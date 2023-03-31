@@ -1,0 +1,8 @@
+{
+  "extends": "@tsconfig/recommended/tsconfig.json",
+  "types": ["node", "jest"],
+  "include": ["src", "types"],
+  "compilerOptions": {
+    "module": "nodenext",
+  }
+}
