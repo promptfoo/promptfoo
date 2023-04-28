@@ -1,0 +1,73 @@
+{
+  "version": "0.1.0",
+  "license": "none",
+  "main": "dist/index.js",
+  "module": "dist/promptfoo.esm.js",
+  "typings": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "src"
+  ],
+  "engines": {
+    "node": ">=12"
+  },
+  "bin": {
+    "promptfoo": "./dist/index.js"
+  },
+  "scripts": {
+    "local": "node dist/index.js",
+    "analyze": "size-limit --why",
+    "build": "dts build",
+    "lint": "dts lint",
+    "prepare": "dts build",
+    "size": "size-limit",
+    "start": "dts watch",
+    "test": "dts test"
+  },
+  "husky": {
+    "hooks": {
+      "pre-commit": "dts lint"
+    }
+  },
+  "prettier": {
+    "printWidth": 80,
+    "semi": true,
+    "singleQuote": true,
+    "trailingComma": "es5"
+  },
+  "name": "promptfoo",
+  "author": "Ian Webster",
+  "jest": {
+    "testEnvironment": "node"
+  },
+  "size-limit": [
+    {
+      "path": "dist/promptfoo.cjs.production.min.js",
+      "limit": "10 KB"
+    },
+    {
+      "path": "dist/promptfoo.esm.js",
+      "limit": "10 KB"
+    }
+  ],
+  "devDependencies": {
+    "@size-limit/preset-small-lib": "^8.2.4",
+    "@tsconfig/recommended": "^1.0.2",
+    "@types/jest": "^29.5.1",
+    "@types/node-fetch": "^2.6.3",
+    "@types/nunjucks": "^3.2.2",
+    "dts-cli": "^2.0.2",
+    "husky": "^8.0.3",
+    "jest-watch-typeahead": "^2.2.2",
+    "size-limit": "^8.2.4",
+    "tslib": "^2.5.0",
+    "typescript": "^5.0.4"
+  },
+  "dependencies": {
+    "commander": "^10.0.1",
+    "csv-parse": "^5.3.8",
+    "csv-stringify": "^6.3.2",
+    "node-fetch": "^2.6.9",
+    "nunjucks": "^3.2.4"
+  }
+}
