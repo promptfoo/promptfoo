@@ -39,12 +39,14 @@ export async function evaluate(
     }
   };
 
-  for (const promptContent of options.prompts) {
-    if (options.vars) {
-      for (const row of options.vars) {
+  if (options.vars) {
+    for (const row of options.vars) {
+      for (const promptContent of options.prompts) {
         await runEval(promptContent, row);
       }
-    } else {
+    }
+  } else {
+    for (const promptContent of options.prompts) {
       await runEval(promptContent, {});
     }
   }
