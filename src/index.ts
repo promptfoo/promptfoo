@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+import { readFileSync } from 'fs';
+import { parse } from 'path';
+
 import chalk from 'chalk';
 import { Command } from 'commander';
 
@@ -19,12 +22,31 @@ program
     'One of: openai:chat, openai:completion, openai:<model name>, or path to custom API caller module',
   )
   .option('-v, --vars <path>', 'Path to CSV file with prompt variables')
+  .option('-c, --config <path>', 'Path to configuration file')
   .action(async (cmdObj: EvaluationOptions & Command) => {
+    const configPath = cmdObj.config;
+    let config = {};
+    if (configPath) {
+      const ext = parse(configPath).ext;
+      switch (ext) {
+        case '.json':
+          const content = readFileSync(configPath, 'utf-8');
+          config = JSON.parse(content);
+          break;
+        case '.js':
+          config = require(configPath);
+          break;
+        default:
+          throw new Error(`Unsupported configuration file format: ${ext}`);
+      }
+    }
+
     const options: EvaluationOptions = {
       prompts: cmdObj.prompts,
       output: cmdObj.output,
       provider: cmdObj.provider,
       vars: cmdObj.vars,
+      ...config,
     };
 
     const provider = loadApiProvider(options.provider);

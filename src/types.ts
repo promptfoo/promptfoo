@@ -3,6 +3,7 @@ export interface EvaluationOptions {
   output: string;
   provider: string;
   vars?: string;
+  config?: string;
 }
 
 export interface ApiProvider {

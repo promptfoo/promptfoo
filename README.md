@@ -18,13 +18,22 @@ By incorporating these features, `promptfoo` enables users to make more informed
 To evaluate prompts using `promptfoo`, use the following command:
 
 ```bash
-npx promptfoo eval -p <prompt_paths...> -o <output_path> -r <provider> [-v <vars_path>]
+npx promptfoo eval -p <prompt_paths...> -o <output_path> -r <provider> [-v <vars_path>] [-c <config_path>]
 ```
 
 - `<prompt_paths...>`: Paths to prompt files
 - `<output_path>`: Path to output CSV file
 - `<provider>`: One of: `openai:chat`, `openai:completion`, `openai:chat:<model_name>`, `openai:completion:<model_name>`, or filesystem path to custom API caller module
 - `<vars_path>` (optional): Path to CSV file with prompt variables
+- `<config_path>` (optional): Path to configuration file
+
+### Example
+
+```bash
+promptfoo eval -p prompt1.txt prompt2.txt -o results.csv -r openai:chat -v vars.csv
+```
+
+This command will evaluate the prompts in `prompt1.txt` and `prompt2.txt` using the OpenAI chat API, substituing the variable values from `vars.csv`, and save the results to `results.csv`.
 
 
 ### Prompt Files
@@ -103,13 +112,18 @@ Example of an output file (`results.json`):
 ]
 ```
 
-### Example
+### Configuration File
 
-```bash
-promptfoo eval -p prompt1.txt prompt2.txt -o results.csv -r openai:chat -v vars.csv
+You can specify any option in a configuration file (e.g., `.promptfoorc`, `promptfoo.config.json`). This can help you avoid repetitive command-line options and simplify the CLI invocation.
+
+Example of a configuration file (`promptfoo.config.json`):
+
+  ```json
+{
+  "provider": "openai:chat",
+  "vars": "vars.csv"
+}
 ```
-
-This command will evaluate the prompts in `prompt1.txt` and `prompt2.txt` using the OpenAI chat API, subtituing the variable values from `vars.csv`, and save the results to `results.csv`.
 
 ## Installation
 
