@@ -86,7 +86,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
   constructor(modelName: string, apiKey?: string) {
     if (!OpenAiChatCompletionProvider.OPENAI_CHAT_MODELS.includes(modelName)) {
-      throw new Error(`Unknown OpenAI completion model name: ${modelName}. Use one of the following: ${OpenAiCompletionProvider.OPENAI_COMPLETION_MODELS.join(', ')}`);
+      throw new Error(
+        `Unknown OpenAI completion model name: ${modelName}. Use one of the following: ${OpenAiCompletionProvider.OPENAI_COMPLETION_MODELS.join(
+          ', ',
+        )}`,
+      );
     }
     super(modelName, apiKey);
   }

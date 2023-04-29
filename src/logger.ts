@@ -22,10 +22,7 @@ const customFormatter = winston.format.printf(({ level, message, ...args }) => {
 
 const logger = winston.createLogger({
   levels: logLevels,
-  format: winston.format.combine(
-    winston.format.simple(),
-    customFormatter,
-  ),
+  format: winston.format.combine(winston.format.simple(), customFormatter),
   transports: [new winston.transports.Console()],
 });
 
