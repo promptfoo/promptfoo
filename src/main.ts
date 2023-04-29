@@ -2,6 +2,7 @@
 import { readFileSync } from 'fs';
 import { parse } from 'path';
 
+import Table from 'cli-table3';
 import chalk from 'chalk';
 import { Command } from 'commander';
 
@@ -17,13 +18,13 @@ const program = new Command();
 program
   .command('eval')
   .description('Evaluate prompts')
-  .requiredOption('-p, --prompts <paths...>', 'Paths to prompt files')
-  .requiredOption('-o, --output <path>', 'Path to output CSV file')
+  .requiredOption('-p, --prompts <paths...>', 'Paths to prompt files (.txt)')
   .requiredOption(
     '-r, --provider <name or path>',
     'One of: openai:chat, openai:completion, openai:<model name>, or path to custom API caller module',
   )
-  .option('-v, --vars <path>', 'Path to CSV file with prompt variables')
+  .option('-o, --output <path>', 'Path to output file (csv, json, yaml)')
+  .option('-v, --vars <path>', 'Path to file with prompt variables (csv, json, yaml)')
   .option('-c, --config <path>', 'Path to configuration file')
   .action(async (cmdObj: CommandLineOptions & Command) => {
     const configPath = cmdObj.config;
@@ -57,8 +58,22 @@ program
     const provider = loadApiProvider(cmdObj.provider);
     const summary = await evaluate(options, provider);
 
-    logger.info(chalk.yellow.bold(`Writing output to ${cmdObj.output}`));
-    writeOutput(cmdObj.output, summary.results);
+    if (cmdObj.output) {
+      logger.info(chalk.yellow(`Writing output to ${cmdObj.output}`));
+      writeOutput(cmdObj.output, summary.results);
+    } else {
+      // Output table
+      const maxWidth = process.stdout.columns || 120;
+      const head = summary.table[0];
+      const table = new Table({
+        head,
+        colWidths: Array(head.length).fill(maxWidth / head.length),
+        wordWrap: true,
+        wrapOnWordBoundary: false,
+      });
+      table.push(...summary.table.slice(1));
+      logger.info(table.toString());
+    }
     logger.info(chalk.green.bold(`Evaluation complete: ${JSON.stringify(summary.stats, null, 2)}`));
     logger.info('Done.');
   });

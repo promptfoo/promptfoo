@@ -1,7 +1,7 @@
 export interface CommandLineOptions {
   prompts: string[];
-  output: string;
   provider: string;
+  output?: string;
   vars?: string;
   config?: string;
 }
@@ -35,11 +35,12 @@ export interface EvaluateOptions {
 export interface EvaluateResult {
   prompt: string;
   output: string;
-  [key: string]: string;
+  vars: Record<string, string>;
 }
 
 export interface EvaluateSummary {
   results: EvaluateResult[];
+  table: string[][];
   stats: {
     successes: number;
     failures: number;

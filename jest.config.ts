@@ -13,7 +13,9 @@ const config: Config = {
   moduleNameMapper: {
     '(.+)\\.js': '$1'
   },
-  extensionsToTreatAsEsm: ['.ts']
+  extensionsToTreatAsEsm: ['.ts'],
+  setupFiles: ["<rootDir>/.jest/setEnvVars.js"],
+
 };
 
 export default config;

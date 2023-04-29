@@ -81,8 +81,10 @@ describe('util', () => {
       {
         prompt: 'Test prompt',
         output: 'Test output',
-        var1: 'value1',
-        var2: 'value2',
+        vars: {
+          var1: 'value1',
+          var2: 'value2',
+        },
       },
     ];
 
@@ -97,8 +99,10 @@ describe('util', () => {
       {
         prompt: 'Test prompt',
         output: 'Test output',
-        var1: 'value1',
-        var2: 'value2',
+        vars: {
+          var1: 'value1',
+          var2: 'value2',
+        },
       },
     ];
 
@@ -113,8 +117,10 @@ describe('util', () => {
       {
         prompt: 'Test prompt',
         output: 'Test output',
-        var1: 'value1',
-        var2: 'value2',
+        vars: {
+          var1: 'value1',
+          var2: 'value2',
+        },
       },
     ];
 
