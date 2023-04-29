@@ -1,8 +1,11 @@
 {
+  "name": "promptfoo",
+  "author": "Ian Webster",
   "version": "0.1.0",
   "license": "none",
+  "type": "module",
   "main": "dist/index.js",
-  "module": "dist/promptfoo.esm.js",
+  "types": "dist/index.d.ts",
   "typings": "dist/index.d.ts",
   "files": [
     "dist",
@@ -12,62 +15,31 @@
     "node": ">=12"
   },
   "bin": {
-    "promptfoo": "./dist/index.js"
+    "promptfoo": "dist/index.js"
   },
   "scripts": {
-    "local": "node dist/index.js",
-    "analyze": "size-limit --why",
-    "build": "dts build",
-    "lint": "dts lint",
-    "prepare": "dts build",
-    "size": "size-limit",
-    "start": "dts watch",
-    "test": "dts test"
+    "local": "ts-node --esm src/index.ts",
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "prepare": "tsc",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "format": "prettier -w src/ test/"
   },
-  "husky": {
-    "hooks": {
-      "pre-commit": "dts lint"
-    }
-  },
-  "prettier": {
-    "printWidth": 80,
-    "semi": true,
-    "singleQuote": true,
-    "trailingComma": "es5"
-  },
-  "name": "promptfoo",
-  "author": "Ian Webster",
-  "jest": {
-    "testEnvironment": "node"
-  },
-  "size-limit": [
-    {
-      "path": "dist/promptfoo.cjs.production.min.js",
-      "limit": "10 KB"
-    },
-    {
-      "path": "dist/promptfoo.esm.js",
-      "limit": "10 KB"
-    }
-  ],
   "devDependencies": {
-    "@size-limit/preset-small-lib": "^8.2.4",
-    "@tsconfig/recommended": "^1.0.2",
     "@types/jest": "^29.5.1",
-    "@types/node-fetch": "^2.6.3",
     "@types/nunjucks": "^3.2.2",
-    "dts-cli": "^2.0.2",
-    "husky": "^8.0.3",
     "jest-watch-typeahead": "^2.2.2",
-    "size-limit": "^8.2.4",
-    "tslib": "^2.5.0",
+    "prettier": "^2.8.8",
+    "ts-jest": "^29.1.0",
+    "ts-node": "^10.9.1",
     "typescript": "^5.0.4"
   },
   "dependencies": {
     "commander": "^10.0.1",
     "csv-parse": "^5.3.8",
     "csv-stringify": "^6.3.2",
-    "node-fetch": "^2.6.9",
+    "node-fetch": "^3.3.1",
     "nunjucks": "^3.2.4"
   }
 }

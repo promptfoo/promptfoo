@@ -1,11 +1,16 @@
 import fs from 'fs';
-import {parse} from 'csv-parse/sync';
-import {stringify} from 'csv-stringify/sync';
+import { parse } from 'csv-parse/sync';
+import { stringify } from 'csv-stringify/sync';
 import nunjucks from 'nunjucks';
-import { EvaluationOptions, EvaluateResult, CsvRow, ApiProvider } from './types';
+import { EvaluationOptions, EvaluateResult, CsvRow, ApiProvider } from './types.js';
 
-export async function evaluate(options: EvaluationOptions, provider: ApiProvider): Promise<EvaluateResult> {
-  const rows: CsvRow[] = options.vars ? parse(fs.readFileSync(options.vars, 'utf-8'), { columns: true }) : [];
+export async function evaluate(
+  options: EvaluationOptions,
+  provider: ApiProvider,
+): Promise<EvaluateResult> {
+  const rows: CsvRow[] = options.vars
+    ? parse(fs.readFileSync(options.vars, 'utf-8'), { columns: true })
+    : [];
   const results: CsvRow[] = [];
 
   const stats = {
@@ -33,13 +38,13 @@ export async function evaluate(options: EvaluationOptions, provider: ApiProvider
         });
 
         stats.successes++;
-        stats.tokenUsage.total += result.tokenUsage.total;
-        stats.tokenUsage.prompt += result.tokenUsage.prompt;
-        stats.tokenUsage.completion += result.tokenUsage.completion;
-      } catch(err) {
+        stats.tokenUsage.total += result.tokenUsage?.total || 0;
+        stats.tokenUsage.prompt += result.tokenUsage?.prompt || 0;
+        stats.tokenUsage.completion += result.tokenUsage?.completion || 0;
+      } catch (err) {
         stats.failures++;
       }
-    }
+    };
 
     if (rows.length === 0) {
       await runPrompt();
