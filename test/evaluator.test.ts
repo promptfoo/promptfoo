@@ -16,7 +16,7 @@ describe('evaluator', () => {
 
   test('evaluate with vars', async () => {
     const options = {
-      prompts: ['Test prompt'],
+      prompts: ['Test prompt {{ var1 }} {{ var2 }}'],
       vars: [{ var1: 'value1', var2: 'value2' }],
     };
 
@@ -26,6 +26,8 @@ describe('evaluator', () => {
     expect(result.stats.successes).toBe(1);
     expect(result.stats.failures).toBe(0);
     expect(result.stats.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+    expect(result.results[0].prompt).toBe('Test prompt {{ var1 }} {{ var2 }}');
+    expect(result.results[0].output).toBe('Test output');
   });
 
   test('evaluate without vars', async () => {
@@ -39,5 +41,7 @@ describe('evaluator', () => {
     expect(result.stats.successes).toBe(1);
     expect(result.stats.failures).toBe(0);
     expect(result.stats.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+    expect(result.results[0].prompt).toBe('Test prompt');
+    expect(result.results[0].output).toBe('Test output');
   });
 });
