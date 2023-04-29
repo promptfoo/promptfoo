@@ -82,4 +82,26 @@ describe('evaluator', () => {
     expect(result.failures).toBe(0);
     expect(result.tokenUsage).toEqual({ total: 20, prompt: 10, completion: 10 });
   });
+
+  test('evaluate with single file containing multiple prompts', async () => {
+    (fs.readFileSync as jest.Mock)
+    .mockReturnValueOnce('Test prompt 1\n---\nTest prompt 2')
+    .mockReturnValueOnce('var1,var2\nvalue1,value2');
+
+    const options = {
+      prompts: ['prompt1.txt'],
+      output: 'output.csv',
+      provider: 'openai:completion:text-davinci-003',
+      vars: 'vars.csv',
+    };
+
+    const result = await evaluate(options, mockApiProvider);
+
+    expect(fs.readFileSync).toHaveBeenCalledTimes(2);
+    expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
+    expect(result.successes).toBe(2);
+    expect(result.failures).toBe(0);
+    expect(result.tokenUsage).toEqual({ total: 20, prompt: 10, completion: 10 });
+  });
 });

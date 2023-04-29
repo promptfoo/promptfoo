@@ -29,13 +29,29 @@ npx promptfoo eval -p <prompt_paths...> -o <output_path> -r <provider> [-v <vars
 
 ### Prompt Files
 
-Prompt files are plain text files that contain the prompts you want to test. Each prompt should be in a separate file. You can use [Nunjucks](https://mozilla.github.io/nunjucks/) templating syntax to include variables in your prompts, which will be replaced with actual values from the `vars` CSV file during evaluation.
+Prompt files are plain text files that contain the prompts you want to test. If you have only one file, you can include multiple prompts in the file, separated by the delimiter `---`. If you have multiple files, each prompt should be in a separate file. You can use [Nunjucks](https://mozilla.github.io/nunjucks/) templating syntax to include variables in your prompts, which will be replaced with actual values from the `vars` CSV file during evaluation.
 
-Example of a prompt file (`prompt1.txt`):
+Example of a single prompt file with multiple prompts (`prompts.txt`):
 
 ```
 Translate the following English text to French: "{{text}}"
+---
+What is the capital of France?
 ```
+
+Example of multiple prompt files:
+
+- `prompt1.txt`:
+
+  ```
+  Translate the following English text to French: "{{text}}"
+  ```
+
+- `prompt2.txt`:
+
+  ```
+  What is the capital of France?
+  ```
 
 ### Vars Files
 
