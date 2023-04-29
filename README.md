@@ -122,5 +122,3 @@ Here are some of the available scripts:
 - `watch`: Continuously watch and transpile TypeScript files on changes
 - `test`: Run test suite
 - `test:watch`: Continuously run test suite on changes
-- `lint`: Check code for linting issues
-- `lint:fix`: Automatically fix linting issues if possible

@@ -1,9 +1,5 @@
 import fetch from 'node-fetch';
-import { ApiProvider, ProviderResult } from './types';
-
-const OPENAI_CHAT_MODELS = ['gpt-4', 'gpt-4-0314', 'gpt-4-32k', 'gpt-4-32k-0314', 'gpt-3.5-turbo', 'gpt-3.5-turbo-0301'];
-
-const OPENAI_COMPLETION_MODELS = ['text-davinci-003', 'text-davinci-002', 'text-curie-001', 'text-babbage-001', 'text-ada-001'];
+import { ApiProvider, ProviderResult } from './types.js';
 
 export class OpenAiGenericProvider implements ApiProvider {
   modelName: string;
@@ -14,7 +10,9 @@ export class OpenAiGenericProvider implements ApiProvider {
 
     const key = apiKey || process.env.OPENAI_API_KEY;
     if (!key) {
-      throw new Error('OpenAI API key is not set. Set OPENAI_API_KEY environment variable or pass it as an argument to the constructor.');
+      throw new Error(
+        'OpenAI API key is not set. Set OPENAI_API_KEY environment variable or pass it as an argument to the constructor.',
+      );
     }
     this.apiKey = key;
   }
@@ -26,6 +24,25 @@ export class OpenAiGenericProvider implements ApiProvider {
 }
 
 export class OpenAiCompletionProvider extends OpenAiGenericProvider {
+  static OPENAI_COMPLETION_MODELS = [
+    'text-davinci-003',
+    'text-davinci-002',
+    'text-curie-001',
+    'text-babbage-001',
+    'text-ada-001',
+  ];
+
+  constructor(modelName: string, apiKey?: string) {
+    if (!OpenAiCompletionProvider.OPENAI_COMPLETION_MODELS.includes(modelName)) {
+      throw new Error(
+        `Unknown OpenAI completion model name: ${modelName}. Use one of the following: ${OpenAiCompletionProvider.OPENAI_COMPLETION_MODELS.join(
+          ', ',
+        )}`,
+      );
+    }
+    super(modelName, apiKey);
+  }
+
   async callApi(prompt: string): Promise<ProviderResult> {
     const body = {
       model: this.modelName,
@@ -38,12 +55,12 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.apiKey}`,
+        Authorization: `Bearer ${this.apiKey}`,
       },
       body: JSON.stringify(body),
     });
 
-    const data = await response.json() as unknown as any;
+    const data = (await response.json()) as unknown as any;
     return {
       output: data.choices[0].text,
       tokenUsage: {
@@ -56,14 +73,34 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
 }
 
 export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
+  static OPENAI_CHAT_MODELS = [
+    'gpt-4',
+    'gpt-4-0314',
+    'gpt-4-32k',
+    'gpt-4-32k-0314',
+    'gpt-3.5-turbo',
+    'gpt-3.5-turbo-0301',
+  ];
+
+  constructor(modelName: string, apiKey?: string) {
+    if (!OpenAiChatCompletionProvider.OPENAI_CHAT_MODELS.includes(modelName)) {
+      throw new Error(
+        `Unknown OpenAI chat model name: ${modelName}. Use one of the following: ${OpenAiChatCompletionProvider.OPENAI_CHAT_MODELS.join(
+          ', ',
+        )}`,
+      );
+    }
+    super(modelName, apiKey);
+  }
+
   async callApi(prompt: string): Promise<ProviderResult> {
-    let messages: {role: string; content: string}[];
+    let messages: { role: string; content: string }[];
     try {
       // User can specify `messages` payload as JSON, or we'll just put the
       // string prompt into a `messages` array.
       messages = JSON.parse(prompt);
     } catch (e) {
-      messages = [{role: 'user', content: prompt}];
+      messages = [{ role: 'user', content: prompt }];
     }
     const body = {
       model: this.modelName,
@@ -76,12 +113,12 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.apiKey}`,
+        Authorization: `Bearer ${this.apiKey}`,
       },
       body: JSON.stringify(body),
     });
 
-    const data = await response.json() as unknown as any;
+    const data = (await response.json()) as unknown as any;
     return {
       output: data.choices[0].message.content,
       tokenUsage: {
@@ -97,30 +134,17 @@ export function loadApiProvider(apiCallerPath: string): ApiProvider {
   if (apiCallerPath?.startsWith('openai:')) {
     // Load OpenAI module
     const options = apiCallerPath.split(':');
-    const modelName = options.pop();
-    if (!modelName) {
-      throw new Error('OpenAI model name is not specified. Please specify openai:chat, openai:completion, or openai:<model name>');
-    }
+    const modelType = options[1];
+    const modelName = options[2];
 
-    if (OPENAI_CHAT_MODELS.includes(modelName)) {
-      return new OpenAiChatCompletionProvider(modelName);
-    } else if (OPENAI_COMPLETION_MODELS.includes(modelName)) {
-      return new OpenAiCompletionProvider(modelName);
+    if (modelType === 'chat') {
+      return new OpenAiChatCompletionProvider(modelName || 'gpt-3.5-turbo');
+    } else if (modelType === 'completion') {
+      return new OpenAiCompletionProvider(modelName || 'text-davinci-003');
     } else {
-      if (modelName === 'chat') {
-        return new OpenAiChatCompletionProvider('gpt-3.5-turbo');
-      } else if (modelName === 'completion') {
-        return new OpenAiCompletionProvider('text-davinci-003');
-      } else {
-        const modelType = options.pop();
-        if (modelType === 'chat') {
-          return new OpenAiChatCompletionProvider(modelName);
-        } else if (modelType === 'completion') {
-          return new OpenAiCompletionProvider(modelName);
-        } else {
-          throw new Error(`Unknown OpenAI model name: ${modelName} and type: ${modelType}. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>`);
-        }
-      }
+      throw new Error(
+        `Unknown OpenAI model type: ${modelType}. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>`,
+      );
     }
   }
 
