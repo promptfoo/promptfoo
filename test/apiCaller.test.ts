@@ -1,7 +1,12 @@
 import * as path from 'path';
 
 import fetch from 'node-fetch';
-import { OpenAiGenericProvider, OpenAiCompletionProvider, OpenAiChatCompletionProvider, loadApiProvider } from '../src/apiCaller';
+import {
+  OpenAiGenericProvider,
+  OpenAiCompletionProvider,
+  OpenAiChatCompletionProvider,
+  loadApiProvider,
+} from '../src/apiCaller';
 
 jest.mock('node-fetch', () => jest.fn());
 

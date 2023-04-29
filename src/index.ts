@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
-import { EvaluationOptions } from './types';
-import { loadApiProvider } from './apiCaller';
-import { evaluate } from './evaluator';
+
+import { EvaluationOptions } from './types.js';
+import { loadApiProvider } from './apiCaller.js';
+import { evaluate } from './evaluator.js';
 
 const program = new Command();
 
@@ -11,7 +12,10 @@ program
   .description('Evaluate prompts')
   .requiredOption('-p, --prompts <paths...>', 'Paths to prompt files')
   .requiredOption('-o, --output <path>', 'Path to output CSV file')
-  .requiredOption('-r, --provider <name or path>', 'One of: openai:chat, openai:completion, openai:<model name>, or path to custom API caller module')
+  .requiredOption(
+    '-r, --provider <name or path>',
+    'One of: openai:chat, openai:completion, openai:<model name>, or path to custom API caller module',
+  )
   .option('-v, --vars <path>', 'Path to CSV file with prompt variables')
   .action(async (cmdObj: EvaluationOptions & Command) => {
     const options: EvaluationOptions = {

@@ -1,8 +1,15 @@
 {
-  "extends": "@tsconfig/recommended/tsconfig.json",
-  "types": ["node", "jest"],
-  "include": ["src", "types"],
   "compilerOptions": {
-    "module": "nodenext",
-  }
+    "declaration": true,
+    "declarationMap": true,
+    "esModuleInterop": true,
+    "module": "es2020",
+    "moduleResolution": "node",
+    "outDir": "dist",
+    "skipLibCheck": true,
+    "sourceMap": true,
+    "strict": true,
+    "target": "ES2015"
+  },
+  "include": ["src/"]
 }
