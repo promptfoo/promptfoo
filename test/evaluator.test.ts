@@ -22,7 +22,7 @@ describe('evaluator', () => {
   test('evaluate with vars', async () => {
     (fs.readFileSync as jest.Mock)
       .mockReturnValueOnce('var1,var2\nvalue1,value2')
-      .mockReturnValueOnce('Test prompt')
+      .mockReturnValueOnce('Test prompt');
 
     const options = {
       prompts: ['prompt1.txt'],
@@ -64,7 +64,7 @@ describe('evaluator', () => {
     (fs.readFileSync as jest.Mock)
       .mockReturnValueOnce('var1,var2\nvalue1,value2')
       .mockReturnValueOnce('Test prompt 1')
-      .mockReturnValueOnce('Test prompt 2')
+      .mockReturnValueOnce('Test prompt 2');
 
     const options = {
       prompts: ['prompt1.txt', 'prompt2.txt'],
@@ -85,8 +85,8 @@ describe('evaluator', () => {
 
   test('evaluate with single file containing multiple prompts', async () => {
     (fs.readFileSync as jest.Mock)
-    .mockReturnValueOnce('var1,var2\nvalue1,value2')
-    .mockReturnValueOnce('Test prompt 1\n---\nTest prompt 2')
+      .mockReturnValueOnce('var1,var2\nvalue1,value2')
+      .mockReturnValueOnce('Test prompt 1\n---\nTest prompt 2');
 
     const options = {
       prompts: ['prompt1.txt'],
@@ -107,8 +107,8 @@ describe('evaluator', () => {
 
   test('evaluate with JSON input', async () => {
     (fs.readFileSync as jest.Mock)
-    .mockReturnValueOnce('[{"var1": "value1", "var2": "value2"}]')
-    .mockReturnValueOnce('Test prompt')
+      .mockReturnValueOnce('[{"var1": "value1", "var2": "value2"}]')
+      .mockReturnValueOnce('Test prompt');
 
     const options = {
       prompts: ['prompt1.txt'],
@@ -129,8 +129,8 @@ describe('evaluator', () => {
 
   test('evaluate with YAML input', async () => {
     (fs.readFileSync as jest.Mock)
-    .mockReturnValueOnce('- var1: value1\n  var2: value2')
-    .mockReturnValueOnce('Test prompt');
+      .mockReturnValueOnce('- var1: value1\n  var2: value2')
+      .mockReturnValueOnce('Test prompt');
 
     const options = {
       prompts: ['prompt1.txt'],

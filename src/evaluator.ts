@@ -50,7 +50,10 @@ export async function evaluate(
 
   for (const promptPath of options.prompts) {
     const fileContent = fs.readFileSync(promptPath, 'utf-8');
-    const prompts = options.prompts.length === 1 ? fileContent.split(PROMPT_DELIMITER).map(p => p.trim()) : [fileContent];
+    const prompts =
+      options.prompts.length === 1
+        ? fileContent.split(PROMPT_DELIMITER).map((p) => p.trim())
+        : [fileContent];
 
     const runPrompt = async (prompt: string, vars: Record<string, string> = {}) => {
       const renderedPrompt = nunjucks.renderString(prompt, vars);
