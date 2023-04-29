@@ -1,4 +1,4 @@
-export interface EvaluationOptions {
+export interface CommandLineOptions {
   prompts: string[];
   output: string;
   provider: string;
@@ -25,8 +25,24 @@ export interface CsvRow {
   [key: string]: string;
 }
 
+export type VarMapping = Record<string, string>;
+
+export interface EvaluateOptions {
+  prompts: string[];
+  vars?: VarMapping[];
+}
+
 export interface EvaluateResult {
-  successes: number;
-  failures: number;
-  tokenUsage: TokenUsage;
+  prompt: string;
+  output: string;
+  [key: string]: string;
+}
+
+export interface EvaluateSummary {
+  results: EvaluateResult[];
+  stats: {
+    successes: number;
+    failures: number;
+    tokenUsage: TokenUsage;
+  };
 }
