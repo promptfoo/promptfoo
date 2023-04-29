@@ -15,16 +15,16 @@
     "node": ">=12"
   },
   "bin": {
-    "promptfoo": "dist/index.js"
+    "promptfoo": "dist/main.js"
   },
   "scripts": {
-    "local": "ts-node --esm src/index.ts",
+    "local": "ts-node --esm src/main.ts",
     "build": "tsc",
     "build:watch": "tsc --watch",
     "prepare": "tsc",
     "test": "jest",
     "test:watch": "jest --watch",
-    "format": "prettier -w src/ test/"
+    "format": "prettier -w src/ test/ examples/"
   },
   "devDependencies": {
     "@types/jest": "^29.5.1",

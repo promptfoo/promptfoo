@@ -1,7 +1,9 @@
 promptfoo
 ---
 
-`promptfoo` is a CLI tool that facilitates prompt editing and evaluation by providing a systematic approach to comparing LLM outputs. With the ability to run a test suite on multiple prompts, catch regressions, and analyze results, `promptfoo` offers a practical solution for evaluating model outputs.
+`promptfoo` is a library and command-line tool that facilitates prompt editing and evaluation by providing a systematic approach to comparing LLM outputs.
+
+With the ability to run a test suite on multiple prompts, catch regressions, and analyze results, `promptfoo` offers a practical solution for evaluating model outputs.
 
 ## Features
 
@@ -13,7 +15,7 @@ promptfoo
 
 By incorporating these features, `promptfoo` enables users to make more informed decisions when refining prompts and assessing language model performance.
 
-## Usage
+## Usage (command line)
 
 To evaluate prompts using `promptfoo`, use the following command:
 
@@ -21,10 +23,10 @@ To evaluate prompts using `promptfoo`, use the following command:
 npx promptfoo eval -p <prompt_paths...> -o <output_path> -r <provider> [-v <vars_path>] [-c <config_path>]
 ```
 
-- `<prompt_paths...>`: Paths to prompt files
-- `<output_path>`: Path to output CSV file
+- `<prompt_paths...>`: Paths to prompt file(s)
+- `<output_path>`: Path to output CSV, JSON, or YAML file
 - `<provider>`: One of: `openai:chat`, `openai:completion`, `openai:chat:<model_name>`, `openai:completion:<model_name>`, or filesystem path to custom API caller module
-- `<vars_path>` (optional): Path to CSV file with prompt variables
+- `<vars_path>` (optional): Path to CSV, JSON, or YAML file with prompt variables
 - `<config_path>` (optional): Path to configuration file
 
 ### Example
@@ -35,6 +37,67 @@ promptfoo eval -p prompt1.txt prompt2.txt -o results.csv -r openai:chat -v vars.
 
 This command will evaluate the prompts in `prompt1.txt` and `prompt2.txt` using the OpenAI chat API, substituing the variable values from `vars.csv`, and save the results to `results.csv`.
 
+
+## Usage (as a library)
+
+You can also use `promptfoo` as a library in your project by importing the `evaluate` function. The function takes the following parameters:
+
+- `providers`: a provider string or an `ApiProvider` object.
+- `options`: an `EvaluateOptions` object.
+
+### Example
+
+Here is an example of how to do this:
+
+```javascript
+import promptfoo from 'promptfoo';
+
+const options = {
+  prompts: ['Rephrase this in French: {{body}}', 'Rephrase this like a pirate: {{body}}'],
+  vars: [{ body: 'Hello world' }, { body: "I'm hungry" }],
+};
+
+(async () => {
+  const summary = await promptfoo.evaluate(options);
+  console.log(summary);
+})();
+```
+
+This code imports the `promptfoo` library, defines the evaluation options, and then calls the `evaluate` function with these options. The results will be logged to the console:
+
+```js
+{
+  results: [
+    {
+      prompt: 'Rephrase this in French: {{body}}',
+      output: 'Bonjour le monde',
+      body: 'Hello world'
+    },
+    {
+      prompt: 'Rephrase this in French: {{body}}',
+      output: "J'ai faim.",
+      body: "I'm hungry"
+    },
+    {
+      prompt: 'Rephrase this like a pirate: {{body}}',
+      output: 'Ahoy thar, me hearties! Avast ye, world!',
+      body: 'Hello world'
+    },
+    {
+      prompt: 'Rephrase this like a pirate: {{body}}',
+      output: "Arrr, me belly be empty and me throat be parched! I be needin' some grub, matey!",
+      body: "I'm hungry"
+    }
+  ],
+  stats: {
+    successes: 4,
+    failures: 0,
+    tokenUsage: { total: 120, prompt: 72, completion: 48 }
+  }
+}
+```
+
+## Configuration
 
 ### Prompt Files
 
