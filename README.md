@@ -39,7 +39,7 @@ Translate the following English text to French: "{{text}}"
 
 ### Vars Files
 
-Vars files are CSV files that contain the values for the variables used in the prompts. The first row of the CSV file should contain the variable names, and each subsequent row should contain the corresponding values for each test case.
+Vars files are CSV, JSON, or YAML files that contain the values for the variables used in the prompts. The first row of the CSV file should contain the variable names, and each subsequent row should contain the corresponding values for each test case.
 
 Example of a vars file (`vars.csv`):
 
@@ -47,6 +47,15 @@ Example of a vars file (`vars.csv`):
 text
 "Hello, world!"
 "Goodbye, everyone!"
+```
+
+Example of a vars file (`vars.json`):
+
+```json
+[
+  {"text": "Hello, world!"},
+  {"text": "Goodbye, everyone!"}
+]
 ```
 
 ### Output File
@@ -59,6 +68,23 @@ Example of an output file (`results.csv`):
 Prompt,Output,text
 "Translate the following English text to French: ""{{text}}""","Bonjour, le monde !","Hello, world!"
 "Translate the following English text to French: ""{{text}}""","Au revoir, tout le monde !","Goodbye, everyone!"
+```
+
+Example of an output file (`results.json`):
+
+```json
+[
+  {
+    "Prompt": "Translate the following English text to French: \"{{text}}\"",
+    "Output": "Bonjour, le monde !",
+    "text": "Hello, world!"
+  },
+  {
+    "Prompt": "Translate the following English text to French: \"{{text}}\"",
+    "Output": "Au revoir, tout le monde !",
+    "text": "Goodbye, everyone!"
+  }
+]
 ```
 
 ### Example

@@ -1,5 +1,6 @@
 import fs from 'fs';
 
+import yaml from 'js-yaml';
 import { parse } from 'csv-parse/sync';
 import { stringify } from 'csv-stringify/sync';
 import nunjucks from 'nunjucks';
@@ -8,12 +9,27 @@ import logger from './logger.js';
 
 import { EvaluationOptions, EvaluateResult, CsvRow, ApiProvider } from './types.js';
 
+function parseJson(json: string): any | undefined {
+  try {
+    return JSON.parse(json);
+  } catch (err) {
+    return undefined;
+  }
+}
+
 export async function evaluate(
   options: EvaluationOptions,
   provider: ApiProvider,
 ): Promise<EvaluateResult> {
+  const fileExtension = options.vars ? options.vars.split('.').pop()?.toLowerCase() : null;
   const rows: CsvRow[] = options.vars
+    ? fileExtension === 'csv'
     ? parse(fs.readFileSync(options.vars, 'utf-8'), { columns: true })
+    : fileExtension === 'json'
+      ? parseJson(fs.readFileSync(options.vars, 'utf-8'))
+      : fileExtension === 'yaml' || fileExtension === 'yml'
+        ? yaml.load(fs.readFileSync(options.vars, 'utf-8'))
+        : []
     : [];
   const results: CsvRow[] = [];
 
@@ -59,10 +75,19 @@ export async function evaluate(
     }
   }
 
-  const csvOutput = stringify(results, { header: true });
+  const outputExtension = options.output.split('.').pop()?.toLowerCase();
 
   logger.info(`Writing output to ${options.output}`);
-  fs.writeFileSync(options.output, csvOutput);
+  if (outputExtension === 'csv') {
+    const csvOutput = stringify(results, { header: true });
+    fs.writeFileSync(options.output, csvOutput);
+  } else if (outputExtension === 'json') {
+    fs.writeFileSync(options.output, JSON.stringify(results, null, 2));
+  } else if (outputExtension === 'yaml' || outputExtension === 'yml') {
+    fs.writeFileSync(options.output, yaml.dump(results));
+  } else {
+    throw new Error('Unsupported output file format. Use CSV, JSON, or YAML.');
+  }
 
   return stats;
 }
