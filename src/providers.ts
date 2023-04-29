@@ -49,8 +49,8 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
     const body = {
       model: this.modelName,
       prompt,
-      max_tokens: 1024,
-      temperature: 0,
+      max_tokens: process.env.OPENAI_MAX_TOKENS || 1024,
+      temperature: process.env.OPENAI_MAX_TEMPERATURE || 0,
     };
     logger.info(`Calling OpenAI API: ${JSON.stringify(body, null, 2)}`);
     const response = await fetch('https://api.openai.com/v1/completions', {
@@ -107,8 +107,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     const body = {
       model: this.modelName,
       messages: messages,
-      max_tokens: 1024,
-      temperature: 0,
+      max_tokens: process.env.OPENAI_MAX_TOKENS || 1024,
+      temperature: process.env.OPENAI_MAX_TEMPERATURE || 0,
     };
     logger.info(`Calling OpenAI API: ${JSON.stringify(body, null, 2)}`);
     const response = await fetch('https://api.openai.com/v1/chat/completions', {

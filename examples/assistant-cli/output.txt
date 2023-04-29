@@ -1,0 +1,151 @@
+Console output:
+
+┌──────────────────────────────┬──────────────────────────────┬──────────────────────────────┬──────────────────────────────┐
+│ You're an ecommerce chat ass │ You're a smart, bubbly chat  │ name                         │ question                     │
+│ istant for a shoe company.   │ assistant for a shoe company │                              │                              │
+│ Answer this user's question: │ .                            │                              │                              │
+│  {{name}}: "{{question}}"    │ Answer this user's question: │                              │                              │
+│                              │  {{name}}: "{{question}}"    │                              │                              │
+├──────────────────────────────┼──────────────────────────────┼──────────────────────────────┼──────────────────────────────┤
+│ Yes, of course! I'd be happy │ Of course, Bob! I'd be happy │ Bob                          │ Can you help me find a speci │
+│  to help you find the produc │  to help you find the produc │                              │ fic product on your website? │
+│ t you're looking for. Can yo │ t you're looking for. Can yo │                              │                              │
+│ u please provide me with the │ u please tell me the name of │                              │                              │
+│  name or description of the  │  the product or provide me w │                              │                              │
+│ product you're interested in │ ith any details about it?    │                              │                              │
+│ ?                            │                              │                              │                              │
+├──────────────────────────────┼──────────────────────────────┼──────────────────────────────┼──────────────────────────────┤
+│ As an AI language model, I d │ Yes, we do have some promoti │ Jane                         │ Do you have any promotions o │
+│ on't have access to real-tim │ ons and discounts available  │                              │ r discounts currently availa │
+│ e information about promotio │ at the moment. You can check │                              │ ble?                         │
+│ ns or discounts. However, yo │  our website or subscribe to │                              │                              │
+│ u can check our website or s │  our newsletter to stay upda │                              │                              │
+│ ubscribe to our newsletter t │ ted on the latest deals and  │                              │                              │
+│ o stay updated on any ongoin │ offers. Is there anything sp │                              │                              │
+│ g promotions or discounts. T │ ecific you're looking for? I │                              │                              │
+│ hank you for your interest i │ 'd be happy to help you find │                              │                              │
+│ n our products!              │  the best deal for your need │                              │                              │
+│                              │ s.                           │                              │                              │
+├──────────────────────────────┼──────────────────────────────┼──────────────────────────────┼──────────────────────────────┤
+│ As an ecommerce chat assista │ As a chat assistant for our  │ Dave                         │ What are your shipping and r │
+│ nt for our shoe company, I'm │ shoe company, I'm happy to h │                              │ eturn policies?              │
+│  happy to help answer your q │ elp you with your question,  │                              │                              │
+│ uestion, Dave. Our shipping  │ Dave! Our shipping policy is │                              │                              │
+│ policy is that we offer free │  that we offer free standard │                              │                              │
+│  standard shipping on all or │  shipping on all orders over │                              │                              │
+│ ders over $50. For orders un │  $50. For orders under $50,  │                              │                              │
+│ der $50, there is a flat rat │ there is a flat rate shippin │                              │                              │
+│ e shipping fee of $5.99. We  │ g fee of $5.99. We also offe │                              │                              │
+│ also offer expedited shippin │ r expedited shipping options │                              │                              │
+│ g options for an additional  │  for an additional fee.      │                              │                              │
+│ fee.                         │ As for our return policy, we │                              │                              │
+│ Regarding our return policy, │  offer free returns within 3 │                              │                              │
+│  we offer free returns withi │ 0 days of purchase. The shoe │                              │                              │
+│ n 30 days of purchase. The s │ s must be in their original  │                              │                              │
+│ hoes must be in new, unworn  │ condition and packaging, and │                              │                              │
+│ condition with all original  │  we ask that you include the │                              │                              │
+│ tags and packaging. To initi │  original receipt or proof o │                              │                              │
+│ ate a return, please contact │ f purchase. If you have any  │                              │                              │
+│  our customer service team a │ further questions or concern │                              │                              │
+│ nd they will provide you wit │ s, please don't hesitate to  │                              │                              │
+│ h a return label and instruc │ ask!                         │                              │                              │
+│ tions. If you have any furth │                              │                              │                              │
+│ er questions, please don't h │                              │                              │                              │
+│ esitate to ask.              │                              │                              │                              │
+├──────────────────────────────┼──────────────────────────────┼──────────────────────────────┼──────────────────────────────┤
+│ Certainly, Jim! Our shoes co │ Of course, Jim! Our shoes ar │ Jim                          │ Can you provide more informa │
+│ me in a variety of styles an │ e made with high-quality mat │                              │ tion about the product speci │
+│ d sizes to fit your needs. S │ erials such as leather, sued │                              │ fications or features?       │
+│ ome of our features include  │ e, and synthetic fabrics. Th │                              │                              │
+│ durable materials, comfortab │ ey come in a variety of size │                              │                              │
+│ le insoles, and non-slip sol │ s and colors to fit your per │                              │                              │
+│ es for added safety. If you  │ sonal style. Our shoes also  │                              │                              │
+│ have any specific questions  │ feature comfortable insoles  │                              │                              │
+│ about a particular product,  │ and durable outsoles for lon │                              │                              │
+│ please let me know and I'll  │ g-lasting wear. Let me know  │                              │                              │
+│ be happy to provide more inf │ if you have any specific que │                              │                              │
+│ ormation.                    │ stions about a particular pr │                              │                              │
+│                              │ oduct!                       │                              │                              │
+├──────────────────────────────┼──────────────────────────────┼──────────────────────────────┼──────────────────────────────┤
+│ Certainly, Alice! May I know │ Of course, Alice! What produ │ Alice                        │ Can you recommend products t │
+│  which products you have bee │ cts have you been looking at │                              │ hat are similar to what I've │
+│ n looking at? This will help │ ? I can suggest similar styl │                              │  been looking at?            │
+│  me suggest similar products │ es and designs based on your │                              │                              │
+│  that match your preferences │  preferences.                │                              │                              │
+│ .                            │                              │                              │                              │
+├──────────────────────────────┼──────────────────────────────┼──────────────────────────────┼──────────────────────────────┤
+│ As an AI language model, I d │ Absolutely, Sophie! Our most │ Sophie                       │ Do you have any recommendati │
+│ on't have access to real-tim │  popular products right now  │                              │ ons for products that are cu │
+│ e data on trending products. │ are our chunky sneakers and  │                              │ rrently popular or trending? │
+│  However, our website featur │ platform sandals. They're bo │                              │                              │
+│ es a "Best Sellers" section  │ th very trendy and versatile │                              │                              │
+│ where you can find our most  │ , perfect for any occasion.  │                              │                              │
+│ popular products. You can al │ We also have a new line of s │                              │                              │
+│ so check out our new arrival │ ustainable and eco-friendly  │                              │                              │
+│ s section to see the latest  │ shoes that are gaining popul │                              │                              │
+│ styles we have available. Is │ arity among our customers. L │                              │                              │
+│  there a particular style or │ et me know if you have any o │                              │                              │
+│  type of shoe you're interes │ ther questions or if you nee │                              │                              │
+│ ted in? I can help you find  │ d help finding anything spec │                              │                              │
+│ some options based on your p │ ific!                        │                              │                              │
+│ references.                  │                              │                              │                              │
+├──────────────────────────────┼──────────────────────────────┼──────────────────────────────┼──────────────────────────────┤
+│ Yes, I can definitely check  │ Of course, Ben! I'd be happy │ Ben                          │ Can you check the availabili │
+│ the availability of a produc │  to help you check the avail │                              │ ty of a product at a specifi │
+│ t at a specific store locati │ ability of a product at a sp │                              │ c store location?            │
+│ on for you. Please provide m │ ecific store location. Pleas │                              │                              │
+│ e with the name of the produ │ e let me know the name of th │                              │                              │
+│ ct and the store location yo │ e product and the store loca │                              │                              │
+│ u are interested in, and I w │ tion you're interested in, a │                              │                              │
+│ ill be happy to assist you f │ nd I'll do my best to provid │                              │                              │
+│ urther.                      │ e you with the most up-to-da │                              │                              │
+│                              │ te information.              │                              │                              │
+├──────────────────────────────┼──────────────────────────────┼──────────────────────────────┼──────────────────────────────┤
+│ As an ecommerce chat assista │ Hi Jessie! Thank you for rea │ Jessie                       │ How can I track my order aft │
+│ nt for a shoe company, you c │ ching out. Once your order h │                              │ er it has been shipped?      │
+│ an track your order after it │ as been shipped, you should  │                              │                              │
+│  has been shipped by using t │ receive an email with a trac │                              │                              │
+│ he tracking number provided  │ king number and a link to th │                              │                              │
+│ in your shipping confirmatio │ e carrier's website where yo │                              │                              │
+│ n email. You can click on th │ u can track your package. If │                              │                              │
+│ e tracking number link or vi │  you haven't received this e │                              │                              │
+│ sit the carrier's website an │ mail, please check your spam │                              │                              │
+│ d enter the tracking number  │  folder or contact our custo │                              │                              │
+│ to get real-time updates on  │ mer service team for assista │                              │                              │
+│ the status of your shipment. │ nce. We hope this helps!     │                              │                              │
+│  If you have any further que │                              │                              │                              │
+│ stions or concerns, please f │                              │                              │                              │
+│ eel free to reach out to our │                              │                              │                              │
+│  customer service team for a │                              │                              │                              │
+│ ssistance.                   │                              │                              │                              │
+├──────────────────────────────┼──────────────────────────────┼──────────────────────────────┼──────────────────────────────┤
+│ As an ecommerce shoe company │ Hi Kim! We accept various pa │ Kim                          │ What payment methods do you  │
+│ , we accept various payment  │ yment methods such as credit │                              │ accept?                      │
+│ methods such as credit cards │  cards (Visa, Mastercard, Am │                              │                              │
+│  (Visa, Mastercard, American │ erican Express), PayPal, and │                              │                              │
+│  Express), PayPal, and Apple │  Apple Pay. Let me know if y │                              │                              │
+│  Pay. You can choose the pay │ ou have any other questions! │                              │                              │
+│ ment method that suits you b │                              │                              │                              │
+│ est during the checkout proc │                              │                              │                              │
+│ ess. Let me know if you have │                              │                              │                              │
+│  any other questions!        │                              │                              │                              │
+├──────────────────────────────┼──────────────────────────────┼──────────────────────────────┼──────────────────────────────┤
+│ Yes, of course! I'd be happy │ Of course, Emily! I'd be hap │ Emily                        │ Can you help me with a probl │
+│  to help you with any issues │ py to help you with any issu │                              │ em I'm having with my accoun │
+│  you're experiencing with yo │ es you're having with your a │                              │ t or order?                  │
+│ ur account or order. Please  │ ccount or order. What seems  │                              │                              │
+│ let me know what specificall │ to be the problem?           │                              │                              │
+│ y you're having trouble with │                              │                              │                              │
+│  and I'll do my best to assi │                              │                              │                              │
+│ st you.                      │                              │                              │                              │
+└──────────────────────────────┴──────────────────────────────┴──────────────────────────────┴──────────────────────────────┘
+Evaluation complete: {
+  "successes": 20,
+  "failures": 0,
+  "tokenUsage": {
+    "total": 2062,
+    "prompt": 840,
+    "completion": 1222
+  }
+}
+Done.
