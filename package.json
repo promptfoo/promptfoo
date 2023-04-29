@@ -29,6 +29,7 @@
   "devDependencies": {
     "@types/jest": "^29.5.1",
     "@types/nunjucks": "^3.2.2",
+    "babel-jest": "^29.5.0",
     "jest-watch-typeahead": "^2.2.2",
     "prettier": "^2.8.8",
     "ts-jest": "^29.1.0",
@@ -36,10 +37,12 @@
     "typescript": "^5.0.4"
   },
   "dependencies": {
+    "chalk": "^4.1.2",
     "commander": "^10.0.1",
     "csv-parse": "^5.3.8",
     "csv-stringify": "^6.3.2",
     "node-fetch": "^3.3.1",
-    "nunjucks": "^3.2.4"
+    "nunjucks": "^3.2.4",
+    "winston": "^3.8.2"
   }
 }

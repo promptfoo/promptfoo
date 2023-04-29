@@ -3,13 +3,14 @@
     "declaration": true,
     "declarationMap": true,
     "esModuleInterop": true,
-    "module": "es2020",
+    "target": "es2020",
+    "module": "esnext",
     "moduleResolution": "node",
     "outDir": "dist",
     "skipLibCheck": true,
     "sourceMap": true,
-    "strict": true,
-    "target": "ES2015"
+    "strict": true
   },
-  "include": ["src/"]
+  "include": ["src/"],
+  "exclude": ["node_modules", "dist"]
 }

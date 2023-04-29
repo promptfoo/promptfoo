@@ -6,11 +6,11 @@ import {
   OpenAiCompletionProvider,
   OpenAiChatCompletionProvider,
   loadApiProvider,
-} from '../src/apiCaller';
+} from '../src/providers.js';
 
 jest.mock('node-fetch', () => jest.fn());
 
-describe('apiCaller', () => {
+describe('providers', () => {
   afterEach(() => {
     jest.clearAllMocks();
   });

@@ -1,7 +1,11 @@
 import fs from 'fs';
+
 import { parse } from 'csv-parse/sync';
 import { stringify } from 'csv-stringify/sync';
 import nunjucks from 'nunjucks';
+
+import logger from './logger.js';
+
 import { EvaluationOptions, EvaluateResult, CsvRow, ApiProvider } from './types.js';
 
 export async function evaluate(
@@ -56,6 +60,8 @@ export async function evaluate(
   }
 
   const csvOutput = stringify(results, { header: true });
+
+  logger.info(`Writing output to ${options.output}`);
   fs.writeFileSync(options.output, csvOutput);
 
   return stats;
