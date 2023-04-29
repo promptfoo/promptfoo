@@ -1,5 +1,7 @@
 import fetch from 'node-fetch';
+
 import { ApiProvider, ProviderResult } from './types.js';
+import logger from './logger.js';
 
 export class OpenAiGenericProvider implements ApiProvider {
   modelName: string;
@@ -50,7 +52,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       max_tokens: 1024,
       temperature: 0,
     };
-    console.log('Calling OpenAI API...', body);
+    logger.info(`Calling OpenAI API: ${JSON.stringify(body, null, 2)}`);
     const response = await fetch('https://api.openai.com/v1/completions', {
       method: 'POST',
       headers: {
@@ -84,11 +86,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
   constructor(modelName: string, apiKey?: string) {
     if (!OpenAiChatCompletionProvider.OPENAI_CHAT_MODELS.includes(modelName)) {
-      throw new Error(
-        `Unknown OpenAI chat model name: ${modelName}. Use one of the following: ${OpenAiChatCompletionProvider.OPENAI_CHAT_MODELS.join(
-          ', ',
-        )}`,
-      );
+      throw new Error(`Unknown OpenAI completion model name: ${modelName}. Use one of the following: ${OpenAiCompletionProvider.OPENAI_COMPLETION_MODELS.join(', ')}`);
     }
     super(modelName, apiKey);
   }
@@ -108,7 +106,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       max_tokens: 1024,
       temperature: 0,
     };
-    console.log('Calling OpenAI API...', body);
+    logger.info(`Calling OpenAI API: ${JSON.stringify(body, null, 2)}`);
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -130,10 +128,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   }
 }
 
-export function loadApiProvider(apiCallerPath: string): ApiProvider {
-  if (apiCallerPath?.startsWith('openai:')) {
+export function loadApiProvider(providerPath: string): ApiProvider {
+  if (providerPath?.startsWith('openai:')) {
     // Load OpenAI module
-    const options = apiCallerPath.split(':');
+    const options = providerPath.split(':');
     const modelType = options[1];
     const modelName = options[2];
 
@@ -149,6 +147,6 @@ export function loadApiProvider(apiCallerPath: string): ApiProvider {
   }
 
   // Load custom module
-  const CustomApiProvider = require(apiCallerPath).default;
+  const CustomApiProvider = require(providerPath).default;
   return new CustomApiProvider();
 }
