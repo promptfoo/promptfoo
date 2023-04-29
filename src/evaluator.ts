@@ -9,6 +9,8 @@ import logger from './logger.js';
 
 import { EvaluationOptions, EvaluateResult, CsvRow, ApiProvider } from './types.js';
 
+const PROMPT_DELIMITER = '---';
+
 function parseJson(json: string): any | undefined {
   try {
     return JSON.parse(json);
@@ -44,8 +46,10 @@ export async function evaluate(
   };
 
   for (const promptPath of options.prompts) {
-    const runPrompt = async (vars: Record<string, string> = {}) => {
-      const prompt = fs.readFileSync(promptPath, 'utf-8');
+    const fileContent = fs.readFileSync(promptPath, 'utf-8');
+    const prompts = options.prompts.length === 1 ? fileContent.split(PROMPT_DELIMITER).map(p => p.trim()) : [fileContent];
+
+    const runPrompt = async (prompt: string, vars: Record<string, string> = {}) => {
       const renderedPrompt = nunjucks.renderString(prompt, vars);
 
       try {
@@ -66,11 +70,13 @@ export async function evaluate(
       }
     };
 
-    if (rows.length === 0) {
-      await runPrompt();
-    } else {
-      for (const row of rows) {
-        await runPrompt(row);
+    for (const prompt of prompts) {
+      if (rows.length === 0) {
+        await runPrompt(prompt);
+      } else {
+        for (const row of rows) {
+          await runPrompt(prompt, row);
+        }
       }
     }
   }
