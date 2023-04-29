@@ -1,4 +1,5 @@
 import fs from 'fs';
+import { parse as pathParse } from 'path';
 
 import yaml from 'js-yaml';
 import { parse } from 'csv-parse/sync';
@@ -23,8 +24,7 @@ export async function evaluate(
   options: EvaluationOptions,
   provider: ApiProvider,
 ): Promise<EvaluateResult> {
-  const fileExtension = options.vars?.split('.').pop()?.toLowerCase();
-
+  const fileExtension = options.vars ? pathParse(options.vars).ext.slice(1) : undefined;
   let rows: CsvRow[] = [];
   if (options.vars) {
     if (fileExtension === 'csv') {
