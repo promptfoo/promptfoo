@@ -1,8 +1,10 @@
 #!/usr/bin/env node
+import chalk from 'chalk';
 import { Command } from 'commander';
 
+import logger from './logger.js';
 import { EvaluationOptions } from './types.js';
-import { loadApiProvider } from './apiCaller.js';
+import { loadApiProvider } from './providers.js';
 import { evaluate } from './evaluator.js';
 
 const program = new Command();
@@ -27,9 +29,8 @@ program
 
     const provider = loadApiProvider(options.provider);
     const results = await evaluate(options, provider);
-    console.log('Evaluation complete:');
-    console.log(results);
-    console.log('Done.');
+    logger.info(chalk.green.bold(`Evaluation complete: ${JSON.stringify(results, null, 2)}`));
+    logger.info('Done.');
   });
 
 program.parse(process.argv);

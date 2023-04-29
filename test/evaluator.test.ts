@@ -1,6 +1,6 @@
 import * as fs from 'fs';
-import { evaluate } from '../src/evaluator';
-import { ApiProvider } from '../src/types';
+import { evaluate } from '../src/evaluator.js';
+import { ApiProvider } from '../src/types.js';
 
 jest.mock('fs', () => ({
   readFileSync: jest.fn(),
