@@ -23,16 +23,19 @@ export async function evaluate(
   options: EvaluationOptions,
   provider: ApiProvider,
 ): Promise<EvaluateResult> {
-  const fileExtension = options.vars ? options.vars.split('.').pop()?.toLowerCase() : null;
-  const rows: CsvRow[] = options.vars
-    ? fileExtension === 'csv'
-    ? parse(fs.readFileSync(options.vars, 'utf-8'), { columns: true })
-    : fileExtension === 'json'
-      ? parseJson(fs.readFileSync(options.vars, 'utf-8'))
-      : fileExtension === 'yaml' || fileExtension === 'yml'
-        ? yaml.load(fs.readFileSync(options.vars, 'utf-8'))
-        : []
-    : [];
+  const fileExtension = options.vars?.split('.').pop()?.toLowerCase();
+
+  let rows: CsvRow[] = [];
+  if (options.vars) {
+    if (fileExtension === 'csv') {
+      rows = parse(fs.readFileSync(options.vars, 'utf-8'), { columns: true });
+    } else if (fileExtension === 'json') {
+      rows = parseJson(fs.readFileSync(options.vars, 'utf-8'));
+    } else if (fileExtension === 'yaml' || fileExtension === 'yml') {
+      rows = yaml.load(fs.readFileSync(options.vars, 'utf-8')) as unknown as any;
+    }
+  }
+
   const results: CsvRow[] = [];
 
   const stats = {
