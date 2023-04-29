@@ -1,19 +1,16 @@
 promptfoo
 ---
 
-`promptfoo` is a library and command-line tool that facilitates prompt editing and evaluation by providing a systematic approach to comparing LLM outputs.
+`promptfoo` is a library and command-line tool that helps you edit and evaluate LLM prompts by providing a systematic approach to comparing model outputs.
 
 With the ability to run a test suite on multiple prompts, catch regressions, and analyze results, `promptfoo` offers a practical solution for evaluating model outputs.
 
 ## Features
 
 - Test multiple prompts against predefined test cases
-- Compare LLM outputs in a structured manner
-- Support for OpenAI API models
-- Customizable API provider integration
-- CSV input/output for seamless data handling and processing
-
-By incorporating these features, `promptfoo` enables users to make more informed decisions when refining prompts and assessing language model performance.
+- Compare LLM outputs side-by-side
+- Use as a command line tool, or integrate into your workflow as a library 
+- Customizable API provider integration + built-in support for OpenAI API models
 
 ## Usage (command line)
 
@@ -47,7 +44,7 @@ You can also use `promptfoo` as a library in your project by importing the `eval
 
 ### Example
 
-Here is an example of how to do this:
+For example: 
 
 ```javascript
 import promptfoo from 'promptfoo';
@@ -74,14 +71,14 @@ This code imports the `promptfoo` library, defines the evaluation options, and t
       body: 'Hello world'
     },
     {
-      prompt: 'Rephrase this in French: {{body}}',
-      output: "J'ai faim.",
-      body: "I'm hungry"
-    },
-    {
       prompt: 'Rephrase this like a pirate: {{body}}',
       output: 'Ahoy thar, me hearties! Avast ye, world!',
       body: 'Hello world'
+    },
+    {
+      prompt: 'Rephrase this in French: {{body}}',
+      output: "J'ai faim.",
+      body: "I'm hungry"
     },
     {
       prompt: 'Rephrase this like a pirate: {{body}}',
