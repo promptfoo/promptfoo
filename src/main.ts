@@ -23,7 +23,7 @@ program
     '-r, --provider <name or path>',
     'One of: openai:chat, openai:completion, openai:<model name>, or path to custom API caller module',
   )
-  .option('-o, --output <path>', 'Path to output file (csv, json, yaml)')
+  .option('-o, --output <path>', 'Path to output file (csv, json, yaml, html)')
   .option('-v, --vars <path>', 'Path to file with prompt variables (csv, json, yaml)')
   .option('-c, --config <path>', 'Path to configuration file')
   .action(async (cmdObj: CommandLineOptions & Command) => {
@@ -60,7 +60,7 @@ program
 
     if (cmdObj.output) {
       logger.info(chalk.yellow(`Writing output to ${cmdObj.output}`));
-      writeOutput(cmdObj.output, summary.results);
+      writeOutput(cmdObj.output, summary.results, summary.table);
     } else {
       // Output table by default
       const maxWidth = process.stdout.columns ? process.stdout.columns - 10 : 120;
