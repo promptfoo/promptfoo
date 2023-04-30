@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+
 import { readVars, readPrompts, writeOutput } from '../src/util.js';
 
 import type { EvaluateResult } from '../src/types.js';
@@ -7,6 +8,8 @@ jest.mock('fs', () => ({
   readFileSync: jest.fn(),
   writeFileSync: jest.fn(),
 }));
+
+jest.mock('../src/esm.js');
 
 describe('util', () => {
   afterEach(() => {
@@ -87,8 +90,12 @@ describe('util', () => {
         },
       },
     ];
+    const table = [
+      ['Test prompt', 'var1', 'var2'],
+      ['Test output', 'value1', 'value2'],
+    ];
 
-    writeOutput(outputPath, results);
+    writeOutput(outputPath, results, table);
 
     expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
   });
@@ -105,8 +112,12 @@ describe('util', () => {
         },
       },
     ];
+    const table = [
+      ['Test prompt', 'var1', 'var2'],
+      ['Test output', 'value1', 'value2'],
+    ];
 
-    writeOutput(outputPath, results);
+    writeOutput(outputPath, results, table);
 
     expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
   });
@@ -123,8 +134,12 @@ describe('util', () => {
         },
       },
     ];
+    const table = [
+      ['Test prompt', 'var1', 'var2'],
+      ['Test output', 'value1', 'value2'],
+    ];
 
-    writeOutput(outputPath, results);
+    writeOutput(outputPath, results, table);
 
     expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
   });
