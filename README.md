@@ -1,12 +1,12 @@
-promptfoo
----
+# promptfoo
 
 `promptfoo` is a library and command-line tool that helps you evaluate LLM prompt quality with a systematic approach to comparing model outputs.
 
 With promptfoo, you can:
+
 - **Test multiple prompts** against predefined test cases
 - **Evaluate quality and catch regressions** by comparing LLM outputs side-by-side
-- Use as a command line tool, or integrate into your workflow as a library 
+- Use as a command line tool, or integrate into your workflow as a library
 - Use OpenAI API models (built-in support), or use a custom API provider integration for any LLM API
 
 ## Usage (command line)
@@ -18,14 +18,14 @@ npx promptfoo eval -p <prompt_paths...> -o <output_path> -r <provider> [-v <vars
 ```
 
 - `<prompt_paths...>`: Paths to prompt file(s)
-- `<output_path>`: Path to output CSV, JSON, or YAML file
+- `<output_path>`: Path to output CSV, JSON, YAML, HTML file
 - `<provider>`: One of: `openai:chat`, `openai:completion`, `openai:chat:<model_name>`, `openai:completion:<model_name>`, or filesystem path to custom API caller module
 - `<vars_path>` (optional): Path to CSV, JSON, or YAML file with prompt variables
 - `<config_path>` (optional): Path to configuration file
 
 ### Example
 
-Use the `promptfoo` CLI tool to generate side-by-side evaluations of LLM prompt quality.  In this example, we evaluate whether adding adjectives to the personality of an assistant bot affects the responses:
+Use the `promptfoo` CLI tool to generate side-by-side evaluations of LLM prompt quality. In this example, we evaluate whether adding adjectives to the personality of an assistant bot affects the responses:
 
 <img width="1362" alt="Side-by-side evaluation of LLM prompt quality" src="https://user-images.githubusercontent.com/310310/235329207-e8c22459-5f51-4fee-9714-1b602ac3d7ca.png">
 
@@ -119,7 +119,7 @@ This code imports the `promptfoo` library, defines the evaluation options, and t
 
 ### Prompt Files
 
-Prompt files are plain text files that contain the prompts you want to test. If you have only one file, you can include multiple prompts in the file, separated by the delimiter `---`. If you have multiple files, each prompt should be in a separate file. 
+Prompt files are plain text files that contain the prompts you want to test. If you have only one file, you can include multiple prompts in the file, separated by the delimiter `---`. If you have multiple files, each prompt should be in a separate file.
 
 You can use [Nunjucks](https://mozilla.github.io/nunjucks/) templating syntax to include variables in your prompts, which will be replaced with actual values from the `vars` CSV file during evaluation.
 
@@ -162,10 +162,7 @@ text
 Example of a vars file (`vars.json`):
 
 ```json
-[
-  {"text": "Hello, world!"},
-  {"text": "Goodbye, everyone!"}
-]
+[{ "text": "Hello, world!" }, { "text": "Goodbye, everyone!" }]
 ```
 
 ### Output File
@@ -203,7 +200,7 @@ You can specify any option in a configuration file (e.g., `.promptfoorc`, `promp
 
 Example of a configuration file (`promptfoo.config.json`):
 
-  ```json
+```json
 {
   "provider": "openai:chat",
   "vars": "/path/to/vars.csv"
@@ -251,9 +248,9 @@ export OPENAI_API_KEY=your_api_key_here
 ```
 
 Other OpenAI-related environment variables are supported:
+
 - `OPENAI_TEMPERATURE` - temperature model parameter
 - `OPENAI_MAX_TOKENS` - max_tokens model parameter
-
 
 ### Custom API Provider
 

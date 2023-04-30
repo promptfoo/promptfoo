@@ -1,5 +1,9 @@
 import * as fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
 import yaml from 'js-yaml';
+import nunjucks from 'nunjucks';
 import { parse as parsePath } from 'path';
 import { CsvRow } from './types.js';
 import { parse as parseCsv } from 'csv-parse/sync';
@@ -40,7 +44,7 @@ export function readVars(varsPath: string): CsvRow[] {
   return rows;
 }
 
-export function writeOutput(outputPath: string, results: EvaluateResult[]): void {
+export function writeOutput(outputPath: string, results: EvaluateResult[], table: string[][]): void {
   const outputExtension = outputPath.split('.').pop()?.toLowerCase();
 
   if (outputExtension === 'csv') {
@@ -56,6 +60,12 @@ export function writeOutput(outputPath: string, results: EvaluateResult[]): void
     fs.writeFileSync(outputPath, JSON.stringify(results, null, 2));
   } else if (outputExtension === 'yaml' || outputExtension === 'yml') {
     fs.writeFileSync(outputPath, yaml.dump(results));
+  } else if (outputExtension === 'html') {
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = path.dirname(__filename);
+    const template = fs.readFileSync(`${__dirname}/tableOutput.html`, 'utf-8');
+    const htmlOutput = nunjucks.renderString(template, { table, results });
+    fs.writeFileSync(outputPath, htmlOutput);
   } else {
     throw new Error('Unsupported output file format. Use CSV, JSON, or YAML.');
   }
