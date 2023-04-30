@@ -1,16 +1,13 @@
 promptfoo
 ---
 
-`promptfoo` is a library and command-line tool that helps you edit and evaluate LLM prompts by providing a systematic approach to comparing model outputs.
+`promptfoo` is a library and command-line tool that helps you evaluate LLM prompt quality with a systematic approach to comparing model outputs.
 
-With the ability to run a test suite on multiple prompts, catch regressions, and analyze results, `promptfoo` offers a practical solution for evaluating model outputs.
-
-## Features
-
-- Test multiple prompts against predefined test cases
-- Compare LLM outputs side-by-side
+With promptfoo, you can:
+- **Test multiple prompts** against predefined test cases
+- **Evaluate quality and catch regressions** by comparing LLM outputs side-by-side
 - Use as a command line tool, or integrate into your workflow as a library 
-- Customizable API provider integration + built-in support for OpenAI API models
+- Use OpenAI API models (built-in support), or use a custom API provider integration for any LLM API
 
 ## Usage (command line)
 
@@ -28,12 +25,17 @@ npx promptfoo eval -p <prompt_paths...> -o <output_path> -r <provider> [-v <vars
 
 ### Example
 
+Use the `promptfoo` CLI tool to generate side-by-side evaluations of LLM prompt quality.  In this example, we evaluate whether adding adjectives to the personality of an assistant bot affects the responses:
+
+<img width="1362" alt="Side-by-side evaluation of LLM prompt quality" src="https://user-images.githubusercontent.com/310310/235329207-e8c22459-5f51-4fee-9714-1b602ac3d7ca.png">
+
 ```bash
-promptfoo eval -p prompt1.txt prompt2.txt -o results.csv -r openai:chat -v vars.csv
+npx promptfoo eval -p prompts.txt -v vars.csv -r openai:chat
 ```
 
-This command will evaluate the prompts in `prompt1.txt` and `prompt2.txt` using the OpenAI chat API, substituing the variable values from `vars.csv`, and save the results to `results.csv`.
+This command will evaluate the prompts in `prompt1.txt` and `prompt2.txt` using the OpenAI chat API, substituing the variable values from `vars.csv`, and output results in your terminal.
 
+Have a look at the files and full output [here](https://github.com/typpo/promptfoo/tree/main/examples/assistant-cli).
 
 ## Usage (as a library)
 
@@ -44,7 +46,7 @@ You can also use `promptfoo` as a library in your project by importing the `eval
 
 ### Example
 
-For example: 
+`promptfoo` exports an `evaluate` function that you can use to run prompt evaluations.
 
 ```javascript
 import promptfoo from 'promptfoo';
@@ -60,7 +62,7 @@ const options = {
 })();
 ```
 
-This code imports the `promptfoo` library, defines the evaluation options, and then calls the `evaluate` function with these options. The results will be logged to the console:
+This code imports the `promptfoo` library, defines the evaluation options, and then calls the `evaluate` function with these options. The results are logged to the console:
 
 ```js
 {
@@ -86,6 +88,23 @@ This code imports the `promptfoo` library, defines the evaluation options, and t
       body: "I'm hungry"
     }
   ],
+  table: [
+    [
+      'Rephrase this in French: {{body}}',
+      'Rephrase this like a pirate: {{body}}',
+      'body'
+    ],
+    [
+      'Bonjour le monde',
+      'Ahoy thar, me hearties! Avast ye, world!',
+      'Hello world'
+    ],
+    [
+      "J'ai faim.",
+      "Arrr, me belly be empty and me throat be parched! I be needin' some grub, matey!",
+      "I'm hungry"
+    ]
+  ]
   stats: {
     successes: 4,
     failures: 0,
@@ -94,18 +113,22 @@ This code imports the `promptfoo` library, defines the evaluation options, and t
 }
 ```
 
+[See example here](https://github.com/typpo/promptfoo/tree/main/examples/simple-import)
+
 ## Configuration
 
 ### Prompt Files
 
-Prompt files are plain text files that contain the prompts you want to test. If you have only one file, you can include multiple prompts in the file, separated by the delimiter `---`. If you have multiple files, each prompt should be in a separate file. You can use [Nunjucks](https://mozilla.github.io/nunjucks/) templating syntax to include variables in your prompts, which will be replaced with actual values from the `vars` CSV file during evaluation.
+Prompt files are plain text files that contain the prompts you want to test. If you have only one file, you can include multiple prompts in the file, separated by the delimiter `---`. If you have multiple files, each prompt should be in a separate file. 
+
+You can use [Nunjucks](https://mozilla.github.io/nunjucks/) templating syntax to include variables in your prompts, which will be replaced with actual values from the `vars` CSV file during evaluation.
 
 Example of a single prompt file with multiple prompts (`prompts.txt`):
 
 ```
-Translate the following English text to French: "{{text}}"
+Translate the following text to French: "{{text}}"
 ---
-What is the capital of France?
+Translate the following text to German: "{{text}}"
 ```
 
 Example of multiple prompt files:
@@ -113,18 +136,20 @@ Example of multiple prompt files:
 - `prompt1.txt`:
 
   ```
-  Translate the following English text to French: "{{text}}"
+  Translate the following text to French: "{{text}}"
   ```
 
 - `prompt2.txt`:
 
   ```
-  What is the capital of France?
+  Translate the following text to German: "{{text}}"
   ```
 
-### Vars Files
+### Vars File
 
-Vars files are CSV, JSON, or YAML files that contain the values for the variables used in the prompts. The first row of the CSV file should contain the variable names, and each subsequent row should contain the corresponding values for each test case.
+The Vars file is a CSV, JSON, or YAML file that contains the values for the variables used in the prompts. The first row of the CSV file should contain the variable names, and each subsequent row should contain the corresponding values for each test case.
+
+Vars are substituted by [Nunjucks](https://mozilla.github.io/nunjucks/) templating syntax into prompts.
 
 Example of a vars file (`vars.csv`):
 
@@ -151,8 +176,8 @@ Example of an output file (`results.csv`):
 
 ```
 Prompt,Output,text
-"Translate the following English text to French: ""{{text}}""","Bonjour, le monde !","Hello, world!"
-"Translate the following English text to French: ""{{text}}""","Au revoir, tout le monde !","Goodbye, everyone!"
+"Translate the following text to French: ""{{text}}""","Bonjour, le monde !","Hello, world!"
+"Translate the following text to French: ""{{text}}""","Au revoir, tout le monde !","Goodbye, everyone!"
 ```
 
 Example of an output file (`results.json`):
@@ -181,7 +206,7 @@ Example of a configuration file (`promptfoo.config.json`):
   ```json
 {
   "provider": "openai:chat",
-  "vars": "vars.csv"
+  "vars": "/path/to/vars.csv"
 }
 ```
 
@@ -225,6 +250,10 @@ Example:
 export OPENAI_API_KEY=your_api_key_here
 ```
 
+Other OpenAI-related environment variables are supported:
+- `OPENAI_TEMPERATURE` - temperature model parameter
+- `OPENAI_MAX_TOKENS` - max_tokens model parameter
+
 
 ### Custom API Provider
 
@@ -264,12 +293,12 @@ module.exports.default = CustomApiProvider;
 To use the custom API provider with `promptfoo`, pass the path to the module as the `provider` option in the CLI invocation:
 
 ```bash
-promptfoo eval -p prompt1.txt prompt2.txt -o results.csv -r ./customApiProvider.js -v vars.csv
+promptfoo eval -p prompt1.txt prompt2.txt -o results.csv  -v vars.csv -r ./customApiProvider.js
 ```
 
 This command will evaluate the prompts using the custom API provider and save the results to the specified CSV file.
 
-## Developing
+## Development
 
 Contributions are welcome! Please feel free to submit a pull request or open an issue.
 
