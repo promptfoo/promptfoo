@@ -62,14 +62,14 @@ program
       logger.info(chalk.yellow(`Writing output to ${cmdObj.output}`));
       writeOutput(cmdObj.output, summary.results);
     } else {
-      // Output table
-      const maxWidth = process.stdout.columns || 120;
+      // Output table by default
+      const maxWidth = process.stdout.columns ? process.stdout.columns - 10 : 120;
       const head = summary.table[0];
       const table = new Table({
         head,
-        colWidths: Array(head.length).fill(maxWidth / head.length),
+        colWidths: Array(head.length).fill(Math.floor(maxWidth / head.length)),
         wordWrap: true,
-        wrapOnWordBoundary: false,
+        wrapOnWordBoundary: true,
       });
       table.push(...summary.table.slice(1));
       logger.info(table.toString());

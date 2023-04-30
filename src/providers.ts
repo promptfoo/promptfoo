@@ -50,7 +50,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       model: this.modelName,
       prompt,
       max_tokens: process.env.OPENAI_MAX_TOKENS || 1024,
-      temperature: process.env.OPENAI_MAX_TEMPERATURE || 0,
+      temperature: process.env.OPENAI_TEMPERATURE || 0,
     };
     logger.info(`Calling OpenAI API: ${JSON.stringify(body, null, 2)}`);
     const response = await fetch('https://api.openai.com/v1/completions', {
