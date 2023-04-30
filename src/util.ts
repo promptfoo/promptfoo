@@ -1,6 +1,4 @@
 import * as fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
 
 import yaml from 'js-yaml';
 import nunjucks from 'nunjucks';
@@ -8,6 +6,8 @@ import { parse as parsePath } from 'path';
 import { CsvRow } from './types.js';
 import { parse as parseCsv } from 'csv-parse/sync';
 import { stringify } from 'csv-stringify/sync';
+
+import { getDirectory } from './esm.js';
 
 import type { EvaluateResult } from './types.js';
 
@@ -61,9 +61,7 @@ export function writeOutput(outputPath: string, results: EvaluateResult[], table
   } else if (outputExtension === 'yaml' || outputExtension === 'yml') {
     fs.writeFileSync(outputPath, yaml.dump(results));
   } else if (outputExtension === 'html') {
-    const __filename = fileURLToPath(import.meta.url);
-    const __dirname = path.dirname(__filename);
-    const template = fs.readFileSync(`${__dirname}/tableOutput.html`, 'utf-8');
+    const template = fs.readFileSync(`${getDirectory()}/tableOutput.html`, 'utf-8');
     const htmlOutput = nunjucks.renderString(template, { table, results });
     fs.writeFileSync(outputPath, htmlOutput);
   } else {
