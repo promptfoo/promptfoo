@@ -82,8 +82,13 @@ describe('util', () => {
     const outputPath = 'output.csv';
     const results: EvaluateResult[] = [
       {
-        prompt: 'Test prompt',
-        output: 'Test output',
+        prompt: {
+          raw: 'Test prompt',
+          display: '[display] Test prompt',
+        },
+        response: {
+          output: 'Test output',
+        },
         vars: {
           var1: 'value1',
           var2: 'value2',
@@ -104,8 +109,13 @@ describe('util', () => {
     const outputPath = 'output.json';
     const results: EvaluateResult[] = [
       {
-        prompt: 'Test prompt',
-        output: 'Test output',
+        prompt: {
+          raw: 'Test prompt',
+          display: '[display] Test prompt',
+        },
+        response: {
+          output: 'Test output',
+        },
         vars: {
           var1: 'value1',
           var2: 'value2',
@@ -126,8 +136,13 @@ describe('util', () => {
     const outputPath = 'output.yaml';
     const results: EvaluateResult[] = [
       {
-        prompt: 'Test prompt',
-        output: 'Test output',
+        prompt: {
+          raw: 'Test prompt',
+          display: '[display] Test prompt',
+        },
+        response: {
+          output: 'Test output',
+        },
         vars: {
           var1: 'value1',
           var2: 'value2',

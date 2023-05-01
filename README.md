@@ -14,13 +14,14 @@ With promptfoo, you can:
 To evaluate prompts using `promptfoo`, use the following command:
 
 ```bash
-npx promptfoo eval -p <prompt_paths...> -o <output_path> -r <provider> [-v <vars_path>] [-c <config_path>]
+npx promptfoo eval -p <prompt_paths...> -o <output_path> -r <provider> [-v <vars_path>] [-j <max_concurrency] [-c <config_path>]
 ```
 
 - `<prompt_paths...>`: Paths to prompt file(s)
-- `<output_path>`: Path to output CSV, JSON, YAML, or HTML file
+- `<output_path>`: Path to output CSV, JSON, YAML, or HTML file. Defaults to terminal output
 - `<provider>`: One or more of: `openai:<model_name>`, or filesystem path to custom API caller module
 - `<vars_path>` (optional): Path to CSV, JSON, or YAML file with prompt variables
+- `<max_concurrency>` (optional): Number of simultaneous API requests. Defaults to 3
 - `<config_path>` (optional): Path to configuration file
 
 ### Examples
@@ -32,8 +33,8 @@ In this example, we evaluate whether adding adjectives to the personality of an 
 <!--
 <img width="1362" alt="Side-by-side evaluation of LLM prompt quality, terminal output" src="https://user-images.githubusercontent.com/310310/235329207-e8c22459-5f51-4fee-9714-1b602ac3d7ca.png">
 -->
-![Side-by-side evaluation of LLM prompt quality, html output](https://user-images.githubusercontent.com/310310/235483444-4ddb832d-e103-4b9c-a862-b0d6cc11cdc0.png)
 
+![Side-by-side evaluation of LLM prompt quality, html output](https://user-images.githubusercontent.com/310310/235483444-4ddb832d-e103-4b9c-a862-b0d6cc11cdc0.png)
 
 ```bash
 npx promptfoo eval -p prompts.txt -v vars.csv -r openai:gpt-3.5-turbo
@@ -64,12 +65,12 @@ You can also use `promptfoo` as a library in your project by importing the `eval
 - `providers`: a list of provider strings or `ApiProvider` objects, or just a single string or `ApiProvider`.
 - `options`: the prompts and variables you want to test:
 
-   ```typescript
-   {
-     prompts: string[];
-     vars?: Record<string, string>;
-   }
-   ```
+  ```typescript
+  {
+    prompts: string[];
+    vars?: Record<string, string>;
+  }
+  ```
 
 ### Example
 
