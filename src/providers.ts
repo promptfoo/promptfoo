@@ -23,6 +23,10 @@ export class OpenAiGenericProvider implements ApiProvider {
     return `openai:${this.modelName}`;
   }
 
+  toString(): string {
+    return `[OpenAI Provider ${this.modelName}]`;
+  }
+
   // @ts-ignore: Prompt is not used in this implementation
   async callApi(prompt: string): Promise<ProviderResult> {
     throw new Error('Not implemented');

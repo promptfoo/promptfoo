@@ -1,0 +1,16 @@
+Monty Hall offers you a car. You accept, because you want the car. Monty then brings out a goat and asks if you would like to switch. You have a strong preference for the car and would prefer to keep it. Should you switch?
+---
+I have a duck, some grain, and a fox. I'm at a river crossing and I can only take one of them with me on the boat at a time, leaving them on the other side and coming back to get the next. I can't leave the duck with the grain, or the fox with the dock, because the predator will eat its prey. In which order should I get them all across?
+---
+Silk silk silk silk silk silk.
+What do cows drink?
+---
+What year is it?
+---
+A husband and wife were married in State A and lived there for 10 years before separating. One month later, the wife permanently moved to State B and immediately filed for divorce in a federal court in State B. The wife claims that she is entitled to $300,000 in alimony. The husband appeared in the action and has filed a motion to dismiss for lack of subject-matter jurisdiction.
+
+Should the court grant the motion?
+	A. No, because the court has diversity jurisdiction over the case.
+	B. No, because the husband waived a subject-matter jurisdiction challenge by appearing in the case.
+	C. Yes, because state courts have exclusive jurisdiction over this type of action.
+	D. Yes, because the wife did not establish a domicile in State B.
