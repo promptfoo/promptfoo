@@ -19,7 +19,7 @@ npx promptfoo eval -p <prompt_paths...> -o <output_path> -r <provider> [-v <vars
 
 - `<prompt_paths...>`: Paths to prompt file(s)
 - `<output_path>`: Path to output CSV, JSON, YAML, HTML file
-- `<provider>`: One or more of: `openai:chat`, `openai:completion`, `openai:chat:<model_name>`, `openai:completion:<model_name>`, or filesystem path to custom API caller module
+- `<provider>`: One or more of: `openai:<model_name>`, or filesystem path to custom API caller module
 - `<vars_path>` (optional): Path to CSV, JSON, or YAML file with prompt variables
 - `<config_path>` (optional): Path to configuration file
 
@@ -42,11 +42,10 @@ Have a look at the files and full output [here](https://github.com/typpo/promptf
 You can also use `promptfoo` as a library in your project by importing the `evaluate` function. The function takes the following parameters:
 
 - `providers`: a list of provider strings or `ApiProvider` objects, or just a single string or `ApiProvider`.
-- `options`: an `EvaluateOptions` object:
+- `options`: the prompts and variables you want to test:
 
    ```typescript
    {
-     providers: ApiProvider[];
      prompts: string[];
      vars?: Record<string, string>;
    }
@@ -257,8 +256,18 @@ export OPENAI_API_KEY=your_api_key_here
 
 Other OpenAI-related environment variables are supported:
 
-- `OPENAI_TEMPERATURE` - temperature model parameter
-- `OPENAI_MAX_TOKENS` - max_tokens model parameter
+- `OPENAI_TEMPERATURE` - temperature model parameter, defaults to 0
+- `OPENAI_MAX_TOKENS` - max_tokens model parameter, defaults to 1024
+
+The OpenAI provider supports the following model formats:
+
+- `openai:chat` - defaults to gpt-3.5-turbo
+- `openai:completion` - defaults to `text-davinci-003`
+- `openai:<model name>` - uses a specific model name (mapped automatically to chat or completion endpoint)
+- `openai:chat:<model name>` - uses any model name against the chat endpoint
+- `openai:completion:<model name>` - uses any model name against the completion endpoint
+
+The `openai:<endpoint>:<model>` construction is useful if OpenAI releases a new model, or if you have a custom model. For example, if OpenAI releases gpt-5 chat completion, you could begin using it immediately with `openai:chat:gpt-5`.
 
 ### Custom API Provider
 
@@ -266,6 +275,7 @@ To create a custom API provider, implement the `ApiProvider` interface in a sepa
 
 ```javascript
 export interface ApiProvider {
+  id: () => string;
   callApi: (prompt: string) => Promise<ProviderResult>;
 }
 ```
@@ -275,6 +285,10 @@ Below is an example of a custom API provider that returns a predefined output an
 ```javascript
 // customApiProvider.js
 class CustomApiProvider {
+  id() {
+    return 'my-custom-api';
+  }
+
   async callApi(prompt) {
     // Add your custom API logic here
 
