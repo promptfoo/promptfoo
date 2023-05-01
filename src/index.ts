@@ -4,11 +4,30 @@ import { loadApiProvider } from './providers.js';
 import type { ApiProvider, EvaluateOptions, EvaluateSummary } from './types.js';
 
 async function evaluate(
-  provider: string | ApiProvider,
-  options: EvaluateOptions,
+  providers: (string | ApiProvider)[] | (string | ApiProvider),
+  options: Omit<EvaluateOptions, 'providers'>,
 ): Promise<EvaluateSummary> {
-  const apiProvider = typeof provider === 'string' ? await loadApiProvider(provider) : provider;
-  return doEvaluate(options, apiProvider);
+  let apiProviders: ApiProvider[] = [];
+  const addProvider = async (provider: ApiProvider | string) => {
+    if (typeof provider === 'string') {
+      apiProviders.push(await loadApiProvider(provider));
+    } else {
+      apiProviders.push(provider);
+    }
+  };
+
+  if (Array.isArray(providers)) {
+    for (const provider of providers) {
+      await addProvider(provider);
+    }
+  } else {
+    await addProvider(providers);
+  }
+
+  return doEvaluate({
+    ...options,
+    providers: apiProviders,
+  });
 }
 
 export default {

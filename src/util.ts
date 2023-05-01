@@ -44,7 +44,11 @@ export function readVars(varsPath: string): CsvRow[] {
   return rows;
 }
 
-export function writeOutput(outputPath: string, results: EvaluateResult[], table: string[][]): void {
+export function writeOutput(
+  outputPath: string,
+  results: EvaluateResult[],
+  table: string[][],
+): void {
   const outputExtension = outputPath.split('.').pop()?.toLowerCase();
 
   if (outputExtension === 'csv') {

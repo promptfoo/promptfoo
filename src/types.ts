@@ -1,12 +1,13 @@
 export interface CommandLineOptions {
-  prompts: string[];
-  provider: string;
+  prompt: string[];
+  provider: string[];
   output?: string;
   vars?: string;
   config?: string;
 }
 
 export interface ApiProvider {
+  id: () => string;
   callApi: (prompt: string) => Promise<ProviderResult>;
 }
 
@@ -28,6 +29,7 @@ export interface CsvRow {
 export type VarMapping = Record<string, string>;
 
 export interface EvaluateOptions {
+  providers: ApiProvider[];
   prompts: string[];
   vars?: VarMapping[];
 }

@@ -2,21 +2,29 @@
   {
     "prompt": "Rephrase this in French: {{body}}",
     "output": "Bonjour le monde",
-    "body": "Hello world"
-  },
-  {
-    "prompt": "Rephrase this in French: {{body}}",
-    "output": "J'ai faim.",
-    "body": "I'm hungry"
+    "vars": {
+      "body": "Hello world"
+    }
   },
   {
     "prompt": "Rephrase this like a pirate: {{body}}",
     "output": "Ahoy thar, me hearties! Avast ye, world!",
-    "body": "Hello world"
+    "vars": {
+      "body": "Hello world"
+    }
+  },
+  {
+    "prompt": "Rephrase this in French: {{body}}",
+    "output": "J'ai faim.",
+    "vars": {
+      "body": "I'm hungry"
+    }
   },
   {
     "prompt": "Rephrase this like a pirate: {{body}}",
     "output": "Arrr, me belly be empty and me throat be parched! I be needin' some grub, matey!",
-    "body": "I'm hungry"
+    "vars": {
+      "body": "I'm hungry"
+    }
   }
 ]
