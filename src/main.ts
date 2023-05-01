@@ -26,6 +26,7 @@ program
   .option('-o, --output <path>', 'Path to output file (csv, json, yaml, html)')
   .option('-v, --vars <path>', 'Path to file with prompt variables (csv, json, yaml)')
   .option('-c, --config <path>', 'Path to configuration file')
+  .option('-j, --max-concurrency <number>', 'Maximum number of concurrent API calls')
   .option('--verbose', 'Show debug logs')
   .action(async (cmdObj: CommandLineOptions & Command) => {
     if (cmdObj.verbose) {
@@ -60,6 +61,8 @@ program
       vars,
       providers,
       showProgressBar: true,
+      maxConcurrency:
+        cmdObj.maxConcurrency && cmdObj.maxConcurrency > 0 ? cmdObj.maxConcurrency : undefined,
       ...config,
     };
 
