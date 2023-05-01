@@ -25,6 +25,8 @@ npx promptfoo eval -p <prompt_paths...> -o <output_path> -r <provider> [-v <vars
 
 ### Examples
 
+#### Prompt quality
+
 In this example, we evaluate whether adding adjectives to the personality of an assistant bot affects the responses:
 
 <!--
@@ -43,6 +45,17 @@ Have a look at the files and full output [here](https://github.com/typpo/promptf
 
 You can run the same command without an `-o` option to output in your terminal ([example](https://user-images.githubusercontent.com/310310/235329207-e8c22459-5f51-4fee-9714-1b602ac3d7ca.png)), or use `-o` to specify a CSV ([example](https://docs.google.com/spreadsheets/d/1nanoj3_TniWrDl1Sj-qYqIMD6jwm5FBy15xPFdUTsmI/edit?usp=sharing)), JSON ([example](https://github.com/typpo/promptfoo/blob/main/examples/simple-cli/output.json)), or YAML output.
 
+#### Model quality
+
+In this example, we evaluate the difference between GPT 3 and GPT 4 outputs for a given prompt:
+
+![Side-by-side evaluation of LLM model quality, gpt3 vs gpt4, html output](https://user-images.githubusercontent.com/310310/235490527-e0c31f40-00a0-493a-8afc-8ed6322bb5ca.png)
+
+```bash
+npx promptfoo eval -p prompts.txt -r openai:gpt-3.5-turbo openai:gpt-4 -o output.html
+```
+
+Full setup and output [here](https://github.com/typpo/promptfoo/tree/main/examples/gpt-3.5-vs-4).
 
 ## Usage (as a library)
 
