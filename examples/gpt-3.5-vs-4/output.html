@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>Table Output</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial,
+          sans-serif;
+      }
+      table,
+      th,
+      td {
+        border: 1px solid black;
+        border-collapse: collapse;
+      }
+      th,
+      td {
+        padding: 5px;
+      }
+    </style>
+  </head>
+  <body>
+    <table>
+      <thead>
+        <th>
+          [openai:gpt-3.5-turbo] Monty Hall offers you a car. You accept, because you want the car.
+          Monty then brings out a goat and asks if you would like to switch. You have a strong
+          preference for the car and would prefer to keep it. Should you switch?
+        </th>
+
+        <th>
+          [openai:gpt-4] Monty Hall offers you a car. You accept, because you want the car. Monty
+          then brings out a goat and asks if you would like to switch. You have a strong preference
+          for the car and would prefer to keep it. Should you switch?
+        </th>
+
+        <th>
+          [openai:gpt-3.5-turbo] I have a duck, some grain, and a fox. I&#39;m at a river crossing
+          and I can only take one of them with me on the boat at a time, leaving them on the other
+          side and coming back to get the next. I can&#39;t leave the duck with the grain, or the
+          fox with the dock, because the predator will eat its prey. In which order should I get
+          them all across?
+        </th>
+
+        <th>
+          [openai:gpt-4] I have a duck, some grain, and a fox. I&#39;m at a river crossing and I can
+          only take one of them with me on the boat at a time, leaving them on the other side and
+          coming back to get the next. I can&#39;t leave the duck with the grain, or the fox with
+          the dock, because the predator will eat its prey. In which order should I get them all
+          across?
+        </th>
+
+        <th>[openai:gpt-3.5-turbo] Silk silk silk silk silk silk. What do cows drink?</th>
+
+        <th>[openai:gpt-4] Silk silk silk silk silk silk. What do cows drink?</th>
+
+        <th>[openai:gpt-3.5-turbo] What year is it?</th>
+
+        <th>[openai:gpt-4] What year is it?</th>
+
+        <th>
+          [openai:gpt-3.5-turbo] A husband and wife were married in State A and lived there for 10
+          years before separating. One month later, the wife permanently moved to State B and
+          immediately filed for divorce in a federal court in State B. The wife claims that she is
+          entitled to $300,000 in alimony. The husband appeared in the action and has filed a motion
+          to dismiss for lack of subject-matter jurisdiction. Should the court grant the motion? A.
+          No, because the court has diversity jurisdiction over the case. B. No, because the husband
+          waived a subject-matter jurisdiction challenge by appearing in the case. C. Yes, because
+          state courts have exclusive jurisdiction over this type of action. D. Yes, because the
+          wife did not establish a domicile in State B.
+        </th>
+
+        <th>
+          [openai:gpt-4] A husband and wife were married in State A and lived there for 10 years
+          before separating. One month later, the wife permanently moved to State B and immediately
+          filed for divorce in a federal court in State B. The wife claims that she is entitled to
+          $300,000 in alimony. The husband appeared in the action and has filed a motion to dismiss
+          for lack of subject-matter jurisdiction. Should the court grant the motion? A. No, because
+          the court has diversity jurisdiction over the case. B. No, because the husband waived a
+          subject-matter jurisdiction challenge by appearing in the case. C. Yes, because state
+          courts have exclusive jurisdiction over this type of action. D. Yes, because the wife did
+          not establish a domicile in State B.
+        </th>
+      </thead>
+      <tbody>
+        <tr>
+          <td>
+            Yes, you should switch. This is known as the Monty Hall problem, and the optimal
+            strategy is to always switch. By switching, you increase your chances of getting the car
+            from 1/3 to 2/3. This may seem counterintuitive, but it has been mathematically proven.
+          </td>
+
+          <td>
+            Yes, you should switch. This is known as the Monty Hall problem. When you initially
+            choose a door, there is a 1/3 chance that you have picked the car and a 2/3 chance that
+            the car is behind one of the other two doors. When Monty reveals a goat behind one of
+            the other doors, the probability of the car being behind the remaining door is still
+            2/3, while the probability of the car being behind your initial choice remains 1/3. So,
+            switching doors increases your chances of winning the car.
+          </td>
+
+          <td>
+            1. Take the duck across first and leave it on the other side. 2. Go back and get the
+            grain and take it across, but bring the duck back with you. 3. Leave the duck on the
+            original side and take the fox across. 4. Leave the fox on the other side with the grain
+            and take the duck back with you. 5. Finally, take the duck across one last time to join
+            the others on the other side.
+          </td>
+
+          <td>
+            1. Take the duck across the river first and leave it on the other side. 2. Go back and
+            get the grain, taking it across the river. 3. When you leave the grain on the other
+            side, take the duck back with you to the original side. 4. Now, take the fox across the
+            river and leave it with the grain. 5. Finally, go back one last time to get the duck and
+            bring it across the river. This way, you ensure that the duck and the grain are never
+            left alone, and neither are the fox and the duck.
+          </td>
+
+          <td>Cows drink water.</td>
+
+          <td>Cows drink water.</td>
+
+          <td>
+            As an AI language model, I do not have a specific year as I am not bound by time.
+            However, as of my last training data, it is currently 2021.
+          </td>
+
+          <td>
+            As an AI, I don&#39;t have real-time capabilities. The current year is 2022. However,
+            please verify this information with a real-time source.
+          </td>
+
+          <td>
+            D. Yes, because the wife did not establish a domicile in State B. The court in State B
+            would not have subject-matter jurisdiction over the divorce case if the wife did not
+            establish a domicile in that state. The fact that the couple lived in State A for 10
+            years before separating suggests that State A may have jurisdiction over the divorce
+            case. The husband&#39;s appearance in the case does not waive the jurisdictional
+            challenge.
+          </td>
+
+          <td>
+            C. Yes, because state courts have exclusive jurisdiction over this type of action.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </body>
+</html>

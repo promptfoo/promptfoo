@@ -64,4 +64,20 @@ describe('evaluator', () => {
     expect(result.results[0].prompt).toBe('Test prompt');
     expect(result.results[0].output).toBe('Test output');
   });
+
+  test('evaluate without vars with multiple providers', async () => {
+    const options = {
+      prompts: ['Test prompt'],
+      providers: [mockApiProvider, mockApiProvider, mockApiProvider],
+    };
+
+    const result = await evaluate(options);
+
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(3);
+    expect(result.stats.successes).toBe(3);
+    expect(result.stats.failures).toBe(0);
+    expect(result.stats.tokenUsage).toEqual({ total: 30, prompt: 15, completion: 15 });
+    expect(result.results[0].prompt).toBe('[test-provider] Test prompt');
+    expect(result.results[0].output).toBe('Test output');
+  });
 });
