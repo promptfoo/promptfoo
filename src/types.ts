@@ -4,6 +4,7 @@ export interface CommandLineOptions {
   output?: string;
   vars?: string;
   config?: string;
+  verbose?: boolean;
 }
 
 export interface ApiProvider {

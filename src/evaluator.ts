@@ -80,7 +80,7 @@ export async function evaluate(options: EvaluateOptions): Promise<EvaluateSummar
     progressbar = new cliProgress.SingleBar(
       {
         format:
-          'Eval: [{bar}] {percentage}% | ETA: {eta}s | {value}/{total} | {provider} {prompt} {vars}',
+          'Eval: [{bar}] {percentage}% | ETA: {eta}s | {value}/{total} | {provider} "{prompt}" {vars}',
       },
       cliProgress.Presets.shades_classic,
     );
