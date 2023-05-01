@@ -1,1 +1,1 @@
-process.env.OPENAI_API_KEY = 'foo'
+process.env.OPENAI_API_KEY = 'foo';
