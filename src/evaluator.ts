@@ -9,9 +9,28 @@ interface RunEvalOptions {
   includeProviderId?: boolean;
 }
 
+interface PromptOptions {
+  content: string;
+  display: string;
+}
+
 export async function evaluate(options: EvaluateOptions): Promise<EvaluateSummary> {
+  const prompts: PromptOptions[] = [];
   const results: EvaluateResult[] = [];
-  const table: string[][] = [[...options.prompts, ...Object.keys(options.vars?.[0] || {})]];
+
+  for (const promptContent of options.prompts) {
+    for (const provider of options.providers) {
+      prompts.push({
+        content: promptContent,
+        display:
+          options.providers.length > 1 ? `[${provider.id()}] ${promptContent}` : promptContent,
+      });
+    }
+  }
+
+  const table: string[][] = [
+    [...prompts.map((p) => p.display), ...Object.keys(options.vars?.[0] || {})],
+  ];
 
   const stats = {
     successes: 0,
@@ -53,34 +72,24 @@ export async function evaluate(options: EvaluateOptions): Promise<EvaluateSummar
     }
   };
 
-  if (options.vars) {
-    for (const row of options.vars) {
-      let outputs: string[] = [];
-      for (const promptContent of options.prompts) {
-        for (const provider of options.providers) {
-          const output = await runEval({
-            provider,
-            prompt: promptContent,
-            vars: row,
-            includeProviderId: options.providers.length > 1,
-          });
-          outputs.push(output);
-        }
-      }
-
-      // Set up table headers: Prompt 1, Prompt 2, ..., Prompt N, Var 1 name, Var 2 name, ..., Var N name
-      // And then table rows: Output 1, Output 2, ..., Output N, Var 1 value, Var 2 value, ..., Var N value
-      table.push([...outputs, ...Object.values(row)]);
-    }
-  } else {
+  const vars = options.vars && options.vars.length > 0 ? options.vars : [{}];
+  for (const row of vars) {
+    let outputs: string[] = [];
     for (const promptContent of options.prompts) {
-      await runEval({
-        provider: options.providers[0],
-        prompt: promptContent,
-        vars: {},
-      });
+      for (const provider of options.providers) {
+        const output = await runEval({
+          provider,
+          prompt: promptContent,
+          vars: row,
+          includeProviderId: options.providers.length > 1,
+        });
+        outputs.push(output);
+      }
     }
-    table.push([...options.prompts]);
+
+    // Set up table headers: Prompt 1, Prompt 2, ..., Prompt N, Var 1 name, Var 2 name, ..., Var N name
+    // And then table rows: Output 1, Output 2, ..., Output N, Var 1 value, Var 2 value, ..., Var N value
+    table.push([...outputs, ...Object.values(row)]);
   }
 
   return { results, stats, table };
