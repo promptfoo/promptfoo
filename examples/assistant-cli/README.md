@@ -5,9 +5,3 @@ Run:
 ```
 promptfoo --prompt prompts.txt --vars vars.csv -r openai:chat
 ```
-
-In development:
-
-```
-npm run local eval -- --prompt prompts.txt --vars vars.csv -r openai:chat
-```
