@@ -6,6 +6,7 @@ With promptfoo, you can:
 
 - **Test multiple prompts** against predefined test cases
 - **Evaluate quality and catch regressions** by comparing LLM outputs side-by-side
+- **Speed up evaluations** by running tests concurrently
 - Use as a command line tool, or integrate into your workflow as a library
 - Use OpenAI API models (built-in support), or integrate custom API providers for any LLM API
 
@@ -30,11 +31,13 @@ npx promptfoo eval -p <prompt_paths...> -o <output_path> -r <provider> [-v <vars
 
 In this example, we evaluate whether adding adjectives to the personality of an assistant bot affects the responses:
 
+![Peek 2023-05-01 13-53](https://user-images.githubusercontent.com/310310/235529431-f4d5c395-d569-448e-9697-cd637e0372a5.gif)
+
 <!--
 <img width="1362" alt="Side-by-side evaluation of LLM prompt quality, terminal output" src="https://user-images.githubusercontent.com/310310/235329207-e8c22459-5f51-4fee-9714-1b602ac3d7ca.png">
--->
 
 ![Side-by-side evaluation of LLM prompt quality, html output](https://user-images.githubusercontent.com/310310/235483444-4ddb832d-e103-4b9c-a862-b0d6cc11cdc0.png)
+-->
 
 ```bash
 npx promptfoo eval -p prompts.txt -v vars.csv -r openai:gpt-3.5-turbo
@@ -42,7 +45,7 @@ npx promptfoo eval -p prompts.txt -v vars.csv -r openai:gpt-3.5-turbo
 
 This command will evaluate the prompts in `prompts.txt`, substituing the variable values from `vars.csv`, and output results in your terminal.
 
-Have a look at the files and full output [here](https://github.com/typpo/promptfoo/tree/main/examples/assistant-cli).
+Have a look at the setup and full output [here](https://github.com/typpo/promptfoo/tree/main/examples/assistant-cli).
 
 You can run the command without an `-o` option to output in your terminal ([example](https://user-images.githubusercontent.com/310310/235329207-e8c22459-5f51-4fee-9714-1b602ac3d7ca.png)), or use `-o` to specify an HTML ([example](https://user-images.githubusercontent.com/310310/235483444-4ddb832d-e103-4b9c-a862-b0d6cc11cdc0.png)), CSV ([example](https://docs.google.com/spreadsheets/d/1nanoj3_TniWrDl1Sj-qYqIMD6jwm5FBy15xPFdUTsmI/edit?usp=sharing)), JSON ([example](https://github.com/typpo/promptfoo/blob/main/examples/simple-cli/output.json)), or YAML output.
 
