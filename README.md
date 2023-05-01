@@ -1,13 +1,13 @@
 # promptfoo
 
-`promptfoo` is a library and command-line tool that helps you evaluate LLM prompt quality with a systematic approach to comparing model outputs.
+`promptfoo` is a library and command-line tool that helps you evaluate LLM prompt & model quality with a systematic approach to comparing model outputs.
 
 With promptfoo, you can:
 
 - **Test multiple prompts** against predefined test cases
 - **Evaluate quality and catch regressions** by comparing LLM outputs side-by-side
 - Use as a command line tool, or integrate into your workflow as a library
-- Use OpenAI API models (built-in support), or use a custom API provider integration for any LLM API
+- Use OpenAI API models (built-in support), or integrate custom API providers for any LLM API
 
 ## Usage (command line)
 
@@ -19,7 +19,7 @@ npx promptfoo eval -p <prompt_paths...> -o <output_path> -r <provider> [-v <vars
 
 - `<prompt_paths...>`: Paths to prompt file(s)
 - `<output_path>`: Path to output CSV, JSON, YAML, HTML file
-- `<provider>`: One of: `openai:chat`, `openai:completion`, `openai:chat:<model_name>`, `openai:completion:<model_name>`, or filesystem path to custom API caller module
+- `<provider>`: One or more of: `openai:chat`, `openai:completion`, `openai:chat:<model_name>`, `openai:completion:<model_name>`, or filesystem path to custom API caller module
 - `<vars_path>` (optional): Path to CSV, JSON, or YAML file with prompt variables
 - `<config_path>` (optional): Path to configuration file
 
@@ -30,10 +30,10 @@ Use the `promptfoo` CLI tool to generate side-by-side evaluations of LLM prompt 
 <img width="1362" alt="Side-by-side evaluation of LLM prompt quality" src="https://user-images.githubusercontent.com/310310/235329207-e8c22459-5f51-4fee-9714-1b602ac3d7ca.png">
 
 ```bash
-npx promptfoo eval -p prompts.txt -v vars.csv -r openai:chat
+npx promptfoo eval -p prompts.txt -v vars.csv -r openai:gpt-3.5-turbo
 ```
 
-This command will evaluate the prompts in `prompt1.txt` and `prompt2.txt` using the OpenAI chat API, substituing the variable values from `vars.csv`, and output results in your terminal.
+This command will evaluate the prompts in `prompt1.txt` and `prompt2.txt`, substituing the variable values from `vars.csv`, and output results in your terminal.
 
 Have a look at the files and full output [here](https://github.com/typpo/promptfoo/tree/main/examples/assistant-cli).
 
@@ -41,8 +41,16 @@ Have a look at the files and full output [here](https://github.com/typpo/promptf
 
 You can also use `promptfoo` as a library in your project by importing the `evaluate` function. The function takes the following parameters:
 
-- `providers`: a provider string or an `ApiProvider` object.
-- `options`: an `EvaluateOptions` object.
+- `providers`: a list of provider strings or `ApiProvider` objects, or just a single string or `ApiProvider`.
+- `options`: an `EvaluateOptions` object:
+
+   ```typescript
+   {
+     providers: ApiProvider[];
+     prompts: string[];
+     vars?: Record<string, string>;
+   }
+   ```
 
 ### Example
 
@@ -57,7 +65,7 @@ const options = {
 };
 
 (async () => {
-  const summary = await promptfoo.evaluate(options);
+  const summary = await promptfoo.evaluate('openai:gpt-3.5-turbo', options);
   console.log(summary);
 })();
 ```

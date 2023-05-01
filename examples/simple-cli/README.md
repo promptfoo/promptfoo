@@ -1,11 +1,11 @@
 Run:
 
 ```
-promptfoo --prompts prompts.txt --vars vars.csv --provider openai:chat --output output.json
+promptfoo --prompt prompts.txt --vars vars.csv --provider openai:chat --output output.json
 ```
 
 In development:
 
 ```
-npm run local eval -- --prompts prompts.txt --vars vars.csv --provider openai:chat --output output.json
+npm run local eval -- --prompt prompts.txt --vars vars.csv --provider openai:chat --output output.json
 ```

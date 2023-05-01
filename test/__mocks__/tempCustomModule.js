@@ -1,4 +1,8 @@
 class CustomApiProvider {
+  id() {
+    return 'custom-api-provider';
+  }
+
   async callApi(prompt) {
     return {
       output: 'Custom output',

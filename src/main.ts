@@ -18,9 +18,9 @@ const program = new Command();
 program
   .command('eval')
   .description('Evaluate prompts')
-  .requiredOption('-p, --prompts <paths...>', 'Paths to prompt files (.txt)')
+  .requiredOption('-p, --prompt <paths...>', 'Paths to prompt files (.txt)')
   .requiredOption(
-    '-r, --provider <name or path>',
+    '-r, --provider <name or path...>',
     'One of: openai:chat, openai:completion, openai:<model name>, or path to custom API caller module',
   )
   .option('-o, --output <path>', 'Path to output file (csv, json, yaml, html)')
@@ -49,14 +49,15 @@ program
       vars = readVars(cmdObj.vars);
     }
 
+    const providers = cmdObj.provider.map((p) => loadApiProvider(p));
     const options: EvaluateOptions = {
-      prompts: readPrompts(cmdObj.prompts),
+      prompts: readPrompts(cmdObj.prompt),
       vars,
+      providers,
       ...config,
     };
 
-    const provider = loadApiProvider(cmdObj.provider);
-    const summary = await evaluate(options, provider);
+    const summary = await evaluate(options);
 
     if (cmdObj.output) {
       logger.info(chalk.yellow(`Writing output to ${cmdObj.output}`));
