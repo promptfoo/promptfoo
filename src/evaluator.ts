@@ -116,13 +116,13 @@ export async function evaluate(options: EvaluateOptions): Promise<EvaluateSummar
       }
     }
 
-    if (progressbar) {
-      progressbar.stop();
-    }
-
     // Set up table headers: Prompt 1, Prompt 2, ..., Prompt N, Var 1 name, Var 2 name, ..., Var N name
     // And then table rows: Output 1, Output 2, ..., Output N, Var 1 value, Var 2 value, ..., Var N value
     table.push([...outputs, ...Object.values(row)]);
+  }
+
+  if (progressbar) {
+    progressbar.stop();
   }
 
   return { results, stats, table };
