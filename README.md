@@ -23,19 +23,26 @@ npx promptfoo eval -p <prompt_paths...> -o <output_path> -r <provider> [-v <vars
 - `<vars_path>` (optional): Path to CSV, JSON, or YAML file with prompt variables
 - `<config_path>` (optional): Path to configuration file
 
-### Example
+### Examples
 
-Use the `promptfoo` CLI tool to generate side-by-side evaluations of LLM prompt quality. In this example, we evaluate whether adding adjectives to the personality of an assistant bot affects the responses:
+In this example, we evaluate whether adding adjectives to the personality of an assistant bot affects the responses:
 
-<img width="1362" alt="Side-by-side evaluation of LLM prompt quality" src="https://user-images.githubusercontent.com/310310/235329207-e8c22459-5f51-4fee-9714-1b602ac3d7ca.png">
+<!--
+<img width="1362" alt="Side-by-side evaluation of LLM prompt quality, terminal output" src="https://user-images.githubusercontent.com/310310/235329207-e8c22459-5f51-4fee-9714-1b602ac3d7ca.png">
+-->
+![Side-by-side evaluation of LLM prompt quality, html output](https://user-images.githubusercontent.com/310310/235483444-4ddb832d-e103-4b9c-a862-b0d6cc11cdc0.png)
+
 
 ```bash
-npx promptfoo eval -p prompts.txt -v vars.csv -r openai:gpt-3.5-turbo
+npx promptfoo eval -p prompts.txt -v vars.csv -r openai:gpt-3.5-turbo -o output.html
 ```
 
 This command will evaluate the prompts in `prompt1.txt` and `prompt2.txt`, substituing the variable values from `vars.csv`, and output results in your terminal.
 
 Have a look at the files and full output [here](https://github.com/typpo/promptfoo/tree/main/examples/assistant-cli).
+
+You can run the same command without an `-o` option to output in your terminal ([example](https://user-images.githubusercontent.com/310310/235329207-e8c22459-5f51-4fee-9714-1b602ac3d7ca.png)), or use `-o` to specify a CSV ([example](https://docs.google.com/spreadsheets/d/1nanoj3_TniWrDl1Sj-qYqIMD6jwm5FBy15xPFdUTsmI/edit?usp=sharing)), JSON ([example](https://github.com/typpo/promptfoo/blob/main/examples/simple-cli/output.json)), or YAML output.
+
 
 ## Usage (as a library)
 
