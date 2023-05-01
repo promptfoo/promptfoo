@@ -3,19 +3,18 @@ import type { Config } from 'jest';
 
 const config: Config = {
   transform: {
-    '\\.[jt]sx?$': 'ts-jest'
+    '\\.[jt]sx?$': 'ts-jest',
   },
   globals: {
     'ts-jest': {
       useESM: true,
-    }
+    },
   },
   moduleNameMapper: {
-    '(.+)\\.js': '$1'
+    '(.+)\\.js': '$1',
   },
   extensionsToTreatAsEsm: ['.ts'],
-  setupFiles: ["<rootDir>/.jest/setEnvVars.js"],
-
+  setupFiles: ['<rootDir>/.jest/setEnvVars.js'],
 };
 
 export default config;
