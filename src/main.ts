@@ -54,6 +54,7 @@ program
       prompts: readPrompts(cmdObj.prompt),
       vars,
       providers,
+      showProgressBar: true,
       ...config,
     };
 
@@ -73,7 +74,7 @@ program
         wrapOnWordBoundary: true,
       });
       table.push(...summary.table.slice(1));
-      logger.info(table.toString());
+      logger.info('\n' + table.toString());
     }
     logger.info(chalk.green.bold(`Evaluation complete: ${JSON.stringify(summary.stats, null, 2)}`));
     logger.info('Done.');

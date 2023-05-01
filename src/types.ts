@@ -32,6 +32,8 @@ export interface EvaluateOptions {
   providers: ApiProvider[];
   prompts: string[];
   vars?: VarMapping[];
+
+  showProgressBar?: boolean;
 }
 
 export interface EvaluateResult {

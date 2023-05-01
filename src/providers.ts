@@ -60,7 +60,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       max_tokens: process.env.OPENAI_MAX_TOKENS || 1024,
       temperature: process.env.OPENAI_TEMPERATURE || 0,
     };
-    logger.info(`Calling OpenAI API: ${JSON.stringify(body, null, 2)}`);
+    logger.debug(`Calling OpenAI API: ${JSON.stringify(body)}`);
     const response = await fetch('https://api.openai.com/v1/completions', {
       method: 'POST',
       headers: {
@@ -71,6 +71,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
     });
 
     const data = (await response.json()) as unknown as any;
+    logger.debug(`\tOpenAI API response: ${JSON.stringify(data)}`);
     return {
       output: data.choices[0].text,
       tokenUsage: {
@@ -118,7 +119,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       max_tokens: process.env.OPENAI_MAX_TOKENS || 1024,
       temperature: process.env.OPENAI_MAX_TEMPERATURE || 0,
     };
-    logger.info(`Calling OpenAI API: ${JSON.stringify(body, null, 2)}`);
+    logger.debug(`Calling OpenAI API: ${JSON.stringify(body)}`);
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -129,6 +130,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     });
 
     const data = (await response.json()) as unknown as any;
+    logger.debug(`\tOpenAI API response: ${JSON.stringify(data)}`);
     return {
       output: data.choices[0].message.content,
       tokenUsage: {
