@@ -15,9 +15,10 @@ const customFormatter = winston.format.printf(({ level, message, ...args }) => {
     return chalk.yellow(message);
   } else if (level === 'info') {
     return message;
-  } else if (level === 'verbose') {
+  } else if (level === 'debug') {
     return chalk.cyan(message);
   }
+  throw new Error(`Invalid log level: ${level}`);
 });
 
 const logger = winston.createLogger({
@@ -25,5 +26,13 @@ const logger = winston.createLogger({
   format: winston.format.combine(winston.format.simple(), customFormatter),
   transports: [new winston.transports.Console()],
 });
+
+export function setLogLevel(level: keyof typeof logLevels) {
+  if (logLevels.hasOwnProperty(level)) {
+    logger.transports[0].level = level;
+  } else {
+    throw new Error(`Invalid log level: ${level}`);
+  }
+}
 
 export default logger;

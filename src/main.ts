@@ -6,7 +6,7 @@ import Table from 'cli-table3';
 import chalk from 'chalk';
 import { Command } from 'commander';
 
-import logger from './logger.js';
+import logger, { setLogLevel } from './logger.js';
 import { loadApiProvider } from './providers.js';
 import { evaluate } from './evaluator.js';
 import { readPrompts, readVars, writeOutput } from './util.js';
@@ -26,7 +26,12 @@ program
   .option('-o, --output <path>', 'Path to output file (csv, json, yaml, html)')
   .option('-v, --vars <path>', 'Path to file with prompt variables (csv, json, yaml)')
   .option('-c, --config <path>', 'Path to configuration file')
+  .option('--verbose', 'Show debug logs')
   .action(async (cmdObj: CommandLineOptions & Command) => {
+    if (cmdObj.verbose) {
+      setLogLevel('debug');
+    }
+
     const configPath = cmdObj.config;
     let config = {};
     if (configPath) {
