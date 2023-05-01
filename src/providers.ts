@@ -19,6 +19,10 @@ export class OpenAiGenericProvider implements ApiProvider {
     this.apiKey = key;
   }
 
+  id(): string {
+    return `openai:${this.modelName}`;
+  }
+
   // @ts-ignore: Prompt is not used in this implementation
   async callApi(prompt: string): Promise<ProviderResult> {
     throw new Error('Not implemented');
@@ -143,6 +147,10 @@ export function loadApiProvider(providerPath: string): ApiProvider {
       return new OpenAiChatCompletionProvider(modelName || 'gpt-3.5-turbo');
     } else if (modelType === 'completion') {
       return new OpenAiCompletionProvider(modelName || 'text-davinci-003');
+    } else if (OpenAiChatCompletionProvider.OPENAI_CHAT_MODELS.includes(modelType)) {
+      return new OpenAiChatCompletionProvider(modelType);
+    } else if (OpenAiCompletionProvider.OPENAI_COMPLETION_MODELS.includes(modelType)) {
+      return new OpenAiCompletionProvider(modelType);
     } else {
       throw new Error(
         `Unknown OpenAI model type: ${modelType}. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>`,

@@ -2,10 +2,14 @@ import nunjucks from 'nunjucks';
 
 import { EvaluateOptions, EvaluateSummary, EvaluateResult, ApiProvider } from './types.js';
 
-export async function evaluate(
-  options: EvaluateOptions,
-  provider: ApiProvider,
-): Promise<EvaluateSummary> {
+interface RunEvalOptions {
+  provider: ApiProvider;
+  prompt: string;
+  vars?: Record<string, string>;
+  includeProviderId?: boolean;
+}
+
+export async function evaluate(options: EvaluateOptions): Promise<EvaluateSummary> {
   const results: EvaluateResult[] = [];
   const table: string[][] = [[...options.prompts, ...Object.keys(options.vars?.[0] || {})]];
 
@@ -19,13 +23,20 @@ export async function evaluate(
     },
   };
 
-  const runEval = async (prompt: string, vars: Record<string, string> = {}): Promise<string> => {
+  const runEval = async ({
+    provider,
+    prompt,
+    vars,
+    includeProviderId,
+  }: RunEvalOptions): Promise<string> => {
+    vars = vars || {};
     const renderedPrompt = nunjucks.renderString(prompt, vars);
 
     try {
       const result = await provider.callApi(renderedPrompt);
       const row = {
-        prompt,
+        // Note that we're using original prompt, not renderedPrompt
+        prompt: includeProviderId ? `[${provider.id()}] ${prompt}` : prompt,
         output: result.output,
         vars,
       };
@@ -46,8 +57,15 @@ export async function evaluate(
     for (const row of options.vars) {
       let outputs: string[] = [];
       for (const promptContent of options.prompts) {
-        const output = await runEval(promptContent, row);
-        outputs.push(output);
+        for (const provider of options.providers) {
+          const output = await runEval({
+            provider,
+            prompt: promptContent,
+            vars: row,
+            includeProviderId: options.providers.length > 1,
+          });
+          outputs.push(output);
+        }
       }
 
       // Set up table headers: Prompt 1, Prompt 2, ..., Prompt N, Var 1 name, Var 2 name, ..., Var N name
@@ -56,7 +74,11 @@ export async function evaluate(
     }
   } else {
     for (const promptContent of options.prompts) {
-      await runEval(promptContent, {});
+      await runEval({
+        provider: options.providers[0],
+        prompt: promptContent,
+        vars: {},
+      });
     }
     table.push([...options.prompts]);
   }
