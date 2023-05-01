@@ -24,7 +24,7 @@
     "prepare": "tsc",
     "test": "jest",
     "test:watch": "jest --watch",
-    "format": "prettier -w src/ test/ examples/"
+    "format": "prettier -w ."
   },
   "devDependencies": {
     "@types/async": "^3.2.20",
