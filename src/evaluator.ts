@@ -72,6 +72,25 @@ export async function evaluate(options: EvaluateOptions): Promise<EvaluateSummar
     }
   };
 
+  let progressbar;
+  if (options.showProgressBar) {
+    const totalNumRuns =
+      options.prompts.length * options.providers.length * (options.vars?.length || 1);
+    const cliProgress = await import('cli-progress');
+    progressbar = new cliProgress.SingleBar(
+      {
+        format:
+          'Eval: [{bar}] {percentage}% | ETA: {eta}s | {value}/{total} | {provider} {prompt} {vars}',
+      },
+      cliProgress.Presets.shades_classic,
+    );
+    progressbar.start(totalNumRuns, 0, {
+      provider: '',
+      prompt: '',
+      vars: '',
+    });
+  }
+
   const vars = options.vars && options.vars.length > 0 ? options.vars : [{}];
   for (const row of vars) {
     let outputs: string[] = [];
@@ -84,7 +103,21 @@ export async function evaluate(options: EvaluateOptions): Promise<EvaluateSummar
           includeProviderId: options.providers.length > 1,
         });
         outputs.push(output);
+        if (progressbar) {
+          progressbar.increment({
+            provider: provider.id(),
+            prompt: promptContent.slice(0, 10),
+            vars: Object.entries(row)
+              .map(([k, v]) => `${k}=${v}`)
+              .join(' ')
+              .slice(0, 10),
+          });
+        }
       }
+    }
+
+    if (progressbar) {
+      progressbar.stop();
     }
 
     // Set up table headers: Prompt 1, Prompt 2, ..., Prompt N, Var 1 name, Var 2 name, ..., Var N name
