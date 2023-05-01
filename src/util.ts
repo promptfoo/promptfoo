@@ -52,13 +52,7 @@ export function writeOutput(
   const outputExtension = outputPath.split('.').pop()?.toLowerCase();
 
   if (outputExtension === 'csv') {
-    const csvOutput = stringify(
-      results.map((row) => {
-        const { prompt, output, ...rest } = row;
-        return { ...rest, Prompt: prompt, Output: output };
-      }),
-      { header: true },
-    );
+    const csvOutput = stringify(table);
     fs.writeFileSync(outputPath, csvOutput);
   } else if (outputExtension === 'json') {
     fs.writeFileSync(outputPath, JSON.stringify(results, null, 2));
