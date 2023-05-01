@@ -5,11 +5,12 @@ export interface CommandLineOptions {
   vars?: string;
   config?: string;
   verbose?: boolean;
+  maxConcurrency?: number;
 }
 
 export interface ApiProvider {
   id: () => string;
-  callApi: (prompt: string) => Promise<ProviderResult>;
+  callApi: (prompt: string) => Promise<ProviderResponse>;
 }
 
 interface TokenUsage {
@@ -18,7 +19,7 @@ interface TokenUsage {
   completion: number;
 }
 
-export interface ProviderResult {
+export interface ProviderResponse {
   output: string;
   tokenUsage?: TokenUsage;
 }
@@ -34,13 +35,20 @@ export interface EvaluateOptions {
   prompts: string[];
   vars?: VarMapping[];
 
+  maxConcurrency?: number;
   showProgressBar?: boolean;
 }
 
+export interface Prompt {
+  raw: string;
+  display: string;
+}
+
 export interface EvaluateResult {
-  prompt: string;
-  output: string;
+  prompt: Prompt;
   vars: Record<string, string>;
+  response?: ProviderResponse;
+  error?: string;
 }
 
 export interface EvaluateSummary {

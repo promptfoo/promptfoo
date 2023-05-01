@@ -1,6 +1,6 @@
 import fetch from 'node-fetch';
 
-import { ApiProvider, ProviderResult } from './types.js';
+import { ApiProvider, ProviderResponse } from './types.js';
 import logger from './logger.js';
 
 export class OpenAiGenericProvider implements ApiProvider {
@@ -28,7 +28,7 @@ export class OpenAiGenericProvider implements ApiProvider {
   }
 
   // @ts-ignore: Prompt is not used in this implementation
-  async callApi(prompt: string): Promise<ProviderResult> {
+  async callApi(prompt: string): Promise<ProviderResponse> {
     throw new Error('Not implemented');
   }
 }
@@ -53,7 +53,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
     super(modelName, apiKey);
   }
 
-  async callApi(prompt: string): Promise<ProviderResult> {
+  async callApi(prompt: string): Promise<ProviderResponse> {
     const body = {
       model: this.modelName,
       prompt,
@@ -104,7 +104,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     super(modelName, apiKey);
   }
 
-  async callApi(prompt: string): Promise<ProviderResult> {
+  async callApi(prompt: string): Promise<ProviderResponse> {
     let messages: { role: string; content: string }[];
     try {
       // User can specify `messages` payload as JSON, or we'll just put the

@@ -1,6 +1,9 @@
+import async from 'async';
 import nunjucks from 'nunjucks';
 
-import { EvaluateOptions, EvaluateSummary, EvaluateResult, ApiProvider } from './types.js';
+import type { SingleBar } from 'cli-progress';
+
+import { EvaluateOptions, EvaluateSummary, EvaluateResult, ApiProvider, Prompt } from './types.js';
 
 interface RunEvalOptions {
   provider: ApiProvider;
@@ -9,19 +12,50 @@ interface RunEvalOptions {
   includeProviderId?: boolean;
 }
 
-interface PromptOptions {
-  content: string;
-  display: string;
+const DEFAULT_MAX_CONCURRENCY = 3;
+
+async function runEval({
+  provider,
+  prompt,
+  vars,
+  includeProviderId,
+}: RunEvalOptions): Promise<EvaluateResult> {
+  vars = vars || {};
+  const renderedPrompt = nunjucks.renderString(prompt, vars);
+
+  // Note that we're using original prompt, not renderedPrompt
+  const promptDisplay = includeProviderId ? `[${provider.id()}] ${prompt}` : prompt;
+
+  const ret = {
+    prompt: {
+      raw: renderedPrompt,
+      display: promptDisplay,
+    },
+    vars,
+  };
+
+  try {
+    const response = await provider.callApi(renderedPrompt);
+    return {
+      ...ret,
+      response,
+    };
+  } catch (err) {
+    return {
+      ...ret,
+      error: String(err),
+    };
+  }
 }
 
 export async function evaluate(options: EvaluateOptions): Promise<EvaluateSummary> {
-  const prompts: PromptOptions[] = [];
+  const prompts: Prompt[] = [];
   const results: EvaluateResult[] = [];
 
   for (const promptContent of options.prompts) {
     for (const provider of options.providers) {
       prompts.push({
-        content: promptContent,
+        raw: promptContent,
         display:
           options.providers.length > 1 ? `[${provider.id()}] ${promptContent}` : promptContent,
       });
@@ -42,37 +76,7 @@ export async function evaluate(options: EvaluateOptions): Promise<EvaluateSummar
     },
   };
 
-  const runEval = async ({
-    provider,
-    prompt,
-    vars,
-    includeProviderId,
-  }: RunEvalOptions): Promise<string> => {
-    vars = vars || {};
-    const renderedPrompt = nunjucks.renderString(prompt, vars);
-
-    try {
-      const result = await provider.callApi(renderedPrompt);
-      const row = {
-        // Note that we're using original prompt, not renderedPrompt
-        prompt: includeProviderId ? `[${provider.id()}] ${prompt}` : prompt,
-        output: result.output,
-        vars,
-      };
-      results.push(row);
-
-      stats.successes++;
-      stats.tokenUsage.total += result.tokenUsage?.total || 0;
-      stats.tokenUsage.prompt += result.tokenUsage?.prompt || 0;
-      stats.tokenUsage.completion += result.tokenUsage?.completion || 0;
-      return result.output;
-    } catch (err) {
-      stats.failures++;
-      return String(err);
-    }
-  };
-
-  let progressbar;
+  let progressbar: SingleBar | undefined;
   if (options.showProgressBar) {
     const totalNumRuns =
       options.prompts.length * options.providers.length * (options.vars?.length || 1);
@@ -92,38 +96,61 @@ export async function evaluate(options: EvaluateOptions): Promise<EvaluateSummar
   }
 
   const vars = options.vars && options.vars.length > 0 ? options.vars : [{}];
+  const runEvalOptions: RunEvalOptions[] = [];
   for (const row of vars) {
-    let outputs: string[] = [];
     for (const promptContent of options.prompts) {
       for (const provider of options.providers) {
-        const output = await runEval({
+        runEvalOptions.push({
           provider,
           prompt: promptContent,
           vars: row,
           includeProviderId: options.providers.length > 1,
         });
-        outputs.push(output);
-        if (progressbar) {
-          progressbar.increment({
-            provider: provider.id(),
-            prompt: promptContent.slice(0, 10),
-            vars: Object.entries(row)
-              .map(([k, v]) => `${k}=${v}`)
-              .join(' ')
-              .slice(0, 10),
-          });
-        }
       }
     }
-
-    // Set up table headers: Prompt 1, Prompt 2, ..., Prompt N, Var 1 name, Var 2 name, ..., Var N name
-    // And then table rows: Output 1, Output 2, ..., Output N, Var 1 value, Var 2 value, ..., Var N value
-    table.push([...outputs, ...Object.values(row)]);
   }
+
+  const combinedOutputs: string[][] = new Array(vars.length).fill(null).map(() => []);
+  await async.forEachOfLimit(
+    runEvalOptions,
+    options.maxConcurrency || DEFAULT_MAX_CONCURRENCY,
+    async (options: RunEvalOptions, index: number | string) => {
+      const row = await runEval(options);
+      results.push(row);
+      if (row.error) {
+        stats.failures++;
+      } else {
+        stats.successes++;
+        stats.tokenUsage.total += row.response?.tokenUsage?.total || 0;
+        stats.tokenUsage.prompt += row.response?.tokenUsage?.prompt || 0;
+        stats.tokenUsage.completion += row.response?.tokenUsage?.completion || 0;
+      }
+
+      if (progressbar) {
+        progressbar.increment({
+          provider: options.provider.id(),
+          prompt: options.prompt.slice(0, 10),
+          vars: Object.entries(options.vars || {})
+            .map(([k, v]) => `${k}=${v}`)
+            .join(' ')
+            .slice(0, 10),
+        });
+      }
+
+      // Bookkeeping for table
+      if (typeof index !== 'number') {
+        throw new Error('Expected index to be a number');
+      }
+      const combinedOutputIndex = Math.floor(index / prompts.length);
+      combinedOutputs[combinedOutputIndex].push(row.response?.output || '');
+    },
+  );
 
   if (progressbar) {
     progressbar.stop();
   }
+
+  table.push(...combinedOutputs.map((output, index) => [...output, ...Object.values(vars[index])]));
 
   return { results, stats, table };
 }
