@@ -70,7 +70,7 @@ program
 
     if (cmdObj.output) {
       logger.info(chalk.yellow(`Writing output to ${cmdObj.output}`));
-      writeOutput(cmdObj.output, summary.results, summary.table);
+      writeOutput(cmdObj.output, summary);
     } else {
       // Output table by default
       const maxWidth = process.stdout.columns ? process.stdout.columns - 10 : 120;

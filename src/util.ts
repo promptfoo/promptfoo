@@ -9,7 +9,7 @@ import { stringify } from 'csv-stringify/sync';
 
 import { getDirectory } from './esm.js';
 
-import type { EvaluateResult } from './types.js';
+import type { EvaluateSummary } from './types.js';
 
 const PROMPT_DELIMITER = '---';
 
@@ -46,21 +46,20 @@ export function readVars(varsPath: string): CsvRow[] {
 
 export function writeOutput(
   outputPath: string,
-  results: EvaluateResult[],
-  table: string[][],
+  summary: EvaluateSummary,
 ): void {
   const outputExtension = outputPath.split('.').pop()?.toLowerCase();
 
-  if (outputExtension === 'csv') {
-    const csvOutput = stringify(table);
+  if (outputExtension === 'csv' || outputExtension === 'txt') {
+    const csvOutput = stringify(summary.table);
     fs.writeFileSync(outputPath, csvOutput);
   } else if (outputExtension === 'json') {
-    fs.writeFileSync(outputPath, JSON.stringify(results, null, 2));
+    fs.writeFileSync(outputPath, JSON.stringify(summary, null, 2));
   } else if (outputExtension === 'yaml' || outputExtension === 'yml') {
-    fs.writeFileSync(outputPath, yaml.dump(results));
+    fs.writeFileSync(outputPath, yaml.dump(summary));
   } else if (outputExtension === 'html') {
     const template = fs.readFileSync(`${getDirectory()}/tableOutput.html`, 'utf-8');
-    const htmlOutput = nunjucks.renderString(template, { table, results });
+    const htmlOutput = nunjucks.renderString(template, { table: summary.table, results: summary.results });
     fs.writeFileSync(outputPath, htmlOutput);
   } else {
     throw new Error('Unsupported output file format. Use CSV, JSON, or YAML.');

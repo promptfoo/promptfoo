@@ -61,7 +61,6 @@ Produces this HTML table:
 
 ![Side-by-side evaluation of LLM model quality, gpt3 vs gpt4, html output](https://user-images.githubusercontent.com/310310/235490527-e0c31f40-00a0-493a-8afc-8ed6322bb5ca.png)
 
-
 Full setup and output [here](https://github.com/typpo/promptfoo/tree/main/examples/gpt-3.5-vs-4).
 
 ## Usage (as a library)
@@ -100,54 +99,42 @@ This code imports the `promptfoo` library, defines the evaluation options, and t
 
 ```js
 {
-  results: [
+  "results": [
     {
-      prompt: 'Rephrase this in French: {{body}}',
-      output: 'Bonjour le monde',
-      body: 'Hello world'
+      "prompt": {
+        "raw": "Rephrase this in French: Hello world",
+        "display": "Rephrase this in French: {{body}}"
+      },
+      "vars": {
+        "body": "Hello world"
+      },
+      "response": {
+        "output": "Bonjour le monde",
+        "tokenUsage": {
+          "total": 19,
+          "prompt": 16,
+          "completion": 3
+        }
+      }
     },
-    {
-      prompt: 'Rephrase this like a pirate: {{body}}',
-      output: 'Ahoy thar, me hearties! Avast ye, world!',
-      body: 'Hello world'
-    },
-    {
-      prompt: 'Rephrase this in French: {{body}}',
-      output: "J'ai faim.",
-      body: "I'm hungry"
-    },
-    {
-      prompt: 'Rephrase this like a pirate: {{body}}',
-      output: "Arrr, me belly be empty and me throat be parched! I be needin' some grub, matey!",
-      body: "I'm hungry"
-    }
+    // ...
   ],
-  table: [
-    [
-      'Rephrase this in French: {{body}}',
-      'Rephrase this like a pirate: {{body}}',
-      'body'
-    ],
-    [
-      'Bonjour le monde',
-      'Ahoy thar, me hearties! Avast ye, world!',
-      'Hello world'
-    ],
-    [
-      "J'ai faim.",
-      "Arrr, me belly be empty and me throat be parched! I be needin' some grub, matey!",
-      "I'm hungry"
-    ]
+  "stats": {
+    "successes": 4,
+    "failures": 0,
+    "tokenUsage": {
+      "total": 120,
+      "prompt": 72,
+      "completion": 48
+    }
+  },
+  "table": [
+    // ...
   ]
-  stats: {
-    successes: 4,
-    failures: 0,
-    tokenUsage: { total: 120, prompt: 72, completion: 48 }
-  }
 }
 ```
 
-[See example here](https://github.com/typpo/promptfoo/tree/main/examples/simple-import)
+[See full example here](https://github.com/typpo/promptfoo/tree/main/examples/simple-import)
 
 ## Configuration
 
