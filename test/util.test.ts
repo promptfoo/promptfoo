@@ -99,8 +99,20 @@ describe('util', () => {
       ['Test prompt', 'var1', 'var2'],
       ['Test output', 'value1', 'value2'],
     ];
-
-    writeOutput(outputPath, results, table);
+    const summary = {
+      stats: {
+        successes: 1,
+        failures: 1,
+        tokenUsage: {
+          total: 10,
+          prompt: 5,
+          completion: 5,
+        },
+      },
+      results,
+      table,
+    };
+    writeOutput(outputPath, summary);
 
     expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
   });
@@ -126,8 +138,20 @@ describe('util', () => {
       ['Test prompt', 'var1', 'var2'],
       ['Test output', 'value1', 'value2'],
     ];
-
-    writeOutput(outputPath, results, table);
+    const summary = {
+      stats: {
+        successes: 1,
+        failures: 1,
+        tokenUsage: {
+          total: 10,
+          prompt: 5,
+          completion: 5,
+        },
+      },
+      results,
+      table,
+    };
+    writeOutput(outputPath, summary);
 
     expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
   });
@@ -153,8 +177,20 @@ describe('util', () => {
       ['Test prompt', 'var1', 'var2'],
       ['Test output', 'value1', 'value2'],
     ];
-
-    writeOutput(outputPath, results, table);
+    const summary = {
+      stats: {
+        successes: 1,
+        failures: 1,
+        tokenUsage: {
+          total: 10,
+          prompt: 5,
+          completion: 5,
+        },
+      },
+      results,
+      table,
+    };
+    writeOutput(outputPath, summary);
 
     expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
   });
