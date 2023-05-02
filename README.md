@@ -31,6 +31,10 @@ npx promptfoo eval -p <prompt_paths...> -o <output_path> -r <provider> [-v <vars
 
 In this example, we evaluate whether adding adjectives to the personality of an assistant bot affects the responses:
 
+```bash
+npx promptfoo eval -p prompts.txt -v vars.csv -r openai:gpt-3.5-turbo
+```
+
 ![Peek 2023-05-01 13-53](https://user-images.githubusercontent.com/310310/235529431-f4d5c395-d569-448e-9697-cd637e0372a5.gif)
 
 <!--
@@ -38,10 +42,6 @@ In this example, we evaluate whether adding adjectives to the personality of an 
 
 ![Side-by-side evaluation of LLM prompt quality, html output](https://user-images.githubusercontent.com/310310/235483444-4ddb832d-e103-4b9c-a862-b0d6cc11cdc0.png)
 -->
-
-```bash
-npx promptfoo eval -p prompts.txt -v vars.csv -r openai:gpt-3.5-turbo
-```
 
 This command will evaluate the prompts in `prompts.txt`, substituing the variable values from `vars.csv`, and output results in your terminal.
 
@@ -53,11 +53,14 @@ You can run the command without an `-o` option to output in your terminal ([exam
 
 In this example, we evaluate the difference between GPT 3 and GPT 4 outputs for a given prompt:
 
-![Side-by-side evaluation of LLM model quality, gpt3 vs gpt4, html output](https://user-images.githubusercontent.com/310310/235490527-e0c31f40-00a0-493a-8afc-8ed6322bb5ca.png)
-
 ```bash
 npx promptfoo eval -p prompts.txt -r openai:gpt-3.5-turbo openai:gpt-4 -o output.html
 ```
+
+Produces this HTML table:
+
+![Side-by-side evaluation of LLM model quality, gpt3 vs gpt4, html output](https://user-images.githubusercontent.com/310310/235490527-e0c31f40-00a0-493a-8afc-8ed6322bb5ca.png)
+
 
 Full setup and output [here](https://github.com/typpo/promptfoo/tree/main/examples/gpt-3.5-vs-4).
 
