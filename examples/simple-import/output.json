@@ -79,16 +79,8 @@
     }
   },
   "table": [
-    [
-      "Rephrase this in French: {{body}}",
-      "Rephrase this like a pirate: {{body}}",
-      "body"
-    ],
-    [
-      "Bonjour le monde",
-      "Ahoy thar, me hearties! Avast ye, world!",
-      "Hello world"
-    ],
+    ["Rephrase this in French: {{body}}", "Rephrase this like a pirate: {{body}}", "body"],
+    ["Bonjour le monde", "Ahoy thar, me hearties! Avast ye, world!", "Hello world"],
     [
       "J'ai faim.",
       "Arrr, me belly be empty and me throat be parched! I be needin' some grub, matey!",

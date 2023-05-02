@@ -44,10 +44,7 @@ export function readVars(varsPath: string): CsvRow[] {
   return rows;
 }
 
-export function writeOutput(
-  outputPath: string,
-  summary: EvaluateSummary,
-): void {
+export function writeOutput(outputPath: string, summary: EvaluateSummary): void {
   const outputExtension = outputPath.split('.').pop()?.toLowerCase();
 
   if (outputExtension === 'csv' || outputExtension === 'txt') {
@@ -59,7 +56,10 @@ export function writeOutput(
     fs.writeFileSync(outputPath, yaml.dump(summary));
   } else if (outputExtension === 'html') {
     const template = fs.readFileSync(`${getDirectory()}/tableOutput.html`, 'utf-8');
-    const htmlOutput = nunjucks.renderString(template, { table: summary.table, results: summary.results });
+    const htmlOutput = nunjucks.renderString(template, {
+      table: summary.table,
+      results: summary.results,
+    });
     fs.writeFileSync(outputPath, htmlOutput);
   } else {
     throw new Error('Unsupported output file format. Use CSV, JSON, or YAML.');
