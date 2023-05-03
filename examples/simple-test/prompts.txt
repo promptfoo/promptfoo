@@ -1,0 +1,3 @@
+Rephrase this from English to Pirate: {{body}}
+---
+Pretend you're a pirate and speak these words: {{body}}

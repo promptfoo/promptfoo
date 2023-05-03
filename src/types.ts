@@ -49,6 +49,7 @@ export interface EvaluateResult {
   vars: Record<string, string>;
   response?: ProviderResponse;
   error?: string;
+  success: boolean;
 }
 
 export interface EvaluateSummary {
