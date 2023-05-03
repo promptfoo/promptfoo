@@ -306,6 +306,8 @@ Below is an example of a custom API provider that returns a predefined output an
 
 ```javascript
 // customApiProvider.js
+import fetch from 'node-fetch';
+
 class CustomApiProvider {
   id() {
     return 'my-custom-api';
@@ -328,7 +330,7 @@ class CustomApiProvider {
   }
 }
 
-module.exports.default = CustomApiProvider;
+export default CustomApiProvider;
 ```
 
 To use the custom API provider with `promptfoo`, pass the path to the module as the `provider` option in the CLI invocation:

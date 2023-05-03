@@ -11,4 +11,4 @@ class CustomApiProvider {
   }
 }
 
-module.exports.default = CustomApiProvider;
+export default CustomApiProvider;
