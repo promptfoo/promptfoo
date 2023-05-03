@@ -1,4 +1,6 @@
 # promptfoo
+[![npm](https://img.shields.io/npm/v/promptfoo)](https://npmjs.com/package/promptfoo)
+![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/typpo/promptfoo/main.yml)
 
 `promptfoo` is a library and command-line tool that helps you evaluate LLM prompt & model quality with a systematic approach to comparing model outputs.
 
