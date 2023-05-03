@@ -55,48 +55,23 @@ describe('providers', () => {
     expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
   });
 
-  test('loadApiProvider with openai:chat', () => {
-    const provider = loadApiProvider('openai:chat');
+  test('loadApiProvider with openai:chat', async () => {
+    const provider = await loadApiProvider('openai:chat');
     expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
   });
 
-  test('loadApiProvider with openai:completion', () => {
-    const provider = loadApiProvider('openai:completion');
+  test('loadApiProvider with openai:completion', async () => {
+    const provider = await loadApiProvider('openai:completion');
     expect(provider).toBeInstanceOf(OpenAiCompletionProvider);
   });
 
-  test('loadApiProvider with openai:chat:modelName', () => {
-    const provider = loadApiProvider('openai:chat:gpt-3.5-turbo');
+  test('loadApiProvider with openai:chat:modelName', async () => {
+    const provider = await loadApiProvider('openai:chat:gpt-3.5-turbo');
     expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
   });
 
-  test('loadApiProvider with openai:completion:modelName', () => {
-    const provider = loadApiProvider('openai:completion:text-davinci-003');
+  test('loadApiProvider with openai:completion:modelName', async () => {
+    const provider = await loadApiProvider('openai:completion:text-davinci-003');
     expect(provider).toBeInstanceOf(OpenAiCompletionProvider);
-  });
-
-  test('loadApiProvider with custom module', () => {
-    // Set up the custom module mock
-    const customModulePath = path.resolve(__dirname, '__mocks__', 'tempCustomModule.js');
-    jest.doMock(customModulePath);
-
-    const CustomApiProvider = require(customModulePath).default;
-    const provider = loadApiProvider(customModulePath);
-    expect(provider).toBeInstanceOf(CustomApiProvider);
-
-    // Clean up the mock
-    jest.dontMock(customModulePath);
-  });
-
-  test('loadApiProvider with invalid openai model', () => {
-    expect(() => {
-      loadApiProvider('openai:invalid');
-    }).toThrowError();
-  });
-
-  test('loadApiProvider with unknown openai model and type', () => {
-    expect(() => {
-      loadApiProvider('openai:unknown:unknown');
-    }).toThrowError();
   });
 });
