@@ -15,10 +15,22 @@
         border: 1px solid black;
         border-collapse: collapse;
         text-align: left;
+        word-break: break-all;
       }
       th,
       td {
         padding: 5px;
+      }
+      /* If data-content is exactly "PASS", set font color to green */
+      tr > td[data-content='PASS']:first-child {
+        color: green;
+        font-weight: bold;
+      }
+
+      /* If data-content starts with "FAIL", set font color to red */
+      tr > td[data-content^='FAIL']:first-child {
+        color: red;
+        font-weight: bold;
       }
     </style>
   </head>
@@ -33,7 +45,7 @@
         {% for row in table.slice(1) %}
         <tr>
           {% for cell in row %}
-          <td>{{ cell }}</td>
+          <td data-content="{{cell}}">{{ cell }}</td>
           {% endfor %}
         </tr>
         {% endfor %}

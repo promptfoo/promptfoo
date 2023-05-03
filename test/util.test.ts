@@ -82,6 +82,7 @@ describe('util', () => {
     const outputPath = 'output.csv';
     const results: EvaluateResult[] = [
       {
+        success: true,
         prompt: {
           raw: 'Test prompt',
           display: '[display] Test prompt',
@@ -121,6 +122,7 @@ describe('util', () => {
     const outputPath = 'output.json';
     const results: EvaluateResult[] = [
       {
+        success: true,
         prompt: {
           raw: 'Test prompt',
           display: '[display] Test prompt',
@@ -160,6 +162,7 @@ describe('util', () => {
     const outputPath = 'output.yaml';
     const results: EvaluateResult[] = [
       {
+        success: true,
         prompt: {
           raw: 'Test prompt',
           display: '[display] Test prompt',

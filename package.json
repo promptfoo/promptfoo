@@ -19,7 +19,7 @@
   },
   "scripts": {
     "local": "ts-node --esm src/main.ts",
-    "build": "tsc",
+    "build": "tsc && cp src/*.html dist/",
     "build:watch": "tsc --watch",
     "prepare": "tsc",
     "test": "jest",
