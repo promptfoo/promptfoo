@@ -86,4 +86,68 @@ describe('evaluator', () => {
     expect(summary.results[0].prompt.display).toBe('[test-provider] Test prompt');
     expect(summary.results[0].response?.output).toBe('Test output');
   });
+
+  test('evaluate with expected value matching output', async () => {
+    const options = {
+      prompts: ['Test prompt'],
+      vars: [{ __expected: 'Test output' }],
+      providers: [mockApiProvider],
+    };
+
+    const summary = await evaluate(options);
+
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
+    expect(summary.stats.successes).toBe(1);
+    expect(summary.stats.failures).toBe(0);
+    expect(summary.results[0].success).toBe(true);
+    expect(summary.results[0].response?.output).toBe('Test output');
+  });
+
+  test('evaluate with expected value not matching output', async () => {
+    const options = {
+      prompts: ['Test prompt'],
+      vars: [{ __expected: 'Different output' }],
+      providers: [mockApiProvider],
+    };
+
+    const summary = await evaluate(options);
+
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
+    expect(summary.stats.successes).toBe(0);
+    expect(summary.stats.failures).toBe(1);
+    expect(summary.results[0].success).toBe(false);
+    expect(summary.results[0].response?.output).toBe('Test output');
+  });
+
+  test('evaluate with eval expected value', async () => {
+    const options = {
+      prompts: ['Test prompt'],
+      vars: [{ __expected: 'eval:output === "Test output";' }],
+      providers: [mockApiProvider],
+    };
+
+    const summary = await evaluate(options);
+
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
+    expect(summary.stats.successes).toBe(1);
+    expect(summary.stats.failures).toBe(0);
+    expect(summary.results[0].success).toBe(true);
+    expect(summary.results[0].response?.output).toBe('Test output');
+  });
+
+  test('evaluate with eval expected value not matching output', async () => {
+    const options = {
+      prompts: ['Test prompt'],
+      vars: [{ __expected: 'eval:output === "Different output";' }],
+      providers: [mockApiProvider],
+    };
+
+    const summary = await evaluate(options);
+
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
+    expect(summary.stats.successes).toBe(0);
+    expect(summary.stats.failures).toBe(1);
+    expect(summary.results[0].success).toBe(false);
+    expect(summary.results[0].response?.output).toBe('Test output');
+  });
 });

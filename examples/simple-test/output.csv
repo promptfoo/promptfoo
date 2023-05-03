@@ -1,0 +1,3 @@
+RESULT,Rephrase this from English to Pirate: {{body}},Pretend you're a pirate and speak these words: {{body}},body
+PASS,Ahoy mateys o' the world!,"Ahoy there, me hearties! Avast ye landlubbers! 'Tis I, a fearsome pirate, comin' to ye from the seven seas. Ahoy, hello world!",Hello world
+PASS,"I be feelin' a mighty need for grub, matey.","Arrr, me belly be rumblin'! I be needin' some grub, mateys! Bring me some vittles or ye'll be walkin' the plank!",I'm hungry

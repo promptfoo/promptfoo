@@ -80,11 +80,24 @@ program
         colWidths: Array(head.length).fill(Math.floor(maxWidth / head.length)),
         wordWrap: true,
         wrapOnWordBoundary: true,
+        style: {
+          head: ['blue', 'bold'],
+        },
       });
-      table.push(...summary.table.slice(1));
+      // Skip first row (header) and add the rest. Color the first column green if it's a success, red if it's a failure.
+      for (const row of summary.table.slice(1)) {
+        const color = row[0] === 'PASS' ? 'green' : row[0].startsWith('FAIL') ? 'red' : undefined;
+        table.push(row.map((col, i) => (i === 0 && color ? chalk[color](col) : col)));
+      }
+
       logger.info('\n' + table.toString());
     }
-    logger.info(chalk.green.bold(`Evaluation complete: ${JSON.stringify(summary.stats, null, 2)}`));
+    logger.info('Evaluation complete');
+    logger.info(chalk.green.bold(`Successes: ${summary.stats.successes}`));
+    logger.info(chalk.red.bold(`Failures: ${summary.stats.failures}`));
+    logger.info(
+      `Token usage: Total ${summary.stats.tokenUsage.total} Prompt ${summary.stats.tokenUsage.prompt} Completion ${summary.stats.tokenUsage.completion}`,
+    );
     logger.info('Done.');
   });
 

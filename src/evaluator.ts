@@ -14,6 +14,19 @@ interface RunEvalOptions {
 
 const DEFAULT_MAX_CONCURRENCY = 3;
 
+function checkExpectedValue(expected: string, output: string): boolean {
+  if (expected.startsWith('eval:')) {
+    const evalBody = expected.slice(5);
+    const evalFunction = new Function('output', `return ${evalBody}`);
+    return evalFunction(output);
+  } else if (expected.startsWith('grade:')) {
+    // NYI
+    return false;
+  } else {
+    return expected === output;
+  }
+}
+
 async function runEval({
   provider,
   prompt,
@@ -26,7 +39,7 @@ async function runEval({
   // Note that we're using original prompt, not renderedPrompt
   const promptDisplay = includeProviderId ? `[${provider.id()}] ${prompt}` : prompt;
 
-  const ret = {
+  const setup = {
     prompt: {
       raw: renderedPrompt,
       display: promptDisplay,
@@ -36,14 +49,21 @@ async function runEval({
 
   try {
     const response = await provider.callApi(renderedPrompt);
-    return {
-      ...ret,
+    const success = vars.__expected ? checkExpectedValue(vars.__expected, response.output) : true;
+    const ret: EvaluateResult = {
+      ...setup,
       response,
+      success,
     };
+    if (!success) {
+      ret.error = `Expected ${vars.__expected}, got "${response.output}"`;
+    }
+    return ret;
   } catch (err) {
     return {
-      ...ret,
+      ...setup,
       error: String(err),
+      success: false,
     };
   }
 }
@@ -62,8 +82,20 @@ export async function evaluate(options: EvaluateOptions): Promise<EvaluateSummar
     }
   }
 
+  const vars = options.vars && options.vars.length > 0 ? options.vars : [{}];
+  const varsWithExpectedKeyRemoved = vars.map((v) => {
+    const ret = { ...v };
+    delete ret.__expected;
+    return ret;
+  });
+  const isTest = vars[0].__expected;
   const table: string[][] = [
-    [...prompts.map((p) => p.display), ...Object.keys(options.vars?.[0] || {})],
+    isTest
+      ? [
+          'RESULT',
+          [...prompts.map((p) => p.display), ...Object.keys(varsWithExpectedKeyRemoved[0])],
+        ].flat()
+      : [...prompts.map((p) => p.display), ...Object.keys(varsWithExpectedKeyRemoved[0])],
   ];
 
   const stats = {
@@ -95,7 +127,6 @@ export async function evaluate(options: EvaluateOptions): Promise<EvaluateSummar
     });
   }
 
-  const vars = options.vars && options.vars.length > 0 ? options.vars : [{}];
   const runEvalOptions: RunEvalOptions[] = [];
   for (const row of vars) {
     for (const promptContent of options.prompts) {
@@ -120,7 +151,11 @@ export async function evaluate(options: EvaluateOptions): Promise<EvaluateSummar
       if (row.error) {
         stats.failures++;
       } else {
-        stats.successes++;
+        if (row.success) {
+          stats.successes++;
+        } else {
+          stats.failures++;
+        }
         stats.tokenUsage.total += row.response?.tokenUsage?.total || 0;
         stats.tokenUsage.prompt += row.response?.tokenUsage?.prompt || 0;
         stats.tokenUsage.completion += row.response?.tokenUsage?.completion || 0;
@@ -150,7 +185,19 @@ export async function evaluate(options: EvaluateOptions): Promise<EvaluateSummar
     progressbar.stop();
   }
 
-  table.push(...combinedOutputs.map((output, index) => [...output, ...Object.values(vars[index])]));
+  if (isTest) {
+    table.push(
+      ...combinedOutputs.map((output, index) => [
+        results[index].success ? 'PASS' : `FAIL: ${results[index].error}`,
+        ...output,
+        ...Object.values(varsWithExpectedKeyRemoved[index]),
+      ]),
+    );
+  } else {
+    table.push(
+      ...combinedOutputs.map((output, index) => [...output, ...Object.values(vars[index])]),
+    );
+  }
 
   return { results, stats, table };
 }

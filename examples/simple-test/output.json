@@ -1,0 +1,109 @@
+{
+  "results": [
+    {
+      "prompt": {
+        "raw": "Rephrase this from English to Pirate: Hello world",
+        "display": "Rephrase this from English to Pirate: {{body}}"
+      },
+      "vars": {
+        "body": "Hello world",
+        "__expected": "eval:output.toLowerCase().includes('ahoy')"
+      },
+      "response": {
+        "output": "Ahoy mateys o' the world!",
+        "tokenUsage": {
+          "total": 27,
+          "prompt": 18,
+          "completion": 9
+        }
+      },
+      "success": true
+    },
+    {
+      "prompt": {
+        "raw": "Rephrase this from English to Pirate: I&#39;m hungry",
+        "display": "Rephrase this from English to Pirate: {{body}}"
+      },
+      "vars": {
+        "body": "I'm hungry",
+        "__expected": "eval:output.toLowerCase().includes('grub')"
+      },
+      "response": {
+        "output": "I be feelin' a mighty need for grub, matey.",
+        "tokenUsage": {
+          "total": 35,
+          "prompt": 21,
+          "completion": 14
+        }
+      },
+      "success": true
+    },
+    {
+      "prompt": {
+        "raw": "Pretend you're a pirate and speak these words: I&#39;m hungry",
+        "display": "Pretend you're a pirate and speak these words: {{body}}"
+      },
+      "vars": {
+        "body": "I'm hungry",
+        "__expected": "eval:output.toLowerCase().includes('grub')"
+      },
+      "response": {
+        "output": "Arrr, me belly be rumblin'! I be needin' some grub, mateys! Bring me some vittles or ye'll be walkin' the plank!",
+        "tokenUsage": {
+          "total": 63,
+          "prompt": 25,
+          "completion": 38
+        }
+      },
+      "success": true
+    },
+    {
+      "prompt": {
+        "raw": "Pretend you're a pirate and speak these words: Hello world",
+        "display": "Pretend you're a pirate and speak these words: {{body}}"
+      },
+      "vars": {
+        "body": "Hello world",
+        "__expected": "eval:output.toLowerCase().includes('ahoy')"
+      },
+      "response": {
+        "output": "Ahoy there, me hearties! Avast ye landlubbers! 'Tis I, a fearsome pirate, comin' to ye from the seven seas. Ahoy, hello world!",
+        "tokenUsage": {
+          "total": 64,
+          "prompt": 22,
+          "completion": 42
+        }
+      },
+      "success": true
+    }
+  ],
+  "stats": {
+    "successes": 4,
+    "failures": 0,
+    "tokenUsage": {
+      "total": 189,
+      "prompt": 86,
+      "completion": 103
+    }
+  },
+  "table": [
+    [
+      "RESULT",
+      "Rephrase this from English to Pirate: {{body}}",
+      "Pretend you're a pirate and speak these words: {{body}}",
+      "body"
+    ],
+    [
+      "PASS",
+      "Ahoy mateys o' the world!",
+      "Ahoy there, me hearties! Avast ye landlubbers! 'Tis I, a fearsome pirate, comin' to ye from the seven seas. Ahoy, hello world!",
+      "Hello world"
+    ],
+    [
+      "PASS",
+      "I be feelin' a mighty need for grub, matey.",
+      "Arrr, me belly be rumblin'! I be needin' some grub, mateys! Bring me some vittles or ye'll be walkin' the plank!",
+      "I'm hungry"
+    ]
+  ]
+}

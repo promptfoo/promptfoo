@@ -1,0 +1,3 @@
+body,__expected
+Hello world,eval:output.toLowerCase().includes('ahoy')
+I'm hungry,eval:output.toLowerCase().includes('grub')

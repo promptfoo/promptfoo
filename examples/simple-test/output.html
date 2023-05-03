@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>Table Output</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial,
+          sans-serif;
+      }
+      table,
+      th,
+      td {
+        border: 1px solid black;
+        border-collapse: collapse;
+        text-align: left;
+      }
+      th,
+      td {
+        padding: 5px;
+      }
+      /* If data-content is exactly "PASS", set font color to green */
+      tr > td[data-content='PASS']:first-child {
+        color: green;
+        font-weight: bold;
+      }
+
+      /* If data-content starts with "FAIL", set font color to red */
+      tr > td[data-content^='FAIL']:first-child {
+        color: red;
+        font-weight: bold;
+      }
+    </style>
+  </head>
+  <body>
+    <table>
+      <thead>
+        <th>RESULT</th>
+
+        <th>Rephrase this from English to Pirate: {{body}}</th>
+
+        <th>Pretend you&#39;re a pirate and speak these words: {{body}}</th>
+
+        <th>body</th>
+      </thead>
+      <tbody>
+        <tr>
+          <td
+            data-content='FAIL: Expected eval:output.toLowerCase().includes(&#39;grub&#39;), got "I be starvin&#39;!"'
+          >
+            FAIL: Expected eval:output.toLowerCase().includes(&#39;grub&#39;), got &quot;I be
+            starvin&#39;!&quot;
+          </td>
+
+          <td data-content="Ahoy mateys o&#39; the world!">Ahoy mateys o&#39; the world!</td>
+
+          <td
+            data-content="Ahoy there, me hearties! Avast ye landlubbers! &#39;Tis I, a fearsome pirate, comin&#39; to ye from the seven seas. Ahoy, hello world!"
+          >
+            Ahoy there, me hearties! Avast ye landlubbers! &#39;Tis I, a fearsome pirate, comin&#39;
+            to ye from the seven seas. Ahoy, hello world!
+          </td>
+
+          <td data-content="Hello world">Hello world</td>
+        </tr>
+
+        <tr>
+          <td data-content="PASS">PASS</td>
+
+          <td data-content="I be starvin&#39;!">I be starvin&#39;!</td>
+
+          <td
+            data-content="Arrr, me belly be rumblin&#39;! I be needin&#39; some grub, mateys! Bring me some vittles or ye&#39;ll be walkin&#39; the plank!"
+          >
+            Arrr, me belly be rumblin&#39;! I be needin&#39; some grub, mateys! Bring me some
+            vittles or ye&#39;ll be walkin&#39; the plank!
+          </td>
+
+          <td data-content="I&#39;m hungry">I&#39;m hungry</td>
+        </tr>
+      </tbody>
+    </table>
+  </body>
+</html>
