@@ -1,4 +1,5 @@
 import fetch from 'node-fetch';
+import path from 'node:path';
 
 import { ApiProvider, ProviderResponse } from './types.js';
 import logger from './logger.js';
@@ -44,11 +45,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
 
   constructor(modelName: string, apiKey?: string) {
     if (!OpenAiCompletionProvider.OPENAI_COMPLETION_MODELS.includes(modelName)) {
-      throw new Error(
-        `Unknown OpenAI completion model name: ${modelName}. Use one of the following: ${OpenAiCompletionProvider.OPENAI_COMPLETION_MODELS.join(
-          ', ',
-        )}`,
-      );
+      logger.warn(`Using unknown OpenAI completion model: ${modelName}`);
     }
     super(modelName, apiKey);
   }
@@ -95,11 +92,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
   constructor(modelName: string, apiKey?: string) {
     if (!OpenAiChatCompletionProvider.OPENAI_CHAT_MODELS.includes(modelName)) {
-      throw new Error(
-        `Unknown OpenAI completion model name: ${modelName}. Use one of the following: ${OpenAiCompletionProvider.OPENAI_COMPLETION_MODELS.join(
-          ', ',
-        )}`,
-      );
+      logger.warn(`Using unknown OpenAI chat model: ${modelName}`);
     }
     super(modelName, apiKey);
   }
@@ -142,7 +135,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   }
 }
 
-export function loadApiProvider(providerPath: string): ApiProvider {
+export async function loadApiProvider(providerPath: string): Promise<ApiProvider> {
   if (providerPath?.startsWith('openai:')) {
     // Load OpenAI module
     const options = providerPath.split(':');
@@ -165,6 +158,6 @@ export function loadApiProvider(providerPath: string): ApiProvider {
   }
 
   // Load custom module
-  const CustomApiProvider = require(providerPath).default;
+  const CustomApiProvider = (await import(path.join(process.cwd(), providerPath))).default;
   return new CustomApiProvider();
 }

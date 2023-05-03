@@ -55,7 +55,7 @@ program
       vars = readVars(cmdObj.vars);
     }
 
-    const providers = cmdObj.provider.map((p) => loadApiProvider(p));
+    const providers = await Promise.all(cmdObj.provider.map(async (p) => await loadApiProvider(p)));
     const options: EvaluateOptions = {
       prompts: readPrompts(cmdObj.prompt),
       vars,

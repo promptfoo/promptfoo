@@ -185,6 +185,7 @@ export async function evaluate(options: EvaluateOptions): Promise<EvaluateSummar
     progressbar.stop();
   }
 
+  // TODO(ian): Display errors in table UI.
   if (isTest) {
     table.push(
       ...combinedOutputs.map((output, index) => [
