@@ -49,14 +49,24 @@ async function runEval({
 
   try {
     const response = await provider.callApi(renderedPrompt);
-    const success = vars.__expected ? checkExpectedValue(vars.__expected, response.output) : true;
     const ret: EvaluateResult = {
       ...setup,
       response,
-      success,
+      success: false,
     };
-    if (!success) {
-      ret.error = `Expected ${vars.__expected}, got "${response.output}"`;
+    if (response.error) {
+      ret.error = response.error;
+    } else if (response.output) {
+      const matchesExpected = vars.__expected
+        ? checkExpectedValue(vars.__expected, response.output)
+        : true;
+      if (!matchesExpected) {
+        ret.error = `Expected ${vars.__expected}, got "${response.output}"`;
+      }
+      ret.success = matchesExpected;
+    } else {
+      ret.success = false;
+      ret.error = 'No output';
     }
     return ret;
   } catch (err) {
@@ -177,7 +187,7 @@ export async function evaluate(options: EvaluateOptions): Promise<EvaluateSummar
         throw new Error('Expected index to be a number');
       }
       const combinedOutputIndex = Math.floor(index / prompts.length);
-      combinedOutputs[combinedOutputIndex].push(row.response?.output || '');
+      combinedOutputs[combinedOutputIndex].push(row.response?.output || row.error || '');
     },
   );
 
