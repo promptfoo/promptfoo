@@ -60,11 +60,13 @@ You'll probably want to change a few of the prompts in prompts.txt and the varia
   writeFileSync(pathJoin(process.cwd(), directory, 'promptfooconfig.js'), dummyConfig);
   writeFileSync(pathJoin(process.cwd(), directory, 'README.md'), readme);
 
-  if (directory) {
+  if (directory === '.') {
+    logger.info(
+      'Wrote prompts.txt, vars.csv, and promptfooconfig.js. Open README.md to get started!',
+    );
+  } else {
     logger.info(`Wrote prompts.txt, vars.csv, and promptfooconfig.js to ${directory}`);
     logger.info(`\`cd ${directory}\` and open README.md to get started!`);
-  } else {
-    logger.info('Wrote prompts.txt, vars.csv, and promptfooconfig.js');
   }
 }
 
