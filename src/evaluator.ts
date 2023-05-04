@@ -147,7 +147,7 @@ export async function evaluate(options: EvaluateOptions): Promise<EvaluateSummar
     options.maxConcurrency || DEFAULT_MAX_CONCURRENCY,
     async (options: RunEvalOptions, index: number | string) => {
       const row = await runEval(options);
-      results.push(row);
+      results[index as number] = row;
       if (row.error) {
         stats.failures++;
       } else {
