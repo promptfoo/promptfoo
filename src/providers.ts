@@ -58,25 +58,38 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       temperature: process.env.OPENAI_TEMPERATURE || 0,
     };
     logger.debug(`Calling OpenAI API: ${JSON.stringify(body)}`);
-    const response = await fetch('https://api.openai.com/v1/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.apiKey}`,
-      },
-      body: JSON.stringify(body),
-    });
+    let response, data;
+    try {
+      response = await fetch('https://api.openai.com/v1/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.apiKey}`,
+        },
+        body: JSON.stringify(body),
+      });
 
-    const data = (await response.json()) as unknown as any;
+      data = (await response.json()) as unknown as any;
+    } catch (err) {
+      return {
+        error: `API call error: ${String(err)}`,
+      };
+    }
     logger.debug(`\tOpenAI API response: ${JSON.stringify(data)}`);
-    return {
-      output: data.choices[0].text,
-      tokenUsage: {
-        total: data.usage.total_tokens,
-        prompt: data.usage.prompt_tokens,
-        completion: data.usage.completion_tokens,
-      },
-    };
+    try {
+      return {
+        output: data.choices[0].text,
+        tokenUsage: {
+          total: data.usage.total_tokens,
+          prompt: data.usage.prompt_tokens,
+          completion: data.usage.completion_tokens,
+        },
+      };
+    } catch (err) {
+      return {
+        error: `API response error: ${String(err)}: ${JSON.stringify(data)}`,
+      };
+    }
   }
 }
 
@@ -103,7 +116,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       // User can specify `messages` payload as JSON, or we'll just put the
       // string prompt into a `messages` array.
       messages = JSON.parse(prompt);
-    } catch (e) {
+    } catch (err) {
       messages = [{ role: 'user', content: prompt }];
     }
     const body = {
@@ -113,25 +126,39 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       temperature: process.env.OPENAI_MAX_TEMPERATURE || 0,
     };
     logger.debug(`Calling OpenAI API: ${JSON.stringify(body)}`);
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.apiKey}`,
-      },
-      body: JSON.stringify(body),
-    });
 
-    const data = (await response.json()) as unknown as any;
+    let response, data;
+    try {
+      response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.apiKey}`,
+        },
+        body: JSON.stringify(body),
+      });
+      data = (await response.json()) as unknown as any;
+    } catch (err) {
+      return {
+        error: `API call error: ${String(err)}`,
+      };
+    }
+
     logger.debug(`\tOpenAI API response: ${JSON.stringify(data)}`);
-    return {
-      output: data.choices[0].message.content,
-      tokenUsage: {
-        total: data.usage.total_tokens,
-        prompt: data.usage.prompt_tokens,
-        completion: data.usage.completion_tokens,
-      },
-    };
+    try {
+      return {
+        output: data.choices[0].message.content,
+        tokenUsage: {
+          total: data.usage.total_tokens,
+          prompt: data.usage.prompt_tokens,
+          completion: data.usage.completion_tokens,
+        },
+      };
+    } catch (err) {
+      return {
+        error: `API response error: ${String(err)}: ${JSON.stringify(data)}`,
+      };
+    }
   }
 }
 

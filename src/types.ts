@@ -20,7 +20,8 @@ interface TokenUsage {
 }
 
 export interface ProviderResponse {
-  output: string;
+  error?: string;
+  output?: string;
   tokenUsage?: TokenUsage;
 }
 
