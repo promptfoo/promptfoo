@@ -1,5 +1,5 @@
 Run:
 
 ```
-promptfoo --prompt prompts.txt --vars vars.csv --provider openai:chat --output output.json
+promptfoo eval --prompts prompts.txt --vars vars.csv --providers openai:chat --output output.json
 ```

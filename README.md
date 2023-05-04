@@ -1,4 +1,5 @@
 # promptfoo
+
 [![npm](https://img.shields.io/npm/v/promptfoo)](https://npmjs.com/package/promptfoo)
 ![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/typpo/promptfoo/main.yml)
 
@@ -14,15 +15,29 @@ With promptfoo, you can:
 
 ## Usage (command line)
 
-To evaluate prompts using `promptfoo`, use the following command:
+To get started, run the following command:
+
+```
+npx promptfoo init
+```
+
+This will create some templates in your current directory: `prompts.txt`, `vars.csv`, and `promptfooconfig.js`.
+
+After editing the prompts and variables to your liking, run the eval command to kick off an evaluation:
+
+```
+npx promptfoo eval
+```
+
+If you're looking to customize your usage, you have the full set of parameters at your disposal:
 
 ```bash
-npx promptfoo eval -p <prompt_paths...> -o <output_path> -r <provider> [-v <vars_path>] [-j <max_concurrency] [-c <config_path>]
+npx promptfoo eval -p <prompt_paths...> -o <output_path> -r <providers> [-v <vars_path>] [-j <max_concurrency] [-c <config_path>]
 ```
 
 - `<prompt_paths...>`: Paths to prompt file(s)
 - `<output_path>`: Path to output CSV, JSON, YAML, or HTML file. Defaults to terminal output
-- `<provider>`: One or more of: `openai:<model_name>`, or filesystem path to custom API caller module
+- `<providers>`: One or more of: `openai:<model_name>`, or filesystem path to custom API caller module
 - `<vars_path>` (optional): Path to CSV, JSON, or YAML file with prompt variables
 - `<max_concurrency>` (optional): Number of simultaneous API requests. Defaults to 3
 - `<config_path>` (optional): Path to configuration file
