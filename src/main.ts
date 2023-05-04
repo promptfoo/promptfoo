@@ -10,6 +10,7 @@ import logger, { setLogLevel } from './logger.js';
 import { loadApiProvider } from './providers.js';
 import { evaluate } from './evaluator.js';
 import { readPrompts, readVars, writeOutput } from './util.js';
+import { getDirectory } from './esm.js';
 
 import type { CommandLineOptions, EvaluateOptions, VarMapping } from './types.js';
 
@@ -79,6 +80,14 @@ async function main() {
   }
 
   const program = new Command();
+
+  program.option('--version', 'Print version', () => {
+    const packageJson = JSON.parse(
+      readFileSync(pathJoin(getDirectory(), '../package.json'), 'utf8'),
+    );
+    console.log(packageJson.version);
+    process.exit(0);
+  });
 
   program
     .command('init [directory]')
