@@ -15,7 +15,8 @@
           "prompt": 16,
           "completion": 3
         }
-      }
+      },
+      "success": true
     },
     {
       "prompt": {
@@ -32,7 +33,8 @@
           "prompt": 19,
           "completion": 5
         }
-      }
+      },
+      "success": true
     },
     {
       "prompt": {
@@ -49,7 +51,8 @@
           "prompt": 17,
           "completion": 15
         }
-      }
+      },
+      "success": true
     },
     {
       "prompt": {
@@ -66,7 +69,8 @@
           "prompt": 20,
           "completion": 25
         }
-      }
+      },
+      "success": true
     }
   ],
   "stats": {

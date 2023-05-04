@@ -1,6 +1,6 @@
 export interface CommandLineOptions {
-  prompt: string[];
-  provider: string[];
+  prompts: string[];
+  providers: string[];
   output?: string;
   vars?: string;
   config?: string;
