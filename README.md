@@ -166,9 +166,9 @@ You can use [Nunjucks](https://mozilla.github.io/nunjucks/) templating syntax to
 Example of a single prompt file with multiple prompts (`prompts.txt`):
 
 ```
-Translate the following text to French: "{{text}}"
+Translate the following text to French: "{{name}}: {{text}}"
 ---
-Translate the following text to German: "{{text}}"
+Translate the following text to German: "{{name}}: {{text}}"
 ```
 
 Example of multiple prompt files:
@@ -176,13 +176,13 @@ Example of multiple prompt files:
 - `prompt1.txt`:
 
   ```
-  Translate the following text to French: "{{text}}"
+  Translate the following text to French: "{{name}}: {{text}}"
   ```
 
 - `prompt2.txt`:
 
   ```
-  Translate the following text to German: "{{text}}"
+  Translate the following text to German: "{{name}}: {{text}}"
   ```
 
 ### Vars File
@@ -194,26 +194,27 @@ Vars are substituted by [Nunjucks](https://mozilla.github.io/nunjucks/) templati
 Example of a vars file (`vars.csv`):
 
 ```
-text
-"Hello, world!"
-"Goodbye, everyone!"
+"name","text"
+"Bob","Hello, world!"
+"Joe","Goodbye, everyone!"
 ```
 
 Example of a vars file (`vars.json`):
 
 ```json
-[{ "text": "Hello, world!" }, { "text": "Goodbye, everyone!" }]
+[
+  { "name": "Bob", "text": "Hello, world!" },
+  { "name": "Joe", "text": "Goodbye, everyone!" }
+]
 ```
 
 ### Expected Value
 
-You can specify an expected value for each test case to evaluate the success or failure of the model's output. To do this, add a special field called `__expected` in the `vars` file. The `__expected` field supports three types of value comparisons:
+You can specify an expected value for each test case to evaluate the success or failure of the model's output. To do this, add a special field called `__expected` in the `vars` file. The `__expected` field supports these types of value comparisons:
 
 1. If the expected value starts with `eval:`, it will evaluate the contents as the body of a JavaScript function defined like: `function(output) { <eval> }`. The function should return a boolean value, where `true` indicates success and `false` indicates failure.
 
-2. If the expected value starts with `grade:`, it will call the `gradeOutput(prompt, output)` function. You should assume this function exists and returns a boolean value, where `true` indicates success and `false` indicates failure.
-
-3. Otherwise, it attempts an exact string match comparison between the expected value and the model's output.
+2. Otherwise, it attempts an exact string match comparison between the expected value and the model's output.
 
 Example of a vars file with the `__expected` field (`vars.csv`):
 
