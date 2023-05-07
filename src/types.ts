@@ -14,7 +14,7 @@ export interface ApiProvider {
   callApi: (prompt: string) => Promise<ProviderResponse>;
 }
 
-interface TokenUsage {
+export interface TokenUsage {
   total: number;
   prompt: number;
   completion: number;
@@ -61,12 +61,14 @@ export interface EvaluateResult {
   success: boolean;
 }
 
+export interface EvaluateStats {
+  successes: number;
+  failures: number;
+  tokenUsage: TokenUsage;
+}
+
 export interface EvaluateSummary {
   results: EvaluateResult[];
   table: string[][];
-  stats: {
-    successes: number;
-    failures: number;
-    tokenUsage: TokenUsage;
-  };
+  stats: EvaluateStats;
 }
