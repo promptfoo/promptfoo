@@ -280,6 +280,8 @@ class Evaluator {
         results[index] = row;
       });
 
+      // TODO(ian): Provide full context in table cells, and have the caller
+      // construct the table contents itself.
     if (isTest) {
       // Iterate through each combined output
       combinedOutputs.forEach((output, index) => {
@@ -291,7 +293,7 @@ class Evaluator {
           const resultIndex = index * prompts.length + outputIndex;
           const result = results[resultIndex];
           // TODO(ian): sometimes output and result.error can be identical (in the case of exception)
-          const resultStatus = result.success ? `[PASS] ${o}` : `[FAIL] ${o}\n---\n${result.error}`;
+          const resultStatus = result.success ? `[PASS] ${o}` : `[FAIL] ${result.error}\n---\n${o}`;
           modifiedOutput.push(resultStatus);
         });
 
