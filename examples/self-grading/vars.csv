@@ -1,0 +1,11 @@
+name,question,__expected
+Bob,Can you help me find a specific product on your website?,grade:Do not mention that you are an AI or chat assistant
+Jane,Do you have any promotions or discounts currently available?,grade:Do not mention that you are an AI or chat assistant
+Dave,What are your shipping and return policies?,grade:Do not mention that you are an AI or chat assistant
+Jim,Can you provide more information about the product specifications or features?,grade:Do not mention that you are an AI or chat assistant
+Alice,Can you recommend products that are similar to what I've been looking at?,grade:Do not mention that you are an AI or chat assistant
+Sophie,Do you have any recommendations for products that are currently popular or trending?,grade:Do not mention that you are an AI or chat assistant
+Ben,Can you check the availability of a product at a specific store location?,grade:Do not mention that you are an AI or chat assistant
+Jessie,How can I track my order after it has been shipped?,grade:Do not mention that you are an AI or chat assistant
+Kim,What payment methods do you accept?,grade:Do not mention that you are an AI or chat assistant
+Emily,Can you help me with a problem I'm having with my account or order?,grade:Do not mention that you are an AI or chat assistant

@@ -3,5 +3,5 @@ This example shows how you can use promptfoo to generate a side-by-side eval of 
 Run:
 
 ```
-promptfoo -p prompts.txt --vars vars.csv -r openai:chat
+promptfoo eval -p prompts.txt --vars vars.csv -r openai:chat
 ```
