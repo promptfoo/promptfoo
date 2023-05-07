@@ -1,7 +1,9 @@
 This example shows how you can have an LLM grade its own output according to predefined expectations.
 
+Configuration is in promptfooconfig.js
+
 Run:
 
 ```
-promptfoo -p prompts.txt --vars vars.csv -r openai:chat:gpt-3.5-turbo --grader openai:chat:gpt-4
+promptfoo eval
 ```
