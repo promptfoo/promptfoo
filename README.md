@@ -39,7 +39,7 @@ npx promptfoo eval -p <prompt_paths...> -o <output_path> -r <providers> [-v <var
 - `<output_path>`: Path to output CSV, JSON, YAML, or HTML file. Defaults to terminal output
 - `<providers>`: One or more of: `openai:<model_name>`, or filesystem path to custom API caller module
 - `<vars_path>` (optional): Path to CSV, JSON, or YAML file with prompt variables
-- `<max_concurrency>` (optional): Number of simultaneous API requests. Defaults to 3
+- `<max_concurrency>` (optional): Number of simultaneous API requests. Defaults to 4
 - `<config_path>` (optional): Path to configuration file
 
 ### Examples
