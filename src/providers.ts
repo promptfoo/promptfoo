@@ -4,9 +4,12 @@ import path from 'node:path';
 import { ApiProvider, ProviderResponse } from './types.js';
 import logger from './logger.js';
 
+const DEFAULT_OPENAI_HOST = 'api.openai.com';
+
 export class OpenAiGenericProvider implements ApiProvider {
   modelName: string;
   apiKey: string;
+  apiHost: string;
 
   constructor(modelName: string, apiKey?: string) {
     this.modelName = modelName;
@@ -18,6 +21,8 @@ export class OpenAiGenericProvider implements ApiProvider {
       );
     }
     this.apiKey = key;
+
+    this.apiHost = process.env.OPENAI_API_HOST || DEFAULT_OPENAI_HOST;
   }
 
   id(): string {
@@ -60,7 +65,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
     logger.debug(`Calling OpenAI API: ${JSON.stringify(body)}`);
     let response, data;
     try {
-      response = await fetch('https://api.openai.com/v1/completions', {
+      response = await fetch(`https://${this.apiHost}/v1/completions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -129,7 +134,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
     let response, data;
     try {
-      response = await fetch('https://api.openai.com/v1/chat/completions', {
+      response = await fetch(`https://${this.apiHost}/v1/chat/completions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
