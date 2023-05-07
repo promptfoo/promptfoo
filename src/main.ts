@@ -129,6 +129,7 @@ async function main() {
       'Maximum number of concurrent API calls',
       String(defaultConfig.maxConcurrency),
     )
+    .option('--grader', 'Model that will grade outputs', defaultConfig.grader)
     .option('--verbose', 'Show debug logs', defaultConfig.verbose)
     .action(async (cmdObj: CommandLineOptions & Command) => {
       if (cmdObj.verbose) {
@@ -170,6 +171,12 @@ async function main() {
         ...config,
       };
 
+      if (cmdObj.grader) {
+        options.grading = {
+          provider: await loadApiProvider(cmdObj.grader),
+        };
+      }
+
       const summary = await evaluate(options);
 
       if (cmdObj.output) {
@@ -191,14 +198,18 @@ async function main() {
         // Skip first row (header) and add the rest. Color PASS/FAIL
         for (const row of summary.table.slice(1)) {
           table.push(
-            row.map((col, i) => {
-              let color: 'green' | 'red' | undefined = undefined;
+            row.map((col) => {
               if (col.startsWith('[PASS]')) {
-                color = 'green';
+                // color '[PASS]' green
+                return chalk.green.bold(col.slice(0, 6)) + col.slice(6);
               } else if (col.startsWith('[FAIL]')) {
-                color = 'red';
+                // color everything red up until '---'
+                return col
+                  .split('---')
+                  .map((c, idx) => (idx === 0 ? chalk.red.bold(c) : c))
+                  .join('---');
               }
-              return color ? chalk[color](col) : col;
+              return col;
             }),
           );
         }
