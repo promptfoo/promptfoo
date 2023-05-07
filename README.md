@@ -13,6 +13,15 @@ With promptfoo, you can:
 - Use as a command line tool, or integrate into your workflow as a library
 - Use OpenAI API models (built-in support), or integrate custom API providers for any LLM API
 
+**» [View docs on website](https://promptfoo.dev/docs/intro) «**
+
+promptfoo works by producing matrix views that allow you to quickly review prompt outputs across many inputs.  The goal: tune prompts systematically across all relevant test cases, instead of testing prompts one-off.
+
+Here's an example of a side-by-side comparison of multiple prompts and inputs.  You can manually review outputs, or set up "expectations" that automatically flag bad outputs.
+
+![Prompt evaluation matrix](https://user-images.githubusercontent.com/310310/236690475-b05205e8-483e-4a6d-bb84-41c2b06a1247.png)
+
+
 ## Usage (command line)
 
 To get started, run the following command:
@@ -32,7 +41,7 @@ npx promptfoo eval
 If you're looking to customize your usage, you have the full set of parameters at your disposal:
 
 ```bash
-npx promptfoo eval -p <prompt_paths...> -o <output_path> -r <providers> [-v <vars_path>] [-j <max_concurrency] [-c <config_path>]
+npx promptfoo eval -p <prompt_paths...> -o <output_path> -r <providers> [-v <vars_path>] [-j <max_concurrency] [-c <config_path>] [--grader <grading_provider>]
 ```
 
 - `<prompt_paths...>`: Paths to prompt file(s)
@@ -41,6 +50,7 @@ npx promptfoo eval -p <prompt_paths...> -o <output_path> -r <providers> [-v <var
 - `<vars_path>` (optional): Path to CSV, JSON, or YAML file with prompt variables
 - `<max_concurrency>` (optional): Number of simultaneous API requests. Defaults to 4
 - `<config_path>` (optional): Path to configuration file
+- `<grading_provider>`: A provider that handles the grading process, if you are using [LLM grading](#expected-outputs)
 
 ### Examples
 
@@ -208,7 +218,7 @@ Example of a vars file (`vars.json`):
 ]
 ```
 
-### Expected Value
+### Expected Outputs
 
 You can specify an expected value for each test case to evaluate the success or failure of the model's output. To do this, add a special field called `__expected` in the `vars` file. The `__expected` field supports these types of value comparisons:
 
