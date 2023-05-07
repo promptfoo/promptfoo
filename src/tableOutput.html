@@ -22,16 +22,12 @@
         padding: 5px;
         min-width: 200px;
       }
-      /* If data-content is exactly "PASS", set font color to green */
-      tr > td[data-content='PASS']:first-child {
-        color: green;
-        font-weight: bold;
-      }
 
-      /* If data-content starts with "FAIL", set font color to red */
-      tr > td[data-content^='FAIL']:first-child {
-        color: red;
-        font-weight: bold;
+      tr > td[data-content^='[PASS]'] {
+        color: green;
+      }
+      tr > td[data-content^='[FAIL]'] {
+        color: #ad0000;
       }
     </style>
   </head>

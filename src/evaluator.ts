@@ -61,7 +61,7 @@ async function runEval({
         ? checkExpectedValue(vars.__expected, response.output)
         : true;
       if (!matchesExpected) {
-        ret.error = `Expected ${vars.__expected}, got "${response.output}"`;
+        ret.error = `Expected: ${vars.__expected}`;
       }
       ret.success = matchesExpected;
     } else {
@@ -100,12 +100,7 @@ export async function evaluate(options: EvaluateOptions): Promise<EvaluateSummar
   });
   const isTest = vars[0].__expected;
   const table: string[][] = [
-    isTest
-      ? [
-          'RESULT',
-          [...prompts.map((p) => p.display), ...Object.keys(varsWithExpectedKeyRemoved[0])],
-        ].flat()
-      : [...prompts.map((p) => p.display), ...Object.keys(varsWithExpectedKeyRemoved[0])],
+    [...prompts.map((p) => p.display), ...Object.keys(varsWithExpectedKeyRemoved[0])],
   ];
 
   const stats = {
@@ -195,15 +190,24 @@ export async function evaluate(options: EvaluateOptions): Promise<EvaluateSummar
     progressbar.stop();
   }
 
-  // TODO(ian): Display errors in table UI.
   if (isTest) {
-    table.push(
-      ...combinedOutputs.map((output, index) => [
-        results[index].success ? 'PASS' : `FAIL: ${results[index].error}`,
-        ...output,
-        ...Object.values(varsWithExpectedKeyRemoved[index]),
-      ]),
-    );
+    // Iterate through each combined output
+    combinedOutputs.forEach((output, index) => {
+      // Create a new array to store the modified output with [PASS] or [FAIL] prepended
+      const modifiedOutput: string[] = [];
+
+      // Iterate through each output value and prepend [PASS] or [FAIL] based on the success status
+      output.forEach((o, outputIndex) => {
+        const resultIndex = index * prompts.length + outputIndex;
+        const result = results[resultIndex];
+        const resultStatus = result.success ? `[PASS] ${o}` : `[FAIL] ${o}\n\n${result.error}`;
+        modifiedOutput.push(resultStatus);
+      });
+
+      // Add the modified output and the corresponding values from varsWithExpectedKeyRemoved to the table
+      const tableRow = [...modifiedOutput, ...Object.values(varsWithExpectedKeyRemoved[index])];
+      table.push(tableRow);
+    });
   } else {
     table.push(
       ...combinedOutputs.map((output, index) => [...output, ...Object.values(vars[index])]),

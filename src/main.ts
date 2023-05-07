@@ -188,10 +188,19 @@ async function main() {
             head: ['blue', 'bold'],
           },
         });
-        // Skip first row (header) and add the rest. Color the first column green if it's a success, red if it's a failure.
+        // Skip first row (header) and add the rest. Color PASS/FAIL
         for (const row of summary.table.slice(1)) {
-          const color = row[0] === 'PASS' ? 'green' : row[0].startsWith('FAIL') ? 'red' : undefined;
-          table.push(row.map((col, i) => (i === 0 && color ? chalk[color](col) : col)));
+          table.push(
+            row.map((col, i) => {
+              let color: 'green' | 'red' | undefined = undefined;
+              if (col.startsWith('[PASS]')) {
+                color = 'green';
+              } else if (col.startsWith('[FAIL]')) {
+                color = 'red';
+              }
+              return color ? chalk[color](col) : col;
+            }),
+          );
         }
 
         logger.info('\n' + table.toString());
