@@ -6,6 +6,7 @@ export interface CommandLineOptions {
   config?: string;
   verbose?: boolean;
   maxConcurrency?: number;
+  grader?: string;
 }
 
 export interface ApiProvider {
@@ -31,6 +32,11 @@ export interface CsvRow {
 
 export type VarMapping = Record<string, string>;
 
+export interface GradingConfig {
+  prompt?: string;
+  provider: ApiProvider;
+}
+
 export interface EvaluateOptions {
   providers: ApiProvider[];
   prompts: string[];
@@ -38,6 +44,8 @@ export interface EvaluateOptions {
 
   maxConcurrency?: number;
   showProgressBar?: boolean;
+
+  grading?: GradingConfig;
 }
 
 export interface Prompt {

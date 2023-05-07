@@ -1,27 +1,78 @@
 import async from 'async';
 import nunjucks from 'nunjucks';
 
-import type { SingleBar } from 'cli-progress';
+import { DEFAULT_GRADING_PROMPT } from './prompts.js';
 
-import { EvaluateOptions, EvaluateSummary, EvaluateResult, ApiProvider, Prompt } from './types.js';
+import type { SingleBar } from 'cli-progress';
+import type {
+  EvaluateOptions,
+  EvaluateSummary,
+  EvaluateResult,
+  ApiProvider,
+  Prompt,
+  GradingConfig,
+} from './types.js';
 
 interface RunEvalOptions {
   provider: ApiProvider;
   prompt: string;
   vars?: Record<string, string>;
   includeProviderId?: boolean;
+  grading?: GradingConfig;
 }
 
 const DEFAULT_MAX_CONCURRENCY = 4;
 
-function checkExpectedValue(expected: string, output: string): boolean {
+interface GradingResult {
+  pass: boolean;
+  reason: string;
+}
+
+async function gradeOutput(
+  expected: string,
+  output: string,
+  grading?: GradingConfig,
+): Promise<GradingResult> {
+  if (!grading) {
+    throw new Error('Cannot grade output without grading config. Specify --grader option or grading config.');
+  }
+
+  const prompt = nunjucks.renderString(grading.prompt || DEFAULT_GRADING_PROMPT, {
+    content: output,
+    rubric: expected,
+  });
+
+  const resp = await grading.provider.callApi(prompt);
+  // TODO(ian): Return tokens used
+  if (resp.error || !resp.output) {
+    return {
+      pass: false,
+      reason: resp.error || 'No output',
+    };
+  }
+
+  try {
+    const parsed = JSON.parse(resp.output) as GradingResult;
+    return parsed;
+  } catch (err) {
+    return {
+      pass: false,
+      reason: `Output is not valid JSON: ${resp.output}`,
+    };
+  }
+}
+
+async function checkExpectedValue(
+  expected: string,
+  output: string,
+  grading?: GradingConfig,
+): Promise<boolean> {
   if (expected.startsWith('eval:')) {
     const evalBody = expected.slice(5);
     const evalFunction = new Function('output', `return ${evalBody}`);
     return evalFunction(output);
   } else if (expected.startsWith('grade:')) {
-    // NYI
-    return false;
+    return (await gradeOutput(expected.slice(6), output, grading)).pass;
   } else {
     return expected === output;
   }
@@ -32,6 +83,7 @@ async function runEval({
   prompt,
   vars,
   includeProviderId,
+  grading,
 }: RunEvalOptions): Promise<EvaluateResult> {
   vars = vars || {};
   const renderedPrompt = nunjucks.renderString(prompt, vars);
@@ -58,7 +110,7 @@ async function runEval({
       ret.error = response.error;
     } else if (response.output) {
       const matchesExpected = vars.__expected
-        ? checkExpectedValue(vars.__expected, response.output)
+        ? await checkExpectedValue(vars.__expected, response.output, grading)
         : true;
       if (!matchesExpected) {
         ret.error = `Expected: ${vars.__expected}`;
@@ -141,6 +193,7 @@ export async function evaluate(options: EvaluateOptions): Promise<EvaluateSummar
           prompt: promptContent,
           vars: row,
           includeProviderId: options.providers.length > 1,
+          grading: options.grading,
         });
       }
     }
@@ -200,7 +253,8 @@ export async function evaluate(options: EvaluateOptions): Promise<EvaluateSummar
       output.forEach((o, outputIndex) => {
         const resultIndex = index * prompts.length + outputIndex;
         const result = results[resultIndex];
-        const resultStatus = result.success ? `[PASS] ${o}` : `[FAIL] ${o}\n\n${result.error}`;
+        // TODO(ian): sometimes output and result.error can be identical (in the case of exception)
+        const resultStatus = result.success ? `[PASS] ${o}` : `[FAIL] ${o}\n---\n${result.error}`;
         modifiedOutput.push(resultStatus);
       });
 

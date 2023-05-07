@@ -129,6 +129,7 @@ async function main() {
       'Maximum number of concurrent API calls',
       String(defaultConfig.maxConcurrency),
     )
+    .option('--grader', 'Model that will grade outputs', defaultConfig.grader)
     .option('--verbose', 'Show debug logs', defaultConfig.verbose)
     .action(async (cmdObj: CommandLineOptions & Command) => {
       if (cmdObj.verbose) {
@@ -169,6 +170,12 @@ async function main() {
           cmdObj.maxConcurrency && cmdObj.maxConcurrency > 0 ? cmdObj.maxConcurrency : undefined,
         ...config,
       };
+
+      if (cmdObj.grader) {
+        options.grading = {
+          provider: await loadApiProvider(cmdObj.grader),
+        };
+      }
 
       const summary = await evaluate(options);
 
