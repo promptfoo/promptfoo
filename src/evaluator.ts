@@ -280,8 +280,8 @@ class Evaluator {
         results[index] = row;
       });
 
-      // TODO(ian): Provide full context in table cells, and have the caller
-      // construct the table contents itself.
+    // TODO(ian): Provide full context in table cells, and have the caller
+    // construct the table contents itself.
     if (isTest) {
       // Iterate through each combined output
       combinedOutputs.forEach((output, index) => {

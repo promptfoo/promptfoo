@@ -214,7 +214,9 @@ You can specify an expected value for each test case to evaluate the success or 
 
 1. If the expected value starts with `eval:`, it will evaluate the contents as the body of a JavaScript function defined like: `function(output) { <eval> }`. The function should return a boolean value, where `true` indicates success and `false` indicates failure.
 
-2. Otherwise, it attempts an exact string match comparison between the expected value and the model's output.
+2. If the expected value starts with `grade:`, it will ask an LLM to evaluate whether the output meets the condition. For example: `grade: don't mention being an AI`. This option requires a provider name to be supplied to promptfoo via the `--grader` argument: `promptfoo --grader openai:gpt-4 ...`.
+
+3. Otherwise, it attempts an exact string match comparison between the expected value and the model's output.
 
 Example of a vars file with the `__expected` field (`vars.csv`):
 
@@ -222,6 +224,7 @@ Example of a vars file with the `__expected` field (`vars.csv`):
 text,__expected
 "Hello, world!","Bonjour le monde"
 "Goodbye, everyone!","eval:return output.includes('Au revoir');"
+"I am a pineapple","grade:doesn't reference any fruits besides pineapple"
 ```
 
 Example of a vars file with the `__expected` field (`vars.json`):
@@ -230,6 +233,7 @@ Example of a vars file with the `__expected` field (`vars.json`):
 [
   { "text": "Hello, world!", "__expected": "Bonjour le monde" },
   { "text": "Goodbye, everyone!", "__expected": "eval:output.includes('Au revoir');" }
+  { "text": "I am a pineapple", "__expected": "grade:doesn't reference any fruits besides pineapple" }
 ]
 ```
 
