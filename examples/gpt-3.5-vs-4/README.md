@@ -3,5 +3,5 @@ This example shows how you can use promptfoo to generate a side-by-side eval of 
 Run:
 
 ```
-promptfoo -p prompts.txt -r openai:gpt-3.5-turbo openai:gpt-4
+promptfoo eval -p prompts.txt -r openai:gpt-3.5-turbo openai:gpt-4
 ```
