@@ -4,6 +4,8 @@ import { readVars, readPrompts, writeOutput } from '../src/util.js';
 
 import type { EvaluateResult } from '../src/types.js';
 
+jest.mock('node-fetch', () => jest.fn());
+
 jest.mock('fs', () => ({
   readFileSync: jest.fn(),
   writeFileSync: jest.fn(),

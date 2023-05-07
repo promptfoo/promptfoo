@@ -1,10 +1,14 @@
-import fetch from 'node-fetch';
 import path from 'node:path';
 
 import { ApiProvider, ProviderResponse } from './types.js';
+import { fetchWithTimeout } from './util.js';
 import logger from './logger.js';
 
 const DEFAULT_OPENAI_HOST = 'api.openai.com';
+
+const REQUEST_TIMEOUT_MS = process.env.REQUEST_TIMEOUT_MS
+  ? parseInt(process.env.REQUEST_TIMEOUT_MS, 10)
+  : 10_000;
 
 export class OpenAiGenericProvider implements ApiProvider {
   modelName: string;
@@ -65,14 +69,18 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
     logger.debug(`Calling OpenAI API: ${JSON.stringify(body)}`);
     let response, data;
     try {
-      response = await fetch(`https://${this.apiHost}/v1/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.apiKey}`,
+      response = await fetchWithTimeout(
+        `https://${this.apiHost}/v1/completions`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${this.apiKey}`,
+          },
+          body: JSON.stringify(body),
         },
-        body: JSON.stringify(body),
-      });
+        REQUEST_TIMEOUT_MS,
+      );
 
       data = (await response.json()) as unknown as any;
     } catch (err) {
@@ -134,14 +142,18 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
     let response, data;
     try {
-      response = await fetch(`https://${this.apiHost}/v1/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.apiKey}`,
+      response = await fetchWithTimeout(
+        `https://${this.apiHost}/v1/chat/completions`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${this.apiKey}`,
+          },
+          body: JSON.stringify(body),
         },
-        body: JSON.stringify(body),
-      });
+        REQUEST_TIMEOUT_MS,
+      );
       data = (await response.json()) as unknown as any;
     } catch (err) {
       return {
