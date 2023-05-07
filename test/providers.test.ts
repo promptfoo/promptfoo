@@ -1,6 +1,5 @@
-import * as path from 'path';
-
 import fetch from 'node-fetch';
+
 import {
   OpenAiGenericProvider,
   OpenAiCompletionProvider,
@@ -9,6 +8,8 @@ import {
 } from '../src/providers.js';
 
 jest.mock('node-fetch', () => jest.fn());
+
+jest.mock('../src/esm.js');
 
 describe('providers', () => {
   afterEach(() => {

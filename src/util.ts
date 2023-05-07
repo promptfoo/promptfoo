@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 
+import fetch from 'node-fetch';
 import yaml from 'js-yaml';
 import nunjucks from 'nunjucks';
 import { parse as parsePath } from 'path';
@@ -8,6 +9,8 @@ import { parse as parseCsv } from 'csv-parse/sync';
 import { stringify } from 'csv-stringify/sync';
 
 import { getDirectory } from './esm.js';
+
+import type { RequestInfo, RequestInit, Response } from 'node-fetch';
 
 import type { EvaluateSummary } from './types.js';
 
@@ -64,4 +67,34 @@ export function writeOutput(outputPath: string, summary: EvaluateSummary): void 
   } else {
     throw new Error('Unsupported output file format. Use CSV, JSON, or YAML.');
   }
+}
+
+export function fetchWithTimeout(
+  url: RequestInfo,
+  options: RequestInit = {},
+  timeout: number,
+): Promise<Response> {
+  return new Promise(async (resolve, reject) => {
+    const controller = new AbortController();
+    const { signal } = controller;
+    options.signal = signal;
+
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+      reject(new Error(`Request timed out after ${timeout} ms`));
+    }, timeout);
+
+    try {
+      const response = await fetch(url, options);
+      clearTimeout(timeoutId);
+      resolve(response);
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        // Fetch request was aborted, no need to reject again
+      } else {
+        clearTimeout(timeoutId);
+        reject(error);
+      }
+    }
+  });
 }
