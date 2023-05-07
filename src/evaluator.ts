@@ -12,7 +12,7 @@ interface RunEvalOptions {
   includeProviderId?: boolean;
 }
 
-const DEFAULT_MAX_CONCURRENCY = 3;
+const DEFAULT_MAX_CONCURRENCY = 4;
 
 function checkExpectedValue(expected: string, output: string): boolean {
   if (expected.startsWith('eval:')) {

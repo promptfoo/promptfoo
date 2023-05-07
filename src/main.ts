@@ -37,7 +37,7 @@ These prompts are nunjucks templates, so you can use logic like this:
   prompts: ['prompts.txt'],
   providers: ['openai:gpt-3.5-turbo'],
   vars: 'vars.csv',
-  maxConcurrency: 3,
+  maxConcurrency: 4,
 };`;
   const readme = `To get started, set your OPENAI_API_KEY environment variable. Then run:
 \`\`\`
