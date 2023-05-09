@@ -11,6 +11,7 @@ import { loadApiProvider } from './providers.js';
 import { evaluate } from './evaluator.js';
 import { readPrompts, readVars, writeOutput } from './util.js';
 import { getDirectory } from './esm.js';
+import { init } from './web/server.js';
 
 import type { CommandLineOptions, EvaluateOptions, VarMapping } from './types.js';
 
@@ -94,6 +95,14 @@ async function main() {
     .description('Initialize project with dummy files')
     .action((directory: string | null) => {
       createDummyFiles(directory);
+    });
+
+  program
+    .command('serve')
+    .description('Start results web server')
+    .option('-p, --port <number>', 'Port number', '3001')
+    .action((cmdObj: { port: number } & Command) => {
+      init(cmdObj.port);
     });
 
   program

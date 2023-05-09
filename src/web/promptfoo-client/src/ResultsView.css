@@ -1,0 +1,83 @@
+* {
+  box-sizing: border-box;
+}
+
+html {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif,
+    'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol';
+  font-size: 16px;
+}
+
+table,
+.divTable {
+  border: 1px solid lightgray;
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.tr {
+  display: flex;
+}
+
+tr,
+.tr {
+  width: fit-content;
+}
+
+th,
+.th,
+td,
+.td {
+  box-shadow: inset 0 0 0 1px lightgray;
+  padding: 1rem;
+}
+
+th,
+.th {
+  padding: 1rem;
+  position: relative;
+  font-weight: bold;
+  text-align: center;
+}
+
+td,
+.td {
+}
+
+td .pass {
+  color: green;
+  font-weight: bold;
+}
+
+td .fail {
+  color: #ad0000;
+  font-weight: bold;
+  margin-bottom: 1rem;
+}
+
+.resizer {
+  position: absolute;
+  right: 0;
+  top: 0;
+  height: 100%;
+  width: 5px;
+  background: rgba(0, 0, 0, 0.5);
+  cursor: col-resize;
+  user-select: none;
+  touch-action: none;
+}
+
+.resizer.isResizing {
+  background: blue;
+  opacity: 1;
+}
+
+@media (hover: hover) {
+  .resizer {
+    opacity: 0;
+  }
+
+  *:hover > .resizer {
+    opacity: 1;
+  }
+}
