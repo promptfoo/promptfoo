@@ -8,7 +8,7 @@ const DEFAULT_OPENAI_HOST = 'api.openai.com';
 
 const REQUEST_TIMEOUT_MS = process.env.REQUEST_TIMEOUT_MS
   ? parseInt(process.env.REQUEST_TIMEOUT_MS, 10)
-  : 10_000;
+  : 60_000;
 
 export class OpenAiGenericProvider implements ApiProvider {
   modelName: string;
