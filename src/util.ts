@@ -1,4 +1,6 @@
 import * as fs from 'fs';
+import * as path from 'node:path';
+import * as os from 'node:os';
 
 import fetch from 'node-fetch';
 import yaml from 'js-yaml';
@@ -8,6 +10,7 @@ import { CsvRow } from './types.js';
 import { parse as parseCsv } from 'csv-parse/sync';
 import { stringify } from 'csv-stringify/sync';
 
+import logger from './logger.js';
 import { getDirectory } from './esm.js';
 
 import type { RequestInfo, RequestInit, Response } from 'node-fetch';
@@ -51,7 +54,10 @@ export function writeOutput(outputPath: string, summary: EvaluateSummary): void 
   const outputExtension = outputPath.split('.').pop()?.toLowerCase();
 
   if (outputExtension === 'csv' || outputExtension === 'txt') {
-    const csvOutput = stringify(summary.table);
+    const csvOutput = stringify([
+      [...summary.table.head.prompts, ...summary.table.head.vars],
+      ...summary.table.body.map((row) => [...row.outputs, ...row.vars]),
+    ]);
     fs.writeFileSync(outputPath, csvOutput);
   } else if (outputExtension === 'json') {
     fs.writeFileSync(outputPath, JSON.stringify(summary, null, 2));
@@ -97,4 +103,23 @@ export function fetchWithTimeout(
       }
     }
   });
+}
+
+export function getConfigDirectoryPath(): string {
+  return path.join(os.homedir(), '.promptfoo');
+}
+
+export function getLatestResultsPath(): string {
+  return path.join(getConfigDirectoryPath(), 'output', 'latest.json');
+}
+
+export function writeLatestResults(results: EvaluateSummary) {
+  const latestResultsPath = getLatestResultsPath();
+  try {
+    fs.mkdirSync(path.dirname(latestResultsPath), { recursive: true });
+    fs.writeFileSync(latestResultsPath, JSON.stringify(results, null, 2));
+    logger.info(`Wrote latest results to ${latestResultsPath}`);
+  } catch (err) {
+    logger.error(`Failed to write latest results to ${latestResultsPath}:\n${err}`);
+  }
 }

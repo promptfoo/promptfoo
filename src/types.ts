@@ -7,6 +7,7 @@ export interface CommandLineOptions {
   verbose?: boolean;
   maxConcurrency?: number;
   grader?: string;
+  ui?: boolean;
 }
 
 export interface ApiProvider {
@@ -61,6 +62,18 @@ export interface EvaluateResult {
   success: boolean;
 }
 
+export interface EvaluateTable {
+  head: {
+    prompts: string[];
+    vars: string[];
+  };
+
+  body: {
+    outputs: string[];
+    vars: string[];
+  }[];
+}
+
 export interface EvaluateStats {
   successes: number;
   failures: number;
@@ -69,6 +82,6 @@ export interface EvaluateStats {
 
 export interface EvaluateSummary {
   results: EvaluateResult[];
-  table: string[][];
+  table: EvaluateTable;
   stats: EvaluateStats;
 }

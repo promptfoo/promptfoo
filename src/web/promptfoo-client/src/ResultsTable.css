@@ -30,14 +30,26 @@ td,
 .td {
   box-shadow: inset 0 0 0 1px lightgray;
   padding: 1rem;
+  word-break: break-all;
 }
 
 th,
 .th {
   padding: 1rem;
   position: relative;
-  font-weight: bold;
   text-align: center;
+  font-weight: semi-bold;
+}
+
+th .smalltext {
+  visibility: hidden;
+  font-weight: normal;
+  font-size: 0.75rem;
+  color: gray;
+}
+
+th:hover .smalltext {
+  visibility: visible;
 }
 
 td,

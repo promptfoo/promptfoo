@@ -10,6 +10,7 @@ import type {
   EvaluateResult,
   EvaluateStats,
   EvaluateSummary,
+  EvaluateTable,
   Prompt,
   TokenUsage,
 } from './types.js';
@@ -202,9 +203,13 @@ class Evaluator {
       return ret;
     });
     const isTest = vars[0].__expected;
-    const table: string[][] = [
-      [...prompts.map((p) => p.display), ...Object.keys(varsWithExpectedKeyRemoved[0])],
-    ];
+    const table: EvaluateTable = {
+      head: {
+        prompts: prompts.map((p) => p.display),
+        vars: Object.keys(varsWithExpectedKeyRemoved[0]),
+      },
+      body: [],
+    };
 
     let progressbar: SingleBar | undefined;
     if (options.showProgressBar) {
@@ -282,30 +287,32 @@ class Evaluator {
 
     // TODO(ian): Provide full context in table cells, and have the caller
     // construct the table contents itself.
-    if (isTest) {
-      // Iterate through each combined output
-      combinedOutputs.forEach((output, index) => {
-        // Create a new array to store the modified output with [PASS] or [FAIL] prepended
-        const modifiedOutput: string[] = [];
 
-        // Iterate through each output value and prepend [PASS] or [FAIL] based on the success status
-        output.forEach((o, outputIndex) => {
-          const resultIndex = index * prompts.length + outputIndex;
-          const result = results[resultIndex];
-          // TODO(ian): sometimes output and result.error can be identical (in the case of exception)
-          const resultStatus = result.success ? `[PASS] ${o}` : `[FAIL] ${result.error}\n---\n${o}`;
-          modifiedOutput.push(resultStatus);
-        });
+    // Iterate through each combined output
+    combinedOutputs.forEach((output, index) => {
+      // Create a new array to store the modified output with [PASS] or [FAIL] prepended
+      const modifiedOutput: string[] = [];
 
-        // Add the modified output and the corresponding values from varsWithExpectedKeyRemoved to the table
-        const tableRow = [...modifiedOutput, ...Object.values(varsWithExpectedKeyRemoved[index])];
-        table.push(tableRow);
+      // Iterate through each output value and prepend [PASS] or [FAIL] based on the success status
+      output.forEach((o, outputIndex) => {
+        const resultIndex = index * prompts.length + outputIndex;
+        const result = results[resultIndex];
+        // TODO(ian): sometimes output and result.error can be identical (in the case of exception)
+        let resultText = o;
+        if (isTest) {
+          resultText = result.success ? `[PASS] ${o}` : `[FAIL] ${result.error}\n---\n${o}`;
+        }
+        modifiedOutput.push(resultText);
       });
-    } else {
-      table.push(
-        ...combinedOutputs.map((output, index) => [...output, ...Object.values(vars[index])]),
-      );
-    }
+
+      // Add the modified output and the corresponding values from varsWithExpectedKeyRemoved to the table
+      //const tableRow = [...modifiedOutput, ...Object.values(varsWithExpectedKeyRemoved[index])];
+      //table.push(tableRow);
+      table.body.push({
+        outputs: modifiedOutput,
+        vars: Object.values(varsWithExpectedKeyRemoved[index]),
+      });
+    });
 
     return { results, stats: this.stats, table };
   }
