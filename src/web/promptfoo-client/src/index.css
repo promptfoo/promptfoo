@@ -6,4 +6,26 @@
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   -webkit-text-size-adjust: 100%;
+
+  /* Light mode colors */
+  --background-color: #ffffff;
+  --text-color: #000000;
+  --border-color: lightgray;
+  --table-border-color: lightgray;
+  --pass-color: green;
+  --fail-color: #ad0000;
+  --smalltext-color: gray;
+}
+
+/* Dark mode colors */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background-color: #1a1a1a;
+    --text-color: #f0f0f0;
+    --border-color: #444444;
+    --table-border-color: #444444;
+    --pass-color: #4caf50;
+    --fail-color: #f44336;
+    --smalltext-color: #888888;
+  }
 }

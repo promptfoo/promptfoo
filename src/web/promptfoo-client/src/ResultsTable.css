@@ -6,11 +6,13 @@ html {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif,
     'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol';
   font-size: 16px;
+  background-color: var(--background-color);
+  color: var(--text-color);
 }
 
 table,
 .divTable {
-  border: 1px solid lightgray;
+  border: 1px solid var(--table-border-color);
   border-collapse: collapse;
   width: 100%;
 }
@@ -28,7 +30,7 @@ th,
 .th,
 td,
 .td {
-  box-shadow: inset 0 0 0 1px lightgray;
+  box-shadow: inset 0 0 0 1px var(--border-color);
   padding: 1rem;
   word-break: break-all;
 }
@@ -45,7 +47,7 @@ th .smalltext {
   visibility: hidden;
   font-weight: normal;
   font-size: 0.75rem;
-  color: gray;
+  color: var(--smalltext-color);
 }
 
 th:hover .smalltext {
@@ -57,12 +59,12 @@ td,
 }
 
 td .pass {
-  color: green;
+  color: var(--pass-color);
   font-weight: bold;
 }
 
 td .fail {
-  color: #ad0000;
+  color: var(--fail-color);
   font-weight: bold;
   margin-bottom: 1rem;
 }
