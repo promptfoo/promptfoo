@@ -81,6 +81,7 @@ export interface EvaluateStats {
 }
 
 export interface EvaluateSummary {
+  version: number;
   results: EvaluateResult[];
   table: EvaluateTable;
   stats: EvaluateStats;

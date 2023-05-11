@@ -20,6 +20,9 @@ interface RunEvalOptions {
   prompt: string;
   vars?: Record<string, string>;
   includeProviderId?: boolean;
+
+  rowIndex: number;
+  colIndex: number;
 }
 
 interface GradingResult {
@@ -231,7 +234,9 @@ class Evaluator {
     }
 
     const runEvalOptions: RunEvalOptions[] = [];
+    let rowIndex = 0;
     for (const row of vars) {
+      let colIndex = 0;
       for (const promptContent of options.prompts) {
         for (const provider of options.providers) {
           runEvalOptions.push({
@@ -239,20 +244,23 @@ class Evaluator {
             prompt: promptContent,
             vars: row,
             includeProviderId: options.providers.length > 1,
+            rowIndex,
+            colIndex,
           });
+          colIndex++;
         }
       }
+      rowIndex++;
     }
 
-    const tempResults: { index: number; row: EvaluateResult }[] = [];
-    const combinedOutputs: string[][] = new Array(vars.length).fill(null).map(() => []);
+    const results: EvaluateResult[] = [];
     await async.forEachOfLimit(
       runEvalOptions,
       options.maxConcurrency || DEFAULT_MAX_CONCURRENCY,
       async (options: RunEvalOptions, index: number | string) => {
         const row = await this.runEval(options);
-        //results[index as number] = row;
-        tempResults.push({ index: index as number, row });
+
+        results.push(row);
 
         if (progressbar) {
           progressbar.increment({
@@ -269,8 +277,23 @@ class Evaluator {
         if (typeof index !== 'number') {
           throw new Error('Expected index to be a number');
         }
-        const combinedOutputIndex = Math.floor(index / prompts.length);
-        combinedOutputs[combinedOutputIndex].push(row.response?.output || row.error || '');
+
+        const resultText = isTest
+          ? row.success
+            ? `[PASS] ${row.response?.output || row.error || ''}`
+            : `[FAIL] ${row.error}\n---\n${row.response?.output || row.error || ''}`
+          : row.response?.output || row.error || '';
+
+        // TODO(ian): Provide full context in table cells, and have the caller
+        // construct the table contents itself.
+        const { rowIndex, colIndex } = options;
+        if (!table.body[rowIndex]) {
+          table.body[rowIndex] = {
+            outputs: [],
+            vars: Object.values(options.vars || {}),
+          };
+        }
+        table.body[rowIndex].outputs[colIndex] = resultText;
       },
     );
 
@@ -278,43 +301,7 @@ class Evaluator {
       progressbar.stop();
     }
 
-    const results: EvaluateResult[] = [];
-    tempResults
-      .sort((a, b) => a.index - b.index)
-      .forEach(({ index, row }) => {
-        results[index] = row;
-      });
-
-    // TODO(ian): Provide full context in table cells, and have the caller
-    // construct the table contents itself.
-
-    // Iterate through each combined output
-    combinedOutputs.forEach((output, index) => {
-      // Create a new array to store the modified output with [PASS] or [FAIL] prepended
-      const modifiedOutput: string[] = [];
-
-      // Iterate through each output value and prepend [PASS] or [FAIL] based on the success status
-      output.forEach((o, outputIndex) => {
-        const resultIndex = index * prompts.length + outputIndex;
-        const result = results[resultIndex];
-        // TODO(ian): sometimes output and result.error can be identical (in the case of exception)
-        let resultText = o;
-        if (isTest) {
-          resultText = result.success ? `[PASS] ${o}` : `[FAIL] ${result.error}\n---\n${o}`;
-        }
-        modifiedOutput.push(resultText);
-      });
-
-      // Add the modified output and the corresponding values from varsWithExpectedKeyRemoved to the table
-      //const tableRow = [...modifiedOutput, ...Object.values(varsWithExpectedKeyRemoved[index])];
-      //table.push(tableRow);
-      table.body.push({
-        outputs: modifiedOutput,
-        vars: Object.values(varsWithExpectedKeyRemoved[index]),
-      });
-    });
-
-    return { results, stats: this.stats, table };
+    return { version: 1, results, stats: this.stats, table };
   }
 }
 
