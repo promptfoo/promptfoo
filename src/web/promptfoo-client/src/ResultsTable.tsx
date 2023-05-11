@@ -2,6 +2,7 @@ import * as React from 'react';
 
 import './index.css';
 
+import invariant from 'tiny-invariant';
 import {
   createColumnHelper,
   flexRender,
@@ -9,11 +10,13 @@ import {
   useReactTable,
 } from '@tanstack/react-table';
 
-import './ResultsTable.css';
+import { useStore } from './store.js';
 
 import type { CellContext, VisibilityState } from '@tanstack/table-core';
 
-import type { EvalHead, EvalRow } from './types.js';
+import type { EvalRow } from './types.js';
+
+import './ResultsTable.css';
 
 interface TruncatedTextProps {
   text: string;
@@ -56,26 +59,42 @@ function TruncatedText({ text, maxLength }: TruncatedTextProps) {
 interface PromptOutputProps {
   text: string;
   maxTextLength: number;
+  rowIndex: number;
+  promptIndex: number;
+  onRating: (rowIndex: number, promptIndex: number, isPass: boolean) => void;
 }
 
-function PromptOutput({ text, maxTextLength }: PromptOutputProps) {
+function PromptOutput({ text, maxTextLength, rowIndex, promptIndex, onRating }: PromptOutputProps) {
   const isPass = text.startsWith('[PASS] ');
   const isFail = text.startsWith('[FAIL] ');
   let chunks: string[] = [];
   if (isPass) {
     text = text.substring(7);
   } else if (isFail) {
-    chunks = text.split('\n---\n');
-    text = chunks.slice(1).join('\n---\n');
+    if (text.includes('---')) {
+      chunks = text.split('---');
+      text = chunks.slice(1).join('---');
+    } else {
+      chunks = ['[FAIL]'];
+    }
   }
+
+  const handleClick = (isPass: boolean) => {
+    onRating(rowIndex, promptIndex, isPass);
+  };
+
   return (
     <div className="cell">
       {isPass && <span className="pass">[PASS]</span>}
       {isFail && <div className="fail">{chunks[0]}</div>}{' '}
       <TruncatedText text={text} maxLength={maxTextLength} />
       <div className="cell-rating">
-        <span className="rating">👍</span>
-        <span className="rating">👎</span>
+        <span className="rating" onClick={() => handleClick(true)}>
+          👍
+        </span>
+        <span className="rating" onClick={() => handleClick(false)}>
+          👎
+        </span>
       </div>
     </div>
   );
@@ -91,36 +110,48 @@ function TableHeader({ text, maxLength, smallText }: TruncatedTextProps & { smal
 }
 
 interface ResultsViewProps {
-  headers: EvalHead;
-  data: EvalRow[];
   maxTextLength: number;
   columnVisibility: VisibilityState;
 }
 
-export default function ResultsTable({
-  headers,
-  data,
-  maxTextLength,
-  columnVisibility,
-}: ResultsViewProps) {
+export default function ResultsTable({ maxTextLength, columnVisibility }: ResultsViewProps) {
+  const { table, setTable } = useStore();
+  invariant(table, 'Table should be defined');
+  const { head, body } = table;
   // TODO(ian): Correctly plumb through the results instead of parsing the string.
-  const numGood = headers.prompts.map((_, idx) =>
-    data.reduce((acc, row) => {
+  const numGood = head.prompts.map((_, idx) =>
+    body.reduce((acc, row) => {
       return acc + (row.outputs[idx].startsWith('[PASS]') ? 1 : 0);
     }, 0),
   );
-  const numBad = headers.prompts.map((_, idx) =>
-    data.reduce((acc, row) => {
+  const numBad = head.prompts.map((_, idx) =>
+    body.reduce((acc, row) => {
       return acc + (row.outputs[idx].startsWith('[FAIL]') ? 1 : 0);
     }, 0),
   );
+
+  const handleRating = (rowIndex: number, promptIndex: number, isPass: boolean) => {
+    const updatedData = [...body];
+    const updatedRow = { ...updatedData[rowIndex] };
+    const updatedOutputs = [...updatedRow.outputs];
+    const updatedOutput = isPass
+      ? `[PASS] ${updatedOutputs[promptIndex].replace(/^\[(PASS|FAIL)\] /, '')}`
+      : `[FAIL] ${updatedOutputs[promptIndex].replace(/^\[(PASS|FAIL)\] /, '')}`;
+    updatedOutputs[promptIndex] = updatedOutput;
+    updatedRow.outputs = updatedOutputs;
+    updatedData[rowIndex] = updatedRow;
+    setTable({
+      head,
+      body: updatedData,
+    });
+  };
 
   const columnHelper = createColumnHelper<EvalRow>();
   const columns = [
     columnHelper.group({
       id: 'prompts',
       header: () => <span>Prompts</span>,
-      columns: headers.prompts.map((prompt, idx) =>
+      columns: head.prompts.map((prompt, idx) =>
         columnHelper.accessor((row: EvalRow) => row.outputs[idx], {
           id: `Prompt ${idx + 1}`,
           header: () => (
@@ -130,11 +161,17 @@ export default function ResultsTable({
                 text={prompt}
                 maxLength={maxTextLength}
               />
-              {numGood[idx]} / {numGood[idx] + numBad[idx]} passing
+              {numGood[idx]} / {body.length} 👍
             </>
           ),
           cell: (info: CellContext<EvalRow, string>) => (
-            <PromptOutput text={info.getValue()} maxTextLength={maxTextLength} />
+            <PromptOutput
+              text={info.getValue()}
+              maxTextLength={maxTextLength}
+              rowIndex={info.row.index}
+              promptIndex={idx}
+              onRating={handleRating}
+            />
           ),
         }),
       ),
@@ -142,7 +179,7 @@ export default function ResultsTable({
     columnHelper.group({
       id: 'vars',
       header: () => <span>Variables</span>,
-      columns: headers.vars.map((varName, idx) =>
+      columns: head.vars.map((varName, idx) =>
         columnHelper.accessor((row: EvalRow) => row.vars[idx], {
           id: `Variable ${idx + 1}`,
           header: () => (
@@ -160,8 +197,8 @@ export default function ResultsTable({
     }),
   ];
 
-  const table = useReactTable({
-    data,
+  const reactTable = useReactTable({
+    data: body,
     columns,
     columnResizeMode: 'onChange',
     getCoreRowModel: getCoreRowModel(),
@@ -174,7 +211,7 @@ export default function ResultsTable({
   return (
     <table>
       <thead>
-        {table.getHeaderGroups().map((headerGroup) => (
+        {reactTable.getHeaderGroups().map((headerGroup) => (
           <tr key={headerGroup.id}>
             {headerGroup.headers.map((header) => (
               <th
@@ -202,7 +239,7 @@ export default function ResultsTable({
         ))}
       </thead>
       <tbody>
-        {table.getRowModel().rows.map((row) => (
+        {reactTable.getRowModel().rows.map((row) => (
           <tr key={row.id}>
             {row.getVisibleCells().map((cell) => (
               <td

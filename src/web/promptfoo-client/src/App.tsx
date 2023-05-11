@@ -2,15 +2,15 @@ import * as React from 'react';
 
 import { io as SocketIOClient } from 'socket.io-client';
 
-import ResultsView from './ResultsView';
-
-import type { ResultsViewTable } from './ResultsView';
+import ResultsView from './ResultsView.js';
+import { useStore } from './store.js';
 
 import './App.css';
 
 function App() {
+  const { table, setTable } = useStore();
   const [loaded, setLoaded] = React.useState<boolean>(false);
-  const [table, setTable] = React.useState<ResultsViewTable | null>(null);
+
   React.useEffect(() => {
     //const socket = SocketIOClient(`http://${window.location.host}`);
     const socket = SocketIOClient(`http://localhost:15500`);
@@ -29,7 +29,7 @@ function App() {
     return () => {
       socket.disconnect();
     };
-  }, [loaded]);
+  }, [loaded, setTable]);
 
   if (!loaded || !table) {
     return <div>Loading...</div>;
@@ -37,7 +37,7 @@ function App() {
 
   return (
     <>
-      <ResultsView table={table} />
+      <ResultsView />
     </>
   );
 }

@@ -1,5 +1,6 @@
 import * as React from 'react';
 
+import invariant from 'tiny-invariant';
 import Box from '@mui/material/Box';
 import Paper from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
@@ -14,26 +15,18 @@ import Select, { SelectChangeEvent } from '@mui/material/Select';
 import Checkbox from '@mui/material/Checkbox';
 
 import ResultsTable from './ResultsTable.js';
+import { useStore } from './store.js';
 
-import { VisibilityState } from '@tanstack/table-core';
+import type { VisibilityState } from '@tanstack/table-core';
 
-import type { EvalRow, EvalHead } from './types.js';
-
-export interface ResultsViewTable {
-  head: EvalHead;
-  body: EvalRow[];
-}
-
-interface ResultsViewProps {
-  table: ResultsViewTable;
-}
-
-export default function ResultsView({ table }: ResultsViewProps) {
+export default function ResultsView() {
+  const { table } = useStore();
   const [maxTextLength, setMaxTextLength] = React.useState(250);
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
   const [selectedColumns, setSelectedColumns] = React.useState<string[]>([]);
 
-  const { head, body } = table;
+  invariant(table, 'Table data must be loaded before rendering ResultsView');
+  const { head } = table;
 
   const handleChange = (event: SelectChangeEvent<typeof selectedColumns>) => {
     const {
@@ -111,12 +104,7 @@ export default function ResultsView({ table }: ResultsViewProps) {
           </Box>
         </Stack>
       </Paper>
-      <ResultsTable
-        headers={head}
-        data={body}
-        maxTextLength={maxTextLength}
-        columnVisibility={columnVisibility}
-      />
+      <ResultsTable maxTextLength={maxTextLength} columnVisibility={columnVisibility} />
     </div>
   );
 }

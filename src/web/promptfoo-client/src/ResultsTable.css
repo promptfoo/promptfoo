@@ -53,15 +53,21 @@ th,
   font-weight: semi-bold;
 }
 
+tr .cell {
+  position: relative;
+}
+
 tr .cell-rating {
-  display: none;
+  visibility: hidden;
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  line-height: 0;
+  font-size: 1.75rem;
 }
 
 tr:hover .cell-rating {
-  display: block;
-  margin-top: 1rem;
-  font-size: 1.75rem;
-  text-align: center;
+  visibility: visible;
 }
 
 tr .cell-rating .rating {
