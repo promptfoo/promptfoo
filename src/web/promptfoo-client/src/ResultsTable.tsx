@@ -69,11 +69,15 @@ function PromptOutput({ text, maxTextLength }: PromptOutputProps) {
     text = chunks.slice(1).join('\n---\n');
   }
   return (
-    <>
+    <div className="cell">
       {isPass && <span className="pass">[PASS]</span>}
       {isFail && <div className="fail">{chunks[0]}</div>}{' '}
       <TruncatedText text={text} maxLength={maxTextLength} />
-    </>
+      <div className="cell-rating">
+        <span className="rating">👍</span>
+        <span className="rating">👎</span>
+      </div>
+    </div>
   );
 }
 
@@ -110,9 +114,6 @@ export default function ResultsTable({
       return acc + (row.outputs[idx].startsWith('[FAIL]') ? 1 : 0);
     }, 0),
   );
-
-  console.log(headers);
-  console.log(data)
 
   const columnHelper = createColumnHelper<EvalRow>();
   const columns = [

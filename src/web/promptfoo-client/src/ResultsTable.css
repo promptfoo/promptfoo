@@ -53,6 +53,22 @@ th,
   font-weight: semi-bold;
 }
 
+tr .cell-rating {
+  display: none;
+}
+
+tr:hover .cell-rating {
+  display: block;
+  margin-top: 1rem;
+  font-size: 1.75rem;
+  text-align: center;
+}
+
+tr .cell-rating .rating {
+  cursor: pointer;
+  margin-right: 1rem;
+}
+
 th .smalltext {
   visibility: hidden;
   font-weight: normal;

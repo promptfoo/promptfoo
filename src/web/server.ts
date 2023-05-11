@@ -62,11 +62,14 @@ export function init(port = 15500) {
     socket.emit('init', { table: readLatestJson() });
 
     // Watch for changes to latest.json and emit the update event
-    fs.watch(latestJsonPath, debounce((event: string) => {
-      if (event === 'change') {
-        socket.emit('update', { table: readLatestJson() });
-      }
-    }, 250));
+    fs.watch(
+      latestJsonPath,
+      debounce((event: string) => {
+        if (event === 'change') {
+          socket.emit('update', { table: readLatestJson() });
+        }
+      }, 250),
+    );
   });
 
   httpServer.listen(port, () => {
