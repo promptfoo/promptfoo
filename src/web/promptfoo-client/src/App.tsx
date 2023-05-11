@@ -3,6 +3,7 @@ import * as React from 'react';
 import { io as SocketIOClient } from 'socket.io-client';
 
 import ResultsView from './ResultsView.js';
+import NavBar from './NavBar.js';
 import { useStore } from './store.js';
 
 import './App.css';
@@ -31,13 +32,10 @@ function App() {
     };
   }, [loaded, setTable]);
 
-  if (!loaded || !table) {
-    return <div>Loading...</div>;
-  }
-
   return (
     <>
-      <ResultsView />
+      <NavBar />
+      {loaded && table ? <ResultsView /> : <div>Loading...</div>}
     </>
   );
 }

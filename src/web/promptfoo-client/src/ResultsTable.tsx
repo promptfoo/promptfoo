@@ -76,6 +76,9 @@ function PromptOutput({ text, maxTextLength, rowIndex, promptIndex, onRating }: 
       text = chunks.slice(1).join('---');
     } else {
       chunks = ['[FAIL]'];
+      if (text.startsWith('[FAIL] ')) {
+        text = text.substring(7);
+      }
     }
   }
 
@@ -85,8 +88,8 @@ function PromptOutput({ text, maxTextLength, rowIndex, promptIndex, onRating }: 
 
   return (
     <div className="cell">
-      {isPass && <span className="pass">[PASS]</span>}
-      {isFail && <div className="fail">{chunks[0]}</div>}{' '}
+      {isPass && <div className="status pass">[PASS]</div>}
+      {isFail && <div className="status fail">{chunks[0]}</div>}{' '}
       <TruncatedText text={text} maxLength={maxTextLength} />
       <div className="cell-rating">
         <span className="rating" onClick={() => handleClick(true)}>
@@ -122,11 +125,6 @@ export default function ResultsTable({ maxTextLength, columnVisibility }: Result
   const numGood = head.prompts.map((_, idx) =>
     body.reduce((acc, row) => {
       return acc + (row.outputs[idx].startsWith('[PASS]') ? 1 : 0);
-    }, 0),
-  );
-  const numBad = head.prompts.map((_, idx) =>
-    body.reduce((acc, row) => {
-      return acc + (row.outputs[idx].startsWith('[FAIL]') ? 1 : 0);
     }, 0),
   );
 

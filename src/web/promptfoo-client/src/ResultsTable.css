@@ -90,15 +90,17 @@ td,
 .td {
 }
 
+td .status {
+  margin-bottom: 0.5rem;
+  font-weight: bold;
+}
+
 td .pass {
   color: var(--pass-color);
-  font-weight: bold;
 }
 
 td .fail {
   color: var(--fail-color);
-  font-weight: bold;
-  margin-bottom: 1rem;
 }
 
 .resizer {

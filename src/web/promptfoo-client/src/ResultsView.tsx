@@ -71,9 +71,9 @@ export default function ResultsView() {
   return (
     <div>
       <Paper py="md">
-        <Stack direction="row" spacing={2}>
+        <Stack direction="row" spacing={2} alignItems="center">
           <Box>
-            <FormControl sx={{ m: 1, width: 300 }}>
+            <FormControl sx={{ m: 1, minWidth: 300 }} size="small">
               <InputLabel id="visible-columns-label">Visible columns</InputLabel>
               <Select
                 labelId="visible-columns-label"
