@@ -313,6 +313,7 @@ Other OpenAI-related environment variables are supported:
 
 - `OPENAI_TEMPERATURE` - temperature model parameter, defaults to 0
 - `OPENAI_MAX_TOKENS` - max_tokens model parameter, defaults to 1024
+- `OPENAI_STOP` - stopwords in JSON format, defaults to []
 - `OPENAI_API_HOST` - override the hostname for the API request. Useful for proxies like Helicone.
 - `REQUEST_TIMEOUT_MS` - maximum request time, in milliseconds (defaults to 60000)
 
