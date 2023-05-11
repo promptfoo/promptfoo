@@ -2,7 +2,7 @@ import * as fs from 'fs';
 
 import { readVars, readPrompts, writeOutput } from '../src/util.js';
 
-import type { EvaluateResult } from '../src/types.js';
+import type { EvaluateResult, EvaluateTable } from '../src/types.js';
 
 jest.mock('node-fetch', () => jest.fn());
 
@@ -98,10 +98,10 @@ describe('util', () => {
         },
       },
     ];
-    const table = [
-      ['Test prompt', 'var1', 'var2'],
-      ['Test output', 'value1', 'value2'],
-    ];
+    const table: EvaluateTable = {
+      head: { prompts: ['Test prompt'], vars: ['var1', 'var2'] },
+      body: [{ outputs: ['Test output'], vars: ['value1', 'value2'] }],
+    };
     const summary = {
       stats: {
         successes: 1,
@@ -138,10 +138,10 @@ describe('util', () => {
         },
       },
     ];
-    const table = [
-      ['Test prompt', 'var1', 'var2'],
-      ['Test output', 'value1', 'value2'],
-    ];
+    const table: EvaluateTable = {
+      head: { prompts: ['Test prompt'], vars: ['var1', 'var2'] },
+      body: [{ outputs: ['Test output'], vars: ['value1', 'value2'] }],
+    };
     const summary = {
       stats: {
         successes: 1,
@@ -178,10 +178,10 @@ describe('util', () => {
         },
       },
     ];
-    const table = [
-      ['Test prompt', 'var1', 'var2'],
-      ['Test output', 'value1', 'value2'],
-    ];
+    const table: EvaluateTable = {
+      head: { prompts: ['Test prompt'], vars: ['var1', 'var2'] },
+      body: [{ outputs: ['Test output'], vars: ['value1', 'value2'] }],
+    };
     const summary = {
       stats: {
         successes: 1,
