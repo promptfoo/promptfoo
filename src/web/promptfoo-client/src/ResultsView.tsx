@@ -72,7 +72,7 @@ export default function ResultsView({ table }: ResultsViewProps) {
       </Paper>
       <ResultsTable
         headers={head}
-        defaultData={body}
+        data={body}
         maxTextLength={maxTextLength}
         columnVisibility={columnVisibility}
       />

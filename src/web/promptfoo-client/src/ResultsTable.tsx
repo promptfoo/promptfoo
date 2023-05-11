@@ -88,22 +88,31 @@ function TableHeader({ text, maxLength, smallText }: TruncatedTextProps & { smal
 
 interface ResultsViewProps {
   headers: EvalHead;
-  defaultData: EvalRow[];
+  data: EvalRow[];
   maxTextLength: number;
   columnVisibility: VisibilityState;
 }
 
 export default function ResultsTable({
   headers,
-  defaultData,
+  data,
   maxTextLength,
   columnVisibility,
 }: ResultsViewProps) {
-  const [data, setData] = React.useState(() => [...defaultData]);
+  // TODO(ian): Correctly plumb through the results instead of parsing the string.
+  const numGood = headers.prompts.map((_, idx) =>
+    data.reduce((acc, row) => {
+      return acc + (row.outputs[idx].startsWith('[PASS]') ? 1 : 0);
+    }, 0),
+  );
+  const numBad = headers.prompts.map((_, idx) =>
+    data.reduce((acc, row) => {
+      return acc + (row.outputs[idx].startsWith('[FAIL]') ? 1 : 0);
+    }, 0),
+  );
 
-  React.useEffect(() => {
-    setData([...defaultData]);
-  }, [defaultData]);
+  console.log(headers);
+  console.log(data)
 
   const columnHelper = createColumnHelper<EvalRow>();
   const columns = [
@@ -114,7 +123,14 @@ export default function ResultsTable({
         columnHelper.accessor((row: EvalRow) => row.outputs[idx], {
           id: `Prompt ${idx + 1}`,
           header: () => (
-            <TableHeader smallText={`Prompt ${idx + 1}`} text={prompt} maxLength={maxTextLength} />
+            <>
+              <TableHeader
+                smallText={`Prompt ${idx + 1}`}
+                text={prompt}
+                maxLength={maxTextLength}
+              />
+              {numGood[idx]} / {numGood[idx] + numBad[idx]} passing
+            </>
           ),
           cell: (info: CellContext<EvalRow, string>) => (
             <PromptOutput text={info.getValue()} maxTextLength={maxTextLength} />

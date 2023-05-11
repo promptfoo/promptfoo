@@ -3,6 +3,7 @@ import path from 'node:path';
 import readline from 'node:readline';
 import http from 'node:http';
 
+import debounce from 'debounce';
 import open from 'open';
 import express from 'express';
 import cors from 'cors';
@@ -61,11 +62,11 @@ export function init(port = 15500) {
     socket.emit('init', { table: readLatestJson() });
 
     // Watch for changes to latest.json and emit the update event
-    fs.watch(latestJsonPath, (event) => {
+    fs.watch(latestJsonPath, debounce((event: string) => {
       if (event === 'change') {
         socket.emit('update', { table: readLatestJson() });
       }
-    });
+    }, 250));
   });
 
   httpServer.listen(port, () => {

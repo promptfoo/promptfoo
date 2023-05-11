@@ -9,7 +9,7 @@
 
   /* Light mode colors */
   --background-color: #ffffff;
-  --text-color: #000000;
+  --text-color: #404040;
   --border-color: lightgray;
   --table-border-color: lightgray;
   --pass-color: green;
@@ -28,4 +28,8 @@
     --fail-color: #f44336;
     --smalltext-color: #888888;
   }
+}
+
+html {
+  font-size: calc(14px + (18 - 14) * ((100vw - 300px) / (1600 - 300)));
 }

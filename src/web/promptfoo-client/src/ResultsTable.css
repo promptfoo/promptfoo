@@ -15,6 +15,9 @@ table,
   border: 1px solid var(--table-border-color);
   border-collapse: collapse;
   width: 100%;
+
+  margin: 1rem 0;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .tr {
@@ -26,6 +29,11 @@ tr,
   width: fit-content;
 }
 
+tr:hover,
+.tr:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
 th,
 .th,
 td,
@@ -33,6 +41,8 @@ td,
   box-shadow: inset 0 0 0 1px var(--border-color);
   padding: 1rem;
   word-break: break-all;
+
+  padding: 1.5rem;
 }
 
 th,
@@ -75,14 +85,16 @@ td .fail {
   top: 0;
   height: 100%;
   width: 5px;
-  background: rgba(0, 0, 0, 0.5);
   cursor: col-resize;
   user-select: none;
   touch-action: none;
+
+  background: var(--text-color);
+  opacity: 0.5;
 }
 
 .resizer.isResizing {
-  background: blue;
+  background: var(--text-color);
   opacity: 1;
 }
 
