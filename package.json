@@ -19,9 +19,12 @@
   },
   "scripts": {
     "local": "ts-node --esm src/main.ts",
-    "build": "tsc && cp src/*.html dist/",
+    "install:client": "cd src/web/client && npm install",
+    "build:clean": "rm -rf dist",
+    "build:client": "cd src/web/client && npm run build && cp -r dist ../../../dist/web/client",
     "build:watch": "tsc --watch",
-    "prepare": "tsc",
+    "build": "tsc && cp src/*.html dist/ && npm run build:client",
+    "prepare": "npm run install:client && npm run build:clean && npm run build",
     "test": "jest",
     "test:watch": "jest --watch",
     "format": "prettier -w ."
@@ -29,6 +32,9 @@
   "devDependencies": {
     "@types/async": "^3.2.20",
     "@types/cli-progress": "^3.11.0",
+    "@types/cors": "^2.8.13",
+    "@types/debounce": "^1.2.1",
+    "@types/express": "^4.17.17",
     "@types/jest": "^29.5.1",
     "@types/js-yaml": "^4.0.5",
     "@types/nunjucks": "^3.2.2",
@@ -45,11 +51,16 @@
     "cli-progress": "^3.12.0",
     "cli-table3": "^0.6.3",
     "commander": "^10.0.1",
+    "cors": "^2.8.5",
     "csv-parse": "^5.3.8",
     "csv-stringify": "^6.3.2",
+    "debounce": "^1.2.1",
+    "express": "^4.18.2",
     "js-yaml": "^4.1.0",
     "node-fetch": "^3.3.1",
     "nunjucks": "^3.2.4",
+    "open": "^9.1.0",
+    "socket.io": "^4.6.1",
     "winston": "^3.8.2"
   }
 }

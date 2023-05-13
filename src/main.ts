@@ -9,8 +9,9 @@ import { Command } from 'commander';
 import logger, { setLogLevel } from './logger.js';
 import { loadApiProvider } from './providers.js';
 import { evaluate } from './evaluator.js';
-import { readPrompts, readVars, writeOutput } from './util.js';
+import { readPrompts, readVars, writeLatestResults, writeOutput } from './util.js';
 import { getDirectory } from './esm.js';
+import { init } from './web/server.js';
 
 import type { CommandLineOptions, EvaluateOptions, VarMapping } from './types.js';
 
@@ -97,6 +98,14 @@ async function main() {
     });
 
   program
+    .command('view')
+    .description('Start browser ui')
+    .option('-p, --port <number>', 'Port number', '15500')
+    .action((cmdObj: { port: number } & Command) => {
+      init(cmdObj.port);
+    });
+
+  program
     .command('eval')
     .description('Evaluate prompts')
     .requiredOption(
@@ -131,6 +140,7 @@ async function main() {
     )
     .option('--grader', 'Model that will grade outputs', defaultConfig.grader)
     .option('--verbose', 'Show debug logs', defaultConfig.verbose)
+    .option('--view', 'View in browser ui')
     .action(async (cmdObj: CommandLineOptions & Command) => {
       if (cmdObj.verbose) {
         setLogLevel('debug');
@@ -185,10 +195,11 @@ async function main() {
       } else {
         // Output table by default
         const maxWidth = process.stdout.columns ? process.stdout.columns - 10 : 120;
-        const head = summary.table[0];
+        const head = summary.table.head;
+        const headLength = head.prompts.length + head.vars.length;
         const table = new Table({
-          head,
-          colWidths: Array(head.length).fill(Math.floor(maxWidth / head.length)),
+          head: [...head.prompts, ...head.vars],
+          colWidths: Array(headLength).fill(Math.floor(maxWidth / headLength)),
           wordWrap: true,
           wrapOnWordBoundary: true,
           style: {
@@ -196,9 +207,9 @@ async function main() {
           },
         });
         // Skip first row (header) and add the rest. Color PASS/FAIL
-        for (const row of summary.table.slice(1)) {
-          table.push(
-            row.map((col) => {
+        for (const row of summary.table.body) {
+          table.push([
+            ...row.outputs.map((col) => {
               if (col.startsWith('[PASS]')) {
                 // color '[PASS]' green
                 return chalk.green.bold(col.slice(0, 6)) + col.slice(6);
@@ -211,11 +222,13 @@ async function main() {
               }
               return col;
             }),
-          );
+            ...row.vars,
+          ]);
         }
 
         logger.info('\n' + table.toString());
       }
+      writeLatestResults(summary);
       logger.info('Evaluation complete');
       logger.info(chalk.green.bold(`Successes: ${summary.stats.successes}`));
       logger.info(chalk.red.bold(`Failures: ${summary.stats.failures}`));
@@ -223,6 +236,10 @@ async function main() {
         `Token usage: Total ${summary.stats.tokenUsage.total} Prompt ${summary.stats.tokenUsage.prompt} Completion ${summary.stats.tokenUsage.completion}`,
       );
       logger.info('Done.');
+
+      if (cmdObj.view) {
+        init(15500);
+      }
     });
 
   program.parse(process.argv);
