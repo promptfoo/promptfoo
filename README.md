@@ -1,9 +1,9 @@
-# promptfoo
+# promptfoo - the prompt engineering toolkit
 
 [![npm](https://img.shields.io/npm/v/promptfoo)](https://npmjs.com/package/promptfoo)
 ![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/typpo/promptfoo/main.yml)
 
-`promptfoo` is a library and command-line tool that helps you evaluate LLM prompt & model quality with a systematic approach to comparing model outputs.
+`promptfoo` helps you tune LLM prompts systematically across many relevant test cases.
 
 With promptfoo, you can:
 
@@ -98,7 +98,7 @@ Produces this HTML table:
 
 Full setup and output [here](https://github.com/typpo/promptfoo/tree/main/examples/gpt-3.5-vs-4).
 
-## Usage (as a library)
+## Usage (node package)
 
 You can also use `promptfoo` as a library in your project by importing the `evaluate` function. The function takes the following parameters:
 
