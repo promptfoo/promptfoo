@@ -138,6 +138,7 @@ async function main() {
       'Maximum number of concurrent API calls',
       String(defaultConfig.maxConcurrency),
     )
+    .option('--no-write', 'Do not write results to promptfoo directory')
     .option('--grader', 'Model that will grade outputs', defaultConfig.grader)
     .option('--verbose', 'Show debug logs', defaultConfig.verbose)
     .option('--view', 'View in browser ui')
@@ -228,8 +229,12 @@ async function main() {
 
         logger.info('\n' + table.toString());
       }
-      writeLatestResults(summary);
-      logger.info('Evaluation complete');
+      if (cmdObj.noWrite) {
+        logger.info('Evaluation complete');
+      } else {
+        writeLatestResults(summary);
+        logger.info(`Evaluation complete. To use web viewer, run ${chalk.green('promptfoo view')}`);
+      }
       logger.info(chalk.green.bold(`Successes: ${summary.stats.successes}`));
       logger.info(chalk.red.bold(`Failures: ${summary.stats.failures}`));
       logger.info(
