@@ -19,9 +19,12 @@ promptfoo works by producing matrix views that allow you to quickly review promp
 
 Here's an example of a side-by-side comparison of multiple prompts and inputs. You can manually review outputs, or set up "expectations" that automatically flag bad outputs.
 
-![Prompt evaluation matrix](https://user-images.githubusercontent.com/310310/236690475-b05205e8-483e-4a6d-bb84-41c2b06a1247.png)
+![Prompt evaluation matrix - web viewer](https://github.com/typpo/promptfoo/assets/310310/ddcd77df-2783-425e-ade9-1a20dd0b6cd2)
 
-## Usage (command line)
+It works on the command line too.
+![Prompt evaluation](https://user-images.githubusercontent.com/310310/235529431-f4d5c395-d569-448e-9697-cd637e0372a5.gif)
+
+## Usage (command line & web viewer)
 
 To get started, run the following command:
 
@@ -51,6 +54,12 @@ npx promptfoo eval -p <prompt_paths...> -o <output_path> -r <providers> [-v <var
 - `<config_path>` (optional): Path to configuration file
 - `<grading_provider>`: A provider that handles the grading process, if you are using [LLM grading](#expected-outputs)
 
+After running an eval, you may optionally use the `view` command to open the web viewer:
+
+```
+npx promptfoo view
+```
+
 ### Examples
 
 #### Prompt quality
@@ -60,8 +69,6 @@ In this example, we evaluate whether adding adjectives to the personality of an 
 ```bash
 npx promptfoo eval -p prompts.txt -v vars.csv -r openai:gpt-3.5-turbo
 ```
-
-![Peek 2023-05-01 13-53](https://user-images.githubusercontent.com/310310/235529431-f4d5c395-d569-448e-9697-cd637e0372a5.gif)
 
 <!--
 <img width="1362" alt="Side-by-side evaluation of LLM prompt quality, terminal output" src="https://user-images.githubusercontent.com/310310/235329207-e8c22459-5f51-4fee-9714-1b602ac3d7ca.png">
