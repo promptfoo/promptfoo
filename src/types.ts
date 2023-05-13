@@ -8,6 +8,7 @@ export interface CommandLineOptions {
   maxConcurrency?: number;
   grader?: string;
   view?: boolean;
+  noWrite?: boolean;
 }
 
 export interface ApiProvider {

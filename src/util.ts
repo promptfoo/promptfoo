@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 
+import chalk from 'chalk';
 import fetch from 'node-fetch';
 import yaml from 'js-yaml';
 import nunjucks from 'nunjucks';
@@ -118,7 +119,7 @@ export function writeLatestResults(results: EvaluateSummary) {
   try {
     fs.mkdirSync(path.dirname(latestResultsPath), { recursive: true });
     fs.writeFileSync(latestResultsPath, JSON.stringify(results, null, 2));
-    logger.info(`Wrote latest results to ${latestResultsPath}`);
+    logger.info(`Wrote latest results to ${latestResultsPath}.`);
   } catch (err) {
     logger.error(`Failed to write latest results to ${latestResultsPath}:\n${err}`);
   }
