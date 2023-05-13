@@ -87,10 +87,12 @@ function PromptOutput({ text, maxTextLength, rowIndex, promptIndex, onRating }: 
   };
 
   return (
-    <div className="cell">
-      {isPass && <div className="status pass">[PASS]</div>}
-      {isFail && <div className="status fail">{chunks[0]}</div>}{' '}
-      <TruncatedText text={text} maxLength={maxTextLength} />
+    <>
+      <div className="cell">
+        {isPass && <div className="status pass">[PASS]</div>}
+        {isFail && <div className="status fail">{chunks[0]}</div>}{' '}
+        <TruncatedText text={text} maxLength={maxTextLength} />
+      </div>
       <div className="cell-rating">
         <span className="rating" onClick={() => handleClick(true)}>
           👍
@@ -99,7 +101,7 @@ function PromptOutput({ text, maxTextLength, rowIndex, promptIndex, onRating }: 
           👎
         </span>
       </div>
-    </div>
+    </>
   );
 }
 

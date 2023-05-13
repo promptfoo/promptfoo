@@ -38,9 +38,10 @@ th,
 .th,
 td,
 .td {
+  position: relative;
   box-shadow: inset 0 0 0 1px var(--border-color);
-  padding: 1rem;
   word-break: break-all;
+  vertical-align: top;
 
   padding: 1.5rem;
 }
@@ -54,14 +55,13 @@ th,
 }
 
 tr .cell {
-  position: relative;
 }
 
 tr .cell-rating {
   visibility: hidden;
   position: absolute;
-  bottom: 0;
-  right: 0;
+  bottom: 1.25rem;
+  right: -1rem;
   line-height: 0;
   font-size: 1.75rem;
 }

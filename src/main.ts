@@ -98,8 +98,8 @@ async function main() {
     });
 
   program
-    .command('ui')
-    .description('Start results web server')
+    .command('view')
+    .description('Start browser ui')
     .option('-p, --port <number>', 'Port number', '15500')
     .action((cmdObj: { port: number } & Command) => {
       init(cmdObj.port);
@@ -140,7 +140,7 @@ async function main() {
     )
     .option('--grader', 'Model that will grade outputs', defaultConfig.grader)
     .option('--verbose', 'Show debug logs', defaultConfig.verbose)
-    .option('--ui', 'Show web UI')
+    .option('--view', 'View in browser ui')
     .action(async (cmdObj: CommandLineOptions & Command) => {
       if (cmdObj.verbose) {
         setLogLevel('debug');
@@ -237,7 +237,7 @@ async function main() {
       );
       logger.info('Done.');
 
-      if (cmdObj.ui) {
+      if (cmdObj.view) {
         init(15500);
       }
     });

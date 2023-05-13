@@ -7,7 +7,7 @@ export interface CommandLineOptions {
   verbose?: boolean;
   maxConcurrency?: number;
   grader?: string;
-  ui?: boolean;
+  view?: boolean;
 }
 
 export interface ApiProvider {

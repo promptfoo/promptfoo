@@ -289,6 +289,18 @@ npm install
 npm link
 ```
 
+4. Build:
+
+```bash
+npm run build
+```
+
+5. Make the entrypoint executable:
+
+```bash
+chmod +x dist/main.js
+```
+
 ### Example
 
 ```bash

@@ -19,7 +19,7 @@ import type { Request, Response } from 'express';
 export function init(port = 15500) {
   const app = express();
 
-  const staticDir = path.join(getDirectory(), '../src/web/promptfoo-client', 'dist');
+  const staticDir = path.join(getDirectory(), 'web', 'client');
 
   app.use(cors());
   app.use(express.json());
