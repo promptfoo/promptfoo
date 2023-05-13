@@ -21,6 +21,25 @@
     },
     {
       "prompt": {
+        "raw": "Pretend you're a pirate and speak these words: Hello world",
+        "display": "Pretend you're a pirate and speak these words: {{body}}"
+      },
+      "vars": {
+        "body": "Hello world",
+        "__expected": "eval:output.toLowerCase().includes('ahoy')"
+      },
+      "response": {
+        "output": "Ahoy there, me hearties! Avast ye landlubbers! 'Tis I, a fearsome pirate, comin' to ye from the seven seas. Ahoy, hello world!",
+        "tokenUsage": {
+          "total": 64,
+          "prompt": 22,
+          "completion": 42
+        }
+      },
+      "success": true
+    },
+    {
+      "prompt": {
         "raw": "Rephrase this from English to Pirate: I&#39;m hungry",
         "display": "Rephrase this from English to Pirate: {{body}}"
       },
@@ -29,14 +48,15 @@
         "__expected": "eval:output.toLowerCase().includes('grub')"
       },
       "response": {
-        "output": "I be feelin' a mighty need for grub, matey.",
+        "output": "I be starvin'!",
         "tokenUsage": {
-          "total": 35,
+          "total": 27,
           "prompt": 21,
-          "completion": 14
+          "completion": 6
         }
       },
-      "success": true
+      "success": false,
+      "error": "Expected: eval:output.toLowerCase().includes('grub')"
     },
     {
       "prompt": {
@@ -56,54 +76,40 @@
         }
       },
       "success": true
-    },
-    {
-      "prompt": {
-        "raw": "Pretend you're a pirate and speak these words: Hello world",
-        "display": "Pretend you're a pirate and speak these words: {{body}}"
-      },
-      "vars": {
-        "body": "Hello world",
-        "__expected": "eval:output.toLowerCase().includes('ahoy')"
-      },
-      "response": {
-        "output": "Ahoy there, me hearties! Avast ye landlubbers! 'Tis I, a fearsome pirate, comin' to ye from the seven seas. Ahoy, hello world!",
-        "tokenUsage": {
-          "total": 64,
-          "prompt": 22,
-          "completion": 42
-        }
-      },
-      "success": true
     }
   ],
   "stats": {
-    "successes": 4,
-    "failures": 0,
+    "successes": 3,
+    "failures": 1,
     "tokenUsage": {
-      "total": 189,
+      "total": 181,
       "prompt": 86,
-      "completion": 103
+      "completion": 95
     }
   },
-  "table": [
-    [
-      "RESULT",
-      "Rephrase this from English to Pirate: {{body}}",
-      "Pretend you're a pirate and speak these words: {{body}}",
-      "body"
-    ],
-    [
-      "PASS",
-      "Ahoy mateys o' the world!",
-      "Ahoy there, me hearties! Avast ye landlubbers! 'Tis I, a fearsome pirate, comin' to ye from the seven seas. Ahoy, hello world!",
-      "Hello world"
-    ],
-    [
-      "PASS",
-      "I be feelin' a mighty need for grub, matey.",
-      "Arrr, me belly be rumblin'! I be needin' some grub, mateys! Bring me some vittles or ye'll be walkin' the plank!",
-      "I'm hungry"
+  "table": {
+    "head": {
+      "prompts": [
+        "Rephrase this from English to Pirate: {{body}}",
+        "Pretend you're a pirate and speak these words: {{body}}"
+      ],
+      "vars": ["body"]
+    },
+    "body": [
+      {
+        "outputs": [
+          "[PASS] Ahoy mateys o' the world!",
+          "[PASS] Ahoy there, me hearties! Avast ye landlubbers! 'Tis I, a fearsome pirate, comin' to ye from the seven seas. Ahoy, hello world!"
+        ],
+        "vars": ["Hello world"]
+      },
+      {
+        "outputs": [
+          "[FAIL] Expected: eval:output.toLowerCase().includes('grub')\n---\nI be starvin'!",
+          "[PASS] Arrr, me belly be rumblin'! I be needin' some grub, mateys! Bring me some vittles or ye'll be walkin' the plank!"
+        ],
+        "vars": ["I'm hungry"]
+      }
     ]
-  ]
+  }
 }
