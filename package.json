@@ -19,11 +19,12 @@
   },
   "scripts": {
     "local": "ts-node --esm src/main.ts",
+    "install:client": "cd src/web/client && npm install",
     "build:clean": "rm -rf dist",
     "build:client": "cd src/web/client && npm run build && cp -r dist ../../../dist/web/client",
     "build:watch": "tsc --watch",
     "build": "tsc && cp src/*.html dist/ && npm run build:client",
-    "prepare": "npm run build:clean && npm run build",
+    "prepare": "npm run install:client && npm run build:clean && npm run build",
     "test": "jest",
     "test:watch": "jest --watch",
     "format": "prettier -w ."
