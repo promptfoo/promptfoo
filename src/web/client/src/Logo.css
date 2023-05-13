@@ -1,0 +1,13 @@
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.logo img {
+  width: 30px;
+}
+
+.logo span {
+  margin-bottom: 6px;
+}
