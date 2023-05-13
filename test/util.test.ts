@@ -103,6 +103,7 @@ describe('util', () => {
       body: [{ outputs: ['Test output'], vars: ['value1', 'value2'] }],
     };
     const summary = {
+      version: 1,
       stats: {
         successes: 1,
         failures: 1,
@@ -143,6 +144,7 @@ describe('util', () => {
       body: [{ outputs: ['Test output'], vars: ['value1', 'value2'] }],
     };
     const summary = {
+      version: 1,
       stats: {
         successes: 1,
         failures: 1,
@@ -183,6 +185,7 @@ describe('util', () => {
       body: [{ outputs: ['Test output'], vars: ['value1', 'value2'] }],
     };
     const summary = {
+      version: 1,
       stats: {
         successes: 1,
         failures: 1,
