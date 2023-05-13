@@ -13,8 +13,8 @@ function App() {
   const [loaded, setLoaded] = React.useState<boolean>(false);
 
   React.useEffect(() => {
-    //const socket = SocketIOClient(`http://${window.location.host}`);
-    const socket = SocketIOClient(`http://localhost:15500`);
+    const socket = SocketIOClient(`http://${window.location.host}`);
+    //const socket = SocketIOClient(`http://localhost:15500`);
 
     socket.on('init', (data) => {
       console.log('Initialized socket connection');
