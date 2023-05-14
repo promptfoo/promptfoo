@@ -1,4 +1,4 @@
-# promptfoo - the prompt engineering toolkit
+# promptfoo - the prompt engineering helper
 
 [![npm](https://img.shields.io/npm/v/promptfoo)](https://npmjs.com/package/promptfoo)
 ![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/typpo/promptfoo/main.yml)
@@ -10,6 +10,7 @@ With promptfoo, you can:
 - **Test multiple prompts** against predefined test cases
 - **Evaluate quality and catch regressions** by comparing LLM outputs side-by-side
 - **Speed up evaluations** by running tests concurrently
+- Set "expectations" that automatically flag bad outputs, or manually review outputs
 - Use as a command line tool, or integrate into your workflow as a library
 - Use OpenAI API models (built-in support), or integrate custom API providers for any LLM API
 
@@ -17,11 +18,11 @@ With promptfoo, you can:
 
 promptfoo works by producing matrix views that allow you to quickly review prompt outputs across many inputs. The goal: tune prompts systematically across all relevant test cases, instead of testing prompts one-off.
 
-Here's an example of a side-by-side comparison of multiple prompts and inputs. You can manually review outputs, or set up "expectations" that automatically flag bad outputs.
+Here's an example of a side-by-side comparison of multiple prompts and inputs:
 
 ![Prompt evaluation matrix - web viewer](https://github.com/typpo/promptfoo/assets/310310/ddcd77df-2783-425e-ade9-1a20dd0b6cd2)
 
-It works on the command line too.
+It works on the command line too:
 ![Prompt evaluation](https://user-images.githubusercontent.com/310310/235529431-f4d5c395-d569-448e-9697-cd637e0372a5.gif)
 
 ## Usage (command line & web viewer)
@@ -116,7 +117,7 @@ You can also use `promptfoo` as a library in your project by importing the `eval
 
 `promptfoo` exports an `evaluate` function that you can use to run prompt evaluations.
 
-```javascript
+```js
 import promptfoo from 'promptfoo';
 
 const options = {
@@ -350,7 +351,7 @@ The `openai:<endpoint>:<model>` construction is useful if OpenAI releases a new 
 
 To create a custom API provider, implement the `ApiProvider` interface in a separate module. Here is the interface:
 
-```javascript
+```js
 export interface ApiProvider {
   id: () => string;
   callApi: (prompt: string) => Promise<ProviderResult>;
@@ -405,6 +406,6 @@ Contributions are welcome! Please feel free to submit a pull request or open an 
 Here are some of the available scripts:
 
 - `build`: Transpile TypeScript files to JavaScript
-- `watch`: Continuously watch and transpile TypeScript files on changes
+- `build:watch`: Continuously watch and transpile TypeScript files on changes
 - `test`: Run test suite
 - `test:watch`: Continuously run test suite on changes
