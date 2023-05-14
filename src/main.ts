@@ -229,7 +229,7 @@ async function main() {
 
         logger.info('\n' + table.toString());
       }
-      if (cmdObj.noWrite) {
+      if (cmdObj.noWrite || cmdObj.view) {
         logger.info('Evaluation complete');
       } else {
         writeLatestResults(summary);
