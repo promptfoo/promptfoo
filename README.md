@@ -1,4 +1,4 @@
-# promptfoo - the prompt engineering helper
+# promptfoo: a prompt engineering tool
 
 [![npm](https://img.shields.io/npm/v/promptfoo)](https://npmjs.com/package/promptfoo)
 ![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/typpo/promptfoo/main.yml)
@@ -10,13 +10,13 @@ With promptfoo, you can:
 - **Test multiple prompts** against predefined test cases
 - **Evaluate quality and catch regressions** by comparing LLM outputs side-by-side
 - **Speed up evaluations** by running tests concurrently
-- Set "expectations" that automatically flag bad outputs, or manually review outputs
+- **Flag bad outputs automatically** by setting "expectations"
 - Use as a command line tool, or integrate into your workflow as a library
 - Use OpenAI API models (built-in support), or integrate custom API providers for any LLM API
 
 **» [View docs on website](https://promptfoo.dev/docs/intro) «**
 
-promptfoo works by producing matrix views that allow you to quickly review prompt outputs across many inputs. The goal: tune prompts systematically across all relevant test cases, instead of testing prompts one-off.
+promptfoo produces matrix views that allow you to quickly review prompt outputs across many inputs. The goal: tune prompts systematically across all relevant test cases, instead of testing prompts by trial and error.
 
 Here's an example of a side-by-side comparison of multiple prompts and inputs:
 
@@ -307,12 +307,6 @@ npm run build
 
 ```bash
 chmod +x dist/main.js
-```
-
-### Example
-
-```bash
-promptfoo eval -p prompt1.txt prompt2.txt -o results.csv -r openai:chat -v vars.csv
 ```
 
 ## API Providers
