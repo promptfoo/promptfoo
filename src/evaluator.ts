@@ -286,7 +286,7 @@ class Evaluator {
             resultText = `[FAIL] ${row.error}\n---\n${row.response?.output || row.error || ''}`;
           }
         } else if (row.error) {
-          resultText = `[FAIL] ${row.error}\n---\n${row.response?.output || row.error || ''}`;
+          resultText = `[FAIL] ${row.error}`;
         } else {
           resultText = row.response?.output || row.error || '';
         }
