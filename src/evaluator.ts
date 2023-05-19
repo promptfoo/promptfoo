@@ -278,11 +278,18 @@ class Evaluator {
           throw new Error('Expected index to be a number');
         }
 
-        const resultText = isTest
-          ? row.success
-            ? `[PASS] ${row.response?.output || row.error || ''}`
-            : `[FAIL] ${row.error}\n---\n${row.response?.output || row.error || ''}`
-          : row.response?.output || row.error || '';
+        let resultText: string | undefined;
+        if (isTest) {
+          if (row.success) {
+            resultText = `[PASS] ${row.response?.output || row.error || ''}`;
+          } else {
+            resultText = `[FAIL] ${row.error}\n---\n${row.response?.output || row.error || ''}`;
+          }
+        } else if (row.error) {
+          resultText = `[FAIL] ${row.error}\n---\n${row.response?.output || row.error || ''}`;
+        } else {
+          resultText = row.response?.output || row.error || '';
+        }
 
         // TODO(ian): Provide full context in table cells, and have the caller
         // construct the table contents itself.
