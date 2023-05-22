@@ -2,6 +2,7 @@ import async from 'async';
 import nunjucks from 'nunjucks';
 
 import { DEFAULT_GRADING_PROMPT } from './prompts.js';
+import { DefaultEmbeddingProvider } from './providers/openai.js';
 
 import type { SingleBar } from 'cli-progress';
 import type {
@@ -14,6 +15,7 @@ import type {
   Prompt,
   TokenUsage,
 } from './types.js';
+import { cosineSimilarity } from './util.js';
 
 interface RunEvalOptions {
   provider: ApiProvider;
@@ -32,6 +34,8 @@ interface GradingResult {
 }
 
 const DEFAULT_MAX_CONCURRENCY = 4;
+
+const SIMILAR_REGEX = /similar(?::|\((\d+(\.\d+)?)\):)/;
 
 class Evaluator {
   options: EvaluateOptions;
@@ -98,20 +102,71 @@ class Evaluator {
     }
   }
 
+  async checkSimilarity(
+    expected: string,
+    output: string,
+    threshold: number,
+  ): Promise<GradingResult> {
+    const expectedEmbedding = await DefaultEmbeddingProvider.callEmbeddingApi(expected);
+    const outputEmbedding = await DefaultEmbeddingProvider.callEmbeddingApi(output);
+
+    const tokensUsed = {
+      total: (expectedEmbedding.tokenUsage?.total || 0) + (outputEmbedding.tokenUsage?.total || 0),
+      prompt:
+        (expectedEmbedding.tokenUsage?.prompt || 0) + (outputEmbedding.tokenUsage?.prompt || 0),
+      completion:
+        (expectedEmbedding.tokenUsage?.completion || 0) +
+        (outputEmbedding.tokenUsage?.completion || 0),
+    };
+
+    if (expectedEmbedding.error || outputEmbedding.error) {
+      return {
+        pass: false,
+        reason:
+          expectedEmbedding.error || outputEmbedding.error || 'Unknown error fetching embeddings',
+        tokensUsed,
+      };
+    }
+
+    if (!expectedEmbedding.embedding || !outputEmbedding.embedding) {
+      return {
+        pass: false,
+        reason: 'Embedding not found',
+        tokensUsed,
+      };
+    }
+
+    const similarity = cosineSimilarity(expectedEmbedding.embedding, outputEmbedding.embedding);
+    if (similarity < threshold) {
+      return {
+        pass: false,
+        reason: `Similarity ${similarity} is less than threshold ${threshold}`,
+        tokensUsed,
+      };
+    }
+    return {
+      pass: true,
+      reason: `Similarity ${similarity} is greater than threshold ${threshold}`,
+      tokensUsed,
+    };
+  }
+
   async checkExpectedValue(
     expected: string,
     output: string,
   ): Promise<{ pass: boolean; reason?: string }> {
-    if (expected.startsWith('eval:')) {
+    const match = expected.match(SIMILAR_REGEX);
+
+    if (match) {
+      const threshold = parseFloat(match[1]) || 0.8;
+      const rest = expected.replace(SIMILAR_REGEX, '').trim();
+      return this.checkSimilarity(rest, output, threshold);
+    } else if (expected.startsWith('eval:')) {
       const evalBody = expected.slice(5);
       const evalFunction = new Function('output', `return ${evalBody}`);
       return { pass: evalFunction(output) };
     } else if (expected.startsWith('grade:')) {
-      const gradingResult = await this.gradeOutput(expected.slice(6), output);
-      return {
-        pass: gradingResult.pass,
-        reason: gradingResult.reason,
-      };
+      return this.gradeOutput(expected.slice(6), output);
     } else {
       const pass = expected === output;
       return {

@@ -2,7 +2,6 @@ import * as fs from 'fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 
-import chalk from 'chalk';
 import fetch from 'node-fetch';
 import yaml from 'js-yaml';
 import nunjucks from 'nunjucks';
@@ -123,4 +122,14 @@ export function writeLatestResults(results: EvaluateSummary) {
   } catch (err) {
     logger.error(`Failed to write latest results to ${latestResultsPath}:\n${err}`);
   }
+}
+
+export function cosineSimilarity(vecA: number[], vecB: number[]) {
+  if (vecA.length !== vecB.length) {
+    throw new Error('Vectors must be of equal length');
+  }
+  const dotProduct = vecA.reduce((acc, val, idx) => acc + val * vecB[idx], 0);
+  const vecAMagnitude = Math.sqrt(vecA.reduce((acc, val) => acc + val * val, 0));
+  const vecBMagnitude = Math.sqrt(vecB.reduce((acc, val) => acc + val * val, 0));
+  return dotProduct / (vecAMagnitude * vecBMagnitude);
 }
