@@ -12,7 +12,7 @@ With promptfoo, you can:
 - **Speed up evaluations** by running tests concurrently
 - **Flag bad outputs automatically** by setting "expectations"
 - Use as a command line tool, or integrate into your workflow as a library
-- Use OpenAI API models (built-in support), or integrate custom API providers for any LLM API
+- Use OpenAI models, open-source models like Llama and Vicuna, or integrate custom API providers for any LLM API
 
 **» [View docs on website](https://promptfoo.dev/docs/intro) «**
 
@@ -329,7 +329,7 @@ Other OpenAI-related environment variables are supported:
 - `OPENAI_MAX_TOKENS` - max_tokens model parameter, defaults to 1024
 - `OPENAI_STOP` - stopwords in JSON format, defaults to []
 - `OPENAI_API_HOST` - override the hostname for the API request. Useful for proxies like Helicone.
-- `REQUEST_TIMEOUT_MS` - maximum request time, in milliseconds (defaults to 60000)
+- `REQUEST_TIMEOUT_MS` - maximum request time, in milliseconds. Defaults to 60000.
 
 The OpenAI provider supports the following model formats:
 
@@ -340,6 +340,25 @@ The OpenAI provider supports the following model formats:
 - `openai:completion:<model name>` - uses any model name against the completion endpoint
 
 The `openai:<endpoint>:<model>` construction is useful if OpenAI releases a new model, or if you have a custom model. For example, if OpenAI releases gpt-5 chat completion, you could begin using it immediately with `openai:chat:gpt-5`.
+
+### LocalAI
+
+LocalAI is an API wrapper for open-source LLMs that is compatible with OpenAI. You can run LocalAI for compatibility with Llama, Alpaca, Vicuna, GPT4All, RedPajama, and many other models compatible with the ggml format.
+
+View all compatible models [here](https://github.com/go-skynet/LocalAI#model-compatibility-table).
+
+Once you have LocalAI up and running, specify one of the following based on the model you have selected:
+
+- `localai:chat:<model name>`
+- `localai:completion:<model name>`
+- `localai:<model name>` - defaults to chat-type model
+
+The model name is typically the filename of the .bin file that you downloaded to set up the model in LocalAI. For example, `ggml-vic13b-uncensored-q5_1.bin`
+
+Supported environment variables:
+
+- `LOCALAI_BASE_URL` - defaults to `http://localhost:8080/v1`
+- `REQUEST_TIMEOUT_MS` - maximum request time, in milliseconds. Defaults to 60000.
 
 ### Custom API Provider
 
