@@ -1,10 +1,16 @@
+import { LRUCache } from 'lru-cache';
+
 import logger from '../logger.js';
 import { fetchWithTimeout } from '../util.js';
 import { REQUEST_TIMEOUT_MS } from './shared.js';
 
-import type { ApiProvider, ProviderResponse } from '../types.js';
+import type { ApiProvider, ProviderEmbeddingResponse, ProviderResponse } from '../types.js';
 
 const DEFAULT_OPENAI_HOST = 'api.openai.com';
+
+const embeddingsCache = new LRUCache<string, ProviderEmbeddingResponse>({
+  max: 1000,
+});
 
 class OpenAiGenericProvider implements ApiProvider {
   modelName: string;
@@ -38,6 +44,79 @@ class OpenAiGenericProvider implements ApiProvider {
     throw new Error('Not implemented');
   }
 }
+
+export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
+  async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
+    if (!this.apiKey) {
+      throw new Error('OpenAI API key must be set for similarity comparison');
+    }
+
+    // TODO(ian): Improve cache
+    const cached = embeddingsCache.get(text);
+    if (cached) {
+      return cached;
+    }
+
+    const body = {
+      input: text,
+      model: this.modelName,
+    };
+    let response, data;
+    try {
+      response = await fetchWithTimeout(
+        `https://${this.apiHost}/v1/embeddings`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${this.apiKey}`,
+          },
+          body: JSON.stringify(body),
+        },
+        REQUEST_TIMEOUT_MS,
+      );
+      data = (await response.json()) as unknown as any;
+    } catch (err) {
+      return {
+        error: `API call error: ${String(err)}`,
+        tokenUsage: {
+          total: 0,
+          prompt: 0,
+          completion: 0,
+        },
+      };
+    }
+    logger.debug(`\tOpenAI API response (embeddings): ${JSON.stringify(data)}`);
+
+    try {
+      const embedding = data?.data?.[0]?.embedding;
+      if (!embedding) {
+        throw new Error('No embedding returned');
+      }
+      const ret = {
+        embedding,
+        tokenUsage: {
+          total: data.usage.total_tokens,
+          prompt: data.usage.prompt_tokens,
+          completion: data.usage.completion_tokens,
+        },
+      };
+      embeddingsCache.set(text, ret);
+      return ret;
+    } catch (err) {
+      return {
+        error: `API response error: ${String(err)}: ${JSON.stringify(data)}`,
+        tokenUsage: {
+          total: data?.usage?.total_tokens,
+          prompt: data?.usage?.prompt_tokens,
+          completion: data?.usage?.completion_tokens,
+        },
+      };
+    }
+  }
+}
+
+export const DefaultEmbeddingProvider = new OpenAiEmbeddingProvider('text-embedding-ada-002');
 
 export class OpenAiCompletionProvider extends OpenAiGenericProvider {
   static OPENAI_COMPLETION_MODELS = [

@@ -231,16 +231,22 @@ You can specify an expected value for each test case to evaluate the success or 
 
 1. If the expected value starts with `eval:`, it will evaluate the contents as the body of a JavaScript function defined like: `function(output) { <eval> }`. The function should return a boolean value, where `true` indicates success and `false` indicates failure.
 
-2. If the expected value starts with `grade:`, it will ask an LLM to evaluate whether the output meets the condition. For example: `grade: don't mention being an AI`. This option requires a provider name to be supplied to promptfoo via the `--grader` argument: `promptfoo --grader openai:gpt-4 ...`.
+1. If the expected value starts with `similar:`, it will compare the semantic similarity of the expected and output values. For example, `similar: greetings, world!` is semantically similar to "Hello world" even though it's not an exact match.
 
-3. Otherwise, it attempts an exact string match comparison between the expected value and the model's output.
+   The `similar` directive uses cosine similarity, where 1.0 is the most similar and 0.0 is the least similar. Tune the similarity threshold by specifying `similar(0.8): ...` (passes only if similarity >= 0.8).
+
+   The embedding model currently supported is OpenAI's `text-embedding-ada-002`. As a result, the `similar` directive requires the OPENAI_API_KEY environment variable to be set.
+
+1. If the expected value starts with `grade:`, it will ask an LLM to evaluate whether the output meets the condition. For example, `grade: don't mention being an AI`. This option requires a provider name to be supplied to promptfoo via the `--grader` argument: `promptfoo --grader openai:gpt-4 ...`.
+
+1. Otherwise, it attempts an exact string match comparison between the expected value and the model's output.
 
 Example of a vars file with the `__expected` field (`vars.csv`):
 
 ```
 text,__expected
 "Hello, world!","Bonjour le monde"
-"Goodbye, everyone!","eval:return output.includes('Au revoir');"
+"Goodbye, everyone!","eval:output.includes('Au revoir');"
 "I am a pineapple","grade:doesn't reference any fruits besides pineapple"
 ```
 
