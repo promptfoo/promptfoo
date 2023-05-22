@@ -29,6 +29,12 @@ export interface ProviderResponse {
   tokenUsage?: TokenUsage;
 }
 
+export interface ProviderEmbeddingResponse {
+  error?: string;
+  embedding?: number[];
+  tokenUsage?: TokenUsage;
+}
+
 export interface CsvRow {
   [key: string]: string;
 }
