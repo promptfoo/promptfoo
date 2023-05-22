@@ -1,11 +1,8 @@
 import fetch from 'node-fetch';
 
-import {
-  OpenAiGenericProvider,
-  OpenAiCompletionProvider,
-  OpenAiChatCompletionProvider,
-  loadApiProvider,
-} from '../src/providers.js';
+import { OpenAiCompletionProvider, OpenAiChatCompletionProvider } from '../src/providers/openai.js';
+
+import { loadApiProvider } from '../src/providers.js';
 
 jest.mock('node-fetch', () => jest.fn());
 
@@ -14,12 +11,6 @@ jest.mock('../src/esm.js');
 describe('providers', () => {
   afterEach(() => {
     jest.clearAllMocks();
-  });
-
-  test('OpenAiGenericProvider constructor', () => {
-    const provider = new OpenAiGenericProvider('gpt-3.5-turbo', 'test-api-key');
-    expect(provider.modelName).toBe('gpt-3.5-turbo');
-    expect(provider.apiKey).toBe('test-api-key');
   });
 
   test('OpenAiCompletionProvider callApi', async () => {
