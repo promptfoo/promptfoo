@@ -10,4 +10,9 @@
 
 .logo span {
   margin-bottom: 6px;
+  color: var(--text-color);
+}
+
+[data-theme='dark'] .logo img {
+  filter: invert(1);
 }

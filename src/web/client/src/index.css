@@ -30,6 +30,16 @@
   }
 }
 
+[data-theme='dark'] {
+  --background-color: #1a1a1a;
+  --text-color: #f0f0f0;
+  --border-color: #444444;
+  --table-border-color: #444444;
+  --pass-color: #4caf50;
+  --fail-color: #f44336;
+  --smalltext-color: #888888;
+}
+
 html {
   font-size: calc(14px + (18 - 14) * ((100vw - 300px) / (1600 - 300)));
 }
