@@ -5,10 +5,11 @@ export interface CommandLineOptions {
   vars?: string;
   config?: string;
   verbose?: boolean;
-  maxConcurrency?: number;
+  maxConcurrency?: string;
   grader?: string;
   view?: boolean;
   noWrite?: boolean;
+  tableCellMaxLength?: string;
 }
 
 export interface ApiProvider {

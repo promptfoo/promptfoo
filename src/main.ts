@@ -138,6 +138,11 @@ async function main() {
       'Maximum number of concurrent API calls',
       String(defaultConfig.maxConcurrency),
     )
+    .option(
+      '--table-cell-max-length <number>',
+      'Truncate console table cells to this length',
+      '250',
+    )
     .option('--no-write', 'Do not write results to promptfoo directory')
     .option('--grader', 'Model that will grade outputs', defaultConfig.grader)
     .option('--verbose', 'Show debug logs', defaultConfig.verbose)
@@ -172,13 +177,13 @@ async function main() {
       const providers = await Promise.all(
         cmdObj.providers.map(async (p) => await loadApiProvider(p)),
       );
+      const maxConcurrency = parseInt(cmdObj.maxConcurrency || '', 10);
       const options: EvaluateOptions = {
         prompts: readPrompts(cmdObj.prompts),
         vars,
         providers,
         showProgressBar: true,
-        maxConcurrency:
-          cmdObj.maxConcurrency && cmdObj.maxConcurrency > 0 ? cmdObj.maxConcurrency : undefined,
+        maxConcurrency: !isNaN(maxConcurrency) && maxConcurrency > 0 ? maxConcurrency : undefined,
         ...config,
       };
 
@@ -202,7 +207,7 @@ async function main() {
           head: [...head.prompts, ...head.vars],
           colWidths: Array(headLength).fill(Math.floor(maxWidth / headLength)),
           wordWrap: true,
-          wrapOnWordBoundary: true,
+          wrapOnWordBoundary: false,
           style: {
             head: ['blue', 'bold'],
           },
@@ -211,6 +216,10 @@ async function main() {
         for (const row of summary.table.body) {
           table.push([
             ...row.outputs.map((col) => {
+              const tableCellMaxLength = parseInt(cmdObj.tableCellMaxLength || '', 10);
+              if (!isNaN(tableCellMaxLength) && col.length > tableCellMaxLength) {
+                col = col.slice(0, tableCellMaxLength) + '...';
+              }
               if (col.startsWith('[PASS]')) {
                 // color '[PASS]' green
                 return chalk.green.bold(col.slice(0, 6)) + col.slice(6);
