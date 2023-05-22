@@ -2,7 +2,6 @@ import * as fs from 'fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 
-import chalk from 'chalk';
 import fetch from 'node-fetch';
 import yaml from 'js-yaml';
 import nunjucks from 'nunjucks';

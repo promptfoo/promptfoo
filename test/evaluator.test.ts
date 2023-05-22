@@ -2,6 +2,10 @@ import { evaluate } from '../src/evaluator.js';
 
 import type { ApiProvider } from '../src/types.js';
 
+jest.mock('node-fetch', () => jest.fn());
+
+jest.mock('../src/esm.js');
+
 const mockApiProvider: ApiProvider = {
   id: jest.fn().mockReturnValue('test-provider'),
   callApi: jest.fn().mockResolvedValue({
