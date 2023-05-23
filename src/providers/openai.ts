@@ -110,8 +110,6 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
   }
 }
 
-export const DefaultEmbeddingProvider = new OpenAiEmbeddingProvider('text-embedding-ada-002');
-
 export class OpenAiCompletionProvider extends OpenAiGenericProvider {
   static OPENAI_COMPLETION_MODELS = [
     'text-davinci-003',
@@ -126,15 +124,15 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       logger.warn(`Using unknown OpenAI completion model: ${modelName}`);
     }
     super(modelName, apiKey);
+  }
 
+  async callApi(prompt: string): Promise<ProviderResponse> {
     if (!this.apiKey) {
       throw new Error(
         'OpenAI API key is not set. Set OPENAI_API_KEY environment variable or pass it as an argument to the constructor.',
       );
     }
-  }
 
-  async callApi(prompt: string): Promise<ProviderResponse> {
     const body = {
       model: this.modelName,
       prompt,
@@ -197,15 +195,15 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       logger.warn(`Using unknown OpenAI chat model: ${modelName}`);
     }
     super(modelName, apiKey);
+  }
 
+  async callApi(prompt: string): Promise<ProviderResponse> {
     if (!this.apiKey) {
       throw new Error(
         'OpenAI API key is not set. Set OPENAI_API_KEY environment variable or pass it as an argument to the constructor.',
       );
     }
-  }
 
-  async callApi(prompt: string): Promise<ProviderResponse> {
     let messages: { role: string; content: string }[];
     try {
       // User can specify `messages` payload as JSON, or we'll just put the
@@ -260,3 +258,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     }
   }
 }
+
+export const DefaultEmbeddingProvider = new OpenAiEmbeddingProvider('text-embedding-ada-002');
+export const DefaultGradingProvider = new OpenAiChatCompletionProvider('gpt-4');

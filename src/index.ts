@@ -1,7 +1,10 @@
 import { evaluate as doEvaluate } from './evaluator.js';
 import { loadApiProvider } from './providers.js';
+import { matchesSimilarity, matchesLlmRubric } from './assertions.js';
 
 import type { ApiProvider, EvaluateOptions, EvaluateSummary } from './types.js';
+
+export * from './types.js';
 
 async function evaluate(
   providers: (string | ApiProvider)[] | (string | ApiProvider),
@@ -30,10 +33,17 @@ async function evaluate(
   });
 }
 
+const assertions = {
+  matchesSimilarity,
+  matchesLlmRubric,
+};
+
 module.exports = {
   evaluate,
+  assertions,
 };
 
 export default {
   evaluate,
+  assertions,
 };

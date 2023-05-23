@@ -175,7 +175,7 @@ This code imports the `promptfoo` library, defines the evaluation options, and t
 ## Configuration
 
 - **[Setting up an eval](https://promptfoo.dev/docs/configuration/parameters)**: Learn more about how to set up prompt files, vars file, output, etc.
-- **[Configuring test cases](https://promptfoo.dev/docs/configuration/expected-outputs)**:  Learn more about how to configure expected outputs and test assertions.
+- **[Configuring test cases](https://promptfoo.dev/docs/configuration/expected-outputs)**: Learn more about how to configure expected outputs and test assertions.
 
 ## Installation
 
@@ -183,7 +183,7 @@ See **[installation docs](https://promptfoo.dev/docs/installation)**
 
 ## API Providers
 
-We support OpenAI's API as well as a number of open-source models.  It's also to set up your own custom API provider.  **[See Provider documentation](https://promptfoo.dev/docs/configuration/providers)** for more details.
+We support OpenAI's API as well as a number of open-source models. It's also to set up your own custom API provider. **[See Provider documentation](https://promptfoo.dev/docs/configuration/providers)** for more details.
 
 ## Development
 

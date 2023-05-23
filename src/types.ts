@@ -43,7 +43,7 @@ export type VarMapping = Record<string, string>;
 
 export interface GradingConfig {
   prompt?: string;
-  provider: ApiProvider;
+  provider?: ApiProvider;
 }
 
 export interface EvaluateOptions {
