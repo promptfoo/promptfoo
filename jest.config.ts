@@ -15,6 +15,7 @@ const config: Config = {
   },
   extensionsToTreatAsEsm: ['.ts'],
   setupFiles: ['<rootDir>/.jest/setEnvVars.js'],
+  testPathIgnorePatterns: ['<rootDir>/examples'],
 };
 
 export default config;
