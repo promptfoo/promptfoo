@@ -30,6 +30,10 @@ async function evaluate(
   });
 }
 
+module.exports = {
+  evaluate,
+};
+
 export default {
   evaluate,
 };

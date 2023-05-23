@@ -1,4 +1,4 @@
-export default {
+module.exports = {
   providers: ['openai:chat:gpt-3.5-turbo'],
   prompts: ['./prompts.txt'],
   vars: './vars.csv',

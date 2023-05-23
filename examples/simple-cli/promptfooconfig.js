@@ -1,5 +1,5 @@
-export default {
-  providers: ['openai:gpt-3-5-turbo'],
+module.exports = {
+  providers: ['openai:gpt-3.5-turbo'],
   prompts: ['./prompts.txt'],
   vars: './vars.csv',
 };

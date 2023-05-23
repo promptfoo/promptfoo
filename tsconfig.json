@@ -4,7 +4,7 @@
     "declarationMap": true,
     "esModuleInterop": true,
     "target": "es2020",
-    "module": "esnext",
+    "module": "CommonJS",
     "moduleResolution": "node",
     "outDir": "dist",
     "skipLibCheck": true,

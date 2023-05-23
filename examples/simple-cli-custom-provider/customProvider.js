@@ -1,4 +1,4 @@
-import fetch from 'node-fetch';
+const fetch = require('node-fetch');
 
 class CustomApiProvider {
   id() {
@@ -34,4 +34,4 @@ class CustomApiProvider {
   }
 }
 
-export default CustomApiProvider;
+module.exports = CustomApiProvider;

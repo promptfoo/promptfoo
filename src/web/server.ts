@@ -4,9 +4,9 @@ import readline from 'node:readline';
 import http from 'node:http';
 
 import debounce from 'debounce';
-import open from 'open';
 import express from 'express';
 import cors from 'cors';
+import opener from 'opener';
 import { Server as SocketIOServer } from 'socket.io';
 
 import promptfoo from '../index.js';
@@ -83,7 +83,7 @@ export function init(port = 15500) {
     rl.question('Do you want to open the browser to the URL? (y/N): ', async (answer) => {
       if (answer.toLowerCase().startsWith('y')) {
         try {
-          await open(url);
+          await opener(url);
           logger.info(`Opening browser to: ${url}`);
         } catch (err) {
           logger.error(`Failed to open browser: ${String(err)}`);
