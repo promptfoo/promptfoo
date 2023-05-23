@@ -34,7 +34,7 @@ These prompts are nunjucks templates, so you can use logic like this:
 {% endif %}`;
   const dummyVars =
     'var1,var2,var3\nvalue1,value2,value3\nanother value1,another value2,another value3';
-  const dummyConfig = `export default {
+  const dummyConfig = `module.exports = {
   prompts: ['prompts.txt'],
   providers: ['openai:gpt-3.5-turbo'],
   vars: 'vars.csv',
@@ -78,6 +78,10 @@ async function main() {
     // @ts-ignore
     defaultConfig = (await import(pathJoin(process.cwd(), './promptfooconfig.js'))).default;
     logger.info('Loaded default config from promptfooconfig.js');
+  }
+  if (existsSync('promptfooconfig.json')) {
+    defaultConfig = JSON.parse(readFileSync('promptfooconfig.json', 'utf-8'));
+    logger.info('Loaded default config from promptfooconfig.json');
   }
 
   const program = new Command();
