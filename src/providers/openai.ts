@@ -14,19 +14,13 @@ const embeddingsCache = new LRUCache<string, ProviderEmbeddingResponse>({
 
 class OpenAiGenericProvider implements ApiProvider {
   modelName: string;
-  apiKey: string;
+  apiKey?: string;
   apiHost: string;
 
   constructor(modelName: string, apiKey?: string) {
     this.modelName = modelName;
 
-    const key = apiKey || process.env.OPENAI_API_KEY;
-    if (!key) {
-      throw new Error(
-        'OpenAI API key is not set. Set OPENAI_API_KEY environment variable or pass it as an argument to the constructor.',
-      );
-    }
-    this.apiKey = key;
+    this.apiKey = apiKey || process.env.OPENAI_API_KEY;
 
     this.apiHost = process.env.OPENAI_API_HOST || DEFAULT_OPENAI_HOST;
   }
@@ -132,6 +126,12 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       logger.warn(`Using unknown OpenAI completion model: ${modelName}`);
     }
     super(modelName, apiKey);
+
+    if (!this.apiKey) {
+      throw new Error(
+        'OpenAI API key is not set. Set OPENAI_API_KEY environment variable or pass it as an argument to the constructor.',
+      );
+    }
   }
 
   async callApi(prompt: string): Promise<ProviderResponse> {
@@ -197,6 +197,12 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       logger.warn(`Using unknown OpenAI chat model: ${modelName}`);
     }
     super(modelName, apiKey);
+
+    if (!this.apiKey) {
+      throw new Error(
+        'OpenAI API key is not set. Set OPENAI_API_KEY environment variable or pass it as an argument to the constructor.',
+      );
+    }
   }
 
   async callApi(prompt: string): Promise<ProviderResponse> {
