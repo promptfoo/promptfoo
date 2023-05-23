@@ -26,7 +26,7 @@ describe('toMatchSemanticSimilarity', () => {
 });
 
 const gradingConfig: GradingConfig = {
-  provider: 'openai:chat:gpt-3-5-turbo',
+  provider: 'openai:chat:gpt-3.5-turbo',
 };
 
 describe('toPassLLMRubric', () => {
