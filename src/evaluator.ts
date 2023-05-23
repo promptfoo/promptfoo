@@ -1,7 +1,7 @@
 import async from 'async';
 import nunjucks from 'nunjucks';
 
-import { checkExpectedValue } from './assertions.js';
+import { matchesExpectedValue } from './assertions.js';
 
 import type { SingleBar } from 'cli-progress';
 import type {
@@ -74,7 +74,7 @@ class Evaluator {
         ret.error = response.error;
       } else if (response.output) {
         const checkResult = vars.__expected
-          ? await checkExpectedValue(vars.__expected, response.output, this.options)
+          ? await matchesExpectedValue(vars.__expected, response.output, this.options)
           : { pass: true };
         if (!checkResult.pass) {
           ret.error = checkResult.reason || `Expected: ${vars.__expected}`;

@@ -45,3 +45,11 @@ export async function loadApiProvider(providerPath: string): Promise<ApiProvider
   const CustomApiProvider = (await import(path.join(process.cwd(), providerPath))).default;
   return new CustomApiProvider();
 }
+
+export default {
+  OpenAiCompletionProvider,
+  OpenAiChatCompletionProvider,
+  LocalAiCompletionProvider,
+  LocalAiChatProvider,
+  loadApiProvider,
+};

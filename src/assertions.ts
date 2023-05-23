@@ -2,6 +2,7 @@ import nunjucks from 'nunjucks';
 
 import { DefaultEmbeddingProvider, DefaultGradingProvider } from './providers/openai.js';
 import { cosineSimilarity } from './util.js';
+import { loadApiProvider } from './providers.js';
 import { DEFAULT_GRADING_PROMPT } from './prompts.js';
 
 import type { EvaluateOptions, GradingConfig, TokenUsage } from './types.js';
@@ -16,7 +17,7 @@ const SIMILAR_REGEX = /similar(?::|\((\d+(\.\d+)?)\):)/;
 
 const DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD = 0.8;
 
-export async function checkExpectedValue(
+export async function matchesExpectedValue(
   expected: string,
   output: string,
   options: EvaluateOptions,
@@ -106,7 +107,10 @@ export async function matchesLlmRubric(
     rubric: expected,
   });
 
-  const provider = options.provider || DefaultGradingProvider;
+  let provider = options.provider || DefaultGradingProvider;
+  if (typeof provider === 'string') {
+    provider = await loadApiProvider(provider);
+  }
   const resp = await provider.callApi(prompt);
   if (resp.error || !resp.output) {
     return {
@@ -140,3 +144,8 @@ export async function matchesLlmRubric(
     };
   }
 }
+
+export default {
+  matchesSimilarity,
+  matchesLlmRubric,
+};
