@@ -7,7 +7,7 @@ export interface CommandLineOptions {
   verbose?: boolean;
   maxConcurrency?: string;
   grader?: string;
-  view?: boolean;
+  view?: string;
   noWrite?: boolean;
   tableCellMaxLength?: string;
 

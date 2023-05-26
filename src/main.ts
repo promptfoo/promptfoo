@@ -164,7 +164,7 @@ async function main() {
     .option('--no-write', 'Do not write results to promptfoo directory')
     .option('--grader', 'Model that will grade outputs', defaultConfig.grader)
     .option('--verbose', 'Show debug logs', defaultConfig.verbose)
-    .option('--view', 'View in browser ui')
+    .option('--view <port>', 'View in browser ui', '15500')
     .action(async (cmdObj: CommandLineOptions & Command) => {
       if (cmdObj.verbose) {
         setLogLevel('debug');
@@ -202,7 +202,7 @@ async function main() {
         providers,
         showProgressBar: true,
         maxConcurrency: !isNaN(maxConcurrency) && maxConcurrency > 0 ? maxConcurrency : undefined,
-        promptOptions: {
+        prompt: {
           prefix: cmdObj.promptPrefix,
           suffix: cmdObj.promptSuffix,
         },
@@ -215,7 +215,7 @@ async function main() {
         };
       }
       if (cmdObj.generateSuggestions) {
-        options.promptOptions!.generateSuggestions = true;
+        options.prompt!.generateSuggestions = true;
       }
 
       const summary = await evaluate(options);
@@ -277,7 +277,7 @@ async function main() {
       logger.info('Done.');
 
       if (cmdObj.view) {
-        init(15500);
+        init(parseInt(cmdObj.view, 10) || 15500);
       }
     });
 
