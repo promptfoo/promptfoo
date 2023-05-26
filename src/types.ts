@@ -10,6 +10,10 @@ export interface CommandLineOptions {
   view?: boolean;
   noWrite?: boolean;
   tableCellMaxLength?: string;
+
+  generateSuggestions?: boolean;
+  promptPrefix?: string;
+  promptSuffix?: string;
 }
 
 export interface ApiProvider {
@@ -55,6 +59,12 @@ export interface EvaluateOptions {
   showProgressBar?: boolean;
 
   grading?: GradingConfig;
+
+  promptOptions?: {
+    prefix?: string;
+    suffix?: string;
+    generateSuggestions?: boolean;
+  };
 }
 
 export interface Prompt {

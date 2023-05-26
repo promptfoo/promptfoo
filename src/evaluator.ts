@@ -1,6 +1,10 @@
+import readline from 'node:readline';
+
 import async from 'async';
+import chalk from 'chalk';
 import nunjucks from 'nunjucks';
 
+import logger from './logger.js';
 import { matchesExpectedValue } from './assertions.js';
 
 import type { SingleBar } from 'cli-progress';
@@ -13,6 +17,7 @@ import type {
   EvaluateTable,
   Prompt,
 } from './types.js';
+import { generatePrompts } from './suggestions.js';
 
 interface RunEvalOptions {
   provider: ApiProvider;
@@ -110,6 +115,48 @@ class Evaluator {
     const options = this.options;
     const prompts: Prompt[] = [];
 
+    if (options.promptOptions?.generateSuggestions) {
+      logger.info(`Generating prompt variations...`);
+      const { prompts: newPrompts, error } = await generatePrompts(options.prompts[0], 1);
+      if (error || !newPrompts) {
+        throw new Error(`Failed to generate prompts: ${error}`);
+      }
+
+      logger.info(chalk.blue('Generated prompts:'));
+      let numAdded = 0;
+      for (const prompt of newPrompts) {
+        logger.info('--------------------------------------------------------');
+        logger.info(`${prompt}`);
+        logger.info('--------------------------------------------------------');
+
+        // Ask the user if they want to continue
+        await new Promise((resolve) => {
+          const rl = readline.createInterface({
+            input: process.stdin,
+            output: process.stdout,
+          });
+          rl.question(
+            `${chalk.blue('Do you want to test this prompt?')} (y/N): `,
+            async (answer) => {
+              rl.close();
+              if (answer.toLowerCase().startsWith('y')) {
+                options.prompts.push(prompt);
+                numAdded++;
+              } else {
+                logger.info('Skipping this prompt.');
+              }
+              resolve(true);
+            },
+          );
+        });
+      }
+
+      if (numAdded < 1) {
+        logger.info(chalk.red('No prompts selected. Aborting.'));
+        process.exit(1);
+      }
+    }
+
     for (const promptContent of options.prompts) {
       for (const provider of options.providers) {
         const display =
@@ -122,16 +169,20 @@ class Evaluator {
     }
 
     const vars = options.vars && options.vars.length > 0 ? options.vars : [{}];
-    const varsWithExpectedKeyRemoved = vars.map((v) => {
+    const varsWithSpecialColsRemoved = vars.map((v) => {
       const ret = { ...v };
-      delete ret.__expected;
+      Object.keys(ret).forEach((key) => {
+        if (key.startsWith('__')) {
+          delete ret[key];
+        }
+      });
       return ret;
     });
     const isTest = vars[0].__expected;
     const table: EvaluateTable = {
       head: {
         prompts: prompts.map((p) => p.display),
-        vars: Object.keys(varsWithExpectedKeyRemoved[0]),
+        vars: Object.keys(varsWithSpecialColsRemoved[0]),
       },
       body: [],
     };
@@ -159,11 +210,15 @@ class Evaluator {
     let rowIndex = 0;
     for (const row of vars) {
       let colIndex = 0;
+
+      const prependToPrompt = row.__prefix || options.promptOptions?.prefix || '';
+      const appendToPrompt = row.__suffix || options.promptOptions?.suffix || '';
+
       for (const promptContent of options.prompts) {
         for (const provider of options.providers) {
           runEvalOptions.push({
             provider,
-            prompt: promptContent,
+            prompt: prependToPrompt + promptContent + appendToPrompt,
             vars: row,
             includeProviderId: options.providers.length > 1,
             rowIndex,

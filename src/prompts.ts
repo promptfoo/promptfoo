@@ -18,3 +18,12 @@ Rubric: Does not speak like a pirate
     content: 'Content: {{ content }}\nRubric: {{ rubric }}',
   },
 ]);
+
+export const SUGGEST_PROMPTS_SYSTEM_MESSAGE = {
+  role: 'system',
+  content: `You're helping a scientist who is tuning a prompt for a large language model.  You will receive messages, and each message is a full prompt.  Generate a candidate variation of the given prompt.  This variation will be tested for quality in order to select a winner.
+
+Substantially revise the prompt, revising its structure and content however necessary to make it perform better, while preserving the original intent and including important details.
+
+Your output is going to be copied directly into the program. It should contain the prompt ONLY`,
+};

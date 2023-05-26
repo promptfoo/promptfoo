@@ -12,6 +12,10 @@ const embeddingsCache = new LRUCache<string, ProviderEmbeddingResponse>({
   max: 1000,
 });
 
+interface OpenAiCompletionOptions {
+  temperature: number;
+}
+
 class OpenAiGenericProvider implements ApiProvider {
   modelName: string;
   apiKey?: string;
@@ -34,7 +38,7 @@ class OpenAiGenericProvider implements ApiProvider {
   }
 
   // @ts-ignore: Prompt is not used in this implementation
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(prompt: string, options?: OpenAiCompletionOptions): Promise<ProviderResponse> {
     throw new Error('Not implemented');
   }
 }
@@ -126,7 +130,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
     super(modelName, apiKey);
   }
 
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(prompt: string, options?: OpenAiCompletionOptions): Promise<ProviderResponse> {
     if (!this.apiKey) {
       throw new Error(
         'OpenAI API key is not set. Set OPENAI_API_KEY environment variable or pass it as an argument to the constructor.',
@@ -137,7 +141,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       model: this.modelName,
       prompt,
       max_tokens: process.env.OPENAI_MAX_TOKENS || 1024,
-      temperature: process.env.OPENAI_TEMPERATURE || 0,
+      temperature: options?.temperature ?? (process.env.OPENAI_MAX_TEMPERATURE || 0),
       stop: process.env.OPENAI_STOP ? JSON.parse(process.env.OPENAI_STOP) : undefined,
     };
     logger.debug(`Calling OpenAI API: ${JSON.stringify(body)}`);
@@ -197,7 +201,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     super(modelName, apiKey);
   }
 
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  // TODO(ian): support passing in `messages` directly
+  async callApi(prompt: string, options?: OpenAiCompletionOptions): Promise<ProviderResponse> {
     if (!this.apiKey) {
       throw new Error(
         'OpenAI API key is not set. Set OPENAI_API_KEY environment variable or pass it as an argument to the constructor.',
@@ -216,7 +221,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       model: this.modelName,
       messages: messages,
       max_tokens: process.env.OPENAI_MAX_TOKENS || 1024,
-      temperature: process.env.OPENAI_MAX_TEMPERATURE || 0,
+      temperature: options?.temperature ?? (process.env.OPENAI_MAX_TEMPERATURE || 0),
     };
     logger.debug(`Calling OpenAI API: ${JSON.stringify(body)}`);
 
@@ -261,3 +266,4 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
 export const DefaultEmbeddingProvider = new OpenAiEmbeddingProvider('text-embedding-ada-002');
 export const DefaultGradingProvider = new OpenAiChatCompletionProvider('gpt-4');
+export const DefaultSuggestionsProvider = new OpenAiChatCompletionProvider('gpt-4');

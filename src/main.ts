@@ -147,6 +147,20 @@ async function main() {
       'Truncate console table cells to this length',
       '250',
     )
+    .option(
+      '--suggest-prompts <number>',
+      'Generate N new prompts and append them to the prompt list',
+    )
+    .option(
+      '--prompt-prefix <path>',
+      'This prefix is prepended to every prompt',
+      defaultConfig.promptPrefix,
+    )
+    .option(
+      '--prompt-suffix <path>',
+      'This suffix is append to every prompt',
+      defaultConfig.promptSuffix,
+    )
     .option('--no-write', 'Do not write results to promptfoo directory')
     .option('--grader', 'Model that will grade outputs', defaultConfig.grader)
     .option('--verbose', 'Show debug logs', defaultConfig.verbose)
@@ -188,6 +202,10 @@ async function main() {
         providers,
         showProgressBar: true,
         maxConcurrency: !isNaN(maxConcurrency) && maxConcurrency > 0 ? maxConcurrency : undefined,
+        promptOptions: {
+          prefix: cmdObj.promptPrefix,
+          suffix: cmdObj.promptSuffix,
+        },
         ...config,
       };
 
@@ -195,6 +213,9 @@ async function main() {
         options.grading = {
           provider: await loadApiProvider(cmdObj.grader),
         };
+      }
+      if (cmdObj.generateSuggestions) {
+        options.promptOptions!.generateSuggestions = true;
       }
 
       const summary = await evaluate(options);
