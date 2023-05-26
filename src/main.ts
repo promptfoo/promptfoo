@@ -164,7 +164,7 @@ async function main() {
     .option('--no-write', 'Do not write results to promptfoo directory')
     .option('--grader', 'Model that will grade outputs', defaultConfig.grader)
     .option('--verbose', 'Show debug logs', defaultConfig.verbose)
-    .option('--view <port>', 'View in browser ui', '15500')
+    .option('--view [port]', 'View in browser ui')
     .action(async (cmdObj: CommandLineOptions & Command) => {
       if (cmdObj.verbose) {
         setLogLevel('debug');
