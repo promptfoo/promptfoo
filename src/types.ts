@@ -50,6 +50,12 @@ export interface GradingConfig {
   provider?: string | ApiProvider;
 }
 
+export interface PromptConfig {
+  prefix?: string;
+  suffix?: string;
+  generateSuggestions?: boolean;
+}
+
 export interface EvaluateOptions {
   providers: ApiProvider[];
   prompts: string[];
@@ -60,11 +66,7 @@ export interface EvaluateOptions {
 
   grading?: GradingConfig;
 
-  promptOptions?: {
-    prefix?: string;
-    suffix?: string;
-    generateSuggestions?: boolean;
-  };
+  prompt?: PromptConfig;
 }
 
 export interface Prompt {

@@ -115,7 +115,7 @@ class Evaluator {
     const options = this.options;
     const prompts: Prompt[] = [];
 
-    if (options.promptOptions?.generateSuggestions) {
+    if (options.prompt?.generateSuggestions) {
       logger.info(`Generating prompt variations...`);
       const { prompts: newPrompts, error } = await generatePrompts(options.prompts[0], 1);
       if (error || !newPrompts) {
@@ -211,8 +211,8 @@ class Evaluator {
     for (const row of vars) {
       let colIndex = 0;
 
-      const prependToPrompt = row.__prefix || options.promptOptions?.prefix || '';
-      const appendToPrompt = row.__suffix || options.promptOptions?.suffix || '';
+      const prependToPrompt = row.__prefix || options.prompt?.prefix || '';
+      const appendToPrompt = row.__suffix || options.prompt?.suffix || '';
 
       for (const promptContent of options.prompts) {
         for (const provider of options.providers) {
