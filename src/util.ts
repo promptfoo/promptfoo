@@ -5,6 +5,7 @@ import * as os from 'node:os';
 import fetch from 'node-fetch';
 import yaml from 'js-yaml';
 import nunjucks from 'nunjucks';
+import { globSync } from 'glob';
 import { parse as parsePath } from 'path';
 import { CsvRow } from './types.js';
 import { parse as parseCsv } from 'csv-parse/sync';
@@ -27,8 +28,24 @@ function parseJson(json: string): any | undefined {
   }
 }
 
-export function readPrompts(promptPaths: string[]): string[] {
-  let promptContents = promptPaths.map((path) => fs.readFileSync(path, 'utf-8'));
+export function readPrompts(promptPathsOrGlobs: string[]): string[] {
+  const promptPaths = promptPathsOrGlobs.flatMap((pathOrGlob) => globSync(pathOrGlob));
+  let promptContents: string[] = [];
+
+  for (const promptPath of promptPaths) {
+    const stat = fs.statSync(promptPath);
+    if (stat.isDirectory()) {
+      const filesInDirectory = fs.readdirSync(promptPath);
+      const fileContents = filesInDirectory.map((fileName) =>
+        fs.readFileSync(path.join(promptPath, fileName), 'utf-8'),
+      );
+      promptContents.push(...fileContents);
+    } else {
+      const fileContent = fs.readFileSync(promptPath, 'utf-8');
+      promptContents.push(fileContent);
+    }
+  }
+
   if (promptContents.length === 1) {
     promptContents = promptContents[0].split(PROMPT_DELIMITER).map((p) => p.trim());
   }

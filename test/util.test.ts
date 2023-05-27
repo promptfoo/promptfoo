@@ -1,14 +1,22 @@
 import * as fs from 'fs';
+import * as path from 'path';
+
+import { globSync } from 'glob';
 
 import { readVars, readPrompts, writeOutput } from '../src/util.js';
 
 import type { EvaluateResult, EvaluateTable } from '../src/types.js';
 
 jest.mock('node-fetch', () => jest.fn());
+jest.mock('glob', () => ({
+  globSync: jest.fn(),
+}));
 
 jest.mock('fs', () => ({
   readFileSync: jest.fn(),
   writeFileSync: jest.fn(),
+  statSync: jest.fn(),
+  readdirSync: jest.fn(),
 }));
 
 jest.mock('../src/esm.js');
@@ -20,6 +28,7 @@ describe('util', () => {
 
   test('readPrompts with single prompt file', () => {
     (fs.readFileSync as jest.Mock).mockReturnValue('Test prompt 1\n---\nTest prompt 2');
+    (fs.statSync as jest.Mock).mockReturnValue({ isDirectory: () => false });
     const promptPaths = ['prompts.txt'];
 
     const result = readPrompts(promptPaths);
@@ -32,6 +41,7 @@ describe('util', () => {
     (fs.readFileSync as jest.Mock)
       .mockReturnValueOnce('Test prompt 1')
       .mockReturnValueOnce('Test prompt 2');
+    (fs.statSync as jest.Mock).mockReturnValue({ isDirectory: () => false });
     const promptPaths = ['prompt1.txt', 'prompt2.txt'];
 
     const result = readPrompts(promptPaths);
@@ -40,8 +50,30 @@ describe('util', () => {
     expect(result).toEqual(['Test prompt 1', 'Test prompt 2']);
   });
 
+  test('readPrompts with directory', () => {
+    (fs.statSync as jest.Mock).mockReturnValue({ isDirectory: () => true });
+    (globSync as jest.Mock).mockReturnValue(['prompts']);
+    (fs.readdirSync as jest.Mock).mockReturnValue(['prompt1.txt', 'prompt2.txt']);
+    (fs.readFileSync as jest.Mock).mockImplementation((filePath) => {
+      if (filePath === path.join('prompts', 'prompt1.txt')) {
+        return 'Test prompt 1';
+      } else if (filePath === path.join('prompts', 'prompt2.txt')) {
+        return 'Test prompt 2';
+      }
+    });
+    const promptPaths = ['prompts'];
+
+    const result = readPrompts(promptPaths);
+
+    expect(fs.statSync).toHaveBeenCalledTimes(1);
+    expect(fs.readdirSync).toHaveBeenCalledTimes(1);
+    expect(fs.readFileSync).toHaveBeenCalledTimes(2);
+    expect(result).toEqual(['Test prompt 1', 'Test prompt 2']);
+  });
+
   test('readPrompts with empty input', () => {
     (fs.readFileSync as jest.Mock).mockReturnValue('');
+    (fs.statSync as jest.Mock).mockReturnValue({ isDirectory: () => false });
     const promptPaths = ['prompts.txt'];
 
     const result = readPrompts(promptPaths);
