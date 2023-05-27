@@ -65,8 +65,12 @@ export function writeOutput(outputPath: string, summary: EvaluateSummary): void 
     fs.writeFileSync(outputPath, yaml.dump(summary));
   } else if (outputExtension === 'html') {
     const template = fs.readFileSync(`${getDirectory()}/tableOutput.html`, 'utf-8');
+    const table = [
+      [...summary.table.head.prompts, ...summary.table.head.vars],
+      ...summary.table.body.map((row) => [...row.outputs, ...row.vars]),
+    ];
     const htmlOutput = nunjucks.renderString(template, {
-      table: summary.table,
+      table,
       results: summary.results,
     });
     fs.writeFileSync(outputPath, htmlOutput);
