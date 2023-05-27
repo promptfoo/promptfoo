@@ -139,7 +139,40 @@ describe('evaluator', () => {
     expect(summary.results[0].response?.output).toBe('Test output');
   });
 
-  test('evaluate with eval expected value', async () => {
+  test('evaluate with fn: expected value', async () => {
+    const options = {
+      prompts: ['Test prompt'],
+      vars: [{ __expected: 'fn:output === "Test output";' }],
+      providers: [mockApiProvider],
+    };
+
+    const summary = await evaluate(options);
+
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
+    expect(summary.stats.successes).toBe(1);
+    expect(summary.stats.failures).toBe(0);
+    expect(summary.results[0].success).toBe(true);
+    expect(summary.results[0].response?.output).toBe('Test output');
+  });
+
+  test('evaluate with fn: expected value not matching output', async () => {
+    const options = {
+      prompts: ['Test prompt'],
+      vars: [{ __expected: 'fn:output === "Different output";' }],
+      providers: [mockApiProvider],
+    };
+
+    const summary = await evaluate(options);
+
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
+    expect(summary.stats.successes).toBe(0);
+    expect(summary.stats.failures).toBe(1);
+    expect(summary.results[0].success).toBe(false);
+    expect(summary.results[0].response?.output).toBe('Test output');
+  });
+
+  // TODO(1.0): remove legacy test
+  test('evaluate with eval: (legacy) expected value', async () => {
     const options = {
       prompts: ['Test prompt'],
       vars: [{ __expected: 'eval:output === "Test output";' }],
@@ -155,7 +188,7 @@ describe('evaluator', () => {
     expect(summary.results[0].response?.output).toBe('Test output');
   });
 
-  test('evaluate with eval expected value not matching output', async () => {
+  test('evaluate with eval: (legacy) expected value not matching output', async () => {
     const options = {
       prompts: ['Test prompt'],
       vars: [{ __expected: 'eval:output === "Different output";' }],

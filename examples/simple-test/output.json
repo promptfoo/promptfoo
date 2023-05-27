@@ -7,7 +7,7 @@
       },
       "vars": {
         "body": "Hello world",
-        "__expected": "eval:output.toLowerCase().includes('ahoy')"
+        "__expected": "fn:output.toLowerCase().includes('ahoy')"
       },
       "response": {
         "output": "Ahoy mateys o' the world!",
@@ -26,7 +26,7 @@
       },
       "vars": {
         "body": "Hello world",
-        "__expected": "eval:output.toLowerCase().includes('ahoy')"
+        "__expected": "fn:output.toLowerCase().includes('ahoy')"
       },
       "response": {
         "output": "Ahoy there, me hearties! Avast ye landlubbers! 'Tis I, a fearsome pirate, comin' to ye from the seven seas. Ahoy, hello world!",
@@ -45,7 +45,7 @@
       },
       "vars": {
         "body": "I'm hungry",
-        "__expected": "eval:output.toLowerCase().includes('grub')"
+        "__expected": "fn:output.toLowerCase().includes('grub')"
       },
       "response": {
         "output": "I be starvin'!",
@@ -56,7 +56,7 @@
         }
       },
       "success": false,
-      "error": "Expected: eval:output.toLowerCase().includes('grub')"
+      "error": "Expected: fn:output.toLowerCase().includes('grub')"
     },
     {
       "prompt": {
@@ -65,7 +65,7 @@
       },
       "vars": {
         "body": "I'm hungry",
-        "__expected": "eval:output.toLowerCase().includes('grub')"
+        "__expected": "fn:output.toLowerCase().includes('grub')"
       },
       "response": {
         "output": "Arrr, me belly be rumblin'! I be needin' some grub, mateys! Bring me some vittles or ye'll be walkin' the plank!",
@@ -105,7 +105,7 @@
       },
       {
         "outputs": [
-          "[FAIL] Expected: eval:output.toLowerCase().includes('grub')\n---\nI be starvin'!",
+          "[FAIL] Expected: fn:output.toLowerCase().includes('grub')\n---\nI be starvin'!",
           "[PASS] Arrr, me belly be rumblin'! I be needin' some grub, mateys! Bring me some vittles or ye'll be walkin' the plank!"
         ],
         "vars": ["I'm hungry"]
