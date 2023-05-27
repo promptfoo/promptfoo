@@ -36,7 +36,9 @@ export function readPrompts(promptPathsOrGlobs: string[]): string[] {
     const stat = fs.statSync(promptPath);
     if (stat.isDirectory()) {
       const filesInDirectory = fs.readdirSync(promptPath);
-      const fileContents = filesInDirectory.map((fileName) => fs.readFileSync(path.join(promptPath, fileName), 'utf-8'));
+      const fileContents = filesInDirectory.map((fileName) =>
+        fs.readFileSync(path.join(promptPath, fileName), 'utf-8'),
+      );
       promptContents.push(...fileContents);
     } else {
       const fileContent = fs.readFileSync(promptPath, 'utf-8');

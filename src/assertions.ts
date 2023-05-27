@@ -30,8 +30,8 @@ export async function matchesExpectedValue(
     return matchesSimilarity(rest, output, threshold);
   } else if (expected.startsWith('fn:') || expected.startsWith('eval:')) {
     // TODO(1.0): delete eval: legacy option
-    const sliceLength = expected.startsWith('fn:') ? 'fn:'.length : 'eval:'.length
-    const functionBody = expected.slice( sliceLength );
+    const sliceLength = expected.startsWith('fn:') ? 'fn:'.length : 'eval:'.length;
+    const functionBody = expected.slice(sliceLength);
 
     const customFunction = new Function('output', `return ${functionBody}`);
     return { pass: customFunction(output) };
