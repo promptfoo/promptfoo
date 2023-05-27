@@ -30,7 +30,20 @@ function parseJson(json: string): any | undefined {
 
 export function readPrompts(promptPathsOrGlobs: string[]): string[] {
   const promptPaths = promptPathsOrGlobs.flatMap((pathOrGlob) => globSync(pathOrGlob));
-  let promptContents = promptPaths.map((path) => fs.readFileSync(path, 'utf-8'));
+  let promptContents: string[] = [];
+
+  for (const promptPath of promptPaths) {
+    const stat = fs.statSync(promptPath);
+    if (stat.isDirectory()) {
+      const filesInDirectory = fs.readdirSync(promptPath);
+      const fileContents = filesInDirectory.map((fileName) => fs.readFileSync(path.join(promptPath, fileName), 'utf-8'));
+      promptContents.push(...fileContents);
+    } else {
+      const fileContent = fs.readFileSync(promptPath, 'utf-8');
+      promptContents.push(fileContent);
+    }
+  }
+
   if (promptContents.length === 1) {
     promptContents = promptContents[0].split(PROMPT_DELIMITER).map((p) => p.trim());
   }
