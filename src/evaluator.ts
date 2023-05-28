@@ -129,6 +129,7 @@ class Evaluator {
     const prompts: Prompt[] = [];
 
     if (options.generateSuggestions) {
+      // TODO(ian): Move this into its own command/file
       logger.info(`Generating prompt variations...`);
       const { prompts: newPrompts, error } = await generatePrompts(testSuite.prompts[0], 1);
       if (error || !newPrompts) {
