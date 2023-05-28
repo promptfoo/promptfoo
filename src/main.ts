@@ -12,9 +12,10 @@ import { evaluate } from './evaluator.js';
 import { readPrompts, readVars, writeLatestResults, writeOutput } from './util.js';
 import { getDirectory } from './esm.js';
 import { init } from './web/server.js';
-
-import type { CommandLineOptions, EvaluateOptions, VarMapping } from './types.js';
+import { assertionFromString } from './assertions.js';
 import { disableCache } from './cache.js';
+
+import type { CommandLineOptions, EvaluateOptions, TestSuite, VarMapping } from './types.js';
 
 function createDummyFiles(directory: string | null) {
   if (directory) {
@@ -201,29 +202,43 @@ async function main() {
         cmdObj.providers.map(async (p) => await loadApiProvider(p)),
       );
       const maxConcurrency = parseInt(cmdObj.maxConcurrency || '', 10);
-      const options: EvaluateOptions = {
+
+      const testSuite: TestSuite = {
         prompts: readPrompts(cmdObj.prompts),
-        vars,
         providers,
+        defaultProperties: {
+          prompt: {
+            prefix: cmdObj.promptPrefix,
+            suffix: cmdObj.promptSuffix,
+          },
+        },
+        tests: vars.map((v) => {
+          const assertions = [];
+          if (v.__expected) {
+            assertions.push(assertionFromString(v.__expected));
+          }
+          return {
+            vars: v,
+          };
+        }),
+      };
+
+      const options: EvaluateOptions = {
         showProgressBar: true,
         maxConcurrency: !isNaN(maxConcurrency) && maxConcurrency > 0 ? maxConcurrency : undefined,
-        prompt: {
-          prefix: cmdObj.promptPrefix,
-          suffix: cmdObj.promptSuffix,
-        },
         ...config,
       };
 
       if (cmdObj.grader) {
-        options.grading = {
+        testSuite.defaultProperties!.grading = {
           provider: await loadApiProvider(cmdObj.grader),
         };
       }
       if (cmdObj.generateSuggestions) {
-        options.prompt!.generateSuggestions = true;
+        options.generateSuggestions = true;
       }
 
-      const summary = await evaluate(options);
+      const summary = await evaluate(testSuite, options);
 
       if (cmdObj.output) {
         logger.info(chalk.yellow(`Writing output to ${cmdObj.output}`));

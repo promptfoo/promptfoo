@@ -32,7 +32,7 @@ It works on the command line too:
 
 Start by establishing a handful of test cases - core use cases and failure cases that you want to ensure your prompt can handle.
 
-As you explore modifications to the prompt, use `promptfoo eval` to rate all outputs.  This ensures the prompt is actually improving overall.
+As you explore modifications to the prompt, use `promptfoo eval` to rate all outputs. This ensures the prompt is actually improving overall.
 
 As you collect more examples and establish a user feedback loop, continue to build the pool of test cases.
 

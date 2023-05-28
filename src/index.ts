@@ -3,13 +3,16 @@ import { loadApiProvider } from './providers.js';
 import assertions from './assertions.js';
 import providers from './providers.js';
 
-import type { ApiProvider, EvaluateOptions, EvaluateSummary } from './types.js';
+import type { ApiProvider, EvaluateOptions, EvaluateSummary, TestSuite } from './types.js';
 
 export * from './types.js';
 
+async function evaluate() {}
+/*
 async function evaluate(
-  providers: (string | ApiProvider)[] | (string | ApiProvider),
-  options: Omit<EvaluateOptions, 'providers'>,
+  // providers: (string | ApiProvider)[] | (string | ApiProvider),
+  testSuite: TestSuite,
+  options: EvaluateOptions,
 ): Promise<EvaluateSummary> {
   let apiProviders: ApiProvider[] = [];
   const addProvider = async (provider: ApiProvider | string) => {
@@ -33,6 +36,7 @@ async function evaluate(
     providers: apiProviders,
   });
 }
+ */
 
 module.exports = {
   evaluate,

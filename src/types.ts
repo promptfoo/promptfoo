@@ -55,20 +55,12 @@ export interface GradingConfig {
 export interface PromptConfig {
   prefix?: string;
   suffix?: string;
-  generateSuggestions?: boolean;
 }
 
 export interface EvaluateOptions {
-  providers: ApiProvider[];
-  prompts: string[];
-  vars?: VarMapping[];
-
   maxConcurrency?: number;
   showProgressBar?: boolean;
-
-  grading?: GradingConfig;
-
-  prompt?: PromptConfig;
+  generateSuggestions?: boolean;
 }
 
 export interface Prompt {
@@ -107,4 +99,28 @@ export interface EvaluateSummary {
   results: EvaluateResult[];
   table: EvaluateTable;
   stats: EvaluateStats;
+}
+
+export interface Assertion {
+  type: 'equality' | 'function' | 'similarity' | 'llm-rubric';
+  value?: string;
+  threshold?: number;
+  provider?: ApiProvider; // Some assertions require an LLM provider
+}
+
+// Each test case is graded pass/fail.  A test case represents a unique input to the LLM after substituting `vars` in the prompt.
+export interface TestCase {
+  name?: string;
+  vars?: Record<string, string>;
+  assert?: Assertion[];
+  prompt?: PromptConfig;
+  grading?: GradingConfig;
+}
+
+// The test suite defines the "knobs" that we are tuning in prompt engineering: providers and prompts
+export interface TestSuite {
+  providers: ApiProvider[];
+  prompts: string[];
+  tests: TestCase[];
+  defaultProperties?: Omit<TestCase, 'name'>;
 }

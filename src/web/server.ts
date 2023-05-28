@@ -32,24 +32,6 @@ export function init(port = 15500) {
     },
   });
 
-  interface EvaluateRequestBody {
-    provider: string;
-    options: {
-      prompts: string[];
-      vars: Record<string, string>[];
-    };
-  }
-
-  app.post('/evaluate', async (req: Request, res: Response) => {
-    try {
-      const { provider, options } = req.body as EvaluateRequestBody;
-      const summary = await promptfoo.evaluate(provider, options);
-      res.json(summary);
-    } catch (error) {
-      res.status(500).json({ message: 'Error evaluating prompts' });
-    }
-  });
-
   const latestJsonPath = getLatestResultsPath();
   const readLatestJson = () => {
     const data = fs.readFileSync(latestJsonPath, 'utf8');
