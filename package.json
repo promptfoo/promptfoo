@@ -1,5 +1,6 @@
 {
   "name": "promptfoo",
+  "description": "Prompt engineering toolkit",
   "author": "Ian Webster",
   "version": "0.6.0",
   "license": "MIT",
