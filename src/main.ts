@@ -14,6 +14,7 @@ import { getDirectory } from './esm.js';
 import { init } from './web/server.js';
 
 import type { CommandLineOptions, EvaluateOptions, VarMapping } from './types.js';
+import { disableCache } from './cache.js';
 
 function createDummyFiles(directory: string | null) {
   if (directory) {
@@ -162,14 +163,11 @@ async function main() {
       defaultConfig.promptSuffix,
     )
     .option('--no-write', 'Do not write results to promptfoo directory')
+    .option('--no-cache', 'Do not read or write results to disk cache')
     .option('--grader', 'Model that will grade outputs', defaultConfig.grader)
     .option('--verbose', 'Show debug logs', defaultConfig.verbose)
     .option('--view [port]', 'View in browser ui')
     .action(async (cmdObj: CommandLineOptions & Command) => {
-      if (cmdObj.verbose) {
-        setLogLevel('debug');
-      }
-
       const configPath = cmdObj.config;
       let config = {};
       if (configPath) {
@@ -185,6 +183,13 @@ async function main() {
           default:
             throw new Error(`Unsupported configuration file format: ${ext}`);
         }
+      }
+
+      if (cmdObj.verbose) {
+        setLogLevel('debug');
+      }
+      if (!cmdObj.cache) {
+        disableCache();
       }
 
       let vars: VarMapping[] = [];
@@ -263,7 +268,7 @@ async function main() {
 
         logger.info('\n' + table.toString());
       }
-      if (cmdObj.noWrite || cmdObj.view) {
+      if (cmdObj.view || !cmdObj.write) {
         logger.info('Evaluation complete');
       } else {
         writeLatestResults(summary);
@@ -272,7 +277,7 @@ async function main() {
       logger.info(chalk.green.bold(`Successes: ${summary.stats.successes}`));
       logger.info(chalk.red.bold(`Failures: ${summary.stats.failures}`));
       logger.info(
-        `Token usage: Total ${summary.stats.tokenUsage.total} Prompt ${summary.stats.tokenUsage.prompt} Completion ${summary.stats.tokenUsage.completion}`,
+        `Token usage: Total ${summary.stats.tokenUsage.total}, Prompt ${summary.stats.tokenUsage.prompt}, Completion ${summary.stats.tokenUsage.completion}, Cached ${summary.stats.tokenUsage.cached}`,
       );
       logger.info('Done.');
 

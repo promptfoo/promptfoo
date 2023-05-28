@@ -44,6 +44,7 @@ class Evaluator {
         total: 0,
         prompt: 0,
         completion: 0,
+        cached: 0,
       },
     };
   }
@@ -94,6 +95,7 @@ class Evaluator {
       this.stats.tokenUsage.total += response.tokenUsage?.total || 0;
       this.stats.tokenUsage.prompt += response.tokenUsage?.prompt || 0;
       this.stats.tokenUsage.completion += response.tokenUsage?.completion || 0;
+      this.stats.tokenUsage.cached += response.tokenUsage?.cached || 0;
 
       if (ret.success) {
         this.stats.successes++;

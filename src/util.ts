@@ -139,7 +139,6 @@ export function writeLatestResults(results: EvaluateSummary) {
   try {
     fs.mkdirSync(path.dirname(latestResultsPath), { recursive: true });
     fs.writeFileSync(latestResultsPath, JSON.stringify(results, null, 2));
-    logger.info(`Wrote latest results to ${latestResultsPath}.`);
   } catch (err) {
     logger.error(`Failed to write latest results to ${latestResultsPath}:\n${err}`);
   }

@@ -38,6 +38,7 @@
   },
   "devDependencies": {
     "@types/async": "^3.2.20",
+    "@types/cache-manager-fs-hash": "^0.0.1",
     "@types/cli-progress": "^3.11.0",
     "@types/cors": "^2.8.13",
     "@types/debounce": "^1.2.1",
@@ -57,6 +58,8 @@
   },
   "dependencies": {
     "async": "^3.2.4",
+    "cache-manager": "^4.1.0",
+    "cache-manager-fs-hash": "^1.0.0",
     "chalk": "^4.1.2",
     "cli-progress": "^3.12.0",
     "cli-table3": "^0.6.3",
@@ -68,7 +71,6 @@
     "express": "^4.18.2",
     "glob": "^10.2.6",
     "js-yaml": "^4.1.0",
-    "lru-cache": "^9.1.1",
     "node-fetch": "^2.6.7",
     "nunjucks": "^3.2.4",
     "opener": "^1.5.2",

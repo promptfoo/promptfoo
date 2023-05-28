@@ -1,16 +1,10 @@
-import { LRUCache } from 'lru-cache';
-
 import logger from '../logger.js';
-import { fetchWithTimeout } from '../util.js';
+import { fetchJsonWithCache } from '../cache.js';
 import { REQUEST_TIMEOUT_MS } from './shared.js';
 
 import type { ApiProvider, ProviderEmbeddingResponse, ProviderResponse } from '../types.js';
 
 const DEFAULT_OPENAI_HOST = 'api.openai.com';
-
-const embeddingsCache = new LRUCache<string, ProviderEmbeddingResponse>({
-  max: 1000,
-});
 
 interface OpenAiCompletionOptions {
   temperature: number;
@@ -49,19 +43,14 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
       throw new Error('OpenAI API key must be set for similarity comparison');
     }
 
-    // TODO(ian): Improve cache
-    const cached = embeddingsCache.get(text);
-    if (cached) {
-      return cached;
-    }
-
     const body = {
       input: text,
       model: this.modelName,
     };
-    let response, data;
+    let data,
+      cached = false;
     try {
-      response = await fetchWithTimeout(
+      ({ data, cached } = (await fetchJsonWithCache(
         `https://${this.apiHost}/v1/embeddings`,
         {
           method: 'POST',
@@ -72,8 +61,7 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
           body: JSON.stringify(body),
         },
         REQUEST_TIMEOUT_MS,
-      );
-      data = (await response.json()) as unknown as any;
+      )) as unknown as any);
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,
@@ -93,13 +81,14 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
       }
       const ret = {
         embedding,
-        tokenUsage: {
-          total: data.usage.total_tokens,
-          prompt: data.usage.prompt_tokens,
-          completion: data.usage.completion_tokens,
-        },
+        tokenUsage: cached
+          ? { cached: data.usage.total_tokens }
+          : {
+              total: data.usage.total_tokens,
+              prompt: data.usage.prompt_tokens,
+              completion: data.usage.completion_tokens,
+            },
       };
-      embeddingsCache.set(text, ret);
       return ret;
     } catch (err) {
       return {
@@ -145,9 +134,10 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       stop: process.env.OPENAI_STOP ? JSON.parse(process.env.OPENAI_STOP) : undefined,
     };
     logger.debug(`Calling OpenAI API: ${JSON.stringify(body)}`);
-    let response, data;
+    let data,
+      cached = false;
     try {
-      response = await fetchWithTimeout(
+      ({ data, cached } = (await fetchJsonWithCache(
         `https://${this.apiHost}/v1/completions`,
         {
           method: 'POST',
@@ -158,9 +148,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
           body: JSON.stringify(body),
         },
         REQUEST_TIMEOUT_MS,
-      );
-
-      data = (await response.json()) as unknown as any;
+      )) as unknown as any);
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,
@@ -170,11 +158,13 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
     try {
       return {
         output: data.choices[0].text,
-        tokenUsage: {
-          total: data.usage.total_tokens,
-          prompt: data.usage.prompt_tokens,
-          completion: data.usage.completion_tokens,
-        },
+        tokenUsage: cached
+          ? { cached: data.usage.total_tokens }
+          : {
+              total: data.usage.total_tokens,
+              prompt: data.usage.prompt_tokens,
+              completion: data.usage.completion_tokens,
+            },
       };
     } catch (err) {
       return {
@@ -225,9 +215,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     };
     logger.debug(`Calling OpenAI API: ${JSON.stringify(body)}`);
 
-    let response, data;
+    let data,
+      cached = false;
     try {
-      response = await fetchWithTimeout(
+      ({ data, cached } = (await fetchJsonWithCache(
         `https://${this.apiHost}/v1/chat/completions`,
         {
           method: 'POST',
@@ -238,8 +229,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           body: JSON.stringify(body),
         },
         REQUEST_TIMEOUT_MS,
-      );
-      data = (await response.json()) as unknown as any;
+      )) as unknown as any);
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,
@@ -250,11 +240,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     try {
       return {
         output: data.choices[0].message.content,
-        tokenUsage: {
-          total: data.usage.total_tokens,
-          prompt: data.usage.prompt_tokens,
-          completion: data.usage.completion_tokens,
-        },
+        tokenUsage: cached
+          ? { cached: data.usage.total_tokens }
+          : {
+              total: data.usage.total_tokens,
+              prompt: data.usage.prompt_tokens,
+              completion: data.usage.completion_tokens,
+            },
       };
     } catch (err) {
       return {
