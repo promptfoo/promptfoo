@@ -41,19 +41,20 @@ After editing the prompts and variables to your liking, run the eval command to 
 npx promptfoo eval
 ```
 
-If you're looking to customize your usage, you have the full set of parameters at your disposal:
+If you're looking to customize your usage, you have a wide set of parameters at your disposal. See the [Configuration docs](https://www.promptfoo.dev/docs/configuration/parameters) for more detail:
 
-```bash
-npx promptfoo eval -p <prompt_paths...> -o <output_path> -r <providers> [-v <vars_path>] [-j <max_concurrency] [-c <config_path>] [--grader <grading_provider>]
-```
-
-- `<prompt_paths...>`: Paths to prompt file(s)
-- `<output_path>`: Path to output CSV, JSON, YAML, or HTML file. Defaults to terminal output
-- `<providers>`: One or more of: `openai:<model_name>`, or filesystem path to custom API caller module
-- `<vars_path>` (optional): Path to CSV, JSON, or YAML file with prompt variables
-- `<max_concurrency>` (optional): Number of simultaneous API requests. Defaults to 4
-- `<config_path>` (optional): Path to configuration file
-- `<grading_provider>`: A provider that handles the grading process, if you are using [LLM grading](#expected-outputs)
+| Option                              | Description                                                                                                                                                                                    |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `-p, --prompts <paths...>`          | Paths to prompt files, directory, or glob                                                                                                                                                      |
+| `-r, --providers <name or path...>` | One of: openai:chat, openai:completion, openai:model-name, localai:chat:model-name, localai:completion:model-name. See [API providers](https://www.promptfoo.dev/docs/configuration/providers) |
+| `-o, --output <path>`               | Path to output file (csv, json, yaml, html)                                                                                                                                                    |
+| `-v, --vars <path>`                 | Path to file with prompt variables (csv, json, yaml)                                                                                                                                           |
+| `-c, --config <path>`               | Path to configuration file. `promptfooconfig.js[on]` is automatically loaded if present                                                                                                        |
+| `-j, --max-concurrency <number>`    | Maximum number of concurrent API calls                                                                                                                                                         |
+| `--table-cell-max-length <number>`  | Truncate console table cells to this length                                                                                                                                                    |
+| `--prompt-prefix <path>`            | This prefix is prepended to every prompt                                                                                                                                                       |
+| `--prompt-suffix <path>`            | This suffix is append to every prompt                                                                                                                                                          |
+| `--grader`                          | Provider that will grade outputs, if you are using [LLM grading](https://www.promptfoo.dev/docs/configuration/expected-outputs)                                                                |
 
 After running an eval, you may optionally use the `view` command to open the web viewer:
 
