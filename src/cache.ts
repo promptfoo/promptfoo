@@ -40,10 +40,13 @@ export async function fetchJsonWithCache(
   url: RequestInfo,
   options: RequestInit = {},
   timeout: number,
-): Promise<Response> {
+): Promise<{ data: any; cached: boolean }> {
   if (!enabled) {
     const resp = await fetchWithTimeout(url, options, timeout);
-    return resp.json();
+    return {
+      cached: false,
+      data: await resp.json(),
+    };
   }
 
   const cache = await getCache();
@@ -57,7 +60,10 @@ export async function fetchJsonWithCache(
 
   if (cachedResponse) {
     logger.debug(`Returning cached response for ${url}: ${cachedResponse}`);
-    return JSON.parse(cachedResponse as string);
+    return {
+      cached: true,
+      data: JSON.parse(cachedResponse as string),
+    };
   }
 
   // Fetch the actual data and store it in the cache
@@ -66,7 +72,10 @@ export async function fetchJsonWithCache(
     const data = await response.json();
     logger.debug(`Storing ${url} response in cache: ${data}`);
     await cache.set(cacheKey, JSON.stringify(data));
-    return data;
+    return {
+      cached: false,
+      data,
+    };
   } catch (err) {
     throw new Error(`Error parsing response from ${url}: ${err}`);
   }

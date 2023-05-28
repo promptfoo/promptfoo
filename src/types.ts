@@ -26,18 +26,19 @@ export interface TokenUsage {
   total: number;
   prompt: number;
   completion: number;
+  cached?: number;
 }
 
 export interface ProviderResponse {
   error?: string;
   output?: string;
-  tokenUsage?: TokenUsage;
+  tokenUsage?: Partial<TokenUsage>;
 }
 
 export interface ProviderEmbeddingResponse {
   error?: string;
   embedding?: number[];
-  tokenUsage?: TokenUsage;
+  tokenUsage?: Partial<TokenUsage>;
 }
 
 export interface CsvRow {
@@ -98,7 +99,7 @@ export interface EvaluateTable {
 export interface EvaluateStats {
   successes: number;
   failures: number;
-  tokenUsage: TokenUsage;
+  tokenUsage: Required<TokenUsage>;
 }
 
 export interface EvaluateSummary {

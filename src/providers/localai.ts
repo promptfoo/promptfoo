@@ -36,9 +36,10 @@ export class LocalAiChatProvider extends LocalAiGenericProvider {
     };
     logger.debug(`Calling LocalAI API: ${JSON.stringify(body)}`);
 
-    let data;
+    let data,
+      cached = false;
     try {
-      data = (await fetchJsonWithCache(
+      ({ data, cached } = (await fetchJsonWithCache(
         `${this.apiBaseUrl}/chat/completions`,
         {
           method: 'POST',
@@ -48,7 +49,7 @@ export class LocalAiChatProvider extends LocalAiGenericProvider {
           body: JSON.stringify(body),
         },
         REQUEST_TIMEOUT_MS,
-      )) as unknown as any;
+      )) as unknown as any);
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,
@@ -76,9 +77,10 @@ export class LocalAiCompletionProvider extends LocalAiGenericProvider {
     };
     logger.debug(`Calling LocalAI API: ${JSON.stringify(body)}`);
 
-    let data;
+    let data,
+      cached = false;
     try {
-      data = (await fetchJsonWithCache(
+      ({ data, cached } = (await fetchJsonWithCache(
         `${this.apiBaseUrl}/completions`,
         {
           method: 'POST',
@@ -88,7 +90,7 @@ export class LocalAiCompletionProvider extends LocalAiGenericProvider {
           body: JSON.stringify(body),
         },
         REQUEST_TIMEOUT_MS,
-      )) as unknown as any;
+      )) as unknown as any);
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,

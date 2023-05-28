@@ -22,7 +22,7 @@ describe('fetchJsonWithCache', () => {
     const result = await fetchJsonWithCache(url, {}, 1000);
 
     expect(mockedFetch).toHaveBeenCalledTimes(1);
-    expect(result).toEqual(response);
+    expect(result).toEqual({ cached: false, data: response });
   });
 
   it('should fetch data with cache enabled after previous test', async () => {
@@ -36,7 +36,7 @@ describe('fetchJsonWithCache', () => {
     const result = await fetchJsonWithCache(url, {}, 1000);
 
     expect(mockedFetch).toHaveBeenCalledTimes(0);
-    expect(result).toEqual(response);
+    expect(result).toEqual({ cached: true, data: response });
   });
 
   it('should fetch data without cache for a single test', async () => {
@@ -52,7 +52,7 @@ describe('fetchJsonWithCache', () => {
     const result = await fetchJsonWithCache(url, {}, 1000);
 
     expect(mockedFetch).toHaveBeenCalledTimes(1);
-    expect(result).toEqual(response);
+    expect(result).toEqual({ cached: false, data: response });
 
     enableCache();
   });
@@ -70,7 +70,7 @@ describe('fetchJsonWithCache', () => {
     const result = await fetchJsonWithCache(url, {}, 1000);
 
     expect(mockedFetch).toHaveBeenCalledTimes(1);
-    expect(result).toEqual(response);
+    expect(result).toEqual({ cached: false, data: response });
 
     enableCache();
   });
