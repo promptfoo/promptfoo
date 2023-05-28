@@ -10,25 +10,30 @@ import { getConfigDirectoryPath, fetchWithTimeout } from './util.js';
 import type { Cache } from 'cache-manager';
 import type { RequestInfo, RequestInit } from 'node-fetch';
 
-let diskCache: Cache | undefined;
+let cacheInstance: Cache | undefined;
 
 let enabled =
-  typeof process.env.CACHE_ENABLED === 'undefined' ? true : Boolean(process.env.USE_CACHE);
+  typeof process.env.PROMPTFOO_CACHE_ENABLED === 'undefined'
+    ? true
+    : Boolean(process.env.PROMPTFOO_CACHE_ENABLED);
+
+const cacheType =
+  process.env.PROMPTFOO_CACHE_TYPE || (process.env.NODE_ENV === 'test' ? 'memory' : 'disk');
 
 function getCache() {
-  if (!diskCache) {
-    diskCache = cacheManager.caching({
-      store: process.env.NODE_ENV === 'test' ? 'memory' : fsStore,
+  if (!cacheInstance) {
+    cacheInstance = cacheManager.caching({
+      store: cacheType === 'disk' ? fsStore : 'memory',
       options: {
-        max: process.env.CACHE_MAX_FILE_COUNT || 10_000, // number of files
-        path: process.env.CACHE_PATH || path.join(getConfigDirectoryPath(), 'cache'),
-        ttl: process.env.CACHE_TTL || 60 * 60 * 24 * 14, // in seconds, 14 days
-        maxsize: process.env.CACHE_MAX_SIZE || 1e7, // in bytes, 10mb
+        max: process.env.PROMPTFOO_CACHE_MAX_FILE_COUNT || 10_000, // number of files
+        path: process.env.PROMPTFOO_CACHE_PATH || path.join(getConfigDirectoryPath(), 'cache'),
+        ttl: process.env.PROMPTFOO_CACHE_TTL || 60 * 60 * 24 * 14, // in seconds, 14 days
+        maxsize: process.env.PROMPTFOO_CACHE_MAX_SIZE || 1e7, // in bytes, 10mb
         //zip: true, // whether to use gzip compression
       },
     });
   }
-  return diskCache;
+  return cacheInstance;
 }
 
 export async function fetchJsonWithCache(
