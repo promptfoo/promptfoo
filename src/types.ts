@@ -8,8 +8,9 @@ export interface CommandLineOptions {
   maxConcurrency?: string;
   grader?: string;
   view?: string;
-  noWrite?: boolean;
   tableCellMaxLength?: string;
+  write?: boolean;
+  cache?: boolean;
 
   generateSuggestions?: boolean;
   promptPrefix?: string;

@@ -1,5 +1,5 @@
 import logger from '../logger.js';
-import { fetchWithTimeout } from '../util.js';
+import { fetchJsonWithCache } from '../cache.js';
 import { REQUEST_TIMEOUT_MS } from './shared.js';
 
 import type { ApiProvider, ProviderResponse } from '../types.js';
@@ -36,9 +36,9 @@ export class LocalAiChatProvider extends LocalAiGenericProvider {
     };
     logger.debug(`Calling LocalAI API: ${JSON.stringify(body)}`);
 
-    let response, data;
+    let data;
     try {
-      response = await fetchWithTimeout(
+      data = (await fetchJsonWithCache(
         `${this.apiBaseUrl}/chat/completions`,
         {
           method: 'POST',
@@ -48,9 +48,7 @@ export class LocalAiChatProvider extends LocalAiGenericProvider {
           body: JSON.stringify(body),
         },
         REQUEST_TIMEOUT_MS,
-      );
-
-      data = (await response.json()) as unknown as any;
+      )) as unknown as any;
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,
@@ -78,9 +76,9 @@ export class LocalAiCompletionProvider extends LocalAiGenericProvider {
     };
     logger.debug(`Calling LocalAI API: ${JSON.stringify(body)}`);
 
-    let response, data;
+    let data;
     try {
-      response = await fetchWithTimeout(
+      data = (await fetchJsonWithCache(
         `${this.apiBaseUrl}/completions`,
         {
           method: 'POST',
@@ -90,9 +88,7 @@ export class LocalAiCompletionProvider extends LocalAiGenericProvider {
           body: JSON.stringify(body),
         },
         REQUEST_TIMEOUT_MS,
-      );
-
-      data = (await response.json()) as unknown as any;
+      )) as unknown as any;
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,

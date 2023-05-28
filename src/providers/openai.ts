@@ -1,7 +1,7 @@
 import { LRUCache } from 'lru-cache';
 
 import logger from '../logger.js';
-import { fetchWithTimeout } from '../util.js';
+import { fetchJsonWithCache } from '../cache.js';
 import { REQUEST_TIMEOUT_MS } from './shared.js';
 
 import type { ApiProvider, ProviderEmbeddingResponse, ProviderResponse } from '../types.js';
@@ -59,9 +59,9 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
       input: text,
       model: this.modelName,
     };
-    let response, data;
+    let data;
     try {
-      response = await fetchWithTimeout(
+      data = (await fetchJsonWithCache(
         `https://${this.apiHost}/v1/embeddings`,
         {
           method: 'POST',
@@ -72,8 +72,7 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
           body: JSON.stringify(body),
         },
         REQUEST_TIMEOUT_MS,
-      );
-      data = (await response.json()) as unknown as any;
+      )) as unknown as any;
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,
@@ -145,9 +144,9 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       stop: process.env.OPENAI_STOP ? JSON.parse(process.env.OPENAI_STOP) : undefined,
     };
     logger.debug(`Calling OpenAI API: ${JSON.stringify(body)}`);
-    let response, data;
+    let data;
     try {
-      response = await fetchWithTimeout(
+      data = (await fetchJsonWithCache(
         `https://${this.apiHost}/v1/completions`,
         {
           method: 'POST',
@@ -158,9 +157,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
           body: JSON.stringify(body),
         },
         REQUEST_TIMEOUT_MS,
-      );
-
-      data = (await response.json()) as unknown as any;
+      )) as unknown as any;
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,
@@ -225,9 +222,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     };
     logger.debug(`Calling OpenAI API: ${JSON.stringify(body)}`);
 
-    let response, data;
+    let data;
     try {
-      response = await fetchWithTimeout(
+      data = (await fetchJsonWithCache(
         `https://${this.apiHost}/v1/chat/completions`,
         {
           method: 'POST',
@@ -238,8 +235,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           body: JSON.stringify(body),
         },
         REQUEST_TIMEOUT_MS,
-      );
-      data = (await response.json()) as unknown as any;
+      )) as unknown as any;
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,
