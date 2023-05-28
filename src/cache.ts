@@ -18,7 +18,7 @@ let enabled =
 function getCache() {
   if (!diskCache) {
     diskCache = cacheManager.caching({
-      store: fsStore,
+      store: process.env.NODE_ENV === 'test' ? 'memory' : fsStore,
       options: {
         max: process.env.CACHE_MAX_FILE_COUNT || 10_000, // number of files
         path: process.env.CACHE_PATH || path.join(getConfigDirectoryPath(), 'cache'),
