@@ -14,16 +14,29 @@ With promptfoo, you can:
 - Use as a command line tool, or integrate into your workflow as a library
 - Use OpenAI models, open-source models like Llama and Vicuna, or integrate custom API providers for any LLM API
 
+The goal: **test-driven prompt engineering**, rather than trial-and-error.
+
 # [» View full documentation «](https://promptfoo.dev/docs/intro)
 
-promptfoo produces matrix views that allow you to quickly review prompt outputs across many inputs. The goal: tune prompts systematically across all relevant test cases, instead of testing prompts by trial and error.
+promptfoo produces matrix views that let you quickly evaluate outputs across many prompts.
 
 Here's an example of a side-by-side comparison of multiple prompts and inputs:
 
 ![Prompt evaluation matrix - web viewer](https://github.com/typpo/promptfoo/assets/310310/ddcd77df-2783-425e-ade9-1a20dd0b6cd2)
 
 It works on the command line too:
+
 ![Prompt evaluation](https://user-images.githubusercontent.com/310310/235529431-f4d5c395-d569-448e-9697-cd637e0372a5.gif)
+
+## Workflow
+
+Start by establishing a handful of test cases - core use cases and failure cases that you want to ensure your prompt can handle.
+
+As you explore modifications to the prompt, use `promptfoo eval` to rate all outputs.  This ensures the prompt is actually improving overall.
+
+As you collect more examples and establish a user feedback loop, continue to build the pool of test cases.
+
+<img width="772" alt="LLM ops" src="https://github.com/typpo/promptfoo/assets/310310/cf0461a7-2832-4362-9fbb-4ebd911d06ff">
 
 ## Usage (command line & web viewer)
 
