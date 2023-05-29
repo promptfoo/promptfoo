@@ -1,0 +1,24 @@
+prompts: prompts.txt
+providers: openai:gpt-3.5-turbo
+tests:
+  - name: Basic test 1
+    vars:
+      body: Hello world
+    assert:
+      - type: function
+        value: output.toLowerCase().includes('ahoy')
+
+  - name: Basic test 2
+    vars:
+      body: I'm hungry
+    assert:
+      - type: function
+        value: output.toLowerCase().includes('grub')
+
+  - name: Basic test 3
+    vars:
+      body: Output the story of your life in JSON
+    assert:
+      - type: is-json
+
+outputPath: output.csv

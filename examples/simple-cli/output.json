@@ -1,19 +1,36 @@
 {
+  "version": 1,
   "results": [
     {
       "prompt": {
         "raw": "Rephrase this in French: Hello world",
-        "display": "Rephrase this in French: {{body}}"
+        "display": "Rephrase this in {{language}}: {{body}}"
       },
       "vars": {
+        "language": "French",
         "body": "Hello world"
       },
       "response": {
         "output": "Bonjour le monde",
         "tokenUsage": {
-          "total": 19,
-          "prompt": 16,
-          "completion": 3
+          "cached": 19
+        }
+      },
+      "success": true
+    },
+    {
+      "prompt": {
+        "raw": "Translate this to conversational French: Hello world",
+        "display": "Translate this to conversational {{language}}: {{body}}"
+      },
+      "vars": {
+        "language": "French",
+        "body": "Hello world"
+      },
+      "response": {
+        "output": "Bonjour le monde",
+        "tokenUsage": {
+          "cached": 20
         }
       },
       "success": true
@@ -21,74 +38,144 @@
     {
       "prompt": {
         "raw": "Rephrase this in French: I&#39;m hungry",
-        "display": "Rephrase this in French: {{body}}"
+        "display": "Rephrase this in {{language}}: {{body}}"
       },
       "vars": {
+        "language": "French",
         "body": "I'm hungry"
       },
       "response": {
         "output": "J'ai faim.",
         "tokenUsage": {
-          "total": 24,
-          "prompt": 19,
-          "completion": 5
+          "cached": 24
         }
       },
       "success": true
     },
     {
       "prompt": {
-        "raw": "Rephrase this like a pirate: Hello world",
-        "display": "Rephrase this like a pirate: {{body}}"
+        "raw": "Translate this to conversational French: I&#39;m hungry",
+        "display": "Translate this to conversational {{language}}: {{body}}"
       },
       "vars": {
-        "body": "Hello world"
-      },
-      "response": {
-        "output": "Ahoy thar, me hearties! Avast ye, world!",
-        "tokenUsage": {
-          "total": 32,
-          "prompt": 17,
-          "completion": 15
-        }
-      },
-      "success": true
-    },
-    {
-      "prompt": {
-        "raw": "Rephrase this like a pirate: I&#39;m hungry",
-        "display": "Rephrase this like a pirate: {{body}}"
-      },
-      "vars": {
+        "language": "French",
         "body": "I'm hungry"
       },
       "response": {
-        "output": "Arrr, me belly be empty and me throat be parched! I be needin' some grub, matey!",
+        "output": "J'ai faim.",
         "tokenUsage": {
-          "total": 45,
-          "prompt": 20,
-          "completion": 25
+          "cached": 25
+        }
+      },
+      "success": true
+    },
+    {
+      "prompt": {
+        "raw": "Rephrase this in Pirate: Hello world",
+        "display": "Rephrase this in {{language}}: {{body}}"
+      },
+      "vars": {
+        "language": "Pirate",
+        "body": "Hello world"
+      },
+      "response": {
+        "output": "Ahoy thar, world!",
+        "tokenUsage": {
+          "cached": 23
+        }
+      },
+      "success": true
+    },
+    {
+      "prompt": {
+        "raw": "Translate this to conversational Pirate: Hello world",
+        "display": "Translate this to conversational {{language}}: {{body}}"
+      },
+      "vars": {
+        "language": "Pirate",
+        "body": "Hello world"
+      },
+      "response": {
+        "output": "Ahoy thar world!",
+        "tokenUsage": {
+          "cached": 23
+        }
+      },
+      "success": true
+    },
+    {
+      "prompt": {
+        "raw": "Rephrase this in Pirate: I&#39;m hungry",
+        "display": "Rephrase this in {{language}}: {{body}}"
+      },
+      "vars": {
+        "language": "Pirate",
+        "body": "I'm hungry"
+      },
+      "response": {
+        "output": "Arrr, me belly be empty and yearnin' for grub.",
+        "tokenUsage": {
+          "cached": 33
+        }
+      },
+      "success": true
+    },
+    {
+      "prompt": {
+        "raw": "Translate this to conversational Pirate: I&#39;m hungry",
+        "display": "Translate this to conversational {{language}}: {{body}}"
+      },
+      "vars": {
+        "language": "Pirate",
+        "body": "I'm hungry"
+      },
+      "response": {
+        "output": "Arrr, me belly be rumblin'! I be needin' some grub!",
+        "tokenUsage": {
+          "cached": 39
         }
       },
       "success": true
     }
   ],
   "stats": {
-    "successes": 4,
+    "successes": 8,
     "failures": 0,
     "tokenUsage": {
-      "total": 120,
-      "prompt": 72,
-      "completion": 48
+      "total": 0,
+      "prompt": 0,
+      "completion": 0,
+      "cached": 206
     }
   },
-  "table": [
-    ["Rephrase this in French: {{body}}", "Rephrase this like a pirate: {{body}}", "body"],
-    ["Bonjour le monde", "Ahoy thar, me hearties! Avast ye, world!", "Hello world"],
-    [
-      "J'ai faim.",
-      "Arrr, me belly be empty and me throat be parched! I be needin' some grub, matey!",
-      "I'm hungry"
+  "table": {
+    "head": {
+      "prompts": [
+        "Rephrase this in {{language}}: {{body}}",
+        "Translate this to conversational {{language}}: {{body}}"
+      ],
+      "vars": ["body", "language"]
+    },
+    "body": [
+      {
+        "outputs": ["Bonjour le monde", "Bonjour le monde"],
+        "vars": ["Hello world", "French"]
+      },
+      {
+        "outputs": ["J'ai faim.", "J'ai faim."],
+        "vars": ["I'm hungry", "French"]
+      },
+      {
+        "outputs": ["Ahoy thar, world!", "Ahoy thar world!"],
+        "vars": ["Hello world", "Pirate"]
+      },
+      {
+        "outputs": [
+          "Arrr, me belly be empty and yearnin' for grub.",
+          "Arrr, me belly be rumblin'! I be needin' some grub!"
+        ],
+        "vars": ["I'm hungry", "Pirate"]
+      }
     ]
-  ]
+  }
 }

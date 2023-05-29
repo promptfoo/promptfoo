@@ -307,7 +307,7 @@ class Evaluator {
         if (!table.body[rowIndex]) {
           table.body[rowIndex] = {
             outputs: [],
-            vars: table.head.vars.map(varName => options.test.vars?.[varName] || ''),
+            vars: table.head.vars.map((varName) => options.test.vars?.[varName] || ''),
           };
         }
         table.body[rowIndex].outputs[colIndex] = resultText;

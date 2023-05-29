@@ -7,7 +7,6 @@ import yaml from 'js-yaml';
 import nunjucks from 'nunjucks';
 import { globSync } from 'glob';
 import { parse as parsePath } from 'path';
-import { CsvRow } from './types.js';
 import { parse as parseCsv } from 'csv-parse/sync';
 import { stringify } from 'csv-stringify/sync';
 
@@ -16,7 +15,16 @@ import { getDirectory } from './esm.js';
 
 import type { RequestInfo, RequestInit, Response } from 'node-fetch';
 
-import type { EvaluateSummary } from './types.js';
+import type {
+  Assertion,
+  CsvRow,
+  EvaluateSummary,
+  CommandLineOptions,
+  TestSuite,
+  UnifiedConfig,
+  TestCase,
+} from './types.js';
+import { assertionFromString } from './assertions.js';
 
 const PROMPT_DELIMITER = '---';
 
@@ -25,6 +33,32 @@ function parseJson(json: string): any | undefined {
     return JSON.parse(json);
   } catch (err) {
     return undefined;
+  }
+}
+
+export function maybeReadConfig(configPath: string): UnifiedConfig | undefined {
+  try {
+    return readConfig(configPath);
+  } catch {
+    return undefined;
+  }
+}
+
+export function readConfig(configPath: string): UnifiedConfig {
+  if (!fs.existsSync(configPath)) {
+    throw new Error(`Config file not found: ${configPath}`);
+  }
+  const ext = path.parse(configPath).ext;
+  switch (ext) {
+    case '.json':
+      const content = fs.readFileSync(configPath, 'utf-8');
+      return JSON.parse(content) as UnifiedConfig;
+    case '.js':
+      return require(configPath) as UnifiedConfig;
+    case '.yaml':
+      return yaml.load(fs.readFileSync(configPath, 'utf-8')) as UnifiedConfig;
+    default:
+      throw new Error(`Unsupported configuration file format: ${ext}`);
   }
 }
 
@@ -48,6 +82,9 @@ export function readPrompts(promptPathsOrGlobs: string[]): string[] {
 
   if (promptContents.length === 1) {
     promptContents = promptContents[0].split(PROMPT_DELIMITER).map((p) => p.trim());
+  }
+  if (promptContents.length === 0) {
+    throw new Error(`There are no prompts in ${promptPathsOrGlobs.join(', ')}`);
   }
   return promptContents;
 }
@@ -152,4 +189,21 @@ export function cosineSimilarity(vecA: number[], vecB: number[]) {
   const vecAMagnitude = Math.sqrt(vecA.reduce((acc, val) => acc + val * val, 0));
   const vecBMagnitude = Math.sqrt(vecB.reduce((acc, val) => acc + val * val, 0));
   return dotProduct / (vecAMagnitude * vecBMagnitude);
+}
+
+export function testCaseFromCsvRow(row: CsvRow): TestCase {
+  const vars: Record<string, string> = {};
+  const asserts: Assertion[] = [];
+  for (const [key, value] of Object.entries(row)) {
+    if (key === '__expected') {
+      asserts.push(assertionFromString(value));
+    } else {
+      vars[key] = value;
+    }
+  }
+
+  return {
+    vars,
+    assert: asserts,
+  };
 }

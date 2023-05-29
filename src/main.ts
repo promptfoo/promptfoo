@@ -1,21 +1,39 @@
 #!/usr/bin/env node
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
-import { parse, join as pathJoin } from 'path';
+import { join as pathJoin } from 'path';
 
 import Table from 'cli-table3';
 import chalk from 'chalk';
+import invariant from 'tiny-invariant';
+import yaml from 'js-yaml';
 import { Command } from 'commander';
 
 import logger, { setLogLevel } from './logger.js';
 import { loadApiProvider } from './providers.js';
 import { evaluate } from './evaluator.js';
-import { readPrompts, readVars, writeLatestResults, writeOutput } from './util.js';
+import {
+  maybeReadConfig,
+  readConfig,
+  readPrompts,
+  readVars,
+  testCaseFromCsvRow,
+  writeLatestResults,
+  writeOutput,
+} from './util.js';
 import { getDirectory } from './esm.js';
 import { init } from './web/server.js';
 import { assertionFromString } from './assertions.js';
 import { disableCache } from './cache.js';
 
-import type { CommandLineOptions, EvaluateOptions, TestSuite, VarMapping } from './types.js';
+import type {
+  ApiProvider,
+  CommandLineOptions,
+  EvaluateOptions,
+  TestCase,
+  TestSuite,
+  UnifiedConfig,
+  VarMapping,
+} from './types.js';
 
 function createDummyFiles(directory: string | null) {
   if (directory) {
@@ -75,15 +93,19 @@ You'll probably want to change a few of the prompts in prompts.txt and the varia
 }
 
 async function main() {
-  let defaultConfig: Partial<CommandLineOptions> = {};
-  if (existsSync('promptfooconfig.js')) {
-    // @ts-ignore
-    defaultConfig = (await import(pathJoin(process.cwd(), './promptfooconfig.js'))).default;
-    logger.info('Loaded default config from promptfooconfig.js');
-  }
-  if (existsSync('promptfooconfig.json')) {
-    defaultConfig = JSON.parse(readFileSync('promptfooconfig.json', 'utf-8'));
-    logger.info('Loaded default config from promptfooconfig.json');
+  const pwd = process.cwd();
+  const potentialPaths = [
+    pathJoin(pwd, 'promptfooconfig.js'),
+    pathJoin(pwd, 'promptfooconfig.json'),
+    pathJoin(pwd, 'promptfooconfig.yaml'),
+  ];
+  let config: Partial<UnifiedConfig> = {};
+  for (const path of potentialPaths) {
+    const maybeConfig = maybeReadConfig(path);
+    if (maybeConfig) {
+      config = maybeConfig;
+      break;
+    }
   }
 
   const program = new Command();
@@ -114,35 +136,26 @@ async function main() {
   program
     .command('eval')
     .description('Evaluate prompts')
-    .requiredOption(
-      '-p, --prompts <paths...>',
-      'Paths to prompt files (.txt)',
-      defaultConfig.prompts,
-    )
+    .requiredOption('-p, --prompts <paths...>', 'Paths to prompt files (.txt)', config.prompts)
     .requiredOption(
       '-r, --providers <name or path...>',
       'One of: openai:chat, openai:completion, openai:<model name>, or path to custom API caller module',
-      defaultConfig.providers,
-    )
-    .option(
-      '-o, --output <path>',
-      'Path to output file (csv, json, yaml, html)',
-      defaultConfig.output,
-    )
-    .option(
-      '-v, --vars <path>',
-      'Path to file with prompt variables (csv, json, yaml)',
-      defaultConfig.vars,
+      config?.providers,
     )
     .option(
       '-c, --config <path>',
-      'Path to configuration file. Automatically loads promptfooconfig.js',
-      defaultConfig.config,
+      'Path to configuration file. Automatically loads promptfooconfig.js/json/yaml',
     )
+    .option(
+      '-v, --vars, --test-csv <path>',
+      'Path to CSV with test cases',
+      config?.commandLineOptions?.vars,
+    )
+    .option('-o, --output <path>', 'Path to output file (csv, json, yaml, html)', config.outputPath)
     .option(
       '-j, --max-concurrency <number>',
       'Maximum number of concurrent API calls',
-      String(defaultConfig.maxConcurrency),
+      config.maxConcurrency ? String(config.maxConcurrency) : undefined,
     )
     .option(
       '--table-cell-max-length <number>',
@@ -156,36 +169,20 @@ async function main() {
     .option(
       '--prompt-prefix <path>',
       'This prefix is prepended to every prompt',
-      defaultConfig.promptPrefix,
+      config.defaultProperties?.prompt?.prefix,
     )
     .option(
       '--prompt-suffix <path>',
       'This suffix is append to every prompt',
-      defaultConfig.promptSuffix,
+      config.defaultProperties?.prompt?.suffix,
     )
     .option('--no-write', 'Do not write results to promptfoo directory')
     .option('--no-cache', 'Do not read or write results to disk cache')
-    .option('--grader', 'Model that will grade outputs', defaultConfig.grader)
-    .option('--verbose', 'Show debug logs', defaultConfig.verbose)
+    .option('--grader', 'Model that will grade outputs', config?.commandLineOptions?.grader)
+    .option('--verbose', 'Show debug logs', config?.commandLineOptions?.verbose)
     .option('--view [port]', 'View in browser ui')
     .action(async (cmdObj: CommandLineOptions & Command) => {
-      const configPath = cmdObj.config;
-      let config = {};
-      if (configPath) {
-        const ext = parse(configPath).ext;
-        switch (ext) {
-          case '.json':
-            const content = readFileSync(configPath, 'utf-8');
-            config = JSON.parse(content);
-            break;
-          case '.js':
-            config = require(configPath);
-            break;
-          default:
-            throw new Error(`Unsupported configuration file format: ${ext}`);
-        }
-      }
-
+      // Misc settings
       if (cmdObj.verbose) {
         setLogLevel('debug');
       }
@@ -193,34 +190,83 @@ async function main() {
         disableCache();
       }
 
-      let vars: VarMapping[] = [];
-      if (cmdObj.vars) {
-        vars = readVars(cmdObj.vars);
+      // Config parsing
+      const maxConcurrency = parseInt(cmdObj.maxConcurrency || '', 10);
+      const configPath = cmdObj.config;
+      if (configPath) {
+        config = readConfig(configPath);
+      } else {
+        config = {
+          prompts: cmdObj.prompts || config.prompts,
+          providers: cmdObj.providers || config.providers,
+          tests: cmdObj.vars || config.tests,
+        };
       }
 
-      const providers = await Promise.all(
-        cmdObj.providers.map(async (p) => await loadApiProvider(p)),
-      );
-      const maxConcurrency = parseInt(cmdObj.maxConcurrency || '', 10);
+      // Validation
+      if (!config.prompts || config.prompts.length === 0) {
+        logger.error(chalk.red('You must provide at least 1 prompt file'));
+        process.exit(1);
+      }
+      if (!config.providers || config.providers.length === 0) {
+        logger.error(
+          chalk.red('You must specify at least 1 provider (for example, openai:gpt-3.5-turbo)'),
+        );
+        process.exit(1);
+      }
+
+      // Parse prompts, providers, and tests
+      let parsedPrompts: string[] = [];
+      let parsedProviders: ApiProvider[] = [];
+      let parsedTests: TestCase[] = [];
+
+      if (Array.isArray(config.prompts)) {
+        parsedPrompts = readPrompts(config.prompts);
+      }
+      if (typeof config.prompts === 'string') {
+        parsedPrompts = readPrompts([config.prompts]);
+      }
+      if (typeof config.providers === 'string') {
+        parsedProviders = [await loadApiProvider(config.providers)];
+      }
+      if (Array.isArray(config.providers)) {
+        parsedProviders = await Promise.all(
+          config.providers.map((provider) => loadApiProvider(provider)),
+        );
+      }
+
+      if (typeof config.tests === 'string') {
+        // It's a filepath, load from CSV
+        const vars = readVars(config.tests);
+        parsedTests = vars.map((row, idx) => {
+          const test = testCaseFromCsvRow(row);
+          test.name = `Test #${idx + 1}`;
+          return test;
+        });
+      } else {
+        parsedTests = config.tests || [
+          {
+            // Dummy test for cases when we're only comparing raw prompts.
+          },
+        ];
+      }
+      // TODO(ian): some sort of validation of the shape of tests
+
+      if (parsedPrompts.length === 0) {
+        logger.error(chalk.red('No prompts found'));
+        process.exit(1);
+      }
 
       const testSuite: TestSuite = {
-        prompts: readPrompts(cmdObj.prompts),
-        providers,
+        prompts: parsedPrompts,
+        providers: parsedProviders,
+        tests: parsedTests,
         defaultProperties: {
           prompt: {
             prefix: cmdObj.promptPrefix,
             suffix: cmdObj.promptSuffix,
           },
         },
-        tests: vars.map((v) => {
-          const assertions = [];
-          if (v.__expected) {
-            assertions.push(assertionFromString(v.__expected));
-          }
-          return {
-            vars: v,
-          };
-        }),
       };
 
       const options: EvaluateOptions = {

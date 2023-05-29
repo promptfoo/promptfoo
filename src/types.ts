@@ -1,11 +1,14 @@
 export interface CommandLineOptions {
+  // Shared with TestSuite
   prompts: string[];
   providers: string[];
-  output?: string;
+  maxConcurrency: string;
+  output: string;
+
+  // Command line only
   vars?: string;
   config?: string;
   verbose?: boolean;
-  maxConcurrency?: string;
   grader?: string;
   view?: string;
   tableCellMaxLength?: string;
@@ -101,8 +104,9 @@ export interface EvaluateSummary {
   stats: EvaluateStats;
 }
 
+// TODO(ian): maybe Assertion should support {type: config} to make the yaml cleaner
 export interface Assertion {
-  type: 'equality' | 'function' | 'similarity' | 'llm-rubric';
+  type: 'equality' | 'is-json' | 'function' | 'similarity' | 'llm-rubric';
   value?: string;
   threshold?: number;
   provider?: ApiProvider; // Some assertions require an LLM provider
@@ -113,6 +117,7 @@ export interface TestCase {
   name?: string;
   vars?: Record<string, string>;
   assert?: Assertion[];
+
   prompt?: PromptConfig;
   grading?: GradingConfig;
 }
@@ -124,3 +129,18 @@ export interface TestSuite {
   tests: TestCase[];
   defaultProperties?: Omit<TestCase, 'name'>;
 }
+
+// TestSuiteConfig = Test Suite, but before everything is parsed and resolved.  Providers are just strings, prompts are filepaths, tests can be filepath or inline.
+export interface TestSuiteConfig {
+  providers: string | string[];
+  prompts: string | string[];
+  tests: string | TestCase[];
+  defaultProperties?: Omit<TestCase, 'name'>;
+
+  outputPath?: string;
+  maxConcurrency?: number;
+}
+
+export type UnifiedConfig = TestSuiteConfig & {
+  commandLineOptions: Partial<CommandLineOptions>;
+};

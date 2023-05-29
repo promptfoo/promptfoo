@@ -56,8 +56,20 @@ async function runAssertion(
     pass = assertion.value === output;
     return {
       pass,
-      reason: pass ? 'Assertion passed' : `Expected ${output} to equal ${assertion.value}`,
+      reason: pass ? 'Assertion passed' : `Expected output "${assertion.value}"`,
     };
+  }
+
+  if (assertion.type === 'is-json') {
+    try {
+      JSON.parse(output);
+      return { pass: true, reason: 'Assertion passed' };
+    } catch (err) {
+      return {
+        pass: false,
+        reason: `Expected output to be valid JSON, but it isn't.\nError: ${err}`,
+      };
+    }
   }
 
   if (assertion.type === 'function') {
@@ -216,6 +228,11 @@ export function assertionFromString(expected: string): Assertion {
     return {
       type: 'llm-rubric',
       value: expected.slice(6),
+    };
+  }
+  if (expected === 'json') {
+    return {
+      type: 'is-json',
     };
   }
   return {

@@ -1,5 +1,10 @@
-This example shows how you can set an expected value in vars.csv and emit a PASS/FAIL based on it:
+This example shows a YAML configuration with inline tests.
+
+Run the test suite with:
 
 ```
-promptfoo eval --prompts prompts.txt --vars vars.csv --providers openai:chat --output output.html
+promptfoo eval
 ```
+
+Note that you can edit the configuration to use a CSV test input instead. Set
+`tests: vars.csv` and try running it again.

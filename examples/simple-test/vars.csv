@@ -1,3 +1,4 @@
 body,__expected
 Hello world,fn:output.toLowerCase().includes('ahoy')
 I'm hungry,fn:output.toLowerCase().includes('grub')
+Output the story of your life in json,is-json
