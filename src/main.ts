@@ -180,12 +180,12 @@ async function main() {
     .option(
       '--prompt-prefix <path>',
       'This prefix is prepended to every prompt',
-      config.defaultProperties?.prompt?.prefix,
+      config.defaultTestProperties?.prompt?.prefix,
     )
     .option(
       '--prompt-suffix <path>',
       'This suffix is append to every prompt',
-      config.defaultProperties?.prompt?.suffix,
+      config.defaultTestProperties?.prompt?.suffix,
     )
     .option('--no-write', 'Do not write results to promptfoo directory')
     .option('--no-cache', 'Do not read or write results to disk cache')
@@ -236,7 +236,7 @@ async function main() {
         process.exit(1);
       }
 
-      const defaultProperties: TestCase = {
+      const defaultTestProperties: TestCase = {
         prompt: {
           prefix: cmdObj.promptPrefix,
           suffix: cmdObj.promptSuffix,
@@ -244,14 +244,14 @@ async function main() {
         grading: {
           provider: cmdObj.grader,
         },
-        ...config.defaultProperties,
+        ...config.defaultTestProperties,
       };
 
       const testSuite: TestSuite = {
         prompts: parsedPrompts,
         providers: parsedProviders,
         tests: parsedTests,
-        defaultProperties,
+        defaultTestProperties,
       };
 
       const options: EvaluateOptions = {
@@ -261,7 +261,7 @@ async function main() {
       };
 
       if (cmdObj.grader) {
-        testSuite.defaultProperties!.grading = {
+        testSuite.defaultTestProperties!.grading = {
           provider: await loadApiProvider(cmdObj.grader),
         };
       }

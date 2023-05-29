@@ -1,7 +1,7 @@
 module.exports = {
   prompts: 'prompts.txt',
   providers: 'openai:gpt-3.5-turbo',
-  defaultProperties: {
+  defaultTestProperties: {
     assert: [
       {
         type: 'llm-rubric',

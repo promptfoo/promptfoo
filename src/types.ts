@@ -130,7 +130,7 @@ export interface TestSuite {
   providers: ApiProvider[];
   prompts: string[];
   tests: TestCase[];
-  defaultProperties?: Omit<TestCase, 'name'>;
+  defaultTestProperties?: Omit<TestCase, 'description'>;
 }
 
 // TestSuiteConfig = Test Suite, but before everything is parsed and resolved.  Providers are just strings, prompts are filepaths, tests can be filepath or inline.
@@ -138,7 +138,7 @@ export interface TestSuiteConfig {
   providers: string | string[];
   prompts: string | string[];
   tests: string | TestCase[];
-  defaultProperties?: Omit<TestCase, 'name'>;
+  defaultTestProperties?: Omit<TestCase, 'description'>;
 
   outputPath?: string;
 }

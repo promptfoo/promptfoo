@@ -187,7 +187,7 @@ class Evaluator {
     // Aggregate all vars across test cases
 
     const tests = testSuite.tests.map((test) => {
-      const finalTestCase: TestCase = Object.assign({}, testSuite.defaultProperties);
+      const finalTestCase: TestCase = Object.assign({}, testSuite.defaultTestProperties);
       return Object.assign(finalTestCase, test);
     });
 
@@ -242,11 +242,19 @@ class Evaluator {
     for (const testCase of tests) {
       let colIndex = 0;
 
+      // Handle default properties
+      testCase.vars = Object.assign({}, testSuite.defaultTestProperties?.vars, testCase.vars);
+      testCase.assert = [
+        ...(testSuite.defaultTestProperties?.assert || []),
+        ...(testCase.assert || []),
+      ];
+      testCase.grading = testCase.grading || testSuite.defaultTestProperties?.grading;
       const prependToPrompt =
-        testCase.prompt?.prefix || testSuite.defaultProperties?.prompt?.prefix || '';
+        testCase.prompt?.prefix || testSuite.defaultTestProperties?.prompt?.prefix || '';
       const appendToPrompt =
-        testCase.prompt?.suffix || testSuite.defaultProperties?.prompt?.suffix || '';
+        testCase.prompt?.suffix || testSuite.defaultTestProperties?.prompt?.suffix || '';
 
+      // Finalize test case eval
       for (const promptContent of testSuite.prompts) {
         for (const provider of testSuite.providers) {
           runEvalOptions.push({

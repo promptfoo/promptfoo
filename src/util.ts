@@ -107,6 +107,14 @@ export function readVars(varsPath: string): CsvRow[] {
 }
 
 export function readTests(tests: string | TestCase[] | undefined): TestCase[] {
+  if (!tests) {
+    return [
+      {
+        // Dummy test for cases when we're only comparing raw prompts.
+      },
+    ];
+  }
+
   if (typeof tests === 'string') {
     // It's a filepath, load from CSV
     const vars = readVars(tests);
@@ -117,14 +125,20 @@ export function readTests(tests: string | TestCase[] | undefined): TestCase[] {
     });
   }
 
-  // TODO(ian): some sort of validation of the shape of tests
-  return (
-    tests || [
-      {
-        // Dummy test for cases when we're only comparing raw prompts.
-      },
-    ]
-  );
+  // Some validation of the shape of tests
+  for (const test of tests) {
+    if (!test.assert && !test.vars) {
+      throw new Error(
+        `Test case must have either "assert" or "vars" property. Instead got ${JSON.stringify(
+          test,
+          null,
+          2,
+        )}`,
+      );
+    }
+  }
+
+  return tests;
 }
 
 export function writeOutput(outputPath: string, summary: EvaluateSummary): void {
