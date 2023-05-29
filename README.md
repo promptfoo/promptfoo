@@ -38,7 +38,7 @@ As you collect more examples and establish a user feedback loop, continue to bui
 
 <img width="772" alt="LLM ops" src="https://github.com/typpo/promptfoo/assets/310310/cf0461a7-2832-4362-9fbb-4ebd911d06ff">
 
-## Usage (command line & web viewer)
+## Usage
 
 To get started, run the following command:
 
@@ -46,13 +46,54 @@ To get started, run the following command:
 npx promptfoo init
 ```
 
-This will create some templates in your current directory: `prompts.txt`, `vars.csv`, and `promptfooconfig.js`.
+This will create some placeholders in your current directory: `prompts.txt` and `promptfooconfig.yaml`.
 
 After editing the prompts and variables to your liking, run the eval command to kick off an evaluation:
 
 ```
 npx promptfoo eval
 ```
+
+### Configuration
+
+The YAML configuration format runs each prompt through a series of example inputs (aka "test") and checks if they meet requirements (aka "assert").
+
+```yaml
+prompts: [prompts.txt]
+providers: [openai:gpt-3.5-turbo]
+tests:
+  - description: First test case - automatic review
+    vars:
+      var1: first variable's value
+      var2: another value
+      var3: some other value
+    assert:
+      - type: equality
+        value: expected LLM output goes here
+      - type: function
+        value: output.includes('some text')
+
+  - description: Second test case - manual review
+    # Test cases don't need assertions if you prefer to review the output yourself
+    vars:
+      var1: new value
+      var2: another value
+      var3: third value
+
+  - description: Third test case - other types of automatic review
+    vars:
+      var1: yet another value
+      var2: and another
+      var3: dear llm, please output your response in json format
+    assert:
+      - type: contains-json
+      - type: similarity
+        value: ensures that output is semantically similar to this text
+      - type: llm-rubric
+        value: ensure that output contains a reference to X
+```
+
+### Command-line
 
 If you're looking to customize your usage, you have a wide set of parameters at your disposal. See the [Configuration docs](https://www.promptfoo.dev/docs/configuration/parameters) for more detail:
 
@@ -117,13 +158,42 @@ Full setup and output [here](https://github.com/typpo/promptfoo/tree/main/exampl
 
 You can also use `promptfoo` as a library in your project by importing the `evaluate` function. The function takes the following parameters:
 
-- `providers`: a list of provider strings or `ApiProvider` objects, or just a single string or `ApiProvider`.
-- `options`: the prompts and variables you want to test:
+- `testSuite`: the Javascript equivalent of the promptfooconfig.yaml
 
   ```typescript
-  {
-    prompts: string[];
+  interface TestSuiteConfig {
+    providers: string[]; // Valid provider name (e.g. openai:gpt-3.5-turbo)
+    prompts: string[]; // List of prompts
+    tests: string | TestCase[]; // Path to a CSV file, or list of test cases
+
+    defaultTestProperties?: Omit<TestCase, 'description'>; // Optional: add default vars and assertions on test case
+    outputPath?: string; // Optional: write results to file
+  }
+
+  interface TestCase {
+    description?: string;
     vars?: Record<string, string>;
+    assert?: Assertion[];
+
+    prompt?: PromptConfig;
+    grading?: GradingConfig;
+  }
+
+  interface Assertion {
+    type: 'equality' | 'is-json' | 'contains-json' | 'function' | 'similarity' | 'llm-rubric';
+    value?: string;
+    threshold?: number; // For similarity assertions
+    provider?: ApiProvider; // For assertions that require an LLM provider
+  }
+  ```
+
+- `options`: misc options related to how the tests are run
+
+  ```typescript
+  interface EvaluateOptions {
+    maxConcurrency?: number;
+    showProgressBar?: boolean;
+    generateSuggestions?: boolean;
   }
   ```
 
@@ -134,57 +204,27 @@ You can also use `promptfoo` as a library in your project by importing the `eval
 ```js
 import promptfoo from 'promptfoo';
 
-const options = {
+const results = await promptfoo.evaluate({
   prompts: ['Rephrase this in French: {{body}}', 'Rephrase this like a pirate: {{body}}'],
-  vars: [{ body: 'Hello world' }, { body: "I'm hungry" }],
-};
-
-(async () => {
-  const summary = await promptfoo.evaluate('openai:gpt-3.5-turbo', options);
-  console.log(summary);
-})();
-```
-
-This code imports the `promptfoo` library, defines the evaluation options, and then calls the `evaluate` function with these options. The results are logged to the console:
-
-```js
-{
-  "results": [
+  providers: ['openai:gpt-3.5-turbo'],
+  tests: [
     {
-      "prompt": {
-        "raw": "Rephrase this in French: Hello world",
-        "display": "Rephrase this in French: {{body}}"
+      vars: {
+        body: 'Hello world',
       },
-      "vars": {
-        "body": "Hello world"
-      },
-      "response": {
-        "output": "Bonjour le monde",
-        "tokenUsage": {
-          "total": 19,
-          "prompt": 16,
-          "completion": 3
-        }
-      }
     },
-    // ...
+    {
+      vars: {
+        body: "I'm hungry",
+      },
+    },
   ],
-  "stats": {
-    "successes": 4,
-    "failures": 0,
-    "tokenUsage": {
-      "total": 120,
-      "prompt": 72,
-      "completion": 48
-    }
-  },
-  "table": [
-    // ...
-  ]
-}
+});
 ```
 
-[See full example here](https://github.com/typpo/promptfoo/tree/main/examples/simple-import)
+This code imports the `promptfoo` library, defines the evaluation options, and then calls the `evaluate` function with these options.
+
+See the full example [here](https://github.com/typpo/promptfoo/tree/main/examples/simple-import), which includes an example results object.
 
 ## Configuration
 

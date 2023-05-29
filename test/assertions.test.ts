@@ -92,11 +92,12 @@ describe('runAssertion', () => {
 
     const result: GradingResult = await runAssertion(isJsonAssertion, {} as TestCase, output);
     expect(result.pass).toBeFalsy();
-    expect(result.reason).toContain("Expected output to be valid JSON");
+    expect(result.reason).toContain('Expected output to be valid JSON');
   });
 
   it('should pass when the contains-json assertion passes', async () => {
-    const output = 'this is some other stuff \n\n {"key": "value", "key2": {"key3": "value2", "key4": ["value3", "value4"]}} \n\n blah blah';
+    const output =
+      'this is some other stuff \n\n {"key": "value", "key2": {"key3": "value2", "key4": ["value3", "value4"]}} \n\n blah blah';
 
     const result: GradingResult = await runAssertion(containsJsonAssertion, {} as TestCase, output);
     expect(result.pass).toBeTruthy();
@@ -108,7 +109,7 @@ describe('runAssertion', () => {
 
     const result: GradingResult = await runAssertion(containsJsonAssertion, {} as TestCase, output);
     expect(result.pass).toBeFalsy();
-    expect(result.reason).toContain("Expected output to contain valid JSON");
+    expect(result.reason).toContain('Expected output to contain valid JSON');
   });
 
   it('should pass when the function assertion passes', async () => {
