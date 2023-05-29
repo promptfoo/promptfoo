@@ -58,6 +58,8 @@ npx promptfoo eval
 
 The YAML configuration format runs each prompt through a series of example inputs (aka "test") and checks if they meet requirements (aka "assert").
 
+See the [Configuration docs](https://www.promptfoo.dev/docs/configuration/parameters) for more detail.
+
 ```yaml
 prompts: [prompts.txt]
 providers: [openai:gpt-3.5-turbo]
@@ -93,9 +95,21 @@ tests:
         value: ensure that output contains a reference to X
 ```
 
+### Tests on spreadsheet
+
+Some people prefer to configure their LLM tests in a CSV. In that case, the config is pretty simple:
+
+```yaml
+prompts: [prompts.txt]
+providers: [openai:gpt-3.5-turbo]
+tests: tests.csv
+```
+
+See [example CSV](https://github.com/typpo/promptfoo/blob/main/examples/simple-test/tests.csv).
+
 ### Command-line
 
-If you're looking to customize your usage, you have a wide set of parameters at your disposal. See the [Configuration docs](https://www.promptfoo.dev/docs/configuration/parameters) for more detail:
+If you're looking to customize your usage, you have a wide set of parameters at your disposal.
 
 | Option                              | Description                                                                                                                                                                                    |
 | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
