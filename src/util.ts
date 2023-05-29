@@ -62,7 +62,9 @@ export function readConfig(configPath: string): UnifiedConfig {
   }
 }
 
-export function readPrompts(promptPathsOrGlobs: string[]): string[] {
+export function readPrompts(promptPathsOrGlobs: string | string[]): string[] {
+  promptPathsOrGlobs =
+    typeof promptPathsOrGlobs === 'string' ? [promptPathsOrGlobs] : promptPathsOrGlobs;
   const promptPaths = promptPathsOrGlobs.flatMap((pathOrGlob) => globSync(pathOrGlob));
   let promptContents: string[] = [];
 
@@ -102,6 +104,27 @@ export function readVars(varsPath: string): CsvRow[] {
   }
 
   return rows;
+}
+
+export function readTests(tests: string | TestCase[] | undefined): TestCase[] {
+  if (typeof tests === 'string') {
+    // It's a filepath, load from CSV
+    const vars = readVars(tests);
+    return vars.map((row, idx) => {
+      const test = testCaseFromCsvRow(row);
+      test.name = `Test #${idx + 1}`;
+      return test;
+    });
+  }
+
+  // TODO(ian): some sort of validation of the shape of tests
+  return (
+    tests || [
+      {
+        // Dummy test for cases when we're only comparing raw prompts.
+      },
+    ]
+  );
 }
 
 export function writeOutput(outputPath: string, summary: EvaluateSummary): void {

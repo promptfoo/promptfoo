@@ -1,42 +1,26 @@
 import { evaluate as doEvaluate } from './evaluator.js';
-import { loadApiProvider } from './providers.js';
+import { loadApiProviders } from './providers.js';
 import assertions from './assertions.js';
 import providers from './providers.js';
 
-import type { ApiProvider, EvaluateOptions, EvaluateSummary, TestSuite } from './types.js';
+import type { EvaluateOptions, TestSuite, TestSuiteConfig } from './types.js';
+import { readTests } from './util.js';
 
 export * from './types.js';
 
-async function evaluate() {}
-/*
-async function evaluate(
-  // providers: (string | ApiProvider)[] | (string | ApiProvider),
-  testSuite: TestSuite,
-  options: EvaluateOptions,
-): Promise<EvaluateSummary> {
-  let apiProviders: ApiProvider[] = [];
-  const addProvider = async (provider: ApiProvider | string) => {
-    if (typeof provider === 'string') {
-      apiProviders.push(await loadApiProvider(provider));
-    } else {
-      apiProviders.push(provider);
-    }
-  };
-
-  if (Array.isArray(providers)) {
-    for (const provider of providers) {
-      await addProvider(provider);
-    }
-  } else {
-    await addProvider(providers);
-  }
-
-  return doEvaluate({
-    ...options,
-    providers: apiProviders,
-  });
+interface EvaluateTestSuite extends TestSuiteConfig {
+  prompts: string[];
 }
- */
+
+async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions = {}) {
+  const constructedTestSuite: TestSuite = {
+    ...testSuite,
+    prompts: testSuite.prompts, // raw prompts expected
+    providers: await loadApiProviders(testSuite.providers),
+    tests: readTests(testSuite.tests),
+  };
+  return doEvaluate(constructedTestSuite, options);
+}
 
 module.exports = {
   evaluate,

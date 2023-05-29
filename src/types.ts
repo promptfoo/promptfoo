@@ -2,8 +2,10 @@ export interface CommandLineOptions {
   // Shared with TestSuite
   prompts: string[];
   providers: string[];
-  maxConcurrency: string;
   output: string;
+
+  // Shared with EvaluateOptions
+  maxConcurrency: string;
 
   // Command line only
   vars?: string;
@@ -138,9 +140,9 @@ export interface TestSuiteConfig {
   defaultProperties?: Omit<TestCase, 'name'>;
 
   outputPath?: string;
-  maxConcurrency?: number;
 }
 
 export type UnifiedConfig = TestSuiteConfig & {
+  evaluateOptions: EvaluateOptions;
   commandLineOptions: Partial<CommandLineOptions>;
 };

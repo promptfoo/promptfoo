@@ -9,12 +9,13 @@ import yaml from 'js-yaml';
 import { Command } from 'commander';
 
 import logger, { setLogLevel } from './logger.js';
-import { loadApiProvider } from './providers.js';
+import { loadApiProvider, loadApiProviders } from './providers.js';
 import { evaluate } from './evaluator.js';
 import {
   maybeReadConfig,
   readConfig,
   readPrompts,
+  readTests,
   readVars,
   testCaseFromCsvRow,
   writeLatestResults,
@@ -108,6 +109,13 @@ async function main() {
     }
   }
 
+  let evaluateOptions: EvaluateOptions = {};
+  if (config.evaluateOptions) {
+    evaluateOptions.generateSuggestions = config.evaluateOptions.generateSuggestions;
+    evaluateOptions.maxConcurrency = config.evaluateOptions.maxConcurrency;
+    evaluateOptions.showProgressBar = config.evaluateOptions.showProgressBar;
+  }
+
   const program = new Command();
 
   program.option('--version', 'Print version', () => {
@@ -155,7 +163,9 @@ async function main() {
     .option(
       '-j, --max-concurrency <number>',
       'Maximum number of concurrent API calls',
-      config.maxConcurrency ? String(config.maxConcurrency) : undefined,
+      config.evaluateOptions?.maxConcurrency
+        ? String(config.evaluateOptions.maxConcurrency)
+        : undefined,
     )
     .option(
       '--table-cell-max-length <number>',
@@ -216,41 +226,9 @@ async function main() {
       }
 
       // Parse prompts, providers, and tests
-      let parsedPrompts: string[] = [];
-      let parsedProviders: ApiProvider[] = [];
-      let parsedTests: TestCase[] = [];
-
-      if (Array.isArray(config.prompts)) {
-        parsedPrompts = readPrompts(config.prompts);
-      }
-      if (typeof config.prompts === 'string') {
-        parsedPrompts = readPrompts([config.prompts]);
-      }
-      if (typeof config.providers === 'string') {
-        parsedProviders = [await loadApiProvider(config.providers)];
-      }
-      if (Array.isArray(config.providers)) {
-        parsedProviders = await Promise.all(
-          config.providers.map((provider) => loadApiProvider(provider)),
-        );
-      }
-
-      if (typeof config.tests === 'string') {
-        // It's a filepath, load from CSV
-        const vars = readVars(config.tests);
-        parsedTests = vars.map((row, idx) => {
-          const test = testCaseFromCsvRow(row);
-          test.name = `Test #${idx + 1}`;
-          return test;
-        });
-      } else {
-        parsedTests = config.tests || [
-          {
-            // Dummy test for cases when we're only comparing raw prompts.
-          },
-        ];
-      }
-      // TODO(ian): some sort of validation of the shape of tests
+      const parsedPrompts = readPrompts(config.prompts);
+      const parsedProviders = await loadApiProviders(config.providers);
+      const parsedTests: TestCase[] = readTests(config.tests);
 
       if (parsedPrompts.length === 0) {
         logger.error(chalk.red('No prompts found'));
@@ -272,7 +250,7 @@ async function main() {
       const options: EvaluateOptions = {
         showProgressBar: true,
         maxConcurrency: !isNaN(maxConcurrency) && maxConcurrency > 0 ? maxConcurrency : undefined,
-        ...config,
+        ...evaluateOptions,
       };
 
       if (cmdObj.grader) {
