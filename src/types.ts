@@ -114,7 +114,7 @@ export interface GradingResult {
 
 // TODO(ian): maybe Assertion should support {type: config} to make the yaml cleaner
 export interface Assertion {
-  type: 'equality' | 'is-json' | 'function' | 'similarity' | 'llm-rubric';
+  type: 'equality' | 'is-json' | 'contains-json' | 'function' | 'similarity' | 'llm-rubric';
   value?: string;
   threshold?: number;
   provider?: ApiProvider; // Some assertions require an LLM provider

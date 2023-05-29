@@ -1,24 +1,44 @@
-prompts: prompts.txt
-providers: openai:gpt-3.5-turbo
+prompts: [prompts.txt]
+providers: [openai:gpt-3.5-turbo]
 tests:
-  - name: Basic test 1
+  - description: Check for exact match
     vars:
-      body: Hello world
+      body: Yes
     assert:
-      - type: function
-        value: output.toLowerCase().includes('ahoy')
+      - type: equality
+        value: Yarr
 
-  - name: Basic test 2
+  - description: Another basic substring check
     vars:
       body: I'm hungry
     assert:
       - type: function
         value: output.toLowerCase().includes('grub')
 
-  - name: Basic test 3
+  - description: Check if output is JSON
     vars:
       body: Output the story of your life in JSON
     assert:
       - type: is-json
+
+  - description: Check for semantic similarity
+    vars:
+      body: Hello world
+    assert:
+      # Look for substring
+      - type: function
+        value: output.toLowerCase().includes('ahoy')
+
+      # Check for semantic similarity
+      - type: similarity
+        value: Ahoy, world
+
+  - description: Use LLM to evaluate output
+    vars:
+      body: The quick brown fox jumps over the lazy dog
+    assert:
+      # Ask the LLM to check if it spoke like a pirate
+      - type: llm-rubric
+        value: Is spoken like a pirate
 
 outputPath: output.csv

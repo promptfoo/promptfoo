@@ -4,8 +4,6 @@ import { join as pathJoin } from 'path';
 
 import Table from 'cli-table3';
 import chalk from 'chalk';
-import invariant from 'tiny-invariant';
-import yaml from 'js-yaml';
 import { Command } from 'commander';
 
 import logger, { setLogLevel } from './logger.js';
@@ -16,25 +14,21 @@ import {
   readConfig,
   readPrompts,
   readTests,
-  readVars,
-  testCaseFromCsvRow,
   writeLatestResults,
   writeOutput,
 } from './util.js';
 import { getDirectory } from './esm.js';
 import { init } from './web/server.js';
-import { assertionFromString } from './assertions.js';
 import { disableCache } from './cache.js';
 
 import type {
-  ApiProvider,
   CommandLineOptions,
   EvaluateOptions,
   TestCase,
   TestSuite,
   UnifiedConfig,
-  VarMapping,
 } from './types.js';
+import { DEFAULT_README, DEFAULT_YAML_CONFIG, DEFAULT_PROMPTS } from './onboarding.js';
 
 function createDummyFiles(directory: string | null) {
   if (directory) {
@@ -43,31 +37,6 @@ function createDummyFiles(directory: string | null) {
       mkdirSync(directory);
     }
   }
-  const dummyPrompts = `Your first prompt goes here
----
-Next prompt goes here. You can substitute variables like this: {{var1}} {{var2}} {{var3}}
----
-This is the next prompt.
-
-These prompts are nunjucks templates, so you can use logic like this:
-{% if var1 %}
-  {{ var1 }}
-{% endif %}`;
-  const dummyVars =
-    'var1,var2,var3\nvalue1,value2,value3\nanother value1,another value2,another value3';
-  const dummyConfig = `module.exports = {
-  prompts: ['prompts.txt'],
-  providers: ['openai:gpt-3.5-turbo'],
-  vars: 'vars.csv',
-  maxConcurrency: 4,
-};`;
-  const readme = `To get started, set your OPENAI_API_KEY environment variable. Then run:
-\`\`\`
-promptfoo eval
-\`\`\`
-
-You'll probably want to change a few of the prompts in prompts.txt and the variables in vars.csv before letting it rip.
-`;
 
   if (directory) {
     if (!existsSync(directory)) {
@@ -78,10 +47,9 @@ You'll probably want to change a few of the prompts in prompts.txt and the varia
     directory = '.';
   }
 
-  writeFileSync(pathJoin(process.cwd(), directory, 'prompts.txt'), dummyPrompts);
-  writeFileSync(pathJoin(process.cwd(), directory, 'vars.csv'), dummyVars);
-  writeFileSync(pathJoin(process.cwd(), directory, 'promptfooconfig.js'), dummyConfig);
-  writeFileSync(pathJoin(process.cwd(), directory, 'README.md'), readme);
+  writeFileSync(pathJoin(process.cwd(), directory, 'prompts.txt'), DEFAULT_PROMPTS);
+  writeFileSync(pathJoin(process.cwd(), directory, 'promptfooconfig.yaml'), DEFAULT_YAML_CONFIG);
+  writeFileSync(pathJoin(process.cwd(), directory, 'README.md'), DEFAULT_README);
 
   if (directory === '.') {
     logger.info(

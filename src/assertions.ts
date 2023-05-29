@@ -66,6 +66,14 @@ export async function runAssertion(
     }
   }
 
+  if (assertion.type === 'contains-json') {
+    const pass = containsJSON(output);
+    return {
+      pass,
+      reason: pass ? 'Assertion passed' : 'Expected output to contain valid JSON',
+    };
+  }
+
   if (assertion.type === 'function') {
     try {
       const customFunction = new Function('output', `return ${assertion.value}`);
@@ -94,6 +102,24 @@ export async function runAssertion(
   }
 
   throw new Error('Unknown assertion type: ' + assertion.type);
+}
+
+function containsJSON(str: string): boolean {
+  // Regular expression to check for JSON-like pattern
+  const jsonPattern = /({[\s\S]*}|\[[\s\S]*])/;
+
+  const match = str.match(jsonPattern);
+
+  if (!match) {
+    return false;
+  }
+
+  try {
+    JSON.parse(match[0]);
+    return true;
+  } catch (error) {
+    return false;
+  }
 }
 
 export async function matchesSimilarity(
@@ -224,9 +250,9 @@ export function assertionFromString(expected: string): Assertion {
       value: expected.slice(6),
     };
   }
-  if (expected === 'json') {
+  if (expected === 'is-json' || expected === 'contains-json') {
     return {
-      type: 'is-json',
+      type: expected,
     };
   }
   return {
