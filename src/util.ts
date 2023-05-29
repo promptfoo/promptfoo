@@ -112,7 +112,7 @@ export function readTests(tests: string | TestCase[] | undefined): TestCase[] {
     const vars = readVars(tests);
     return vars.map((row, idx) => {
       const test = testCaseFromCsvRow(row);
-      test.name = `Test #${idx + 1}`;
+      test.description = `Row #${idx + 1}`;
       return test;
     });
   }

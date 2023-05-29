@@ -155,7 +155,8 @@ async function main() {
       'Path to configuration file. Automatically loads promptfooconfig.js/json/yaml',
     )
     .option(
-      '-v, --vars, --test-csv <path>',
+      // TODO(ian): Remove `vars` for v1
+      '-v, --vars, --tests <path>',
       'Path to CSV with test cases',
       config?.commandLineOptions?.vars,
     )
@@ -235,16 +236,22 @@ async function main() {
         process.exit(1);
       }
 
+      const defaultProperties: TestCase = {
+        prompt: {
+          prefix: cmdObj.promptPrefix,
+          suffix: cmdObj.promptSuffix,
+        },
+        grading: {
+          provider: cmdObj.grader,
+        },
+        ...config.defaultProperties,
+      };
+
       const testSuite: TestSuite = {
         prompts: parsedPrompts,
         providers: parsedProviders,
         tests: parsedTests,
-        defaultProperties: {
-          prompt: {
-            prefix: cmdObj.promptPrefix,
-            suffix: cmdObj.promptSuffix,
-          },
-        },
+        defaultProperties,
       };
 
       const options: EvaluateOptions = {

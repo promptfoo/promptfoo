@@ -5,3 +5,9 @@ Configure in `promptfooconfig.yaml`. Run with:
 ```
 promptfoo eval
 ```
+
+Full command-line equivalent:
+
+```
+promptfoo eval --prompts prompts.txt --providers openai:gpt-3.5-turbo openai:gpt-4
+```

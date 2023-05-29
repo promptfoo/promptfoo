@@ -87,6 +87,7 @@ class Evaluator {
       } else if (response.output) {
         const checkResult = await runAssertions(test, response.output);
         if (!checkResult.pass) {
+          // FIXME(ian)
           ret.error = checkResult.reason || `Expected: ${vars.__expected}`;
         }
         ret.success = checkResult.pass;
@@ -204,7 +205,7 @@ class Evaluator {
     }
 
     // Set up table...
-    const isTest = varNames.has('__expected');
+    const isTest = tests.some((t) => !!t.assert);
 
     const table: EvaluateTable = {
       head: {

@@ -7,4 +7,4 @@ promptfoo eval
 ```
 
 Note that you can edit the configuration to use a CSV test input instead. Set
-`tests: vars.csv` and try running it again.
+`tests: tests.csv` and try running it again.

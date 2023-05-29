@@ -1,4 +1,4 @@
-# This file is equivalent to promptfooconfig.js
+# This file is equivalent to promptfooconfig.example.js
 description: A translator built with LLM
 prompts: prompts.txt
 providers: openai:gpt-3.5-turbo

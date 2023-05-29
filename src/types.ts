@@ -116,7 +116,7 @@ export interface Assertion {
 
 // Each test case is graded pass/fail.  A test case represents a unique input to the LLM after substituting `vars` in the prompt.
 export interface TestCase {
-  name?: string;
+  description?: string;
   vars?: Record<string, string>;
   assert?: Assertion[];
 
@@ -126,6 +126,7 @@ export interface TestCase {
 
 // The test suite defines the "knobs" that we are tuning in prompt engineering: providers and prompts
 export interface TestSuite {
+  description?: string;
   providers: ApiProvider[];
   prompts: string[];
   tests: TestCase[];

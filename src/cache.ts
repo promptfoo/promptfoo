@@ -2,7 +2,6 @@ import path from 'node:path';
 
 import cacheManager from 'cache-manager';
 import fsStore from 'cache-manager-fs-hash';
-import fetch, { Response } from 'node-fetch';
 
 import logger from './logger.js';
 import { getConfigDirectoryPath, fetchWithTimeout } from './util.js';
