@@ -106,6 +106,12 @@ export interface EvaluateSummary {
   stats: EvaluateStats;
 }
 
+export interface GradingResult {
+  pass: boolean;
+  reason: string;
+  tokensUsed?: TokenUsage;
+}
+
 // TODO(ian): maybe Assertion should support {type: config} to make the yaml cleaner
 export interface Assertion {
   type: 'equality' | 'is-json' | 'function' | 'similarity' | 'llm-rubric';
@@ -129,7 +135,7 @@ export interface TestSuite {
   description?: string;
   providers: ApiProvider[];
   prompts: string[];
-  tests: TestCase[];
+  tests?: TestCase[];
   defaultTestProperties?: Omit<TestCase, 'description'>;
 }
 

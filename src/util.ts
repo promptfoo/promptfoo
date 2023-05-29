@@ -108,11 +108,7 @@ export function readVars(varsPath: string): CsvRow[] {
 
 export function readTests(tests: string | TestCase[] | undefined): TestCase[] {
   if (!tests) {
-    return [
-      {
-        // Dummy test for cases when we're only comparing raw prompts.
-      },
-    ];
+    return [];
   }
 
   if (typeof tests === 'string') {
