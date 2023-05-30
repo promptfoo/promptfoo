@@ -1,0 +1,3 @@
+Rephrase this in {{language}}: {{body}}
+---
+Translate this to conversational {{language}}: {{body}}

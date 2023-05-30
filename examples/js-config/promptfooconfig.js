@@ -1,4 +1,3 @@
-// This file is equivalent to promptfooconfig.yaml
 module.exports = {
   description: 'A translator built with LLM',
   prompts: ['prompts.txt'],

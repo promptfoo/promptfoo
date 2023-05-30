@@ -1,11 +1,11 @@
-This example is pre-configured in `promptfooconfig.js` and `promptfooconfig.yaml` (both identical examples). That means you can just run:
+This example is pre-configured in `promptfooconfig.yaml` (both identical examples). That means you can just run:
 
 ```
 promptfoo eval
 ```
 
-Here's the full command:
+To override prompts, providers, output, etc. you can run:
 
 ```
-promptfoo eval --prompts prompts.txt --vars vars.csv --providers openai:chat --output output.json
+promptfoo eval --prompts prompts.txt --providers openai:chat --output output.json
 ```
