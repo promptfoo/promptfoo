@@ -137,7 +137,7 @@ npx promptfoo view
 In [this example](https://github.com/typpo/promptfoo/tree/main/examples/assistant-cli), we evaluate whether adding adjectives to the personality of an assistant bot affects the responses:
 
 ```bash
-npx promptfoo eval -p prompts.txt -v tests.csv -r openai:gpt-3.5-turbo
+npx promptfoo eval -p prompts.txt -r openai:gpt-3.5-turbo -t tests.csv
 ```
 
 <!--

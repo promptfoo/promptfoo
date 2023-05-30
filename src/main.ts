@@ -124,7 +124,7 @@ async function main() {
     )
     .option(
       // TODO(ian): Remove `vars` for v1
-      '-v, --vars, --tests <path>',
+      '-v, --vars, -t, --tests <path>',
       'Path to CSV with test cases',
       config?.commandLineOptions?.vars,
     )
