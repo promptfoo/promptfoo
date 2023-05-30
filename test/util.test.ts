@@ -3,9 +3,9 @@ import * as path from 'path';
 
 import { globSync } from 'glob';
 
-import { readVars, readPrompts, writeOutput } from '../src/util.js';
+import { readVars, readPrompts, writeOutput, readTests } from '../src/util.js';
 
-import type { EvaluateResult, EvaluateTable } from '../src/types.js';
+import type { EvaluateResult, EvaluateTable, TestCase } from '../src/types.js';
 
 jest.mock('node-fetch', () => jest.fn());
 jest.mock('glob', () => ({
@@ -236,5 +236,56 @@ describe('util', () => {
     writeOutput(outputPath, summary);
 
     expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('readTests', () => {
+  afterEach(() => {
+    jest.resetAllMocks();
+  });
+
+  test('readTests with no input', async () => {
+    const result = await readTests(undefined);
+    expect(result).toEqual([]);
+  });
+
+  test('readTests with string input (CSV file path)', async () => {
+    (fs.readFileSync as jest.Mock).mockReturnValue('var1,var2,__expected\nvalue1,value2,value1\nvalue3,value4,fn:value5');
+    const testsPath = 'tests.csv';
+
+    const result = await readTests(testsPath);
+
+    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+    expect(result).toEqual([
+      {
+        description: 'Row #1',
+        vars: { var1: 'value1', var2: 'value2' },
+        assert: [{ type: 'equals', value: 'value1' }],
+      },
+      {
+        description: 'Row #2',
+        vars: { var1: 'value3', var2: 'value4' },
+        assert: [{ type: 'javascript', value: 'value5' }],
+      },
+    ]);
+  });
+
+  test('readTests with array input (TestCase[])', async () => {
+    const input: TestCase[] = [
+      {
+        description: 'Test 1',
+        vars: { var1: 'value1', var2: 'value2' },
+        assert: [{ type: 'equals', value: 'value1' }],
+      },
+      {
+        description: 'Test 2',
+        vars: { var1: 'value3', var2: 'value4' },
+        assert: [{ type: 'contains-json', value: 'value3' }],
+      },
+    ];
+
+    const result = await readTests(input);
+
+    expect(result).toEqual(input);
   });
 });
