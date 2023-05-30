@@ -1,44 +1,88 @@
 Rephrase this from English to Pirate: {{body}},Pretend you're a pirate and speak these words: {{body}},body
-"Ahoy thar, world!","Ahoy there, me hearties! Avast ye landlubbers! 'Tis I, a fearsome pirate, comin' to ye from the seven seas. Ahoy, hello world!",Hello world
-"I be feelin' a mighty need for grub, matey.","Arrr, me belly be rumblin'! I be needin' some grub, mateys! Bring me some vittles or ye'll be walkin' the plank!",I'm hungry
-"""Yarr, me hearties! Spew forth a JSON tale o' yer life!""","[FAIL] Expected Arrr, me hearties! Gather round and listen to the tale of me life as a pirate. 
-
-{
-""name"": ""Captain Blackbeard"",
-""age"": 35,
-""occupation"": ""Pirate"",
-""location"": ""The Caribbean"",
-""crew"": [""Redbeard"", ""Long John"", ""Calico Jack""],
-""ship"": {
-""name"": ""The Black Pearl"",
-""type"": ""Galleon"",
-""weapons"": [""Cannons"", ""Cutlasses"", ""Pistols""]
-},
-""treasure"": {
-""gold"": 50000,
-""jewels"": [""Diamonds"", ""Emeralds"", ""Rubies""]
-},
-""adventures"": [
-{
-""title"": ""The Raid on Port Royal"",
-""description"": ""We plundered the town and took all their riches!"",
-""date"": ""June 12, 1720""
-},
-{
-""title"": ""The Battle of Nassau"",
-""description"": ""We fought off the British navy and claimed the port for ourselves!"",
-""date"": ""September 3, 1721""
-},
-{
-""title"": ""The Treasure of Tortuga"",
-""description"": ""We found a hidden treasure trove on the island of Tortuga!"",
-""date"": ""December 18, 1722""
-}
-]
-}
-
-Me life as a pirate has been full of adventure and danger. Me crew and I have raided towns, battled the British navy, and found hidden treasures. We've sailed the seas on me trusty ship, The Black Pearl, armed with cannons, cutlasses, and pistols. And we've amassed a great fortune in gold and jewels.
-
-But it's not all fun and games, me hearties. We've faced many challenges and dangers along the way. We've battled fierce storms, deadly sea monsters, and treacherous rival pirates. And we've lost many good men in the process.
-
-But through it all, we've remained true to our pirate code and our love of adventure. And we'll continue to sail the seas, seeking out new treasures and new adventures, until the end of our days. Arrr! to be valid JSON, but it isn't: SyntaxError: Unexpected token A in JSON at position 0",Output a JSON story of your life
+"[FAIL] Expected output ""Yarr""
+---
+Aye.","[FAIL] Expected output ""Yarr""
+---
+, me hearties! We be sailin' the high seas in search of treasure and adventure! Hoist the Jolly Roger and let's set sail! Arrrrr!",Yes
+"[PASS] I be feelin' a mighty need for grub, matey.","[PASS] Arrr, me belly be rumblin'! I be needin' some grub, mateys! Bring me some vittles or ye'll be walkin' the plank!",I'm hungry
+"[FAIL] API response error: TypeError: Cannot read properties of undefined (reading '0'): {""error"":{""message"":""That model is currently overloaded with other requests. You can retry your request, or contact us through our help center at help.openai.com if the error persists. (Please include the request ID 5102a6ce396f450a664c71fc906e6e09 in your message.)"",""type"":""server_error"",""param"":null,""code"":null}}
+---
+API response error: TypeError: Cannot read properties of undefined (reading '0'): {""error"":{""message"":""That model is currently overloaded with other requests. You can retry your request, or contact us through our help center at help.openai.com if the error persists. (Please include the request ID 5102a6ce396f450a664c71fc906e6e09 in your message.)"",""type"":""server_error"",""param"":null,""code"":null}}","[PASS] {
+  ""name"": ""Captain Blackbeard"",
+  ""age"": 45,
+  ""occupation"": ""Pirate"",
+  ""nationality"": ""English"",
+  ""crew"": [
+    {
+      ""name"": ""Redbeard"",
+      ""age"": 32,
+      ""position"": ""First Mate""
+    },
+    {
+      ""name"": ""Scurvy Joe"",
+      ""age"": 28,
+      ""position"": ""Navigator""
+    },
+    {
+      ""name"": ""One-Eyed Jack"",
+      ""age"": 50,
+      ""position"": ""Quartermaster""
+    }
+  ],
+  ""ships"": [
+    {
+      ""name"": ""The Black Pearl"",
+      ""type"": ""Galleon"",
+      ""captured"": [
+        ""Spanish Galleon"",
+        ""Portuguese Man O' War"",
+        ""French Frigate""
+      ]
+    },
+    {
+      ""name"": ""The Jolly Roger"",
+      ""type"": ""Sloop"",
+      ""captured"": [
+        ""British Merchant Ship"",
+        ""Dutch Trading Vessel""
+      ]
+    }
+  ],
+  ""treasure"": [
+    {
+      ""type"": ""Gold"",
+      ""amount"": 50000
+    },
+    {
+      ""type"": ""Silver"",
+      ""amount"": 25000
+    },
+    {
+      ""type"": ""Jewels"",
+      ""amount"": 100000
+    }
+  ],
+  ""adventures"": [
+    {
+      ""name"": ""The Treasure of El Dorado"",
+      ""location"": ""South America"",
+      ""outcome"": ""Success""
+    },
+    {
+      ""name"": ""The Battle of Nassau"",
+      ""location"": ""Bahamas"",
+      ""outcome"": ""Victory""
+    },
+    {
+      ""name"": ""The Raid on Port Royal"",
+      ""location"": ""Jamaica"",
+      ""outcome"": ""Defeat""
+    }
+  ]
+}",Output the story of your life in JSON
+"[FAIL] Error: Invariant failed: Similarity assertion must have a threshold
+---
+Error: Invariant failed: Similarity assertion must have a threshold","[FAIL] Error: Invariant failed: Similarity assertion must have a threshold
+---
+Error: Invariant failed: Similarity assertion must have a threshold",Hello world
+"[PASS] Arrr, thar speedy brown fox be jumpin' o'er th' lazy dog.","[PASS] Arrr, me hearties! The quick brown fox be jumpin' over the lazy dog! Ye best be keepin' yer eyes peeled for that sly fox, or he'll be stealin' all yer booty!",The quick brown fox jumps over the lazy dog

@@ -82,31 +82,31 @@ describe('util', () => {
     expect(result).toEqual(['']);
   });
 
-  test('readVars with CSV input', () => {
+  test('readVars with CSV input', async () => {
     (fs.readFileSync as jest.Mock).mockReturnValue('var1,var2\nvalue1,value2');
     const varsPath = 'vars.csv';
 
-    const result = readVars(varsPath);
+    const result = await readVars(varsPath);
 
     expect(fs.readFileSync).toHaveBeenCalledTimes(1);
     expect(result).toEqual([{ var1: 'value1', var2: 'value2' }]);
   });
 
-  test('readVars with JSON input', () => {
+  test('readVars with JSON input', async () => {
     (fs.readFileSync as jest.Mock).mockReturnValue('[{"var1": "value1", "var2": "value2"}]');
     const varsPath = 'vars.json';
 
-    const result = readVars(varsPath);
+    const result = await readVars(varsPath);
 
     expect(fs.readFileSync).toHaveBeenCalledTimes(1);
     expect(result).toEqual([{ var1: 'value1', var2: 'value2' }]);
   });
 
-  test('readVars with YAML input', () => {
+  test('readVars with YAML input', async () => {
     (fs.readFileSync as jest.Mock).mockReturnValue('- var1: value1\n  var2: value2');
     const varsPath = 'vars.yaml';
 
-    const result = readVars(varsPath);
+    const result = await readVars(varsPath);
 
     expect(fs.readFileSync).toHaveBeenCalledTimes(1);
     expect(result).toEqual([{ var1: 'value1', var2: 'value2' }]);

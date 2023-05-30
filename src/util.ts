@@ -91,12 +91,27 @@ export function readPrompts(promptPathsOrGlobs: string | string[]): string[] {
   return promptContents;
 }
 
-export function readVars(varsPath: string): CsvRow[] {
+export async function fetchCsvFromGoogleSheet(url: string): Promise<string> {
+  const csvUrl = url.replace(/\/edit.*$/, '/export?format=csv');
+  const response = await fetch(csvUrl);
+  if (response.status !== 200) {
+    throw new Error(`Failed to fetch CSV from Google Sheets URL: ${url}`);
+  }
+  const csvData = await response.text();
+  return csvData;
+}
+
+export async function readVars(varsPath: string): Promise<CsvRow[]> {
   const fileExtension = parsePath(varsPath).ext.slice(1);
   let rows: CsvRow[] = [];
 
   if (fileExtension === 'csv') {
-    rows = parseCsv(fs.readFileSync(varsPath, 'utf-8'), { columns: true });
+    if (varsPath.startsWith('https://docs.google.com/spreadsheets/')) {
+      const csvData = await fetchCsvFromGoogleSheet(varsPath);
+      rows = parseCsv(csvData, { columns: true });
+    } else {
+      rows = parseCsv(fs.readFileSync(varsPath, 'utf-8'), { columns: true });
+    }
   } else if (fileExtension === 'json') {
     rows = parseJson(fs.readFileSync(varsPath, 'utf-8'));
   } else if (fileExtension === 'yaml' || fileExtension === 'yml') {
@@ -106,14 +121,14 @@ export function readVars(varsPath: string): CsvRow[] {
   return rows;
 }
 
-export function readTests(tests: string | TestCase[] | undefined): TestCase[] {
+export async function readTests(tests: string | TestCase[] | undefined): Promise<TestCase[]> {
   if (!tests) {
     return [];
   }
 
   if (typeof tests === 'string') {
     // It's a filepath, load from CSV
-    const vars = readVars(tests);
+    const vars = await readVars(tests);
     return vars.map((row, idx) => {
       const test = testCaseFromCsvRow(row);
       test.description = `Row #${idx + 1}`;

@@ -197,7 +197,7 @@ async function main() {
       // Parse prompts, providers, and tests
       const parsedPrompts = readPrompts(config.prompts);
       const parsedProviders = await loadApiProviders(config.providers);
-      const parsedTests: TestCase[] = readTests(config.tests);
+      const parsedTests: TestCase[] = await readTests(config.tests);
 
       if (parsedPrompts.length === 0) {
         logger.error(chalk.red('No prompts found'));
