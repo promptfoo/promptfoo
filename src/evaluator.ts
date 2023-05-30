@@ -87,8 +87,7 @@ class Evaluator {
       } else if (response.output) {
         const checkResult = await runAssertions(test, response.output);
         if (!checkResult.pass) {
-          // FIXME(ian)
-          ret.error = checkResult.reason || `Expected: ${vars.__expected}`;
+          ret.error = checkResult.reason;
         }
         ret.success = checkResult.pass;
         if (checkResult.tokensUsed) {
