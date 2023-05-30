@@ -58,7 +58,7 @@ npx promptfoo eval
 
 The YAML configuration format runs each prompt through a series of example inputs (aka "test case") and checks if they meet requirements (aka "assert").
 
-See the [Configuration docs](https://www.promptfoo.dev/docs/configuration/parameters) for more detail.
+See the [Configuration docs](https://www.promptfoo.dev/docs/configuration/guide) for a detailed guide.
 
 ```yaml
 prompts: [prompts.txt]
