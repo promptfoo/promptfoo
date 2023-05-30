@@ -1,5 +1,3 @@
-// assertions.test.ts
-
 import {
   runAssertions,
   runAssertion,
@@ -21,7 +19,7 @@ describe('runAssertions', () => {
   const test: TestCase = {
     assert: [
       {
-        type: 'equality',
+        type: 'equals',
         value: 'Expected output',
       },
     ],
@@ -46,7 +44,7 @@ describe('runAssertions', () => {
 
 describe('runAssertion', () => {
   const equalityAssertion: Assertion = {
-    type: 'equality',
+    type: 'equals',
     value: 'Expected output',
   };
 
@@ -59,7 +57,7 @@ describe('runAssertion', () => {
   };
 
   const functionAssertion: Assertion = {
-    type: 'function',
+    type: 'javascript',
     value: 'output === "Expected output"',
   };
 
@@ -156,7 +154,7 @@ describe('assertionFromString', () => {
     const expected = 'fn:output === "Expected output"';
 
     const result: Assertion = assertionFromString(expected);
-    expect(result.type).toBe('function');
+    expect(result.type).toBe('javascript');
     expect(result.value).toBe('output === "Expected output"');
   });
 
@@ -164,7 +162,7 @@ describe('assertionFromString', () => {
     const expected = 'similar(0.9):Expected output';
 
     const result: Assertion = assertionFromString(expected);
-    expect(result.type).toBe('similarity');
+    expect(result.type).toBe('similar');
     expect(result.value).toBe('Expected output');
     expect(result.threshold).toBe(0.9);
   });

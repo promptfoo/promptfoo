@@ -124,7 +124,7 @@ describe('evaluator', () => {
         {
           assert: [
             {
-              type: 'equality',
+              type: 'equals',
               value: 'Test output',
             },
           ],
@@ -149,7 +149,7 @@ describe('evaluator', () => {
         {
           assert: [
             {
-              type: 'equality',
+              type: 'equals',
               value: 'Different output',
             },
           ],
@@ -174,7 +174,7 @@ describe('evaluator', () => {
         {
           assert: [
             {
-              type: 'function',
+              type: 'javascript',
               value: 'output === "Test output";',
             },
           ],
@@ -199,7 +199,7 @@ describe('evaluator', () => {
         {
           assert: [
             {
-              type: 'function',
+              type: 'javascript',
               value: 'output === "Different output";',
             },
           ],

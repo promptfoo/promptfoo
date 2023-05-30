@@ -5,14 +5,14 @@ tests:
     vars:
       body: Yes
     assert:
-      - type: equality
+      - type: equals
         value: Yarr
 
   - description: Another basic substring check
     vars:
       body: I'm hungry
     assert:
-      - type: function
+      - type: javascript
         value: output.toLowerCase().includes('grub')
 
   - description: Check if output is JSON
@@ -26,11 +26,11 @@ tests:
       body: Hello world
     assert:
       # Look for substring
-      - type: function
+      - type: javascript
         value: output.toLowerCase().includes('ahoy')
 
       # Check for semantic similarity
-      - type: similarity
+      - type: similar
         value: Ahoy, world
 
   - description: Use LLM to evaluate output

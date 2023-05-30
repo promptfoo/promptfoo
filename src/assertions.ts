@@ -46,7 +46,7 @@ export async function runAssertion(
 ): Promise<GradingResult> {
   let pass: boolean = false;
 
-  if (assertion.type === 'equality') {
+  if (assertion.type === 'equals') {
     pass = assertion.value === output;
     return {
       pass,
@@ -74,7 +74,7 @@ export async function runAssertion(
     };
   }
 
-  if (assertion.type === 'function') {
+  if (assertion.type === 'javascript') {
     try {
       const customFunction = new Function('output', `return ${assertion.value}`);
       pass = customFunction(output);
@@ -90,7 +90,7 @@ export async function runAssertion(
     };
   }
 
-  if (assertion.type === 'similarity') {
+  if (assertion.type === 'similar') {
     invariant(assertion.value, 'Similarity assertion must have a string value');
     invariant(assertion.threshold, 'Similarity assertion must have a threshold');
     return matchesSimilarity(assertion.value, output, assertion.threshold);
@@ -230,7 +230,7 @@ export function assertionFromString(expected: string): Assertion {
     const threshold = parseFloat(match[1]) || DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD;
     const rest = expected.replace(SIMILAR_REGEX, '').trim();
     return {
-      type: 'similarity',
+      type: 'similar',
       value: rest,
       threshold,
     };
@@ -240,7 +240,7 @@ export function assertionFromString(expected: string): Assertion {
     const sliceLength = expected.startsWith('fn:') ? 'fn:'.length : 'eval:'.length;
     const functionBody = expected.slice(sliceLength);
     return {
-      type: 'function',
+      type: 'javascript',
       value: functionBody,
     };
   }
@@ -256,7 +256,7 @@ export function assertionFromString(expected: string): Assertion {
     };
   }
   return {
-    type: 'equality',
+    type: 'equals',
     value: expected,
   };
 }

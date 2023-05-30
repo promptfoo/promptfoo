@@ -115,7 +115,7 @@ export interface GradingResult {
 // TODO(ian): maybe Assertion should support {type: config} to make the yaml cleaner
 export interface Assertion {
   // Type of assertion
-  type: 'equality' | 'is-json' | 'contains-json' | 'function' | 'similarity' | 'llm-rubric';
+  type: 'equals' | 'is-json' | 'contains-json' | 'javascript' | 'similar' | 'llm-rubric';
 
   // The expected value, if applicable
   value?: string;
