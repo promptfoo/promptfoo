@@ -232,7 +232,7 @@ describe('matchesLlmRubric', () => {
     const expected = 'Expected output';
     const output = 'Sample output';
     const options: GradingConfig = {
-      prompt: 'Grading prompt',
+      rubricPrompt: 'Grading prompt',
       provider: Grader,
     };
 
@@ -244,7 +244,7 @@ describe('matchesLlmRubric', () => {
     const expected = 'Expected output';
     const output = 'Different output';
     const options: GradingConfig = {
-      prompt: 'Grading prompt',
+      rubricPrompt: 'Grading prompt',
       provider: Grader,
     };
 

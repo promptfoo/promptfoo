@@ -98,7 +98,7 @@ export async function runAssertion(
 
   if (assertion.type === 'llm-rubric') {
     invariant(assertion.value, 'Similarity assertion must have a string value');
-    return matchesLlmRubric(assertion.value, output, test.grading);
+    return matchesLlmRubric(assertion.value, output, test.options);
   }
 
   throw new Error('Unknown assertion type: ' + assertion.type);
@@ -181,7 +181,7 @@ export async function matchesLlmRubric(
     );
   }
 
-  const prompt = nunjucks.renderString(options.prompt || DEFAULT_GRADING_PROMPT, {
+  const prompt = nunjucks.renderString(options.rubricPrompt || DEFAULT_GRADING_PROMPT, {
     content: output,
     rubric: expected,
   });

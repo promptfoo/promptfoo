@@ -53,7 +53,7 @@ export interface CsvRow {
 export type VarMapping = Record<string, string>;
 
 export interface GradingConfig {
-  prompt?: string;
+  rubricPrompt?: string;
   provider?: string | ApiProvider;
 }
 
@@ -138,11 +138,8 @@ export interface TestCase {
   // Optional list of automatic checks to run on the LLM output
   assert?: Assertion[];
 
-  // Optional additional configuration settings for the prompt
-  prompt?: PromptConfig;
-
-  // Optional configuration settings for automatic LLM grading
-  grading?: GradingConfig;
+  // Additional configuration settings for the prompt
+  options?: PromptConfig & GradingConfig;
 }
 
 // The test suite defines the "knobs" that we are tuning in prompt engineering: providers and prompts
@@ -160,7 +157,7 @@ export interface TestSuite {
   tests?: TestCase[];
 
   // Default test case config
-  defaultTestProperties?: Omit<TestCase, 'description'>;
+  defaultTestProperties?: Partial<TestCase>;
 }
 
 // TestSuiteConfig = Test Suite, but before everything is parsed and resolved.  Providers are just strings, prompts are filepaths, tests can be filepath or inline.

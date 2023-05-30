@@ -231,7 +231,7 @@ describe('evaluator', () => {
         },
       ],
       defaultTestProperties: {
-        grading: {
+        options: {
           provider: mockGradingApiProviderPasses,
         },
       },
@@ -261,7 +261,7 @@ describe('evaluator', () => {
         },
       ],
       defaultTestProperties: {
-        grading: {
+        options: {
           provider: mockGradingApiProviderFails,
         },
       },

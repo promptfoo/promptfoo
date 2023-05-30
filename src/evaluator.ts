@@ -254,11 +254,13 @@ class Evaluator {
         ...(testSuite.defaultTestProperties?.assert || []),
         ...(testCase.assert || []),
       ];
-      testCase.grading = testCase.grading || testSuite.defaultTestProperties?.grading;
+      testCase.options = testCase.options || {};
+      testCase.options.provider =
+        testCase.options.provider || testSuite.defaultTestProperties?.options?.provider;
       const prependToPrompt =
-        testCase.prompt?.prefix || testSuite.defaultTestProperties?.prompt?.prefix || '';
+        testCase.options?.prefix || testSuite.defaultTestProperties?.options?.prefix || '';
       const appendToPrompt =
-        testCase.prompt?.suffix || testSuite.defaultTestProperties?.prompt?.suffix || '';
+        testCase.options?.suffix || testSuite.defaultTestProperties?.options?.suffix || '';
 
       // Finalize test case eval
       for (const promptContent of testSuite.prompts) {
