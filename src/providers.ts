@@ -5,6 +5,15 @@ import { ApiProvider } from './types.js';
 import { OpenAiCompletionProvider, OpenAiChatCompletionProvider } from './providers/openai.js';
 import { LocalAiCompletionProvider, LocalAiChatProvider } from './providers/localai.js';
 
+export async function loadApiProviders(providerPaths: string | string[]): Promise<ApiProvider[]> {
+  if (typeof providerPaths === 'string') {
+    return [await loadApiProvider(providerPaths)];
+  } else if (Array.isArray(providerPaths)) {
+    return Promise.all(providerPaths.map((provider) => loadApiProvider(provider)));
+  }
+  throw new Error('Invalid providers list');
+}
+
 export async function loadApiProvider(providerPath: string): Promise<ApiProvider> {
   if (providerPath?.startsWith('openai:')) {
     // Load OpenAI module

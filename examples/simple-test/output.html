@@ -27,7 +27,7 @@
         color: green;
       }
       tr > td[data-content^='[FAIL]'] {
-        color: red;
+        color: #ad0000;
       }
     </style>
   </head>
@@ -42,33 +42,27 @@
       </thead>
       <tbody>
         <tr>
-          <td data-content="[PASS] Ahoy mateys o&#39; the world!">
-            [PASS] Ahoy mateys o&#39; the world!
-          </td>
+          <td data-content="Ahoy thar, world!">Ahoy thar, world!</td>
 
           <td
-            data-content="[PASS] Ahoy there, me hearties! Avast ye landlubbers! &#39;Tis I, a fearsome pirate, comin&#39; to ye from the seven seas. Ahoy, hello world!"
+            data-content="Ahoy there, me hearties! Avast ye landlubbers! &#39;Tis I, a fearsome pirate, comin&#39; to ye from the seven seas. Ahoy, hello world!"
           >
-            [PASS] Ahoy there, me hearties! Avast ye landlubbers! &#39;Tis I, a fearsome pirate,
-            comin&#39; to ye from the seven seas. Ahoy, hello world!
+            Ahoy there, me hearties! Avast ye landlubbers! &#39;Tis I, a fearsome pirate, comin&#39;
+            to ye from the seven seas. Ahoy, hello world!
           </td>
 
           <td data-content="Hello world">Hello world</td>
         </tr>
 
         <tr>
-          <td
-            data-content="[FAIL] I be starvin&#39;!
-
-Expected: fn:output.toLowerCase().includes(&#39;grub&#39;)"
-          >
-            [FAIL] I be starvin&#39;! Expected: fn:output.toLowerCase().includes(&#39;grub&#39;)
+          <td data-content="I be feelin&#39; a mighty need for grub, matey.">
+            I be feelin&#39; a mighty need for grub, matey.
           </td>
 
           <td
-            data-content="[PASS] Arrr, me belly be rumblin&#39;! I be needin&#39; some grub, mateys! Bring me some vittles or ye&#39;ll be walkin&#39; the plank!"
+            data-content="Arrr, me belly be rumblin&#39;! I be needin&#39; some grub, mateys! Bring me some vittles or ye&#39;ll be walkin&#39; the plank!"
           >
-            [PASS] Arrr, me belly be rumblin&#39;! I be needin&#39; some grub, mateys! Bring me some
+            Arrr, me belly be rumblin&#39;! I be needin&#39; some grub, mateys! Bring me some
             vittles or ye&#39;ll be walkin&#39; the plank!
           </td>
 

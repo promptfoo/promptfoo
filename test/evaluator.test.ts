@@ -1,6 +1,7 @@
 import { evaluate } from '../src/evaluator.js';
-
 import type { ApiProvider } from '../src/types.js';
+
+import { TestSuite } from '../src/types.js';
 
 jest.mock('node-fetch', () => jest.fn());
 
@@ -36,13 +37,17 @@ describe('evaluator', () => {
   });
 
   test('evaluate with vars', async () => {
-    const options = {
-      prompts: ['Test prompt {{ var1 }} {{ var2 }}'],
-      vars: [{ var1: 'value1', var2: 'value2' }],
+    const testSuite: TestSuite = {
       providers: [mockApiProvider],
+      prompts: ['Test prompt {{ var1 }} {{ var2 }}'],
+      tests: [
+        {
+          vars: { var1: 'value1', var2: 'value2' },
+        },
+      ],
     };
 
-    const summary = await evaluate(options);
+    const summary = await evaluate(testSuite, {});
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
@@ -54,13 +59,17 @@ describe('evaluator', () => {
   });
 
   test('evaluate with multiple providers', async () => {
-    const options = {
-      prompts: ['Test prompt {{ var1 }} {{ var2 }}'],
-      vars: [{ var1: 'value1', var2: 'value2' }],
+    const testSuite: TestSuite = {
       providers: [mockApiProvider, mockApiProvider],
+      prompts: ['Test prompt {{ var1 }} {{ var2 }}'],
+      tests: [
+        {
+          vars: { var1: 'value1', var2: 'value2' },
+        },
+      ],
     };
 
-    const summary = await evaluate(options);
+    const summary = await evaluate(testSuite, {});
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
     expect(summary.stats.successes).toBe(2);
@@ -73,13 +82,13 @@ describe('evaluator', () => {
     expect(summary.results[0].response?.output).toBe('Test output');
   });
 
-  test('evaluate without vars', async () => {
-    const options = {
-      prompts: ['Test prompt'],
+  test('evaluate without tests', async () => {
+    const testSuite: TestSuite = {
       providers: [mockApiProvider],
+      prompts: ['Test prompt'],
     };
 
-    const summary = await evaluate(options);
+    const summary = await evaluate(testSuite, {});
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
@@ -90,13 +99,13 @@ describe('evaluator', () => {
     expect(summary.results[0].response?.output).toBe('Test output');
   });
 
-  test('evaluate without vars with multiple providers', async () => {
-    const options = {
-      prompts: ['Test prompt'],
+  test('evaluate without tests with multiple providers', async () => {
+    const testSuite: TestSuite = {
       providers: [mockApiProvider, mockApiProvider, mockApiProvider],
+      prompts: ['Test prompt'],
     };
 
-    const summary = await evaluate(options);
+    const summary = await evaluate(testSuite, {});
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(3);
     expect(summary.stats.successes).toBe(3);
@@ -108,13 +117,22 @@ describe('evaluator', () => {
   });
 
   test('evaluate with expected value matching output', async () => {
-    const options = {
-      prompts: ['Test prompt'],
-      vars: [{ __expected: 'Test output' }],
+    const testSuite: TestSuite = {
       providers: [mockApiProvider],
+      prompts: ['Test prompt'],
+      tests: [
+        {
+          assert: [
+            {
+              type: 'equals',
+              value: 'Test output',
+            },
+          ],
+        },
+      ],
     };
 
-    const summary = await evaluate(options);
+    const summary = await evaluate(testSuite, {});
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
@@ -124,13 +142,22 @@ describe('evaluator', () => {
   });
 
   test('evaluate with expected value not matching output', async () => {
-    const options = {
-      prompts: ['Test prompt'],
-      vars: [{ __expected: 'Different output' }],
+    const testSuite: TestSuite = {
       providers: [mockApiProvider],
+      prompts: ['Test prompt'],
+      tests: [
+        {
+          assert: [
+            {
+              type: 'equals',
+              value: 'Different output',
+            },
+          ],
+        },
+      ],
     };
 
-    const summary = await evaluate(options);
+    const summary = await evaluate(testSuite, {});
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(0);
@@ -140,13 +167,22 @@ describe('evaluator', () => {
   });
 
   test('evaluate with fn: expected value', async () => {
-    const options = {
-      prompts: ['Test prompt'],
-      vars: [{ __expected: 'fn:output === "Test output";' }],
+    const testSuite: TestSuite = {
       providers: [mockApiProvider],
+      prompts: ['Test prompt'],
+      tests: [
+        {
+          assert: [
+            {
+              type: 'javascript',
+              value: 'output === "Test output";',
+            },
+          ],
+        },
+      ],
     };
 
-    const summary = await evaluate(options);
+    const summary = await evaluate(testSuite, {});
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
@@ -156,46 +192,22 @@ describe('evaluator', () => {
   });
 
   test('evaluate with fn: expected value not matching output', async () => {
-    const options = {
-      prompts: ['Test prompt'],
-      vars: [{ __expected: 'fn:output === "Different output";' }],
+    const testSuite: TestSuite = {
       providers: [mockApiProvider],
+      prompts: ['Test prompt'],
+      tests: [
+        {
+          assert: [
+            {
+              type: 'javascript',
+              value: 'output === "Different output";',
+            },
+          ],
+        },
+      ],
     };
 
-    const summary = await evaluate(options);
-
-    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
-    expect(summary.stats.successes).toBe(0);
-    expect(summary.stats.failures).toBe(1);
-    expect(summary.results[0].success).toBe(false);
-    expect(summary.results[0].response?.output).toBe('Test output');
-  });
-
-  // TODO(1.0): remove legacy test
-  test('evaluate with eval: (legacy) expected value', async () => {
-    const options = {
-      prompts: ['Test prompt'],
-      vars: [{ __expected: 'eval:output === "Test output";' }],
-      providers: [mockApiProvider],
-    };
-
-    const summary = await evaluate(options);
-
-    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
-    expect(summary.stats.successes).toBe(1);
-    expect(summary.stats.failures).toBe(0);
-    expect(summary.results[0].success).toBe(true);
-    expect(summary.results[0].response?.output).toBe('Test output');
-  });
-
-  test('evaluate with eval: (legacy) expected value not matching output', async () => {
-    const options = {
-      prompts: ['Test prompt'],
-      vars: [{ __expected: 'eval:output === "Different output";' }],
-      providers: [mockApiProvider],
-    };
-
-    const summary = await evaluate(options);
+    const summary = await evaluate(testSuite, {});
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(0);
@@ -205,16 +217,27 @@ describe('evaluator', () => {
   });
 
   test('evaluate with grading expected value', async () => {
-    const options = {
-      prompts: ['Test prompt'],
-      vars: [{ __expected: 'grade:output is a test output' }],
+    const testSuite: TestSuite = {
       providers: [mockApiProvider],
-      grading: {
-        provider: mockGradingApiProviderPasses,
+      prompts: ['Test prompt'],
+      tests: [
+        {
+          assert: [
+            {
+              type: 'llm-rubric',
+              value: 'output is a test output',
+            },
+          ],
+        },
+      ],
+      defaultTest: {
+        options: {
+          provider: mockGradingApiProviderPasses,
+        },
       },
     };
 
-    const summary = await evaluate(options);
+    const summary = await evaluate(testSuite, {});
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
@@ -224,16 +247,27 @@ describe('evaluator', () => {
   });
 
   test('evaluate with grading expected value does not pass', async () => {
-    const options = {
-      prompts: ['Test prompt'],
-      vars: [{ __expected: 'grade:output is a test output' }],
+    const testSuite: TestSuite = {
       providers: [mockApiProvider],
-      grading: {
-        provider: mockGradingApiProviderFails,
+      prompts: ['Test prompt'],
+      tests: [
+        {
+          assert: [
+            {
+              type: 'llm-rubric',
+              value: 'output is a test output',
+            },
+          ],
+        },
+      ],
+      defaultTest: {
+        options: {
+          provider: mockGradingApiProviderFails,
+        },
       },
     };
 
-    const summary = await evaluate(options);
+    const summary = await evaluate(testSuite, {});
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(0);

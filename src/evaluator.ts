@@ -5,7 +5,7 @@ import chalk from 'chalk';
 import nunjucks from 'nunjucks';
 
 import logger from './logger.js';
-import { matchesExpectedValue } from './assertions.js';
+import { runAssertions } from './assertions.js';
 
 import type { SingleBar } from 'cli-progress';
 import type {
@@ -15,14 +15,18 @@ import type {
   EvaluateStats,
   EvaluateSummary,
   EvaluateTable,
+  TestSuite,
   Prompt,
+  TestCase,
 } from './types.js';
 import { generatePrompts } from './suggestions.js';
 
 interface RunEvalOptions {
   provider: ApiProvider;
   prompt: string;
-  vars?: Record<string, string>;
+
+  test: TestCase;
+
   includeProviderId?: boolean;
 
   rowIndex: number;
@@ -32,10 +36,12 @@ interface RunEvalOptions {
 const DEFAULT_MAX_CONCURRENCY = 4;
 
 class Evaluator {
+  testSuite: TestSuite;
   options: EvaluateOptions;
   stats: EvaluateStats;
 
-  constructor(options: EvaluateOptions) {
+  constructor(testSuite: TestSuite, options: EvaluateOptions) {
+    this.testSuite = testSuite;
     this.options = options;
     this.stats = {
       successes: 0,
@@ -52,10 +58,10 @@ class Evaluator {
   async runEval({
     provider,
     prompt,
-    vars,
+    test,
     includeProviderId,
   }: RunEvalOptions): Promise<EvaluateResult> {
-    vars = vars || {};
+    const vars = test.vars || {};
     const renderedPrompt = nunjucks.renderString(prompt, vars);
 
     // Note that we're using original prompt, not renderedPrompt
@@ -79,23 +85,28 @@ class Evaluator {
       if (response.error) {
         ret.error = response.error;
       } else if (response.output) {
-        const checkResult = vars.__expected
-          ? await matchesExpectedValue(vars.__expected, response.output, this.options)
-          : { pass: true };
+        const checkResult = await runAssertions(test, response.output);
         if (!checkResult.pass) {
-          ret.error = checkResult.reason || `Expected: ${vars.__expected}`;
+          ret.error = checkResult.reason;
         }
         ret.success = checkResult.pass;
+        if (checkResult.tokensUsed) {
+          this.stats.tokenUsage.total += checkResult.tokensUsed.total;
+          this.stats.tokenUsage.prompt += checkResult.tokensUsed.prompt;
+          this.stats.tokenUsage.completion += checkResult.tokensUsed.completion;
+        }
       } else {
         ret.success = false;
         ret.error = 'No output';
       }
 
       // Update token usage stats
-      this.stats.tokenUsage.total += response.tokenUsage?.total || 0;
-      this.stats.tokenUsage.prompt += response.tokenUsage?.prompt || 0;
-      this.stats.tokenUsage.completion += response.tokenUsage?.completion || 0;
-      this.stats.tokenUsage.cached += response.tokenUsage?.cached || 0;
+      if (response.tokenUsage) {
+        this.stats.tokenUsage.total += response.tokenUsage.total || 0;
+        this.stats.tokenUsage.prompt += response.tokenUsage.prompt || 0;
+        this.stats.tokenUsage.completion += response.tokenUsage.completion || 0;
+        this.stats.tokenUsage.cached += response.tokenUsage.cached || 0;
+      }
 
       if (ret.success) {
         this.stats.successes++;
@@ -114,12 +125,13 @@ class Evaluator {
   }
 
   async evaluate(): Promise<EvaluateSummary> {
-    const options = this.options;
+    const { testSuite, options } = this;
     const prompts: Prompt[] = [];
 
-    if (options.prompt?.generateSuggestions) {
+    if (options.generateSuggestions) {
+      // TODO(ian): Move this into its own command/file
       logger.info(`Generating prompt variations...`);
-      const { prompts: newPrompts, error } = await generatePrompts(options.prompts[0], 1);
+      const { prompts: newPrompts, error } = await generatePrompts(testSuite.prompts[0], 1);
       if (error || !newPrompts) {
         throw new Error(`Failed to generate prompts: ${error}`);
       }
@@ -142,7 +154,7 @@ class Evaluator {
             async (answer) => {
               rl.close();
               if (answer.toLowerCase().startsWith('y')) {
-                options.prompts.push(prompt);
+                testSuite.prompts.push(prompt);
                 numAdded++;
               } else {
                 logger.info('Skipping this prompt.');
@@ -159,10 +171,11 @@ class Evaluator {
       }
     }
 
-    for (const promptContent of options.prompts) {
-      for (const provider of options.providers) {
+    // Split prompts by provider
+    for (const promptContent of testSuite.prompts) {
+      for (const provider of testSuite.providers) {
         const display =
-          options.providers.length > 1 ? `[${provider.id()}] ${promptContent}` : promptContent;
+          testSuite.providers.length > 1 ? `[${provider.id()}] ${promptContent}` : promptContent;
         prompts.push({
           raw: promptContent,
           display,
@@ -170,29 +183,49 @@ class Evaluator {
       }
     }
 
-    const vars = options.vars && options.vars.length > 0 ? options.vars : [{}];
-    const varsWithSpecialColsRemoved = vars.map((v) => {
-      const ret = { ...v };
-      Object.keys(ret).forEach((key) => {
-        if (key.startsWith('__')) {
-          delete ret[key];
-        }
-      });
-      return ret;
+    // Aggregate all vars across test cases
+
+    const tests = (
+      testSuite.tests || [
+        {
+          // Dummy test for cases when we're only comparing raw prompts.
+        },
+      ]
+    ).map((test) => {
+      const finalTestCase: TestCase = Object.assign({}, testSuite.defaultTest);
+      return Object.assign(finalTestCase, test);
     });
-    const isTest = vars[0].__expected;
+
+    const varNames: Set<string> = new Set();
+    const varsWithSpecialColsRemoved: Record<string, string>[] = [];
+    for (const testCase of tests) {
+      if (testCase.vars) {
+        const varWithSpecialColsRemoved: Record<string, string> = {};
+        for (const varName of Object.keys(testCase.vars)) {
+          varNames.add(varName);
+          varWithSpecialColsRemoved[varName] = testCase.vars[varName];
+        }
+        varsWithSpecialColsRemoved.push(varWithSpecialColsRemoved);
+      }
+    }
+
+    // Set up table...
+    const isTest = tests.some((t) => !!t.assert);
+
     const table: EvaluateTable = {
       head: {
         prompts: prompts.map((p) => p.display),
-        vars: Object.keys(varsWithSpecialColsRemoved[0]),
+        vars: Array.from(varNames).sort(),
+        // TODO(ian): add assertions to table?
       },
       body: [],
     };
 
+    // And progress bar...
     let progressbar: SingleBar | undefined;
     if (options.showProgressBar) {
       const totalNumRuns =
-        options.prompts.length * options.providers.length * (options.vars?.length || 1);
+        testSuite.prompts.length * testSuite.providers.length * (tests.length || 1);
       const cliProgress = await import('cli-progress');
       progressbar = new cliProgress.SingleBar(
         {
@@ -208,21 +241,31 @@ class Evaluator {
       });
     }
 
+    // Set up eval cases
     const runEvalOptions: RunEvalOptions[] = [];
     let rowIndex = 0;
-    for (const row of vars) {
+    for (const testCase of tests) {
       let colIndex = 0;
 
-      const prependToPrompt = row.__prefix || options.prompt?.prefix || '';
-      const appendToPrompt = row.__suffix || options.prompt?.suffix || '';
+      // Handle default properties
+      testCase.vars = Object.assign({}, testSuite.defaultTest?.vars, testCase.vars);
+      testCase.assert = [...(testSuite.defaultTest?.assert || []), ...(testCase.assert || [])];
+      testCase.options = testCase.options || {};
+      testCase.options.provider =
+        testCase.options.provider || testSuite.defaultTest?.options?.provider;
+      const prependToPrompt =
+        testCase.options?.prefix || testSuite.defaultTest?.options?.prefix || '';
+      const appendToPrompt =
+        testCase.options?.suffix || testSuite.defaultTest?.options?.suffix || '';
 
-      for (const promptContent of options.prompts) {
-        for (const provider of options.providers) {
+      // Finalize test case eval
+      for (const promptContent of testSuite.prompts) {
+        for (const provider of testSuite.providers) {
           runEvalOptions.push({
             provider,
             prompt: prependToPrompt + promptContent + appendToPrompt,
-            vars: row,
-            includeProviderId: options.providers.length > 1,
+            test: testCase,
+            includeProviderId: testSuite.providers.length > 1,
             rowIndex,
             colIndex,
           });
@@ -232,6 +275,7 @@ class Evaluator {
       rowIndex++;
     }
 
+    // Actually run the eval
     const results: EvaluateResult[] = [];
     await async.forEachOfLimit(
       runEvalOptions,
@@ -245,7 +289,7 @@ class Evaluator {
           progressbar.increment({
             provider: options.provider.id(),
             prompt: options.prompt.slice(0, 10),
-            vars: Object.entries(options.vars || {})
+            vars: Object.entries(options.test.vars || {})
               .map(([k, v]) => `${k}=${v}`)
               .join(' ')
               .slice(0, 10),
@@ -276,7 +320,7 @@ class Evaluator {
         if (!table.body[rowIndex]) {
           table.body[rowIndex] = {
             outputs: [],
-            vars: Object.values(options.vars || {}),
+            vars: table.head.vars.map((varName) => options.test.vars?.[varName] || ''),
           };
         }
         table.body[rowIndex].outputs[colIndex] = resultText;
@@ -291,7 +335,7 @@ class Evaluator {
   }
 }
 
-export function evaluate(options: EvaluateOptions) {
-  const ev = new Evaluator(options);
+export function evaluate(testSuite: TestSuite, options: EvaluateOptions) {
+  const ev = new Evaluator(testSuite, options);
   return ev.evaluate();
 }

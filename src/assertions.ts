@@ -1,3 +1,4 @@
+import invariant from 'tiny-invariant';
 import nunjucks from 'nunjucks';
 
 import { DefaultEmbeddingProvider, DefaultGradingProvider } from './providers/openai.js';
@@ -5,44 +6,119 @@ import { cosineSimilarity } from './util.js';
 import { loadApiProvider } from './providers.js';
 import { DEFAULT_GRADING_PROMPT } from './prompts.js';
 
-import type { EvaluateOptions, GradingConfig, TokenUsage } from './types.js';
-
-interface GradingResult {
-  pass: boolean;
-  reason: string;
-  tokensUsed: TokenUsage;
-}
+import type { Assertion, GradingConfig, TestCase, GradingResult } from './types.js';
 
 const SIMILAR_REGEX = /similar(?::|\((\d+(\.\d+)?)\):)/;
 
 const DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD = 0.8;
 
-export async function matchesExpectedValue(
-  expected: string,
+export async function runAssertions(test: TestCase, output: string): Promise<GradingResult> {
+  const tokensUsed = {
+    total: 0,
+    prompt: 0,
+    completion: 0,
+  };
+
+  if (!test.assert) {
+    return { pass: true, reason: 'No assertions', tokensUsed };
+  }
+
+  for (const assertion of test.assert) {
+    const result = await runAssertion(assertion, test, output);
+    if (!result.pass) {
+      return result;
+    }
+
+    if (result.tokensUsed) {
+      tokensUsed.total += result.tokensUsed.total;
+      tokensUsed.prompt += result.tokensUsed.prompt;
+      tokensUsed.completion += result.tokensUsed.completion;
+    }
+  }
+
+  return { pass: true, reason: 'All assertions passed', tokensUsed };
+}
+
+export async function runAssertion(
+  assertion: Assertion,
+  test: TestCase,
   output: string,
-  options: EvaluateOptions,
-): Promise<{ pass: boolean; reason?: string }> {
-  const match = expected.match(SIMILAR_REGEX);
+): Promise<GradingResult> {
+  let pass: boolean = false;
 
-  if (match) {
-    const threshold = parseFloat(match[1]) || DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD;
-    const rest = expected.replace(SIMILAR_REGEX, '').trim();
-    return matchesSimilarity(rest, output, threshold);
-  } else if (expected.startsWith('fn:') || expected.startsWith('eval:')) {
-    // TODO(1.0): delete eval: legacy option
-    const sliceLength = expected.startsWith('fn:') ? 'fn:'.length : 'eval:'.length;
-    const functionBody = expected.slice(sliceLength);
-
-    const customFunction = new Function('output', `return ${functionBody}`);
-    return { pass: customFunction(output) };
-  } else if (expected.startsWith('grade:')) {
-    return matchesLlmRubric(expected.slice(6), output, options.grading);
-  } else {
-    const pass = expected === output;
+  if (assertion.type === 'equals') {
+    pass = assertion.value === output;
     return {
       pass,
-      reason: pass ? undefined : `Expected: ${expected}, Output: ${output}`,
+      reason: pass ? 'Assertion passed' : `Expected output "${assertion.value}"`,
     };
+  }
+
+  if (assertion.type === 'is-json') {
+    try {
+      JSON.parse(output);
+      return { pass: true, reason: 'Assertion passed' };
+    } catch (err) {
+      return {
+        pass: false,
+        reason: `Expected output to be valid JSON, but it isn't.\nError: ${err}`,
+      };
+    }
+  }
+
+  if (assertion.type === 'contains-json') {
+    const pass = containsJSON(output);
+    return {
+      pass,
+      reason: pass ? 'Assertion passed' : 'Expected output to contain valid JSON',
+    };
+  }
+
+  if (assertion.type === 'javascript') {
+    try {
+      const customFunction = new Function('output', `return ${assertion.value}`);
+      pass = customFunction(output);
+    } catch (err) {
+      return {
+        pass: false,
+        reason: `Custom function threw error: ${(err as Error).message}`,
+      };
+    }
+    return {
+      pass,
+      reason: pass ? 'Assertion passed' : `Custom function returned false`,
+    };
+  }
+
+  if (assertion.type === 'similar') {
+    invariant(assertion.value, 'Similarity assertion must have a string value');
+    invariant(assertion.threshold, 'Similarity assertion must have a threshold');
+    return matchesSimilarity(assertion.value, output, assertion.threshold);
+  }
+
+  if (assertion.type === 'llm-rubric') {
+    invariant(assertion.value, 'Similarity assertion must have a string value');
+    return matchesLlmRubric(assertion.value, output, test.options);
+  }
+
+  throw new Error('Unknown assertion type: ' + assertion.type);
+}
+
+function containsJSON(str: string): boolean {
+  // Regular expression to check for JSON-like pattern
+  const jsonPattern = /({[\s\S]*}|\[[\s\S]*])/;
+
+  const match = str.match(jsonPattern);
+
+  if (!match) {
+    return false;
+  }
+
+  try {
+    JSON.parse(match[0]);
+    return true;
+  } catch (error) {
+    return false;
   }
 }
 
@@ -105,7 +181,7 @@ export async function matchesLlmRubric(
     );
   }
 
-  const prompt = nunjucks.renderString(options.prompt || DEFAULT_GRADING_PROMPT, {
+  const prompt = nunjucks.renderString(options.rubricPrompt || DEFAULT_GRADING_PROMPT, {
     content: output,
     rubric: expected,
   });
@@ -146,6 +222,43 @@ export async function matchesLlmRubric(
       },
     };
   }
+}
+
+export function assertionFromString(expected: string): Assertion {
+  const match = expected.match(SIMILAR_REGEX);
+  if (match) {
+    const threshold = parseFloat(match[1]) || DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD;
+    const rest = expected.replace(SIMILAR_REGEX, '').trim();
+    return {
+      type: 'similar',
+      value: rest,
+      threshold,
+    };
+  }
+  if (expected.startsWith('fn:') || expected.startsWith('eval:')) {
+    // TODO(1.0): delete eval: legacy option
+    const sliceLength = expected.startsWith('fn:') ? 'fn:'.length : 'eval:'.length;
+    const functionBody = expected.slice(sliceLength);
+    return {
+      type: 'javascript',
+      value: functionBody,
+    };
+  }
+  if (expected.startsWith('grade:')) {
+    return {
+      type: 'llm-rubric',
+      value: expected.slice(6),
+    };
+  }
+  if (expected === 'is-json' || expected === 'contains-json') {
+    return {
+      type: expected,
+    };
+  }
+  return {
+    type: 'equals',
+    value: expected,
+  };
 }
 
 export default {

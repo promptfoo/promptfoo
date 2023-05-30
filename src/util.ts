@@ -7,7 +7,6 @@ import yaml from 'js-yaml';
 import nunjucks from 'nunjucks';
 import { globSync } from 'glob';
 import { parse as parsePath } from 'path';
-import { CsvRow } from './types.js';
 import { parse as parseCsv } from 'csv-parse/sync';
 import { stringify } from 'csv-stringify/sync';
 
@@ -16,7 +15,16 @@ import { getDirectory } from './esm.js';
 
 import type { RequestInfo, RequestInit, Response } from 'node-fetch';
 
-import type { EvaluateSummary } from './types.js';
+import type {
+  Assertion,
+  CsvRow,
+  EvaluateSummary,
+  CommandLineOptions,
+  TestSuite,
+  UnifiedConfig,
+  TestCase,
+} from './types.js';
+import { assertionFromString } from './assertions.js';
 
 const PROMPT_DELIMITER = '---';
 
@@ -28,7 +36,35 @@ function parseJson(json: string): any | undefined {
   }
 }
 
-export function readPrompts(promptPathsOrGlobs: string[]): string[] {
+export function maybeReadConfig(configPath: string): UnifiedConfig | undefined {
+  try {
+    return readConfig(configPath);
+  } catch {
+    return undefined;
+  }
+}
+
+export function readConfig(configPath: string): UnifiedConfig {
+  if (!fs.existsSync(configPath)) {
+    throw new Error(`Config file not found: ${configPath}`);
+  }
+  const ext = path.parse(configPath).ext;
+  switch (ext) {
+    case '.json':
+      const content = fs.readFileSync(configPath, 'utf-8');
+      return JSON.parse(content) as UnifiedConfig;
+    case '.js':
+      return require(configPath) as UnifiedConfig;
+    case '.yaml':
+      return yaml.load(fs.readFileSync(configPath, 'utf-8')) as UnifiedConfig;
+    default:
+      throw new Error(`Unsupported configuration file format: ${ext}`);
+  }
+}
+
+export function readPrompts(promptPathsOrGlobs: string | string[]): string[] {
+  promptPathsOrGlobs =
+    typeof promptPathsOrGlobs === 'string' ? [promptPathsOrGlobs] : promptPathsOrGlobs;
   const promptPaths = promptPathsOrGlobs.flatMap((pathOrGlob) => globSync(pathOrGlob));
   let promptContents: string[] = [];
 
@@ -49,6 +85,9 @@ export function readPrompts(promptPathsOrGlobs: string[]): string[] {
   if (promptContents.length === 1) {
     promptContents = promptContents[0].split(PROMPT_DELIMITER).map((p) => p.trim());
   }
+  if (promptContents.length === 0) {
+    throw new Error(`There are no prompts in ${promptPathsOrGlobs.join(', ')}`);
+  }
   return promptContents;
 }
 
@@ -65,6 +104,37 @@ export function readVars(varsPath: string): CsvRow[] {
   }
 
   return rows;
+}
+
+export function readTests(tests: string | TestCase[] | undefined): TestCase[] {
+  if (!tests) {
+    return [];
+  }
+
+  if (typeof tests === 'string') {
+    // It's a filepath, load from CSV
+    const vars = readVars(tests);
+    return vars.map((row, idx) => {
+      const test = testCaseFromCsvRow(row);
+      test.description = `Row #${idx + 1}`;
+      return test;
+    });
+  }
+
+  // Some validation of the shape of tests
+  for (const test of tests) {
+    if (!test.assert && !test.vars) {
+      throw new Error(
+        `Test case must have either "assert" or "vars" property. Instead got ${JSON.stringify(
+          test,
+          null,
+          2,
+        )}`,
+      );
+    }
+  }
+
+  return tests;
 }
 
 export function writeOutput(outputPath: string, summary: EvaluateSummary): void {
@@ -152,4 +222,21 @@ export function cosineSimilarity(vecA: number[], vecB: number[]) {
   const vecAMagnitude = Math.sqrt(vecA.reduce((acc, val) => acc + val * val, 0));
   const vecBMagnitude = Math.sqrt(vecB.reduce((acc, val) => acc + val * val, 0));
   return dotProduct / (vecAMagnitude * vecBMagnitude);
+}
+
+export function testCaseFromCsvRow(row: CsvRow): TestCase {
+  const vars: Record<string, string> = {};
+  const asserts: Assertion[] = [];
+  for (const [key, value] of Object.entries(row)) {
+    if (key === '__expected') {
+      asserts.push(assertionFromString(value));
+    } else {
+      vars[key] = value;
+    }
+  }
+
+  return {
+    vars,
+    assert: asserts,
+  };
 }
