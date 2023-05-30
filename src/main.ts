@@ -128,6 +128,11 @@ async function main() {
       'Path to CSV with test cases',
       config?.commandLineOptions?.vars,
     )
+    .option(
+      '-t, --tests <path>',
+      'Path to CSV with test cases',
+      config?.commandLineOptions?.tests,
+    )
     .option('-o, --output <path>', 'Path to output file (csv, json, yaml, html)', config.outputPath)
     .option(
       '-j, --max-concurrency <number>',
@@ -178,7 +183,7 @@ async function main() {
         config = {
           prompts: cmdObj.prompts || config.prompts,
           providers: cmdObj.providers || config.providers,
-          tests: cmdObj.vars || config.tests,
+          tests: cmdObj.tests || cmdObj.vars || config.tests,
         };
       }
 

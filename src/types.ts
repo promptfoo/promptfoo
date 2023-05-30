@@ -9,6 +9,7 @@ export interface CommandLineOptions {
 
   // Command line only
   vars?: string;
+  tests?: string;
   config?: string;
   verbose?: boolean;
   grader?: string;
