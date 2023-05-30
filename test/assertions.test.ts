@@ -132,7 +132,7 @@ describe('assertionFromString', () => {
     const expected = 'Expected output';
 
     const result: Assertion = assertionFromString(expected);
-    expect(result.type).toBe('equality');
+    expect(result.type).toBe('equals');
     expect(result.value).toBe(expected);
   });
 
