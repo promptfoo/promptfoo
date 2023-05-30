@@ -9,6 +9,23 @@ describe('fetchJsonWithCache', () => {
     mockedFetch.mockReset();
   });
 
+  it('should not cache data with failed request', async () => {
+    enableCache();
+
+    const url = 'https://api.example.com/data';
+    const response = { data: 'test data' };
+
+    mockedFetch.mockResolvedValueOnce({
+      ok: false,
+      json: () => Promise.resolve(response),
+    } as Response);
+
+    const result = await fetchJsonWithCache(url, {}, 1000);
+
+    expect(mockedFetch).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ cached: false, data: response });
+  });
+
   it('should fetch data with cache enabled', async () => {
     enableCache();
 
@@ -16,6 +33,7 @@ describe('fetchJsonWithCache', () => {
     const response = { data: 'test data' };
 
     mockedFetch.mockResolvedValueOnce({
+      ok: true,
       json: () => Promise.resolve(response),
     } as Response);
 
@@ -30,6 +48,7 @@ describe('fetchJsonWithCache', () => {
     const response = { data: 'test data' };
 
     mockedFetch.mockResolvedValueOnce({
+      ok: true,
       json: () => Promise.resolve(response),
     } as Response);
 
@@ -64,6 +83,7 @@ describe('fetchJsonWithCache', () => {
     const response = { data: 'test data' };
 
     mockedFetch.mockResolvedValueOnce({
+      ok: true,
       json: () => Promise.resolve(response),
     } as Response);
 
