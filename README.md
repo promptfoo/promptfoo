@@ -40,7 +40,7 @@ As you collect more examples and establish a user feedback loop, continue to bui
 
 ## Usage
 
-To get started, run the following command:
+To get started, run this command:
 
 ```
 npx promptfoo init
@@ -56,7 +56,7 @@ npx promptfoo eval
 
 ### Configuration
 
-The YAML configuration format runs each prompt through a series of example inputs (aka "test") and checks if they meet requirements (aka "assert").
+The YAML configuration format runs each prompt through a series of example inputs (aka "test case") and checks if they meet requirements (aka "assert").
 
 See the [Configuration docs](https://www.promptfoo.dev/docs/configuration/parameters) for more detail.
 
@@ -111,18 +111,18 @@ See [example CSV](https://github.com/typpo/promptfoo/blob/main/examples/simple-t
 
 If you're looking to customize your usage, you have a wide set of parameters at your disposal.
 
-| Option                              | Description                                                                                                                                                                                    |
-| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `-p, --prompts <paths...>`          | Paths to prompt files, directory, or glob                                                                                                                                                      |
-| `-r, --providers <name or path...>` | One of: openai:chat, openai:completion, openai:model-name, localai:chat:model-name, localai:completion:model-name. See [API providers](https://www.promptfoo.dev/docs/configuration/providers) |
-| `-o, --output <path>`               | Path to output file (csv, json, yaml, html)                                                                                                                                                    |
-| `-v, --vars <path>`                 | Path to file with prompt variables (csv, json, yaml)                                                                                                                                           |
-| `-c, --config <path>`               | Path to configuration file. `promptfooconfig.js[on]` is automatically loaded if present                                                                                                        |
-| `-j, --max-concurrency <number>`    | Maximum number of concurrent API calls                                                                                                                                                         |
-| `--table-cell-max-length <number>`  | Truncate console table cells to this length                                                                                                                                                    |
-| `--prompt-prefix <path>`            | This prefix is prepended to every prompt                                                                                                                                                       |
-| `--prompt-suffix <path>`            | This suffix is append to every prompt                                                                                                                                                          |
-| `--grader`                          | Provider that will grade outputs, if you are using [LLM grading](https://www.promptfoo.dev/docs/configuration/expected-outputs)                                                                |
+| Option                              | Description                                                                                                                                                                                                            |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `-p, --prompts <paths...>`          | Paths to [prompt files](https://promptfoo.dev/docs/configuration/parameters#prompt-files), directory, or glob                                                                                                          |
+| `-r, --providers <name or path...>` | One of: openai:chat, openai:completion, openai:model-name, localai:chat:model-name, localai:completion:model-name. See [API providers](https://promptfoo.dev/docs/configuration/providers)                             |
+| `-o, --output <path>`               | Path to [output file](https://promptfoo.dev/docs/configuration/parameters#output-file) (csv, json, yaml, html)                                                                                                         |
+| `--tests <path>`                    | Path to [external test file](https://promptfoo.dev/docs/configurationexpected-outputsassertions#load-an-external-tests-file)                                                                                           |
+| `-c, --config <path>`               | Path to [configuration file](https://promptfoo.dev/docs/configuration/guide). `promptfooconfig.js/json/yaml` is automatically loaded if present                                                                        |
+| `-j, --max-concurrency <number>`    | Maximum number of concurrent API calls                                                                                                                                                                                 |
+| `--table-cell-max-length <number>`  | Truncate console table cells to this length                                                                                                                                                                            |
+| `--prompt-prefix <path>`            | This prefix is prepended to every prompt                                                                                                                                                                               |
+| `--prompt-suffix <path>`            | This suffix is append to every prompt                                                                                                                                                                                  |
+| `--grader`                          | [Provider](https://promptfoo.dev/docs/configuration/providers) that will conduct the evaluation, if you are [using LLM to grade your output](https://promptfoo.dev/docs/configuration/expected-outputs#llm-evaluation) |
 
 After running an eval, you may optionally use the `view` command to open the web viewer:
 
@@ -134,10 +134,10 @@ npx promptfoo view
 
 #### Prompt quality
 
-In this example, we evaluate whether adding adjectives to the personality of an assistant bot affects the responses:
+In [this example](https://github.com/typpo/promptfoo/tree/main/examples/assistant-cli), we evaluate whether adding adjectives to the personality of an assistant bot affects the responses:
 
 ```bash
-npx promptfoo eval -p prompts.txt -v vars.csv -r openai:gpt-3.5-turbo
+npx promptfoo eval -p prompts.txt -v tests.csv -r openai:gpt-3.5-turbo
 ```
 
 <!--
@@ -148,15 +148,13 @@ npx promptfoo eval -p prompts.txt -v vars.csv -r openai:gpt-3.5-turbo
 
 This command will evaluate the prompts in `prompts.txt`, substituing the variable values from `vars.csv`, and output results in your terminal.
 
-Have a look at the setup and full output [here](https://github.com/typpo/promptfoo/tree/main/examples/assistant-cli).
-
 You can also output a nice [spreadsheet](https://docs.google.com/spreadsheets/d/1nanoj3_TniWrDl1Sj-qYqIMD6jwm5FBy15xPFdUTsmI/edit?usp=sharing), [JSON](https://github.com/typpo/promptfoo/blob/main/examples/simple-cli/output.json), YAML, or an HTML file:
 
 ![Table output](https://user-images.githubusercontent.com/310310/235483444-4ddb832d-e103-4b9c-a862-b0d6cc11cdc0.png)
 
 #### Model quality
 
-In this example, we evaluate the difference between GPT 3 and GPT 4 outputs for a given prompt:
+In the [next example](https://github.com/typpo/promptfoo/tree/main/examples/gpt-3.5-vs-4), we evaluate the difference between GPT 3 and GPT 4 outputs for a given prompt:
 
 ```bash
 npx promptfoo eval -p prompts.txt -r openai:gpt-3.5-turbo openai:gpt-4 -o output.html
@@ -165,8 +163,6 @@ npx promptfoo eval -p prompts.txt -r openai:gpt-3.5-turbo openai:gpt-4 -o output
 Produces this HTML table:
 
 ![Side-by-side evaluation of LLM model quality, gpt3 vs gpt4, html output](https://user-images.githubusercontent.com/310310/235490527-e0c31f40-00a0-493a-8afc-8ed6322bb5ca.png)
-
-Full setup and output [here](https://github.com/typpo/promptfoo/tree/main/examples/gpt-3.5-vs-4).
 
 ## Usage (node package)
 
@@ -242,7 +238,7 @@ See the full example [here](https://github.com/typpo/promptfoo/tree/main/example
 
 ## Configuration
 
-- **[Setting up an eval](https://promptfoo.dev/docs/configuration/parameters)**: Learn more about how to set up prompt files, vars file, output, etc.
+- **[Main guide](https://promptfoo.dev/docs/configuration/guide)**: Learn about how to configure your YAML file, setup prompt files, etc.
 - **[Configuring test cases](https://promptfoo.dev/docs/configuration/expected-outputs)**: Learn more about how to configure expected outputs and test assertions.
 
 ## Installation

@@ -216,6 +216,7 @@ async function main() {
       };
 
       const testSuite: TestSuite = {
+        description: config.description,
         prompts: parsedPrompts,
         providers: parsedProviders,
         tests: parsedTests,

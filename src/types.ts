@@ -114,38 +114,73 @@ export interface GradingResult {
 
 // TODO(ian): maybe Assertion should support {type: config} to make the yaml cleaner
 export interface Assertion {
+  // Type of assertion
   type: 'equality' | 'is-json' | 'contains-json' | 'function' | 'similarity' | 'llm-rubric';
+
+  // The expected value, if applicable
   value?: string;
+
+  // The threshold value, only applicable for similarity (cosine distance)
   threshold?: number;
-  provider?: ApiProvider; // Some assertions require an LLM provider
+
+  // Some assertions (similarity, llm-rubric) require an LLM provider
+  provider?: ApiProvider;
 }
 
 // Each test case is graded pass/fail.  A test case represents a unique input to the LLM after substituting `vars` in the prompt.
 export interface TestCase {
+  // Optional description of what you're testing
   description?: string;
+
+  // Key-value pairs to substitute in the prompt
   vars?: Record<string, string>;
+
+  // Optional list of automatic checks to run on the LLM output
   assert?: Assertion[];
 
+  // Optional additional configuration settings for the prompt
   prompt?: PromptConfig;
+
+  // Optional configuration settings for automatic LLM grading
   grading?: GradingConfig;
 }
 
 // The test suite defines the "knobs" that we are tuning in prompt engineering: providers and prompts
 export interface TestSuite {
+  // Optional description of what your LLM is trying to do
   description?: string;
+
+  // One or more LLM APIs to use
   providers: ApiProvider[];
+
+  // One or more prompt strings
   prompts: string[];
+
+  // Test cases
   tests?: TestCase[];
+
+  // Default test case config
   defaultTestProperties?: Omit<TestCase, 'description'>;
 }
 
 // TestSuiteConfig = Test Suite, but before everything is parsed and resolved.  Providers are just strings, prompts are filepaths, tests can be filepath or inline.
 export interface TestSuiteConfig {
+  // Optional description of what your LLM is trying to do
+  description?: string;
+
+  // One or more LLM APIs to use, for example: openai:gpt-3.5-turbo, openai:gpt-4, localai:chat:vicuna
   providers: string | string[];
+
+  // One or more prompt files to load
   prompts: string | string[];
+
+  // Path to a test file, OR list of LLM prompt variations (aka "test case")
   tests: string | TestCase[];
+
+  // Sets the default properties for each test case. Useful for setting an assertion, on all test cases, for example.
   defaultTestProperties?: Omit<TestCase, 'description'>;
 
+  // Path to write output. Writes to console/web viewer if not set.
   outputPath?: string;
 }
 
