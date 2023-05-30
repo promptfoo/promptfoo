@@ -1,6 +1,6 @@
 prompts: prompts.txt
 providers: openai:gpt-3.5-turbo
-defaultTestProperties:
+defaultTest:
   assert:
     - type: llm-rubric
       value: Do not mention that you are an AI or chat assistant

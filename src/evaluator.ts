@@ -193,7 +193,7 @@ class Evaluator {
         },
       ]
     ).map((test) => {
-      const finalTestCase: TestCase = Object.assign({}, testSuite.defaultTestProperties);
+      const finalTestCase: TestCase = Object.assign({}, testSuite.defaultTest);
       return Object.assign(finalTestCase, test);
     });
 
@@ -249,18 +249,15 @@ class Evaluator {
       let colIndex = 0;
 
       // Handle default properties
-      testCase.vars = Object.assign({}, testSuite.defaultTestProperties?.vars, testCase.vars);
-      testCase.assert = [
-        ...(testSuite.defaultTestProperties?.assert || []),
-        ...(testCase.assert || []),
-      ];
+      testCase.vars = Object.assign({}, testSuite.defaultTest?.vars, testCase.vars);
+      testCase.assert = [...(testSuite.defaultTest?.assert || []), ...(testCase.assert || [])];
       testCase.options = testCase.options || {};
       testCase.options.provider =
-        testCase.options.provider || testSuite.defaultTestProperties?.options?.provider;
+        testCase.options.provider || testSuite.defaultTest?.options?.provider;
       const prependToPrompt =
-        testCase.options?.prefix || testSuite.defaultTestProperties?.options?.prefix || '';
+        testCase.options?.prefix || testSuite.defaultTest?.options?.prefix || '';
       const appendToPrompt =
-        testCase.options?.suffix || testSuite.defaultTestProperties?.options?.suffix || '';
+        testCase.options?.suffix || testSuite.defaultTest?.options?.suffix || '';
 
       // Finalize test case eval
       for (const promptContent of testSuite.prompts) {

@@ -157,7 +157,7 @@ export interface TestSuite {
   tests?: TestCase[];
 
   // Default test case config
-  defaultTestProperties?: Partial<TestCase>;
+  defaultTest?: Partial<TestCase>;
 }
 
 // TestSuiteConfig = Test Suite, but before everything is parsed and resolved.  Providers are just strings, prompts are filepaths, tests can be filepath or inline.
@@ -175,7 +175,7 @@ export interface TestSuiteConfig {
   tests: string | TestCase[];
 
   // Sets the default properties for each test case. Useful for setting an assertion, on all test cases, for example.
-  defaultTestProperties?: Omit<TestCase, 'description'>;
+  defaultTest?: Omit<TestCase, 'description'>;
 
   // Path to write output. Writes to console/web viewer if not set.
   outputPath?: string;
