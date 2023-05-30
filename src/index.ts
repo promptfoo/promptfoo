@@ -17,7 +17,7 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
     ...testSuite,
     prompts: testSuite.prompts, // raw prompts expected
     providers: await loadApiProviders(testSuite.providers),
-    tests: readTests(testSuite.tests),
+    tests: await readTests(testSuite.tests),
   };
   return doEvaluate(constructedTestSuite, options);
 }
