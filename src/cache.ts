@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 
 import cacheManager from 'cache-manager';
@@ -21,11 +22,16 @@ const cacheType =
 
 function getCache() {
   if (!cacheInstance) {
+    const cachePath = process.env.PROMPTFOO_CACHE_PATH || path.join(getConfigDirectoryPath(), 'cache');
+    if (!fs.existsSync(cachePath)) {
+      logger.info('Creating cache folder at ${cachePath}.');
+      fs.mkdirSync(cachePath, { recursive: true });
+    }
     cacheInstance = cacheManager.caching({
       store: cacheType === 'disk' ? fsStore : 'memory',
       options: {
         max: process.env.PROMPTFOO_CACHE_MAX_FILE_COUNT || 10_000, // number of files
-        path: process.env.PROMPTFOO_CACHE_PATH || path.join(getConfigDirectoryPath(), 'cache'),
+        path: cachePath,
         ttl: process.env.PROMPTFOO_CACHE_TTL || 60 * 60 * 24 * 14, // in seconds, 14 days
         maxsize: process.env.PROMPTFOO_CACHE_MAX_SIZE || 1e7, // in bytes, 10mb
         //zip: true, // whether to use gzip compression
