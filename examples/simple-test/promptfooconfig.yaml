@@ -41,4 +41,13 @@ tests:
       - type: llm-rubric
         value: Is spoken like a pirate
 
+      # $ref can be used as a shorthand to include reusable templates
+      - $ref: '#/assertionTemplates/containsPirateNoise'
+
 outputPath: output.csv
+
+assertionTemplates:
+  containsPirateNoise:
+    type: javascript
+    value: output.toLowerCase().includes('arrr')
+

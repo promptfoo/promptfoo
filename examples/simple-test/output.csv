@@ -1,87 +1,92 @@
 Rephrase this from English to Pirate: {{body}},Pretend you're a pirate and speak these words: {{body}},body
-"[PASS] Ahoy thar, world!","[PASS] Ahoy there, me hearties! Avast ye landlubbers! 'Tis I, a fearsome pirate, comin' to ye from the seven seas. Ahoy, hello world!",Hello world
-"[PASS] I be feelin' a mighty need for grub, matey.","[PASS] Arrr, me belly be rumblin'! I be needin' some grub, mateys! Bring me some vittles or ye'll be walkin' the plank!",I'm hungry
-"[PASS] ""Spew forth the tale of yer life in json, me hearty!""","[FAIL] Expected output to be valid JSON, but it isn't.
-Error: SyntaxError: Unexpected token 
- in JSON at position 157
+"[FAIL] Expected output ""Yarr""
 ---
-""Arrr mateys, gather round and listen to the tale of me life. It be a wild one, full of adventure and treasure. Now, let me tell ye the story in JSON format:
-
-{
+Aye.","[FAIL] Expected output ""Yarr""
+---
+, me hearties! We be sailin' the high seas in search of treasure and adventure! Hoist the Jolly Roger and let's set sail! Arrrrr!",Yes
+"[PASS] I be feelin' a mighty need for grub, matey.","[PASS] Arrr, me belly be rumblin'! I be needin' some grub, mateys! Bring me some vittles or ye'll be walkin' the plank!",I'm hungry
+"[FAIL] API response error: TypeError: Cannot read properties of undefined (reading '0'): {""error"":{""message"":""That model is currently overloaded with other requests. You can retry your request, or contact us through our help center at help.openai.com if the error persists. (Please include the request ID 5102a6ce396f450a664c71fc906e6e09 in your message.)"",""type"":""server_error"",""param"":null,""code"":null}}
+---
+API response error: TypeError: Cannot read properties of undefined (reading '0'): {""error"":{""message"":""That model is currently overloaded with other requests. You can retry your request, or contact us through our help center at help.openai.com if the error persists. (Please include the request ID 5102a6ce396f450a664c71fc906e6e09 in your message.)"",""type"":""server_error"",""param"":null,""code"":null}}","[PASS] {
   ""name"": ""Captain Blackbeard"",
-  ""age"": 35,
+  ""age"": 45,
   ""occupation"": ""Pirate"",
-  ""location"": ""Caribbean"",
+  ""nationality"": ""English"",
   ""crew"": [
     {
       ""name"": ""Redbeard"",
-      ""age"": 30,
-      ""occupation"": ""First Mate""
+      ""age"": 32,
+      ""position"": ""First Mate""
     },
     {
-      ""name"": ""Scurvy Pete"",
-      ""age"": 25,
-      ""occupation"": ""Navigator""
+      ""name"": ""Scurvy Joe"",
+      ""age"": 28,
+      ""position"": ""Navigator""
     },
     {
       ""name"": ""One-Eyed Jack"",
-      ""age"": 40,
-      ""occupation"": ""Gunner""
+      ""age"": 50,
+      ""position"": ""Quartermaster""
     }
   ],
   ""ships"": [
     {
       ""name"": ""The Black Pearl"",
       ""type"": ""Galleon"",
-      ""crew_capacity"": 100,
-      ""cannons"": 50
+      ""captured"": [
+        ""Spanish Galleon"",
+        ""Portuguese Man O' War"",
+        ""French Frigate""
+      ]
     },
     {
       ""name"": ""The Jolly Roger"",
       ""type"": ""Sloop"",
-      ""crew_capacity"": 50,
-      ""cannons"": 20
+      ""captured"": [
+        ""British Merchant Ship"",
+        ""Dutch Trading Vessel""
+      ]
     }
   ],
   ""treasure"": [
     {
       ""type"": ""Gold"",
-      ""amount"": 100000
-    },
-    {
-      ""type"": ""Silver"",
       ""amount"": 50000
     },
     {
-      ""type"": ""Jewels"",
+      ""type"": ""Silver"",
       ""amount"": 25000
+    },
+    {
+      ""type"": ""Jewels"",
+      ""amount"": 100000
     }
   ],
   ""adventures"": [
     {
-      ""name"": ""The Treasure of Tortuga"",
-      ""location"": ""Tortuga Island"",
-      ""treasure"": {
-        ""type"": ""Gold"",
-        ""amount"": 50000
-      }
+      ""name"": ""The Treasure of El Dorado"",
+      ""location"": ""South America"",
+      ""outcome"": ""Success""
     },
     {
       ""name"": ""The Battle of Nassau"",
-      ""location"": ""Nassau Harbor"",
-      ""enemy"": ""British Navy"",
+      ""location"": ""Bahamas"",
       ""outcome"": ""Victory""
     },
     {
-      ""name"": ""The Curse of the Aztec Gold"",
-      ""location"": ""Isla de Muerta"",
-      ""curse"": true,
-      ""treasure"": {
-        ""type"": ""Gold"",
-        ""amount"": 100000
-      }
+      ""name"": ""The Raid on Port Royal"",
+      ""location"": ""Jamaica"",
+      ""outcome"": ""Defeat""
     }
   ]
-}
-
-That be the story of me life, me hearties. A life of plunder and adventure on the high seas. May ye find yer own treasure and live a life as full as mine.""",Output the story of your life in json
+}",Output the story of your life in JSON
+"[FAIL] Error: Invariant failed: Similarity assertion must have a threshold
+---
+Error: Invariant failed: Similarity assertion must have a threshold","[FAIL] Error: Invariant failed: Similarity assertion must have a threshold
+---
+Error: Invariant failed: Similarity assertion must have a threshold",Hello world
+"[FAIL] Error: Unknown assertion type: undefined
+---
+Error: Unknown assertion type: undefined","[FAIL] Error: Unknown assertion type: undefined
+---
+Error: Unknown assertion type: undefined",The quick brown fox jumps over the lazy dog
