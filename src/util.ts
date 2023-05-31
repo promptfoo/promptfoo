@@ -19,8 +19,6 @@ import type {
   Assertion,
   CsvRow,
   EvaluateSummary,
-  CommandLineOptions,
-  TestSuite,
   UnifiedConfig,
   TestCase,
 } from './types.js';
@@ -37,17 +35,13 @@ function parseJson(json: string): any | undefined {
 }
 
 export function maybeReadConfig(configPath: string): UnifiedConfig | undefined {
-  try {
-    return readConfig(configPath);
-  } catch {
+  if (!fs.existsSync(configPath)) {
     return undefined;
   }
+  return readConfig(configPath);
 }
 
 export function readConfig(configPath: string): UnifiedConfig {
-  if (!fs.existsSync(configPath)) {
-    throw new Error(`Config file not found: ${configPath}`);
-  }
   const ext = path.parse(configPath).ext;
   switch (ext) {
     case '.json':
