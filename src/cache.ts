@@ -24,7 +24,7 @@ function getCache() {
   if (!cacheInstance) {
     const cachePath = process.env.PROMPTFOO_CACHE_PATH || path.join(getConfigDirectoryPath(), 'cache');
     if (!fs.existsSync(cachePath)) {
-      logger.info('Creating cache folder at ${cachePath}.');
+      logger.info(`Creating cache folder at ${cachePath}.`);
       fs.mkdirSync(cachePath, { recursive: true });
     }
     cacheInstance = cacheManager.caching({
