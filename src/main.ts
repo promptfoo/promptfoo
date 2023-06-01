@@ -53,10 +53,10 @@ function createDummyFiles(directory: string | null) {
 
   if (directory === '.') {
     logger.info(
-      'Wrote prompts.txt, vars.csv, and promptfooconfig.js. Open README.md to get started!',
+      'Wrote prompts.txt and promptfooconfig.js. Open README.md to get started!',
     );
   } else {
-    logger.info(`Wrote prompts.txt, vars.csv, and promptfooconfig.js to ${directory}`);
+    logger.info(`Wrote prompts.txt and promptfooconfig.js to ./${directory}`);
     logger.info(`\`cd ${directory}\` and open README.md to get started!`);
   }
 }
