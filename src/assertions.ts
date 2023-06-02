@@ -92,8 +92,7 @@ export async function runAssertion(
 
   if (assertion.type === 'similar') {
     invariant(assertion.value, 'Similarity assertion must have a string value');
-    invariant(assertion.threshold, 'Similarity assertion must have a threshold');
-    return matchesSimilarity(assertion.value, output, assertion.threshold);
+    return matchesSimilarity(assertion.value, output, assertion.threshold || 0.75);
   }
 
   if (assertion.type === 'llm-rubric') {
