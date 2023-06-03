@@ -15,13 +15,7 @@ import { getDirectory } from './esm.js';
 
 import type { RequestInfo, RequestInit, Response } from 'node-fetch';
 
-import type {
-  Assertion,
-  CsvRow,
-  EvaluateSummary,
-  UnifiedConfig,
-  TestCase,
-} from './types.js';
+import type { Assertion, CsvRow, EvaluateSummary, UnifiedConfig, TestCase } from './types.js';
 import { assertionFromString } from './assertions.js';
 
 const PROMPT_DELIMITER = '---';

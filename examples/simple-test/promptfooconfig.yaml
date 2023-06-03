@@ -50,4 +50,3 @@ assertionTemplates:
   containsPirateNoise:
     type: javascript
     value: output.toLowerCase().includes('arrr')
-
