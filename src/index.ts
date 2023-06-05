@@ -1,12 +1,12 @@
-import { evaluate as doEvaluate } from './evaluator.js';
-import { loadApiProviders } from './providers.js';
-import assertions from './assertions.js';
-import providers from './providers.js';
+import { evaluate as doEvaluate } from './evaluator';
+import { loadApiProviders } from './providers';
+import assertions from './assertions';
+import providers from './providers';
 
-import type { EvaluateOptions, TestSuite, TestSuiteConfig } from './types.js';
-import { readTests } from './util.js';
+import type { EvaluateOptions, TestSuite, TestSuiteConfig } from './types';
+import { readTests } from './util';
 
-export * from './types.js';
+export * from './types';
 
 interface EvaluateTestSuite extends TestSuiteConfig {
   prompts: string[];

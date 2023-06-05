@@ -1,6 +1,6 @@
-import logger from '../logger.js';
-import { fetchJsonWithCache } from '../cache.js';
-import { REQUEST_TIMEOUT_MS } from './shared.js';
+import logger from '../logger';
+import { fetchJsonWithCache } from '../cache';
+import { REQUEST_TIMEOUT_MS } from './shared';
 
 import type { ApiProvider, ProviderResponse } from '../types.js';
 

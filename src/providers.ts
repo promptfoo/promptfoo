@@ -1,9 +1,9 @@
 import path from 'node:path';
 
-import { ApiProvider } from './types.js';
+import { ApiProvider } from './types';
 
-import { OpenAiCompletionProvider, OpenAiChatCompletionProvider } from './providers/openai.js';
-import { LocalAiCompletionProvider, LocalAiChatProvider } from './providers/localai.js';
+import { OpenAiCompletionProvider, OpenAiChatCompletionProvider } from './providers/openai';
+import { LocalAiCompletionProvider, LocalAiChatProvider } from './providers/localai';
 
 export async function loadApiProviders(providerPaths: string | string[]): Promise<ApiProvider[]> {
   if (typeof providerPaths === 'string') {

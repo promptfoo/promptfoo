@@ -4,8 +4,8 @@ import async from 'async';
 import chalk from 'chalk';
 import nunjucks from 'nunjucks';
 
-import logger from './logger.js';
-import { runAssertions } from './assertions.js';
+import logger from './logger';
+import { runAssertions } from './assertions';
 
 import type { SingleBar } from 'cli-progress';
 import type {
@@ -18,8 +18,8 @@ import type {
   TestSuite,
   Prompt,
   TestCase,
-} from './types.js';
-import { generatePrompts } from './suggestions.js';
+} from './types';
+import { generatePrompts } from './suggestions';
 
 interface RunEvalOptions {
   provider: ApiProvider;
