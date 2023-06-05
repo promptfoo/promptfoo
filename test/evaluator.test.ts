@@ -58,6 +58,28 @@ describe('evaluator', () => {
     expect(summary.results[0].response?.output).toBe('Test output');
   });
 
+  test('evaluate with multiple vars', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: ['Test prompt {{ var1 }} {{ var2 }}'],
+      tests: [
+        {
+          vars: { var1: ['value1', 'value3'], var2: ['value2', 'value4'] },
+        },
+      ],
+    };
+
+    const summary = await evaluate(testSuite, {});
+
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(4);
+    expect(summary.stats.successes).toBe(4);
+    expect(summary.stats.failures).toBe(0);
+    expect(summary.stats.tokenUsage).toEqual({ total: 40, prompt: 20, completion: 20, cached: 0 });
+    expect(summary.results[0].prompt.raw).toBe('Test prompt value1 value2');
+    expect(summary.results[0].prompt.display).toBe('Test prompt {{ var1 }} {{ var2 }}');
+    expect(summary.results[0].response?.output).toBe('Test output');
+  });
+
   test('evaluate with multiple providers', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider, mockApiProvider],

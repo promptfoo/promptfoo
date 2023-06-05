@@ -6,13 +6,13 @@ import { cosineSimilarity } from './util.js';
 import { loadApiProvider } from './providers.js';
 import { DEFAULT_GRADING_PROMPT } from './prompts.js';
 
-import type { Assertion, GradingConfig, TestCase, GradingResult } from './types.js';
+import type { Assertion, GradingConfig, TestCase, GradingResult, AtomicTestCase } from './types.js';
 
 const SIMILAR_REGEX = /similar(?::|\((\d+(\.\d+)?)\):)/;
 
 const DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD = 0.8;
 
-export async function runAssertions(test: TestCase, output: string): Promise<GradingResult> {
+export async function runAssertions(test: AtomicTestCase, output: string): Promise<GradingResult> {
   const tokensUsed = {
     total: 0,
     prompt: 0,
@@ -41,7 +41,7 @@ export async function runAssertions(test: TestCase, output: string): Promise<Gra
 
 export async function runAssertion(
   assertion: Assertion,
-  test: TestCase,
+  test: AtomicTestCase,
   output: string,
 ): Promise<GradingResult> {
   let pass: boolean = false;
