@@ -15,6 +15,7 @@ const TestCaseForm: React.FC<TestCaseFormProps> = ({ onAdd, varsList, initialVal
   const [description, setDescription] = useState(initialValues?.description || '');
   const [vars, setVars] = useState(initialValues?.vars || {});
   const [asserts, setAsserts] = useState(initialValues?.assert || []);
+  const [assertsFormKey, setAssertsFormKey] = useState(0);
 
   React.useEffect(() => {
     if (initialValues) {
@@ -39,7 +40,7 @@ const TestCaseForm: React.FC<TestCaseFormProps> = ({ onAdd, varsList, initialVal
     onCancel();
   };
 
-  const handleAdd = (close: boolean = true) => {
+  const handleAdd = (close: boolean) => {
     onAdd({
       description,
       vars,
@@ -48,6 +49,7 @@ const TestCaseForm: React.FC<TestCaseFormProps> = ({ onAdd, varsList, initialVal
     setDescription('');
     setVars({});
     setAsserts([]);
+    setAssertsFormKey((prevKey) => prevKey + 1);
     if (close) {
       handleClose();
     }
@@ -55,7 +57,7 @@ const TestCaseForm: React.FC<TestCaseFormProps> = ({ onAdd, varsList, initialVal
 
   return (
     <>
-      <Button variant="contained" color="primary" onClick={handleOpen}>
+      <Button color="primary" onClick={handleOpen}>
         {initialValues ? 'Edit Test Case' : 'Add Test Case'}
       </Button>
       <Dialog open={open} onClose={handleClose} fullWidth maxWidth="md">
@@ -65,7 +67,7 @@ const TestCaseForm: React.FC<TestCaseFormProps> = ({ onAdd, varsList, initialVal
             <Typography variant="h5" gutterBottom>Test Case</Typography>
             <TextField label="Description" value={description} onChange={(e) => setDescription(e.target.value)} fullWidth margin="normal" />
             <VarsForm onAdd={(vars) => setVars(vars)} varsList={varsList} />
-            <AssertsForm onAdd={(asserts) => setAsserts(asserts)} />
+            <AssertsForm key={assertsFormKey} onAdd={(asserts) => setAsserts(asserts)} />
           </Box>
         </DialogContent>
         <DialogActions>

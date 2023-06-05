@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Button, Container, TextField, Typography, MenuItem, FormControl, InputLabel, Select, Chip, IconButton, Box } from '@mui/material';
 import { Edit, Delete, Save } from '@mui/icons-material';
 import TestCaseForm from './TestCaseForm';
@@ -39,6 +39,14 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({
   const [editingTestCaseIndex, setEditingTestCaseIndex] = useState<number | null>(null);
   const [editingPromptIndex, setEditingPromptIndex] = useState<number | null>(null);
 
+  const newPromptInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editingPromptIndex !== null && newPromptInputRef.current) {
+      newPromptInputRef.current.focus();
+    }
+  }, [editingPromptIndex]);
+
   const handleAddTestCase = (testCase: TestCase) => {
     if (editingTestCaseIndex === null) {
       setTestCases([...testCases, testCase]);
@@ -59,10 +67,13 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({
     setEditingPromptIndex(index);
   };
 
-  const handleSavePrompt = (index: number, newPrompt: string) => {
+  const handleChangePrompt = (index: number, newPrompt: string) => {
     setPrompts((prevPrompts) =>
       prevPrompts.map((p, i) => (i === index ? newPrompt : p))
     );
+  };
+
+  const handleSavePrompt = (index: number) => {
     setEditingPromptIndex(null);
   };
 
@@ -119,38 +130,48 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({
       </FormControl>
       <Typography variant="h5">Prompts</Typography>
       {prompts.map((prompt, index) => (
-        <div key={index} style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
+        <div
+          key={index}
+          style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}
+        >
           {editingPromptIndex === index ? (
             <>
               <TextField
                 label={`Prompt ${index + 1}`}
                 value={prompt}
-                onChange={(e) =>handleSavePrompt(index, e.target.value)}
+                onChange={(e) => handleChangePrompt(index, e.target.value)}
+                onBlur={() => handleSavePrompt(index)}
                 fullWidth
                 margin="normal"
                 multiline
+                inputRef={editingPromptIndex === index ? newPromptInputRef : null}
               />
-              <IconButton onClick={() => handleSavePrompt(index, prompt)} size="small">
-                <Save />
-              </IconButton>
             </>
           ) : (
             <>
-              <Typography variant="body1">{`Prompt ${index + 1}: ${prompt.slice(0, 250)}`}</Typography>
+              <Typography variant="body1">{`Prompt ${index + 1}: ${prompt.slice(
+                0,
+                250
+              )}`}</Typography>
               <IconButton onClick={() => handleEditPrompt(index)} size="small">
                 <Edit />
               </IconButton>
             </>
           )}
+          {index === 0 && prompt === '' && editingPromptIndex === null
+            ? handleEditPrompt(0)
+            : null}
           <IconButton onClick={() => handleRemovePrompt(index)} size="small">
             <Delete />
           </IconButton>
         </div>
       ))}
       <Button
-        variant="contained"
         color="primary"
-        onClick={() => setPrompts((prevPrompts) => [...prevPrompts, ''])}
+        onClick={() => {
+          setPrompts((prevPrompts) => [...prevPrompts, '']);
+          setEditingPromptIndex(prompts.length);
+        }}
       >
         Add Prompt
       </Button>
