@@ -134,13 +134,18 @@ export interface TestCase {
   description?: string;
 
   // Key-value pairs to substitute in the prompt
-  vars?: Record<string, string>;
+  vars?: Record<string, string | string[]>;
 
   // Optional list of automatic checks to run on the LLM output
   assert?: Assertion[];
 
   // Additional configuration settings for the prompt
   options?: PromptConfig & GradingConfig;
+}
+
+// Same as a TestCase, except the `vars` object has been flattened into its final form.
+export interface AtomicTestCase extends TestCase {
+  vars?: Record<string, string>;
 }
 
 // The test suite defines the "knobs" that we are tuning in prompt engineering: providers and prompts

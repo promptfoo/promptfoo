@@ -9,6 +9,7 @@ import { DefaultEmbeddingProvider } from '../src/providers/openai';
 import type {
   Assertion,
   ApiProvider,
+  AtomicTestCase,
   TestCase,
   GradingConfig,
   ProviderResponse,
@@ -16,7 +17,7 @@ import type {
 } from '../src/types';
 
 describe('runAssertions', () => {
-  const test: TestCase = {
+  const test: AtomicTestCase = {
     assert: [
       {
         type: 'equals',
@@ -64,7 +65,11 @@ describe('runAssertion', () => {
   it('should pass when the equality assertion passes', async () => {
     const output = 'Expected output';
 
-    const result: GradingResult = await runAssertion(equalityAssertion, {} as TestCase, output);
+    const result: GradingResult = await runAssertion(
+      equalityAssertion,
+      {} as AtomicTestCase,
+      output,
+    );
     expect(result.pass).toBeTruthy();
     expect(result.reason).toBe('Assertion passed');
   });
@@ -72,7 +77,11 @@ describe('runAssertion', () => {
   it('should fail when the equality assertion fails', async () => {
     const output = 'Different output';
 
-    const result: GradingResult = await runAssertion(equalityAssertion, {} as TestCase, output);
+    const result: GradingResult = await runAssertion(
+      equalityAssertion,
+      {} as AtomicTestCase,
+      output,
+    );
     expect(result.pass).toBeFalsy();
     expect(result.reason).toBe('Expected output "Expected output"');
   });
@@ -80,7 +89,7 @@ describe('runAssertion', () => {
   it('should pass when the is-json assertion passes', async () => {
     const output = '{"key": "value"}';
 
-    const result: GradingResult = await runAssertion(isJsonAssertion, {} as TestCase, output);
+    const result: GradingResult = await runAssertion(isJsonAssertion, {} as AtomicTestCase, output);
     expect(result.pass).toBeTruthy();
     expect(result.reason).toBe('Assertion passed');
   });
@@ -88,7 +97,7 @@ describe('runAssertion', () => {
   it('should fail when the is-json assertion fails', async () => {
     const output = 'Not valid JSON';
 
-    const result: GradingResult = await runAssertion(isJsonAssertion, {} as TestCase, output);
+    const result: GradingResult = await runAssertion(isJsonAssertion, {} as AtomicTestCase, output);
     expect(result.pass).toBeFalsy();
     expect(result.reason).toContain('Expected output to be valid JSON');
   });
@@ -97,7 +106,11 @@ describe('runAssertion', () => {
     const output =
       'this is some other stuff \n\n {"key": "value", "key2": {"key3": "value2", "key4": ["value3", "value4"]}} \n\n blah blah';
 
-    const result: GradingResult = await runAssertion(containsJsonAssertion, {} as TestCase, output);
+    const result: GradingResult = await runAssertion(
+      containsJsonAssertion,
+      {} as AtomicTestCase,
+      output,
+    );
     expect(result.pass).toBeTruthy();
     expect(result.reason).toBe('Assertion passed');
   });
@@ -105,7 +118,11 @@ describe('runAssertion', () => {
   it('should fail when the contains-json assertion fails', async () => {
     const output = 'Not valid JSON';
 
-    const result: GradingResult = await runAssertion(containsJsonAssertion, {} as TestCase, output);
+    const result: GradingResult = await runAssertion(
+      containsJsonAssertion,
+      {} as AtomicTestCase,
+      output,
+    );
     expect(result.pass).toBeFalsy();
     expect(result.reason).toContain('Expected output to contain valid JSON');
   });
@@ -113,7 +130,11 @@ describe('runAssertion', () => {
   it('should pass when the function assertion passes', async () => {
     const output = 'Expected output';
 
-    const result: GradingResult = await runAssertion(functionAssertion, {} as TestCase, output);
+    const result: GradingResult = await runAssertion(
+      functionAssertion,
+      {} as AtomicTestCase,
+      output,
+    );
     expect(result.pass).toBeTruthy();
     expect(result.reason).toBe('Assertion passed');
   });
@@ -121,7 +142,11 @@ describe('runAssertion', () => {
   it('should fail when the function assertion fails', async () => {
     const output = 'Different output';
 
-    const result: GradingResult = await runAssertion(functionAssertion, {} as TestCase, output);
+    const result: GradingResult = await runAssertion(
+      functionAssertion,
+      {} as AtomicTestCase,
+      output,
+    );
     expect(result.pass).toBeFalsy();
     expect(result.reason).toBe('Custom function returned false');
   });

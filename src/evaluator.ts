@@ -18,6 +18,7 @@ import type {
   TestSuite,
   Prompt,
   TestCase,
+  AtomicTestCase,
 } from './types';
 import { generatePrompts } from './suggestions';
 
@@ -25,7 +26,7 @@ interface RunEvalOptions {
   provider: ApiProvider;
   prompt: string;
 
-  test: TestCase;
+  test: AtomicTestCase;
 
   includeProviderId?: boolean;
 
@@ -34,6 +35,29 @@ interface RunEvalOptions {
 }
 
 const DEFAULT_MAX_CONCURRENCY = 4;
+
+function generateVarCombinations(
+  vars: Record<string, string | string[]>,
+): Record<string, string>[] {
+  const keys = Object.keys(vars);
+  const combinations: Record<string, string>[] = [{}];
+
+  for (const key of keys) {
+    const values = Array.isArray(vars[key]) ? vars[key] : [vars[key]];
+    const newCombinations: Record<string, string>[] = [];
+
+    for (const combination of combinations) {
+      for (const value of values) {
+        newCombinations.push({ ...combination, [key]: value as string });
+      }
+    }
+
+    combinations.length = 0;
+    combinations.push(...newCombinations);
+  }
+
+  return combinations;
+}
 
 class Evaluator {
   testSuite: TestSuite;
@@ -197,10 +221,10 @@ class Evaluator {
     });
 
     const varNames: Set<string> = new Set();
-    const varsWithSpecialColsRemoved: Record<string, string>[] = [];
+    const varsWithSpecialColsRemoved: Record<string, string | string[]>[] = [];
     for (const testCase of tests) {
       if (testCase.vars) {
-        const varWithSpecialColsRemoved: Record<string, string> = {};
+        const varWithSpecialColsRemoved: Record<string, string | string[]> = {};
         for (const varName of Object.keys(testCase.vars)) {
           varNames.add(varName);
           varWithSpecialColsRemoved[varName] = testCase.vars[varName];
@@ -245,8 +269,6 @@ class Evaluator {
     const runEvalOptions: RunEvalOptions[] = [];
     let rowIndex = 0;
     for (const testCase of tests) {
-      let colIndex = 0;
-
       // Handle default properties
       testCase.vars = Object.assign({}, testSuite.defaultTest?.vars, testCase.vars);
       testCase.assert = [...(testSuite.defaultTest?.assert || []), ...(testCase.assert || [])];
@@ -259,20 +281,24 @@ class Evaluator {
         testCase.options?.suffix || testSuite.defaultTest?.options?.suffix || '';
 
       // Finalize test case eval
-      for (const promptContent of testSuite.prompts) {
-        for (const provider of testSuite.providers) {
-          runEvalOptions.push({
-            provider,
-            prompt: prependToPrompt + promptContent + appendToPrompt,
-            test: testCase,
-            includeProviderId: testSuite.providers.length > 1,
-            rowIndex,
-            colIndex,
-          });
-          colIndex++;
+      const varCombinations = generateVarCombinations(testCase.vars || {});
+      for (const vars of varCombinations) {
+        let colIndex = 0;
+        for (const promptContent of testSuite.prompts) {
+          for (const provider of testSuite.providers) {
+            runEvalOptions.push({
+              provider,
+              prompt: prependToPrompt + promptContent + appendToPrompt,
+              test: { ...testCase, vars },
+              includeProviderId: testSuite.providers.length > 1,
+              rowIndex,
+              colIndex,
+            });
+            colIndex++;
+          }
         }
+        rowIndex++;
       }
-      rowIndex++;
     }
 
     // Actually run the eval
@@ -320,7 +346,7 @@ class Evaluator {
         if (!table.body[rowIndex]) {
           table.body[rowIndex] = {
             outputs: [],
-            vars: table.head.vars.map((varName) => options.test.vars?.[varName] || ''),
+            vars: table.head.vars.map((varName) => options.test.vars?.[varName] || '').flat(),
           };
         }
         table.body[rowIndex].outputs[colIndex] = resultText;

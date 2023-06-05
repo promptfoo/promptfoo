@@ -1,0 +1,10 @@
+prompts: prompts.txt
+providers: [openai:gpt-3.5-turbo, openai:gpt-4]
+tests:
+  - vars:
+      language: [French, German, Spanish]
+      input: ['Hello world', 'Good morning', 'How are you?']
+    assert:
+      - type: similar
+        value: 'Hello world'
+        threshold: 0.8
