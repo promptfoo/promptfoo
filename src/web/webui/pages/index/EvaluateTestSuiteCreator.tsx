@@ -66,7 +66,7 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({
   const newPromptInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (editingPromptIndex !== null && newPromptInputRef.current) {
+    if (editingPromptIndex !== null && editingPromptIndex > 0 && newPromptInputRef.current) {
       newPromptInputRef.current.focus();
     }
   }, [editingPromptIndex]);
@@ -122,8 +122,8 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({
   };
 
   return (
-    <Container>
-      <Typography variant="h4" gutterBottom>Create Evaluate Test Suite</Typography>
+    <Container maxWidth="lg">
+      <Typography variant="h4" gutterBottom>Create a Test Suite</Typography>
       <TextField
         label="Description"
         value={description}
@@ -133,7 +133,7 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({
       />
       <FormControl fullWidth margin="normal">
         <InputLabel>Providers</InputLabel>
-                <Select
+        <Select
           multiple
           value={providers}
           onChange={(e) => setProviders(e.target.value as string[])}
