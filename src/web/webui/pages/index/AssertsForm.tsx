@@ -6,6 +6,7 @@ import type { Assertion } from '../../../../types';
 
 interface AssertsFormProps {
   onAdd: (asserts: Assertion[]) => void;
+  initialValues: Assertion[];
 }
 
 const assertTypes = [
@@ -16,8 +17,8 @@ const assertTypes = [
   'LLM-rubric',
 ];
 
-const AssertsForm: React.FC<AssertsFormProps> = ({ onAdd }) => {
-  const [asserts, setAsserts] = useState<Assertion[]>([]);
+const AssertsForm: React.FC<AssertsFormProps> = ({ onAdd, initialValues }) => {
+  const [asserts, setAsserts] = useState<Assertion[]>(initialValues || []);
 
   const handleAdd = () => {
     const newAsserts = [...asserts, { type: 'Equals', value: '' }];

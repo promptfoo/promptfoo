@@ -1,7 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
+import yaml from 'js-yaml';
+import { Light as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { docco } from 'react-syntax-highlighter/dist/cjs/styles/hljs'; // Or any other style you prefer
 import { Button, Container, TextField, Typography, MenuItem, FormControl, InputLabel, Select, Chip, IconButton, Box } from '@mui/material';
-import { Edit, Delete, Save } from '@mui/icons-material';
+import { Edit, Delete } from '@mui/icons-material';
+
 import TestCaseForm from './TestCaseForm';
+import { useStore } from '../../util/store';
+
 import type { TestSuiteConfig } from '../../../../types';
 import type { TestCase } from '../../../../types';
 
@@ -22,22 +28,40 @@ const providerOptions = [
 const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({
   onSubmit,
 }) => {
+  const [yamlString, setYamlString] = useState('');
+  /*
   const [description, setDescription] = useState('');
   const [providers, setProviders] = useState<string[]>([]);
   const [prompts, setPrompts] = useState<string[]>(['']);
+  */
 
   const handleSubmit = () => {
-    onSubmit({
+    const testSuite = {
       description,
       providers,
       prompts,
       tests: testCases,
-    });
+    };
+    onSubmit(testSuite);
+    setYamlString(yaml.dump(testSuite));
   };
 
-  const [testCases, setTestCases] = useState<TestCase[]>([]);
+  //const [testCases, setTestCases] = useState<TestCase[]>([]);
   const [editingTestCaseIndex, setEditingTestCaseIndex] = useState<number | null>(null);
   const [editingPromptIndex, setEditingPromptIndex] = useState<number | null>(null);
+
+  const [testCaseFormOpen, setTestCaseFormOpen] = useState(false);
+
+  const {
+    description,
+    setDescription,
+    providers,
+    setProviders,
+    prompts,
+    setPrompts,
+    testCases,
+    setTestCases,
+  } = useStore();
 
   const newPromptInputRef = useRef<HTMLInputElement>(null);
 
@@ -47,7 +71,7 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({
     }
   }, [editingPromptIndex]);
 
-  const handleAddTestCase = (testCase: TestCase) => {
+  const handleAddTestCase = (testCase: TestCase, shouldClose: boolean) => {
     if (editingTestCaseIndex === null) {
       setTestCases([...testCases, testCase]);
     } else {
@@ -57,10 +81,10 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({
       setTestCases(updatedTestCases);
       setEditingTestCaseIndex(null);
     }
-  };
 
-  const handleEditTestCase = (index: number) => {
-    setEditingTestCaseIndex(index);
+    if (shouldClose) {
+      setTestCaseFormOpen(false);
+    }
   };
 
   const handleEditPrompt = (index: number) => {
@@ -68,12 +92,12 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({
   };
 
   const handleChangePrompt = (index: number, newPrompt: string) => {
-    setPrompts((prevPrompts) =>
-      prevPrompts.map((p, i) => (i === index ? newPrompt : p))
+    setPrompts(
+      prompts.map((p, i) => (i === index ? newPrompt : p))
     );
   };
 
-  const handleSavePrompt = (index: number) => {
+  const handleSavePrompt = () => {
     setEditingPromptIndex(null);
   };
 
@@ -140,7 +164,7 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({
                 label={`Prompt ${index + 1}`}
                 value={prompt}
                 onChange={(e) => handleChangePrompt(index, e.target.value)}
-                onBlur={() => handleSavePrompt(index)}
+                onBlur={() => handleSavePrompt()}
                 fullWidth
                 margin="normal"
                 multiline
@@ -149,10 +173,10 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({
             </>
           ) : (
             <>
-              <Typography variant="body1">{`Prompt ${index + 1}: ${prompt.slice(
+              <Typography variant="body1">{`Prompt ${index + 1}: ${prompt.length > 250 ? prompt.slice(
                 0,
                 250
-              )}`}</Typography>
+              ) + ' ...' : prompt}`}</Typography>
               <IconButton onClick={() => handleEditPrompt(index)} size="small">
                 <Edit />
               </IconButton>
@@ -169,7 +193,7 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({
       <Button
         color="primary"
         onClick={() => {
-          setPrompts((prevPrompts) => [...prevPrompts, '']);
+          setPrompts([...prompts, '']);
           setEditingPromptIndex(prompts.length);
         }}
       >
@@ -180,21 +204,39 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({
       {testCases.map((testCase, index) => (
         <Box key={index} display="flex" alignItems="center" marginBottom={1}>
           <Typography variant="subtitle1">{`Test Case ${index + 1}: ${testCase.description}`}</Typography>
-          <IconButton onClick={() => handleEditTestCase(index)} size="small">
+          <IconButton onClick={() => {
+            setEditingTestCaseIndex(index);
+            setTestCaseFormOpen(true);
+          }} size="small">
             <Edit />
           </IconButton>
         </Box>
       ))}
+      <Button color="primary" onClick={() => setTestCaseFormOpen(true)}>
+        Add Test Case
+      </Button>
       <TestCaseForm
+        open={testCaseFormOpen}
         onAdd={handleAddTestCase}
         varsList={varsList}
         initialValues={editingTestCaseIndex !== null ? testCases[editingTestCaseIndex] : undefined}
-        onCancel={() => setEditingTestCaseIndex(null)}
+        onCancel={() => {
+          setEditingTestCaseIndex(null);
+          setTestCaseFormOpen(false);
+        }}
       />
       <Box mt={4}>
         <Button variant="contained" color="primary" onClick={handleSubmit} style={{ marginTop: 16 }}>
           Submit
         </Button>
+        {yamlString && (
+          <Box mt={4}>
+            <Typography variant="h5" gutterBottom>YAML config</Typography>
+            <SyntaxHighlighter language="yaml" style={docco}>
+              {yamlString}
+            </SyntaxHighlighter>
+          </Box>
+        )}
       </Box>
     </Container>
   );

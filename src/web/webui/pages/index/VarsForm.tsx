@@ -4,41 +4,45 @@ import { TextField, Typography, Grid } from '@mui/material';
 interface VarsFormProps {
   onAdd: (vars: Record<string, string>) => void;
   varsList: string[];
+  initialValues?: Record<string, string>;
 }
 
-const VarsForm: React.FC<VarsFormProps> = ({ onAdd, varsList }) => {
-  const [vars, setVars] = React.useState<Record<string, string>[]>([]);
+const VarsForm: React.FC<VarsFormProps> = ({ onAdd, varsList, initialValues }) => {
+  const [vars, setVars] = React.useState<Record<string, string>>(initialValues || {});
 
   useEffect(() => {
-    const newVars = varsList.map((varName) => ({ [varName]: '' }));
+    const newVars: Record<string, string> = {};
+    varsList.forEach((v) => {
+      newVars[v] = initialValues?.[v] || '';
+    });
     setVars(newVars);
-    onAdd(Object.assign({}, ...newVars));
-  }, [varsList, onAdd]);
+  }, [varsList, initialValues]);
 
   return (
     <>
       <Typography variant="h6">Vars</Typography>
       {varsList.length > 0 ? (
         <Grid container spacing={2}>
-          {vars.map((variable, index) => (
+          {Object.keys(vars).map((varName, index) => (
             <Grid item xs={12} key={index}>
               <TextField
                 label="Key"
-                value={Object.keys(variable)[0] || ''}
+                value={varName}
                 InputProps={{
                   readOnly: true,
                 }}
               />
               <TextField
                 label="Value"
-                value={Object.values(variable)[0] || ''}
+                value={vars[varName]}
                 onChange={(e) => {
                   const newValue = e.target.value;
-                  const newVars = vars.map((v, i) =>
-                    i === index ? { [Object.keys(v)[0]]: newValue } : v
-                  );
+                  const newVars = {
+                    ...vars,
+                    [varName]: newValue,
+                  };
                   setVars(newVars);
-                  onAdd(Object.assign({}, ...newVars));
+                  onAdd(newVars);
                 }}
               />
             </Grid>
