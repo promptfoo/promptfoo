@@ -1,17 +1,17 @@
-# promptfoo: a prompt engineering tool
+# promptfoo: test your prompts
 
 [![npm](https://img.shields.io/npm/v/promptfoo)](https://npmjs.com/package/promptfoo)
 ![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/typpo/promptfoo/main.yml)
 
-`promptfoo` helps you tune LLM prompts systematically across many relevant test cases.
+`promptfoo` is a tool for testing and evaluating LLM prompt quality.
 
 With promptfoo, you can:
 
-- **Test multiple prompts** against predefined test cases
+- **Systematically test prompts** against predefined test cases
 - **Evaluate quality and catch regressions** by comparing LLM outputs side-by-side
 - **Speed up evaluations** with caching and concurrent tests
-- **Flag bad outputs automatically** by setting "expectations"
-- Use as a command line tool, or integrate into your workflow as a library
+- **Score outputs automatically** by defining "expectations"
+- Use as a CLI, or integrate into your workflow as a library
 - Use OpenAI models, open-source models like Llama and Vicuna, or integrate custom API providers for any LLM API
 
 The goal: **test-driven prompt engineering**, rather than trial-and-error.
