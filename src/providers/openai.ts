@@ -126,12 +126,18 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       );
     }
 
+    let stop: string;
+    try {
+      stop = process.env.OPENAI_STOP ? JSON.parse(process.env.OPENAI_STOP) : undefined;
+    } catch (err) {
+      throw new Error(`OPENAI_STOP is not a valid JSON string: ${err}`);
+    }
     const body = {
       model: this.modelName,
       prompt,
       max_tokens: process.env.OPENAI_MAX_TOKENS || 1024,
       temperature: options?.temperature ?? (process.env.OPENAI_MAX_TEMPERATURE || 0),
-      stop: process.env.OPENAI_STOP ? JSON.parse(process.env.OPENAI_STOP) : undefined,
+      stop,
     };
     logger.debug(`Calling OpenAI API: ${JSON.stringify(body)}`);
     let data,
