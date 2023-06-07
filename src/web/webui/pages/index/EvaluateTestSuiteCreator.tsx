@@ -29,24 +29,6 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({
   onSubmit,
 }) => {
   const [yamlString, setYamlString] = useState('');
-  /*
-  const [description, setDescription] = useState('');
-  const [providers, setProviders] = useState<string[]>([]);
-  const [prompts, setPrompts] = useState<string[]>(['']);
-  */
-
-  const handleSubmit = () => {
-    const testSuite = {
-      description,
-      providers,
-      prompts,
-      tests: testCases,
-    };
-    onSubmit(testSuite);
-    setYamlString(yaml.dump(testSuite));
-  };
-
-  //const [testCases, setTestCases] = useState<TestCase[]>([]);
   const [editingTestCaseIndex, setEditingTestCaseIndex] = useState<number | null>(null);
   const [editingPromptIndex, setEditingPromptIndex] = useState<number | null>(null);
 
@@ -71,6 +53,17 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({
     }
   }, [editingPromptIndex]);
 
+  const handleSubmit = () => {
+    const testSuite = {
+      description,
+      providers,
+      prompts,
+      tests: testCases,
+    };
+    onSubmit(testSuite);
+    setYamlString(yaml.dump(testSuite));
+  };
+
   const handleAddTestCase = (testCase: TestCase, shouldClose: boolean) => {
     if (editingTestCaseIndex === null) {
       setTestCases([...testCases, testCase]);
@@ -91,9 +84,24 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({
     setEditingPromptIndex(index);
   };
 
-  const handleChangePrompt = (index: number, newPrompt: string) => {
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>, index: number) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const text = e.target?.result?.toString();
+        if (text) {
+          handleChangePrompt(index, text);
+        }
+      };
+      reader.readAsText(file);
+    }
+  };
+
+  const handleChangePrompt = (index: number, newPrompt: string, callback?: () => void) => {
     setPrompts(
-      prompts.map((p, i) => (i === index ? newPrompt : p))
+      prompts.map((p, i) => (i === index ? newPrompt : p)),
+      callback
     );
   };
 
@@ -169,6 +177,12 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({
                 margin="normal"
                 multiline
                 inputRef={editingPromptIndex === index ? newPromptInputRef : null}
+              />
+              <input
+                type="file"
+                accept=".txt,.md"
+                onChange={(e) => handleFileUpload(e, index)}
+                style={{ marginLeft: 8 }}
               />
             </>
           ) : (
