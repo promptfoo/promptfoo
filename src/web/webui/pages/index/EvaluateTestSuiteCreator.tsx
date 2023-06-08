@@ -3,7 +3,7 @@ import yaml from 'js-yaml';
 import { Light as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { docco } from 'react-syntax-highlighter/dist/cjs/styles/hljs'; // Or any other style you prefer
 import { Button, Container, TextField, Typography, MenuItem, FormControl, InputLabel, Select, Chip, IconButton, Box } from '@mui/material';
-import { Edit, Delete } from '@mui/icons-material';
+import { Edit, Delete, Publish } from '@mui/icons-material';
 
 import TestCaseForm from './TestCaseForm';
 import { useStore } from '../../util/store';
@@ -85,6 +85,9 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({
   };
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>, index: number) => {
+    event.stopPropagation();
+    event.preventDefault();
+
     const file = event.target.files?.[0];
     if (file) {
       const reader = new FileReader();
@@ -98,10 +101,9 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({
     }
   };
 
-  const handleChangePrompt = (index: number, newPrompt: string, callback?: () => void) => {
+  const handleChangePrompt = (index: number, newPrompt: string) => {
     setPrompts(
-      prompts.map((p, i) => (i === index ? newPrompt : p)),
-      callback
+      prompts.map((p, i) => (i === index ? newPrompt : p))
     );
   };
 
@@ -178,22 +180,41 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({
                 multiline
                 inputRef={editingPromptIndex === index ? newPromptInputRef : null}
               />
-              <input
-                type="file"
-                accept=".txt,.md"
-                onChange={(e) => handleFileUpload(e, index)}
-                style={{ marginLeft: 8 }}
-              />
             </>
           ) : (
             <>
-              <Typography variant="body1">{`Prompt ${index + 1}: ${prompt.length > 250 ? prompt.slice(
-                0,
-                250
-              ) + ' ...' : prompt}`}</Typography>
+              <Box
+                component="span"
+                onClick={() => handleEditPrompt(index)}
+                sx={{
+                  cursor: 'pointer',
+                  padding: '1rem 0.5rem',
+                  borderRadius: '4px',
+                  '&:hover': {
+                    backgroundColor: 'aliceblue',
+                  },
+                }}
+              >
+                <Typography variant="body1">{`Prompt ${index + 1}: ${prompt.length > 250 ? prompt.slice(
+                  0,
+                  250
+                ) + ' ...' : prompt}`}</Typography>
+              </Box>
               <IconButton onClick={() => handleEditPrompt(index)} size="small">
                 <Edit />
               </IconButton>
+              <label htmlFor={`file-input-${index}`}>
+                <IconButton component="span" size="small">
+                  <Publish />
+                </IconButton>
+                <input
+                  id={`file-input-${index}`}
+                  type="file"
+                  accept=".txt,.md"
+                  onChange={(e) => handleFileUpload(e, index)}
+                  style={{ display: 'none' }}
+                />
+              </label>
             </>
           )}
           {index === 0 && prompt === '' && editingPromptIndex === null
@@ -217,7 +238,23 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({
       <Typography variant="h5">Test Cases</Typography>
       {testCases.map((testCase, index) => (
         <Box key={index} display="flex" alignItems="center" marginBottom={1}>
-          <Typography variant="subtitle1">{`Test Case ${index + 1}: ${testCase.description}`}</Typography>
+          <Box
+            component="span"
+            onClick={() => {
+              setEditingTestCaseIndex(index);
+              setTestCaseFormOpen(true);
+            }}
+            sx={{
+              cursor: 'pointer',
+              padding: '1rem 0.5rem',
+              borderRadius: '4px',
+              '&:hover': {
+                backgroundColor: 'aliceblue',
+              },
+            }}
+          >
+            <Typography variant="subtitle1">{`Test Case ${index + 1}: ${testCase.description}`}</Typography>
+          </Box>
           <IconButton onClick={() => {
             setEditingTestCaseIndex(index);
             setTestCaseFormOpen(true);

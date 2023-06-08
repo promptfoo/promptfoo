@@ -12,15 +12,6 @@ function PageShell({ children, pageContext }: { children: React.ReactNode; pageC
     <React.StrictMode>
       <PageContextProvider pageContext={pageContext}>
         <Layout>
-          <Sidebar>
-            <Logo />
-            <Link className="navitem" href="/">
-              Home
-            </Link>
-            <Link className="navitem" href="/about">
-              About
-            </Link>
-          </Sidebar>
           <Content>{children}</Content>
         </Layout>
       </PageContextProvider>
@@ -32,8 +23,7 @@ function Layout({ children }: { children: React.ReactNode }) {
   return (
     <div
       style={{
-        display: 'flex',
-        maxWidth: 900,
+        maxWidth: 960,
         margin: 'auto'
       }}
     >
@@ -64,9 +54,6 @@ function Content({ children }: { children: React.ReactNode }) {
     <div
       style={{
         padding: 20,
-        paddingBottom: 50,
-        borderLeft: '2px solid #eee',
-        minHeight: '100vh'
       }}
     >
       {children}
