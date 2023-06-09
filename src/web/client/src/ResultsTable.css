@@ -46,6 +46,17 @@ td,
   padding: 1.5rem;
 }
 
+th.variable,
+.th.variable,
+td.variable,
+.td.variable {
+  background-color: #f8fbff;
+}
+
+tr.header {
+  background-color: #fffdf7;
+}
+
 th,
 .th {
   padding: 1rem;
@@ -101,6 +112,14 @@ td .pass {
 
 td .fail {
   color: var(--fail-color);
+}
+
+.first-prompt-column {
+  border-left: 1px solid #000;
+}
+
+.first-prompt-row {
+  border-top: 1px solid #000;
 }
 
 .resizer {

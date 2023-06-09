@@ -169,7 +169,7 @@ export default function ResultsTable({ maxTextLength, columnVisibility }: Result
     }),
     columnHelper.group({
       id: 'prompts',
-      header: () => <span>Prompts</span>,
+      header: () => <span>Outputs</span>,
       columns: head.prompts.map((prompt, idx) =>
         columnHelper.accessor((row: EvalRow) => row.outputs[idx], {
           id: `Prompt ${idx + 1}`,
@@ -212,7 +212,7 @@ export default function ResultsTable({ maxTextLength, columnVisibility }: Result
     <table>
       <thead>
         {reactTable.getHeaderGroups().map((headerGroup) => (
-          <tr key={headerGroup.id}>
+          <tr key={headerGroup.id} className="header">
             {headerGroup.headers.map((header) => (
               <th
                 {...{
@@ -248,6 +248,7 @@ export default function ResultsTable({ maxTextLength, columnVisibility }: Result
                   style: {
                     width: cell.column.getSize(),
                   },
+                  className: cell.column.id.startsWith('Variable') ? 'variable' : '',
                 }}
               >
                 {flexRender(cell.column.columnDef.cell, cell.getContext())}
