@@ -178,6 +178,7 @@ async function main() {
           prompts: cmdObj.prompts || config.prompts,
           providers: cmdObj.providers || config.providers,
           tests: cmdObj.tests || cmdObj.vars || config.tests,
+          defaultTest: config.defaultTest,
         };
       }
 
