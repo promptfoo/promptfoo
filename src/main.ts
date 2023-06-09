@@ -6,9 +6,9 @@ import Table from 'cli-table3';
 import chalk from 'chalk';
 import { Command } from 'commander';
 
-import logger, { setLogLevel } from './logger.js';
-import { loadApiProvider, loadApiProviders } from './providers.js';
-import { evaluate } from './evaluator.js';
+import logger, { setLogLevel } from './logger';
+import { loadApiProvider, loadApiProviders } from './providers';
+import { evaluate } from './evaluator';
 import {
   maybeReadConfig,
   readConfig,
@@ -16,10 +16,10 @@ import {
   readTests,
   writeLatestResults,
   writeOutput,
-} from './util.js';
-import { getDirectory } from './esm.js';
-import { init } from './web/server.js';
-import { disableCache } from './cache.js';
+} from './util';
+import { getDirectory } from './esm';
+import { init } from './web/server';
+import { disableCache } from './cache';
 
 import type {
   CommandLineOptions,
@@ -27,8 +27,8 @@ import type {
   TestCase,
   TestSuite,
   UnifiedConfig,
-} from './types.js';
-import { DEFAULT_README, DEFAULT_YAML_CONFIG, DEFAULT_PROMPTS } from './onboarding.js';
+} from './types';
+import { DEFAULT_README, DEFAULT_YAML_CONFIG, DEFAULT_PROMPTS } from './onboarding';
 
 function createDummyFiles(directory: string | null) {
   if (directory) {

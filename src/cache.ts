@@ -4,8 +4,8 @@ import path from 'node:path';
 import cacheManager from 'cache-manager';
 import fsStore from 'cache-manager-fs-hash';
 
-import logger from './logger.js';
-import { getConfigDirectoryPath, fetchWithTimeout } from './util.js';
+import logger from './logger';
+import { getConfigDirectoryPath, fetchWithTimeout } from './util';
 
 import type { Cache } from 'cache-manager';
 import type { RequestInfo, RequestInit } from 'node-fetch';

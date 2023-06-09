@@ -1,12 +1,12 @@
 import invariant from 'tiny-invariant';
 import nunjucks from 'nunjucks';
 
-import { DefaultEmbeddingProvider, DefaultGradingProvider } from './providers/openai.js';
-import { cosineSimilarity } from './util.js';
-import { loadApiProvider } from './providers.js';
-import { DEFAULT_GRADING_PROMPT } from './prompts.js';
+import { DefaultEmbeddingProvider, DefaultGradingProvider } from './providers/openai';
+import { cosineSimilarity } from './util';
+import { loadApiProvider } from './providers';
+import { DEFAULT_GRADING_PROMPT } from './prompts';
 
-import type { Assertion, GradingConfig, TestCase, GradingResult, AtomicTestCase } from './types.js';
+import type { Assertion, GradingConfig, TestCase, GradingResult, AtomicTestCase } from './types';
 
 const SIMILAR_REGEX = /similar(?::|\((\d+(\.\d+)?)\):)/;
 

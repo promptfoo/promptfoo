@@ -10,9 +10,9 @@ import opener from 'opener';
 import { Server as SocketIOServer } from 'socket.io';
 
 import promptfoo from '../index.js';
-import logger from '../logger.js';
-import { getDirectory } from '../esm.js';
-import { getLatestResultsPath } from '../util.js';
+import logger from '../logger';
+import { getDirectory } from '../esm';
+import { getLatestResultsPath } from '../util';
 
 import type { Request, Response } from 'express';
 

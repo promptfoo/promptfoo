@@ -1,6 +1,6 @@
 import fetch from 'node-fetch';
 
-import { OpenAiCompletionProvider, OpenAiChatCompletionProvider } from '../src/providers/openai.js';
+import { OpenAiCompletionProvider, OpenAiChatCompletionProvider } from '../src/providers/openai';
 
 import { disableCache, enableCache } from '../src/cache.js';
 import { loadApiProvider } from '../src/providers.js';

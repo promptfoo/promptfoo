@@ -10,13 +10,13 @@ import { parse as parsePath } from 'path';
 import { parse as parseCsv } from 'csv-parse/sync';
 import { stringify } from 'csv-stringify/sync';
 
-import logger from './logger.js';
-import { getDirectory } from './esm.js';
+import logger from './logger';
+import { getDirectory } from './esm';
 
 import type { RequestInfo, RequestInit, Response } from 'node-fetch';
 
-import type { Assertion, CsvRow, EvaluateSummary, UnifiedConfig, TestCase } from './types.js';
-import { assertionFromString } from './assertions.js';
+import type { Assertion, CsvRow, EvaluateSummary, UnifiedConfig, TestCase } from './types';
+import { assertionFromString } from './assertions';
 
 const PROMPT_DELIMITER = '---';
 

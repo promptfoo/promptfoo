@@ -3,9 +3,9 @@ import * as path from 'path';
 
 import { globSync } from 'glob';
 
-import { readVars, readPrompts, writeOutput, readTests } from '../src/util.js';
+import { readVars, readPrompts, writeOutput, readTests } from '../src/util';
 
-import type { EvaluateResult, EvaluateTable, TestCase } from '../src/types.js';
+import type { EvaluateResult, EvaluateTable, TestCase } from '../src/types';
 
 jest.mock('node-fetch', () => jest.fn());
 jest.mock('glob', () => ({
