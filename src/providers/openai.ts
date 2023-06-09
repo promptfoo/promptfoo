@@ -138,7 +138,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       model: this.modelName,
       prompt,
       max_tokens: parseInt(process.env.OPENAI_MAX_TOKENS || '1024'),
-      temperature: options?.temperature ?? parseFloat(process.env.OPENAI_MAX_TEMPERATURE || '0'),
+      temperature: options?.temperature ?? parseFloat(process.env.OPENAI_TEMPERATURE || '0'),
       stop,
     };
     logger.debug(`Calling OpenAI API: ${JSON.stringify(body)}`);
@@ -219,7 +219,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       model: this.modelName,
       messages: messages,
       max_tokens: parseInt(process.env.OPENAI_MAX_TOKENS || '1024'),
-      temperature: options?.temperature ?? parseFloat(process.env.OPENAI_MAX_TEMPERATURE || '0'),
+      temperature: options?.temperature ?? parseFloat(process.env.OPENAI_TEMPERATURE || '0'),
     };
     logger.debug(`Calling OpenAI API: ${JSON.stringify(body)}`);
 
