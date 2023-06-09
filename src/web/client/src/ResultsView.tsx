@@ -35,8 +35,8 @@ export default function ResultsView() {
     setSelectedColumns(typeof value === 'string' ? value.split(',') : value);
 
     const allColumns = [
-      ...head.prompts.map((_, idx) => `Prompt ${idx + 1}`),
       ...head.vars.map((_, idx) => `Variable ${idx + 1}`),
+      ...head.prompts.map((_, idx) => `Prompt ${idx + 1}`),
     ];
     const newColumnVisibility: VisibilityState = {};
     allColumns.forEach((col) => {
@@ -48,23 +48,23 @@ export default function ResultsView() {
   };
 
   const columnData = [
-    ...head.prompts.map((_, idx) => ({
-      value: `Prompt ${idx + 1}`,
-      label: `Prompt ${idx + 1}`,
-      group: 'Prompts',
-    })),
     ...head.vars.map((_, idx) => ({
       value: `Variable ${idx + 1}`,
       label: `Variable ${idx + 1}`,
       group: 'Variables',
+    })),
+    ...head.prompts.map((_, idx) => ({
+      value: `Prompt ${idx + 1}`,
+      label: `Prompt ${idx + 1}`,
+      group: 'Prompts',
     })),
   ];
 
   // Set all columns as selected by default
   React.useEffect(() => {
     setSelectedColumns([
-      ...head.prompts.map((_, idx) => `Prompt ${idx + 1}`),
       ...head.vars.map((_, idx) => `Variable ${idx + 1}`),
+      ...head.prompts.map((_, idx) => `Prompt ${idx + 1}`),
     ]);
   }, [head]);
 

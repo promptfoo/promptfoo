@@ -149,6 +149,25 @@ export default function ResultsTable({ maxTextLength, columnVisibility }: Result
   const columnHelper = createColumnHelper<EvalRow>();
   const columns = [
     columnHelper.group({
+      id: 'vars',
+      header: () => <span>Variables</span>,
+      columns: head.vars.map((varName, idx) =>
+        columnHelper.accessor((row: EvalRow) => row.vars[idx], {
+          id: `Variable ${idx + 1}`,
+          header: () => (
+            <TableHeader
+              smallText={`Variable ${idx + 1}`}
+              text={varName}
+              maxLength={maxTextLength}
+            />
+          ),
+          cell: (info: CellContext<EvalRow, string>) => (
+            <TruncatedText text={info.getValue()} maxLength={maxTextLength} />
+          ),
+        }),
+      ),
+    }),
+    columnHelper.group({
       id: 'prompts',
       header: () => <span>Prompts</span>,
       columns: head.prompts.map((prompt, idx) =>
@@ -172,25 +191,6 @@ export default function ResultsTable({ maxTextLength, columnVisibility }: Result
               promptIndex={idx}
               onRating={handleRating}
             />
-          ),
-        }),
-      ),
-    }),
-    columnHelper.group({
-      id: 'vars',
-      header: () => <span>Variables</span>,
-      columns: head.vars.map((varName, idx) =>
-        columnHelper.accessor((row: EvalRow) => row.vars[idx], {
-          id: `Variable ${idx + 1}`,
-          header: () => (
-            <TableHeader
-              smallText={`Variable ${idx + 1}`}
-              text={varName}
-              maxLength={maxTextLength}
-            />
-          ),
-          cell: (info: CellContext<EvalRow, string>) => (
-            <TruncatedText text={info.getValue()} maxLength={maxTextLength} />
           ),
         }),
       ),
