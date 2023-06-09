@@ -15,7 +15,7 @@ import { getDirectory } from './esm';
 
 import type { RequestInfo, RequestInit, Response } from 'node-fetch';
 
-import type { Assertion, CsvRow, EvaluateSummary, UnifiedConfig, TestCase } from './types';
+import type { Assertion, CsvRow, EvaluateSummary, UnifiedConfig, TestCase, Prompt } from './types';
 import { assertionFromString } from './assertions';
 
 const PROMPT_DELIMITER = '---';
@@ -51,11 +51,29 @@ export function readConfig(configPath: string): UnifiedConfig {
   }
 }
 
-export function readPrompts(promptPathsOrGlobs: string | string[]): string[] {
-  promptPathsOrGlobs =
-    typeof promptPathsOrGlobs === 'string' ? [promptPathsOrGlobs] : promptPathsOrGlobs;
-  const promptPaths = promptPathsOrGlobs.flatMap((pathOrGlob) => globSync(pathOrGlob));
-  let promptContents: string[] = [];
+enum PromptInputType {
+  STRING = 1,
+  ARRAY = 2,
+  NAMED = 3,
+}
+
+export function readPrompts(
+  promptPathOrGlobs: string | string[] | Record<string, string>,
+): Prompt[] {
+  let promptPaths: string[] = [];
+  let promptContents: Prompt[] = [];
+
+  let inputType: PromptInputType | undefined;
+  if (typeof promptPathOrGlobs === 'string') {
+    promptPaths = [promptPathOrGlobs];
+    inputType = PromptInputType.STRING;
+  } else if (Array.isArray(promptPathOrGlobs)) {
+    promptPaths = promptPathOrGlobs.flatMap((pathOrGlob) => globSync(pathOrGlob));
+    inputType = PromptInputType.ARRAY;
+  } else if (typeof promptPathOrGlobs === 'object') {
+    promptPaths = Object.keys(promptPathOrGlobs);
+    inputType = PromptInputType.NAMED;
+  }
 
   for (const promptPath of promptPaths) {
     const stat = fs.statSync(promptPath);
@@ -64,18 +82,27 @@ export function readPrompts(promptPathsOrGlobs: string | string[]): string[] {
       const fileContents = filesInDirectory.map((fileName) =>
         fs.readFileSync(path.join(promptPath, fileName), 'utf-8'),
       );
-      promptContents.push(...fileContents);
+      promptContents.push(...fileContents.map((content) => ({ raw: content, display: content })));
     } else {
       const fileContent = fs.readFileSync(promptPath, 'utf-8');
-      promptContents.push(fileContent);
+      let display;
+      if (inputType === PromptInputType.NAMED) {
+        display = (promptPathOrGlobs as Record<string, string>)[promptPath];
+      } else {
+        display = fileContent.length > 200 ? promptPath : fileContent;
+      }
+      promptContents.push({ raw: fileContent, display });
     }
   }
 
-  if (promptContents.length === 1) {
-    promptContents = promptContents[0].split(PROMPT_DELIMITER).map((p) => p.trim());
+  if (promptContents.length === 1 && inputType !== PromptInputType.NAMED) {
+    const content = promptContents[0].raw;
+    promptContents = content
+      .split(PROMPT_DELIMITER)
+      .map((p) => ({ raw: p.trim(), display: p.trim() }));
   }
   if (promptContents.length === 0) {
-    throw new Error(`There are no prompts in ${promptPathsOrGlobs.join(', ')}`);
+    throw new Error(`There are no prompts in ${JSON.stringify(promptPathOrGlobs)}`);
   }
   return promptContents;
 }

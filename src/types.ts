@@ -157,7 +157,7 @@ export interface TestSuite {
   providers: ApiProvider[];
 
   // One or more prompt strings
-  prompts: string[];
+  prompts: Prompt[];
 
   // Test cases
   tests?: TestCase[];

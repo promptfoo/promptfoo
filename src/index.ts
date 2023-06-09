@@ -15,9 +15,14 @@ interface EvaluateTestSuite extends TestSuiteConfig {
 async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions = {}) {
   const constructedTestSuite: TestSuite = {
     ...testSuite,
-    prompts: testSuite.prompts, // raw prompts expected
     providers: await loadApiProviders(testSuite.providers),
     tests: await readTests(testSuite.tests),
+
+    // Full prompts expected (not filepaths)
+    prompts: testSuite.prompts.map((promptContent) => ({
+      raw: promptContent,
+      display: promptContent,
+    })),
   };
   return doEvaluate(constructedTestSuite, options);
 }

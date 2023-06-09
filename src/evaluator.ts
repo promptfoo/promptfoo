@@ -24,7 +24,7 @@ import { generatePrompts } from './suggestions';
 
 interface RunEvalOptions {
   provider: ApiProvider;
-  prompt: string;
+  prompt: Prompt;
 
   test: AtomicTestCase;
 
@@ -86,10 +86,13 @@ class Evaluator {
     includeProviderId,
   }: RunEvalOptions): Promise<EvaluateResult> {
     const vars = test.vars || {};
-    const renderedPrompt = nunjucks.renderString(prompt, vars);
+    const renderedPrompt = nunjucks.renderString(prompt.raw, vars);
 
     // Note that we're using original prompt, not renderedPrompt
-    const promptDisplay = includeProviderId ? `[${provider.id()}] ${prompt}` : prompt;
+    let promptDisplay = prompt.display;
+    if (includeProviderId) {
+      promptDisplay = `[${provider.id()}] ${promptDisplay}`;
+    }
 
     const setup = {
       prompt: {
@@ -155,7 +158,7 @@ class Evaluator {
     if (options.generateSuggestions) {
       // TODO(ian): Move this into its own command/file
       logger.info(`Generating prompt variations...`);
-      const { prompts: newPrompts, error } = await generatePrompts(testSuite.prompts[0], 1);
+      const { prompts: newPrompts, error } = await generatePrompts(testSuite.prompts[0].raw, 1);
       if (error || !newPrompts) {
         throw new Error(`Failed to generate prompts: ${error}`);
       }
@@ -178,7 +181,7 @@ class Evaluator {
             async (answer) => {
               rl.close();
               if (answer.toLowerCase().startsWith('y')) {
-                testSuite.prompts.push(prompt);
+                testSuite.prompts.push({ raw: prompt, display: prompt });
                 numAdded++;
               } else {
                 logger.info('Skipping this prompt.');
@@ -196,13 +199,13 @@ class Evaluator {
     }
 
     // Split prompts by provider
-    for (const promptContent of testSuite.prompts) {
+    for (const prompt of testSuite.prompts) {
       for (const provider of testSuite.providers) {
-        const display =
-          testSuite.providers.length > 1 ? `[${provider.id()}] ${promptContent}` : promptContent;
+        const updatedDisplay =
+          testSuite.providers.length > 1 ? `[${provider.id()}] ${prompt.display}` : prompt.display;
         prompts.push({
-          raw: promptContent,
-          display,
+          ...prompt,
+          display: updatedDisplay,
         });
       }
     }
@@ -248,6 +251,7 @@ class Evaluator {
     // And progress bar...
     let progressbar: SingleBar | undefined;
     if (options.showProgressBar) {
+      // FIXME(ian): Add var combinations too
       const totalNumRuns =
         testSuite.prompts.length * testSuite.providers.length * (tests.length || 1);
       const cliProgress = await import('cli-progress');
@@ -284,11 +288,14 @@ class Evaluator {
       const varCombinations = generateVarCombinations(testCase.vars || {});
       for (const vars of varCombinations) {
         let colIndex = 0;
-        for (const promptContent of testSuite.prompts) {
+        for (const prompt of testSuite.prompts) {
           for (const provider of testSuite.providers) {
             runEvalOptions.push({
               provider,
-              prompt: prependToPrompt + promptContent + appendToPrompt,
+              prompt: {
+                ...prompt,
+                raw: prependToPrompt + prompt.raw + appendToPrompt,
+              },
               test: { ...testCase, vars },
               includeProviderId: testSuite.providers.length > 1,
               rowIndex,
@@ -314,7 +321,7 @@ class Evaluator {
         if (progressbar) {
           progressbar.increment({
             provider: options.provider.id(),
-            prompt: options.prompt.slice(0, 10),
+            prompt: options.prompt.raw.slice(0, 10),
             vars: Object.entries(options.test.vars || {})
               .map(([k, v]) => `${k}=${v}`)
               .join(' ')
