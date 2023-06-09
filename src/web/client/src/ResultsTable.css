@@ -114,12 +114,12 @@ td .fail {
   color: var(--fail-color);
 }
 
-.first-prompt-column {
-  border-left: 1px solid #000;
+.first-prompt-col {
+  border-left: 2px solid #888;
 }
 
 .first-prompt-row {
-  border-top: 1px solid #000;
+  border-top: 2px solid #888;
 }
 
 .resizer {

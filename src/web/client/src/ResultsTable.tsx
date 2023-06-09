@@ -239,23 +239,36 @@ export default function ResultsTable({ maxTextLength, columnVisibility }: Result
         ))}
       </thead>
       <tbody>
-        {reactTable.getRowModel().rows.map((row) => (
-          <tr key={row.id}>
-            {row.getVisibleCells().map((cell) => (
-              <td
-                {...{
-                  key: cell.id,
-                  style: {
-                    width: cell.column.getSize(),
-                  },
-                  className: cell.column.id.startsWith('Variable') ? 'variable' : '',
-                }}
-              >
-                {flexRender(cell.column.columnDef.cell, cell.getContext())}
-              </td>
-            ))}
-          </tr>
-        ))}
+        {reactTable.getRowModel().rows.map((row, rowIndex) => {
+          let colBorderDrawn = false;
+          return (
+            <tr key={row.id}>
+              {row.getVisibleCells().map((cell) => {
+                const isVariableCol = cell.column.id.startsWith('Variable');
+                const shouldDrawColBorder = !isVariableCol && !colBorderDrawn;
+                if (shouldDrawColBorder) {
+                  colBorderDrawn = true;
+                }
+                const shouldDrawRowBorder = rowIndex === 0 && !isVariableCol;
+                return (
+                  <td
+                    {...{
+                      key: cell.id,
+                      style: {
+                        width: cell.column.getSize(),
+                      },
+                      className: `${isVariableCol ? 'variable' : ''} ${
+                        shouldDrawRowBorder ? 'first-prompt-row' : ''
+                      } ${shouldDrawColBorder ? 'first-prompt-col' : ''}`,
+                    }}
+                  >
+                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                  </td>
+                );
+              })}
+            </tr>
+          );
+        })}
       </tbody>
     </table>
   );
