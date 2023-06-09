@@ -6,19 +6,24 @@ interface PromptDialogProps {
   open: boolean;
   prompt: string;
   index: number;
-  onSave: (index: number, prompt: string) => void;
+  onAdd: (prompt: string) => void;
   onCancel: () => void;
 }
 
-const PromptDialog: React.FC<PromptDialogProps> = ({ open, prompt, index, onSave, onCancel }) => {
+const PromptDialog: React.FC<PromptDialogProps> = ({ open, prompt, index, onAdd, onCancel }) => {
   const [editingPrompt, setEditingPrompt] = React.useState(prompt);
 
   React.useEffect(() => {
     setEditingPrompt(prompt);
   }, [prompt]);
 
+  const handleAddAnother = () => {
+    onAdd('');
+    setEditingPrompt('');
+  };
+
   const handleSave = () => {
-    onSave(index, editingPrompt);
+    onAdd(editingPrompt);
     onCancel();
   };
 
@@ -36,13 +41,16 @@ const PromptDialog: React.FC<PromptDialogProps> = ({ open, prompt, index, onSave
         />
       </DialogContent>
       <DialogActions>
-        <Button onClick={handleSave} color="primary" variant="contained">
-          Save
-        </Button>
-        <Button onClick={onCancel} color="secondary">
-          Cancel
-        </Button>
-      </DialogActions>
+      <Button onClick={handleSave} color="primary" variant="contained">
+        Add
+      </Button>
+      <Button onClick={handleAddAnother} color="primary" variant="contained">
+        Add Another
+      </Button>
+      <Button onClick={onCancel} color="secondary">
+        Cancel
+      </Button>
+    </DialogActions>
     </Dialog>
   );
 };

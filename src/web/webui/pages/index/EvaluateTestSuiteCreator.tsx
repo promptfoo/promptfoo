@@ -214,7 +214,14 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({
         open={editingPromptIndex !== null}
         prompt={editingPromptIndex !== null ? prompts[editingPromptIndex] : ''}
         index={editingPromptIndex !== null ? editingPromptIndex : 0}
-        onSave={(index, newPrompt) => handleChangePrompt(index, newPrompt)}
+        onAdd={(newPrompt) => {
+          if (editingPromptIndex !== null) {
+            handleChangePrompt(editingPromptIndex, newPrompt);
+          } else {
+            setPrompts([...prompts, newPrompt]);
+          }
+          setEditingPromptIndex(null);
+        }}
         onCancel={() => setEditingPromptIndex(null)}
       />
       <Typography variant="h5">Test Cases</Typography>
