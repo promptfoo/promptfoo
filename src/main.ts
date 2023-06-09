@@ -256,8 +256,9 @@ async function main() {
           },
         });
         // Skip first row (header) and add the rest. Color PASS/FAIL
-        for (const row of summary.table.body) {
+        for (const row of summary.table.body.slice(0, 25)) {
           table.push([
+            ...row.vars,
             ...row.outputs.map((col) => {
               const tableCellMaxLength = parseInt(cmdObj.tableCellMaxLength || '', 10);
               if (!isNaN(tableCellMaxLength) && col.length > tableCellMaxLength) {
@@ -275,11 +276,14 @@ async function main() {
               }
               return col;
             }),
-            ...row.vars,
           ]);
         }
 
         logger.info('\n' + table.toString());
+        if (summary.table.body.length > 25) {
+          const rowsLeft = summary.table.body.length - 25;
+          logger.info(`... ${rowsLeft} more row${rowsLeft === 1 ? '' : 's'} not shown ...\n`);
+        }
       }
       if (cmdObj.view || !cmdObj.write) {
         logger.info('Evaluation complete');
