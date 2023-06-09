@@ -44,6 +44,7 @@ export function readConfig(configPath: string): UnifiedConfig {
     case '.js':
       return require(configPath) as UnifiedConfig;
     case '.yaml':
+    case '.yml':
       return yaml.load(fs.readFileSync(configPath, 'utf-8')) as UnifiedConfig;
     default:
       throw new Error(`Unsupported configuration file format: ${ext}`);
