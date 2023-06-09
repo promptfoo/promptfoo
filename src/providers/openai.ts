@@ -128,7 +128,9 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
 
     let stop: string;
     try {
-      stop = process.env.OPENAI_STOP ? JSON.parse(process.env.OPENAI_STOP) : undefined;
+      stop = process.env.OPENAI_STOP
+        ? JSON.parse(process.env.OPENAI_STOP)
+        : ['<|im_end|>', '<|endoftext|>'];
     } catch (err) {
       throw new Error(`OPENAI_STOP is not a valid JSON string: ${err}`);
     }
