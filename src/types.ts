@@ -116,10 +116,25 @@ export interface GradingResult {
 // TODO(ian): maybe Assertion should support {type: config} to make the yaml cleaner
 export interface Assertion {
   // Type of assertion
-  type: 'equals' | 'is-json' | 'contains-json' | 'javascript' | 'similar' | 'llm-rubric';
+  type:
+    | 'equals'
+    | 'contains'
+    | 'not-contains'
+    | 'contains-lower'
+    | 'not-contains-lower'
+    | 'contains-all'
+    | 'contains-any'
+    | 'regex'
+    | 'not-regex'
+    | 'is-json'
+    | 'contains-json'
+    | 'javascript'
+    | 'similar'
+    | 'not-similar'
+    | 'llm-rubric';
 
   // The expected value, if applicable
-  value?: string;
+  value?: string | string[];
 
   // The threshold value, only applicable for similarity (cosine distance)
   threshold?: number;
