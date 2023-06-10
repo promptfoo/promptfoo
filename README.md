@@ -22,11 +22,11 @@ promptfoo produces matrix views that let you quickly evaluate outputs across man
 
 Here's an example of a side-by-side comparison of multiple prompts and inputs:
 
-![Prompt evaluation matrix - web viewer](https://github.com/typpo/promptfoo/assets/310310/ddcd77df-2783-425e-ade9-1a20dd0b6cd2)
+![prompt evaluation matrix - web viewer](https://github.com/typpo/promptfoo/assets/310310/2b79e8f8-9b79-49e7-bffb-24cba18352f2)
 
 It works on the command line too:
 
-![Prompt evaluation](https://user-images.githubusercontent.com/310310/235529431-f4d5c395-d569-448e-9697-cd637e0372a5.gif)
+![Prompt evaluation](https://github.com/typpo/promptfoo/assets/310310/480e1114-d049-40b9-bd5f-f81c15060284)
 
 ## Workflow
 
@@ -61,41 +61,49 @@ The YAML configuration format runs each prompt through a series of example input
 See the [Configuration docs](https://www.promptfoo.dev/docs/configuration/guide) for a detailed guide.
 
 ```yaml
-prompts: [prompts.txt]
-providers: [openai:gpt-3.5-turbo]
+prompts: [prompt1.txt, prompt2.txt]
+providers: [openai:gpt-3.5-turbo, localai:chat:vicuna]
+defaultTest:
+  assert:
 tests:
-  - description: First test case - automatic review
-    vars:
-      var1: first variable's value
-      var2: another value
-      var3: some other value
-    assert:
-      - type: equality
-        value: expected LLM output goes here
-      - type: function
-        value: output.includes('some text')
-
-  - description: Second test case - manual review
-    # Test cases don't need assertions if you prefer to review the output yourself
-    vars:
-      var1: new value
-      var2: another value
-      var3: third value
-
-  - description: Third test case - other types of automatic review
-    vars:
-      var1: yet another value
-      var2: and another
-      var3: dear llm, please output your response in json format
-    assert:
-      - type: contains-json
-      - type: similarity
-        value: ensures that output is semantically similar to this text
+  - vars:
+      language: French
+      input: Hello world
+        assert:
+          - type: contains-json
+          - type: javascript
+            value: output.statsWith('Bonjour')
+  - vars:
+      language: German
+      input: How's it going?
+      - type: similar
+        value: was geht
+        threshold: 0.6   # cosine similarity
       - type: llm-rubric
-        value: ensure that output contains a reference to X
+        value: does not describe self as an AI, model, or chatbot
 ```
 
-### Tests on spreadsheet
+### Supported assertion types
+
+See [Test assertions](https://promptfoo.dev/docs/configuration/expected-outputs) for full details.
+
+| Assertion Type   | Returns true if...                                                        |
+|------------------|---------------------------------------------------------------------------|
+| `equals`         | output matches exactly                                                    |
+| `contains`       | output contains substring                                                 |
+| `icontains`      | output contains substring, case insensitive                               |
+| `regex`          | output matches regex                                                      |
+| `contains-some`  | output contains some in list of substrings                                |
+| `contains-all`   | output contains all list of substrings                                    |
+| `is-json`        | output is valid json                                                      |
+| `contains-json`  | output contains valid json                                                |
+| `javascript`     | provided Javascript function validates the output                         |
+| `similar`        | embeddings and cosine similarity are above a threshold                    |
+| `llm-rubric`     | LLM output matches a given rubric, using a Language Model to grade output |
+
+Every test type can be negated by prepending `not-`.  For example, `not-equals` or `not-regex`.
+
+### Tests from spreadsheet
 
 Some people prefer to configure their LLM tests in a CSV. In that case, the config is pretty simple:
 
