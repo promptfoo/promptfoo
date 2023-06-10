@@ -128,12 +128,12 @@ type BaseAssertionTypes =
 
 type NotPrefixed<T extends string> = `not-${T}`;
 
-type AllAssertionTypes = BaseAssertionTypes | NotPrefixed<BaseAssertionTypes>;
+export type AssertionType = BaseAssertionTypes | NotPrefixed<BaseAssertionTypes>;
 
 // TODO(ian): maybe Assertion should support {type: config} to make the yaml cleaner
 export interface Assertion {
   // Type of assertion
-  type: AllAssertionTypes;
+  type: AssertionType;
 
   // The expected value, if applicable
   value?: string | string[];

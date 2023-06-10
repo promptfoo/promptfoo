@@ -6,7 +6,13 @@ import { cosineSimilarity } from './util';
 import { loadApiProvider } from './providers';
 import { DEFAULT_GRADING_PROMPT } from './prompts';
 
-import type { Assertion, GradingConfig, GradingResult, AtomicTestCase } from './types';
+import type {
+  Assertion,
+  AssertionType,
+  GradingConfig,
+  GradingResult,
+  AtomicTestCase,
+} from './types';
 
 const SIMILAR_REGEX = /similar(?::|\((\d+(\.\d+)?)\):)/;
 
@@ -323,16 +329,7 @@ export async function matchesLlmRubric(
 }
 
 export function assertionFromString(expected: string): Assertion {
-  const match = expected.match(SIMILAR_REGEX);
-  if (match) {
-    const threshold = parseFloat(match[1]) || DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD;
-    const rest = expected.replace(SIMILAR_REGEX, '').trim();
-    return {
-      type: 'similar',
-      value: rest,
-      threshold,
-    };
-  }
+  // Legacy options
   if (expected.startsWith('fn:') || expected.startsWith('eval:')) {
     // TODO(1.0): delete eval: legacy option
     const sliceLength = expected.startsWith('fn:') ? 'fn:'.length : 'eval:'.length;
@@ -348,12 +345,48 @@ export function assertionFromString(expected: string): Assertion {
       value: expected.slice(6),
     };
   }
+
+  // New options
+  const assertionRegex =
+    /^(not-)?(equals|contains|contains-any|contains-all|regex|icontains):(.+)$/;
+  const regexMatch = expected.match(assertionRegex);
+
+  if (regexMatch) {
+    const [_, notPrefix, type, value] = regexMatch;
+    const fullType = notPrefix ? `not-${type}` : type;
+
+    if (type === 'contains-any' || type === 'contains-all') {
+      return {
+        type: fullType as AssertionType,
+        value: value.split(',').map((s) => s.trim()),
+      };
+    } else {
+      return {
+        type: fullType as AssertionType,
+        value,
+      };
+    }
+  }
+
+  // Options that require some special handling
+  const match = expected.match(SIMILAR_REGEX);
+  if (match) {
+    const threshold = parseFloat(match[1]) || DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD;
+    const rest = expected.replace(SIMILAR_REGEX, '').trim();
+    return {
+      type: 'similar',
+      value: rest,
+      threshold,
+    };
+  }
+
   if (expected === 'is-json' || expected === 'contains-json') {
     return {
       type: expected,
     };
   }
 
+  // Default to equality
   return {
     type: 'equals',
     value: expected,

@@ -400,6 +400,70 @@ describe('assertionFromString', () => {
     expect(result.value).toBe('Expected output');
     expect(result.threshold).toBe(0.9);
   });
+
+  it('should create a contains assertion', () => {
+    const expected = 'contains:substring';
+
+    const result: Assertion = assertionFromString(expected);
+    expect(result.type).toBe('contains');
+    expect(result.value).toBe('substring');
+  });
+
+  it('should create a not-contains assertion', () => {
+    const expected = 'not-contains:substring';
+
+    const result: Assertion = assertionFromString(expected);
+    expect(result.type).toBe('not-contains');
+    expect(result.value).toBe('substring');
+  });
+
+  it('should create a contains-any assertion', () => {
+    const expected = 'contains-any:substring1,substring2';
+
+    const result: Assertion = assertionFromString(expected);
+    expect(result.type).toBe('contains-any');
+    expect(result.value).toEqual(['substring1', 'substring2']);
+  });
+
+  it('should create a contains-all assertion', () => {
+    const expected = 'contains-all:substring1,substring2';
+
+    const result: Assertion = assertionFromString(expected);
+    expect(result.type).toBe('contains-all');
+    expect(result.value).toEqual(['substring1', 'substring2']);
+  });
+
+  it('should create a regex assertion', () => {
+    const expected = 'regex:\\d+';
+
+    const result: Assertion = assertionFromString(expected);
+    expect(result.type).toBe('regex');
+    expect(result.value).toBe('\\d+');
+  });
+
+  it('should create a not-regex assertion', () => {
+    const expected = 'not-regex:\\d+';
+
+    const result: Assertion = assertionFromString(expected);
+    expect(result.type).toBe('not-regex');
+    expect(result.value).toBe('\\d+');
+  });
+
+  it('should create an icontains assertion', () => {
+    const expected = 'icontains:substring';
+
+    const result: Assertion = assertionFromString(expected);
+    expect(result.type).toBe('icontains');
+    expect(result.value).toBe('substring');
+  });
+
+  it('should create a not-icontains assertion', () => {
+    const expected = 'not-icontains:substring';
+
+    const result: Assertion = assertionFromString(expected);
+    expect(result.type).toBe('not-icontains');
+    expect(result.value).toBe('substring');
+  });
 });
 
 describe('matchesSimilarity', () => {
