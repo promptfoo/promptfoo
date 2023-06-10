@@ -141,9 +141,18 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onS
 
   return (
     <Container maxWidth="lg">
-      <Typography variant="h4" gutterBottom>
-        Configure Test Suite
-      </Typography>
+      <Stack direction="row" spacing={2} justifyContent="space-between">
+        <Typography variant="h4">
+          Configure Test Suite
+        </Typography>
+        <Button
+          variant="contained"
+          color="primary"
+          onClick={handleSubmit}
+        >
+          Run Test Suite
+        </Button>
+      </Stack>
       <TextField
         label="Description"
         value={description}
@@ -172,30 +181,32 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onS
           ))}
         </Select>
       </FormControl>
-      <Stack direction="row" spacing={2}>
+      <Stack direction="row" spacing={2} justifyContent="space-between">
         <Typography variant="h5">Prompts</Typography>
-        <Button
-          color="primary"
-          onClick={() => {
-            setPrompts([...prompts, '']);
-            setEditingPromptIndex(prompts.length);
-          }}
-          variant="contained"
-        >
-          Add Prompt
-        </Button>
-        <label htmlFor={`file-input-add-prompt`}>
-          <Button color="primary" component="span">
-            Upload Prompt
+        <div>
+          <label htmlFor={`file-input-add-prompt`}>
+            <Button color="primary" component="span">
+              Upload Prompt
+            </Button>
+            <input
+              id={`file-input-add-prompt`}
+              type="file"
+              accept=".txt,.md"
+              onChange={handleAddPromptFromFile}
+              style={{ display: 'none' }}
+            />
+          </label>
+          <Button
+            color="primary"
+            onClick={() => {
+              setPrompts([...prompts, '']);
+              setEditingPromptIndex(prompts.length);
+            }}
+            variant="contained"
+          >
+            Add Prompt
           </Button>
-          <input
-            id={`file-input-add-prompt`}
-            type="file"
-            accept=".txt,.md"
-            onChange={handleAddPromptFromFile}
-            style={{ display: 'none' }}
-          />
-        </label>
+        </div>
       </Stack>
       <TableContainer>
         <Table>
@@ -242,7 +253,7 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onS
         }}
         onCancel={() => setEditingPromptIndex(null)}
       />
-      <Stack direction="row" spacing={2} marginY={2}>
+      <Stack direction="row" spacing={2} marginY={2} justifyContent="space-between">
         <Typography variant="h5">Test Cases</Typography>
         <Button color="primary" onClick={() => setTestCaseDialogOpen(true)} variant="contained">
           Add Test Case
@@ -293,14 +304,6 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onS
         }}
       />
       <Box mt={4}>
-        <Button
-          variant="contained"
-          color="primary"
-          onClick={handleSubmit}
-          style={{ marginTop: 16 }}
-        >
-          Run Test Suite
-        </Button>
         {yamlString && (
           <Box mt={4}>
             <Typography variant="h5" gutterBottom>
