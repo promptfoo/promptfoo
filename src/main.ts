@@ -68,7 +68,7 @@ async function main() {
   ];
   let config: Partial<UnifiedConfig> = {};
   for (const path of potentialPaths) {
-    const maybeConfig = maybeReadConfig(path);
+    const maybeConfig = await maybeReadConfig(path);
     if (maybeConfig) {
       config = maybeConfig;
       break;
@@ -172,7 +172,7 @@ async function main() {
       const maxConcurrency = parseInt(cmdObj.maxConcurrency || '', 10);
       const configPath = cmdObj.config;
       if (configPath) {
-        config = readConfig(configPath);
+        config = await readConfig(configPath);
       } else {
         config = {
           prompts: cmdObj.prompts || config.prompts,

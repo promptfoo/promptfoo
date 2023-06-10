@@ -52,6 +52,8 @@ export async function runAssertion(
 ): Promise<GradingResult> {
   let pass: boolean = false;
 
+  invariant(assertion.type, `Assertion must have a type: ${JSON.stringify(assertion)}`);
+
   const inverse = assertion.type.startsWith('not-');
   const baseType = inverse ? assertion.type.slice(4) : assertion.type;
 

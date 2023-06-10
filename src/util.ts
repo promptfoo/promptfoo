@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 
+import $RefParser from '@apidevtools/json-schema-ref-parser';
 import fetch from 'node-fetch';
 import yaml from 'js-yaml';
 import nunjucks from 'nunjucks';
@@ -28,14 +29,14 @@ function parseJson(json: string): any | undefined {
   }
 }
 
-export function maybeReadConfig(configPath: string): UnifiedConfig | undefined {
+export async function maybeReadConfig(configPath: string): Promise<UnifiedConfig | undefined> {
   if (!fs.existsSync(configPath)) {
     return undefined;
   }
   return readConfig(configPath);
 }
 
-export function readConfig(configPath: string): UnifiedConfig {
+export async function readConfig(configPath: string): Promise<UnifiedConfig> {
   const ext = path.parse(configPath).ext;
   switch (ext) {
     case '.json':
@@ -45,7 +46,9 @@ export function readConfig(configPath: string): UnifiedConfig {
       return require(configPath) as UnifiedConfig;
     case '.yaml':
     case '.yml':
-      return yaml.load(fs.readFileSync(configPath, 'utf-8')) as UnifiedConfig;
+      let ret = yaml.load(fs.readFileSync(configPath, 'utf-8')) as UnifiedConfig;
+      ret = (await $RefParser.dereference(ret)) as UnifiedConfig;
+      return ret;
     default:
       throw new Error(`Unsupported configuration file format: ${ext}`);
   }

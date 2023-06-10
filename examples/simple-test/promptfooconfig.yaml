@@ -12,8 +12,8 @@ tests:
     vars:
       body: I'm hungry
     assert:
-      - type: javascript
-        value: output.toLowerCase().includes('grub')
+      - type: icontains
+        value: grub
 
   - description: Check if output is JSON
     vars:
@@ -27,7 +27,7 @@ tests:
     assert:
       # Look for substring
       - type: javascript
-        value: output.toLowerCase().includes('ahoy')
+        value: output.startsWith('Ahoy')
 
       # Check for semantic similarity
       - type: similar
@@ -48,5 +48,5 @@ outputPath: output.csv
 
 assertionTemplates:
   containsPirateNoise:
-    type: javascript
-    value: output.toLowerCase().includes('arrr')
+    type: icontains
+    value: arrr

@@ -145,7 +145,7 @@ class Evaluator {
     } catch (err) {
       return {
         ...setup,
-        error: String(err),
+        error: String(err) + '\n\n' + (err as Error).stack,
         success: false,
       };
     }
