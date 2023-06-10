@@ -113,25 +113,27 @@ export interface GradingResult {
   tokensUsed?: TokenUsage;
 }
 
+type BaseAssertionTypes =
+  | 'equals'
+  | 'contains'
+  | 'icontains'
+  | 'contains-all'
+  | 'contains-any'
+  | 'regex'
+  | 'is-json'
+  | 'contains-json'
+  | 'javascript'
+  | 'similar'
+  | 'llm-rubric';
+
+type NotPrefixed<T extends string> = `not-${T}`;
+
+type AllAssertionTypes = BaseAssertionTypes | NotPrefixed<BaseAssertionTypes>;
+
 // TODO(ian): maybe Assertion should support {type: config} to make the yaml cleaner
 export interface Assertion {
   // Type of assertion
-  type:
-    | 'equals'
-    | 'contains'
-    | 'not-contains'
-    | 'contains-lower'
-    | 'not-contains-lower'
-    | 'contains-all'
-    | 'contains-any'
-    | 'regex'
-    | 'not-regex'
-    | 'is-json'
-    | 'contains-json'
-    | 'javascript'
-    | 'similar'
-    | 'not-similar'
-    | 'llm-rubric';
+  type: AllAssertionTypes;
 
   // The expected value, if applicable
   value?: string | string[];

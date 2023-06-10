@@ -6,7 +6,7 @@ import { cosineSimilarity } from './util';
 import { loadApiProvider } from './providers';
 import { DEFAULT_GRADING_PROMPT } from './prompts';
 
-import type { Assertion, GradingConfig, TestCase, GradingResult, AtomicTestCase } from './types';
+import type { Assertion, GradingConfig, GradingResult, AtomicTestCase } from './types';
 
 const SIMILAR_REGEX = /similar(?::|\((\d+(\.\d+)?)\):)/;
 
@@ -46,7 +46,10 @@ export async function runAssertion(
 ): Promise<GradingResult> {
   let pass: boolean = false;
 
-  if (assertion.type === 'equals') {
+  const inverse = assertion.type.startsWith('not-');
+  const baseType = inverse ? assertion.type.slice(4) : assertion.type;
+
+  if (baseType === 'equals') {
     pass = assertion.value === output;
     return {
       pass,
@@ -54,176 +57,136 @@ export async function runAssertion(
     };
   }
 
-  if (assertion.type === 'is-json') {
+  if (baseType === 'is-json') {
     try {
       JSON.parse(output);
-      return { pass: true, reason: 'Assertion passed' };
+      pass = !inverse;
     } catch (err) {
-      return {
-        pass: false,
-        reason: `Expected output to be valid JSON, but it isn't.\nError: ${err}`,
-      };
+      pass = inverse;
     }
+    return { pass, reason: pass ? 'Assertion passed' : 'Expected output to be valid JSON' };
   }
 
-  if (assertion.type === 'contains') {
+  if (baseType === 'contains') {
     invariant(assertion.value, '"contains" assertion type must have a string value');
     invariant(
       typeof assertion.value === 'string',
       '"contains" assertion type must have a string value',
     );
-    const pass = output.includes(assertion.value);
+    pass = output.includes(assertion.value) !== inverse;
     return {
       pass,
-      reason: pass ? 'Assertion passed' : `Expected output to contain "${assertion.value}"`,
+      reason: pass
+        ? 'Assertion passed'
+        : `Expected output to ${inverse ? 'not ' : ''}contain "${assertion.value}"`,
     };
   }
 
-  if (assertion.type === 'not-contains') {
-    invariant(assertion.value, '"not-contains" assertion type must have a string value');
-    invariant(
-      typeof assertion.value === 'string',
-      '"contains" assertion type must have a string value',
-    );
-    const pass = !output.includes(assertion.value);
-    return {
-      pass,
-      reason: pass ? 'Assertion passed' : `Expected output to not contain "${assertion.value}"`,
-    };
-  }
-
-  if (assertion.type === 'contains-any') {
+  if (baseType === 'contains-any') {
     invariant(assertion.value, '"contains-any" assertion type must have a value');
     invariant(
       Array.isArray(assertion.value),
       '"contains-any" assertion type must have an array value',
     );
-    const pass = assertion.value.some((value) => output.includes(value));
+    pass = assertion.value.some((value) => output.includes(value)) !== inverse;
     return {
       pass,
       reason: pass
         ? 'Assertion passed'
-        : `Expected output to contain one of "${assertion.value.join(', ')}"`,
+        : `Expected output to ${inverse ? 'not ' : ''}contain one of "${assertion.value.join(
+            ', ',
+          )}"`,
     };
   }
 
-  if (assertion.type === 'contains-all') {
+  if (baseType === 'contains-all') {
     invariant(assertion.value, '"contains-all" assertion type must have a value');
     invariant(
       Array.isArray(assertion.value),
       '"contains-all" assertion type must have an array value',
     );
-    const pass = assertion.value.every((value) => output.includes(value));
+    pass = assertion.value.every((value) => output.includes(value)) !== inverse;
     return {
       pass,
       reason: pass
         ? 'Assertion passed'
-        : `Expected output to contain all of "${assertion.value.join(', ')}"`,
+        : `Expected output to ${inverse ? 'not ' : ''}contain all of "${assertion.value.join(
+            ', ',
+          )}"`,
     };
   }
 
-  if (assertion.type === 'regex') {
+  if (baseType === 'regex') {
     invariant(assertion.value, '"regex" assertion type must have a string value');
     invariant(
       typeof assertion.value === 'string',
       '"contains" assertion type must have a string value',
     );
     const regex = new RegExp(assertion.value);
-    const pass = regex.test(output);
+    pass = regex.test(output) !== inverse;
     return {
       pass,
-      reason: pass ? 'Assertion passed' : `Expected output to match regex "${assertion.value}"`,
+      reason: pass
+        ? 'Assertion passed'
+        : `Expected output to ${inverse ? 'not ' : ''}match regex "${assertion.value}"`,
     };
   }
 
-  if (assertion.type === 'not-regex') {
-    invariant(assertion.value, '"not-regex" assertion type must have a string value');
+  if (baseType === 'icontains') {
+    invariant(assertion.value, '"icontains" assertion type must have a string value');
     invariant(
       typeof assertion.value === 'string',
-      '"contains" assertion type must have a string value',
+      '"icontains" assertion type must have a string value',
     );
-    const regex = new RegExp(assertion.value);
-    const pass = !regex.test(output);
+    pass = output.toLowerCase().includes(assertion.value.toLowerCase()) !== inverse;
     return {
       pass,
-      reason: pass ? 'Assertion passed' : `Expected output to not match regex "${assertion.value}"`,
+      reason: pass
+        ? 'Assertion passed'
+        : `Expected output to ${inverse ? 'not ' : ''}contain "${assertion.value}"`,
     };
   }
 
-  if (assertion.type === 'contains-lower') {
-    invariant(assertion.value, '"contains-lower" assertion type must have a string value');
-    invariant(
-      typeof assertion.value === 'string',
-      '"contains" assertion type must have a string value',
-    );
-    const pass = output.toLowerCase().includes(assertion.value.toLowerCase());
+  if (baseType === 'contains-json') {
+    pass = containsJSON(output) !== inverse;
     return {
       pass,
-      reason: pass ? 'Assertion passed' : `Expected output to contain "${assertion.value}"`,
+      reason: pass
+        ? 'Assertion passed'
+        : `Expected output to ${inverse ? 'not ' : ''}contain valid JSON`,
     };
   }
 
-  if (assertion.type === 'not-contains-lower') {
-    invariant(assertion.value, '"not-contains-lower" assertion type must have a string value');
-    invariant(
-      typeof assertion.value === 'string',
-      '"contains" assertion type must have a string value',
-    );
-    const pass = !output.toLowerCase().includes(assertion.value.toLowerCase());
-    return {
-      pass,
-      reason: pass ? 'Assertion passed' : `Expected output to not contain "${assertion.value}"`,
-    };
-  }
-
-  if (assertion.type === 'contains-json') {
-    const pass = containsJSON(output);
-    return {
-      pass,
-      reason: pass ? 'Assertion passed' : 'Expected output to contain valid JSON',
-    };
-  }
-
-  if (assertion.type === 'javascript') {
+  if (baseType === 'javascript') {
     try {
       const customFunction = new Function('output', `return ${assertion.value}`);
-      pass = customFunction(output);
+      pass = customFunction(output) !== inverse;
     } catch (err) {
       return {
         pass: false,
-        reason: `Custom function threw error: ${(err as Error).message}\n${assertion.value}`,
+        reason: `Custom function threw error: ${(err as Error).message}
+${assertion.value}`,
       };
     }
     return {
       pass,
-      reason: pass ? 'Assertion passed' : `Custom function returned false\n${assertion.value}`,
+      reason: pass
+        ? 'Assertion passed'
+        : `Custom function returned ${inverse ? 'true' : 'false'}
+${assertion.value}`,
     };
   }
 
-  if (assertion.type === 'similar') {
+  if (baseType === 'similar') {
     invariant(assertion.value, 'Similarity assertion must have a string value');
     invariant(
       typeof assertion.value === 'string',
       '"contains" assertion type must have a string value',
     );
-    return matchesSimilarity(assertion.value, output, assertion.threshold || 0.75);
+    return matchesSimilarity(assertion.value, output, assertion.threshold || 0.75, inverse);
   }
 
-  if (assertion.type === 'not-similar') {
-    invariant(assertion.value, 'Similarity assertion must have a string value');
-    invariant(
-      typeof assertion.value === 'string',
-      '"contains" assertion type must have a string value',
-    );
-    return matchesSimilarity(
-      assertion.value,
-      output,
-      assertion.threshold || 0.25,
-      true /* inverse */,
-    );
-  }
-
-  if (assertion.type === 'llm-rubric') {
+  if (baseType === 'llm-rubric') {
     invariant(assertion.value, 'Similarity assertion must have a string value');
     invariant(
       typeof assertion.value === 'string',
@@ -390,6 +353,7 @@ export function assertionFromString(expected: string): Assertion {
       type: expected,
     };
   }
+
   return {
     type: 'equals',
     value: expected,

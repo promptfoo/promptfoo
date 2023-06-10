@@ -180,13 +180,13 @@ describe('runAssertion', () => {
     expect(result.reason).toBe('Expected output to not contain "Unexpected output"');
   });
 
-  // Test for contains-lower assertion
+  // Test for icontains assertion
   const containsLowerAssertion: Assertion = {
-    type: 'contains-lower',
+    type: 'icontains',
     value: 'expected output',
   };
 
-  it('should pass when the contains-lower assertion passes', async () => {
+  it('should pass when the icontains assertion passes', async () => {
     const output = 'EXPECTED OUTPUT';
 
     const result: GradingResult = await runAssertion(
@@ -198,7 +198,7 @@ describe('runAssertion', () => {
     expect(result.reason).toBe('Assertion passed');
   });
 
-  it('should fail when the contains-lower assertion fails', async () => {
+  it('should fail when the icontains assertion fails', async () => {
     const output = 'Different output';
 
     const result: GradingResult = await runAssertion(
@@ -210,13 +210,13 @@ describe('runAssertion', () => {
     expect(result.reason).toBe('Expected output to contain "expected output"');
   });
 
-  // Test for not-contains-lower assertion
+  // Test for not-icontains assertion
   const notContainsLowerAssertion: Assertion = {
-    type: 'not-contains-lower',
+    type: 'not-icontains',
     value: 'unexpected output',
   };
 
-  it('should pass when the not-contains-lower assertion passes', async () => {
+  it('should pass when the not-icontains assertion passes', async () => {
     const output = 'Expected output';
 
     const result: GradingResult = await runAssertion(
@@ -228,7 +228,7 @@ describe('runAssertion', () => {
     expect(result.reason).toBe('Assertion passed');
   });
 
-  it('should fail when the not-contains-lower assertion fails', async () => {
+  it('should fail when the not-icontains assertion fails', async () => {
     const output = 'UNEXPECTED OUTPUT';
 
     const result: GradingResult = await runAssertion(
