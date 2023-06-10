@@ -50,7 +50,7 @@ th.variable,
 .th.variable,
 td.variable,
 .td.variable {
-  background-color: #f8fbff;
+  background-color: #f7f7f7;
 }
 
 tr.header {
@@ -62,7 +62,7 @@ th,
   padding: 1rem;
   position: relative;
   text-align: center;
-  font-weight: semi-bold;
+  vertical-align: bottom;
 }
 
 tr .cell {
@@ -95,6 +95,16 @@ th .smalltext {
 
 th:hover .smalltext {
   visibility: visible;
+}
+
+th .summary {
+  font-weight: normal;
+  font-size: 0.8rem;
+  padding: 0.25rem;
+}
+
+th .summary.highlight {
+  background-color: #d1ffd7;
 }
 
 td,
