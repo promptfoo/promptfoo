@@ -87,21 +87,22 @@ tests:
 
 See [Test assertions](https://promptfoo.dev/docs/configuration/expected-outputs) for full details.
 
-| Assertion Type   | Returns true if...                                                        |
-|------------------|---------------------------------------------------------------------------|
-| `equals`         | output matches exactly                                                    |
-| `contains`       | output contains substring                                                 |
-| `icontains`      | output contains substring, case insensitive                               |
-| `regex`          | output matches regex                                                      |
-| `contains-some`  | output contains some in list of substrings                                |
-| `contains-all`   | output contains all list of substrings                                    |
-| `is-json`        | output is valid json                                                      |
-| `contains-json`  | output contains valid json                                                |
-| `javascript`     | provided Javascript function validates the output                         |
-| `similar`        | embeddings and cosine similarity are above a threshold                    |
-| `llm-rubric`     | LLM output matches a given rubric, using a Language Model to grade output |
+| Assertion Type  | Returns true if...                                                        |
+| --------------- | ------------------------------------------------------------------------- |
+| `equals`        | output matches exactly                                                    |
+| `contains`      | output contains substring                                                 |
+| `icontains`     | output contains substring, case insensitive                               |
+| `regex`         | output matches regex                                                      |
+| `contains-some` | output contains some in list of substrings                                |
+| `contains-all`  | output contains all list of substrings                                    |
+| `is-json`       | output is valid json                                                      |
+| `contains-json` | output contains valid json                                                |
+| `javascript`    | provided Javascript function validates the output                         |
+| `webhook`       | provided webhook returns `{pass: true}                                    |
+| `similar`       | embeddings and cosine similarity are above a threshold                    |
+| `llm-rubric`    | LLM output matches a given rubric, using a Language Model to grade output |
 
-Every test type can be negated by prepending `not-`.  For example, `not-equals` or `not-regex`.
+Every test type can be negated by prepending `not-`. For example, `not-equals` or `not-regex`.
 
 ### Tests from spreadsheet
 
@@ -198,7 +199,7 @@ You can also use `promptfoo` as a library in your project by importing the `eval
   }
 
   interface Assertion {
-    type: 'equality' | 'is-json' | 'contains-json' | 'function' | 'similarity' | 'llm-rubric';
+    type: string;
     value?: string;
     threshold?: number; // For similarity assertions
     provider?: ApiProvider; // For assertions that require an LLM provider

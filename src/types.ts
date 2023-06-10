@@ -124,7 +124,8 @@ type BaseAssertionTypes =
   | 'contains-json'
   | 'javascript'
   | 'similar'
-  | 'llm-rubric';
+  | 'llm-rubric'
+  | 'webhook';
 
 type NotPrefixed<T extends string> = `not-${T}`;
 

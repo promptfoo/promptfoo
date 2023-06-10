@@ -2,7 +2,7 @@ import invariant from 'tiny-invariant';
 import nunjucks from 'nunjucks';
 
 import { DefaultEmbeddingProvider, DefaultGradingProvider } from './providers/openai';
-import { cosineSimilarity } from './util';
+import { cosineSimilarity, fetchWithTimeout } from './util';
 import { loadApiProvider } from './providers';
 import { DEFAULT_GRADING_PROMPT } from './prompts';
 
@@ -204,6 +204,48 @@ ${assertion.value}`,
       '"contains" assertion type must have a string value',
     );
     return matchesLlmRubric(assertion.value, output, test.options);
+  }
+
+  if (baseType === 'webhook') {
+    invariant(assertion.value, '"webhook" assertion type must have a URL value');
+    invariant(
+      typeof assertion.value === 'string',
+      '"webhook" assertion type must have a URL value',
+    );
+
+    try {
+      const context = {
+        vars: test.vars || {},
+      };
+      const response = await fetchWithTimeout(
+        assertion.value,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ output, context }),
+        },
+        process.env.WEBHOOK_TIMEOUT ? parseInt(process.env.WEBHOOK_TIMEOUT, 10) : 5000,
+      );
+
+      if (!response.ok) {
+        throw new Error(`Webhook response status: ${response.status}`);
+      }
+
+      const jsonResponse = await response.json();
+      pass = jsonResponse.pass !== inverse;
+    } catch (err) {
+      return {
+        pass: false,
+        reason: `Webhook error: ${(err as Error).message}`,
+      };
+    }
+
+    return {
+      pass,
+      reason: pass ? 'Assertion passed' : `Webhook returned ${inverse ? 'true' : 'false'}`,
+    };
   }
 
   throw new Error('Unknown assertion type: ' + assertion.type);

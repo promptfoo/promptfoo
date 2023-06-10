@@ -1,3 +1,4 @@
+import { Response } from 'node-fetch';
 import {
   runAssertions,
   runAssertion,
@@ -5,12 +6,12 @@ import {
   matchesLlmRubric,
   assertionFromString,
 } from '../src/assertions';
+import * as util from '../src/util';
 import { DefaultEmbeddingProvider } from '../src/providers/openai';
 import type {
   Assertion,
   ApiProvider,
   AtomicTestCase,
-  TestCase,
   GradingConfig,
   ProviderResponse,
   GradingResult,
@@ -392,6 +393,64 @@ describe('runAssertion', () => {
     );
     expect(result.pass).toBeFalsy();
     expect(result.reason).toBe('Expected output to not match regex "\\d{3}-\\d{2}-\\d{4}"');
+  });
+
+  // Tests for webhook assertion
+  const webhookAssertion: Assertion = {
+    type: 'webhook',
+    value: 'https://example.com/webhook',
+  };
+
+  it('should pass when the webhook assertion passes', async () => {
+    const output = 'Expected output';
+
+    jest
+      .spyOn(util, 'fetchWithTimeout')
+      .mockImplementation(() =>
+        Promise.resolve(new Response(JSON.stringify({ pass: true }), { status: 200 })),
+      );
+
+    const result: GradingResult = await runAssertion(
+      webhookAssertion,
+      {} as AtomicTestCase,
+      output,
+    );
+    expect(result.pass).toBeTruthy();
+    expect(result.reason).toBe('Assertion passed');
+  });
+
+  it('should fail when the webhook assertion fails', async () => {
+    const output = 'Different output';
+
+    jest
+      .spyOn(util, 'fetchWithTimeout')
+      .mockImplementation(() =>
+        Promise.resolve(new Response(JSON.stringify({ pass: false }), { status: 200 })),
+      );
+
+    const result: GradingResult = await runAssertion(
+      webhookAssertion,
+      {} as AtomicTestCase,
+      output,
+    );
+    expect(result.pass).toBeFalsy();
+    expect(result.reason).toBe('Webhook returned false');
+  });
+
+  it('should fail when the webhook returns an error', async () => {
+    const output = 'Expected output';
+
+    jest
+      .spyOn(util, 'fetchWithTimeout')
+      .mockImplementation(() => Promise.resolve(new Response('', { status: 500 })));
+
+    const result: GradingResult = await runAssertion(
+      webhookAssertion,
+      {} as AtomicTestCase,
+      output,
+    );
+    expect(result.pass).toBeFalsy();
+    expect(result.reason).toBe('Webhook error: Webhook response status: 500');
   });
 });
 

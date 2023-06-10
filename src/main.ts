@@ -154,8 +154,16 @@ async function main() {
       'This suffix is append to every prompt',
       config.defaultTest?.options?.suffix,
     )
-    .option('--no-write', 'Do not write results to promptfoo directory', config?.commandLineOptions?.write)
-    .option('--no-cache', 'Do not read or write results to disk cache', config?.commandLineOptions?.cache)
+    .option(
+      '--no-write',
+      'Do not write results to promptfoo directory',
+      config?.commandLineOptions?.write,
+    )
+    .option(
+      '--no-cache',
+      'Do not read or write results to disk cache',
+      config?.commandLineOptions?.cache,
+    )
     .option('--grader', 'Model that will grade outputs', config?.commandLineOptions?.grader)
     .option('--verbose', 'Show debug logs', config?.commandLineOptions?.verbose)
     .option('--view [port]', 'View in browser ui')
