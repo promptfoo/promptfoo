@@ -81,12 +81,12 @@ export async function runAssertion(
     } catch (err) {
       return {
         pass: false,
-        reason: `Custom function threw error: ${(err as Error).message}`,
+        reason: `Custom function threw error: ${(err as Error).message}\n${assertion.value}`,
       };
     }
     return {
       pass,
-      reason: pass ? 'Assertion passed' : `Custom function returned false`,
+      reason: pass ? 'Assertion passed' : `Custom function returned false\n${assertion.value}`,
     };
   }
 
