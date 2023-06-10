@@ -48,10 +48,20 @@ const PromptDialog: React.FC<PromptDialogProps> = ({ open, prompt, index, onAdd,
         />
       </DialogContent>
       <DialogActions>
-        <Button onClick={handleSave} color="primary" variant="contained">
+        <Button
+          onClick={handleSave}
+          color="primary"
+          variant="contained"
+          disabled={!editingPrompt.length}
+        >
           Add
         </Button>
-        <Button onClick={handleAddAnother} color="primary" variant="contained">
+        <Button
+          onClick={handleAddAnother}
+          color="primary"
+          variant="contained"
+          disabled={!editingPrompt.length}
+        >
           Add Another
         </Button>
         <Button onClick={onCancel} color="secondary">

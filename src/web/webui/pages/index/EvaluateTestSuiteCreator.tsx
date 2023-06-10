@@ -231,7 +231,7 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onS
                     }}
                     onClick={() => handleEditPrompt(index)}
                   >
-                    <Typography variant="body2">{`Prompt ${index + 1}: ${
+                    <Typography variant="body2">{`Prompt #${index + 1}: ${
                       prompt.length > 250 ? prompt.slice(0, 250) + ' ...' : prompt
                     }`}</Typography>
                   </TableCell>
@@ -293,9 +293,11 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onS
                       setTestCaseDialogOpen(true);
                     }}
                   >
-                    <Typography variant="body2">{`Test Case ${index + 1}: ${
-                      testCase.description
-                    }`}</Typography>
+                    <Typography variant="body2">
+                      {`Test Case #${index + 1}: ${
+                        testCase.description || `${testCase.assert?.length || 0} assertions`
+                      }`}
+                    </Typography>
                   </TableCell>
                   <TableCell align="right" sx={{ minWidth: 150 }}>
                     <IconButton
