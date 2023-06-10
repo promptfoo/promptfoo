@@ -148,7 +148,216 @@ describe('runAssertion', () => {
       output,
     );
     expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe('Custom function returned false');
+    expect(result.reason).toBe('Custom function returned false\noutput === "Expected output"');
+  });
+
+  const notContainsAssertion: Assertion = {
+    type: 'not-contains',
+    value: 'Unexpected output',
+  };
+
+  it('should pass when the not-contains assertion passes', async () => {
+    const output = 'Expected output';
+
+    const result: GradingResult = await runAssertion(
+      notContainsAssertion,
+      {} as AtomicTestCase,
+      output,
+    );
+    expect(result.pass).toBeTruthy();
+    expect(result.reason).toBe('Assertion passed');
+  });
+
+  it('should fail when the not-contains assertion fails', async () => {
+    const output = 'Unexpected output';
+
+    const result: GradingResult = await runAssertion(
+      notContainsAssertion,
+      {} as AtomicTestCase,
+      output,
+    );
+    expect(result.pass).toBeFalsy();
+    expect(result.reason).toBe('Expected output to not contain "Unexpected output"');
+  });
+
+  // Test for contains-lower assertion
+  const containsLowerAssertion: Assertion = {
+    type: 'contains-lower',
+    value: 'expected output',
+  };
+
+  it('should pass when the contains-lower assertion passes', async () => {
+    const output = 'EXPECTED OUTPUT';
+
+    const result: GradingResult = await runAssertion(
+      containsLowerAssertion,
+      {} as AtomicTestCase,
+      output,
+    );
+    expect(result.pass).toBeTruthy();
+    expect(result.reason).toBe('Assertion passed');
+  });
+
+  it('should fail when the contains-lower assertion fails', async () => {
+    const output = 'Different output';
+
+    const result: GradingResult = await runAssertion(
+      containsLowerAssertion,
+      {} as AtomicTestCase,
+      output,
+    );
+    expect(result.pass).toBeFalsy();
+    expect(result.reason).toBe('Expected output to contain "expected output"');
+  });
+
+  // Test for not-contains-lower assertion
+  const notContainsLowerAssertion: Assertion = {
+    type: 'not-contains-lower',
+    value: 'unexpected output',
+  };
+
+  it('should pass when the not-contains-lower assertion passes', async () => {
+    const output = 'Expected output';
+
+    const result: GradingResult = await runAssertion(
+      notContainsLowerAssertion,
+      {} as AtomicTestCase,
+      output,
+    );
+    expect(result.pass).toBeTruthy();
+    expect(result.reason).toBe('Assertion passed');
+  });
+
+  it('should fail when the not-contains-lower assertion fails', async () => {
+    const output = 'UNEXPECTED OUTPUT';
+
+    const result: GradingResult = await runAssertion(
+      notContainsLowerAssertion,
+      {} as AtomicTestCase,
+      output,
+    );
+    expect(result.pass).toBeFalsy();
+    expect(result.reason).toBe('Expected output to not contain "unexpected output"');
+  });
+
+  // Test for contains-any assertion
+  const containsAnyAssertion: Assertion = {
+    type: 'contains-any',
+    value: ['option1', 'option2', 'option3'],
+  };
+
+  it('should pass when the contains-any assertion passes', async () => {
+    const output = 'This output contains option1';
+
+    const result: GradingResult = await runAssertion(
+      containsAnyAssertion,
+      {} as AtomicTestCase,
+      output,
+    );
+    expect(result.pass).toBeTruthy();
+    expect(result.reason).toBe('Assertion passed');
+  });
+
+  it('should fail when the contains-any assertion fails', async () => {
+    const output = 'This output does not contain any option';
+
+    const result: GradingResult = await runAssertion(
+      containsAnyAssertion,
+      {} as AtomicTestCase,
+      output,
+    );
+    expect(result.pass).toBeFalsy();
+    expect(result.reason).toBe('Expected output to contain one of "option1, option2, option3"');
+  });
+
+  // Test for contains-all assertion
+  const containsAllAssertion: Assertion = {
+    type: 'contains-all',
+    value: ['option1', 'option2', 'option3'],
+  };
+
+  it('should pass when the contains-all assertion passes', async () => {
+    const output = 'This output contains option1, option2, and option3';
+
+    const result: GradingResult = await runAssertion(
+      containsAllAssertion,
+      {} as AtomicTestCase,
+      output,
+    );
+    expect(result.pass).toBeTruthy();
+    expect(result.reason).toBe('Assertion passed');
+  });
+
+  it('should fail when the contains-all assertion fails', async () => {
+    const output = 'This output contains only option1 and option2';
+
+    const result: GradingResult = await runAssertion(
+      containsAllAssertion,
+      {} as AtomicTestCase,
+      output,
+    );
+    expect(result.pass).toBeFalsy();
+    expect(result.reason).toBe('Expected output to contain all of "option1, option2, option3"');
+  });
+
+  // Test for regex assertion
+  const containsRegexAssertion: Assertion = {
+    type: 'regex',
+    value: '\\d{3}-\\d{2}-\\d{4}',
+  };
+
+  it('should pass when the regex assertion passes', async () => {
+    const output = 'This output contains 123-45-6789';
+
+    const result: GradingResult = await runAssertion(
+      containsRegexAssertion,
+      {} as AtomicTestCase,
+      output,
+    );
+    expect(result.pass).toBeTruthy();
+    expect(result.reason).toBe('Assertion passed');
+  });
+
+  it('should fail when the regex assertion fails', async () => {
+    const output = 'This output does not contain the pattern';
+
+    const result: GradingResult = await runAssertion(
+      containsRegexAssertion,
+      {} as AtomicTestCase,
+      output,
+    );
+    expect(result.pass).toBeFalsy();
+    expect(result.reason).toBe('Expected output to match regex "\\d{3}-\\d{2}-\\d{4}"');
+  });
+
+  // Test for not-regex assertion
+  const notContainsRegexAssertion: Assertion = {
+    type: 'not-regex',
+    value: '\\d{3}-\\d{2}-\\d{4}',
+  };
+
+  it('should pass when the not-regex assertion passes', async () => {
+    const output = 'This output does not contain the pattern';
+
+    const result: GradingResult = await runAssertion(
+      notContainsRegexAssertion,
+      {} as AtomicTestCase,
+      output,
+    );
+    expect(result.pass).toBeTruthy();
+    expect(result.reason).toBe('Assertion passed');
+  });
+
+  it('should fail when the not-regex assertion fails', async () => {
+    const output = 'This output contains 123-45-6789';
+
+    const result: GradingResult = await runAssertion(
+      notContainsRegexAssertion,
+      {} as AtomicTestCase,
+      output,
+    );
+    expect(result.pass).toBeFalsy();
+    expect(result.reason).toBe('Expected output to not match regex "\\d{3}-\\d{2}-\\d{4}"');
   });
 });
 
@@ -232,6 +441,26 @@ describe('matchesSimilarity', () => {
 
     const result = await matchesSimilarity(expected, output, threshold);
     expect(result.pass).toBeFalsy();
+    expect(result.reason).toBe('Similarity 0 is less than threshold 0.9');
+  });
+
+  it('should fail when inverted similarity is above the threshold', async () => {
+    const expected = 'Expected output';
+    const output = 'Sample output';
+    const threshold = 0.5;
+
+    const result = await matchesSimilarity(expected, output, threshold, true /* invert */);
+    expect(result.pass).toBeFalsy();
+    expect(result.reason).toBe('Similarity 1 is greater than threshold 0.5');
+  });
+
+  it('should pass when inverted similarity is below the threshold', async () => {
+    const expected = 'Expected output';
+    const output = 'Different output';
+    const threshold = 0.9;
+
+    const result = await matchesSimilarity(expected, output, threshold, true /* invert */);
+    expect(result.pass).toBeTruthy();
     expect(result.reason).toBe('Similarity 0 is less than threshold 0.9');
   });
 });

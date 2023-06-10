@@ -66,6 +66,116 @@ export async function runAssertion(
     }
   }
 
+  if (assertion.type === 'contains') {
+    invariant(assertion.value, '"contains" assertion type must have a string value');
+    invariant(
+      typeof assertion.value === 'string',
+      '"contains" assertion type must have a string value',
+    );
+    const pass = output.includes(assertion.value);
+    return {
+      pass,
+      reason: pass ? 'Assertion passed' : `Expected output to contain "${assertion.value}"`,
+    };
+  }
+
+  if (assertion.type === 'not-contains') {
+    invariant(assertion.value, '"not-contains" assertion type must have a string value');
+    invariant(
+      typeof assertion.value === 'string',
+      '"contains" assertion type must have a string value',
+    );
+    const pass = !output.includes(assertion.value);
+    return {
+      pass,
+      reason: pass ? 'Assertion passed' : `Expected output to not contain "${assertion.value}"`,
+    };
+  }
+
+  if (assertion.type === 'contains-any') {
+    invariant(assertion.value, '"contains-any" assertion type must have a value');
+    invariant(
+      Array.isArray(assertion.value),
+      '"contains-any" assertion type must have an array value',
+    );
+    const pass = assertion.value.some((value) => output.includes(value));
+    return {
+      pass,
+      reason: pass
+        ? 'Assertion passed'
+        : `Expected output to contain one of "${assertion.value.join(', ')}"`,
+    };
+  }
+
+  if (assertion.type === 'contains-all') {
+    invariant(assertion.value, '"contains-all" assertion type must have a value');
+    invariant(
+      Array.isArray(assertion.value),
+      '"contains-all" assertion type must have an array value',
+    );
+    const pass = assertion.value.every((value) => output.includes(value));
+    return {
+      pass,
+      reason: pass
+        ? 'Assertion passed'
+        : `Expected output to contain all of "${assertion.value.join(', ')}"`,
+    };
+  }
+
+  if (assertion.type === 'regex') {
+    invariant(assertion.value, '"regex" assertion type must have a string value');
+    invariant(
+      typeof assertion.value === 'string',
+      '"contains" assertion type must have a string value',
+    );
+    const regex = new RegExp(assertion.value);
+    const pass = regex.test(output);
+    return {
+      pass,
+      reason: pass ? 'Assertion passed' : `Expected output to match regex "${assertion.value}"`,
+    };
+  }
+
+  if (assertion.type === 'not-regex') {
+    invariant(assertion.value, '"not-regex" assertion type must have a string value');
+    invariant(
+      typeof assertion.value === 'string',
+      '"contains" assertion type must have a string value',
+    );
+    const regex = new RegExp(assertion.value);
+    const pass = !regex.test(output);
+    return {
+      pass,
+      reason: pass ? 'Assertion passed' : `Expected output to not match regex "${assertion.value}"`,
+    };
+  }
+
+  if (assertion.type === 'contains-lower') {
+    invariant(assertion.value, '"contains-lower" assertion type must have a string value');
+    invariant(
+      typeof assertion.value === 'string',
+      '"contains" assertion type must have a string value',
+    );
+    const pass = output.toLowerCase().includes(assertion.value.toLowerCase());
+    return {
+      pass,
+      reason: pass ? 'Assertion passed' : `Expected output to contain "${assertion.value}"`,
+    };
+  }
+
+  if (assertion.type === 'not-contains-lower') {
+    invariant(assertion.value, '"not-contains-lower" assertion type must have a string value');
+    invariant(
+      typeof assertion.value === 'string',
+      '"contains" assertion type must have a string value',
+    );
+    const pass = !output.toLowerCase().includes(assertion.value.toLowerCase());
+    return {
+      pass,
+      reason: pass ? 'Assertion passed' : `Expected output to not contain "${assertion.value}"`,
+    };
+  }
+
   if (assertion.type === 'contains-json') {
     const pass = containsJSON(output);
     return {
@@ -92,11 +202,33 @@ export async function runAssertion(
 
   if (assertion.type === 'similar') {
     invariant(assertion.value, 'Similarity assertion must have a string value');
+    invariant(
+      typeof assertion.value === 'string',
+      '"contains" assertion type must have a string value',
+    );
     return matchesSimilarity(assertion.value, output, assertion.threshold || 0.75);
+  }
+
+  if (assertion.type === 'not-similar') {
+    invariant(assertion.value, 'Similarity assertion must have a string value');
+    invariant(
+      typeof assertion.value === 'string',
+      '"contains" assertion type must have a string value',
+    );
+    return matchesSimilarity(
+      assertion.value,
+      output,
+      assertion.threshold || 0.25,
+      true /* inverse */,
+    );
   }
 
   if (assertion.type === 'llm-rubric') {
     invariant(assertion.value, 'Similarity assertion must have a string value');
+    invariant(
+      typeof assertion.value === 'string',
+      '"contains" assertion type must have a string value',
+    );
     return matchesLlmRubric(assertion.value, output, test.options);
   }
 
@@ -125,6 +257,7 @@ export async function matchesSimilarity(
   expected: string,
   output: string,
   threshold: number,
+  inverse: boolean = false,
 ): Promise<GradingResult> {
   const expectedEmbedding = await DefaultEmbeddingProvider.callEmbeddingApi(expected);
   const outputEmbedding = await DefaultEmbeddingProvider.callEmbeddingApi(output);
@@ -155,16 +288,19 @@ export async function matchesSimilarity(
   }
 
   const similarity = cosineSimilarity(expectedEmbedding.embedding, outputEmbedding.embedding);
-  if (similarity < threshold) {
+  const pass = inverse ? similarity <= threshold : similarity >= threshold;
+  const greaterThanReason = `Similarity ${similarity} is greater than threshold ${threshold}`;
+  const lessThanReason = `Similarity ${similarity} is less than threshold ${threshold}`;
+  if (pass) {
     return {
-      pass: false,
-      reason: `Similarity ${similarity} is less than threshold ${threshold}`,
+      pass: true,
+      reason: inverse ? lessThanReason : greaterThanReason,
       tokensUsed,
     };
   }
   return {
-    pass: true,
-    reason: `Similarity ${similarity} is greater than threshold ${threshold}`,
+    pass: false,
+    reason: inverse ? greaterThanReason : lessThanReason,
     tokensUsed,
   };
 }
