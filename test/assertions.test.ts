@@ -452,6 +452,29 @@ describe('runAssertion', () => {
     expect(result.pass).toBeFalsy();
     expect(result.reason).toBe('Webhook error: Webhook response status: 500');
   });
+
+  // Test for rouge-n assertion
+  const rougeNAssertion: Assertion = {
+    type: 'rouge-n',
+    value: 'This is the expected output.',
+    threshold: 0.75,
+  };
+
+  it('should pass when the rouge-n assertion passes', async () => {
+    const output = 'This is the expected output.';
+
+    const result: GradingResult = await runAssertion(rougeNAssertion, {} as AtomicTestCase, output);
+    expect(result.pass).toBeTruthy();
+    expect(result.reason).toBe('ROUGE-N score 1 is greater than or equal to threshold 0.75');
+  });
+
+  it('should fail when the rouge-n assertion fails', async () => {
+    const output = 'some different output';
+
+    const result: GradingResult = await runAssertion(rougeNAssertion, {} as AtomicTestCase, output);
+    expect(result.pass).toBeFalsy();
+    expect(result.reason).toBe('ROUGE-N score 0.2 is less than threshold 0.75');
+  });
 });
 
 describe('assertionFromString', () => {

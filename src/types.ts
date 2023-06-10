@@ -125,7 +125,10 @@ type BaseAssertionTypes =
   | 'javascript'
   | 'similar'
   | 'llm-rubric'
-  | 'webhook';
+  | 'webhook'
+  | 'rouge-n'
+  | 'rouge-s'
+  | 'rouge-l';
 
 type NotPrefixed<T extends string> = `not-${T}`;
 

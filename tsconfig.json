@@ -11,6 +11,6 @@
     "sourceMap": true,
     "strict": true
   },
-  "include": ["src/"],
+  "include": ["src/", "typings/**/*"],
   "exclude": ["node_modules", "dist", "src/web/client/**/*"]
 }

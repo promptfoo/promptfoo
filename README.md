@@ -98,9 +98,10 @@ See [Test assertions](https://promptfoo.dev/docs/configuration/expected-outputs)
 | `is-json`       | output is valid json                                                      |
 | `contains-json` | output contains valid json                                                |
 | `javascript`    | provided Javascript function validates the output                         |
-| `webhook`       | provided webhook returns `{pass: true}                                    |
+| `webhook`       | provided webhook returns `{pass: true}`                                   |
 | `similar`       | embeddings and cosine similarity are above a threshold                    |
 | `llm-rubric`    | LLM output matches a given rubric, using a Language Model to grade output |
+| `rouge-n`       | Rouge-N score is above a given threshold                                  |
 
 Every test type can be negated by prepending `not-`. For example, `not-equals` or `not-regex`.
 

@@ -1,3 +1,4 @@
+import rouge from 'rouge';
 import invariant from 'tiny-invariant';
 import nunjucks from 'nunjucks';
 
@@ -17,6 +18,31 @@ import type {
 const SIMILAR_REGEX = /similar(?::|\((\d+(\.\d+)?)\):)/;
 
 const DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD = 0.8;
+
+function handleRougeScore(
+  baseType: 'rouge-n',
+  assertion: Assertion,
+  expected: string | string[],
+  output: string,
+  inverted: boolean,
+): GradingResult {
+  const fnName = baseType[baseType.length - 1] as 'n' | 'l' | 's';
+  const rougeMethod = rouge[fnName];
+  const score = rougeMethod(output, expected);
+  console.log(output, expected, score);
+  const pass = score >= (assertion.threshold || 0.75) != inverted;
+
+  return {
+    pass,
+    reason: pass
+      ? `${baseType.toUpperCase()} score ${score} is greater than or equal to threshold ${
+          assertion.threshold || 0.75
+        }`
+      : `${baseType.toUpperCase()} score ${score} is less than threshold ${
+          assertion.threshold || 0.75
+        }`,
+  };
+}
 
 export async function runAssertions(test: AtomicTestCase, output: string): Promise<GradingResult> {
   const tokensUsed = {
@@ -246,6 +272,11 @@ ${assertion.value}`,
       pass,
       reason: pass ? 'Assertion passed' : `Webhook returned ${inverse ? 'true' : 'false'}`,
     };
+  }
+
+  if (baseType === 'rouge-n') {
+    invariant(assertion.value, '"rouge" assertion type must a value (string or string array)');
+    return handleRougeScore(baseType, assertion, assertion.value, output, inverse);
   }
 
   throw new Error('Unknown assertion type: ' + assertion.type);
