@@ -40,7 +40,6 @@ td,
 .td {
   position: relative;
   box-shadow: inset 0 0 0 1px var(--border-color);
-  word-break: break-all;
   vertical-align: top;
 
   padding: 1.5rem;
@@ -72,7 +71,7 @@ tr .cell-rating {
   visibility: hidden;
   position: absolute;
   bottom: 1.25rem;
-  right: -1rem;
+  right: 0;
   line-height: 0;
   font-size: 1.75rem;
 }
@@ -83,7 +82,10 @@ tr:hover .cell-rating {
 
 tr .cell-rating .rating {
   cursor: pointer;
-  margin-right: 1rem;
+}
+
+tr .cell-rating .rating:first-child {
+  margin-right: 0.5rem;
 }
 
 th .smalltext {
