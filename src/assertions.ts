@@ -165,8 +165,11 @@ export async function runAssertion(
 
   if (baseType === 'javascript') {
     try {
-      const customFunction = new Function('output', `return ${assertion.value}`);
-      pass = customFunction(output) !== inverse;
+      const customFunction = new Function('output', 'context', `return ${assertion.value}`);
+      const context = {
+        vars: test.vars || {},
+      };
+      pass = customFunction(output, context) !== inverse;
     } catch (err) {
       return {
         pass: false,

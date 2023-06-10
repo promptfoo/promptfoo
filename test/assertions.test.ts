@@ -151,6 +151,40 @@ describe('runAssertion', () => {
     expect(result.reason).toBe('Custom function returned false\noutput === "Expected output"');
   });
 
+  it('should pass when the function assertion passes - with vars', async () => {
+    const output = 'Expected output';
+
+    const functionAssertionWithVars: Assertion = {
+      type: 'javascript',
+      value: 'output === "Expected output" && context.vars.foo === "bar"',
+    };
+    const result: GradingResult = await runAssertion(
+      functionAssertionWithVars,
+      { vars: { foo: 'bar' } } as AtomicTestCase,
+      output,
+    );
+    expect(result.pass).toBeTruthy();
+    expect(result.reason).toBe('Assertion passed');
+  });
+
+  it('should fail when the function does not match vars', async () => {
+    const output = 'Expected output';
+
+    const functionAssertionWithVars: Assertion = {
+      type: 'javascript',
+      value: 'output === "Expected output" && context.vars.foo === "something else"',
+    };
+    const result: GradingResult = await runAssertion(
+      functionAssertionWithVars,
+      { vars: { foo: 'bar' } } as AtomicTestCase,
+      output,
+    );
+    expect(result.pass).toBeFalsy();
+    expect(result.reason).toBe(
+      'Custom function returned false\noutput === "Expected output" && context.vars.foo === "something else"',
+    );
+  });
+
   const notContainsAssertion: Assertion = {
     type: 'not-contains',
     value: 'Unexpected output',
