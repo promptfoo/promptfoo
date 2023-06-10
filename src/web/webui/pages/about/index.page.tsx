@@ -1,6 +1,6 @@
-import './code.css'
+import './code.css';
 
-export { Page }
+export { Page };
 
 function Page() {
   return (
@@ -10,5 +10,5 @@ function Page() {
         Example of using <code>vite-plugin-ssr</code>.
       </p>
     </>
-  )
+  );
 }

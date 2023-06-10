@@ -9,13 +9,7 @@ interface AssertsFormProps {
   initialValues: Assertion[];
 }
 
-const assertTypes = [
-  'Equals',
-  'Contains JSON',
-  'Is JSON',
-  'Similar',
-  'LLM-rubric',
-];
+const assertTypes = ['Equals', 'Contains JSON', 'Is JSON', 'Similar', 'LLM-rubric'];
 
 const AssertsForm: React.FC<AssertsFormProps> = ({ onAdd, initialValues }) => {
   const [asserts, setAsserts] = useState<Assertion[]>(initialValues || []);
@@ -45,7 +39,7 @@ const AssertsForm: React.FC<AssertsFormProps> = ({ onAdd, initialValues }) => {
               onChange={(e) => {
                 const newType = e.target.value;
                 const newAsserts = asserts.map((a, i) =>
-                  i === index ? { ...a, type: newType } : a
+                  i === index ? { ...a, type: newType } : a,
                 );
                 setAsserts(newAsserts);
                 onAdd(newAsserts);
@@ -63,7 +57,7 @@ const AssertsForm: React.FC<AssertsFormProps> = ({ onAdd, initialValues }) => {
               onChange={(e) => {
                 const newValue = e.target.value;
                 const newAsserts = asserts.map((a, i) =>
-                  i === index ? { ...a, value: newValue } : a
+                  i === index ? { ...a, value: newValue } : a,
                 );
                 setAsserts(newAsserts);
                 onAdd(newAsserts);

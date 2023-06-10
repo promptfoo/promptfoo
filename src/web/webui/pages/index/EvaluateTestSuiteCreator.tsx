@@ -1,8 +1,28 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Light as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { docco } from 'react-syntax-highlighter/dist/cjs/styles/hljs';
-import { Button, Container, TextField, Typography, MenuItem, FormControl, InputLabel, Select, Chip, IconButton, Box } from '@mui/material';
+import {
+  Button,
+  Container,
+  TextField,
+  Typography,
+  MenuItem,
+  FormControl,
+  InputLabel,
+  Select,
+  Chip,
+  IconButton,
+  Box,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Stack,
+} from '@mui/material';
 import { Edit, Delete, Publish } from '@mui/icons-material';
+import yaml from 'js-yaml';
 
 import TestCaseDialog from './TestCaseDialog';
 import PromptDialog from './PromptDialog';
@@ -19,15 +39,9 @@ interface EvaluateTestSuiteCreatorProps {
   onSubmit: (testSuite: EvaluateTestSuite) => void;
 }
 
-const providerOptions = [
-  'openai:gpt-3.5-turbo',
-  'openai:gpt-4',
-  'localai:chat:vicuna',
-];
+const providerOptions = ['openai:gpt-3.5-turbo', 'openai:gpt-4', 'localai:chat:vicuna'];
 
-const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({
-  onSubmit,
-}) => {
+const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onSubmit }) => {
   const [yamlString, setYamlString] = useState('');
   const [editingTestCaseIndex, setEditingTestCaseIndex] = useState<number | null>(null);
   const [editingPromptIndex, setEditingPromptIndex] = useState<number | null>(null);
@@ -69,7 +83,7 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({
       setTestCases([...testCases, testCase]);
     } else {
       const updatedTestCases = testCases.map((tc, index) =>
-        index === editingTestCaseIndex ? testCase : tc
+        index === editingTestCaseIndex ? testCase : tc,
       );
       setTestCases(updatedTestCases);
       setEditingTestCaseIndex(null);
@@ -84,7 +98,7 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({
     setEditingPromptIndex(index);
   };
 
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>, index: number) => {
+  const handleAddPromptFromFile = (event: React.ChangeEvent<HTMLInputElement>) => {
     event.stopPropagation();
     event.preventDefault();
 
@@ -94,7 +108,7 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({
       reader.onload = (e) => {
         const text = e.target?.result?.toString();
         if (text) {
-          handleChangePrompt(index, text);
+          setPrompts([...prompts, text]);
         }
       };
       reader.readAsText(file);
@@ -102,9 +116,7 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({
   };
 
   const handleChangePrompt = (index: number, newPrompt: string) => {
-    setPrompts(
-      prompts.map((p, i) => (i === index ? newPrompt : p))
-    );
+    setPrompts(prompts.map((p, i) => (i === index ? newPrompt : p)));
   };
 
   const extractVarsFromPrompts = (prompts: string[]): string[] => {
@@ -129,7 +141,9 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({
 
   return (
     <Container maxWidth="lg">
-      <Typography variant="h4" gutterBottom>Create a Test Suite</Typography>
+      <Typography variant="h4" gutterBottom>
+        Configure Test Suite
+      </Typography>
       <TextField
         label="Description"
         value={description}
@@ -158,58 +172,62 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({
           ))}
         </Select>
       </FormControl>
-      <Typography variant="h5">Prompts</Typography>
-      {prompts.map((prompt, index) => (
-        <div
-          key={index}
-          style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}
+      <Stack direction="row" spacing={2}>
+        <Typography variant="h5">Prompts</Typography>
+        <Button
+          color="primary"
+          onClick={() => {
+            setPrompts([...prompts, '']);
+            setEditingPromptIndex(prompts.length);
+          }}
+          variant="contained"
         >
-          <Box
-            component="span"
-            onClick={() => handleEditPrompt(index)}
-            sx={{
-              cursor: 'pointer',
-              padding: '1rem 0.5rem',
-              borderRadius: '4px',
-              '&:hover': {
-                backgroundColor: 'aliceblue',
-              },
-            }}
-          >
-            <Typography variant="body1">{`Prompt ${index + 1}: ${prompt.length > 250 ? prompt.slice(
-              0,
-              250
-            ) + ' ...' : prompt}`}</Typography>
-          </Box>
-          <IconButton onClick={() => handleEditPrompt(index)} size="small">
-            <Edit />
-          </IconButton>
-          <label htmlFor={`file-input-${index}`}>
-            <IconButton component="span" size="small">
-              <Publish />
-            </IconButton>
-            <input
-              id={`file-input-${index}`}
-              type="file"
-              accept=".txt,.md"
-              onChange={(e) => handleFileUpload(e, index)}
-              style={{ display: 'none' }}
-            />
-          </label>
-          <IconButton onClick={() => handleRemovePrompt(index)} size="small">
-            <Delete />
-          </IconButton>
-        </div>
-      ))}
-      <Button
-        color="primary"
-        onClick={() => {
-          setPrompts([...prompts, '']);
-          setEditingPromptIndex(prompts.length);
-        }}
-      >
-        Add Prompt
-      </Button>
+          Add Prompt
+        </Button>
+        <label htmlFor={`file-input-add-prompt`}>
+          <Button color="primary" component="span">
+            Upload Prompt
+          </Button>
+          <input
+            id={`file-input-add-prompt`}
+            type="file"
+            accept=".txt,.md"
+            onChange={handleAddPromptFromFile}
+            style={{ display: 'none' }}
+          />
+        </label>
+      </Stack>
+      <TableContainer>
+        <Table>
+          <TableBody>
+            {prompts.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={2} align="center">
+                  No prompts added yet.
+                </TableCell>
+              </TableRow>
+            ) : (
+              prompts.map((prompt, index) => (
+                <TableRow key={index}>
+                  <TableCell>
+                    <Typography variant="body2">{`Prompt ${index + 1}: ${
+                      prompt.length > 250 ? prompt.slice(0, 250) + ' ...' : prompt
+                    }`}</Typography>
+                  </TableCell>
+                  <TableCell align="right">
+                    <IconButton onClick={() => handleEditPrompt(index)} size="small">
+                      <Edit />
+                    </IconButton>
+                    <IconButton onClick={() => handleRemovePrompt(index)} size="small">
+                      <Delete />
+                    </IconButton>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </TableContainer>
       <PromptDialog
         open={editingPromptIndex !== null}
         prompt={editingPromptIndex !== null ? prompts[editingPromptIndex] : ''}
@@ -224,37 +242,46 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({
         }}
         onCancel={() => setEditingPromptIndex(null)}
       />
-      <Typography variant="h5">Test Cases</Typography>
-      {testCases.map((testCase, index) => (
-        <Box key={index} display="flex" alignItems="center" marginBottom={1}>
-          <Box
-            component="span"
-            onClick={() => {
-              setEditingTestCaseIndex(index);
-              setTestCaseDialogOpen(true);
-            }}
-            sx={{
-              cursor: 'pointer',
-              padding: '1rem 0.5rem',
-              borderRadius: '4px',
-              '&:hover': {
-                backgroundColor: 'aliceblue',
-              },
-            }}
-          >
-            <Typography variant="subtitle1">{`Test Case ${index + 1}: ${testCase.description}`}</Typography>
-          </Box>
-          <IconButton onClick={() => {
-            setEditingTestCaseIndex(index);
-            setTestCaseDialogOpen(true);
-          }} size="small">
-            <Edit />
-          </IconButton>
-        </Box>
-      ))}
-      <Button color="primary" onClick={() => setTestCaseDialogOpen(true)}>
-        Add Test Case
-      </Button>
+      <Stack direction="row" spacing={2} marginY={2}>
+        <Typography variant="h5">Test Cases</Typography>
+        <Button color="primary" onClick={() => setTestCaseDialogOpen(true)} variant="contained">
+          Add Test Case
+        </Button>
+      </Stack>
+      <TableContainer>
+        <Table>
+          <TableBody>
+            {testCases.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={2} align="center">
+                  No test cases added yet.
+                </TableCell>
+              </TableRow>
+            ) : (
+              testCases.map((testCase, index) => (
+                <TableRow key={index}>
+                  <TableCell>
+                    <Typography variant="body2">{`Test Case ${index + 1}: ${
+                      testCase.description
+                    }`}</Typography>
+                  </TableCell>
+                  <TableCell align="right">
+                    <IconButton
+                      onClick={() => {
+                        setEditingTestCaseIndex(index);
+                        setTestCaseDialogOpen(true);
+                      }}
+                      size="small"
+                    >
+                      <Edit />
+                    </IconButton>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </TableContainer>
       <TestCaseDialog
         open={testCaseDialogOpen}
         onAdd={handleAddTestCase}
@@ -266,12 +293,19 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({
         }}
       />
       <Box mt={4}>
-        <Button variant="contained" color="primary" onClick={handleSubmit} style={{ marginTop: 16 }}>
-          Submit
+        <Button
+          variant="contained"
+          color="primary"
+          onClick={handleSubmit}
+          style={{ marginTop: 16 }}
+        >
+          Run Test Suite
         </Button>
         {yamlString && (
           <Box mt={4}>
-            <Typography variant="h5" gutterBottom>YAML config</Typography>
+            <Typography variant="h5" gutterBottom>
+              YAML config
+            </Typography>
             <SyntaxHighlighter language="yaml" style={docco}>
               {yamlString}
             </SyntaxHighlighter>

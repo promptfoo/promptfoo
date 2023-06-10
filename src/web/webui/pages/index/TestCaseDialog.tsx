@@ -1,5 +1,14 @@
 import React, { useState } from 'react';
-import { Button, TextField, Typography, Box, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material';
+import {
+  Button,
+  TextField,
+  Typography,
+  Box,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+} from '@mui/material';
 import VarsForm from './VarsForm';
 import AssertsForm from './AssertsForm';
 import type { TestCase } from '../../../../types';
@@ -12,7 +21,13 @@ interface TestCaseFormProps {
   onCancel: () => void;
 }
 
-const TestCaseForm: React.FC<TestCaseFormProps> = ({ open, onAdd, varsList, initialValues, onCancel }) => {
+const TestCaseForm: React.FC<TestCaseFormProps> = ({
+  open,
+  onAdd,
+  varsList,
+  initialValues,
+  onCancel,
+}) => {
   const [description, setDescription] = useState(initialValues?.description || '');
   const [vars, setVars] = useState(initialValues?.vars || {});
   const [asserts, setAsserts] = useState(initialValues?.assert || []);
@@ -31,11 +46,14 @@ const TestCaseForm: React.FC<TestCaseFormProps> = ({ open, onAdd, varsList, init
   }, [initialValues]);
 
   const handleAdd = (close: boolean) => {
-    onAdd({
-      description,
-      vars,
-      assert: asserts,
-    }, close);
+    onAdd(
+      {
+        description,
+        vars,
+        assert: asserts,
+      },
+      close,
+    );
     setDescription('');
     setVars({});
     setAsserts([]);
@@ -50,10 +68,26 @@ const TestCaseForm: React.FC<TestCaseFormProps> = ({ open, onAdd, varsList, init
       <DialogTitle>{initialValues ? 'Edit Test Case' : 'Add Test Case'}</DialogTitle>
       <DialogContent>
         <Box mt={4}>
-          <Typography variant="h5" gutterBottom>Test Case</Typography>
-          <TextField label="Description" value={description} onChange={(e) => setDescription(e.target.value)} fullWidth margin="normal" />
-          <VarsForm onAdd={(vars) => setVars(vars)} varsList={varsList} initialValues={initialValues?.vars} />
-          <AssertsForm key={assertsFormKey} onAdd={(asserts) => setAsserts(asserts)} initialValues={initialValues?.assert} />
+          <Typography variant="h5" gutterBottom>
+            Test Case
+          </Typography>
+          <TextField
+            label="Description"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            fullWidth
+            margin="normal"
+          />
+          <VarsForm
+            onAdd={(vars) => setVars(vars)}
+            varsList={varsList}
+            initialValues={initialValues?.vars}
+          />
+          <AssertsForm
+            key={assertsFormKey}
+            onAdd={(asserts) => setAsserts(asserts)}
+            initialValues={initialValues?.assert}
+          />
         </Box>
       </DialogContent>
       <DialogActions>

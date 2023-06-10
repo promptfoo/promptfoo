@@ -50,7 +50,7 @@ const VarsForm: React.FC<VarsFormProps> = ({ onAdd, varsList, initialValues }) =
         </Grid>
       ) : (
         <Typography variant="subtitle1" gutterBottom>
-          Add variables to your prompt using the {"{{varname}}"} syntax.
+          Add variables to your prompt using the {'{{varname}}'} syntax.
         </Typography>
       )}
     </>

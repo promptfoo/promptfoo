@@ -1,11 +1,15 @@
-import EvaluateTestSuiteCreator from "./EvaluateTestSuiteCreator"
+import EvaluateTestSuiteCreator from './EvaluateTestSuiteCreator';
 
-export { Page }
+export { Page };
 
 function Page() {
   return (
     <>
-      <EvaluateTestSuiteCreator onSubmit={() => {alert('yolo')}} />
+      <EvaluateTestSuiteCreator
+        onSubmit={() => {
+          alert('yolo');
+        }}
+      />
     </>
-  )
+  );
 }

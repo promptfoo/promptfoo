@@ -1,6 +1,13 @@
 // src/components/PromptDialog.tsx
 import React from 'react';
-import { Dialog, DialogTitle, DialogContent, DialogActions, TextField, Button } from '@mui/material';
+import {
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  Button,
+} from '@mui/material';
 
 interface PromptDialogProps {
   open: boolean;
@@ -41,16 +48,16 @@ const PromptDialog: React.FC<PromptDialogProps> = ({ open, prompt, index, onAdd,
         />
       </DialogContent>
       <DialogActions>
-      <Button onClick={handleSave} color="primary" variant="contained">
-        Add
-      </Button>
-      <Button onClick={handleAddAnother} color="primary" variant="contained">
-        Add Another
-      </Button>
-      <Button onClick={onCancel} color="secondary">
-        Cancel
-      </Button>
-    </DialogActions>
+        <Button onClick={handleSave} color="primary" variant="contained">
+          Add
+        </Button>
+        <Button onClick={handleAddAnother} color="primary" variant="contained">
+          Add Another
+        </Button>
+        <Button onClick={onCancel} color="secondary">
+          Cancel
+        </Button>
+      </DialogActions>
     </Dialog>
   );
 };

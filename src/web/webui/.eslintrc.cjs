@@ -1,6 +1,6 @@
 module.exports = {
   rules: {
-    'react-refresh/only-export-components': 'warn'
+    'react-refresh/only-export-components': 'warn',
   },
   reportUnusedDisableDirectives: true,
   ignorePatterns: ['dist/*'],
@@ -13,7 +13,7 @@ module.exports = {
     'plugin:react/recommended',
     'plugin:react/jsx-runtime',
     'plugin:react-hooks/recommended',
-    'plugin:@typescript-eslint/recommended'
+    'plugin:@typescript-eslint/recommended',
   ],
-  parser: '@typescript-eslint/parser'
-}
+  parser: '@typescript-eslint/parser',
+};
