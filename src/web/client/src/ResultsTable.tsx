@@ -114,12 +114,17 @@ function TableHeader({ text, maxLength, smallText }: TruncatedTextProps & { smal
   );
 }
 
-interface ResultsViewProps {
+interface ResultsTableProps {
   maxTextLength: number;
   columnVisibility: VisibilityState;
+  wordBreak: 'break-word' | 'break-all';
 }
 
-export default function ResultsTable({ maxTextLength, columnVisibility }: ResultsViewProps) {
+export default function ResultsTable({
+  maxTextLength,
+  columnVisibility,
+  wordBreak,
+}: ResultsTableProps) {
   const { table, setTable } = useStore();
   invariant(table, 'Table should be defined');
   const { head, body } = table;
@@ -222,7 +227,11 @@ export default function ResultsTable({ maxTextLength, columnVisibility }: Result
   });
 
   return (
-    <table>
+    <table
+      style={{
+        wordBreak,
+      }}
+    >
       <thead>
         {reactTable.getHeaderGroups().map((headerGroup) => (
           <tr key={headerGroup.id} className="header">
