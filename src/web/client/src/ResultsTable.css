@@ -49,11 +49,11 @@ th.variable,
 .th.variable,
 td.variable,
 .td.variable {
-  background-color: #f7f7f7;
+  background-color: var(--variable-background-color);
 }
 
 tr.header {
-  background-color: #fffdf7;
+  background-color: var(--header-background-color);
 }
 
 th,
@@ -106,7 +106,7 @@ th .summary {
 }
 
 th .summary.highlight {
-  background-color: #d1ffd7;
+  background-color: var(--success-background-color);
 }
 
 td,
