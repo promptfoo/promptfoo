@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import yaml from 'js-yaml';
 import { Light as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { docco } from 'react-syntax-highlighter/dist/cjs/styles/hljs';
 import {
@@ -17,12 +18,11 @@ import {
   TableBody,
   TableCell,
   TableContainer,
-  TableHead,
   TableRow,
+  Tooltip,
   Stack,
 } from '@mui/material';
 import { Edit, Delete, Publish } from '@mui/icons-material';
-import yaml from 'js-yaml';
 
 import TestCaseDialog from './TestCaseDialog';
 import PromptDialog from './PromptDialog';
@@ -139,17 +139,15 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onS
     setPrompts(prompts.filter((_, index) => index !== indexToRemove));
   };
 
+  const handleRemoveTestCase = (indexToRemove: number) => {
+    setTestCases(testCases.filter((_, index) => index !== indexToRemove));
+  };
+
   return (
     <Container maxWidth="lg">
       <Stack direction="row" spacing={2} justifyContent="space-between">
-        <Typography variant="h4">
-          Configure Test Suite
-        </Typography>
-        <Button
-          variant="contained"
-          color="primary"
-          onClick={handleSubmit}
-        >
+        <Typography variant="h4">Configure Test Suite</Typography>
+        <Button variant="contained" color="primary" onClick={handleSubmit}>
           Run Test Suite
         </Button>
       </Stack>
@@ -185,16 +183,20 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onS
         <Typography variant="h5">Prompts</Typography>
         <div>
           <label htmlFor={`file-input-add-prompt`}>
-            <Button color="primary" component="span">
-              Upload Prompt
-            </Button>
-            <input
-              id={`file-input-add-prompt`}
-              type="file"
-              accept=".txt,.md"
-              onChange={handleAddPromptFromFile}
-              style={{ display: 'none' }}
-            />
+            <Tooltip title="Upload prompt from file">
+              <span>
+                <IconButton component="span">
+                  <Publish />
+                </IconButton>
+                <input
+                  id={`file-input-add-prompt`}
+                  type="file"
+                  accept=".txt,.md"
+                  onChange={handleAddPromptFromFile}
+                  style={{ display: 'none' }}
+                />
+              </span>
+            </Tooltip>
           </label>
           <Button
             color="primary"
@@ -220,12 +222,20 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onS
             ) : (
               prompts.map((prompt, index) => (
                 <TableRow key={index}>
-                  <TableCell>
+                  <TableCell
+                    sx={{
+                      '&:hover': {
+                        backgroundColor: 'rgba(0, 0, 0, 0.04)',
+                        cursor: 'pointer',
+                      },
+                    }}
+                    onClick={() => handleEditPrompt(index)}
+                  >
                     <Typography variant="body2">{`Prompt ${index + 1}: ${
                       prompt.length > 250 ? prompt.slice(0, 250) + ' ...' : prompt
                     }`}</Typography>
                   </TableCell>
-                  <TableCell align="right">
+                  <TableCell align="right" sx={{ minWidth: 150 }}>
                     <IconButton onClick={() => handleEditPrompt(index)} size="small">
                       <Edit />
                     </IconButton>
@@ -271,12 +281,23 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onS
             ) : (
               testCases.map((testCase, index) => (
                 <TableRow key={index}>
-                  <TableCell>
+                  <TableCell
+                    sx={{
+                      '&:hover': {
+                        backgroundColor: 'rgba(0, 0, 0, 0.04)',
+                        cursor: 'pointer',
+                      },
+                    }}
+                    onClick={() => {
+                      setEditingTestCaseIndex(index);
+                      setTestCaseDialogOpen(true);
+                    }}
+                  >
                     <Typography variant="body2">{`Test Case ${index + 1}: ${
                       testCase.description
                     }`}</Typography>
                   </TableCell>
-                  <TableCell align="right">
+                  <TableCell align="right" sx={{ minWidth: 150 }}>
                     <IconButton
                       onClick={() => {
                         setEditingTestCaseIndex(index);
@@ -285,6 +306,9 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onS
                       size="small"
                     >
                       <Edit />
+                    </IconButton>
+                    <IconButton onClick={() => handleRemoveTestCase(index)} size="small">
+                      <Delete />
                     </IconButton>
                   </TableCell>
                 </TableRow>
