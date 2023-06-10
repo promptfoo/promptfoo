@@ -21,6 +21,7 @@ import ResultsTable from './ResultsTable.js';
 import { useStore } from './store.js';
 
 import type { VisibilityState } from '@tanstack/table-core';
+import { FilterMode } from './types.js';
 
 const ResponsiveStack = styled(Stack)(({ theme }) => ({
   [theme.breakpoints.down('sm')]: {
@@ -34,8 +35,25 @@ export default function ResultsView() {
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
   const [selectedColumns, setSelectedColumns] = React.useState<string[]>([]);
 
-  const [wordBreak, setWordBreak] = React.useState<'break-word' | 'break-all'>('break-all');
+  const [failureFilter, setFailureFilter] = React.useState<{ [key: string]: boolean }>({});
+  const handleFailureFilterToggle = (columnId: string, checked: boolean) => {
+    setFailureFilter((prevFailureFilter) => ({ ...prevFailureFilter, [columnId]: checked }));
+  };
 
+  const [filterMode, setFilterMode] = React.useState<FilterMode>('all');
+  const handleFilterModeChange = (event: SelectChangeEvent<unknown>) => {
+    const mode = event.target.value as FilterMode;
+    setFilterMode(mode);
+
+    const newFailureFilter: { [key: string]: boolean } = {};
+    head.prompts.forEach((_, idx) => {
+      const columnId = `Prompt ${idx + 1}`;
+      newFailureFilter[columnId] = mode === 'failures';
+    });
+    setFailureFilter(newFailureFilter);
+  };
+
+  const [wordBreak, setWordBreak] = React.useState<'break-word' | 'break-all'>('break-all');
   const handleWordBreakChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setWordBreak(event.target.checked ? 'break-all' : 'break-word');
   };
@@ -109,6 +127,21 @@ export default function ResultsView() {
             </FormControl>
           </Box>
           <Box>
+            <FormControl sx={{ minWidth: 180 }} size="small">
+              <InputLabel id="failure-filter-mode-label">Filter</InputLabel>
+              <Select
+                labelId="filter-mode-label"
+                id="filter-mode"
+                value={filterMode}
+                onChange={handleFilterModeChange}
+                label="Filter"
+              >
+                <MenuItem value="all">Show all results</MenuItem>
+                <MenuItem value="failures">Show only failures</MenuItem>
+              </Select>
+            </FormControl>
+          </Box>
+          <Box>
             <Typography mt={2}>Max text length: {maxTextLength}</Typography>
             <Slider
               min={25}
@@ -133,6 +166,9 @@ export default function ResultsView() {
         maxTextLength={maxTextLength}
         columnVisibility={columnVisibility}
         wordBreak={wordBreak}
+        filterMode={filterMode}
+        failureFilter={failureFilter}
+        onFailureFilterToggle={handleFailureFilterToggle}
       />
     </div>
   );

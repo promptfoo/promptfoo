@@ -9,12 +9,14 @@ import {
   getCoreRowModel,
   useReactTable,
 } from '@tanstack/react-table';
+import Checkbox from '@mui/material/Checkbox';
+import FormControlLabel from '@mui/material/FormControlLabel';
 
 import { useStore } from './store.js';
 
 import type { CellContext, VisibilityState } from '@tanstack/table-core';
 
-import type { EvalRow } from './types.js';
+import type { EvalRow, FilterMode } from './types.js';
 
 import './ResultsTable.css';
 
@@ -118,12 +120,18 @@ interface ResultsTableProps {
   maxTextLength: number;
   columnVisibility: VisibilityState;
   wordBreak: 'break-word' | 'break-all';
+  filterMode: FilterMode;
+  failureFilter: { [key: string]: boolean };
+  onFailureFilterToggle: (columnId: string, checked: boolean) => void;
 }
 
 export default function ResultsTable({
   maxTextLength,
   columnVisibility,
   wordBreak,
+  filterMode,
+  failureFilter,
+  onFailureFilterToggle,
 }: ResultsTableProps) {
   const { table, setTable } = useStore();
   invariant(table, 'Table should be defined');
@@ -188,6 +196,8 @@ export default function ResultsTable({
             const pct = ((numGood[idx] / body.length) * 100.0).toFixed(2);
             const isHighestPassing =
               numGood[idx] === highestPassingCount && highestPassingCount !== 0;
+            const columnId = `Prompt ${idx + 1}`;
+            const isChecked = failureFilter[columnId] || false;
             return (
               <>
                 <TableHeader
@@ -195,6 +205,22 @@ export default function ResultsTable({
                   text={prompt}
                   maxLength={maxTextLength}
                 />
+                {filterMode === 'failures' && (
+                  <FormControlLabel
+                    sx={{
+                      '& .MuiFormControlLabel-label': {
+                        fontSize: '0.75rem',
+                      },
+                    }}
+                    control={
+                      <Checkbox
+                        checked={isChecked}
+                        onChange={(event) => onFailureFilterToggle(columnId, event.target.checked)}
+                      />
+                    }
+                    label="Show failures"
+                  />
+                )}
                 <div className={`summary ${isHighestPassing ? 'highlight' : ''}`}>
                   Passing: <strong>{pct}%</strong> ({numGood[idx]} / {body.length})
                 </div>
@@ -215,8 +241,24 @@ export default function ResultsTable({
     }),
   ];
 
+  const filteredBody = React.useMemo(() => {
+    if (filterMode === 'failures') {
+      if (Object.values(failureFilter).every((v) => !v)) {
+        return body;
+      }
+      return body.filter((row) => {
+        return row.outputs.some((output, idx) => {
+          const columnId = `Prompt ${idx + 1}`;
+          const isFail = output.startsWith('[FAIL] ');
+          return failureFilter[columnId] && isFail;
+        });
+      });
+    }
+    return body;
+  }, [body, failureFilter, filterMode]);
+
   const reactTable = useReactTable({
-    data: body,
+    data: filteredBody,
     columns,
     columnResizeMode: 'onChange',
     getCoreRowModel: getCoreRowModel(),

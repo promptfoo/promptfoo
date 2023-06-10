@@ -12,3 +12,5 @@ export type EvalTable = {
   head: EvalHead;
   body: EvalRow[];
 };
+
+export type FilterMode = 'all' | 'failures';
