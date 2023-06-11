@@ -5,15 +5,15 @@
   "version": "0.11.0",
   "license": "MIT",
   "type": "commonjs",
-  "main": "dist/index.js",
+  "main": "dist/src/index.js",
   "exports": {
     ".": {
-      "import": "./dist/index.js",
-      "require": "./dist/index.js"
+      "import": "./dist/src/index.js",
+      "require": "./dist/src/index.js"
     }
   },
-  "types": "dist/index.d.ts",
-  "typings": "dist/index.d.ts",
+  "types": "dist/src/index.d.ts",
+  "typings": "dist/src/index.d.ts",
   "files": [
     "dist",
     "src"
@@ -22,13 +22,13 @@
     "node": ">=12"
   },
   "bin": {
-    "promptfoo": "dist/main.js"
+    "promptfoo": "dist/src/main.js"
   },
   "scripts": {
     "local": "ts-node --esm src/main.ts",
     "install:client": "cd src/web/client && npm install",
     "build:clean": "rm -rf dist",
-    "build:client": "cd src/web/client && npm run build && cp -r dist ../../../dist/web/client",
+    "build:client": "cd src/web/client && npm run build && cp -r dist/ ../../../dist/src/web/client",
     "build:watch": "tsc --watch",
     "build": "tsc && cp src/*.html dist/ && npm run build:client",
     "prepare": "npm run install:client && npm run build:clean && npm run build",
