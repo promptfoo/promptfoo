@@ -55,7 +55,9 @@ describe('Telemetry', () => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify([{ event: 'eval_ran', packageVersion: '1.0.0', properties: { foo: 'bar' } }]),
+        body: JSON.stringify([
+          { event: 'eval_ran', packageVersion: '1.0.0', properties: { foo: 'bar' } },
+        ]),
       },
       1000,
     );
