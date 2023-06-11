@@ -29,6 +29,7 @@ import type {
   UnifiedConfig,
 } from './types';
 import { DEFAULT_README, DEFAULT_YAML_CONFIG, DEFAULT_PROMPTS } from './onboarding';
+import telemetry from './telemetry';
 
 function createDummyFiles(directory: string | null) {
   if (directory) {
@@ -95,15 +96,23 @@ async function main() {
   program
     .command('init [directory]')
     .description('Initialize project with dummy files')
-    .action((directory: string | null) => {
+    .action(async (directory: string | null) => {
       createDummyFiles(directory);
+      telemetry.record('command_used', {
+        name: 'init',
+      });
+      await telemetry.send();
     });
 
   program
     .command('view')
     .description('Start browser ui')
     .option('-p, --port <number>', 'Port number', '15500')
-    .action((cmdObj: { port: number } & Command) => {
+    .action(async (cmdObj: { port: number } & Command) => {
+      telemetry.record('command_used', {
+        name: 'view',
+      });
+      await telemetry.send();
       init(cmdObj.port);
     });
 
@@ -305,6 +314,11 @@ async function main() {
         `Token usage: Total ${summary.stats.tokenUsage.total}, Prompt ${summary.stats.tokenUsage.prompt}, Completion ${summary.stats.tokenUsage.completion}, Cached ${summary.stats.tokenUsage.cached}`,
       );
       logger.info('Done.');
+
+      telemetry.record('command_used', {
+        name: 'eval',
+      });
+      await telemetry.send();
 
       if (cmdObj.view) {
         init(parseInt(cmdObj.view, 10) || 15500);

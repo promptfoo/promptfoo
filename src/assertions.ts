@@ -2,6 +2,7 @@ import rouge from 'rouge';
 import invariant from 'tiny-invariant';
 import nunjucks from 'nunjucks';
 
+import telemetry from './telemetry';
 import { DefaultEmbeddingProvider, DefaultGradingProvider } from './providers/openai';
 import { cosineSimilarity, fetchWithTimeout } from './util';
 import { loadApiProvider } from './providers';
@@ -29,7 +30,6 @@ function handleRougeScore(
   const fnName = baseType[baseType.length - 1] as 'n' | 'l' | 's';
   const rougeMethod = rouge[fnName];
   const score = rougeMethod(output, expected);
-  console.log(output, expected, score);
   const pass = score >= (assertion.threshold || 0.75) != inverted;
 
   return {
@@ -82,6 +82,10 @@ export async function runAssertion(
 
   const inverse = assertion.type.startsWith('not-');
   const baseType = inverse ? assertion.type.slice(4) : assertion.type;
+
+  telemetry.record('assertion_used', {
+    type: baseType,
+  });
 
   if (baseType === 'equals') {
     pass = assertion.value === output;

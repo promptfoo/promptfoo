@@ -5,7 +5,9 @@ import chalk from 'chalk';
 import nunjucks from 'nunjucks';
 
 import logger from './logger';
+import telemetry from './telemetry';
 import { runAssertions } from './assertions';
+import { generatePrompts } from './suggestions';
 
 import type { SingleBar } from 'cli-progress';
 import type {
@@ -20,7 +22,6 @@ import type {
   TestCase,
   AtomicTestCase,
 } from './types';
-import { generatePrompts } from './suggestions';
 
 interface RunEvalOptions {
   provider: ApiProvider;
@@ -363,6 +364,8 @@ class Evaluator {
     if (progressbar) {
       progressbar.stop();
     }
+
+    telemetry.record('eval_ran', {});
 
     return { version: 1, results, stats: this.stats, table };
   }

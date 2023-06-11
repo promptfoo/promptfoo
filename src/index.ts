@@ -1,10 +1,11 @@
-import { evaluate as doEvaluate } from './evaluator';
-import { loadApiProviders } from './providers';
 import assertions from './assertions';
 import providers from './providers';
+import telemetry from './telemetry';
+import { evaluate as doEvaluate } from './evaluator';
+import { loadApiProviders } from './providers';
+import { readTests } from './util';
 
 import type { EvaluateOptions, TestSuite, TestSuiteConfig } from './types';
-import { readTests } from './util';
 
 export * from './types';
 
@@ -24,7 +25,9 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
       display: promptContent,
     })),
   };
-  return doEvaluate(constructedTestSuite, options);
+  const ret = await doEvaluate(constructedTestSuite, options);
+  await telemetry.send();
+  return ret;
 }
 
 module.exports = {
