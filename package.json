@@ -5,15 +5,15 @@
   "version": "0.11.0",
   "license": "MIT",
   "type": "commonjs",
-  "main": "dist/index.js",
+  "main": "dist/src/index.js",
   "exports": {
     ".": {
-      "import": "./dist/index.js",
-      "require": "./dist/index.js"
+      "import": "./dist/src/index.js",
+      "require": "./dist/src/index.js"
     }
   },
-  "types": "dist/index.d.ts",
-  "typings": "dist/index.d.ts",
+  "types": "dist/src/index.d.ts",
+  "typings": "dist/src/index.d.ts",
   "files": [
     "dist",
     "src"
@@ -22,15 +22,13 @@
     "node": ">=12"
   },
   "bin": {
-    "promptfoo": "dist/main.js"
+    "promptfoo": "dist/src/main.js"
   },
   "scripts": {
     "local": "ts-node --esm src/main.ts",
     "install:client": "cd src/web/client && npm install",
     "build:clean": "rm -rf dist",
-    "build:client:unix": "cd src/web/client && npm run build && mkdir -p ../../../dist/web && cp -r dist ../../../dist/web/client",
-    "build:client:windows": "cd src/web/client && npm run build && if not exist ../../../dist/web mkdir ../../../dist/web && xcopy /E /I /Y dist ../../../dist/web/client",
-    "build:client": "cross-env-shell \"npm run build:client:${platform:-unix}\"",
+    "build:client": "cd src/web/client && npm run build && cp -r dist/ ../../../dist/src/web/client",
     "build:watch": "tsc --watch",
     "build": "tsc && cp src/*.html dist/ && npm run build:client",
     "prepare": "npm run install:client && npm run build:clean && npm run build",
@@ -53,7 +51,6 @@
     "@types/nunjucks": "^3.2.2",
     "@types/opener": "^1.4.0",
     "babel-jest": "^29.5.0",
-    "cross-env": "^7.0.3",
     "jest": "^29.5.0",
     "jest-watch-typeahead": "^2.2.2",
     "prettier": "^2.8.8",
