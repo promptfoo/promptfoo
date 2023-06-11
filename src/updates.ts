@@ -2,7 +2,7 @@ import chalk from 'chalk';
 import ora from 'ora';
 import latestVersion from 'latest-version';
 import semverGt from 'semver/functions/gt';
-import { execa } from 'execa';
+import execa from 'execa';
 
 import packageJson from '../package.json';
 

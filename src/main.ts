@@ -62,7 +62,6 @@ function createDummyFiles(directory: string | null) {
 }
 
 async function main() {
-  console.log('ehhehe')
   await checkForUpdates();
 
   const pwd = process.cwd();
