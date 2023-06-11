@@ -305,12 +305,20 @@ async function main() {
           logger.info(`... ${rowsLeft} more row${rowsLeft === 1 ? '' : 's'} not shown ...\n`);
         }
       }
+
+      const border = '='.repeat(process.stdout.columns - 10);
+      logger.info(border);
       if (cmdObj.view || !cmdObj.write) {
         logger.info(`${chalk.green('✔')} Evaluation complete`);
       } else {
         writeLatestResults(summary);
-        logger.info(`${chalk.green('✔')} Evaluation complete. To use web viewer, run ${chalk.green('promptfoo view')}`);
+        logger.info(
+          `${chalk.green('✔')} Evaluation complete. To use web viewer, run ${chalk.green(
+            'promptfoo view',
+          )}`,
+        );
       }
+      logger.info(border);
       logger.info(chalk.green.bold(`Successes: ${summary.stats.successes}`));
       logger.info(chalk.red.bold(`Failures: ${summary.stats.failures}`));
       logger.info(

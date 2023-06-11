@@ -7,7 +7,7 @@ import packageJson from '../package.json';
 
 const VERSION = packageJson.version;
 
-async function getLatestVersion(packageName: string) {
+export async function getLatestVersion(packageName: string) {
   const response = await fetchWithTimeout(`https://registry.npmjs.org/${packageName}`, {}, 1000);
   if (!response.ok) {
     throw new Error(`Failed to fetch package information for ${packageName}`);
@@ -16,16 +16,22 @@ async function getLatestVersion(packageName: string) {
   return data['dist-tags'].latest;
 }
 
-export async function checkForUpdates() {
+export async function checkForUpdates(): Promise<boolean> {
   const latestVersion = await getLatestVersion('promptfoo');
   if (semverGt(latestVersion, VERSION)) {
     const border = '='.repeat(process.stdout.columns - 10);
     logger.info(
       `\n${border}
-${chalk.yellow('⚠️')} The current version of promptfoo ${chalk.yellow(VERSION)} is lower than the latest available version ${chalk.green(latestVersion)}.
+${chalk.yellow('⚠️')} The current version of promptfoo ${chalk.yellow(
+        VERSION,
+      )} is lower than the latest available version ${chalk.green(latestVersion)}.
 
-Please run ${chalk.green('npx promptfoo@latest')} or ${chalk.green('npm install -g promptfoo@latest')} to update.
+Please run ${chalk.green('npx promptfoo@latest')} or ${chalk.green(
+        'npm install -g promptfoo@latest',
+      )} to update.
 ${border}\n`,
     );
+    return true;
   }
+  return false;
 }
