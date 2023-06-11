@@ -6,6 +6,7 @@ import Table from 'cli-table3';
 import chalk from 'chalk';
 import { Command } from 'commander';
 
+import telemetry from './telemetry';
 import logger, { setLogLevel } from './logger';
 import { loadApiProvider, loadApiProviders } from './providers';
 import { evaluate } from './evaluator';
@@ -17,9 +18,11 @@ import {
   writeLatestResults,
   writeOutput,
 } from './util';
+import { DEFAULT_README, DEFAULT_YAML_CONFIG, DEFAULT_PROMPTS } from './onboarding';
+import { disableCache } from './cache';
 import { getDirectory } from './esm';
 import { init } from './web/server';
-import { disableCache } from './cache';
+import { checkForUpdates } from './updates';
 
 import type {
   CommandLineOptions,
@@ -28,8 +31,6 @@ import type {
   TestSuite,
   UnifiedConfig,
 } from './types';
-import { DEFAULT_README, DEFAULT_YAML_CONFIG, DEFAULT_PROMPTS } from './onboarding';
-import telemetry from './telemetry';
 
 function createDummyFiles(directory: string | null) {
   if (directory) {
@@ -61,6 +62,9 @@ function createDummyFiles(directory: string | null) {
 }
 
 async function main() {
+  console.log('ehhehe')
+  await checkForUpdates();
+
   const pwd = process.cwd();
   const potentialPaths = [
     pathJoin(pwd, 'promptfooconfig.js'),
