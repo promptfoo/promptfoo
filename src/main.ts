@@ -6,6 +6,7 @@ import Table from 'cli-table3';
 import chalk from 'chalk';
 import { Command } from 'commander';
 
+import telemetry from './telemetry';
 import logger, { setLogLevel } from './logger';
 import { loadApiProvider, loadApiProviders } from './providers';
 import { evaluate } from './evaluator';
@@ -17,9 +18,11 @@ import {
   writeLatestResults,
   writeOutput,
 } from './util';
+import { DEFAULT_README, DEFAULT_YAML_CONFIG, DEFAULT_PROMPTS } from './onboarding';
+import { disableCache } from './cache';
 import { getDirectory } from './esm';
 import { init } from './web/server';
-import { disableCache } from './cache';
+import { checkForUpdates } from './updates';
 
 import type {
   CommandLineOptions,
@@ -28,8 +31,6 @@ import type {
   TestSuite,
   UnifiedConfig,
 } from './types';
-import { DEFAULT_README, DEFAULT_YAML_CONFIG, DEFAULT_PROMPTS } from './onboarding';
-import telemetry from './telemetry';
 
 function createDummyFiles(directory: string | null) {
   if (directory) {
@@ -61,6 +62,8 @@ function createDummyFiles(directory: string | null) {
 }
 
 async function main() {
+  await checkForUpdates();
+
   const pwd = process.cwd();
   const potentialPaths = [
     pathJoin(pwd, 'promptfooconfig.js'),
@@ -302,12 +305,20 @@ async function main() {
           logger.info(`... ${rowsLeft} more row${rowsLeft === 1 ? '' : 's'} not shown ...\n`);
         }
       }
+
+      const border = '='.repeat(process.stdout.columns - 10);
+      logger.info(border);
       if (cmdObj.view || !cmdObj.write) {
-        logger.info('Evaluation complete');
+        logger.info(`${chalk.green('✔')} Evaluation complete`);
       } else {
         writeLatestResults(summary);
-        logger.info(`Evaluation complete. To use web viewer, run ${chalk.green('promptfoo view')}`);
+        logger.info(
+          `${chalk.green('✔')} Evaluation complete. To use web viewer, run ${chalk.green(
+            'promptfoo view',
+          )}`,
+        );
       }
+      logger.info(border);
       logger.info(chalk.green.bold(`Successes: ${summary.stats.successes}`));
       logger.info(chalk.red.bold(`Failures: ${summary.stats.failures}`));
       logger.info(
