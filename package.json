@@ -30,7 +30,7 @@
     "build:clean": "rm -rf dist",
     "build:client:unix": "cd src/web/client && npm run build && mkdir -p ../../../dist/web && cp -r dist ../../../dist/web/client",
     "build:client:windows": "cd src/web/client && npm run build && if not exist ../../../dist/web mkdir ../../../dist/web && xcopy /E /I /Y dist ../../../dist/web/client",
-    "build:client": "cross-env-shell \"npm run build:client:$npm_config_platform\"",
+    "build:client": "cross-env-shell \"npm run build:client:${platform:-unix}\"",
     "build:watch": "tsc --watch",
     "build": "tsc && cp src/*.html dist/ && npm run build:client",
     "prepare": "npm run install:client && npm run build:clean && npm run build",
