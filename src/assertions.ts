@@ -16,8 +16,6 @@ import type {
   AtomicTestCase,
 } from './types';
 
-const SIMILAR_REGEX = /similar(?::|\((\d+(\.\d+)?)\):)/;
-
 const DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD = 0.8;
 
 function handleRougeScore(
@@ -430,17 +428,28 @@ export function assertionFromString(expected: string): Assertion {
 
   // New options
   const assertionRegex =
-    /^(not-)?(equals|contains|contains-any|contains-all|regex|icontains):(.+)$/;
+    /^(not-)?(equals|contains-any|contains-all|contains-json|is-json|regex|icontains|contains|webhook|rouge-n|similar)(?::|\((\d+(\.\d+)?)\):)?(.*)$/;
   const regexMatch = expected.match(assertionRegex);
 
   if (regexMatch) {
-    const [_, notPrefix, type, value] = regexMatch;
+    const [_, notPrefix, type, __, thresholdStr, value] = regexMatch;
     const fullType = notPrefix ? `not-${type}` : type;
+    const threshold = parseFloat(thresholdStr);
 
     if (type === 'contains-any' || type === 'contains-all') {
       return {
         type: fullType as AssertionType,
         value: value.split(',').map((s) => s.trim()),
+      };
+    } else if (type === 'contains-json' || type === 'is-json') {
+      return {
+        type: fullType as AssertionType,
+      };
+    } else if (type === 'rouge-n' || type === 'similar') {
+      return {
+        type: fullType as AssertionType,
+        value,
+        threshold: threshold || (type === 'similar' ? DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD : 0.75),
       };
     } else {
       return {
@@ -448,24 +457,6 @@ export function assertionFromString(expected: string): Assertion {
         value,
       };
     }
-  }
-
-  // Options that require some special handling
-  const match = expected.match(SIMILAR_REGEX);
-  if (match) {
-    const threshold = parseFloat(match[1]) || DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD;
-    const rest = expected.replace(SIMILAR_REGEX, '').trim();
-    return {
-      type: 'similar',
-      value: rest,
-      threshold,
-    };
-  }
-
-  if (expected === 'is-json' || expected === 'contains-json') {
-    return {
-      type: expected,
-    };
   }
 
   // Default to equality

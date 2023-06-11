@@ -580,6 +580,40 @@ describe('assertionFromString', () => {
     expect(result.type).toBe('not-icontains');
     expect(result.value).toBe('substring');
   });
+
+  it('should create a webhook assertion', () => {
+    const expected = 'webhook:https://example.com';
+
+    const result: Assertion = assertionFromString(expected);
+    expect(result.type).toBe('webhook');
+    expect(result.value).toBe('https://example.com');
+  });
+
+  it('should create a not-webhook assertion', () => {
+    const expected = 'not-webhook:https://example.com';
+
+    const result: Assertion = assertionFromString(expected);
+    expect(result.type).toBe('not-webhook');
+    expect(result.value).toBe('https://example.com');
+  });
+
+  it('should create a rouge-n assertion', () => {
+    const expected = 'rouge-n(0.225):foo';
+
+    const result: Assertion = assertionFromString(expected);
+    expect(result.type).toBe('rouge-n');
+    expect(result.value).toBe('foo');
+    expect(result.threshold).toBeCloseTo(0.225);
+  });
+
+  it('should create a not-rouge-n assertion', () => {
+    const expected = 'not-rouge-n(0.225):foo';
+
+    const result: Assertion = assertionFromString(expected);
+    expect(result.type).toBe('not-rouge-n');
+    expect(result.value).toBe('foo');
+    expect(result.threshold).toBeCloseTo(0.225);
+  });
 });
 
 describe('matchesSimilarity', () => {
