@@ -16,7 +16,15 @@ import { getDirectory } from './esm';
 
 import type { RequestInfo, RequestInit, Response } from 'node-fetch';
 
-import type { Assertion, CsvRow, EvaluateSummary, UnifiedConfig, TestCase, Prompt } from './types';
+import type {
+  Assertion,
+  CsvRow,
+  EvaluateSummary,
+  UnifiedConfig,
+  TestCase,
+  Prompt,
+  TestSuite,
+} from './types';
 import { assertionFromString } from './assertions';
 
 const PROMPT_DELIMITER = '---';
@@ -238,11 +246,22 @@ export function getLatestResultsPath(): string {
   return path.join(getConfigDirectoryPath(), 'output', 'latest.json');
 }
 
-export function writeLatestResults(results: EvaluateSummary) {
+export function writeLatestResults(results: EvaluateSummary, config: Partial<UnifiedConfig>) {
   const latestResultsPath = getLatestResultsPath();
   try {
     fs.mkdirSync(path.dirname(latestResultsPath), { recursive: true });
-    fs.writeFileSync(latestResultsPath, JSON.stringify(results, null, 2));
+    fs.writeFileSync(
+      latestResultsPath,
+      JSON.stringify(
+        {
+          version: 1,
+          config,
+          results,
+        },
+        null,
+        2,
+      ),
+    );
   } catch (err) {
     logger.error(`Failed to write latest results to ${latestResultsPath}:\n${err}`);
   }

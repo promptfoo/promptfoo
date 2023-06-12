@@ -14,3 +14,5 @@ export type EvalTable = {
 };
 
 export type FilterMode = 'all' | 'failures';
+
+export type { UnifiedConfig } from '../../../types';

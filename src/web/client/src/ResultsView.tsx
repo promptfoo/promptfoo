@@ -1,8 +1,10 @@
 import * as React from 'react';
 
 import invariant from 'tiny-invariant';
+import Button from '@mui/material/Button';
 import Box from '@mui/material/Box';
 import Checkbox from '@mui/material/Checkbox';
+import CircularProgress from '@mui/material/CircularProgress';
 import FormControl from '@mui/material/FormControl';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import InputLabel from '@mui/material/InputLabel';
@@ -15,15 +17,21 @@ import Slider from '@mui/material/Slider';
 import Stack from '@mui/material/Stack';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import ShareIcon from '@mui/icons-material/Share';
+import VisibilityIcon from '@mui/icons-material/Visibility';
 import { styled } from '@mui/system';
 
 import ResultsTable from './ResultsTable.js';
+import ConfigModal from './ConfigModal';
+import ShareModal from './ShareModal';
 import { useStore } from './store.js';
 
 import type { VisibilityState } from '@tanstack/table-core';
-import { FilterMode } from './types.js';
+import type { FilterMode } from './types.js';
 
 const ResponsiveStack = styled(Stack)(({ theme }) => ({
+  maxWidth: '100%',
+  flexWrap: 'wrap',
   [theme.breakpoints.down('sm')]: {
     flexDirection: 'column',
   },
@@ -57,6 +65,39 @@ export default function ResultsView() {
   const handleWordBreakChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setWordBreak(event.target.checked ? 'break-all' : 'break-word');
   };
+
+  const [shareModalOpen, setShareModalOpen] = React.useState(false);
+  const [shareUrl, setShareUrl] = React.useState('');
+  const [shareLoading, setShareLoading] = React.useState(false);
+
+  const handleShareButtonClick = async () => {
+    setShareLoading(true);
+    try {
+      const response = await fetch('https://api.promptfoo.dev/eval', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          data: {
+            version: 1,
+            table,
+          },
+        }),
+      });
+
+      const { id } = await response.json();
+      const shareUrl = `https://app.promptfoo.dev/eval/${id}`;
+      setShareUrl(shareUrl);
+      setShareModalOpen(true);
+    } catch {
+      alert('Sorry, something went wrong.');
+    } finally {
+      setShareLoading(false);
+    }
+  };
+
+  const [configModalOpen, setConfigModalOpen] = React.useState(false);
 
   invariant(table, 'Table data must be loaded before rendering ResultsView');
   const { head } = table;
@@ -106,7 +147,7 @@ export default function ResultsView() {
       <Paper py="md">
         <ResponsiveStack direction="row" spacing={8} alignItems="center">
           <Box>
-            <FormControl sx={{ m: 1, minWidth: 300 }} size="small">
+            <FormControl sx={{ m: 1, minWidth: 200 }} size="small">
               <InputLabel id="visible-columns-label">Visible columns</InputLabel>
               <Select
                 labelId="visible-columns-label"
@@ -160,6 +201,30 @@ export default function ResultsView() {
               />
             </Tooltip>
           </Box>
+          <Box flexGrow={1} />
+          <Box display="flex" justifyContent="flex-end">
+            <ResponsiveStack direction="row" spacing={2}>
+              <Tooltip title="View config">
+                <Button
+                  color="primary"
+                  onClick={() => setConfigModalOpen(true)}
+                  startIcon={<VisibilityIcon />}
+                >
+                  Config
+                </Button>
+              </Tooltip>
+              <Tooltip title="Generate a unique URL that others can access">
+                <Button
+                  color="primary"
+                  onClick={handleShareButtonClick}
+                  disabled={shareLoading}
+                  startIcon={shareLoading ? <CircularProgress size={16} /> : <ShareIcon />}
+                >
+                  Share
+                </Button>
+              </Tooltip>
+            </ResponsiveStack>
+          </Box>
         </ResponsiveStack>
       </Paper>
       <ResultsTable
@@ -169,6 +234,12 @@ export default function ResultsView() {
         filterMode={filterMode}
         failureFilter={failureFilter}
         onFailureFilterToggle={handleFailureFilterToggle}
+      />
+      <ConfigModal open={configModalOpen} onClose={() => setConfigModalOpen(false)} />
+      <ShareModal
+        open={shareModalOpen}
+        onClose={() => setShareModalOpen(false)}
+        shareUrl={shareUrl}
       />
     </div>
   );
