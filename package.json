@@ -2,7 +2,7 @@
   "name": "promptfoo",
   "description": "Prompt engineering toolkit",
   "author": "Ian Webster",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "license": "MIT",
   "type": "commonjs",
   "main": "dist/src/index.js",
