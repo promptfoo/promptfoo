@@ -7,6 +7,7 @@ import Checkbox from '@mui/material/Checkbox';
 import CircularProgress from '@mui/material/CircularProgress';
 import FormControl from '@mui/material/FormControl';
 import FormControlLabel from '@mui/material/FormControlLabel';
+import IconButton from '@mui/material/IconButton';
 import InputLabel from '@mui/material/InputLabel';
 import ListItemText from '@mui/material/ListItemText';
 import MenuItem from '@mui/material/MenuItem';
@@ -18,14 +19,16 @@ import Stack from '@mui/material/Stack';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import ShareIcon from '@mui/icons-material/Share';
+import VisibilityIcon from '@mui/icons-material/Visibility';
 import { styled } from '@mui/system';
 
 import ResultsTable from './ResultsTable.js';
+import ConfigModal from './ConfigModal';
 import ShareModal from './ShareModal';
 import { useStore } from './store.js';
 
 import type { VisibilityState } from '@tanstack/table-core';
-import { FilterMode } from './types.js';
+import type { FilterMode } from './types.js';
 
 const ResponsiveStack = styled(Stack)(({ theme }) => ({
   [theme.breakpoints.down('sm')]: {
@@ -93,9 +96,7 @@ export default function ResultsView() {
     }
   };
 
-  const handleCloseShareModal = () => {
-    setShareModalOpen(false);
-  };
+  const [configModalOpen, setConfigModalOpen] = React.useState(false);
 
   invariant(table, 'Table data must be loaded before rendering ResultsView');
   const { head } = table;
@@ -201,6 +202,11 @@ export default function ResultsView() {
           </Box>
           <Box flexGrow={1} />
           <Box display="flex" justifyContent="flex-end">
+            <Tooltip title="View config">
+              <IconButton color="primary" onClick={() => setConfigModalOpen(true)}>
+                <VisibilityIcon />
+              </IconButton>
+            </Tooltip>
             <Tooltip title="Generate a unique URL that others can access">
               <Button
                 color="primary"
@@ -222,7 +228,12 @@ export default function ResultsView() {
         failureFilter={failureFilter}
         onFailureFilterToggle={handleFailureFilterToggle}
       />
-      <ShareModal open={shareModalOpen} onClose={handleCloseShareModal} shareUrl={shareUrl} />
+      <ConfigModal open={configModalOpen} onClose={() => setConfigModalOpen(false)} />
+      <ShareModal
+        open={shareModalOpen}
+        onClose={() => setShareModalOpen(false)}
+        shareUrl={shareUrl}
+      />
     </div>
   );
 }

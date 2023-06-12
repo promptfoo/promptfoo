@@ -9,12 +9,9 @@ import cors from 'cors';
 import opener from 'opener';
 import { Server as SocketIOServer } from 'socket.io';
 
-import promptfoo from '../index.js';
 import logger from '../logger';
 import { getDirectory } from '../esm';
 import { getLatestResultsPath } from '../util';
-
-import type { Request, Response } from 'express';
 
 export function init(port = 15500) {
   const app = express();
@@ -35,20 +32,19 @@ export function init(port = 15500) {
   const latestJsonPath = getLatestResultsPath();
   const readLatestJson = () => {
     const data = fs.readFileSync(latestJsonPath, 'utf8');
-    const jsonData = JSON.parse(data);
-    return jsonData.table;
+    return JSON.parse(data);
   };
 
   io.on('connection', (socket) => {
     // Send the initial table data when a client connects
-    socket.emit('init', { table: readLatestJson() });
+    socket.emit('init', readLatestJson());
 
     // Watch for changes to latest.json and emit the update event
     fs.watch(
       latestJsonPath,
       debounce((event: string) => {
         if (event === 'change') {
-          socket.emit('update', { table: readLatestJson() });
+          socket.emit('update', readLatestJson);
         }
       }, 250),
     );

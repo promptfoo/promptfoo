@@ -311,7 +311,7 @@ async function main() {
       if (cmdObj.view || !cmdObj.write) {
         logger.info(`${chalk.green('✔')} Evaluation complete`);
       } else {
-        writeLatestResults(summary);
+        writeLatestResults(summary, config);
         logger.info(
           `${chalk.green('✔')} Evaluation complete. To use web viewer, run ${chalk.green(
             'promptfoo view',

@@ -11,7 +11,7 @@ import { useStore } from './store.js';
 import './App.css';
 
 function App() {
-  const { table, setTable } = useStore();
+  const { table, setTable, config, setConfig } = useStore();
   const [loaded, setLoaded] = React.useState<boolean>(false);
   const loadedFromApi = React.useRef(false);
 
@@ -45,7 +45,8 @@ function App() {
       loadedFromApi.current = true;
       const response = await fetch(`https://api.promptfoo.dev/eval/${id}`);
       const body = await response.json();
-      setTable(body.data.table);
+      setTable(body.data.results.table);
+      setConfig(body.data.config);
       setLoaded(true);
     };
 
@@ -57,21 +58,23 @@ function App() {
       fetchEvalData(id);
     } else {
       socket.on('init', (data) => {
-        console.log('Initialized socket connection');
+        console.log('Initialized socket connection', data);
         setLoaded(true);
-        setTable(data.table);
+        setTable(data.results.table);
+        setConfig(data.config);
       });
 
       socket.on('update', (data) => {
-        console.log('Received data update');
-        setTable(data.table);
+        console.log('Received data update', data);
+        setTable(data.results.table);
+        setConfig(data.config);
       });
     }
 
     return () => {
       socket.disconnect();
     };
-  }, [setTable]);
+  }, [setTable, setConfig]);
 
   return (
     <ThemeProvider theme={theme}>
