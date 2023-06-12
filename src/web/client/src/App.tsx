@@ -11,7 +11,7 @@ import { useStore } from './store.js';
 import './App.css';
 
 function App() {
-  const { table, setTable, config, setConfig } = useStore();
+  const { table, setTable, setConfig } = useStore();
   const [loaded, setLoaded] = React.useState<boolean>(false);
   const loadedFromApi = React.useRef(false);
 
