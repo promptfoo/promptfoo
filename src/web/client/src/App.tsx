@@ -13,6 +13,7 @@ import './App.css';
 function App() {
   const { table, setTable } = useStore();
   const [loaded, setLoaded] = React.useState<boolean>(false);
+  const loadedFromApi = React.useRef(false);
 
   const prefersDarkMode = useMediaQuery('(prefers-color-scheme: dark)');
   const [darkMode, setDarkMode] = React.useState(prefersDarkMode);
@@ -37,24 +38,40 @@ function App() {
   };
 
   React.useEffect(() => {
-    //const socket = SocketIOClient(`http://${window.location.host}`);
+    const fetchEvalData = async (id: string) => {
+      if (loadedFromApi.current) {
+        return;
+      }
+      loadedFromApi.current = true;
+      const response = await fetch(`https://api.promptfoo.dev/eval/${id}`);
+      const body = await response.json();
+      setTable(body.data.table);
+      setLoaded(true);
+    };
+
     const socket = SocketIOClient(`http://localhost:15500`);
 
-    socket.on('init', (data) => {
-      console.log('Initialized socket connection');
-      setLoaded(true);
-      setTable(data.table);
-    });
+    const pathMatch = window.location.pathname.match(/\/eval\/([\w:-]+)/);
+    if (pathMatch) {
+      const id = pathMatch[1];
+      fetchEvalData(id);
+    } else {
+      socket.on('init', (data) => {
+        console.log('Initialized socket connection');
+        setLoaded(true);
+        setTable(data.table);
+      });
 
-    socket.on('update', (data) => {
-      console.log('Received data update');
-      setTable(data.table);
-    });
+      socket.on('update', (data) => {
+        console.log('Received data update');
+        setTable(data.table);
+      });
+    }
 
     return () => {
       socket.disconnect();
     };
-  }, [loaded, setTable]);
+  }, [setTable]);
 
   return (
     <ThemeProvider theme={theme}>
