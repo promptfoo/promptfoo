@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
+import DialogContentText from '@mui/material/DialogContentText';
 import DialogActions from '@mui/material/DialogActions';
 import Button from '@mui/material/Button';
 import TextField from '@mui/material/TextField';
@@ -53,6 +54,9 @@ const ShareModal: React.FC<ShareModalProps> = ({ open, onClose, shareUrl }) => {
             ),
           }}
         />
+        <DialogContentText sx={{ fontSize: '0.75rem' }}>
+          Shared URLs are deleted after 1 week.
+        </DialogContentText>
       </DialogContent>
       <DialogActions>
         <Button onClick={handleClose} color="primary">
