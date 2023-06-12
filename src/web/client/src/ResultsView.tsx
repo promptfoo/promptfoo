@@ -7,7 +7,6 @@ import Checkbox from '@mui/material/Checkbox';
 import CircularProgress from '@mui/material/CircularProgress';
 import FormControl from '@mui/material/FormControl';
 import FormControlLabel from '@mui/material/FormControlLabel';
-import IconButton from '@mui/material/IconButton';
 import InputLabel from '@mui/material/InputLabel';
 import ListItemText from '@mui/material/ListItemText';
 import MenuItem from '@mui/material/MenuItem';
@@ -31,6 +30,8 @@ import type { VisibilityState } from '@tanstack/table-core';
 import type { FilterMode } from './types.js';
 
 const ResponsiveStack = styled(Stack)(({ theme }) => ({
+  maxWidth: '100%',
+  flexWrap: 'wrap',
   [theme.breakpoints.down('sm')]: {
     flexDirection: 'column',
   },
@@ -146,7 +147,7 @@ export default function ResultsView() {
       <Paper py="md">
         <ResponsiveStack direction="row" spacing={8} alignItems="center">
           <Box>
-            <FormControl sx={{ m: 1, minWidth: 300 }} size="small">
+            <FormControl sx={{ m: 1, minWidth: 200 }} size="small">
               <InputLabel id="visible-columns-label">Visible columns</InputLabel>
               <Select
                 labelId="visible-columns-label"
@@ -202,21 +203,27 @@ export default function ResultsView() {
           </Box>
           <Box flexGrow={1} />
           <Box display="flex" justifyContent="flex-end">
-            <Tooltip title="View config">
-              <IconButton color="primary" onClick={() => setConfigModalOpen(true)}>
-                <VisibilityIcon />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title="Generate a unique URL that others can access">
-              <Button
-                color="primary"
-                onClick={handleShareButtonClick}
-                disabled={shareLoading}
-                startIcon={shareLoading ? <CircularProgress size={16} /> : <ShareIcon />}
-              >
-                Share
-              </Button>
-            </Tooltip>
+            <ResponsiveStack direction="row" spacing={2}>
+              <Tooltip title="View config">
+                <Button
+                  color="primary"
+                  onClick={() => setConfigModalOpen(true)}
+                  startIcon={<VisibilityIcon />}
+                >
+                  Config
+                </Button>
+              </Tooltip>
+              <Tooltip title="Generate a unique URL that others can access">
+                <Button
+                  color="primary"
+                  onClick={handleShareButtonClick}
+                  disabled={shareLoading}
+                  startIcon={shareLoading ? <CircularProgress size={16} /> : <ShareIcon />}
+                >
+                  Share
+                </Button>
+              </Tooltip>
+            </ResponsiveStack>
           </Box>
         </ResponsiveStack>
       </Paper>

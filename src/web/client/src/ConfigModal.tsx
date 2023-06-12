@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef } from 'react';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
@@ -8,7 +8,7 @@ import Typography from '@mui/material/Typography';
 import { useStore } from './store';
 import yaml from 'js-yaml';
 import { IconButton, Box } from '@mui/material';
-import { FileCopy, Check } from '@mui/icons-material';
+import { FileCopy } from '@mui/icons-material';
 
 interface ConfigModalProps {
   open: boolean;
@@ -18,19 +18,12 @@ interface ConfigModalProps {
 export default function ConfigModal({ open, onClose }: ConfigModalProps) {
   const { config } = useStore();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const [copied, setCopied] = useState(false);
 
   const handleCopyClick = () => {
     if (textareaRef.current) {
       textareaRef.current.select();
       document.execCommand('copy');
-      setCopied(true);
     }
-  };
-
-  const handleClose = () => {
-    setCopied(false);
-    onClose();
   };
 
   const yamlConfig = yaml.dump(config);
@@ -38,7 +31,7 @@ export default function ConfigModal({ open, onClose }: ConfigModalProps) {
   return (
     <Dialog
       open={open}
-      onClose={handleClose}
+      onClose={onClose}
       aria-labelledby="config-dialog-title"
       maxWidth="md"
       fullWidth
@@ -46,7 +39,9 @@ export default function ConfigModal({ open, onClose }: ConfigModalProps) {
       <DialogTitle id="config-dialog-title">
         <Box display="flex" justifyContent="space-between" alignItems="center">
           <Typography variant="h6">Config</Typography>
-          <IconButton onClick={handleCopyClick}>{copied ? <Check /> : <FileCopy />}</IconButton>
+          <IconButton onClick={handleCopyClick} color="primary">
+            <FileCopy />
+          </IconButton>
         </Box>
       </DialogTitle>
       <DialogContent>
@@ -65,7 +60,7 @@ export default function ConfigModal({ open, onClose }: ConfigModalProps) {
         </Typography>
       </DialogContent>
       <DialogActions>
-        <Button onClick={handleClose} color="primary">
+        <Button onClick={onClose} color="primary">
           Close
         </Button>
       </DialogActions>
