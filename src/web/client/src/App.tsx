@@ -45,7 +45,11 @@ function App() {
       loadedFromApi.current = true;
       const response = await fetch(`https://api.promptfoo.dev/eval/${id}`);
       const body = await response.json();
-      setTable(body.data.results.table);
+      setTable(
+        body.data.results?.table ||
+          // Backwards compatibility with <= 0.12.0
+          body.data.table,
+      );
       setConfig(body.data.config);
       setLoaded(true);
     };

@@ -38,7 +38,7 @@ const ResponsiveStack = styled(Stack)(({ theme }) => ({
 }));
 
 export default function ResultsView() {
-  const { table } = useStore();
+  const { table, config } = useStore();
   const [maxTextLength, setMaxTextLength] = React.useState(250);
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
   const [selectedColumns, setSelectedColumns] = React.useState<string[]>([]);
@@ -204,15 +204,17 @@ export default function ResultsView() {
           <Box flexGrow={1} />
           <Box display="flex" justifyContent="flex-end">
             <ResponsiveStack direction="row" spacing={2}>
-              <Tooltip title="View config">
-                <Button
-                  color="primary"
-                  onClick={() => setConfigModalOpen(true)}
-                  startIcon={<VisibilityIcon />}
-                >
-                  Config
-                </Button>
-              </Tooltip>
+              {config && (
+                <Tooltip title="View config">
+                  <Button
+                    color="primary"
+                    onClick={() => setConfigModalOpen(true)}
+                    startIcon={<VisibilityIcon />}
+                  >
+                    Config
+                  </Button>
+                </Tooltip>
+              )}
               <Tooltip title="Generate a unique URL that others can access">
                 <Button
                   color="primary"
