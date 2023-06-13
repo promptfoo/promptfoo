@@ -151,34 +151,39 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onS
           Run Test Suite
         </Button>
       </Stack>
-      <TextField
-        label="Description"
-        value={description}
-        onChange={(e) => setDescription(e.target.value)}
-        fullWidth
-        margin="normal"
-      />
-      <FormControl fullWidth margin="normal">
-        <InputLabel>Providers</InputLabel>
-        <Select
-          multiple
-          value={providers}
-          onChange={(e) => setProviders(e.target.value as string[])}
-          renderValue={(selected) => (
-            <div>
-              {(selected as string[]).map((value) => (
-                <Chip key={value} label={value} />
-              ))}
-            </div>
-          )}
-        >
-          {providerOptions.map((option) => (
-            <MenuItem key={option} value={option}>
-              {option}
-            </MenuItem>
-          ))}
-        </Select>
-      </FormControl>
+      <Box mt={4}>
+        <TextField
+          label="Description"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          fullWidth
+          margin="normal"
+        />
+      </Box>
+      <Box mt={2}>
+        <FormControl fullWidth margin="normal">
+          <InputLabel>Providers</InputLabel>
+          <Select
+            multiple
+            value={providers}
+            onChange={(e) => setProviders(e.target.value as string[])}
+            renderValue={(selected) => (
+              <div>
+                {(selected as string[]).map((value) => (
+                  <Chip key={value} label={value} />
+                ))}
+              </div>
+            )}
+          >
+            {providerOptions.map((option) => (
+              <MenuItem key={option} value={option}>
+                {option}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+      </Box>
+      <Box mt={4} />
       <Stack direction="row" spacing={2} justifyContent="space-between">
         <Typography variant="h5">Prompts</Typography>
         <div>
@@ -263,6 +268,7 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onS
         }}
         onCancel={() => setEditingPromptIndex(null)}
       />
+      <Box mt={6} />
       <Stack direction="row" spacing={2} marginY={2} justifyContent="space-between">
         <Typography variant="h5">Test Cases</Typography>
         <Button color="primary" onClick={() => setTestCaseDialogOpen(true)} variant="contained">
@@ -329,7 +335,7 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onS
           setTestCaseDialogOpen(false);
         }}
       />
-      <Box mt={4}>
+      <Box mt={8}>
         {yamlString && (
           <Box mt={4}>
             <Typography variant="h5" gutterBottom>
