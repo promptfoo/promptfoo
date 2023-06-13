@@ -237,41 +237,9 @@ class Evaluator {
       }
     }
 
-    // Set up table...
-    const isTest = tests.some((t) => !!t.assert);
-
-    const table: EvaluateTable = {
-      head: {
-        prompts: prompts.map((p) => p.display),
-        vars: Array.from(varNames).sort(),
-        // TODO(ian): add assertions to table?
-      },
-      body: [],
-    };
-
-    // And progress bar...
-    let progressbar: SingleBar | undefined;
-    if (options.showProgressBar) {
-      // FIXME(ian): Add var combinations too
-      const totalNumRuns =
-        testSuite.prompts.length * testSuite.providers.length * (tests.length || 1);
-      const cliProgress = await import('cli-progress');
-      progressbar = new cliProgress.SingleBar(
-        {
-          format:
-            'Eval: [{bar}] {percentage}% | ETA: {eta}s | {value}/{total} | {provider} "{prompt}" {vars}',
-        },
-        cliProgress.Presets.shades_classic,
-      );
-      progressbar.start(totalNumRuns, 0, {
-        provider: '',
-        prompt: '',
-        vars: '',
-      });
-    }
-
     // Set up eval cases
     const runEvalOptions: RunEvalOptions[] = [];
+    let totalVarCombinations = 0;
     let rowIndex = 0;
     for (const testCase of tests) {
       // Handle default properties
@@ -287,6 +255,7 @@ class Evaluator {
 
       // Finalize test case eval
       const varCombinations = generateVarCombinations(testCase.vars || {});
+      totalVarCombinations += varCombinations.length;
       for (const vars of varCombinations) {
         let colIndex = 0;
         for (const prompt of testSuite.prompts) {
@@ -307,6 +276,38 @@ class Evaluator {
         }
         rowIndex++;
       }
+    }
+
+    // Set up table...
+    const isTest = tests.some((t) => !!t.assert);
+
+    const table: EvaluateTable = {
+      head: {
+        prompts: prompts.map((p) => p.display),
+        vars: Array.from(varNames).sort(),
+        // TODO(ian): add assertions to table?
+      },
+      body: [],
+    };
+
+    // Set up progress bar...
+    let progressbar: SingleBar | undefined;
+    if (options.showProgressBar) {
+      const totalNumRuns =
+        testSuite.prompts.length * testSuite.providers.length * (totalVarCombinations || 1);
+      const cliProgress = await import('cli-progress');
+      progressbar = new cliProgress.SingleBar(
+        {
+          format:
+            'Eval: [{bar}] {percentage}% | ETA: {eta}s | {value}/{total} | {provider} "{prompt}" {vars}',
+        },
+        cliProgress.Presets.shades_classic,
+      );
+      progressbar.start(totalNumRuns, 0, {
+        provider: '',
+        prompt: '',
+        vars: '',
+      });
     }
 
     // Actually run the eval
