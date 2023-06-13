@@ -1,4 +1,3 @@
-// src/components/PromptDialog.tsx
 import React from 'react';
 import {
   Dialog,
@@ -19,19 +18,24 @@ interface PromptDialogProps {
 
 const PromptDialog: React.FC<PromptDialogProps> = ({ open, prompt, index, onAdd, onCancel }) => {
   const [editingPrompt, setEditingPrompt] = React.useState(prompt);
+  const textFieldRef = React.useRef<HTMLInputElement>(null);
 
   React.useEffect(() => {
     setEditingPrompt(prompt);
   }, [prompt]);
 
-  const handleAddAnother = () => {
-    onAdd('');
+  const handleAdd = () => {
+    onAdd(editingPrompt);
+    onCancel();
     setEditingPrompt('');
   };
 
-  const handleSave = () => {
+  const handleAddAnother = () => {
     onAdd(editingPrompt);
-    onCancel();
+    setEditingPrompt('');
+    if (textFieldRef.current) {
+      textFieldRef.current.focus();
+    }
   };
 
   return (
@@ -45,11 +49,12 @@ const PromptDialog: React.FC<PromptDialogProps> = ({ open, prompt, index, onAdd,
           fullWidth
           margin="normal"
           multiline
+          inputRef={textFieldRef}
         />
       </DialogContent>
       <DialogActions>
         <Button
-          onClick={handleSave}
+          onClick={handleAdd}
           color="primary"
           variant="contained"
           disabled={!editingPrompt.length}

@@ -43,10 +43,12 @@ const providerOptions = ['openai:gpt-3.5-turbo', 'openai:gpt-4', 'localai:chat:v
 
 const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onSubmit }) => {
   const [yamlString, setYamlString] = useState('');
+
+  const [promptDialogOpen, setPromptDialogOpen] = useState(false);
+  const [testCaseDialogOpen, setTestCaseDialogOpen] = useState(false);
+
   const [editingTestCaseIndex, setEditingTestCaseIndex] = useState<number | null>(null);
   const [editingPromptIndex, setEditingPromptIndex] = useState<number | null>(null);
-
-  const [testCaseDialogOpen, setTestCaseDialogOpen] = useState(false);
 
   const {
     description,
@@ -96,6 +98,7 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onS
 
   const handleEditPrompt = (index: number) => {
     setEditingPromptIndex(index);
+    setPromptDialogOpen(true);
   };
 
   const handleAddPromptFromFile = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -205,10 +208,7 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onS
           </label>
           <Button
             color="primary"
-            onClick={() => {
-              setPrompts([...prompts, '']);
-              setEditingPromptIndex(prompts.length);
-            }}
+            onClick={() => { setPromptDialogOpen(true); }}
             variant="contained"
           >
             Add Prompt
@@ -255,7 +255,7 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onS
         </Table>
       </TableContainer>
       <PromptDialog
-        open={editingPromptIndex !== null}
+        open={promptDialogOpen}
         prompt={editingPromptIndex !== null ? prompts[editingPromptIndex] : ''}
         index={editingPromptIndex !== null ? editingPromptIndex : 0}
         onAdd={(newPrompt) => {
@@ -266,7 +266,10 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onS
           }
           setEditingPromptIndex(null);
         }}
-        onCancel={() => setEditingPromptIndex(null)}
+        onCancel={() => {
+          setEditingPromptIndex(null);
+          setPromptDialogOpen(false);
+        }}
       />
       <Box mt={6} />
       <Stack direction="row" spacing={2} marginY={2} justifyContent="space-between">
