@@ -30,7 +30,7 @@
     "build:clean": "rm -rf dist",
     "build:client": "cd src/web/client && npm run build && cp -r dist/ ../../../dist/src/web/client",
     "build:watch": "tsc --watch",
-    "build": "tsc && cp src/*.html dist/ && npm run build:client && chmod +x dist/src/main.js",
+    "build": "tsc && cp src/*.html dist/src && npm run build:client && chmod +x dist/src/main.js",
     "prepare": "npm run install:client && npm run build:clean && npm run build",
     "test": "jest",
     "test:watch": "jest --watch",
