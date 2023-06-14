@@ -7,7 +7,7 @@ import chalk from 'chalk';
 import { Command } from 'commander';
 
 import telemetry from './telemetry';
-import logger, { setLogLevel } from './logger';
+import logger, { getLogLevel, setLogLevel } from './logger';
 import { loadApiProvider, loadApiProviders } from './providers';
 import { evaluate } from './evaluator';
 import {
@@ -123,10 +123,9 @@ async function main() {
     .command('eval')
     .description('Evaluate prompts')
     .requiredOption('-p, --prompts <paths...>', 'Paths to prompt files (.txt)', config.prompts)
-    .requiredOption(
+    .option(
       '-r, --providers <name or path...>',
       'One of: openai:chat, openai:completion, openai:<model name>, or path to custom API caller module',
-      config?.providers,
     )
     .option(
       '-c, --config <path>',
@@ -243,7 +242,7 @@ async function main() {
       };
 
       const options: EvaluateOptions = {
-        showProgressBar: true,
+        showProgressBar: getLogLevel() !== 'debug',
         maxConcurrency: !isNaN(maxConcurrency) && maxConcurrency > 0 ? maxConcurrency : undefined,
         ...evaluateOptions,
       };
@@ -261,7 +260,7 @@ async function main() {
       if (cmdObj.output) {
         logger.info(chalk.yellow(`Writing output to ${cmdObj.output}`));
         writeOutput(cmdObj.output, summary);
-      } else {
+      } else if (getLogLevel() !== 'debug') {
         // Output table by default
         const maxWidth = process.stdout.columns ? process.stdout.columns - 10 : 120;
         const head = summary.table.head;
