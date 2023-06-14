@@ -248,8 +248,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
     logger.debug(`\tOpenAI API response: ${JSON.stringify(data)}`);
     try {
+      const message = data.choices[0].message;
+      const output =
+        message.content === null ? JSON.stringify(message.function_call) : message.content;
       return {
-        output: data.choices[0].message.content,
+        output,
         tokenUsage: cached
           ? { cached: data.usage.total_tokens }
           : {
