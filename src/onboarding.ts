@@ -9,6 +9,12 @@ These prompts are nunjucks templates, so you can use logic like this:
   {{ var1 }}
 {% endif %}
 ---
+[
+  {"role": "system", "content": "Use JSON too for more complex payloads"},
+  {"role": "user", "content": "Such as multi-shot prompts"}
+  {"role": "user", "content": "Variable substitution still works: {{ var3 }}"}
+]
+---
 If you prefer, you can break prompts into multiple files (make sure to edit promptfooconfig.yaml accordingly)
 `;
 

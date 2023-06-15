@@ -1,0 +1,11 @@
+prompts: [prompt1.json, prompt2.json]
+providers: [openai:gpt-3.5-turbo]
+tests:
+  - vars:
+      year: 1950
+  - vars:
+      year: 1984
+  - vars:
+      year: 2020
+  - vars:
+      year: 2023
