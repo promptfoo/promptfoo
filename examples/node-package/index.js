@@ -1,4 +1,4 @@
-import promptfoo from '../../dist/index.js';
+import promptfoo from '../../dist/src/index.js';
 
 (async () => {
   const results = await promptfoo.evaluate({
