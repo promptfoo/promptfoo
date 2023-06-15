@@ -3,7 +3,8 @@ import fetch from 'node-fetch';
 import { OpenAiCompletionProvider, OpenAiChatCompletionProvider } from '../src/providers/openai';
 
 import { disableCache, enableCache } from '../src/cache.js';
-import { loadApiProvider } from '../src/providers.js';
+import { loadApiProvider, loadApiProviders } from '../src/providers.js';
+import type { RawProviderConfig } from '../src/types';
 
 jest.mock('node-fetch', () => jest.fn());
 
@@ -87,5 +88,35 @@ describe('providers', () => {
   test('loadApiProvider with openai:completion:modelName', async () => {
     const provider = await loadApiProvider('openai:completion:text-davinci-003');
     expect(provider).toBeInstanceOf(OpenAiCompletionProvider);
+  });
+
+  test('loadApiProvider with RawProviderConfig', async () => {
+    const rawProviderConfig = {
+      'openai:chat': {
+        id: 'test',
+        config: { foo: 'bar' },
+      },
+    };
+    const provider = await loadApiProvider('openai:chat', rawProviderConfig['openai:chat']);
+    expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
+  });
+
+  test('loadApiProviders with RawProviderConfig[]', async () => {
+    const rawProviderConfigs: RawProviderConfig[] = [
+      {
+        'openai:chat:abc123': {
+          config: { foo: 'bar' },
+        },
+      },
+      {
+        'openai:completion:def456': {
+          config: { foo: 'bar' },
+        },
+      },
+    ];
+    const providers = await loadApiProviders(rawProviderConfigs);
+    expect(providers).toHaveLength(2);
+    expect(providers[0]).toBeInstanceOf(OpenAiChatCompletionProvider);
+    expect(providers[1]).toBeInstanceOf(OpenAiCompletionProvider);
   });
 });

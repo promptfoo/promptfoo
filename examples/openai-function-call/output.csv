@@ -1,0 +1,7 @@
+"[
+  {""role"": ""user"", ""content"": ""What is the weather like in {{city}}?""}
+]",city
+"[PASS] {""name"":""get_current_weather"",""arguments"":""{\n  \""location\"": \""Boston, MA\""\n}""}",Boston
+"[PASS] {""name"":""get_current_weather"",""arguments"":""{\n  \""location\"": \""New York\""\n}""}",New York
+"[PASS] {""name"":""get_current_weather"",""arguments"":""{\n  \""location\"": \""Paris\""\n}""}",Paris
+"[PASS] {""name"":""get_current_weather"",""arguments"":""{\n  \""location\"": \""Mars\""\n}""}",Mars

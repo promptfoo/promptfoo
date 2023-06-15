@@ -77,7 +77,7 @@ export async function fetchJsonWithCache(
   try {
     const data = await response.json();
     if (response.ok) {
-      logger.debug(`Storing ${url} response in cache: ${data}`);
+      logger.debug(`Storing ${url} response in cache: ${JSON.stringify(data)}`);
       await cache.set(cacheKey, JSON.stringify(data));
     }
     return {

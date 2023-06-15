@@ -7,7 +7,13 @@ import type { ApiProvider, ProviderEmbeddingResponse, ProviderResponse } from '.
 const DEFAULT_OPENAI_HOST = 'api.openai.com';
 
 interface OpenAiCompletionOptions {
-  temperature: number;
+  temperature?: number;
+  functions?: {
+    name: string;
+    description?: string;
+    parameters: any;
+  }[];
+  function_call?: 'none' | 'auto';
 }
 
 class OpenAiGenericProvider implements ApiProvider {
@@ -112,11 +118,14 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
     'text-ada-001',
   ];
 
-  constructor(modelName: string, apiKey?: string) {
+  options: OpenAiCompletionOptions;
+
+  constructor(modelName: string, apiKey?: string, context?: OpenAiCompletionOptions) {
     if (!OpenAiCompletionProvider.OPENAI_COMPLETION_MODELS.includes(modelName)) {
       logger.warn(`Using unknown OpenAI completion model: ${modelName}`);
     }
     super(modelName, apiKey);
+    this.options = context || {};
   }
 
   async callApi(prompt: string, options?: OpenAiCompletionOptions): Promise<ProviderResponse> {
@@ -138,7 +147,10 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       model: this.modelName,
       prompt,
       max_tokens: parseInt(process.env.OPENAI_MAX_TOKENS || '1024'),
-      temperature: options?.temperature ?? parseFloat(process.env.OPENAI_TEMPERATURE || '0'),
+      temperature:
+        options?.temperature ??
+        this.options.temperature ??
+        parseFloat(process.env.OPENAI_TEMPERATURE || '0'),
       stop,
     };
     logger.debug(`Calling OpenAI API: ${JSON.stringify(body)}`);
@@ -194,11 +206,14 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     'gpt-3.5-turbo-0613',
   ];
 
-  constructor(modelName: string, apiKey?: string) {
+  options: OpenAiCompletionOptions;
+
+  constructor(modelName: string, apiKey?: string, context?: OpenAiCompletionOptions) {
     if (!OpenAiChatCompletionProvider.OPENAI_CHAT_MODELS.includes(modelName)) {
       logger.warn(`Using unknown OpenAI chat model: ${modelName}`);
     }
     super(modelName, apiKey);
+    this.options = context || {};
   }
 
   // TODO(ian): support passing in `messages` directly
@@ -217,11 +232,17 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     } catch (err) {
       messages = [{ role: 'user', content: prompt }];
     }
+
     const body = {
       model: this.modelName,
       messages: messages,
       max_tokens: parseInt(process.env.OPENAI_MAX_TOKENS || '1024'),
-      temperature: options?.temperature ?? parseFloat(process.env.OPENAI_TEMPERATURE || '0'),
+      temperature:
+        options?.temperature ??
+        this.options.temperature ??
+        parseFloat(process.env.OPENAI_TEMPERATURE || '0'),
+      functions: options?.functions || this.options.functions || undefined,
+      function_call: options?.function_call || this.options.function_call || undefined,
     };
     logger.debug(`Calling OpenAI API: ${JSON.stringify(body)}`);
 
