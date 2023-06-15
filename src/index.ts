@@ -4,10 +4,11 @@ import telemetry from './telemetry';
 import { evaluate as doEvaluate } from './evaluator';
 import { loadApiProviders } from './providers';
 import { readTests } from './util';
-
 import type { EvaluateOptions, TestSuite, TestSuiteConfig } from './types';
 
 export * from './types';
+
+export { generateTable } from './table';
 
 interface EvaluateTestSuite extends TestSuiteConfig {
   prompts: string[];
@@ -30,11 +31,7 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
   return ret;
 }
 
-module.exports = {
-  evaluate,
-  assertions,
-  providers,
-};
+export { evaluate, assertions, providers };
 
 export default {
   evaluate,

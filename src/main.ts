@@ -2,7 +2,6 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join as pathJoin } from 'path';
 
-import Table from 'cli-table3';
 import chalk from 'chalk';
 import { Command } from 'commander';
 
@@ -31,6 +30,7 @@ import type {
   TestSuite,
   UnifiedConfig,
 } from './types';
+import { generateTable } from './table';
 
 function createDummyFiles(directory: string | null) {
   if (directory) {
@@ -262,41 +262,7 @@ async function main() {
         writeOutput(cmdObj.output, summary);
       } else if (getLogLevel() !== 'debug') {
         // Output table by default
-        const maxWidth = process.stdout.columns ? process.stdout.columns - 10 : 120;
-        const head = summary.table.head;
-        const headLength = head.prompts.length + head.vars.length;
-        const table = new Table({
-          head: [...head.prompts, ...head.vars],
-          colWidths: Array(headLength).fill(Math.floor(maxWidth / headLength)),
-          wordWrap: true,
-          wrapOnWordBoundary: false,
-          style: {
-            head: ['blue', 'bold'],
-          },
-        });
-        // Skip first row (header) and add the rest. Color PASS/FAIL
-        for (const row of summary.table.body.slice(0, 25)) {
-          table.push([
-            ...row.vars,
-            ...row.outputs.map((col) => {
-              const tableCellMaxLength = parseInt(cmdObj.tableCellMaxLength || '', 10);
-              if (!isNaN(tableCellMaxLength) && col.length > tableCellMaxLength) {
-                col = col.slice(0, tableCellMaxLength) + '...';
-              }
-              if (col.startsWith('[PASS]')) {
-                // color '[PASS]' green
-                return chalk.green.bold(col.slice(0, 6)) + col.slice(6);
-              } else if (col.startsWith('[FAIL]')) {
-                // color everything red up until '---'
-                return col
-                  .split('---')
-                  .map((c, idx) => (idx === 0 ? chalk.red.bold(c) : c))
-                  .join('---');
-              }
-              return col;
-            }),
-          ]);
-        }
+        const table = generateTable(summary, parseInt(cmdObj.tableCellMaxLength || '', 10));
 
         logger.info('\n' + table.toString());
         if (summary.table.body.length > 25) {
