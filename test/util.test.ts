@@ -34,6 +34,7 @@ describe('util', () => {
     (fs.readFileSync as jest.Mock).mockReturnValue('Test prompt 1\n---\nTest prompt 2');
     (fs.statSync as jest.Mock).mockReturnValue({ isDirectory: () => false });
     const promptPaths = ['prompts.txt'];
+    (globSync as jest.Mock).mockImplementation((pathOrGlob) => [pathOrGlob]);
 
     const result = readPrompts(promptPaths);
 
@@ -47,6 +48,7 @@ describe('util', () => {
       .mockReturnValueOnce('Test prompt 2');
     (fs.statSync as jest.Mock).mockReturnValue({ isDirectory: () => false });
     const promptPaths = ['prompt1.txt', 'prompt2.txt'];
+    (globSync as jest.Mock).mockImplementation((pathOrGlob) => [pathOrGlob]);
 
     const result = readPrompts(promptPaths);
 
@@ -56,7 +58,7 @@ describe('util', () => {
 
   test('readPrompts with directory', () => {
     (fs.statSync as jest.Mock).mockReturnValue({ isDirectory: () => true });
-    (globSync as jest.Mock).mockReturnValue(['prompts']);
+    (globSync as jest.Mock).mockImplementation((pathOrGlob) => [pathOrGlob]);
     (fs.readdirSync as jest.Mock).mockReturnValue(['prompt1.txt', 'prompt2.txt']);
     (fs.readFileSync as jest.Mock).mockImplementation((filePath) => {
       if (filePath === path.join('prompts', 'prompt1.txt')) {
@@ -96,6 +98,28 @@ describe('util', () => {
 
     expect(fs.readFileSync).toHaveBeenCalledTimes(1);
     expect(result).toEqual([{ raw: 'some raw text', display: 'foo bar' }]);
+  });
+
+  test('readPrompts with JSONL file', () => {
+    const data = [
+      [
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "Who won the world series in {{ year }}?"}
+      ],
+      [
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "Who won the superbowl in {{ year }}?"}
+      ],
+    ];
+
+    (fs.readFileSync as jest.Mock).mockReturnValue(data.map(o => JSON.stringify(o)).join('\n'));
+    (fs.statSync as jest.Mock).mockReturnValue({ isDirectory: () => false });
+    const promptPaths = ['prompts.jsonl'];
+
+    const result = readPrompts(promptPaths);
+
+    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+    expect(result).toEqual([toPrompt(JSON.stringify(data[0])), toPrompt(JSON.stringify(data[1]))]);
   });
 
   test('readVars with CSV input', async () => {

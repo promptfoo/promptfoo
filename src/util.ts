@@ -96,11 +96,22 @@ export function readPrompts(
       promptContents.push(...fileContents.map((content) => ({ raw: content, display: content })));
     } else {
       const fileContent = fs.readFileSync(promptPath, 'utf-8');
-      let display;
+
+      let display: string | undefined;
       if (inputType === PromptInputType.NAMED) {
         display = (promptPathOrGlobs as Record<string, string>)[promptPath];
       } else {
         display = fileContent.length > 200 ? promptPath : fileContent;
+
+        const ext = path.parse(promptPath).ext;
+        if (ext === '.jsonl') {
+          // Special case for JSONL file
+          const jsonLines = fileContent.split(/\r?\n/).filter((line) => line.length > 0);
+          for (const json of jsonLines) {
+            promptContents.push({ raw: json, display: json });
+          }
+          continue;
+        }
       }
       promptContents.push({ raw: fileContent, display });
     }
