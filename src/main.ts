@@ -289,12 +289,13 @@ async function main() {
       logger.info(
         `Token usage: Total ${summary.stats.tokenUsage.total}, Prompt ${summary.stats.tokenUsage.prompt}, Completion ${summary.stats.tokenUsage.completion}, Cached ${summary.stats.tokenUsage.cached}`,
       );
-      logger.info('Done.');
 
       telemetry.record('command_used', {
         name: 'eval',
       });
       await telemetry.send();
+
+      logger.info('Done.');
 
       if (cmdObj.view) {
         init(parseInt(cmdObj.view, 10) || 15500);

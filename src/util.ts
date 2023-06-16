@@ -16,15 +16,7 @@ import { getDirectory } from './esm';
 
 import type { RequestInfo, RequestInit, Response } from 'node-fetch';
 
-import type {
-  Assertion,
-  CsvRow,
-  EvaluateSummary,
-  UnifiedConfig,
-  TestCase,
-  Prompt,
-  TestSuite,
-} from './types';
+import type { Assertion, CsvRow, EvaluateSummary, UnifiedConfig, TestCase, Prompt } from './types';
 import { assertionFromString } from './assertions';
 
 const PROMPT_DELIMITER = '---';
@@ -34,6 +26,46 @@ function parseJson(json: string): any | undefined {
     return JSON.parse(json);
   } catch (err) {
     return undefined;
+  }
+}
+
+let globalConfigCache: any = null;
+
+export function resetCliConfig(): void {
+  globalConfigCache = null;
+}
+
+export function readCliConfig(): any {
+  if (!globalConfigCache) {
+    const configDir = getConfigDirectoryPath();
+    const configFilePath = path.join(configDir, 'cliconfig.yaml');
+
+    if (fs.existsSync(configFilePath)) {
+      globalConfigCache = yaml.load(fs.readFileSync(configFilePath, 'utf-8'));
+    } else {
+      if (!fs.existsSync(configDir)) {
+        fs.mkdirSync(configDir, { recursive: true });
+      }
+      globalConfigCache = { hasRun: false };
+      fs.writeFileSync(configFilePath, yaml.dump(globalConfigCache));
+    }
+  }
+
+  return globalConfigCache;
+}
+
+export function maybeRecordFirstRun(): boolean {
+  // Return true if first run
+  try {
+    const config = readCliConfig();
+    if (!config.hasRun) {
+      config.hasRun = true;
+      fs.writeFileSync(path.join(getConfigDirectoryPath(), 'cliconfig.yaml'), yaml.dump(config));
+      return true;
+    }
+    return false;
+  } catch (err) {
+    return false;
   }
 }
 
