@@ -146,9 +146,7 @@
         "[\n  {\"role\": \"system\", \"content\": \"You are a helpful assistant.\"},\n  {\"role\": \"user\", \"content\": \"Who won the world series in {{ year }}?\"}\n]\n",
         "[\n  {\"role\": \"system\", \"content\": \"You are a sports historian.\"},\n  {\"role\": \"user\", \"content\": \"This team won the world series in {{ year }}:\"}\n]\n"
       ],
-      "vars": [
-        "year"
-      ]
+      "vars": ["year"]
     },
     "body": [
       {
@@ -156,36 +154,28 @@
           "[PASS] The New York Yankees won the World Series in 1950.",
           "[PASS] The New York Yankees won the World Series in 1950."
         ],
-        "vars": [
-          1950
-        ]
+        "vars": [1950]
       },
       {
         "outputs": [
           "[PASS] The Detroit Tigers won the World Series in 1984.",
           "[PASS] The Detroit Tigers won the World Series in 1984. They defeated the San Diego Padres in five games to win their fourth championship in franchise history. The Tigers were led by manager Sparky Anderson and a talented roster that included players such as Alan Trammell, Lou Whitaker, Jack Morris, and Kirk Gibson."
         ],
-        "vars": [
-          1984
-        ]
+        "vars": [1984]
       },
       {
         "outputs": [
           "[PASS] The Los Angeles Dodgers won the World Series in 2020.",
           "[PASS] The Los Angeles Dodgers won the World Series in 2020. It was their first championship since 1988."
         ],
-        "vars": [
-          2020
-        ]
+        "vars": [2020]
       },
       {
         "outputs": [
           "[PASS] I'm sorry, but as an AI language model, I cannot predict future events. However, the World Series in 2021 was won by the Atlanta Braves.",
           "[PASS] As an AI language model, I do not have knowledge of future events. However, I can tell you about the past World Series winners. The most recent World Series champions are the Los Angeles Dodgers, who won the 2020 World Series against the Tampa Bay Rays. The Dodgers have won a total of seven World Series championships in their history, with their first win coming in 1955."
         ],
-        "vars": [
-          2023
-        ]
+        "vars": [2023]
       }
     ]
   }
