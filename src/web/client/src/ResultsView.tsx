@@ -81,7 +81,10 @@ export default function ResultsView() {
         body: JSON.stringify({
           data: {
             version: 1,
-            table,
+            results: {
+              table,
+            },
+            config,
           },
         }),
       });
