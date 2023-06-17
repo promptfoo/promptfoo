@@ -103,16 +103,16 @@ describe('util', () => {
   test('readPrompts with JSONL file', () => {
     const data = [
       [
-        {"role": "system", "content": "You are a helpful assistant."},
-        {"role": "user", "content": "Who won the world series in {{ year }}?"}
+        { role: 'system', content: 'You are a helpful assistant.' },
+        { role: 'user', content: 'Who won the world series in {{ year }}?' },
       ],
       [
-        {"role": "system", "content": "You are a helpful assistant."},
-        {"role": "user", "content": "Who won the superbowl in {{ year }}?"}
+        { role: 'system', content: 'You are a helpful assistant.' },
+        { role: 'user', content: 'Who won the superbowl in {{ year }}?' },
       ],
     ];
 
-    (fs.readFileSync as jest.Mock).mockReturnValue(data.map(o => JSON.stringify(o)).join('\n'));
+    (fs.readFileSync as jest.Mock).mockReturnValue(data.map((o) => JSON.stringify(o)).join('\n'));
     (fs.statSync as jest.Mock).mockReturnValue({ isDirectory: () => false });
     const promptPaths = ['prompts.jsonl'];
 

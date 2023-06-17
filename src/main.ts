@@ -175,6 +175,7 @@ async function main() {
       'Do not read or write results to disk cache',
       config?.commandLineOptions?.cache,
     )
+    .option('--no-table', 'Do not output table in CLI', config?.commandLineOptions?.table)
     .option('--grader', 'Model that will grade outputs', config?.commandLineOptions?.grader)
     .option('--verbose', 'Show debug logs', config?.commandLineOptions?.verbose)
     .option('--view [port]', 'View in browser ui')
@@ -258,7 +259,7 @@ async function main() {
       if (cmdObj.output) {
         logger.info(chalk.yellow(`Writing output to ${cmdObj.output}`));
         writeOutput(cmdObj.output, summary);
-      } else if (getLogLevel() !== 'debug') {
+      } else if (cmdObj.table && getLogLevel() !== 'debug') {
         // Output table by default
         const table = generateTable(summary, parseInt(cmdObj.tableCellMaxLength || '', 10));
 

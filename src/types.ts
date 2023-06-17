@@ -17,6 +17,7 @@ export interface CommandLineOptions {
   tableCellMaxLength?: string;
   write?: boolean;
   cache?: boolean;
+  table?: boolean;
 
   generateSuggestions?: boolean;
   promptPrefix?: string;
