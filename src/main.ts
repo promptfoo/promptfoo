@@ -274,6 +274,9 @@ async function main() {
       logger.info(border);
       if (cmdObj.view || !cmdObj.write) {
         logger.info(`${chalk.green('✔')} Evaluation complete`);
+        if (cmdObj.view) {
+          writeLatestResults(summary, config);
+        }
       } else {
         writeLatestResults(summary, config);
         logger.info(
