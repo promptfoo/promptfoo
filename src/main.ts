@@ -12,6 +12,7 @@ import { evaluate } from './evaluator';
 import {
   maybeReadConfig,
   readConfig,
+  readLatestResults,
   readPrompts,
   readTests,
   writeLatestResults,
@@ -31,6 +32,7 @@ import type {
   UnifiedConfig,
 } from './types';
 import { generateTable } from './table';
+import { createShareableUrl } from './share';
 
 function createDummyFiles(directory: string | null) {
   if (directory) {
@@ -120,6 +122,24 @@ async function main() {
     });
 
   program
+    .command('share')
+    .description('Share your most recent result')
+    .action(async (cmdObj: { port: number } & Command) => {
+      telemetry.record('command_used', {
+        name: 'share',
+      });
+      await telemetry.send();
+
+      const latestResults = readLatestResults();
+      if (!latestResults) {
+        logger.error('Could not load results. Do you need to run `promptfoo eval` first?');
+        process.exit(1);
+      }
+      const url = await createShareableUrl(latestResults.results, latestResults.config);
+      logger.info(`View results: ${chalk.greenBright.bold(url)}`);
+    });
+
+  program
     .command('eval')
     .description('Evaluate prompts')
     .requiredOption('-p, --prompts <paths...>', 'Paths to prompt files (.txt)', config.prompts)
@@ -176,6 +196,7 @@ async function main() {
       config?.commandLineOptions?.cache,
     )
     .option('--no-table', 'Do not output table in CLI', config?.commandLineOptions?.table)
+    .option('--share', 'Create a shareable URL', config?.commandLineOptions?.share)
     .option('--grader', 'Model that will grade outputs', config?.commandLineOptions?.grader)
     .option('--verbose', 'Show debug logs', config?.commandLineOptions?.verbose)
     .option('--view [port]', 'View in browser ui')
@@ -272,18 +293,21 @@ async function main() {
 
       const border = '='.repeat(process.stdout.columns - 10);
       logger.info(border);
-      if (cmdObj.view || !cmdObj.write) {
+      if (!cmdObj.write) {
         logger.info(`${chalk.green('✔')} Evaluation complete`);
-        if (cmdObj.view) {
-          writeLatestResults(summary, config);
-        }
       } else {
         writeLatestResults(summary, config);
-        logger.info(
-          `${chalk.green('✔')} Evaluation complete. To use web viewer, run ${chalk.green(
-            'promptfoo view',
-          )}`,
-        );
+
+        if (cmdObj.view) {
+          logger.info(`${chalk.green('✔')} Evaluation complete. Launching web viewer...`);
+        } else if (cmdObj.share) {
+          const url = await createShareableUrl(summary, config);
+          logger.info(`${chalk.green('✔')} Evaluation complete: ${url}`);
+        } else {
+          logger.info(`${chalk.green('✔')} Evaluation complete.\n`);
+          logger.info(`Run ${chalk.greenBright('promptfoo view')} to use the local web viewer`);
+          logger.info(`Run ${chalk.greenBright('promptfoo share')} to create a shareable URL`);
+        }
       }
       logger.info(border);
       logger.info(chalk.green.bold(`Successes: ${summary.stats.successes}`));
