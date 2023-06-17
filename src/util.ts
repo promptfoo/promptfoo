@@ -12,20 +12,12 @@ import { parse as parseCsv } from 'csv-parse/sync';
 import { stringify } from 'csv-stringify/sync';
 
 import logger from './logger';
+import { assertionFromString } from './assertions';
 import { getDirectory } from './esm';
 
 import type { RequestInfo, RequestInit, Response } from 'node-fetch';
 
-import type {
-  Assertion,
-  CsvRow,
-  EvaluateSummary,
-  UnifiedConfig,
-  TestCase,
-  Prompt,
-  TestSuite,
-} from './types';
-import { assertionFromString } from './assertions';
+import type { Assertion, CsvRow, EvaluateSummary, UnifiedConfig, TestCase, Prompt } from './types';
 
 const PROMPT_DELIMITER = '---';
 
@@ -275,6 +267,18 @@ export function writeLatestResults(results: EvaluateSummary, config: Partial<Uni
     );
   } catch (err) {
     logger.error(`Failed to write latest results to ${latestResultsPath}:\n${err}`);
+  }
+}
+
+export function readLatestResults():
+  | { results: EvaluateSummary; config: Partial<UnifiedConfig> }
+  | undefined {
+  const latestResultsPath = getLatestResultsPath();
+  try {
+    const latestResults = JSON.parse(fs.readFileSync(latestResultsPath, 'utf-8'));
+    return latestResults;
+  } catch (err) {
+    logger.error(`Failed to read latest results from ${latestResultsPath}:\n${err}`);
   }
 }
 

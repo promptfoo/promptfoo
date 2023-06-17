@@ -18,6 +18,7 @@ export interface CommandLineOptions {
   write?: boolean;
   cache?: boolean;
   table?: boolean;
+  share?: boolean;
 
   generateSuggestions?: boolean;
   promptPrefix?: string;
