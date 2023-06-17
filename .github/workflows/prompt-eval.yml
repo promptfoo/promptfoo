@@ -2,6 +2,8 @@ name: Prompt Evaluation
 
 on:
   pull_request:
+    branches:
+      - github-action
     paths:
       - 'examples/github_action/prompt1.json'
 
