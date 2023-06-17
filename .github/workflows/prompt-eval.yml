@@ -1,0 +1,61 @@
+name: Prompt Evaluation
+
+on:
+  pull_request:
+    paths:
+      - 'examples/github_action/prompt1.json'
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout base ref (original)
+      uses: actions/checkout@v2
+      with:
+        ref: ${{ github.base_ref }}
+        path: base
+
+    - name: Checkout head ref (modified)
+      uses: actions/checkout@v2
+      with:
+        ref: ${{ github.head_ref }}
+        path: head
+
+    - name: Cache promptfoo data
+      id: cache
+      uses: actions/cache@v2
+      with:
+        path: ~/.cache/promptfoo
+        key: ${{ runner.os }}-promptfoo-${{ hashFiles('**/package-lock.json') }}
+        restore-keys: |
+          ${{ runner.os }}-promptfoo-
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v2
+      with:
+        node-version: 14
+
+    - name: Install dependencies
+      run: npm install promptfoo@0.13.0
+
+    - name: Run promptfoo evaluation
+      id: eval
+      env:
+        OPENAI_API_TOKEN: ${{ secrets.OPENAI_API_TOKEN }}
+        PROMPTFOO_CACHE_PATH: ~/.cache/promptfoo
+      run: |
+        echo "::set-output name=result::$(npx promptfoo eval --prompts base/examples/github_action/prompt1.json head/examples/github_action/prompt1.json)"
+
+    - name: Comment PR
+      uses: actions/github-script@v0.9.0
+      with:
+        github-token: ${{secrets.GITHUB_TOKEN}}
+        script: |
+          const output = `${{steps.eval.outputs.result}}`;
+          github.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: output
+          });
