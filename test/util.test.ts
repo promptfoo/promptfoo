@@ -61,9 +61,9 @@ describe('util', () => {
     (globSync as jest.Mock).mockImplementation((pathOrGlob) => [pathOrGlob]);
     (fs.readdirSync as jest.Mock).mockReturnValue(['prompt1.txt', 'prompt2.txt']);
     (fs.readFileSync as jest.Mock).mockImplementation((filePath) => {
-      if (filePath === path.join('prompts', 'prompt1.txt')) {
+      if (filePath.endsWith(path.join('prompts', 'prompt1.txt'))) {
         return 'Test prompt 1';
-      } else if (filePath === path.join('prompts', 'prompt2.txt')) {
+      } else if (filePath.endsWith(path.join('prompts', 'prompt2.txt'))) {
         return 'Test prompt 2';
       }
     });

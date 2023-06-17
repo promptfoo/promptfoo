@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
-import { join as pathJoin } from 'path';
+import { join as pathJoin, dirname } from 'path';
 
 import chalk from 'chalk';
 import { Command } from 'commander';
@@ -142,7 +142,7 @@ async function main() {
   program
     .command('eval')
     .description('Evaluate prompts')
-    .requiredOption('-p, --prompts <paths...>', 'Paths to prompt files (.txt)', config.prompts)
+    .option('-p, --prompts <paths...>', 'Paths to prompt files (.txt)', config.prompts)
     .option(
       '-r, --providers <name or path...>',
       'One of: openai:chat, openai:completion, openai:<model name>, or path to custom API caller module',
@@ -234,9 +234,10 @@ async function main() {
       }
 
       // Parse prompts, providers, and tests
-      const parsedPrompts = readPrompts(config.prompts);
+      const basePath = configPath ? dirname(configPath) : '';
+      const parsedPrompts = readPrompts(config.prompts, basePath);
       const parsedProviders = await loadApiProviders(config.providers);
-      const parsedTests: TestCase[] = await readTests(config.tests);
+      const parsedTests: TestCase[] = await readTests(config.tests, basePath);
 
       if (parsedPrompts.length === 0) {
         logger.error(chalk.red('No prompts found'));

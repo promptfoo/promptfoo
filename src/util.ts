@@ -62,36 +62,53 @@ enum PromptInputType {
 
 export function readPrompts(
   promptPathOrGlobs: string | string[] | Record<string, string>,
+  basePath: string = '',
 ): Prompt[] {
   let promptPaths: string[] = [];
   let promptContents: Prompt[] = [];
 
   let inputType: PromptInputType | undefined;
+  let resolvedPath: string | undefined;
+  const resolvedPathToDisplay = new Map<string, string>();
   if (typeof promptPathOrGlobs === 'string') {
-    promptPaths = [promptPathOrGlobs];
+    resolvedPath = path.resolve(basePath, promptPathOrGlobs);
+    promptPaths = [resolvedPath];
+    resolvedPathToDisplay.set(resolvedPath, promptPathOrGlobs);
     inputType = PromptInputType.STRING;
   } else if (Array.isArray(promptPathOrGlobs)) {
-    promptPaths = promptPathOrGlobs.flatMap((pathOrGlob) => globSync(pathOrGlob));
+    promptPaths = promptPathOrGlobs.flatMap((pathOrGlob) => {
+      resolvedPath = path.resolve(basePath, pathOrGlob);
+      resolvedPathToDisplay.set(resolvedPath, pathOrGlob);
+      return globSync(resolvedPath);
+    });
     inputType = PromptInputType.ARRAY;
   } else if (typeof promptPathOrGlobs === 'object') {
-    promptPaths = Object.keys(promptPathOrGlobs);
+    promptPaths = Object.keys(promptPathOrGlobs).map((key) => {
+      resolvedPath = path.resolve(basePath, key);
+      resolvedPathToDisplay.set(resolvedPath, promptPathOrGlobs[key]);
+      return resolvedPath;
+    });
     inputType = PromptInputType.NAMED;
   }
 
   for (const promptPath of promptPaths) {
     const stat = fs.statSync(promptPath);
     if (stat.isDirectory()) {
+      // FIXME(ian): Make directory handling share logic with file handling.
       const filesInDirectory = fs.readdirSync(promptPath);
-      const fileContents = filesInDirectory.map((fileName) =>
-        fs.readFileSync(path.join(promptPath, fileName), 'utf-8'),
-      );
+      const fileContents = filesInDirectory.map((fileName) => {
+        const joinedPath = path.join(promptPath, fileName);
+        resolvedPath = path.resolve(basePath, joinedPath);
+        resolvedPathToDisplay.set(resolvedPath, joinedPath);
+        return fs.readFileSync(resolvedPath, 'utf-8');
+      });
       promptContents.push(...fileContents.map((content) => ({ raw: content, display: content })));
     } else {
       const fileContent = fs.readFileSync(promptPath, 'utf-8');
 
       let display: string | undefined;
       if (inputType === PromptInputType.NAMED) {
-        display = (promptPathOrGlobs as Record<string, string>)[promptPath];
+        display = resolvedPathToDisplay.get(promptPath) || promptPath;
       } else {
         display = fileContent.length > 200 ? promptPath : fileContent;
 
@@ -131,7 +148,8 @@ export async function fetchCsvFromGoogleSheet(url: string): Promise<string> {
   return csvData;
 }
 
-export async function readVars(varsPath: string): Promise<CsvRow[]> {
+export async function readVars(varsPath: string, basePath: string = ''): Promise<CsvRow[]> {
+  const resolvedVarsPath = path.resolve(basePath, varsPath);
   const fileExtension = parsePath(varsPath).ext.slice(1);
   let rows: CsvRow[] = [];
 
@@ -140,25 +158,28 @@ export async function readVars(varsPath: string): Promise<CsvRow[]> {
       const csvData = await fetchCsvFromGoogleSheet(varsPath);
       rows = parseCsv(csvData, { columns: true });
     } else {
-      rows = parseCsv(fs.readFileSync(varsPath, 'utf-8'), { columns: true });
+      rows = parseCsv(fs.readFileSync(resolvedVarsPath, 'utf-8'), { columns: true });
     }
   } else if (fileExtension === 'json') {
-    rows = parseJson(fs.readFileSync(varsPath, 'utf-8'));
+    rows = parseJson(fs.readFileSync(resolvedVarsPath, 'utf-8'));
   } else if (fileExtension === 'yaml' || fileExtension === 'yml') {
-    rows = yaml.load(fs.readFileSync(varsPath, 'utf-8')) as unknown as any;
+    rows = yaml.load(fs.readFileSync(resolvedVarsPath, 'utf-8')) as unknown as any;
   }
 
   return rows;
 }
 
-export async function readTests(tests: string | TestCase[] | undefined): Promise<TestCase[]> {
+export async function readTests(
+  tests: string | TestCase[] | undefined,
+  basePath: string = '',
+): Promise<TestCase[]> {
   if (!tests) {
     return [];
   }
 
   if (typeof tests === 'string') {
     // It's a filepath, load from CSV
-    const vars = await readVars(tests);
+    const vars = await readVars(tests, basePath);
     return vars.map((row, idx) => {
       const test = testCaseFromCsvRow(row);
       test.description = `Row #${idx + 1}`;
