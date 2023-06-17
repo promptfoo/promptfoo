@@ -192,14 +192,12 @@ async function main() {
       const configPath = cmdObj.config;
       if (configPath) {
         config = await readConfig(configPath);
-      } else {
-        config = {
-          prompts: cmdObj.prompts || config.prompts,
-          providers: cmdObj.providers || config.providers,
-          tests: cmdObj.tests || cmdObj.vars || config.tests,
-          defaultTest: config.defaultTest,
-        };
       }
+      config = {
+        prompts: cmdObj.prompts || config.prompts,
+        providers: cmdObj.providers || config.providers,
+        tests: cmdObj.tests || cmdObj.vars || config.tests,
+      };
 
       // Validation
       if (!config.prompts || config.prompts.length === 0) {
