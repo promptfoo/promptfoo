@@ -189,7 +189,11 @@ describe('util', () => {
       results,
       table,
     };
-    writeOutput(outputPath, summary);
+    const config = {
+      description: 'test',
+    };
+    const shareableUrl = null;
+    writeOutput(outputPath, summary, config, shareableUrl);
 
     expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
   });
@@ -231,7 +235,11 @@ describe('util', () => {
       results,
       table,
     };
-    writeOutput(outputPath, summary);
+    const config = {
+      description: 'test',
+    };
+    const shareableUrl = null;
+    writeOutput(outputPath, summary, config, shareableUrl);
 
     expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
   });
@@ -273,7 +281,11 @@ describe('util', () => {
       results,
       table,
     };
-    writeOutput(outputPath, summary);
+    const config = {
+      description: 'test',
+    };
+    const shareableUrl = null;
+    writeOutput(outputPath, summary, config, shareableUrl);
 
     expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
   });
