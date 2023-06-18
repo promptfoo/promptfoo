@@ -278,9 +278,11 @@ async function main() {
 
       const summary = await evaluate(testSuite, options);
 
+      const shareableUrl = cmdObj.share ? await createShareableUrl(summary, config) : null;
+
       if (cmdObj.output) {
         logger.info(chalk.yellow(`Writing output to ${cmdObj.output}`));
-        writeOutput(cmdObj.output, summary);
+        writeOutput(cmdObj.output, summary, config, shareableUrl);
       } else if (cmdObj.table && getLogLevel() !== 'debug') {
         // Output table by default
         const table = generateTable(summary, parseInt(cmdObj.tableCellMaxLength || '', 10));
@@ -301,9 +303,8 @@ async function main() {
 
         if (cmdObj.view) {
           logger.info(`${chalk.green('✔')} Evaluation complete. Launching web viewer...`);
-        } else if (cmdObj.share) {
-          const url = await createShareableUrl(summary, config);
-          logger.info(`${chalk.green('✔')} Evaluation complete: ${url}`);
+        } else if (shareableUrl) {
+          logger.info(`${chalk.green('✔')} Evaluation complete: ${shareableUrl}`);
         } else {
           logger.info(`${chalk.green('✔')} Evaluation complete.\n`);
           logger.info(`Run ${chalk.greenBright('promptfoo view')} to use the local web viewer`);

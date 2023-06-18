@@ -203,28 +203,33 @@ export async function readTests(
   return tests;
 }
 
-export function writeOutput(outputPath: string, summary: EvaluateSummary): void {
+export function writeOutput(
+  outputPath: string,
+  results: EvaluateSummary,
+  config: Partial<UnifiedConfig>,
+  shareableUrl: string | null,
+): void {
   const outputExtension = outputPath.split('.').pop()?.toLowerCase();
 
   if (outputExtension === 'csv' || outputExtension === 'txt') {
     const csvOutput = stringify([
-      [...summary.table.head.prompts, ...summary.table.head.vars],
-      ...summary.table.body.map((row) => [...row.outputs, ...row.vars]),
+      [...results.table.head.prompts, ...results.table.head.vars],
+      ...results.table.body.map((row) => [...row.outputs, ...row.vars]),
     ]);
     fs.writeFileSync(outputPath, csvOutput);
   } else if (outputExtension === 'json') {
-    fs.writeFileSync(outputPath, JSON.stringify(summary, null, 2));
+    fs.writeFileSync(outputPath, JSON.stringify({ results, config, shareableUrl }, null, 2));
   } else if (outputExtension === 'yaml' || outputExtension === 'yml') {
-    fs.writeFileSync(outputPath, yaml.dump(summary));
+    fs.writeFileSync(outputPath, yaml.dump({ results, config, shareableUrl }));
   } else if (outputExtension === 'html') {
     const template = fs.readFileSync(`${getDirectory()}/tableOutput.html`, 'utf-8');
     const table = [
-      [...summary.table.head.prompts, ...summary.table.head.vars],
-      ...summary.table.body.map((row) => [...row.outputs, ...row.vars]),
+      [...results.table.head.prompts, ...results.table.head.vars],
+      ...results.table.body.map((row) => [...row.outputs, ...row.vars]),
     ];
     const htmlOutput = nunjucks.renderString(template, {
       table,
-      results: summary.results,
+      results: results.results,
     });
     fs.writeFileSync(outputPath, htmlOutput);
   } else {
