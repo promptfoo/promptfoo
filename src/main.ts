@@ -195,6 +195,7 @@ async function main() {
       'Do not read or write results to disk cache',
       config?.commandLineOptions?.cache,
     )
+    .option('--no-progress-bar', 'Do not show progress bar')
     .option('--no-table', 'Do not output table in CLI', config?.commandLineOptions?.table)
     .option('--share', 'Create a shareable URL', config?.commandLineOptions?.share)
     .option('--grader', 'Model that will grade outputs', config?.commandLineOptions?.grader)
@@ -263,7 +264,10 @@ async function main() {
       };
 
       const options: EvaluateOptions = {
-        showProgressBar: getLogLevel() !== 'debug',
+        showProgressBar:
+          typeof cmdObj.progressBar === 'undefined'
+            ? getLogLevel() !== 'debug'
+            : cmdObj.progressBar,
         maxConcurrency: !isNaN(maxConcurrency) && maxConcurrency > 0 ? maxConcurrency : undefined,
         ...evaluateOptions,
       };

@@ -19,6 +19,7 @@ export interface CommandLineOptions {
   cache?: boolean;
   table?: boolean;
   share?: boolean;
+  progressBar?: boolean;
 
   generateSuggestions?: boolean;
   promptPrefix?: string;
