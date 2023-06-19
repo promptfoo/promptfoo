@@ -21,12 +21,13 @@ import type { EvalRow, FilterMode } from './types.js';
 import './ResultsTable.css';
 
 interface TruncatedTextProps {
-  text: string;
+  text: string | number;
   maxLength: number;
 }
 
-function TruncatedText({ text, maxLength }: TruncatedTextProps) {
+function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
   const [isTruncated, setIsTruncated] = React.useState<boolean>(true);
+  const text = String(rawText);
 
   const toggleTruncate = () => {
     setIsTruncated(!isTruncated);
@@ -59,14 +60,15 @@ function TruncatedText({ text, maxLength }: TruncatedTextProps) {
 }
 
 interface PromptOutputProps {
-  text: string;
+  text: string | number;
   maxTextLength: number;
   rowIndex: number;
   promptIndex: number;
   onRating: (rowIndex: number, promptIndex: number, isPass: boolean) => void;
 }
 
-function PromptOutput({ text, maxTextLength, rowIndex, promptIndex, onRating }: PromptOutputProps) {
+function PromptOutput({ text: rawText, maxTextLength, rowIndex, promptIndex, onRating }: PromptOutputProps) {
+  let text = String(rawText);
   const isPass = text.startsWith('[PASS] ');
   const isFail = text.startsWith('[FAIL] ');
   let chunks: string[] = [];
