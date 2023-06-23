@@ -291,5 +291,5 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 }
 
 export const DefaultEmbeddingProvider = new OpenAiEmbeddingProvider('text-embedding-ada-002');
-export const DefaultGradingProvider = new OpenAiChatCompletionProvider('gpt-4');
+export const DefaultGradingProvider = new OpenAiChatCompletionProvider('gpt-4-0613');
 export const DefaultSuggestionsProvider = new OpenAiChatCompletionProvider('gpt-4');
