@@ -323,11 +323,12 @@ class Evaluator {
         if (progressbar) {
           progressbar.increment({
             provider: options.provider.id(),
-            prompt: options.prompt.raw.slice(0, 10),
+            prompt: options.prompt.raw.slice(0, 10).replace(/\n/g, ' '),
             vars: Object.entries(options.test.vars || {})
               .map(([k, v]) => `${k}=${v}`)
               .join(' ')
-              .slice(0, 10),
+              .slice(0, 10)
+              .replace(/\n/g, ' '),
           });
         }
 
