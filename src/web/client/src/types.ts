@@ -3,8 +3,14 @@ export type EvalHead = {
   vars: string[];
 };
 
+export type EvalRowOutput = {
+  pass: boolean;
+  score: number;
+  text: string;
+};
+
 export type EvalRow = {
-  outputs: string[]; // var inputs
+  outputs: EvalRowOutput[];
   vars: string[]; // model outputs
 };
 

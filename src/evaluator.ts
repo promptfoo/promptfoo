@@ -109,6 +109,7 @@ class Evaluator {
         ...setup,
         response,
         success: false,
+        score: 0,
       };
       if (response.error) {
         ret.error = response.error;
@@ -118,6 +119,7 @@ class Evaluator {
           ret.error = checkResult.reason;
         }
         ret.success = checkResult.pass;
+        ret.score = checkResult.score;
         if (checkResult.tokensUsed) {
           this.stats.tokenUsage.total += checkResult.tokensUsed.total;
           this.stats.tokenUsage.prompt += checkResult.tokensUsed.prompt;
@@ -125,6 +127,7 @@ class Evaluator {
         }
       } else {
         ret.success = false;
+        ret.score = 0;
         ret.error = 'No output';
       }
 
@@ -148,6 +151,7 @@ class Evaluator {
         ...setup,
         error: String(err) + '\n\n' + (err as Error).stack,
         success: false,
+        score: 0,
       };
     }
   }
@@ -340,12 +344,12 @@ class Evaluator {
         let resultText: string | undefined;
         if (isTest) {
           if (row.success) {
-            resultText = `[PASS] ${row.response?.output || row.error || ''}`;
+            resultText = `${row.response?.output || row.error || ''}`;
           } else {
-            resultText = `[FAIL] ${row.error}\n---\n${row.response?.output || row.error || ''}`;
+            resultText = `${row.error}\n---\n${row.response?.output || row.error || ''}`;
           }
         } else if (row.error) {
-          resultText = `[FAIL] ${row.error}`;
+          resultText = `${row.error}`;
         } else {
           resultText = row.response?.output || row.error || '';
         }
@@ -359,7 +363,11 @@ class Evaluator {
             vars: table.head.vars.map((varName) => options.test.vars?.[varName] || '').flat(),
           };
         }
-        table.body[rowIndex].outputs[colIndex] = resultText;
+        table.body[rowIndex].outputs[colIndex] = {
+          pass: row.success,
+          score: row.score,
+          text: resultText,
+        };
       },
     );
 
@@ -369,7 +377,7 @@ class Evaluator {
 
     telemetry.record('eval_ran', {});
 
-    return { version: 1, results, stats: this.stats, table };
+    return { version: 2, results, stats: this.stats, table };
   }
 }
 

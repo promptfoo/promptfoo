@@ -118,6 +118,10 @@ td .status {
   font-weight: bold;
 }
 
+td .score {
+  font-weight: normal;
+}
+
 td .pass {
   color: var(--pass-color);
 }

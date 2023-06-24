@@ -17,7 +17,15 @@ import { getDirectory } from './esm';
 
 import type { RequestInfo, RequestInit, Response } from 'node-fetch';
 
-import type { Assertion, CsvRow, EvaluateSummary, UnifiedConfig, TestCase, Prompt } from './types';
+import type {
+  Assertion,
+  CsvRow,
+  EvaluateSummary,
+  EvaluateTableOutput,
+  UnifiedConfig,
+  TestCase,
+  Prompt,
+} from './types';
 
 const PROMPT_DELIMITER = '---';
 
@@ -211,10 +219,13 @@ export function writeOutput(
 ): void {
   const outputExtension = outputPath.split('.').pop()?.toLowerCase();
 
+  const outputToSimpleString = (output: EvaluateTableOutput) =>
+    `${output.pass ? '[PASS]' : '[FAIL]'} (${output.score.toFixed(2)}) ${output.text}`;
+
   if (outputExtension === 'csv' || outputExtension === 'txt') {
     const csvOutput = stringify([
       [...results.table.head.prompts, ...results.table.head.vars],
-      ...results.table.body.map((row) => [...row.outputs, ...row.vars]),
+      ...results.table.body.map((row) => [...row.outputs.map(outputToSimpleString), ...row.vars]),
     ]);
     fs.writeFileSync(outputPath, csvOutput);
   } else if (outputExtension === 'json') {
@@ -225,7 +236,7 @@ export function writeOutput(
     const template = fs.readFileSync(`${getDirectory()}/tableOutput.html`, 'utf-8');
     const table = [
       [...results.table.head.prompts, ...results.table.head.vars],
-      ...results.table.body.map((row) => [...row.outputs, ...row.vars]),
+      ...results.table.body.map((row) => [...row.outputs.map(outputToSimpleString), ...row.vars]),
     ];
     const htmlOutput = nunjucks.renderString(template, {
       table,
