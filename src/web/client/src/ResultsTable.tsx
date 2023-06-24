@@ -16,9 +16,17 @@ import { useStore } from './store.js';
 
 import type { CellContext, VisibilityState } from '@tanstack/table-core';
 
-import type { EvalRow, FilterMode } from './types.js';
+import type { EvalRow, EvalRowOutput, FilterMode } from './types.js';
 
 import './ResultsTable.css';
+
+function scoreToString(score: number) {
+  if (score === 0 || score === 1) {
+    // Don't show boolean scores.
+    return '';
+  }
+  return `(${score.toFixed(2)})`;
+}
 
 interface TruncatedTextProps {
   text: string | number;
@@ -60,30 +68,26 @@ function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
 }
 
 interface PromptOutputProps {
-  text: string | number;
+  output: EvalRowOutput;
   maxTextLength: number;
   rowIndex: number;
   promptIndex: number;
   onRating: (rowIndex: number, promptIndex: number, isPass: boolean) => void;
 }
 
-function PromptOutput({ text: rawText, maxTextLength, rowIndex, promptIndex, onRating }: PromptOutputProps) {
-  let text = String(rawText);
-  const isPass = text.startsWith('[PASS] ');
-  const isFail = text.startsWith('[FAIL] ');
+function PromptOutput({
+  output,
+  maxTextLength,
+  rowIndex,
+  promptIndex,
+  onRating,
+}: PromptOutputProps) {
+  let text = String(output.text);
   let chunks: string[] = [];
-  if (isPass) {
-    text = text.substring(7);
-  } else if (isFail) {
-    if (text.includes('---')) {
-      chunks = text.split('---');
-      text = chunks.slice(1).join('---');
-    } else {
-      chunks = ['[FAIL]'];
-      if (text.startsWith('[FAIL] ')) {
-        text = text.substring(7);
-      }
-    }
+  if (!output.pass && text.includes('---')) {
+    // TODO(ian): Plumb through failure message instead of parsing it out.
+    chunks = text.split('---');
+    text = chunks.slice(1).join('---');
   }
 
   const handleClick = (isPass: boolean) => {
@@ -93,8 +97,16 @@ function PromptOutput({ text: rawText, maxTextLength, rowIndex, promptIndex, onR
   return (
     <>
       <div className="cell">
-        {isPass && <div className="status pass">[PASS]</div>}
-        {isFail && <div className="status fail">{chunks[0]}</div>}{' '}
+        {output.pass && (
+          <div className="status pass">
+            PASS <span className="score">{scoreToString(output.score)}</span>
+          </div>
+        )}
+        {!output.pass && (
+          <div className="status fail">
+            [FAIL<span className="score">{scoreToString(output.score)}</span>] {chunks[0]}
+          </div>
+        )}{' '}
         <TruncatedText text={text} maxLength={maxTextLength} />
       </div>
       <div className="cell-rating">
@@ -138,10 +150,9 @@ export default function ResultsTable({
   const { table, setTable } = useStore();
   invariant(table, 'Table should be defined');
   const { head, body } = table;
-  // TODO(ian): Correctly plumb through the results instead of parsing the string.
   const numGood = head.prompts.map((_, idx) =>
     body.reduce((acc, row) => {
-      return acc + (row.outputs[idx].startsWith('[PASS]') ? 1 : 0);
+      return acc + (row.outputs[idx].pass ? 1 : 0);
     }, 0),
   );
 
@@ -149,10 +160,8 @@ export default function ResultsTable({
     const updatedData = [...body];
     const updatedRow = { ...updatedData[rowIndex] };
     const updatedOutputs = [...updatedRow.outputs];
-    const updatedOutput = isPass
-      ? `[PASS] ${updatedOutputs[promptIndex].replace(/^\[(PASS|FAIL)\] /, '')}`
-      : `[FAIL] ${updatedOutputs[promptIndex].replace(/^\[(PASS|FAIL)\] /, '')}`;
-    updatedOutputs[promptIndex] = updatedOutput;
+    updatedOutputs[promptIndex].pass = isPass;
+    updatedOutputs[promptIndex].score = isPass ? 1 : 0;
     updatedRow.outputs = updatedOutputs;
     updatedData[rowIndex] = updatedRow;
     setTable({
@@ -231,7 +240,7 @@ export default function ResultsTable({
           },
           cell: (info: CellContext<EvalRow, string>) => (
             <PromptOutput
-              text={info.getValue()}
+              output={info.getValue() as unknown as EvalRowOutput}
               maxTextLength={maxTextLength}
               rowIndex={info.row.index}
               promptIndex={idx}
@@ -251,7 +260,7 @@ export default function ResultsTable({
       return body.filter((row) => {
         return row.outputs.some((output, idx) => {
           const columnId = `Prompt ${idx + 1}`;
-          const isFail = output.startsWith('[FAIL] ');
+          const isFail = !output.pass;
           return failureFilter[columnId] && isFail;
         });
       });

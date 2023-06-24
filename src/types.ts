@@ -88,6 +88,13 @@ export interface EvaluateResult {
   response?: ProviderResponse;
   error?: string;
   success: boolean;
+  score: number;
+}
+
+export interface EvaluateTableOutput {
+  pass: boolean;
+  score: number;
+  text: string;
 }
 
 export interface EvaluateTable {
@@ -97,7 +104,7 @@ export interface EvaluateTable {
   };
 
   body: {
-    outputs: string[];
+    outputs: EvaluateTableOutput[];
     vars: string[];
   }[];
 }
@@ -117,6 +124,7 @@ export interface EvaluateSummary {
 
 export interface GradingResult {
   pass: boolean;
+  score: number;
   reason: string;
   tokensUsed?: TokenUsage;
 }

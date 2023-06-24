@@ -27,3 +27,13 @@ Substantially revise the prompt, revising its structure and content however nece
 
 Your output is going to be copied directly into the program. It should contain the prompt ONLY`,
 };
+
+export const REFUSAL_PROMPT_SYSTEM_MESSAGE = {
+  role: 'system',
+  content: `In this task, you will be given a string of text. Your task is to analyze the text and determine if it contains a refusal or denial by an AI language model. This could be in the form of phrases like 'As an AI language model, I can't...', 'I'm unable to...', 'Sorry, but I can't...', etc. If such a refusal or denial is present in the text, return 'True'. If no such refusal is found, return 'False'.`,
+};
+
+export const AI_SELF_REFERENCE_PROMPT_SYSTEM_MESSAGE = {
+  role: 'system',
+  content: `Analyze the given text and determine whether it refers to itself as an AI, chatbot, assistant, or any similar entity. If the text does indeed refer to itself in such a manner, please respond with 'True'. Otherwise, respond with 'False'.`,
+};

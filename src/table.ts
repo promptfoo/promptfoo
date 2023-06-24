@@ -19,21 +19,23 @@ export function generateTable(summary: EvaluateSummary, tableCellMaxLength = 250
   for (const row of summary.table.body.slice(0, maxRows)) {
     table.push([
       ...row.vars,
-      ...row.outputs.map((col) => {
-        if (col.length > tableCellMaxLength) {
-          col = col.slice(0, tableCellMaxLength) + '...';
+      ...row.outputs.map(({ pass, score, text }) => {
+        if (text.length > tableCellMaxLength) {
+          text = text.slice(0, tableCellMaxLength) + '...';
         }
-        if (col.startsWith('[PASS]')) {
-          // color '[PASS]' green
-          return chalk.green.bold(col.slice(0, 6)) + col.slice(6);
-        } else if (col.startsWith('[FAIL]')) {
+        if (pass) {
+          return chalk.green.bold('[PASS] ') + text;
+        } else if (!pass) {
           // color everything red up until '---'
-          return col
-            .split('---')
-            .map((c, idx) => (idx === 0 ? chalk.red.bold(c) : c))
-            .join('---');
+          return (
+            chalk.red.bold('[FAIL] ') +
+            text
+              .split('---')
+              .map((c, idx) => (idx === 0 ? chalk.red.bold(c) : c))
+              .join('---')
+          );
         }
-        return col;
+        return text;
       }),
     ]);
   }
