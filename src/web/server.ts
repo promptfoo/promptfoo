@@ -44,7 +44,7 @@ export function init(port = 15500) {
       latestJsonPath,
       debounce((event: string) => {
         if (event === 'change') {
-          socket.emit('update', readLatestJson);
+          socket.emit('update', readLatestJson());
         }
       }, 250),
     );
