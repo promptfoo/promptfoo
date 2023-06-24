@@ -20,6 +20,25 @@ import type { EvalRow, EvalRowOutput, FilterMode } from './types.js';
 
 import './ResultsTable.css';
 
+function formatRowOutput(output: EvalRowOutput | string) {
+  if (typeof output === 'string') {
+    // Backwards compatibility for 0.15.0 breaking change. Remove eventually.
+    const pass = output.startsWith('[PASS]');
+    let text = output;
+    if (output.startsWith('[PASS]')) {
+      text = text.slice('[PASS]'.length);
+    } else if (output.startsWith('[FAIL]')) {
+      text = text.slice('[FAIL]'.length);
+    }
+    return {
+      text,
+      pass,
+      score: pass ? 1 : 0,
+    };
+  }
+  return output;
+}
+
 function scoreToString(score: number) {
   if (score === 0 || score === 1) {
     // Don't show boolean scores.
@@ -201,7 +220,7 @@ export default function ResultsTable({
       id: 'prompts',
       header: () => <span>Outputs</span>,
       columns: head.prompts.map((prompt, idx) =>
-        columnHelper.accessor((row: EvalRow) => row.outputs[idx], {
+        columnHelper.accessor((row: EvalRow) => formatRowOutput(row.outputs[idx]), {
           id: `Prompt ${idx + 1}`,
           header: () => {
             const pct = ((numGood[idx] / body.length) * 100.0).toFixed(2);
