@@ -32,7 +32,7 @@ function handleRougeScore(
 
   return {
     pass,
-    score,
+    score: inverted ? 1 - score : score,
     reason: pass
       ? `${baseType.toUpperCase()} score ${score} is greater than or equal to threshold ${
           assertion.threshold || 0.75
@@ -295,7 +295,14 @@ ${assertion.value}`,
 
       const jsonResponse = await response.json();
       pass = jsonResponse.pass !== inverse;
-      score = jsonResponse.score ?? (pass ? 1 : 0);
+      score =
+        typeof jsonResponse.score === 'undefined'
+          ? pass
+            ? 1
+            : 0
+          : inverse
+          ? 1 - jsonResponse.score
+          : jsonResponse.score;
     } catch (err) {
       return {
         pass: false,
