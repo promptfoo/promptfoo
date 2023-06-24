@@ -55,9 +55,13 @@ export async function runAssertions(test: AtomicTestCase, output: string): Promi
   }
 
   let totalScore = 0;
+  let totalWeight = 0;
   for (const assertion of test.assert) {
+    const weight = assertion.weight || 1;
+    totalWeight += weight;
+
     const result = await runAssertion(assertion, test, output);
-    totalScore += result.score;
+    totalScore += result.score * weight;
     if (result.tokensUsed) {
       tokensUsed.total += result.tokensUsed.total;
       tokensUsed.prompt += result.tokensUsed.prompt;
@@ -72,7 +76,7 @@ export async function runAssertions(test: AtomicTestCase, output: string): Promi
 
   return {
     pass: true,
-    score: totalScore / test.assert.length,
+    score: totalScore / totalWeight,
     reason: 'All assertions passed',
     tokensUsed,
   };

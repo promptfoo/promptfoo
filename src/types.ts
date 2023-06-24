@@ -161,6 +161,9 @@ export interface Assertion {
   // The threshold value, only applicable for similarity (cosine distance)
   threshold?: number;
 
+  // The weight of this assertion compared to other assertions in the test case. Defaults to 1.
+  weight?: number;
+
   // Some assertions (similarity, llm-rubric) require an LLM provider
   provider?: ApiProvider;
 }
