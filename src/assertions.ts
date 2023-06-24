@@ -412,7 +412,7 @@ export async function matchesLlmRubric(
   }
 
   const prompt = nunjucks.renderString(options.rubricPrompt || DEFAULT_GRADING_PROMPT, {
-    content: output,
+    output,
     rubric: expected,
   });
 
