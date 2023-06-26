@@ -248,34 +248,47 @@ export function writeOutput(
   }
 }
 
-export function fetchWithTimeout(
+export async function fetchWithTimeout(
   url: RequestInfo,
   options: RequestInit = {},
   timeout: number,
 ): Promise<Response> {
-  return new Promise(async (resolve, reject) => {
-    const controller = new AbortController();
-    const { signal } = controller;
-    options.signal = signal;
+  const controller = new AbortController();
+  const { signal } = controller;
+  options.signal = signal;
 
-    const timeoutId = setTimeout(() => {
-      controller.abort();
-      reject(new Error(`Request timed out after ${timeout} ms`));
-    }, timeout);
+  const timeoutId = setTimeout(() => {
+    controller.abort();
+    throw new Error(`Request timed out after ${timeout} ms`);
+  }, timeout);
 
+  try {
+    const response = await fetch(url, options);
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    throw error;
+  }
+}
+
+export async function fetchWithRetries(
+  url: RequestInfo,
+  options: RequestInit = {},
+  timeout: number,
+  retries: number = 3,
+): Promise<Response> {
+  let lastError;
+  for (let i = 0; i < retries; i++) {
     try {
-      const response = await fetch(url, options);
-      clearTimeout(timeoutId);
-      resolve(response);
+      return await fetchWithTimeout(url, options, timeout);
     } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
-        // Fetch request was aborted, no need to reject again
-      } else {
-        clearTimeout(timeoutId);
-        reject(error);
-      }
+      lastError = error;
+      const waitTime = Math.pow(2, i) * 1000; // Exponential backoff
+      await new Promise((resolve) => setTimeout(resolve, waitTime));
     }
-  });
+  }
+  throw new Error(`Request failed after ${retries} retries: ${(lastError as Error).message}`);
 }
 
 export function getConfigDirectoryPath(): string {

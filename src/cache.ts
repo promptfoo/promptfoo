@@ -5,7 +5,7 @@ import cacheManager from 'cache-manager';
 import fsStore from 'cache-manager-fs-hash';
 
 import logger from './logger';
-import { getConfigDirectoryPath, fetchWithTimeout } from './util';
+import { getConfigDirectoryPath, fetchWithRetries } from './util';
 
 import type { Cache } from 'cache-manager';
 import type { RequestInfo, RequestInit } from 'node-fetch';
@@ -48,7 +48,7 @@ export async function fetchJsonWithCache(
   timeout: number,
 ): Promise<{ data: any; cached: boolean }> {
   if (!enabled) {
-    const resp = await fetchWithTimeout(url, options, timeout);
+    const resp = await fetchWithRetries(url, options, timeout);
     return {
       cached: false,
       data: await resp.json(),
@@ -73,7 +73,7 @@ export async function fetchJsonWithCache(
   }
 
   // Fetch the actual data and store it in the cache
-  const response = await fetchWithTimeout(url, options, timeout);
+  const response = await fetchWithRetries(url, options, timeout);
   try {
     const data = await response.json();
     if (response.ok) {

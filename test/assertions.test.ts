@@ -423,7 +423,7 @@ describe('runAssertion', () => {
     const output = 'Expected output';
 
     jest
-      .spyOn(util, 'fetchWithTimeout')
+      .spyOn(util, 'fetchWithRetries')
       .mockImplementation(() =>
         Promise.resolve(new Response(JSON.stringify({ pass: true }), { status: 200 })),
       );
@@ -441,7 +441,7 @@ describe('runAssertion', () => {
     const output = 'Different output';
 
     jest
-      .spyOn(util, 'fetchWithTimeout')
+      .spyOn(util, 'fetchWithRetries')
       .mockImplementation(() =>
         Promise.resolve(new Response(JSON.stringify({ pass: false }), { status: 200 })),
       );
@@ -459,7 +459,7 @@ describe('runAssertion', () => {
     const output = 'Expected output';
 
     jest
-      .spyOn(util, 'fetchWithTimeout')
+      .spyOn(util, 'fetchWithRetries')
       .mockImplementation(() => Promise.resolve(new Response('', { status: 500 })));
 
     const result: GradingResult = await runAssertion(
