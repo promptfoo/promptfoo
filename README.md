@@ -76,11 +76,12 @@ tests:
   - vars:
       language: German
       input: How's it going?
-      - type: similar
-        value: was geht
-        threshold: 0.6   # cosine similarity
-      - type: llm-rubric
-        value: does not describe self as an AI, model, or chatbot
+        assert:
+          - type: similar
+            value: was geht
+            threshold: 0.6   # cosine similarity
+          - type: llm-rubric
+            value: does not describe self as an AI, model, or chatbot
 ```
 
 ### Supported assertion types
