@@ -4,7 +4,7 @@ import nunjucks from 'nunjucks';
 
 import telemetry from './telemetry';
 import { DefaultEmbeddingProvider, DefaultGradingProvider } from './providers/openai';
-import { cosineSimilarity, fetchWithTimeout } from './util';
+import { cosineSimilarity, fetchWithRetries } from './util';
 import { loadApiProvider } from './providers';
 import { DEFAULT_GRADING_PROMPT } from './prompts';
 
@@ -281,7 +281,7 @@ ${assertion.value}`,
       const context = {
         vars: test.vars || {},
       };
-      const response = await fetchWithTimeout(
+      const response = await fetchWithRetries(
         assertion.value,
         {
           method: 'POST',

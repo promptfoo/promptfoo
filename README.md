@@ -66,7 +66,7 @@ providers: [openai:gpt-3.5-turbo, localai:chat:vicuna]
 defaultTest:
   assert:
 tests:
-  - description: "Test translation to French"
+  - description: 'Test translation to French'
     vars:
       language: French
       input: Hello world
@@ -74,14 +74,14 @@ tests:
       - type: contains-json
       - type: javascript
         value: output.startsWith('Bonjour')
-  - description: "Test translation to German"
+  - description: 'Test translation to German'
     vars:
       language: German
       input: How's it going?
     assert:
       - type: similar
         value: was geht
-        threshold: 0.6   # cosine similarity
+        threshold: 0.6 # cosine similarity
       - type: llm-rubric
         value: does not describe self as an AI, model, or chatbot
 ```
