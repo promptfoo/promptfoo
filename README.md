@@ -73,7 +73,7 @@ tests:
     assert:
       - type: contains-json
       - type: javascript
-        value: output.statsWith('Bonjour')
+        value: output.startsWith('Bonjour')
   - description: "Test translation to German"
     vars:
       language: German
