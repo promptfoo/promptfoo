@@ -6,7 +6,7 @@ export type EvalHead = {
 export type EvalRowOutput = {
   pass: boolean;
   score: number;
-  text: string;
+  text: string | object;
 };
 
 export type EvalRow = {

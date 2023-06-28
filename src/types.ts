@@ -84,7 +84,7 @@ export interface Prompt {
 
 export interface EvaluateResult {
   prompt: Prompt;
-  vars: Record<string, string>;
+  vars: Record<string, string | object>;
   response?: ProviderResponse;
   error?: string;
   success: boolean;
@@ -174,7 +174,7 @@ export interface TestCase {
   description?: string;
 
   // Key-value pairs to substitute in the prompt
-  vars?: Record<string, string | string[]>;
+  vars?: Record<string, string | string[] | object>;
 
   // Optional list of automatic checks to run on the LLM output
   assert?: Assertion[];
@@ -185,7 +185,7 @@ export interface TestCase {
 
 // Same as a TestCase, except the `vars` object has been flattened into its final form.
 export interface AtomicTestCase extends TestCase {
-  vars?: Record<string, string>;
+  vars?: Record<string, string | object>;
 }
 
 // The test suite defines the "knobs" that we are tuning in prompt engineering: providers and prompts
