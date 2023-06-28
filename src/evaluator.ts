@@ -38,18 +38,24 @@ interface RunEvalOptions {
 const DEFAULT_MAX_CONCURRENCY = 4;
 
 function generateVarCombinations(
-  vars: Record<string, string | string[]>,
-): Record<string, string>[] {
+  vars: Record<string, string | string[] | any>,
+): Record<string, string | any[]>[] {
   const keys = Object.keys(vars);
-  const combinations: Record<string, string>[] = [{}];
+  const combinations: Record<string, string | any[]>[] = [{}];
 
   for (const key of keys) {
-    const values = Array.isArray(vars[key]) ? vars[key] : [vars[key]];
-    const newCombinations: Record<string, string>[] = [];
+    let values: any[] = Array.isArray(vars[key]) ? vars[key] : [vars[key]];
+
+    // Check if it's an array but not a string array
+    if (Array.isArray(vars[key]) && typeof vars[key][0] !== 'string') {
+      values = [vars[key]];
+    }
+
+    const newCombinations: Record<string, any>[] = [];
 
     for (const combination of combinations) {
       for (const value of values) {
-        newCombinations.push({ ...combination, [key]: value as string });
+        newCombinations.push({ ...combination, [key]: value });
       }
     }
 
@@ -229,10 +235,10 @@ class Evaluator {
     });
 
     const varNames: Set<string> = new Set();
-    const varsWithSpecialColsRemoved: Record<string, string | string[]>[] = [];
+    const varsWithSpecialColsRemoved: Record<string, string | string[] | object>[] = [];
     for (const testCase of tests) {
       if (testCase.vars) {
-        const varWithSpecialColsRemoved: Record<string, string | string[]> = {};
+        const varWithSpecialColsRemoved: Record<string, string | string[] | object> = {};
         for (const varName of Object.keys(testCase.vars)) {
           varNames.add(varName);
           varWithSpecialColsRemoved[varName] = testCase.vars[varName];
@@ -354,13 +360,23 @@ class Evaluator {
           resultText = row.response?.output || row.error || '';
         }
 
-        // TODO(ian): Provide full context in table cells, and have the caller
-        // construct the table contents itself.
         const { rowIndex, colIndex } = options;
         if (!table.body[rowIndex]) {
           table.body[rowIndex] = {
             outputs: [],
-            vars: table.head.vars.map((varName) => options.test.vars?.[varName] || '').flat(),
+            vars: table.head.vars
+              .map((varName) => {
+                const varValue = options.test.vars?.[varName] || '';
+                if (typeof varValue === 'string') {
+                  return varValue;
+                }
+                if (Array.isArray(varValue)) {
+                  // Only flatten string arrays
+                  return typeof varValue[0] === 'string' ? varValue : JSON.stringify(varValue);
+                }
+                return JSON.stringify(varValue);
+              })
+              .flat(),
           };
         }
         table.body[rowIndex].outputs[colIndex] = {

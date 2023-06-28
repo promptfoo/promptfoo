@@ -54,7 +54,7 @@ interface TruncatedTextProps {
 
 function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
   const [isTruncated, setIsTruncated] = React.useState<boolean>(true);
-  const text = String(rawText);
+  const text = typeof rawText === 'string' ? rawText : JSON.stringify(rawText);
 
   const toggleTruncate = () => {
     setIsTruncated(!isTruncated);
@@ -94,14 +94,14 @@ interface PromptOutputProps {
   onRating: (rowIndex: number, promptIndex: number, isPass: boolean) => void;
 }
 
-function PromptOutput({
+function EvalOutputCell({
   output,
   maxTextLength,
   rowIndex,
   promptIndex,
   onRating,
 }: PromptOutputProps) {
-  let text = String(output.text);
+  let text = typeof output.text === 'string' ? output.text : JSON.stringify(output.text);
   let chunks: string[] = [];
   if (!output.pass && text.includes('---')) {
     // TODO(ian): Plumb through failure message instead of parsing it out.
@@ -199,21 +199,26 @@ export default function ResultsTable({
       id: 'vars',
       header: () => <span>Variables</span>,
       columns: head.vars.map((varName, idx) =>
-        columnHelper.accessor((row: EvalRow) => row.vars[idx], {
-          id: `Variable ${idx + 1}`,
-          header: () => (
-            <TableHeader
-              smallText={`Variable ${idx + 1}`}
-              text={varName}
-              maxLength={maxTextLength}
-            />
-          ),
-          cell: (info: CellContext<EvalRow, string>) => (
-            <TruncatedText text={info.getValue()} maxLength={maxTextLength} />
-          ),
-          // Minimize the size of Variable columns.
-          size: 50,
-        }),
+        columnHelper.accessor(
+          (row: EvalRow) => {
+            return row.vars[idx];
+          },
+          {
+            id: `Variable ${idx + 1}`,
+            header: () => (
+              <TableHeader
+                smallText={`Variable ${idx + 1}`}
+                text={varName}
+                maxLength={maxTextLength}
+              />
+            ),
+            cell: (info: CellContext<EvalRow, string>) => (
+              <TruncatedText text={info.getValue()} maxLength={maxTextLength} />
+            ),
+            // Minimize the size of Variable columns.
+            size: 50,
+          },
+        ),
       ),
     }),
     columnHelper.group({
@@ -258,7 +263,7 @@ export default function ResultsTable({
             );
           },
           cell: (info: CellContext<EvalRow, string>) => (
-            <PromptOutput
+            <EvalOutputCell
               output={info.getValue() as unknown as EvalRowOutput}
               maxTextLength={maxTextLength}
               rowIndex={info.row.index}
