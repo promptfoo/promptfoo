@@ -224,14 +224,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       );
     }
 
-    let messages: { role: string; content: string }[];
-    try {
-      // User can specify `messages` payload as JSON, or we'll just put the
-      // string prompt into a `messages` array.
-      messages = JSON.parse(prompt);
-    } catch (err) {
-      messages = [{ role: 'user', content: prompt }];
-    }
+    const messages = JSON.parse(prompt) as { role: string; content: string }[];
 
     const body = {
       model: this.modelName,
