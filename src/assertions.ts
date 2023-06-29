@@ -123,12 +123,12 @@ export async function runAssertion(
   }
 
   if (baseType === 'contains') {
-    invariant(assertion.value, '"contains" assertion type must have a string value');
+    invariant(assertion.value, '"contains" assertion type must have a string or number value');
     invariant(
-      typeof assertion.value === 'string',
-      '"contains" assertion type must have a string value',
+      typeof assertion.value === 'string' || typeof assertion.value === 'number',
+      '"contains" assertion type must have a string or number value',
     );
-    pass = output.includes(assertion.value) !== inverse;
+    pass = output.includes(String(assertion.value)) !== inverse;
     return {
       pass,
       score: pass ? 1 : 0,
@@ -192,12 +192,12 @@ export async function runAssertion(
   }
 
   if (baseType === 'icontains') {
-    invariant(assertion.value, '"icontains" assertion type must have a string value');
+    invariant(assertion.value, '"icontains" assertion type must have a string or number value');
     invariant(
-      typeof assertion.value === 'string',
-      '"icontains" assertion type must have a string value',
+      typeof assertion.value === 'string' || typeof assertion.value === 'number',
+      '"icontains" assertion type must have a string or number value',
     );
-    pass = output.toLowerCase().includes(assertion.value.toLowerCase()) !== inverse;
+    pass = output.toLowerCase().includes(String(assertion.value).toLowerCase()) !== inverse;
     return {
       pass,
       score: pass ? 1 : 0,
