@@ -42,7 +42,9 @@ describe('providers', () => {
     (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
 
     const provider = new OpenAiChatCompletionProvider('gpt-3.5-turbo', 'test-api-key');
-    const result = await provider.callApi('Test prompt');
+    const result = await provider.callApi(
+      JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
+    );
 
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(result.output).toBe('Test output');
@@ -61,7 +63,9 @@ describe('providers', () => {
     (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
 
     const provider = new OpenAiChatCompletionProvider('gpt-3.5-turbo', 'test-api-key');
-    const result = await provider.callApi('Test prompt');
+    const result = await provider.callApi(
+      JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
+    );
 
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(result.output).toBe('Test output');
