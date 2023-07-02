@@ -4,6 +4,7 @@ import { ApiProvider, ProviderConfig, ProviderId, RawProviderConfig } from './ty
 
 import { OpenAiCompletionProvider, OpenAiChatCompletionProvider } from './providers/openai';
 import { LocalAiCompletionProvider, LocalAiChatProvider } from './providers/localai';
+import { ScriptCompletionProvider } from './providers/scriptCompletion';
 
 export async function loadApiProviders(
   providerPaths: ProviderId | ProviderId[] | RawProviderConfig[],
@@ -30,7 +31,11 @@ export async function loadApiProvider(
   providerPath: string,
   context: ProviderConfig | undefined = undefined,
 ): Promise<ApiProvider> {
-  if (providerPath?.startsWith('openai:')) {
+  if (providerPath?.startsWith('script:')) {
+    // Load script module
+    const scriptPath = providerPath.split(':')[1];
+    return new ScriptCompletionProvider(scriptPath, context?.config);
+  } else if (providerPath?.startsWith('openai:')) {
     // Load OpenAI module
     const options = providerPath.split(':');
     const modelType = options[1];
