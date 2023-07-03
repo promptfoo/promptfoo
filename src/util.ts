@@ -347,7 +347,9 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
   const asserts: Assertion[] = [];
   for (const [key, value] of Object.entries(row)) {
     if (key === '__expected') {
-      asserts.push(assertionFromString(value));
+      if (value.trim() !== '') {
+        asserts.push(assertionFromString(value));
+      }
     } else {
       vars[key] = value;
     }
