@@ -118,6 +118,7 @@ function EvalOutputCell({
     onRating(rowIndex, promptIndex, isPass);
   };
 
+  // TODO(ian): output.prompt check for backwards compatibility, remove after 0.17.0
   return (
     <>
       <div className="cell">
@@ -134,15 +135,19 @@ function EvalOutputCell({
         <TruncatedText text={text} maxLength={maxTextLength} />
       </div>
       <div className="cell-actions">
-        <span className="action" onClick={handlePromptOpen}>
-          🔎
-        </span>
-        <EvalOutputPromptDialog
-          open={openPrompt}
-          onClose={handlePromptClose}
-          prompt={output.prompt}
-          output={text}
-        />
+        {output.prompt && (
+          <>
+            <span className="action" onClick={handlePromptOpen}>
+              🔎
+            </span>
+            <EvalOutputPromptDialog
+              open={openPrompt}
+              onClose={handlePromptClose}
+              prompt={output.prompt}
+              output={text}
+            />
+          </>
+        )}
         <span className="action" onClick={() => handleClick(true)}>
           👍
         </span>
