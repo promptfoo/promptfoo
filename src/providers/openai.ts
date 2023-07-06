@@ -218,7 +218,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     this.options = context || {};
   }
 
-  // TODO(ian): support passing in `messages` directly
   async callApi(prompt: string, options?: OpenAiCompletionOptions): Promise<ProviderResponse> {
     if (!this.apiKey) {
       throw new Error(
@@ -230,7 +229,12 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     try {
       messages = JSON.parse(prompt) as { role: string; content: string }[];
     } catch (err) {
-      if (process.env.PROMPTFOO_STRICT_JSON) {
+      const trimmedPrompt = prompt.trim();
+      if (
+        process.env.PROMPTFOO_REQUIRE_JSON_PROMPTS ||
+        trimmedPrompt.startsWith('{') ||
+        trimmedPrompt.startsWith('[')
+      ) {
         throw new Error(
           `OpenAI Chat Completion prompt is not a valid JSON string: ${err}\n\n${prompt}`,
         );
