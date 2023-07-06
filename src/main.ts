@@ -19,7 +19,7 @@ import {
   writeOutput,
 } from './util';
 import { DEFAULT_README, DEFAULT_YAML_CONFIG, DEFAULT_PROMPTS } from './onboarding';
-import { disableCache } from './cache';
+import { disableCache, clearCache } from './cache';
 import { getDirectory } from './esm';
 import { init } from './web/server';
 import { checkForUpdates } from './updates';
@@ -137,6 +137,19 @@ async function main() {
       }
       const url = await createShareableUrl(latestResults.results, latestResults.config);
       logger.info(`View results: ${chalk.greenBright.bold(url)}`);
+    });
+
+  program
+    .command('cache')
+    .description('Manage cache')
+    .command('clear')
+    .description('Clear cache')
+    .action(async () => {
+      await clearCache();
+      telemetry.record('command_used', {
+        name: 'cache_clear',
+      });
+      await telemetry.send();
     });
 
   program

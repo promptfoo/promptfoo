@@ -97,3 +97,8 @@ export function disableCache() {
   logger.info('Cache is disabled.');
   enabled = false;
 }
+
+export async function clearCache() {
+  logger.info('Clearing cache...');
+  return getCache().reset();
+}
