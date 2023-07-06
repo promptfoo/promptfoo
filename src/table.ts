@@ -7,7 +7,7 @@ export function generateTable(summary: EvaluateSummary, tableCellMaxLength = 250
   const head = summary.table.head;
   const headLength = head.prompts.length + head.vars.length;
   const table = new Table({
-    head: [...head.prompts, ...head.vars],
+    head: [...head.prompts.map((prompt) => prompt.display), ...head.vars],
     colWidths: Array(headLength).fill(Math.floor(maxWidth / headLength)),
     wordWrap: true,
     wrapOnWordBoundary: false,

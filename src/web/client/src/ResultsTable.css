@@ -64,10 +64,17 @@ th,
   vertical-align: bottom;
 }
 
+th .action {
+  cursor: pointer;
+  margin-left: 0.5rem;
+}
+
 tr .cell {
 }
 
-tr .cell-rating {
+tr .cell-actions {
+  display: flex;
+  gap: 0.5rem;
   visibility: hidden;
   position: absolute;
   bottom: 1.25rem;
@@ -76,16 +83,12 @@ tr .cell-rating {
   font-size: 1.75rem;
 }
 
-tr:hover .cell-rating {
+tr:hover .cell-actions {
   visibility: visible;
 }
 
-tr .cell-rating .rating {
+tr .cell-actions .action {
   cursor: pointer;
-}
-
-tr .cell-rating .rating:first-child {
-  margin-right: 0.5rem;
 }
 
 th .smalltext {

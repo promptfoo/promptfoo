@@ -293,7 +293,7 @@ class Evaluator {
 
     const table: EvaluateTable = {
       head: {
-        prompts: prompts.map((p) => p.display),
+        prompts,
         vars: Array.from(varNames).sort(),
         // TODO(ian): add assertions to table?
       },
@@ -383,6 +383,7 @@ class Evaluator {
           pass: row.success,
           score: row.score,
           text: resultText,
+          prompt: row.prompt.raw,
         };
       },
     );
