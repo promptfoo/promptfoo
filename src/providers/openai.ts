@@ -226,7 +226,17 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       );
     }
 
-    const messages = JSON.parse(prompt) as { role: string; content: string }[];
+    let messages: { role: string; content: string; name?: string }[];
+    try {
+      messages = JSON.parse(prompt) as { role: string; content: string }[];
+    } catch (err) {
+      if (process.env.PROMPTFOO_STRICT_JSON) {
+        throw new Error(
+          `OpenAI Chat Completion prompt is not a valid JSON string: ${err}\n\n${prompt}`,
+        );
+      }
+      messages = [{ role: 'user', content: prompt }];
+    }
 
     const body = {
       model: this.modelName,
