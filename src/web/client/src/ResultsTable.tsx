@@ -16,6 +16,8 @@ import { useStore } from './store.js';
 
 import type { CellContext, VisibilityState } from '@tanstack/table-core';
 
+import EvalOutputPromptDialog from './EvalOutputPromptDialog';
+
 import type { EvalRow, EvalRowOutput, FilterMode } from './types.js';
 
 import './ResultsTable.css';
@@ -62,28 +64,24 @@ function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
 
   const renderTruncatedText = () => {
     if (text.length <= maxLength) {
-      return text;
+      return <span>text</span>;
     }
     if (isTruncated) {
       return (
-        <>
-          <span style={{ cursor: 'pointer' }} onClick={toggleTruncate}>
-            {text.substring(0, maxLength)} ...
-          </span>
-        </>
+        <span style={{ cursor: 'pointer' }} onClick={toggleTruncate}>
+          {text.substring(0, maxLength)} ...
+        </span>
       );
     } else {
       return (
-        <>
-          <span style={{ cursor: 'pointer' }} onClick={toggleTruncate}>
-            {text}
-          </span>
-        </>
+        <span style={{ cursor: 'pointer' }} onClick={toggleTruncate}>
+          {text}
+        </span>
       );
     }
   };
 
-  return <div>{renderTruncatedText()}</div>;
+  return renderTruncatedText();
 }
 
 interface PromptOutputProps {
@@ -101,6 +99,13 @@ function EvalOutputCell({
   promptIndex,
   onRating,
 }: PromptOutputProps) {
+  const [openPrompt, setOpen] = React.useState(false);
+  const handlePromptOpen = () => {
+    setOpen(true);
+  };
+  const handlePromptClose = () => {
+    setOpen(false);
+  };
   let text = typeof output.text === 'string' ? output.text : JSON.stringify(output.text);
   let chunks: string[] = [];
   if (!output.pass && text.includes('---')) {
@@ -128,11 +133,20 @@ function EvalOutputCell({
         )}{' '}
         <TruncatedText text={text} maxLength={maxTextLength} />
       </div>
-      <div className="cell-rating">
-        <span className="rating" onClick={() => handleClick(true)}>
+      <div className="cell-actions">
+        <span className="action" onClick={handlePromptOpen}>
+          🔎
+        </span>
+        <EvalOutputPromptDialog
+          open={openPrompt}
+          onClose={handlePromptClose}
+          prompt={output.prompt}
+          output={text}
+        />
+        <span className="action" onClick={() => handleClick(true)}>
           👍
         </span>
-        <span className="rating" onClick={() => handleClick(false)}>
+        <span className="action" onClick={() => handleClick(false)}>
           👎
         </span>
       </div>
@@ -140,11 +154,35 @@ function EvalOutputCell({
   );
 }
 
-function TableHeader({ text, maxLength, smallText }: TruncatedTextProps & { smallText: string }) {
+function TableHeader({
+  text,
+  maxLength,
+  smallText,
+  expandedText,
+}: TruncatedTextProps & { smallText: string; expandedText?: string }) {
+  const [openPrompt, setOpen] = React.useState(false);
+  const handlePromptOpen = () => {
+    setOpen(true);
+  };
+  const handlePromptClose = () => {
+    setOpen(false);
+  };
   return (
     <div>
       <TruncatedText text={text} maxLength={maxLength} />
-      <span className="smalltext">{smallText}</span>
+      {expandedText && (
+        <>
+          <span className="action" onClick={handlePromptOpen}>
+            🔎
+          </span>
+          <EvalOutputPromptDialog
+            open={openPrompt}
+            onClose={handlePromptClose}
+            prompt={expandedText}
+          />
+        </>
+      )}
+      <div className="smalltext">{smallText}</div>
     </div>
   );
 }
@@ -233,11 +271,13 @@ export default function ResultsTable({
               numGood[idx] === highestPassingCount && highestPassingCount !== 0;
             const columnId = `Prompt ${idx + 1}`;
             const isChecked = failureFilter[columnId] || false;
+            // TODO(ian): prompt string support for backwards compatibility, remove after 0.17.0
             return (
               <>
                 <TableHeader
                   smallText={`Prompt ${idx + 1}`}
-                  text={prompt}
+                  text={typeof prompt === 'string' ? prompt : prompt.display}
+                  expandedText={typeof prompt === 'string' ? undefined : prompt.raw}
                   maxLength={maxTextLength}
                 />
                 {filterMode === 'failures' && (

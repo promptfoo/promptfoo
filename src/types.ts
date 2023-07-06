@@ -95,11 +95,12 @@ export interface EvaluateTableOutput {
   pass: boolean;
   score: number;
   text: string;
+  prompt: string;
 }
 
 export interface EvaluateTable {
   head: {
-    prompts: string[];
+    prompts: Prompt[];
     vars: string[];
   };
 

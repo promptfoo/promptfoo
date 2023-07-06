@@ -172,9 +172,15 @@ describe('util', () => {
       },
     ];
     const table: EvaluateTable = {
-      head: { prompts: ['Test prompt'], vars: ['var1', 'var2'] },
+      head: {
+        prompts: [{ raw: 'Test prompt', display: '[display] Test prompt' }],
+        vars: ['var1', 'var2'],
+      },
       body: [
-        { outputs: [{ pass: true, score: 1.0, text: 'Test output' }], vars: ['value1', 'value2'] },
+        {
+          outputs: [{ pass: true, score: 1.0, text: 'Test output', prompt: 'Test prompt' }],
+          vars: ['value1', 'value2'],
+        },
       ],
     };
     const summary = {
@@ -221,9 +227,15 @@ describe('util', () => {
       },
     ];
     const table: EvaluateTable = {
-      head: { prompts: ['Test prompt'], vars: ['var1', 'var2'] },
+      head: {
+        prompts: [{ raw: 'Test prompt', display: '[display] Test prompt' }],
+        vars: ['var1', 'var2'],
+      },
       body: [
-        { outputs: [{ pass: true, score: 1.0, text: 'Test output' }], vars: ['value1', 'value2'] },
+        {
+          outputs: [{ pass: true, score: 1.0, text: 'Test output', prompt: 'Test prompt' }],
+          vars: ['value1', 'value2'],
+        },
       ],
     };
     const summary = {
@@ -270,9 +282,15 @@ describe('util', () => {
       },
     ];
     const table: EvaluateTable = {
-      head: { prompts: ['Test prompt'], vars: ['var1', 'var2'] },
+      head: {
+        prompts: [{ raw: 'Test prompt', display: '[display] Test prompt' }],
+        vars: ['var1', 'var2'],
+      },
       body: [
-        { outputs: [{ pass: true, score: 1.0, text: 'Test output' }], vars: ['value1', 'value2'] },
+        {
+          outputs: [{ pass: true, score: 1.0, text: 'Test output', prompt: 'Test prompt' }],
+          vars: ['value1', 'value2'],
+        },
       ],
     };
     const summary = {
