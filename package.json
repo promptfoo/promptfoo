@@ -1,8 +1,8 @@
 {
   "name": "promptfoo",
-  "description": "Prompt engineering toolkit",
+  "description": "LLM eval & testing toolkit",
   "author": "Ian Webster",
-  "version": "0.16.0",
+  "version": "0.17.0",
   "license": "MIT",
   "type": "commonjs",
   "main": "dist/src/index.js",
