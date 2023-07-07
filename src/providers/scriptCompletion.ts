@@ -2,6 +2,12 @@ import { exec } from 'child_process';
 
 import { ApiProvider, ProviderConfig, ProviderResponse } from '../types';
 
+const ANSI_ESCAPE = /\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;
+
+function stripText(text: string) {
+  return text.replace(ANSI_ESCAPE, '');
+}
+
 export class ScriptCompletionProvider implements ApiProvider {
   constructor(private scriptPath: string, private config?: ProviderConfig) {}
 
@@ -15,7 +21,7 @@ export class ScriptCompletionProvider implements ApiProvider {
         if (error) {
           reject(error);
         } else {
-          resolve({ output: stdout.trim() });
+          resolve({ output: stripText(stdout.trim()) });
         }
       });
     }) as Promise<ProviderResponse>;
