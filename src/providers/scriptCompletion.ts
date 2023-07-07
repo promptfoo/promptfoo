@@ -12,7 +12,7 @@ export class ScriptCompletionProvider implements ApiProvider {
   constructor(private scriptPath: string, private config?: ProviderConfig) {}
 
   id() {
-    return 'script';
+    return `script:${this.scriptPath}`;
   }
 
   async callApi(prompt: string) {
