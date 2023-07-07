@@ -8,18 +8,19 @@ import { ScriptCompletionProvider } from './providers/scriptCompletion';
 
 export async function loadApiProviders(
   providerPaths: ProviderId | ProviderId[] | RawProviderConfig[],
+  basePath?: string,
 ): Promise<ApiProvider[]> {
   if (typeof providerPaths === 'string') {
-    return [await loadApiProvider(providerPaths)];
+    return [await loadApiProvider(providerPaths, undefined, basePath)];
   } else if (Array.isArray(providerPaths)) {
     return Promise.all(
       providerPaths.map((provider) => {
         if (typeof provider === 'string') {
-          return loadApiProvider(provider);
+          return loadApiProvider(provider, undefined, basePath);
         } else {
           const id = Object.keys(provider)[0];
           const context = { ...provider[id], id };
-          return loadApiProvider(id, context);
+          return loadApiProvider(id, context, basePath);
         }
       }),
     );
@@ -29,12 +30,16 @@ export async function loadApiProviders(
 
 export async function loadApiProvider(
   providerPath: string,
-  context: ProviderConfig | undefined = undefined,
+  context?: ProviderConfig,
+  basePath?: string,
 ): Promise<ApiProvider> {
-  if (providerPath?.startsWith('script:')) {
+  if (providerPath?.startsWith('exec:')) {
     // Load script module
     const scriptPath = providerPath.split(':')[1];
-    return new ScriptCompletionProvider(scriptPath, context?.config);
+    return new ScriptCompletionProvider(scriptPath, {
+      id: `exec:${scriptPath}`,
+      config: { basePath },
+    });
   } else if (providerPath?.startsWith('openai:')) {
     // Load OpenAI module
     const options = providerPath.split(':');

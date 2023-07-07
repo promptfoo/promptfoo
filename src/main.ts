@@ -253,7 +253,7 @@ async function main() {
       // Use basepath in cases where path was supplied in the config file
       const basePath = configPath ? dirname(configPath) : '';
       const parsedPrompts = readPrompts(config.prompts, cmdObj.prompts ? undefined : basePath);
-      const parsedProviders = await loadApiProviders(config.providers);
+      const parsedProviders = await loadApiProviders(config.providers, basePath);
       const parsedTests: TestCase[] = await readTests(
         config.tests,
         cmdObj.tests ? undefined : basePath,
