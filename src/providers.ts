@@ -36,7 +36,10 @@ export async function loadApiProvider(
   if (providerPath?.startsWith('script:')) {
     // Load script module
     const scriptPath = providerPath.split(':')[1];
-    return new ScriptCompletionProvider(scriptPath, {id: `script:${scriptPath}`, config: {basePath}});
+    return new ScriptCompletionProvider(scriptPath, {
+      id: `script:${scriptPath}`,
+      config: { basePath },
+    });
   } else if (providerPath?.startsWith('openai:')) {
     // Load OpenAI module
     const options = providerPath.split(':');

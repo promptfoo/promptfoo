@@ -56,7 +56,8 @@ interface TruncatedTextProps {
 
 function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
   const [isTruncated, setIsTruncated] = React.useState<boolean>(true);
-  const text = typeof rawText === 'string' ? rawText : JSON.stringify(rawText);
+  let text = typeof rawText === 'string' ? rawText : JSON.stringify(rawText);
+  text = text.replace('\n', '<br>');
 
   const toggleTruncate = () => {
     setIsTruncated(!isTruncated);

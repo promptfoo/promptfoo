@@ -17,7 +17,12 @@ export class ScriptCompletionProvider implements ApiProvider {
 
   async callApi(prompt: string) {
     return new Promise((resolve, reject) => {
-      const command = this.config.basePath ? `cd ${this.config.basePath} && ${this.scriptPath} "${prompt}"` : `${this.scriptPath} "${prompt}"`;
+      // TODO(ian): This config is real ugly.
+      const command = this.config?.config.basePath
+        ? `cd ${this.config.config.basePath} && ${this.scriptPath} "${prompt}"`
+        : `${this.scriptPath} "${prompt}"`;
+
+      // TODO(ian): Caching
       exec(command, (error, stdout, stderr) => {
         if (error) {
           reject(error);
