@@ -33,11 +33,11 @@ export async function loadApiProvider(
   context?: ProviderConfig,
   basePath?: string,
 ): Promise<ApiProvider> {
-  if (providerPath?.startsWith('script:')) {
+  if (providerPath?.startsWith('exec:')) {
     // Load script module
     const scriptPath = providerPath.split(':')[1];
     return new ScriptCompletionProvider(scriptPath, {
-      id: `script:${scriptPath}`,
+      id: `exec:${scriptPath}`,
       config: { basePath },
     });
   } else if (providerPath?.startsWith('openai:')) {
