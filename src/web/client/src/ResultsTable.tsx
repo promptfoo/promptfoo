@@ -57,7 +57,7 @@ interface TruncatedTextProps {
 function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
   const [isTruncated, setIsTruncated] = React.useState<boolean>(true);
   let text = typeof rawText === 'string' ? rawText : JSON.stringify(rawText);
-  text = text.replace('\n', '<br>');
+  text = text.replace(/\n/g, '<br>');
 
   const toggleTruncate = () => {
     setIsTruncated(!isTruncated);
@@ -65,18 +65,18 @@ function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
 
   const renderTruncatedText = () => {
     if (text.length <= maxLength) {
-      return <span>{text}</span>;
+      return <span dangerouslySetInnerHTML={{ __html: text }} />;
     }
     if (isTruncated) {
       return (
         <span style={{ cursor: 'pointer' }} onClick={toggleTruncate}>
-          {text.substring(0, maxLength)} ...
+          <span dangerouslySetInnerHTML={{ __html: text.substring(0, maxLength) }} /> ...
         </span>
       );
     } else {
       return (
         <span style={{ cursor: 'pointer' }} onClick={toggleTruncate}>
-          {text}
+          <span dangerouslySetInnerHTML={{ __html: text }} />
         </span>
       );
     }
