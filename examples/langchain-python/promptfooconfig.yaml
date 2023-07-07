@@ -1,5 +1,7 @@
-prompts: prompts.txt
-providers: exec:python langchain_example.py
+prompts: prompt.txt
+providers:
+  - openai:chat:gpt-4-0613
+  - exec:python langchain_example.py
 tests:
   - vars:
       question: What is the cube root of 389017?
