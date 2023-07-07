@@ -64,7 +64,7 @@ function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
 
   const renderTruncatedText = () => {
     if (text.length <= maxLength) {
-      return <span>text</span>;
+      return <span>{text}</span>;
     }
     if (isTruncated) {
       return (
