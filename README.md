@@ -277,7 +277,7 @@ Here are some of the available scripts:
 
 # [» View full documentation «](https://promptfoo.dev/docs/intro)
 
-## Lian Jiang
+## for node newbies like me
 ```
 # install node virtual env
 sudo pip install nodeenv
@@ -285,11 +285,18 @@ sudo pip install nodeenv
 # create a virtual env.
 nodeenv env
 
+# activate the virtual env.
+. env/bin/activate
+
 # install typescript
 npm install typescript -g
 
-# install dependencies
-npm i @types/node -D
+# install dependencies in package.json
+npm install 
 
+# build
+npm run build
 
+# test
+npm run test
 ```
