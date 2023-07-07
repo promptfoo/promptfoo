@@ -276,3 +276,20 @@ Here are some of the available scripts:
 - `test:watch`: Continuously run test suite on changes
 
 # [» View full documentation «](https://promptfoo.dev/docs/intro)
+
+## Lian Jiang
+```
+# install node virtual env
+sudo pip install nodeenv
+
+# create a virtual env.
+nodeenv env
+
+# install typescript
+npm install typescript -g
+
+# install dependencies
+npm i @types/node -D
+
+
+```
