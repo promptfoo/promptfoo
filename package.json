@@ -60,6 +60,7 @@
     "typescript": "^5.0.4"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.5.2",
     "@apidevtools/json-schema-ref-parser": "^10.1.0",
     "async": "^3.2.4",
     "cache-manager": "^4.1.0",

@@ -1,6 +1,7 @@
 import fetch from 'node-fetch';
 
 import { OpenAiCompletionProvider, OpenAiChatCompletionProvider } from '../src/providers/openai';
+import { AnthropicCompletionProvider } from '../src/providers/anthropic';
 
 import { disableCache, enableCache } from '../src/cache.js';
 import { loadApiProvider, loadApiProviders } from '../src/providers.js';
@@ -74,6 +75,18 @@ describe('providers', () => {
     enableCache();
   });
 
+  test('AnthropicCompletionProvider callApi', async () => {
+    const provider = new AnthropicCompletionProvider('claude-1', 'test-api-key');
+    provider.anthropic.completions.create = jest.fn().mockResolvedValue({
+      completion: 'Test output',
+    })
+    const result = await provider.callApi('Test prompt');
+
+    expect(provider.anthropic.completions.create).toHaveBeenCalledTimes(1);
+    expect(result.output).toBe('Test output');
+    expect(result.tokenUsage).toEqual({});
+  });
+
   test('loadApiProvider with openai:chat', async () => {
     const provider = await loadApiProvider('openai:chat');
     expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
@@ -92,6 +105,16 @@ describe('providers', () => {
   test('loadApiProvider with openai:completion:modelName', async () => {
     const provider = await loadApiProvider('openai:completion:text-davinci-003');
     expect(provider).toBeInstanceOf(OpenAiCompletionProvider);
+  });
+
+  test('loadApiProvider with anthropic:completion', async () => {
+    const provider = await loadApiProvider('anthropic:completion');
+    expect(provider).toBeInstanceOf(AnthropicCompletionProvider);
+  });
+
+  test('loadApiProvider with anthropic:completion:modelName', async () => {
+    const provider = await loadApiProvider('anthropic:completion:claude-1');
+    expect(provider).toBeInstanceOf(AnthropicCompletionProvider);
   });
 
   test('loadApiProvider with RawProviderConfig', async () => {
@@ -117,10 +140,16 @@ describe('providers', () => {
           config: { foo: 'bar' },
         },
       },
+      {
+        'anthropic:completion:ghi789': {
+          config: { foo: 'bar' },
+        },
+      },
     ];
     const providers = await loadApiProviders(rawProviderConfigs);
-    expect(providers).toHaveLength(2);
+    expect(providers).toHaveLength(3);
     expect(providers[0]).toBeInstanceOf(OpenAiChatCompletionProvider);
     expect(providers[1]).toBeInstanceOf(OpenAiCompletionProvider);
+    expect(providers[2]).toBeInstanceOf(AnthropicCompletionProvider);
   });
 });
