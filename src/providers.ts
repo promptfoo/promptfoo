@@ -3,6 +3,7 @@ import path from 'node:path';
 import { ApiProvider, ProviderConfig, ProviderId, RawProviderConfig } from './types';
 
 import { OpenAiCompletionProvider, OpenAiChatCompletionProvider } from './providers/openai';
+import { AnthropicCompletionProvider } from './providers/anthropic';
 import { LocalAiCompletionProvider, LocalAiChatProvider } from './providers/localai';
 import { ScriptCompletionProvider } from './providers/scriptCompletion';
 
@@ -67,6 +68,25 @@ export async function loadApiProvider(
         `Unknown OpenAI model type: ${modelType}. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>`,
       );
     }
+  } else if (providerPath?.startsWith('anthropic:')) {
+    // Load Anthropic module
+    const options = providerPath.split(':');
+    const modelType = options[1];
+    const modelName = options[2];
+
+    if (modelType === 'completion') {
+      return new AnthropicCompletionProvider(
+        modelName || 'claude-instant-1',
+        undefined,
+        context?.config,
+      );
+    } else if (AnthropicCompletionProvider.ANTHROPIC_COMPLETION_MODELS.includes(modelType)) {
+      return new AnthropicCompletionProvider(modelType, undefined, context?.config);
+    } else {
+      throw new Error(
+        `Unknown Anthropic model type: ${modelType}. Use one of the following providers: anthropic:completion:<model name>`,
+      );
+    }
   }
 
   if (providerPath?.startsWith('localai:')) {
@@ -91,6 +111,7 @@ export async function loadApiProvider(
 export default {
   OpenAiCompletionProvider,
   OpenAiChatCompletionProvider,
+  AnthropicCompletionProvider,
   LocalAiCompletionProvider,
   LocalAiChatProvider,
   loadApiProvider,
