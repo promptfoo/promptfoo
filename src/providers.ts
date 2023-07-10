@@ -1,4 +1,4 @@
-import path from 'node:path';
+import path from 'path';
 
 import { ApiProvider, ProviderConfig, ProviderId, RawProviderConfig } from './types';
 

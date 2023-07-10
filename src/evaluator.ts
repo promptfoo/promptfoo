@@ -1,4 +1,4 @@
-import readline from 'node:readline';
+import readline from 'readline';
 
 import async from 'async';
 import chalk from 'chalk';
