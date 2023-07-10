@@ -37,6 +37,46 @@ function parseJson(json: string): any | undefined {
   }
 }
 
+let globalConfigCache: any = null;
+
+export function resetGlobalConfig(): void {
+  globalConfigCache = null;
+}
+
+export function readGlobalConfig(): any {
+  if (!globalConfigCache) {
+    const configDir = getConfigDirectoryPath();
+    const configFilePath = path.join(configDir, 'promptfoo.yaml');
+
+    if (fs.existsSync(configFilePath)) {
+      globalConfigCache = yaml.load(fs.readFileSync(configFilePath, 'utf-8'));
+    } else {
+      if (!fs.existsSync(configDir)) {
+        fs.mkdirSync(configDir, { recursive: true });
+      }
+      globalConfigCache = { hasRun: false };
+      fs.writeFileSync(configFilePath, yaml.dump(globalConfigCache));
+    }
+  }
+
+  return globalConfigCache;
+}
+
+export function maybeRecordFirstRun(): boolean {
+  // Return true if first run
+  try {
+    const config = readGlobalConfig();
+    if (!config.hasRun) {
+      config.hasRun = true;
+      fs.writeFileSync(path.join(getConfigDirectoryPath(), 'promptfoo.yaml'), yaml.dump(config));
+      return true;
+    }
+    return false;
+  } catch (err) {
+    return false;
+  }
+}
+
 export async function maybeReadConfig(configPath: string): Promise<UnifiedConfig | undefined> {
   if (!fs.existsSync(configPath)) {
     return undefined;

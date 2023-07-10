@@ -56,10 +56,10 @@ function createDummyFiles(directory: string | null) {
   writeFileSync(pathJoin(process.cwd(), directory, 'README.md'), DEFAULT_README);
 
   if (directory === '.') {
-    logger.info('Wrote prompts.txt and promptfooconfig.yaml. Open README.md to get started!');
+    logger.info(chalk.green.bold('Wrote prompts.txt and promptfooconfig.yaml. Open README.md to get started!'));
   } else {
-    logger.info(`Wrote prompts.txt and promptfooconfig.yaml to ./${directory}`);
-    logger.info(`\`cd ${directory}\` and open README.md to get started!`);
+    logger.info(chalk.green.bold(`Wrote prompts.txt and promptfooconfig.yaml to ./${directory}`));
+    logger.info(chalk.green(`\`cd ${directory}\` and open README.md to get started!`));
   }
 }
 
@@ -102,6 +102,7 @@ async function main() {
     .command('init [directory]')
     .description('Initialize project with dummy files')
     .action(async (directory: string | null) => {
+      telemetry.maybeShowNotice();
       createDummyFiles(directory);
       telemetry.record('command_used', {
         name: 'init',
@@ -114,6 +115,7 @@ async function main() {
     .description('Start browser ui')
     .option('-p, --port <number>', 'Port number', '15500')
     .action(async (cmdObj: { port: number } & Command) => {
+      telemetry.maybeShowNotice();
       telemetry.record('command_used', {
         name: 'view',
       });
@@ -125,6 +127,7 @@ async function main() {
     .command('share')
     .description('Share your most recent result')
     .action(async (cmdObj: { port: number } & Command) => {
+      telemetry.maybeShowNotice();
       telemetry.record('command_used', {
         name: 'share',
       });
@@ -145,6 +148,7 @@ async function main() {
     .command('clear')
     .description('Clear cache')
     .action(async () => {
+      telemetry.maybeShowNotice();
       await clearCache();
       telemetry.record('command_used', {
         name: 'cache_clear',
@@ -317,6 +321,8 @@ async function main() {
         }
       }
 
+      telemetry.maybeShowNotice();
+
       const border = '='.repeat(process.stdout.columns - 10);
       logger.info(border);
       if (!cmdObj.write) {
@@ -340,12 +346,13 @@ async function main() {
       logger.info(
         `Token usage: Total ${summary.stats.tokenUsage.total}, Prompt ${summary.stats.tokenUsage.prompt}, Completion ${summary.stats.tokenUsage.completion}, Cached ${summary.stats.tokenUsage.cached}`,
       );
-      logger.info('Done.');
 
       telemetry.record('command_used', {
         name: 'eval',
       });
       await telemetry.send();
+
+      logger.info('Done.');
 
       if (cmdObj.view) {
         init(parseInt(cmdObj.view, 10) || 15500);

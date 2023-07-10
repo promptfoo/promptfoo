@@ -4,6 +4,7 @@ import { fetchWithTimeout } from '../src/util';
 
 jest.mock('../src/util', () => ({
   fetchWithTimeout: jest.fn(),
+  maybeRecordFirstRun: jest.fn(),
 }));
 
 jest.mock('../package.json', () => ({

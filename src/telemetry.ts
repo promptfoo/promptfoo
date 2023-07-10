@@ -1,5 +1,8 @@
+import chalk from 'chalk';
+
 import packageJson from '../package.json';
-import { fetchWithTimeout } from './util';
+import logger from './logger';
+import { fetchWithTimeout, maybeRecordFirstRun } from './util';
 
 type TelemetryEvent = {
   event: string;
@@ -27,6 +30,16 @@ export class Telemetry {
         packageVersion: packageJson.version,
         properties,
       });
+    }
+  }
+
+  maybeShowNotice(): void {
+    if (maybeRecordFirstRun()) {
+      logger.info(
+        chalk.gray(
+          'Anonymous telemetry is enabled. For more info, see https://www.promptfoo.dev/docs/configuration/telemetry',
+        ),
+      );
     }
   }
 

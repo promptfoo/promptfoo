@@ -1,9 +1,18 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+import yaml from 'js-yaml';
 import { globSync } from 'glob';
 
-import { readVars, readPrompts, writeOutput, readTests } from '../src/util';
+import {
+  readVars,
+  readPrompts,
+  writeOutput,
+  readTests,
+  readGlobalConfig,
+  maybeRecordFirstRun,
+  resetGlobalConfig,
+} from '../src/util';
 
 import type { EvaluateResult, EvaluateTable, Prompt, TestCase } from '../src/types';
 
@@ -17,6 +26,8 @@ jest.mock('fs', () => ({
   writeFileSync: jest.fn(),
   statSync: jest.fn(),
   readdirSync: jest.fn(),
+  existsSync: jest.fn(),
+  mkdirSync: jest.fn(),
 }));
 
 jest.mock('../src/esm.js');
@@ -315,6 +326,64 @@ describe('util', () => {
     writeOutput(outputPath, summary, config, shareableUrl);
 
     expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
+  });
+
+  describe('readCliConfig', () => {
+    afterEach(() => {
+      jest.clearAllMocks();
+      resetGlobalConfig();
+    });
+
+    test('reads from existing config', () => {
+      const config = { hasRun: false };
+      (fs.existsSync as jest.Mock).mockReturnValue(true);
+      (fs.readFileSync as jest.Mock).mockReturnValue(yaml.dump(config));
+
+      const result = readGlobalConfig();
+
+      expect(fs.existsSync).toHaveBeenCalledTimes(1);
+      expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+      expect(result).toEqual(config);
+    });
+
+    test('creates new config if none exists', () => {
+      (fs.existsSync as jest.Mock).mockReturnValue(false);
+      (fs.writeFileSync as jest.Mock).mockImplementation();
+
+      const result = readGlobalConfig();
+
+      expect(fs.existsSync).toHaveBeenCalledTimes(2);
+      expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
+      expect(result).toEqual({ hasRun: false });
+    });
+  });
+
+  describe('maybeRecordFirstRun', () => {
+    afterEach(() => {
+      resetGlobalConfig();
+      jest.clearAllMocks();
+    });
+
+    test('returns true if it is the first run', () => {
+      (fs.existsSync as jest.Mock).mockReturnValue(false);
+      (fs.writeFileSync as jest.Mock).mockImplementation();
+
+      const result = maybeRecordFirstRun();
+
+      expect(fs.writeFileSync).toHaveBeenCalledTimes(2);
+      expect(result).toBe(true);
+    });
+
+    test('returns false if it is not the first run', () => {
+      const config = { hasRun: true };
+      (fs.existsSync as jest.Mock).mockReturnValue(true);
+      (fs.readFileSync as jest.Mock).mockReturnValue(yaml.dump(config));
+
+      const result = maybeRecordFirstRun();
+
+      expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+      expect(result).toBe(false);
+    });
   });
 });
 
