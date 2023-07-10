@@ -33,15 +33,18 @@ export class Telemetry {
     }
   }
 
+  maybeShowNotice(): void {
+    if (maybeRecordFirstRun()) {
+      logger.info(
+        chalk.gray(
+          'Anonymous telemetry is enabled. For more info, see https://www.promptfoo.dev/docs/configuration/telemetry',
+        ),
+      );
+    }
+  }
+
   async send(): Promise<void> {
     if (!this.disabled && this.events.length > 0) {
-      if (maybeRecordFirstRun()) {
-        logger.info(
-          chalk.gray(
-            'Anonymous telemetry is enabled. For more info, see https://www.promptfoo.dev/docs/configuration/telemetry',
-          ),
-        );
-      }
       try {
         const response = await fetchWithTimeout(
           TELEMETRY_ENDPOINT,

@@ -26,6 +26,7 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
       display: promptContent,
     })),
   };
+  telemetry.maybeShowNotice();
   const ret = await doEvaluate(constructedTestSuite, options);
   await telemetry.send();
   return ret;
