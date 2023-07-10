@@ -10,8 +10,8 @@ These prompts are nunjucks templates, so you can use logic like this:
 {% endif %}
 ---
 [
-  {"role": "system", "content": "Use JSON too for more complex payloads"},
-  {"role": "user", "content": "Such as multi-shot prompts"}
+  {"role": "system", "content": "This is another prompt. JSON is supported."},
+  {"role": "user", "content": "Using this format, you may construct multi-shot OpenAI prompts"}
   {"role": "user", "content": "Variable substitution still works: {{ var3 }}"}
 ]
 ---
@@ -21,7 +21,7 @@ If you prefer, you can break prompts into multiple files (make sure to edit prom
 export const DEFAULT_YAML_CONFIG = `# This configuration runs each prompt through a series of example inputs and checks if they meet requirements.
 
 prompts: [prompts.txt]
-providers: [openai:gpt-3.5-turbo]
+providers: [openai:gpt-3.5-turbo-0613]
 tests:
   - description: First test case - automatic review
     vars:
@@ -29,10 +29,12 @@ tests:
       var2: another value
       var3: some other value
     assert:
-      - type: equality
+      - type: equals
         value: expected LLM output goes here
-      - type: function
-        value: output.includes('some text')
+      - type: contains
+        value: some text
+      - type: javascript
+        value: 1 / (output.length + 1)  # prefer shorter outputs
 
   - description: Second test case - manual review
     # Test cases don't need assertions if you prefer to manually review the output

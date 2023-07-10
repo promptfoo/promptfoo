@@ -1,24 +1,27 @@
-import path from 'node:path';
+import path from 'path';
 
 import { ApiProvider, ProviderConfig, ProviderId, RawProviderConfig } from './types';
 
 import { OpenAiCompletionProvider, OpenAiChatCompletionProvider } from './providers/openai';
+import { AnthropicCompletionProvider } from './providers/anthropic';
 import { LocalAiCompletionProvider, LocalAiChatProvider } from './providers/localai';
+import { ScriptCompletionProvider } from './providers/scriptCompletion';
 
 export async function loadApiProviders(
   providerPaths: ProviderId | ProviderId[] | RawProviderConfig[],
+  basePath?: string,
 ): Promise<ApiProvider[]> {
   if (typeof providerPaths === 'string') {
-    return [await loadApiProvider(providerPaths)];
+    return [await loadApiProvider(providerPaths, undefined, basePath)];
   } else if (Array.isArray(providerPaths)) {
     return Promise.all(
       providerPaths.map((provider) => {
         if (typeof provider === 'string') {
-          return loadApiProvider(provider);
+          return loadApiProvider(provider, undefined, basePath);
         } else {
           const id = Object.keys(provider)[0];
           const context = { ...provider[id], id };
-          return loadApiProvider(id, context);
+          return loadApiProvider(id, context, basePath);
         }
       }),
     );
@@ -28,9 +31,17 @@ export async function loadApiProviders(
 
 export async function loadApiProvider(
   providerPath: string,
-  context: ProviderConfig | undefined = undefined,
+  context?: ProviderConfig,
+  basePath?: string,
 ): Promise<ApiProvider> {
-  if (providerPath?.startsWith('openai:')) {
+  if (providerPath?.startsWith('exec:')) {
+    // Load script module
+    const scriptPath = providerPath.split(':')[1];
+    return new ScriptCompletionProvider(scriptPath, {
+      id: `exec:${scriptPath}`,
+      config: { basePath },
+    });
+  } else if (providerPath?.startsWith('openai:')) {
     // Load OpenAI module
     const options = providerPath.split(':');
     const modelType = options[1];
@@ -57,6 +68,25 @@ export async function loadApiProvider(
         `Unknown OpenAI model type: ${modelType}. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>`,
       );
     }
+  } else if (providerPath?.startsWith('anthropic:')) {
+    // Load Anthropic module
+    const options = providerPath.split(':');
+    const modelType = options[1];
+    const modelName = options[2];
+
+    if (modelType === 'completion') {
+      return new AnthropicCompletionProvider(
+        modelName || 'claude-instant-1',
+        undefined,
+        context?.config,
+      );
+    } else if (AnthropicCompletionProvider.ANTHROPIC_COMPLETION_MODELS.includes(modelType)) {
+      return new AnthropicCompletionProvider(modelType, undefined, context?.config);
+    } else {
+      throw new Error(
+        `Unknown Anthropic model type: ${modelType}. Use one of the following providers: anthropic:completion:<model name>`,
+      );
+    }
   }
 
   if (providerPath?.startsWith('localai:')) {
@@ -81,6 +111,7 @@ export async function loadApiProvider(
 export default {
   OpenAiCompletionProvider,
   OpenAiChatCompletionProvider,
+  AnthropicCompletionProvider,
   LocalAiCompletionProvider,
   LocalAiChatProvider,
   loadApiProvider,

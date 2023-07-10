@@ -45,6 +45,7 @@ describe('util', () => {
     (fs.readFileSync as jest.Mock).mockReturnValue('Test prompt 1\n---\nTest prompt 2');
     (fs.statSync as jest.Mock).mockReturnValue({ isDirectory: () => false });
     const promptPaths = ['prompts.txt'];
+    (globSync as jest.Mock).mockImplementation((pathOrGlob) => [pathOrGlob]);
 
     const result = readPrompts(promptPaths);
 
@@ -58,6 +59,7 @@ describe('util', () => {
       .mockReturnValueOnce('Test prompt 2');
     (fs.statSync as jest.Mock).mockReturnValue({ isDirectory: () => false });
     const promptPaths = ['prompt1.txt', 'prompt2.txt'];
+    (globSync as jest.Mock).mockImplementation((pathOrGlob) => [pathOrGlob]);
 
     const result = readPrompts(promptPaths);
 
@@ -67,12 +69,12 @@ describe('util', () => {
 
   test('readPrompts with directory', () => {
     (fs.statSync as jest.Mock).mockReturnValue({ isDirectory: () => true });
-    (globSync as jest.Mock).mockReturnValue(['prompts']);
+    (globSync as jest.Mock).mockImplementation((pathOrGlob) => [pathOrGlob]);
     (fs.readdirSync as jest.Mock).mockReturnValue(['prompt1.txt', 'prompt2.txt']);
     (fs.readFileSync as jest.Mock).mockImplementation((filePath) => {
-      if (filePath === path.join('prompts', 'prompt1.txt')) {
+      if (filePath.endsWith(path.join('prompts', 'prompt1.txt'))) {
         return 'Test prompt 1';
-      } else if (filePath === path.join('prompts', 'prompt2.txt')) {
+      } else if (filePath.endsWith(path.join('prompts', 'prompt2.txt'))) {
         return 'Test prompt 2';
       }
     });
@@ -107,6 +109,28 @@ describe('util', () => {
 
     expect(fs.readFileSync).toHaveBeenCalledTimes(1);
     expect(result).toEqual([{ raw: 'some raw text', display: 'foo bar' }]);
+  });
+
+  test('readPrompts with JSONL file', () => {
+    const data = [
+      [
+        { role: 'system', content: 'You are a helpful assistant.' },
+        { role: 'user', content: 'Who won the world series in {{ year }}?' },
+      ],
+      [
+        { role: 'system', content: 'You are a helpful assistant.' },
+        { role: 'user', content: 'Who won the superbowl in {{ year }}?' },
+      ],
+    ];
+
+    (fs.readFileSync as jest.Mock).mockReturnValue(data.map((o) => JSON.stringify(o)).join('\n'));
+    (fs.statSync as jest.Mock).mockReturnValue({ isDirectory: () => false });
+    const promptPaths = ['prompts.jsonl'];
+
+    const result = readPrompts(promptPaths);
+
+    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+    expect(result).toEqual([toPrompt(JSON.stringify(data[0])), toPrompt(JSON.stringify(data[1]))]);
   });
 
   test('readVars with CSV input', async () => {
@@ -144,6 +168,7 @@ describe('util', () => {
     const results: EvaluateResult[] = [
       {
         success: true,
+        score: 1.0,
         prompt: {
           raw: 'Test prompt',
           display: '[display] Test prompt',
@@ -158,8 +183,16 @@ describe('util', () => {
       },
     ];
     const table: EvaluateTable = {
-      head: { prompts: ['Test prompt'], vars: ['var1', 'var2'] },
-      body: [{ outputs: ['Test output'], vars: ['value1', 'value2'] }],
+      head: {
+        prompts: [{ raw: 'Test prompt', display: '[display] Test prompt' }],
+        vars: ['var1', 'var2'],
+      },
+      body: [
+        {
+          outputs: [{ pass: true, score: 1.0, text: 'Test output', prompt: 'Test prompt' }],
+          vars: ['value1', 'value2'],
+        },
+      ],
     };
     const summary = {
       version: 1,
@@ -176,7 +209,11 @@ describe('util', () => {
       results,
       table,
     };
-    writeOutput(outputPath, summary);
+    const config = {
+      description: 'test',
+    };
+    const shareableUrl = null;
+    writeOutput(outputPath, summary, config, shareableUrl);
 
     expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
   });
@@ -186,6 +223,7 @@ describe('util', () => {
     const results: EvaluateResult[] = [
       {
         success: true,
+        score: 1.0,
         prompt: {
           raw: 'Test prompt',
           display: '[display] Test prompt',
@@ -200,8 +238,16 @@ describe('util', () => {
       },
     ];
     const table: EvaluateTable = {
-      head: { prompts: ['Test prompt'], vars: ['var1', 'var2'] },
-      body: [{ outputs: ['Test output'], vars: ['value1', 'value2'] }],
+      head: {
+        prompts: [{ raw: 'Test prompt', display: '[display] Test prompt' }],
+        vars: ['var1', 'var2'],
+      },
+      body: [
+        {
+          outputs: [{ pass: true, score: 1.0, text: 'Test output', prompt: 'Test prompt' }],
+          vars: ['value1', 'value2'],
+        },
+      ],
     };
     const summary = {
       version: 1,
@@ -218,7 +264,11 @@ describe('util', () => {
       results,
       table,
     };
-    writeOutput(outputPath, summary);
+    const config = {
+      description: 'test',
+    };
+    const shareableUrl = null;
+    writeOutput(outputPath, summary, config, shareableUrl);
 
     expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
   });
@@ -228,6 +278,7 @@ describe('util', () => {
     const results: EvaluateResult[] = [
       {
         success: true,
+        score: 1.0,
         prompt: {
           raw: 'Test prompt',
           display: '[display] Test prompt',
@@ -242,8 +293,16 @@ describe('util', () => {
       },
     ];
     const table: EvaluateTable = {
-      head: { prompts: ['Test prompt'], vars: ['var1', 'var2'] },
-      body: [{ outputs: ['Test output'], vars: ['value1', 'value2'] }],
+      head: {
+        prompts: [{ raw: 'Test prompt', display: '[display] Test prompt' }],
+        vars: ['var1', 'var2'],
+      },
+      body: [
+        {
+          outputs: [{ pass: true, score: 1.0, text: 'Test output', prompt: 'Test prompt' }],
+          vars: ['value1', 'value2'],
+        },
+      ],
     };
     const summary = {
       version: 1,
@@ -260,7 +319,11 @@ describe('util', () => {
       results,
       table,
     };
-    writeOutput(outputPath, summary);
+    const config = {
+      description: 'test',
+    };
+    const shareableUrl = null;
+    writeOutput(outputPath, summary, config, shareableUrl);
 
     expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
   });

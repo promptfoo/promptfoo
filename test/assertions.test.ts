@@ -63,6 +63,11 @@ describe('runAssertion', () => {
     value: 'output === "Expected output"',
   };
 
+  const functionAssertionWithNumber: Assertion = {
+    type: 'javascript',
+    value: 'output.length * 10',
+  };
+
   it('should pass when the equality assertion passes', async () => {
     const output = 'Expected output';
 
@@ -137,6 +142,19 @@ describe('runAssertion', () => {
       output,
     );
     expect(result.pass).toBeTruthy();
+    expect(result.reason).toBe('Assertion passed');
+  });
+
+  it('should pass a score through when the function returns a number', async () => {
+    const output = 'Expected output';
+
+    const result: GradingResult = await runAssertion(
+      functionAssertionWithNumber,
+      {} as AtomicTestCase,
+      output,
+    );
+    expect(result.pass).toBeTruthy();
+    expect(result.score).toBe(output.length * 10);
     expect(result.reason).toBe('Assertion passed');
   });
 
@@ -405,7 +423,7 @@ describe('runAssertion', () => {
     const output = 'Expected output';
 
     jest
-      .spyOn(util, 'fetchWithTimeout')
+      .spyOn(util, 'fetchWithRetries')
       .mockImplementation(() =>
         Promise.resolve(new Response(JSON.stringify({ pass: true }), { status: 200 })),
       );
@@ -423,7 +441,7 @@ describe('runAssertion', () => {
     const output = 'Different output';
 
     jest
-      .spyOn(util, 'fetchWithTimeout')
+      .spyOn(util, 'fetchWithRetries')
       .mockImplementation(() =>
         Promise.resolve(new Response(JSON.stringify({ pass: false }), { status: 200 })),
       );
@@ -441,7 +459,7 @@ describe('runAssertion', () => {
     const output = 'Expected output';
 
     jest
-      .spyOn(util, 'fetchWithTimeout')
+      .spyOn(util, 'fetchWithRetries')
       .mockImplementation(() => Promise.resolve(new Response('', { status: 500 })));
 
     const result: GradingResult = await runAssertion(

@@ -1,8 +1,8 @@
 {
   "name": "promptfoo",
-  "description": "Prompt engineering toolkit",
+  "description": "LLM eval & testing toolkit",
   "author": "Ian Webster",
-  "version": "0.12.0",
+  "version": "0.17.3",
   "license": "MIT",
   "type": "commonjs",
   "main": "dist/src/index.js",
@@ -60,6 +60,7 @@
     "typescript": "^5.0.4"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.5.2",
     "@apidevtools/json-schema-ref-parser": "^10.1.0",
     "async": "^3.2.4",
     "cache-manager": "^4.1.0",
@@ -79,7 +80,7 @@
     "nunjucks": "^3.2.4",
     "opener": "^1.5.2",
     "rouge": "^1.0.3",
-    "semver": "^7.5.1",
+    "semver": "^7.5.3",
     "socket.io": "^4.6.1",
     "tiny-invariant": "^1.3.1",
     "winston": "^3.8.2"

@@ -61,6 +61,28 @@ describe('evaluator', () => {
     expect(summary.results[0].response?.output).toBe('Test output');
   });
 
+  test('evaluate with vars as object', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt {{ var1.prop1 }} {{ var2 }}')],
+      tests: [
+        {
+          vars: { var1: { prop1: 'value1' }, var2: 'value2' },
+        },
+      ],
+    };
+
+    const summary = await evaluate(testSuite, {});
+
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
+    expect(summary.stats.successes).toBe(1);
+    expect(summary.stats.failures).toBe(0);
+    expect(summary.stats.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, cached: 0 });
+    expect(summary.results[0].prompt.raw).toBe('Test prompt value1 value2');
+    expect(summary.results[0].prompt.display).toBe('Test prompt {{ var1.prop1 }} {{ var2 }}');
+    expect(summary.results[0].response?.output).toBe('Test output');
+  });
+
   test('evaluate with named prompt', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],

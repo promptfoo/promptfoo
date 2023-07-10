@@ -1,0 +1,19 @@
+prompts: prompt.txt
+providers:
+  - openai:chat:gpt-4-0613
+  - exec:python langchain_example.py
+tests:
+  - vars:
+      question: What is the cube root of 389017?
+  - vars:
+      question: If you have 101101 in binary, what number does it represent in base 10?
+  - vars:
+      question: What is the natural logarithm (ln) of 89234?
+  - vars:
+      question: If a geometric series has a first term of 3125 and a common ratio of 0.008, what is the sum of the first 20 terms?
+  - vars:
+      question: A number in base 7 is 3526. What is this number in base 10?
+  - vars:
+      question: If a complex number is represented as 3 + 4i, what is its magnitude?
+  - vars:
+      question: What is the fourth root of 1296?

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
-import { join as pathJoin } from 'path';
+import { join as pathJoin, dirname } from 'path';
 
 import chalk from 'chalk';
 import { Command } from 'commander';
@@ -12,13 +12,14 @@ import { evaluate } from './evaluator';
 import {
   maybeReadConfig,
   readConfig,
+  readLatestResults,
   readPrompts,
   readTests,
   writeLatestResults,
   writeOutput,
 } from './util';
 import { DEFAULT_README, DEFAULT_YAML_CONFIG, DEFAULT_PROMPTS } from './onboarding';
-import { disableCache } from './cache';
+import { disableCache, clearCache } from './cache';
 import { getDirectory } from './esm';
 import { init } from './web/server';
 import { checkForUpdates } from './updates';
@@ -31,6 +32,7 @@ import type {
   UnifiedConfig,
 } from './types';
 import { generateTable } from './table';
+import { createShareableUrl } from './share';
 
 function createDummyFiles(directory: string | null) {
   if (directory) {
@@ -54,9 +56,9 @@ function createDummyFiles(directory: string | null) {
   writeFileSync(pathJoin(process.cwd(), directory, 'README.md'), DEFAULT_README);
 
   if (directory === '.') {
-    logger.info('Wrote prompts.txt and promptfooconfig.js. Open README.md to get started!');
+    logger.info('Wrote prompts.txt and promptfooconfig.yaml. Open README.md to get started!');
   } else {
-    logger.info(`Wrote prompts.txt and promptfooconfig.js to ./${directory}`);
+    logger.info(`Wrote prompts.txt and promptfooconfig.yaml to ./${directory}`);
     logger.info(`\`cd ${directory}\` and open README.md to get started!`);
   }
 }
@@ -120,9 +122,40 @@ async function main() {
     });
 
   program
+    .command('share')
+    .description('Share your most recent result')
+    .action(async (cmdObj: { port: number } & Command) => {
+      telemetry.record('command_used', {
+        name: 'share',
+      });
+      await telemetry.send();
+
+      const latestResults = readLatestResults();
+      if (!latestResults) {
+        logger.error('Could not load results. Do you need to run `promptfoo eval` first?');
+        process.exit(1);
+      }
+      const url = await createShareableUrl(latestResults.results, latestResults.config);
+      logger.info(`View results: ${chalk.greenBright.bold(url)}`);
+    });
+
+  program
+    .command('cache')
+    .description('Manage cache')
+    .command('clear')
+    .description('Clear cache')
+    .action(async () => {
+      await clearCache();
+      telemetry.record('command_used', {
+        name: 'cache_clear',
+      });
+      await telemetry.send();
+    });
+
+  program
     .command('eval')
     .description('Evaluate prompts')
-    .requiredOption('-p, --prompts <paths...>', 'Paths to prompt files (.txt)', config.prompts)
+    .option('-p, --prompts <paths...>', 'Paths to prompt files (.txt)', config.prompts)
     .option(
       '-r, --providers <name or path...>',
       'One of: openai:chat, openai:completion, openai:<model name>, or path to custom API caller module',
@@ -175,6 +208,9 @@ async function main() {
       'Do not read or write results to disk cache',
       config?.commandLineOptions?.cache,
     )
+    .option('--no-progress-bar', 'Do not show progress bar')
+    .option('--no-table', 'Do not output table in CLI', config?.commandLineOptions?.table)
+    .option('--share', 'Create a shareable URL', config?.commandLineOptions?.share)
     .option('--grader', 'Model that will grade outputs', config?.commandLineOptions?.grader)
     .option('--verbose', 'Show debug logs', config?.commandLineOptions?.verbose)
     .option('--view [port]', 'View in browser ui')
@@ -192,14 +228,13 @@ async function main() {
       const configPath = cmdObj.config;
       if (configPath) {
         config = await readConfig(configPath);
-      } else {
-        config = {
-          prompts: cmdObj.prompts || config.prompts,
-          providers: cmdObj.providers || config.providers,
-          tests: cmdObj.tests || cmdObj.vars || config.tests,
-          defaultTest: config.defaultTest,
-        };
       }
+      config = {
+        prompts: cmdObj.prompts || config.prompts,
+        providers: cmdObj.providers || config.providers,
+        tests: cmdObj.tests || cmdObj.vars || config.tests,
+        defaultTest: config.defaultTest,
+      };
 
       // Validation
       if (!config.prompts || config.prompts.length === 0) {
@@ -214,9 +249,15 @@ async function main() {
       }
 
       // Parse prompts, providers, and tests
-      const parsedPrompts = readPrompts(config.prompts);
-      const parsedProviders = await loadApiProviders(config.providers);
-      const parsedTests: TestCase[] = await readTests(config.tests);
+
+      // Use basepath in cases where path was supplied in the config file
+      const basePath = configPath ? dirname(configPath) : '';
+      const parsedPrompts = readPrompts(config.prompts, cmdObj.prompts ? undefined : basePath);
+      const parsedProviders = await loadApiProviders(config.providers, basePath);
+      const parsedTests: TestCase[] = await readTests(
+        config.tests,
+        cmdObj.tests ? undefined : basePath,
+      );
 
       if (parsedPrompts.length === 0) {
         logger.error(chalk.red('No prompts found'));
@@ -242,7 +283,10 @@ async function main() {
       };
 
       const options: EvaluateOptions = {
-        showProgressBar: getLogLevel() !== 'debug',
+        showProgressBar:
+          typeof cmdObj.progressBar === 'undefined'
+            ? getLogLevel() !== 'debug'
+            : cmdObj.progressBar,
         maxConcurrency: !isNaN(maxConcurrency) && maxConcurrency > 0 ? maxConcurrency : undefined,
         ...evaluateOptions,
       };
@@ -257,10 +301,12 @@ async function main() {
 
       const summary = await evaluate(testSuite, options);
 
+      const shareableUrl = cmdObj.share ? await createShareableUrl(summary, config) : null;
+
       if (cmdObj.output) {
         logger.info(chalk.yellow(`Writing output to ${cmdObj.output}`));
-        writeOutput(cmdObj.output, summary);
-      } else if (getLogLevel() !== 'debug') {
+        writeOutput(cmdObj.output, summary, config, shareableUrl);
+      } else if (cmdObj.table && getLogLevel() !== 'debug') {
         // Output table by default
         const table = generateTable(summary, parseInt(cmdObj.tableCellMaxLength || '', 10));
 
@@ -273,15 +319,20 @@ async function main() {
 
       const border = '='.repeat(process.stdout.columns - 10);
       logger.info(border);
-      if (cmdObj.view || !cmdObj.write) {
+      if (!cmdObj.write) {
         logger.info(`${chalk.green('✔')} Evaluation complete`);
       } else {
         writeLatestResults(summary, config);
-        logger.info(
-          `${chalk.green('✔')} Evaluation complete. To use web viewer, run ${chalk.green(
-            'promptfoo view',
-          )}`,
-        );
+
+        if (cmdObj.view) {
+          logger.info(`${chalk.green('✔')} Evaluation complete. Launching web viewer...`);
+        } else if (shareableUrl) {
+          logger.info(`${chalk.green('✔')} Evaluation complete: ${shareableUrl}`);
+        } else {
+          logger.info(`${chalk.green('✔')} Evaluation complete.\n`);
+          logger.info(`Run ${chalk.greenBright('promptfoo view')} to use the local web viewer`);
+          logger.info(`Run ${chalk.greenBright('promptfoo share')} to create a shareable URL`);
+        }
       }
       logger.info(border);
       logger.info(chalk.green.bold(`Successes: ${summary.stats.successes}`));

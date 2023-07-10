@@ -204,6 +204,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     'gpt-3.5-turbo',
     'gpt-3.5-turbo-0301',
     'gpt-3.5-turbo-0613',
+    'gpt-3.5-turbo-16k',
+    'gpt-3.5-turbo-16k-0613',
   ];
 
   options: OpenAiCompletionOptions;
@@ -216,7 +218,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     this.options = context || {};
   }
 
-  // TODO(ian): support passing in `messages` directly
   async callApi(prompt: string, options?: OpenAiCompletionOptions): Promise<ProviderResponse> {
     if (!this.apiKey) {
       throw new Error(
@@ -224,12 +225,20 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       );
     }
 
-    let messages: { role: string; content: string }[];
+    let messages: { role: string; content: string; name?: string }[];
     try {
-      // User can specify `messages` payload as JSON, or we'll just put the
-      // string prompt into a `messages` array.
-      messages = JSON.parse(prompt);
+      messages = JSON.parse(prompt) as { role: string; content: string }[];
     } catch (err) {
+      const trimmedPrompt = prompt.trim();
+      if (
+        process.env.PROMPTFOO_REQUIRE_JSON_PROMPTS ||
+        trimmedPrompt.startsWith('{') ||
+        trimmedPrompt.startsWith('[')
+      ) {
+        throw new Error(
+          `OpenAI Chat Completion prompt is not a valid JSON string: ${err}\n\n${prompt}`,
+        );
+      }
       messages = [{ role: 'user', content: prompt }];
     }
 
@@ -291,5 +300,5 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 }
 
 export const DefaultEmbeddingProvider = new OpenAiEmbeddingProvider('text-embedding-ada-002');
-export const DefaultGradingProvider = new OpenAiChatCompletionProvider('gpt-4');
-export const DefaultSuggestionsProvider = new OpenAiChatCompletionProvider('gpt-4');
+export const DefaultGradingProvider = new OpenAiChatCompletionProvider('gpt-4-0613');
+export const DefaultSuggestionsProvider = new OpenAiChatCompletionProvider('gpt-4-0613');

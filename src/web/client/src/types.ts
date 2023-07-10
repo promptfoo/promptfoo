@@ -1,10 +1,22 @@
+type Prompt = {
+  display: string;
+  raw: string;
+};
+
 export type EvalHead = {
-  prompts: string[];
+  prompts: Prompt[];
   vars: string[];
 };
 
+export type EvalRowOutput = {
+  pass: boolean;
+  score: number;
+  text: string | object;
+  prompt: string;
+};
+
 export type EvalRow = {
-  outputs: string[]; // var inputs
+  outputs: EvalRowOutput[];
   vars: string[]; // model outputs
 };
 

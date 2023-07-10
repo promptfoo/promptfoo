@@ -4,7 +4,7 @@ import nunjucks from 'nunjucks';
 
 import telemetry from './telemetry';
 import { DefaultEmbeddingProvider, DefaultGradingProvider } from './providers/openai';
-import { cosineSimilarity, fetchWithTimeout } from './util';
+import { cosineSimilarity, fetchWithRetries } from './util';
 import { loadApiProvider } from './providers';
 import { DEFAULT_GRADING_PROMPT } from './prompts';
 
@@ -32,6 +32,7 @@ function handleRougeScore(
 
   return {
     pass,
+    score: inverted ? 1 - score : score,
     reason: pass
       ? `${baseType.toUpperCase()} score ${score} is greater than or equal to threshold ${
           assertion.threshold || 0.75
@@ -49,24 +50,36 @@ export async function runAssertions(test: AtomicTestCase, output: string): Promi
     completion: 0,
   };
 
-  if (!test.assert) {
-    return { pass: true, reason: 'No assertions', tokensUsed };
+  if (!test.assert || test.assert.length < 1) {
+    return { pass: true, score: 1, reason: 'No assertions', tokensUsed };
   }
 
+  let totalScore = 0;
+  let totalWeight = 0;
   for (const assertion of test.assert) {
-    const result = await runAssertion(assertion, test, output);
-    if (!result.pass) {
-      return result;
-    }
+    const weight = assertion.weight || 1;
+    totalWeight += weight;
 
+    const result = await runAssertion(assertion, test, output);
+    totalScore += result.score * weight;
     if (result.tokensUsed) {
       tokensUsed.total += result.tokensUsed.total;
       tokensUsed.prompt += result.tokensUsed.prompt;
       tokensUsed.completion += result.tokensUsed.completion;
     }
+
+    if (!result.pass) {
+      // Short-circuit assertions
+      return result;
+    }
   }
 
-  return { pass: true, reason: 'All assertions passed', tokensUsed };
+  return {
+    pass: true,
+    score: totalScore / totalWeight,
+    reason: 'All assertions passed',
+    tokensUsed,
+  };
 }
 
 export async function runAssertion(
@@ -75,6 +88,7 @@ export async function runAssertion(
   output: string,
 ): Promise<GradingResult> {
   let pass: boolean = false;
+  let score: number = 0.0;
 
   invariant(assertion.type, `Assertion must have a type: ${JSON.stringify(assertion)}`);
 
@@ -89,6 +103,7 @@ export async function runAssertion(
     pass = assertion.value === output;
     return {
       pass,
+      score: pass ? 1 : 0,
       reason: pass ? 'Assertion passed' : `Expected output "${assertion.value}"`,
     };
   }
@@ -100,18 +115,23 @@ export async function runAssertion(
     } catch (err) {
       pass = inverse;
     }
-    return { pass, reason: pass ? 'Assertion passed' : 'Expected output to be valid JSON' };
+    return {
+      pass,
+      score: pass ? 1 : 0,
+      reason: pass ? 'Assertion passed' : 'Expected output to be valid JSON',
+    };
   }
 
   if (baseType === 'contains') {
-    invariant(assertion.value, '"contains" assertion type must have a string value');
+    invariant(assertion.value, '"contains" assertion type must have a string or number value');
     invariant(
-      typeof assertion.value === 'string',
-      '"contains" assertion type must have a string value',
+      typeof assertion.value === 'string' || typeof assertion.value === 'number',
+      '"contains" assertion type must have a string or number value',
     );
-    pass = output.includes(assertion.value) !== inverse;
+    pass = output.includes(String(assertion.value)) !== inverse;
     return {
       pass,
+      score: pass ? 1 : 0,
       reason: pass
         ? 'Assertion passed'
         : `Expected output to ${inverse ? 'not ' : ''}contain "${assertion.value}"`,
@@ -127,6 +147,7 @@ export async function runAssertion(
     pass = assertion.value.some((value) => output.includes(value)) !== inverse;
     return {
       pass,
+      score: pass ? 1 : 0,
       reason: pass
         ? 'Assertion passed'
         : `Expected output to ${inverse ? 'not ' : ''}contain one of "${assertion.value.join(
@@ -144,6 +165,7 @@ export async function runAssertion(
     pass = assertion.value.every((value) => output.includes(value)) !== inverse;
     return {
       pass,
+      score: pass ? 1 : 0,
       reason: pass
         ? 'Assertion passed'
         : `Expected output to ${inverse ? 'not ' : ''}contain all of "${assertion.value.join(
@@ -162,6 +184,7 @@ export async function runAssertion(
     pass = regex.test(output) !== inverse;
     return {
       pass,
+      score: pass ? 1 : 0,
       reason: pass
         ? 'Assertion passed'
         : `Expected output to ${inverse ? 'not ' : ''}match regex "${assertion.value}"`,
@@ -169,14 +192,15 @@ export async function runAssertion(
   }
 
   if (baseType === 'icontains') {
-    invariant(assertion.value, '"icontains" assertion type must have a string value');
+    invariant(assertion.value, '"icontains" assertion type must have a string or number value');
     invariant(
-      typeof assertion.value === 'string',
-      '"icontains" assertion type must have a string value',
+      typeof assertion.value === 'string' || typeof assertion.value === 'number',
+      '"icontains" assertion type must have a string or number value',
     );
-    pass = output.toLowerCase().includes(assertion.value.toLowerCase()) !== inverse;
+    pass = output.toLowerCase().includes(String(assertion.value).toLowerCase()) !== inverse;
     return {
       pass,
+      score: pass ? 1 : 0,
       reason: pass
         ? 'Assertion passed'
         : `Expected output to ${inverse ? 'not ' : ''}contain "${assertion.value}"`,
@@ -187,6 +211,7 @@ export async function runAssertion(
     pass = containsJSON(output) !== inverse;
     return {
       pass,
+      score: pass ? 1 : 0,
       reason: pass
         ? 'Assertion passed'
         : `Expected output to ${inverse ? 'not ' : ''}contain valid JSON`,
@@ -199,16 +224,27 @@ export async function runAssertion(
       const context = {
         vars: test.vars || {},
       };
-      pass = customFunction(output, context) !== inverse;
+      const result = customFunction(output, context) as any;
+      if (typeof result === 'boolean') {
+        pass = result !== inverse;
+        score = 1.0;
+      } else if (typeof result === 'number') {
+        pass = true;
+        score = result;
+      } else {
+        throw new Error('Custom function must return a boolean or number');
+      }
     } catch (err) {
       return {
         pass: false,
+        score: 0,
         reason: `Custom function threw error: ${(err as Error).message}
 ${assertion.value}`,
       };
     }
     return {
       pass,
+      score,
       reason: pass
         ? 'Assertion passed'
         : `Custom function returned ${inverse ? 'true' : 'false'}
@@ -245,7 +281,7 @@ ${assertion.value}`,
       const context = {
         vars: test.vars || {},
       };
-      const response = await fetchWithTimeout(
+      const response = await fetchWithRetries(
         assertion.value,
         {
           method: 'POST',
@@ -263,15 +299,25 @@ ${assertion.value}`,
 
       const jsonResponse = await response.json();
       pass = jsonResponse.pass !== inverse;
+      score =
+        typeof jsonResponse.score === 'undefined'
+          ? pass
+            ? 1
+            : 0
+          : inverse
+          ? 1 - jsonResponse.score
+          : jsonResponse.score;
     } catch (err) {
       return {
         pass: false,
+        score: 0,
         reason: `Webhook error: ${(err as Error).message}`,
       };
     }
 
     return {
       pass,
+      score,
       reason: pass ? 'Assertion passed' : `Webhook returned ${inverse ? 'true' : 'false'}`,
     };
   }
@@ -322,6 +368,7 @@ export async function matchesSimilarity(
   if (expectedEmbedding.error || outputEmbedding.error) {
     return {
       pass: false,
+      score: 0,
       reason:
         expectedEmbedding.error || outputEmbedding.error || 'Unknown error fetching embeddings',
       tokensUsed,
@@ -331,6 +378,7 @@ export async function matchesSimilarity(
   if (!expectedEmbedding.embedding || !outputEmbedding.embedding) {
     return {
       pass: false,
+      score: 0,
       reason: 'Embedding not found',
       tokensUsed,
     };
@@ -343,12 +391,14 @@ export async function matchesSimilarity(
   if (pass) {
     return {
       pass: true,
+      score: inverse ? 1 - similarity : similarity,
       reason: inverse ? lessThanReason : greaterThanReason,
       tokensUsed,
     };
   }
   return {
     pass: false,
+    score: inverse ? 1 - similarity : similarity,
     reason: inverse ? greaterThanReason : lessThanReason,
     tokensUsed,
   };
@@ -366,7 +416,7 @@ export async function matchesLlmRubric(
   }
 
   const prompt = nunjucks.renderString(options.rubricPrompt || DEFAULT_GRADING_PROMPT, {
-    content: output,
+    output,
     rubric: expected,
   });
 
@@ -378,6 +428,7 @@ export async function matchesLlmRubric(
   if (resp.error || !resp.output) {
     return {
       pass: false,
+      score: 0,
       reason: resp.error || 'No output',
       tokensUsed: {
         total: resp.tokenUsage?.total || 0,
@@ -388,16 +439,17 @@ export async function matchesLlmRubric(
   }
 
   try {
-    const parsed = JSON.parse(resp.output) as GradingResult;
+    const parsed = JSON.parse(resp.output) as Omit<GradingResult, 'score'>;
     parsed.tokensUsed = {
       total: resp.tokenUsage?.total || 0,
       prompt: resp.tokenUsage?.prompt || 0,
       completion: resp.tokenUsage?.completion || 0,
     };
-    return parsed;
+    return { ...parsed, score: parsed.pass ? 1 : 0 };
   } catch (err) {
     return {
       pass: false,
+      score: 0,
       reason: `Output is not valid JSON: ${resp.output}`,
       tokensUsed: {
         total: resp.tokenUsage?.total || 0,

@@ -1,4 +1,4 @@
-import readline from 'node:readline';
+import readline from 'readline';
 
 import async from 'async';
 import chalk from 'chalk';
@@ -38,18 +38,24 @@ interface RunEvalOptions {
 const DEFAULT_MAX_CONCURRENCY = 4;
 
 function generateVarCombinations(
-  vars: Record<string, string | string[]>,
-): Record<string, string>[] {
+  vars: Record<string, string | string[] | any>,
+): Record<string, string | any[]>[] {
   const keys = Object.keys(vars);
-  const combinations: Record<string, string>[] = [{}];
+  const combinations: Record<string, string | any[]>[] = [{}];
 
   for (const key of keys) {
-    const values = Array.isArray(vars[key]) ? vars[key] : [vars[key]];
-    const newCombinations: Record<string, string>[] = [];
+    let values: any[] = Array.isArray(vars[key]) ? vars[key] : [vars[key]];
+
+    // Check if it's an array but not a string array
+    if (Array.isArray(vars[key]) && typeof vars[key][0] !== 'string') {
+      values = [vars[key]];
+    }
+
+    const newCombinations: Record<string, any>[] = [];
 
     for (const combination of combinations) {
       for (const value of values) {
-        newCombinations.push({ ...combination, [key]: value as string });
+        newCombinations.push({ ...combination, [key]: value });
       }
     }
 
@@ -109,6 +115,7 @@ class Evaluator {
         ...setup,
         response,
         success: false,
+        score: 0,
       };
       if (response.error) {
         ret.error = response.error;
@@ -118,6 +125,7 @@ class Evaluator {
           ret.error = checkResult.reason;
         }
         ret.success = checkResult.pass;
+        ret.score = checkResult.score;
         if (checkResult.tokensUsed) {
           this.stats.tokenUsage.total += checkResult.tokensUsed.total;
           this.stats.tokenUsage.prompt += checkResult.tokensUsed.prompt;
@@ -125,6 +133,7 @@ class Evaluator {
         }
       } else {
         ret.success = false;
+        ret.score = 0;
         ret.error = 'No output';
       }
 
@@ -148,6 +157,7 @@ class Evaluator {
         ...setup,
         error: String(err) + '\n\n' + (err as Error).stack,
         success: false,
+        score: 0,
       };
     }
   }
@@ -225,10 +235,10 @@ class Evaluator {
     });
 
     const varNames: Set<string> = new Set();
-    const varsWithSpecialColsRemoved: Record<string, string | string[]>[] = [];
+    const varsWithSpecialColsRemoved: Record<string, string | string[] | object>[] = [];
     for (const testCase of tests) {
       if (testCase.vars) {
-        const varWithSpecialColsRemoved: Record<string, string | string[]> = {};
+        const varWithSpecialColsRemoved: Record<string, string | string[] | object> = {};
         for (const varName of Object.keys(testCase.vars)) {
           varNames.add(varName);
           varWithSpecialColsRemoved[varName] = testCase.vars[varName];
@@ -283,7 +293,7 @@ class Evaluator {
 
     const table: EvaluateTable = {
       head: {
-        prompts: prompts.map((p) => p.display),
+        prompts,
         vars: Array.from(varNames).sort(),
         // TODO(ian): add assertions to table?
       },
@@ -323,11 +333,12 @@ class Evaluator {
         if (progressbar) {
           progressbar.increment({
             provider: options.provider.id(),
-            prompt: options.prompt.raw.slice(0, 10),
+            prompt: options.prompt.raw.slice(0, 10).replace(/\n/g, ' '),
             vars: Object.entries(options.test.vars || {})
               .map(([k, v]) => `${k}=${v}`)
               .join(' ')
-              .slice(0, 10),
+              .slice(0, 10)
+              .replace(/\n/g, ' '),
           });
         }
 
@@ -339,26 +350,41 @@ class Evaluator {
         let resultText: string | undefined;
         if (isTest) {
           if (row.success) {
-            resultText = `[PASS] ${row.response?.output || row.error || ''}`;
+            resultText = `${row.response?.output || row.error || ''}`;
           } else {
-            resultText = `[FAIL] ${row.error}\n---\n${row.response?.output || row.error || ''}`;
+            resultText = `${row.error}\n---\n${row.response?.output || row.error || ''}`;
           }
         } else if (row.error) {
-          resultText = `[FAIL] ${row.error}`;
+          resultText = `${row.error}`;
         } else {
           resultText = row.response?.output || row.error || '';
         }
 
-        // TODO(ian): Provide full context in table cells, and have the caller
-        // construct the table contents itself.
         const { rowIndex, colIndex } = options;
         if (!table.body[rowIndex]) {
           table.body[rowIndex] = {
             outputs: [],
-            vars: table.head.vars.map((varName) => options.test.vars?.[varName] || '').flat(),
+            vars: table.head.vars
+              .map((varName) => {
+                const varValue = options.test.vars?.[varName] || '';
+                if (typeof varValue === 'string') {
+                  return varValue;
+                }
+                if (Array.isArray(varValue)) {
+                  // Only flatten string arrays
+                  return typeof varValue[0] === 'string' ? varValue : JSON.stringify(varValue);
+                }
+                return JSON.stringify(varValue);
+              })
+              .flat(),
           };
         }
-        table.body[rowIndex].outputs[colIndex] = resultText;
+        table.body[rowIndex].outputs[colIndex] = {
+          pass: row.success,
+          score: row.score,
+          text: resultText,
+          prompt: row.prompt.raw,
+        };
       },
     );
 
@@ -368,7 +394,7 @@ class Evaluator {
 
     telemetry.record('eval_ran', {});
 
-    return { version: 1, results, stats: this.stats, table };
+    return { version: 2, results, stats: this.stats, table };
   }
 }
 

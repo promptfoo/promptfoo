@@ -17,6 +17,9 @@ export interface CommandLineOptions {
   tableCellMaxLength?: string;
   write?: boolean;
   cache?: boolean;
+  table?: boolean;
+  share?: boolean;
+  progressBar?: boolean;
 
   generateSuggestions?: boolean;
   promptPrefix?: string;
@@ -81,20 +84,28 @@ export interface Prompt {
 
 export interface EvaluateResult {
   prompt: Prompt;
-  vars: Record<string, string>;
+  vars: Record<string, string | object>;
   response?: ProviderResponse;
   error?: string;
   success: boolean;
+  score: number;
+}
+
+export interface EvaluateTableOutput {
+  pass: boolean;
+  score: number;
+  text: string;
+  prompt: string;
 }
 
 export interface EvaluateTable {
   head: {
-    prompts: string[];
+    prompts: Prompt[];
     vars: string[];
   };
 
   body: {
-    outputs: string[];
+    outputs: EvaluateTableOutput[];
     vars: string[];
   }[];
 }
@@ -114,6 +125,7 @@ export interface EvaluateSummary {
 
 export interface GradingResult {
   pass: boolean;
+  score: number;
   reason: string;
   tokensUsed?: TokenUsage;
 }
@@ -150,6 +162,9 @@ export interface Assertion {
   // The threshold value, only applicable for similarity (cosine distance)
   threshold?: number;
 
+  // The weight of this assertion compared to other assertions in the test case. Defaults to 1.
+  weight?: number;
+
   // Some assertions (similarity, llm-rubric) require an LLM provider
   provider?: ApiProvider;
 }
@@ -160,7 +175,7 @@ export interface TestCase {
   description?: string;
 
   // Key-value pairs to substitute in the prompt
-  vars?: Record<string, string | string[]>;
+  vars?: Record<string, string | string[] | object>;
 
   // Optional list of automatic checks to run on the LLM output
   assert?: Assertion[];
@@ -171,7 +186,7 @@ export interface TestCase {
 
 // Same as a TestCase, except the `vars` object has been flattened into its final form.
 export interface AtomicTestCase extends TestCase {
-  vars?: Record<string, string>;
+  vars?: Record<string, string | object>;
 }
 
 // The test suite defines the "knobs" that we are tuning in prompt engineering: providers and prompts

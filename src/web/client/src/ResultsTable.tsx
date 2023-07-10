@@ -16,17 +16,48 @@ import { useStore } from './store.js';
 
 import type { CellContext, VisibilityState } from '@tanstack/table-core';
 
-import type { EvalRow, FilterMode } from './types.js';
+import EvalOutputPromptDialog from './EvalOutputPromptDialog';
+
+import type { EvalRow, EvalRowOutput, FilterMode } from './types.js';
 
 import './ResultsTable.css';
 
+function formatRowOutput(output: EvalRowOutput | string) {
+  if (typeof output === 'string') {
+    // Backwards compatibility for 0.15.0 breaking change. Remove eventually.
+    const pass = output.startsWith('[PASS]');
+    let text = output;
+    if (output.startsWith('[PASS]')) {
+      text = text.slice('[PASS]'.length);
+    } else if (output.startsWith('[FAIL]')) {
+      text = text.slice('[FAIL]'.length);
+    }
+    return {
+      text,
+      pass,
+      score: pass ? 1 : 0,
+    };
+  }
+  return output;
+}
+
+function scoreToString(score: number) {
+  if (score === 0 || score === 1) {
+    // Don't show boolean scores.
+    return '';
+  }
+  return `(${score.toFixed(2)})`;
+}
+
 interface TruncatedTextProps {
-  text: string;
+  text: string | number;
   maxLength: number;
 }
 
-function TruncatedText({ text, maxLength }: TruncatedTextProps) {
+function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
   const [isTruncated, setIsTruncated] = React.useState<boolean>(true);
+  let text = typeof rawText === 'string' ? rawText : JSON.stringify(rawText);
+  text = text.replace(/\n/g, '<br>');
 
   const toggleTruncate = () => {
     setIsTruncated(!isTruncated);
@@ -34,72 +65,94 @@ function TruncatedText({ text, maxLength }: TruncatedTextProps) {
 
   const renderTruncatedText = () => {
     if (text.length <= maxLength) {
-      return text;
+      return <span dangerouslySetInnerHTML={{ __html: text }} />;
     }
     if (isTruncated) {
       return (
-        <>
-          <span style={{ cursor: 'pointer' }} onClick={toggleTruncate}>
-            {text.substring(0, maxLength)} ...
-          </span>
-        </>
+        <span style={{ cursor: 'pointer' }} onClick={toggleTruncate}>
+          <span dangerouslySetInnerHTML={{ __html: text.substring(0, maxLength) }} /> ...
+        </span>
       );
     } else {
       return (
-        <>
-          <span style={{ cursor: 'pointer' }} onClick={toggleTruncate}>
-            {text}
-          </span>
-        </>
+        <span style={{ cursor: 'pointer' }} onClick={toggleTruncate}>
+          <span dangerouslySetInnerHTML={{ __html: text }} />
+        </span>
       );
     }
   };
 
-  return <div>{renderTruncatedText()}</div>;
+  return renderTruncatedText();
 }
 
 interface PromptOutputProps {
-  text: string;
+  output: EvalRowOutput;
   maxTextLength: number;
   rowIndex: number;
   promptIndex: number;
   onRating: (rowIndex: number, promptIndex: number, isPass: boolean) => void;
 }
 
-function PromptOutput({ text, maxTextLength, rowIndex, promptIndex, onRating }: PromptOutputProps) {
-  const isPass = text.startsWith('[PASS] ');
-  const isFail = text.startsWith('[FAIL] ');
+function EvalOutputCell({
+  output,
+  maxTextLength,
+  rowIndex,
+  promptIndex,
+  onRating,
+}: PromptOutputProps) {
+  const [openPrompt, setOpen] = React.useState(false);
+  const handlePromptOpen = () => {
+    setOpen(true);
+  };
+  const handlePromptClose = () => {
+    setOpen(false);
+  };
+  let text = typeof output.text === 'string' ? output.text : JSON.stringify(output.text);
   let chunks: string[] = [];
-  if (isPass) {
-    text = text.substring(7);
-  } else if (isFail) {
-    if (text.includes('---')) {
-      chunks = text.split('---');
-      text = chunks.slice(1).join('---');
-    } else {
-      chunks = ['[FAIL]'];
-      if (text.startsWith('[FAIL] ')) {
-        text = text.substring(7);
-      }
-    }
+  if (!output.pass && text.includes('---')) {
+    // TODO(ian): Plumb through failure message instead of parsing it out.
+    chunks = text.split('---');
+    text = chunks.slice(1).join('---');
   }
 
   const handleClick = (isPass: boolean) => {
     onRating(rowIndex, promptIndex, isPass);
   };
 
+  // TODO(ian): output.prompt check for backwards compatibility, remove after 0.17.0
   return (
     <>
       <div className="cell">
-        {isPass && <div className="status pass">[PASS]</div>}
-        {isFail && <div className="status fail">{chunks[0]}</div>}{' '}
+        {output.pass && (
+          <div className="status pass">
+            PASS <span className="score">{scoreToString(output.score)}</span>
+          </div>
+        )}
+        {!output.pass && (
+          <div className="status fail">
+            [FAIL<span className="score">{scoreToString(output.score)}</span>] {chunks[0]}
+          </div>
+        )}{' '}
         <TruncatedText text={text} maxLength={maxTextLength} />
       </div>
-      <div className="cell-rating">
-        <span className="rating" onClick={() => handleClick(true)}>
+      <div className="cell-actions">
+        {output.prompt && (
+          <>
+            <span className="action" onClick={handlePromptOpen}>
+              🔎
+            </span>
+            <EvalOutputPromptDialog
+              open={openPrompt}
+              onClose={handlePromptClose}
+              prompt={output.prompt}
+              output={text}
+            />
+          </>
+        )}
+        <span className="action" onClick={() => handleClick(true)}>
           👍
         </span>
-        <span className="rating" onClick={() => handleClick(false)}>
+        <span className="action" onClick={() => handleClick(false)}>
           👎
         </span>
       </div>
@@ -107,11 +160,35 @@ function PromptOutput({ text, maxTextLength, rowIndex, promptIndex, onRating }: 
   );
 }
 
-function TableHeader({ text, maxLength, smallText }: TruncatedTextProps & { smallText: string }) {
+function TableHeader({
+  text,
+  maxLength,
+  smallText,
+  expandedText,
+}: TruncatedTextProps & { smallText: string; expandedText?: string }) {
+  const [openPrompt, setOpen] = React.useState(false);
+  const handlePromptOpen = () => {
+    setOpen(true);
+  };
+  const handlePromptClose = () => {
+    setOpen(false);
+  };
   return (
     <div>
       <TruncatedText text={text} maxLength={maxLength} />
-      <span className="smalltext">{smallText}</span>
+      {expandedText && (
+        <>
+          <span className="action" onClick={handlePromptOpen}>
+            🔎
+          </span>
+          <EvalOutputPromptDialog
+            open={openPrompt}
+            onClose={handlePromptClose}
+            prompt={expandedText}
+          />
+        </>
+      )}
+      <div className="smalltext">{smallText}</div>
     </div>
   );
 }
@@ -136,10 +213,9 @@ export default function ResultsTable({
   const { table, setTable } = useStore();
   invariant(table, 'Table should be defined');
   const { head, body } = table;
-  // TODO(ian): Correctly plumb through the results instead of parsing the string.
   const numGood = head.prompts.map((_, idx) =>
     body.reduce((acc, row) => {
-      return acc + (row.outputs[idx].startsWith('[PASS]') ? 1 : 0);
+      return acc + (row.outputs[idx].pass ? 1 : 0);
     }, 0),
   );
 
@@ -147,10 +223,8 @@ export default function ResultsTable({
     const updatedData = [...body];
     const updatedRow = { ...updatedData[rowIndex] };
     const updatedOutputs = [...updatedRow.outputs];
-    const updatedOutput = isPass
-      ? `[PASS] ${updatedOutputs[promptIndex].replace(/^\[(PASS|FAIL)\] /, '')}`
-      : `[FAIL] ${updatedOutputs[promptIndex].replace(/^\[(PASS|FAIL)\] /, '')}`;
-    updatedOutputs[promptIndex] = updatedOutput;
+    updatedOutputs[promptIndex].pass = isPass;
+    updatedOutputs[promptIndex].score = isPass ? 1 : 0;
     updatedRow.outputs = updatedOutputs;
     updatedData[rowIndex] = updatedRow;
     setTable({
@@ -169,28 +243,33 @@ export default function ResultsTable({
       id: 'vars',
       header: () => <span>Variables</span>,
       columns: head.vars.map((varName, idx) =>
-        columnHelper.accessor((row: EvalRow) => row.vars[idx], {
-          id: `Variable ${idx + 1}`,
-          header: () => (
-            <TableHeader
-              smallText={`Variable ${idx + 1}`}
-              text={varName}
-              maxLength={maxTextLength}
-            />
-          ),
-          cell: (info: CellContext<EvalRow, string>) => (
-            <TruncatedText text={info.getValue()} maxLength={maxTextLength} />
-          ),
-          // Minimize the size of Variable columns.
-          size: 50,
-        }),
+        columnHelper.accessor(
+          (row: EvalRow) => {
+            return row.vars[idx];
+          },
+          {
+            id: `Variable ${idx + 1}`,
+            header: () => (
+              <TableHeader
+                smallText={`Variable ${idx + 1}`}
+                text={varName}
+                maxLength={maxTextLength}
+              />
+            ),
+            cell: (info: CellContext<EvalRow, string>) => (
+              <TruncatedText text={info.getValue()} maxLength={maxTextLength} />
+            ),
+            // Minimize the size of Variable columns.
+            size: 50,
+          },
+        ),
       ),
     }),
     columnHelper.group({
       id: 'prompts',
       header: () => <span>Outputs</span>,
       columns: head.prompts.map((prompt, idx) =>
-        columnHelper.accessor((row: EvalRow) => row.outputs[idx], {
+        columnHelper.accessor((row: EvalRow) => formatRowOutput(row.outputs[idx]), {
           id: `Prompt ${idx + 1}`,
           header: () => {
             const pct = ((numGood[idx] / body.length) * 100.0).toFixed(2);
@@ -198,11 +277,13 @@ export default function ResultsTable({
               numGood[idx] === highestPassingCount && highestPassingCount !== 0;
             const columnId = `Prompt ${idx + 1}`;
             const isChecked = failureFilter[columnId] || false;
+            // TODO(ian): prompt string support for backwards compatibility, remove after 0.17.0
             return (
               <>
                 <TableHeader
                   smallText={`Prompt ${idx + 1}`}
-                  text={prompt}
+                  text={typeof prompt === 'string' ? prompt : prompt.display}
+                  expandedText={typeof prompt === 'string' ? undefined : prompt.raw}
                   maxLength={maxTextLength}
                 />
                 {filterMode === 'failures' && (
@@ -228,8 +309,8 @@ export default function ResultsTable({
             );
           },
           cell: (info: CellContext<EvalRow, string>) => (
-            <PromptOutput
-              text={info.getValue()}
+            <EvalOutputCell
+              output={info.getValue() as unknown as EvalRowOutput}
               maxTextLength={maxTextLength}
               rowIndex={info.row.index}
               promptIndex={idx}
@@ -249,7 +330,7 @@ export default function ResultsTable({
       return body.filter((row) => {
         return row.outputs.some((output, idx) => {
           const columnId = `Prompt ${idx + 1}`;
-          const isFail = output.startsWith('[FAIL] ');
+          const isFail = !output.pass;
           return failureFilter[columnId] && isFail;
         });
       });
