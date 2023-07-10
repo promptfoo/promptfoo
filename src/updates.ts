@@ -17,7 +17,12 @@ export async function getLatestVersion(packageName: string) {
 }
 
 export async function checkForUpdates(): Promise<boolean> {
-  const latestVersion = await getLatestVersion('promptfoo');
+  let latestVersion: string;
+  try {
+    latestVersion = await getLatestVersion('promptfoo');
+  } catch {
+    return false;
+  }
   if (semverGt(latestVersion, VERSION)) {
     const border = '='.repeat(process.stdout.columns - 10);
     logger.info(
