@@ -20,7 +20,7 @@ export class Telemetry {
   private events: TelemetryEvent[] = [];
 
   get disabled() {
-    return process.env.PROMPTFOO_DISABLE_TELEMETRY === '1' || process.env.NODE_ENV === 'test';
+    return process.env.PROMPTFOO_DISABLE_TELEMETRY === '1';
   }
 
   record(eventName: TelemetryEventTypes, properties: Record<string, string | number>): void {
