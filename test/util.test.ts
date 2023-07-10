@@ -9,9 +9,9 @@ import {
   readPrompts,
   writeOutput,
   readTests,
-  readCliConfig,
+  readGlobalConfig,
   maybeRecordFirstRun,
-  resetCliConfig,
+  resetGlobalConfig,
 } from '../src/util';
 
 import type { EvaluateResult, EvaluateTable, Prompt, TestCase } from '../src/types';
@@ -331,7 +331,7 @@ describe('util', () => {
   describe('readCliConfig', () => {
     afterEach(() => {
       jest.clearAllMocks();
-      resetCliConfig();
+      resetGlobalConfig();
     });
 
     test('reads from existing config', () => {
@@ -339,7 +339,7 @@ describe('util', () => {
       (fs.existsSync as jest.Mock).mockReturnValue(true);
       (fs.readFileSync as jest.Mock).mockReturnValue(yaml.dump(config));
 
-      const result = readCliConfig();
+      const result = readGlobalConfig();
 
       expect(fs.existsSync).toHaveBeenCalledTimes(1);
       expect(fs.readFileSync).toHaveBeenCalledTimes(1);
@@ -350,7 +350,7 @@ describe('util', () => {
       (fs.existsSync as jest.Mock).mockReturnValue(false);
       (fs.writeFileSync as jest.Mock).mockImplementation();
 
-      const result = readCliConfig();
+      const result = readGlobalConfig();
 
       expect(fs.existsSync).toHaveBeenCalledTimes(2);
       expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
@@ -360,7 +360,7 @@ describe('util', () => {
 
   describe('maybeRecordFirstRun', () => {
     afterEach(() => {
-      resetCliConfig();
+      resetGlobalConfig();
       jest.clearAllMocks();
     });
 

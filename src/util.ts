@@ -39,14 +39,14 @@ function parseJson(json: string): any | undefined {
 
 let globalConfigCache: any = null;
 
-export function resetCliConfig(): void {
+export function resetGlobalConfig(): void {
   globalConfigCache = null;
 }
 
-export function readCliConfig(): any {
+export function readGlobalConfig(): any {
   if (!globalConfigCache) {
     const configDir = getConfigDirectoryPath();
-    const configFilePath = path.join(configDir, 'cliconfig.yaml');
+    const configFilePath = path.join(configDir, 'promptfoo.yaml');
 
     if (fs.existsSync(configFilePath)) {
       globalConfigCache = yaml.load(fs.readFileSync(configFilePath, 'utf-8'));
@@ -65,10 +65,10 @@ export function readCliConfig(): any {
 export function maybeRecordFirstRun(): boolean {
   // Return true if first run
   try {
-    const config = readCliConfig();
+    const config = readGlobalConfig();
     if (!config.hasRun) {
       config.hasRun = true;
-      fs.writeFileSync(path.join(getConfigDirectoryPath(), 'cliconfig.yaml'), yaml.dump(config));
+      fs.writeFileSync(path.join(getConfigDirectoryPath(), 'promptfoo.yaml'), yaml.dump(config));
       return true;
     }
     return false;
