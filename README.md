@@ -12,7 +12,7 @@ With promptfoo, you can:
 - **Speed up evaluations** with caching and concurrent tests
 - **Score outputs automatically** by defining "expectations"
 - Use as a CLI, or integrate into your workflow as a library
-- Use OpenAI models, open-source models like Llama and Vicuna, or integrate custom API providers for any LLM API
+- Use OpenAI, Anthropic, open-source models like Llama and Vicuna, or integrate custom API providers for any LLM API
 
 The goal: **test-driven prompt engineering**, rather than trial-and-error.
 
