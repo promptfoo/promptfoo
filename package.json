@@ -2,7 +2,7 @@
   "name": "promptfoo",
   "description": "LLM eval & testing toolkit",
   "author": "Ian Webster",
-  "version": "0.17.4",
+  "version": "0.17.5",
   "license": "MIT",
   "type": "commonjs",
   "main": "dist/src/index.js",
@@ -25,7 +25,7 @@
     "promptfoo": "dist/src/main.js"
   },
   "scripts": {
-    "local": "ts-node --esm src/main.ts",
+    "local": "ts-node --esm --files src/main.ts",
     "install:client": "cd src/web/client && npm install",
     "build:clean": "rm -rf dist",
     "build:client": "cd src/web/client && npm run build && cp -r dist/ ../../../dist/src/web/client",
