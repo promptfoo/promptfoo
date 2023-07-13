@@ -203,6 +203,16 @@ async function main() {
       config.defaultTest?.options?.suffix,
     )
     .option(
+      '--wandb-project',
+      'Enable logging to a Weights & Biases project. The project must already exist in the W&B dashboard.',
+      config?.commandLineOptions?.wandbProject,
+    )
+    .option(
+      '--wandb-name',
+      'Enable logging to a Weights & Biases under a run name',
+      config?.commandLineOptions?.wandbName,
+    )
+    .option(
       '--no-write',
       'Do not write results to promptfoo directory',
       config?.commandLineOptions?.write,
@@ -303,6 +313,27 @@ async function main() {
         options.generateSuggestions = true;
       }
 
+      // Other test setup
+      let wandb;
+      if (cmdObj.wandbProject || cmdObj.wandbName) {
+        if (!process.env.WANDB_API_KEY) {
+          throw new Error(
+            'You must set WANDB_API_KEY in your environment to use the --wandb-project or --wandb-name options',
+          );
+        }
+        logger.info('Enabled logging to Weights & Biases');
+
+        wandb = (await import('@wandb/sdk')).default;
+
+        await wandb.init({
+          project: cmdObj.wandbProject,
+          name: cmdObj.wandbName,
+          config: testSuite,
+        });
+      }
+
+      // Run it!
+
       const summary = await evaluate(testSuite, options);
 
       const shareableUrl = cmdObj.share ? await createShareableUrl(summary, config) : null;
@@ -319,6 +350,26 @@ async function main() {
           const rowsLeft = summary.table.body.length - 25;
           logger.info(`... ${rowsLeft} more row${rowsLeft === 1 ? '' : 's'} not shown ...\n`);
         }
+      }
+
+      // Outputs
+
+      if (wandb) {
+        logger.info('Sending everything to Weights & Biases...');
+
+        // Record all results
+        for (const result of summary.results) {
+          wandb.log({
+            prompt: result.prompt.raw,
+            vars: result.vars,
+            modelOutput: result.response?.output,
+            modelError: result.response?.error,
+            modelTokens: result.response?.tokenUsage,
+            success: result.success,
+            score: result.score,
+          });
+        }
+        await wandb.finish();
       }
 
       telemetry.maybeShowNotice();
