@@ -493,6 +493,36 @@ describe('runAssertion', () => {
     expect(result.pass).toBeFalsy();
     expect(result.reason).toBe('ROUGE-N score 0.2 is less than threshold 0.75');
   });
+
+  // Test for starts-with assertion
+  const startsWithAssertion: Assertion = {
+    type: 'starts-with',
+    value: 'Expected',
+  };
+
+  it('should pass when the starts-with assertion passes', async () => {
+    const output = 'Expected output';
+
+    const result: GradingResult = await runAssertion(
+      startsWithAssertion,
+      {} as AtomicTestCase,
+      output,
+    );
+    expect(result.pass).toBeTruthy();
+    expect(result.reason).toBe('Assertion passed');
+  });
+
+  it('should fail when the starts-with assertion fails', async () => {
+    const output = 'Different output';
+
+    const result: GradingResult = await runAssertion(
+      startsWithAssertion,
+      {} as AtomicTestCase,
+      output,
+    );
+    expect(result.pass).toBeFalsy();
+    expect(result.reason).toBe('Expected output to start with "Expected"');
+  });
 });
 
 describe('assertionFromString', () => {
@@ -631,6 +661,14 @@ describe('assertionFromString', () => {
     expect(result.type).toBe('not-rouge-n');
     expect(result.value).toBe('foo');
     expect(result.threshold).toBeCloseTo(0.225);
+  });
+
+  it('should create a starts-with assertion', () => {
+    const expected = 'starts-with:Expected';
+
+    const result: Assertion = assertionFromString(expected);
+    expect(result.type).toBe('starts-with');
+    expect(result.value).toBe('Expected');
   });
 });
 
