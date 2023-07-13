@@ -96,6 +96,7 @@ See [Test assertions](https://promptfoo.dev/docs/configuration/expected-outputs)
 | `contains`      | output contains substring                                                 |
 | `icontains`     | output contains substring, case insensitive                               |
 | `regex`         | output matches regex                                                      |
+| `starts-with`   | output starts with string                                                 |
 | `contains-any ` | output contains any of the listed substrings                              |
 | `contains-all`  | output contains all list of substrings                                    |
 | `is-json`       | output is valid json                                                      |

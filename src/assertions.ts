@@ -207,6 +207,22 @@ export async function runAssertion(
     };
   }
 
+  if (baseType === 'starts-with') {
+    invariant(assertion.value, '"starts-with" assertion type must have a string value');
+    invariant(
+      typeof assertion.value === 'string',
+      '"starts-with" assertion type must have a string value',
+    );
+    pass = output.startsWith(String(assertion.value)) !== inverse;
+    return {
+      pass,
+      score: pass ? 1 : 0,
+      reason: pass
+        ? 'Assertion passed'
+        : `Expected output to ${inverse ? 'not ' : ''}start with "${assertion.value}"`,
+    };
+  }
+
   if (baseType === 'contains-json') {
     pass = containsJSON(output) !== inverse;
     return {
@@ -480,7 +496,7 @@ export function assertionFromString(expected: string): Assertion {
 
   // New options
   const assertionRegex =
-    /^(not-)?(equals|contains-any|contains-all|contains-json|is-json|regex|icontains|contains|webhook|rouge-n|similar)(?::|\((\d+(\.\d+)?)\):)?(.*)$/;
+    /^(not-)?(equals|contains-any|contains-all|contains-json|is-json|regex|icontains|contains|webhook|rouge-n|similar|starts-with)(?::|\((\d+(\.\d+)?)\):)?(.*)$/;
   const regexMatch = expected.match(assertionRegex);
 
   if (regexMatch) {
@@ -497,7 +513,7 @@ export function assertionFromString(expected: string): Assertion {
       return {
         type: fullType as AssertionType,
       };
-    } else if (type === 'rouge-n' || type === 'similar') {
+    } else if (type === 'rouge-n' || type === 'similar' || type === 'starts-with') {
       return {
         type: fullType as AssertionType,
         value,
