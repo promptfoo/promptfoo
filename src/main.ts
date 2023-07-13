@@ -323,7 +323,7 @@ async function main() {
 
       telemetry.maybeShowNotice();
 
-      const border = '='.repeat(process.stdout.columns - 10);
+      const border = '='.repeat((process.stdout.columns || 80) - 10);
       logger.info(border);
       if (!cmdObj.write) {
         logger.info(`${chalk.green('✔')} Evaluation complete`);
