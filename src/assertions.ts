@@ -207,6 +207,22 @@ export async function runAssertion(
     };
   }
 
+  if (baseType === 'starts-with') {
+    invariant(assertion.value, '"starts-with" assertion type must have a string value');
+    invariant(
+      typeof assertion.value === 'string',
+      '"starts-with" assertion type must have a string value',
+    );
+    pass = output.startsWith(String(assertion.value)) !== inverse;
+    return {
+      pass,
+      score: pass ? 1 : 0,
+      reason: pass
+        ? 'Assertion passed'
+        : `Expected output to ${inverse ? 'not ' : ''}start with "${assertion.value}"`,
+    };
+  }
+
   if (baseType === 'contains-json') {
     pass = containsJSON(output) !== inverse;
     return {
