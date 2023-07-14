@@ -231,6 +231,9 @@ export interface TestSuiteConfig {
 
   // Path to write output. Writes to console/web viewer if not set.
   outputPath?: string;
+
+  // Determines whether or not sharing is enabled.
+  sharing?: boolean;
 }
 
 export type UnifiedConfig = TestSuiteConfig & {
