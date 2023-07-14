@@ -6,6 +6,7 @@ import { AnthropicCompletionProvider } from '../src/providers/anthropic';
 import { disableCache, enableCache } from '../src/cache.js';
 import { loadApiProvider, loadApiProviders } from '../src/providers.js';
 import type { RawProviderConfig } from '../src/types';
+import { AzureOpenAiChatCompletionProvider, AzureOpenAiCompletionProvider } from '../src/providers/azureopenai';
 
 jest.mock('node-fetch', () => jest.fn());
 
@@ -75,6 +76,65 @@ describe('providers', () => {
     enableCache();
   });
 
+  test('AzureOpenAiCompletionProvider callApi', async () => {
+    const mockResponse = {
+      json: jest.fn().mockResolvedValue({
+        choices: [{ text: 'Test output' }],
+        usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+      }),
+    };
+    (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
+
+    const provider = new AzureOpenAiCompletionProvider('text-davinci-003', 'test-api-key');
+    const result = await provider.callApi('Test prompt');
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(result.output).toBe('Test output');
+    expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+  });
+
+  test('AzureOpenAiChatCompletionProvider callApi', async () => {
+    const mockResponse = {
+      json: jest.fn().mockResolvedValue({
+        choices: [{ message: { content: 'Test output' } }],
+        usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+      }),
+    };
+    (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
+
+    const provider = new AzureOpenAiChatCompletionProvider('gpt-3.5-turbo', 'test-api-key');
+    const result = await provider.callApi(
+      JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
+    );
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(result.output).toBe('Test output');
+    expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+  });
+
+  test('AzureOpenAiChatCompletionProvider callApi with cache disabled', async () => {
+    disableCache();
+
+    const mockResponse = {
+      json: jest.fn().mockResolvedValue({
+        choices: [{ message: { content: 'Test output' } }],
+        usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+      }),
+    };
+    (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
+
+    const provider = new AzureOpenAiChatCompletionProvider('gpt-3.5-turbo', 'test-api-key');
+    const result = await provider.callApi(
+      JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
+    );
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(result.output).toBe('Test output');
+    expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+
+    enableCache();
+  });
+
   test('AnthropicCompletionProvider callApi', async () => {
     const provider = new AnthropicCompletionProvider('claude-1', 'test-api-key');
     provider.anthropic.completions.create = jest.fn().mockResolvedValue({
@@ -106,6 +166,17 @@ describe('providers', () => {
     const provider = await loadApiProvider('openai:completion:text-davinci-003');
     expect(provider).toBeInstanceOf(OpenAiCompletionProvider);
   });
+
+  test('loadApiProvider with azureopenai:completion:modelName', async () => {
+    const provider = await loadApiProvider('azureopenai:completion:text-davinci-003');
+    expect(provider).toBeInstanceOf(AzureOpenAiCompletionProvider);
+  });
+
+  test('loadApiProvider with azureopenai:chat:modelName', async () => {
+    const provider = await loadApiProvider('azureopenai:chat:gpt-3.5-turbo');
+    expect(provider).toBeInstanceOf(AzureOpenAiChatCompletionProvider);
+  });
+
 
   test('loadApiProvider with anthropic:completion', async () => {
     const provider = await loadApiProvider('anthropic:completion');

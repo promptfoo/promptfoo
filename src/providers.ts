@@ -6,6 +6,7 @@ import { OpenAiCompletionProvider, OpenAiChatCompletionProvider } from './provid
 import { AnthropicCompletionProvider } from './providers/anthropic';
 import { LocalAiCompletionProvider, LocalAiChatProvider } from './providers/localai';
 import { ScriptCompletionProvider } from './providers/scriptCompletion';
+import { AzureOpenAiChatCompletionProvider, AzureOpenAiCompletionProvider } from './providers/azureopenai'
 
 export async function loadApiProviders(
   providerPaths: ProviderId | ProviderId[] | RawProviderConfig[],
@@ -66,6 +67,29 @@ export async function loadApiProvider(
     } else {
       throw new Error(
         `Unknown OpenAI model type: ${modelType}. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>`,
+      );
+    }
+  } else if (providerPath?.startsWith('azureopenai:')) {
+    // Load Azure OpenAI module
+    const options = providerPath.split(':');
+    const modelType = options[1];
+    const deploymentName = options[2];
+
+    if (modelType === 'chat') {
+      return new AzureOpenAiChatCompletionProvider(
+        deploymentName,
+        undefined,
+        context?.config,
+      );
+    } else if (modelType === 'completion') {
+      return new AzureOpenAiCompletionProvider(
+        deploymentName,
+        undefined,
+        context?.config,
+      );
+    } else {
+      throw new Error(
+        `Unknown Azure OpenAI model type: ${modelType}. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>`,
       );
     }
   } else if (providerPath?.startsWith('anthropic:')) {
