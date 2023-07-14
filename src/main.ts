@@ -248,7 +248,6 @@ async function main() {
         tests: cmdObj.tests || cmdObj.vars || fileConfig.tests || defaultConfig.tests,
         defaultTest: fileConfig.defaultTest,
       };
-      console.log(defaultConfig.commandLineOptions);
 
       // Validation
       if (!config.prompts || config.prompts.length === 0) {
