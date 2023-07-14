@@ -137,6 +137,11 @@ async function main() {
       });
       await telemetry.send();
 
+      if (!defaultConfig.sharing) {
+        logger.error('Sharing is not enabled. Add `sharing: true` to your promptfooconfig.yaml');
+        process.exit(1);
+      }
+
       const latestResults = readLatestResults();
       if (!latestResults) {
         logger.error('Could not load results. Do you need to run `promptfoo eval` first?');
@@ -246,6 +251,7 @@ async function main() {
         prompts: cmdObj.prompts || fileConfig.prompts || defaultConfig.prompts,
         providers: cmdObj.providers || fileConfig.providers || defaultConfig.providers,
         tests: cmdObj.tests || cmdObj.vars || fileConfig.tests || defaultConfig.tests,
+        sharing: process.env.DISABLE_SHARING === "1" ? false : defaultConfig.sharing ?? true,
         defaultTest: fileConfig.defaultTest,
       };
 
@@ -314,7 +320,7 @@ async function main() {
 
       const summary = await evaluate(testSuite, options);
 
-      const shareableUrl = cmdObj.share ? await createShareableUrl(summary, config) : null;
+      const shareableUrl = cmdObj.share && config.sharing ? await createShareableUrl(summary, config) : null;
 
       if (cmdObj.output) {
         logger.info(chalk.yellow(`Writing output to ${cmdObj.output}`));

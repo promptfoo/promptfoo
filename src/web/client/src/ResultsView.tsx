@@ -218,16 +218,18 @@ export default function ResultsView() {
                   </Button>
                 </Tooltip>
               )}
-              <Tooltip title="Generate a unique URL that others can access">
-                <Button
-                  color="primary"
-                  onClick={handleShareButtonClick}
-                  disabled={shareLoading}
-                  startIcon={shareLoading ? <CircularProgress size={16} /> : <ShareIcon />}
-                >
-                  Share
-                </Button>
-              </Tooltip>
+              {config?.sharing && (
+                <Tooltip title="Generate a unique URL that others can access">
+                  <Button
+                    color="primary"
+                    onClick={handleShareButtonClick}
+                    disabled={shareLoading}
+                    startIcon={shareLoading ? <CircularProgress size={16} /> : <ShareIcon />}
+                  >
+                    Share
+                  </Button>
+                </Tooltip>
+              )}
             </ResponsiveStack>
           </Box>
         </ResponsiveStack>
