@@ -1,3 +1,5 @@
+import yaml from 'js-yaml';
+
 import logger from '../logger';
 import { fetchJsonWithCache } from '../cache';
 import { REQUEST_TIMEOUT_MS } from './shared';
@@ -227,6 +229,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
     let messages: { role: string; content: string; name?: string }[];
     try {
+      // Try JSON
       messages = JSON.parse(prompt) as { role: string; content: string }[];
     } catch (err) {
       const trimmedPrompt = prompt.trim();
