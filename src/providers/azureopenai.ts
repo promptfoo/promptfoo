@@ -17,16 +17,12 @@ interface AzureOpenAiCompletionOptions {
 class AzureOpenAiGenericProvider implements ApiProvider {
   deploymentName: string;
   apiKey?: string;
-  apiHost: string;
+  apiHost?: string;
 
   constructor(deploymentName: string, apiKey?: string) {
     this.deploymentName = deploymentName;
 
     this.apiKey = apiKey || process.env.AZURE_OPENAI_API_KEY;
-
-    if (!process.env.AZURE_OPENAI_API_HOST) {
-      throw new Error('Azure OpenAI API host must be set');
-    }
 
     this.apiHost = process.env.AZURE_OPENAI_API_HOST;
   }
@@ -49,6 +45,9 @@ export class AzureOpenAiEmbeddingProvider extends AzureOpenAiGenericProvider {
   async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
     if (!this.apiKey) {
       throw new Error('Azure OpenAI API key must be set for similarity comparison');
+    }
+    if (!this.apiHost) {
+      throw new Error('Azure OpenAI API host must be set');
     }
 
     const body = {
@@ -125,6 +124,9 @@ export class AzureOpenAiCompletionProvider extends AzureOpenAiGenericProvider {
         'Azure OpenAI API key is not set. Set AZURE_OPENAI_API_KEY environment variable or pass it as an argument to the constructor.',
       );
     }
+    if (!this.apiHost) {
+      throw new Error('Azure OpenAI API host must be set');
+    }
 
     let stop: string;
     try {
@@ -198,6 +200,9 @@ export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvide
       throw new Error(
         'Azure OpenAI API key is not set. Set AZURE_OPENAI_API_KEY environment variable or pass it as an argument to the constructor.',
       );
+    }
+    if (!this.apiHost) {
+      throw new Error('Azure OpenAI API host must be set');
     }
 
     let messages: { role: string; content: string; name?: string }[];
