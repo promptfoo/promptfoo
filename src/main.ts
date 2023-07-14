@@ -56,7 +56,11 @@ function createDummyFiles(directory: string | null) {
   writeFileSync(pathJoin(process.cwd(), directory, 'README.md'), DEFAULT_README);
 
   if (directory === '.') {
-    logger.info(chalk.green.bold('Wrote prompts.txt and promptfooconfig.yaml. Open README.md to get started!'));
+    logger.info(
+      chalk.green.bold(
+        'Wrote prompts.txt and promptfooconfig.yaml. Open README.md to get started!',
+      ),
+    );
   } else {
     logger.info(chalk.green.bold(`Wrote prompts.txt and promptfooconfig.yaml to ./${directory}`));
     logger.info(chalk.green(`\`cd ${directory}\` and open README.md to get started!`));
@@ -72,20 +76,20 @@ async function main() {
     pathJoin(pwd, 'promptfooconfig.json'),
     pathJoin(pwd, 'promptfooconfig.yaml'),
   ];
-  let config: Partial<UnifiedConfig> = {};
+  let defaultConfig: Partial<UnifiedConfig> = {};
   for (const path of potentialPaths) {
     const maybeConfig = await maybeReadConfig(path);
     if (maybeConfig) {
-      config = maybeConfig;
+      defaultConfig = maybeConfig;
       break;
     }
   }
 
   let evaluateOptions: EvaluateOptions = {};
-  if (config.evaluateOptions) {
-    evaluateOptions.generateSuggestions = config.evaluateOptions.generateSuggestions;
-    evaluateOptions.maxConcurrency = config.evaluateOptions.maxConcurrency;
-    evaluateOptions.showProgressBar = config.evaluateOptions.showProgressBar;
+  if (defaultConfig.evaluateOptions) {
+    evaluateOptions.generateSuggestions = defaultConfig.evaluateOptions.generateSuggestions;
+    evaluateOptions.maxConcurrency = defaultConfig.evaluateOptions.maxConcurrency;
+    evaluateOptions.showProgressBar = defaultConfig.evaluateOptions.showProgressBar;
   }
 
   const program = new Command();
@@ -159,28 +163,32 @@ async function main() {
   program
     .command('eval')
     .description('Evaluate prompts')
-    .option('-p, --prompts <paths...>', 'Paths to prompt files (.txt)', config.prompts)
+    .option('-p, --prompts <paths...>', 'Paths to prompt files (.txt)')
     .option(
       '-r, --providers <name or path...>',
       'One of: openai:chat, openai:completion, openai:<model name>, or path to custom API caller module',
     )
     .option(
       '-c, --config <path>',
-      'Path to configuration file. Automatically loads promptfooconfig.js/json/yaml',
+      'Path to configuration file. Automatically loads promptfoodefaultConfig.js/json/yaml',
     )
     .option(
       // TODO(ian): Remove `vars` for v1
       '-v, --vars, -t, --tests <path>',
       'Path to CSV with test cases',
-      config?.commandLineOptions?.vars,
+      defaultConfig?.commandLineOptions?.vars,
     )
-    .option('-t, --tests <path>', 'Path to CSV with test cases', config?.commandLineOptions?.tests)
-    .option('-o, --output <path>', 'Path to output file (csv, json, yaml, html)', config.outputPath)
+    .option('-t, --tests <path>', 'Path to CSV with test cases')
+    .option(
+      '-o, --output <path>',
+      'Path to output file (csv, json, yaml, html)',
+      defaultConfig.outputPath,
+    )
     .option(
       '-j, --max-concurrency <number>',
       'Maximum number of concurrent API calls',
-      config.evaluateOptions?.maxConcurrency
-        ? String(config.evaluateOptions.maxConcurrency)
+      defaultConfig.evaluateOptions?.maxConcurrency
+        ? String(defaultConfig.evaluateOptions.maxConcurrency)
         : undefined,
     )
     .option(
@@ -195,28 +203,28 @@ async function main() {
     .option(
       '--prompt-prefix <path>',
       'This prefix is prepended to every prompt',
-      config.defaultTest?.options?.prefix,
+      defaultConfig.defaultTest?.options?.prefix,
     )
     .option(
       '--prompt-suffix <path>',
       'This suffix is append to every prompt',
-      config.defaultTest?.options?.suffix,
+      defaultConfig.defaultTest?.options?.suffix,
     )
     .option(
       '--no-write',
       'Do not write results to promptfoo directory',
-      config?.commandLineOptions?.write,
+      defaultConfig?.commandLineOptions?.write,
     )
     .option(
       '--no-cache',
       'Do not read or write results to disk cache',
-      config?.commandLineOptions?.cache,
+      defaultConfig?.commandLineOptions?.cache,
     )
     .option('--no-progress-bar', 'Do not show progress bar')
-    .option('--no-table', 'Do not output table in CLI', config?.commandLineOptions?.table)
-    .option('--share', 'Create a shareable URL', config?.commandLineOptions?.share)
-    .option('--grader', 'Model that will grade outputs', config?.commandLineOptions?.grader)
-    .option('--verbose', 'Show debug logs', config?.commandLineOptions?.verbose)
+    .option('--no-table', 'Do not output table in CLI', defaultConfig?.commandLineOptions?.table)
+    .option('--share', 'Create a shareable URL', defaultConfig?.commandLineOptions?.share)
+    .option('--grader', 'Model that will grade outputs', defaultConfig?.commandLineOptions?.grader)
+    .option('--verbose', 'Show debug logs', defaultConfig?.commandLineOptions?.verbose)
     .option('--view [port]', 'View in browser ui')
     .action(async (cmdObj: CommandLineOptions & Command) => {
       // Misc settings
@@ -229,16 +237,18 @@ async function main() {
 
       // Config parsing
       const maxConcurrency = parseInt(cmdObj.maxConcurrency || '', 10);
+      let fileConfig: Partial<UnifiedConfig> = {};
       const configPath = cmdObj.config;
       if (configPath) {
-        config = await readConfig(configPath);
+        fileConfig = await readConfig(configPath);
       }
-      config = {
-        prompts: cmdObj.prompts || config.prompts,
-        providers: cmdObj.providers || config.providers,
-        tests: cmdObj.tests || cmdObj.vars || config.tests,
-        defaultTest: config.defaultTest,
+      const config: Partial<UnifiedConfig> = {
+        prompts: cmdObj.prompts || fileConfig.prompts || defaultConfig.prompts,
+        providers: cmdObj.providers || fileConfig.providers || defaultConfig.providers,
+        tests: cmdObj.tests || cmdObj.vars || fileConfig.tests || defaultConfig.tests,
+        defaultTest: fileConfig.defaultTest,
       };
+      console.log(defaultConfig.commandLineOptions);
 
       // Validation
       if (!config.prompts || config.prompts.length === 0) {
