@@ -17,6 +17,10 @@ export async function getLatestVersion(packageName: string) {
 }
 
 export async function checkForUpdates(): Promise<boolean> {
+  if (process.env.PROMPTFOO_DISABLE_UPDATE) {
+    return false;
+  }
+
   let latestVersion: string;
   try {
     latestVersion = await getLatestVersion('promptfoo');
