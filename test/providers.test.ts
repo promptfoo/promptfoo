@@ -79,7 +79,7 @@ describe('providers', () => {
     const provider = new AnthropicCompletionProvider('claude-1', 'test-api-key');
     provider.anthropic.completions.create = jest.fn().mockResolvedValue({
       completion: 'Test output',
-    })
+    });
     const result = await provider.callApi('Test prompt');
 
     expect(provider.anthropic.completions.create).toHaveBeenCalledTimes(1);

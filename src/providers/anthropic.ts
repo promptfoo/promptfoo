@@ -25,7 +25,7 @@ export class AnthropicCompletionProvider implements ApiProvider {
   constructor(modelName: string, apiKey?: string, context?: AnthropicCompletionOptions) {
     this.modelName = modelName;
     this.apiKey = apiKey || process.env.ANTHROPIC_API_KEY;
-    this.anthropic = new Anthropic({apiKey: this.apiKey});
+    this.anthropic = new Anthropic({ apiKey: this.apiKey });
     this.options = context || {};
   }
 
