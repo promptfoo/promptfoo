@@ -251,7 +251,7 @@ async function main() {
         prompts: cmdObj.prompts || fileConfig.prompts || defaultConfig.prompts,
         providers: cmdObj.providers || fileConfig.providers || defaultConfig.providers,
         tests: cmdObj.tests || cmdObj.vars || fileConfig.tests || defaultConfig.tests,
-        sharing: process.env.DISABLE_SHARING === "1" ? false : defaultConfig.sharing ?? true,
+        sharing: process.env.PROMPTFOO_DISABLE_SHARING === "1" ? false : (fileConfig.sharing ?? defaultConfig.sharing ?? true),
         defaultTest: fileConfig.defaultTest,
       };
 
