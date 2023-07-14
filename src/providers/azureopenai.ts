@@ -63,7 +63,7 @@ export class AzureOpenAiEmbeddingProvider extends AzureOpenAiGenericProvider {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            "api-key": this.apiKey,
+            'api-key': this.apiKey,
           },
           body: JSON.stringify(body),
         },
@@ -156,7 +156,7 @@ export class AzureOpenAiCompletionProvider extends AzureOpenAiGenericProvider {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            "api-key": this.apiKey,
+            'api-key': this.apiKey,
           },
           body: JSON.stringify(body),
         },
@@ -244,7 +244,7 @@ export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvide
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            "api-key": this.apiKey,
+            'api-key': this.apiKey,
           },
           body: JSON.stringify(body),
         },

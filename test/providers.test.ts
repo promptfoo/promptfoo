@@ -6,7 +6,10 @@ import { AnthropicCompletionProvider } from '../src/providers/anthropic';
 import { disableCache, enableCache } from '../src/cache.js';
 import { loadApiProvider, loadApiProviders } from '../src/providers.js';
 import type { RawProviderConfig } from '../src/types';
-import { AzureOpenAiChatCompletionProvider, AzureOpenAiCompletionProvider } from '../src/providers/azureopenai';
+import {
+  AzureOpenAiChatCompletionProvider,
+  AzureOpenAiCompletionProvider,
+} from '../src/providers/azureopenai';
 
 jest.mock('node-fetch', () => jest.fn());
 
@@ -176,7 +179,6 @@ describe('providers', () => {
     const provider = await loadApiProvider('azureopenai:chat:gpt-3.5-turbo');
     expect(provider).toBeInstanceOf(AzureOpenAiChatCompletionProvider);
   });
-
 
   test('loadApiProvider with anthropic:completion', async () => {
     const provider = await loadApiProvider('anthropic:completion');

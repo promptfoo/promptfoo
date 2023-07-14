@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join as pathJoin, dirname } from 'path';
+import readline from 'readline';
 
 import chalk from 'chalk';
 import { Command } from 'commander';
@@ -130,25 +131,46 @@ async function main() {
   program
     .command('share')
     .description('Share your most recent result')
-    .action(async (cmdObj: { port: number } & Command) => {
+    .option('-y, --yes', 'Skip confirmation')
+    .action(async (cmdObj: { yes: boolean } & Command) => {
       telemetry.maybeShowNotice();
       telemetry.record('command_used', {
         name: 'share',
       });
       await telemetry.send();
 
-      if (!defaultConfig.sharing) {
-        logger.error('Sharing is not enabled. Add `sharing: true` to your promptfooconfig.yaml');
-        process.exit(1);
-      }
+      const createPublicUrl = async () => {
+        const latestResults = readLatestResults();
+        if (!latestResults) {
+          logger.error('Could not load results. Do you need to run `promptfoo eval` first?');
+          process.exit(1);
+        }
+        const url = await createShareableUrl(latestResults.results, latestResults.config);
+        logger.info(`View results: ${chalk.greenBright.bold(url)}`);
+      };
 
-      const latestResults = readLatestResults();
-      if (!latestResults) {
-        logger.error('Could not load results. Do you need to run `promptfoo eval` first?');
-        process.exit(1);
+      if (cmdObj.yes || process.env.PROMPTFOO_DISABLE_SHARE_WARNING) {
+        createPublicUrl();
+      } else {
+        const reader = readline.createInterface({
+          input: process.stdin,
+          output: process.stdout,
+        });
+
+        reader.question(
+          'Are you sure you want to create a public URL? [y/N] ',
+          async function (answer: string) {
+            if (answer.toLowerCase() !== 'yes' && answer.toLowerCase() !== 'y') {
+              logger.info('Did not create a public URL.');
+              reader.close();
+              return;
+            }
+            reader.close();
+
+            createPublicUrl();
+          },
+        );
       }
-      const url = await createShareableUrl(latestResults.results, latestResults.config);
-      logger.info(`View results: ${chalk.greenBright.bold(url)}`);
     });
 
   program
@@ -251,7 +273,10 @@ async function main() {
         prompts: cmdObj.prompts || fileConfig.prompts || defaultConfig.prompts,
         providers: cmdObj.providers || fileConfig.providers || defaultConfig.providers,
         tests: cmdObj.tests || cmdObj.vars || fileConfig.tests || defaultConfig.tests,
-        sharing: process.env.PROMPTFOO_DISABLE_SHARING === "1" ? false : (fileConfig.sharing ?? defaultConfig.sharing ?? true),
+        sharing:
+          process.env.PROMPTFOO_DISABLE_SHARING === '1'
+            ? false
+            : fileConfig.sharing ?? defaultConfig.sharing ?? true,
         defaultTest: fileConfig.defaultTest,
       };
 
@@ -320,7 +345,8 @@ async function main() {
 
       const summary = await evaluate(testSuite, options);
 
-      const shareableUrl = cmdObj.share && config.sharing ? await createShareableUrl(summary, config) : null;
+      const shareableUrl =
+        cmdObj.share && config.sharing ? await createShareableUrl(summary, config) : null;
 
       if (cmdObj.output) {
         logger.info(chalk.yellow(`Writing output to ${cmdObj.output}`));
