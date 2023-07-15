@@ -21,22 +21,6 @@
 }
 
 /* Dark mode colors */
-@media (prefers-color-scheme: dark) {
-  :root {
-    /* Keep synced with dark mode below */
-    --background-color: #1a1a1a;
-    --text-color: #f0f0f0;
-    --border-color: #444444;
-    --table-border-color: #444444;
-    --pass-color: #4caf50;
-    --fail-color: #f44336;
-    --smalltext-color: #888888;
-    --success-background-color: #216d2b;
-    --variable-background-color: #333;
-    --header-background-color: #333;
-  }
-}
-
 [data-theme='dark'] {
   /* Keep synced with prefers-color-scheme above */
   --background-color: #1a1a1a;

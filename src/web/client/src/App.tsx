@@ -38,6 +38,12 @@ function App() {
   };
 
   React.useEffect(() => {
+    if (prefersDarkMode) {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    }
+  }, [prefersDarkMode]);
+
+  React.useEffect(() => {
     const fetchEvalData = async (id: string) => {
       if (loadedFromApi.current) {
         return;
