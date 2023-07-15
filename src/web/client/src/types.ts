@@ -25,6 +25,6 @@ export type EvalTable = {
   body: EvalRow[];
 };
 
-export type FilterMode = 'all' | 'failures';
+export type FilterMode = 'all' | 'failures' | 'different';
 
 export type { UnifiedConfig } from '../../../types';

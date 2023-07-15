@@ -334,6 +334,11 @@ export default function ResultsTable({
           return failureFilter[columnId] && isFail;
         });
       });
+    } else if (filterMode === 'different') {
+      return body.filter((row) => {
+        // TODO(ian): This works for strings, but not objects.
+        return !row.outputs.every((output) => output.text === row.outputs[0].text);
+      });
     }
     return body;
   }, [body, failureFilter, filterMode]);

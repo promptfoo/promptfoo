@@ -181,7 +181,8 @@ export default function ResultsView() {
                 label="Filter"
               >
                 <MenuItem value="all">Show all results</MenuItem>
-                <MenuItem value="failures">Show only failures</MenuItem>
+                <MenuItem value="failures">Show failures only</MenuItem>
+                <MenuItem value="different">Show different only</MenuItem>
               </Select>
             </FormControl>
           </Box>
