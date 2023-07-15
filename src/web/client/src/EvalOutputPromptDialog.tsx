@@ -37,7 +37,7 @@ export default function EvalOutputPromptDialog({
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="lg">
       <DialogTitle>Prompt</DialogTitle>
       <DialogContent>
-        <TextareaAutosize readOnly value={prompt} style={{ width: '100%' }} />
+        <TextareaAutosize readOnly value={prompt} style={{ width: '100%', padding: '0.75rem' }} />
         <IconButton
           onClick={() => copyToClipboard(prompt)}
           style={{ position: 'absolute', right: '10px', top: '10px' }}
@@ -49,7 +49,11 @@ export default function EvalOutputPromptDialog({
         <>
           <DialogTitle>Output</DialogTitle>
           <DialogContent>
-            <TextareaAutosize readOnly value={output} style={{ width: '100%' }} />
+            <TextareaAutosize
+              readOnly
+              value={output}
+              style={{ width: '100%', padding: '0.75rem' }}
+            />
           </DialogContent>
         </>
       )}
