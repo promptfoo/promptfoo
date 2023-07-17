@@ -130,7 +130,7 @@ async function main() {
 
   program
     .command('share')
-    .description('Share your most recent result')
+    .description('Create a shareable URL of your most recent eval')
     .option('-y, --yes', 'Skip confirmation')
     .action(async (cmdObj: { yes: boolean } & Command) => {
       telemetry.maybeShowNotice();
@@ -158,10 +158,9 @@ async function main() {
         });
 
         reader.question(
-          'Are you sure you want to create a public URL? [y/N] ',
+          'Are you sure you want to create a shareable URL of your most recent eval? Anyone you give this URL to will be able to view the results [y/N] ',
           async function (answer: string) {
             if (answer.toLowerCase() !== 'yes' && answer.toLowerCase() !== 'y') {
-              logger.info('Did not create a public URL.');
               reader.close();
               return;
             }
