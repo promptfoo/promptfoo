@@ -266,25 +266,29 @@ class Evaluator {
       // Finalize test case eval
       const varCombinations = generateVarCombinations(testCase.vars || {});
       totalVarCombinations += varCombinations.length;
-      for (const vars of varCombinations) {
-        let colIndex = 0;
-        for (const prompt of testSuite.prompts) {
-          for (const provider of testSuite.providers) {
-            runEvalOptions.push({
-              provider,
-              prompt: {
-                ...prompt,
-                raw: prependToPrompt + prompt.raw + appendToPrompt,
-              },
-              test: { ...testCase, vars },
-              includeProviderId: testSuite.providers.length > 1,
-              rowIndex,
-              colIndex,
-            });
-            colIndex++;
+
+      const numRepeat = this.options.repeat || 1;
+      for (let i = 0; i < numRepeat; i++) {
+        for (const vars of varCombinations) {
+          let colIndex = 0;
+          for (const prompt of testSuite.prompts) {
+            for (const provider of testSuite.providers) {
+              runEvalOptions.push({
+                provider,
+                prompt: {
+                  ...prompt,
+                  raw: prependToPrompt + prompt.raw + appendToPrompt,
+                },
+                test: { ...testCase, vars },
+                includeProviderId: testSuite.providers.length > 1,
+                rowIndex,
+                colIndex,
+              });
+              colIndex++;
+            }
           }
+          rowIndex++;
         }
-        rowIndex++;
       }
     }
 
