@@ -61,8 +61,13 @@ export interface CsvRow {
 
 export type VarMapping = Record<string, string>;
 
-export interface GradingConfig {
-  rubricPrompt?: string;
+export interface LlmRubricConfig {
+  prompt?: string;
+  promptPath?: string;
+  provider?: string | ApiProvider;
+}
+
+export interface SimilarityConfig {
   provider?: string | ApiProvider;
 }
 
@@ -166,8 +171,8 @@ export interface Assertion {
   // The weight of this assertion compared to other assertions in the test case. Defaults to 1.
   weight?: number;
 
-  // Some assertions (similarity, llm-rubric) require an LLM provider
-  provider?: ApiProvider;
+  // Configurations that are specific to the assert.
+  config?: LlmRubricConfig | SimilarityConfig;
 }
 
 // Each test case is graded pass/fail.  A test case represents a unique input to the LLM after substituting `vars` in the prompt.
@@ -182,7 +187,7 @@ export interface TestCase {
   assert?: Assertion[];
 
   // Additional configuration settings for the prompt
-  options?: PromptConfig & GradingConfig;
+  options?: PromptConfig;
 }
 
 // Same as a TestCase, except the `vars` object has been flattened into its final form.

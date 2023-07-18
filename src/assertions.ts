@@ -1,17 +1,14 @@
 import rouge from 'rouge';
 import invariant from 'tiny-invariant';
-import nunjucks from 'nunjucks';
 
 import telemetry from './telemetry';
-import { DefaultEmbeddingProvider, DefaultGradingProvider } from './providers/openai';
+import { DefaultEmbeddingProvider } from './providers/openai';
 import { cosineSimilarity, fetchWithRetries } from './util';
-import { loadApiProvider } from './providers';
-import { DEFAULT_GRADING_PROMPT } from './prompts';
+import {matchesLlmRubric} from './llmRubric';
 
 import type {
   Assertion,
   AssertionType,
-  GradingConfig,
   GradingResult,
   AtomicTestCase,
 } from './types';
@@ -283,7 +280,7 @@ ${assertion.value}`,
       typeof assertion.value === 'string',
       '"contains" assertion type must have a string value',
     );
-    return matchesLlmRubric(assertion.value, output, test.options);
+    return matchesLlmRubric(assertion.value, output, assertion.config);
   }
 
   if (baseType === 'webhook') {
@@ -418,62 +415,6 @@ export async function matchesSimilarity(
     reason: inverse ? greaterThanReason : lessThanReason,
     tokensUsed,
   };
-}
-
-export async function matchesLlmRubric(
-  expected: string,
-  output: string,
-  options?: GradingConfig,
-): Promise<GradingResult> {
-  if (!options) {
-    throw new Error(
-      'Cannot grade output without grading config. Specify --grader option or grading config.',
-    );
-  }
-
-  const prompt = nunjucks.renderString(options.rubricPrompt || DEFAULT_GRADING_PROMPT, {
-    output,
-    rubric: expected,
-  });
-
-  let provider = options.provider || DefaultGradingProvider;
-  if (typeof provider === 'string') {
-    provider = await loadApiProvider(provider);
-  }
-  const resp = await provider.callApi(prompt);
-  if (resp.error || !resp.output) {
-    return {
-      pass: false,
-      score: 0,
-      reason: resp.error || 'No output',
-      tokensUsed: {
-        total: resp.tokenUsage?.total || 0,
-        prompt: resp.tokenUsage?.prompt || 0,
-        completion: resp.tokenUsage?.completion || 0,
-      },
-    };
-  }
-
-  try {
-    const parsed = JSON.parse(resp.output) as Omit<GradingResult, 'score'>;
-    parsed.tokensUsed = {
-      total: resp.tokenUsage?.total || 0,
-      prompt: resp.tokenUsage?.prompt || 0,
-      completion: resp.tokenUsage?.completion || 0,
-    };
-    return { ...parsed, score: parsed.pass ? 1 : 0 };
-  } catch (err) {
-    return {
-      pass: false,
-      score: 0,
-      reason: `Output is not valid JSON: ${resp.output}`,
-      tokensUsed: {
-        total: resp.tokenUsage?.total || 0,
-        prompt: resp.tokenUsage?.prompt || 0,
-        completion: resp.tokenUsage?.completion || 0,
-      },
-    };
-  }
 }
 
 export function assertionFromString(expected: string): Assertion {
