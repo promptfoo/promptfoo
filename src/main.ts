@@ -158,9 +158,9 @@ async function main() {
         });
 
         reader.question(
-          'Are you sure you want to create a shareable URL of your most recent eval? Anyone you give this URL to will be able to view the results [y/N] ',
+          'Are you sure you want to create a shareable URL of your most recent eval? Anyone you give this URL to will be able to view the results [Y/n] ',
           async function (answer: string) {
-            if (answer.toLowerCase() !== 'yes' && answer.toLowerCase() !== 'y') {
+            if (answer.toLowerCase() !== 'yes' && answer.toLowerCase() !== 'y' && answer !== '') {
               reader.close();
               return;
             }
