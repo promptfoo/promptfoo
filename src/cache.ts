@@ -20,7 +20,7 @@ let enabled =
 const cacheType =
   process.env.PROMPTFOO_CACHE_TYPE || (process.env.NODE_ENV === 'test' ? 'memory' : 'disk');
 
-function getCache() {
+export function getCache() {
   if (!cacheInstance) {
     const cachePath =
       process.env.PROMPTFOO_CACHE_PATH || path.join(getConfigDirectoryPath(), 'cache');
@@ -101,4 +101,8 @@ export function disableCache() {
 export async function clearCache() {
   logger.info('Clearing cache...');
   return getCache().reset();
+}
+
+export function isCacheEnabled() {
+  return enabled;
 }
