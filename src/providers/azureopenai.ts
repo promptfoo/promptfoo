@@ -1,8 +1,6 @@
-import yaml from 'js-yaml';
-
 import logger from '../logger';
 import { fetchJsonWithCache } from '../cache';
-import { REQUEST_TIMEOUT_MS } from './shared';
+import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
 
 import type { ApiProvider, ProviderEmbeddingResponse, ProviderResponse } from '../types.js';
 
@@ -207,36 +205,7 @@ export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvide
       throw new Error('Azure OpenAI API host must be set');
     }
 
-    let messages: { role: string; content: string; name?: string }[];
-    const trimmedPrompt = prompt.trim();
-    if (trimmedPrompt.startsWith('- role:')) {
-      try {
-        // Try YAML
-        messages = yaml.load(prompt) as { role: string; content: string }[];
-      } catch (err) {
-        throw new Error(
-          `Azure OpenAI Chat Completion prompt is not a valid YAML string: ${err}\n\n${prompt}`,
-        );
-      }
-    } else {
-      try {
-        // Try JSON
-        messages = JSON.parse(prompt) as { role: string; content: string }[];
-      } catch (err) {
-        const trimmedPrompt = prompt.trim();
-        if (
-          process.env.PROMPTFOO_REQUIRE_JSON_PROMPTS ||
-          trimmedPrompt.startsWith('{') ||
-          trimmedPrompt.startsWith('[')
-        ) {
-          throw new Error(
-            `Azure OpenAI Chat Completion prompt is not a valid JSON string: ${err}\n\n${prompt}`,
-          );
-        }
-        messages = [{ role: 'user', content: prompt }];
-      }
-    }
-
+    const messages = parseChatPrompt(prompt);
     const body = {
       model: this.deploymentName,
       messages: messages,
