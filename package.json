@@ -79,6 +79,7 @@
     "node-fetch": "^2.6.7",
     "nunjucks": "^3.2.4",
     "opener": "^1.5.2",
+    "replicate": "^0.12.3",
     "rouge": "^1.0.3",
     "semver": "^7.5.3",
     "socket.io": "^4.6.1",

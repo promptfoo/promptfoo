@@ -1,0 +1,304 @@
+{
+  "results": {
+    "version": 2,
+    "results": [
+      {
+        "prompt": {
+          "raw": "User: Write a viral Instagram post about bananas. Output only the post text.\nAssistant: Post: \"",
+          "display": "User: Write a viral Instagram post about {{topic}}. Output only the post text.\nAssistant: Post: \""
+        },
+        "vars": {
+          "topic": "bananas"
+        },
+        "response": {
+          "output": "Bananas are not just a fruit, they're a mood, a vibe, a lifestyle. They're the ultimate snack that never lets you down. Whether you're feeling blue or yellow, bananas are always there for you. They're the perfect cure for hangryness and the best way to get your daily dose of potassium. So, go ahead, peel off that brown skin and enjoy the creamy goodness inside. Bananas, the OG fruit that never goes out of style. 🍌💛 #BananaLove #YellowFever #FruitLover\"",
+          "tokenUsage": {}
+        },
+        "success": true,
+        "score": 1
+      },
+      {
+        "prompt": {
+          "raw": "User: Write a viral tweet about poetry. Output only the tweet.\nAssistant: Tweet: \"",
+          "display": "User: Write a viral tweet about {{topic}}. Output only the tweet.\nAssistant: Tweet: \""
+        },
+        "vars": {
+          "topic": "poetry"
+        },
+        "response": {
+          "output": "Poetry: where words dance and emotions sing. Let's raise a glass to the poets, the unsung heroes of literature. 🍻💫 #poetrylovers #poetryappreciation #wordswithsoul\"",
+          "tokenUsage": {}
+        },
+        "success": true,
+        "score": 1
+      },
+      {
+        "prompt": {
+          "raw": "User: Write a viral Instagram post about poetry. Output only the post text.\nAssistant: Post: \"",
+          "display": "User: Write a viral Instagram post about {{topic}}. Output only the post text.\nAssistant: Post: \""
+        },
+        "vars": {
+          "topic": "poetry"
+        },
+        "response": {
+          "output": "Poetry is like a warm hug for your soul. It's a way to express yourself, to connect with others, and to find comfort in the chaos of life. Whether you're reading it, writing it, or reciting it, poetry has the power to transform your day and your heart. So go ahead, grab a cup of tea, sit back, and let the words wash over you. Let poetry be your sanctuary, your confidant, and your friend. ❤️📚 #poetrylove #poetrycommunity #poetryislife\"",
+          "tokenUsage": {}
+        },
+        "success": true,
+        "score": 1
+      },
+      {
+        "prompt": {
+          "raw": "User: Write a viral tweet about bananas. Output only the tweet.\nAssistant: Tweet: \"",
+          "display": "User: Write a viral tweet about {{topic}}. Output only the tweet.\nAssistant: Tweet: \""
+        },
+        "vars": {
+          "topic": "bananas"
+        },
+        "response": {
+          "output": "Bananas are like people, they come in all shapes and sizes but at the end of the day, they're all just trying to be peeled and enjoyed 🍌😂 #BananaLover #FruitPuns\"",
+          "tokenUsage": {}
+        },
+        "success": true,
+        "score": 1
+      },
+      {
+        "prompt": {
+          "raw": "User: Write a viral Instagram post about pirates. Output only the post text.\nAssistant: Post: \"",
+          "display": "User: Write a viral Instagram post about {{topic}}. Output only the post text.\nAssistant: Post: \""
+        },
+        "vars": {
+          "topic": "pirates"
+        },
+        "response": {
+          "output": "Pirates, the original social distancers 😂🏴‍☠️👀💦 #PirateLife #SocialDistancing #PirateHumor\"",
+          "tokenUsage": {}
+        },
+        "success": true,
+        "score": 1
+      },
+      {
+        "prompt": {
+          "raw": "User: Write a viral tweet about healthy lifestyle. Output only the tweet.\nAssistant: Tweet: \"",
+          "display": "User: Write a viral tweet about {{topic}}. Output only the tweet.\nAssistant: Tweet: \""
+        },
+        "vars": {
+          "topic": "healthy lifestyle"
+        },
+        "response": {
+          "output": "Living a healthy lifestyle isn't just about looking good, it's about feeling good too! 💪🏼🥗 Make sure to prioritize self-care, exercise regularly, and fuel your body with nutritious foods for a happy and healthy life 🌟 #healthylifestyle #selfcare #fitness\"",
+          "tokenUsage": {}
+        },
+        "success": true,
+        "score": 1
+      },
+      {
+        "prompt": {
+          "raw": "User: Write a viral tweet about pirates. Output only the tweet.\nAssistant: Tweet: \"",
+          "display": "User: Write a viral tweet about {{topic}}. Output only the tweet.\nAssistant: Tweet: \""
+        },
+        "vars": {
+          "topic": "pirates"
+        },
+        "response": {
+          "output": "Pirates be the original social distancers. They knew how to keep their treasure, and their distance, long before it was cool. #PirateLife #SocialDistancing #TreasureHunters\"",
+          "tokenUsage": {}
+        },
+        "success": true,
+        "score": 1
+      },
+      {
+        "prompt": {
+          "raw": "User: Write a viral Instagram post about healthy lifestyle. Output only the post text.\nAssistant: Post: \"",
+          "display": "User: Write a viral Instagram post about {{topic}}. Output only the post text.\nAssistant: Post: \""
+        },
+        "vars": {
+          "topic": "healthy lifestyle"
+        },
+        "response": {
+          "output": "Good morning! 🌞✨ I just wanted to share a little reminder that a healthy lifestyle is not just about physical health, but also mental well-being. 🧠💪 It's about finding balance and making conscious choices that nourish our bodies and minds. 🌟🌱 Whether that means taking a few minutes each day to meditate, going for a walk in nature, or simply choosing to eat whole foods - every small step counts! 💪🌟 Let's all strive to be the best versions of ourselves, both inside and out! 💕🌟 #healthylifestyle #mentalwellness #balance #nourish #consciouschoices\"",
+          "tokenUsage": {}
+        },
+        "success": true,
+        "score": 1
+      },
+      {
+        "prompt": {
+          "raw": "User: Write a viral Instagram post about chimpanzees. Output only the post text.\nAssistant: Post: \"",
+          "display": "User: Write a viral Instagram post about {{topic}}. Output only the post text.\nAssistant: Post: \""
+        },
+        "vars": {
+          "topic": "chimpanzees"
+        },
+        "response": {
+          "output": "Did you know that chimpanzees are actually more similar to humans than they are to gorillas? 🐒🦍🌿 They have a highly developed brain and are capable of complex thought and emotion. They even have their own version of culture, passed down through generations! 🌟🦜🌈🐒 #chimpanzees #primates #nature #wildlife\"",
+          "tokenUsage": {}
+        },
+        "success": true,
+        "score": 1
+      },
+      {
+        "prompt": {
+          "raw": "User: Write a viral tweet about chimpanzees. Output only the tweet.\nAssistant: Tweet: \"",
+          "display": "User: Write a viral tweet about {{topic}}. Output only the tweet.\nAssistant: Tweet: \""
+        },
+        "vars": {
+          "topic": "chimpanzees"
+        },
+        "response": {
+          "output": "Chimpanzees are so relatable. They have their own version of social media, it's called 'branch-book' and they use it to share their banana selfies 🍌💁‍♀️ #chimpanzeesocials #bananaselfies\"",
+          "tokenUsage": {}
+        },
+        "success": true,
+        "score": 1
+      }
+    ],
+    "stats": {
+      "successes": 10,
+      "failures": 0,
+      "tokenUsage": {
+        "total": 0,
+        "prompt": 0,
+        "completion": 0,
+        "cached": 0
+      }
+    },
+    "table": {
+      "head": {
+        "prompts": [
+          {
+            "raw": "User: Write a viral tweet about {{topic}}. Output only the tweet.\nAssistant: Tweet: \"",
+            "display": "User: Write a viral tweet about {{topic}}. Output only the tweet.\nAssistant: Tweet: \""
+          },
+          {
+            "raw": "User: Write a viral Instagram post about {{topic}}. Output only the post text.\nAssistant: Post: \"",
+            "display": "User: Write a viral Instagram post about {{topic}}. Output only the post text.\nAssistant: Post: \""
+          }
+        ],
+        "vars": ["topic"]
+      },
+      "body": [
+        {
+          "outputs": [
+            {
+              "pass": true,
+              "score": 1,
+              "text": "Bananas are like people, they come in all shapes and sizes but at the end of the day, they're all just trying to be peeled and enjoyed 🍌😂 #BananaLover #FruitPuns\"",
+              "prompt": "User: Write a viral tweet about bananas. Output only the tweet.\nAssistant: Tweet: \""
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "text": "Bananas are not just a fruit, they're a mood, a vibe, a lifestyle. They're the ultimate snack that never lets you down. Whether you're feeling blue or yellow, bananas are always there for you. They're the perfect cure for hangryness and the best way to get your daily dose of potassium. So, go ahead, peel off that brown skin and enjoy the creamy goodness inside. Bananas, the OG fruit that never goes out of style. 🍌💛 #BananaLove #YellowFever #FruitLover\"",
+              "prompt": "User: Write a viral Instagram post about bananas. Output only the post text.\nAssistant: Post: \""
+            }
+          ],
+          "vars": ["bananas"]
+        },
+        {
+          "outputs": [
+            {
+              "pass": true,
+              "score": 1,
+              "text": "Poetry: where words dance and emotions sing. Let's raise a glass to the poets, the unsung heroes of literature. 🍻💫 #poetrylovers #poetryappreciation #wordswithsoul\"",
+              "prompt": "User: Write a viral tweet about poetry. Output only the tweet.\nAssistant: Tweet: \""
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "text": "Poetry is like a warm hug for your soul. It's a way to express yourself, to connect with others, and to find comfort in the chaos of life. Whether you're reading it, writing it, or reciting it, poetry has the power to transform your day and your heart. So go ahead, grab a cup of tea, sit back, and let the words wash over you. Let poetry be your sanctuary, your confidant, and your friend. ❤️📚 #poetrylove #poetrycommunity #poetryislife\"",
+              "prompt": "User: Write a viral Instagram post about poetry. Output only the post text.\nAssistant: Post: \""
+            }
+          ],
+          "vars": ["poetry"]
+        },
+        {
+          "outputs": [
+            {
+              "pass": true,
+              "score": 1,
+              "text": "Pirates be the original social distancers. They knew how to keep their treasure, and their distance, long before it was cool. #PirateLife #SocialDistancing #TreasureHunters\"",
+              "prompt": "User: Write a viral tweet about pirates. Output only the tweet.\nAssistant: Tweet: \""
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "text": "Pirates, the original social distancers 😂🏴‍☠️👀💦 #PirateLife #SocialDistancing #PirateHumor\"",
+              "prompt": "User: Write a viral Instagram post about pirates. Output only the post text.\nAssistant: Post: \""
+            }
+          ],
+          "vars": ["pirates"]
+        },
+        {
+          "outputs": [
+            {
+              "pass": true,
+              "score": 1,
+              "text": "Living a healthy lifestyle isn't just about looking good, it's about feeling good too! 💪🏼🥗 Make sure to prioritize self-care, exercise regularly, and fuel your body with nutritious foods for a happy and healthy life 🌟 #healthylifestyle #selfcare #fitness\"",
+              "prompt": "User: Write a viral tweet about healthy lifestyle. Output only the tweet.\nAssistant: Tweet: \""
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "text": "Good morning! 🌞✨ I just wanted to share a little reminder that a healthy lifestyle is not just about physical health, but also mental well-being. 🧠💪 It's about finding balance and making conscious choices that nourish our bodies and minds. 🌟🌱 Whether that means taking a few minutes each day to meditate, going for a walk in nature, or simply choosing to eat whole foods - every small step counts! 💪🌟 Let's all strive to be the best versions of ourselves, both inside and out! 💕🌟 #healthylifestyle #mentalwellness #balance #nourish #consciouschoices\"",
+              "prompt": "User: Write a viral Instagram post about healthy lifestyle. Output only the post text.\nAssistant: Post: \""
+            }
+          ],
+          "vars": ["healthy lifestyle"]
+        },
+        {
+          "outputs": [
+            {
+              "pass": true,
+              "score": 1,
+              "text": "Chimpanzees are so relatable. They have their own version of social media, it's called 'branch-book' and they use it to share their banana selfies 🍌💁‍♀️ #chimpanzeesocials #bananaselfies\"",
+              "prompt": "User: Write a viral tweet about chimpanzees. Output only the tweet.\nAssistant: Tweet: \""
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "text": "Did you know that chimpanzees are actually more similar to humans than they are to gorillas? 🐒🦍🌿 They have a highly developed brain and are capable of complex thought and emotion. They even have their own version of culture, passed down through generations! 🌟🦜🌈🐒 #chimpanzees #primates #nature #wildlife\"",
+              "prompt": "User: Write a viral Instagram post about chimpanzees. Output only the post text.\nAssistant: Post: \""
+            }
+          ],
+          "vars": ["chimpanzees"]
+        }
+      ]
+    }
+  },
+  "config": {
+    "prompts": ["prompts.txt"],
+    "providers": [
+      "replicate:replicate/llama70b-v2-chat:e951f18578850b652510200860fc4ea62b3b16fac280f83ff32282f87bbd2e48"
+    ],
+    "tests": [
+      {
+        "vars": {
+          "topic": "bananas"
+        }
+      },
+      {
+        "vars": {
+          "topic": "poetry"
+        }
+      },
+      {
+        "vars": {
+          "topic": "pirates"
+        }
+      },
+      {
+        "vars": {
+          "topic": "healthy lifestyle"
+        }
+      },
+      {
+        "vars": {
+          "topic": "chimpanzees"
+        }
+      }
+    ],
+    "sharing": true
+  },
+  "shareableUrl": null
+}

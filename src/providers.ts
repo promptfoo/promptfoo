@@ -4,6 +4,7 @@ import { ApiProvider, ProviderConfig, ProviderId, RawProviderConfig } from './ty
 
 import { OpenAiCompletionProvider, OpenAiChatCompletionProvider } from './providers/openai';
 import { AnthropicCompletionProvider } from './providers/anthropic';
+import { ReplicateProvider } from './providers/replicate';
 import { LocalAiCompletionProvider, LocalAiChatProvider } from './providers/localai';
 import { ScriptCompletionProvider } from './providers/scriptCompletion';
 import {
@@ -106,6 +107,12 @@ export async function loadApiProvider(
         `Unknown Anthropic model type: ${modelType}. Use one of the following providers: anthropic:completion:<model name>`,
       );
     }
+  } else if (providerPath?.startsWith('replicate:')) {
+    // Load Replicate module
+    const options = providerPath.split(':');
+    const modelName = options.slice(1).join(':');
+
+    return new ReplicateProvider(modelName, undefined);
   }
 
   if (providerPath?.startsWith('localai:')) {
@@ -131,6 +138,7 @@ export default {
   OpenAiCompletionProvider,
   OpenAiChatCompletionProvider,
   AnthropicCompletionProvider,
+  ReplicateProvider,
   LocalAiCompletionProvider,
   LocalAiChatProvider,
   loadApiProvider,

@@ -1,0 +1,5 @@
+User: Write a viral tweet about {{topic}}. Output only the tweet.
+Assistant: Tweet: "
+---
+User: Write a viral Instagram post about {{topic}}. Output only the post text.
+Assistant: Post: "
