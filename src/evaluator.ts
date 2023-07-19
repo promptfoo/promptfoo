@@ -33,6 +33,7 @@ interface RunEvalOptions {
 
   rowIndex: number;
   colIndex: number;
+  repeatIndex: number;
 }
 
 const DEFAULT_MAX_CONCURRENCY = 4;
@@ -268,7 +269,7 @@ class Evaluator {
       totalVarCombinations += varCombinations.length;
 
       const numRepeat = this.options.repeat || 1;
-      for (let i = 0; i < numRepeat; i++) {
+      for (let repeatIndex = 0; repeatIndex < numRepeat; repeatIndex++) {
         for (const vars of varCombinations) {
           let colIndex = 0;
           for (const prompt of testSuite.prompts) {
@@ -283,6 +284,7 @@ class Evaluator {
                 includeProviderId: testSuite.providers.length > 1,
                 rowIndex,
                 colIndex,
+                repeatIndex,
               });
               colIndex++;
             }
