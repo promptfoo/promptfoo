@@ -6,6 +6,7 @@ export interface CommandLineOptions {
 
   // Shared with EvaluateOptions
   maxConcurrency: string;
+  repeat: string;
 
   // Command line only
   vars?: string;
@@ -75,6 +76,7 @@ export interface EvaluateOptions {
   maxConcurrency?: number;
   showProgressBar?: boolean;
   generateSuggestions?: boolean;
+  repeat?: number;
 }
 
 export interface Prompt {

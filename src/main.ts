@@ -218,6 +218,13 @@ async function main() {
         : undefined,
     )
     .option(
+      '--repeat <number>',
+      'Number of times to run each test',
+      defaultConfig.evaluateOptions?.repeat
+        ? String(defaultConfig.evaluateOptions.repeat)
+        : undefined,
+    )
+    .option(
       '--table-cell-max-length <number>',
       'Truncate console table cells to this length',
       '250',
@@ -262,7 +269,6 @@ async function main() {
       }
 
       // Config parsing
-      const maxConcurrency = parseInt(cmdObj.maxConcurrency || '', 10);
       let fileConfig: Partial<UnifiedConfig> = {};
       const configPath = cmdObj.config;
       if (configPath) {
@@ -325,12 +331,15 @@ async function main() {
         defaultTest,
       };
 
+      const maxConcurrency = parseInt(cmdObj.maxConcurrency || '', 10);
+      const iterations = parseInt(cmdObj.repeat || '', 10);
       const options: EvaluateOptions = {
         showProgressBar:
           typeof cmdObj.progressBar === 'undefined'
             ? getLogLevel() !== 'debug'
             : cmdObj.progressBar,
         maxConcurrency: !isNaN(maxConcurrency) && maxConcurrency > 0 ? maxConcurrency : undefined,
+        repeat: !isNaN(iterations) && iterations > 0 ? iterations : 1,
         ...evaluateOptions,
       };
 
