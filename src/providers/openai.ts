@@ -1,8 +1,7 @@
-import yaml from 'js-yaml';
 
 import logger from '../logger';
 import { fetchJsonWithCache } from '../cache';
-import { REQUEST_TIMEOUT_MS } from './shared';
+import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
 
 import type { ApiProvider, ProviderEmbeddingResponse, ProviderResponse } from '../types.js';
 
@@ -227,9 +226,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       );
     }
 
-    import { parsePrompt } from './shared';
-    const messages = parsePrompt(prompt);
-
+    const messages = parseChatPrompt(prompt);
     const body = {
       model: this.modelName,
       messages: messages,

@@ -1,8 +1,6 @@
-import yaml from 'js-yaml';
-
 import logger from '../logger';
 import { fetchJsonWithCache } from '../cache';
-import { REQUEST_TIMEOUT_MS } from './shared';
+import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
 
 import type { ApiProvider, ProviderEmbeddingResponse, ProviderResponse } from '../types.js';
 
@@ -207,9 +205,7 @@ export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvide
       throw new Error('Azure OpenAI API host must be set');
     }
 
-    import { parsePrompt } from './shared';
-    const messages = parsePrompt(prompt);
-
+    const messages = parseChatPrompt(prompt);
     const body = {
       model: this.deploymentName,
       messages: messages,

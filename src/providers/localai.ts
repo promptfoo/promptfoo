@@ -1,6 +1,6 @@
 import logger from '../logger';
 import { fetchJsonWithCache } from '../cache';
-import { REQUEST_TIMEOUT_MS } from './shared';
+import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
 
 import type { ApiProvider, ProviderResponse } from '../types.js';
 
@@ -29,9 +29,10 @@ class LocalAiGenericProvider implements ApiProvider {
 
 export class LocalAiChatProvider extends LocalAiGenericProvider {
   async callApi(prompt: string): Promise<ProviderResponse> {
+    const messages = parseChatPrompt(prompt);
     const body = {
       model: this.modelName,
-      prompt,
+      messages: messages,
       temperature: process.env.LOCALAI_TEMPERATURE || 0.7,
     };
     logger.debug(`Calling LocalAI API: ${JSON.stringify(body)}`);

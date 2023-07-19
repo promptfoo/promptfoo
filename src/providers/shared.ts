@@ -4,7 +4,7 @@ export const REQUEST_TIMEOUT_MS = process.env.REQUEST_TIMEOUT_MS
   ? parseInt(process.env.REQUEST_TIMEOUT_MS, 10)
   : 300_000;
 
-export function parsePrompt(prompt: string): { role: string; content: string; name?: string }[] {
+export function parseChatPrompt(prompt: string): { role: string; content: string; name?: string }[] {
   const trimmedPrompt = prompt.trim();
   if (trimmedPrompt.startsWith('- role:')) {
     try {
