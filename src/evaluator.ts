@@ -214,8 +214,11 @@ class Evaluator {
     for (const prompt of testSuite.prompts) {
       for (const provider of testSuite.providers) {
         // Check if providerPromptMap exists and if it contains the current prompt's display
-        if (testSuite.providerPromptMap && !testSuite.providerPromptMap[provider.id()].includes(prompt.display)) {
-          continue;
+        if (testSuite.providerPromptMap) {
+          const allowedPrompts = testSuite.providerPromptMap[provider.id()];
+          if (allowedPrompts && !allowedPrompts.includes(prompt.display)) {
+            continue;
+          }
         }
         const updatedDisplay =
           testSuite.providers.length > 1 ? `[${provider.id()}] ${prompt.display}` : prompt.display;

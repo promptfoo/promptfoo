@@ -234,12 +234,13 @@ export async function runAssertion(
     };
   }
 
+  const context = {
+    vars: test.vars || {},
+  };
+
   if (baseType === 'javascript') {
     try {
       const customFunction = new Function('output', 'context', `return ${assertion.value}`);
-      const context = {
-        vars: test.vars || {},
-      };
       const result = customFunction(output, context) as any;
       if (typeof result === 'boolean') {
         pass = result !== inverse;
@@ -264,6 +265,44 @@ ${assertion.value}`,
       reason: pass
         ? 'Assertion passed'
         : `Custom function returned ${inverse ? 'true' : 'false'}
+${assertion.value}`,
+    };
+  }
+
+  if (baseType === 'python') {
+    try {
+      const { execSync } = require('child_process');
+      const escapedOutput = output.replace(/'/g, "\\'").replace(/"/g, '\\"');;
+      const escapedContext = JSON.stringify(context).replace(/'/g, "\\'").replace(/"/g, '\\"');
+      const result = execSync(`python -c "import json; output='${escapedOutput}'; context='${escapedContext}'; print(json.dumps(${assertion.value}))"`).toString().trim();
+      if (result === 'true') {
+        pass = true;
+        score = 1.0;
+      } else if (result === 'false') {
+        pass = false;
+        score = 0.0;
+      } else if (result.startsWith('{')) {
+        return JSON.parse(result);
+      } else {
+        pass = true;
+        score = parseFloat(result);
+        if (isNaN(score)) {
+          throw new Error('Python code must return a boolean, number, or {pass, score, reason} object');
+        }
+      }
+    } catch (err) {
+      return {
+        pass: false,
+        score: 0,
+        reason: `Python code execution failed: ${(err as Error).message}`,
+      };
+    }
+    return {
+      pass,
+      score,
+      reason: pass
+        ? 'Assertion passed'
+        : `Python code returned ${pass ? 'true' : 'false'}
 ${assertion.value}`,
     };
   }

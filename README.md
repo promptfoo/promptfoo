@@ -102,6 +102,7 @@ See [Test assertions](https://promptfoo.dev/docs/configuration/expected-outputs)
 | `is-json`       | output is valid json                                                      |
 | `contains-json` | output contains valid json                                                |
 | `javascript`    | provided Javascript function validates the output                         |
+| `python`        | provided Python function validates the output                             |
 | `webhook`       | provided webhook returns `{pass: true}`                                   |
 | `similar`       | embeddings and cosine similarity are above a threshold                    |
 | `llm-rubric`    | LLM output matches a given rubric, using a Language Model to grade output |
