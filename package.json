@@ -19,7 +19,7 @@
     "src"
   ],
   "engines": {
-    "node": ">=12"
+    "node": ">=16"
   },
   "bin": {
     "promptfoo": "dist/src/main.js"
