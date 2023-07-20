@@ -6,14 +6,22 @@ import { getCache, isCacheEnabled } from '../cache';
 
 import type { ApiProvider, ProviderResponse } from '../types.js';
 
+interface ReplicateCompletionOptions {
+  temperature?: number;
+  max_length?: number;
+  repetition_penalty?: number;
+}
+
 export class ReplicateProvider implements ApiProvider {
   modelName: string;
   apiKey?: string;
   replicate: any;
+  options: ReplicateCompletionOptions;
 
-  constructor(modelName: string, apiKey?: string) {
+  constructor(modelName: string, apiKey?: string, options?: ReplicateCompletionOptions) {
     this.modelName = modelName;
     this.apiKey = apiKey || process.env.REPLICATE_API_TOKEN || process.env.REPLICATE_API_KEY;
+    this.options = options || {};
   }
 
   id(): string {
@@ -24,7 +32,7 @@ export class ReplicateProvider implements ApiProvider {
     return `[Replicate Provider ${this.modelName}]`;
   }
 
-    async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(prompt: string): Promise<ProviderResponse> {
     if (!this.apiKey) {
       throw new Error(
         'Replicate API key is not set. Set REPLICATE_API_TOKEN environment variable or pass it as an argument to the constructor.',
@@ -54,14 +62,15 @@ export class ReplicateProvider implements ApiProvider {
     logger.debug(`Calling Replicate: ${prompt}`);
     let response;
     try {
-      response = await replicate.run(this.modelName as any, {
+      const data = {
         input: {
           prompt,
-          max_length: process.env.REPLICATE_MAX_LENGTH || 2046,
-          temperature: process.env.REPLICATE_TEMPERATURE || 0.5,
-          repetition_penalty: process.env.REPLICATE_REPETITION_PENALTY || 1.0,
+          max_length: this.options.max_length || parseInt(process.env.REPLICATE_MAX_LENGTH || '2046', 10),
+          temperature: this.options.temperature || parseFloat(process.env.REPLICATE_TEMPERATURE || '0.01'),
+          repetition_penalty: this.options.repetition_penalty || parseFloat(process.env.REPLICATE_REPETITION_PENALTY || '1.0'),
         },
-      });
+      };
+      response = await replicate.run(this.modelName as any, data);
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,
