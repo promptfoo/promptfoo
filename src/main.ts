@@ -15,6 +15,7 @@ import {
   readConfig,
   readLatestResults,
   readPrompts,
+  readProviderPromptMap,
   readTests,
   writeLatestResults,
   writeOutput,
@@ -307,6 +308,7 @@ async function main() {
         config.tests,
         cmdObj.tests ? undefined : basePath,
       );
+      const parsedProviderPromptMap = readProviderPromptMap(config, parsedPrompts);
 
       if (parsedPrompts.length === 0) {
         logger.error(chalk.red('No prompts found'));
@@ -327,6 +329,7 @@ async function main() {
         description: config.description,
         prompts: parsedPrompts,
         providers: parsedProviders,
+        providerPromptMap: parsedProviderPromptMap,
         tests: parsedTests,
         defaultTest,
       };
