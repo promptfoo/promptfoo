@@ -30,6 +30,7 @@ export interface CommandLineOptions {
 export interface ProviderConfig {
   id: ProviderId;
   config?: any;
+  prompts?: string[]; // List of prompt display strings
 }
 
 export interface ApiProvider {
@@ -202,6 +203,10 @@ export interface TestSuite {
 
   // One or more prompt strings
   prompts: Prompt[];
+
+  // Optional mapping of provider to prompt display strings.  If not provided,
+  // all prompts are used for all providers.
+  providerPromptMap?: Record<string, string[]>;
 
   // Test cases
   tests?: TestCase[];

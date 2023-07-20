@@ -213,6 +213,10 @@ class Evaluator {
     // Split prompts by provider
     for (const prompt of testSuite.prompts) {
       for (const provider of testSuite.providers) {
+        // Check if providerPromptMap exists and if it contains the current prompt's display
+        if (testSuite.providerPromptMap && !testSuite.providerPromptMap[provider.id()].includes(prompt.display)) {
+          continue;
+        }
         const updatedDisplay =
           testSuite.providers.length > 1 ? `[${provider.id()}] ${prompt.display}` : prompt.display;
         prompts.push({
@@ -274,6 +278,13 @@ class Evaluator {
           let colIndex = 0;
           for (const prompt of testSuite.prompts) {
             for (const provider of testSuite.providers) {
+              if (testSuite.providerPromptMap) {
+                const allowedPrompts = testSuite.providerPromptMap[provider.id()];
+                if (allowedPrompts && !allowedPrompts.includes(prompt.display)) {
+                  // This prompt should not be used with this provider.
+                  continue;
+                }
+              }
               runEvalOptions.push({
                 provider,
                 prompt: {

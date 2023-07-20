@@ -25,7 +25,32 @@ import type {
   UnifiedConfig,
   TestCase,
   Prompt,
+  RawProviderConfig,
+  TestSuite,
 } from './types';
+
+export function readProviderPromptMap(config: Partial<UnifiedConfig>, parsedPrompts: Prompt[]): TestSuite["providerPromptMap"] {
+  const ret: Record<string, string[]> = {};
+
+  if (!config.providers) {
+    return ret;
+  }
+
+  const allPrompts = [];
+  for (const prompt of parsedPrompts) {
+    allPrompts.push(prompt.display);
+  }
+
+  for (const provider of config.providers) {
+    if (typeof provider === 'object') {
+      const rawProvider = provider as RawProviderConfig;
+      const id = Object.keys(rawProvider)[0];
+      ret[id] = rawProvider[id].prompts || allPrompts;
+    }
+  }
+
+  return ret;
+}
 
 const PROMPT_DELIMITER = '---';
 
