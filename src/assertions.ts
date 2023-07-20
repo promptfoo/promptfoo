@@ -432,8 +432,8 @@ export async function matchesLlmRubric(
   }
 
   const prompt = nunjucks.renderString(options.rubricPrompt || DEFAULT_GRADING_PROMPT, {
-    output,
-    rubric: expected,
+    output: output.replace(/\n/g, '\\n').replace(/"/g, '\\"'),
+    rubric: expected.replace(/\n/g, '\\n').replace(/"/g, '\\"'),
   });
 
   let provider = options.provider || DefaultGradingProvider;
