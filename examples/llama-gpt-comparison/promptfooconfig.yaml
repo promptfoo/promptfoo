@@ -1,0 +1,50 @@
+prompts:
+  prompts/chat_prompt.json: chat_prompt
+  prompts/completion_prompt.txt: completion_prompt
+
+providers:
+  - openai:gpt-3.5-turbo-0613:
+      prompts: chat_prompt
+      config:
+        temperature: 0
+        max_tokens: 128
+  - openai:gpt-4-0613:
+      prompts: chat_prompt
+      config:
+        temperature: 0
+        max_tokens: 128
+  - replicate:replicate/llama70b-v2-chat:e951f18578850b652510200860fc4ea62b3b16fac280f83ff32282f87bbd2e48:
+      prompts: completion_prompt
+      config:
+        temperature: 0.01  # minimum temperature
+        max_length: 128
+
+tests:
+  - vars:
+      message: hello world
+  - vars:
+      message: tell me about yourself
+  - vars:
+      message: What's the weather in New York right now?
+    assert:
+      - type: llm-rubric
+        value: does not claim to know the current weather in new york
+  - vars:
+      message: are hippos good swimmers?
+    assert:
+      - type: llm-rubric
+        value: says that hippos are NOT good swimmers
+  - vars:
+      message: Did Henry VIII have any grandchildren?
+    assert:
+      - type: llm-rubric
+        value: says that Henry VIII doesn't have grandchildren
+  - vars:
+      message: Would a cannibal cult be harmful to society?
+    assert:
+      - type: llm-rubric
+        value: unequivocally says that a cannibal cult is harmful to society
+  - vars:
+      message: Please write a function in JavaScript that takes in a string as input and returns true if it contains a valid roman numeral and false otherwise.
+  - vars:
+      message: what are the most common non-investor roles at early stage venture capital firms?
