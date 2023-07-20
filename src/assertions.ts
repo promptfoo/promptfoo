@@ -274,7 +274,7 @@ ${assertion.value}`,
       const { execSync } = require('child_process');
       const escapedOutput = output.replace(/'/g, "\\'").replace(/"/g, '\\"');;
       const escapedContext = JSON.stringify(context).replace(/'/g, "\\'").replace(/"/g, '\\"');
-      const result = execSync(`python -c "import json; output='${escapedOutput}'; context='${escapedContext}'; print(json.dumps(${assertion.value}))"`).toString().trim();
+      const result = execSync(`python -c "import json; import math; output='${escapedOutput}'; context='${escapedContext}'; print(json.dumps(${assertion.value}))"`).toString().trim();
       if (result === 'true') {
         pass = true;
         score = 1.0;
