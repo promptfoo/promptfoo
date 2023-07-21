@@ -53,6 +53,13 @@ function App() {
     setRecentFiles(body.data);
   };
 
+  const handleRecentFileSelection = async (file: string) => {
+    const resp = await fetch(`http://localhost:15500/results/${file}`);
+    const body = await resp.json();
+    setTable(body.data.results.table);
+    setConfig(body.data.config);
+  };
+
   React.useEffect(() => {
     const fetchEvalData = async (id: string) => {
       if (loadedFromApi.current) {
@@ -100,7 +107,7 @@ function App() {
 
   return (
     <ThemeProvider theme={theme}>
-      <NavBar darkMode={darkMode} onToggleDarkMode={toggleDarkMode} recentFiles={recentFiles} />
+      <NavBar darkMode={darkMode} onToggleDarkMode={toggleDarkMode} recentFiles={recentFiles} onRecentFileSelected={handleRecentFileSelection} />
       {loaded && table ? <ResultsView /> : <div>Loading...</div>}
     </ThemeProvider>
   );
