@@ -359,6 +359,8 @@ export async function fetchWithRetries(
   throw new Error(`Request failed after ${retries} retries: ${(lastError as Error).message}`);
 }
 
+const RESULT_HISTORY_LENGTH = 50;
+
 export function getConfigDirectoryPath(): string {
   return path.join(os.homedir(), '.promptfoo');
 }
@@ -390,22 +392,23 @@ export function writeLatestResults(results: EvaluateSummary, config: Partial<Uni
       fs.unlinkSync(latestResultsPath);
     }
     fs.symlinkSync(newResultsPath, latestResultsPath);
-    cleanupOldResults(resultsDirectory);
+    cleanupOldResults();
   } catch (err) {
     logger.error(`Failed to write latest results to ${newResultsPath}:\n${err}`);
   }
 }
 
-function cleanupOldResults(directory: string) {
+function cleanupOldResults() {
+  const directory = path.join(getConfigDirectoryPath(), 'output');
   const files = fs.readdirSync(directory);
   const resultsFiles = files.filter(file => file.startsWith('results-') && file.endsWith('.json'));
-  if (resultsFiles.length > 50) {
+  if (resultsFiles.length > RESULT_HISTORY_LENGTH) {
     const sortedFiles = resultsFiles.sort((a, b) => {
       const statA = fs.statSync(path.join(directory, a));
       const statB = fs.statSync(path.join(directory, b));
       return statA.birthtime.getTime() - statB.birthtime.getTime();
     });
-    for (let i = 0; i < sortedFiles.length - 50; i++) {
+    for (let i = 0; i < sortedFiles.length - RESULT_HISTORY_LENGTH; i++) {
       fs.unlinkSync(path.join(directory, sortedFiles[i]));
     }
   }
