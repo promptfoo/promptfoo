@@ -11,6 +11,7 @@ import logger, { getLogLevel, setLogLevel } from './logger';
 import { loadApiProvider, loadApiProviders } from './providers';
 import { evaluate } from './evaluator';
 import {
+  cleanupOldResults,
   maybeReadConfig,
   readConfig,
   readLatestResults,
@@ -181,6 +182,7 @@ async function main() {
     .action(async () => {
       telemetry.maybeShowNotice();
       await clearCache();
+      cleanupOldResults(0);
       telemetry.record('command_used', {
         name: 'cache_clear',
       });

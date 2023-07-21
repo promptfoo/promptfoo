@@ -371,8 +371,8 @@ export function getLatestResultsPath(): string {
 
 export function writeLatestResults(results: EvaluateSummary, config: Partial<UnifiedConfig>) {
   const resultsDirectory = path.join(getConfigDirectoryPath(), 'output');
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const newResultsPath = path.join(resultsDirectory, `results-${timestamp}.json`);
+  const timestamp = new Date().toISOString();
+  const newResultsPath = path.join(resultsDirectory, `eval-${timestamp}.json`);
   const latestResultsPath = getLatestResultsPath();
   try {
     fs.mkdirSync(resultsDirectory, { recursive: true });
@@ -401,7 +401,7 @@ export function writeLatestResults(results: EvaluateSummary, config: Partial<Uni
 export function listPreviousResults(): string[] {
   const directory = path.join(getConfigDirectoryPath(), 'output');
   const files = fs.readdirSync(directory);
-  const resultsFiles = files.filter(file => file.startsWith('results-') && file.endsWith('.json'));
+  const resultsFiles = files.filter(file => file.startsWith('eval-') && file.endsWith('.json'));
   const sortedFiles = resultsFiles.sort((a, b) => {
     const statA = fs.statSync(path.join(directory, a));
     const statB = fs.statSync(path.join(directory, b));
@@ -410,9 +410,9 @@ export function listPreviousResults(): string[] {
   return sortedFiles;
 }
 
-function cleanupOldResults() {
+export function cleanupOldResults(remaining = RESULT_HISTORY_LENGTH) {
   const sortedFiles = listPreviousResults();
-  for (let i = 0; i < sortedFiles.length - RESULT_HISTORY_LENGTH; i++) {
+  for (let i = 0; i < sortedFiles.length - remaining; i++) {
     fs.unlinkSync(path.join(getConfigDirectoryPath(), 'output', sortedFiles[i]));
   }
 }

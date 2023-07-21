@@ -37,7 +37,33 @@ const ResponsiveStack = styled(Stack)(({ theme }) => ({
   },
 }));
 
-export default function ResultsView() {
+function filenameToDate(filename: string) {
+  // extract the date string from the filename
+  const dateString = filename.split('.')[0].split('-').slice(1).join('-');
+
+  // create a Date object
+  const date = new Date(dateString);
+
+  // format the date
+  const formattedDate = date.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    timeZoneName: 'short'
+  });
+
+  return formattedDate;
+}
+
+interface ResultsViewProps {
+  recentFiles: string[];
+  onRecentFileSelected: (file: string) => void;
+}
+
+export default function ResultsView({ recentFiles, onRecentFileSelected }: ResultsViewProps) {
   const { table, config } = useStore();
   const [maxTextLength, setMaxTextLength] = React.useState(250);
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
@@ -148,7 +174,19 @@ export default function ResultsView() {
   return (
     <div>
       <Paper py="md">
-        <ResponsiveStack direction="row" spacing={8} alignItems="center">
+        <ResponsiveStack direction="row" spacing={4} alignItems="center">
+          <Box>
+            {recentFiles && recentFiles.length > 0 && (
+              <FormControl sx={{ m: 1, minWidth: 200 }} size="small">
+                <InputLabel>Eval</InputLabel>
+                <Select className="recent-files" label="Previous runs" defaultValue={recentFiles[0]} onChange={(e: SelectChangeEvent) => onRecentFileSelected(e.target.value)}>
+                  {recentFiles.map((file) => (
+                    <MenuItem key={file} value={file}>{filenameToDate(file)}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
+          </Box>
           <Box>
             <FormControl sx={{ m: 1, minWidth: 200 }} size="small">
               <InputLabel id="visible-columns-label">Visible columns</InputLabel>
