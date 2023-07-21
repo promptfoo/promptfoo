@@ -359,6 +359,8 @@ export async function fetchWithRetries(
   throw new Error(`Request failed after ${retries} retries: ${(lastError as Error).message}`);
 }
 
+const RESULT_HISTORY_LENGTH = 50;
+
 export function getConfigDirectoryPath(): string {
   return path.join(os.homedir(), '.promptfoo');
 }
@@ -368,11 +370,14 @@ export function getLatestResultsPath(): string {
 }
 
 export function writeLatestResults(results: EvaluateSummary, config: Partial<UnifiedConfig>) {
+  const resultsDirectory = path.join(getConfigDirectoryPath(), 'output');
+  const timestamp = new Date().toISOString();
+  const newResultsPath = path.join(resultsDirectory, `eval-${timestamp}.json`);
   const latestResultsPath = getLatestResultsPath();
   try {
-    fs.mkdirSync(path.dirname(latestResultsPath), { recursive: true });
+    fs.mkdirSync(resultsDirectory, { recursive: true });
     fs.writeFileSync(
-      latestResultsPath,
+      newResultsPath,
       JSON.stringify(
         {
           version: 1,
@@ -383,8 +388,45 @@ export function writeLatestResults(results: EvaluateSummary, config: Partial<Uni
         2,
       ),
     );
+    if (fs.existsSync(latestResultsPath)) {
+      fs.unlinkSync(latestResultsPath);
+    }
+    fs.symlinkSync(newResultsPath, latestResultsPath);
+    cleanupOldResults();
   } catch (err) {
-    logger.error(`Failed to write latest results to ${latestResultsPath}:\n${err}`);
+    logger.error(`Failed to write latest results to ${newResultsPath}:\n${err}`);
+  }
+}
+
+export function listPreviousResults(): string[] {
+  const directory = path.join(getConfigDirectoryPath(), 'output');
+  const files = fs.readdirSync(directory);
+  const resultsFiles = files.filter((file) => file.startsWith('eval-') && file.endsWith('.json'));
+  const sortedFiles = resultsFiles.sort((a, b) => {
+    const statA = fs.statSync(path.join(directory, a));
+    const statB = fs.statSync(path.join(directory, b));
+    return statB.birthtime.getTime() - statA.birthtime.getTime(); // sort in descending order
+  });
+  return sortedFiles;
+}
+
+export function cleanupOldResults(remaining = RESULT_HISTORY_LENGTH) {
+  const sortedFiles = listPreviousResults();
+  for (let i = 0; i < sortedFiles.length - remaining; i++) {
+    fs.unlinkSync(path.join(getConfigDirectoryPath(), 'output', sortedFiles[i]));
+  }
+}
+
+export function readResult(
+  name: string,
+): { results: EvaluateSummary; config: Partial<UnifiedConfig> } | undefined {
+  const resultsDirectory = path.join(getConfigDirectoryPath(), 'output');
+  const resultsPath = path.join(resultsDirectory, name);
+  try {
+    const results = JSON.parse(fs.readFileSync(fs.realpathSync(resultsPath), 'utf-8'));
+    return results;
+  } catch (err) {
+    logger.error(`Failed to read results from ${resultsPath}:\n${err}`);
   }
 }
 
@@ -392,12 +434,7 @@ export function readLatestResults():
   | { results: EvaluateSummary; config: Partial<UnifiedConfig> }
   | undefined {
   const latestResultsPath = getLatestResultsPath();
-  try {
-    const latestResults = JSON.parse(fs.readFileSync(latestResultsPath, 'utf-8'));
-    return latestResults;
-  } catch (err) {
-    logger.error(`Failed to read latest results from ${latestResultsPath}:\n${err}`);
-  }
+  return readResult(latestResultsPath);
 }
 
 export function cosineSimilarity(vecA: number[], vecB: number[]) {

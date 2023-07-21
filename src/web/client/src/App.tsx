@@ -14,6 +14,7 @@ function App() {
   const { table, setTable, setConfig } = useStore();
   const [loaded, setLoaded] = React.useState<boolean>(false);
   const loadedFromApi = React.useRef(false);
+  const [recentFiles, setRecentFiles] = React.useState<string[]>([]);
 
   const prefersDarkMode = useMediaQuery('(prefers-color-scheme: dark)');
   const [darkMode, setDarkMode] = React.useState(prefersDarkMode);
@@ -42,6 +43,22 @@ function App() {
       document.documentElement.setAttribute('data-theme', 'dark');
     }
   }, [prefersDarkMode]);
+
+  const fetchRecentFiles = async () => {
+    if (!window.location.href.includes('localhost')) {
+      return;
+    }
+    const resp = await fetch(`http://localhost:15500/results`);
+    const body = await resp.json();
+    setRecentFiles(body.data);
+  };
+
+  const handleRecentFileSelection = async (file: string) => {
+    const resp = await fetch(`http://localhost:15500/results/${file}`);
+    const body = await resp.json();
+    setTable(body.data.results.table);
+    setConfig(body.data.config);
+  };
 
   React.useEffect(() => {
     const fetchEvalData = async (id: string) => {
@@ -72,12 +89,14 @@ function App() {
         setLoaded(true);
         setTable(data.results.table);
         setConfig(data.config);
+        fetchRecentFiles();
       });
 
       socket.on('update', (data) => {
         console.log('Received data update', data);
         setTable(data.results.table);
         setConfig(data.config);
+        fetchRecentFiles();
       });
     }
 
@@ -89,7 +108,11 @@ function App() {
   return (
     <ThemeProvider theme={theme}>
       <NavBar darkMode={darkMode} onToggleDarkMode={toggleDarkMode} />
-      {loaded && table ? <ResultsView /> : <div>Loading...</div>}
+      {loaded && table ? (
+        <ResultsView recentFiles={recentFiles} onRecentFileSelected={handleRecentFileSelection} />
+      ) : (
+        <div>Loading...</div>
+      )}
     </ThemeProvider>
   );
 }

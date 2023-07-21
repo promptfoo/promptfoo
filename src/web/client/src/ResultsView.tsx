@@ -37,7 +37,26 @@ const ResponsiveStack = styled(Stack)(({ theme }) => ({
   },
 }));
 
-export default function ResultsView() {
+function filenameToDate(filename: string) {
+  const dateString = filename.slice('eval-'.length, filename.length - '.json'.length);
+  const date = new Date(dateString);
+  return date.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    timeZoneName: 'short',
+  });
+}
+
+interface ResultsViewProps {
+  recentFiles: string[];
+  onRecentFileSelected: (file: string) => void;
+}
+
+export default function ResultsView({ recentFiles, onRecentFileSelected }: ResultsViewProps) {
   const { table, config } = useStore();
   const [maxTextLength, setMaxTextLength] = React.useState(250);
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
@@ -148,10 +167,30 @@ export default function ResultsView() {
   return (
     <div>
       <Paper py="md">
-        <ResponsiveStack direction="row" spacing={8} alignItems="center">
+        <ResponsiveStack direction="row" spacing={4} alignItems="center">
+          <Box>
+            {recentFiles && recentFiles.length > 0 && (
+              <FormControl sx={{ m: 1, minWidth: 200 }} size="small">
+                <InputLabel>View run</InputLabel>
+                <Select
+                  key={recentFiles.join(',')}
+                  className="recent-files"
+                  label="Previous runs"
+                  defaultValue={recentFiles[0]}
+                  onChange={(e: SelectChangeEvent) => onRecentFileSelected(e.target.value)}
+                >
+                  {recentFiles.map((file) => (
+                    <MenuItem key={file} value={file}>
+                      {filenameToDate(file)}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
+          </Box>
           <Box>
             <FormControl sx={{ m: 1, minWidth: 200 }} size="small">
-              <InputLabel id="visible-columns-label">Visible columns</InputLabel>
+              <InputLabel id="visible-columns-label">Show columns</InputLabel>
               <Select
                 labelId="visible-columns-label"
                 id="visible-columns"
