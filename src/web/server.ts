@@ -1,4 +1,4 @@
-import fs from 'fs';
+import fs, { Stats } from 'fs';
 import path from 'node:path';
 import readline from 'node:readline';
 import http from 'node:http';
@@ -14,7 +14,6 @@ import { getDirectory } from '../esm';
 import {
   getLatestResultsPath,
   listPreviousResults,
-  getConfigDirectoryPath,
   readResult,
 } from '../util';
 
@@ -45,7 +44,7 @@ export function init(port = 15500) {
     socket.emit('init', readLatestJson());
 
     // Watch for changes to latest.json and emit the update event
-    const watcher = debounce((curr, prev) => {
+    const watcher = debounce((curr: Stats, prev: Stats) => {
       if (curr.mtime !== prev.mtime) {
         socket.emit('update', readLatestJson());
       }
