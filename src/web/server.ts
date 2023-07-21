@@ -11,7 +11,12 @@ import { Server as SocketIOServer } from 'socket.io';
 
 import logger from '../logger';
 import { getDirectory } from '../esm';
-import { getLatestResultsPath, listPreviousResults, getConfigDirectoryPath, readResult } from '../util';
+import {
+  getLatestResultsPath,
+  listPreviousResults,
+  getConfigDirectoryPath,
+  readResult,
+} from '../util';
 
 export function init(port = 15500) {
   const app = express();
@@ -53,10 +58,10 @@ export function init(port = 15500) {
     });
   });
 
-   app.get('/results', (req, res) => {
-     const previousResults = listPreviousResults();
-     res.json({ data: previousResults });
-   });
+  app.get('/results', (req, res) => {
+    const previousResults = listPreviousResults();
+    res.json({ data: previousResults });
+  });
 
   app.get('/results/:filename', (req, res) => {
     const filename = req.params.filename;
@@ -70,7 +75,7 @@ export function init(port = 15500) {
       res.status(404).send('Result not found');
       return;
     }
-    res.json({data: result});
+    res.json({ data: result });
   });
 
   httpServer.listen(port, () => {

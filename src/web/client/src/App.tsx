@@ -108,7 +108,11 @@ function App() {
   return (
     <ThemeProvider theme={theme}>
       <NavBar darkMode={darkMode} onToggleDarkMode={toggleDarkMode} />
-      {loaded && table ? <ResultsView recentFiles={recentFiles} onRecentFileSelected={handleRecentFileSelection} /> : <div>Loading...</div>}
+      {loaded && table ? (
+        <ResultsView recentFiles={recentFiles} onRecentFileSelected={handleRecentFileSelection} />
+      ) : (
+        <div>Loading...</div>
+      )}
     </ThemeProvider>
   );
 }

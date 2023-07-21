@@ -401,7 +401,7 @@ export function writeLatestResults(results: EvaluateSummary, config: Partial<Uni
 export function listPreviousResults(): string[] {
   const directory = path.join(getConfigDirectoryPath(), 'output');
   const files = fs.readdirSync(directory);
-  const resultsFiles = files.filter(file => file.startsWith('eval-') && file.endsWith('.json'));
+  const resultsFiles = files.filter((file) => file.startsWith('eval-') && file.endsWith('.json'));
   const sortedFiles = resultsFiles.sort((a, b) => {
     const statA = fs.statSync(path.join(directory, a));
     const statB = fs.statSync(path.join(directory, b));
@@ -417,7 +417,9 @@ export function cleanupOldResults(remaining = RESULT_HISTORY_LENGTH) {
   }
 }
 
-export function readResult(name: string): { results: EvaluateSummary; config: Partial<UnifiedConfig> } | undefined {
+export function readResult(
+  name: string,
+): { results: EvaluateSummary; config: Partial<UnifiedConfig> } | undefined {
   const resultsDirectory = path.join(getConfigDirectoryPath(), 'output');
   const resultsPath = path.join(resultsDirectory, name);
   try {

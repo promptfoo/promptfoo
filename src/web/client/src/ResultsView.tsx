@@ -47,7 +47,7 @@ function filenameToDate(filename: string) {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
-    timeZoneName: 'short'
+    timeZoneName: 'short',
   });
 }
 
@@ -171,10 +171,18 @@ export default function ResultsView({ recentFiles, onRecentFileSelected }: Resul
           <Box>
             {recentFiles && recentFiles.length > 0 && (
               <FormControl sx={{ m: 1, minWidth: 200 }} size="small">
-                <InputLabel>Eval</InputLabel>
-                <Select key={recentFiles.join(',')} className="recent-files" label="Previous runs" defaultValue={recentFiles[0]} onChange={(e: SelectChangeEvent) => onRecentFileSelected(e.target.value)}>
+                <InputLabel>View run</InputLabel>
+                <Select
+                  key={recentFiles.join(',')}
+                  className="recent-files"
+                  label="Previous runs"
+                  defaultValue={recentFiles[0]}
+                  onChange={(e: SelectChangeEvent) => onRecentFileSelected(e.target.value)}
+                >
                   {recentFiles.map((file) => (
-                    <MenuItem key={file} value={file}>{filenameToDate(file)}</MenuItem>
+                    <MenuItem key={file} value={file}>
+                      {filenameToDate(file)}
+                    </MenuItem>
                   ))}
                 </Select>
               </FormControl>
@@ -182,7 +190,7 @@ export default function ResultsView({ recentFiles, onRecentFileSelected }: Resul
           </Box>
           <Box>
             <FormControl sx={{ m: 1, minWidth: 200 }} size="small">
-              <InputLabel id="visible-columns-label">Visible columns</InputLabel>
+              <InputLabel id="visible-columns-label">Show columns</InputLabel>
               <Select
                 labelId="visible-columns-label"
                 id="visible-columns"
