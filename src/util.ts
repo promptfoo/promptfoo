@@ -398,19 +398,22 @@ export function writeLatestResults(results: EvaluateSummary, config: Partial<Uni
   }
 }
 
-function cleanupOldResults() {
+export function readPreviousResults(): string[] {
   const directory = path.join(getConfigDirectoryPath(), 'output');
   const files = fs.readdirSync(directory);
   const resultsFiles = files.filter(file => file.startsWith('results-') && file.endsWith('.json'));
-  if (resultsFiles.length > RESULT_HISTORY_LENGTH) {
-    const sortedFiles = resultsFiles.sort((a, b) => {
-      const statA = fs.statSync(path.join(directory, a));
-      const statB = fs.statSync(path.join(directory, b));
-      return statA.birthtime.getTime() - statB.birthtime.getTime();
-    });
-    for (let i = 0; i < sortedFiles.length - RESULT_HISTORY_LENGTH; i++) {
-      fs.unlinkSync(path.join(directory, sortedFiles[i]));
-    }
+  const sortedFiles = resultsFiles.sort((a, b) => {
+    const statA = fs.statSync(path.join(directory, a));
+    const statB = fs.statSync(path.join(directory, b));
+    return statB.birthtime.getTime() - statA.birthtime.getTime(); // sort in descending order
+  });
+  return sortedFiles;
+}
+
+function cleanupOldResults() {
+  const sortedFiles = readPreviousResults();
+  for (let i = 0; i < sortedFiles.length - RESULT_HISTORY_LENGTH; i++) {
+    fs.unlinkSync(path.join(getConfigDirectoryPath(), 'output', sortedFiles[i]));
   }
 }
 
