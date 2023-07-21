@@ -50,7 +50,7 @@ export function init(port = 15500) {
     );
   });
 
-  app.get('/previous-results', (req, res) => {
+  app.get('/results', (req, res) => {
     const previousResults = readPreviousResults();
     res.json(previousResults);
   });
