@@ -65,9 +65,13 @@ export class ReplicateProvider implements ApiProvider {
       const data = {
         input: {
           prompt,
-          max_length: this.options.max_length || parseInt(process.env.REPLICATE_MAX_LENGTH || '2046', 10),
-          temperature: this.options.temperature || parseFloat(process.env.REPLICATE_TEMPERATURE || '0.01'),
-          repetition_penalty: this.options.repetition_penalty || parseFloat(process.env.REPLICATE_REPETITION_PENALTY || '1.0'),
+          max_length:
+            this.options.max_length || parseInt(process.env.REPLICATE_MAX_LENGTH || '2046', 10),
+          temperature:
+            this.options.temperature || parseFloat(process.env.REPLICATE_TEMPERATURE || '0.01'),
+          repetition_penalty:
+            this.options.repetition_penalty ||
+            parseFloat(process.env.REPLICATE_REPETITION_PENALTY || '1.0'),
         },
       };
       response = await replicate.run(this.modelName as any, data);

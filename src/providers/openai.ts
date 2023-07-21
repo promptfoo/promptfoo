@@ -1,4 +1,3 @@
-
 import logger from '../logger';
 import { fetchJsonWithCache } from '../cache';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
@@ -152,7 +151,10 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
     const body = {
       model: this.modelName,
       prompt,
-      max_tokens: options?.max_tokens ?? this.options.max_tokens ?? parseInt(process.env.OPENAI_MAX_TOKENS || '1024'),
+      max_tokens:
+        options?.max_tokens ??
+        this.options.max_tokens ??
+        parseInt(process.env.OPENAI_MAX_TOKENS || '1024'),
       temperature:
         options?.temperature ??
         this.options.temperature ??
@@ -239,7 +241,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     const body = {
       model: this.modelName,
       messages: messages,
-      max_tokens: options?.max_tokens ?? this.options.max_tokens ?? parseInt(process.env.OPENAI_MAX_TOKENS || '1024'),
+      max_tokens:
+        options?.max_tokens ??
+        this.options.max_tokens ??
+        parseInt(process.env.OPENAI_MAX_TOKENS || '1024'),
       temperature:
         options?.temperature ??
         this.options.temperature ??

@@ -29,7 +29,10 @@ import type {
   TestSuite,
 } from './types';
 
-export function readProviderPromptMap(config: Partial<UnifiedConfig>, parsedPrompts: Prompt[]): TestSuite["providerPromptMap"] {
+export function readProviderPromptMap(
+  config: Partial<UnifiedConfig>,
+  parsedPrompts: Prompt[],
+): TestSuite['providerPromptMap'] {
   const ret: Record<string, string[]> = {};
 
   if (!config.providers) {

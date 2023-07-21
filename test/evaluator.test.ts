@@ -350,7 +350,7 @@ describe('evaluator', () => {
       providers: [mockApiProvider],
       prompts: [toPrompt('Test prompt 1'), toPrompt('Test prompt 2')],
       providerPromptMap: {
-        'test-provider': ['Test prompt 1']
+        'test-provider': ['Test prompt 1'],
       },
       tests: [
         {
