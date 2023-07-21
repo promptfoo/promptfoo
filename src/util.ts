@@ -398,7 +398,7 @@ export function writeLatestResults(results: EvaluateSummary, config: Partial<Uni
   }
 }
 
-export function readPreviousResults(): string[] {
+export function listPreviousResults(): string[] {
   const directory = path.join(getConfigDirectoryPath(), 'output');
   const files = fs.readdirSync(directory);
   const resultsFiles = files.filter(file => file.startsWith('results-') && file.endsWith('.json'));
@@ -411,9 +411,20 @@ export function readPreviousResults(): string[] {
 }
 
 function cleanupOldResults() {
-  const sortedFiles = readPreviousResults();
+  const sortedFiles = listPreviousResults();
   for (let i = 0; i < sortedFiles.length - RESULT_HISTORY_LENGTH; i++) {
     fs.unlinkSync(path.join(getConfigDirectoryPath(), 'output', sortedFiles[i]));
+  }
+}
+
+export function readResult(name: string): { results: EvaluateSummary; config: Partial<UnifiedConfig> } | undefined {
+  const resultsDirectory = path.join(getConfigDirectoryPath(), 'output');
+  const resultsPath = path.join(resultsDirectory, name);
+  try {
+    const results = JSON.parse(fs.readFileSync(fs.realpathSync(resultsPath), 'utf-8'));
+    return results;
+  } catch (err) {
+    logger.error(`Failed to read results from ${resultsPath}:\n${err}`);
   }
 }
 
@@ -421,12 +432,7 @@ export function readLatestResults():
   | { results: EvaluateSummary; config: Partial<UnifiedConfig> }
   | undefined {
   const latestResultsPath = getLatestResultsPath();
-  try {
-    const latestResults = JSON.parse(fs.readFileSync(fs.realpathSync(latestResultsPath), 'utf-8'));
-    return latestResults;
-  } catch (err) {
-    logger.error(`Failed to read latest results from ${latestResultsPath}:\n${err}`);
-  }
+  return readResult(latestResultsPath);
 }
 
 export function cosineSimilarity(vecA: number[], vecB: number[]) {

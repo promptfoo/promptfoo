@@ -11,7 +11,7 @@ import { Server as SocketIOServer } from 'socket.io';
 
 import logger from '../logger';
 import { getDirectory } from '../esm';
-import { getLatestResultsPath, readPreviousResults, getConfigDirectoryPath } from '../util';
+import { getLatestResultsPath, listPreviousResults, getConfigDirectoryPath, readResult } from '../util';
 
 export function init(port = 15500) {
   const app = express();
@@ -51,21 +51,23 @@ export function init(port = 15500) {
   });
 
    app.get('/results', (req, res) => {
-     const previousResults = readPreviousResults();
-     res.json(previousResults);
+     const previousResults = listPreviousResults();
+     res.json({ data: previousResults });
    });
 
   app.get('/results/:filename', (req, res) => {
     const filename = req.params.filename;
     const safeFilename = path.basename(filename);
-    if (safeFilename !== filename || !readPreviousResults().includes(safeFilename)) {
+    if (safeFilename !== filename || !listPreviousResults().includes(safeFilename)) {
       res.status(400).send('Invalid filename');
       return;
     }
-    const resultsDirectory = path.join(getConfigDirectoryPath(), 'output');
-    const filePath = path.join(resultsDirectory, safeFilename);
-    const fileContents = fs.readFileSync(filePath, 'utf-8');
-    res.json(JSON.parse(fileContents));
+    const result = readResult(safeFilename);
+    if (!result) {
+      res.status(404).send('Result not found');
+      return;
+    }
+    res.json({data: result});
   });
 
   httpServer.listen(port, () => {
