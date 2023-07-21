@@ -368,11 +368,14 @@ export function getLatestResultsPath(): string {
 }
 
 export function writeLatestResults(results: EvaluateSummary, config: Partial<UnifiedConfig>) {
+  const resultsDirectory = path.join(getConfigDirectoryPath(), 'output');
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const newResultsPath = path.join(resultsDirectory, `results-${timestamp}.json`);
   const latestResultsPath = getLatestResultsPath();
   try {
-    fs.mkdirSync(path.dirname(latestResultsPath), { recursive: true });
+    fs.mkdirSync(resultsDirectory, { recursive: true });
     fs.writeFileSync(
-      latestResultsPath,
+      newResultsPath,
       JSON.stringify(
         {
           version: 1,
@@ -383,8 +386,12 @@ export function writeLatestResults(results: EvaluateSummary, config: Partial<Uni
         2,
       ),
     );
+    if (fs.existsSync(latestResultsPath)) {
+      fs.unlinkSync(latestResultsPath);
+    }
+    fs.symlinkSync(newResultsPath, latestResultsPath);
   } catch (err) {
-    logger.error(`Failed to write latest results to ${latestResultsPath}:\n${err}`);
+    logger.error(`Failed to write latest results to ${newResultsPath}:\n${err}`);
   }
 }
 
@@ -393,7 +400,7 @@ export function readLatestResults():
   | undefined {
   const latestResultsPath = getLatestResultsPath();
   try {
-    const latestResults = JSON.parse(fs.readFileSync(latestResultsPath, 'utf-8'));
+    const latestResults = JSON.parse(fs.readFileSync(fs.realpathSync(latestResultsPath), 'utf-8'));
     return latestResults;
   } catch (err) {
     logger.error(`Failed to read latest results from ${latestResultsPath}:\n${err}`);
