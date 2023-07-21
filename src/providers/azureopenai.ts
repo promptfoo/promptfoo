@@ -149,9 +149,16 @@ export class AzureOpenAiCompletionProvider extends AzureOpenAiGenericProvider {
         this.options.temperature ??
         parseFloat(process.env.OPENAI_TEMPERATURE || '0'),
       top_p: options?.top_p ?? this.options.top_p ?? parseFloat(process.env.OPENAI_TOP_P || '1'),
-      presence_penalty: options?.presence_penalty ?? this.options.presence_penalty ?? parseFloat(process.env.OPENAI_PRESENCE_PENALTY || '0'),
-      frequency_penalty: options?.frequency_penalty ?? this.options.frequency_penalty ?? parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0'),
-      best_of: options?.best_of ?? this.options.best_of ?? parseInt(process.env.OPENAI_BEST_OF || '1'),
+      presence_penalty:
+        options?.presence_penalty ??
+        this.options.presence_penalty ??
+        parseFloat(process.env.OPENAI_PRESENCE_PENALTY || '0'),
+      frequency_penalty:
+        options?.frequency_penalty ??
+        this.options.frequency_penalty ??
+        parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0'),
+      best_of:
+        options?.best_of ?? this.options.best_of ?? parseInt(process.env.OPENAI_BEST_OF || '1'),
       stop,
     };
     logger.debug(`Calling Azure OpenAI API: ${JSON.stringify(body)}`);
@@ -223,8 +230,14 @@ export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvide
         this.options.temperature ??
         parseFloat(process.env.OPENAI_TEMPERATURE || '0'),
       top_p: options?.top_p ?? this.options.top_p ?? parseFloat(process.env.OPENAI_TOP_P || '1'),
-      presence_penalty: options?.presence_penalty ?? this.options.presence_penalty ?? parseFloat(process.env.OPENAI_PRESENCE_PENALTY || '0'),
-      frequency_penalty: options?.frequency_penalty ?? this.options.frequency_penalty ?? parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0'),
+      presence_penalty:
+        options?.presence_penalty ??
+        this.options.presence_penalty ??
+        parseFloat(process.env.OPENAI_PRESENCE_PENALTY || '0'),
+      frequency_penalty:
+        options?.frequency_penalty ??
+        this.options.frequency_penalty ??
+        parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0'),
       functions: options?.functions || this.options.functions || undefined,
       function_call: options?.function_call || this.options.function_call || undefined,
     };
