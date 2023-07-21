@@ -11,7 +11,7 @@ import { Server as SocketIOServer } from 'socket.io';
 
 import logger from '../logger';
 import { getDirectory } from '../esm';
-import { getLatestResultsPath } from '../util';
+import { getLatestResultsPath, readPreviousResults } from '../util';
 
 export function init(port = 15500) {
   const app = express();
@@ -48,6 +48,11 @@ export function init(port = 15500) {
         }
       }, 250),
     );
+  });
+
+  app.get('/previous-results', (req, res) => {
+    const previousResults = readPreviousResults();
+    res.json(previousResults);
   });
 
   httpServer.listen(port, () => {
