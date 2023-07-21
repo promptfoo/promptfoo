@@ -1,4 +1,4 @@
-import { readFileSync } from 'fs';
+import fs from 'fs';
 import path from 'node:path';
 import readline from 'node:readline';
 import http from 'node:http';
@@ -11,7 +11,7 @@ import { Server as SocketIOServer } from 'socket.io';
 
 import logger from '../logger';
 import { getDirectory } from '../esm';
-import { getLatestResultsPath, readPreviousResults } from '../util';
+import { getLatestResultsPath, readPreviousResults, getConfigDirectoryPath } from '../util';
 
 export function init(port = 15500) {
   const app = express();
@@ -50,11 +50,20 @@ export function init(port = 15500) {
     );
   });
 
+   app.get('/results', (req, res) => {
+     const previousResults = readPreviousResults();
+     res.json(previousResults);
+   });
+
   app.get('/results/:filename', (req, res) => {
     const filename = req.params.filename;
+    if (!readPreviousResults().includes(filename)) {
+      res.status(404).send('Not found');
+      return;
+    }
     const resultsDirectory = path.join(getConfigDirectoryPath(), 'output');
     const filePath = path.join(resultsDirectory, filename);
-    const fileContents = readFileSync(filePath, 'utf-8');
+    const fileContents = fs.readFileSync(filePath, 'utf-8');
     res.json(JSON.parse(fileContents));
   });
 
