@@ -40,14 +40,17 @@ export function init(port = 15500) {
     socket.emit('init', readLatestJson());
 
     // Watch for changes to latest.json and emit the update event
-    fs.watchFile(
-      latestJsonPath,
-      debounce((curr, prev) => {
-        if (curr.mtime !== prev.mtime) {
-          socket.emit('update', readLatestJson());
-        }
-      }, 250),
-    );
+    const watcher = debounce((curr, prev) => {
+      if (curr.mtime !== prev.mtime) {
+        socket.emit('update', readLatestJson());
+      }
+    }, 250);
+    fs.watchFile(latestJsonPath, watcher);
+
+    // Stop watching the file when the socket connection is closed
+    socket.on('disconnect', () => {
+      fs.unwatchFile(latestJsonPath, watcher);
+    });
   });
 
    app.get('/results', (req, res) => {
