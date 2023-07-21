@@ -57,12 +57,13 @@ export function init(port = 15500) {
 
   app.get('/results/:filename', (req, res) => {
     const filename = req.params.filename;
-    if (!readPreviousResults().includes(filename)) {
-      res.status(404).send('Not found');
+    const safeFilename = path.basename(filename);
+    if (safeFilename !== filename || !readPreviousResults().includes(safeFilename)) {
+      res.status(400).send('Invalid filename');
       return;
     }
     const resultsDirectory = path.join(getConfigDirectoryPath(), 'output');
-    const filePath = path.join(resultsDirectory, filename);
+    const filePath = path.join(resultsDirectory, safeFilename);
     const fileContents = fs.readFileSync(filePath, 'utf-8');
     res.json(JSON.parse(fileContents));
   });
