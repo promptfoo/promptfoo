@@ -172,7 +172,7 @@ export default function ResultsView({ recentFiles, onRecentFileSelected }: Resul
             {recentFiles && recentFiles.length > 0 && (
               <FormControl sx={{ m: 1, minWidth: 200 }} size="small">
                 <InputLabel>Eval</InputLabel>
-                <Select className="recent-files" label="Previous runs" defaultValue={recentFiles[0]} onChange={(e: SelectChangeEvent) => onRecentFileSelected(e.target.value)}>
+                <Select key={recentFiles.join(',')} className="recent-files" label="Previous runs" defaultValue={recentFiles[0]} onChange={(e: SelectChangeEvent) => onRecentFileSelected(e.target.value)}>
                   {recentFiles.map((file) => (
                     <MenuItem key={file} value={file}>{filenameToDate(file)}</MenuItem>
                   ))}
