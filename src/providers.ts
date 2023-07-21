@@ -24,8 +24,12 @@ export async function loadApiProviders(
         if (typeof provider === 'string') {
           return loadApiProvider(provider, undefined, basePath);
         } else {
-          const id = Object.keys(provider)[0];
+          let id = Object.keys(provider)[0];
+          const providerObject = provider[id];
           const context = { ...provider[id], id };
+          if (providerObject.id) {
+            context.id = providerObject.id;
+          }
           return loadApiProvider(id, context, basePath);
         }
       }),
@@ -65,9 +69,9 @@ export async function loadApiProvider(
         context?.config,
       );
     } else if (OpenAiChatCompletionProvider.OPENAI_CHAT_MODELS.includes(modelType)) {
-      return new OpenAiChatCompletionProvider(modelType, undefined, context?.config);
+      return new OpenAiChatCompletionProvider(modelType, undefined, context?.config, context?.id);
     } else if (OpenAiCompletionProvider.OPENAI_COMPLETION_MODELS.includes(modelType)) {
-      return new OpenAiCompletionProvider(modelType, undefined, context?.config);
+      return new OpenAiCompletionProvider(modelType, undefined, context?.config, context?.id);
     } else {
       throw new Error(
         `Unknown OpenAI model type: ${modelType}. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>`,
@@ -80,9 +84,9 @@ export async function loadApiProvider(
     const deploymentName = options[2];
 
     if (modelType === 'chat') {
-      return new AzureOpenAiChatCompletionProvider(deploymentName, undefined, context?.config);
+      return new AzureOpenAiChatCompletionProvider(deploymentName, undefined, context?.config, context?.id);
     } else if (modelType === 'completion') {
-      return new AzureOpenAiCompletionProvider(deploymentName, undefined, context?.config);
+      return new AzureOpenAiCompletionProvider(deploymentName, undefined, context?.config, context?.id);
     } else {
       throw new Error(
         `Unknown Azure OpenAI model type: ${modelType}. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>`,

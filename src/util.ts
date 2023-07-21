@@ -47,8 +47,13 @@ export function readProviderPromptMap(
   for (const provider of config.providers) {
     if (typeof provider === 'object') {
       const rawProvider = provider as RawProviderConfig;
-      const id = Object.keys(rawProvider)[0];
-      ret[id] = rawProvider[id].prompts || allPrompts;
+      let id = Object.keys(rawProvider)[0];
+      let originalId = id;
+      const providerObject = rawProvider[id];
+      if (providerObject.id) {
+        id = providerObject.id;
+      }
+      ret[id] = rawProvider[originalId].prompts || allPrompts;
     }
   }
 

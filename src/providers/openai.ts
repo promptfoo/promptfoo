@@ -125,12 +125,13 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
 
   options: OpenAiCompletionOptions;
 
-  constructor(modelName: string, apiKey?: string, context?: OpenAiCompletionOptions) {
+  constructor(modelName: string, apiKey?: string, context?: OpenAiCompletionOptions, id?: string) {
     if (!OpenAiCompletionProvider.OPENAI_COMPLETION_MODELS.includes(modelName)) {
       logger.warn(`Using unknown OpenAI completion model: ${modelName}`);
     }
     super(modelName, apiKey);
     this.options = context || {};
+    this.id = id ? () => id : this.id;
   }
 
   async callApi(prompt: string, options?: OpenAiCompletionOptions): Promise<ProviderResponse> {
@@ -229,12 +230,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
   options: OpenAiCompletionOptions;
 
-  constructor(modelName: string, apiKey?: string, context?: OpenAiCompletionOptions) {
+  constructor(modelName: string, apiKey?: string, context?: OpenAiCompletionOptions, id?: string) {
     if (!OpenAiChatCompletionProvider.OPENAI_CHAT_MODELS.includes(modelName)) {
       logger.warn(`Using unknown OpenAI chat model: ${modelName}`);
     }
     super(modelName, apiKey);
     this.options = context || {};
+    this.id = id ? () => id : this.id;
   }
 
   async callApi(prompt: string, options?: OpenAiCompletionOptions): Promise<ProviderResponse> {

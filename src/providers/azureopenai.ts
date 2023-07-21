@@ -117,9 +117,10 @@ export class AzureOpenAiEmbeddingProvider extends AzureOpenAiGenericProvider {
 export class AzureOpenAiCompletionProvider extends AzureOpenAiGenericProvider {
   options: AzureOpenAiCompletionOptions;
 
-  constructor(deploymentName: string, apiKey?: string, context?: AzureOpenAiCompletionOptions) {
+  constructor(deploymentName: string, apiKey?: string, context?: AzureOpenAiCompletionOptions, id?: string) {
     super(deploymentName, apiKey);
     this.options = context || {};
+    this.id = id ? () => id : this.id;
   }
 
   async callApi(prompt: string, options?: AzureOpenAiCompletionOptions): Promise<ProviderResponse> {
@@ -205,9 +206,10 @@ export class AzureOpenAiCompletionProvider extends AzureOpenAiGenericProvider {
 export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvider {
   options: AzureOpenAiCompletionOptions;
 
-  constructor(deploymentName: string, apiKey?: string, context?: AzureOpenAiCompletionOptions) {
+  constructor(deploymentName: string, apiKey?: string, context?: AzureOpenAiCompletionOptions, id?: string) {
     super(deploymentName, apiKey);
     this.options = context || {};
+    this.id = id ? () => id : this.id;
   }
 
   async callApi(prompt: string, options?: AzureOpenAiCompletionOptions): Promise<ProviderResponse> {
