@@ -38,14 +38,9 @@ const ResponsiveStack = styled(Stack)(({ theme }) => ({
 }));
 
 function filenameToDate(filename: string) {
-  // extract the date string from the filename
-  const dateString = filename.split('.')[0].split('-').slice(1).join('-');
-
-  // create a Date object
+  const dateString = filename.slice('eval-'.length, filename.length - '.json'.length);
   const date = new Date(dateString);
-
-  // format the date
-  const formattedDate = date.toLocaleDateString('en-US', {
+  return date.toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
@@ -54,8 +49,6 @@ function filenameToDate(filename: string) {
     second: '2-digit',
     timeZoneName: 'short'
   });
-
-  return formattedDate;
 }
 
 interface ResultsViewProps {
