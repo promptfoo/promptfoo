@@ -1,4 +1,4 @@
-import fs from 'fs';
+import { readFileSync } from 'fs';
 import path from 'node:path';
 import readline from 'node:readline';
 import http from 'node:http';
@@ -50,9 +50,12 @@ export function init(port = 15500) {
     );
   });
 
-  app.get('/results', (req, res) => {
-    const previousResults = readPreviousResults();
-    res.json(previousResults);
+  app.get('/results/:filename', (req, res) => {
+    const filename = req.params.filename;
+    const resultsDirectory = path.join(getConfigDirectoryPath(), 'output');
+    const filePath = path.join(resultsDirectory, filename);
+    const fileContents = readFileSync(filePath, 'utf-8');
+    res.json(JSON.parse(fileContents));
   });
 
   httpServer.listen(port, () => {
