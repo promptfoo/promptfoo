@@ -390,8 +390,24 @@ export function writeLatestResults(results: EvaluateSummary, config: Partial<Uni
       fs.unlinkSync(latestResultsPath);
     }
     fs.symlinkSync(newResultsPath, latestResultsPath);
+    cleanupOldResults(resultsDirectory);
   } catch (err) {
     logger.error(`Failed to write latest results to ${newResultsPath}:\n${err}`);
+  }
+}
+
+function cleanupOldResults(directory: string) {
+  const files = fs.readdirSync(directory);
+  const resultsFiles = files.filter(file => file.startsWith('results-') && file.endsWith('.json'));
+  if (resultsFiles.length > 50) {
+    const sortedFiles = resultsFiles.sort((a, b) => {
+      const statA = fs.statSync(path.join(directory, a));
+      const statB = fs.statSync(path.join(directory, b));
+      return statA.birthtime.getTime() - statB.birthtime.getTime();
+    });
+    for (let i = 0; i < sortedFiles.length - 50; i++) {
+      fs.unlinkSync(path.join(directory, sortedFiles[i]));
+    }
   }
 }
 
