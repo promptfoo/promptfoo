@@ -121,7 +121,12 @@ class Evaluator {
       if (response.error) {
         ret.error = response.error;
       } else if (response.output) {
-        const checkResult = await runAssertions(test, response.output);
+        let output = response.output;
+        // Apply postprocess function if it exists
+        if (test.postprocess) {
+          output = test.postprocess(output);
+        }
+        const checkResult = await runAssertions(test, output);
         if (!checkResult.pass) {
           ret.error = checkResult.reason;
         }
