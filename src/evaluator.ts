@@ -232,11 +232,13 @@ class Evaluator {
     // Aggregate all vars across test cases
 
     const tests = (
-      testSuite.tests || [
-        {
-          // Dummy test for cases when we're only comparing raw prompts.
-        },
-      ]
+      testSuite.tests && testSuite.tests.length > 0
+        ? testSuite.tests
+        : [
+            {
+              // Dummy test for cases when we're only comparing raw prompts.
+            },
+          ]
     ).map((test) => {
       const finalTestCase: TestCase = Object.assign({}, testSuite.defaultTest);
       return Object.assign(finalTestCase, test);
