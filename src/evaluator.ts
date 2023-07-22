@@ -434,6 +434,7 @@ class Evaluator {
           text: resultText,
           prompt: row.prompt.raw,
           latencyMs: row.latencyMs,
+          tokenUsage: row.response?.tokenUsage,
         };
       },
     );

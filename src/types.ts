@@ -105,6 +105,7 @@ export interface EvaluateTableOutput {
   text: string;
   prompt: string;
   latencyMs: number;
+  tokenUsage?: Partial<TokenUsage>;
 }
 
 export interface EvaluateTable {
