@@ -137,7 +137,6 @@ class Evaluator {
           }
         }
 
-        console.log('checking output', processedResponse.output, JSON.stringify(ret));
         invariant(processedResponse.output != null, 'Response output should not be null');
         const checkResult = await runAssertions(test, processedResponse.output);
         if (!checkResult.pass) {
