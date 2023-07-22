@@ -111,17 +111,19 @@ class Evaluator {
       vars,
     };
 
+    let latencyMs = 0;
     try {
       const startTime = Date.now();
       const response = await provider.callApi(renderedPrompt);
       const endTime = Date.now();
-      const latencyMs = endTime - startTime;
+      latencyMs = endTime - startTime;
+
       const ret: EvaluateResult = {
-        latencyMs,
         ...setup,
         response,
         success: false,
         score: 0,
+        latencyMs,
       };
       if (response.error) {
         ret.error = response.error;
@@ -181,6 +183,7 @@ class Evaluator {
         error: String(err) + '\n\n' + (err as Error).stack,
         success: false,
         score: 0,
+        latencyMs,
       };
     }
   }
@@ -430,6 +433,7 @@ class Evaluator {
           score: row.score,
           text: resultText,
           prompt: row.prompt.raw,
+          latencyMs: row.latencyMs,
         };
       },
     );

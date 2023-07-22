@@ -104,6 +104,7 @@ export interface EvaluateTableOutput {
   score: number;
   text: string;
   prompt: string;
+  latencyMs: number;
 }
 
 export interface EvaluateTable {

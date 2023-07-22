@@ -169,6 +169,7 @@ describe('util', () => {
       {
         success: true,
         score: 1.0,
+        latencyMs: 1000,
         prompt: {
           raw: 'Test prompt',
           display: '[display] Test prompt',
@@ -224,6 +225,7 @@ describe('util', () => {
       {
         success: true,
         score: 1.0,
+        latencyMs: 1000,
         prompt: {
           raw: 'Test prompt',
           display: '[display] Test prompt',
@@ -279,6 +281,7 @@ describe('util', () => {
       {
         success: true,
         score: 1.0,
+        latencyMs: 1000,
         prompt: {
           raw: 'Test prompt',
           display: '[display] Test prompt',
