@@ -112,8 +112,12 @@ class Evaluator {
     };
 
     try {
+      const startTime = Date.now();
       const response = await provider.callApi(renderedPrompt);
+      const endTime = Date.now();
+      const latencyMs = endTime - startTime;
       const ret: EvaluateResult = {
+        latencyMs,
         ...setup,
         response,
         success: false,
