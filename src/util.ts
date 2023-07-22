@@ -332,11 +332,11 @@ export function fetchWithTimeout(
     }, timeout);
 
     fetch(url, options)
-      .then(response => {
+      .then((response) => {
         clearTimeout(timeoutId);
         resolve(response);
       })
-      .catch(error => {
+      .catch((error) => {
         clearTimeout(timeoutId);
         reject(error);
       });

@@ -11,11 +11,7 @@ import { Server as SocketIOServer } from 'socket.io';
 
 import logger from '../logger';
 import { getDirectory } from '../esm';
-import {
-  getLatestResultsPath,
-  listPreviousResults,
-  readResult,
-} from '../util';
+import { getLatestResultsPath, listPreviousResults, readResult } from '../util';
 
 export function init(port = 15500) {
   const app = express();
