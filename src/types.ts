@@ -74,7 +74,6 @@ export interface PromptConfig {
 }
 
 export interface OutputConfig {
-  preprocess?: string;
   postprocess?: string;
 }
 
@@ -191,9 +190,6 @@ export interface TestCase {
 
   // Additional configuration settings for the prompt
   options?: PromptConfig & OutputConfig & GradingConfig;
-
-  // Optional postprocessing function to modify the output
-  postprocess?: (output: string) => string;
 }
 
 // Same as a TestCase, except the `vars` object has been flattened into its final form.

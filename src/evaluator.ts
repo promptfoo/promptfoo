@@ -121,11 +121,20 @@ class Evaluator {
       if (response.error) {
         ret.error = response.error;
       } else if (response.output) {
-        let output = response.output;
-        // Apply postprocess function if it exists
-        if (test.postprocess) {
-          output = test.postprocess(output);
+        if (test.options?.postprocess) {
+          const { postprocess } = test.options;
+          const postprocessFn = new Function(
+            'output',
+            'context',
+            postprocess.includes('\n') ? postprocess : `return ${postprocess}`,
+          );
+          response.output = postprocessFn(response.output);
+          if (response.output == null) {
+            throw new Error('Postprocess function must return a value');
+          }
         }
+
+        let output = response.output;
         const checkResult = await runAssertions(test, output);
         if (!checkResult.pass) {
           ret.error = checkResult.reason;
@@ -277,6 +286,7 @@ class Evaluator {
         testCase.options?.prefix || testSuite.defaultTest?.options?.prefix || '';
       const appendToPrompt =
         testCase.options?.suffix || testSuite.defaultTest?.options?.suffix || '';
+      testCase.options.postprocess = testCase.options.postprocess || testSuite.defaultTest?.options?.postprocess;
 
       // Finalize test case eval
       const varCombinations = generateVarCombinations(testCase.vars || {});
