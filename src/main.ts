@@ -323,6 +323,7 @@ async function main() {
           suffix: cmdObj.promptSuffix,
           provider: cmdObj.grader,
           // rubricPrompt:
+          // postprocess
         },
         ...config.defaultTest,
       };

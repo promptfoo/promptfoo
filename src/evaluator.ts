@@ -3,6 +3,7 @@ import readline from 'readline';
 import async from 'async';
 import chalk from 'chalk';
 import nunjucks from 'nunjucks';
+import invariant from 'tiny-invariant';
 
 import logger from './logger';
 import telemetry from './telemetry';
@@ -121,7 +122,23 @@ class Evaluator {
       if (response.error) {
         ret.error = response.error;
       } else if (response.output) {
-        const checkResult = await runAssertions(test, response.output);
+        // Create a copy of response so we can potentially mutate it.
+        let processedResponse = { ...response };
+        if (test.options?.postprocess) {
+          const { postprocess } = test.options;
+          const postprocessFn = new Function(
+            'output',
+            'context',
+            postprocess.includes('\n') ? postprocess : `return ${postprocess}`,
+          );
+          processedResponse.output = postprocessFn(processedResponse.output);
+          if (processedResponse.output == null) {
+            throw new Error('Postprocess function did not return a value');
+          }
+        }
+
+        invariant(processedResponse.output != null, 'Response output should not be null');
+        const checkResult = await runAssertions(test, processedResponse.output);
         if (!checkResult.pass) {
           ret.error = checkResult.reason;
         }
@@ -132,6 +149,7 @@ class Evaluator {
           this.stats.tokenUsage.prompt += checkResult.tokensUsed.prompt;
           this.stats.tokenUsage.completion += checkResult.tokensUsed.completion;
         }
+        ret.response = processedResponse;
       } else {
         ret.success = false;
         ret.score = 0;
@@ -272,6 +290,8 @@ class Evaluator {
         testCase.options?.prefix || testSuite.defaultTest?.options?.prefix || '';
       const appendToPrompt =
         testCase.options?.suffix || testSuite.defaultTest?.options?.suffix || '';
+      testCase.options.postprocess =
+        testCase.options.postprocess || testSuite.defaultTest?.options?.postprocess;
 
       // Finalize test case eval
       const varCombinations = generateVarCombinations(testCase.vars || {});

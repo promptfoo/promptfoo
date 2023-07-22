@@ -73,6 +73,10 @@ export interface PromptConfig {
   suffix?: string;
 }
 
+export interface OutputConfig {
+  postprocess?: string;
+}
+
 export interface EvaluateOptions {
   maxConcurrency?: number;
   showProgressBar?: boolean;
@@ -185,7 +189,7 @@ export interface TestCase {
   assert?: Assertion[];
 
   // Additional configuration settings for the prompt
-  options?: PromptConfig & GradingConfig;
+  options?: PromptConfig & OutputConfig & GradingConfig;
 }
 
 // Same as a TestCase, except the `vars` object has been flattened into its final form.
