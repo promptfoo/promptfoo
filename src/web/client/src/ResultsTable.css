@@ -83,7 +83,17 @@ tr .cell-actions {
   font-size: 1.75rem;
 }
 
-tr:hover .cell-actions {
+tr .cell-detail {
+  visibility: hidden;
+  position: absolute;
+  bottom: 0.25rem;
+  margin-top: 1rem;
+  font-size: 0.75rem;
+  color: #888;
+}
+
+tr:hover .cell-actions,
+tr:hover .cell-detail {
   visibility: visible;
 }
 

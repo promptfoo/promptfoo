@@ -169,6 +169,7 @@ describe('util', () => {
       {
         success: true,
         score: 1.0,
+        latencyMs: 1000,
         prompt: {
           raw: 'Test prompt',
           display: '[display] Test prompt',
@@ -189,7 +190,9 @@ describe('util', () => {
       },
       body: [
         {
-          outputs: [{ pass: true, score: 1.0, text: 'Test output', prompt: 'Test prompt' }],
+          outputs: [
+            { pass: true, score: 1.0, text: 'Test output', prompt: 'Test prompt', latencyMs: 1000 },
+          ],
           vars: ['value1', 'value2'],
         },
       ],
@@ -224,6 +227,7 @@ describe('util', () => {
       {
         success: true,
         score: 1.0,
+        latencyMs: 1000,
         prompt: {
           raw: 'Test prompt',
           display: '[display] Test prompt',
@@ -244,7 +248,9 @@ describe('util', () => {
       },
       body: [
         {
-          outputs: [{ pass: true, score: 1.0, text: 'Test output', prompt: 'Test prompt' }],
+          outputs: [
+            { pass: true, score: 1.0, text: 'Test output', prompt: 'Test prompt', latencyMs: 1000 },
+          ],
           vars: ['value1', 'value2'],
         },
       ],
@@ -279,6 +285,7 @@ describe('util', () => {
       {
         success: true,
         score: 1.0,
+        latencyMs: 1000,
         prompt: {
           raw: 'Test prompt',
           display: '[display] Test prompt',
@@ -299,7 +306,9 @@ describe('util', () => {
       },
       body: [
         {
-          outputs: [{ pass: true, score: 1.0, text: 'Test output', prompt: 'Test prompt' }],
+          outputs: [
+            { pass: true, score: 1.0, text: 'Test output', prompt: 'Test prompt', latencyMs: 1000 },
+          ],
           vars: ['value1', 'value2'],
         },
       ],

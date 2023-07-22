@@ -96,6 +96,7 @@ export interface EvaluateResult {
   error?: string;
   success: boolean;
   score: number;
+  latencyMs: number;
 }
 
 export interface EvaluateTableOutput {
@@ -103,6 +104,8 @@ export interface EvaluateTableOutput {
   score: number;
   text: string;
   prompt: string;
+  latencyMs: number;
+  tokenUsage?: Partial<TokenUsage>;
 }
 
 export interface EvaluateTable {

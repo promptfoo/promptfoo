@@ -1,3 +1,5 @@
+import { TokenUsage } from '../../../types';
+
 type Prompt = {
   display: string;
   raw: string;
@@ -13,6 +15,8 @@ export type EvalRowOutput = {
   score: number;
   text: string | object;
   prompt: string;
+  latencyMs: number;
+  tokenUsage?: Partial<TokenUsage>;
 };
 
 export type EvalRow = {
