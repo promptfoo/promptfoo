@@ -130,12 +130,12 @@ class Evaluator {
           );
           response.output = postprocessFn(response.output);
           if (response.output == null) {
-            throw new Error('Postprocess function must return a value');
+            throw new Error('Postprocess function did not return a value');
           }
         }
 
-        let output = response.output;
-        const checkResult = await runAssertions(test, output);
+        console.log('checking output', response.output, JSON.stringify(ret))
+        const checkResult = await runAssertions(test, response.output);
         if (!checkResult.pass) {
           ret.error = checkResult.reason;
         }

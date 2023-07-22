@@ -345,6 +345,52 @@ describe('evaluator', () => {
     expect(summary.results[0].response?.output).toBe('Test output');
   });
 
+  test('evaluate with postprocess option - default test', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      defaultTest: {
+        options: {
+          postprocess: 'output + " postprocessed"',
+        },
+      },
+    };
+
+    const summary = await evaluate(testSuite, {});
+
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
+    expect(summary.stats.successes).toBe(1);
+    expect(summary.stats.failures).toBe(0);
+    expect(summary.results[0].response?.output).toBe('Test output postprocessed');
+  });
+
+  /*
+  test('evaluate with postprocess option - single test', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{
+        assert: [
+          {
+            type: 'equals',
+            value: 'Test output postprocessed',
+          },
+        ],
+        options: {
+          postprocess: 'output + " postprocessed"',
+        },
+      }],
+    };
+
+    const summary = await evaluate(testSuite, {});
+
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
+    expect(summary.stats.successes).toBe(1);
+    expect(summary.stats.failures).toBe(0);
+    expect(summary.results[0].response?.output).toBe('Test output postprocessed');
+  });
+  */
+
   test('evaluate with providerPromptMap', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
