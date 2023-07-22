@@ -364,22 +364,23 @@ describe('evaluator', () => {
     expect(summary.results[0].response?.output).toBe('Test output postprocessed');
   });
 
-  /*
   test('evaluate with postprocess option - single test', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
       prompts: [toPrompt('Test prompt')],
-      tests: [{
-        assert: [
-          {
-            type: 'equals',
-            value: 'Test output postprocessed',
+      tests: [
+        {
+          assert: [
+            {
+              type: 'equals',
+              value: 'Test output postprocessed',
+            },
+          ],
+          options: {
+            postprocess: 'output + " postprocessed"',
           },
-        ],
-        options: {
-          postprocess: 'output + " postprocessed"',
         },
-      }],
+      ],
     };
 
     const summary = await evaluate(testSuite, {});
@@ -389,7 +390,6 @@ describe('evaluator', () => {
     expect(summary.stats.failures).toBe(0);
     expect(summary.results[0].response?.output).toBe('Test output postprocessed');
   });
-  */
 
   test('evaluate with providerPromptMap', async () => {
     const testSuite: TestSuite = {
