@@ -316,28 +316,31 @@ export function writeOutput(
   }
 }
 
-export async function fetchWithTimeout(
+export function fetchWithTimeout(
   url: RequestInfo,
   options: RequestInit = {},
   timeout: number,
 ): Promise<Response> {
-  const controller = new AbortController();
-  const { signal } = controller;
-  options.signal = signal;
+  return new Promise((resolve, reject) => {
+    const controller = new AbortController();
+    const { signal } = controller;
+    options.signal = signal;
 
-  const timeoutId = setTimeout(() => {
-    controller.abort();
-    throw new Error(`Request timed out after ${timeout} ms`);
-  }, timeout);
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+      reject(new Error(`Request timed out after ${timeout} ms`));
+    }, timeout);
 
-  try {
-    const response = await fetch(url, options);
-    clearTimeout(timeoutId);
-    return response;
-  } catch (error) {
-    clearTimeout(timeoutId);
-    throw error;
-  }
+    fetch(url, options)
+      .then(response => {
+        clearTimeout(timeoutId);
+        resolve(response);
+      })
+      .catch(error => {
+        clearTimeout(timeoutId);
+        reject(error);
+      });
+  });
 }
 
 export async function fetchWithRetries(
