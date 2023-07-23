@@ -39,7 +39,13 @@ const ResponsiveStack = styled(Stack)(({ theme }) => ({
 
 function filenameToDate(filename: string) {
   const dateString = filename.slice('eval-'.length, filename.length - '.json'.length);
-  const date = new Date(dateString);
+
+  // Replace hyphens with colons where necessary (Windows compatibility).
+  const dateParts = dateString.split('T');
+  const timePart = dateParts[1].replace(/-/g, ':');
+  const formattedDateString = `${dateParts[0]}T${timePart}`;
+
+  const date = new Date(formattedDateString);
   return date.toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'long',

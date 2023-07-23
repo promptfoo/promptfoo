@@ -374,7 +374,10 @@ export function getLatestResultsPath(): string {
 
 export function writeLatestResults(results: EvaluateSummary, config: Partial<UnifiedConfig>) {
   const resultsDirectory = path.join(getConfigDirectoryPath(), 'output');
-  const timestamp = new Date().toISOString();
+
+  // Replace hyphens with colons (Windows compatibility).
+  const timestamp = new Date().toISOString().replace(/:/g, '-');
+
   const newResultsPath = path.join(resultsDirectory, `eval-${timestamp}.json`);
   const latestResultsPath = getLatestResultsPath();
   try {
