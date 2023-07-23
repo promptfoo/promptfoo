@@ -5,7 +5,7 @@ import yaml from 'js-yaml';
 import { globSync } from 'glob';
 
 import {
-  readVars,
+  readTestsFile,
   readPrompts,
   writeOutput,
   readTests,
@@ -137,7 +137,7 @@ describe('util', () => {
     (fs.readFileSync as jest.Mock).mockReturnValue('var1,var2\nvalue1,value2');
     const varsPath = 'vars.csv';
 
-    const result = await readVars(varsPath);
+    const result = await readTestsFile(varsPath);
 
     expect(fs.readFileSync).toHaveBeenCalledTimes(1);
     expect(result).toEqual([{ var1: 'value1', var2: 'value2' }]);
@@ -147,7 +147,7 @@ describe('util', () => {
     (fs.readFileSync as jest.Mock).mockReturnValue('[{"var1": "value1", "var2": "value2"}]');
     const varsPath = 'vars.json';
 
-    const result = await readVars(varsPath);
+    const result = await readTestsFile(varsPath);
 
     expect(fs.readFileSync).toHaveBeenCalledTimes(1);
     expect(result).toEqual([{ var1: 'value1', var2: 'value2' }]);
@@ -157,7 +157,7 @@ describe('util', () => {
     (fs.readFileSync as jest.Mock).mockReturnValue('- var1: value1\n  var2: value2');
     const varsPath = 'vars.yaml';
 
-    const result = await readVars(varsPath);
+    const result = await readTestsFile(varsPath);
 
     expect(fs.readFileSync).toHaveBeenCalledTimes(1);
     expect(result).toEqual([{ var1: 'value1', var2: 'value2' }]);

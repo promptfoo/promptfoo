@@ -224,7 +224,22 @@ export async function fetchCsvFromGoogleSheet(url: string): Promise<string> {
   return csvData;
 }
 
-export async function readVars(varsPath: string, basePath: string = ''): Promise<CsvRow[]> {
+export async function readVarsFile(pathOrGlob: string, basePath: string = ''): Promise<Record<string, string | string[] | object>> {
+  const resolvedPath = path.resolve(basePath, pathOrGlob);
+  const paths = globSync(resolvedPath);
+  const ret: Record<string, string | string[] | object> = {};
+
+  for (const p of paths) {
+    const yamlData = yaml.load(fs.readFileSync(p, 'utf-8'));
+    Object.assign(ret, yamlData);
+  }
+
+  return ret;
+}
+
+export async function readTestsFile(varsPath: string, basePath: string = ''): Promise<CsvRow[]> {
+  // This function is confusingly named - it reads a CSV, JSON, or YAML file of
+  // TESTS or test equivalents.
   const resolvedVarsPath = path.resolve(basePath, varsPath);
   const fileExtension = parsePath(varsPath).ext.slice(1);
   let rows: CsvRow[] = [];
@@ -255,7 +270,7 @@ export async function readTests(
 
   if (typeof tests === 'string') {
     // It's a filepath, load from CSV
-    const vars = await readVars(tests, basePath);
+    const vars = await readTestsFile(tests, basePath);
     return vars.map((row, idx) => {
       const test = testCaseFromCsvRow(row);
       test.description = `Row #${idx + 1}`;
@@ -265,6 +280,9 @@ export async function readTests(
 
   // Some validation of the shape of tests
   for (const test of tests) {
+    if (test.varsFile) {
+      test.vars = await readVarsFile(test.varsFile, basePath);
+    }
     if (!test.assert && !test.vars) {
       throw new Error(
         `Test case must have either "assert" or "vars" property. Instead got ${JSON.stringify(
