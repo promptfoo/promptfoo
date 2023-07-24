@@ -447,4 +447,31 @@ describe('readTests', () => {
 
     expect(result).toEqual(input);
   });
+
+  test('readTests with string array input (paths to test configs)', async () => {
+    const testsPaths = ['test1.yaml', 'test2.yaml'];
+    const test1Content = [
+      {
+        description: 'Test 1',
+        vars: { var1: 'value1', var2: 'value2' },
+        assert: [{ type: 'equals', value: 'value1' }],
+      },
+    ];
+    const test2Content = [
+      {
+        description: 'Test 2',
+        vars: { var1: 'value3', var2: 'value4' },
+        assert: [{ type: 'contains-json', value: 'value3' }],
+      },
+    ];
+    (fs.readFileSync as jest.Mock)
+      .mockReturnValueOnce(yaml.dump(test1Content))
+      .mockReturnValueOnce(yaml.dump(test2Content));
+    (globSync as jest.Mock).mockImplementation((pathOrGlob) => [pathOrGlob]);
+
+    const result = await readTests(testsPaths);
+
+    expect(fs.readFileSync).toHaveBeenCalledTimes(2);
+    expect(result).toEqual([...test1Content, ...test2Content]);
+  });
 });
