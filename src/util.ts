@@ -224,14 +224,23 @@ export async function fetchCsvFromGoogleSheet(url: string): Promise<string> {
   return csvData;
 }
 
-export async function readVarsFile(pathOrGlob: string, basePath: string = ''): Promise<Record<string, string | string[] | object>> {
-  const resolvedPath = path.resolve(basePath, pathOrGlob);
-  const paths = globSync(resolvedPath);
-  const ret: Record<string, string | string[] | object> = {};
+export async function readVarsFile(
+  pathOrGlobs: string | string[],
+  basePath: string = '',
+): Promise<Record<string, string | string[] | object>> {
+  if (typeof pathOrGlobs === 'string') {
+    pathOrGlobs = [pathOrGlobs];
+  }
 
-  for (const p of paths) {
-    const yamlData = yaml.load(fs.readFileSync(p, 'utf-8'));
-    Object.assign(ret, yamlData);
+  const ret: Record<string, string | string[] | object> = {};
+  for (const pathOrGlob of pathOrGlobs) {
+    const resolvedPath = path.resolve(basePath, pathOrGlob);
+    const paths = globSync(resolvedPath);
+
+    for (const p of paths) {
+      const yamlData = yaml.load(fs.readFileSync(p, 'utf-8'));
+      Object.assign(ret, yamlData);
+    }
   }
 
   return ret;
@@ -262,12 +271,9 @@ export async function readTestsFile(varsPath: string, basePath: string = ''): Pr
 
 export async function readTests(
   tests: string | TestCase[] | undefined,
+  loadTests?: string | string[],
   basePath: string = '',
 ): Promise<TestCase[]> {
-  if (!tests) {
-    return [];
-  }
-
   if (typeof tests === 'string') {
     // It's a filepath, load from CSV
     const vars = await readTestsFile(tests, basePath);
@@ -278,10 +284,29 @@ export async function readTests(
     });
   }
 
+  if (!tests) {
+    tests = [];
+  }
+
+  if (loadTests) {
+    if (typeof loadTests === 'string') {
+      loadTests = [loadTests];
+    }
+
+    for (const loadTestsGlob of loadTests) {
+      const resolvedPath = path.resolve(basePath, loadTestsGlob);
+      const testFiles = globSync(resolvedPath);
+      for (const testFile of testFiles) {
+        const testFileContent = yaml.load(fs.readFileSync(testFile, 'utf-8')) as TestCase[];
+        tests.push(...testFileContent);
+      }
+    }
+  }
+
   // Some validation of the shape of tests
   for (const test of tests) {
-    if (test.varsFile) {
-      test.vars = await readVarsFile(test.varsFile, basePath);
+    if (test.loadVars) {
+      test.vars = await readVarsFile(test.loadVars, basePath);
     }
     if (!test.assert && !test.vars) {
       throw new Error(

@@ -189,7 +189,7 @@ export interface TestCase {
   vars?: Record<string, string | string[] | object>;
 
   // Optional filepath or glob pattern to load vars from
-  varsFile?: string;
+  loadVars?: string | string[];
 
   // Optional list of automatic checks to run on the LLM output
   assert?: Assertion[];
@@ -221,6 +221,9 @@ export interface TestSuite {
   // Test cases
   tests?: TestCase[];
 
+  // File paths to load tests from
+  loadTests?: string | string[];
+
   // Default test case config
   defaultTest?: Partial<TestCase>;
 }
@@ -242,6 +245,9 @@ export interface TestSuiteConfig {
 
   // Path to a test file, OR list of LLM prompt variations (aka "test case")
   tests: string | TestCase[];
+
+  // File paths to load tests from
+  loadTests?: string | string[];
 
   // Sets the default properties for each test case. Useful for setting an assertion, on all test cases, for example.
   defaultTest?: Omit<TestCase, 'description'>;
