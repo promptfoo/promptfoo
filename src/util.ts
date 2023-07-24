@@ -224,7 +224,7 @@ export async function fetchCsvFromGoogleSheet(url: string): Promise<string> {
   return csvData;
 }
 
-export async function readVarsFile(
+export async function readVarsFiles(
   pathOrGlobs: string | string[],
   basePath: string = '',
 ): Promise<Record<string, string | string[] | object>> {
@@ -275,11 +275,17 @@ export async function readTests(
 ): Promise<TestCase[]> {
   const ret: TestCase[] = [];
 
-  const loadTestsFromGlob = (loadTestsGlob: string) => {
+  const loadTestsFromGlob = async (loadTestsGlob: string) => {
     const resolvedPath = path.resolve(basePath, loadTestsGlob);
     const testFiles = globSync(resolvedPath);
     for (const testFile of testFiles) {
       const testFileContent = yaml.load(fs.readFileSync(testFile, 'utf-8')) as TestCase[];
+      for (const testCase of testFileContent) {
+        if (typeof testCase.vars === 'string' || Array.isArray(testCase.vars)) {
+          const testcaseBasePath = path.dirname(testFile);
+          testCase.vars = await readVarsFiles(testCase.vars, testcaseBasePath);
+        }
+      }
       ret.push(...testFileContent);
     }
   };
@@ -287,7 +293,7 @@ export async function readTests(
   if (typeof tests === 'string') {
     if (tests.endsWith('yaml') || tests.endsWith('yml')) {
       // Load testcase config from yaml
-      loadTestsFromGlob(tests);
+      await loadTestsFromGlob(tests);
     } else {
       // Legacy load CSV
       const vars = await readTestsFile(tests, basePath);
@@ -301,7 +307,7 @@ export async function readTests(
     for (const maybeTestsGlob of tests) {
       if (typeof maybeTestsGlob === 'string') {
         // Assume it's a filepath
-        loadTestsFromGlob(maybeTestsGlob);
+        await loadTestsFromGlob(maybeTestsGlob);
       } else {
         // Assume it's a full test case
         ret.push(maybeTestsGlob);
@@ -311,9 +317,6 @@ export async function readTests(
 
   // Some validation of the shape of tests
   for (const test of ret) {
-    if (test.loadVars) {
-      test.vars = await readVarsFile(test.loadVars, basePath);
-    }
     if (!test.assert && !test.vars) {
       throw new Error(
         `Test case must have either "assert" or "vars" property. Instead got ${JSON.stringify(

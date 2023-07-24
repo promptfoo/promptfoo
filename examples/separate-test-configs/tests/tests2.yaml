@@ -22,3 +22,4 @@
 - vars:
     topic: fairy dust
     content_type: cleaning hacks
+- vars: ../vars/vars_*.yaml
