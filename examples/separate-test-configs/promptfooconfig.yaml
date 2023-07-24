@@ -1,0 +1,20 @@
+prompts: prompts.txt
+providers: openai:gpt-3.5-turbo
+
+# The defaultTest configuration is applied to every test case in this config.
+defaultTest:
+  options:
+    suffix: Be extremely concise
+
+# Loads & runs all test cases matching these filepaths
+tests:
+  # You can supply an exact filepath
+  - tests/tests2.yaml
+
+  # Or a glob (wildcard)
+  - tests/*
+
+  # Mix and match with actual test cases
+  - vars:
+      topic: the internet
+      content_type: witty tweets
