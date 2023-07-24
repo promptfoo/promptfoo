@@ -270,41 +270,47 @@ export async function readTestsFile(varsPath: string, basePath: string = ''): Pr
 }
 
 export async function readTests(
-  tests: string | TestCase[] | undefined,
-  loadTests?: string | string[],
+  tests: string | string[] | TestCase[] | undefined,
   basePath: string = '',
 ): Promise<TestCase[]> {
-  if (typeof tests === 'string') {
-    // It's a filepath, load from CSV
-    const vars = await readTestsFile(tests, basePath);
-    return vars.map((row, idx) => {
-      const test = testCaseFromCsvRow(row);
-      test.description = `Row #${idx + 1}`;
-      return test;
-    });
-  }
+  const ret: TestCase[] = [];
 
-  if (!tests) {
-    tests = [];
-  }
-
-  if (loadTests) {
-    if (typeof loadTests === 'string') {
-      loadTests = [loadTests];
+  const loadTestsFromGlob = (loadTestsGlob: string) => {
+    const resolvedPath = path.resolve(basePath, loadTestsGlob);
+    const testFiles = globSync(resolvedPath);
+    for (const testFile of testFiles) {
+      const testFileContent = yaml.load(fs.readFileSync(testFile, 'utf-8')) as TestCase[];
+      ret.push(...testFileContent);
     }
+  };
 
-    for (const loadTestsGlob of loadTests) {
-      const resolvedPath = path.resolve(basePath, loadTestsGlob);
-      const testFiles = globSync(resolvedPath);
-      for (const testFile of testFiles) {
-        const testFileContent = yaml.load(fs.readFileSync(testFile, 'utf-8')) as TestCase[];
-        tests.push(...testFileContent);
+  if (typeof tests === 'string') {
+    if (tests.endsWith('yaml') || tests.endsWith('yml')) {
+      // Load testcase config from yaml
+      loadTestsFromGlob(tests);
+    } else {
+      // Legacy load CSV
+      const vars = await readTestsFile(tests, basePath);
+      return vars.map((row, idx) => {
+        const test = testCaseFromCsvRow(row);
+        test.description = `Row #${idx + 1}`;
+        return test;
+      });
+    }
+  } else if (Array.isArray(tests)) {
+    for (const maybeTestsGlob of tests) {
+      if (typeof maybeTestsGlob === 'string') {
+        // Assume it's a filepath
+        loadTestsFromGlob(maybeTestsGlob);
+      } else {
+        // Assume it's a full test case
+        ret.push(maybeTestsGlob);
       }
     }
   }
 
   // Some validation of the shape of tests
-  for (const test of tests) {
+  for (const test of ret) {
     if (test.loadVars) {
       test.vars = await readVarsFile(test.loadVars, basePath);
     }
@@ -319,7 +325,7 @@ export async function readTests(
     }
   }
 
-  return tests;
+  return ret;
 }
 
 export function writeOutput(
