@@ -1,0 +1,3 @@
+Generate a list of creative {{content_type}} about {{topic}}.
+---
+Imagine you are an expert in {{topic}}. What {{content_type}} would you recommend writing about?

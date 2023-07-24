@@ -224,7 +224,31 @@ export async function fetchCsvFromGoogleSheet(url: string): Promise<string> {
   return csvData;
 }
 
-export async function readVars(varsPath: string, basePath: string = ''): Promise<CsvRow[]> {
+export async function readVarsFiles(
+  pathOrGlobs: string | string[],
+  basePath: string = '',
+): Promise<Record<string, string | string[] | object>> {
+  if (typeof pathOrGlobs === 'string') {
+    pathOrGlobs = [pathOrGlobs];
+  }
+
+  const ret: Record<string, string | string[] | object> = {};
+  for (const pathOrGlob of pathOrGlobs) {
+    const resolvedPath = path.resolve(basePath, pathOrGlob);
+    const paths = globSync(resolvedPath);
+
+    for (const p of paths) {
+      const yamlData = yaml.load(fs.readFileSync(p, 'utf-8'));
+      Object.assign(ret, yamlData);
+    }
+  }
+
+  return ret;
+}
+
+export async function readTestsFile(varsPath: string, basePath: string = ''): Promise<CsvRow[]> {
+  // This function is confusingly named - it reads a CSV, JSON, or YAML file of
+  // TESTS or test equivalents.
   const resolvedVarsPath = path.resolve(basePath, varsPath);
   const fileExtension = parsePath(varsPath).ext.slice(1);
   let rows: CsvRow[] = [];
@@ -246,25 +270,53 @@ export async function readVars(varsPath: string, basePath: string = ''): Promise
 }
 
 export async function readTests(
-  tests: string | TestCase[] | undefined,
+  tests: string | string[] | TestCase[] | undefined,
   basePath: string = '',
 ): Promise<TestCase[]> {
-  if (!tests) {
-    return [];
-  }
+  const ret: TestCase[] = [];
+
+  const loadTestsFromGlob = async (loadTestsGlob: string) => {
+    const resolvedPath = path.resolve(basePath, loadTestsGlob);
+    const testFiles = globSync(resolvedPath);
+    for (const testFile of testFiles) {
+      const testFileContent = yaml.load(fs.readFileSync(testFile, 'utf-8')) as TestCase[];
+      for (const testCase of testFileContent) {
+        if (typeof testCase.vars === 'string' || Array.isArray(testCase.vars)) {
+          const testcaseBasePath = path.dirname(testFile);
+          testCase.vars = await readVarsFiles(testCase.vars, testcaseBasePath);
+        }
+      }
+      ret.push(...testFileContent);
+    }
+  };
 
   if (typeof tests === 'string') {
-    // It's a filepath, load from CSV
-    const vars = await readVars(tests, basePath);
-    return vars.map((row, idx) => {
-      const test = testCaseFromCsvRow(row);
-      test.description = `Row #${idx + 1}`;
-      return test;
-    });
+    if (tests.endsWith('yaml') || tests.endsWith('yml')) {
+      // Load testcase config from yaml
+      await loadTestsFromGlob(tests);
+    } else {
+      // Legacy load CSV
+      const vars = await readTestsFile(tests, basePath);
+      return vars.map((row, idx) => {
+        const test = testCaseFromCsvRow(row);
+        test.description = `Row #${idx + 1}`;
+        return test;
+      });
+    }
+  } else if (Array.isArray(tests)) {
+    for (const maybeTestsGlob of tests) {
+      if (typeof maybeTestsGlob === 'string') {
+        // Assume it's a filepath
+        await loadTestsFromGlob(maybeTestsGlob);
+      } else {
+        // Assume it's a full test case
+        ret.push(maybeTestsGlob);
+      }
+    }
   }
 
   // Some validation of the shape of tests
-  for (const test of tests) {
+  for (const test of ret) {
     if (!test.assert && !test.vars) {
       throw new Error(
         `Test case must have either "assert" or "vars" property. Instead got ${JSON.stringify(
@@ -276,7 +328,7 @@ export async function readTests(
     }
   }
 
-  return tests;
+  return ret;
 }
 
 export function writeOutput(

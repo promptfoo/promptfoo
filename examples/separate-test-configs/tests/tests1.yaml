@@ -1,0 +1,24 @@
+# This file contains a list of test cases. They're added alongside test cases
+# from tests2.yaml in the example promptfooconfig.yaml.
+
+- vars:
+    topic: artificial intelligence
+    content_type: blog post ideas
+  assert:
+    - type: javascript
+      value: output.length > 100
+- vars:
+    topic: climate change
+    content_type: policy proposals
+- vars:
+    topic: vegetarian cooking
+    content_type: recipe ideas
+- vars:
+    topic: cybersecurity
+    content_type: educational topics
+- vars:
+    topic: remote work
+    content_type: challenges
+- vars:
+    topic: quantum computing
+    content_type: use cases
