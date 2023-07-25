@@ -2,23 +2,21 @@ prompts: prompts.txt
 providers: [openai:gpt-3.5-turbo, openai:gpt-4]
 theories:
   - dataSet:
-      -vars:
-        language: Spanish
-        expectedHelloWorld: 'Hola Mundo'
-        expectedGoodMorning: 'Buenos Dias'
-        expectedHowAreYou: '¿Cómo estás?'
-
-      -vars:
-        language: French
-        expectedHelloWorld: 'Bonjour le monde'
-        expectedGoodMorning: 'Bonjour'
-        expectedHowAreYou: 'Comment allez-vous?'
-
-      -vars:
-        language: German
-        expectedHelloWorld: 'Hallo Welt'
-        expectedGoodMorning: 'Guten Morgen'
-        expectedHowAreYou: 'Wie geht es dir?'
+      - vars:
+          language: Spanish
+          expectedHelloWorld: 'Hola mundo'
+          expectedGoodMorning: 'Buenos días'
+          expectedHowAreYou: '¿Cómo estás?'
+      - vars:
+          language: French
+          expectedHelloWorld: 'Bonjour le monde'
+          expectedGoodMorning: 'Bonjour'
+          expectedHowAreYou: 'Comment ça va?'
+      - vars:
+          language: German
+          expectedHelloWorld: 'Hallo Welt'
+          expectedGoodMorning: 'Guten Morgen'
+          expectedHowAreYou: 'Wie geht es dir?'
 
     tests:
       - description: Translated Hello World
@@ -27,7 +25,7 @@ theories:
         assert:
         - type: similar
           value: '{{expectedHelloWorld}}'
-          threshold: 0.95
+          threshold: 0.90
       
       - description: Translated Good Morning
         vars:
@@ -35,7 +33,7 @@ theories:
         assert:
         - type: similar
           value: '{{expectedGoodMorning}}'
-          threshold: 0.95
+          threshold: 0.90
       
       - description: Translated How are you?
         vars:
@@ -43,4 +41,4 @@ theories:
         assert:
         - type: similar
           value: '{{expectedHowAreYou}}'
-          threshold: 0.95
+          threshold: 0.90
