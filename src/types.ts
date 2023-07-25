@@ -198,6 +198,17 @@ export interface TestCase {
   options?: PromptConfig & OutputConfig & GradingConfig;
 }
 
+export interface Theory { 
+  // Optional description of what you're testing
+  description?: string;
+
+  // Default test case config
+  dataSet: Partial<TestCase>[];
+
+  // Optional list of automatic checks to run on the LLM output
+  tests: TestCase[];
+}
+
 // Same as a TestCase, except the `vars` object has been flattened into its final form.
 export interface AtomicTestCase extends TestCase {
   vars?: Record<string, string | object>;
@@ -221,6 +232,9 @@ export interface TestSuite {
   // Test cases
   tests?: TestCase[];
 
+  // Theories
+  theories?: Theory[];
+
   // Default test case config
   defaultTest?: Partial<TestCase>;
 }
@@ -242,6 +256,9 @@ export interface TestSuiteConfig {
 
   // Path to a test file, OR list of LLM prompt variations (aka "test case")
   tests: string | string[] | TestCase[];
+
+  // Theories, groupings of data and tests to be evaluated
+  theories?: Theory[];
 
   // Sets the default properties for each test case. Useful for setting an assertion, on all test cases, for example.
   defaultTest?: Omit<TestCase, 'description'>;

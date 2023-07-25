@@ -281,6 +281,7 @@ async function main() {
         prompts: cmdObj.prompts || fileConfig.prompts || defaultConfig.prompts,
         providers: cmdObj.providers || fileConfig.providers || defaultConfig.providers,
         tests: cmdObj.tests || cmdObj.vars || fileConfig.tests || defaultConfig.tests,
+        theories: fileConfig.theories,
         sharing:
           process.env.PROMPTFOO_DISABLE_SHARING === '1'
             ? false
@@ -310,6 +311,18 @@ async function main() {
         config.tests,
         cmdObj.tests ? undefined : basePath,
       );
+
+      //parse testCases for each theory
+      if (fileConfig.theories) {
+        for (const theory of fileConfig.theories) {
+          const parsedTheoryTests: TestCase[] = await readTests(
+            theory.tests,
+            cmdObj.tests ? undefined : basePath,
+          );
+          theory.tests = parsedTheoryTests;
+        }
+      }
+
       const parsedProviderPromptMap = readProviderPromptMap(config, parsedPrompts);
 
       if (parsedPrompts.length === 0) {
@@ -334,6 +347,7 @@ async function main() {
         providers: parsedProviders,
         providerPromptMap: parsedProviderPromptMap,
         tests: parsedTests,
+        theories:config.theories,
         defaultTest,
       };
 

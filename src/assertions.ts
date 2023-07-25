@@ -98,13 +98,23 @@ export async function runAssertion(
   telemetry.record('assertion_used', {
     type: baseType,
   });
+  
+  //render assertion values
+  let renderedValue = assertion.value;
+  // renderString for assertion values
+  if(renderedValue && typeof renderedValue === 'string'){    
+    renderedValue = nunjucks.renderString(renderedValue, test.vars || {});
+  }
+  else if(renderedValue && Array.isArray(renderedValue)){    
+    renderedValue = renderedValue.map(v => nunjucks.renderString(v, test.vars || {}));
+  }
 
   if (baseType === 'equals') {
-    pass = assertion.value === output;
+    pass = renderedValue === output;
     return {
       pass,
       score: pass ? 1 : 0,
-      reason: pass ? 'Assertion passed' : `Expected output "${assertion.value}"`,
+      reason: pass ? 'Assertion passed' : `Expected output "${renderedValue}"`,
     };
   }
 
@@ -123,103 +133,103 @@ export async function runAssertion(
   }
 
   if (baseType === 'contains') {
-    invariant(assertion.value, '"contains" assertion type must have a string or number value');
+    invariant(renderedValue, '"contains" assertion type must have a string or number value');
     invariant(
-      typeof assertion.value === 'string' || typeof assertion.value === 'number',
+      typeof renderedValue === 'string' || typeof renderedValue === 'number',
       '"contains" assertion type must have a string or number value',
     );
-    pass = output.includes(String(assertion.value)) !== inverse;
+    pass = output.includes(String(renderedValue)) !== inverse;
     return {
       pass,
       score: pass ? 1 : 0,
       reason: pass
         ? 'Assertion passed'
-        : `Expected output to ${inverse ? 'not ' : ''}contain "${assertion.value}"`,
+        : `Expected output to ${inverse ? 'not ' : ''}contain "${renderedValue}"`,
     };
   }
 
   if (baseType === 'contains-any') {
-    invariant(assertion.value, '"contains-any" assertion type must have a value');
+    invariant(renderedValue, '"contains-any" assertion type must have a value');
     invariant(
-      Array.isArray(assertion.value),
+      Array.isArray(renderedValue),
       '"contains-any" assertion type must have an array value',
     );
-    pass = assertion.value.some((value) => output.includes(value)) !== inverse;
+    pass = renderedValue.some((value) => output.includes(value)) !== inverse;
     return {
       pass,
       score: pass ? 1 : 0,
       reason: pass
         ? 'Assertion passed'
-        : `Expected output to ${inverse ? 'not ' : ''}contain one of "${assertion.value.join(
+        : `Expected output to ${inverse ? 'not ' : ''}contain one of "${renderedValue.join(
             ', ',
           )}"`,
     };
   }
 
   if (baseType === 'contains-all') {
-    invariant(assertion.value, '"contains-all" assertion type must have a value');
+    invariant(renderedValue, '"contains-all" assertion type must have a value');
     invariant(
-      Array.isArray(assertion.value),
+      Array.isArray(renderedValue),
       '"contains-all" assertion type must have an array value',
     );
-    pass = assertion.value.every((value) => output.includes(value)) !== inverse;
+    pass = renderedValue.every((value) => output.includes(value)) !== inverse;
     return {
       pass,
       score: pass ? 1 : 0,
       reason: pass
         ? 'Assertion passed'
-        : `Expected output to ${inverse ? 'not ' : ''}contain all of "${assertion.value.join(
+        : `Expected output to ${inverse ? 'not ' : ''}contain all of "${renderedValue.join(
             ', ',
           )}"`,
     };
   }
 
   if (baseType === 'regex') {
-    invariant(assertion.value, '"regex" assertion type must have a string value');
+    invariant(renderedValue, '"regex" assertion type must have a string value');
     invariant(
-      typeof assertion.value === 'string',
+      typeof renderedValue === 'string',
       '"contains" assertion type must have a string value',
     );
-    const regex = new RegExp(assertion.value);
+    const regex = new RegExp(renderedValue);
     pass = regex.test(output) !== inverse;
     return {
       pass,
       score: pass ? 1 : 0,
       reason: pass
         ? 'Assertion passed'
-        : `Expected output to ${inverse ? 'not ' : ''}match regex "${assertion.value}"`,
+        : `Expected output to ${inverse ? 'not ' : ''}match regex "${renderedValue}"`,
     };
   }
 
   if (baseType === 'icontains') {
-    invariant(assertion.value, '"icontains" assertion type must have a string or number value');
+    invariant(renderedValue, '"icontains" assertion type must have a string or number value');
     invariant(
-      typeof assertion.value === 'string' || typeof assertion.value === 'number',
+      typeof renderedValue === 'string' || typeof renderedValue === 'number',
       '"icontains" assertion type must have a string or number value',
     );
-    pass = output.toLowerCase().includes(String(assertion.value).toLowerCase()) !== inverse;
+    pass = output.toLowerCase().includes(String(renderedValue).toLowerCase()) !== inverse;
     return {
       pass,
       score: pass ? 1 : 0,
       reason: pass
         ? 'Assertion passed'
-        : `Expected output to ${inverse ? 'not ' : ''}contain "${assertion.value}"`,
+        : `Expected output to ${inverse ? 'not ' : ''}contain "${renderedValue}"`,
     };
   }
 
   if (baseType === 'starts-with') {
-    invariant(assertion.value, '"starts-with" assertion type must have a string value');
+    invariant(renderedValue, '"starts-with" assertion type must have a string value');
     invariant(
-      typeof assertion.value === 'string',
+      typeof renderedValue === 'string',
       '"starts-with" assertion type must have a string value',
     );
-    pass = output.startsWith(String(assertion.value)) !== inverse;
+    pass = output.startsWith(String(renderedValue)) !== inverse;
     return {
       pass,
       score: pass ? 1 : 0,
       reason: pass
         ? 'Assertion passed'
-        : `Expected output to ${inverse ? 'not ' : ''}start with "${assertion.value}"`,
+        : `Expected output to ${inverse ? 'not ' : ''}start with "${renderedValue}"`,
     };
   }
 
@@ -236,7 +246,7 @@ export async function runAssertion(
 
   if (baseType === 'javascript') {
     try {
-      const customFunction = new Function('output', 'context', `return ${assertion.value}`);
+      const customFunction = new Function('output', 'context', `return ${renderedValue}`);
       const context = {
         vars: test.vars || {},
       };
@@ -255,7 +265,7 @@ export async function runAssertion(
         pass: false,
         score: 0,
         reason: `Custom function threw error: ${(err as Error).message}
-${assertion.value}`,
+${renderedValue}`,
       };
     }
     return {
@@ -264,32 +274,32 @@ ${assertion.value}`,
       reason: pass
         ? 'Assertion passed'
         : `Custom function returned ${inverse ? 'true' : 'false'}
-${assertion.value}`,
+${renderedValue}`,
     };
   }
 
   if (baseType === 'similar') {
-    invariant(assertion.value, 'Similarity assertion must have a string value');
+    invariant(renderedValue, 'Similarity assertion must have a string value');
     invariant(
-      typeof assertion.value === 'string',
+      typeof renderedValue === 'string',
       '"contains" assertion type must have a string value',
     );
-    return matchesSimilarity(assertion.value, output, assertion.threshold || 0.75, inverse);
+    return matchesSimilarity(renderedValue, output, assertion.threshold || 0.75, inverse);
   }
 
   if (baseType === 'llm-rubric') {
-    invariant(assertion.value, 'Similarity assertion must have a string value');
+    invariant(renderedValue, 'Similarity assertion must have a string value');
     invariant(
-      typeof assertion.value === 'string',
+      typeof renderedValue === 'string',
       '"contains" assertion type must have a string value',
     );
-    return matchesLlmRubric(assertion.value, output, test.options);
+    return matchesLlmRubric(renderedValue, output, test.options);
   }
 
   if (baseType === 'webhook') {
-    invariant(assertion.value, '"webhook" assertion type must have a URL value');
+    invariant(renderedValue, '"webhook" assertion type must have a URL value');
     invariant(
-      typeof assertion.value === 'string',
+      typeof renderedValue === 'string',
       '"webhook" assertion type must have a URL value',
     );
 
@@ -298,7 +308,7 @@ ${assertion.value}`,
         vars: test.vars || {},
       };
       const response = await fetchWithRetries(
-        assertion.value,
+        renderedValue,
         {
           method: 'POST',
           headers: {
@@ -339,8 +349,8 @@ ${assertion.value}`,
   }
 
   if (baseType === 'rouge-n') {
-    invariant(assertion.value, '"rouge" assertion type must a value (string or string array)');
-    return handleRougeScore(baseType, assertion, assertion.value, output, inverse);
+    invariant(renderedValue, '"rouge" assertion type must a value (string or string array)');
+    return handleRougeScore(baseType, assertion, renderedValue, output, inverse);
   }
 
   throw new Error('Unknown assertion type: ' + assertion.type);
