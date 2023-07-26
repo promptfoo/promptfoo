@@ -3,7 +3,7 @@ import providers from './providers';
 import telemetry from './telemetry';
 import { evaluate as doEvaluate } from './evaluator';
 import { loadApiProviders } from './providers';
-import { readTests } from './util';
+import { readTests, writeOutput } from './util';
 import type { EvaluateOptions, TestSuite, TestSuiteConfig } from './types';
 
 export * from './types';
@@ -28,6 +28,11 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
   };
   telemetry.maybeShowNotice();
   const ret = await doEvaluate(constructedTestSuite, options);
+
+  if (testSuite.outputPath) {
+    writeOutput(testSuite.outputPath, ret, testSuite, null);
+  }
+
   await telemetry.send();
   return ret;
 }
