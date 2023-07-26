@@ -258,6 +258,8 @@ class Evaluator {
     let tests = (
       testSuite.tests && testSuite.tests.length > 0
         ? testSuite.tests
+        : testSuite.theories
+        ? []
         : [
             {
               // Dummy test for cases when we're only comparing raw prompts.
