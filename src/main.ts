@@ -347,7 +347,7 @@ async function main() {
         providers: parsedProviders,
         providerPromptMap: parsedProviderPromptMap,
         tests: parsedTests,
-        theories:config.theories,
+        theories: config.theories,
         defaultTest,
       };
 

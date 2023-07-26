@@ -198,7 +198,7 @@ export interface TestCase {
   options?: PromptConfig & OutputConfig & GradingConfig;
 }
 
-export interface Theory { 
+export interface Theory {
   // Optional description of what you're testing
   description?: string;
 

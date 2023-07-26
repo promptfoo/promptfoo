@@ -98,15 +98,14 @@ export async function runAssertion(
   telemetry.record('assertion_used', {
     type: baseType,
   });
-  
+
   //render assertion values
   let renderedValue = assertion.value;
   // renderString for assertion values
-  if(renderedValue && typeof renderedValue === 'string'){    
+  if (renderedValue && typeof renderedValue === 'string') {
     renderedValue = nunjucks.renderString(renderedValue, test.vars || {});
-  }
-  else if(renderedValue && Array.isArray(renderedValue)){    
-    renderedValue = renderedValue.map(v => nunjucks.renderString(v, test.vars || {}));
+  } else if (renderedValue && Array.isArray(renderedValue)) {
+    renderedValue = renderedValue.map((v) => nunjucks.renderString(v, test.vars || {}));
   }
 
   if (baseType === 'equals') {
@@ -160,9 +159,7 @@ export async function runAssertion(
       score: pass ? 1 : 0,
       reason: pass
         ? 'Assertion passed'
-        : `Expected output to ${inverse ? 'not ' : ''}contain one of "${renderedValue.join(
-            ', ',
-          )}"`,
+        : `Expected output to ${inverse ? 'not ' : ''}contain one of "${renderedValue.join(', ')}"`,
     };
   }
 
@@ -178,9 +175,7 @@ export async function runAssertion(
       score: pass ? 1 : 0,
       reason: pass
         ? 'Assertion passed'
-        : `Expected output to ${inverse ? 'not ' : ''}contain all of "${renderedValue.join(
-            ', ',
-          )}"`,
+        : `Expected output to ${inverse ? 'not ' : ''}contain all of "${renderedValue.join(', ')}"`,
     };
   }
 
@@ -298,10 +293,7 @@ ${renderedValue}`,
 
   if (baseType === 'webhook') {
     invariant(renderedValue, '"webhook" assertion type must have a URL value');
-    invariant(
-      typeof renderedValue === 'string',
-      '"webhook" assertion type must have a URL value',
-    );
+    invariant(typeof renderedValue === 'string', '"webhook" assertion type must have a URL value');
 
     try {
       const context = {

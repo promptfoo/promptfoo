@@ -280,16 +280,16 @@ class Evaluator {
               },
             ]
           ).map((test) => {
-            return{
+            return {
               ...testSuite.defaultTest,
               ...data,
               ...test,
-              vars:{
+              vars: {
                 ...testSuite.defaultTest?.vars,
                 ...data.vars,
-                ...test.vars
-              }
-            }
+                ...test.vars,
+              },
+            };
           });
           //add theory tests to tests
           tests = tests.concat(theoryTests);

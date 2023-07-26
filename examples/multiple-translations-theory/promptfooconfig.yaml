@@ -23,22 +23,22 @@ theories:
         vars:
           input: 'Hello world'
         assert:
-        - type: similar
-          value: '{{expectedHelloWorld}}'
-          threshold: 0.90
-      
+          - type: similar
+            value: '{{expectedHelloWorld}}'
+            threshold: 0.90
+
       - description: Translated Good Morning
         vars:
           input: 'Good morning'
         assert:
-        - type: similar
-          value: '{{expectedGoodMorning}}'
-          threshold: 0.90
-      
+          - type: similar
+            value: '{{expectedGoodMorning}}'
+            threshold: 0.90
+
       - description: Translated How are you?
         vars:
           input: 'How are you?'
         assert:
-        - type: similar
-          value: '{{expectedHowAreYou}}'
-          threshold: 0.90
+          - type: similar
+            value: '{{expectedHowAreYou}}'
+            threshold: 0.90
