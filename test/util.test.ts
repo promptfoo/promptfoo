@@ -496,6 +496,6 @@ describe('readTests', () => {
     const result = await readTests(testsPaths);
 
     expect(fs.readFileSync).toHaveBeenCalledTimes(2);
-    expect(result).toEqual([Object.assign({}, test1Content[0], {vars: vars1Content})]);
+    expect(result).toEqual([Object.assign({}, test1Content[0], { vars: vars1Content })]);
   });
 });
