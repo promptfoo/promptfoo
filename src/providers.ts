@@ -10,7 +10,13 @@ import {
   AzureOpenAiCompletionProvider,
 } from './providers/azureopenai';
 
-import type { ApiProvider, ProviderConfig, ProviderFunction, ProviderId, RawProviderConfig } from './types';
+import type {
+  ApiProvider,
+  ProviderConfig,
+  ProviderFunction,
+  ProviderId,
+  RawProviderConfig,
+} from './types';
 
 export async function loadApiProviders(
   providerPaths: ProviderId | ProviderId[] | RawProviderConfig[] | ProviderFunction,
@@ -19,10 +25,12 @@ export async function loadApiProviders(
   if (typeof providerPaths === 'string') {
     return [await loadApiProvider(providerPaths, undefined, basePath)];
   } else if (typeof providerPaths === 'function') {
-    return [{
-      id: () => 'custom-function',
-      callApi: providerPaths
-    }];
+    return [
+      {
+        id: () => 'custom-function',
+        callApi: providerPaths,
+      },
+    ];
   } else if (Array.isArray(providerPaths)) {
     return Promise.all(
       providerPaths.map((provider, idx) => {
@@ -31,7 +39,7 @@ export async function loadApiProviders(
         } else if (typeof provider === 'function') {
           return {
             id: () => `custom-function-${idx}`,
-            callApi: provider
+            callApi: provider,
           };
         } else {
           const id = Object.keys(provider)[0];

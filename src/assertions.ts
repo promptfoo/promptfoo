@@ -236,6 +236,9 @@ export async function runAssertion(
 
   if (baseType === 'javascript') {
     try {
+      if (typeof assertion.value === 'function') {
+        return assertion.value(output, test, assertion);
+      }
       const customFunction = new Function('output', 'context', `return ${assertion.value}`);
       const context = {
         vars: test.vars || {},
@@ -339,7 +342,10 @@ ${assertion.value}`,
   }
 
   if (baseType === 'rouge-n') {
-    invariant(assertion.value, '"rouge" assertion type must a value (string or string array)');
+    invariant(
+      typeof assertion.value === 'string' || Array.isArray(assertion.value),
+      '"rouge" assertion type must be a value (string or string array)',
+    );
     return handleRougeScore(baseType, assertion, assertion.value, output, inverse);
   }
 

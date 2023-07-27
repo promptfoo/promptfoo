@@ -45,8 +45,14 @@ export function readProviderPromptMap(
     allPrompts.push(prompt.display);
   }
 
-  invariant(typeof config.providers !== 'string', 'In order to use a provider-prompt map, config.providers should be an array of objects, not a string');
-  invariant(typeof config.providers !== 'function', 'In order to use a provider-prompt map, config.providers should be an array of objects, not a function');
+  invariant(
+    typeof config.providers !== 'string',
+    'In order to use a provider-prompt map, config.providers should be an array of objects, not a string',
+  );
+  invariant(
+    typeof config.providers !== 'function',
+    'In order to use a provider-prompt map, config.providers should be an array of objects, not a function',
+  );
 
   for (const provider of config.providers) {
     if (typeof provider === 'object') {
