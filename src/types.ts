@@ -151,6 +151,7 @@ type BaseAssertionTypes =
   | 'is-json'
   | 'contains-json'
   | 'javascript'
+  | 'python'
   | 'similar'
   | 'llm-rubric'
   | 'webhook'
@@ -168,7 +169,10 @@ export interface Assertion {
   type: AssertionType;
 
   // The expected value, if applicable
-  value?: string | string[];
+  value?:
+    | string
+    | string[]
+    | ((output: string, testCase: AtomicTestCase, assertion: Assertion) => Promise<GradingResult>);
 
   // The threshold value, only applicable for similarity (cosine distance)
   threshold?: number;
@@ -241,6 +245,8 @@ export interface TestSuite {
 
 export type ProviderId = string;
 
+export type ProviderFunction = (prompt: string) => Promise<ProviderResponse>;
+
 export type RawProviderConfig = Record<ProviderId, Omit<ProviderConfig, 'id'>>;
 
 // TestSuiteConfig = Test Suite, but before everything is parsed and resolved.  Providers are just strings, prompts are filepaths, tests can be filepath or inline.
@@ -249,7 +255,7 @@ export interface TestSuiteConfig {
   description?: string;
 
   // One or more LLM APIs to use, for example: openai:gpt-3.5-turbo, openai:gpt-4, localai:chat:vicuna
-  providers: ProviderId | ProviderId[] | RawProviderConfig[];
+  providers: ProviderId | ProviderId[] | RawProviderConfig[] | ProviderFunction;
 
   // One or more prompt files to load
   prompts: string | string[];

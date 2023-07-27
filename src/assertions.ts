@@ -239,12 +239,16 @@ export async function runAssertion(
     };
   }
 
+  const context = {
+    vars: test.vars || {},
+  };
+
   if (baseType === 'javascript') {
     try {
+      if (typeof assertion.value === 'function') {
+        return assertion.value(output, test, assertion);
+      }
       const customFunction = new Function('output', 'context', `return ${renderedValue}`);
-      const context = {
-        vars: test.vars || {},
-      };
       const result = customFunction(output, context) as any;
       if (typeof result === 'boolean') {
         pass = result !== inverse;
@@ -270,6 +274,44 @@ ${renderedValue}`,
         ? 'Assertion passed'
         : `Custom function returned ${inverse ? 'true' : 'false'}
 ${renderedValue}`,
+    };
+  }
+
+  if (baseType === 'python') {
+    try {
+      const { execSync } = require('child_process');
+      const escapedOutput = output.replace(/'/g, "\\'").replace(/"/g, '\\"');;
+      const escapedContext = JSON.stringify(context).replace(/'/g, "\\'").replace(/"/g, '\\"');
+      const result = execSync(`python -c "import json; import math; import os; import sys; import re; import datetime; import random; import collections; output='${escapedOutput}'; context='${escapedContext}'; print(json.dumps(${assertion.value}))"`).toString().trim();
+      if (result === 'true') {
+        pass = true;
+        score = 1.0;
+      } else if (result === 'false') {
+        pass = false;
+        score = 0.0;
+      } else if (result.startsWith('{')) {
+        return JSON.parse(result);
+      } else {
+        pass = true;
+        score = parseFloat(result);
+        if (isNaN(score)) {
+          throw new Error('Python code must return a boolean, number, or {pass, score, reason} object');
+        }
+      }
+    } catch (err) {
+      return {
+        pass: false,
+        score: 0,
+        reason: `Python code execution failed: ${(err as Error).message}`,
+      };
+    }
+    return {
+      pass,
+      score,
+      reason: pass
+        ? 'Assertion passed'
+        : `Python code returned ${pass ? 'true' : 'false'}
+${assertion.value}`,
     };
   }
 
@@ -341,7 +383,10 @@ ${renderedValue}`,
   }
 
   if (baseType === 'rouge-n') {
-    invariant(renderedValue, '"rouge" assertion type must a value (string or string array)');
+    invariant(
+      typeof renderedValue === 'string' || Array.isArray(renderedValue),
+      '"rouge" assertion type must be a value (string or string array)',
+    );
     return handleRougeScore(baseType, assertion, renderedValue, output, inverse);
   }
 

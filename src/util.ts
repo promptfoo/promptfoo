@@ -4,6 +4,7 @@ import * as os from 'os';
 
 import $RefParser from '@apidevtools/json-schema-ref-parser';
 import fetch from 'node-fetch';
+import invariant from 'tiny-invariant';
 import yaml from 'js-yaml';
 import nunjucks from 'nunjucks';
 import { globSync } from 'glob';
@@ -43,6 +44,15 @@ export function readProviderPromptMap(
   for (const prompt of parsedPrompts) {
     allPrompts.push(prompt.display);
   }
+
+  invariant(
+    typeof config.providers !== 'string',
+    'In order to use a provider-prompt map, config.providers should be an array of objects, not a string',
+  );
+  invariant(
+    typeof config.providers !== 'function',
+    'In order to use a provider-prompt map, config.providers should be an array of objects, not a function',
+  );
 
   for (const provider of config.providers) {
     if (typeof provider === 'object') {
