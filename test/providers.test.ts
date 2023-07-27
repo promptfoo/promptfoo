@@ -201,6 +201,21 @@ describe('providers', () => {
     expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
   });
 
+  test('loadApiProviders with ProviderFunction', async () => {
+    const providerFunction: ProviderFunction = async (prompt: string) => {
+      return {
+        output: `Output for ${prompt}`,
+        tokenUsage: { total: 10, prompt: 5, completion: 5 },
+      };
+    };
+    const providers = await loadApiProviders(providerFunction);
+    expect(providers).toHaveLength(1);
+    expect(providers[0].id()).toBe('custom-function');
+    const response = await providers[0].callApi('Test prompt');
+    expect(response.output).toBe('Output for Test prompt');
+    expect(response.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+  });
+
   test('loadApiProviders with RawProviderConfig[]', async () => {
     const rawProviderConfigs: RawProviderConfig[] = [
       {
