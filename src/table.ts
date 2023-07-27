@@ -24,11 +24,11 @@ export function generateTable(summary: EvaluateSummary, tableCellMaxLength = 250
           text = text.slice(0, tableCellMaxLength) + '...';
         }
         if (pass) {
-          return chalk.green.bold('[PASS] ') + text;
+          return chalk.green('[PASS] ') + text;
         } else if (!pass) {
           // color everything red up until '---'
           return (
-            chalk.red.bold('[FAIL] ') +
+            chalk.red('[FAIL] ') +
             text
               .split('---')
               .map((c, idx) => (idx === 0 ? chalk.red.bold(c) : c))
