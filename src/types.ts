@@ -192,9 +192,6 @@ export interface TestCase {
   // Key-value pairs to substitute in the prompt
   vars?: Record<string, string | string[] | object>;
 
-  // Optional filepath or glob pattern to load vars from
-  loadVars?: string | string[];
-
   // Optional list of automatic checks to run on the LLM output
   assert?: Assertion[];
 
