@@ -1,7 +1,5 @@
 import path from 'path';
 
-import { ApiProvider, ProviderConfig, ProviderId, RawProviderConfig } from './types';
-
 import { OpenAiCompletionProvider, OpenAiChatCompletionProvider } from './providers/openai';
 import { AnthropicCompletionProvider } from './providers/anthropic';
 import { ReplicateProvider } from './providers/replicate';
@@ -12,12 +10,16 @@ import {
   AzureOpenAiCompletionProvider,
 } from './providers/azureopenai';
 
+import type { ApiProvider, ProviderConfig, ProviderFunction, ProviderId, RawProviderConfig } from './types';
+
 export async function loadApiProviders(
-  providerPaths: ProviderId | ProviderId[] | RawProviderConfig[],
+  providerPaths: ProviderId | ProviderId[] | RawProviderConfig[] | ProviderFunction,
   basePath?: string,
 ): Promise<ApiProvider[]> {
   if (typeof providerPaths === 'string') {
     return [await loadApiProvider(providerPaths, undefined, basePath)];
+  } else if (typeof providerPaths === 'function') {
+    // implement this
   } else if (Array.isArray(providerPaths)) {
     return Promise.all(
       providerPaths.map((provider) => {
