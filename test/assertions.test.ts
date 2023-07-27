@@ -58,14 +58,24 @@ describe('runAssertion', () => {
     type: 'contains-json',
   };
 
-  const functionAssertion: Assertion = {
+  const javascriptStringAssertion: Assertion = {
     type: 'javascript',
     value: 'output === "Expected output"',
   };
 
-  const functionAssertionWithNumber: Assertion = {
+  const javascriptStringAssertionWithNumber: Assertion = {
     type: 'javascript',
     value: 'output.length * 10',
+  };
+
+  const javascriptFunctionAssertion: Assertion = {
+    type: 'javascript',
+    value: async (output: string) => ({ pass: true, score: 0.5, reason: 'Assertion passed' }),
+  };
+
+  const javascriptFunctionFailAssertion: Assertion = {
+    type: 'javascript',
+    value: async (output: string) => ({ pass: false, score: 0.5, reason: 'Assertion failed' }),
   };
 
   it('should pass when the equality assertion passes', async () => {
@@ -133,11 +143,11 @@ describe('runAssertion', () => {
     expect(result.reason).toContain('Expected output to contain valid JSON');
   });
 
-  it('should pass when the function assertion passes', async () => {
+  it('should pass when the javascript assertion passes', async () => {
     const output = 'Expected output';
 
     const result: GradingResult = await runAssertion(
-      functionAssertion,
+      javascriptStringAssertion,
       {} as AtomicTestCase,
       output,
     );
@@ -145,11 +155,11 @@ describe('runAssertion', () => {
     expect(result.reason).toBe('Assertion passed');
   });
 
-  it('should pass a score through when the function returns a number', async () => {
+  it('should pass a score through when the javascript returns a number', async () => {
     const output = 'Expected output';
 
     const result: GradingResult = await runAssertion(
-      functionAssertionWithNumber,
+      javascriptStringAssertionWithNumber,
       {} as AtomicTestCase,
       output,
     );
@@ -158,11 +168,11 @@ describe('runAssertion', () => {
     expect(result.reason).toBe('Assertion passed');
   });
 
-  it('should fail when the function assertion fails', async () => {
+  it('should fail when the javascript assertion fails', async () => {
     const output = 'Different output';
 
     const result: GradingResult = await runAssertion(
-      functionAssertion,
+      javascriptStringAssertion,
       {} as AtomicTestCase,
       output,
     );
@@ -173,12 +183,12 @@ describe('runAssertion', () => {
   it('should pass when the function assertion passes - with vars', async () => {
     const output = 'Expected output';
 
-    const functionAssertionWithVars: Assertion = {
+    const javascriptStringAssertionWithVars: Assertion = {
       type: 'javascript',
       value: 'output === "Expected output" && context.vars.foo === "bar"',
     };
     const result: GradingResult = await runAssertion(
-      functionAssertionWithVars,
+      javascriptStringAssertionWithVars,
       { vars: { foo: 'bar' } } as AtomicTestCase,
       output,
     );
@@ -186,15 +196,15 @@ describe('runAssertion', () => {
     expect(result.reason).toBe('Assertion passed');
   });
 
-  it('should fail when the function does not match vars', async () => {
+  it('should fail when the javascript does not match vars', async () => {
     const output = 'Expected output';
 
-    const functionAssertionWithVars: Assertion = {
+    const javascriptStringAssertionWithVars: Assertion = {
       type: 'javascript',
       value: 'output === "Expected output" && context.vars.foo === "something else"',
     };
     const result: GradingResult = await runAssertion(
-      functionAssertionWithVars,
+      javascriptStringAssertionWithVars,
       { vars: { foo: 'bar' } } as AtomicTestCase,
       output,
     );
@@ -202,6 +212,32 @@ describe('runAssertion', () => {
     expect(result.reason).toBe(
       'Custom function returned false\noutput === "Expected output" && context.vars.foo === "something else"',
     );
+  });
+
+  it('should pass when the function returns pass', async () => {
+    const output = 'Expected output';
+
+    const result: GradingResult = await runAssertion(
+      javascriptFunctionAssertion,
+      {} as AtomicTestCase,
+      output,
+    );
+    expect(result.pass).toBeTruthy();
+    expect(result.score).toBe(0.5);
+    expect(result.reason).toBe('Assertion passed');
+  });
+
+  it('should fail when the function returns fail', async () => {
+    const output = 'Expected output';
+
+    const result: GradingResult = await runAssertion(
+      javascriptFunctionFailAssertion,
+      {} as AtomicTestCase,
+      output,
+    );
+    expect(result.pass).toBeFalsy();
+    expect(result.score).toBe(0.5);
+    expect(result.reason).toBe('Assertion failed');
   });
 
   const notContainsAssertion: Assertion = {

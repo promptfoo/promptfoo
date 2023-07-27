@@ -5,7 +5,7 @@ import { AnthropicCompletionProvider } from '../src/providers/anthropic';
 
 import { disableCache, enableCache } from '../src/cache.js';
 import { loadApiProvider, loadApiProviders } from '../src/providers.js';
-import type { RawProviderConfig } from '../src/types';
+import type { RawProviderConfig, ProviderFunction } from '../src/types';
 import {
   AzureOpenAiChatCompletionProvider,
   AzureOpenAiCompletionProvider,
