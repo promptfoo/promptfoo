@@ -19,12 +19,20 @@ export async function loadApiProviders(
   if (typeof providerPaths === 'string') {
     return [await loadApiProvider(providerPaths, undefined, basePath)];
   } else if (typeof providerPaths === 'function') {
-    // implement this
+    return [{
+      id: () => 'custom-function',
+      callApi: providerPaths
+    }];
   } else if (Array.isArray(providerPaths)) {
     return Promise.all(
-      providerPaths.map((provider) => {
+      providerPaths.map((provider, idx) => {
         if (typeof provider === 'string') {
           return loadApiProvider(provider, undefined, basePath);
+        } else if (typeof provider === 'function') {
+          return {
+            id: () => `custom-function-${idx}`,
+            callApi: provider
+          };
         } else {
           const id = Object.keys(provider)[0];
           const context = { ...provider[id], id };
