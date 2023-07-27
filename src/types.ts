@@ -151,6 +151,7 @@ type BaseAssertionTypes =
   | 'is-json'
   | 'contains-json'
   | 'javascript'
+  | 'python'
   | 'similar'
   | 'llm-rubric'
   | 'webhook'
