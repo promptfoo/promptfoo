@@ -135,6 +135,16 @@ function EvalOutputCell({
         )}{' '}
         <TruncatedText text={text} maxLength={maxTextLength} />
       </div>
+      <div className="cell-detail">
+        {output.tokenUsage?.cached ? (
+          <span>{output.tokenUsage.cached} tokens (cached)</span>
+        ) : (
+          <>
+            {output.tokenUsage?.total && <span>{output.tokenUsage.total} tokens</span>} |{' '}
+            <span>{output.latencyMs} ms</span>
+          </>
+        )}
+      </div>
       <div className="cell-actions">
         {output.prompt && (
           <>

@@ -2,6 +2,7 @@
 
 [![npm](https://img.shields.io/npm/v/promptfoo)](https://npmjs.com/package/promptfoo)
 [![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/typpo/promptfoo/main.yml)](https://github.com/typpo/promptfoo/actions/workflows/main.yml)
+![MIT license](https://img.shields.io/github/license/typpo/promptfoo)
 
 `promptfoo` is a tool for testing and evaluating LLM prompt quality.
 
@@ -102,6 +103,7 @@ See [Test assertions](https://promptfoo.dev/docs/configuration/expected-outputs)
 | `is-json`       | output is valid json                                                      |
 | `contains-json` | output contains valid json                                                |
 | `javascript`    | provided Javascript function validates the output                         |
+| `python`        | provided Python function validates the output                             |
 | `webhook`       | provided webhook returns `{pass: true}`                                   |
 | `similar`       | embeddings and cosine similarity are above a threshold                    |
 | `llm-rubric`    | LLM output matches a given rubric, using a Language Model to grade output |

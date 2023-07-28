@@ -4,6 +4,7 @@ import * as os from 'os';
 
 import $RefParser from '@apidevtools/json-schema-ref-parser';
 import fetch from 'node-fetch';
+import invariant from 'tiny-invariant';
 import yaml from 'js-yaml';
 import nunjucks from 'nunjucks';
 import { globSync } from 'glob';
@@ -43,6 +44,15 @@ export function readProviderPromptMap(
   for (const prompt of parsedPrompts) {
     allPrompts.push(prompt.display);
   }
+
+  invariant(
+    typeof config.providers !== 'string',
+    'In order to use a provider-prompt map, config.providers should be an array of objects, not a string',
+  );
+  invariant(
+    typeof config.providers !== 'function',
+    'In order to use a provider-prompt map, config.providers should be an array of objects, not a function',
+  );
 
   for (const provider of config.providers) {
     if (typeof provider === 'object') {
@@ -229,7 +239,31 @@ export async function fetchCsvFromGoogleSheet(url: string): Promise<string> {
   return csvData;
 }
 
-export async function readVars(varsPath: string, basePath: string = ''): Promise<CsvRow[]> {
+export async function readVarsFiles(
+  pathOrGlobs: string | string[],
+  basePath: string = '',
+): Promise<Record<string, string | string[] | object>> {
+  if (typeof pathOrGlobs === 'string') {
+    pathOrGlobs = [pathOrGlobs];
+  }
+
+  const ret: Record<string, string | string[] | object> = {};
+  for (const pathOrGlob of pathOrGlobs) {
+    const resolvedPath = path.resolve(basePath, pathOrGlob);
+    const paths = globSync(resolvedPath);
+
+    for (const p of paths) {
+      const yamlData = yaml.load(fs.readFileSync(p, 'utf-8'));
+      Object.assign(ret, yamlData);
+    }
+  }
+
+  return ret;
+}
+
+export async function readTestsFile(varsPath: string, basePath: string = ''): Promise<CsvRow[]> {
+  // This function is confusingly named - it reads a CSV, JSON, or YAML file of
+  // TESTS or test equivalents.
   const resolvedVarsPath = path.resolve(basePath, varsPath);
   const fileExtension = parsePath(varsPath).ext.slice(1);
   let rows: CsvRow[] = [];
@@ -251,25 +285,53 @@ export async function readVars(varsPath: string, basePath: string = ''): Promise
 }
 
 export async function readTests(
-  tests: string | TestCase[] | undefined,
+  tests: string | string[] | TestCase[] | undefined,
   basePath: string = '',
 ): Promise<TestCase[]> {
-  if (!tests) {
-    return [];
-  }
+  const ret: TestCase[] = [];
+
+  const loadTestsFromGlob = async (loadTestsGlob: string) => {
+    const resolvedPath = path.resolve(basePath, loadTestsGlob);
+    const testFiles = globSync(resolvedPath);
+    for (const testFile of testFiles) {
+      const testFileContent = yaml.load(fs.readFileSync(testFile, 'utf-8')) as TestCase[];
+      for (const testCase of testFileContent) {
+        if (typeof testCase.vars === 'string' || Array.isArray(testCase.vars)) {
+          const testcaseBasePath = path.dirname(testFile);
+          testCase.vars = await readVarsFiles(testCase.vars, testcaseBasePath);
+        }
+      }
+      ret.push(...testFileContent);
+    }
+  };
 
   if (typeof tests === 'string') {
-    // It's a filepath, load from CSV
-    const vars = await readVars(tests, basePath);
-    return vars.map((row, idx) => {
-      const test = testCaseFromCsvRow(row);
-      test.description = `Row #${idx + 1}`;
-      return test;
-    });
+    if (tests.endsWith('yaml') || tests.endsWith('yml')) {
+      // Load testcase config from yaml
+      await loadTestsFromGlob(tests);
+    } else {
+      // Legacy load CSV
+      const vars = await readTestsFile(tests, basePath);
+      return vars.map((row, idx) => {
+        const test = testCaseFromCsvRow(row);
+        test.description = `Row #${idx + 1}`;
+        return test;
+      });
+    }
+  } else if (Array.isArray(tests)) {
+    for (const maybeTestsGlob of tests) {
+      if (typeof maybeTestsGlob === 'string') {
+        // Assume it's a filepath
+        await loadTestsFromGlob(maybeTestsGlob);
+      } else {
+        // Assume it's a full test case
+        ret.push(maybeTestsGlob);
+      }
+    }
   }
 
   // Some validation of the shape of tests
-  for (const test of tests) {
+  for (const test of ret) {
     if (!test.assert && !test.vars) {
       throw new Error(
         `Test case must have either "assert" or "vars" property. Instead got ${JSON.stringify(
@@ -281,7 +343,7 @@ export async function readTests(
     }
   }
 
-  return tests;
+  return ret;
 }
 
 export function writeOutput(
@@ -321,28 +383,31 @@ export function writeOutput(
   }
 }
 
-export async function fetchWithTimeout(
+export function fetchWithTimeout(
   url: RequestInfo,
   options: RequestInit = {},
   timeout: number,
 ): Promise<Response> {
-  const controller = new AbortController();
-  const { signal } = controller;
-  options.signal = signal;
+  return new Promise((resolve, reject) => {
+    const controller = new AbortController();
+    const { signal } = controller;
+    options.signal = signal;
 
-  const timeoutId = setTimeout(() => {
-    controller.abort();
-    throw new Error(`Request timed out after ${timeout} ms`);
-  }, timeout);
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+      reject(new Error(`Request timed out after ${timeout} ms`));
+    }, timeout);
 
-  try {
-    const response = await fetch(url, options);
-    clearTimeout(timeoutId);
-    return response;
-  } catch (error) {
-    clearTimeout(timeoutId);
-    throw error;
-  }
+    fetch(url, options)
+      .then((response) => {
+        clearTimeout(timeoutId);
+        resolve(response);
+      })
+      .catch((error) => {
+        clearTimeout(timeoutId);
+        reject(error);
+      });
+  });
 }
 
 export async function fetchWithRetries(
@@ -364,6 +429,8 @@ export async function fetchWithRetries(
   throw new Error(`Request failed after ${retries} retries: ${(lastError as Error).message}`);
 }
 
+const RESULT_HISTORY_LENGTH = 50;
+
 export function getConfigDirectoryPath(): string {
   return path.join(os.homedir(), '.promptfoo');
 }
@@ -373,11 +440,17 @@ export function getLatestResultsPath(): string {
 }
 
 export function writeLatestResults(results: EvaluateSummary, config: Partial<UnifiedConfig>) {
+  const resultsDirectory = path.join(getConfigDirectoryPath(), 'output');
+
+  // Replace hyphens with colons (Windows compatibility).
+  const timestamp = new Date().toISOString().replace(/:/g, '-');
+
+  const newResultsPath = path.join(resultsDirectory, `eval-${timestamp}.json`);
   const latestResultsPath = getLatestResultsPath();
   try {
-    fs.mkdirSync(path.dirname(latestResultsPath), { recursive: true });
+    fs.mkdirSync(resultsDirectory, { recursive: true });
     fs.writeFileSync(
-      latestResultsPath,
+      newResultsPath,
       JSON.stringify(
         {
           version: 1,
@@ -388,8 +461,45 @@ export function writeLatestResults(results: EvaluateSummary, config: Partial<Uni
         2,
       ),
     );
+    if (fs.existsSync(latestResultsPath) || fs.lstatSync(latestResultsPath).isSymbolicLink()) {
+      fs.unlinkSync(latestResultsPath);
+    }
+    fs.symlinkSync(newResultsPath, latestResultsPath);
+    cleanupOldResults();
   } catch (err) {
-    logger.error(`Failed to write latest results to ${latestResultsPath}:\n${err}`);
+    logger.error(`Failed to write latest results to ${newResultsPath}:\n${err}`);
+  }
+}
+
+export function listPreviousResults(): string[] {
+  const directory = path.join(getConfigDirectoryPath(), 'output');
+  const files = fs.readdirSync(directory);
+  const resultsFiles = files.filter((file) => file.startsWith('eval-') && file.endsWith('.json'));
+  const sortedFiles = resultsFiles.sort((a, b) => {
+    const statA = fs.statSync(path.join(directory, a));
+    const statB = fs.statSync(path.join(directory, b));
+    return statA.birthtime.getTime() - statB.birthtime.getTime(); // sort in ascending order
+  });
+  return sortedFiles;
+}
+
+export function cleanupOldResults(remaining = RESULT_HISTORY_LENGTH) {
+  const sortedFiles = listPreviousResults();
+  for (let i = 0; i < sortedFiles.length - remaining; i++) {
+    fs.unlinkSync(path.join(getConfigDirectoryPath(), 'output', sortedFiles[i]));
+  }
+}
+
+export function readResult(
+  name: string,
+): { results: EvaluateSummary; config: Partial<UnifiedConfig> } | undefined {
+  const resultsDirectory = path.join(getConfigDirectoryPath(), 'output');
+  const resultsPath = path.join(resultsDirectory, name);
+  try {
+    const results = JSON.parse(fs.readFileSync(fs.realpathSync(resultsPath), 'utf-8'));
+    return results;
+  } catch (err) {
+    logger.error(`Failed to read results from ${resultsPath}:\n${err}`);
   }
 }
 
@@ -397,12 +507,7 @@ export function readLatestResults():
   | { results: EvaluateSummary; config: Partial<UnifiedConfig> }
   | undefined {
   const latestResultsPath = getLatestResultsPath();
-  try {
-    const latestResults = JSON.parse(fs.readFileSync(latestResultsPath, 'utf-8'));
-    return latestResults;
-  } catch (err) {
-    logger.error(`Failed to read latest results from ${latestResultsPath}:\n${err}`);
-  }
+  return readResult(latestResultsPath);
 }
 
 export function cosineSimilarity(vecA: number[], vecB: number[]) {

@@ -3,6 +3,7 @@ import readline from 'readline';
 import async from 'async';
 import chalk from 'chalk';
 import nunjucks from 'nunjucks';
+import invariant from 'tiny-invariant';
 
 import logger from './logger';
 import telemetry from './telemetry';
@@ -110,18 +111,40 @@ class Evaluator {
       vars,
     };
 
+    let latencyMs = 0;
     try {
+      const startTime = Date.now();
       const response = await provider.callApi(renderedPrompt);
+      const endTime = Date.now();
+      latencyMs = endTime - startTime;
+
       const ret: EvaluateResult = {
         ...setup,
         response,
         success: false,
         score: 0,
+        latencyMs,
       };
       if (response.error) {
         ret.error = response.error;
       } else if (response.output) {
-        const checkResult = await runAssertions(test, response.output);
+        // Create a copy of response so we can potentially mutate it.
+        let processedResponse = { ...response };
+        if (test.options?.postprocess) {
+          const { postprocess } = test.options;
+          const postprocessFn = new Function(
+            'output',
+            'context',
+            postprocess.includes('\n') ? postprocess : `return ${postprocess}`,
+          );
+          processedResponse.output = postprocessFn(processedResponse.output);
+          if (processedResponse.output == null) {
+            throw new Error('Postprocess function did not return a value');
+          }
+        }
+
+        invariant(processedResponse.output != null, 'Response output should not be null');
+        const checkResult = await runAssertions(test, processedResponse.output);
         if (!checkResult.pass) {
           ret.error = checkResult.reason;
         }
@@ -132,6 +155,7 @@ class Evaluator {
           this.stats.tokenUsage.prompt += checkResult.tokensUsed.prompt;
           this.stats.tokenUsage.completion += checkResult.tokensUsed.completion;
         }
+        ret.response = processedResponse;
       } else {
         ret.success = false;
         ret.score = 0;
@@ -159,6 +183,7 @@ class Evaluator {
         error: String(err) + '\n\n' + (err as Error).stack,
         success: false,
         score: 0,
+        latencyMs,
       };
     }
   }
@@ -230,17 +255,49 @@ class Evaluator {
     }
 
     // Aggregate all vars across test cases
-
-    const tests = (
-      testSuite.tests || [
-        {
-          // Dummy test for cases when we're only comparing raw prompts.
-        },
-      ]
+    let tests = (
+      testSuite.tests && testSuite.tests.length > 0
+        ? testSuite.tests
+        : testSuite.scenarios
+        ? []
+        : [
+            {
+              // Dummy test for cases when we're only comparing raw prompts.
+            },
+          ]
     ).map((test) => {
       const finalTestCase: TestCase = Object.assign({}, testSuite.defaultTest);
       return Object.assign(finalTestCase, test);
     });
+
+    // Build scenarios and add to tests
+    if (testSuite.scenarios && testSuite.scenarios.length > 0) {
+      for (const scenario of testSuite.scenarios) {
+        for (const data of scenario.config) {
+          // Merge defaultTest with scenario config
+          const scenarioTests = (
+            scenario.tests || [
+              {
+                // Dummy test for cases when we're only comparing raw prompts.
+              },
+            ]
+          ).map((test) => {
+            return {
+              ...testSuite.defaultTest,
+              ...data,
+              ...test,
+              vars: {
+                ...testSuite.defaultTest?.vars,
+                ...data.vars,
+                ...test.vars,
+              },
+            };
+          });
+          // Add scenario tests to tests
+          tests = tests.concat(scenarioTests);
+        }
+      }
+    }
 
     const varNames: Set<string> = new Set();
     const varsWithSpecialColsRemoved: Record<string, string | string[] | object>[] = [];
@@ -270,6 +327,8 @@ class Evaluator {
         testCase.options?.prefix || testSuite.defaultTest?.options?.prefix || '';
       const appendToPrompt =
         testCase.options?.suffix || testSuite.defaultTest?.options?.suffix || '';
+      testCase.options.postprocess =
+        testCase.options.postprocess || testSuite.defaultTest?.options?.postprocess;
 
       // Finalize test case eval
       const varCombinations = generateVarCombinations(testCase.vars || {});
@@ -323,8 +382,7 @@ class Evaluator {
     // Set up progress bar...
     let progressbar: SingleBar | undefined;
     if (options.showProgressBar) {
-      const totalNumRuns =
-        testSuite.prompts.length * testSuite.providers.length * (totalVarCombinations || 1);
+      const totalNumRuns = runEvalOptions.length;
       const cliProgress = await import('cli-progress');
       progressbar = new cliProgress.SingleBar(
         {
@@ -404,6 +462,8 @@ class Evaluator {
           score: row.score,
           text: resultText,
           prompt: row.prompt.raw,
+          latencyMs: row.latencyMs,
+          tokenUsage: row.response?.tokenUsage,
         };
       },
     );

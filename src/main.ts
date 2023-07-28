@@ -11,6 +11,7 @@ import logger, { getLogLevel, setLogLevel } from './logger';
 import { loadApiProvider, loadApiProviders } from './providers';
 import { evaluate } from './evaluator';
 import {
+  cleanupOldResults,
   maybeReadConfig,
   readConfig,
   readLatestResults,
@@ -181,6 +182,7 @@ async function main() {
     .action(async () => {
       telemetry.maybeShowNotice();
       await clearCache();
+      cleanupOldResults(0);
       telemetry.record('command_used', {
         name: 'cache_clear',
       });
@@ -279,6 +281,7 @@ async function main() {
         prompts: cmdObj.prompts || fileConfig.prompts || defaultConfig.prompts,
         providers: cmdObj.providers || fileConfig.providers || defaultConfig.providers,
         tests: cmdObj.tests || cmdObj.vars || fileConfig.tests || defaultConfig.tests,
+        scenarios: fileConfig.scenarios || defaultConfig.scenarios,
         sharing:
           process.env.PROMPTFOO_DISABLE_SHARING === '1'
             ? false
@@ -308,6 +311,18 @@ async function main() {
         config.tests,
         cmdObj.tests ? undefined : basePath,
       );
+
+      //parse testCases for each scenario
+      if (fileConfig.scenarios) {
+        for (const scenario of fileConfig.scenarios) {
+          const parsedScenarioTests: TestCase[] = await readTests(
+            scenario.tests,
+            cmdObj.tests ? undefined : basePath,
+          );
+          scenario.tests = parsedScenarioTests;
+        }
+      }
+
       const parsedProviderPromptMap = readProviderPromptMap(config, parsedPrompts);
 
       if (parsedPrompts.length === 0) {
@@ -321,6 +336,7 @@ async function main() {
           suffix: cmdObj.promptSuffix,
           provider: cmdObj.grader,
           // rubricPrompt:
+          // postprocess
         },
         ...config.defaultTest,
       };
@@ -331,6 +347,7 @@ async function main() {
         providers: parsedProviders,
         providerPromptMap: parsedProviderPromptMap,
         tests: parsedTests,
+        scenarios: config.scenarios,
         defaultTest,
       };
 

@@ -345,6 +345,52 @@ describe('evaluator', () => {
     expect(summary.results[0].response?.output).toBe('Test output');
   });
 
+  test('evaluate with postprocess option - default test', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      defaultTest: {
+        options: {
+          postprocess: 'output + " postprocessed"',
+        },
+      },
+    };
+
+    const summary = await evaluate(testSuite, {});
+
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
+    expect(summary.stats.successes).toBe(1);
+    expect(summary.stats.failures).toBe(0);
+    expect(summary.results[0].response?.output).toBe('Test output postprocessed');
+  });
+
+  test('evaluate with postprocess option - single test', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          assert: [
+            {
+              type: 'equals',
+              value: 'Test output postprocessed',
+            },
+          ],
+          options: {
+            postprocess: 'output + " postprocessed"',
+          },
+        },
+      ],
+    };
+
+    const summary = await evaluate(testSuite, {});
+
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
+    expect(summary.stats.successes).toBe(1);
+    expect(summary.stats.failures).toBe(0);
+    expect(summary.results[0].response?.output).toBe('Test output postprocessed');
+  });
+
   test('evaluate with providerPromptMap', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
@@ -368,5 +414,122 @@ describe('evaluator', () => {
     expect(summary.results[0].prompt.raw).toBe('Test prompt 1');
     expect(summary.results[0].prompt.display).toBe('Test prompt 1');
     expect(summary.results[0].response?.output).toBe('Test output');
+  });
+
+  test('evaluate with scenarios', async () => {
+    const mockApiProvider: ApiProvider = {
+      id: jest.fn().mockReturnValue('test-provider'),
+      callApi: jest
+        .fn()
+        .mockResolvedValueOnce({
+          output: 'Hola mundo',
+          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+        })
+        .mockResolvedValueOnce({
+          output: 'Bonjour le monde',
+          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+        }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt {{ language }}')],
+      scenarios: [
+        {
+          config: [
+            {
+              vars: {
+                language: 'Spanish',
+                expectedHelloWorld: 'Hola mundo',
+              },
+            },
+            {
+              vars: {
+                language: 'French',
+                expectedHelloWorld: 'Bonjour le monde',
+              },
+            },
+          ],
+          tests: [
+            {
+              assert: [
+                {
+                  type: 'equals',
+                  value: '{{expectedHelloWorld}}',
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const summary = await evaluate(testSuite, {});
+
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
+    expect(summary.stats.successes).toBe(2);
+    expect(summary.stats.failures).toBe(0);
+    expect(summary.results[0].response?.output).toBe('Hola mundo');
+    expect(summary.results[1].response?.output).toBe('Bonjour le monde');
+  });
+
+  test('evaluate with scenarios and multiple vars', async () => {
+    const mockApiProvider: ApiProvider = {
+      id: jest.fn().mockReturnValue('test-provider'),
+      callApi: jest
+        .fn()
+        .mockResolvedValueOnce({
+          output: 'Spanish Hola',
+          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+        })
+        .mockResolvedValueOnce({
+          output: 'Spanish Bonjour',
+          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+        })
+        .mockResolvedValueOnce({
+          output: 'French Hola',
+          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+        })
+        .mockResolvedValueOnce({
+          output: 'French Bonjour',
+          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+        }),
+    };
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt {{ language }} {{ greeting }}')],
+      scenarios: [
+        {
+          config: [
+            {
+              vars: {
+                language: ['Spanish', 'French'],
+                greeting: ['Hola', 'Bonjour'],
+              },
+            },
+          ],
+          tests: [
+            {
+              assert: [
+                {
+                  type: 'equals',
+                  value: '{{language}} {{greeting}}',
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const summary = await evaluate(testSuite, {});
+
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(4);
+    expect(summary.stats.successes).toBe(4);
+    expect(summary.stats.failures).toBe(0);
+    expect(summary.results[0].response?.output).toBe('Spanish Hola');
+    expect(summary.results[1].response?.output).toBe('Spanish Bonjour');
+    expect(summary.results[2].response?.output).toBe('French Hola');
+    expect(summary.results[3].response?.output).toBe('French Bonjour');
   });
 });

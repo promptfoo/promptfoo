@@ -73,6 +73,10 @@ export interface PromptConfig {
   suffix?: string;
 }
 
+export interface OutputConfig {
+  postprocess?: string;
+}
+
 export interface EvaluateOptions {
   maxConcurrency?: number;
   showProgressBar?: boolean;
@@ -92,6 +96,7 @@ export interface EvaluateResult {
   error?: string;
   success: boolean;
   score: number;
+  latencyMs: number;
 }
 
 export interface EvaluateTableOutput {
@@ -99,6 +104,8 @@ export interface EvaluateTableOutput {
   score: number;
   text: string;
   prompt: string;
+  latencyMs: number;
+  tokenUsage?: Partial<TokenUsage>;
 }
 
 export interface EvaluateTable {
@@ -144,6 +151,7 @@ type BaseAssertionTypes =
   | 'is-json'
   | 'contains-json'
   | 'javascript'
+  | 'python'
   | 'similar'
   | 'llm-rubric'
   | 'webhook'
@@ -161,7 +169,10 @@ export interface Assertion {
   type: AssertionType;
 
   // The expected value, if applicable
-  value?: string | string[];
+  value?:
+    | string
+    | string[]
+    | ((output: string, testCase: AtomicTestCase, assertion: Assertion) => Promise<GradingResult>);
 
   // The threshold value, only applicable for similarity (cosine distance)
   threshold?: number;
@@ -185,7 +196,18 @@ export interface TestCase {
   assert?: Assertion[];
 
   // Additional configuration settings for the prompt
-  options?: PromptConfig & GradingConfig;
+  options?: PromptConfig & OutputConfig & GradingConfig;
+}
+
+export interface Scenario {
+  // Optional description of what you're testing
+  description?: string;
+
+  // Default test case config
+  config: Partial<TestCase>[];
+
+  // Optional list of automatic checks to run on the LLM output
+  tests: TestCase[];
 }
 
 // Same as a TestCase, except the `vars` object has been flattened into its final form.
@@ -211,11 +233,16 @@ export interface TestSuite {
   // Test cases
   tests?: TestCase[];
 
+  // scenarios
+  scenarios?: Scenario[];
+
   // Default test case config
   defaultTest?: Partial<TestCase>;
 }
 
 export type ProviderId = string;
+
+export type ProviderFunction = (prompt: string) => Promise<ProviderResponse>;
 
 export type RawProviderConfig = Record<ProviderId, ProviderConfig>;
 
@@ -225,13 +252,16 @@ export interface TestSuiteConfig {
   description?: string;
 
   // One or more LLM APIs to use, for example: openai:gpt-3.5-turbo, openai:gpt-4, localai:chat:vicuna
-  providers: ProviderId | ProviderId[] | RawProviderConfig[];
+  providers: ProviderId | ProviderId[] | RawProviderConfig[] | ProviderFunction;
 
   // One or more prompt files to load
   prompts: string | string[];
 
   // Path to a test file, OR list of LLM prompt variations (aka "test case")
-  tests: string | TestCase[];
+  tests: string | string[] | TestCase[];
+
+  // Scenarios, groupings of data and tests to be evaluated
+  scenarios?: Scenario[];
 
   // Sets the default properties for each test case. Useful for setting an assertion, on all test cases, for example.
   defaultTest?: Omit<TestCase, 'description'>;
