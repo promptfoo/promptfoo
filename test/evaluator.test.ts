@@ -416,7 +416,7 @@ describe('evaluator', () => {
     expect(summary.results[0].response?.output).toBe('Test output');
   });
 
-  test('evaluate with theories', async () => {
+  test('evaluate with scenarios', async () => {
     const mockApiProvider: ApiProvider = {
       id: jest.fn().mockReturnValue('test-provider'),
       callApi: jest
@@ -434,9 +434,9 @@ describe('evaluator', () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
       prompts: [toPrompt('Test prompt {{ language }}')],
-      theories: [
+      scenarios: [
         {
-          dataSet: [
+          config: [
             {
               vars: {
                 language: 'Spanish',
@@ -473,7 +473,7 @@ describe('evaluator', () => {
     expect(summary.results[1].response?.output).toBe('Bonjour le monde');
   });
 
-  test('evaluate with theories and multiple vars', async () => {
+  test('evaluate with scenarios and multiple vars', async () => {
     const mockApiProvider: ApiProvider = {
       id: jest.fn().mockReturnValue('test-provider'),
       callApi: jest
@@ -498,9 +498,9 @@ describe('evaluator', () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
       prompts: [toPrompt('Test prompt {{ language }} {{ greeting }}')],
-      theories: [
+      scenarios: [
         {
-          dataSet: [
+          config: [
             {
               vars: {
                 language: ['Spanish', 'French'],

@@ -1,7 +1,7 @@
 prompts: prompts.txt
 providers: [openai:gpt-3.5-turbo, openai:gpt-4]
-theories:
-  - dataSet:
+scenarios:
+  - config:
       - vars:
           language: Spanish
           expectedHelloWorld: 'Hola mundo'

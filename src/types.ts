@@ -199,12 +199,12 @@ export interface TestCase {
   options?: PromptConfig & OutputConfig & GradingConfig;
 }
 
-export interface Theory {
+export interface Scenario {
   // Optional description of what you're testing
   description?: string;
 
   // Default test case config
-  dataSet: Partial<TestCase>[];
+  config: Partial<TestCase>[];
 
   // Optional list of automatic checks to run on the LLM output
   tests: TestCase[];
@@ -233,8 +233,8 @@ export interface TestSuite {
   // Test cases
   tests?: TestCase[];
 
-  // Theories
-  theories?: Theory[];
+  // scenarios
+  scenarios?: Scenario[];
 
   // Default test case config
   defaultTest?: Partial<TestCase>;
@@ -260,8 +260,8 @@ export interface TestSuiteConfig {
   // Path to a test file, OR list of LLM prompt variations (aka "test case")
   tests: string | string[] | TestCase[];
 
-  // Theories, groupings of data and tests to be evaluated
-  theories?: Theory[];
+  // Scenarios, groupings of data and tests to be evaluated
+  scenarios?: Scenario[];
 
   // Sets the default properties for each test case. Useful for setting an assertion, on all test cases, for example.
   defaultTest?: Omit<TestCase, 'description'>;

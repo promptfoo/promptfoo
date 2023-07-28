@@ -258,7 +258,7 @@ class Evaluator {
     let tests = (
       testSuite.tests && testSuite.tests.length > 0
         ? testSuite.tests
-        : testSuite.theories
+        : testSuite.scenarios
         ? []
         : [
             {
@@ -270,13 +270,13 @@ class Evaluator {
       return Object.assign(finalTestCase, test);
     });
 
-    //build theories and add to tests
-    if (testSuite.theories && testSuite.theories.length > 0) {
-      for (const theory of testSuite.theories) {
-        for (const data of theory.dataSet) {
-          //merge defaultTest with TheoryData
-          const theoryTests = (
-            theory.tests || [
+    // Build scenarios and add to tests
+    if (testSuite.scenarios && testSuite.scenarios.length > 0) {
+      for (const scenario of testSuite.scenarios) {
+        for (const data of scenario.config) {
+          // Merge defaultTest with scenario config
+          const scenarioTests = (
+            scenario.tests || [
               {
                 // Dummy test for cases when we're only comparing raw prompts.
               },
@@ -293,8 +293,8 @@ class Evaluator {
               },
             };
           });
-          //add theory tests to tests
-          tests = tests.concat(theoryTests);
+          // Add scenario tests to tests
+          tests = tests.concat(scenarioTests);
         }
       }
     }

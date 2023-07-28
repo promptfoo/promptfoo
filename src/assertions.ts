@@ -280,9 +280,13 @@ ${renderedValue}`,
   if (baseType === 'python') {
     try {
       const { execSync } = require('child_process');
-      const escapedOutput = output.replace(/'/g, "\\'").replace(/"/g, '\\"');;
+      const escapedOutput = output.replace(/'/g, "\\'").replace(/"/g, '\\"');
       const escapedContext = JSON.stringify(context).replace(/'/g, "\\'").replace(/"/g, '\\"');
-      const result = execSync(`python -c "import json; import math; import os; import sys; import re; import datetime; import random; import collections; output='${escapedOutput}'; context='${escapedContext}'; print(json.dumps(${assertion.value}))"`).toString().trim();
+      const result = execSync(
+        `python -c "import json; import math; import os; import sys; import re; import datetime; import random; import collections; output='${escapedOutput}'; context='${escapedContext}'; print(json.dumps(${assertion.value}))"`,
+      )
+        .toString()
+        .trim();
       if (result === 'true') {
         pass = true;
         score = 1.0;
@@ -295,7 +299,9 @@ ${renderedValue}`,
         pass = true;
         score = parseFloat(result);
         if (isNaN(score)) {
-          throw new Error('Python code must return a boolean, number, or {pass, score, reason} object');
+          throw new Error(
+            'Python code must return a boolean, number, or {pass, score, reason} object',
+          );
         }
       }
     } catch (err) {
