@@ -473,7 +473,7 @@ export function listPreviousResults(): string[] {
   const sortedFiles = resultsFiles.sort((a, b) => {
     const statA = fs.statSync(path.join(directory, a));
     const statB = fs.statSync(path.join(directory, b));
-    return statB.birthtime.getTime() - statA.birthtime.getTime(); // sort in descending order
+    return statA.birthtime.getTime() - statB.birthtime.getTime(); // sort in ascending order
   });
   return sortedFiles;
 }
