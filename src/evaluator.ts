@@ -255,10 +255,11 @@ class Evaluator {
     }
 
     // Aggregate all vars across test cases
-
-    const tests = (
+    let tests = (
       testSuite.tests && testSuite.tests.length > 0
         ? testSuite.tests
+        : testSuite.theories
+        ? []
         : [
             {
               // Dummy test for cases when we're only comparing raw prompts.
@@ -268,6 +269,35 @@ class Evaluator {
       const finalTestCase: TestCase = Object.assign({}, testSuite.defaultTest);
       return Object.assign(finalTestCase, test);
     });
+
+    //build theories and add to tests
+    if (testSuite.theories && testSuite.theories.length > 0) {
+      for (const theory of testSuite.theories) {
+        for (const data of theory.dataSet) {
+          //merge defaultTest with TheoryData
+          const theoryTests = (
+            theory.tests || [
+              {
+                // Dummy test for cases when we're only comparing raw prompts.
+              },
+            ]
+          ).map((test) => {
+            return {
+              ...testSuite.defaultTest,
+              ...data,
+              ...test,
+              vars: {
+                ...testSuite.defaultTest?.vars,
+                ...data.vars,
+                ...test.vars,
+              },
+            };
+          });
+          //add theory tests to tests
+          tests = tests.concat(theoryTests);
+        }
+      }
+    }
 
     const varNames: Set<string> = new Set();
     const varsWithSpecialColsRemoved: Record<string, string | string[] | object>[] = [];
@@ -352,8 +382,7 @@ class Evaluator {
     // Set up progress bar...
     let progressbar: SingleBar | undefined;
     if (options.showProgressBar) {
-      const totalNumRuns =
-        testSuite.prompts.length * testSuite.providers.length * (totalVarCombinations || 1);
+      const totalNumRuns = runEvalOptions.length;
       const cliProgress = await import('cli-progress');
       progressbar = new cliProgress.SingleBar(
         {
