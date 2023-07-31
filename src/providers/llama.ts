@@ -18,30 +18,33 @@ export class LlamaProvider implements ApiProvider {
 
   toString(): string {
     return `[Llama Provider ${this.modelName}]`;
+  constructor(modelName: string, config: LlamaCompletionOptions) {
+    this.modelName = modelName;
+    this.apiBaseUrl = 'http://localhost:8080';
+    this.config = config;
   }
 
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(prompt: string, config: LlamaCompletionOptions): Promise<ProviderResponse> {
     const body = {
       prompt,
-      n_predict: this.config.n_predict || 512,
-      temperature: this.config.temperature,
-      top_k: this.config.top_k,
-      top_p: this.config.top_p,
-      n_keep: this.config.n_keep,
-      stop: this.config.stop,
-      repeat_penalty: this.config.repeat_penalty,
-      repeat_last_n: this.config.repeat_last_n,
-      penalize_nl: this.config.penalize_nl,
-      presence_penalty: this.config.presence_penalty,
-      frequency_penalty: this.config.frequency_penalty,
-      mirostat: this.config.mirostat,
-      mirostat_tau: this.config.mirostat_tau,
-      mirostat_eta: this.config.mirostat_eta,
-      seed: this.config.seed,
-      ignore_eos: this.config.ignore_eos,
-      logit_bias: this.config.logit_bias,
+      n_predict: config.n_predict || 512,
+      temperature: config.temperature,
+      top_k: config.top_k,
+      top_p: config.top_p,
+      n_keep: config.n_keep,
+      stop: config.stop,
+      repeat_penalty: config.repeat_penalty,
+      repeat_last_n: config.repeat_last_n,
+      penalize_nl: config.penalize_nl,
+      presence_penalty: config.presence_penalty,
+      frequency_penalty: config.frequency_penalty,
+      mirostat: config.mirostat,
+      mirostat_tau: config.mirostat_tau,
+      mirostat_eta: config.mirostat_eta,
+      seed: config.seed,
+      ignore_eos: config.ignore_eos,
+      logit_bias: config.logit_bias,
     };
-
     let response;
     try {
       response = await axios.post(`${this.apiBaseUrl}/completion`, body);
