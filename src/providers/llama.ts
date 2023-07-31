@@ -1,5 +1,7 @@
-import axios from 'axios';
-import { ApiProvider, ProviderResponse } from '../types.js';
+import { fetchJsonWithCache } from '../cache';
+import { REQUEST_TIMEOUT_MS } from './shared';
+
+import type { ApiProvider, ProviderResponse } from '../types.js';
 
 interface LlamaCompletionOptions {
    n_predict?: number;
@@ -61,14 +63,21 @@ export class LlamaProvider implements ApiProvider {
       ignore_eos: options?.ignore_eos,
       logit_bias: options?.logit_bias,
     };
+
     let response;
-    try {
-      response = await axios.post(`${this.apiBaseUrl}/completion`, body);
-    } catch (err) {
-      return {
-        error: `API call error: ${String(err)}`,
-      };
-    }
+     try {
+       response = await fetchJsonWithCache(`${this.apiBaseUrl}/completion`, {
+         method: 'POST',
+         headers: {
+           'Content-Type': 'application/json',
+         },
+         body: JSON.stringify(body),
+       }, REQUEST_TIMEOUT_MS);
+     } catch (err) {
+       return {
+         error: `API call error: ${String(err)}`,
+       };
+     }
 
     try {
       return {
