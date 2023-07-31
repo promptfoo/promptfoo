@@ -222,14 +222,7 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onS
       <Box mt={4} />
       <PromptsSection />
       <Box mt={6} />
-      <TestCasesSection
-        testCases={testCases}
-        varsList={varsList}
-        editingTestCaseIndex={editingTestCaseIndex}
-        setEditingTestCaseIndex={setEditingTestCaseIndex}
-        handleAddTestCase={handleAddTestCase}
-        handleRemoveTestCase={handleRemoveTestCase}
-      />
+      <TestCasesSection varsList={varsList} />
       <Box mt={8}>
         {yamlString && (
           <Box mt={4}>

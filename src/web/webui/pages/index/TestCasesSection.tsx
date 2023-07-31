@@ -6,24 +6,33 @@ import TestCaseDialog from './TestCaseDialog';
 import type { TestCase } from '../../../../types';
 
 interface TestCasesSectionProps {
-  testCases: TestCase[];
   varsList: string[];
-  editingTestCaseIndex: number | null;
-  setEditingTestCaseIndex: (index: number | null) => void;
-  setTestCaseDialogOpen: (open: boolean) => void;
-  handleAddTestCase: (testCase: TestCase, shouldClose: boolean) => void;
-  handleRemoveTestCase: (index: number) => void;
 }
 
-const TestCasesSection: React.FC<TestCasesSectionProps> = ({
-  testCases,
-  varsList,
-  editingTestCaseIndex,
-  setEditingTestCaseIndex,
-  handleAddTestCase,
-  handleRemoveTestCase,
-}) => {
+const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
+  const [editingTestCaseIndex, setEditingTestCaseIndex] = React.useState<number | null>(null);
+  const [testCases, setTestCases] = React.useState<TestCase[]>([]);
   const [testCaseDialogOpen, setTestCaseDialogOpen] = React.useState(false);
+
+  const handleAddTestCase = (testCase: TestCase, shouldClose: boolean) => {
+    if (editingTestCaseIndex === null) {
+      setTestCases([...testCases, testCase]);
+    } else {
+      const updatedTestCases = testCases.map((tc, index) =>
+        index === editingTestCaseIndex ? testCase : tc,
+      );
+      setTestCases(updatedTestCases);
+      setEditingTestCaseIndex(null);
+    }
+
+    if (shouldClose) {
+      setTestCaseDialogOpen(false);
+    }
+  };
+
+  const handleRemoveTestCase = (index: number) => {
+    setTestCases(testCases.filter((_, i) => i !== index));
+  };
 
   return (
     <>
