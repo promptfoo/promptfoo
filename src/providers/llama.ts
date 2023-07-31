@@ -25,12 +25,10 @@ interface LlamaCompletionOptions {
 
 export class LlamaProvider implements ApiProvider {
   modelName: string;
-  apiBaseUrl: string;
   options?: LlamaCompletionOptions;
 
   constructor(modelName: string, options?: LlamaCompletionOptions) {
     this.modelName = modelName;
-    this.apiBaseUrl = 'http://localhost:8080';
     this.options = options;
   }
 
@@ -68,7 +66,7 @@ export class LlamaProvider implements ApiProvider {
     let response;
     try {
       response = await fetchJsonWithCache(
-        `${this.apiBaseUrl}/completion`,
+        `${process.env.LLAMA_BASE_URL || 'http://localhost:8080'}/completion`,
         {
           method: 'POST',
           headers: {
