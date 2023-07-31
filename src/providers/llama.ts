@@ -1,12 +1,32 @@
 import axios from 'axios';
 import { ApiProvider, ProviderResponse } from '../types.js';
 
+interface LlamaCompletionOptions {
+   n_predict?: number;
+   temperature?: number;
+   top_k?: number;
+   top_p?: number;
+   n_keep?: number;
+   stop?: string[];
+   repeat_penalty?: number;
+   repeat_last_n?: number;
+   penalize_nl?: boolean;
+   presence_penalty?: number;
+   frequency_penalty?: number;
+   mirostat?: boolean;
+   mirostat_tau?: number;
+   mirostat_eta?: number;
+   seed?: number;
+   ignore_eos?: boolean;
+   logit_bias?: Record<string, number>;
+ }
+
 export class LlamaProvider implements ApiProvider {
   modelName: string;
   apiBaseUrl: string;
-  config: any;
+  config: LlamaCompletionOptions;
 
-  constructor(modelName: string, config: any) {
+  constructor(modelName: string, config: LlamaCompletionOptions) {
     this.modelName = modelName;
     this.apiBaseUrl = 'http://localhost:8080';
     this.config = config;
@@ -18,32 +38,28 @@ export class LlamaProvider implements ApiProvider {
 
   toString(): string {
     return `[Llama Provider ${this.modelName}]`;
-  constructor(modelName: string, config: LlamaCompletionOptions) {
-    this.modelName = modelName;
-    this.apiBaseUrl = 'http://localhost:8080';
-    this.config = config;
   }
 
-  async callApi(prompt: string, config: LlamaCompletionOptions): Promise<ProviderResponse> {
+  async callApi(prompt: string, options?: LlamaCompletionOptions): Promise<ProviderResponse> {
     const body = {
       prompt,
-      n_predict: config.n_predict || 512,
-      temperature: config.temperature,
-      top_k: config.top_k,
-      top_p: config.top_p,
-      n_keep: config.n_keep,
-      stop: config.stop,
-      repeat_penalty: config.repeat_penalty,
-      repeat_last_n: config.repeat_last_n,
-      penalize_nl: config.penalize_nl,
-      presence_penalty: config.presence_penalty,
-      frequency_penalty: config.frequency_penalty,
-      mirostat: config.mirostat,
-      mirostat_tau: config.mirostat_tau,
-      mirostat_eta: config.mirostat_eta,
-      seed: config.seed,
-      ignore_eos: config.ignore_eos,
-      logit_bias: config.logit_bias,
+      n_predict: options?.n_predict || 512,
+      temperature: options?.temperature,
+      top_k: options?.top_k,
+      top_p: options?.top_p,
+      n_keep: options?.n_keep,
+      stop: options?.stop,
+      repeat_penalty: options?.repeat_penalty,
+      repeat_last_n: options?.repeat_last_n,
+      penalize_nl: options?.penalize_nl,
+      presence_penalty: options?.presence_penalty,
+      frequency_penalty: options?.frequency_penalty,
+      mirostat: options?.mirostat,
+      mirostat_tau: options?.mirostat_tau,
+      mirostat_eta: options?.mirostat_eta,
+      seed: options?.seed,
+      ignore_eos: options?.ignore_eos,
+      logit_bias: options?.logit_bias,
     };
     let response;
     try {
