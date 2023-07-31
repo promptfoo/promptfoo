@@ -223,72 +223,19 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onS
       <Box mt={4} />
       <PromptsSection onSubmit={handleSubmit} />
       <Box mt={6} />
-      <Stack direction="row" spacing={2} marginY={2} justifyContent="space-between">
-        <Typography variant="h5">Test Cases</Typography>
-        <Button color="primary" onClick={() => setTestCaseDialogOpen(true)} variant="contained">
-          Add Test Case
-        </Button>
-      </Stack>
-      <TableContainer>
-        <Table>
-          <TableBody>
-            {testCases.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={2} align="center">
-                  No test cases added yet.
-                </TableCell>
-              </TableRow>
-            ) : (
-              testCases.map((testCase, index) => (
-                <TableRow key={index}>
-                  <TableCell
-                    sx={{
-                      '&:hover': {
-                        backgroundColor: 'rgba(0, 0, 0, 0.04)',
-                        cursor: 'pointer',
-                      },
-                    }}
-                    onClick={() => {
-                      setEditingTestCaseIndex(index);
-                      setTestCaseDialogOpen(true);
-                    }}
-                  >
-                    <Typography variant="body2">
-                      {`Test Case #${index + 1}: ${
-                        testCase.description || `${testCase.assert?.length || 0} assertions`
-                      }`}
-                    </Typography>
-                  </TableCell>
-                  <TableCell align="right" sx={{ minWidth: 150 }}>
-                    <IconButton
-                      onClick={() => {
-                        setEditingTestCaseIndex(index);
-                        setTestCaseDialogOpen(true);
-                      }}
-                      size="small"
-                    >
-                      <Edit />
-                    </IconButton>
-                    <IconButton onClick={() => handleRemoveTestCase(index)} size="small">
-                      <Delete />
-                    </IconButton>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </TableContainer>
-      <TestCaseDialog
-        open={testCaseDialogOpen}
-        onAdd={handleAddTestCase}
-        varsList={varsList}
-        initialValues={editingTestCaseIndex !== null ? testCases[editingTestCaseIndex] : undefined}
-        onCancel={() => {
-          setEditingTestCaseIndex(null);
-          setTestCaseDialogOpen(false);
-        }}
-      />
+import TestCasesSection from './TestCasesSection';
+
+// ...
+
+<TestCasesSection
+  testCases={testCases}
+  varsList={varsList}
+  editingTestCaseIndex={editingTestCaseIndex}
+  setEditingTestCaseIndex={setEditingTestCaseIndex}
+  setTestCaseDialogOpen={setTestCaseDialogOpen}
+  handleAddTestCase={handleAddTestCase}
+  handleRemoveTestCase={handleRemoveTestCase}
+/>
       <Box mt={8}>
         {yamlString && (
           <Box mt={4}>
