@@ -9,7 +9,42 @@ interface AssertsFormProps {
   initialValues: Assertion[];
 }
 
-const assertTypes: AssertionType[] = ['equals', 'contains-json', 'is-json', 'similar', 'llm-rubric'];
+const assertTypes: AssertionType[] = [
+  'equals',
+  'contains',
+  'icontains',
+  'contains-all',
+  'contains-any',
+  'starts-with',
+  'regex',
+  'is-json',
+  'contains-json',
+  'javascript',
+  'python',
+  'similar',
+  'llm-rubric',
+  'webhook',
+  'rouge-n',
+  'rouge-s',
+  'rouge-l',
+  'not-equals',
+  'not-contains',
+  'not-icontains',
+  'not-contains-all',
+  'not-contains-any',
+  'not-starts-with',
+  'not-regex',
+  'not-is-json',
+  'not-contains-json',
+  'not-javascript',
+  'not-python',
+  'not-similar',
+  'not-llm-rubric',
+  'not-webhook',
+  'not-rouge-n',
+  'not-rouge-s',
+  'not-rouge-l'
+];
 
 const AssertsForm: React.FC<AssertsFormProps> = ({ onAdd, initialValues }) => {
   const [asserts, setAsserts] = useState<Assertion[]>(initialValues || []);
