@@ -1,7 +1,9 @@
 import React from 'react';
-import { Button, Typography, TableContainer, Table, TableBody, TableRow, TableCell, IconButton } from '@mui/material';
+import { Button, Typography, TableContainer, Table, TableBody, TableRow, TableCell, Stack, IconButton } from '@mui/material';
 import { Edit, Delete } from '@mui/icons-material';
 import TestCaseDialog from './TestCaseDialog';
+
+import type { TestCase } from '../../../../types';
 
 interface TestCasesSectionProps {
   testCases: TestCase[];
@@ -18,10 +20,11 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({
   varsList,
   editingTestCaseIndex,
   setEditingTestCaseIndex,
-  setTestCaseDialogOpen,
   handleAddTestCase,
   handleRemoveTestCase,
 }) => {
+  const [testCaseDialogOpen, setTestCaseDialogOpen] = React.useState(false);
+
   return (
     <>
       <Stack direction="row" spacing={2} marginY={2} justifyContent="space-between">

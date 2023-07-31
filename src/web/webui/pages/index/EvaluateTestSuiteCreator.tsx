@@ -31,6 +31,7 @@ import { Edit, Delete, Publish } from '@mui/icons-material';
 
 import TestCaseDialog from './TestCaseDialog';
 import PromptsSection from './PromptsSection';
+import TestCasesSection from './TestCasesSection';
 import { useStore } from '../../util/store';
 
 import type { TestSuiteConfig } from '../../../../types';
@@ -48,8 +49,6 @@ const providerOptions = ['openai:gpt-3.5-turbo', 'openai:gpt-4', 'localai:chat:v
 
 const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onSubmit }) => {
   const [yamlString, setYamlString] = useState('');
-  const [promptDialogOpen, setPromptDialogOpen] = useState(false);
-  const [testCaseDialogOpen, setTestCaseDialogOpen] = useState(false);
   const [editingTestCaseIndex, setEditingTestCaseIndex] = useState<number | null>(null);
   const [editingPromptIndex, setEditingPromptIndex] = useState<number | null>(null);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
@@ -221,21 +220,16 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onS
         </FormControl>
       </Box>
       <Box mt={4} />
-      <PromptsSection onSubmit={handleSubmit} />
+      <PromptsSection />
       <Box mt={6} />
-import TestCasesSection from './TestCasesSection';
-
-// ...
-
-<TestCasesSection
-  testCases={testCases}
-  varsList={varsList}
-  editingTestCaseIndex={editingTestCaseIndex}
-  setEditingTestCaseIndex={setEditingTestCaseIndex}
-  setTestCaseDialogOpen={setTestCaseDialogOpen}
-  handleAddTestCase={handleAddTestCase}
-  handleRemoveTestCase={handleRemoveTestCase}
-/>
+      <TestCasesSection
+        testCases={testCases}
+        varsList={varsList}
+        editingTestCaseIndex={editingTestCaseIndex}
+        setEditingTestCaseIndex={setEditingTestCaseIndex}
+        handleAddTestCase={handleAddTestCase}
+        handleRemoveTestCase={handleRemoveTestCase}
+      />
       <Box mt={8}>
         {yamlString && (
           <Box mt={4}>

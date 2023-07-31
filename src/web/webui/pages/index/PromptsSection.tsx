@@ -1,16 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   Button,
-  Container,
-  TextField,
   Typography,
-  MenuItem,
-  FormControl,
-  InputLabel,
-  Select,
-  Chip,
   IconButton,
-  Box,
   Table,
   TableBody,
   TableCell,
@@ -18,31 +10,13 @@ import {
   TableRow,
   Tooltip,
   Stack,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
 } from '@mui/material';
 import { Edit, Delete, Publish } from '@mui/icons-material';
 
 import PromptDialog from './PromptDialog';
 import { useStore } from '../../util/store';
 
-import type { TestSuiteConfig } from '../../../../types';
-import type { TestCase } from '../../../../types';
-
-interface EvaluateTestSuite extends TestSuiteConfig {
-  prompts: string[];
-}
-
-interface EvaluateTestSuiteCreatorProps {
-  onSubmit: (testSuite: EvaluateTestSuite) => void;
-}
-
-const providerOptions = ['openai:gpt-3.5-turbo', 'openai:gpt-4', 'localai:chat:vicuna'];
-
-const PromptsSection: React.FC<EvaluateTestSuiteCreatorProps> = ({ onSubmit }) => {
+const PromptsSection: React.FC = () => {
   const [promptDialogOpen, setPromptDialogOpen] = useState(false);
   const [editingPromptIndex, setEditingPromptIndex] = useState<number | null>(null);
 
