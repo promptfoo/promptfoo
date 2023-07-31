@@ -30,7 +30,7 @@ import {
 import { Edit, Delete, Publish } from '@mui/icons-material';
 
 import TestCaseDialog from './TestCaseDialog';
-import PromptDialog from './PromptDialog';
+import PromptsSection from './PromptsSection';
 import { useStore } from '../../util/store';
 
 import type { TestSuiteConfig } from '../../../../types';
