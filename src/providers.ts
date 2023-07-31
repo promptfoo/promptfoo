@@ -135,7 +135,8 @@ export async function loadApiProvider(
 
   if (providerPath?.startsWith('llama:')) {
     const modelName = providerPath.split(':')[1];
-    return new LlamaProvider(modelName);
+    return new LlamaProvider(modelName, context?.config);
+  }
   } else if (providerPath?.startsWith('localai:')) {
     const options = providerPath.split(':');
     const modelType = options[1];
