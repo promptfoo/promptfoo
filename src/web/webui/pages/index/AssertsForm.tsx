@@ -2,20 +2,20 @@
 import React, { useState } from 'react';
 import { Button, TextField, Typography, MenuItem, Grid, IconButton } from '@mui/material';
 import { Delete } from '@mui/icons-material';
-import type { Assertion } from '../../../../types';
+import type { Assertion, AssertionType } from '../../../../types';
 
 interface AssertsFormProps {
   onAdd: (asserts: Assertion[]) => void;
   initialValues: Assertion[];
 }
 
-const assertTypes = ['Equals', 'Contains JSON', 'Is JSON', 'Similar', 'LLM-rubric'];
+const assertTypes: AssertionType[] = ['equals', 'contains-json', 'is-json', 'similar', 'llm-rubric'];
 
 const AssertsForm: React.FC<AssertsFormProps> = ({ onAdd, initialValues }) => {
   const [asserts, setAsserts] = useState<Assertion[]>(initialValues || []);
 
   const handleAdd = () => {
-    const newAsserts = [...asserts, { type: 'Equals', value: '' }];
+    const newAsserts = [...asserts, { type: 'equals' as AssertionType, value: '' }];
     setAsserts(newAsserts);
     onAdd(newAsserts);
   };
@@ -39,7 +39,7 @@ const AssertsForm: React.FC<AssertsFormProps> = ({ onAdd, initialValues }) => {
               onChange={(e) => {
                 const newType = e.target.value;
                 const newAsserts = asserts.map((a, i) =>
-                  i === index ? { ...a, type: newType } : a,
+                  i === index ? { ...a, type: newType as AssertionType} : a,
                 );
                 setAsserts(newAsserts);
                 onAdd(newAsserts);
