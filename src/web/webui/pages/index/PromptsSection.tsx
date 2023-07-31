@@ -20,10 +20,7 @@ const PromptsSection: React.FC = () => {
   const [promptDialogOpen, setPromptDialogOpen] = useState(false);
   const [editingPromptIndex, setEditingPromptIndex] = useState<number | null>(null);
 
-  const {
-    prompts,
-    setPrompts,
-  } = useStore();
+  const { prompts, setPrompts } = useStore();
   const newPromptInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {

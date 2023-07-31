@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import yaml from 'js-yaml';
 import { Light as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { docco } from 'react-syntax-highlighter/dist/cjs/styles/hljs';
@@ -12,14 +12,7 @@ import {
   InputLabel,
   Select,
   Chip,
-  IconButton,
   Box,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableRow,
-  Tooltip,
   Stack,
   Dialog,
   DialogActions,
@@ -27,15 +20,12 @@ import {
   DialogContentText,
   DialogTitle,
 } from '@mui/material';
-import { Edit, Delete, Publish } from '@mui/icons-material';
 
-import TestCaseDialog from './TestCaseDialog';
 import PromptsSection from './PromptsSection';
 import TestCasesSection from './TestCasesSection';
 import { useStore } from '../../util/store';
 
 import type { TestSuiteConfig } from '../../../../types';
-import type { TestCase } from '../../../../types';
 
 interface EvaluateTestSuite extends TestSuiteConfig {
   prompts: string[];
@@ -49,8 +39,6 @@ const providerOptions = ['openai:gpt-3.5-turbo', 'openai:gpt-4', 'localai:chat:v
 
 const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onSubmit }) => {
   const [yamlString, setYamlString] = useState('');
-  const [editingTestCaseIndex, setEditingTestCaseIndex] = useState<number | null>(null);
-  const [editingPromptIndex, setEditingPromptIndex] = useState<number | null>(null);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
 
   const {
@@ -63,17 +51,10 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onS
     testCases,
     setTestCases,
   } = useStore();
-  const newPromptInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     useStore.persist.rehydrate();
   }, []);
-
-  useEffect(() => {
-    if (editingPromptIndex !== null && editingPromptIndex > 0 && newPromptInputRef.current) {
-      newPromptInputRef.current.focus();
-    }
-  }, [editingPromptIndex]);
 
   useEffect(() => {
     const testSuite = {
@@ -95,48 +76,6 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onS
     onSubmit(testSuite);
   };
 
-  const handleAddTestCase = (testCase: TestCase, shouldClose: boolean) => {
-    if (editingTestCaseIndex === null) {
-      setTestCases([...testCases, testCase]);
-    } else {
-      const updatedTestCases = testCases.map((tc, index) =>
-        index === editingTestCaseIndex ? testCase : tc,
-      );
-      setTestCases(updatedTestCases);
-      setEditingTestCaseIndex(null);
-    }
-
-    if (shouldClose) {
-      setTestCaseDialogOpen(false);
-    }
-  };
-
-  const handleEditPrompt = (index: number) => {
-    setEditingPromptIndex(index);
-    setPromptDialogOpen(true);
-  };
-
-  const handleAddPromptFromFile = (event: React.ChangeEvent<HTMLInputElement>) => {
-    event.stopPropagation();
-    event.preventDefault();
-
-    const file = event.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const text = e.target?.result?.toString();
-        if (text) {
-          setPrompts([...prompts, text]);
-        }
-      };
-      reader.readAsText(file);
-    }
-  };
-
-  const handleChangePrompt = (index: number, newPrompt: string) => {
-    setPrompts(prompts.map((p, i) => (i === index ? newPrompt : p)));
-  };
-
   const extractVarsFromPrompts = (prompts: string[]): string[] => {
     const varRegex = /{{(\w+)}}/g;
     const varsSet = new Set<string>();
@@ -152,14 +91,6 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onS
   };
 
   const varsList = extractVarsFromPrompts(prompts);
-
-  const handleRemovePrompt = (indexToRemove: number) => {
-    setPrompts(prompts.filter((_, index) => index !== indexToRemove));
-  };
-
-  const handleRemoveTestCase = (indexToRemove: number) => {
-    setTestCases(testCases.filter((_, index) => index !== indexToRemove));
-  };
 
   const handleReset = () => {
     setDescription('');
@@ -196,19 +127,21 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onS
       </Box>
       <Box mt={2}>
         <FormControl fullWidth margin="normal">
-          <InputLabel>Providers</InputLabel>
+          <InputLabel id="providers-select-label">Providers</InputLabel>
           <Select
+            labelId="providers-select-label"
+            label="Providers"
             multiple
             value={providers}
             onChange={(e) => {
               setProviders(e.target.value as string[]);
             }}
             renderValue={(selected) => (
-              <div>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                 {(selected as string[]).map((value) => (
                   <Chip key={value} label={value} />
                 ))}
-              </div>
+              </Box>
             )}
           >
             {providerOptions.map((option) => (
@@ -241,7 +174,7 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onS
         aria-labelledby="alert-dialog-title"
         aria-describedby="alert-dialog-description"
       >
-        <DialogTitle id="alert-dialog-title">{"Confirm Reset"}</DialogTitle>
+        <DialogTitle id="alert-dialog-title">{'Confirm Reset'}</DialogTitle>
         <DialogContent>
           <DialogContentText id="alert-dialog-description">
             Are you sure you want to reset all the fields? This action cannot be undone.

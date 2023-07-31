@@ -33,8 +33,8 @@ export const useStore = create<State>()(
     {
       name: 'promptfoo',
       skipHydration: true,
-    }
-  )
+    },
+  ),
 );
 
 /*
