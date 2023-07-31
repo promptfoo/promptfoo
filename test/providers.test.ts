@@ -152,6 +152,21 @@ describe('providers', () => {
     expect(result.tokenUsage).toEqual({});
   });
 
+  test('LlamaProvider callApi', async () => {
+    const mockResponse = {
+      json: jest.fn().mockResolvedValue({
+        data: { content: 'Test output' },
+      }),
+    };
+    (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
+
+    const provider = new LlamaProvider('llama.cpp');
+    const result = await provider.callApi('Test prompt');
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(result.output).toBe('Test output');
+  });
+
   test('loadApiProvider with openai:chat', async () => {
     const provider = await loadApiProvider('openai:chat');
     expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
@@ -187,29 +202,14 @@ describe('providers', () => {
     expect(provider).toBeInstanceOf(AnthropicCompletionProvider);
   });
 
-  test('LlamaProvider callApi', async () => {
-    const mockResponse = {
-      data: {
-        content: 'Test output',
-      },
-    };
-    jest.spyOn(fetchJsonWithCache, 'fetchJsonWithCache').mockResolvedValue(mockResponse);
-
-    const provider = new LlamaProvider('test-model', {});
-    const result = await provider.callApi('Test prompt');
-
-    expect(fetchJsonWithCache).toHaveBeenCalledTimes(1);
-    expect(result.output).toBe('Test output');
-  });
-
-  test('loadApiProvider with llama:modelName', async () => {
-    const provider = await loadApiProvider('llama:test-model');
-    expect(provider).toBeInstanceOf(LlamaProvider);
-  });
-
   test('loadApiProvider with anthropic:completion:modelName', async () => {
     const provider = await loadApiProvider('anthropic:completion:claude-1');
     expect(provider).toBeInstanceOf(AnthropicCompletionProvider);
+  });
+
+  test('loadApiProvider with llama:modelName', async () => {
+    const provider = await loadApiProvider('llama');
+    expect(provider).toBeInstanceOf(LlamaProvider);
   });
 
   test('loadApiProvider with RawProviderConfig', async () => {

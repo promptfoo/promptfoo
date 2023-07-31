@@ -134,7 +134,7 @@ export async function loadApiProvider(
     return new ReplicateProvider(modelName, undefined, context?.config);
   }
 
-  if (providerPath?.startsWith('llama.cpp:')) {
+  if (providerPath === 'llama' || providerPath.startsWith('llama:')) {
     const modelName = providerPath.split(':')[1];
     return new LlamaProvider(modelName, context?.config);
   } else if (providerPath?.startsWith('localai:')) {

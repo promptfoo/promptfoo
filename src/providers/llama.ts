@@ -4,34 +4,34 @@ import { REQUEST_TIMEOUT_MS } from './shared';
 import type { ApiProvider, ProviderResponse } from '../types.js';
 
 interface LlamaCompletionOptions {
-   n_predict?: number;
-   temperature?: number;
-   top_k?: number;
-   top_p?: number;
-   n_keep?: number;
-   stop?: string[];
-   repeat_penalty?: number;
-   repeat_last_n?: number;
-   penalize_nl?: boolean;
-   presence_penalty?: number;
-   frequency_penalty?: number;
-   mirostat?: boolean;
-   mirostat_tau?: number;
-   mirostat_eta?: number;
-   seed?: number;
-   ignore_eos?: boolean;
-   logit_bias?: Record<string, number>;
- }
+  n_predict?: number;
+  temperature?: number;
+  top_k?: number;
+  top_p?: number;
+  n_keep?: number;
+  stop?: string[];
+  repeat_penalty?: number;
+  repeat_last_n?: number;
+  penalize_nl?: boolean;
+  presence_penalty?: number;
+  frequency_penalty?: number;
+  mirostat?: boolean;
+  mirostat_tau?: number;
+  mirostat_eta?: number;
+  seed?: number;
+  ignore_eos?: boolean;
+  logit_bias?: Record<string, number>;
+}
 
 export class LlamaProvider implements ApiProvider {
   modelName: string;
   apiBaseUrl: string;
-  config: LlamaCompletionOptions;
+  options?: LlamaCompletionOptions;
 
-  constructor(modelName: string, config: LlamaCompletionOptions) {
+  constructor(modelName: string, options?: LlamaCompletionOptions) {
     this.modelName = modelName;
     this.apiBaseUrl = 'http://localhost:8080';
-    this.config = config;
+    this.options = options;
   }
 
   id(): string {
@@ -43,6 +43,7 @@ export class LlamaProvider implements ApiProvider {
   }
 
   async callApi(prompt: string, options?: LlamaCompletionOptions): Promise<ProviderResponse> {
+    options = Object.assign({}, this.options, options);
     const body = {
       prompt,
       n_predict: options?.n_predict || 512,
@@ -65,23 +66,27 @@ export class LlamaProvider implements ApiProvider {
     };
 
     let response;
-     try {
-       response = await fetchJsonWithCache(`${this.apiBaseUrl}/completion`, {
-         method: 'POST',
-         headers: {
-           'Content-Type': 'application/json',
-         },
-         body: JSON.stringify(body),
-       }, REQUEST_TIMEOUT_MS);
-     } catch (err) {
-       return {
-         error: `API call error: ${String(err)}`,
-       };
-     }
+    try {
+      response = await fetchJsonWithCache(
+        `${this.apiBaseUrl}/completion`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(body),
+        },
+        REQUEST_TIMEOUT_MS,
+      );
+    } catch (err) {
+      return {
+        error: `API call error: ${String(err)}`,
+      };
+    }
 
     try {
       return {
-        output: response.data.content,
+        output: response.data.data.content,
       };
     } catch (err) {
       return {
