@@ -1,7 +1,9 @@
 import fetch from 'node-fetch';
+import { fetchJsonWithCache } from '../src/cache';
 
 import { OpenAiCompletionProvider, OpenAiChatCompletionProvider } from '../src/providers/openai';
 import { AnthropicCompletionProvider } from '../src/providers/anthropic';
+import { LlamaProvider } from '../src/providers/llama';
 
 import { disableCache, enableCache } from '../src/cache.js';
 import { loadApiProvider, loadApiProviders } from '../src/providers.js';
@@ -183,6 +185,26 @@ describe('providers', () => {
   test('loadApiProvider with anthropic:completion', async () => {
     const provider = await loadApiProvider('anthropic:completion');
     expect(provider).toBeInstanceOf(AnthropicCompletionProvider);
+  });
+
+  test('LlamaProvider callApi', async () => {
+    const mockResponse = {
+      data: {
+        content: 'Test output',
+      },
+    };
+    jest.spyOn(fetchJsonWithCache, 'fetchJsonWithCache').mockResolvedValue(mockResponse);
+
+    const provider = new LlamaProvider('test-model', {});
+    const result = await provider.callApi('Test prompt');
+
+    expect(fetchJsonWithCache).toHaveBeenCalledTimes(1);
+    expect(result.output).toBe('Test output');
+  });
+
+  test('loadApiProvider with llama:modelName', async () => {
+    const provider = await loadApiProvider('llama:test-model');
+    expect(provider).toBeInstanceOf(LlamaProvider);
   });
 
   test('loadApiProvider with anthropic:completion:modelName', async () => {
