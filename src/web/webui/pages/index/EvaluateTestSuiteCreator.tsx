@@ -69,6 +69,16 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onS
     }
   }, [editingPromptIndex]);
 
+  useEffect(() => {
+    const testSuite = {
+      description,
+      providers,
+      prompts,
+      tests: testCases,
+    };
+    setYamlString(yaml.dump(testSuite));
+  }, [description, providers, prompts, testCases]);
+
   const handleSubmit = () => {
     const testSuite = {
       description,
@@ -77,7 +87,6 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onS
       tests: testCases,
     };
     onSubmit(testSuite);
-    setYamlString(yaml.dump(testSuite));
   };
 
   const handleAddTestCase = (testCase: TestCase, shouldClose: boolean) => {
@@ -94,11 +103,15 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onS
     if (shouldClose) {
       setTestCaseDialogOpen(false);
     }
+
+    updateYamlConfig();
   };
 
   const handleEditPrompt = (index: number) => {
     setEditingPromptIndex(index);
     setPromptDialogOpen(true);
+
+    updateYamlConfig();
   };
 
   const handleAddPromptFromFile = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -116,10 +129,13 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onS
       };
       reader.readAsText(file);
     }
+
+    updateYamlConfig();
   };
 
   const handleChangePrompt = (index: number, newPrompt: string) => {
     setPrompts(prompts.map((p, i) => (i === index ? newPrompt : p)));
+    updateYamlConfig();
   };
 
   const extractVarsFromPrompts = (prompts: string[]): string[] => {
@@ -140,10 +156,12 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onS
 
   const handleRemovePrompt = (indexToRemove: number) => {
     setPrompts(prompts.filter((_, index) => index !== indexToRemove));
+    updateYamlConfig();
   };
 
   const handleRemoveTestCase = (indexToRemove: number) => {
     setTestCases(testCases.filter((_, index) => index !== indexToRemove));
+    updateYamlConfig();
   };
 
   return (
@@ -158,7 +176,10 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onS
         <TextField
           label="Description"
           value={description}
-          onChange={(e) => setDescription(e.target.value)}
+          onChange={(e) => {
+            setDescription(e.target.value);
+            updateYamlConfig();
+          }}
           fullWidth
           margin="normal"
         />
@@ -169,7 +190,10 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onS
           <Select
             multiple
             value={providers}
-            onChange={(e) => setProviders(e.target.value as string[])}
+            onChange={(e) => {
+              setProviders(e.target.value as string[]);
+              updateYamlConfig();
+            }}
             renderValue={(selected) => (
               <div>
                 {(selected as string[]).map((value) => (
@@ -208,7 +232,9 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onS
           </label>
           <Button
             color="primary"
-            onClick={() => { setPromptDialogOpen(true); }}
+            onClick={() => {
+              setPromptDialogOpen(true);
+            }}
             variant="contained"
           >
             Add Prompt

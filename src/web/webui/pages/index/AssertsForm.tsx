@@ -43,7 +43,7 @@ const assertTypes: AssertionType[] = [
   'not-webhook',
   'not-rouge-n',
   'not-rouge-s',
-  'not-rouge-l'
+  'not-rouge-l',
 ];
 
 const AssertsForm: React.FC<AssertsFormProps> = ({ onAdd, initialValues }) => {
@@ -74,7 +74,7 @@ const AssertsForm: React.FC<AssertsFormProps> = ({ onAdd, initialValues }) => {
               onChange={(e) => {
                 const newType = e.target.value;
                 const newAsserts = asserts.map((a, i) =>
-                  i === index ? { ...a, type: newType as AssertionType} : a,
+                  i === index ? { ...a, type: newType as AssertionType } : a,
                 );
                 setAsserts(newAsserts);
                 onAdd(newAsserts);
