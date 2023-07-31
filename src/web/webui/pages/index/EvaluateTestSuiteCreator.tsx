@@ -67,6 +67,10 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onS
   const newPromptInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    useStore.persist.rehydrate();
+  }, []);
+
+  useEffect(() => {
     if (editingPromptIndex !== null && editingPromptIndex > 0 && newPromptInputRef.current) {
       newPromptInputRef.current.focus();
     }
