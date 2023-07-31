@@ -24,16 +24,12 @@ const PromptDialog: React.FC<PromptDialogProps> = ({ open, prompt, index, onAdd,
     setEditingPrompt(prompt);
   }, [prompt]);
 
-  const handleAdd = () => {
-    onAdd(editingPrompt);
-    onCancel();
-    setEditingPrompt('');
-  };
-
-  const handleAddAnother = () => {
+  const handleAdd = (close: boolean) => {
     onAdd(editingPrompt);
     setEditingPrompt('');
-    if (textFieldRef.current) {
+    if (close) {
+      onCancel();
+    } else if (textFieldRef.current) {
       textFieldRef.current.focus();
     }
   };
@@ -54,7 +50,7 @@ const PromptDialog: React.FC<PromptDialogProps> = ({ open, prompt, index, onAdd,
       </DialogContent>
       <DialogActions>
         <Button
-          onClick={handleAdd}
+          onClick={handleAdd.bind(null, true)}
           color="primary"
           variant="contained"
           disabled={!editingPrompt.length}
@@ -62,7 +58,7 @@ const PromptDialog: React.FC<PromptDialogProps> = ({ open, prompt, index, onAdd,
           Add
         </Button>
         <Button
-          onClick={handleAddAnother}
+          onClick={handleAdd.bind(null, false)}
           color="primary"
           variant="contained"
           disabled={!editingPrompt.length}
