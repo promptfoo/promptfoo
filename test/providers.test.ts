@@ -155,7 +155,7 @@ describe('providers', () => {
   test('LlamaProvider callApi', async () => {
     const mockResponse = {
       json: jest.fn().mockResolvedValue({
-        data: { content: 'Test output' },
+        content: 'Test output',
       }),
     };
     (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
