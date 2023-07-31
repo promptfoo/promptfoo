@@ -106,15 +106,11 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onS
     if (shouldClose) {
       setTestCaseDialogOpen(false);
     }
-
-    updateYamlConfig();
   };
 
   const handleEditPrompt = (index: number) => {
     setEditingPromptIndex(index);
     setPromptDialogOpen(true);
-
-    updateYamlConfig();
   };
 
   const handleAddPromptFromFile = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -132,13 +128,10 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onS
       };
       reader.readAsText(file);
     }
-
-    updateYamlConfig();
   };
 
   const handleChangePrompt = (index: number, newPrompt: string) => {
     setPrompts(prompts.map((p, i) => (i === index ? newPrompt : p)));
-    updateYamlConfig();
   };
 
   const extractVarsFromPrompts = (prompts: string[]): string[] => {
@@ -159,12 +152,10 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onS
 
   const handleRemovePrompt = (indexToRemove: number) => {
     setPrompts(prompts.filter((_, index) => index !== indexToRemove));
-    updateYamlConfig();
   };
 
   const handleRemoveTestCase = (indexToRemove: number) => {
     setTestCases(testCases.filter((_, index) => index !== indexToRemove));
-    updateYamlConfig();
   };
 
   const handleReset = () => {
@@ -173,6 +164,7 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onS
     setPrompts([]);
     setTestCases([]);
     setYamlString('');
+    setResetDialogOpen(false);
   };
 
   return (
@@ -194,7 +186,6 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onS
           value={description}
           onChange={(e) => {
             setDescription(e.target.value);
-            updateYamlConfig();
           }}
           fullWidth
           margin="normal"
@@ -208,7 +199,6 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onS
             value={providers}
             onChange={(e) => {
               setProviders(e.target.value as string[]);
-              updateYamlConfig();
             }}
             renderValue={(selected) => (
               <div>
