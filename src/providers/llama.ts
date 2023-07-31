@@ -86,7 +86,7 @@ export class LlamaProvider implements ApiProvider {
 
     try {
       return {
-        output: response.data.data.content,
+        output: response.data.content,
       };
     } catch (err) {
       return {
