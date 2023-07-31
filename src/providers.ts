@@ -133,7 +133,10 @@ export async function loadApiProvider(
     return new ReplicateProvider(modelName, undefined, context?.config);
   }
 
-  if (providerPath?.startsWith('localai:')) {
+  if (providerPath?.startsWith('llama:')) {
+    const modelName = providerPath.split(':')[1];
+    return new LlamaProvider(modelName);
+  } else if (providerPath?.startsWith('localai:')) {
     const options = providerPath.split(':');
     const modelType = options[1];
     const modelName = options[2];
