@@ -21,6 +21,11 @@ import {
   TableRow,
   Tooltip,
   Stack,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
 } from '@mui/material';
 import { Edit, Delete, Publish } from '@mui/icons-material';
 
@@ -43,12 +48,11 @@ const providerOptions = ['openai:gpt-3.5-turbo', 'openai:gpt-4', 'localai:chat:v
 
 const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onSubmit }) => {
   const [yamlString, setYamlString] = useState('');
-
   const [promptDialogOpen, setPromptDialogOpen] = useState(false);
   const [testCaseDialogOpen, setTestCaseDialogOpen] = useState(false);
-
   const [editingTestCaseIndex, setEditingTestCaseIndex] = useState<number | null>(null);
   const [editingPromptIndex, setEditingPromptIndex] = useState<number | null>(null);
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
 
   const {
     description,
@@ -60,7 +64,6 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onS
     testCases,
     setTestCases,
   } = useStore();
-
   const newPromptInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -164,13 +167,26 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onS
     updateYamlConfig();
   };
 
+  const handleReset = () => {
+    setDescription('');
+    setProviders([]);
+    setPrompts([]);
+    setTestCases([]);
+    setYamlString('');
+  };
+
   return (
     <Container maxWidth="lg">
       <Stack direction="row" spacing={2} justifyContent="space-between">
         <Typography variant="h4">Configure Test Suite</Typography>
-        <Button variant="contained" color="primary" onClick={handleSubmit}>
-          Run Test Suite
-        </Button>
+        <Stack direction="row" spacing={2}>
+          <Button variant="contained" color="primary" onClick={handleSubmit}>
+            Run Test Suite
+          </Button>
+          <Button variant="outlined" color="primary" onClick={() => setResetDialogOpen(true)}>
+            Reset
+          </Button>
+        </Stack>
       </Stack>
       <Box mt={4}>
         <TextField
@@ -376,6 +392,25 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onS
           </Box>
         )}
       </Box>
+      <Dialog
+        open={resetDialogOpen}
+        onClose={() => setResetDialogOpen(false)}
+        aria-labelledby="alert-dialog-title"
+        aria-describedby="alert-dialog-description"
+      >
+        <DialogTitle id="alert-dialog-title">{"Confirm Reset"}</DialogTitle>
+        <DialogContent>
+          <DialogContentText id="alert-dialog-description">
+            Are you sure you want to reset all the fields? This action cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setResetDialogOpen(false)}>Cancel</Button>
+          <Button onClick={handleReset} autoFocus>
+            Reset
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Container>
   );
 };
