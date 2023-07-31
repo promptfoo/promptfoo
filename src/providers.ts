@@ -4,6 +4,7 @@ import { OpenAiCompletionProvider, OpenAiChatCompletionProvider } from './provid
 import { AnthropicCompletionProvider } from './providers/anthropic';
 import { ReplicateProvider } from './providers/replicate';
 import { LocalAiCompletionProvider, LocalAiChatProvider } from './providers/localai';
+import { LlamaProvider } from './providers/llama';
 import { ScriptCompletionProvider } from './providers/scriptCompletion';
 import {
   AzureOpenAiChatCompletionProvider,
@@ -133,7 +134,10 @@ export async function loadApiProvider(
     return new ReplicateProvider(modelName, undefined, context?.config);
   }
 
-  if (providerPath?.startsWith('localai:')) {
+  if (providerPath === 'llama' || providerPath.startsWith('llama:')) {
+    const modelName = providerPath.split(':')[1];
+    return new LlamaProvider(modelName, context?.config);
+  } else if (providerPath?.startsWith('localai:')) {
     const options = providerPath.split(':');
     const modelType = options[1];
     const modelName = options[2];
