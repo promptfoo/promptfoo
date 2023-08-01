@@ -4,6 +4,7 @@ import express from 'express';
 import compression from 'compression';
 import { renderPage } from 'vite-plugin-ssr/server';
 import { root } from './root.js';
+import promptfoo from 'promptfoo';
 const isProduction = process.env.NODE_ENV === 'production';
 
 startServer();
@@ -12,6 +13,7 @@ async function startServer() {
   const app = express();
 
   app.use(compression());
+  app.use(express.json());
 
   if (isProduction) {
     const sirv = (await import('sirv')).default;
@@ -26,6 +28,12 @@ async function startServer() {
     ).middlewares;
     app.use(viteDevMiddleware);
   }
+
+  app.post('/run-test-suite', async (req, res) => {
+    const testSuite = req.body;
+    const results = await promptfoo.evaluate(testSuite);
+    res.json(results);
+  });
 
   app.get('*', async (req, res, next) => {
     const pageContextInit = {
