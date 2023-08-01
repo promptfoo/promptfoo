@@ -1,6 +1,6 @@
 // src/components/AssertsForm.tsx
 import React, { useState } from 'react';
-import { Button, TextField, Typography, MenuItem, Grid, IconButton } from '@mui/material';
+import { Box, Button, TextField, Typography, MenuItem, Stack, IconButton } from '@mui/material';
 import { Delete } from '@mui/icons-material';
 import type { Assertion, AssertionType } from '../../../../types';
 
@@ -64,51 +64,53 @@ const AssertsForm: React.FC<AssertsFormProps> = ({ onAdd, initialValues }) => {
   return (
     <>
       <Typography variant="h6">Asserts</Typography>
-      <Grid container spacing={2}>
-        {asserts.map((assert, index) => (
-          <Grid item xs={12} key={index}>
-            <TextField
-              label="Type"
-              select
-              value={assert.type}
-              onChange={(e) => {
-                const newType = e.target.value;
-                const newAsserts = asserts.map((a, i) =>
-                  i === index ? { ...a, type: newType as AssertionType } : a,
-                );
-                setAsserts(newAsserts);
-                onAdd(newAsserts);
-              }}
-            >
-              {assertTypes.map((option) => (
-                <MenuItem key={option} value={option}>
-                  {option}
-                </MenuItem>
-              ))}
-            </TextField>
-            <TextField
-              label="Value"
-              value={assert.value}
-              onChange={(e) => {
-                const newValue = e.target.value;
-                const newAsserts = asserts.map((a, i) =>
-                  i === index ? { ...a, value: newValue } : a,
-                );
-                setAsserts(newAsserts);
-                onAdd(newAsserts);
-              }}
-            />
-            <IconButton onClick={() => handleRemoveAssert(index)} size="small">
-              <Delete />
-            </IconButton>
-          </Grid>
-        ))}
-        <Grid item xs={12}>
-          <Button color="primary" onClick={handleAdd}>
-            Add Assert
-          </Button>
-        </Grid>
-      </Grid>
+      <Box my={2}>
+        <Stack direction="column" spacing={2}>
+          {asserts.map((assert, index) => (
+            <Stack key={index} direction="row" spacing={2} alignItems="center">
+              <TextField
+                label="Type"
+                select
+                value={assert.type}
+                sx={{ minWidth: 200 }}
+                onChange={(e) => {
+                  const newType = e.target.value;
+                  const newAsserts = asserts.map((a, i) =>
+                    i === index ? { ...a, type: newType as AssertionType } : a,
+                  );
+                  setAsserts(newAsserts);
+                  onAdd(newAsserts);
+                }}
+              >
+                {assertTypes.map((option) => (
+                  <MenuItem key={option} value={option}>
+                    {option}
+                  </MenuItem>
+                ))}
+              </TextField>
+              <TextField
+                label="Value"
+                value={assert.value}
+                fullWidth
+                onChange={(e) => {
+                  const newValue = e.target.value;
+                  const newAsserts = asserts.map((a, i) =>
+                    i === index ? { ...a, value: newValue } : a,
+                  );
+                  setAsserts(newAsserts);
+                  onAdd(newAsserts);
+                }}
+              />
+              <IconButton onClick={() => handleRemoveAssert(index)} size="small">
+                <Delete />
+              </IconButton>
+            </Stack>
+          ))}
+        </Stack>
+      </Box>
+      <Button color="primary" onClick={handleAdd}>
+        Add Assert
+      </Button>
     </>
   );
 };
