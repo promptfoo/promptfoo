@@ -18,6 +18,7 @@ body {
   padding: 0 0.5rem;
   text-decoration: none;
   color: #000;
+  align-self: center;
 }
 
 .nav a:hover {

@@ -83,7 +83,7 @@ const EvaluateTestSuiteCreator: React.FC = () => {
   };
 
   return (
-    <Container maxWidth="lg" sx={{marginTop: '2rem'}}>
+    <Container maxWidth="lg" sx={{ marginTop: '2rem' }}>
       <Stack direction="row" spacing={2} justifyContent="space-between">
         <Typography variant="h4">Configure Test Suite</Typography>
         <Stack direction="row" spacing={2}>

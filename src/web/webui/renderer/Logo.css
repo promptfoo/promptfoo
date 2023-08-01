@@ -1,15 +1,18 @@
 .logo {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
+  background-color: #ccc;
+  padding: 0 0.5rem;
+  border-radius: 0.5rem;
 }
 
 .logo img {
-  width: 30px;
+  width: 25px;
+  margin-top: 2px;
 }
 
 .logo span {
-  margin-bottom: 6px;
   color: var(--text-color);
 }
 

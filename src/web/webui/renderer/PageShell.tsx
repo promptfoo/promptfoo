@@ -1,8 +1,9 @@
 import React from 'react';
 import { PageContextProvider } from './usePageContext';
-import {Stack} from '@mui/material';
+import { Stack } from '@mui/material';
 
-import {Link} from './Link';
+import { Link } from './Link';
+import Logo from './Logo';
 
 import type { PageContext } from './types';
 
@@ -22,9 +23,7 @@ function PageShell({
       <PageContextProvider pageContext={pageContext}>
         <Layout>
           <Navigation />
-          <div>
-            {children}
-          </div>
+          <div>{children}</div>
         </Layout>
       </PageContextProvider>
     </React.StrictMode>
@@ -32,18 +31,14 @@ function PageShell({
 }
 
 function Layout({ children }: { children: React.ReactNode }) {
-  return (
-    <div>
-      {children}
-    </div>
-  );
+  return <div>{children}</div>;
 }
 
 function Navigation() {
   return (
     <Stack direction="row" spacing={2} className="nav">
+      <Logo />
       <Link href="/">Home</Link>
-      <Link href="/about">About</Link>
       <Link href="/setup">Create Eval</Link>
       <Link href="/eval">View Eval</Link>
     </Stack>
