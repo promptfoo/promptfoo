@@ -21,6 +21,11 @@ body {
   align-self: center;
 }
 
+.nav div:last-child {
+  margin-left: auto;
+  margin-right: 0.5rem;
+}
+
 .nav a:hover {
   text-decoration: underline;
 }

@@ -1,7 +1,7 @@
 import DarkModeIcon from '@mui/icons-material/DarkMode';
 import LightModeIcon from '@mui/icons-material/LightMode';
 
-import './NavBar.css';
+import './DarkMode.css';
 
 interface NavbarProps {
   darkMode: boolean;
@@ -10,10 +10,8 @@ interface NavbarProps {
 
 export default function NavBar({ darkMode, onToggleDarkMode }: NavbarProps) {
   return (
-    <nav>
-      <div className="dark-mode-toggle" onClick={onToggleDarkMode}>
-        {darkMode ? <DarkModeIcon /> : <LightModeIcon />}
-      </div>
-    </nav>
+    <div className="dark-mode-toggle" onClick={onToggleDarkMode}>
+      {darkMode ? <DarkModeIcon /> : <LightModeIcon />}
+    </div>
   );
 }
