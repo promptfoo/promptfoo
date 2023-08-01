@@ -19,6 +19,7 @@ import {
   DialogContent,
   DialogContentText,
   DialogTitle,
+  CircularProgress, // Import CircularProgress
 } from '@mui/material';
 
 import PromptsSection from './PromptsSection';
@@ -38,8 +39,11 @@ interface EvaluateTestSuiteCreatorProps {
 const providerOptions = ['openai:gpt-3.5-turbo', 'openai:gpt-4', 'localai:chat:vicuna'];
 
 const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onSubmit }) => {
+  const [isLoading, setIsLoading] = useState(false); // Add isLoading state variable
+
   // Function to run the test suite
   const runTestSuite = async (testSuite: EvaluateTestSuite) => {
+    setIsLoading(true); // Set isLoading to true when the request starts
     try {
       const response = await fetch('/run-test-suite', {
         method: 'POST',
@@ -52,6 +56,8 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onS
       console.log(data);
     } catch (error) {
       console.error(error);
+    } finally {
+      setIsLoading(false); // Set isLoading back to false when the request is completed
     }
   };
   const [yamlString, setYamlString] = useState('');
@@ -122,8 +128,8 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onS
       <Stack direction="row" spacing={2} justifyContent="space-between">
         <Typography variant="h4">Configure Test Suite</Typography>
         <Stack direction="row" spacing={2}>
-          <Button variant="contained" color="primary" onClick={handleSubmit}>
-            Run Test Suite
+          <Button variant="contained" color="primary" onClick={handleSubmit} disabled={isLoading}>
+            {isLoading ? <CircularProgress size={24} /> : 'Run Test Suite'} // Show loader and disable button when isLoading is true
           </Button>
           <Button variant="outlined" color="primary" onClick={() => setResetDialogOpen(true)}>
             Reset
