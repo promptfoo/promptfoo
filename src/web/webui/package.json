@@ -28,6 +28,7 @@
     "eslint-plugin-react-refresh": "^0.3.4",
     "express": "^4.18.1",
     "js-yaml": "^4.1.0",
+    "promptfoo": "^0.18.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-syntax-highlighter": "^15.5.0",
