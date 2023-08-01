@@ -127,10 +127,12 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onS
     <Container maxWidth="lg">
       <Stack direction="row" spacing={2} justifyContent="space-between">
         <Typography variant="h4">Configure Test Suite</Typography>
+        import RunTestSuiteButton from '../../components/RunTestSuiteButton';
+
+        // ...
+
         <Stack direction="row" spacing={2}>
-          <Button variant="contained" color="primary" onClick={handleSubmit} disabled={isRunning}>
-            {isRunning ? <CircularProgress size={24} /> : 'Run Test Suite'}
-          </Button>
+          <RunTestSuiteButton testSuite={testSuite} />
           <Button variant="outlined" color="primary" onClick={() => setResetDialogOpen(true)}>
             Reset
           </Button>
