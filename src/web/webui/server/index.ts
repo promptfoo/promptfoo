@@ -4,7 +4,9 @@ import express from 'express';
 import compression from 'compression';
 import { renderPage } from 'vite-plugin-ssr/server';
 import { root } from './root.js';
-import promptfoo from 'promptfoo';
+
+import promptfoo from '../../../../dist/src/index';
+
 const isProduction = process.env.NODE_ENV === 'production';
 
 startServer();
