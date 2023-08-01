@@ -38,6 +38,22 @@ interface EvaluateTestSuiteCreatorProps {
 const providerOptions = ['openai:gpt-3.5-turbo', 'openai:gpt-4', 'localai:chat:vicuna'];
 
 const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onSubmit }) => {
+  // Function to run the test suite
+  const runTestSuite = async (testSuite: EvaluateTestSuite) => {
+    try {
+      const response = await fetch('/run-test-suite', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(testSuite)
+      });
+      const data = await response.json();
+      console.log(data);
+    } catch (error) {
+      console.error(error);
+    }
+  };
   const [yamlString, setYamlString] = useState('');
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
 
@@ -73,7 +89,7 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onS
       prompts,
       tests: testCases,
     };
-    onSubmit(testSuite);
+    runTestSuite(testSuite); // Call the runTestSuite function instead of onSubmit
   };
 
   const extractVarsFromPrompts = (prompts: string[]): string[] => {
