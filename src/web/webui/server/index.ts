@@ -31,7 +31,7 @@ async function startServer() {
     app.use(viteDevMiddleware);
   }
 
-  app.post('/run-test-suite', async (req, res) => {
+  app.post('/api/eval', async (req, res) => {
     const testSuite = req.body;
     const results = await promptfoo.evaluate(testSuite);
     res.json(results);

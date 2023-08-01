@@ -1,22 +1,29 @@
 import React, { useState } from 'react';
 import { Button, CircularProgress } from '@mui/material';
 
-interface RunTestSuiteButtonProps {
-  testSuite: any;
-}
+import { useStore } from '../../util/store';
 
-const RunTestSuiteButton: React.FC<RunTestSuiteButtonProps> = ({ testSuite }) => {
+const RunTestSuiteButton: React.FC = () => {
+  const { description, providers, prompts, testCases } = useStore();
   const [isRunning, setIsRunning] = useState(false);
 
   const runTestSuite = async () => {
     setIsRunning(true);
+
+    const testSuite = {
+      description,
+      providers,
+      prompts,
+      tests: testCases,
+    };
+
     try {
-      const response = await fetch('/run-test-suite', {
+      const response = await fetch('/api/eval', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
         },
-        body: JSON.stringify(testSuite)
+        body: JSON.stringify(testSuite),
       });
       const data = await response.json();
       console.log(data);
@@ -29,7 +36,7 @@ const RunTestSuiteButton: React.FC<RunTestSuiteButtonProps> = ({ testSuite }) =>
 
   return (
     <Button variant="contained" color="primary" onClick={runTestSuite} disabled={isRunning}>
-      {isRunning ? <CircularProgress size={24} /> : 'Run Test Suite'}
+      {isRunning && <CircularProgress size={24} sx={{ marginRight: 2 }} />} Run Test Suite
     </Button>
   );
 };

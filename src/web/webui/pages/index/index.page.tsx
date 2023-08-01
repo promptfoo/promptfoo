@@ -5,11 +5,7 @@ export { Page };
 function Page() {
   return (
     <>
-      <EvaluateTestSuiteCreator
-        onSubmit={() => {
-          alert('yolo');
-        }}
-      />
+      <EvaluateTestSuiteCreator />
     </>
   );
 }

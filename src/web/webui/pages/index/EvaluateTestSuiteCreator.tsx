@@ -19,47 +19,16 @@ import {
   DialogContent,
   DialogContentText,
   DialogTitle,
-  CircularProgress, // Import CircularProgress
 } from '@mui/material';
 
+import RunTestSuiteButton from './RunTestSuiteButton';
 import PromptsSection from './PromptsSection';
 import TestCasesSection from './TestCasesSection';
 import { useStore } from '../../util/store';
 
-import type { TestSuiteConfig } from '../../../../types';
-
-interface EvaluateTestSuite extends TestSuiteConfig {
-  prompts: string[];
-}
-
-interface EvaluateTestSuiteCreatorProps {
-  onSubmit: (testSuite: EvaluateTestSuite) => void;
-}
-
 const providerOptions = ['openai:gpt-3.5-turbo', 'openai:gpt-4', 'localai:chat:vicuna'];
 
-const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onSubmit }) => {
-  const [isRunning, setIsRunning] = useState(false); // Add isLoading state variable
-
-  // Function to run the test suite
-  const runTestSuite = async (testSuite: EvaluateTestSuite) => {
-    setIsRunning(true); // Set isLoading to true when the request starts
-    try {
-      const response = await fetch('/run-test-suite', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(testSuite)
-      });
-      const data = await response.json();
-      console.log(data);
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setIsRunning(false); // Set isLoading back to false when the request is completed
-    }
-  };
+const EvaluateTestSuiteCreator: React.FC = () => {
   const [yamlString, setYamlString] = useState('');
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
 
@@ -87,16 +56,6 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onS
     };
     setYamlString(yaml.dump(testSuite));
   }, [description, providers, prompts, testCases]);
-
-  const handleSubmit = () => {
-    const testSuite = {
-      description,
-      providers,
-      prompts,
-      tests: testCases,
-    };
-    runTestSuite(testSuite);
-  };
 
   const extractVarsFromPrompts = (prompts: string[]): string[] => {
     const varRegex = /{{(\w+)}}/g;
@@ -127,12 +86,8 @@ const EvaluateTestSuiteCreator: React.FC<EvaluateTestSuiteCreatorProps> = ({ onS
     <Container maxWidth="lg">
       <Stack direction="row" spacing={2} justifyContent="space-between">
         <Typography variant="h4">Configure Test Suite</Typography>
-        import RunTestSuiteButton from '../../components/RunTestSuiteButton';
-
-        // ...
-
         <Stack direction="row" spacing={2}>
-          <RunTestSuiteButton testSuite={testSuite} />
+          <RunTestSuiteButton />
           <Button variant="outlined" color="primary" onClick={() => setResetDialogOpen(true)}>
             Reset
           </Button>
