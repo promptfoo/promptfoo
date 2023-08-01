@@ -42,12 +42,9 @@ export async function loadApiProviders(
             callApi: provider,
           };
         } else {
-          let id = Object.keys(provider)[0];
+          const id = Object.keys(provider)[0];
           const providerObject = provider[id];
-          const context = { ...provider[id], id };
-          if (providerObject.id) {
-            context.id = providerObject.id;
-          }
+          const context = { ...providerObject, id: providerObject.id || id };
           return loadApiProvider(id, context, basePath);
         }
       }),
