@@ -1,9 +1,12 @@
 import React from 'react';
-import logo from './logo.svg';
 import { PageContextProvider } from './usePageContext';
+import {Stack} from '@mui/material';
+
+import {Link} from './Link';
+
 import type { PageContext } from './types';
+
 import './PageShell.css';
-import { Link } from './Link';
 
 export { PageShell };
 
@@ -18,7 +21,10 @@ function PageShell({
     <React.StrictMode>
       <PageContextProvider pageContext={pageContext}>
         <Layout>
-          <Content>{children}</Content>
+          <Navigation />
+          <div>
+            {children}
+          </div>
         </Layout>
       </PageContextProvider>
     </React.StrictMode>
@@ -27,57 +33,19 @@ function PageShell({
 
 function Layout({ children }: { children: React.ReactNode }) {
   return (
-    <div
-      style={{
-        maxWidth: 960,
-        margin: 'auto',
-      }}
-    >
+    <div>
       {children}
     </div>
   );
 }
 
-function Sidebar({ children }: { children: React.ReactNode }) {
+function Navigation() {
   return (
-    <div
-      style={{
-        padding: 20,
-        flexShrink: 0,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        lineHeight: '1.8em',
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-
-function Content({ children }: { children: React.ReactNode }) {
-  return (
-    <div
-      style={{
-        padding: 20,
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-
-function Logo() {
-  return (
-    <div
-      style={{
-        marginTop: 20,
-        marginBottom: 10,
-      }}
-    >
-      <a href="/">
-        <img src={logo} height={64} width={64} alt="logo" />
-      </a>
-    </div>
+    <Stack direction="row" spacing={2} className="nav">
+      <Link href="/">Home</Link>
+      <Link href="/about">About</Link>
+      <Link href="/setup">Create Eval</Link>
+      <Link href="/eval">View Eval</Link>
+    </Stack>
   );
 }

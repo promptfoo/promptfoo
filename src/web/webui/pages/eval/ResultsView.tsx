@@ -171,7 +171,7 @@ export default function ResultsView({ recentFiles, onRecentFileSelected }: Resul
   }, [head]);
 
   return (
-    <div>
+    <div style={{marginLeft: '1rem', marginRight: '1rem'}}>
       <Paper py="md">
         <ResponsiveStack direction="row" spacing={4} alignItems="center">
           <Box>

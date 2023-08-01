@@ -8,3 +8,18 @@ body {
 * {
   box-sizing: border-box;
 }
+
+.nav {
+  padding: 1rem 0 1rem 1rem;
+  background-color: #eee;
+}
+
+.nav a {
+  padding: 0 0.5rem;
+  text-decoration: none;
+  color: #000;
+}
+
+.nav a:hover {
+  text-decoration: underline;
+}
