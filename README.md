@@ -4,15 +4,15 @@
 [![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/typpo/promptfoo/main.yml)](https://github.com/typpo/promptfoo/actions/workflows/main.yml)
 ![MIT license](https://img.shields.io/github/license/typpo/promptfoo)
 
-`promptfoo` is a tool for testing and evaluating LLM prompt quality.
+`promptfoo` is a tool for testing and evaluating LLM output quality.
 
 With promptfoo, you can:
 
-- **Systematically test prompts** against predefined test cases
+- **Systematically test prompts & models** against predefined test cases
 - **Evaluate quality and catch regressions** by comparing LLM outputs side-by-side
-- **Speed up evaluations** with caching and concurrent tests
-- **Score outputs automatically** by defining "expectations"
-- Use as a CLI, or integrate into your workflow as a library
+- **Speed up evaluations** with caching and concurrency
+- **Score outputs automatically** by defining test cases
+- Use as a CLI, library, or in CI/CD
 - Use OpenAI, Anthropic, open-source models like Llama and Vicuna, or integrate custom API providers for any LLM API
 
 The goal: **test-driven prompt engineering**, rather than trial-and-error.
