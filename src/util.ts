@@ -456,7 +456,7 @@ export function writeLatestResults(results: EvaluateSummary, config: Partial<Uni
         2,
       ),
     );
-    if (fs.existsSync(latestResultsPath) || fs.lstatSync(latestResultsPath).isSymbolicLink()) {
+    if (fs.existsSync(latestResultsPath) && fs.lstatSync(latestResultsPath).isSymbolicLink()) {
       fs.unlinkSync(latestResultsPath);
     }
     fs.symlinkSync(newResultsPath, latestResultsPath);
