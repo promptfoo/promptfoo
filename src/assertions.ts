@@ -56,6 +56,9 @@ export async function runAssertions(test: AtomicTestCase, output: string): Promi
 
   let totalScore = 0;
   let totalWeight = 0;
+  let allPass = true;
+  let failedReason = '';
+
   for (const assertion of test.assert) {
     const weight = assertion.weight || 1;
     totalWeight += weight;
@@ -69,15 +72,18 @@ export async function runAssertions(test: AtomicTestCase, output: string): Promi
     }
 
     if (!result.pass) {
-      // Short-circuit assertions
-      return result;
+      allPass = false;
+      failedReason = result.reason;
+      if (process.env.PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES) {
+        return result;
+      }
     }
   }
 
   return {
-    pass: true,
+    pass: allPass,
     score: totalScore / totalWeight,
-    reason: 'All assertions passed',
+    reason: allPass ? 'All assertions passed' : failedReason,
     tokensUsed,
   };
 }
