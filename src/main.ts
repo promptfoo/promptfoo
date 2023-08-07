@@ -286,7 +286,7 @@ async function main() {
           process.env.PROMPTFOO_DISABLE_SHARING === '1'
             ? false
             : fileConfig.sharing ?? defaultConfig.sharing ?? true,
-        defaultTest: fileConfig.defaultTest,
+        defaultTest: fileConfig.defaultTest || defaultConfig.defaultTest,
       };
 
       // Validation
@@ -312,7 +312,7 @@ async function main() {
         cmdObj.tests ? undefined : basePath,
       );
 
-      //parse testCases for each scenario
+      // Parse testCases for each scenario
       if (fileConfig.scenarios) {
         for (const scenario of fileConfig.scenarios) {
           const parsedScenarioTests: TestCase[] = await readTests(
@@ -335,8 +335,8 @@ async function main() {
           prefix: cmdObj.promptPrefix,
           suffix: cmdObj.promptSuffix,
           provider: cmdObj.grader,
-          // rubricPrompt:
-          // postprocess
+          // rubricPrompt
+          ...(config.defaultTest?.options || {}),
         },
         ...config.defaultTest,
       };

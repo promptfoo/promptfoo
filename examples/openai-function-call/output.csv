@@ -1,7 +1,13 @@
-"[
-  {""role"": ""user"", ""content"": ""What is the weather like in {{city}}?""}
-]",city
-"[PASS] {""name"":""get_current_weather"",""arguments"":""{\n  \""location\"": \""Boston, MA\""\n}""}",Boston
-"[PASS] {""name"":""get_current_weather"",""arguments"":""{\n  \""location\"": \""New York\""\n}""}",New York
-"[PASS] {""name"":""get_current_weather"",""arguments"":""{\n  \""location\"": \""Paris\""\n}""}",Paris
-"[PASS] {""name"":""get_current_weather"",""arguments"":""{\n  \""location\"": \""Mars\""\n}""}",Mars
+"{""raw"":""[\n  {\""role\"": \""user\"", \""content\"": \""What is the weather like in {{city}}?\""}\n]"",""display"":""[\n  {\""role\"": \""user\"", \""content\"": \""What is the weather like in {{city}}?\""}\n]""}",city
+"[PASS] (1.00) {
+  ""location"": ""Boston, MA""
+}",Boston
+"[PASS] (1.00) {
+  ""location"": ""New York""
+}",New York
+"[PASS] (1.00) {
+  ""location"": ""Paris""
+}",Paris
+"[PASS] (1.00) {
+  ""location"": ""Mars""
+}",Mars
