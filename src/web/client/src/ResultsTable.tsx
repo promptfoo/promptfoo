@@ -341,7 +341,7 @@ export default function ResultsTable({
               </>
             );
           },
-          cell: (info: CellContext<EvalRow, string>) => (
+          cell: (info: CellContext<EvalRow, EvalRowOutput>) => (
             <EvalOutputCell
               output={info.getValue() as unknown as EvalRowOutput}
               maxTextLength={maxTextLength}
