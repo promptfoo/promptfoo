@@ -39,5 +39,5 @@ import promptfoo from '../../dist/src/index.js';
     ],
   });
   console.log('RESULTS:');
-  console.log(results);
+  console.log(JSON.stringify(results, null, 2));
 })();

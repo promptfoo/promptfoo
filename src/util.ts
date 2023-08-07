@@ -45,14 +45,13 @@ export function readProviderPromptMap(
     allPrompts.push(prompt.display);
   }
 
-  invariant(
-    typeof config.providers !== 'string',
-    'In order to use a provider-prompt map, config.providers should be an array of objects, not a string',
-  );
-  invariant(
-    typeof config.providers !== 'function',
-    'In order to use a provider-prompt map, config.providers should be an array of objects, not a function',
-  );
+  if (typeof config.providers === 'string') {
+    return { [config.providers]: allPrompts };
+  }
+
+  if (typeof config.providers === 'function') {
+    return { 'Custom function': allPrompts };
+  }
 
   for (const provider of config.providers) {
     if (typeof provider === 'object') {
