@@ -4,7 +4,6 @@ import * as os from 'os';
 
 import $RefParser from '@apidevtools/json-schema-ref-parser';
 import fetch from 'node-fetch';
-import invariant from 'tiny-invariant';
 import yaml from 'js-yaml';
 import nunjucks from 'nunjucks';
 import { globSync } from 'glob';
