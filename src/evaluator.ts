@@ -156,6 +156,7 @@ class Evaluator {
           this.stats.tokenUsage.completion += checkResult.tokensUsed.completion;
         }
         ret.response = processedResponse;
+        ret.gradingResult = checkResult;
       } else {
         ret.success = false;
         ret.score = 0;
@@ -464,6 +465,7 @@ class Evaluator {
           prompt: row.prompt.raw,
           latencyMs: row.latencyMs,
           tokenUsage: row.response?.tokenUsage,
+          gradingResult: row.gradingResult,
         };
       },
     );

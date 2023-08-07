@@ -1,4 +1,4 @@
-import { TokenUsage } from '../../../types';
+import { EvaluateResult, TokenUsage } from '../../../types';
 
 type Prompt = {
   display: string;
@@ -10,6 +10,7 @@ export type EvalHead = {
   vars: string[];
 };
 
+// TODO(ian): Remove this and replace with EvaluateResult
 export type EvalRowOutput = {
   pass: boolean;
   score: number;
@@ -17,6 +18,7 @@ export type EvalRowOutput = {
   prompt: string;
   latencyMs: number;
   tokenUsage?: Partial<TokenUsage>;
+  gradingResult: EvaluateResult['gradingResult'];
 };
 
 export type EvalRow = {

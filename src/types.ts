@@ -97,6 +97,7 @@ export interface EvaluateResult {
   success: boolean;
   score: number;
   latencyMs: number;
+  gradingResult?: GradingResult;
 }
 
 export interface EvaluateTableOutput {
@@ -106,6 +107,7 @@ export interface EvaluateTableOutput {
   prompt: string;
   latencyMs: number;
   tokenUsage?: Partial<TokenUsage>;
+  gradingResult?: GradingResult;
 }
 
 export interface EvaluateTable {
@@ -138,6 +140,8 @@ export interface GradingResult {
   score: number;
   reason: string;
   tokensUsed?: TokenUsage;
+  componentResults?: GradingResult[];
+  assertion: Assertion | null;
 }
 
 type BaseAssertionTypes =
