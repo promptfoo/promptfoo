@@ -232,7 +232,6 @@ export default function ResultsTable({
 
   const numAsserts = head.prompts.map((_, idx) =>
     body.reduce((acc, row) => {
-      console.log(row.outputs[idx].gradingResult);
       return acc + (row.outputs[idx].gradingResult?.componentResults?.length || 0);
     }, 0),
   );
@@ -243,8 +242,6 @@ export default function ResultsTable({
       return acc + (componentResults ? componentResults.filter((r) => r.pass).length : 0);
     }, 0),
   );
-
-  console.log(numAsserts, numGoodAsserts);
 
   const handleRating = (rowIndex: number, promptIndex: number, isPass: boolean) => {
     const updatedData = [...body];
