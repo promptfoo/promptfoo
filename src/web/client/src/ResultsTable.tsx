@@ -155,6 +155,7 @@ function EvalOutputCell({
               open={openPrompt}
               onClose={handlePromptClose}
               prompt={output.prompt}
+              gradingResults={output.gradingResult?.componentResults}
               output={text}
             />
           </>
@@ -223,9 +224,22 @@ export default function ResultsTable({
   const { table, setTable } = useStore();
   invariant(table, 'Table should be defined');
   const { head, body } = table;
-  const numGood = head.prompts.map((_, idx) =>
+  const numGoodTests = head.prompts.map((_, idx) =>
     body.reduce((acc, row) => {
       return acc + (row.outputs[idx].pass ? 1 : 0);
+    }, 0),
+  );
+
+  const numAsserts = head.prompts.map((_, idx) =>
+    body.reduce((acc, row) => {
+      return acc + (row.outputs[idx].gradingResult?.componentResults?.length || 0);
+    }, 0),
+  );
+
+  const numGoodAsserts = head.prompts.map((_, idx) =>
+    body.reduce((acc, row) => {
+      const componentResults = row.outputs[idx].gradingResult?.componentResults;
+      return acc + (componentResults ? componentResults.filter((r) => r.pass).length : 0);
     }, 0),
   );
 
@@ -243,10 +257,13 @@ export default function ResultsTable({
     });
   };
 
-  const highestPassingIndex = numGood.reduce((maxIndex, currentPassCount, currentIndex, array) => {
-    return currentPassCount > array[maxIndex] ? currentIndex : maxIndex;
-  }, 0);
-  const highestPassingCount = numGood[highestPassingIndex];
+  const highestPassingIndex = numGoodTests.reduce(
+    (maxIndex, currentPassCount, currentIndex, array) => {
+      return currentPassCount > array[maxIndex] ? currentIndex : maxIndex;
+    },
+    0,
+  );
+  const highestPassingCount = numGoodTests[highestPassingIndex];
   const columnHelper = createColumnHelper<EvalRow>();
   const columns = [
     columnHelper.group({
@@ -282,9 +299,9 @@ export default function ResultsTable({
         columnHelper.accessor((row: EvalRow) => formatRowOutput(row.outputs[idx]), {
           id: `Prompt ${idx + 1}`,
           header: () => {
-            const pct = ((numGood[idx] / body.length) * 100.0).toFixed(2);
+            const pct = ((numGoodTests[idx] / body.length) * 100.0).toFixed(2);
             const isHighestPassing =
-              numGood[idx] === highestPassingCount && highestPassingCount !== 0;
+              numGoodTests[idx] === highestPassingCount && highestPassingCount !== 0;
             const columnId = `Prompt ${idx + 1}`;
             const isChecked = failureFilter[columnId] || false;
             // TODO(ian): prompt string support for backwards compatibility, remove after 0.17.0
@@ -313,12 +330,18 @@ export default function ResultsTable({
                   />
                 )}
                 <div className={`summary ${isHighestPassing ? 'highlight' : ''}`}>
-                  Passing: <strong>{pct}%</strong> ({numGood[idx]} / {body.length})
+                  Passing: <strong>{pct}%</strong> ({numGoodTests[idx]}/{body.length} cases
+                  {numAsserts[idx] ? (
+                    <span>
+                      , {numGoodAsserts[idx]}/{numAsserts[idx]} asserts
+                    </span>
+                  ) : null}
+                  )
                 </div>
               </>
             );
           },
-          cell: (info: CellContext<EvalRow, string>) => (
+          cell: (info: CellContext<EvalRow, EvalRowOutput>) => (
             <EvalOutputCell
               output={info.getValue() as unknown as EvalRowOutput}
               maxTextLength={maxTextLength}

@@ -40,6 +40,7 @@ function handleRougeScore(
       : `${baseType.toUpperCase()} score ${score} is less than threshold ${
           assertion.threshold || 0.75
         }`,
+    assertion,
   };
 }
 
@@ -51,13 +52,14 @@ export async function runAssertions(test: AtomicTestCase, output: string): Promi
   };
 
   if (!test.assert || test.assert.length < 1) {
-    return { pass: true, score: 1, reason: 'No assertions', tokensUsed };
+    return { pass: true, score: 1, reason: 'No assertions', tokensUsed, assertion: null };
   }
 
   let totalScore = 0;
   let totalWeight = 0;
   let allPass = true;
   let failedReason = '';
+  const componentResults: GradingResult[] = [];
 
   for (const assertion of test.assert) {
     const weight = assertion.weight || 1;
@@ -65,6 +67,8 @@ export async function runAssertions(test: AtomicTestCase, output: string): Promi
 
     const result = await runAssertion(assertion, test, output);
     totalScore += result.score * weight;
+    componentResults.push(result);
+
     if (result.tokensUsed) {
       tokensUsed.total += result.tokensUsed.total;
       tokensUsed.prompt += result.tokensUsed.prompt;
@@ -85,6 +89,8 @@ export async function runAssertions(test: AtomicTestCase, output: string): Promi
     score: totalScore / totalWeight,
     reason: allPass ? 'All assertions passed' : failedReason,
     tokensUsed,
+    componentResults,
+    assertion: null,
   };
 }
 
@@ -120,6 +126,7 @@ export async function runAssertion(
       pass,
       score: pass ? 1 : 0,
       reason: pass ? 'Assertion passed' : `Expected output "${renderedValue}"`,
+      assertion,
     };
   }
 
@@ -134,6 +141,7 @@ export async function runAssertion(
       pass,
       score: pass ? 1 : 0,
       reason: pass ? 'Assertion passed' : 'Expected output to be valid JSON',
+      assertion,
     };
   }
 
@@ -150,6 +158,7 @@ export async function runAssertion(
       reason: pass
         ? 'Assertion passed'
         : `Expected output to ${inverse ? 'not ' : ''}contain "${renderedValue}"`,
+      assertion,
     };
   }
 
@@ -166,6 +175,7 @@ export async function runAssertion(
       reason: pass
         ? 'Assertion passed'
         : `Expected output to ${inverse ? 'not ' : ''}contain one of "${renderedValue.join(', ')}"`,
+      assertion,
     };
   }
 
@@ -182,6 +192,7 @@ export async function runAssertion(
       reason: pass
         ? 'Assertion passed'
         : `Expected output to ${inverse ? 'not ' : ''}contain all of "${renderedValue.join(', ')}"`,
+      assertion,
     };
   }
 
@@ -199,6 +210,7 @@ export async function runAssertion(
       reason: pass
         ? 'Assertion passed'
         : `Expected output to ${inverse ? 'not ' : ''}match regex "${renderedValue}"`,
+      assertion,
     };
   }
 
@@ -215,6 +227,7 @@ export async function runAssertion(
       reason: pass
         ? 'Assertion passed'
         : `Expected output to ${inverse ? 'not ' : ''}contain "${renderedValue}"`,
+      assertion,
     };
   }
 
@@ -231,6 +244,7 @@ export async function runAssertion(
       reason: pass
         ? 'Assertion passed'
         : `Expected output to ${inverse ? 'not ' : ''}start with "${renderedValue}"`,
+      assertion,
     };
   }
 
@@ -242,6 +256,7 @@ export async function runAssertion(
       reason: pass
         ? 'Assertion passed'
         : `Expected output to ${inverse ? 'not ' : ''}contain valid JSON`,
+      assertion,
     };
   }
 
@@ -271,6 +286,7 @@ export async function runAssertion(
         score: 0,
         reason: `Custom function threw error: ${(err as Error).message}
 ${renderedValue}`,
+        assertion,
       };
     }
     return {
@@ -280,6 +296,7 @@ ${renderedValue}`,
         ? 'Assertion passed'
         : `Custom function returned ${inverse ? 'true' : 'false'}
 ${renderedValue}`,
+      assertion,
     };
   }
 
@@ -315,6 +332,7 @@ ${renderedValue}`,
         pass: false,
         score: 0,
         reason: `Python code execution failed: ${(err as Error).message}`,
+        assertion,
       };
     }
     return {
@@ -324,6 +342,7 @@ ${renderedValue}`,
         ? 'Assertion passed'
         : `Python code returned ${pass ? 'true' : 'false'}
 ${assertion.value}`,
+      assertion,
     };
   }
 
@@ -333,7 +352,10 @@ ${assertion.value}`,
       typeof renderedValue === 'string',
       '"contains" assertion type must have a string value',
     );
-    return matchesSimilarity(renderedValue, output, assertion.threshold || 0.75, inverse);
+    return {
+      assertion,
+      ...(await matchesSimilarity(renderedValue, output, assertion.threshold || 0.75, inverse)),
+    };
   }
 
   if (baseType === 'llm-rubric') {
@@ -342,7 +364,10 @@ ${assertion.value}`,
       typeof renderedValue === 'string',
       '"contains" assertion type must have a string value',
     );
-    return matchesLlmRubric(renderedValue, output, test.options);
+    return {
+      assertion,
+      ...(await matchesLlmRubric(renderedValue, output, test.options)),
+    };
   }
 
   if (baseType === 'webhook') {
@@ -384,6 +409,7 @@ ${assertion.value}`,
         pass: false,
         score: 0,
         reason: `Webhook error: ${(err as Error).message}`,
+        assertion,
       };
     }
 
@@ -391,6 +417,7 @@ ${assertion.value}`,
       pass,
       score,
       reason: pass ? 'Assertion passed' : `Webhook returned ${inverse ? 'true' : 'false'}`,
+      assertion,
     };
   }
 
@@ -428,7 +455,7 @@ export async function matchesSimilarity(
   output: string,
   threshold: number,
   inverse: boolean = false,
-): Promise<GradingResult> {
+): Promise<Omit<GradingResult, 'assertion'>> {
   const expectedEmbedding = await DefaultEmbeddingProvider.callEmbeddingApi(expected);
   const outputEmbedding = await DefaultEmbeddingProvider.callEmbeddingApi(output);
 
@@ -483,7 +510,7 @@ export async function matchesLlmRubric(
   expected: string,
   output: string,
   options?: GradingConfig,
-): Promise<GradingResult> {
+): Promise<Omit<GradingResult, 'assertion'>> {
   if (!options) {
     throw new Error(
       'Cannot grade output without grading config. Specify --grader option or grading config.',

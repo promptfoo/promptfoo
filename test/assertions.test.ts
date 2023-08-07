@@ -70,12 +70,22 @@ describe('runAssertion', () => {
 
   const javascriptFunctionAssertion: Assertion = {
     type: 'javascript',
-    value: async (output: string) => ({ pass: true, score: 0.5, reason: 'Assertion passed' }),
+    value: async (output: string) => ({
+      pass: true,
+      score: 0.5,
+      reason: 'Assertion passed',
+      assertion: null,
+    }),
   };
 
   const javascriptFunctionFailAssertion: Assertion = {
     type: 'javascript',
-    value: async (output: string) => ({ pass: false, score: 0.5, reason: 'Assertion failed' }),
+    value: async (output: string) => ({
+      pass: false,
+      score: 0.5,
+      reason: 'Assertion failed',
+      assertion: null,
+    }),
   };
 
   it('should pass when the equality assertion passes', async () => {

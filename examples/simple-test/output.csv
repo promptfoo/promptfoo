@@ -1,80 +1,82 @@
-Rephrase this from English to Pirate: {{body}},Pretend you're a pirate and speak these words: {{body}},body
-"[FAIL] Expected output ""Yarr""
+"{""raw"":""Rephrase this from English to Pirate: {{body}}"",""display"":""Rephrase this from English to Pirate: {{body}}""}","{""raw"":""Pretend you're a pirate and speak these words: {{body}}"",""display"":""Pretend you're a pirate and speak these words: {{body}}""}",body
+"[FAIL] (0.00) Expected output ""Yarr""
 ---
-Aye.","[FAIL] Expected output ""Yarr""
+Aye","[FAIL] (0.00) Expected output ""Yarr""
 ---
-Ahoy mateys! Yes, I be a pirate and proud of it! Ye best be ready to hoist the Jolly Roger and set sail on the high seas with me crew. Yes, we'll be plunderin' and pillagin' all the treasure we can find. So, hoist the anchor and let's set sail! Yes, we'll be the most feared pirates on the seven seas! Arrr!",Yes
-"[PASS] I be feelin' a mighty need for grub, matey.","[PASS] Arrr, me belly be rumblin'! I be needin' some grub, mateys! Bring me some vittles or ye'll be walkin' the plank!",I'm hungry
-"[PASS] ""Spew forth the tale of yer life in JSON, me hearty!""","[PASS] {
+Arr, me hearties! Yes, be the word ye be seekin'.",Yes
+"[FAIL] (0.00) Expected output to contain ""grub""
+---
+I be feelin' a mighty hunger.","[PASS] (1.00) Arr, me hearties! I be feelin' a mighty rumblin' in me belly, for I be famished! Aye, I be longin' for a feast fit for a pirate. Bring me a bounty of savory meats, hearty stews, and fresh fruits to quell this hunger that be gnawin' at me insides. I be yearnin' for a taste of the sea, with fish so fresh it be jumpin' straight from the ocean onto me plate. So, me mateys, let's set sail on a culinary adventure and fill our bellies with the finest grub a pirate could ask for!",I'm hungry
+"[PASS] (1.00) ""Splice out the tale of yer life in JSON, matey!""","[PASS] (1.00) {
   ""name"": ""Captain Blackbeard"",
-  ""age"": 45,
+  ""alias"": ""The Dread Pirate"",
   ""occupation"": ""Pirate"",
+  ""birthplace"": ""Port Royal"",
+  ""birthyear"": 1680,
+  ""nationality"": ""English"",
   ""crew"": [
-    {
-      ""name"": ""Redbeard"",
-      ""age"": 32,
-      ""position"": ""First Mate""
-    },
-    {
-      ""name"": ""Scurvy Pete"",
-      ""age"": 28,
-      ""position"": ""Navigator""
-    },
-    {
-      ""name"": ""One-Eyed Jack"",
-      ""age"": 50,
-      ""position"": ""Quartermaster""
-    }
+    ""Redbeard"",
+    ""One-Eyed Jack"",
+    ""Mad Anne"",
+    ""Salty Sam""
   ],
   ""ships"": [
     {
       ""name"": ""The Black Pearl"",
-      ""type"": ""Galleon"",
-      ""captured"": [
-        ""The Spanish Armada"",
-        ""The British Navy""
-      ]
+      ""type"": ""Sloop"",
+      ""year"": 1700
     },
     {
-      ""name"": ""The Jolly Roger"",
-      ""type"": ""Sloop"",
-      ""captured"": [
-        ""Merchant ships"",
-        ""Fishing vessels""
-      ]
+      ""name"": ""The Revenge"",
+      ""type"": ""Frigate"",
+      ""year"": 1715
     }
   ],
-  ""treasure"": [
+  ""treasures"": [
     {
-      ""type"": ""Gold"",
-      ""amount"": 50000
+      ""name"": ""Cursed Aztec Gold"",
+      ""value"": ""Priceless""
     },
     {
-      ""type"": ""Silver"",
-      ""amount"": 25000
+      ""name"": ""Emerald of the Sea"",
+      ""value"": ""500,000 gold coins""
     },
     {
-      ""type"": ""Jewels"",
-      ""amount"": 100000
+      ""name"": ""Golden Chalice"",
+      ""value"": ""200,000 gold coins""
     }
   ],
   ""adventures"": [
     {
-      ""name"": ""The Battle of Nassau"",
-      ""location"": ""Nassau"",
-      ""outcome"": ""Victory""
-    },
-    {
-      ""name"": ""The Raid on Port Royal"",
-      ""location"": ""Port Royal"",
-      ""outcome"": ""Success""
-    },
-    {
-      ""name"": ""The Treasure of Tortuga"",
+      ""year"": 1698,
       ""location"": ""Tortuga"",
-      ""outcome"": ""Success""
+      ""description"": ""First encounter with pirates, joined crew of Captain Redbeard.""
+    },
+    {
+      ""year"": 1702,
+      ""location"": ""Isla de Muerta"",
+      ""description"": ""Discovered cursed Aztec gold, narrowly escaped the wrath of cursed pirates.""
+    },
+    {
+      ""year"": 1705,
+      ""location"": ""Port Royal"",
+      ""description"": ""Led a successful raid on the governor's mansion, acquired valuable treasures.""
+    },
+    {
+      ""year"": 1710,
+      ""location"": ""Treasure Island"",
+      ""description"": ""Unearthed the hidden treasure of Captain Flint, became legendary among pirates.""
+    },
+    {
+      ""year"": 1718,
+      ""location"": ""Nassau"",
+      ""description"": ""Declared war against the British Empire, led a fleet of pirate ships.""
     }
   ]
 }",Output the story of your life in JSON
-[PASS] Ahoy mateys o' the world!,"[PASS] Ahoy there, me hearties! Avast ye landlubbers! 'Tis I, a fearsome pirate, comin' to ye from the seven seas. Ahoy, hello world!",Hello world
-"[PASS] Arrr, thar be a swift brown fox leaping o'er th' lazy dog.","[PASS] Arrr, me hearties! The quick brown fox be jumpin' over the lazy dog! Ye best be keepin' yer eyes peeled for that sly fox, or he'll be stealin' all yer booty!",The quick brown fox jumps over the lazy dog
+"[PASS] (0.96) Ahoy thar, mateys!","[PASS] (0.96) Ahoy, me hearties! Avast ye, landlubbers! 'Tis I, a fearsome pirate, settin' sail on the vast seas. Hear me words, ye scurvy dogs: ""Hello world!""",Hello world
+"[FAIL] (0.50) Expected output to contain ""arrr""
+---
+Thar swift brown fox be jumpin' o'er thar lazy dog.","[FAIL] (0.50) Expected output to contain ""arrr""
+---
+Arr, me hearties! Listen up, ye scurvy dogs! The quick brown fox be jumpin' o'er the lazy dog, aye!",The quick brown fox jumps over the lazy dog
