@@ -26,8 +26,8 @@ const VarsForm: React.FC<VarsFormProps> = ({ onAdd, varsList, initialValues }) =
         <Stack direction="row" spacing={2} alignItems="center">
           {Object.keys(vars).map((varName, index) => (
             <Stack key={index} direction="row" spacing={2} alignItems="center">
-              <Typography variant="subtitle1">{varName}</Typography>
               <TextField
+                placeholder={varName}
                 label={varName}
                 value={vars[varName]}
                 fullWidth
