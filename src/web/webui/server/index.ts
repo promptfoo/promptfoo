@@ -5,7 +5,7 @@ import compression from 'compression';
 import { renderPage } from 'vite-plugin-ssr/server';
 import { root } from './root.js';
 
-import promptfoo from 'promptfoo';
+import promptfoo from '../../../../dist/src/index.js';
 
 const isProduction = process.env.NODE_ENV === 'production';
 
@@ -33,7 +33,14 @@ async function startServer() {
 
   app.post('/api/eval', async (req, res) => {
     const testSuite = req.body;
-    const results = await promptfoo.evaluate(testSuite);
+    const results = await promptfoo.evaluate(
+      Object.assign({}, testSuite, { writeLatestResults: true }),
+      {
+        progressCallback: (progress, total) => {
+          console.log(`Progress: ${progress}/${total}`);
+        },
+      },
+    );
     res.json(results);
   });
 

@@ -385,7 +385,6 @@ class Evaluator {
     // Set up progress bar...
     let progressbar: SingleBar | undefined;
     if (options.showProgressBar) {
-      const totalNumRuns = runEvalOptions.length;
       const cliProgress = await import('cli-progress');
       progressbar = new cliProgress.SingleBar(
         {
@@ -394,11 +393,14 @@ class Evaluator {
         },
         cliProgress.Presets.shades_classic,
       );
-      progressbar.start(totalNumRuns, 0, {
+      progressbar.start(runEvalOptions.length, 0, {
         provider: '',
         prompt: '',
         vars: '',
       });
+    }
+    if (options.progressCallback) {
+      options.progressCallback(0, runEvalOptions.length);
     }
 
     // Actually run the eval
@@ -406,21 +408,24 @@ class Evaluator {
     await async.forEachOfLimit(
       runEvalOptions,
       options.maxConcurrency || DEFAULT_MAX_CONCURRENCY,
-      async (options: RunEvalOptions, index: number | string) => {
-        const row = await this.runEval(options);
+      async (evalStep: RunEvalOptions, index: number | string) => {
+        const row = await this.runEval(evalStep);
 
         results.push(row);
 
         if (progressbar) {
           progressbar.increment({
-            provider: options.provider.id(),
-            prompt: options.prompt.raw.slice(0, 10).replace(/\n/g, ' '),
-            vars: Object.entries(options.test.vars || {})
+            provider: evalStep.provider.id(),
+            prompt: evalStep.prompt.raw.slice(0, 10).replace(/\n/g, ' '),
+            vars: Object.entries(evalStep.test.vars || {})
               .map(([k, v]) => `${k}=${v}`)
               .join(' ')
               .slice(0, 10)
               .replace(/\n/g, ' '),
           });
+        }
+        if (options.progressCallback) {
+          options.progressCallback(results.length, runEvalOptions.length);
         }
 
         // Bookkeeping for table
@@ -441,13 +446,13 @@ class Evaluator {
           resultText = row.response?.output || row.error || '';
         }
 
-        const { rowIndex, colIndex } = options;
+        const { rowIndex, colIndex } = evalStep;
         if (!table.body[rowIndex]) {
           table.body[rowIndex] = {
             outputs: [],
             vars: table.head.vars
               .map((varName) => {
-                const varValue = options.test.vars?.[varName] || '';
+                const varValue = evalStep.test.vars?.[varName] || '';
                 if (typeof varValue === 'string') {
                   return varValue;
                 }
@@ -474,6 +479,9 @@ class Evaluator {
 
     if (progressbar) {
       progressbar.stop();
+    }
+    if (options.progressCallback) {
+      options.progressCallback(runEvalOptions.length, runEvalOptions.length);
     }
 
     telemetry.record('eval_ran', {});

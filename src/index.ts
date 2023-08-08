@@ -3,7 +3,7 @@ import providers from './providers';
 import telemetry from './telemetry';
 import { evaluate as doEvaluate } from './evaluator';
 import { loadApiProviders } from './providers';
-import { readTests, writeOutput } from './util';
+import { readTests, writeLatestResults, writeOutput } from './util';
 import type { EvaluateOptions, TestSuite, TestSuiteConfig } from './types';
 
 export * from './types';
@@ -12,6 +12,7 @@ export { generateTable } from './table';
 
 interface EvaluateTestSuite extends TestSuiteConfig {
   prompts: string[];
+  writeLatestResults?: boolean;
 }
 
 async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions = {}) {
@@ -31,6 +32,10 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
 
   if (testSuite.outputPath) {
     writeOutput(testSuite.outputPath, ret, testSuite, null);
+  }
+
+  if (testSuite.writeLatestResults) {
+    writeLatestResults(ret, {});
   }
 
   await telemetry.send();

@@ -79,7 +79,12 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
                   >
                     <Typography variant="body2">
                       {`Test Case #${index + 1}: ${
-                        testCase.description || `${testCase.assert?.length || 0} assertions`
+                        testCase.description ||
+                        `${testCase.assert?.length || 0} assertions, ${Object.entries(
+                          testCase.vars || {},
+                        )
+                          .map(([k, v]) => k + '=' + v)
+                          .join(', ')}`
                       }`}
                     </Typography>
                   </TableCell>

@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { TextField, Typography, Grid } from '@mui/material';
+import { Box, TextField, Typography, Grid } from '@mui/material';
 
 interface VarsFormProps {
   onAdd: (vars: Record<string, string>) => void;
@@ -19,10 +19,10 @@ const VarsForm: React.FC<VarsFormProps> = ({ onAdd, varsList, initialValues }) =
   }, [varsList, initialValues]);
 
   return (
-    <>
+    <Box my={2}>
       <Typography variant="h6">Vars</Typography>
       {varsList.length > 0 ? (
-        <Grid container spacing={2}>
+        <Grid container spacing={2} my={1}>
           {Object.keys(vars).map((varName, index) => (
             <Grid item xs={12} key={index}>
               <TextField
@@ -53,7 +53,7 @@ const VarsForm: React.FC<VarsFormProps> = ({ onAdd, varsList, initialValues }) =
           Add variables to your prompt using the {'{{varname}}'} syntax.
         </Typography>
       )}
-    </>
+    </Box>
   );
 };
 

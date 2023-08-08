@@ -80,6 +80,7 @@ export interface OutputConfig {
 export interface EvaluateOptions {
   maxConcurrency?: number;
   showProgressBar?: boolean;
+  progressCallback?: (progress: number, total: number) => void;
   generateSuggestions?: boolean;
   repeat?: number;
 }
