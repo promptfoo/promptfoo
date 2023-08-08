@@ -112,9 +112,12 @@ const PromptsSection: React.FC = () => {
                     }}
                     onClick={() => handleEditPrompt(index)}
                   >
-                    <Typography variant="body2">{`Prompt #${index + 1}: ${
-                      prompt.length > 250 ? prompt.slice(0, 250) + ' ...' : prompt
-                    }`}</Typography>
+                    <Typography variant="body2">
+                      {`Prompt #${index + 1}: `}
+                      {(prompt.length > 250 ? prompt.slice(0, 250) + ' ...' : prompt).split(/({{\w+}})/g).map((part, i) => 
+                        /{{\w+}}/g.test(part) ? <span key={i} style={{backgroundColor: 'yellow'}}>{part}</span> : part
+                      )}
+                    </Typography>
                   </TableCell>
                   <TableCell align="right" sx={{ minWidth: 150 }}>
                     <IconButton onClick={() => handleEditPrompt(index)} size="small">
