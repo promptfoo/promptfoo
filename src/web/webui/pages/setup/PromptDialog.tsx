@@ -39,12 +39,13 @@ const PromptDialog: React.FC<PromptDialogProps> = ({ open, prompt, index, onAdd,
       <DialogTitle>{`Edit Prompt ${index + 1}`}</DialogTitle>
       <DialogContent>
         <TextField
-          label={`Prompt ${index + 1}`}
           value={editingPrompt}
           onChange={(e) => setEditingPrompt(e.target.value)}
           fullWidth
           margin="normal"
           multiline
+          placeholder="The quick brown {{animal1}} jumps over the lazy {{animal2}}."
+          helperText="Tip: use the {{varname}} syntax to add variables to your prompt."
           inputRef={textFieldRef}
         />
       </DialogContent>
