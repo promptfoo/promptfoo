@@ -4,8 +4,11 @@ import express from 'express';
 import compression from 'compression';
 import { renderPage } from 'vite-plugin-ssr/server';
 import { root } from './root.js';
+import { v4 as uuidv4 } from 'uuid';
 
 import promptfoo from '../../../../dist/src/index.js';
+
+const evalJobs = new Map();
 
 const isProduction = process.env.NODE_ENV === 'production';
 
@@ -31,17 +34,28 @@ async function startServer() {
     app.use(viteDevMiddleware);
   }
 
-  app.post('/api/eval', async (req, res) => {
+  app.post('/api/eval', (req, res) => {
     const testSuite = req.body;
-    const results = await promptfoo.evaluate(
+    const id = uuidv4();
+    evalJobs.set(id, { status: 'in-progress', progress: 0, total: 0, results: null });
+
+    promptfoo.evaluate(
       Object.assign({}, testSuite, { writeLatestResults: true }),
       {
         progressCallback: (progress, total) => {
+          const job = evalJobs.get(id);
+          job.progress = progress;
+          job.total = total;
           console.log(`Progress: ${progress}/${total}`);
         },
       },
-    );
-    res.json(results);
+    ).then(results => {
+      const job = evalJobs.get(id);
+      job.status = 'completed';
+      job.results = results;
+    });
+
+    res.json({ id });
   });
 
   app.get('*', async (req, res, next) => {
@@ -60,3 +74,16 @@ async function startServer() {
   app.listen(port);
   console.log(`Server running at http://localhost:${port}`);
 }
+app.get('/api/eval/:id', (req, res) => {
+    const id = req.params.id;
+    const job = evalJobs.get(id);
+    if (!job) {
+      res.status(404).json({ error: 'Job not found' });
+      return;
+    }
+    if (job.status === 'completed') {
+      res.json(job.results);
+    } else {
+      res.json({ status: 'in-progress', progress: job.progress, total: job.total });
+    }
+  });
