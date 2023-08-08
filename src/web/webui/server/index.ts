@@ -58,6 +58,20 @@ async function startServer() {
     res.json({ id });
   });
 
+  app.get('/api/eval/:id', (req, res) => {
+    const id = req.params.id;
+    const job = evalJobs.get(id);
+    if (!job) {
+      res.status(404).json({ error: 'Job not found' });
+      return;
+    }
+    if (job.status === 'completed') {
+      res.json(job.results);
+    } else {
+      res.json({ status: 'in-progress', progress: job.progress, total: job.total });
+    }
+  });
+
   app.get('*', async (req, res, next) => {
     const pageContextInit = {
       urlOriginal: req.originalUrl,
@@ -74,16 +88,3 @@ async function startServer() {
   app.listen(port);
   console.log(`Server running at http://localhost:${port}`);
 }
-app.get('/api/eval/:id', (req, res) => {
-    const id = req.params.id;
-    const job = evalJobs.get(id);
-    if (!job) {
-      res.status(404).json({ error: 'Job not found' });
-      return;
-    }
-    if (job.status === 'completed') {
-      res.json(job.results);
-    } else {
-      res.json({ status: 'in-progress', progress: job.progress, total: job.total });
-    }
-  });
