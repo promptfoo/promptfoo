@@ -9,6 +9,7 @@ import {
   TableCell,
   Stack,
   IconButton,
+  TableHead,
 } from '@mui/material';
 import { Edit, Delete } from '@mui/icons-material';
 import TestCaseDialog from './TestCaseDialog';
@@ -55,6 +56,14 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
       </Stack>
       <TableContainer>
         <Table>
+          <TableHead>
+            <TableRow>
+              <TableCell>Description</TableCell>
+              <TableCell>Assertions</TableCell>
+              <TableCell>Variables</TableCell>
+              <TableCell align="right"></TableCell>
+            </TableRow>
+          </TableHead>
           <TableBody>
             {testCases.length === 0 ? (
               <TableRow>
@@ -64,8 +73,7 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
               </TableRow>
             ) : (
               testCases.map((testCase, index) => (
-                <TableRow key={index}>
-                  <TableCell
+                <TableRow key={index}
                     sx={{
                       '&:hover': {
                         backgroundColor: 'rgba(0, 0, 0, 0.04)',
@@ -76,17 +84,22 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
                       setEditingTestCaseIndex(index);
                       setTestCaseDialogOpen(true);
                     }}
+                >
+                  <TableCell
                   >
                     <Typography variant="body2">
-                      {`Test Case #${index + 1}: ${
-                        testCase.description ||
-                        `${testCase.assert?.length || 0} assertions, ${Object.entries(
+                      {testCase.description || `Test Case #${index + 1}`}
+                    </Typography>
+                  </TableCell>
+                  <TableCell>
+                    {testCase.assert?.length || 0} assertions
+                  </TableCell>
+                  <TableCell>
+                    {Object.entries(
                           testCase.vars || {},
                         )
                           .map(([k, v]) => k + '=' + v)
-                          .join(', ')}`
-                      }`}
-                    </Typography>
+                          .join(', ')}
                   </TableCell>
                   <TableCell align="right" sx={{ minWidth: 150 }}>
                     <IconButton
