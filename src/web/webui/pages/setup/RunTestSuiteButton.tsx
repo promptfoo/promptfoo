@@ -6,6 +6,7 @@ import { useStore } from '../../util/store';
 const RunTestSuiteButton: React.FC = () => {
   const { description, providers, prompts, testCases } = useStore();
   const [isRunning, setIsRunning] = useState(false);
+  const [progressPercent, setProgressPercent] = useState(0);
 
   const runTestSuite = async () => {
     setIsRunning(true);
@@ -26,17 +27,29 @@ const RunTestSuiteButton: React.FC = () => {
         body: JSON.stringify(testSuite),
       });
       const data = await response.json();
-      console.log(data);
+
+      const intervalId = setInterval(async () => {
+        const progressResponse = await fetch(`/api/eval/${data.id}`);
+        const progressData = await progressResponse.json();
+
+        if (progressData.status === 'completed') {
+          clearInterval(intervalId);
+          setIsRunning(false);
+        } else {
+          const percent = (progressData.progress / progressData.total) * 100;
+          setProgressPercent(percent);
+        }
+      }, 1000);
     } catch (error) {
       console.error(error);
-    } finally {
       setIsRunning(false);
     }
   };
 
   return (
     <Button variant="contained" color="primary" onClick={runTestSuite} disabled={isRunning}>
-      {isRunning && <CircularProgress size={24} sx={{ marginRight: 2 }} />} Run Evaluation
+      {isRunning ? `${progressPercent.toFixed(0)}% Complete` : 'Run Evaluation'}
+      {isRunning && <CircularProgress size={24} sx={{ marginRight: 2 }} />}
     </Button>
   );
 };
