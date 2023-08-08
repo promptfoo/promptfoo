@@ -8,7 +8,14 @@ import { v4 as uuidv4 } from 'uuid';
 
 import promptfoo from '../../../../dist/src/index.js';
 
-const evalJobs = new Map();
+interface Job {
+  status: 'in-progress' | 'completed';
+  progress: number;
+  total: number;
+  results: any;
+}
+
+const evalJobs = new Map<string, Job>();
 
 const isProduction = process.env.NODE_ENV === 'production';
 
