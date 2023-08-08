@@ -1,4 +1,4 @@
-import axios from 'axios';
+import { fetchJsonWithCache } from '../cache';
 import logger from '../logger';
 
 import type { ApiProvider, ProviderResponse } from '../types.js';
@@ -44,7 +44,13 @@ export class OllamaCompletionProvider implements ApiProvider {
     logger.debug(`Calling Ollama API: ${JSON.stringify(params)}`);
     let response;
     try {
-      response = await axios.post('http://localhost:11434/api/generate', params);
+      response = await fetchJsonWithCache('http://localhost:11434/api/generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(params),
+      });
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,
