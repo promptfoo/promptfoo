@@ -1,10 +1,9 @@
 import rouge from 'rouge';
 import invariant from 'tiny-invariant';
-import nunjucks from 'nunjucks';
 
 import telemetry from './telemetry';
 import { DefaultEmbeddingProvider, DefaultGradingProvider } from './providers/openai';
-import { cosineSimilarity, fetchWithRetries } from './util';
+import { cosineSimilarity, fetchWithRetries, getNunjucksEngine } from './util';
 import { loadApiProvider } from './providers';
 import { DEFAULT_GRADING_PROMPT } from './prompts';
 
@@ -17,6 +16,8 @@ import type {
 } from './types';
 
 const DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD = 0.8;
+
+const nunjucks = getNunjucksEngine();
 
 function handleRougeScore(
   baseType: 'rouge-n',

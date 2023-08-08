@@ -368,7 +368,7 @@ export function writeOutput(
       [...results.table.head.prompts, ...results.table.head.vars],
       ...results.table.body.map((row) => [...row.outputs.map(outputToSimpleString), ...row.vars]),
     ];
-    const htmlOutput = nunjucks.renderString(template, {
+    const htmlOutput = getNunjucksEngine().renderString(template, {
       table,
       results: results.results,
     });
@@ -531,4 +531,11 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
     vars,
     assert: asserts,
   };
+}
+
+export function getNunjucksEngine() {
+  nunjucks.configure({
+    autoescape: false,
+  });
+  return nunjucks;
 }
