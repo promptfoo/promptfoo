@@ -1,5 +1,5 @@
 import logger from '../logger';
-import { fetchJsonWithCache } from '../cache';
+import { fetchWithCache } from '../cache';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
 
 import type { ApiProvider, ProviderResponse } from '../types.js';
@@ -40,7 +40,7 @@ export class LocalAiChatProvider extends LocalAiGenericProvider {
     let data,
       cached = false;
     try {
-      ({ data, cached } = (await fetchJsonWithCache(
+      ({ data, cached } = (await fetchWithCache(
         `${this.apiBaseUrl}/chat/completions`,
         {
           method: 'POST',
@@ -81,7 +81,7 @@ export class LocalAiCompletionProvider extends LocalAiGenericProvider {
     let data,
       cached = false;
     try {
-      ({ data, cached } = (await fetchJsonWithCache(
+      ({ data, cached } = (await fetchWithCache(
         `${this.apiBaseUrl}/completions`,
         {
           method: 'POST',

@@ -42,10 +42,11 @@ export function getCache() {
   return cacheInstance;
 }
 
-export async function fetchJsonWithCache(
+export async function fetchWithCache(
   url: RequestInfo,
   options: RequestInit = {},
   timeout: number,
+  format: 'json' | 'text' = 'json',
 ): Promise<{ data: any; cached: boolean }> {
   if (!enabled) {
     const resp = await fetchWithRetries(url, options, timeout);
@@ -75,7 +76,7 @@ export async function fetchJsonWithCache(
   // Fetch the actual data and store it in the cache
   const response = await fetchWithRetries(url, options, timeout);
   try {
-    const data = await response.json();
+    const data = format === 'json' ? await response.json() : await response.text();
     if (response.ok) {
       logger.debug(`Storing ${url} response in cache: ${JSON.stringify(data)}`);
       await cache.set(cacheKey, JSON.stringify(data));

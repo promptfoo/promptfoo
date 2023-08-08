@@ -1,5 +1,5 @@
 import fetch from 'node-fetch';
-import { fetchJsonWithCache } from '../src/cache';
+import { fetchWithCache } from '../src/cache';
 
 import { OpenAiCompletionProvider, OpenAiChatCompletionProvider } from '../src/providers/openai';
 import { AnthropicCompletionProvider } from '../src/providers/anthropic';
@@ -12,6 +12,7 @@ import {
   AzureOpenAiChatCompletionProvider,
   AzureOpenAiCompletionProvider,
 } from '../src/providers/azureopenai';
+import { OllamaProvider } from '../src/providers/ollama';
 
 jest.mock('node-fetch', () => jest.fn());
 
@@ -165,6 +166,28 @@ describe('providers', () => {
 
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(result.output).toBe('Test output');
+  });
+
+  test('OllamaProvider callApi', async () => {
+    const mockResponse = {
+      text: jest.fn()
+        .mockResolvedValue(`{"model":"llama2:13b","created_at":"2023-08-08T21:50:34.898068Z","response":"Gre","done":false}
+{"model":"llama2:13b","created_at":"2023-08-08T21:50:34.929199Z","response":"at","done":false}
+{"model":"llama2:13b","created_at":"2023-08-08T21:50:34.959989Z","response":" question","done":false}
+{"model":"llama2:13b","created_at":"2023-08-08T21:50:34.992117Z","response":"!","done":false}
+{"model":"llama2:13b","created_at":"2023-08-08T21:50:35.023658Z","response":" The","done":false}
+{"model":"llama2:13b","created_at":"2023-08-08T21:50:35.0551Z","response":" sky","done":false}
+{"model":"llama2:13b","created_at":"2023-08-08T21:50:35.086103Z","response":" appears","done":false}
+{"model":"llama2:13b","created_at":"2023-08-08T21:50:35.117166Z","response":" blue","done":false}
+{"model":"llama2:13b","created_at":"2023-08-08T21:50:41.695299Z","done":true,"context":[1,29871,1,13,9314],"total_duration":10411943458,"load_duration":458333,"sample_count":217,"sample_duration":154566000,"prompt_eval_count":11,"prompt_eval_duration":3334582000,"eval_count":216,"eval_duration":6905134000}`),
+    };
+    (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
+
+    const provider = new OllamaProvider('llama');
+    const result = await provider.callApi('Test prompt');
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(result.output).toBe('Great question! The sky appears blue');
   });
 
   test('loadApiProvider with openai:chat', async () => {

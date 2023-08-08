@@ -1,5 +1,5 @@
 import logger from '../logger';
-import { fetchJsonWithCache } from '../cache';
+import { fetchWithCache } from '../cache';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
 
 import type { ApiProvider, ProviderEmbeddingResponse, ProviderResponse } from '../types.js';
@@ -61,7 +61,7 @@ export class AzureOpenAiEmbeddingProvider extends AzureOpenAiGenericProvider {
     let data,
       cached = false;
     try {
-      ({ data, cached } = (await fetchJsonWithCache(
+      ({ data, cached } = (await fetchWithCache(
         `https://${this.apiHost}/openai/deployments/${this.deploymentName}/embeddings?api-version=2023-07-01-preview`,
         {
           method: 'POST',
@@ -171,7 +171,7 @@ export class AzureOpenAiCompletionProvider extends AzureOpenAiGenericProvider {
     let data,
       cached = false;
     try {
-      ({ data, cached } = (await fetchJsonWithCache(
+      ({ data, cached } = (await fetchWithCache(
         `https://${this.apiHost}/openai/deployments/${this.deploymentName}/completions?api-version=2023-07-01-preview`,
         {
           method: 'POST',
@@ -258,7 +258,7 @@ export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvide
     let data,
       cached = false;
     try {
-      ({ data, cached } = (await fetchJsonWithCache(
+      ({ data, cached } = (await fetchWithCache(
         `https://${this.apiHost}/openai/deployments/${this.deploymentName}/chat/completions?api-version=2023-07-01-preview`,
         {
           method: 'POST',
