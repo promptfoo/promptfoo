@@ -61,13 +61,13 @@ export class OllamaProvider implements ApiProvider {
         error: `API call error: ${String(err)}`,
       };
     }
-    logger.debug(`\tOllama API response: ${JSON.stringify(response.data)}`);
+    logger.debug(`\tOllama API response: ${response.data}`);
 
     try {
       const output = response.data
         .split('\n')
-        .map((s: string) => {
-          const parsed = JSON.parse(s) as OllamaJsonL;
+        .map((line: string) => {
+          const parsed = JSON.parse(line) as OllamaJsonL;
           if (parsed.response) {
             return parsed.response;
           }
