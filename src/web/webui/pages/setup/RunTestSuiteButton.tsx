@@ -49,8 +49,14 @@ const RunTestSuiteButton: React.FC = () => {
 
   return (
     <Button variant="contained" color="primary" onClick={runTestSuite} disabled={isRunning}>
-      {isRunning ? `${progressPercent.toFixed(0)}% Complete` : 'Run Evaluation'}{' '}
-      {isRunning && <CircularProgress size={24} sx={{ marginRight: 2 }} />}
+      {isRunning ? (
+        <>
+          <CircularProgress size={24} sx={{ marginRight: 2 }} />
+          {progressPercent.toFixed(0)}% complete
+        </>
+      ) : (
+        'Run Evaluation'
+      )}
     </Button>
   );
 };

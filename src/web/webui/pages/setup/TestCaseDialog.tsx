@@ -67,10 +67,7 @@ const TestCaseForm: React.FC<TestCaseFormProps> = ({
     <Dialog open={open} onClose={onCancel} fullWidth maxWidth="md">
       <DialogTitle>{initialValues ? 'Edit Test Case' : 'Add Test Case'}</DialogTitle>
       <DialogContent>
-        <Box mt={4}>
-          <Typography variant="h5" gutterBottom>
-            Test Case
-          </Typography>
+        <Box>
           <TextField
             label="Description"
             value={description}

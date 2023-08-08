@@ -78,8 +78,8 @@ function Navigation({
     <Stack direction="row" spacing={2} className="nav">
       <Logo />
       <Link href="/">Home</Link>
-      <Link href="/setup">Create Eval</Link>
-      <Link href="/eval">View Eval</Link>
+      <Link href="/setup">New Eval</Link>
+      <Link href="/eval">View Evals</Link>
       <DarkMode darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} />
     </Stack>
   );

@@ -67,39 +67,35 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
           <TableBody>
             {testCases.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={2} align="center">
+                <TableCell colSpan={4} align="center">
                   No test cases added yet.
                 </TableCell>
               </TableRow>
             ) : (
               testCases.map((testCase, index) => (
-                <TableRow key={index}
-                    sx={{
-                      '&:hover': {
-                        backgroundColor: 'rgba(0, 0, 0, 0.04)',
-                        cursor: 'pointer',
-                      },
-                    }}
-                    onClick={() => {
-                      setEditingTestCaseIndex(index);
-                      setTestCaseDialogOpen(true);
-                    }}
+                <TableRow
+                  key={index}
+                  sx={{
+                    '&:hover': {
+                      backgroundColor: 'rgba(0, 0, 0, 0.04)',
+                      cursor: 'pointer',
+                    },
+                  }}
+                  onClick={() => {
+                    setEditingTestCaseIndex(index);
+                    setTestCaseDialogOpen(true);
+                  }}
                 >
-                  <TableCell
-                  >
+                  <TableCell>
                     <Typography variant="body2">
                       {testCase.description || `Test Case #${index + 1}`}
                     </Typography>
                   </TableCell>
+                  <TableCell>{testCase.assert?.length || 0} assertions</TableCell>
                   <TableCell>
-                    {testCase.assert?.length || 0} assertions
-                  </TableCell>
-                  <TableCell>
-                    {Object.entries(
-                          testCase.vars || {},
-                        )
-                          .map(([k, v]) => k + '=' + v)
-                          .join(', ')}
+                    {Object.entries(testCase.vars || {})
+                      .map(([k, v]) => k + '=' + v)
+                      .join(', ')}
                   </TableCell>
                   <TableCell align="right" sx={{ minWidth: 150 }}>
                     <IconButton
