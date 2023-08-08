@@ -4,17 +4,7 @@ import { fetchJsonWithCache } from '../cache';
 import type { ApiProvider, ProviderResponse } from '../types.js';
 import {REQUEST_TIMEOUT_MS} from './shared';
 
-export class OllamaCompletionProvider implements ApiProvider {
-  static OLLAMA_COMPLETION_MODELS = [
-    'llama2',
-    'llama2-uncensored',
-    'llama2:13b',
-    'orca',
-    'vicuna',
-    'nous-hermes',
-    'wizard-vicuna',
-  ];
-
+export class OllamaProvider implements ApiProvider {
   modelName: string;
 
   constructor(modelName: string) {
