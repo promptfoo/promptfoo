@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Box, TextField, Typography, Grid } from '@mui/material';
+import { Box, TextField, Typography, Stack } from '@mui/material';
 
 interface VarsFormProps {
   onAdd: (vars: Record<string, string>) => void;
@@ -19,8 +19,9 @@ const VarsForm: React.FC<VarsFormProps> = ({ onAdd, varsList, initialValues }) =
   }, [varsList, initialValues]);
 
   return (
+  <>
+    <Typography variant="h6">Vars</Typography>
     <Box my={2}>
-      <Typography variant="h6">Vars</Typography>
       {varsList.length > 0 ? (
         <Stack direction="row" spacing={2} alignItems="center">
           {Object.keys(vars).map((varName, index) => (
@@ -35,6 +36,7 @@ const VarsForm: React.FC<VarsFormProps> = ({ onAdd, varsList, initialValues }) =
               <TextField
                 label="Value"
                 value={vars[varName]}
+                fullWidth
                 onChange={(e) => {
                   const newValue = e.target.value;
                   const newVars = {
@@ -54,6 +56,7 @@ const VarsForm: React.FC<VarsFormProps> = ({ onAdd, varsList, initialValues }) =
         </Typography>
       )}
     </Box>
+</>
   );
 };
 
