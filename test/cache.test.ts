@@ -1,10 +1,10 @@
-import { fetchJsonWithCache, disableCache, enableCache } from '../src/cache.js';
+import { fetchWithCache, disableCache, enableCache } from '../src/cache.js';
 import fetch, { Response } from 'node-fetch';
 
 jest.mock('node-fetch');
 const mockedFetch = fetch as jest.MockedFunction<typeof fetch>;
 
-describe('fetchJsonWithCache', () => {
+describe('fetchWithCache', () => {
   afterEach(() => {
     mockedFetch.mockReset();
   });
@@ -20,7 +20,7 @@ describe('fetchJsonWithCache', () => {
       json: () => Promise.resolve(response),
     } as Response);
 
-    const result = await fetchJsonWithCache(url, {}, 1000);
+    const result = await fetchWithCache(url, {}, 1000);
 
     expect(mockedFetch).toHaveBeenCalledTimes(1);
     expect(result).toEqual({ cached: false, data: response });
@@ -37,7 +37,7 @@ describe('fetchJsonWithCache', () => {
       json: () => Promise.resolve(response),
     } as Response);
 
-    const result = await fetchJsonWithCache(url, {}, 1000);
+    const result = await fetchWithCache(url, {}, 1000);
 
     expect(mockedFetch).toHaveBeenCalledTimes(1);
     expect(result).toEqual({ cached: false, data: response });
@@ -52,7 +52,7 @@ describe('fetchJsonWithCache', () => {
       json: () => Promise.resolve(response),
     } as Response);
 
-    const result = await fetchJsonWithCache(url, {}, 1000);
+    const result = await fetchWithCache(url, {}, 1000);
 
     expect(mockedFetch).toHaveBeenCalledTimes(0);
     expect(result).toEqual({ cached: true, data: response });
@@ -68,7 +68,7 @@ describe('fetchJsonWithCache', () => {
       json: () => Promise.resolve(response),
     } as Response);
 
-    const result = await fetchJsonWithCache(url, {}, 1000);
+    const result = await fetchWithCache(url, {}, 1000);
 
     expect(mockedFetch).toHaveBeenCalledTimes(1);
     expect(result).toEqual({ cached: false, data: response });
@@ -87,7 +87,7 @@ describe('fetchJsonWithCache', () => {
       json: () => Promise.resolve(response),
     } as Response);
 
-    const result = await fetchJsonWithCache(url, {}, 1000);
+    const result = await fetchWithCache(url, {}, 1000);
 
     expect(mockedFetch).toHaveBeenCalledTimes(1);
     expect(result).toEqual({ cached: false, data: response });

@@ -1,5 +1,5 @@
 import fetch from 'node-fetch';
-import { fetchJsonWithCache } from '../src/cache';
+import { fetchWithCache } from '../src/cache';
 
 import { OpenAiCompletionProvider, OpenAiChatCompletionProvider } from '../src/providers/openai';
 import { AnthropicCompletionProvider } from '../src/providers/anthropic';
