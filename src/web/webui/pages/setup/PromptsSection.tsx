@@ -114,9 +114,24 @@ const PromptsSection: React.FC = () => {
                   >
                     <Typography variant="body2">
                       {`Prompt #${index + 1}: `}
-                      {(prompt.length > 250 ? prompt.slice(0, 250) + ' ...' : prompt).split(/({{\w+}})/g).map((part, i) => 
-                        /{{\w+}}/g.test(part) ? <span key={i} style={{backgroundColor: 'yellow'}}>{part}</span> : part
-                      )}
+                      {(prompt.length > 250 ? prompt.slice(0, 250) + ' ...' : prompt)
+                        .split(/({{\w+}})/g)
+                        .map((part, i) =>
+                          /{{\w+}}/g.test(part) ? (
+                            <span
+                              key={i}
+                              style={{
+                                backgroundColor: 'linen',
+                                padding: '0.25rem',
+                                borderRadius: '4px',
+                              }}
+                            >
+                              {part}
+                            </span>
+                          ) : (
+                            part
+                          ),
+                        )}
                     </Typography>
                   </TableCell>
                   <TableCell align="right" sx={{ minWidth: 150 }}>
