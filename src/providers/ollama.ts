@@ -1,11 +1,8 @@
-import { fetchJsonWithCache } from '../cache';
 import logger from '../logger';
+import { fetchJsonWithCache } from '../cache';
 
 import type { ApiProvider, ProviderResponse } from '../types.js';
-
-interface OllamaCompletionOptions {
-  temperature?: number;
-}
+import {REQUEST_TIMEOUT_MS} from './shared';
 
 export class OllamaCompletionProvider implements ApiProvider {
   static OLLAMA_COMPLETION_MODELS = [
@@ -19,11 +16,9 @@ export class OllamaCompletionProvider implements ApiProvider {
   ];
 
   modelName: string;
-  options: OllamaCompletionOptions;
 
-  constructor(modelName: string, context?: OllamaCompletionOptions) {
+  constructor(modelName: string) {
     this.modelName = modelName;
-    this.options = context || {};
   }
 
   id(): string {
@@ -34,11 +29,10 @@ export class OllamaCompletionProvider implements ApiProvider {
     return `[Ollama Provider ${this.modelName}]`;
   }
 
-  async callApi(prompt: string, options?: OllamaCompletionOptions): Promise<ProviderResponse> {
+  async callApi(prompt: string): Promise<ProviderResponse> {
     const params = {
       model: this.modelName,
-      prompt: prompt,
-      temperature: options?.temperature ?? this.options.temperature ?? 0,
+      prompt,
     };
 
     logger.debug(`Calling Ollama API: ${JSON.stringify(params)}`);
@@ -50,7 +44,7 @@ export class OllamaCompletionProvider implements ApiProvider {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(params),
-      });
+      }, REQUEST_TIMEOUT_MS);
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,
