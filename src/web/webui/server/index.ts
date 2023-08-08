@@ -1,18 +1,19 @@
 // Note that this file isn't processed by Vite, see https://github.com/brillout/vite-plugin-ssr/issues/562
 
+import invariant from 'tiny-invariant';
 import express from 'express';
 import compression from 'compression';
 import { renderPage } from 'vite-plugin-ssr/server';
 import { root } from './root.js';
 import { v4 as uuidv4 } from 'uuid';
 
-import promptfoo from '../../../../dist/src/index.js';
+import promptfoo, {EvaluateSummary} from '../../../../dist/src/index.js';
 
 interface Job {
   status: 'in-progress' | 'completed';
   progress: number;
   total: number;
-  results: any;
+  result: EvaluateSummary | null;
 }
 
 const evalJobs = new Map<string, Job>();
@@ -44,22 +45,24 @@ async function startServer() {
   app.post('/api/eval', (req, res) => {
     const testSuite = req.body;
     const id = uuidv4();
-    evalJobs.set(id, { status: 'in-progress', progress: 0, total: 0, results: null });
+    evalJobs.set(id, { status: 'in-progress', progress: 0, total: 0, result: null });
 
     promptfoo.evaluate(
       Object.assign({}, testSuite, { writeLatestResults: true }),
       {
         progressCallback: (progress, total) => {
           const job = evalJobs.get(id);
+          invariant(job, 'Job not found');
           job.progress = progress;
           job.total = total;
           console.log(`Progress: ${progress}/${total}`);
         },
       },
-    ).then(results => {
+    ).then(result => {
       const job = evalJobs.get(id);
+      invariant(job, 'Job not found');
       job.status = 'completed';
-      job.results = results;
+      job.result = result;
     });
 
     res.json({ id });
@@ -73,7 +76,7 @@ async function startServer() {
       return;
     }
     if (job.status === 'completed') {
-      res.json(job.results);
+      res.json(job.result);
     } else {
       res.json({ status: 'in-progress', progress: job.progress, total: job.total });
     }
