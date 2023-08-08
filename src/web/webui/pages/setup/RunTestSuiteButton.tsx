@@ -26,17 +26,17 @@ const RunTestSuiteButton: React.FC = () => {
         },
         body: JSON.stringify(testSuite),
       });
-      const data = await response.json();
+      const job = await response.json();
 
       const intervalId = setInterval(async () => {
-        const progressResponse = await fetch(`/api/eval/${data.id}`);
+        const progressResponse = await fetch(`/api/eval/${job.id}`);
         const progressData = await progressResponse.json();
 
         if (progressData.status === 'completed') {
           clearInterval(intervalId);
           setIsRunning(false);
         } else {
-          const percent = (progressData.progress / progressData.total) * 100;
+          const percent = Math.round((progressData.progress / progressData.total) * 100);
           setProgressPercent(percent);
         }
       }, 1000);
@@ -48,7 +48,7 @@ const RunTestSuiteButton: React.FC = () => {
 
   return (
     <Button variant="contained" color="primary" onClick={runTestSuite} disabled={isRunning}>
-      {isRunning ? `${progressPercent.toFixed(0)}% Complete` : 'Run Evaluation'}
+      {isRunning ? `${progressPercent.toFixed(0)}% Complete` : 'Run Evaluation'}{' '}
       {isRunning && <CircularProgress size={24} sx={{ marginRight: 2 }} />}
     </Button>
   );

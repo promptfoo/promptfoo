@@ -7,7 +7,7 @@ import { renderPage } from 'vite-plugin-ssr/server';
 import { root } from './root.js';
 import { v4 as uuidv4 } from 'uuid';
 
-import promptfoo, {EvaluateSummary} from '../../../../dist/src/index.js';
+import promptfoo, { EvaluateSummary } from '../../../../dist/src/index.js';
 
 interface Job {
   status: 'in-progress' | 'completed';
@@ -47,9 +47,8 @@ async function startServer() {
     const id = uuidv4();
     evalJobs.set(id, { status: 'in-progress', progress: 0, total: 0, result: null });
 
-    promptfoo.evaluate(
-      Object.assign({}, testSuite, { writeLatestResults: true }),
-      {
+    promptfoo
+      .evaluate(Object.assign({}, testSuite, { writeLatestResults: true }), {
         progressCallback: (progress, total) => {
           const job = evalJobs.get(id);
           invariant(job, 'Job not found');
@@ -57,13 +56,13 @@ async function startServer() {
           job.total = total;
           console.log(`Progress: ${progress}/${total}`);
         },
-      },
-    ).then(result => {
-      const job = evalJobs.get(id);
-      invariant(job, 'Job not found');
-      job.status = 'completed';
-      job.result = result;
-    });
+      })
+      .then((result) => {
+        const job = evalJobs.get(id);
+        invariant(job, 'Job not found');
+        job.status = 'completed';
+        job.result = result;
+      });
 
     res.json({ id });
   });
@@ -76,7 +75,7 @@ async function startServer() {
       return;
     }
     if (job.status === 'completed') {
-      res.json(job.result);
+      res.json({ status: 'completed', result: job.result });
     } else {
       res.json({ status: 'in-progress', progress: job.progress, total: job.total });
     }
