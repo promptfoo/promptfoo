@@ -64,7 +64,7 @@ const AssertsForm: React.FC<AssertsFormProps> = ({ onAdd, initialValues }) => {
   return (
     <>
       <Typography variant="h6">Asserts</Typography>
-      <Box my={2}>
+      <Box my={asserts.length > 0 ? 2 : 0}>
         <Stack direction="column" spacing={2}>
           {asserts.map((assert, index) => (
             <Stack key={index} direction="row" spacing={2} alignItems="center">
