@@ -2,13 +2,13 @@ import readline from 'readline';
 
 import async from 'async';
 import chalk from 'chalk';
-import nunjucks from 'nunjucks';
 import invariant from 'tiny-invariant';
 
 import logger from './logger';
 import telemetry from './telemetry';
 import { runAssertions } from './assertions';
 import { generatePrompts } from './suggestions';
+import { getNunjucksEngine } from './util';
 
 import type { SingleBar } from 'cli-progress';
 import type {
@@ -38,6 +38,8 @@ interface RunEvalOptions {
 }
 
 const DEFAULT_MAX_CONCURRENCY = 4;
+
+const nunjucks = getNunjucksEngine();
 
 function generateVarCombinations(
   vars: Record<string, string | string[] | any>,

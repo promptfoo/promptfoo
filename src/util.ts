@@ -12,7 +12,6 @@ import { parse as parseCsv } from 'csv-parse/sync';
 import { stringify } from 'csv-stringify/sync';
 
 import logger from './logger';
-import { assertionFromString } from './assertions';
 import { getDirectory } from './esm';
 
 import type { RequestInfo, RequestInit, Response } from 'node-fetch';
@@ -368,7 +367,7 @@ export function writeOutput(
       [...results.table.head.prompts, ...results.table.head.vars],
       ...results.table.body.map((row) => [...row.outputs.map(outputToSimpleString), ...row.vars]),
     ];
-    const htmlOutput = nunjucks.renderString(template, {
+    const htmlOutput = getNunjucksEngine().renderString(template, {
       table,
       results: results.results,
     });
@@ -520,6 +519,7 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
   for (const [key, value] of Object.entries(row)) {
     if (key === '__expected') {
       if (value.trim() !== '') {
+        const { assertionFromString } = require('./assertions');
         asserts.push(assertionFromString(value));
       }
     } else {
@@ -531,4 +531,11 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
     vars,
     assert: asserts,
   };
+}
+
+export function getNunjucksEngine() {
+  nunjucks.configure({
+    autoescape: false,
+  });
+  return nunjucks;
 }
