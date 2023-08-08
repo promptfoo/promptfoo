@@ -501,8 +501,7 @@ export function readResult(
 export function readLatestResults():
   | { results: EvaluateSummary; config: Partial<UnifiedConfig> }
   | undefined {
-  const latestResultsPath = getLatestResultsPath();
-  return readResult(latestResultsPath);
+  return JSON.parse(fs.readFileSync(getLatestResultsPath(), 'utf-8'));
 }
 
 export function cosineSimilarity(vecA: number[], vecB: number[]) {
