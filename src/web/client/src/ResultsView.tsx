@@ -86,7 +86,7 @@ export default function ResultsView({ recentFiles, onRecentFileSelected }: Resul
     setFailureFilter(newFailureFilter);
   };
 
-  const [wordBreak, setWordBreak] = React.useState<'break-word' | 'break-all'>('break-all');
+  const [wordBreak, setWordBreak] = React.useState<'break-word' | 'break-all'>('break-word');
   const handleWordBreakChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setWordBreak(event.target.checked ? 'break-all' : 'break-word');
   };
