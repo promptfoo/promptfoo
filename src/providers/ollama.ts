@@ -2,7 +2,7 @@ import logger from '../logger';
 import { fetchJsonWithCache } from '../cache';
 
 import type { ApiProvider, ProviderResponse } from '../types.js';
-import {REQUEST_TIMEOUT_MS} from './shared';
+import { REQUEST_TIMEOUT_MS } from './shared';
 
 export class OllamaProvider implements ApiProvider {
   modelName: string;
@@ -28,13 +28,17 @@ export class OllamaProvider implements ApiProvider {
     logger.debug(`Calling Ollama API: ${JSON.stringify(params)}`);
     let response;
     try {
-      response = await fetchJsonWithCache('http://localhost:11434/api/generate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+      response = await fetchJsonWithCache(
+        `${process.env.OLLAMA_BASE_URL || 'http://localhost:11434'}/api/generate`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(params),
         },
-        body: JSON.stringify(params),
-      }, REQUEST_TIMEOUT_MS);
+        REQUEST_TIMEOUT_MS,
+      );
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,
