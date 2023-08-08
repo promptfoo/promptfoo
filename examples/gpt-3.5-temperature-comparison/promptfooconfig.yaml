@@ -20,7 +20,7 @@ providers:
       config:
         temperature: 0
         max_tokens: 128
-        
+
 tests:
   - vars:
       message: hello world

@@ -100,9 +100,19 @@ export async function loadApiProvider(
     const deploymentName = options[2];
 
     if (modelType === 'chat') {
-      return new AzureOpenAiChatCompletionProvider(deploymentName, undefined, context?.config, context?.id);
+      return new AzureOpenAiChatCompletionProvider(
+        deploymentName,
+        undefined,
+        context?.config,
+        context?.id,
+      );
     } else if (modelType === 'completion') {
-      return new AzureOpenAiCompletionProvider(deploymentName, undefined, context?.config, context?.id);
+      return new AzureOpenAiCompletionProvider(
+        deploymentName,
+        undefined,
+        context?.config,
+        context?.id,
+      );
     } else {
       throw new Error(
         `Unknown Azure OpenAI model type: ${modelType}. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>`,
