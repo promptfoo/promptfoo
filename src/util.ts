@@ -12,7 +12,6 @@ import { parse as parseCsv } from 'csv-parse/sync';
 import { stringify } from 'csv-stringify/sync';
 
 import logger from './logger';
-import { assertionFromString } from './assertions';
 import { getDirectory } from './esm';
 
 import type { RequestInfo, RequestInit, Response } from 'node-fetch';
@@ -520,6 +519,7 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
   for (const [key, value] of Object.entries(row)) {
     if (key === '__expected') {
       if (value.trim() !== '') {
+        const { assertionFromString } = require('./assertions');
         asserts.push(assertionFromString(value));
       }
     } else {
