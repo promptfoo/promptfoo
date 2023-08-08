@@ -35,6 +35,7 @@ const RunTestSuiteButton: React.FC = () => {
         if (progressData.status === 'completed') {
           clearInterval(intervalId);
           setIsRunning(false);
+          window.open('/eval', '_blank');
         } else {
           const percent = Math.round((progressData.progress / progressData.total) * 100);
           setProgressPercent(percent);
