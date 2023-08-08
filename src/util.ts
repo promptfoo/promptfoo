@@ -455,10 +455,12 @@ export function writeLatestResults(results: EvaluateSummary, config: Partial<Uni
         2,
       ),
     );
-    if (fs.existsSync(latestResultsPath) && fs.lstatSync(latestResultsPath).isSymbolicLink()) {
+
+    try {
       fs.unlinkSync(latestResultsPath);
-    }
+    } catch {}
     fs.symlinkSync(newResultsPath, latestResultsPath);
+
     cleanupOldResults();
   } catch (err) {
     logger.error(`Failed to write latest results to ${newResultsPath}:\n${err}`);
