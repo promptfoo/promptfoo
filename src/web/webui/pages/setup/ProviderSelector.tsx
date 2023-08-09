@@ -29,8 +29,9 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange
   const [selectedProvider, setSelectedProvider] = React.useState<ProviderConfig | null>(null);
   const value = providers.map((provider) => provider.id || 'Unknown provider');
 
-  const handleProviderClick = (provider: ProviderConfig) => {
-    setSelectedProvider(provider);
+  const handleProviderClick = (providerId: string) => {
+    const provider = providers.find((p) => p.id === providerId);
+    setSelectedProvider(provider || null);
   };
 
   const handleSave = (config: ProviderConfig['config']) => {
@@ -73,7 +74,7 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange
               }
               {...getTagProps({ index })}
               key={typeof provider === 'string' ? provider : provider.id || index}
-              onClick={() => handleProviderClick(provider as ProviderConfig)}
+              onClick={() => handleProviderClick(typeof provider === 'string' ? provider : provider.id)}
             />
           ))
         }
