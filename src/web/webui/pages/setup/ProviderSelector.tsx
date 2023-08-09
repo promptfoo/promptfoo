@@ -27,7 +27,6 @@ interface ProviderSelectorProps {
 
 const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange }) => {
   const [selectedProvider, setSelectedProvider] = React.useState<ProviderConfig | null>(null);
-  const value = providers.map((provider) => provider.id || 'Unknown provider');
 
   const handleProviderClick = (provider: ProviderConfig) => {
     setSelectedProvider(provider);
@@ -49,7 +48,7 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange
         multiple
         freeSolo
         options={defaultProviders}
-        value={value}
+        value={providers}
         onChange={(event, newValue: (string | ProviderConfig)[]) => {
           onChange(newValue.map((value) => (typeof value === 'string' ? { id: value } : value)));
         }}
