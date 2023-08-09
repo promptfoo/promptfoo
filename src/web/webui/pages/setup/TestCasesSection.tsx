@@ -44,7 +44,10 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
 
   const handleRemoveTestCase = (event: React.MouseEvent, index: number) => {
     event.stopPropagation();
-    setTestCases(testCases.filter((_, i) => i !== index));
+
+    if (confirm('Are you sure you want to delete this test case?')) {
+      setTestCases(testCases.filter((_, i) => i !== index));
+    }
   };
 
   const handleDuplicateTestCase = (event: React.MouseEvent, index: number) => {
