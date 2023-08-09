@@ -1,6 +1,7 @@
 // src/components/AssertsForm.tsx
 import React, { useState } from 'react';
-import { Box, Button, TextField, Typography, MenuItem, Stack, IconButton } from '@mui/material';
+import { Box, Button, TextField, Typography, Stack, IconButton } from '@mui/material';
+import Autocomplete from '@mui/material/Autocomplete';
 import { Delete } from '@mui/icons-material';
 import type { Assertion, AssertionType } from '../../../../types';
 
@@ -68,26 +69,20 @@ const AssertsForm: React.FC<AssertsFormProps> = ({ onAdd, initialValues }) => {
         <Stack direction="column" spacing={2}>
           {asserts.map((assert, index) => (
             <Stack key={index} direction="row" spacing={2} alignItems="center">
-              <TextField
-                label="Type"
-                select
+              <Autocomplete
                 value={assert.type}
+                options={assertTypes}
                 sx={{ minWidth: 200 }}
-                onChange={(e) => {
-                  const newType = e.target.value;
+                onChange={(event, newValue) => {
+                  const newType = newValue;
                   const newAsserts = asserts.map((a, i) =>
                     i === index ? { ...a, type: newType as AssertionType } : a,
                   );
                   setAsserts(newAsserts);
                   onAdd(newAsserts);
                 }}
-              >
-                {assertTypes.map((option) => (
-                  <MenuItem key={option} value={option}>
-                    {option}
-                  </MenuItem>
-                ))}
-              </TextField>
+                renderInput={(params) => <TextField {...params} label="Type" />}
+              />
               <TextField
                 label="Value"
                 value={assert.value}
