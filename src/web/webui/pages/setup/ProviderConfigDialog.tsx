@@ -36,20 +36,30 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
     <Dialog open={open} onClose={onClose}>
       <DialogTitle>Edit Provider Config</DialogTitle>
       <DialogContent>
-        <TextField
-          label="Temperature"
-          value={localConfig.temperature}
-          onChange={(e) =>
-            setLocalConfig({ ...localConfig, temperature: parseFloat(e.target.value) })
+        {Object.keys(localConfig).map((key) => {
+          const value = localConfig[key];
+          let handleChange;
+
+          if (typeof value === 'number') {
+            handleChange = (e) =>
+              setLocalConfig({ ...localConfig, [key]: parseFloat(e.target.value) });
+          } else if (typeof value === 'boolean') {
+            handleChange = (e) =>
+              setLocalConfig({ ...localConfig, [key]: e.target.value === 'true' });
+          } else {
+            handleChange = (e) =>
+              setLocalConfig({ ...localConfig, [key]: e.target.value });
           }
-        />
-        <TextField
-          label="Max Tokens"
-          value={localConfig.max_tokens}
-          onChange={(e) =>
-            setLocalConfig({ ...localConfig, max_tokens: parseInt(e.target.value, 10) })
-          }
-        />
+
+          return (
+            <TextField
+              key={key}
+              label={key}
+              value={value}
+              onChange={handleChange}
+            />
+          );
+        })}
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
