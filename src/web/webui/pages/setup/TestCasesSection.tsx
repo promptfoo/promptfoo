@@ -42,7 +42,8 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
     }
   };
 
-  const handleRemoveTestCase = (index: number) => {
+  const handleRemoveTestCase = (event: React.MouseEvent, index: number) => {
+    event.stopPropagation();
     setTestCases(testCases.filter((_, i) => i !== index));
   };
 
@@ -107,7 +108,7 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
                     >
                       <Edit />
                     </IconButton>
-                    <IconButton onClick={() => handleRemoveTestCase(index)} size="small">
+                    <IconButton onClick={(event) => handleRemoveTestCase(event, index)} size="small">
                       <Delete />
                     </IconButton>
                   </TableCell>
