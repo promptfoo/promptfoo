@@ -38,6 +38,7 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange
         onChange={(event, newValue: (string | ProviderConfig)[]) => {
           onChange(newValue.map(value => typeof value === 'string' ? { id: value } : value));
         }}
+        getOptionLabel={(option) => typeof option === 'string' ? option : option.id}
         renderTags={(value: ProviderConfig[], getTagProps) =>
           value.map((provider: ProviderConfig, index: number) => (
             <Chip variant="outlined" label={provider.id || 'Unknown provider'} {...getTagProps({ index })} key={provider.id} />
