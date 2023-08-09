@@ -1,5 +1,5 @@
 import React from 'react';
-import { FormControl, InputLabel, Select, MenuItem, Box, Chip } from '@mui/material';
+import { Autocomplete, Box, Chip, TextField } from '@mui/material';
 
 const providerOptions = ['openai:gpt-3.5-turbo', 'openai:gpt-4', 'localai:chat:vicuna'];
 
@@ -8,33 +8,27 @@ interface ProviderSelectorProps {
   onChange: (providers: string[]) => void;
 }
 
-const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange}) => {
+const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange }) => {
   return (
-    <FormControl fullWidth margin="normal">
-      <InputLabel id="providers-select-label">Providers</InputLabel>
-      <Select
-        labelId="providers-select-label"
-        label="Providers"
+    <Box mt={2}>
+      <Autocomplete
         multiple
+        freeSolo
+        options={providerOptions}
         value={providers}
-        onChange={(e) => {
-          onChange(e.target.value as string[]);
+        onChange={(event, newValue) => {
+          onChange(newValue);
         }}
-        renderValue={(selected) => (
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-            {(selected as string[]).map((value) => (
-              <Chip key={value} label={value} />
-            ))}
-          </Box>
+        renderTags={(value: string[], getTagProps) =>
+          value.map((option: string, index: number) => (
+            <Chip variant="outlined" label={option} {...getTagProps({ index })} />
+          ))
+        }
+        renderInput={(params) => (
+          <TextField {...params} variant="outlined" label="Providers" placeholder="Providers" />
         )}
-      >
-        {providerOptions.map((option) => (
-          <MenuItem key={option} value={option}>
-            {option}
-          </MenuItem>
-        ))}
-      </Select>
-    </FormControl>
+      />
+    </Box>
   );
 };
 
