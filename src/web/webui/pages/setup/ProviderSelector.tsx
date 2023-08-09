@@ -18,7 +18,11 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange
         options={defaultProviders}
         value={providers.map((provider) => provider.id)}
         onChange={(event, newValue) => {
-          onChange(newValue.map((id) => ({ id })));
+          onChange(
+            newValue
+              .filter((id): id is string => id !== undefined)
+              .map((id) => ({ id }))
+          );
         }}
         renderTags={(value: string[], getTagProps) =>
           value.map((option: string, index: number) => (
