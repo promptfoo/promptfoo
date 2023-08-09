@@ -104,6 +104,7 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange
       {selectedProvider && (
         <ProviderConfigDialog
           open={!!selectedProvider}
+          providerId={selectedProvider.id}
           config={selectedProvider.config}
           onClose={() => setSelectedProvider(null)}
           onSave={handleSave}

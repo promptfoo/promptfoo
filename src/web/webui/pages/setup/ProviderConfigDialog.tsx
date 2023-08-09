@@ -12,6 +12,7 @@ import { ProviderConfig } from '../../../../types';
 
 interface ProviderConfigDialogProps {
   open: boolean;
+  providerId: string;
   config: ProviderConfig['config'];
   onClose: () => void;
   onSave: (config: ProviderConfig['config']) => void;
@@ -19,6 +20,7 @@ interface ProviderConfigDialogProps {
 
 const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
   open,
+  providerId,
   config,
   onClose,
   onSave,
@@ -35,24 +37,28 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
 
   return (
     <Dialog open={open} onClose={onClose}>
-      <DialogTitle>Edit Provider Config</DialogTitle>
+      <DialogTitle>Edit {providerId}</DialogTitle>
       <DialogContent>
         {Object.keys(localConfig).map((key) => {
           const value = localConfig[key];
           let handleChange;
 
-          if (typeof value === 'number') {
-            handleChange = (e: React.ChangeEvent<HTMLInputElement>) =>
-              setLocalConfig({ ...localConfig, [key]: parseFloat(e.target.value) });
-          } else if (typeof value === 'boolean') {
-            handleChange = (e: React.ChangeEvent<HTMLInputElement>) =>
-              setLocalConfig({ ...localConfig, [key]: e.target.value === 'true' });
-          } else {
-            handleChange = (e: React.ChangeEvent<HTMLInputElement>) =>
-              setLocalConfig({ ...localConfig, [key]: e.target.value });
-          }
+          if (
+            typeof value === 'number' ||
+            typeof value === 'boolean' ||
+            typeof value === 'string'
+          ) {
+            if (typeof value === 'number') {
+              handleChange = (e: React.ChangeEvent<HTMLInputElement>) =>
+                setLocalConfig({ ...localConfig, [key]: parseFloat(e.target.value) });
+            } else if (typeof value === 'boolean') {
+              handleChange = (e: React.ChangeEvent<HTMLInputElement>) =>
+                setLocalConfig({ ...localConfig, [key]: e.target.value === 'true' });
+            } else {
+              handleChange = (e: React.ChangeEvent<HTMLInputElement>) =>
+                setLocalConfig({ ...localConfig, [key]: e.target.value });
+            }
 
-          if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'string') {
             return (
               <Box key={key} my={2}>
                 <TextField
