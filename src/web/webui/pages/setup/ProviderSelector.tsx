@@ -1,6 +1,6 @@
 import React from 'react';
 import { Autocomplete, Box, Chip, TextField } from '@mui/material';
-import {ProviderConfig} from '../../../../types';
+import { ProviderConfig } from '../../../../types';
 
 const defaultProviders: ProviderConfig[] = [
   {
@@ -25,9 +25,7 @@ interface ProviderSelectorProps {
 }
 
 const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange }) => {
-  console.log('providers', providers);
-  const value = providers.map(provider => provider.id || 'Unknown provider');
-  console.log('value', value);
+  const value = providers.map((provider) => provider.id || 'Unknown provider');
   return (
     <Box mt={2}>
       <Autocomplete
@@ -36,12 +34,29 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange
         options={defaultProviders}
         value={value}
         onChange={(event, newValue: (string | ProviderConfig)[]) => {
-          onChange(newValue.map(value => typeof value === 'string' ? { id: value } : value));
+          onChange(newValue.map((value) => (typeof value === 'string' ? { id: value } : value)));
         }}
-        getOptionLabel={(option) => typeof option === 'string' ? option : option.id}
-        renderTags={(value: ProviderConfig[], getTagProps) =>
-          value.map((provider: ProviderConfig, index: number) => (
-            <Chip variant="outlined" label={provider.id || 'Unknown provider'} {...getTagProps({ index })} key={provider.id} />
+        getOptionLabel={(option) => {
+          if (!option) {
+            return '';
+          }
+          if (typeof option === 'string') {
+            return option;
+          }
+          return (option as ProviderConfig).id || 'Unknown provider';
+        }}
+        renderTags={(value: (string | ProviderConfig)[], getTagProps) =>
+          value.map((provider: string | ProviderConfig, index: number) => (
+            <Chip
+              variant="outlined"
+              label={
+                typeof provider === 'string'
+                  ? provider
+                  : (provider as ProviderConfig).id || 'Unknown provider'
+              }
+              {...getTagProps({ index })}
+              key={typeof provider === 'string' ? provider : provider.id || index}
+            />
           ))
         }
         renderInput={(params) => (

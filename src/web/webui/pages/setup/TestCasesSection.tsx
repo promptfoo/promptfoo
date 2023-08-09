@@ -117,10 +117,16 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
                     >
                       <Edit />
                     </IconButton>
-                    <IconButton onClick={(event) => handleDuplicateTestCase(event, index)} size="small">
+                    <IconButton
+                      onClick={(event) => handleDuplicateTestCase(event, index)}
+                      size="small"
+                    >
                       <Copy />
                     </IconButton>
-                    <IconButton onClick={(event) => handleRemoveTestCase(event, index)} size="small">
+                    <IconButton
+                      onClick={(event) => handleRemoveTestCase(event, index)}
+                      size="small"
+                    >
                       <Delete />
                     </IconButton>
                   </TableCell>
