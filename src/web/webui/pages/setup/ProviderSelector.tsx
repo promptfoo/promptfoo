@@ -31,13 +31,9 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange
         multiple
         freeSolo
         options={defaultProviders}
-        value={providers.map(provider => provider.id)}
+        value={providers.map(provider => provider.id || 'Unknown provider')}
         onChange={(event, newValue: (string | ProviderConfig)[]) => {
-          if (typeof newValue === 'string') {
-            onChange([...providers, { id: newValue }]);
-          } else {
-            onChange(newValue.map(value => typeof value === 'string' ? { id: value } : value));
-          }
+          onChange(newValue.map(value => typeof value === 'string' ? { id: value } : value));
         }}
         renderTags={(value: ProviderConfig[], getTagProps) =>
           value.map((provider: ProviderConfig, index: number) => (
