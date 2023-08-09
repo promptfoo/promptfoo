@@ -105,31 +105,7 @@ const EvaluateTestSuiteCreator: React.FC = () => {
         />
       </Box>
       <Box mt={2}>
-        <FormControl fullWidth margin="normal">
-          <InputLabel id="providers-select-label">Providers</InputLabel>
-          <Select
-            labelId="providers-select-label"
-            label="Providers"
-            multiple
-            value={providers}
-            onChange={(e) => {
-              setProviders(e.target.value as string[]);
-            }}
-            renderValue={(selected) => (
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                {(selected as string[]).map((value) => (
-                  <Chip key={value} label={value} />
-                ))}
-              </Box>
-            )}
-          >
-            {providerOptions.map((option) => (
-              <MenuItem key={option} value={option}>
-                {option}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
+        <ProviderSelector providers={providers} setProviders={setProviders} />
       </Box>
       <Box mt={4} />
       <PromptsSection />
