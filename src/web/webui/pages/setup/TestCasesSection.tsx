@@ -11,7 +11,7 @@ import {
   IconButton,
   TableHead,
 } from '@mui/material';
-import { Edit, Delete } from '@mui/icons-material';
+import { Edit, Delete, ContentCopy as Copy } from '@mui/icons-material';
 import TestCaseDialog from './TestCaseDialog';
 import { useStore } from '../../util/store';
 
@@ -45,6 +45,11 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
   const handleRemoveTestCase = (event: React.MouseEvent, index: number) => {
     event.stopPropagation();
     setTestCases(testCases.filter((_, i) => i !== index));
+  };
+
+  const handleDuplicateTestCase = (index: number) => {
+    const duplicatedTestCase = { ...testCases[index] };
+    setTestCases([...testCases, duplicatedTestCase]);
   };
 
   return (
@@ -107,6 +112,9 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
                       size="small"
                     >
                       <Edit />
+                    </IconButton>
+                    <IconButton onClick={() => handleDuplicateTestCase(index)} size="small">
+                      <Copy />
                     </IconButton>
                     <IconButton onClick={(event) => handleRemoveTestCase(event, index)} size="small">
                       <Delete />
