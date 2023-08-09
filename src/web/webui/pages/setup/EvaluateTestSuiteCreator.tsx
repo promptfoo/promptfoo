@@ -7,11 +7,6 @@ import {
   Container,
   TextField,
   Typography,
-  MenuItem,
-  FormControl,
-  InputLabel,
-  Select,
-  Chip,
   Box,
   Stack,
   Dialog,
@@ -24,9 +19,8 @@ import {
 import RunTestSuiteButton from './RunTestSuiteButton';
 import PromptsSection from './PromptsSection';
 import TestCasesSection from './TestCasesSection';
+import ProviderSelector from './ProviderSelector';
 import { useStore } from '../../util/store';
-
-const providerOptions = ['openai:gpt-3.5-turbo', 'openai:gpt-4', 'localai:chat:vicuna'];
 
 const EvaluateTestSuiteCreator: React.FC = () => {
   const [yamlString, setYamlString] = useState('');
@@ -105,7 +99,7 @@ const EvaluateTestSuiteCreator: React.FC = () => {
         />
       </Box>
       <Box mt={2}>
-        <ProviderSelector providers={providers} setProviders={setProviders} />
+        <ProviderSelector providers={providers} onChange={setProviders} />
       </Box>
       <Box mt={4} />
       <PromptsSection />

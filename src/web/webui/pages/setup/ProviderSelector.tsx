@@ -5,10 +5,10 @@ const providerOptions = ['openai:gpt-3.5-turbo', 'openai:gpt-4', 'localai:chat:v
 
 interface ProviderSelectorProps {
   providers: string[];
-  setProviders: (providers: string[]) => void;
+  onChange: (providers: string[]) => void;
 }
 
-const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, setProviders }) => {
+const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange}) => {
   return (
     <FormControl fullWidth margin="normal">
       <InputLabel id="providers-select-label">Providers</InputLabel>
@@ -18,7 +18,7 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, setProvi
         multiple
         value={providers}
         onChange={(e) => {
-          setProviders(e.target.value as string[]);
+          onChange(e.target.value as string[]);
         }}
         renderValue={(selected) => (
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
