@@ -50,10 +50,6 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange
     }
   };
 
-  const handleProviderClick = (provider: ProviderConfig) => {
-    setSelectedProvider(provider);
-  };
-
   const handleSave = (config: ProviderConfig['config']) => {
     if (selectedProvider) {
       const updatedProviders = providers.map((provider) =>
@@ -87,6 +83,7 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange
           value.map((provider, index: number) => {
             const label = getProviderLabel(provider);
             const key = getProviderKey(provider, index);
+            const isCustom = typeof provider === 'string';
 
             return (
               <Chip
