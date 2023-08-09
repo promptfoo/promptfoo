@@ -47,7 +47,8 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
     setTestCases(testCases.filter((_, i) => i !== index));
   };
 
-  const handleDuplicateTestCase = (index: number) => {
+  const handleDuplicateTestCase = (event: React.MouseEvent, index: number) => {
+    event.stopPropagation();
     const duplicatedTestCase = { ...testCases[index] };
     setTestCases([...testCases, duplicatedTestCase]);
   };
@@ -113,7 +114,7 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
                     >
                       <Edit />
                     </IconButton>
-                    <IconButton onClick={() => handleDuplicateTestCase(index)} size="small">
+                    <IconButton onClick={(event) => handleDuplicateTestCase(event, index)} size="small">
                       <Copy />
                     </IconButton>
                     <IconButton onClick={(event) => handleRemoveTestCase(event, index)} size="small">
