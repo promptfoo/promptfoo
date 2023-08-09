@@ -21,7 +21,7 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange
         }}
         renderTags={(value: string[], getTagProps) =>
           value.map((option: string, index: number) => (
-            <Chip variant="outlined" label={option} {...getTagProps({ index })} />
+            <Chip variant="outlined" label={option} {...getTagProps({ index })} key={index} />
           ))
         }
         renderInput={(params) => (

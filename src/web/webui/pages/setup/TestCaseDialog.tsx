@@ -54,13 +54,13 @@ const TestCaseForm: React.FC<TestCaseFormProps> = ({
       },
       close,
     );
+    if (close) {
+      onCancel();
+    }
     setDescription('');
     setVars({});
     setAsserts([]);
     setAssertsFormKey((prevKey) => prevKey + 1);
-    if (close) {
-      onCancel();
-    }
   };
 
   return (
