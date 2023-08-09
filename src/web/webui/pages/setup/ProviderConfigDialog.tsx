@@ -54,12 +54,13 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
 
           return (
             <Box key={key} my={2}>
-              <TextField
-                label={key}
-                value={value}
-                onChange={handleChange}
-                fullWidth
-              />
+            <TextField
+              label={key}
+              value={value}
+              onChange={handleChange}
+              fullWidth
+              type={typeof value === 'number' ? 'number' : 'text'}
+            />
             </Box>
           );
         })}
