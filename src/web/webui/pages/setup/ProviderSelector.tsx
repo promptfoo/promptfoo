@@ -1,6 +1,7 @@
 import React from 'react';
 import { Autocomplete, Box, Chip, TextField } from '@mui/material';
 import { ProviderConfig } from '../../../../types';
+import ProviderConfigDialog from './ProviderConfigDialog';
 
 const defaultProviders: ProviderConfig[] = [
   {
@@ -25,7 +26,23 @@ interface ProviderSelectorProps {
 }
 
 const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange }) => {
+  const [selectedProvider, setSelectedProvider] = React.useState<ProviderConfig | null>(null);
   const value = providers.map((provider) => provider.id || 'Unknown provider');
+
+  const handleProviderClick = (provider: ProviderConfig) => {
+    setSelectedProvider(provider);
+  };
+
+  const handleSave = (config: ProviderConfig['config']) => {
+    if (selectedProvider) {
+      const updatedProviders = providers.map((provider) =>
+        provider.id === selectedProvider.id ? { ...provider, config } : provider
+      );
+      onChange(updatedProviders);
+      setSelectedProvider(null);
+    }
+  };
+
   return (
     <Box mt={2}>
       <Autocomplete
@@ -56,6 +73,7 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange
               }
               {...getTagProps({ index })}
               key={typeof provider === 'string' ? provider : provider.id || index}
+              onClick={() => handleProviderClick(provider as ProviderConfig)}
             />
           ))
         }
@@ -63,6 +81,14 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange
           <TextField {...params} variant="outlined" label="Providers" placeholder="Providers" />
         )}
       />
+      {selectedProvider && (
+        <ProviderConfigDialog
+          open={!!selectedProvider}
+          config={selectedProvider.config}
+          onClose={() => setSelectedProvider(null)}
+          onSave={handleSave}
+        />
+      )}
     </Box>
   );
 };
