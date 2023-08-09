@@ -1,5 +1,12 @@
 import React from 'react';
-import { Dialog, DialogTitle, DialogContent, TextField, DialogActions, Button } from '@mui/material';
+import {
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  TextField,
+  DialogActions,
+  Button,
+} from '@mui/material';
 import { ProviderConfig } from '../../../../types';
 
 interface ProviderConfigDialogProps {
@@ -9,7 +16,12 @@ interface ProviderConfigDialogProps {
   onSave: (config: ProviderConfig['config']) => void;
 }
 
-const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({ open, config, onClose, onSave }) => {
+const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
+  open,
+  config,
+  onClose,
+  onSave,
+}) => {
   const [localConfig, setLocalConfig] = React.useState(config);
 
   React.useEffect(() => {
@@ -27,12 +39,16 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({ open, confi
         <TextField
           label="Temperature"
           value={localConfig.temperature}
-          onChange={(e) => setLocalConfig({ ...localConfig, temperature: parseFloat(e.target.value) })}
+          onChange={(e) =>
+            setLocalConfig({ ...localConfig, temperature: parseFloat(e.target.value) })
+          }
         />
         <TextField
           label="Max Tokens"
           value={localConfig.max_tokens}
-          onChange={(e) => setLocalConfig({ ...localConfig, max_tokens: parseInt(e.target.value, 10) })}
+          onChange={(e) =>
+            setLocalConfig({ ...localConfig, max_tokens: parseInt(e.target.value, 10) })
+          }
         />
       </DialogContent>
       <DialogActions>

@@ -29,15 +29,14 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange
   const [selectedProvider, setSelectedProvider] = React.useState<ProviderConfig | null>(null);
   const value = providers.map((provider) => provider.id || 'Unknown provider');
 
-  const handleProviderClick = (providerId: string) => {
-    const provider = providers.find((p) => p.id === providerId);
-    setSelectedProvider(provider || null);
+  const handleProviderClick = (provider: ProviderConfig) => {
+    setSelectedProvider(provider);
   };
 
   const handleSave = (config: ProviderConfig['config']) => {
     if (selectedProvider) {
       const updatedProviders = providers.map((provider) =>
-        provider.id === selectedProvider.id ? { ...provider, config } : provider
+        provider.id === selectedProvider.id ? { ...provider, config } : provider,
       );
       onChange(updatedProviders);
       setSelectedProvider(null);
@@ -63,8 +62,8 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange
           }
           return (option as ProviderConfig).id || 'Unknown provider';
         }}
-        renderTags={(value: (string | ProviderConfig)[], getTagProps) =>
-          value.map((provider: string | ProviderConfig, index: number) => (
+        renderTags={(value, getTagProps) =>
+          value.map((provider, index: number) => (
             <Chip
               variant="outlined"
               label={
@@ -74,7 +73,13 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange
               }
               {...getTagProps({ index })}
               key={typeof provider === 'string' ? provider : provider.id || index}
-              onClick={() => handleProviderClick(typeof provider === 'string' ? provider : provider.id)}
+              onClick={() => {
+                if (typeof provider === 'string') {
+                  alert('Cannot edit custom providers');
+                } else {
+                  handleProviderClick(provider as ProviderConfig);
+                }
+              }}
             />
           ))
         }
