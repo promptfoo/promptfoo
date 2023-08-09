@@ -16,7 +16,7 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange
         multiple
         freeSolo
         options={defaultProviders}
-        value={providers.map((provider) => provider.id)}
+        value={providers.map((provider) => provider.id || undefined)}
         onChange={(event, newValue) => {
           onChange(
             newValue
