@@ -28,6 +28,28 @@ interface ProviderSelectorProps {
 const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange }) => {
   const [selectedProvider, setSelectedProvider] = React.useState<ProviderConfig | null>(null);
 
+  const getProviderLabel = (provider: string | ProviderConfig) => {
+    if (typeof provider === 'string') {
+      return provider;
+    }
+    return provider.id || 'Unknown provider';
+  };
+
+  const getProviderKey = (provider: string | ProviderConfig, index: number) => {
+    if (typeof provider === 'string') {
+      return provider;
+    }
+    return provider.id || index;
+  };
+
+  const handleProviderClick = (provider: string | ProviderConfig) => {
+    if (typeof provider === 'string') {
+      alert('Cannot edit custom providers');
+    } else {
+      setSelectedProvider(provider as ProviderConfig);
+    }
+  };
+
   const handleProviderClick = (provider: ProviderConfig) => {
     setSelectedProvider(provider);
   };
@@ -62,25 +84,20 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange
           return (option as ProviderConfig).id || 'Unknown provider';
         }}
         renderTags={(value, getTagProps) =>
-          value.map((provider, index: number) => (
-            <Chip
-              variant="outlined"
-              label={
-                typeof provider === 'string'
-                  ? provider
-                  : (provider as ProviderConfig).id || 'Unknown provider'
-              }
-              {...getTagProps({ index })}
-              key={typeof provider === 'string' ? provider : provider.id || index}
-              onClick={() => {
-                if (typeof provider === 'string') {
-                  alert('Cannot edit custom providers');
-                } else {
-                  handleProviderClick(provider as ProviderConfig);
-                }
-              }}
-            />
-          ))
+          value.map((provider, index: number) => {
+            const label = getProviderLabel(provider);
+            const key = getProviderKey(provider, index);
+
+            return (
+              <Chip
+                variant="outlined"
+                label={label}
+                {...getTagProps({ index })}
+                key={key}
+                onClick={() => handleProviderClick(provider)}
+              />
+            );
+          })
         }
         renderInput={(params) => (
           <TextField {...params} variant="outlined" label="Providers" placeholder="Providers" />
