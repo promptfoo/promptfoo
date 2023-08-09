@@ -30,14 +30,14 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange
       <Autocomplete
         multiple
         freeSolo
-        options={defaultProviders.map((provider) => provider.id || 'Unknown provider')}
-        value={providers.map((provider) => provider.id || 'Unknown provider')}
-        onChange={(event, newValue) => {
-          onChange(newValue.map((id) => ({ id })));
+        options={defaultProviders}
+        value={providers}
+        onChange={(event, newValue: ProviderConfig[]) => {
+          onChange(newValue);
         }}
-        renderTags={(value: string[], getTagProps) =>
-          value.map((option: string, index: number) => (
-            <Chip variant="outlined" label={option} {...getTagProps({ index })} key={index} />
+        renderTags={(value: ProviderConfig[], getTagProps) =>
+          value.map((provider: ProviderConfig, index: number) => (
+            <Chip variant="outlined" label={provider.id || 'Unknown provider'} {...getTagProps({ index })} key={index} />
           ))
         }
         renderInput={(params) => (
