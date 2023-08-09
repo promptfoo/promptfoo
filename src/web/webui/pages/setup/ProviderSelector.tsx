@@ -45,6 +45,8 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange
   const handleProviderClick = (provider: string | ProviderConfig) => {
     if (typeof provider === 'string') {
       alert('Cannot edit custom providers');
+    } else if (!provider.config) {
+      alert('There is no config for this provider');
     } else {
       setSelectedProvider(provider as ProviderConfig);
     }
@@ -83,7 +85,6 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange
           value.map((provider, index: number) => {
             const label = getProviderLabel(provider);
             const key = getProviderKey(provider, index);
-            const isCustom = typeof provider === 'string';
 
             return (
               <Chip
