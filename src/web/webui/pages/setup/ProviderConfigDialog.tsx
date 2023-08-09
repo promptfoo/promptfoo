@@ -41,13 +41,13 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
           let handleChange;
 
           if (typeof value === 'number') {
-            handleChange = (e) =>
+            handleChange = (e: React.ChangeEvent<HTMLInputElement>) =>
               setLocalConfig({ ...localConfig, [key]: parseFloat(e.target.value) });
           } else if (typeof value === 'boolean') {
-            handleChange = (e) =>
+            handleChange = (e: React.ChangeEvent<HTMLInputElement>) =>
               setLocalConfig({ ...localConfig, [key]: e.target.value === 'true' });
           } else {
-            handleChange = (e) =>
+            handleChange = (e: React.ChangeEvent<HTMLInputElement>) =>
               setLocalConfig({ ...localConfig, [key]: e.target.value });
           }
 
