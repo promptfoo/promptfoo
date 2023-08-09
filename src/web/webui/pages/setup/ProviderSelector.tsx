@@ -25,13 +25,16 @@ interface ProviderSelectorProps {
 }
 
 const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange }) => {
+  console.log('providers', providers);
+  const value = providers.map(provider => provider.id || 'Unknown provider');
+  console.log('value', value);
   return (
     <Box mt={2}>
       <Autocomplete
         multiple
         freeSolo
         options={defaultProviders}
-        value={providers.map(provider => provider.id || 'Unknown provider')}
+        value={value}
         onChange={(event, newValue: (string | ProviderConfig)[]) => {
           onChange(newValue.map(value => typeof value === 'string' ? { id: value } : value));
         }}
