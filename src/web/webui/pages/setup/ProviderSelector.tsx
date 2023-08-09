@@ -2,7 +2,7 @@ import React from 'react';
 import { Autocomplete, Box, Chip, TextField } from '@mui/material';
 import {ProviderConfig} from '../../../../types';
 
-const defaultProviders = [
+const defaultProviders: ProviderConfig[] = [
   {
     id: 'openai:gpt-3.5-turbo',
     config: {
@@ -32,8 +32,12 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange
         freeSolo
         options={defaultProviders}
         value={providers}
-        onChange={(event, newValue: ProviderConfig[]) => {
-          onChange(newValue);
+        onChange={(event, newValue: (string | ProviderConfig)[]) => {
+          if (typeof newValue === 'string') {
+            onChange([...providers, { id: newValue }]);
+          } else {
+            onChange(newValue as ProviderConfig[]);
+          }
         }}
         renderTags={(value: ProviderConfig[], getTagProps) =>
           value.map((provider: ProviderConfig, index: number) => (
