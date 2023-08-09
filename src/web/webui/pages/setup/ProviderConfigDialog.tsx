@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  Box,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -52,9 +53,8 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
           }
 
           return (
-            <Box mb={2}>
+            <Box key={key} my={2}>
               <TextField
-                key={key}
                 label={key}
                 value={value}
                 onChange={handleChange}
