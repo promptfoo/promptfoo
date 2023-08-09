@@ -2,7 +2,22 @@ import React from 'react';
 import { Autocomplete, Box, Chip, TextField } from '@mui/material';
 import {ProviderConfig} from '../../../../types';
 
-const defaultProviders = ['openai:gpt-3.5-turbo', 'openai:gpt-4', 'localai:chat:vicuna'];
+const defaultProviders = [
+  {
+    id: 'openai:gpt-3.5-turbo',
+    config: {
+      temperature: 0.5,
+      max_tokens: 1024,
+    },
+  },
+  {
+    id: 'openai:gpt-4',
+    config: {
+      temperature: 0.5,
+      max_tokens: 1024,
+    },
+  },
+];
 
 interface ProviderSelectorProps {
   providers: ProviderConfig[];
@@ -15,14 +30,10 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange
       <Autocomplete
         multiple
         freeSolo
-        options={defaultProviders}
-        value={providers.map((provider) => provider.id || undefined)}
+        options={defaultProviders.map((provider) => provider.id || 'Unknown provider')}
+        value={providers.map((provider) => provider.id || 'Unknown provider')}
         onChange={(event, newValue) => {
-          onChange(
-            newValue
-              .filter((id): id is string => id !== undefined)
-              .map((id) => ({ id }))
-          );
+          onChange(newValue.map((id) => ({ id })));
         }}
         renderTags={(value: string[], getTagProps) =>
           value.map((option: string, index: number) => (
