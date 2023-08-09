@@ -52,17 +52,34 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
               setLocalConfig({ ...localConfig, [key]: e.target.value });
           }
 
-          return (
-            <Box key={key} my={2}>
-            <TextField
-              label={key}
-              value={value}
-              onChange={handleChange}
-              fullWidth
-              type={typeof value === 'number' ? 'number' : 'text'}
-            />
-            </Box>
-          );
+          if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'string') {
+            return (
+              <Box key={key} my={2}>
+                <TextField
+                  label={key}
+                  value={value}
+                  onChange={handleChange}
+                  fullWidth
+                  type={typeof value === 'number' ? 'number' : 'text'}
+                />
+              </Box>
+            );
+          } else {
+            return (
+              <Box key={key} my={2}>
+                <TextField
+                  label={key}
+                  value={JSON.stringify(value)}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                    setLocalConfig({ ...localConfig, [key]: JSON.parse(e.target.value) })
+                  }
+                  fullWidth
+                  multiline
+                  minRows={3}
+                />
+              </Box>
+            );
+          }
         })}
       </DialogContent>
       <DialogActions>
