@@ -22,6 +22,9 @@ export interface CommandLineOptions {
   share?: boolean;
   progressBar?: boolean;
 
+  wandbProject?: string;
+  wandbName?: string;
+
   generateSuggestions?: boolean;
   promptPrefix?: string;
   promptSuffix?: string;
