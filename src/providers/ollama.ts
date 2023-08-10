@@ -66,6 +66,7 @@ export class OllamaProvider implements ApiProvider {
     try {
       const output = response.data
         .split('\n')
+        .filter((line: string) => line.trim() !== '')
         .map((line: string) => {
           const parsed = JSON.parse(line) as OllamaJsonL;
           if (parsed.response) {
