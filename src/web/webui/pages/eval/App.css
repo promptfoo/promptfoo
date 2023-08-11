@@ -2,3 +2,10 @@ body {
   background-color: var(--background-color);
   color: var(--text-color);
 }
+
+.loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+}
