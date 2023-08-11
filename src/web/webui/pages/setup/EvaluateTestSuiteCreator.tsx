@@ -87,6 +87,8 @@ const EvaluateTestSuiteCreator: React.FC = () => {
           </Button>
         </Stack>
       </Stack>
+      <Box mt={4} />
+      {/*
       <Box mt={4}>
         <TextField
           label="Description"
@@ -98,6 +100,7 @@ const EvaluateTestSuiteCreator: React.FC = () => {
           margin="normal"
         />
       </Box>
+      */}
       <Box mt={2}>
         <ProviderSelector providers={providers} onChange={setProviders} />
       </Box>
