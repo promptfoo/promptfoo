@@ -52,7 +52,7 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
 
   const handleDuplicateTestCase = (event: React.MouseEvent, index: number) => {
     event.stopPropagation();
-    const duplicatedTestCase = { ...testCases[index] };
+    const duplicatedTestCase = JSON.parse(JSON.stringify(testCases[index]));
     setTestCases([...testCases, duplicatedTestCase]);
   };
 
