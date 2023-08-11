@@ -14,11 +14,19 @@ body {
   background-color: #eee;
 }
 
+[data-theme='dark'] .nav {
+  background-color: #333;
+}
+
 .nav a {
   padding: 0 0.5rem;
   text-decoration: none;
   color: #000;
   align-self: center;
+}
+
+[data-theme='dark'] .nav a {
+  color: #f0f0f0;
 }
 
 .nav div:last-child {
@@ -28,4 +36,8 @@ body {
 
 .nav a:hover {
   text-decoration: underline;
+}
+
+[data-theme='dark'] .nav a:hover {
+  color: #ddd;
 }
