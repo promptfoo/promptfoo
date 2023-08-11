@@ -121,8 +121,38 @@ async function startServer() {
     res.status(statusCode).type(contentType).send(body);
   });
 
+  const httpServer = http.createServer(app);
+  const io = new SocketIOServer(httpServer, {
+    cors: {
+      origin: '*',
+    },
+  });
+
+  const latestJsonPath = getLatestResultsPath();
+  const readLatestJson = () => {
+    const data = fs.readFileSync(latestJsonPath, 'utf8');
+    return JSON.parse(data);
+  };
+
+  io.on('connection', (socket) => {
+    // Send the initial table data when a client connects
+    socket.emit('init', readLatestJson());
+
+    // Watch for changes to latest.json and emit the update event
+    const watcher = fs.watch(latestJsonPath, (curr, prev) => {
+      if (curr.mtime !== prev.mtime) {
+        socket.emit('update', readLatestJson());
+      }
+    });
+
+    // Stop watching the file when the socket connection is closed
+    socket.on('disconnect', () => {
+      fs.unwatchFile(latestJsonPath, watcher);
+    });
+  });
+
   const port = process.env.PORT || 3000;
-  app.listen(port, () => {
+  httpServer.listen(port, () => {
     const url = `http://localhost:${port}`;
     console.log(`Server listening at ${url}`);
 
