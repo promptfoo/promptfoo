@@ -4,18 +4,23 @@ import fs, { Stats } from 'fs';
 import path from 'node:path';
 import readline from 'node:readline';
 import http from 'node:http';
-import { Server as SocketIOServer } from 'socket.io';
-import opener from 'opener';
 
-import invariant from 'tiny-invariant';
-import express from 'express';
 import compression from 'compression';
+import debounce from 'debounce';
+import express from 'express';
+import invariant from 'tiny-invariant';
+import opener from 'opener';
+import { Server as SocketIOServer } from 'socket.io';
 import { renderPage } from 'vite-plugin-ssr/server';
-import { root } from './root.js';
 import { v4 as uuidv4 } from 'uuid';
 
+import { root } from './root.js';
 import promptfoo, { EvaluateSummary } from '../../../../dist/src/index.js';
-import { getLatestResultsPath, listPreviousResults, readResult } from '../../../../dist/src/util';
+import {
+  getLatestResultsPath,
+  listPreviousResults,
+  readResult,
+} from '../../../../dist/src/util.js';
 
 interface Job {
   status: 'in-progress' | 'completed';
@@ -139,11 +144,12 @@ async function startServer() {
     socket.emit('init', readLatestJson());
 
     // Watch for changes to latest.json and emit the update event
-    const watcher = fs.watch(latestJsonPath, (curr, prev) => {
+    const watcher = debounce((curr: Stats, prev: Stats) => {
       if (curr.mtime !== prev.mtime) {
         socket.emit('update', readLatestJson());
       }
-    });
+    }, 250);
+    fs.watchFile(latestJsonPath, watcher);
 
     // Stop watching the file when the socket connection is closed
     socket.on('disconnect', () => {
@@ -151,7 +157,7 @@ async function startServer() {
     });
   });
 
-  const port = process.env.PORT || 3000;
+  const port = process.env.PORT || 15500;
   httpServer.listen(port, () => {
     const url = `http://localhost:${port}`;
     console.log(`Server listening at ${url}`);
