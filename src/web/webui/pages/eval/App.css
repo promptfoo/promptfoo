@@ -5,7 +5,9 @@ body {
 
 .loading {
   display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
   justify-content: center;
   align-items: center;
-  height: 10vh;
+  height: 9rem;
 }

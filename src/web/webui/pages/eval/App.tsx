@@ -1,9 +1,10 @@
 import * as React from 'react';
-
+import CircularProgress from '@mui/material/CircularProgress';
 import { io as SocketIOClient } from 'socket.io-client';
 
 import ResultsView from './ResultsView.js';
 import { useStore } from './store.js';
+import './App.css';
 
 import './App.css';
 
@@ -74,10 +75,15 @@ function App() {
     };
   }, [setTable, setConfig]);
 
-  return loaded && table && false ? (
+  return loaded && table ? (
     <ResultsView recentFiles={recentFiles} onRecentFileSelected={handleRecentFileSelection} />
   ) : (
-    <div className="loading">Loading...</div>
+    <div className="loading">
+      <div>
+        <CircularProgress size={22} />
+      </div>
+      <div>Loading eval data</div>
+    </div>
   );
 }
 
