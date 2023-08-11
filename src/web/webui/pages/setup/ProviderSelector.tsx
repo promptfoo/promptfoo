@@ -5,20 +5,47 @@ import ProviderConfigDialog from './ProviderConfigDialog';
 
 const defaultProviders: ProviderConfig[] = [
   {
-    id: 'openai:gpt-3.5-turbo',
-    config: {
-      temperature: 0.5,
-      max_tokens: 1024,
-    },
+    id: 'replicate:replicate/llama70b-v2-chat:e951f18578850b652510200860fc4ea62b3b16fac280f83ff32282f87bbd2e48',
+    config: { temperature: 0.5 },
   },
-  {
-    id: 'openai:gpt-4',
-    config: {
-      temperature: 0.5,
-      max_tokens: 1024,
-    },
-  },
-];
+]
+  .concat(
+    [
+      'anthropic:claude-1',
+      'anthropic:claude-1-100k',
+      'anthropic:claude-instant-1',
+      'anthropic:claude-instant-1-100k',
+    ].map((id) => ({ id, config: { temperature: 0.5 } })),
+  )
+  .concat(
+    [
+      'openai:gpt-3.5-turbo',
+      'openai:gpt-3.5-turbo-0301',
+      'openai:gpt-3.5-turbo-0613',
+      'openai:gpt-3.5-turbo-16k',
+      'openai:gpt-3.5-turbo-16k-0613',
+      'openai:gpt-4',
+      'openai:gpt-4-0314',
+      'openai:gpt-4-0613',
+      'openai:gpt-4-32k',
+      'openai:gpt-4-32k-0314',
+    ].map((id) => ({ id, config: { temperature: 0.5, max_tokens: 1024 } })),
+  )
+  .concat(
+    [
+      'azureopenai:gpt-3.5-turbo',
+      'azureopenai:gpt-3.5-turbo-0301',
+      'azureopenai:gpt-3.5-turbo-0613',
+      'azureopenai:gpt-3.5-turbo-16k',
+      'azureopenai:gpt-3.5-turbo-16k-0613',
+      'azureopenai:gpt-4',
+      'azureopenai:gpt-4-0314',
+      'azureopenai:gpt-4-0613',
+      'azureopenai:gpt-4-32k',
+      'azureopenai:gpt-4-32k-0314',
+    ].map((id) => ({ id, config: { temperature: 0.5, max_tokens: 1024 } })),
+  )
+  .sort((a, b) => a.id.localeCompare(b.id));
 
 interface ProviderSelectorProps {
   providers: ProviderConfig[];
