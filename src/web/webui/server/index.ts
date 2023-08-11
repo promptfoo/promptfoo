@@ -122,6 +122,25 @@ async function startServer() {
   });
 
   const port = process.env.PORT || 3000;
-  app.listen(port);
-  console.log(`Server running at http://localhost:${port}`);
+  app.listen(port, () => {
+    const url = `http://localhost:${port}`;
+    console.log(`Server listening at ${url}`);
+
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+    rl.question('Do you want to open the browser to the URL? (y/N): ', async (answer) => {
+      if (answer.toLowerCase().startsWith('y')) {
+        try {
+          await opener(url);
+          console.log(`Opening browser to: ${url}`);
+        } catch (err) {
+          console.error(`Failed to open browser: ${String(err)}`);
+        }
+      }
+      rl.close();
+      console.log('Press Ctrl+C to stop the server');
+    });
+  });
 }
