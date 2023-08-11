@@ -74,7 +74,7 @@ function App() {
     };
   }, [setTable, setConfig]);
 
-  return loaded && table ? (
+  return loaded && table && false ? (
     <ResultsView recentFiles={recentFiles} onRecentFileSelected={handleRecentFileSelection} />
   ) : (
     <div className="loading">Loading...</div>
