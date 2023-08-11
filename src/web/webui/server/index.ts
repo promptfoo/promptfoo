@@ -89,6 +89,26 @@ async function startServer() {
     }
   });
 
+  app.get('/results', (req, res) => {
+    const previousResults = listPreviousResults();
+    res.json({ data: previousResults });
+  });
+
+  app.get('/results/:filename', (req, res) => {
+    const filename = req.params.filename;
+    const safeFilename = path.basename(filename);
+    if (safeFilename !== filename || !listPreviousResults().includes(safeFilename)) {
+      res.status(400).send('Invalid filename');
+      return;
+    }
+    const result = readResult(safeFilename);
+    if (!result) {
+      res.status(404).send('Result not found');
+      return;
+    }
+    res.json({ data: result });
+  });
+
   app.get('*', async (req, res, next) => {
     const pageContextInit = {
       urlOriginal: req.originalUrl,
