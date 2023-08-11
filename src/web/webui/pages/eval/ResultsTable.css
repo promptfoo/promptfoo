@@ -20,6 +20,16 @@ table,
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
+ins {
+  background-color: #d4fcbc;
+  text-decoration: none;
+}
+
+del {
+  background-color: #fbb6c2;
+  text-decoration: strikethrough;
+}
+
 .tr {
   display: flex;
 }

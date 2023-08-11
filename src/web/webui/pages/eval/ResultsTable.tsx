@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { diffWords } from 'diff';
+import { diffSentences, diffJson, diffWords } from 'diff';
 
 import './index.css';
 
@@ -112,9 +112,34 @@ function EvalOutputCell({
   };
   let text = typeof output.text === 'string' ? output.text : JSON.stringify(output.text);
   if (filterMode === 'different' && firstOutput) {
-    const firstOutputText = typeof firstOutput.text === 'string' ? firstOutput.text : JSON.stringify(firstOutput.text);
-    const diffResult = diffWords(firstOutputText, text);
-    text = diffResult.map(part => part.added ? `<ins>${part.value}</ins>` : part.removed ? `<del>${part.value}</del>` : part.value).join('');
+    const firstOutputText =
+      typeof firstOutput.text === 'string' ? firstOutput.text : JSON.stringify(firstOutput.text);
+    let diffResult;
+    try {
+      // Try parsing the texts as JSON
+      JSON.parse(firstOutputText);
+      JSON.parse(text);
+      // If no errors are thrown, the texts are valid JSON
+      diffResult = diffJson(firstOutputText, text);
+    } catch (error) {
+      // If an error is thrown, the texts are not valid JSON
+      if (firstOutputText.includes('. ') && text.includes('. ')) {
+        // If the texts contain a period, they are considered as prose
+        diffResult = diffSentences(firstOutputText, text);
+      } else {
+        // If the texts do not contain a period, use diffWords
+        diffResult = diffWords(firstOutputText, text);
+      }
+    }
+    text = diffResult
+      .map((part: { added?: boolean; removed?: boolean; value: string }) =>
+        part.added
+          ? `<ins>${part.value}</ins>`
+          : part.removed
+          ? `<del>${part.value}</del>`
+          : part.value,
+      )
+      .join('');
   }
   let chunks: string[] = [];
   if (!output.pass && text.includes('---')) {
@@ -356,7 +381,7 @@ export default function ResultsTable({
               rowIndex={info.row.index}
               promptIndex={idx}
               onRating={handleRating}
-              firstOutput={filteredBody[0].outputs[0]}
+              firstOutput={filteredBody[info.row.index].outputs[0]}
               filterMode={filterMode}
             />
           ),
