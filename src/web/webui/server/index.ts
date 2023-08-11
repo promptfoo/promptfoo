@@ -1,5 +1,12 @@
 // Note that this file isn't processed by Vite, see https://github.com/brillout/vite-plugin-ssr/issues/562
 
+import fs, { Stats } from 'fs';
+import path from 'node:path';
+import readline from 'node:readline';
+import http from 'node:http';
+import { Server as SocketIOServer } from 'socket.io';
+import opener from 'opener';
+
 import invariant from 'tiny-invariant';
 import express from 'express';
 import compression from 'compression';
@@ -8,6 +15,7 @@ import { root } from './root.js';
 import { v4 as uuidv4 } from 'uuid';
 
 import promptfoo, { EvaluateSummary } from '../../../../dist/src/index.js';
+import { getLatestResultsPath, listPreviousResults, readResult } from '../../../../dist/src/util';
 
 interface Job {
   status: 'in-progress' | 'completed';
