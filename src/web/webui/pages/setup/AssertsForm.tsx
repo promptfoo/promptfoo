@@ -1,8 +1,13 @@
 // src/components/AssertsForm.tsx
 import React, { useState } from 'react';
-import { Box, Button, TextField, Typography, Stack, IconButton } from '@mui/material';
 import Autocomplete from '@mui/material/Autocomplete';
-import { Delete } from '@mui/icons-material';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Delete from '@mui/icons-material/Delete';
+import IconButton from '@mui/material/IconButton';
+import Stack from '@mui/material/Stack';
+import TextField from '@mui/material/TextField';
+import Typography from '@mui/material/Typography';
 import type { Assertion, AssertionType } from '../../../../types';
 
 interface AssertsFormProps {

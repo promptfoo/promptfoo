@@ -1,13 +1,16 @@
 import React from 'react';
-import Dialog from '@mui/material/Dialog';
-import DialogTitle from '@mui/material/DialogTitle';
-import DialogContent from '@mui/material/DialogContent';
-import DialogActions from '@mui/material/DialogActions';
+import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import Check from '@mui/icons-material/Check';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
+import FileCopy from '@mui/icons-material/FileCopy';
+import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
+
 import { useStore } from './store';
-import { IconButton, Box } from '@mui/material';
-import { FileCopy, Check } from '@mui/icons-material';
 
 interface ConfigModalProps {
   open: boolean;

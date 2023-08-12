@@ -50,7 +50,6 @@
     "vite-plugin-ssr": "^0.4.131",
     "zustand": "^4.3.8"
   },
-  "type": "module",
   "devDependencies": {
     "@types/diff": "^5.0.3",
     "@types/react-syntax-highlighter": "^15.5.7",

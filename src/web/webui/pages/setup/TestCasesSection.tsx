@@ -1,17 +1,18 @@
 import React from 'react';
-import {
-  Button,
-  Typography,
-  TableContainer,
-  Table,
-  TableBody,
-  TableRow,
-  TableCell,
-  Stack,
-  IconButton,
-  TableHead,
-} from '@mui/material';
-import { Edit, Delete, ContentCopy as Copy } from '@mui/icons-material';
+import Button from '@mui/material/Button';
+import Copy from '@mui/icons-material/ContentCopy';
+import Delete from '@mui/icons-material/Delete';
+import Edit from '@mui/icons-material/Edit';
+import IconButton from '@mui/material/IconButton';
+import Stack from '@mui/material/Stack';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableContainer from '@mui/material/TableContainer';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import Typography from '@mui/material/Typography';
+
 import TestCaseDialog from './TestCaseDialog';
 import { useStore } from '../../util/store';
 

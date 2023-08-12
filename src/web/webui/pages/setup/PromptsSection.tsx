@@ -1,17 +1,17 @@
 import React, { useState, useRef, useEffect } from 'react';
-import {
-  Button,
-  Typography,
-  IconButton,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableRow,
-  Tooltip,
-  Stack,
-} from '@mui/material';
-import { Edit, Delete, Publish } from '@mui/icons-material';
+import Button from '@mui/material/Button';
+import Typography from '@mui/material/Typography';
+import IconButton from '@mui/material/IconButton';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableContainer from '@mui/material/TableContainer';
+import TableRow from '@mui/material/TableRow';
+import Tooltip from '@mui/material/Tooltip';
+import Stack from '@mui/material/Stack';
+import Edit from '@mui/icons-material/Edit';
+import Delete from '@mui/icons-material/Delete';
+import Publish from '@mui/icons-material/Publish';
 
 import PromptDialog from './PromptDialog';
 import { useStore } from '../../util/store';
