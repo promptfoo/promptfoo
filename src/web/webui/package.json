@@ -3,6 +3,7 @@
     "dev": "npm run server",
     "prod": "npm run lint && npm run build && npm run server:prod",
     "build": "vite build",
+    "preview": "vite preview",
     "server": "ts-node ./server/index.ts",
     "server:prod": "cross-env NODE_ENV=production ts-node ./server/index.ts",
     "lint": "eslint . --max-warnings 0"

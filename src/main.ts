@@ -24,7 +24,7 @@ import {
 import { DEFAULT_README, DEFAULT_YAML_CONFIG, DEFAULT_PROMPTS } from './onboarding';
 import { disableCache, clearCache } from './cache';
 import { getDirectory } from './esm';
-import { init } from './web/server';
+import { startServer } from './web/webui/server/index';
 import { checkForUpdates } from './updates';
 
 import type {
@@ -127,7 +127,7 @@ async function main() {
         name: 'view',
       });
       await telemetry.send();
-      init(cmdObj.port);
+      startServer(cmdObj.port);
     });
 
   program
@@ -424,7 +424,7 @@ async function main() {
       logger.info('Done.');
 
       if (cmdObj.view) {
-        init(parseInt(cmdObj.view, 10) || 15500);
+        startServer(parseInt(cmdObj.view, 10) || 15500);
       }
     });
 

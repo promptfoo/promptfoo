@@ -15,12 +15,12 @@ import { renderPage } from 'vite-plugin-ssr/server';
 import { v4 as uuidv4 } from 'uuid';
 
 import { root } from './root.js';
-import promptfoo, { EvaluateSummary } from '../../../../dist/src/index.js';
+import promptfoo, { EvaluateSummary } from '../../../../src/index';
 import {
   getLatestResultsPath,
   listPreviousResults,
   readResult,
-} from '../../../../dist/src/util.js';
+} from '../../../../src/util';
 
 interface Job {
   status: 'in-progress' | 'completed';
@@ -33,9 +33,7 @@ const evalJobs = new Map<string, Job>();
 
 const isProduction = process.env.NODE_ENV === 'production';
 
-startServer();
-
-async function startServer() {
+export async function startServer(port?: number) {
   const app = express();
 
   app.use(compression());
@@ -157,9 +155,9 @@ async function startServer() {
     });
   });
 
-  const port = process.env.PORT || 15500;
-  httpServer.listen(port, () => {
-    const url = `http://localhost:${port}`;
+  const listenPort = port || process.env.PORT || 15500;
+  httpServer.listen(listenPort, () => {
+    const url = `http://localhost:${listenPort}`;
     console.log(`Server listening at ${url}`);
 
     const rl = readline.createInterface({

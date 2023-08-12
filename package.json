@@ -25,13 +25,14 @@
     "promptfoo": "dist/src/main.js"
   },
   "scripts": {
+    "tsc": "tsc",
     "local": "ts-node --esm --files src/main.ts",
-    "install:client": "cd src/web/client && npm install",
+    "install:webui": "cd src/web/webui && npm install",
     "build:clean": "rm -rf dist",
-    "build:client": "cd src/web/client && npm run build && cp -r dist/ ../../../dist/src/web/client",
+    "build:webui": "cd src/web/webui && npm run build && cp -r dist/ ../../../dist/src/web/webui",
     "build:watch": "tsc --watch",
-    "build": "tsc && cp src/*.html dist/src && npm run build:client && chmod +x dist/src/main.js",
-    "prepare": "npm run install:client && npm run build:clean && npm run build",
+    "build": "tsc && cp src/*.html dist/src && npm run build:webui && chmod +x dist/src/main.js",
+    "prepare": "npm run install:webui && npm run build:clean && npm run build",
     "test": "jest",
     "test:watch": "jest --watch",
     "format": "prettier -w ."
