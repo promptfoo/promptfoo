@@ -1,6 +1,7 @@
 .nav {
   padding: 0.25rem 0 0.25rem 1rem;
   background-color: #eee;
+  margin-bottom: 1rem;
 }
 
 [data-theme='dark'] .nav {
