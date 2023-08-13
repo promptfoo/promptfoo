@@ -9,12 +9,12 @@ table,
 }
 
 ins {
-  background-color: #d4fcbc;
+  background-color: var(--insert-highlight-color);
   text-decoration: none;
 }
 
 del {
-  background-color: #fbb6c2;
+  background-color: var(--delete-highlight-color);
   text-decoration: strikethrough;
 }
 
