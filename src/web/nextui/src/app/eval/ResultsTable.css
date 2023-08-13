@@ -1,0 +1,179 @@
+table,
+.divTable {
+  border: 1px solid var(--table-border-color);
+  border-collapse: collapse;
+  width: 100%;
+
+  margin: 1rem 0;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+ins {
+  background-color: #d4fcbc;
+  text-decoration: none;
+}
+
+del {
+  background-color: #fbb6c2;
+  text-decoration: strikethrough;
+}
+
+.tr {
+  display: flex;
+}
+
+tr,
+.tr {
+  width: fit-content;
+}
+
+tr:hover,
+.tr:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+th,
+.th,
+td,
+.td {
+  position: relative;
+  box-shadow: inset 0 0 0 1px var(--border-color);
+  vertical-align: top;
+
+  padding: 1.5rem;
+}
+
+th.variable,
+.th.variable,
+td.variable,
+.td.variable {
+  background-color: var(--variable-background-color);
+}
+
+tr.header {
+  background-color: var(--header-background-color);
+}
+
+th,
+.th {
+  padding: 1rem;
+  position: relative;
+  text-align: center;
+  vertical-align: bottom;
+}
+
+th .action {
+  cursor: pointer;
+  margin-left: 0.5rem;
+}
+
+tr .cell {
+}
+
+tr .cell-actions {
+  display: flex;
+  gap: 0.5rem;
+  visibility: hidden;
+  position: absolute;
+  bottom: 1.25rem;
+  right: 0;
+  line-height: 0;
+  font-size: 1.75rem;
+}
+
+tr .cell-detail {
+  visibility: hidden;
+  position: absolute;
+  bottom: 0.25rem;
+  margin-top: 1rem;
+  font-size: 0.75rem;
+  color: #888;
+}
+
+tr:hover .cell-actions,
+tr:hover .cell-detail {
+  visibility: visible;
+}
+
+tr .cell-actions .action {
+  cursor: pointer;
+}
+
+th .smalltext {
+  visibility: hidden;
+  font-weight: normal;
+  font-size: 0.75rem;
+  color: var(--smalltext-color);
+}
+
+th:hover .smalltext {
+  visibility: visible;
+}
+
+th .summary {
+  font-weight: normal;
+  font-size: 0.8rem;
+  padding: 0.25rem;
+}
+
+th .summary.highlight {
+  background-color: var(--success-background-color);
+}
+
+td,
+.td {
+}
+
+td .status {
+  margin-bottom: 0.5rem;
+  font-weight: bold;
+}
+
+td .score {
+  font-weight: normal;
+}
+
+td .pass {
+  color: var(--pass-color);
+}
+
+td .fail {
+  color: var(--fail-color);
+}
+
+.first-prompt-col {
+  border-left: 2px solid #888;
+}
+
+.first-prompt-row {
+  border-top: 2px solid #888;
+}
+
+.resizer {
+  position: absolute;
+  right: 0;
+  top: 0;
+  height: 100%;
+  width: 5px;
+  cursor: col-resize;
+  user-select: none;
+  touch-action: none;
+
+  background: var(--text-color);
+  opacity: 0.5;
+}
+
+.resizer.isResizing {
+  background: var(--text-color);
+  opacity: 1;
+}
+
+@media (hover: hover) {
+  .resizer {
+    opacity: 0;
+  }
+
+  *:hover > .resizer {
+    opacity: 1;
+  }
+}

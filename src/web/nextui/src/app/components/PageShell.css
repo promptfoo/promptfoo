@@ -1,0 +1,32 @@
+.nav {
+  padding: 1rem 0 1rem 1rem;
+  background-color: #eee;
+}
+
+[data-theme='dark'] .nav {
+  background-color: #333;
+}
+
+.nav a {
+  padding: 0 0.5rem;
+  text-decoration: none;
+  color: #000;
+  align-self: center;
+}
+
+[data-theme='dark'] .nav a {
+  color: #f0f0f0;
+}
+
+.nav div:last-child {
+  margin-left: auto;
+  margin-right: 0.5rem;
+}
+
+.nav a:hover {
+  text-decoration: underline;
+}
+
+[data-theme='dark'] .nav a:hover {
+  color: #ddd;
+}

@@ -21,7 +21,12 @@ import type {
 } from './types';
 
 export async function loadApiProviders(
-  providerPaths: ProviderId | ProviderId[] | RawProviderConfig[] | ProviderConfig[] | ProviderFunction,
+  providerPaths:
+    | ProviderId
+    | ProviderId[]
+    | RawProviderConfig[]
+    | ProviderConfig[]
+    | ProviderFunction,
   basePath?: string,
 ): Promise<ApiProvider[]> {
   if (typeof providerPaths === 'string') {
