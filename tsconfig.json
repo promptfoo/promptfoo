@@ -17,7 +17,6 @@
     "node_modules",
     "dist",
     "src/web/client/**/*",
-    "src/web/webui/**/*",
     "src/web/nextui/**/*"
   ]
 }
