@@ -1,3 +1,5 @@
 dist
 venv
-aider*
+.aider*
+src/web/nextui/out
+src/web/nextui/.next

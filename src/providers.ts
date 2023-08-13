@@ -21,7 +21,7 @@ import type {
 } from './types';
 
 export async function loadApiProviders(
-  providerPaths: ProviderId | ProviderId[] | RawProviderConfig[] | ProviderFunction,
+  providerPaths: ProviderId | ProviderId[] | RawProviderConfig[] | ProviderConfig[] | ProviderFunction,
   basePath?: string,
 ): Promise<ApiProvider[]> {
   if (typeof providerPaths === 'string') {
@@ -43,9 +43,13 @@ export async function loadApiProviders(
             id: () => `custom-function-${idx}`,
             callApi: provider,
           };
+        } else if (provider.id) {
+          // List of ProviderConfig objects
+          return loadApiProvider((provider as ProviderConfig).id!, provider, basePath);
         } else {
+          // List of { id: string, config: ProviderConfig } objects
           const id = Object.keys(provider)[0];
-          const providerObject = provider[id];
+          const providerObject = (provider as RawProviderConfig)[id];
           const context = { ...providerObject, id: providerObject.id || id };
           return loadApiProvider(id, context, basePath);
         }

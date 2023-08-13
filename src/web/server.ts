@@ -80,6 +80,7 @@ export function startServer(port = 15500) {
 
   app.get('/results', (req, res) => {
     const previousResults = listPreviousResults();
+    previousResults.reverse();
     res.json({ data: previousResults });
   });
 

@@ -16,11 +16,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 import { root } from './root.js';
 import promptfoo, { EvaluateSummary } from '../../../../src/index';
-import {
-  getLatestResultsPath,
-  listPreviousResults,
-  readResult,
-} from '../../../../src/util';
+import { getLatestResultsPath, listPreviousResults, readResult } from '../../../../src/util';
 
 interface Job {
   status: 'in-progress' | 'completed';

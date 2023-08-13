@@ -28,6 +28,7 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
     })),
   };
   telemetry.maybeShowNotice();
+
   const ret = await doEvaluate(constructedTestSuite, options);
 
   if (testSuite.outputPath) {
