@@ -112,9 +112,21 @@ function EvalOutputCell({
     setOpen(false);
   };
   let text = typeof output.text === 'string' ? output.text : JSON.stringify(output.text);
+  let chunks: string[] = [];
+  if (!output.pass && text.includes('---')) {
+    // TODO(ian): Plumb through failure message instead of parsing it out.
+    chunks = text.split('---');
+    text = chunks.slice(1).join('---');
+  }
+
   if (filterMode === 'different' && firstOutput) {
-    const firstOutputText =
+    let firstOutputText =
       typeof firstOutput.text === 'string' ? firstOutput.text : JSON.stringify(firstOutput.text);
+
+    if (firstOutputText.includes('---')) {
+      firstOutputText = firstOutputText.split('---').slice(1).join('---');
+    }
+
     let diffResult;
     try {
       // Try parsing the texts as JSON
@@ -141,12 +153,6 @@ function EvalOutputCell({
           : part.value,
       )
       .join('');
-  }
-  let chunks: string[] = [];
-  if (!output.pass && text.includes('---')) {
-    // TODO(ian): Plumb through failure message instead of parsing it out.
-    chunks = text.split('---');
-    text = chunks.slice(1).join('---');
   }
 
   const handleClick = (isPass: boolean) => {

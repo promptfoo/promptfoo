@@ -1,10 +1,11 @@
 .logo {
   display: flex;
+  font-family: mono;
+  font-size: 0.8rem;
   align-items: center;
   gap: 8px;
-  border: 1px solid #ccc;
   background-color: #f0f0f0;
-  padding: 0 0.5rem;
+  padding: 0 2rem 0 0;
   border-radius: 0.5rem;
 }
 

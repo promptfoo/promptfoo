@@ -150,7 +150,10 @@ const PromptsSection: React.FC = () => {
                     <IconButton onClick={() => handleEditPrompt(index)} size="small">
                       <Edit />
                     </IconButton>
-                    <IconButton onClick={(event) => handleDuplicatePrompt(event, index)} size="small">
+                    <IconButton
+                      onClick={(event) => handleDuplicatePrompt(event, index)}
+                      size="small"
+                    >
                       <Copy />
                     </IconButton>
                     <IconButton onClick={(event) => handleRemovePrompt(event, index)} size="small">
