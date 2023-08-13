@@ -31,16 +31,31 @@ const RunTestSuiteButton: React.FC = () => {
         },
         body: JSON.stringify(testSuite),
       });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
       const job = await response.json();
 
       const intervalId = setInterval(async () => {
         const progressResponse = await fetch(`${API_BASE_URL}/api/eval/${job.id}`);
+
+        if (!progressResponse.ok) {
+          clearInterval(intervalId);
+          throw new Error(`HTTP error! status: ${progressResponse.status}`);
+        }
+
         const progressData = await progressResponse.json();
 
         if (progressData.status === 'completed') {
           clearInterval(intervalId);
           setIsRunning(false);
           router.push('/eval');
+        } else if (progressData.status === 'failed') {
+          clearInterval(intervalId);
+          setIsRunning(false);
+          throw new Error('Job failed');
         } else {
           const percent =
             progressData.total === 0
