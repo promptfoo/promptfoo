@@ -67,6 +67,7 @@ const RunTestSuiteButton: React.FC = () => {
     } catch (error) {
       console.error(error);
       setIsRunning(false);
+      alert(`An error occurred: ${error.message}`);
     }
   };
 
