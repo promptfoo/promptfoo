@@ -59,7 +59,7 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
 
   return (
     <>
-      <Stack direction="row" spacing={2} marginY={2} justifyContent="space-between">
+      <Stack direction="row" spacing={2} justifyContent="space-between">
         <Typography variant="h5">Test Cases</Typography>
         <Button color="primary" onClick={() => setTestCaseDialogOpen(true)} variant="contained">
           Add Test Case

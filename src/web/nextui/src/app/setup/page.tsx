@@ -104,7 +104,10 @@ const EvaluateTestSuiteCreator: React.FC = () => {
       </Box>
       */}
       <Box mt={2}>
-        <ProviderSelector providers={providers} onChange={setProviders} />
+        <Stack direction="column" spacing={2} justifyContent="space-between">
+          <Typography variant="h5">Providers</Typography>
+          <ProviderSelector providers={providers} onChange={setProviders} />
+        </Stack>
       </Box>
       <Box mt={4} />
       <PromptsSection />

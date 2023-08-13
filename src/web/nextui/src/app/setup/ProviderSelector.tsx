@@ -125,7 +125,7 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange
           })
         }
         renderInput={(params) => (
-          <TextField {...params} variant="outlined" label="Providers" placeholder="Providers" />
+          <TextField {...params} variant="outlined" placeholder="Select LLM providers" />
         )}
       />
       {selectedProvider && selectedProvider.id && (
