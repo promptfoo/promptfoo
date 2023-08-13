@@ -8,6 +8,7 @@ import { v4 as uuidv4 } from 'uuid';
 import debounce from 'debounce';
 import express from 'express';
 import cors from 'cors';
+import compression from 'compression';
 import opener from 'opener';
 import { Server as SocketIOServer } from 'socket.io';
 import promptfoo, { EvaluateSummary } from '../index';
@@ -31,6 +32,7 @@ export function startServer(port = 15500) {
   const staticDir = path.join(getDirectory(), 'web', 'nextui');
 
   app.use(cors());
+  app.use(compression());
   app.use(express.json());
   app.use(express.static(staticDir));
   app.use((req, res, next) => {
