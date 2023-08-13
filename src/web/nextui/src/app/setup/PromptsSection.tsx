@@ -12,6 +12,7 @@ import Stack from '@mui/material/Stack';
 import Edit from '@mui/icons-material/Edit';
 import Delete from '@mui/icons-material/Delete';
 import Publish from '@mui/icons-material/Publish';
+import Copy from '@mui/icons-material/ContentCopy';
 
 import PromptDialog from './PromptDialog';
 import { useStore } from '../../util/store';
@@ -49,6 +50,11 @@ const PromptsSection: React.FC = () => {
       };
       reader.readAsText(file);
     }
+  };
+
+  const handleDuplicatePrompt = (index: number) => {
+    const duplicatedPrompt = prompts[index];
+    setPrompts([...prompts, duplicatedPrompt]);
   };
 
   const handleChangePrompt = (index: number, newPrompt: string) => {
@@ -139,6 +145,9 @@ const PromptsSection: React.FC = () => {
                   <TableCell align="right" sx={{ minWidth: 150 }}>
                     <IconButton onClick={() => handleEditPrompt(index)} size="small">
                       <Edit />
+                    </IconButton>
+                    <IconButton onClick={() => handleDuplicatePrompt(index)} size="small">
+                      <Copy />
                     </IconButton>
                     <IconButton onClick={(event) => handleRemovePrompt(event, index)} size="small">
                       <Delete />
