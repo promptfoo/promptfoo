@@ -25,10 +25,10 @@ interface Job {
 
 const evalJobs = new Map<string, Job>();
 
-export function init(port = 15500) {
+export function startServer(port = 15500) {
   const app = express();
 
-  const staticDir = path.join(getDirectory(), 'web', 'client');
+  const staticDir = path.join(getDirectory(), 'web', 'nextui');
 
   app.use(cors());
   app.use(express.json());

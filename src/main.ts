@@ -24,7 +24,7 @@ import {
 import { DEFAULT_README, DEFAULT_YAML_CONFIG, DEFAULT_PROMPTS } from './onboarding';
 import { disableCache, clearCache } from './cache';
 import { getDirectory } from './esm';
-import { startServer } from './web/webui/server/index';
+import { startServer } from './web/server';
 import { checkForUpdates } from './updates';
 
 import type {
