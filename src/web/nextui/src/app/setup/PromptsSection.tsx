@@ -52,7 +52,8 @@ const PromptsSection: React.FC = () => {
     }
   };
 
-  const handleDuplicatePrompt = (index: number) => {
+  const handleDuplicatePrompt = (event: React.MouseEvent, index: number) => {
+    event.stopPropagation();
     const duplicatedPrompt = prompts[index];
     setPrompts([...prompts, duplicatedPrompt]);
   };
@@ -63,7 +64,10 @@ const PromptsSection: React.FC = () => {
 
   const handleRemovePrompt = (event: React.MouseEvent, indexToRemove: number) => {
     event.stopPropagation();
-    setPrompts(prompts.filter((_, index) => index !== indexToRemove));
+
+    if (confirm('Are you sure you want to remove this prompt?')) {
+      setPrompts(prompts.filter((_, index) => index !== indexToRemove));
+    }
   };
 
   return (
@@ -146,7 +150,7 @@ const PromptsSection: React.FC = () => {
                     <IconButton onClick={() => handleEditPrompt(index)} size="small">
                       <Edit />
                     </IconButton>
-                    <IconButton onClick={() => handleDuplicatePrompt(index)} size="small">
+                    <IconButton onClick={(event) => handleDuplicatePrompt(event, index)} size="small">
                       <Copy />
                     </IconButton>
                     <IconButton onClick={(event) => handleRemovePrompt(event, index)} size="small">
