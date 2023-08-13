@@ -68,7 +68,7 @@ function Navigation({
   darkMode: boolean;
   onToggleDarkMode: () => void;
 }) {
-  if (typeof window === 'undefined' || !window.location.href.includes('localhost')) {
+  if (process.env.NEXT_PUBLIC_NO_BROWSING) {
     return (
       <Stack direction="row" spacing={2} className="nav">
         <Logo />
