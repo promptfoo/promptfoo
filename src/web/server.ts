@@ -35,17 +35,6 @@ export function startServer(port = 15500) {
   app.use(compression());
   app.use(express.json());
   app.use(express.static(staticDir));
-  app.use((req, res, next) => {
-    // Serve /x.html as /x
-    const file = path.join(staticDir, req.path + '.html');
-    fs.access(file, fs.constants.F_OK, (err) => {
-      if (!err) {
-        res.sendFile(file);
-      } else {
-        next();
-      }
-    });
-  });
 
   const httpServer = http.createServer(app);
   const io = new SocketIOServer(httpServer, {
