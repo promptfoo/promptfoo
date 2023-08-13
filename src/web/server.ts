@@ -2,16 +2,28 @@ import fs, { Stats } from 'fs';
 import path from 'node:path';
 import readline from 'node:readline';
 import http from 'node:http';
+import invariant from 'tiny-invariant';
+import { v4 as uuidv4 } from 'uuid';
 
 import debounce from 'debounce';
 import express from 'express';
 import cors from 'cors';
 import opener from 'opener';
 import { Server as SocketIOServer } from 'socket.io';
+import promptfoo, { EvaluateSummary } from '../index';
 
 import logger from '../logger';
 import { getDirectory } from '../esm';
 import { getLatestResultsPath, listPreviousResults, readResult } from '../util';
+
+interface Job {
+  status: 'in-progress' | 'completed';
+  progress: number;
+  total: number;
+  result: EvaluateSummary | null;
+}
+
+const evalJobs = new Map<string, Job>();
 
 export function init(port = 15500) {
   const app = express();
@@ -56,6 +68,45 @@ export function init(port = 15500) {
   app.get('/results', (req, res) => {
     const previousResults = listPreviousResults();
     res.json({ data: previousResults });
+  });
+
+  app.post('/api/eval', (req, res) => {
+    const testSuite = req.body;
+    const id = uuidv4();
+    evalJobs.set(id, { status: 'in-progress', progress: 0, total: 0, result: null });
+
+    promptfoo
+      .evaluate(Object.assign({}, testSuite, { writeLatestResults: true }), {
+        progressCallback: (progress, total) => {
+          const job = evalJobs.get(id);
+          invariant(job, 'Job not found');
+          job.progress = progress;
+          job.total = total;
+          console.log(`Progress: ${progress}/${total}`);
+        },
+      })
+      .then((result) => {
+        const job = evalJobs.get(id);
+        invariant(job, 'Job not found');
+        job.status = 'completed';
+        job.result = result;
+      });
+
+    res.json({ id });
+  });
+
+  app.get('/api/eval/:id', (req, res) => {
+    const id = req.params.id;
+    const job = evalJobs.get(id);
+    if (!job) {
+      res.status(404).json({ error: 'Job not found' });
+      return;
+    }
+    if (job.status === 'completed') {
+      res.json({ status: 'completed', result: job.result });
+    } else {
+      res.json({ status: 'in-progress', progress: job.progress, total: job.total });
+    }
   });
 
   app.get('/results/:filename', (req, res) => {
