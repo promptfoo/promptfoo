@@ -33,6 +33,7 @@ export function startServer(port = 15500) {
   app.use(cors());
   app.use(express.json());
   app.use(express.static(staticDir));
+  app.use('/eval', express.static(path.join(staticDir, 'eval.html')));
 
   const httpServer = http.createServer(app);
   const io = new SocketIOServer(httpServer, {
