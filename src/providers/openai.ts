@@ -19,6 +19,8 @@ interface OpenAiCompletionOptions {
     parameters: any;
   }[];
   function_call?: 'none' | 'auto';
+  apiKey?: string;
+  organization?: string;
 }
 
 class OpenAiGenericProvider implements ApiProvider {
@@ -67,8 +69,8 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${this.apiKey}`,
-            ...(process.env.OPENAI_ORGANIZATION ? { 'OpenAI-Organization': process.env.OPENAI_ORGANIZATION } : {}),
+            Authorization: `Bearer ${options?.apiKey || this.apiKey}`,
+            ...(options?.organization ? { 'OpenAI-Organization': options.organization } : (process.env.OPENAI_ORGANIZATION ? { 'OpenAI-Organization': process.env.OPENAI_ORGANIZATION } : {})),
           },
           body: JSON.stringify(body),
         },
@@ -184,8 +186,8 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${this.apiKey}`,
-            ...(process.env.OPENAI_ORGANIZATION ? { 'OpenAI-Organization': process.env.OPENAI_ORGANIZATION } : {}),
+            Authorization: `Bearer ${options?.apiKey || this.apiKey}`,
+            ...(options?.organization ? { 'OpenAI-Organization': options.organization } : (process.env.OPENAI_ORGANIZATION ? { 'OpenAI-Organization': process.env.OPENAI_ORGANIZATION } : {})),
           },
           body: JSON.stringify(body),
         },
@@ -283,8 +285,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${this.apiKey}`,
-            ...(process.env.OPENAI_ORGANIZATION ? { 'OpenAI-Organization': process.env.OPENAI_ORGANIZATION } : {}),
+            Authorization: `Bearer ${options?.apiKey || this.apiKey}`,
+            ...(options?.organization ? { 'OpenAI-Organization': options.organization } : (process.env.OPENAI_ORGANIZATION ? { 'OpenAI-Organization': process.env.OPENAI_ORGANIZATION } : {})),
           },
           body: JSON.stringify(body),
         },
