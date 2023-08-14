@@ -1,2 +1,5 @@
 dist
 venv
+.aider*
+src/web/nextui/out
+src/web/nextui/.next

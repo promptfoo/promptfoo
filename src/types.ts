@@ -80,6 +80,7 @@ export interface OutputConfig {
 export interface EvaluateOptions {
   maxConcurrency?: number;
   showProgressBar?: boolean;
+  progressCallback?: (progress: number, total: number) => void;
   generateSuggestions?: boolean;
   repeat?: number;
 }
@@ -256,7 +257,7 @@ export interface TestSuiteConfig {
   description?: string;
 
   // One or more LLM APIs to use, for example: openai:gpt-3.5-turbo, openai:gpt-4, localai:chat:vicuna
-  providers: ProviderId | ProviderId[] | RawProviderConfig[] | ProviderFunction;
+  providers: ProviderId | ProviderId[] | RawProviderConfig[] | ProviderConfig[] | ProviderFunction;
 
   // One or more prompt files to load
   prompts: string | string[];
