@@ -19,6 +19,8 @@ interface OpenAiCompletionOptions {
     parameters: any;
   }[];
   function_call?: 'none' | 'auto';
+  apiKey?: string;
+  organization?: string;
 }
 
 class OpenAiGenericProvider implements ApiProvider {
@@ -40,6 +42,14 @@ class OpenAiGenericProvider implements ApiProvider {
 
   toString(): string {
     return `[OpenAI Provider ${this.modelName}]`;
+  }
+
+  getOrganization(options?: OpenAiCompletionOptions): string | undefined {
+    return options?.organization || process.env.OPENAI_ORGANIZATION;
+  }
+
+  getApiKey(options?: OpenAiCompletionOptions): string | undefined {
+    return options?.apiKey || this.apiKey;
   }
 
   // @ts-ignore: Prompt is not used in this implementation
@@ -67,7 +77,10 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${this.apiKey}`,
+            Authorization: `Bearer ${this.getApiKey()}`,
+            ...(this.getOrganization()
+              ? { 'OpenAI-Organization': this.getOrganization() }
+              : {}),
           },
           body: JSON.stringify(body),
         },
@@ -183,7 +196,10 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${this.apiKey}`,
+            Authorization: `Bearer ${this.getApiKey(options)}`,
+            ...(this.getOrganization(options)
+              ? { 'OpenAI-Organization': this.getOrganization(options) }
+              : {}),
           },
           body: JSON.stringify(body),
         },
@@ -281,7 +297,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${this.apiKey}`,
+            Authorization: `Bearer ${this.getApiKey(options)}`,
+            ...(this.getOrganization(options)
+              ? { 'OpenAI-Organization': this.getOrganization(options) }
+              : {}),
           },
           body: JSON.stringify(body),
         },
