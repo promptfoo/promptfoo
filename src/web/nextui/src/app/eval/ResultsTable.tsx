@@ -19,12 +19,11 @@ import type { CellContext, VisibilityState } from '@tanstack/table-core';
 
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 
-import type { EvalRow, EvalRowOutput, FilterMode } from './types';
-import type { GradingResult } from '../../../../../types';
+import type { EvalRow, EvaluateTableOutput, FilterMode, GradingResult } from './types';
 
 import './ResultsTable.css';
 
-function formatRowOutput(output: EvalRowOutput | string) {
+function formatRowOutput(output: EvaluateTableOutput | string) {
   if (typeof output === 'string') {
     // Backwards compatibility for 0.15.0 breaking change. Remove eventually.
     const pass = output.startsWith('[PASS]');
@@ -88,7 +87,7 @@ function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
 }
 
 interface PromptOutputProps {
-  output: EvalRowOutput;
+  output: EvaluateTableOutput;
   maxTextLength: number;
   rowIndex: number;
   promptIndex: number;
@@ -103,7 +102,7 @@ function EvalOutputCell({
   onRating,
   firstOutput,
   filterMode,
-}: PromptOutputProps & { firstOutput: EvalRowOutput; filterMode: FilterMode }) {
+}: PromptOutputProps & { firstOutput: EvaluateTableOutput; filterMode: FilterMode }) {
   const [openPrompt, setOpen] = React.useState(false);
   const handlePromptOpen = () => {
     setOpen(true);
@@ -383,9 +382,9 @@ export default function ResultsTable({
               </>
             );
           },
-          cell: (info: CellContext<EvalRow, EvalRowOutput>) => (
+          cell: (info: CellContext<EvalRow, EvaluateTableOutput>) => (
             <EvalOutputCell
-              output={info.getValue() as unknown as EvalRowOutput}
+              output={info.getValue() as unknown as EvaluateTableOutput}
               maxTextLength={maxTextLength}
               rowIndex={info.row.index}
               promptIndex={idx}

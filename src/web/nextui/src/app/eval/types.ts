@@ -1,28 +1,12 @@
-import type { EvaluateResult, TokenUsage } from '../../../../../types';
-
-type Prompt = {
-  display: string;
-  raw: string;
-};
+import type { Prompt, EvaluateTableOutput } from '../../../../../types';
 
 export type EvalHead = {
   prompts: Prompt[];
   vars: string[];
 };
 
-// TODO(ian): Remove this and replace with EvaluateResult
-export type EvalRowOutput = {
-  pass: boolean;
-  score: number;
-  text: string | object;
-  prompt: string;
-  latencyMs: number;
-  tokenUsage?: Partial<TokenUsage>;
-  gradingResult: EvaluateResult['gradingResult'];
-};
-
 export type EvalRow = {
-  outputs: EvalRowOutput[];
+  outputs: EvaluateTableOutput[];
   vars: string[]; // model outputs
 };
 
@@ -33,4 +17,4 @@ export type EvalTable = {
 
 export type FilterMode = 'all' | 'failures' | 'different';
 
-export type { UnifiedConfig } from '../../../../../types';
+export * from '../../../../../types';

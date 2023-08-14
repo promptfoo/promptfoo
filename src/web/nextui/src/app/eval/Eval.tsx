@@ -8,8 +8,7 @@ import ResultsView from './ResultsView';
 import { API_BASE_URL } from '@/util/api';
 import { useStore } from './store';
 
-import type { SharedResults } from '../../../../../types';
-import type { EvalTable } from './types';
+import type { EvalTable, SharedResults } from './types';
 
 import './Eval.css';
 

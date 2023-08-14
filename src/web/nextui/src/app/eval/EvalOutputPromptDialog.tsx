@@ -17,7 +17,7 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import Typography from '@mui/material/Typography';
 
-import type { GradingResult } from '../../../../../types';
+import type { GradingResult } from './types';
 
 interface EvalOutputPromptDialogProps {
   open: boolean;
