@@ -38,5 +38,8 @@
     "typescript": "5.1.6",
     "uuid": "^9.0.0",
     "zustand": "^4.4.1"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.5"
   }
 }
