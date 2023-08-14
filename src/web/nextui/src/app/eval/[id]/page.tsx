@@ -1,4 +1,5 @@
 import React from 'react';
+import { notFound } from 'next/navigation';
 
 import Eval from '../Eval';
 
@@ -11,7 +12,7 @@ export async function generateStaticParams() {
 export default async function Page({ params }: { params: { id: string } }) {
   const response = await fetch(`https://api.promptfoo.dev/eval/${params.id}`);
   if (!response.ok) {
-    return <div className="error">Eval not found</div>;
+    notFound();
   }
   const data = await response.json();
 
