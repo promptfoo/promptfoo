@@ -1,7 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  //output: 'standalone',
-  output: 'export',
+  output: process.env.USING_VERCEL ? 'standalone' : 'export',
   trailingSlash: true,
   webpack: (config, { buildId, dev, isServer, defaultLoaders, webpack }) => {
     config.externals.push({
