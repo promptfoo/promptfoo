@@ -74,8 +74,8 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${this.apiKey}`,
-            ...(this.getOrganization(options)
-              ? { 'OpenAI-Organization': this.getOrganization(options) }
+            ...(this.getOrganization()
+              ? { 'OpenAI-Organization': this.getOrganization() }
               : {}),
           },
           body: JSON.stringify(body),
