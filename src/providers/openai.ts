@@ -44,6 +44,10 @@ class OpenAiGenericProvider implements ApiProvider {
     return `[OpenAI Provider ${this.modelName}]`;
   }
 
+  getOrganization(options?: OpenAiCompletionOptions): string | undefined {
+    return options?.organization || process.env.OPENAI_ORGANIZATION;
+  }
+
   // @ts-ignore: Prompt is not used in this implementation
   async callApi(prompt: string, options?: OpenAiCompletionOptions): Promise<ProviderResponse> {
     throw new Error('Not implemented');
@@ -70,8 +74,8 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${this.apiKey}`,
-            ...(process.env.OPENAI_ORGANIZATION
-              ? { 'OpenAI-Organization': process.env.OPENAI_ORGANIZATION }
+            ...(this.getOrganization(options)
+              ? { 'OpenAI-Organization': this.getOrganization(options) }
               : {}),
           },
           body: JSON.stringify(body),
@@ -189,10 +193,8 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${options?.apiKey || this.apiKey}`,
-            ...(options?.organization
-              ? { 'OpenAI-Organization': options.organization }
-              : process.env.OPENAI_ORGANIZATION
-              ? { 'OpenAI-Organization': process.env.OPENAI_ORGANIZATION }
+            ...(this.getOrganization(options)
+              ? { 'OpenAI-Organization': this.getOrganization(options) }
               : {}),
           },
           body: JSON.stringify(body),
@@ -292,10 +294,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${options?.apiKey || this.apiKey}`,
-            ...(options?.organization
-              ? { 'OpenAI-Organization': options.organization }
-              : process.env.OPENAI_ORGANIZATION
-              ? { 'OpenAI-Organization': process.env.OPENAI_ORGANIZATION }
+            ...(this.getOrganization(options)
+              ? { 'OpenAI-Organization': this.getOrganization(options) }
               : {}),
           },
           body: JSON.stringify(body),
