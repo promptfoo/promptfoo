@@ -48,6 +48,10 @@ class OpenAiGenericProvider implements ApiProvider {
     return options?.organization || process.env.OPENAI_ORGANIZATION;
   }
 
+  getApiKey(options?: OpenAiCompletionOptions): string | undefined {
+    return options?.apiKey || this.apiKey;
+  }
+
   // @ts-ignore: Prompt is not used in this implementation
   async callApi(prompt: string, options?: OpenAiCompletionOptions): Promise<ProviderResponse> {
     throw new Error('Not implemented');
@@ -73,7 +77,7 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${this.apiKey}`,
+            Authorization: `Bearer ${this.getApiKey()}`,
             ...(this.getOrganization()
               ? { 'OpenAI-Organization': this.getOrganization() }
               : {}),
@@ -192,7 +196,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${options?.apiKey || this.apiKey}`,
+            Authorization: `Bearer ${this.getApiKey(options)}`,
             ...(this.getOrganization(options)
               ? { 'OpenAI-Organization': this.getOrganization(options) }
               : {}),
@@ -293,7 +297,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${options?.apiKey || this.apiKey}`,
+            Authorization: `Bearer ${this.getApiKey(options)}`,
             ...(this.getOrganization(options)
               ? { 'OpenAI-Organization': this.getOrganization(options) }
               : {}),
