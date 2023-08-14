@@ -282,3 +282,11 @@ export type UnifiedConfig = TestSuiteConfig & {
   evaluateOptions: EvaluateOptions;
   commandLineOptions: Partial<CommandLineOptions>;
 };
+
+export interface SharedResults {
+  data: {
+    version: number;
+    results: EvaluateSummary;
+    config: Partial<UnifiedConfig>;
+  };
+}

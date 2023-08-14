@@ -53,6 +53,10 @@ const EvaluateTestSuiteCreator: React.FC = () => {
     setYamlString(yaml.dump(testSuite));
   }, [description, providers, prompts, testCases]);
 
+  if (process.env.NEXT_PUBLIC_NO_BROWSING) {
+    return null;
+  }
+
   const extractVarsFromPrompts = (prompts: string[]): string[] => {
     const varRegex = /{{(\w+)}}/g;
     const varsSet = new Set<string>();
