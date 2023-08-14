@@ -31,7 +31,7 @@ class OpenAiGenericProvider implements ApiProvider {
   constructor(modelName: string, apiKey?: string) {
     this.modelName = modelName;
 
-    this.apiKey = apiKey || process.env.OPENAI_API_KEY;
+    this.apiKey = apiKey;
 
     this.apiHost = process.env.OPENAI_API_HOST || DEFAULT_OPENAI_HOST;
   }
@@ -49,7 +49,7 @@ class OpenAiGenericProvider implements ApiProvider {
   }
 
   getApiKey(options?: OpenAiCompletionOptions): string | undefined {
-    return options?.apiKey || this.apiKey;
+    return options?.apiKey || this.apiKey || process.env.OPENAI_API_KEY;
   }
 
   // @ts-ignore: Prompt is not used in this implementation
@@ -60,7 +60,7 @@ class OpenAiGenericProvider implements ApiProvider {
 
 export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
   async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
-    if (!this.apiKey) {
+    if (!this.getApiKey()) {
       throw new Error('OpenAI API key must be set for similarity comparison');
     }
 
@@ -148,7 +148,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
   }
 
   async callApi(prompt: string, options?: OpenAiCompletionOptions): Promise<ProviderResponse> {
-    if (!this.apiKey) {
+    if (!this.getApiKey(options)) {
       throw new Error(
         'OpenAI API key is not set. Set OPENAI_API_KEY environment variable or pass it as an argument to the constructor.',
       );
@@ -256,7 +256,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   }
 
   async callApi(prompt: string, options?: OpenAiCompletionOptions): Promise<ProviderResponse> {
-    if (!this.apiKey) {
+    if (!this.getApiKey(options)) {
       throw new Error(
         'OpenAI API key is not set. Set OPENAI_API_KEY environment variable or pass it as an argument to the constructor.',
       );
