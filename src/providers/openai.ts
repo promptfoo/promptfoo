@@ -69,8 +69,10 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${options?.apiKey || this.apiKey}`,
-            ...(options?.organization ? { 'OpenAI-Organization': options.organization } : (process.env.OPENAI_ORGANIZATION ? { 'OpenAI-Organization': process.env.OPENAI_ORGANIZATION } : {})),
+            Authorization: `Bearer ${this.apiKey}`,
+            ...(process.env.OPENAI_ORGANIZATION
+              ? { 'OpenAI-Organization': process.env.OPENAI_ORGANIZATION }
+              : {}),
           },
           body: JSON.stringify(body),
         },
@@ -187,7 +189,11 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${options?.apiKey || this.apiKey}`,
-            ...(options?.organization ? { 'OpenAI-Organization': options.organization } : (process.env.OPENAI_ORGANIZATION ? { 'OpenAI-Organization': process.env.OPENAI_ORGANIZATION } : {})),
+            ...(options?.organization
+              ? { 'OpenAI-Organization': options.organization }
+              : process.env.OPENAI_ORGANIZATION
+              ? { 'OpenAI-Organization': process.env.OPENAI_ORGANIZATION }
+              : {}),
           },
           body: JSON.stringify(body),
         },
@@ -286,7 +292,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${options?.apiKey || this.apiKey}`,
-            ...(options?.organization ? { 'OpenAI-Organization': options.organization } : (process.env.OPENAI_ORGANIZATION ? { 'OpenAI-Organization': process.env.OPENAI_ORGANIZATION } : {})),
+            ...(options?.organization
+              ? { 'OpenAI-Organization': options.organization }
+              : process.env.OPENAI_ORGANIZATION
+              ? { 'OpenAI-Organization': process.env.OPENAI_ORGANIZATION }
+              : {}),
           },
           body: JSON.stringify(body),
         },
