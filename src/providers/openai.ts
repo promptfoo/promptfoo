@@ -316,7 +316,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     try {
       const message = data.choices[0].message;
       const output =
-        message.content === null ? JSON.stringify(message.function_call) : message.content;
+        message.content === null ? message.function_call : message.content;
       return {
         output,
         tokenUsage: cached
