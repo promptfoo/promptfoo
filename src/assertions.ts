@@ -268,13 +268,27 @@ export async function runAssertion(
   }
 
   if (baseType === 'contains-json') {
-    pass = containsJSON(output) !== inverse;
+    const jsonMatch = containsJSON(output);
+    pass = jsonMatch !== inverse;
+
+    if (pass && renderedValue) {
+      invariant(typeof renderedValue === 'object', 'contains-json assertion must have an object value');
+      const validate = ajv.compile(renderedValue);
+      pass = validate(jsonMatch);
+      if (!pass) {
+        return {
+          pass,
+          score: 0,
+          reason: `JSON does not conform to the provided schema. Errors: ${ajv.errorsText(validate.errors)}`,
+          assertion,
+        };
+      }
+    }
+
     return {
       pass,
       score: pass ? 1 : 0,
-      reason: pass
-        ? 'Assertion passed'
-        : `Expected output to ${inverse ? 'not ' : ''}contain valid JSON`,
+      reason: pass ? 'Assertion passed' : 'Expected output to contain valid JSON',
       assertion,
     };
   }
