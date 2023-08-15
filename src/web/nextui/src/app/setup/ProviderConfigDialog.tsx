@@ -8,14 +8,14 @@ import {
   DialogActions,
   Button,
 } from '@mui/material';
-import { ProviderConfig } from '../../../../../types';
+import { ProviderOptions } from '../../../../../types';
 
 interface ProviderConfigDialogProps {
   open: boolean;
   providerId: string;
-  config: ProviderConfig['config'];
+  config: ProviderOptions['config'];
   onClose: () => void;
-  onSave: (config: ProviderConfig['config']) => void;
+  onSave: (config: ProviderOptions['config']) => void;
 }
 
 const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({

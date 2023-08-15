@@ -1,9 +1,9 @@
 import React from 'react';
 import { Autocomplete, Box, Chip, TextField } from '@mui/material';
-import { ProviderConfig } from '../../../../../types';
+import { ProviderOptions } from '../../../../../types';
 import ProviderConfigDialog from './ProviderConfigDialog';
 
-const defaultProviders: ProviderConfig[] = [
+const defaultProviders: ProviderOptions[] = [
   {
     id: 'replicate:replicate/llama70b-v2-chat:e951f18578850b652510200860fc4ea62b3b16fac280f83ff32282f87bbd2e48',
     config: { temperature: 0.5 },
@@ -48,38 +48,38 @@ const defaultProviders: ProviderConfig[] = [
   .sort((a, b) => a.id.localeCompare(b.id));
 
 interface ProviderSelectorProps {
-  providers: ProviderConfig[];
-  onChange: (providers: ProviderConfig[]) => void;
+  providers: ProviderOptions[];
+  onChange: (providers: ProviderOptions[]) => void;
 }
 
 const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange }) => {
-  const [selectedProvider, setSelectedProvider] = React.useState<ProviderConfig | null>(null);
+  const [selectedProvider, setSelectedProvider] = React.useState<ProviderOptions | null>(null);
 
-  const getProviderLabel = (provider: string | ProviderConfig) => {
+  const getProviderLabel = (provider: string | ProviderOptions) => {
     if (typeof provider === 'string') {
       return provider;
     }
     return provider.id || 'Unknown provider';
   };
 
-  const getProviderKey = (provider: string | ProviderConfig, index: number) => {
+  const getProviderKey = (provider: string | ProviderOptions, index: number) => {
     if (typeof provider === 'string') {
       return provider;
     }
     return provider.id || index;
   };
 
-  const handleProviderClick = (provider: string | ProviderConfig) => {
+  const handleProviderClick = (provider: string | ProviderOptions) => {
     if (typeof provider === 'string') {
       alert('Cannot edit custom providers');
     } else if (!provider.config) {
       alert('There is no config for this provider');
     } else {
-      setSelectedProvider(provider as ProviderConfig);
+      setSelectedProvider(provider as ProviderOptions);
     }
   };
 
-  const handleSave = (config: ProviderConfig['config']) => {
+  const handleSave = (config: ProviderOptions['config']) => {
     if (selectedProvider) {
       const updatedProviders = providers.map((provider) =>
         provider.id === selectedProvider.id ? { ...provider, config } : provider,
@@ -96,7 +96,7 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange
         freeSolo
         options={defaultProviders}
         value={providers}
-        onChange={(event, newValue: (string | ProviderConfig)[]) => {
+        onChange={(event, newValue: (string | ProviderOptions)[]) => {
           onChange(newValue.map((value) => (typeof value === 'string' ? { id: value } : value)));
         }}
         getOptionLabel={(option) => {
@@ -106,7 +106,7 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange
           if (typeof option === 'string') {
             return option;
           }
-          return (option as ProviderConfig).id || 'Unknown provider';
+          return (option as ProviderOptions).id || 'Unknown provider';
         }}
         renderTags={(value, getTagProps) =>
           value.map((provider, index: number) => {

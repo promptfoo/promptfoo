@@ -1,18 +1,18 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-import type { Assertion, ProviderConfig, TestCase } from '../../../../types';
+import type { Assertion, ProviderOptions, TestCase } from '../../../../types';
 
 export interface State {
   asserts: Assertion[];
   testCases: TestCase[];
   description: string;
-  providers: ProviderConfig[];
+  providers: ProviderOptions[];
   prompts: string[];
   setAsserts: (asserts: Assertion[]) => void;
   setTestCases: (testCases: TestCase[]) => void;
   setDescription: (description: string) => void;
-  setProviders: (providers: ProviderConfig[]) => void;
+  setProviders: (providers: ProviderOptions[]) => void;
   setPrompts: (prompts: string[]) => void;
 }
 
