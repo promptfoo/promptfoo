@@ -177,6 +177,7 @@ export interface Assertion {
   value?:
     | string
     | string[]
+    | object
     | ((output: string, testCase: AtomicTestCase, assertion: Assertion) => Promise<GradingResult>);
 
   // The threshold value, only applicable for similarity (cosine distance)
