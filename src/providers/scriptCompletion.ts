@@ -1,6 +1,6 @@
 import { exec } from 'child_process';
 
-import { ApiProvider, ProviderConfig, ProviderResponse } from '../types';
+import { ApiProvider, ProviderOptions, ProviderResponse } from '../types';
 
 const ANSI_ESCAPE = /\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;
 
@@ -9,7 +9,7 @@ function stripText(text: string) {
 }
 
 export class ScriptCompletionProvider implements ApiProvider {
-  constructor(private scriptPath: string, private config?: ProviderConfig) {}
+  constructor(private scriptPath: string, private config?: ProviderOptions) {}
 
   id() {
     return `exec:${this.scriptPath}`;

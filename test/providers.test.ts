@@ -7,7 +7,7 @@ import { LlamaProvider } from '../src/providers/llama';
 
 import { disableCache, enableCache } from '../src/cache.js';
 import { loadApiProvider, loadApiProviders } from '../src/providers.js';
-import type { RawProviderConfig, ProviderFunction } from '../src/types';
+import type { ProviderOptionsMap, ProviderFunction } from '../src/types';
 import {
   AzureOpenAiChatCompletionProvider,
   AzureOpenAiCompletionProvider,
@@ -262,7 +262,7 @@ describe('providers', () => {
   });
 
   test('loadApiProviders with RawProviderConfig[]', async () => {
-    const rawProviderConfigs: RawProviderConfig[] = [
+    const rawProviderConfigs: ProviderOptionsMap[] = [
       {
         'openai:chat:abc123': {
           config: { foo: 'bar' },

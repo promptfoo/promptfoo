@@ -24,7 +24,7 @@ import type {
   UnifiedConfig,
   TestCase,
   Prompt,
-  RawProviderConfig,
+  ProviderOptionsMap,
   TestSuite,
 } from './types';
 
@@ -53,7 +53,7 @@ export function readProviderPromptMap(
 
   for (const provider of config.providers) {
     if (typeof provider === 'object') {
-      const rawProvider = provider as RawProviderConfig;
+      const rawProvider = provider as ProviderOptionsMap;
       const originalId = Object.keys(rawProvider)[0];
       const providerObject = rawProvider[originalId];
       const id = providerObject.id || originalId;

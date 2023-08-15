@@ -1,3 +1,14 @@
 prompts: prompts.txt
 providers: customProvider.js
 tests: vars.csv
+# To compare two of the same provider, you can do the following:
+#
+# providers:
+#   - customProvider.js:
+#       id: custom-provider-hightemp
+#       config:
+#         temperature: 1.0
+#   - customProvider.js:
+#       id: custom-provider-lowtemp
+#       config:
+#         temperature: 0

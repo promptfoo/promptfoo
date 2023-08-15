@@ -27,7 +27,7 @@ export interface CommandLineOptions {
   promptSuffix?: string;
 }
 
-export interface ProviderConfig {
+export interface ProviderOptions {
   id?: ProviderId;
   config?: any;
   prompts?: string[]; // List of prompt display strings
@@ -250,7 +250,7 @@ export type ProviderId = string;
 
 export type ProviderFunction = (prompt: string) => Promise<ProviderResponse>;
 
-export type RawProviderConfig = Record<ProviderId, ProviderConfig>;
+export type ProviderOptionsMap = Record<ProviderId, ProviderOptions>;
 
 // TestSuiteConfig = Test Suite, but before everything is parsed and resolved.  Providers are just strings, prompts are filepaths, tests can be filepath or inline.
 export interface TestSuiteConfig {
@@ -258,7 +258,12 @@ export interface TestSuiteConfig {
   description?: string;
 
   // One or more LLM APIs to use, for example: openai:gpt-3.5-turbo, openai:gpt-4, localai:chat:vicuna
-  providers: ProviderId | ProviderId[] | RawProviderConfig[] | ProviderConfig[] | ProviderFunction;
+  providers:
+    | ProviderId
+    | ProviderId[]
+    | ProviderOptionsMap[]
+    | ProviderOptions[]
+    | ProviderFunction;
 
   // One or more prompt files to load
   prompts: string | string[];
