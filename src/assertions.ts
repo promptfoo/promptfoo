@@ -1,5 +1,6 @@
 import rouge from 'rouge';
 import invariant from 'tiny-invariant';
+import Ajv from 'ajv';
 
 import telemetry from './telemetry';
 import { DefaultEmbeddingProvider, DefaultGradingProvider } from './providers/openai';
@@ -17,6 +18,7 @@ import type {
 
 const DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD = 0.8;
 
+const ajv = new Ajv();
 const nunjucks = getNunjucksEngine();
 
 function handleRougeScore(
@@ -132,12 +134,30 @@ export async function runAssertion(
   }
 
   if (baseType === 'is-json') {
+    let parsedJson;
     try {
-      JSON.parse(output);
+      parsedJson = JSON.parse(output);
       pass = !inverse;
     } catch (err) {
       pass = inverse;
     }
+
+    if (pass && renderedValue) {
+      invariant(typeof renderedValue === 'object', 'is-json assertion must have an object value');
+      const validate = ajv.compile(renderedValue);
+      pass = validate(parsedJson);
+      if (!pass) {
+        return {
+          pass,
+          score: 0,
+          reason: `JSON does not conform to the provided schema. Errors: ${ajv.errorsText(
+            validate.errors,
+          )}`,
+          assertion,
+        };
+      }
+    }
+
     return {
       pass,
       score: pass ? 1 : 0,
@@ -250,13 +270,32 @@ export async function runAssertion(
   }
 
   if (baseType === 'contains-json') {
-    pass = containsJSON(output) !== inverse;
+    const jsonMatch = containsJSON(output);
+    pass = jsonMatch !== inverse;
+
+    if (pass && renderedValue) {
+      invariant(
+        typeof renderedValue === 'object',
+        'contains-json assertion must have an object value',
+      );
+      const validate = ajv.compile(renderedValue);
+      pass = validate(jsonMatch);
+      if (!pass) {
+        return {
+          pass,
+          score: 0,
+          reason: `JSON does not conform to the provided schema. Errors: ${ajv.errorsText(
+            validate.errors,
+          )}`,
+          assertion,
+        };
+      }
+    }
+
     return {
       pass,
       score: pass ? 1 : 0,
-      reason: pass
-        ? 'Assertion passed'
-        : `Expected output to ${inverse ? 'not ' : ''}contain valid JSON`,
+      reason: pass ? 'Assertion passed' : 'Expected output to contain valid JSON',
       assertion,
     };
   }
@@ -444,8 +483,7 @@ function containsJSON(str: string): boolean {
   }
 
   try {
-    JSON.parse(match[0]);
-    return true;
+    return JSON.parse(match[0]);
   } catch (error) {
     return false;
   }

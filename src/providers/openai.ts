@@ -78,9 +78,7 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${this.getApiKey()}`,
-            ...(this.getOrganization()
-              ? { 'OpenAI-Organization': this.getOrganization() }
-              : {}),
+            ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
           },
           body: JSON.stringify(body),
         },
@@ -315,8 +313,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     logger.debug(`\tOpenAI API response: ${JSON.stringify(data)}`);
     try {
       const message = data.choices[0].message;
-      const output =
-        message.content === null ? message.function_call : message.content;
+      const output = message.content === null ? message.function_call : message.content;
       return {
         output,
         tokenUsage: cached
