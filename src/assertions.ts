@@ -150,7 +150,9 @@ export async function runAssertion(
         return {
           pass,
           score: 0,
-          reason: `JSON does not conform to the provided schema. Errors: ${ajv.errorsText(validate.errors)}`,
+          reason: `JSON does not conform to the provided schema. Errors: ${ajv.errorsText(
+            validate.errors,
+          )}`,
           assertion,
         };
       }
@@ -272,14 +274,19 @@ export async function runAssertion(
     pass = jsonMatch !== inverse;
 
     if (pass && renderedValue) {
-      invariant(typeof renderedValue === 'object', 'contains-json assertion must have an object value');
+      invariant(
+        typeof renderedValue === 'object',
+        'contains-json assertion must have an object value',
+      );
       const validate = ajv.compile(renderedValue);
       pass = validate(jsonMatch);
       if (!pass) {
         return {
           pass,
           score: 0,
-          reason: `JSON does not conform to the provided schema. Errors: ${ajv.errorsText(validate.errors)}`,
+          reason: `JSON does not conform to the provided schema. Errors: ${ajv.errorsText(
+            validate.errors,
+          )}`,
           assertion,
         };
       }
@@ -476,8 +483,7 @@ function containsJSON(str: string): boolean {
   }
 
   try {
-    JSON.parse(match[0]);
-    return true;
+    return JSON.parse(match[0]);
   } catch (error) {
     return false;
   }
