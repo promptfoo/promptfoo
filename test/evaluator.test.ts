@@ -1,12 +1,34 @@
 import { evaluate } from '../src/evaluator.js';
 
-import { mockApiProvider, mockGradingApiProviderPasses, mockGradingApiProviderFails } from './mocks.js';
-
 import type { ApiProvider, TestSuite, Prompt } from '../src/types.js';
 
 jest.mock('node-fetch', () => jest.fn());
 
 jest.mock('../src/esm.js');
+
+const mockApiProvider: ApiProvider = {
+  id: jest.fn().mockReturnValue('test-provider'),
+  callApi: jest.fn().mockResolvedValue({
+    output: 'Test output',
+    tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+  }),
+};
+
+const mockGradingApiProviderPasses: ApiProvider = {
+  id: jest.fn().mockReturnValue('test-grading-provider'),
+  callApi: jest.fn().mockResolvedValue({
+    output: JSON.stringify({ pass: true, reason: 'Test grading output' }),
+    tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+  }),
+};
+
+const mockGradingApiProviderFails: ApiProvider = {
+  id: jest.fn().mockReturnValue('test-grading-provider'),
+  callApi: jest.fn().mockResolvedValue({
+    output: JSON.stringify({ pass: false, reason: 'Grading failed reason' }),
+    tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+  }),
+};
 
 function toPrompt(text: string): Prompt {
   return { raw: text, display: text };

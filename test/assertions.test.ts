@@ -927,10 +927,10 @@ describe('matchesLlmRubric', () => {
       provider: Grader,
     };
 
-    class BogusGrader implements ApiProvider {
+    const BogusGrader: ApiProvider = {
       id(): string {
         return 'BogusGrader';
-      }
+      },
       async callApi(): Promise<ProviderResponse> {
         throw new Error('Should not be called');
       }
@@ -944,7 +944,6 @@ describe('matchesLlmRubric', () => {
     };
 
     const result: GradingResult = await runAssertion(assertion, test, output);
-    console.log('result', result)
     expect(result.pass).toBeTruthy();
     expect(result.reason).toBe('Test grading output');
   });
