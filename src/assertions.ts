@@ -1,6 +1,7 @@
 import rouge from 'rouge';
 import invariant from 'tiny-invariant';
 import Ajv from 'ajv';
+import { distance as levenshtein } from 'fastest-levenshtein';
 
 import telemetry from './telemetry';
 import { fetchWithRetries, getNunjucksEngine } from './util';
@@ -466,6 +467,25 @@ ${assertion.value}`,
     return handleRougeScore(baseType, assertion, renderedValue, output, inverse);
   }
 
+  if (baseType === 'levenshtein') {
+    invariant(
+      typeof renderedValue === 'string',
+      '"levenshtein" assertion type must have a string value',
+    );
+    const levDistance = levenshtein(output, renderedValue);
+    pass = levDistance <= (assertion.threshold || 5);
+    return {
+      pass,
+      score: pass ? 1 : 0,
+      reason: pass
+        ? 'Assertion passed'
+        : `Levenshtein distance ${levDistance} is greater than threshold ${
+            assertion.threshold || 5
+          }`,
+      assertion,
+    };
+  }
+
   throw new Error('Unknown assertion type: ' + assertion.type);
 }
 
@@ -506,11 +526,11 @@ export function assertionFromString(expected: string): Assertion {
 
   // New options
   const assertionRegex =
-    /^(not-)?(equals|contains-any|contains-all|contains-json|is-json|regex|icontains|contains|webhook|rouge-n|similar|starts-with)(?::|\((\d+(\.\d+)?)\):)?(.*)$/;
+    /^(not-)?(equals|contains-any|contains-all|contains-json|is-json|regex|icontains|contains|webhook|rouge-n|similar|starts-with|levenshtein)(?:\((\d+(?:\.\d+)?)\))?(?::(.*))?$/;
   const regexMatch = expected.match(assertionRegex);
 
   if (regexMatch) {
-    const [_, notPrefix, type, __, thresholdStr, value] = regexMatch;
+    const [_, notPrefix, type, thresholdStr, value] = regexMatch;
     const fullType = notPrefix ? `not-${type}` : type;
     const threshold = parseFloat(thresholdStr);
 
@@ -523,7 +543,12 @@ export function assertionFromString(expected: string): Assertion {
       return {
         type: fullType as AssertionType,
       };
-    } else if (type === 'rouge-n' || type === 'similar' || type === 'starts-with') {
+    } else if (
+      type === 'rouge-n' ||
+      type === 'similar' ||
+      type === 'starts-with' ||
+      type === 'levenshtein'
+    ) {
       return {
         type: fullType as AssertionType,
         value,
