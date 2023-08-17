@@ -1,0 +1,120 @@
+import { DefaultEmbeddingProvider, DefaultGradingProvider } from './providers/openai';
+import { cosineSimilarity, getNunjucksEngine } from './util';
+import { loadApiProvider } from './providers';
+import { DEFAULT_GRADING_PROMPT } from './prompts';
+
+import type { GradingConfig, GradingResult } from './types';
+
+const nunjucks = getNunjucksEngine();
+
+export async function matchesSimilarity(
+  expected: string,
+  output: string,
+  threshold: number,
+  inverse: boolean = false,
+): Promise<Omit<GradingResult, 'assertion'>> {
+  const expectedEmbedding = await DefaultEmbeddingProvider.callEmbeddingApi(expected);
+  const outputEmbedding = await DefaultEmbeddingProvider.callEmbeddingApi(output);
+
+  const tokensUsed = {
+    total: (expectedEmbedding.tokenUsage?.total || 0) + (outputEmbedding.tokenUsage?.total || 0),
+    prompt: (expectedEmbedding.tokenUsage?.prompt || 0) + (outputEmbedding.tokenUsage?.prompt || 0),
+    completion:
+      (expectedEmbedding.tokenUsage?.completion || 0) +
+      (outputEmbedding.tokenUsage?.completion || 0),
+  };
+
+  if (expectedEmbedding.error || outputEmbedding.error) {
+    return {
+      pass: false,
+      score: 0,
+      reason:
+        expectedEmbedding.error || outputEmbedding.error || 'Unknown error fetching embeddings',
+      tokensUsed,
+    };
+  }
+
+  if (!expectedEmbedding.embedding || !outputEmbedding.embedding) {
+    return {
+      pass: false,
+      score: 0,
+      reason: 'Embedding not found',
+      tokensUsed,
+    };
+  }
+
+  const similarity = cosineSimilarity(expectedEmbedding.embedding, outputEmbedding.embedding);
+  const pass = inverse ? similarity <= threshold : similarity >= threshold;
+  const greaterThanReason = `Similarity ${similarity} is greater than threshold ${threshold}`;
+  const lessThanReason = `Similarity ${similarity} is less than threshold ${threshold}`;
+  if (pass) {
+    return {
+      pass: true,
+      score: inverse ? 1 - similarity : similarity,
+      reason: inverse ? lessThanReason : greaterThanReason,
+      tokensUsed,
+    };
+  }
+  return {
+    pass: false,
+    score: inverse ? 1 - similarity : similarity,
+    reason: inverse ? greaterThanReason : lessThanReason,
+    tokensUsed,
+  };
+}
+
+export async function matchesLlmRubric(
+  expected: string,
+  output: string,
+  grading?: GradingConfig,
+): Promise<Omit<GradingResult, 'assertion'>> {
+  if (!grading) {
+    throw new Error(
+      'Cannot grade output without grading config. Specify --grader option or grading config.',
+    );
+  }
+
+  const prompt = nunjucks.renderString(grading.rubricPrompt || DEFAULT_GRADING_PROMPT, {
+    output: output.replace(/\n/g, '\\n').replace(/"/g, '\\"'),
+    rubric: expected.replace(/\n/g, '\\n').replace(/"/g, '\\"'),
+  });
+
+  let provider = grading.provider || DefaultGradingProvider;
+  if (typeof provider === 'string') {
+    provider = await loadApiProvider(provider);
+  }
+  const resp = await provider.callApi(prompt);
+  if (resp.error || !resp.output) {
+    return {
+      pass: false,
+      score: 0,
+      reason: resp.error || 'No output',
+      tokensUsed: {
+        total: resp.tokenUsage?.total || 0,
+        prompt: resp.tokenUsage?.prompt || 0,
+        completion: resp.tokenUsage?.completion || 0,
+      },
+    };
+  }
+
+  try {
+    const parsed = JSON.parse(resp.output) as Omit<GradingResult, 'score'>;
+    parsed.tokensUsed = {
+      total: resp.tokenUsage?.total || 0,
+      prompt: resp.tokenUsage?.prompt || 0,
+      completion: resp.tokenUsage?.completion || 0,
+    };
+    return { ...parsed, score: parsed.pass ? 1 : 0 };
+  } catch (err) {
+    return {
+      pass: false,
+      score: 0,
+      reason: `Output is not valid JSON: ${resp.output}`,
+      tokensUsed: {
+        total: resp.tokenUsage?.total || 0,
+        prompt: resp.tokenUsage?.prompt || 0,
+        completion: resp.tokenUsage?.completion || 0,
+      },
+    };
+  }
+}
