@@ -526,11 +526,11 @@ export function assertionFromString(expected: string): Assertion {
 
   // New options
   const assertionRegex =
-    /^(not-)?(equals|contains-any|contains-all|contains-json|is-json|regex|icontains|contains|webhook|rouge-n|similar|starts-with)(?::|\((\d+(\.\d+)?)\):)?(.*)$/;
+    /^(not-)?(equals|contains-any|contains-all|contains-json|is-json|regex|icontains|contains|webhook|rouge-n|similar|starts-with|levenshtein)(?:\((\d+(?:\.\d+)?)\))?(?::(.*))?$/;
   const regexMatch = expected.match(assertionRegex);
 
   if (regexMatch) {
-    const [_, notPrefix, type, __, thresholdStr, value] = regexMatch;
+    const [_, notPrefix, type, thresholdStr, value] = regexMatch;
     const fullType = notPrefix ? `not-${type}` : type;
     const threshold = parseFloat(thresholdStr);
 
@@ -543,7 +543,12 @@ export function assertionFromString(expected: string): Assertion {
       return {
         type: fullType as AssertionType,
       };
-    } else if (type === 'rouge-n' || type === 'similar' || type === 'starts-with') {
+    } else if (
+      type === 'rouge-n' ||
+      type === 'similar' ||
+      type === 'starts-with' ||
+      type === 'levenshtein'
+    ) {
       return {
         type: fullType as AssertionType,
         value,

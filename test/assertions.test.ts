@@ -697,6 +697,37 @@ describe('runAssertion', () => {
     expect(result.pass).toBeTruthy();
     expect(result.reason).toBe('Test grading output');
   });
+
+  // Test for levenshtein assertion
+  const levenshteinAssertion: Assertion = {
+    type: 'levenshtein',
+    value: 'Expected output',
+    threshold: 5,
+  };
+
+  it('should pass when the levenshtein assertion passes', async () => {
+    const output = 'Expected output';
+
+    const result: GradingResult = await runAssertion(
+      levenshteinAssertion,
+      {} as AtomicTestCase,
+      output,
+    );
+    expect(result.pass).toBeTruthy();
+    expect(result.reason).toBe('Assertion passed');
+  });
+
+  it('should fail when the levenshtein assertion fails', async () => {
+    const output = 'Different output';
+
+    const result: GradingResult = await runAssertion(
+      levenshteinAssertion,
+      {} as AtomicTestCase,
+      output,
+    );
+    expect(result.pass).toBeFalsy();
+    expect(result.reason).toBe('Levenshtein distance 8 is greater than threshold 5');
+  });
 });
 
 describe('assertionFromString', () => {
@@ -843,5 +874,14 @@ describe('assertionFromString', () => {
     const result: Assertion = assertionFromString(expected);
     expect(result.type).toBe('starts-with');
     expect(result.value).toBe('Expected');
+  });
+
+  it('should create a levenshtein assertion', () => {
+    const expected = 'levenshtein(5):Expected output';
+
+    const result: Assertion = assertionFromString(expected);
+    expect(result.type).toBe('levenshtein');
+    expect(result.value).toBe('Expected output');
+    expect(result.threshold).toBe(5);
   });
 });

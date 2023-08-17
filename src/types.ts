@@ -162,7 +162,8 @@ type BaseAssertionTypes =
   | 'webhook'
   | 'rouge-n'
   | 'rouge-s'
-  | 'rouge-l';
+  | 'rouge-l'
+  | 'levenshtein';
 
 type NotPrefixed<T extends string> = `not-${T}`;
 
