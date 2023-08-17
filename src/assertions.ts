@@ -404,6 +404,11 @@ ${assertion.value}`,
       typeof renderedValue === 'string',
       '"contains" assertion type must have a string value',
     );
+
+    // Assertion provider overrides test provider
+    test.options = test.options || {};
+    test.options.provider = assertion.provider || test.options.provider;
+
     return {
       assertion,
       ...(await matchesLlmRubric(renderedValue, output, test.options)),
@@ -548,20 +553,20 @@ export async function matchesSimilarity(
 export async function matchesLlmRubric(
   expected: string,
   output: string,
-  options?: GradingConfig,
+  grading?: GradingConfig,
 ): Promise<Omit<GradingResult, 'assertion'>> {
-  if (!options) {
+  if (!grading) {
     throw new Error(
       'Cannot grade output without grading config. Specify --grader option or grading config.',
     );
   }
 
-  const prompt = nunjucks.renderString(options.rubricPrompt || DEFAULT_GRADING_PROMPT, {
+  const prompt = nunjucks.renderString(grading.rubricPrompt || DEFAULT_GRADING_PROMPT, {
     output: output.replace(/\n/g, '\\n').replace(/"/g, '\\"'),
     rubric: expected.replace(/\n/g, '\\n').replace(/"/g, '\\"'),
   });
 
-  let provider = options.provider || DefaultGradingProvider;
+  let provider = grading.provider || DefaultGradingProvider;
   if (typeof provider === 'string') {
     provider = await loadApiProvider(provider);
   }

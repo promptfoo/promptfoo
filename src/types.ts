@@ -187,7 +187,7 @@ export interface Assertion {
   weight?: number;
 
   // Some assertions (similarity, llm-rubric) require an LLM provider
-  provider?: ApiProvider;
+  provider?: GradingConfig['provider'];
 }
 
 // Each test case is graded pass/fail.  A test case represents a unique input to the LLM after substituting `vars` in the prompt.

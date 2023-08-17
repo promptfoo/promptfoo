@@ -101,7 +101,7 @@ async function main() {
     const packageJson = JSON.parse(
       readFileSync(pathJoin(getDirectory(), '../package.json'), 'utf8'),
     );
-    console.log(packageJson.version);
+    logger.info(packageJson.version);
     process.exit(0);
   });
 
@@ -259,7 +259,11 @@ async function main() {
     .option('--no-progress-bar', 'Do not show progress bar')
     .option('--no-table', 'Do not output table in CLI', defaultConfig?.commandLineOptions?.table)
     .option('--share', 'Create a shareable URL', defaultConfig?.commandLineOptions?.share)
-    .option('--grader', 'Model that will grade outputs', defaultConfig?.commandLineOptions?.grader)
+    .option(
+      '--grader <provider>',
+      'Model that will grade outputs',
+      defaultConfig?.commandLineOptions?.grader,
+    )
     .option('--verbose', 'Show debug logs', defaultConfig?.commandLineOptions?.verbose)
     .option('--view [port]', 'View in browser ui')
     .action(async (cmdObj: CommandLineOptions & Command) => {
