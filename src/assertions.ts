@@ -1,6 +1,7 @@
 import rouge from 'rouge';
 import invariant from 'tiny-invariant';
 import Ajv from 'ajv';
+import { distance as levenshtein } from 'fastest-levenshtein';
 
 import telemetry from './telemetry';
 import { fetchWithRetries, getNunjucksEngine } from './util';
@@ -464,6 +465,25 @@ ${assertion.value}`,
       '"rouge" assertion type must be a value (string or string array)',
     );
     return handleRougeScore(baseType, assertion, renderedValue, output, inverse);
+  }
+
+  if (baseType === 'levenshtein') {
+    invariant(
+      typeof renderedValue === 'string',
+      '"levenshtein" assertion type must have a string value',
+    );
+    const levDistance = levenshtein(output, renderedValue);
+    pass = levDistance <= (assertion.threshold || 5);
+    return {
+      pass,
+      score: pass ? 1 : 0,
+      reason: pass
+        ? 'Assertion passed'
+        : `Levenshtein distance ${levDistance} is greater than threshold ${
+            assertion.threshold || 5
+          }`,
+      assertion,
+    };
   }
 
   throw new Error('Unknown assertion type: ' + assertion.type);
