@@ -8,7 +8,6 @@ import {
 } from '../src/assertions';
 import * as util from '../src/util';
 import { DefaultEmbeddingProvider } from '../src/providers/openai';
-import { mockGradingApiProviderPasses, mockGradingApiProviderFails } from './mocks.js';
 
 import type {
   Assertion,
@@ -879,7 +878,7 @@ describe('matchesLlmRubric', () => {
   class TestGrader implements ApiProvider {
     async callApi(): Promise<ProviderResponse> {
       return {
-        output: JSON.stringify({ pass: true }),
+        output: JSON.stringify({ pass: true, reason: 'Test grading output' }),
         tokenUsage: { total: 10, prompt: 5, completion: 5 },
       };
     }
@@ -919,26 +918,35 @@ describe('matchesLlmRubric', () => {
     expect(result.pass).toBeFalsy();
     expect(result.reason).toBe('Grading failed');
   });
+
+  it('should use the provider from the assertion if it exists', async () => {
+    const output = 'Expected output';
+    const assertion: Assertion = {
+      type: 'llm-rubric',
+      value: 'Expected output',
+      provider: Grader,
+    };
+
+    class BogusGrader implements ApiProvider {
+      id(): string {
+        return 'BogusGrader';
+      }
+      async callApi(): Promise<ProviderResponse> {
+        throw new Error('Should not be called');
+      }
+    }
+
+    const test: AtomicTestCase = {
+      assert: [assertion],
+      options: {
+        provider: BogusGrader,
+      },
+    };
+
+    const result: GradingResult = await runAssertion(assertion, test, output);
+    console.log('result', result)
+    expect(result.pass).toBeTruthy();
+    expect(result.reason).toBe('Test grading output');
+  });
 });
 
-it('should use the provider from the assertion if it exists', async () => {
-  const output = 'Expected output';
-  const assertion: Assertion = {
-    type: 'llm-rubric',
-    value: 'Expected output',
-    provider: mockGradingApiProviderPasses,
-  };
-  const test: AtomicTestCase = {
-    assert: [assertion],
-    /*
-    options: {
-      provider: mockGradingApiProviderFails,
-    },
-    */
-  };
-
-  const result: GradingResult = await runAssertion(assertion, test, output);
-  console.log('result', result)
-  expect(result.pass).toBeTruthy();
-  expect(result.reason).toBe('Test grading output');
-});

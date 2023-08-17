@@ -408,7 +408,6 @@ ${assertion.value}`,
     // Assertion provider overrides test provider
     test.options = test.options || {};
     test.options.provider = assertion.provider || test.options.provider;
-    console.log('opts', test.options)
 
     return {
       assertion,
