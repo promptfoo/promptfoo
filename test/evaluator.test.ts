@@ -555,3 +555,24 @@ describe('evaluator', () => {
     expect(summary.results[3].response?.output).toBe('French Bonjour');
   });
 });
+it('should use the options from the test if they exist', async () => {
+  const testSuite: TestSuite = {
+    providers: [mockApiProvider],
+    prompts: [toPrompt('Test prompt')],
+    tests: [
+      {
+        vars: { var1: 'value1', var2: 'value2' },
+        options: {
+          postprocess: 'output + " postprocessed"',
+        },
+      },
+    ],
+  };
+
+  const summary = await evaluate(testSuite, {});
+
+  expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
+  expect(summary.stats.successes).toBe(1);
+  expect(summary.stats.failures).toBe(0);
+  expect(summary.results[0].response?.output).toBe('Test output postprocessed');
+});

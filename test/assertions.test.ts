@@ -918,3 +918,21 @@ describe('matchesLlmRubric', () => {
     expect(result.reason).toBe('Grading failed');
   });
 });
+it('should use the provider from the assertion if it exists', async () => {
+  const output = 'Expected output';
+  const assertion: Assertion = {
+    type: 'llm-rubric',
+    value: 'Expected output',
+    provider: mockGradingApiProviderPasses,
+  };
+  const test: AtomicTestCase = {
+    assert: [assertion],
+    options: {
+      provider: mockGradingApiProviderFails,
+    },
+  };
+
+  const result: GradingResult = await runAssertion(assertion, test, output);
+  expect(result.pass).toBeTruthy();
+  expect(result.reason).toBe('Test grading output');
+});
