@@ -294,6 +294,10 @@ class Evaluator {
                 ...data.vars,
                 ...test.vars,
               },
+              options: {
+                ...testSuite.defaultTest?.options,
+                ...test.options,
+              },
             };
           });
           // Add scenario tests to tests
@@ -356,7 +360,7 @@ class Evaluator {
                   ...prompt,
                   raw: prependToPrompt + prompt.raw + appendToPrompt,
                 },
-                test: { ...testCase, vars },
+                test: { ...testCase, vars, options: testCase.options },
                 includeProviderId: testSuite.providers.length > 1,
                 rowIndex,
                 colIndex,

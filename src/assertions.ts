@@ -404,6 +404,10 @@ ${assertion.value}`,
       typeof renderedValue === 'string',
       '"contains" assertion type must have a string value',
     );
+    if (test.options) {
+      // Assertion provider overrides test provider
+      test.options.provider = assertion.provider || test.options.provider;
+    }
     return {
       assertion,
       ...(await matchesLlmRubric(renderedValue, output, test.options)),
