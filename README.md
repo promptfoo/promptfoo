@@ -108,6 +108,7 @@ See [Test assertions](https://promptfoo.dev/docs/configuration/expected-outputs)
 | `similar`       | embeddings and cosine similarity are above a threshold                    |
 | `llm-rubric`    | LLM output matches a given rubric, using a Language Model to grade output |
 | `rouge-n`       | Rouge-N score is above a given threshold                                  |
+| `levenshtein`   | Levenshtein distance is below a threshold                                 |
 
 Every test type can be negated by prepending `not-`. For example, `not-equals` or `not-regex`.
 
