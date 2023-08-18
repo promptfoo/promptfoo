@@ -1,9 +1,12 @@
 prompts: prompts.txt
-providers: openai:gpt-3.5-turbo
+providers: openai:gpt-4-0613
 defaultTest:
   assert:
     - type: llm-rubric
       value: Do not mention that you are an AI or chat assistant
+    - type: javascript
+      # Shorter is better
+      value: Math.max(0, Math.min(1, 1 - (output.length - 100) / 900));
 tests:
   - vars:
       name: Bob
@@ -11,6 +14,9 @@ tests:
   - vars:
       name: Jane
       question: Do you have any promotions or discounts currently available?
+  - vars:
+      name: Ben
+      question: Can you check the availability of a product at a specific store location?
   - vars:
       name: Dave
       question: What are your shipping and return policies?
@@ -23,9 +29,6 @@ tests:
   - vars:
       name: Sophie
       question: Do you have any recommendations for products that are currently popular or trending?
-  - vars:
-      name: Ben
-      question: Can you check the availability of a product at a specific store location?
   - vars:
       name: Jessie
       question: How can I track my order after it has been shipped?
