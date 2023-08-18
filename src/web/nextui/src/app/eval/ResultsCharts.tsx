@@ -332,6 +332,12 @@ export default function ResultsCharts({ columnVisibility }: ResultsChartsProps) 
     return null;
   }
 
+  const scores = table.body.flatMap((row) => row.outputs.map((output) => output.score));
+  if (new Set(scores).size === 1) {
+    // All scores are the same, charts not useful.
+    return null;
+  }
+
   return (
     <ErrorBoundary fallback={null}>
       <Paper style={{ position: 'relative', padding: theme.spacing(3) }}>
