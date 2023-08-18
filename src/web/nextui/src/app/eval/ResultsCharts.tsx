@@ -22,6 +22,7 @@ import { useTheme } from '@mui/material/styles';
 import Paper from '@mui/material/Paper';
 import IconButton from '@mui/material/IconButton';
 import CloseIcon from '@mui/icons-material/Close';
+import { ErrorBoundary } from 'react-error-boundary';
 
 import { useStore } from './store';
 
@@ -101,17 +102,17 @@ function HistogramChart({ table }: ChartProps) {
           },
           tooltip: {
             callbacks: {
-              title: function(context) {
+              title: function (context) {
                 const datasetIndex = context[0].datasetIndex;
                 return `Prompt ${datasetIndex + 1}`;
               },
-              label: function(context) {
+              label: function (context) {
                 const labelIndex = context.dataIndex;
                 const lowerBound = bins[labelIndex];
                 const upperBound = bins[labelIndex + 1];
                 return `${lowerBound} <= score < ${upperBound}`;
-              }
-            }
+              },
+            },
           },
         },
       },
@@ -315,24 +316,26 @@ export default function ResultsCharts({ columnVisibility }: ResultsChartsProps) 
   }
 
   return (
-    <Paper style={{ position: 'relative', padding: theme.spacing(3) }}>
-      <IconButton
-        style={{ position: 'absolute', right: 0, top: 0 }}
-        onClick={() => setShowCharts(false)}
-      >
-        <CloseIcon />
-      </IconButton>
-      <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
-        <div style={{ width: '33%' }}>
-          <PassRateChart table={table} />
+    <ErrorBoundary fallback={null}>
+      <Paper style={{ position: 'relative', padding: theme.spacing(3) }}>
+        <IconButton
+          style={{ position: 'absolute', right: 0, top: 0 }}
+          onClick={() => setShowCharts(false)}
+        >
+          <CloseIcon />
+        </IconButton>
+        <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+          <div style={{ width: '33%' }}>
+            <PassRateChart table={table} />
+          </div>
+          <div style={{ width: '33%' }}>
+            <HistogramChart table={table} />
+          </div>
+          <div style={{ width: '33%' }}>
+            <ScatterChart table={table} />
+          </div>
         </div>
-        <div style={{ width: '33%' }}>
-          <HistogramChart table={table} />
-        </div>
-        <div style={{ width: '33%' }}>
-          <ScatterChart table={table} />
-        </div>
-      </div>
-    </Paper>
+      </Paper>
+    </ErrorBoundary>
   );
 }

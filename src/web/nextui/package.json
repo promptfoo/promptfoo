@@ -32,6 +32,7 @@
     "react-dnd": "^16.0.1",
     "react-dnd-html5-backend": "^16.0.1",
     "react-dom": "18.2.0",
+    "react-error-boundary": "^4.0.11",
     "react-syntax-highlighter": "^15.5.0",
     "socket.io": "^4.7.2",
     "socket.io-client": "^4.7.2",
