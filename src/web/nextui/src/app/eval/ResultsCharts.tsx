@@ -29,6 +29,26 @@ import { useStore } from './store';
 import type { VisibilityState } from '@tanstack/table-core';
 import type { EvalTable } from './types';
 
+interface ResultsChartsProps {
+  columnVisibility: VisibilityState;
+}
+
+interface ChartProps {
+  table: EvalTable;
+}
+
+const COLOR_PALETTE = [
+  '#fd7f6f',
+  '#7eb0d5',
+  '#b2e061',
+  '#bd7ebe',
+  '#ffb55a',
+  '#ffee65',
+  '#beb9db',
+  '#fdcce5',
+  '#8bd3c7',
+];
+
 Chart.register(
   BarController,
   LineController,
@@ -41,14 +61,6 @@ Chart.register(
   Tooltip,
   Colors,
 );
-
-interface ResultsChartsProps {
-  columnVisibility: VisibilityState;
-}
-
-interface ChartProps {
-  table: EvalTable;
-}
 
 function HistogramChart({ table }: ChartProps) {
   const histogramCanvasRef = useRef(null);
@@ -81,6 +93,7 @@ function HistogramChart({ table }: ChartProps) {
       return {
         label: `Prompt ${promptIdx + 1}`,
         data: counts,
+        backgroundColor: COLOR_PALETTE[promptIdx % COLOR_PALETTE.length],
       };
     });
 
@@ -142,6 +155,7 @@ function PassRateChart({ table }: ChartProps) {
       return {
         label: `Prompt ${promptIdx + 1}`,
         data: [passRate],
+        backgroundColor: COLOR_PALETTE[promptIdx % COLOR_PALETTE.length],
       };
     });
 
