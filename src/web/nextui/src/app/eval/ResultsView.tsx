@@ -21,6 +21,7 @@ import ShareIcon from '@mui/icons-material/Share';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import { styled } from '@mui/system';
 
+import ResultsCharts from './ResultsCharts';
 import ResultsTable from './ResultsTable';
 import ConfigModal from './ConfigModal';
 import ShareModal from './ShareModal';
@@ -280,6 +281,7 @@ export default function ResultsView({ recentFiles, onRecentFileSelected }: Resul
           </Box>
         </ResponsiveStack>
       </Paper>
+      <ResultsCharts columnVisibility={columnVisibility} />
       <ResultsTable
         maxTextLength={maxTextLength}
         columnVisibility={columnVisibility}
