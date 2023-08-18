@@ -302,7 +302,9 @@ export async function runAssertion(
       if (typeof assertion.value === 'function') {
         return assertion.value(output, test, assertion);
       }
-      const customFunction = new Function('output', 'context', `return ${renderedValue}`);
+      invariant(typeof renderedValue === 'string', 'javascript assertion must have a string value');
+      const functionBody = renderedValue.includes('\n') ? renderedValue : `return ${renderedValue}`;
+      const customFunction = new Function('output', 'context', functionBody);
       const result = customFunction(output, context) as any;
       if (typeof result === 'boolean') {
         pass = result !== inverse;
@@ -310,6 +312,8 @@ export async function runAssertion(
       } else if (typeof result === 'number') {
         pass = true;
         score = result;
+      } else if (typeof result === 'object') {
+        return result;
       } else {
         throw new Error('Custom function must return a boolean or number');
       }

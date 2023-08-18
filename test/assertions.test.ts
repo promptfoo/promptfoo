@@ -110,6 +110,23 @@ describe('runAssertion', () => {
     value: 'output === "Expected output"',
   };
 
+  const javascriptMultilineStringAssertion: Assertion = {
+    type: 'javascript',
+    value: `
+      if (output === "Expected output") {
+        return {
+          pass: true,
+          score: 0.5,
+          reason: 'Assertion passed',
+        };
+      }
+      return {
+        pass: false,
+        score: 0,
+        reason: 'Assertion failed',
+      };`,
+  };
+
   const javascriptStringAssertionWithNumber: Assertion = {
     type: 'javascript',
     value: 'output.length * 10',
@@ -346,6 +363,30 @@ describe('runAssertion', () => {
     );
     expect(result.pass).toBeFalsy();
     expect(result.score).toBe(0.5);
+    expect(result.reason).toBe('Assertion failed');
+  });
+
+  it('should pass when the multiline javascript assertion passes', async () => {
+    const output = 'Expected output';
+
+    const result: GradingResult = await runAssertion(
+      javascriptMultilineStringAssertion,
+      {} as AtomicTestCase,
+      output,
+    );
+    expect(result.pass).toBeTruthy();
+    expect(result.reason).toBe('Assertion passed');
+  });
+
+  it('should pass when the multiline javascript assertion fails', async () => {
+    const output = 'Not the expected output';
+
+    const result: GradingResult = await runAssertion(
+      javascriptMultilineStringAssertion,
+      {} as AtomicTestCase,
+      output,
+    );
+    expect(result.pass).toBeFalsy();
     expect(result.reason).toBe('Assertion failed');
   });
 
