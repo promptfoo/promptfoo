@@ -99,6 +99,16 @@ function HistogramChart({ table }: ChartProps) {
           legend: {
             display: false,
           },
+          tooltip: {
+            callbacks: {
+              label: function(context) {
+                const labelIndex = context.dataIndex;
+                const lowerBound = bins[labelIndex];
+                const upperBound = bins[labelIndex + 1];
+                return `${lowerBound} <= score < ${upperBound}`;
+              }
+            }
+          },
         },
       },
     });
