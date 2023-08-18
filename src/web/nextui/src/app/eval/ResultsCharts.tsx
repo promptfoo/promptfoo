@@ -101,6 +101,10 @@ function HistogramChart({ table }: ChartProps) {
           },
           tooltip: {
             callbacks: {
+              title: function(context) {
+                const datasetIndex = context[0].datasetIndex;
+                return `Prompt ${datasetIndex + 1}`;
+              },
               label: function(context) {
                 const labelIndex = context.dataIndex;
                 const lowerBound = bins[labelIndex];
