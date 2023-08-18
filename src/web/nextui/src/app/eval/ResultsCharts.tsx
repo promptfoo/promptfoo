@@ -123,6 +123,9 @@ function HistogramChart({ table }: ChartProps) {
                 const labelIndex = context.dataIndex;
                 const lowerBound = bins[labelIndex];
                 const upperBound = bins[labelIndex + 1];
+                if (!upperBound) {
+                  return `${lowerBound} <= score`;
+                }
                 return `${lowerBound} <= score < ${upperBound}`;
               },
             },
