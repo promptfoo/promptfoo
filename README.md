@@ -23,7 +23,7 @@ promptfoo produces matrix views that let you quickly evaluate outputs across man
 
 Here's an example of a side-by-side comparison of multiple prompts and inputs:
 
-![prompt evaluation matrix - web viewer](https://github.com/promptfoo/promptfoo/assets/310310/d365c752-87dd-48a2-aafc-9ece03d61930)
+![prompt evaluation matrix - web viewer](https://github.com/promptfoo/promptfoo/assets/310310/ce5a7817-da82-4484-b26d-32474f1cabc5)
 
 It works on the command line too:
 
