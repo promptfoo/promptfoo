@@ -328,7 +328,7 @@ export default function ResultsCharts({ columnVisibility }: ResultsChartsProps) 
   const [showCharts, setShowCharts] = useState(true);
 
   const { table } = useStore();
-  if (!table || !showCharts) {
+  if (!table || !showCharts || table.head.prompts.length < 2) {
     return null;
   }
 
