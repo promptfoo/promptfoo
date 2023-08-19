@@ -1,22 +1,18 @@
 prompts:
   prompts/chat_prompt.json: chat_prompt
-  prompts/completion_prompt.txt: completion_prompt
 
 providers:
   - openai:gpt-3.5-turbo-0613:
       id: openai-gpt-3.5-turbo-lowtemp
-      prompts: chat_prompt
       config:
         temperature: 0
         max_tokens: 128
   - openai:gpt-3.5-turbo-0613:
       id: openai-gpt-3.5-turbo-hightemp
-      prompts: chat_prompt
       config:
         temperature: 1
         max_tokens: 128
   - openai:gpt-4-0613:
-      prompts: chat_prompt
       config:
         temperature: 0
         max_tokens: 128

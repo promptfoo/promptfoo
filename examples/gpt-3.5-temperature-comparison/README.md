@@ -1,6 +1,6 @@
-To get started, set your OPENAI_API_KEY and REPLICATE_API_TOKEN environment variables.
+To get started, set the OPENAI_API_KEY environment variable.
 
-Next, change a few of the prompts in prompts.txt and edit promptfooconfig.yaml.
+Next, change `prompts/chat_prompt.json` and edit promptfooconfig.yaml.
 
 Then run:
 
