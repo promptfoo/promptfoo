@@ -189,6 +189,8 @@ export interface Assertion {
 
   // Some assertions (similarity, llm-rubric) require an LLM provider
   provider?: GradingConfig['provider'];
+
+  rubricPrompt?: GradingConfig['rubricPrompt'];
 }
 
 // Each test case is graded pass/fail.  A test case represents a unique input to the LLM after substituting `vars` in the prompt.

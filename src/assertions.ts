@@ -405,6 +405,12 @@ ${assertion.value}`,
     // Assertion provider overrides test provider
     test.options = test.options || {};
     test.options.provider = assertion.provider || test.options.provider;
+    test.options.rubricPrompt = assertion.rubricPrompt || test.options.rubricPrompt;
+
+    if (test.options.rubricPrompt) {
+      // Substitute vars in prompt
+      test.options.rubricPrompt = nunjucks.renderString(test.options.rubricPrompt, test.vars || {});
+    }
 
     return {
       assertion,
