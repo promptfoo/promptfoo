@@ -123,7 +123,11 @@ const EvaluateTestSuiteCreator: React.FC = () => {
         </Stack>
       </Box>
       <Box mt={4} />
-      <PromptsSection />
+      import { ErrorBoundary } from 'react-error-boundary';
+
+      <ErrorBoundary FallbackComponent={ErrorFallback}>
+        <PromptsSection />
+      </ErrorBoundary>
       <Box mt={6} />
       <TestCasesSection varsList={varsList} />
       <YamlEditor yamlString={yamlString} onTestSuiteUpdated={handleTestSuiteUpdated} />
@@ -151,3 +155,12 @@ const EvaluateTestSuiteCreator: React.FC = () => {
 };
 
 export default EvaluateTestSuiteCreator;
+function ErrorFallback({ error, resetErrorBoundary }) {
+  return (
+    <div role="alert">
+      <p>Something went wrong:</p>
+      <pre>{error.message}</pre>
+      <button onClick={resetErrorBoundary}>Try again</button>
+    </div>
+  )
+}
