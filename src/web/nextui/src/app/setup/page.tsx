@@ -1,10 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import Link from 'next/link';
 import yaml from 'js-yaml';
-import { Light as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { docco } from 'react-syntax-highlighter/dist/cjs/styles/hljs';
 import Button from '@mui/material/Button';
 import Container from '@mui/material/Container';
 import Typography from '@mui/material/Typography';
@@ -15,15 +12,19 @@ import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogContentText from '@mui/material/DialogContentText';
 import DialogTitle from '@mui/material/DialogTitle';
-import YamlEditor from './YamlEditor';
 
 import RunTestSuiteButton from './RunTestSuiteButton';
 import PromptsSection from './PromptsSection';
 import TestCasesSection from './TestCasesSection';
 import ProviderSelector from './ProviderSelector';
+import YamlEditor from './YamlEditor';
 import { useStore } from '../../util/store';
 
+import type {ProviderOptions, TestCase, TestSuiteConfig} from '../eval/types';
+
 import './page.css';
+
+export type WebTestSuiteConfig = TestSuiteConfig & {providers: ProviderOptions[], prompts: string[], tests: TestCase[]};
 
 const EvaluateTestSuiteCreator: React.FC = () => {
   const [yamlString, setYamlString] = useState('');
@@ -83,6 +84,13 @@ const EvaluateTestSuiteCreator: React.FC = () => {
     setResetDialogOpen(false);
   };
 
+  const handleTestSuiteUpdated = (testSuite: WebTestSuiteConfig) => {
+    setDescription(testSuite.description || '');
+    setProviders(testSuite.providers || []);
+    setPrompts(testSuite.prompts || []);
+    setTestCases(testSuite.tests || []);
+  };
+
   return (
     <Container maxWidth="lg" sx={{ marginTop: '2rem' }}>
       <Stack direction="row" spacing={2} justifyContent="space-between">
@@ -118,13 +126,6 @@ const EvaluateTestSuiteCreator: React.FC = () => {
       <PromptsSection />
       <Box mt={6} />
       <TestCasesSection varsList={varsList} />
-      const handleTestSuiteUpdated = (testSuite: any) => {
-        setDescription(testSuite.description);
-        setProviders(testSuite.providers);
-        setPrompts(testSuite.prompts);
-        setTestCases(testSuite.tests);
-      };
-
       <YamlEditor yamlString={yamlString} onTestSuiteUpdated={handleTestSuiteUpdated} />
       <Dialog
         open={resetDialogOpen}

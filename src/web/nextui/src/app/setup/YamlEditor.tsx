@@ -4,9 +4,11 @@ import Typography from '@mui/material/Typography';
 import Box from '@mui/material/Box';
 import Link from 'next/link';
 
+import type {WebTestSuiteConfig} from './page';
+
 interface YamlEditorProps {
   yamlString: string;
-  onTestSuiteUpdated: (testSuite: any) => void;
+  onTestSuiteUpdated: (testSuite: WebTestSuiteConfig) => void;
 }
 
 const YamlEditorComponent: React.FC<YamlEditorProps> = ({ yamlString, onTestSuiteUpdated }) => {
