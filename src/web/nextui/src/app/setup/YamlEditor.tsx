@@ -6,11 +6,13 @@ import Link from 'next/link';
 
 interface YamlEditorProps {
   yamlString: string;
+  onTestSuiteUpdated: (testSuite: any) => void;
 }
 
-const YamlEditorComponent: React.FC<YamlEditorProps> = ({ yamlString }) => {
+const YamlEditorComponent: React.FC<YamlEditorProps> = ({ yamlString, onTestSuiteUpdated }) => {
   const handleChange = ({ json, text }: {json: any, text: string}) => {
     console.log(json);
+    onTestSuiteUpdated(json);
   };
 
   return (

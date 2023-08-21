@@ -118,7 +118,14 @@ const EvaluateTestSuiteCreator: React.FC = () => {
       <PromptsSection />
       <Box mt={6} />
       <TestCasesSection varsList={varsList} />
-      <YamlEditor yamlString={yamlString} />
+      const handleTestSuiteUpdated = (testSuite: any) => {
+        setDescription(testSuite.description);
+        setProviders(testSuite.providers);
+        setPrompts(testSuite.prompts);
+        setTestCases(testSuite.tests);
+      };
+
+      <YamlEditor yamlString={yamlString} onTestSuiteUpdated={handleTestSuiteUpdated} />
       <Dialog
         open={resetDialogOpen}
         onClose={() => setResetDialogOpen(false)}
