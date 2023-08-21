@@ -9,7 +9,7 @@ interface YamlEditorProps {
 }
 
 const YamlEditorComponent: React.FC<YamlEditorProps> = ({ yamlString }) => {
-  const handleChange = ({ json, text }) => {
+  const handleChange = ({ json, text }: {json: any, text: string}) => {
     console.log(json);
   };
 
