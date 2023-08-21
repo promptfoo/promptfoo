@@ -1,6 +1,5 @@
 import React from 'react';
-import { Light as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { docco } from 'react-syntax-highlighter/dist/cjs/styles/hljs';
+import YamlEditor from '@focus-reactive/react-yaml';
 import Typography from '@mui/material/Typography';
 import Box from '@mui/material/Box';
 import Link from 'next/link';
@@ -9,7 +8,11 @@ interface YamlEditorProps {
   yamlString: string;
 }
 
-const YamlEditor: React.FC<YamlEditorProps> = ({ yamlString }) => {
+const YamlEditorComponent: React.FC<YamlEditorProps> = ({ yamlString }) => {
+  const handleChange = ({ json, text }) => {
+    console.log(json);
+  };
+
   return (
     <Box mt={8}>
       {yamlString && (
@@ -22,13 +25,11 @@ const YamlEditor: React.FC<YamlEditorProps> = ({ yamlString }) => {
             <Link href="https://promptfoo.dev/docs/configuration/guide">configuration docs</Link>{' '}
             to learn more.
           </Typography>
-          <SyntaxHighlighter className="yaml-config" language="yaml" style={docco}>
-            {yamlString}
-          </SyntaxHighlighter>
+          <YamlEditor text={yamlString} onChange={handleChange} />
         </Box>
       )}
     </Box>
   );
 };
 
-export default YamlEditor;
+export default YamlEditorComponent;
