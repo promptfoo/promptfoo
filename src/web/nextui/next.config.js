@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: process.env.USING_VERCEL ? 'standalone' : 'export',
+  output: process.env.PROMPTFOO_STANDALONE_SERVER ? 'standalone' : 'export',
   trailingSlash: true,
   webpack: (config, { buildId, dev, isServer, defaultLoaders, webpack }) => {
     config.externals.push({
