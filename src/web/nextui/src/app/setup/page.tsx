@@ -15,6 +15,7 @@ import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogContentText from '@mui/material/DialogContentText';
 import DialogTitle from '@mui/material/DialogTitle';
+import YamlEditor from './YamlEditor';
 
 import RunTestSuiteButton from './RunTestSuiteButton';
 import PromptsSection from './PromptsSection';
@@ -117,23 +118,7 @@ const EvaluateTestSuiteCreator: React.FC = () => {
       <PromptsSection />
       <Box mt={6} />
       <TestCasesSection varsList={varsList} />
-      <Box mt={8}>
-        {yamlString && (
-          <Box mt={4}>
-            <Typography variant="h5" gutterBottom>
-              YAML config
-            </Typography>
-            <Typography variant="body1" gutterBottom>
-              This is the evaluation config that is run by promptfoo. See{' '}
-              <Link href="https://promptfoo.dev/docs/configuration/guide">configuration docs</Link>{' '}
-              to learn more.
-            </Typography>
-            <SyntaxHighlighter className="yaml-config" language="yaml" style={docco}>
-              {yamlString}
-            </SyntaxHighlighter>
-          </Box>
-        )}
-      </Box>
+      <YamlEditor yamlString={yamlString} />
       <Dialog
         open={resetDialogOpen}
         onClose={() => setResetDialogOpen(false)}
