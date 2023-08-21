@@ -12,6 +12,7 @@ import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogContentText from '@mui/material/DialogContentText';
 import DialogTitle from '@mui/material/DialogTitle';
+import { ErrorBoundary } from 'react-error-boundary';
 
 import RunTestSuiteButton from './RunTestSuiteButton';
 import PromptsSection from './PromptsSection';
@@ -20,11 +21,31 @@ import ProviderSelector from './ProviderSelector';
 import YamlEditor from './YamlEditor';
 import { useStore } from '../../util/store';
 
-import type {ProviderOptions, TestCase, TestSuiteConfig} from '../eval/types';
+import type { ProviderOptions, TestCase, TestSuiteConfig } from '../eval/types';
 
 import './page.css';
 
-export type WebTestSuiteConfig = TestSuiteConfig & {providers: ProviderOptions[], prompts: string[], tests: TestCase[]};
+export type WebTestSuiteConfig = TestSuiteConfig & {
+  providers: ProviderOptions[];
+  prompts: string[];
+  tests: TestCase[];
+};
+
+function ErrorFallback({
+  error,
+  resetErrorBoundary,
+}: {
+  error: Error;
+  resetErrorBoundary: () => void;
+}) {
+  return (
+    <div role="alert">
+      <p>Something went wrong:</p>
+      <pre>{error.message}</pre>
+      <button onClick={resetErrorBoundary}>Try again</button>
+    </div>
+  );
+}
 
 const EvaluateTestSuiteCreator: React.FC = () => {
   const [yamlString, setYamlString] = useState('');
@@ -117,19 +138,36 @@ const EvaluateTestSuiteCreator: React.FC = () => {
       </Box>
       */}
       <Box mt={2}>
-        <Stack direction="column" spacing={2} justifyContent="space-between">
-          <Typography variant="h5">Providers</Typography>
-          <ProviderSelector providers={providers} onChange={setProviders} />
-        </Stack>
+        <ErrorBoundary
+          FallbackComponent={ErrorFallback}
+          onReset={() => {
+            setProviders([]);
+          }}
+        >
+          <Stack direction="column" spacing={2} justifyContent="space-between">
+            <Typography variant="h5">Providers</Typography>
+            <ProviderSelector providers={providers} onChange={setProviders} />
+          </Stack>
+        </ErrorBoundary>
       </Box>
       <Box mt={4} />
-      import { ErrorBoundary } from 'react-error-boundary';
-
-      <ErrorBoundary FallbackComponent={ErrorFallback}>
+      <ErrorBoundary
+        FallbackComponent={ErrorFallback}
+        onReset={() => {
+          setPrompts([]);
+        }}
+      >
         <PromptsSection />
       </ErrorBoundary>
       <Box mt={6} />
-      <TestCasesSection varsList={varsList} />
+      <ErrorBoundary
+        FallbackComponent={ErrorFallback}
+        onReset={() => {
+          setTestCases([]);
+        }}
+      >
+        <TestCasesSection varsList={varsList} />
+      </ErrorBoundary>
       <YamlEditor yamlString={yamlString} onTestSuiteUpdated={handleTestSuiteUpdated} />
       <Dialog
         open={resetDialogOpen}
@@ -155,12 +193,3 @@ const EvaluateTestSuiteCreator: React.FC = () => {
 };
 
 export default EvaluateTestSuiteCreator;
-function ErrorFallback({ error, resetErrorBoundary }) {
-  return (
-    <div role="alert">
-      <p>Something went wrong:</p>
-      <pre>{error.message}</pre>
-      <button onClick={resetErrorBoundary}>Try again</button>
-    </div>
-  )
-}

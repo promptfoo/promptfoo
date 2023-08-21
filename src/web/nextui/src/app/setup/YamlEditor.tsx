@@ -4,7 +4,7 @@ import Typography from '@mui/material/Typography';
 import Box from '@mui/material/Box';
 import Link from 'next/link';
 
-import type {WebTestSuiteConfig} from './page';
+import type { WebTestSuiteConfig } from './page';
 
 interface YamlEditorProps {
   yamlString: string;
@@ -12,7 +12,7 @@ interface YamlEditorProps {
 }
 
 const YamlEditorComponent: React.FC<YamlEditorProps> = ({ yamlString, onTestSuiteUpdated }) => {
-  const handleChange = ({ json, text }: {json: any, text: string}) => {
+  const handleChange = ({ json, text }: { json: any; text: string }) => {
     console.log(json);
     onTestSuiteUpdated(json);
   };
@@ -26,8 +26,8 @@ const YamlEditorComponent: React.FC<YamlEditorProps> = ({ yamlString, onTestSuit
           </Typography>
           <Typography variant="body1" gutterBottom>
             This is the evaluation config that is run by promptfoo. See{' '}
-            <Link href="https://promptfoo.dev/docs/configuration/guide">configuration docs</Link>{' '}
-            to learn more.
+            <Link href="https://promptfoo.dev/docs/configuration/guide">configuration docs</Link> to
+            learn more.
           </Typography>
           <YamlEditor text={yamlString} onChange={handleChange} />
         </Box>
