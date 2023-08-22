@@ -168,7 +168,7 @@ const EvaluateTestSuiteCreator: React.FC = () => {
       >
         <TestCasesSection varsList={varsList} />
       </ErrorBoundary>
-      <YamlEditor yamlString={yamlString} onTestSuiteUpdated={handleTestSuiteUpdated} />
+      <YamlEditor />
       <Dialog
         open={resetDialogOpen}
         onClose={() => setResetDialogOpen(false)}

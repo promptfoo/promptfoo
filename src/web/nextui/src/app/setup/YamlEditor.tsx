@@ -5,33 +5,74 @@ import Box from '@mui/material/Box';
 import Link from 'next/link';
 
 import type { WebTestSuiteConfig } from './page';
+import { useStore } from '@/util/store';
 
-interface YamlEditorProps {
-  yamlString: string;
-  onTestSuiteUpdated: (testSuite: WebTestSuiteConfig) => void;
-}
+const YamlEditorComponent: React.FC = () => {
+  const {
+    description,
+    setDescription,
+    providers,
+    setProviders,
+    prompts,
+    setPrompts,
+    testCases,
+    setTestCases,
+  } = useStore();
 
-const YamlEditorComponent: React.FC<YamlEditorProps> = ({ yamlString, onTestSuiteUpdated }) => {
+  const testSuite = {
+    description,
+    providers,
+    prompts,
+    tests: testCases,
+  };
+
+  const anyNull = (arr: any[]) => arr.some((item) => item == null);
+
   const handleChange = ({ json, text }: { json: any; text: string }) => {
-    console.log(json);
-    onTestSuiteUpdated(json);
+    setDescription(json.description || '');
+    if (!anyNull(json.providers)) {
+      setProviders(json.providers || []);
+    }
+    if (!anyNull(json.prompts)) {
+      setPrompts(json.prompts || []);
+    }
+    if (!anyNull(json.tests)) {
+      setTestCases(json.tests || []);
+    }
+  };
+
+  const handleMerge = ({
+    json,
+    text,
+    currentText,
+  }: {
+    json: any;
+    text: string;
+    currentText: string;
+  }) => {
+    if (!json.providers || !json.prompts || !json.tests) {
+      return { text: currentText };
+    }
+    if (anyNull(json.providers) || anyNull(json.prompts) || anyNull(json.tests)) {
+      return { text: currentText };
+    }
+    return {
+      json,
+    };
   };
 
   return (
-    <Box mt={8}>
-      {yamlString && (
-        <Box mt={4}>
-          <Typography variant="h5" gutterBottom>
-            YAML config
-          </Typography>
-          <Typography variant="body1" gutterBottom>
-            This is the evaluation config that is run by promptfoo. See{' '}
-            <Link href="https://promptfoo.dev/docs/configuration/guide">configuration docs</Link> to
-            learn more.
-          </Typography>
-          <YamlEditor text={yamlString} onChange={handleChange} />
-        </Box>
-      )}
+    <Box mt={4}>
+      <Typography variant="h5" gutterBottom>
+        YAML config
+      </Typography>
+      <Typography variant="body1" gutterBottom>
+        This is the evaluation config that is run by promptfoo. See{' '}
+        <Link href="https://promptfoo.dev/docs/configuration/guide">configuration docs</Link> to
+        learn more.
+      </Typography>
+      {/* @ts-ignore: Upset with merge, but seems to work just fine. */}
+      <YamlEditor json={testSuite} onChange={handleChange} merge={handleMerge} />
     </Box>
   );
 };
