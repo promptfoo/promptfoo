@@ -28,11 +28,13 @@
     "js-yaml": "^4.1.0",
     "next": "13.4.13",
     "opener": "^1.5.2",
+    "prismjs": "^1.29.0",
     "react": "18.2.0",
     "react-dnd": "^16.0.1",
     "react-dnd-html5-backend": "^16.0.1",
     "react-dom": "18.2.0",
     "react-error-boundary": "^4.0.11",
+    "react-simple-code-editor": "^0.13.1",
     "react-syntax-highlighter": "^15.5.0",
     "socket.io": "^4.7.2",
     "socket.io-client": "^4.7.2",
@@ -42,6 +44,7 @@
     "zustand": "^4.4.1"
   },
   "devDependencies": {
-    "@types/js-yaml": "^4.0.5"
+    "@types/js-yaml": "^4.0.5",
+    "@types/prismjs": "^1.26.0"
   }
 }

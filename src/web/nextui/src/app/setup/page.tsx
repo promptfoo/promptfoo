@@ -1,10 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import Link from 'next/link';
 import yaml from 'js-yaml';
-import { Light as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { docco } from 'react-syntax-highlighter/dist/cjs/styles/hljs';
 import Button from '@mui/material/Button';
 import Container from '@mui/material/Container';
 import Typography from '@mui/material/Typography';
@@ -15,17 +12,42 @@ import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogContentText from '@mui/material/DialogContentText';
 import DialogTitle from '@mui/material/DialogTitle';
+import { ErrorBoundary } from 'react-error-boundary';
 
 import RunTestSuiteButton from './RunTestSuiteButton';
 import PromptsSection from './PromptsSection';
 import TestCasesSection from './TestCasesSection';
 import ProviderSelector from './ProviderSelector';
+import YamlEditor from './YamlEditor';
 import { useStore } from '../../util/store';
+
+import type { ProviderOptions, TestCase, TestSuiteConfig } from '../eval/types';
 
 import './page.css';
 
+export type WebTestSuiteConfig = TestSuiteConfig & {
+  providers: ProviderOptions[];
+  prompts: string[];
+  tests: TestCase[];
+};
+
+function ErrorFallback({
+  error,
+  resetErrorBoundary,
+}: {
+  error: Error;
+  resetErrorBoundary: () => void;
+}) {
+  return (
+    <div role="alert">
+      <p>Something went wrong:</p>
+      <pre>{error.message}</pre>
+      <button onClick={resetErrorBoundary}>Try again</button>
+    </div>
+  );
+}
+
 const EvaluateTestSuiteCreator: React.FC = () => {
-  const [yamlString, setYamlString] = useState('');
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
 
   const {
@@ -42,16 +64,6 @@ const EvaluateTestSuiteCreator: React.FC = () => {
   useEffect(() => {
     useStore.persist.rehydrate();
   }, []);
-
-  useEffect(() => {
-    const testSuite = {
-      description,
-      providers,
-      prompts,
-      tests: testCases,
-    };
-    setYamlString(yaml.dump(testSuite));
-  }, [description, providers, prompts, testCases]);
 
   if (process.env.NEXT_PUBLIC_NO_BROWSING) {
     return null;
@@ -78,7 +90,6 @@ const EvaluateTestSuiteCreator: React.FC = () => {
     setProviders([]);
     setPrompts([]);
     setTestCases([]);
-    setYamlString('');
     setResetDialogOpen(false);
   };
 
@@ -108,32 +119,37 @@ const EvaluateTestSuiteCreator: React.FC = () => {
       </Box>
       */}
       <Box mt={2}>
-        <Stack direction="column" spacing={2} justifyContent="space-between">
-          <Typography variant="h5">Providers</Typography>
-          <ProviderSelector providers={providers} onChange={setProviders} />
-        </Stack>
+        <ErrorBoundary
+          FallbackComponent={ErrorFallback}
+          onReset={() => {
+            setProviders([]);
+          }}
+        >
+          <Stack direction="column" spacing={2} justifyContent="space-between">
+            <Typography variant="h5">Providers</Typography>
+            <ProviderSelector providers={providers} onChange={setProviders} />
+          </Stack>
+        </ErrorBoundary>
       </Box>
       <Box mt={4} />
-      <PromptsSection />
+      <ErrorBoundary
+        FallbackComponent={ErrorFallback}
+        onReset={() => {
+          setPrompts([]);
+        }}
+      >
+        <PromptsSection />
+      </ErrorBoundary>
       <Box mt={6} />
-      <TestCasesSection varsList={varsList} />
-      <Box mt={8}>
-        {yamlString && (
-          <Box mt={4}>
-            <Typography variant="h5" gutterBottom>
-              YAML config
-            </Typography>
-            <Typography variant="body1" gutterBottom>
-              This is the evaluation config that is run by promptfoo. See{' '}
-              <Link href="https://promptfoo.dev/docs/configuration/guide">configuration docs</Link>{' '}
-              to learn more.
-            </Typography>
-            <SyntaxHighlighter className="yaml-config" language="yaml" style={docco}>
-              {yamlString}
-            </SyntaxHighlighter>
-          </Box>
-        )}
-      </Box>
+      <ErrorBoundary
+        FallbackComponent={ErrorFallback}
+        onReset={() => {
+          setTestCases([]);
+        }}
+      >
+        <TestCasesSection varsList={varsList} />
+      </ErrorBoundary>
+      <YamlEditor />
       <Dialog
         open={resetDialogOpen}
         onClose={() => setResetDialogOpen(false)}

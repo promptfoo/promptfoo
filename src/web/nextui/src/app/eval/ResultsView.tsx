@@ -19,13 +19,16 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import ShareIcon from '@mui/icons-material/Share';
 import VisibilityIcon from '@mui/icons-material/Visibility';
+import EditIcon from '@mui/icons-material/Edit';
 import { styled } from '@mui/system';
+import { useRouter } from 'next/navigation';
 
 import ResultsCharts from './ResultsCharts';
 import ResultsTable from './ResultsTable';
 import ConfigModal from './ConfigModal';
 import ShareModal from './ShareModal';
-import { useStore } from './store';
+import { useStore as useResultsViewStore } from './store';
+import { useStore as useMainStore } from '@/util/store';
 
 import type { VisibilityState } from '@tanstack/table-core';
 import type { FilterMode } from './types';
@@ -64,7 +67,9 @@ interface ResultsViewProps {
 }
 
 export default function ResultsView({ recentFiles, onRecentFileSelected }: ResultsViewProps) {
-  const { table, config } = useStore();
+  const router = useRouter();
+  const { table, config } = useResultsViewStore();
+  const { setStateFromConfig } = useMainStore();
   const [maxTextLength, setMaxTextLength] = React.useState(250);
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
   const [selectedColumns, setSelectedColumns] = React.useState<string[]>([]);
@@ -261,7 +266,21 @@ export default function ResultsView({ recentFiles, onRecentFileSelected }: Resul
                     onClick={() => setConfigModalOpen(true)}
                     startIcon={<VisibilityIcon />}
                   >
-                    Config
+                    View Config
+                  </Button>
+                </Tooltip>
+              )}
+              {config && (
+                <Tooltip title="Edit eval">
+                  <Button
+                    color="primary"
+                    onClick={() => {
+                      setStateFromConfig(config);
+                      router.push('/setup/');
+                    }}
+                    startIcon={<EditIcon />}
+                  >
+                    Edit Eval
                   </Button>
                 </Tooltip>
               )}

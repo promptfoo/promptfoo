@@ -3,6 +3,7 @@
 import * as React from 'react';
 import CircularProgress from '@mui/material/CircularProgress';
 import { io as SocketIOClient } from 'socket.io-client';
+import { useRouter } from 'next/navigation';
 
 import ResultsView from './ResultsView';
 import { API_BASE_URL } from '@/util/api';
@@ -14,12 +15,14 @@ import './Eval.css';
 
 interface EvalOptions {
   preloadedData?: SharedResults;
+  recentFiles?: string[];
 }
 
-export default function Eval({ preloadedData }: EvalOptions) {
+export default function Eval({ preloadedData, recentFiles: defaultRecentFiles }: EvalOptions) {
+  const router = useRouter();
   const { table, setTable, setConfig } = useStore();
   const [loaded, setLoaded] = React.useState<boolean>(false);
-  const [recentFiles, setRecentFiles] = React.useState<string[]>([]);
+  const [recentFiles, setRecentFiles] = React.useState<string[]>(defaultRecentFiles || []);
 
   const fetchRecentFiles = async () => {
     if (!window.location.href.includes('localhost')) {
@@ -35,6 +38,8 @@ export default function Eval({ preloadedData }: EvalOptions) {
     const body = await resp.json();
     setTable(body.data.results.table);
     setConfig(body.data.config);
+    // TODO(ian): This requires next.js standalone server
+    // router.push(`/eval/local:${encodeURIComponent(file)}`);
   };
 
   React.useEffect(() => {
