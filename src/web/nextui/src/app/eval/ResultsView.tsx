@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { useRouter } from 'next/router';
 
 import invariant from 'tiny-invariant';
 import Button from '@mui/material/Button';
@@ -66,6 +67,7 @@ interface ResultsViewProps {
 }
 
 export default function ResultsView({ recentFiles, onRecentFileSelected }: ResultsViewProps) {
+  const router = useRouter();
   const { table, config } = useResultsViewStore();
   const { setStateFromConfig } = useMainStore();
   const [maxTextLength, setMaxTextLength] = React.useState(250);
@@ -272,7 +274,10 @@ export default function ResultsView({ recentFiles, onRecentFileSelected }: Resul
                 <Tooltip title="Set config in store">
                   <Button
                     color="primary"
-                    onClick={() => setStateFromConfig(config)}
+                    onClick={() => {
+                      setStateFromConfig(config);
+                      router.push('/eval/');
+                    }}
                     startIcon={<SettingsIcon />}
                   >
                     Set Config
