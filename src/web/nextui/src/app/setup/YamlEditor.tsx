@@ -1,5 +1,6 @@
 import React from 'react';
 import Editor from 'react-simple-code-editor';
+// @ts-ignore: No types available
 import { highlight, languages } from 'prismjs/components/prism-core';
 import 'prismjs/components/prism-yaml';
 import 'prismjs/themes/prism.css';
@@ -13,8 +14,6 @@ import Button from '@mui/material/Button';
 import Link from 'next/link';
 
 import { useStore } from '@/util/store';
-
-import type {TestCase} from '../eval/types';
 
 import './YamlEditor.css';
 
