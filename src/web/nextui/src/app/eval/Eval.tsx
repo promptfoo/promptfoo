@@ -15,13 +15,14 @@ import './Eval.css';
 
 interface EvalOptions {
   preloadedData?: SharedResults;
+  recentFiles?: string[];
 }
 
-export default function Eval({ preloadedData }: EvalOptions) {
+export default function Eval({ preloadedData, recentFiles: defaultRecentFiles }: EvalOptions) {
   const router = useRouter();
   const { table, setTable, setConfig } = useStore();
   const [loaded, setLoaded] = React.useState<boolean>(false);
-  const [recentFiles, setRecentFiles] = React.useState<string[]>([]);
+  const [recentFiles, setRecentFiles] = React.useState<string[]>(defaultRecentFiles || []);
 
   const fetchRecentFiles = async () => {
     if (!window.location.href.includes('localhost')) {
@@ -49,7 +50,6 @@ export default function Eval({ preloadedData }: EvalOptions) {
       setTable(preloadedData.data.results?.table as EvalTable);
       setConfig(preloadedData.data.config);
       setLoaded(true);
-      fetchRecentFiles();
     } else {
       socket.on('init', (data) => {
         console.log('Initialized socket connection', data);

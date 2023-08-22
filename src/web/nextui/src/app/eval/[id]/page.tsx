@@ -12,14 +12,23 @@ export async function generateStaticParams() {
 
 export default async function Page({ params }: { params: { id: string } }) {
   let data;
+  let recentFiles;
   const decodedId = decodeURIComponent(params.id);
   if (decodedId.startsWith('local:')) {
-    // Local file
-    const response = await fetch(`${API_BASE_URL}/results/${decodedId.slice(6)}`);
+    // Load local file and list of recent files in parallel
+    const [response, response2] = await Promise.all([
+      fetch(`${API_BASE_URL}/results/${decodedId.slice(6)}`),
+      fetch(`${API_BASE_URL}/results`),
+    ]);
+
     if (!response.ok) {
       notFound();
     }
-    data = await response.json();
+
+    [data, recentFiles] = await Promise.all([
+      response.json(),
+      response2.json().then((res) => res.data),
+    ]);
   } else {
     // Cloudflare KV
     const response = await fetch(`https://api.promptfoo.dev/eval/${params.id}`);
@@ -28,7 +37,5 @@ export default async function Page({ params }: { params: { id: string } }) {
     }
     data = await response.json();
   }
-
-  // TODO(ian): Pass recent files as well
-  return <Eval preloadedData={data} />;
+  return <Eval preloadedData={data} recentFiles={recentFiles} />;
 }
