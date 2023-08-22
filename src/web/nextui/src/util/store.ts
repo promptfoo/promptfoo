@@ -58,18 +58,3 @@ export const useStore = create<State>()(
     },
   ),
 );
-
-/*
-export const useStore = create<State>((set) => ({
-  asserts: [],
-  testCases: [],
-  description: '',
-  providers: [],
-  prompts: [],
-  setAsserts: (asserts) => set({ asserts }),
-  setTestCases: (testCases) => set({ testCases }),
-  setDescription: (description) => set({ description }),
-  setProviders: (providers) => set({ providers }),
-  setPrompts: (prompts) => set({ prompts }),
-}));
-*/
