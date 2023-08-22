@@ -63,11 +63,11 @@ const YamlEditorComponent: React.FC = () => {
   return (
     <Box mt={4}>
       <Typography variant="h5" gutterBottom>
-        YAML config
+        Configuration
       </Typography>
       <Typography variant="body1" gutterBottom>
-        This is the evaluation config that is run by promptfoo. See{' '}
-        <Link href="https://promptfoo.dev/docs/configuration/guide">configuration docs</Link> to
+        This is the YAML config that defines the evaluation and is processed by promptfoo. See{' '}
+        <Link target="_blank" href="https://promptfoo.dev/docs/configuration/guide">configuration docs</Link> to
         learn more.
       </Typography>
       {/* @ts-ignore: Upset with merge, but seems to work just fine. */}
