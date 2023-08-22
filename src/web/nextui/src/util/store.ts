@@ -41,7 +41,10 @@ export const useStore = create<State>()(
           if (typeof config.prompts === 'string') {
             updates.prompts = [config.prompts];
           } else if (Array.isArray(config.prompts)) {
-            updates.prompts = config.prompts;
+            // If it looks like a file path, don't set it.
+            updates.prompts = config.prompts.filter(
+              (p) => !p.endsWith('.txt') && !p.endsWith('.json') && !p.endsWith('.yaml'),
+            );
           } else {
             console.warn('Invalid prompts config', config.prompts);
           }

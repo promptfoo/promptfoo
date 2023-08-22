@@ -67,8 +67,10 @@ const YamlEditorComponent: React.FC = () => {
       </Typography>
       <Typography variant="body1" gutterBottom>
         This is the YAML config that defines the evaluation and is processed by promptfoo. See{' '}
-        <Link target="_blank" href="https://promptfoo.dev/docs/configuration/guide">configuration docs</Link> to
-        learn more.
+        <Link target="_blank" href="https://promptfoo.dev/docs/configuration/guide">
+          configuration docs
+        </Link>{' '}
+        to learn more.
       </Typography>
       {/* @ts-ignore: Upset with merge, but seems to work just fine. */}
       <YamlEditor json={testSuite} onChange={handleChange} merge={handleMerge} />
