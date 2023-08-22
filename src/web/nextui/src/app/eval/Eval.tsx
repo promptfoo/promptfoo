@@ -3,6 +3,7 @@
 import * as React from 'react';
 import CircularProgress from '@mui/material/CircularProgress';
 import { io as SocketIOClient } from 'socket.io-client';
+import { useRouter } from 'next/navigation';
 
 import ResultsView from './ResultsView';
 import { API_BASE_URL } from '@/util/api';
@@ -17,6 +18,7 @@ interface EvalOptions {
 }
 
 export default function Eval({ preloadedData }: EvalOptions) {
+  const router = useRouter();
   const { table, setTable, setConfig } = useStore();
   const [loaded, setLoaded] = React.useState<boolean>(false);
   const [recentFiles, setRecentFiles] = React.useState<string[]>([]);
@@ -31,10 +33,13 @@ export default function Eval({ preloadedData }: EvalOptions) {
   };
 
   const handleRecentFileSelection = async (file: string) => {
+    /*
     const resp = await fetch(`${API_BASE_URL}/results/${file}`);
     const body = await resp.json();
     setTable(body.data.results.table);
     setConfig(body.data.config);
+    */
+    router.push(`/eval/local:${encodeURIComponent(file)}`);
   };
 
   React.useEffect(() => {
@@ -44,6 +49,7 @@ export default function Eval({ preloadedData }: EvalOptions) {
       setTable(preloadedData.data.results?.table as EvalTable);
       setConfig(preloadedData.data.config);
       setLoaded(true);
+      fetchRecentFiles();
     } else {
       socket.on('init', (data) => {
         console.log('Initialized socket connection', data);
