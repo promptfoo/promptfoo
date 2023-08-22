@@ -11,7 +11,7 @@ import cors from 'cors';
 import compression from 'compression';
 import opener from 'opener';
 import { Server as SocketIOServer } from 'socket.io';
-import promptfoo, { EvaluateSummary } from '../index';
+import promptfoo, { EvaluateSummary, EvaluateTestSuite } from '../index';
 
 import logger from '../logger';
 import { getDirectory } from '../esm';
@@ -74,7 +74,7 @@ export function startServer(port = 15500) {
   });
 
   app.post('/api/eval', (req, res) => {
-    const testSuite = req.body;
+    const testSuite = req.body as EvaluateTestSuite;
     const id = uuidv4();
     evalJobs.set(id, { status: 'in-progress', progress: 0, total: 0, result: null });
 
@@ -85,7 +85,7 @@ export function startServer(port = 15500) {
           invariant(job, 'Job not found');
           job.progress = progress;
           job.total = total;
-          console.log(`Progress: ${progress}/${total}`);
+          console.log(`[${id}] ${progress}/${total}`);
         },
       })
       .then((result) => {
@@ -93,6 +93,7 @@ export function startServer(port = 15500) {
         invariant(job, 'Job not found');
         job.status = 'completed';
         job.result = result;
+        console.log(`[${id}] Completed`);
       });
 
     res.json({ id });

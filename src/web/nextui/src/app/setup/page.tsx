@@ -48,7 +48,6 @@ function ErrorFallback({
 }
 
 const EvaluateTestSuiteCreator: React.FC = () => {
-  const [yamlString, setYamlString] = useState('');
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
 
   const {
@@ -65,16 +64,6 @@ const EvaluateTestSuiteCreator: React.FC = () => {
   useEffect(() => {
     useStore.persist.rehydrate();
   }, []);
-
-  useEffect(() => {
-    const testSuite = {
-      description,
-      providers,
-      prompts,
-      tests: testCases,
-    };
-    setYamlString(yaml.dump(testSuite));
-  }, [description, providers, prompts, testCases]);
 
   if (process.env.NEXT_PUBLIC_NO_BROWSING) {
     return null;
@@ -101,15 +90,7 @@ const EvaluateTestSuiteCreator: React.FC = () => {
     setProviders([]);
     setPrompts([]);
     setTestCases([]);
-    setYamlString('');
     setResetDialogOpen(false);
-  };
-
-  const handleTestSuiteUpdated = (testSuite: WebTestSuiteConfig) => {
-    setDescription(testSuite.description || '');
-    setProviders(testSuite.providers || []);
-    setPrompts(testSuite.prompts || []);
-    setTestCases(testSuite.tests || []);
   };
 
   return (

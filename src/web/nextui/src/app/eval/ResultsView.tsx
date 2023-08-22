@@ -26,7 +26,8 @@ import ResultsCharts from './ResultsCharts';
 import ResultsTable from './ResultsTable';
 import ConfigModal from './ConfigModal';
 import ShareModal from './ShareModal';
-import { useStore } from './store';
+import { useStore as useResultsViewStore } from './store';
+import { useStore as useMainStore } from '@/util/store';
 
 import type { VisibilityState } from '@tanstack/table-core';
 import type { FilterMode } from './types';
@@ -65,7 +66,8 @@ interface ResultsViewProps {
 }
 
 export default function ResultsView({ recentFiles, onRecentFileSelected }: ResultsViewProps) {
-  const { table, config } = useStore();
+  const { table, config } = useResultsViewStore();
+  const { setStateFromConfig } = useMainStore();
   const [maxTextLength, setMaxTextLength] = React.useState(250);
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
   const [selectedColumns, setSelectedColumns] = React.useState<string[]>([]);
@@ -270,7 +272,7 @@ export default function ResultsView({ recentFiles, onRecentFileSelected }: Resul
                 <Tooltip title="Set config in store">
                   <Button
                     color="primary"
-                    onClick={() => setConfigFromResults(config)}
+                    onClick={() => setStateFromConfig(config)}
                     startIcon={<SettingsIcon />}
                   >
                     Set Config

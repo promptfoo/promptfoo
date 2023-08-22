@@ -10,7 +10,7 @@ export * from './types';
 
 export { generateTable } from './table';
 
-interface EvaluateTestSuite extends TestSuiteConfig {
+export interface EvaluateTestSuite extends TestSuiteConfig {
   prompts: string[];
   writeLatestResults?: boolean;
 }
@@ -36,7 +36,7 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
   }
 
   if (testSuite.writeLatestResults) {
-    writeLatestResults(ret, {});
+    writeLatestResults(ret, testSuite);
   }
 
   await telemetry.send();
