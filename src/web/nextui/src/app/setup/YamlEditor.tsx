@@ -1,10 +1,22 @@
 import React from 'react';
-import YamlEditor from '@focus-reactive/react-yaml';
+import Editor from 'react-simple-code-editor';
+import { highlight, languages } from 'prismjs/components/prism-core';
+import 'prismjs/components/prism-yaml';
+import 'prismjs/themes/prism.css';
+import yaml from 'js-yaml';
+
+import EditIcon from '@mui/icons-material/Edit';
+import SaveIcon from '@mui/icons-material/Save';
 import Typography from '@mui/material/Typography';
 import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
 import Link from 'next/link';
 
 import { useStore } from '@/util/store';
+
+import type {TestCase} from '../eval/types';
+
+import './YamlEditor.css';
 
 const YamlEditorComponent: React.FC = () => {
   const {
@@ -18,46 +30,37 @@ const YamlEditorComponent: React.FC = () => {
     setTestCases,
   } = useStore();
 
-  const testSuite = {
-    description,
-    providers,
-    prompts,
-    tests: testCases,
+  const [code, setCode] = React.useState('');
+  const [isReadOnly, setIsReadOnly] = React.useState(true);
+
+  const toggleReadOnly = () => {
+    if (!isReadOnly) {
+      try {
+        const parsed = yaml.load(code, { json: true });
+        handleChange(parsed);
+      } catch {
+        // Invalid YAML, probably mid-edit
+      }
+    }
+    setIsReadOnly(!isReadOnly);
   };
 
-  const anyNull = (arr: any[]) => arr.some((item) => item == null);
-
-  const handleChange = ({ json, text }: { json: any; text: string }) => {
-    setDescription(json.description || '');
-    if (!anyNull(json.providers)) {
-      setProviders(json.providers || []);
-    }
-    if (!anyNull(json.prompts)) {
-      setPrompts(json.prompts || []);
-    }
-    if (!anyNull(json.tests)) {
-      setTestCases(json.tests || []);
-    }
-  };
-
-  const handleMerge = ({
-    json,
-    text,
-    currentText,
-  }: {
-    json: any;
-    text: string;
-    currentText: string;
-  }) => {
-    if (!json.providers || !json.prompts || !json.tests) {
-      return { text: currentText };
-    }
-    if (anyNull(json.providers) || anyNull(json.prompts) || anyNull(json.tests)) {
-      return { text: currentText };
-    }
-    return {
-      json,
+  React.useEffect(() => {
+    const testSuite = {
+      description,
+      providers,
+      prompts,
+      tests: testCases,
     };
+
+    setCode(yaml.dump(testSuite));
+  }, [description, providers, prompts, testCases]);
+
+  const handleChange = (yamlObj: any) => {
+    setDescription(yamlObj.description || '');
+    setProviders(yamlObj.providers || []);
+    setPrompts(yamlObj.prompts || []);
+    setTestCases(yamlObj.tests || []);
   };
 
   return (
@@ -72,8 +75,25 @@ const YamlEditorComponent: React.FC = () => {
         </Link>{' '}
         to learn more.
       </Typography>
-      {/* @ts-ignore: Upset with merge, but seems to work just fine. */}
-      <YamlEditor json={testSuite} onChange={handleChange} merge={handleMerge} />
+      <Button variant="text" color="primary" startIcon={isReadOnly ? <EditIcon /> : <SaveIcon />} onClick={toggleReadOnly}>
+        {isReadOnly ? 'Edit YAML' : 'Save'}
+      </Button>
+      <Editor
+        value={code}
+        onValueChange={code => {
+          if (!isReadOnly) {
+            setCode(code);
+          }
+        }}
+        highlight={code => highlight(code, languages.yaml)}
+        padding={10}
+        style={{
+          fontFamily: '"Fira code", "Fira Mono", monospace',
+          fontSize: 12,
+        }}
+        disabled={isReadOnly}
+        className={isReadOnly ? '' : 'glowing-border'}
+      />
     </Box>
   );
 };

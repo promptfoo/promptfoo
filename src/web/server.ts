@@ -79,15 +79,21 @@ export function startServer(port = 15500) {
     evalJobs.set(id, { status: 'in-progress', progress: 0, total: 0, result: null });
 
     promptfoo
-      .evaluate(Object.assign({}, testSuite, { writeLatestResults: true }), {
-        progressCallback: (progress, total) => {
-          const job = evalJobs.get(id);
-          invariant(job, 'Job not found');
-          job.progress = progress;
-          job.total = total;
-          console.log(`[${id}] ${progress}/${total}`);
+      .evaluate(
+        Object.assign({}, testSuite, {
+          writeLatestResults: true,
+          sharing: testSuite.sharing ?? true,
+        }),
+        {
+          progressCallback: (progress, total) => {
+            const job = evalJobs.get(id);
+            invariant(job, 'Job not found');
+            job.progress = progress;
+            job.total = total;
+            console.log(`[${id}] ${progress}/${total}`);
+          },
         },
-      })
+      )
       .then((result) => {
         const job = evalJobs.get(id);
         invariant(job, 'Job not found');

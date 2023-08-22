@@ -34,13 +34,12 @@ export default function Eval({ preloadedData, recentFiles: defaultRecentFiles }:
   };
 
   const handleRecentFileSelection = async (file: string) => {
-    /*
     const resp = await fetch(`${API_BASE_URL}/results/${file}`);
     const body = await resp.json();
     setTable(body.data.results.table);
     setConfig(body.data.config);
-    */
-    router.push(`/eval/local:${encodeURIComponent(file)}`);
+    // TODO(ian): This requires next.js standalone server
+    // router.push(`/eval/local:${encodeURIComponent(file)}`);
   };
 
   React.useEffect(() => {
