@@ -29,6 +29,7 @@ export const useStore = create<State>()(
       setDescription: (description) => set({ description }),
       setProviders: (providers) => set({ providers }),
       setPrompts: (prompts) => set({ prompts }),
+      setConfigFromResults: (config) => set({ asserts: config.asserts, testCases: config.testCases, description: config.description, providers: config.providers, prompts: config.prompts }),
     }),
     {
       name: 'promptfoo',

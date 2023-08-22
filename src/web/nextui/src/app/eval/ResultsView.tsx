@@ -19,6 +19,7 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import ShareIcon from '@mui/icons-material/Share';
 import VisibilityIcon from '@mui/icons-material/Visibility';
+import SettingsIcon from '@mui/icons-material/Settings';
 import { styled } from '@mui/system';
 
 import ResultsCharts from './ResultsCharts';
@@ -262,6 +263,17 @@ export default function ResultsView({ recentFiles, onRecentFileSelected }: Resul
                     startIcon={<VisibilityIcon />}
                   >
                     Config
+                  </Button>
+                </Tooltip>
+              )}
+              {config && (
+                <Tooltip title="Set config in store">
+                  <Button
+                    color="primary"
+                    onClick={() => setConfigFromResults(config)}
+                    startIcon={<SettingsIcon />}
+                  >
+                    Set Config
                   </Button>
                 </Tooltip>
               )}
