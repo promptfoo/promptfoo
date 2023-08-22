@@ -38,7 +38,13 @@ export const useStore = create<State>()(
           updates.providers = config.providers as ProviderOptions[];
         }
         if (config.prompts) {
-          updates.prompts = config.prompts as string[];
+          if (typeof config.prompts === 'string') {
+            updates.prompts = [config.prompts];
+          } else if (Array.isArray(config.prompts)) {
+            updates.prompts = config.prompts;
+          } else {
+            console.warn('Invalid prompts config', config.prompts);
+          }
         }
         set(updates);
       },

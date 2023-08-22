@@ -1,5 +1,4 @@
 import * as React from 'react';
-import { useRouter } from 'next/router';
 
 import invariant from 'tiny-invariant';
 import Button from '@mui/material/Button';
@@ -20,8 +19,9 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import ShareIcon from '@mui/icons-material/Share';
 import VisibilityIcon from '@mui/icons-material/Visibility';
-import SettingsIcon from '@mui/icons-material/Settings';
+import EditIcon from '@mui/icons-material/Edit';
 import { styled } from '@mui/system';
+import { useRouter } from 'next/navigation';
 
 import ResultsCharts from './ResultsCharts';
 import ResultsTable from './ResultsTable';
@@ -266,21 +266,21 @@ export default function ResultsView({ recentFiles, onRecentFileSelected }: Resul
                     onClick={() => setConfigModalOpen(true)}
                     startIcon={<VisibilityIcon />}
                   >
-                    Config
+                    View Config
                   </Button>
                 </Tooltip>
               )}
               {config && (
-                <Tooltip title="Set config in store">
+                <Tooltip title="Edit eval">
                   <Button
                     color="primary"
                     onClick={() => {
                       setStateFromConfig(config);
-                      router.push('/eval/');
+                      router.push('/setup/');
                     }}
-                    startIcon={<SettingsIcon />}
+                    startIcon={<EditIcon />}
                   >
-                    Set Config
+                    Edit Eval
                   </Button>
                 </Tooltip>
               )}
