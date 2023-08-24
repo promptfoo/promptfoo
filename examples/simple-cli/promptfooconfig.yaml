@@ -1,6 +1,6 @@
 description: A translator built with LLM
 prompts: [prompts.txt]
-providers: [webhook:https://webhook.site/6b8cecd1-28b4-4e25-a0d5-2dde9f45275b]
+providers: [openai:gpt-3.5-turbo]
 tests:
   - vars:
       language: French
