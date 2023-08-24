@@ -156,7 +156,10 @@ export async function loadApiProvider(
     return new ReplicateProvider(modelName, undefined, context.config);
   }
 
-  if (providerPath === 'llama' || providerPath.startsWith('llama:')) {
+  if (providerPath.startsWith('webhook:')) {
+    const webhookUrl = providerPath.split(':')[1];
+    return new WebhookProvider(webhookUrl);
+  } else if (providerPath === 'llama' || providerPath.startsWith('llama:')) {
     const modelName = providerPath.split(':')[1];
     return new LlamaProvider(modelName, context.config);
   } else if (providerPath.startsWith('ollama:')) {
