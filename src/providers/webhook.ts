@@ -52,7 +52,9 @@ export class WebhookProvider implements ApiProvider {
       };
     } else {
       return {
-        error: `Webhook response error: Unexpected response format: ${JSON.stringify(response.data)}`,
+        error: `Webhook response error: Unexpected response format: ${JSON.stringify(
+          response.data,
+        )}`,
       };
     }
   }

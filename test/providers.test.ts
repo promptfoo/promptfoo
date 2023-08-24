@@ -1,5 +1,4 @@
 import fetch from 'node-fetch';
-import { fetchWithCache } from '../src/cache';
 
 import { OpenAiCompletionProvider, OpenAiChatCompletionProvider } from '../src/providers/openai';
 import { AnthropicCompletionProvider } from '../src/providers/anthropic';
@@ -13,6 +12,7 @@ import {
   AzureOpenAiCompletionProvider,
 } from '../src/providers/azureopenai';
 import { OllamaProvider } from '../src/providers/ollama';
+import { WebhookProvider } from '../src/providers/webhook';
 
 jest.mock('node-fetch', () => jest.fn());
 
@@ -190,6 +190,21 @@ describe('providers', () => {
     expect(result.output).toBe('Great question! The sky appears blue');
   });
 
+  test('WebhookProvider callApi', async () => {
+    const mockResponse = {
+      json: jest.fn().mockResolvedValue({
+        output: 'Test output',
+      }),
+    };
+    (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
+
+    const provider = new WebhookProvider('http://example.com/webhook');
+    const result = await provider.callApi('Test prompt');
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(result.output).toBe('Test output');
+  });
+
   test('loadApiProvider with openai:chat', async () => {
     const provider = await loadApiProvider('openai:chat');
     expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
@@ -233,6 +248,11 @@ describe('providers', () => {
   test('loadApiProvider with llama:modelName', async () => {
     const provider = await loadApiProvider('llama');
     expect(provider).toBeInstanceOf(LlamaProvider);
+  });
+
+  test('loadApiProvider with webhook', async () => {
+    const provider = await loadApiProvider('webhook:http://example.com/webhook');
+    expect(provider).toBeInstanceOf(WebhookProvider);
   });
 
   test('loadApiProvider with RawProviderConfig', async () => {
@@ -286,17 +306,3 @@ describe('providers', () => {
     expect(providers[2]).toBeInstanceOf(AnthropicCompletionProvider);
   });
 });
-  test('WebhookProvider callApi', async () => {
-    const mockResponse = {
-      json: jest.fn().mockResolvedValue({
-        output: 'Test output',
-      }),
-    };
-    (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
-
-    const provider = new WebhookProvider('http://example.com/webhook');
-    const result = await provider.callApi('Test prompt');
-
-    expect(fetch).toHaveBeenCalledTimes(1);
-    expect(result.output).toBe('Test output');
-  });
