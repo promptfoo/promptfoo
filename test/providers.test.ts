@@ -286,3 +286,17 @@ describe('providers', () => {
     expect(providers[2]).toBeInstanceOf(AnthropicCompletionProvider);
   });
 });
+  test('WebhookProvider callApi', async () => {
+    const mockResponse = {
+      json: jest.fn().mockResolvedValue({
+        output: 'Test output',
+      }),
+    };
+    (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
+
+    const provider = new WebhookProvider('http://example.com/webhook');
+    const result = await provider.callApi('Test prompt');
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(result.output).toBe('Test output');
+  });
