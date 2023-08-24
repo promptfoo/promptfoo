@@ -74,17 +74,22 @@ const YamlEditorComponent: React.FC = () => {
         </Link>{' '}
         to learn more.
       </Typography>
-      <Button variant="text" color="primary" startIcon={isReadOnly ? <EditIcon /> : <SaveIcon />} onClick={toggleReadOnly}>
+      <Button
+        variant="text"
+        color="primary"
+        startIcon={isReadOnly ? <EditIcon /> : <SaveIcon />}
+        onClick={toggleReadOnly}
+      >
         {isReadOnly ? 'Edit YAML' : 'Save'}
       </Button>
       <Editor
         value={code}
-        onValueChange={code => {
+        onValueChange={(code) => {
           if (!isReadOnly) {
             setCode(code);
           }
         }}
-        highlight={code => highlight(code, languages.yaml)}
+        highlight={(code) => highlight(code, languages.yaml)}
         padding={10}
         style={{
           fontFamily: '"Fira code", "Fira Mono", monospace',
