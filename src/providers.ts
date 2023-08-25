@@ -112,19 +112,9 @@ export async function loadApiProvider(
     const deploymentName = options[2];
 
     if (modelType === 'chat') {
-      return new AzureOpenAiChatCompletionProvider(
-        deploymentName,
-        undefined,
-        context.config,
-        context.id,
-      );
+      return new AzureOpenAiChatCompletionProvider(deploymentName, context.config, context.id);
     } else if (modelType === 'completion') {
-      return new AzureOpenAiCompletionProvider(
-        deploymentName,
-        undefined,
-        context.config,
-        context.id,
-      );
+      return new AzureOpenAiCompletionProvider(deploymentName, context.config, context.id);
     } else {
       throw new Error(
         `Unknown Azure OpenAI model type: ${modelType}. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>`,
@@ -137,13 +127,9 @@ export async function loadApiProvider(
     const modelName = options[2];
 
     if (modelType === 'completion') {
-      return new AnthropicCompletionProvider(
-        modelName || 'claude-instant-1',
-        undefined,
-        context.config,
-      );
+      return new AnthropicCompletionProvider(modelName || 'claude-instant-1', context.config);
     } else if (AnthropicCompletionProvider.ANTHROPIC_COMPLETION_MODELS.includes(modelType)) {
-      return new AnthropicCompletionProvider(modelType, undefined, context.config);
+      return new AnthropicCompletionProvider(modelType, context.config);
     } else {
       throw new Error(
         `Unknown Anthropic model type: ${modelType}. Use one of the following providers: anthropic:completion:<model name>`,
@@ -154,7 +140,7 @@ export async function loadApiProvider(
     const options = providerPath.split(':');
     const modelName = options.slice(1).join(':');
 
-    return new ReplicateProvider(modelName, undefined, context.config);
+    return new ReplicateProvider(modelName, context.config);
   }
 
   if (providerPath.startsWith('webhook:')) {

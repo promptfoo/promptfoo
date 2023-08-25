@@ -36,8 +36,10 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
   };
 
   return (
-    <Dialog open={open} onClose={onClose}>
-      <DialogTitle>Edit {providerId}</DialogTitle>
+    <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
+      <DialogTitle>
+        Edit {providerId.length > 50 ? providerId.slice(0, 50) + '...' : providerId}
+      </DialogTitle>
       <DialogContent>
         {Object.keys(localConfig).map((key) => {
           const value = localConfig[key];
@@ -66,6 +68,7 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
                   value={value}
                   onChange={handleChange}
                   fullWidth
+                  InputLabelProps={{ shrink: true }}
                   type={typeof value === 'number' ? 'number' : 'text'}
                 />
               </Box>
@@ -82,6 +85,7 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
                   fullWidth
                   multiline
                   minRows={3}
+                  InputLabelProps={{ shrink: true }}
                 />
               </Box>
             );

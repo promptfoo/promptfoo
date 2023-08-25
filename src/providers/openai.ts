@@ -20,20 +20,15 @@ interface OpenAiCompletionOptions {
   }[];
   function_call?: 'none' | 'auto';
   apiKey?: string;
+  apiHost?: string;
   organization?: string;
 }
 
 class OpenAiGenericProvider implements ApiProvider {
   modelName: string;
-  apiKey?: string;
-  apiHost: string;
 
-  constructor(modelName: string, apiKey?: string) {
+  constructor(modelName: string) {
     this.modelName = modelName;
-
-    this.apiKey = apiKey;
-
-    this.apiHost = process.env.OPENAI_API_HOST || DEFAULT_OPENAI_HOST;
   }
 
   id(): string {
@@ -48,8 +43,12 @@ class OpenAiGenericProvider implements ApiProvider {
     return options?.organization || process.env.OPENAI_ORGANIZATION;
   }
 
+  getApiHost(options?: OpenAiCompletionOptions): string | undefined {
+    return options?.apiHost || process.env.OPENAI_API_HOST || DEFAULT_OPENAI_HOST;
+  }
+
   getApiKey(options?: OpenAiCompletionOptions): string | undefined {
-    return options?.apiKey || this.apiKey || process.env.OPENAI_API_KEY;
+    return options?.apiKey || process.env.OPENAI_API_KEY;
   }
 
   // @ts-ignore: Prompt is not used in this implementation
@@ -72,7 +71,7 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
       cached = false;
     try {
       ({ data, cached } = (await fetchWithCache(
-        `https://${this.apiHost}/v1/embeddings`,
+        `https://${this.getApiHost()}/v1/embeddings`,
         {
           method: 'POST',
           headers: {
@@ -140,7 +139,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
     if (!OpenAiCompletionProvider.OPENAI_COMPLETION_MODELS.includes(modelName)) {
       logger.warn(`Using unknown OpenAI completion model: ${modelName}`);
     }
-    super(modelName, apiKey);
+    super(modelName);
     this.options = context || {};
     this.id = id ? () => id : this.id;
   }
@@ -189,7 +188,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       cached = false;
     try {
       ({ data, cached } = (await fetchWithCache(
-        `https://${this.apiHost}/v1/completions`,
+        `https://${this.getApiHost(options)}/v1/completions`,
         {
           method: 'POST',
           headers: {
@@ -248,7 +247,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     if (!OpenAiChatCompletionProvider.OPENAI_CHAT_MODELS.includes(modelName)) {
       logger.warn(`Using unknown OpenAI chat model: ${modelName}`);
     }
-    super(modelName, apiKey);
+    super(modelName);
     this.options = context || {};
     this.id = id ? () => id : this.id;
   }
@@ -290,7 +289,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       cached = false;
     try {
       ({ data, cached } = (await fetchWithCache(
-        `https://${this.apiHost}/v1/chat/completions`,
+        `https://${this.getApiHost(options)}/v1/chat/completions`,
         {
           method: 'POST',
           headers: {

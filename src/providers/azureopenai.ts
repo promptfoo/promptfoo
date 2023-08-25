@@ -5,6 +5,7 @@ import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
 import type { ApiProvider, ProviderEmbeddingResponse, ProviderResponse } from '../types.js';
 
 interface AzureOpenAiCompletionOptions {
+  apiKey?: string;
   temperature?: number;
   top_p?: number;
   frequency_penalty?: number;
@@ -23,10 +24,10 @@ class AzureOpenAiGenericProvider implements ApiProvider {
   apiKey?: string;
   apiHost?: string;
 
-  constructor(deploymentName: string, apiKey?: string) {
+  constructor(deploymentName: string, context?: AzureOpenAiCompletionOptions) {
     this.deploymentName = deploymentName;
 
-    this.apiKey = apiKey || process.env.AZURE_OPENAI_API_KEY;
+    this.apiKey = context?.apiKey || process.env.AZURE_OPENAI_API_KEY;
 
     this.apiHost = process.env.AZURE_OPENAI_API_HOST;
   }
@@ -117,13 +118,8 @@ export class AzureOpenAiEmbeddingProvider extends AzureOpenAiGenericProvider {
 export class AzureOpenAiCompletionProvider extends AzureOpenAiGenericProvider {
   options: AzureOpenAiCompletionOptions;
 
-  constructor(
-    deploymentName: string,
-    apiKey?: string,
-    context?: AzureOpenAiCompletionOptions,
-    id?: string,
-  ) {
-    super(deploymentName, apiKey);
+  constructor(deploymentName: string, context?: AzureOpenAiCompletionOptions, id?: string) {
+    super(deploymentName, context);
     this.options = context || {};
     this.id = id ? () => id : this.id;
   }
@@ -211,13 +207,8 @@ export class AzureOpenAiCompletionProvider extends AzureOpenAiGenericProvider {
 export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvider {
   options: AzureOpenAiCompletionOptions;
 
-  constructor(
-    deploymentName: string,
-    apiKey?: string,
-    context?: AzureOpenAiCompletionOptions,
-    id?: string,
-  ) {
-    super(deploymentName, apiKey);
+  constructor(deploymentName: string, context?: AzureOpenAiCompletionOptions, id?: string) {
+    super(deploymentName, context);
     this.options = context || {};
     this.id = id ? () => id : this.id;
   }

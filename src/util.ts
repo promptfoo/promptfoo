@@ -423,7 +423,7 @@ export async function fetchWithRetries(
   throw new Error(`Request failed after ${retries} retries: ${(lastError as Error).message}`);
 }
 
-const RESULT_HISTORY_LENGTH = 50;
+const RESULT_HISTORY_LENGTH = parseInt(process.env.RESULT_HISTORY_LENGTH || '', 10) || 50;
 
 export function getConfigDirectoryPath(): string {
   return path.join(os.homedir(), '.promptfoo');

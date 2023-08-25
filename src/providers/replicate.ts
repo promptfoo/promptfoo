@@ -7,6 +7,7 @@ import { getCache, isCacheEnabled } from '../cache';
 import type { ApiProvider, ProviderResponse } from '../types.js';
 
 interface ReplicateCompletionOptions {
+  apiKey?: string;
   temperature?: number;
   max_length?: number;
   repetition_penalty?: number;
@@ -18,9 +19,10 @@ export class ReplicateProvider implements ApiProvider {
   replicate: any;
   options: ReplicateCompletionOptions;
 
-  constructor(modelName: string, apiKey?: string, options?: ReplicateCompletionOptions) {
+  constructor(modelName: string, options?: ReplicateCompletionOptions) {
     this.modelName = modelName;
-    this.apiKey = apiKey || process.env.REPLICATE_API_TOKEN || process.env.REPLICATE_API_KEY;
+    this.apiKey =
+      options?.apiKey || process.env.REPLICATE_API_TOKEN || process.env.REPLICATE_API_KEY;
     this.options = options || {};
   }
 

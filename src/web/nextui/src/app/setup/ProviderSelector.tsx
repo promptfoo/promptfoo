@@ -7,7 +7,10 @@ import type { ProviderOptions } from '../../../../../types';
 const defaultProviders: ProviderOptions[] = [
   {
     id: 'replicate:replicate/llama70b-v2-chat:e951f18578850b652510200860fc4ea62b3b16fac280f83ff32282f87bbd2e48',
-    config: { temperature: 0.5 },
+    config: {
+      apiKey: '',
+      temperature: 0.5,
+    },
   },
 ]
   .concat(
@@ -16,7 +19,7 @@ const defaultProviders: ProviderOptions[] = [
       'anthropic:claude-1-100k',
       'anthropic:claude-instant-1',
       'anthropic:claude-instant-1-100k',
-    ].map((id) => ({ id, config: { temperature: 0.5 } })),
+    ].map((id) => ({ id, config: { apiKey: '', temperature: 0.5 } })),
   )
   .concat(
     [
@@ -30,7 +33,16 @@ const defaultProviders: ProviderOptions[] = [
       'openai:gpt-4-0613',
       'openai:gpt-4-32k',
       'openai:gpt-4-32k-0314',
-    ].map((id) => ({ id, config: { temperature: 0.5, max_tokens: 1024 } })),
+    ].map((id) => ({
+      id,
+      config: {
+        apiKey: '',
+        organization: '',
+        apiHost: 'api.openai.com',
+        temperature: 0.5,
+        max_tokens: 1024,
+      },
+    })),
   )
   .concat(
     [
@@ -44,7 +56,7 @@ const defaultProviders: ProviderOptions[] = [
       'azureopenai:gpt-4-0613',
       'azureopenai:gpt-4-32k',
       'azureopenai:gpt-4-32k-0314',
-    ].map((id) => ({ id, config: { temperature: 0.5, max_tokens: 1024 } })),
+    ].map((id) => ({ id, config: { apiKey: '', temperature: 0.5, max_tokens: 1024 } })),
   )
   .sort((a, b) => a.id.localeCompare(b.id));
 

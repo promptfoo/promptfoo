@@ -4,6 +4,7 @@ import logger from '../logger';
 import type { ApiProvider, ProviderResponse } from '../types.js';
 
 interface AnthropicCompletionOptions {
+  apiKey?: string;
   temperature?: number;
   top_p?: number;
   top_k?: number;
@@ -22,9 +23,9 @@ export class AnthropicCompletionProvider implements ApiProvider {
   anthropic: Anthropic;
   options: AnthropicCompletionOptions;
 
-  constructor(modelName: string, apiKey?: string, context?: AnthropicCompletionOptions) {
+  constructor(modelName: string, context?: AnthropicCompletionOptions) {
     this.modelName = modelName;
-    this.apiKey = apiKey || process.env.ANTHROPIC_API_KEY;
+    this.apiKey = context?.apiKey || process.env.ANTHROPIC_API_KEY;
     this.anthropic = new Anthropic({ apiKey: this.apiKey });
     this.options = context || {};
   }

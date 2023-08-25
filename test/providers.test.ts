@@ -32,7 +32,7 @@ describe('providers', () => {
     };
     (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
 
-    const provider = new OpenAiCompletionProvider('text-davinci-003', 'test-api-key');
+    const provider = new OpenAiCompletionProvider('text-davinci-003');
     const result = await provider.callApi('Test prompt');
 
     expect(fetch).toHaveBeenCalledTimes(1);
@@ -49,7 +49,7 @@ describe('providers', () => {
     };
     (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
 
-    const provider = new OpenAiChatCompletionProvider('gpt-3.5-turbo', 'test-api-key');
+    const provider = new OpenAiChatCompletionProvider('gpt-3.5-turbo');
     const result = await provider.callApi(
       JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
     );
@@ -70,7 +70,7 @@ describe('providers', () => {
     };
     (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
 
-    const provider = new OpenAiChatCompletionProvider('gpt-3.5-turbo', 'test-api-key');
+    const provider = new OpenAiChatCompletionProvider('gpt-3.5-turbo');
     const result = await provider.callApi(
       JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
     );
@@ -91,7 +91,7 @@ describe('providers', () => {
     };
     (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
 
-    const provider = new AzureOpenAiCompletionProvider('text-davinci-003', 'test-api-key');
+    const provider = new AzureOpenAiCompletionProvider('text-davinci-003');
     const result = await provider.callApi('Test prompt');
 
     expect(fetch).toHaveBeenCalledTimes(1);
@@ -108,7 +108,7 @@ describe('providers', () => {
     };
     (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
 
-    const provider = new AzureOpenAiChatCompletionProvider('gpt-3.5-turbo', 'test-api-key');
+    const provider = new AzureOpenAiChatCompletionProvider('gpt-3.5-turbo');
     const result = await provider.callApi(
       JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
     );
@@ -129,7 +129,7 @@ describe('providers', () => {
     };
     (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
 
-    const provider = new AzureOpenAiChatCompletionProvider('gpt-3.5-turbo', 'test-api-key');
+    const provider = new AzureOpenAiChatCompletionProvider('gpt-3.5-turbo');
     const result = await provider.callApi(
       JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
     );
@@ -142,7 +142,7 @@ describe('providers', () => {
   });
 
   test('AnthropicCompletionProvider callApi', async () => {
-    const provider = new AnthropicCompletionProvider('claude-1', 'test-api-key');
+    const provider = new AnthropicCompletionProvider('claude-1');
     provider.anthropic.completions.create = jest.fn().mockResolvedValue({
       completion: 'Test output',
     });
