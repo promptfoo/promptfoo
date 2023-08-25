@@ -6,6 +6,7 @@ import { ReplicateProvider } from './providers/replicate';
 import { LocalAiCompletionProvider, LocalAiChatProvider } from './providers/localai';
 import { LlamaProvider } from './providers/llama';
 import { OllamaProvider } from './providers/ollama';
+import { WebhookProvider } from './providers/webhook';
 import { ScriptCompletionProvider } from './providers/scriptCompletion';
 import {
   AzureOpenAiChatCompletionProvider,
@@ -156,7 +157,10 @@ export async function loadApiProvider(
     return new ReplicateProvider(modelName, undefined, context.config);
   }
 
-  if (providerPath === 'llama' || providerPath.startsWith('llama:')) {
+  if (providerPath.startsWith('webhook:')) {
+    const webhookUrl = providerPath.substring('webhook:'.length);
+    return new WebhookProvider(webhookUrl);
+  } else if (providerPath === 'llama' || providerPath.startsWith('llama:')) {
     const modelName = providerPath.split(':')[1];
     return new LlamaProvider(modelName, context.config);
   } else if (providerPath.startsWith('ollama:')) {
