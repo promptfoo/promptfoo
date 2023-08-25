@@ -11,6 +11,9 @@ interface ReplicateCompletionOptions {
   temperature?: number;
   max_length?: number;
   repetition_penalty?: number;
+
+  // Any other key-value pairs will be passed to the Replicate API as-is
+  [key: string]: any;
 }
 
 export class ReplicateProvider implements ApiProvider {
@@ -45,7 +48,7 @@ export class ReplicateProvider implements ApiProvider {
     let cacheKey;
     if (isCacheEnabled()) {
       cache = await getCache();
-      cacheKey = `replicate:${this.modelName}:${prompt}`;
+      cacheKey = `replicate:${this.modelName}:${JSON.stringify(this.options)}:${prompt}`;
 
       // Try to get the cached response
       const cachedResponse = await cache.get(cacheKey);
@@ -66,6 +69,7 @@ export class ReplicateProvider implements ApiProvider {
     try {
       const data = {
         input: {
+          ...this.options,
           prompt,
           max_length:
             this.options.max_length || parseInt(process.env.REPLICATE_MAX_LENGTH || '2046', 10),

@@ -5,6 +5,7 @@ import type { ApiProvider, ProviderResponse } from '../types.js';
 
 interface AnthropicCompletionOptions {
   apiKey?: string;
+  max_tokens_to_sample?: number;
   temperature?: number;
   top_p?: number;
   top_k?: number;
@@ -57,7 +58,8 @@ export class AnthropicCompletionProvider implements ApiProvider {
     const params: Anthropic.CompletionCreateParams = {
       model: this.modelName,
       prompt: `${Anthropic.HUMAN_PROMPT} ${prompt} ${Anthropic.AI_PROMPT}`,
-      max_tokens_to_sample: parseInt(process.env.ANTHROPIC_MAX_TOKENS || '1024'),
+      max_tokens_to_sample:
+        options?.max_tokens_to_sample || parseInt(process.env.ANTHROPIC_MAX_TOKENS || '1024'),
       temperature:
         options?.temperature ??
         this.options.temperature ??
