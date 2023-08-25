@@ -17,6 +17,7 @@ interface AzureOpenAiCompletionOptions {
     parameters: any;
   }[];
   function_call?: 'none' | 'auto';
+  stop?: string[];
 }
 
 class AzureOpenAiGenericProvider implements ApiProvider {
@@ -138,7 +139,7 @@ export class AzureOpenAiCompletionProvider extends AzureOpenAiGenericProvider {
     try {
       stop = process.env.OPENAI_STOP
         ? JSON.parse(process.env.OPENAI_STOP)
-        : ['<|im_end|>', '<|endoftext|>'];
+        : this.options?.stop || ['<|im_end|>', '<|endoftext|>'];
     } catch (err) {
       throw new Error(`OPENAI_STOP is not a valid JSON string: ${err}`);
     }

@@ -63,6 +63,9 @@ const defaultProviders: ProviderOptions[] = ([] as (ProviderOptions & { id: stri
         top_p: 1.0,
         frequency_penalty: 0.0,
         presence_penalty: 0.0,
+        function_call: undefined,
+        functions: undefined,
+        stop: undefined,
       },
     })),
   )
@@ -87,6 +90,9 @@ const defaultProviders: ProviderOptions[] = ([] as (ProviderOptions & { id: stri
         top_p: 1.0,
         frequency_penalty: 0.0,
         presence_penalty: 0.0,
+        function_call: undefined,
+        functions: undefined,
+        stop: undefined,
       },
     })),
   )

@@ -1,14 +1,15 @@
 import React from 'react';
-import {
-  Box,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  TextField,
-  DialogActions,
-  Button,
-} from '@mui/material';
-import { ProviderOptions } from '../../../../../types';
+import Box from '@mui/material/Box';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import TextField from '@mui/material/TextField';
+import DialogActions from '@mui/material/DialogActions';
+import Button from '@mui/material/Button';
+
+import JsonTextField from '../components/JsonTextField';
+
+import type { ProviderOptions } from '../../../../../types';
 
 interface ProviderConfigDialogProps {
   open: boolean;
@@ -57,8 +58,22 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
               handleChange = (e: React.ChangeEvent<HTMLInputElement>) =>
                 setLocalConfig({ ...localConfig, [key]: e.target.value === 'true' });
             } else {
-              handleChange = (e: React.ChangeEvent<HTMLInputElement>) =>
-                setLocalConfig({ ...localConfig, [key]: e.target.value });
+              handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+                const trimmed = e.target.value.trim();
+                if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+                  try {
+                    setLocalConfig({ ...localConfig, [key]: JSON.parse(trimmed) });
+                  } catch {
+                    setLocalConfig({ ...localConfig, [key]: trimmed });
+                  }
+                } else if (trimmed === 'null') {
+                  setLocalConfig({ ...localConfig, [key]: null });
+                } else if (trimmed === 'undefined') {
+                  setLocalConfig({ ...localConfig, [key]: undefined });
+                } else {
+                  setLocalConfig({ ...localConfig, [key]: trimmed });
+                }
+              };
             }
 
             return (
@@ -76,15 +91,15 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
           } else {
             return (
               <Box key={key} my={2}>
-                <TextField
+                <JsonTextField
                   label={key}
-                  value={JSON.stringify(value)}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                    setLocalConfig({ ...localConfig, [key]: JSON.parse(e.target.value) })
-                  }
+                  defaultValue={JSON.stringify(value)}
+                  onChange={(parsed) => {
+                    setLocalConfig({ ...localConfig, [key]: parsed });
+                  }}
                   fullWidth
                   multiline
-                  minRows={3}
+                  minRows={2}
                   InputLabelProps={{ shrink: true }}
                 />
               </Box>
