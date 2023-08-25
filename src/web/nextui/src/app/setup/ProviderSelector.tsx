@@ -4,22 +4,41 @@ import ProviderConfigDialog from './ProviderConfigDialog';
 
 import type { ProviderOptions } from '../../../../../types';
 
-const defaultProviders: ProviderOptions[] = [
-  {
-    id: 'replicate:replicate/llama70b-v2-chat:e951f18578850b652510200860fc4ea62b3b16fac280f83ff32282f87bbd2e48',
-    config: {
-      apiKey: '',
-      temperature: 0.5,
-    },
-  },
-]
+const defaultProviders: ProviderOptions[] = ([] as (ProviderOptions & { id: string })[])
+  .concat(
+    [
+      'replicate:replicate/llama70b-v2-chat:e951f18578850b652510200860fc4ea62b3b16fac280f83ff32282f87bbd2e48',
+      'replicate:replicate/flan-t5-small:69716ad8c34274043bf4a135b7315c7c569ec931d8f23d6826e249e1c142a264',
+    ].map((id) => ({
+      id,
+      config: { apiKey: '', temperature: 0.5, max_length: 1024, repetition_penality: 1.0 },
+    })),
+  )
+  .concat(
+    [
+      'replicate:a16z-infra/llama-2-7b-chat:7b0bfc9aff140d5b75bacbed23e91fd3c34b01a1e958d32132de6e0a19796e2c',
+      'replicate:a16z-infra/llama-2-13b-chat:2a7f981751ec7fdf87b5b91ad4db53683a98082e9ff7bfd12c8cd5ea85980a52',
+    ].map((id) => ({
+      id,
+      config: {
+        apiKey: '',
+        temperature: 0.95,
+        top_p: 0.95,
+        top_k: 250,
+        max_new_tokens: 500,
+        min_new_tokens: -1,
+        repetition_penality: 1.0,
+        system_prompt: '',
+      },
+    })),
+  )
   .concat(
     [
       'anthropic:claude-1',
       'anthropic:claude-1-100k',
       'anthropic:claude-instant-1',
       'anthropic:claude-instant-1-100k',
-    ].map((id) => ({ id, config: { apiKey: '', temperature: 0.5 } })),
+    ].map((id) => ({ id, config: { apiKey: '', max_tokens_to_sample: 256, temperature: 0.5 } })),
   )
   .concat(
     [
@@ -41,6 +60,9 @@ const defaultProviders: ProviderOptions[] = [
         apiHost: 'api.openai.com',
         temperature: 0.5,
         max_tokens: 1024,
+        top_p: 1.0,
+        frequency_penalty: 0.0,
+        presence_penalty: 0.0,
       },
     })),
   )
@@ -56,7 +78,17 @@ const defaultProviders: ProviderOptions[] = [
       'azureopenai:gpt-4-0613',
       'azureopenai:gpt-4-32k',
       'azureopenai:gpt-4-32k-0314',
-    ].map((id) => ({ id, config: { apiKey: '', temperature: 0.5, max_tokens: 1024 } })),
+    ].map((id) => ({
+      id,
+      config: {
+        apiKey: '',
+        temperature: 0.5,
+        max_tokens: 1024,
+        top_p: 1.0,
+        frequency_penalty: 0.0,
+        presence_penalty: 0.0,
+      },
+    })),
   )
   .sort((a, b) => a.id.localeCompare(b.id));
 
