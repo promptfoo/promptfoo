@@ -13,8 +13,27 @@ datasource db {
 model EvaluationResult {
   id        String   @id @default(uuid())
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  version Int
-  results Json
-  config  Json
+  version       Int
+  results       Json
+  config        Json
+  EvaluationJob EvaluationJob[]
+}
+
+enum JobStatus {
+  IN_PROGRESS
+  COMPLETE
+}
+
+model EvaluationJob {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  status             JobStatus
+  progress           Int
+  total              Int
+  evaluationResult   EvaluationResult? @relation(fields: [evaluationResultId], references: [id])
+  evaluationResultId String?
 }

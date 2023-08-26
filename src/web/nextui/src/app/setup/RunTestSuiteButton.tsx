@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Button, CircularProgress } from '@mui/material';
 
 import { useStore } from '@/util/store';
-import { API_BASE_URL } from '@/util/api';
+import { NEXTJS_BASE_URL } from '@/util/api';
 
 const RunTestSuiteButton: React.FC = () => {
   const router = useRouter();
@@ -24,7 +24,7 @@ const RunTestSuiteButton: React.FC = () => {
     };
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/eval`, {
+      const response = await fetch(`${NEXTJS_BASE_URL}/api/eval`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -39,7 +39,7 @@ const RunTestSuiteButton: React.FC = () => {
       const job = await response.json();
 
       const intervalId = setInterval(async () => {
-        const progressResponse = await fetch(`${API_BASE_URL}/api/eval/${job.id}`);
+        const progressResponse = await fetch(`${NEXTJS_BASE_URL}/api/eval/${job.id}`);
 
         if (!progressResponse.ok) {
           clearInterval(intervalId);

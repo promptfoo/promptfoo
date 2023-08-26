@@ -83,6 +83,7 @@ const YamlEditorComponent: React.FC = () => {
         {isReadOnly ? 'Edit YAML' : 'Save'}
       </Button>
       <Editor
+        autoCapitalize="off"
         value={code}
         onValueChange={(code) => {
           if (!isReadOnly) {
