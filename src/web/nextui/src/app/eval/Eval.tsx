@@ -28,7 +28,7 @@ export default function Eval({ preloadedData, recentFiles: defaultRecentFiles }:
     if (!window.location.href.includes('localhost')) {
       return;
     }
-    if (process.env.NEXT_PUBLIC_PROMPTFOO_STANDALONE_SERVER) {
+    if (process.env.NEXT_PUBLIC_PROMPTFOO_WITH_DATABASE) {
       return;
     }
     const resp = await fetch(`${API_BASE_URL}/results`);

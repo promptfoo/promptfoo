@@ -29,8 +29,8 @@ async function runWithDatabase(testSuite: EvaluateTestSuite) {
 
 export async function POST(req: Request) {
   const testSuite = (await req.json()) as EvaluateTestSuite;
-  if (!process.env.PROMPTFOO_STANDALONE_SERVER) {
-    throw new Error('This route should only be used in standalone mode');
+  if (!process.env.NEXT_PUBLIC_PROMPTFOO_WITH_DATABASE) {
+    throw new Error('This route should only be used in database mode');
   }
   return runWithDatabase(testSuite);
 }
