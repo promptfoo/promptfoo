@@ -34,3 +34,8 @@ export async function GET(request: Request, { params }: { params: { filename: st
   return NextResponse.json({ data: latestJsonData });
 }
 */
+
+import { NextResponse } from 'next/server';
+export async function GET() {
+  return NextResponse.json({ data: 'NYI' });
+}

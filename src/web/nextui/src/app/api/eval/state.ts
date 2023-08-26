@@ -2,12 +2,10 @@ import { Prisma, PrismaClient, EvaluationJob, EvaluationResult, JobStatus } from
 import { EvaluateTestSuite } from '../../../../../../index';
 import { EvaluateSummary } from '../../../../../../types';
 
-export { JobStatus, EvaluationJob } from '@prisma/client';
+export { JobStatus } from '@prisma/client';
+export type { EvaluationJob } from '@prisma/client';
 
 const prisma = new PrismaClient();
-
-// TODO(ian): Persist this somewhere.
-// export const evalJobs = new Map<string, Job>();
 
 export async function createJob(): Promise<EvaluationJob> {
   const job = await prisma.evaluationJob.create({
