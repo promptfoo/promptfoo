@@ -85,15 +85,9 @@ export async function loadApiProvider(
     const modelName = splits[2];
 
     if (modelType === 'chat') {
-      return new OpenAiChatCompletionProvider(
-        modelName || 'gpt-3.5-turbo',
-        options.config,
-      );
+      return new OpenAiChatCompletionProvider(modelName || 'gpt-3.5-turbo', options.config);
     } else if (modelType === 'completion') {
-      return new OpenAiCompletionProvider(
-        modelName || 'text-davinci-003',
-        options.config,
-      );
+      return new OpenAiCompletionProvider(modelName || 'text-davinci-003', options.config);
     } else if (OpenAiChatCompletionProvider.OPENAI_CHAT_MODELS.includes(modelType)) {
       return new OpenAiChatCompletionProvider(modelType, options.config, options.id);
     } else if (OpenAiCompletionProvider.OPENAI_COMPLETION_MODELS.includes(modelType)) {

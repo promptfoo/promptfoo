@@ -91,9 +91,12 @@ describe('providers', () => {
     const prompt = 'Test prompt';
     await provider.callApi(prompt);
 
-    expect(fetch).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({
-      body: expect.stringMatching(`temperature\":3.1415926`),
-    }));
+    expect(fetch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        body: expect.stringMatching(`temperature\":3.1415926`),
+      }),
+    );
     expect(provider.config.temperature).toBe(config.temperature);
     expect(provider.config.max_tokens).toBe(config.max_tokens);
   });

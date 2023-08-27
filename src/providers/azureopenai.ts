@@ -25,12 +25,16 @@ class AzureOpenAiGenericProvider implements ApiProvider {
   apiKey?: string;
   apiHost?: string;
 
-  constructor(deploymentName: string, context?: AzureOpenAiCompletionOptions) {
+  config: AzureOpenAiCompletionOptions;
+
+  constructor(deploymentName: string, config?: AzureOpenAiCompletionOptions) {
     this.deploymentName = deploymentName;
 
-    this.apiKey = context?.apiKey || process.env.AZURE_OPENAI_API_KEY;
+    this.apiKey = config?.apiKey || process.env.AZURE_OPENAI_API_KEY;
 
     this.apiHost = process.env.AZURE_OPENAI_API_HOST;
+
+    this.config = config || {};
   }
 
   id(): string {
@@ -42,7 +46,7 @@ class AzureOpenAiGenericProvider implements ApiProvider {
   }
 
   // @ts-ignore: Prompt is not used in this implementation
-  async callApi(prompt: string, options?: AzureOpenAiCompletionOptions): Promise<ProviderResponse> {
+  async callApi(prompt: string): Promise<ProviderResponse> {
     throw new Error('Not implemented');
   }
 }
@@ -117,15 +121,12 @@ export class AzureOpenAiEmbeddingProvider extends AzureOpenAiGenericProvider {
 }
 
 export class AzureOpenAiCompletionProvider extends AzureOpenAiGenericProvider {
-  options: AzureOpenAiCompletionOptions;
-
-  constructor(deploymentName: string, context?: AzureOpenAiCompletionOptions, id?: string) {
-    super(deploymentName, context);
-    this.options = context || {};
+  constructor(deploymentName: string, config?: AzureOpenAiCompletionOptions, id?: string) {
+    super(deploymentName, config);
     this.id = id ? () => id : this.id;
   }
 
-  async callApi(prompt: string, options?: AzureOpenAiCompletionOptions): Promise<ProviderResponse> {
+  async callApi(prompt: string): Promise<ProviderResponse> {
     if (!this.apiKey) {
       throw new Error(
         'Azure OpenAI API key is not set. Set AZURE_OPENAI_API_KEY environment variable or pass it as an argument to the constructor.',
@@ -139,7 +140,7 @@ export class AzureOpenAiCompletionProvider extends AzureOpenAiGenericProvider {
     try {
       stop = process.env.OPENAI_STOP
         ? JSON.parse(process.env.OPENAI_STOP)
-        : this.options?.stop || ['<|im_end|>', '<|endoftext|>'];
+        : this.config?.stop || ['<|im_end|>', '<|endoftext|>'];
     } catch (err) {
       throw new Error(`OPENAI_STOP is not a valid JSON string: ${err}`);
     }
@@ -147,21 +148,13 @@ export class AzureOpenAiCompletionProvider extends AzureOpenAiGenericProvider {
       model: this.deploymentName,
       prompt,
       max_tokens: parseInt(process.env.OPENAI_MAX_TOKENS || '1024'),
-      temperature:
-        options?.temperature ??
-        this.options.temperature ??
-        parseFloat(process.env.OPENAI_TEMPERATURE || '0'),
-      top_p: options?.top_p ?? this.options.top_p ?? parseFloat(process.env.OPENAI_TOP_P || '1'),
+      temperature: this.config.temperature ?? parseFloat(process.env.OPENAI_TEMPERATURE || '0'),
+      top_p: this.config.top_p ?? parseFloat(process.env.OPENAI_TOP_P || '1'),
       presence_penalty:
-        options?.presence_penalty ??
-        this.options.presence_penalty ??
-        parseFloat(process.env.OPENAI_PRESENCE_PENALTY || '0'),
+        this.config.presence_penalty ?? parseFloat(process.env.OPENAI_PRESENCE_PENALTY || '0'),
       frequency_penalty:
-        options?.frequency_penalty ??
-        this.options.frequency_penalty ??
-        parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0'),
-      best_of:
-        options?.best_of ?? this.options.best_of ?? parseInt(process.env.OPENAI_BEST_OF || '1'),
+        this.config.frequency_penalty ?? parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0'),
+      best_of: this.config.best_of ?? parseInt(process.env.OPENAI_BEST_OF || '1'),
       stop,
     };
     logger.debug(`Calling Azure OpenAI API: ${JSON.stringify(body)}`);
@@ -206,15 +199,12 @@ export class AzureOpenAiCompletionProvider extends AzureOpenAiGenericProvider {
 }
 
 export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvider {
-  options: AzureOpenAiCompletionOptions;
-
-  constructor(deploymentName: string, context?: AzureOpenAiCompletionOptions, id?: string) {
-    super(deploymentName, context);
-    this.options = context || {};
+  constructor(deploymentName: string, config?: AzureOpenAiCompletionOptions, id?: string) {
+    super(deploymentName, config);
     this.id = id ? () => id : this.id;
   }
 
-  async callApi(prompt: string, options?: AzureOpenAiCompletionOptions): Promise<ProviderResponse> {
+  async callApi(prompt: string): Promise<ProviderResponse> {
     if (!this.apiKey) {
       throw new Error(
         'Azure OpenAI API key is not set. Set the AZURE_OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
@@ -225,25 +215,28 @@ export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvide
     }
 
     const messages = parseChatPrompt(prompt);
+
+    let stop: string;
+    try {
+      stop = process.env.OPENAI_STOP
+        ? JSON.parse(process.env.OPENAI_STOP)
+        : this.config?.stop || [];
+    } catch (err) {
+      throw new Error(`OPENAI_STOP is not a valid JSON string: ${err}`);
+    }
     const body = {
       model: this.deploymentName,
       messages: messages,
       max_tokens: parseInt(process.env.OPENAI_MAX_TOKENS || '1024'),
-      temperature:
-        options?.temperature ??
-        this.options.temperature ??
-        parseFloat(process.env.OPENAI_TEMPERATURE || '0'),
-      top_p: options?.top_p ?? this.options.top_p ?? parseFloat(process.env.OPENAI_TOP_P || '1'),
+      temperature: this.config.temperature ?? parseFloat(process.env.OPENAI_TEMPERATURE || '0'),
+      top_p: this.config.top_p ?? parseFloat(process.env.OPENAI_TOP_P || '1'),
       presence_penalty:
-        options?.presence_penalty ??
-        this.options.presence_penalty ??
-        parseFloat(process.env.OPENAI_PRESENCE_PENALTY || '0'),
+        this.config.presence_penalty ?? parseFloat(process.env.OPENAI_PRESENCE_PENALTY || '0'),
       frequency_penalty:
-        options?.frequency_penalty ??
-        this.options.frequency_penalty ??
-        parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0'),
-      functions: options?.functions || this.options.functions || undefined,
-      function_call: options?.function_call || this.options.function_call || undefined,
+        this.config.frequency_penalty ?? parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0'),
+      functions: this.config.functions || undefined,
+      function_call: this.config.function_call || undefined,
+      stop,
     };
     logger.debug(`Calling Azure OpenAI API: ${JSON.stringify(body)}`);
 

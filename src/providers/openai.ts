@@ -163,21 +163,14 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
     const body = {
       model: this.modelName,
       prompt,
-      max_tokens:
-        this.config.max_tokens ??
-        parseInt(process.env.OPENAI_MAX_TOKENS || '1024'),
-      temperature:
-        this.config.temperature ??
-        parseFloat(process.env.OPENAI_TEMPERATURE || '0'),
+      max_tokens: this.config.max_tokens ?? parseInt(process.env.OPENAI_MAX_TOKENS || '1024'),
+      temperature: this.config.temperature ?? parseFloat(process.env.OPENAI_TEMPERATURE || '0'),
       top_p: this.config.top_p ?? parseFloat(process.env.OPENAI_TOP_P || '1'),
       presence_penalty:
-        this.config.presence_penalty ??
-        parseFloat(process.env.OPENAI_PRESENCE_PENALTY || '0'),
+        this.config.presence_penalty ?? parseFloat(process.env.OPENAI_PRESENCE_PENALTY || '0'),
       frequency_penalty:
-        this.config.frequency_penalty ??
-        parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0'),
-      best_of:
-        this.config.best_of ?? parseInt(process.env.OPENAI_BEST_OF || '1'),
+        this.config.frequency_penalty ?? parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0'),
+      best_of: this.config.best_of ?? parseInt(process.env.OPENAI_BEST_OF || '1'),
       stop,
     };
     logger.debug(`Calling OpenAI API: ${JSON.stringify(body)}`);
@@ -191,9 +184,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${this.getApiKey()}`,
-            ...(this.getOrganization()
-              ? { 'OpenAI-Organization': this.getOrganization() }
-              : {}),
+            ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
           },
           body: JSON.stringify(body),
         },
@@ -254,24 +245,28 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     }
 
     const messages = parseChatPrompt(prompt);
+
+    let stop: string;
+    try {
+      stop = process.env.OPENAI_STOP
+        ? JSON.parse(process.env.OPENAI_STOP)
+        : this.config?.stop || [];
+    } catch (err) {
+      throw new Error(`OPENAI_STOP is not a valid JSON string: ${err}`);
+    }
     const body = {
       model: this.modelName,
       messages: messages,
-      max_tokens:
-        this.config.max_tokens ??
-        parseInt(process.env.OPENAI_MAX_TOKENS || '1024'),
-      temperature:
-        this.config.temperature ??
-        parseFloat(process.env.OPENAI_TEMPERATURE || '0'),
+      max_tokens: this.config.max_tokens ?? parseInt(process.env.OPENAI_MAX_TOKENS || '1024'),
+      temperature: this.config.temperature ?? parseFloat(process.env.OPENAI_TEMPERATURE || '0'),
       top_p: this.config.top_p ?? parseFloat(process.env.OPENAI_TOP_P || '1'),
       presence_penalty:
-        this.config.presence_penalty ??
-        parseFloat(process.env.OPENAI_PRESENCE_PENALTY || '0'),
+        this.config.presence_penalty ?? parseFloat(process.env.OPENAI_PRESENCE_PENALTY || '0'),
       frequency_penalty:
-        this.config.frequency_penalty ??
-        parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0'),
+        this.config.frequency_penalty ?? parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0'),
       functions: this.config.functions || undefined,
       function_call: this.config.function_call || undefined,
+      stop,
     };
     logger.debug(`Calling OpenAI API: ${JSON.stringify(body)}`);
 
@@ -285,9 +280,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${this.getApiKey()}`,
-            ...(this.getOrganization()
-              ? { 'OpenAI-Organization': this.getOrganization() }
-              : {}),
+            ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
           },
           body: JSON.stringify(body),
         },

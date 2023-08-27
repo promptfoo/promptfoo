@@ -22,13 +22,13 @@ export class AnthropicCompletionProvider implements ApiProvider {
   modelName: string;
   apiKey?: string;
   anthropic: Anthropic;
-  options: AnthropicCompletionOptions;
+  config: AnthropicCompletionOptions;
 
-  constructor(modelName: string, context?: AnthropicCompletionOptions) {
+  constructor(modelName: string, config?: AnthropicCompletionOptions) {
     this.modelName = modelName;
-    this.apiKey = context?.apiKey || process.env.ANTHROPIC_API_KEY;
+    this.apiKey = config?.apiKey || process.env.ANTHROPIC_API_KEY;
     this.anthropic = new Anthropic({ apiKey: this.apiKey });
-    this.options = context || {};
+    this.config = config || {};
   }
 
   id(): string {
@@ -39,7 +39,7 @@ export class AnthropicCompletionProvider implements ApiProvider {
     return `[Anthropic Provider ${this.modelName}]`;
   }
 
-  async callApi(prompt: string, options?: AnthropicCompletionOptions): Promise<ProviderResponse> {
+  async callApi(prompt: string): Promise<ProviderResponse> {
     if (!this.apiKey) {
       throw new Error(
         'Anthropic API key is not set. Set the ANTHROPIC_API_KEY environment variable or add `apiKey` to the provider config.',
@@ -59,11 +59,8 @@ export class AnthropicCompletionProvider implements ApiProvider {
       model: this.modelName,
       prompt: `${Anthropic.HUMAN_PROMPT} ${prompt} ${Anthropic.AI_PROMPT}`,
       max_tokens_to_sample:
-        options?.max_tokens_to_sample || parseInt(process.env.ANTHROPIC_MAX_TOKENS || '1024'),
-      temperature:
-        options?.temperature ??
-        this.options.temperature ??
-        parseFloat(process.env.ANTHROPIC_TEMPERATURE || '0'),
+        this.config?.max_tokens_to_sample || parseInt(process.env.ANTHROPIC_MAX_TOKENS || '1024'),
+      temperature: this.config.temperature ?? parseFloat(process.env.ANTHROPIC_TEMPERATURE || '0'),
       stop_sequences: stop,
     };
 
