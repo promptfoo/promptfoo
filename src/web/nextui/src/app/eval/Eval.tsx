@@ -6,7 +6,7 @@ import { io as SocketIOClient } from 'socket.io-client';
 import { useRouter } from 'next/navigation';
 
 import ResultsView from './ResultsView';
-import { API_BASE_URL } from '@/constants';
+import { API_BASE_URL, IS_RUNNING_LOCALLY } from '@/constants';
 import { useStore } from './store';
 
 import type { EvalTable, SharedResults } from './types';
@@ -46,7 +46,7 @@ export default function Eval({ preloadedData, recentFiles: defaultRecentFiles }:
   };
 
   React.useEffect(() => {
-    if (process.env.NEXT_PUBLIC_PROMPTFOO_WITH_DATABASE) {
+    if (!IS_RUNNING_LOCALLY) {
       return;
     }
 

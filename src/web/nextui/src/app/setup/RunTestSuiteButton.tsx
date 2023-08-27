@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Button, CircularProgress } from '@mui/material';
 
 import { useStore } from '@/state/evalConfig';
-import { NEXTJS_BASE_URL } from '@/constants';
+import { IS_RUNNING_LOCALLY, NEXTJS_BASE_URL } from '@/constants';
 
 const RunTestSuiteButton: React.FC = () => {
   const router = useRouter();
@@ -51,10 +51,10 @@ const RunTestSuiteButton: React.FC = () => {
         if (progressData.status === 'completed') {
           clearInterval(intervalId);
           setIsRunning(false);
-          if (process.env.NEXT_PUBLIC_PROMPTFOO_WITH_DATABASE) {
-            router.push(`/eval/remote:${encodeURIComponent(job.id)}`);
-          } else {
+          if (IS_RUNNING_LOCALLY) {
             router.push('/eval');
+          } else {
+            router.push(`/eval/remote:${encodeURIComponent(job.id)}`);
           }
         } else if (progressData.status === 'failed') {
           clearInterval(intervalId);
