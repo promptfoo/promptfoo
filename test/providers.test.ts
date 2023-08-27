@@ -82,6 +82,25 @@ describe('providers', () => {
     enableCache();
   });
 
+  test('OpenAiChatCompletionProvider constructor with config', async () => {
+    const config = {
+      temperature: 3.1415926,
+      max_tokens: 201,
+    };
+    const provider = new OpenAiChatCompletionProvider('gpt-3.5-turbo', config);
+    const prompt = 'Test prompt';
+    await provider.callApi(prompt);
+
+    expect(fetch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        body: expect.stringMatching(`temperature\":3.1415926`),
+      }),
+    );
+    expect(provider.config.temperature).toBe(config.temperature);
+    expect(provider.config.max_tokens).toBe(config.max_tokens);
+  });
+
   test('AzureOpenAiCompletionProvider callApi', async () => {
     const mockResponse = {
       json: jest.fn().mockResolvedValue({

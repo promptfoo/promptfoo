@@ -67,10 +67,10 @@ export async function loadApiProviders(
 
 export async function loadApiProvider(
   providerPath: string,
-  context?: ProviderOptions,
+  options?: ProviderOptions,
   basePath?: string,
 ): Promise<ApiProvider> {
-  context = context || {};
+  options = options || {};
   if (providerPath?.startsWith('exec:')) {
     // Load script module
     const scriptPath = providerPath.split(':')[1];
@@ -80,26 +80,18 @@ export async function loadApiProvider(
     });
   } else if (providerPath?.startsWith('openai:')) {
     // Load OpenAI module
-    const options = providerPath.split(':');
-    const modelType = options[1];
-    const modelName = options[2];
+    const splits = providerPath.split(':');
+    const modelType = splits[1];
+    const modelName = splits[2];
 
     if (modelType === 'chat') {
-      return new OpenAiChatCompletionProvider(
-        modelName || 'gpt-3.5-turbo',
-        undefined,
-        context.config,
-      );
+      return new OpenAiChatCompletionProvider(modelName || 'gpt-3.5-turbo', options.config);
     } else if (modelType === 'completion') {
-      return new OpenAiCompletionProvider(
-        modelName || 'text-davinci-003',
-        undefined,
-        context.config,
-      );
+      return new OpenAiCompletionProvider(modelName || 'text-davinci-003', options.config);
     } else if (OpenAiChatCompletionProvider.OPENAI_CHAT_MODELS.includes(modelType)) {
-      return new OpenAiChatCompletionProvider(modelType, undefined, context.config, context.id);
+      return new OpenAiChatCompletionProvider(modelType, options.config, options.id);
     } else if (OpenAiCompletionProvider.OPENAI_COMPLETION_MODELS.includes(modelType)) {
-      return new OpenAiCompletionProvider(modelType, undefined, context.config, context.id);
+      return new OpenAiCompletionProvider(modelType, options.config, options.id);
     } else {
       throw new Error(
         `Unknown OpenAI model type: ${modelType}. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>`,
@@ -107,14 +99,14 @@ export async function loadApiProvider(
     }
   } else if (providerPath?.startsWith('azureopenai:')) {
     // Load Azure OpenAI module
-    const options = providerPath.split(':');
-    const modelType = options[1];
-    const deploymentName = options[2];
+    const splits = providerPath.split(':');
+    const modelType = splits[1];
+    const deploymentName = splits[2];
 
     if (modelType === 'chat') {
-      return new AzureOpenAiChatCompletionProvider(deploymentName, context.config, context.id);
+      return new AzureOpenAiChatCompletionProvider(deploymentName, options.config, options.id);
     } else if (modelType === 'completion') {
-      return new AzureOpenAiCompletionProvider(deploymentName, context.config, context.id);
+      return new AzureOpenAiCompletionProvider(deploymentName, options.config, options.id);
     } else {
       throw new Error(
         `Unknown Azure OpenAI model type: ${modelType}. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>`,
@@ -122,14 +114,14 @@ export async function loadApiProvider(
     }
   } else if (providerPath?.startsWith('anthropic:')) {
     // Load Anthropic module
-    const options = providerPath.split(':');
-    const modelType = options[1];
-    const modelName = options[2];
+    const splits = providerPath.split(':');
+    const modelType = splits[1];
+    const modelName = splits[2];
 
     if (modelType === 'completion') {
-      return new AnthropicCompletionProvider(modelName || 'claude-instant-1', context.config);
+      return new AnthropicCompletionProvider(modelName || 'claude-instant-1', options.config);
     } else if (AnthropicCompletionProvider.ANTHROPIC_COMPLETION_MODELS.includes(modelType)) {
-      return new AnthropicCompletionProvider(modelType, context.config);
+      return new AnthropicCompletionProvider(modelType, options.config);
     } else {
       throw new Error(
         `Unknown Anthropic model type: ${modelType}. Use one of the following providers: anthropic:completion:<model name>`,
@@ -137,10 +129,10 @@ export async function loadApiProvider(
     }
   } else if (providerPath?.startsWith('replicate:')) {
     // Load Replicate module
-    const options = providerPath.split(':');
-    const modelName = options.slice(1).join(':');
+    const splits = providerPath.split(':');
+    const modelName = splits.slice(1).join(':');
 
-    return new ReplicateProvider(modelName, context.config);
+    return new ReplicateProvider(modelName, options.config);
   }
 
   if (providerPath.startsWith('webhook:')) {
@@ -148,14 +140,14 @@ export async function loadApiProvider(
     return new WebhookProvider(webhookUrl);
   } else if (providerPath === 'llama' || providerPath.startsWith('llama:')) {
     const modelName = providerPath.split(':')[1];
-    return new LlamaProvider(modelName, context.config);
+    return new LlamaProvider(modelName, options.config);
   } else if (providerPath.startsWith('ollama:')) {
     const modelName = providerPath.split(':')[1];
     return new OllamaProvider(modelName);
   } else if (providerPath?.startsWith('localai:')) {
-    const options = providerPath.split(':');
-    const modelType = options[1];
-    const modelName = options[2];
+    const splits = providerPath.split(':');
+    const modelType = splits[1];
+    const modelName = splits[2];
 
     if (modelType === 'chat') {
       return new LocalAiChatProvider(modelName);
@@ -168,7 +160,7 @@ export async function loadApiProvider(
 
   // Load custom module
   const CustomApiProvider = (await import(path.join(process.cwd(), providerPath))).default;
-  return new CustomApiProvider(context);
+  return new CustomApiProvider(options);
 }
 
 export default {

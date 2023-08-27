@@ -2,7 +2,7 @@ import React from 'react';
 import { Autocomplete, Box, Chip, TextField } from '@mui/material';
 import ProviderConfigDialog from './ProviderConfigDialog';
 
-import type { ProviderOptions } from '../../../../../types';
+import type { ProviderOptions } from '@/../../../types';
 
 const defaultProviders: ProviderOptions[] = ([] as (ProviderOptions & { id: string })[])
   .concat(

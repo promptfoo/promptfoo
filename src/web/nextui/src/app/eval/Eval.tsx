@@ -6,7 +6,7 @@ import { io as SocketIOClient } from 'socket.io-client';
 import { useRouter } from 'next/navigation';
 
 import ResultsView from './ResultsView';
-import { API_BASE_URL } from '@/util/api';
+import { API_BASE_URL, IS_RUNNING_LOCALLY } from '@/constants';
 import { useStore } from './store';
 
 import type { EvalTable, SharedResults } from './types';
@@ -25,7 +25,7 @@ export default function Eval({ preloadedData, recentFiles: defaultRecentFiles }:
   const [recentFiles, setRecentFiles] = React.useState<string[]>(defaultRecentFiles || []);
 
   const fetchRecentFiles = async () => {
-    if (!window.location.href.includes('localhost')) {
+    if (!IS_RUNNING_LOCALLY) {
       return;
     }
     const resp = await fetch(`${API_BASE_URL}/results`);
@@ -43,13 +43,13 @@ export default function Eval({ preloadedData, recentFiles: defaultRecentFiles }:
   };
 
   React.useEffect(() => {
-    const socket = SocketIOClient(API_BASE_URL);
-
     if (preloadedData) {
       setTable(preloadedData.data.results?.table as EvalTable);
       setConfig(preloadedData.data.config);
       setLoaded(true);
-    } else {
+    } else if (IS_RUNNING_LOCALLY) {
+      const socket = SocketIOClient(API_BASE_URL);
+
       socket.on('init', (data) => {
         console.log('Initialized socket connection', data);
         setLoaded(true);
@@ -64,11 +64,13 @@ export default function Eval({ preloadedData, recentFiles: defaultRecentFiles }:
         setConfig(data.config);
         fetchRecentFiles();
       });
-    }
 
-    return () => {
-      socket.disconnect();
-    };
+      return () => {
+        socket.disconnect();
+      };
+    } else {
+      alert('No preloaded data and not running locally. Configuration error?');
+    }
   }, [setTable, setConfig, preloadedData]);
 
   return loaded && table ? (

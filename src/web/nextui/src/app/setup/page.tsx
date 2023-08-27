@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import yaml from 'js-yaml';
 import Button from '@mui/material/Button';
 import Container from '@mui/material/Container';
 import Typography from '@mui/material/Typography';
@@ -19,7 +18,8 @@ import PromptsSection from './PromptsSection';
 import TestCasesSection from './TestCasesSection';
 import ProviderSelector from './ProviderSelector';
 import YamlEditor from './YamlEditor';
-import { useStore } from '../../util/store';
+
+import { useStore } from '@/state/evalConfig';
 
 import type { ProviderOptions, TestCase, TestSuiteConfig } from '../eval/types';
 

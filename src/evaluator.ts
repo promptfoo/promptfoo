@@ -442,7 +442,7 @@ class Evaluator {
           if (row.success) {
             resultText = `${row.response?.output || row.error || ''}`;
           } else {
-            resultText = `${row.error}\n---\n${row.response?.output || row.error || ''}`;
+            resultText = `${row.error}\n---\n${row.response?.output || ''}`;
           }
         } else if (row.error) {
           resultText = `${row.error}`;

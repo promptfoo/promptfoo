@@ -13,7 +13,7 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Link from 'next/link';
 
-import { useStore } from '@/util/store';
+import { useStore } from '@/state/evalConfig';
 
 import './YamlEditor.css';
 
@@ -83,6 +83,7 @@ const YamlEditorComponent: React.FC = () => {
         {isReadOnly ? 'Edit YAML' : 'Save'}
       </Button>
       <Editor
+        autoCapitalize="off"
         value={code}
         onValueChange={(code) => {
           if (!isReadOnly) {

@@ -12,6 +12,13 @@ const roboto = Roboto({
 export const metadata: Metadata = {
   title: 'promptfoo',
   description: 'LLM testing and evaluation',
+  openGraph: {
+    images: [
+      {
+        url: 'https://www.promptfoo.dev/img/thumbnail.png',
+      },
+    ],
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

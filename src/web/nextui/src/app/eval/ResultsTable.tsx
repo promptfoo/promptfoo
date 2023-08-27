@@ -169,7 +169,8 @@ function EvalOutputCell({
         )}
         {!output.pass && (
           <div className="status fail">
-            [FAIL<span className="score">{scoreToString(output.score)}</span>] {chunks[0]}
+            [FAIL<span className="score">{scoreToString(output.score)}</span>]{' '}
+            <span dangerouslySetInnerHTML={{ __html: chunks[0].replace(/\n/g, '<br>') }} />
           </div>
         )}{' '}
         <TruncatedText text={text} maxLength={maxTextLength} />

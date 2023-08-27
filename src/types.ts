@@ -292,6 +292,12 @@ export type UnifiedConfig = TestSuiteConfig & {
   commandLineOptions: Partial<CommandLineOptions>;
 };
 
+// node.js package interface
+export interface EvaluateTestSuite extends TestSuiteConfig {
+  prompts: string[];
+  writeLatestResults?: boolean;
+}
+
 export interface SharedResults {
   data: {
     version: number;

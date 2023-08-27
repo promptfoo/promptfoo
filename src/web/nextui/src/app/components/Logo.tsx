@@ -1,3 +1,4 @@
+import Image from 'next/image';
 import Box from '@mui/material/Box';
 
 import './Logo.css';
@@ -5,7 +6,7 @@ import './Logo.css';
 export default function Logo() {
   return (
     <Box className="logo">
-      <img src="/logo.svg" alt="Promptfoo logo" /> <span>promptfoo</span>
+      <Image width={25} height={25} src="/logo.svg" alt="Promptfoo logo" /> <span>promptfoo</span>
     </Box>
   );
 }

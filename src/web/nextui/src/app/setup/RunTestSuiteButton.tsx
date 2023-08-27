@@ -4,8 +4,8 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button, CircularProgress } from '@mui/material';
 
-import { useStore } from '@/util/store';
-import { API_BASE_URL } from '@/util/api';
+import { useStore } from '@/state/evalConfig';
+import { IS_RUNNING_LOCALLY, NEXTJS_BASE_URL } from '@/constants';
 
 const RunTestSuiteButton: React.FC = () => {
   const router = useRouter();
@@ -24,7 +24,7 @@ const RunTestSuiteButton: React.FC = () => {
     };
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/eval`, {
+      const response = await fetch(`${NEXTJS_BASE_URL}/api/eval/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -39,7 +39,7 @@ const RunTestSuiteButton: React.FC = () => {
       const job = await response.json();
 
       const intervalId = setInterval(async () => {
-        const progressResponse = await fetch(`${API_BASE_URL}/api/eval/${job.id}`);
+        const progressResponse = await fetch(`${NEXTJS_BASE_URL}/api/eval/${job.id}/`);
 
         if (!progressResponse.ok) {
           clearInterval(intervalId);
@@ -48,10 +48,14 @@ const RunTestSuiteButton: React.FC = () => {
 
         const progressData = await progressResponse.json();
 
-        if (progressData.status === 'completed') {
+        if (progressData.status === 'complete') {
           clearInterval(intervalId);
           setIsRunning(false);
-          router.push('/eval');
+          if (IS_RUNNING_LOCALLY) {
+            router.push('/eval');
+          } else {
+            router.push(`/eval/remote:${encodeURIComponent(job.id)}`);
+          }
         } else if (progressData.status === 'failed') {
           clearInterval(intervalId);
           setIsRunning(false);

@@ -1,4 +1,3 @@
-// src/components/AssertsForm.tsx
 import React, { useState } from 'react';
 import Autocomplete from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
@@ -8,7 +7,8 @@ import IconButton from '@mui/material/IconButton';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import type { Assertion, AssertionType } from '../../../../../types';
+
+import type { Assertion, AssertionType } from '@/../../../types';
 
 interface AssertsFormProps {
   onAdd: (asserts: Assertion[]) => void;

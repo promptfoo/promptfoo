@@ -20,13 +20,13 @@ export class ReplicateProvider implements ApiProvider {
   modelName: string;
   apiKey?: string;
   replicate: any;
-  options: ReplicateCompletionOptions;
+  config: ReplicateCompletionOptions;
 
-  constructor(modelName: string, options?: ReplicateCompletionOptions) {
+  constructor(modelName: string, config?: ReplicateCompletionOptions) {
     this.modelName = modelName;
     this.apiKey =
-      options?.apiKey || process.env.REPLICATE_API_TOKEN || process.env.REPLICATE_API_KEY;
-    this.options = options || {};
+      config?.apiKey || process.env.REPLICATE_API_TOKEN || process.env.REPLICATE_API_KEY;
+    this.config = config || {};
   }
 
   id(): string {
@@ -40,7 +40,7 @@ export class ReplicateProvider implements ApiProvider {
   async callApi(prompt: string): Promise<ProviderResponse> {
     if (!this.apiKey) {
       throw new Error(
-        'Replicate API key is not set. Set REPLICATE_API_TOKEN environment variable or pass it as an argument to the constructor.',
+        'Replicate API key is not set. Set the REPLICATE_API_TOKEN environment variable or or add `apiKey` to the provider config.',
       );
     }
 
@@ -48,7 +48,7 @@ export class ReplicateProvider implements ApiProvider {
     let cacheKey;
     if (isCacheEnabled()) {
       cache = await getCache();
-      cacheKey = `replicate:${this.modelName}:${JSON.stringify(this.options)}:${prompt}`;
+      cacheKey = `replicate:${this.modelName}:${JSON.stringify(this.config)}:${prompt}`;
 
       // Try to get the cached response
       const cachedResponse = await cache.get(cacheKey);
@@ -69,14 +69,14 @@ export class ReplicateProvider implements ApiProvider {
     try {
       const data = {
         input: {
-          ...this.options,
+          ...this.config,
           prompt,
           max_length:
-            this.options.max_length || parseInt(process.env.REPLICATE_MAX_LENGTH || '2046', 10),
+            this.config.max_length || parseInt(process.env.REPLICATE_MAX_LENGTH || '2046', 10),
           temperature:
-            this.options.temperature || parseFloat(process.env.REPLICATE_TEMPERATURE || '0.01'),
+            this.config.temperature || parseFloat(process.env.REPLICATE_TEMPERATURE || '0.01'),
           repetition_penalty:
-            this.options.repetition_penalty ||
+            this.config.repetition_penalty ||
             parseFloat(process.env.REPLICATE_REPETITION_PENALTY || '1.0'),
         },
       };

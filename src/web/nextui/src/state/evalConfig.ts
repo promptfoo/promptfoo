@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-import type { ProviderOptions, TestCase, UnifiedConfig } from '../../../../types';
+import type { ProviderOptions, TestCase, UnifiedConfig } from '@/../../../types';
 
 export interface State {
   testCases: TestCase[];
