@@ -1,5 +1,6 @@
 import { Prisma, PrismaClient, EvaluationJob, EvaluationResult, JobStatus } from '@prisma/client';
-import { EvaluateSummary, EvaluateTestSuite } from '../../../../../../types';
+
+import { EvaluateSummary, EvaluateTestSuite } from '@/../../../types';
 
 export { JobStatus } from '@prisma/client';
 export type { EvaluationJob } from '@prisma/client';
@@ -21,14 +22,12 @@ export async function updateJob(
   id: string,
   progress: number,
   total: number,
-  status = JobStatus.IN_PROGRESS,
 ) {
   await prisma.evaluationJob.update({
     where: { id },
     data: {
       progress,
       total,
-      status,
     },
   });
 }

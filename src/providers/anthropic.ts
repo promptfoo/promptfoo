@@ -42,7 +42,7 @@ export class AnthropicCompletionProvider implements ApiProvider {
   async callApi(prompt: string, options?: AnthropicCompletionOptions): Promise<ProviderResponse> {
     if (!this.apiKey) {
       throw new Error(
-        'Anthropic API key is not set. Set ANTHROPIC_API_KEY environment variable or pass it as an argument to the constructor.',
+        'Anthropic API key is not set. Set the ANTHROPIC_API_KEY environment variable or add `apiKey` to the provider config.',
       );
     }
 

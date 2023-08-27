@@ -40,7 +40,7 @@ export class ReplicateProvider implements ApiProvider {
   async callApi(prompt: string): Promise<ProviderResponse> {
     if (!this.apiKey) {
       throw new Error(
-        'Replicate API key is not set. Set REPLICATE_API_TOKEN environment variable or pass it as an argument to the constructor.',
+        'Replicate API key is not set. Set the REPLICATE_API_TOKEN environment variable or or add `apiKey` to the provider config.',
       );
     }
 

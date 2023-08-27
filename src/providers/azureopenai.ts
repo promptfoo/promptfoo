@@ -217,7 +217,7 @@ export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvide
   async callApi(prompt: string, options?: AzureOpenAiCompletionOptions): Promise<ProviderResponse> {
     if (!this.apiKey) {
       throw new Error(
-        'Azure OpenAI API key is not set. Set AZURE_OPENAI_API_KEY environment variable or pass it as an argument to the constructor.',
+        'Azure OpenAI API key is not set. Set the AZURE_OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
       );
     }
     if (!this.apiHost) {

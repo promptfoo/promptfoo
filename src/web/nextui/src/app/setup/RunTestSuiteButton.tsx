@@ -51,7 +51,11 @@ const RunTestSuiteButton: React.FC = () => {
         if (progressData.status === 'completed') {
           clearInterval(intervalId);
           setIsRunning(false);
-          router.push('/eval');
+          if (process.env.NEXT_PUBLIC_PROMPTFOO_WITH_DATABASE) {
+            router.push(`/eval/remote:${encodeURIComponent(job.id)}`);
+          } else {
+            router.push('/eval');
+          }
         } else if (progressData.status === 'failed') {
           clearInterval(intervalId);
           setIsRunning(false);

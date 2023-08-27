@@ -2,6 +2,8 @@ import React from 'react';
 import { notFound } from 'next/navigation';
 
 import { API_BASE_URL } from '@/util/api';
+import {getResult} from '@/database';
+import { EvaluateSummary, EvaluateTestSuite, SharedResults } from '@/../../../types';
 import Eval from '../Eval';
 
 import './page.css';
@@ -11,7 +13,7 @@ export async function generateStaticParams() {
 }
 
 export default async function Page({ params }: { params: { id: string } }) {
-  let data;
+  let sharedResults: SharedResults;
   let recentFiles;
   const decodedId = decodeURIComponent(params.id);
   if (decodedId.startsWith('local:')) {
@@ -25,17 +27,28 @@ export default async function Page({ params }: { params: { id: string } }) {
       notFound();
     }
 
-    [data, recentFiles] = await Promise.all([
+    [sharedResults, recentFiles] = await Promise.all([
       response.json(),
       response2.json().then((res) => res.data),
     ]);
+  } else if (decodedId.startsWith('remote:')) {
+    const id = decodedId.slice('remote:'.length);
+    const result = await getResult(id)
+    sharedResults = {
+      data: {
+        version: result.version,
+        results: result.results as unknown as EvaluateSummary,
+        config: result.config as unknown as EvaluateTestSuite,
+      },
+    };
+
   } else {
     // Cloudflare KV
     const response = await fetch(`https://api.promptfoo.dev/eval/${params.id}`);
     if (!response.ok) {
       notFound();
     }
-    data = await response.json();
+    sharedResults = await response.json();
   }
-  return <Eval preloadedData={data} recentFiles={recentFiles} />;
+  return <Eval preloadedData={sharedResults} recentFiles={recentFiles} />;
 }

@@ -1,7 +1,7 @@
 import invariant from 'tiny-invariant';
 import { NextRequest, NextResponse } from 'next/server';
 
-import { getJob, getResult, JobStatus, EvaluationJob } from '../state';
+import { getJob, getResult, JobStatus, EvaluationJob } from '@/database';
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const { id } = params;

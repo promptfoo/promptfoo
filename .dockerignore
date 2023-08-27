@@ -8,7 +8,7 @@ Dockerfile
 *.log
 .DS_Store
 .aider*
-.env
+.env*
 dist
 scratch
 *.sqlite

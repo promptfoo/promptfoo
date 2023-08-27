@@ -8,8 +8,6 @@ primary_region = "sjc"
 
 [env]
   NODE_ENV = "production"
-  PROMPTFOO_BUILD_STANDALONE_SERVER = 1
-  NEXT_PUBLIC_PROMPTFOO_WITH_DATABASE = 1
 
 [build]
 

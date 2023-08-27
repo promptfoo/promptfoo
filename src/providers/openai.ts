@@ -148,7 +148,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
   async callApi(prompt: string, options?: OpenAiCompletionOptions): Promise<ProviderResponse> {
     if (!this.getApiKey(options)) {
       throw new Error(
-        'OpenAI API key is not set. Set OPENAI_API_KEY environment variable or pass it as an argument to the constructor.',
+        'OpenAI API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
       );
     }
 
@@ -256,7 +256,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   async callApi(prompt: string, options?: OpenAiCompletionOptions): Promise<ProviderResponse> {
     if (!this.getApiKey(options)) {
       throw new Error(
-        'OpenAI API key is not set. Set OPENAI_API_KEY environment variable or pass it as an argument to the constructor.',
+        'OpenAI API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
       );
     }
 
