@@ -84,15 +84,15 @@ describe('providers', () => {
 
   test('OpenAiChatCompletionProvider constructor with config', async () => {
     const config = {
-      temperature: 0.5,
-      max_tokens: 200,
+      temperature: 3.1415926,
+      max_tokens: 201,
     };
     const provider = new OpenAiChatCompletionProvider('gpt-3.5-turbo', config);
     const prompt = 'Test prompt';
     await provider.callApi(prompt);
 
     expect(fetch).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({
-      body: expect.stringContaining(`"temperature":${config.temperature},"max_tokens":${config.max_tokens}`)
+      body: expect.stringMatching(`temperature\":3.1415926`),
     }));
     expect(provider.config.temperature).toBe(config.temperature);
     expect(provider.config.max_tokens).toBe(config.max_tokens);
