@@ -1,5 +1,5 @@
 // Behavior varies depending on whether the app is running locally or not (e.g. connecting to local socket).
-export const IS_RUNNING_LOCALLY = !process.env.BUILD_STANDALONE_SERVER;
+export const IS_RUNNING_LOCALLY = !process.env.NEXT_PUBLIC_PROMPTFOO_BUILD_STANDALONE_SERVER;
 
 // The base URL of the separate API server, used locally.
 export const API_BASE_URL = `http://localhost:15500`;

@@ -24,7 +24,7 @@ const RunTestSuiteButton: React.FC = () => {
     };
 
     try {
-      const response = await fetch(`${NEXTJS_BASE_URL}/api/eval`, {
+      const response = await fetch(`${NEXTJS_BASE_URL}/api/eval/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -39,7 +39,7 @@ const RunTestSuiteButton: React.FC = () => {
       const job = await response.json();
 
       const intervalId = setInterval(async () => {
-        const progressResponse = await fetch(`${NEXTJS_BASE_URL}/api/eval/${job.id}`);
+        const progressResponse = await fetch(`${NEXTJS_BASE_URL}/api/eval/${job.id}/`);
 
         if (!progressResponse.ok) {
           clearInterval(intervalId);
@@ -48,7 +48,7 @@ const RunTestSuiteButton: React.FC = () => {
 
         const progressData = await progressResponse.json();
 
-        if (progressData.status === 'completed') {
+        if (progressData.status === 'complete') {
           clearInterval(intervalId);
           setIsRunning(false);
           if (IS_RUNNING_LOCALLY) {

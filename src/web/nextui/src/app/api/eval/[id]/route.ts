@@ -17,7 +17,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
   if (job.status === JobStatus.COMPLETE) {
     const result = await getResult(id);
-    return NextResponse.json({ status: 'completed', result });
+    return NextResponse.json({ status: 'complete', result });
   } else {
     return NextResponse.json({ status: 'in-progress', progress: job.progress, total: job.total });
   }

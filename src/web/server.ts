@@ -18,7 +18,7 @@ import { getDirectory } from '../esm';
 import { getLatestResultsPath, listPreviousResults, readResult } from '../util';
 
 interface Job {
-  status: 'in-progress' | 'completed';
+  status: 'in-progress' | 'complete';
   progress: number;
   total: number;
   result: EvaluateSummary | null;
@@ -97,9 +97,9 @@ export function startServer(port = 15500) {
       .then((result) => {
         const job = evalJobs.get(id);
         invariant(job, 'Job not found');
-        job.status = 'completed';
+        job.status = 'complete';
         job.result = result;
-        console.log(`[${id}] Completed`);
+        console.log(`[${id}] Complete`);
       });
 
     res.json({ id });
@@ -112,8 +112,8 @@ export function startServer(port = 15500) {
       res.status(404).json({ error: 'Job not found' });
       return;
     }
-    if (job.status === 'completed') {
-      res.json({ status: 'completed', result: job.result });
+    if (job.status === 'complete') {
+      res.json({ status: 'complete', result: job.result });
     } else {
       res.json({ status: 'in-progress', progress: job.progress, total: job.total });
     }

@@ -43,17 +43,13 @@ export default function Eval({ preloadedData, recentFiles: defaultRecentFiles }:
   };
 
   React.useEffect(() => {
-    if (!IS_RUNNING_LOCALLY) {
-      return;
-    }
-
-    const socket = SocketIOClient(API_BASE_URL);
-
     if (preloadedData) {
       setTable(preloadedData.data.results?.table as EvalTable);
       setConfig(preloadedData.data.config);
       setLoaded(true);
-    } else {
+    } else if (IS_RUNNING_LOCALLY) {
+      const socket = SocketIOClient(API_BASE_URL);
+
       socket.on('init', (data) => {
         console.log('Initialized socket connection', data);
         setLoaded(true);
@@ -68,11 +64,13 @@ export default function Eval({ preloadedData, recentFiles: defaultRecentFiles }:
         setConfig(data.config);
         fetchRecentFiles();
       });
-    }
 
-    return () => {
-      socket.disconnect();
-    };
+      return () => {
+        socket.disconnect();
+      };
+    } else {
+      alert('No preloaded data and not running locally. Configuration error?');
+    }
   }, [setTable, setConfig, preloadedData]);
 
   return loaded && table ? (
