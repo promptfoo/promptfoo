@@ -28,8 +28,11 @@ interface OpenAiCompletionOptions {
 class OpenAiGenericProvider implements ApiProvider {
   modelName: string;
 
-  constructor(modelName: string) {
+  config: OpenAiCompletionOptions;
+
+  constructor(modelName: string, config?: OpenAiCompletionOptions) {
     this.modelName = modelName;
+    this.config = config || {};
   }
 
   id(): string {
@@ -40,20 +43,20 @@ class OpenAiGenericProvider implements ApiProvider {
     return `[OpenAI Provider ${this.modelName}]`;
   }
 
-  getOrganization(options?: OpenAiCompletionOptions): string | undefined {
-    return options?.organization || process.env.OPENAI_ORGANIZATION;
+  getOrganization(): string | undefined {
+    return this.config.organization || process.env.OPENAI_ORGANIZATION;
   }
 
-  getApiHost(options?: OpenAiCompletionOptions): string | undefined {
-    return options?.apiHost || process.env.OPENAI_API_HOST || DEFAULT_OPENAI_HOST;
+  getApiHost(): string | undefined {
+    return this.config.apiHost || process.env.OPENAI_API_HOST || DEFAULT_OPENAI_HOST;
   }
 
-  getApiKey(options?: OpenAiCompletionOptions): string | undefined {
-    return options?.apiKey || process.env.OPENAI_API_KEY;
+  getApiKey(): string | undefined {
+    return this.config.apiKey || process.env.OPENAI_API_KEY;
   }
 
   // @ts-ignore: Prompt is not used in this implementation
-  async callApi(prompt: string, options?: OpenAiCompletionOptions): Promise<ProviderResponse> {
+  async callApi(prompt: string): Promise<ProviderResponse> {
     throw new Error('Not implemented');
   }
 }
@@ -134,19 +137,16 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
     'text-ada-001',
   ];
 
-  options: OpenAiCompletionOptions;
-
-  constructor(modelName: string, apiKey?: string, context?: OpenAiCompletionOptions, id?: string) {
+  constructor(modelName: string, config?: OpenAiCompletionOptions, id?: string) {
     if (!OpenAiCompletionProvider.OPENAI_COMPLETION_MODELS.includes(modelName)) {
       logger.warn(`Using unknown OpenAI completion model: ${modelName}`);
     }
-    super(modelName);
-    this.options = context || {};
+    super(modelName, config);
     this.id = id ? () => id : this.id;
   }
 
-  async callApi(prompt: string, options?: OpenAiCompletionOptions): Promise<ProviderResponse> {
-    if (!this.getApiKey(options)) {
+  async callApi(prompt: string): Promise<ProviderResponse> {
+    if (!this.getApiKey()) {
       throw new Error(
         'OpenAI API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
       );
@@ -156,7 +156,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
     try {
       stop = process.env.OPENAI_STOP
         ? JSON.parse(process.env.OPENAI_STOP)
-        : this.options?.stop || ['<|im_end|>', '<|endoftext|>'];
+        : this.config?.stop || ['<|im_end|>', '<|endoftext|>'];
     } catch (err) {
       throw new Error(`OPENAI_STOP is not a valid JSON string: ${err}`);
     }
@@ -164,24 +164,20 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       model: this.modelName,
       prompt,
       max_tokens:
-        options?.max_tokens ??
-        this.options.max_tokens ??
+        this.config.max_tokens ??
         parseInt(process.env.OPENAI_MAX_TOKENS || '1024'),
       temperature:
-        options?.temperature ??
-        this.options.temperature ??
+        this.config.temperature ??
         parseFloat(process.env.OPENAI_TEMPERATURE || '0'),
-      top_p: options?.top_p ?? this.options.top_p ?? parseFloat(process.env.OPENAI_TOP_P || '1'),
+      top_p: this.config.top_p ?? parseFloat(process.env.OPENAI_TOP_P || '1'),
       presence_penalty:
-        options?.presence_penalty ??
-        this.options.presence_penalty ??
+        this.config.presence_penalty ??
         parseFloat(process.env.OPENAI_PRESENCE_PENALTY || '0'),
       frequency_penalty:
-        options?.frequency_penalty ??
-        this.options.frequency_penalty ??
+        this.config.frequency_penalty ??
         parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0'),
       best_of:
-        options?.best_of ?? this.options.best_of ?? parseInt(process.env.OPENAI_BEST_OF || '1'),
+        this.config.best_of ?? parseInt(process.env.OPENAI_BEST_OF || '1'),
       stop,
     };
     logger.debug(`Calling OpenAI API: ${JSON.stringify(body)}`);
@@ -189,14 +185,14 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       cached = false;
     try {
       ({ data, cached } = (await fetchWithCache(
-        `https://${this.getApiHost(options)}/v1/completions`,
+        `https://${this.getApiHost()}/v1/completions`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${this.getApiKey(options)}`,
-            ...(this.getOrganization(options)
-              ? { 'OpenAI-Organization': this.getOrganization(options) }
+            Authorization: `Bearer ${this.getApiKey()}`,
+            ...(this.getOrganization()
+              ? { 'OpenAI-Organization': this.getOrganization() }
               : {}),
           },
           body: JSON.stringify(body),
@@ -242,19 +238,16 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     'gpt-3.5-turbo-16k-0613',
   ];
 
-  options: OpenAiCompletionOptions;
-
-  constructor(modelName: string, apiKey?: string, context?: OpenAiCompletionOptions, id?: string) {
+  constructor(modelName: string, config?: OpenAiCompletionOptions, id?: string) {
     if (!OpenAiChatCompletionProvider.OPENAI_CHAT_MODELS.includes(modelName)) {
       logger.warn(`Using unknown OpenAI chat model: ${modelName}`);
     }
-    super(modelName);
-    this.options = context || {};
+    super(modelName, config);
     this.id = id ? () => id : this.id;
   }
 
-  async callApi(prompt: string, options?: OpenAiCompletionOptions): Promise<ProviderResponse> {
-    if (!this.getApiKey(options)) {
+  async callApi(prompt: string): Promise<ProviderResponse> {
+    if (!this.getApiKey()) {
       throw new Error(
         'OpenAI API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
       );
@@ -265,24 +258,20 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       model: this.modelName,
       messages: messages,
       max_tokens:
-        options?.max_tokens ??
-        this.options.max_tokens ??
+        this.config.max_tokens ??
         parseInt(process.env.OPENAI_MAX_TOKENS || '1024'),
       temperature:
-        options?.temperature ??
-        this.options.temperature ??
+        this.config.temperature ??
         parseFloat(process.env.OPENAI_TEMPERATURE || '0'),
-      top_p: options?.top_p ?? this.options.top_p ?? parseFloat(process.env.OPENAI_TOP_P || '1'),
+      top_p: this.config.top_p ?? parseFloat(process.env.OPENAI_TOP_P || '1'),
       presence_penalty:
-        options?.presence_penalty ??
-        this.options.presence_penalty ??
+        this.config.presence_penalty ??
         parseFloat(process.env.OPENAI_PRESENCE_PENALTY || '0'),
       frequency_penalty:
-        options?.frequency_penalty ??
-        this.options.frequency_penalty ??
+        this.config.frequency_penalty ??
         parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0'),
-      functions: options?.functions || this.options.functions || undefined,
-      function_call: options?.function_call || this.options.function_call || undefined,
+      functions: this.config.functions || undefined,
+      function_call: this.config.function_call || undefined,
     };
     logger.debug(`Calling OpenAI API: ${JSON.stringify(body)}`);
 
@@ -290,14 +279,14 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       cached = false;
     try {
       ({ data, cached } = (await fetchWithCache(
-        `https://${this.getApiHost(options)}/v1/chat/completions`,
+        `https://${this.getApiHost()}/v1/chat/completions`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${this.getApiKey(options)}`,
-            ...(this.getOrganization(options)
-              ? { 'OpenAI-Organization': this.getOrganization(options) }
+            Authorization: `Bearer ${this.getApiKey()}`,
+            ...(this.getOrganization()
+              ? { 'OpenAI-Organization': this.getOrganization() }
               : {}),
           },
           body: JSON.stringify(body),

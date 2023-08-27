@@ -26,9 +26,6 @@ export async function generatePrompts(prompt: string, num: number): Promise<Gene
         content: prompt,
       },
     ]),
-    {
-      temperature: DEFAULT_TEMPERATURE,
-    },
   );
   if (resp.error || !resp.output) {
     return {
