@@ -4,16 +4,11 @@ import telemetry from './telemetry';
 import { evaluate as doEvaluate } from './evaluator';
 import { loadApiProviders } from './providers';
 import { readTests, writeLatestResults, writeOutput } from './util';
-import type { EvaluateOptions, TestSuite, TestSuiteConfig } from './types';
+import type { EvaluateOptions, TestSuite, EvaluateTestSuite } from './types';
 
 export * from './types';
 
 export { generateTable } from './table';
-
-export interface EvaluateTestSuite extends TestSuiteConfig {
-  prompts: string[];
-  writeLatestResults?: boolean;
-}
 
 async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions = {}) {
   const constructedTestSuite: TestSuite = {

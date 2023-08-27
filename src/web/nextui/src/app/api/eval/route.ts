@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server';
 
-import promptfoo, { EvaluateTestSuite } from '../../../../../../index';
+import promptfoo from '../../../../../../index';
 
 import { createJob, createResult, updateJob } from './state';
+
+import type { EvaluateTestSuite } from '../../../../../../types';
 
 async function runWithDatabase(testSuite: EvaluateTestSuite) {
   const job = await createJob();

@@ -1,6 +1,5 @@
 import { Prisma, PrismaClient, EvaluationJob, EvaluationResult, JobStatus } from '@prisma/client';
-import { EvaluateTestSuite } from '../../../../../../index';
-import { EvaluateSummary } from '../../../../../../types';
+import { EvaluateSummary, EvaluateTestSuite } from '../../../../../../types';
 
 export { JobStatus } from '@prisma/client';
 export type { EvaluationJob } from '@prisma/client';
