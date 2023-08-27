@@ -9,7 +9,7 @@ import Button from '@mui/material/Button';
 
 import JsonTextField from '../components/JsonTextField';
 
-import type { ProviderOptions } from '../../../../../types';
+import type { ProviderOptions } from '@/../../../types';
 
 interface ProviderConfigDialogProps {
   open: boolean;

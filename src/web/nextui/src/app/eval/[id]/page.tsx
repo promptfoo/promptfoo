@@ -1,8 +1,8 @@
 import React from 'react';
 import { notFound } from 'next/navigation';
 
-import { API_BASE_URL } from '@/util/api';
-import {getResult} from '@/database';
+import { API_BASE_URL } from '@/constants';
+import { getResult } from '@/database';
 import { EvaluateSummary, EvaluateTestSuite, SharedResults } from '@/../../../types';
 import Eval from '../Eval';
 
@@ -33,7 +33,7 @@ export default async function Page({ params }: { params: { id: string } }) {
     ]);
   } else if (decodedId.startsWith('remote:')) {
     const id = decodedId.slice('remote:'.length);
-    const result = await getResult(id)
+    const result = await getResult(id);
     sharedResults = {
       data: {
         version: result.version,
@@ -41,7 +41,6 @@ export default async function Page({ params }: { params: { id: string } }) {
         config: result.config as unknown as EvaluateTestSuite,
       },
     };
-
   } else {
     // Cloudflare KV
     const response = await fetch(`https://api.promptfoo.dev/eval/${params.id}`);

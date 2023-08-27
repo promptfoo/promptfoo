@@ -1,4 +1,4 @@
-import type { Prompt, EvaluateTableOutput } from '../../../../../types';
+import type { Prompt, EvaluateTableOutput } from '@/../../../types';
 
 export type EvalHead = {
   prompts: Prompt[];
@@ -17,4 +17,4 @@ export type EvalTable = {
 
 export type FilterMode = 'all' | 'failures' | 'different';
 
-export * from '../../../../../types';
+export * from '@/../../../types';

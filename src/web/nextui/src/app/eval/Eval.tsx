@@ -6,7 +6,7 @@ import { io as SocketIOClient } from 'socket.io-client';
 import { useRouter } from 'next/navigation';
 
 import ResultsView from './ResultsView';
-import { API_BASE_URL } from '@/util/api';
+import { API_BASE_URL } from '@/constants';
 import { useStore } from './store';
 
 import type { EvalTable, SharedResults } from './types';

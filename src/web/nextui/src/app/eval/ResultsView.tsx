@@ -28,7 +28,7 @@ import ResultsTable from './ResultsTable';
 import ConfigModal from './ConfigModal';
 import ShareModal from './ShareModal';
 import { useStore as useResultsViewStore } from './store';
-import { useStore as useMainStore } from '@/util/store';
+import { useStore as useMainStore } from '@/state/evalConfig';
 
 import type { VisibilityState } from '@tanstack/table-core';
 import type { FilterMode } from './types';

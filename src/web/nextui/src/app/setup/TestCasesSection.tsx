@@ -14,9 +14,9 @@ import TableRow from '@mui/material/TableRow';
 import Typography from '@mui/material/Typography';
 
 import TestCaseDialog from './TestCaseDialog';
-import { useStore } from '../../util/store';
+import { useStore } from '@/state/evalConfig';
 
-import type { TestCase } from '../../../../../types';
+import type { TestCase } from '@/../../../types';
 
 interface TestCasesSectionProps {
   varsList: string[];

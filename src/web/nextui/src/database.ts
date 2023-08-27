@@ -18,11 +18,7 @@ export async function createJob(): Promise<EvaluationJob> {
   return job;
 }
 
-export async function updateJob(
-  id: string,
-  progress: number,
-  total: number,
-) {
+export async function updateJob(id: string, progress: number, total: number) {
   await prisma.evaluationJob.update({
     where: { id },
     data: {

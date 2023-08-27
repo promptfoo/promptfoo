@@ -13,7 +13,7 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Link from 'next/link';
 
-import { useStore } from '@/util/store';
+import { useStore } from '@/state/evalConfig';
 
 import './YamlEditor.css';
 

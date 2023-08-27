@@ -15,7 +15,7 @@ import Publish from '@mui/icons-material/Publish';
 import Copy from '@mui/icons-material/ContentCopy';
 
 import PromptDialog from './PromptDialog';
-import { useStore } from '../../util/store';
+import { useStore } from '@/state/evalConfig';
 
 const PromptsSection: React.FC = () => {
   const [promptDialogOpen, setPromptDialogOpen] = useState(false);

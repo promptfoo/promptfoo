@@ -7,9 +7,8 @@ ENV PROMPTFOO_BUILD_STANDALONE_SERVER=1
 WORKDIR /app
 COPY . .
 
-# Note envars are read in from src/web/nextui/.env.production
-RUN echo "Building with env vars (.env.production):"
-RUN cat src/web/nextui/.env.production
+# Envars are read in from src/web/nextui/.env.production
+RUN echo "*** Building with env vars from .env.production"
 
 RUN npm install
 
