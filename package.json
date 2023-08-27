@@ -32,7 +32,7 @@
     "build:nextui": "cd src/web/nextui && npm run build && { [ -z \"$PROMPTFOO_BUILD_STANDALONE_SERVER\" ] && cp -r out/ ../../../dist/src/web/nextui; } || true",
     "build:watch": "tsc --watch",
     "build": "tsc && cp src/*.html dist/src && npm run build:nextui && chmod +x dist/src/main.js",
-    "prepare": "npm run install:nextui && echo $? && npm run build:clean && echo $? && npm run build && echo $?",
+    "prepare": "npm run install:nextui && npm run build:clean && npm run build",
     "test": "jest",
     "test:watch": "jest --watch",
     "format": "prettier -w ."
