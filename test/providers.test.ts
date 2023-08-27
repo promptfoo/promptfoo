@@ -118,6 +118,17 @@ describe('providers', () => {
     expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
   });
 
+  test('OpenAiChatCompletionProvider constructor with config', async () => {
+    const config = {
+      temperature: 0.5,
+      max_tokens: 200,
+    };
+    const provider = new OpenAiChatCompletionProvider('gpt-3.5-turbo', config);
+
+    expect(provider.config.temperature).toBe(config.temperature);
+    expect(provider.config.max_tokens).toBe(config.max_tokens);
+  });
+
   test('AzureOpenAiChatCompletionProvider callApi with cache disabled', async () => {
     disableCache();
 
