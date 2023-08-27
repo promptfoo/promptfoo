@@ -46,6 +46,10 @@ export default function Eval({ preloadedData, recentFiles: defaultRecentFiles }:
   };
 
   React.useEffect(() => {
+    if (process.env.NEXT_PUBLIC_PROMPTFOO_WITH_DATABASE) {
+      return;
+    }
+
     const socket = SocketIOClient(API_BASE_URL);
 
     if (preloadedData) {
