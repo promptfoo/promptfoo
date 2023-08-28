@@ -39,7 +39,7 @@ export async function loadApiProviders(
   } = {},
 ): Promise<ApiProvider[]> {
   if (typeof providerPaths === 'string') {
-    return [await loadApiProvider(providerPaths, undefined, options.basePath)];
+    return [await loadApiProvider({ providerPath: providerPaths, basePath: options.basePath })];
   } else if (typeof providerPaths === 'function') {
     return [
       {
@@ -51,7 +51,7 @@ export async function loadApiProviders(
     return Promise.all(
       providerPaths.map((provider, idx) => {
         if (typeof provider === 'string') {
-          return loadApiProvider(provider, undefined, options.basePath);
+          return loadApiProvider({ providerPath: provider, basePath: options.basePath });
         } else if (typeof provider === 'function') {
           return {
             id: () => `custom-function-${idx}`,
@@ -59,13 +59,13 @@ export async function loadApiProviders(
           };
         } else if (provider.id) {
           // List of ProviderConfig objects
-          return loadApiProvider((provider as ProviderOptions).id!, provider, options.basePath);
+          return loadApiProvider({ providerPath: (provider as ProviderOptions).id!, options: provider, basePath: options.basePath });
         } else {
           // List of { id: string, config: ProviderConfig } objects
           const id = Object.keys(provider)[0];
           const providerObject = (provider as ProviderOptionsMap)[id];
           const context = { ...providerObject, id: providerObject.id || id };
-          return loadApiProvider(id, context, options.basePath);
+          return loadApiProvider({ providerPath: id, options: context, basePath: options.basePath });
         }
       }),
     );
@@ -73,12 +73,15 @@ export async function loadApiProviders(
   throw new Error('Invalid providers list');
 }
 
-export async function loadApiProvider(
-  providerPath: string,
-  options?: ProviderOptions,
-  basePath?: string,
-): Promise<ApiProvider> {
-  options = options || {};
+export async function loadApiProvider({
+  providerPath,
+  options = {},
+  basePath,
+}: {
+  providerPath: string;
+  options?: ProviderOptions;
+  basePath?: string;
+}): Promise<ApiProvider> {
   if (providerPath?.startsWith('exec:')) {
     // Load script module
     const scriptPath = providerPath.split(':')[1];
