@@ -32,10 +32,12 @@ export async function loadApiProviders(
     | ProviderOptionsMap[]
     | ProviderOptions[]
     | ProviderFunction,
-  basePath?: string,
+  options: {
+    basePath?: string;
+  } = {},
 ): Promise<ApiProvider[]> {
   if (typeof providerPaths === 'string') {
-    return [await loadApiProvider(providerPaths, undefined, basePath)];
+    return [await loadApiProvider(providerPaths, undefined, options.basePath)];
   } else if (typeof providerPaths === 'function') {
     return [
       {
@@ -47,7 +49,7 @@ export async function loadApiProviders(
     return Promise.all(
       providerPaths.map((provider, idx) => {
         if (typeof provider === 'string') {
-          return loadApiProvider(provider, undefined, basePath);
+          return loadApiProvider(provider, undefined, options.basePath);
         } else if (typeof provider === 'function') {
           return {
             id: () => `custom-function-${idx}`,
@@ -55,13 +57,13 @@ export async function loadApiProviders(
           };
         } else if (provider.id) {
           // List of ProviderConfig objects
-          return loadApiProvider((provider as ProviderOptions).id!, provider, basePath);
+          return loadApiProvider((provider as ProviderOptions).id!, provider, options.basePath);
         } else {
           // List of { id: string, config: ProviderConfig } objects
           const id = Object.keys(provider)[0];
           const providerObject = (provider as ProviderOptionsMap)[id];
           const context = { ...providerObject, id: providerObject.id || id };
-          return loadApiProvider(id, context, basePath);
+          return loadApiProvider(id, context, options.basePath);
         }
       }),
     );
