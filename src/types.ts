@@ -27,6 +27,15 @@ export interface CommandLineOptions {
   promptSuffix?: string;
 }
 
+interface EnvOverrides {
+  ANTHROPIC_API_KEY?: string;
+  AZURE_OPENAI_API_HOST?: string;
+  AZURE_OPENAI_API_KEY?: string;
+  OPENAI_API_KEY?: string;
+  REPLICATE_API_KEY?: string;
+  REPLICATE_API_TOKEN?: string;
+}
+
 export interface ProviderOptions {
   id?: ProviderId;
   config?: any;
@@ -248,6 +257,9 @@ export interface TestSuite {
 
   // Default test case config
   defaultTest?: Partial<TestCase>;
+
+  // Envar overrides
+  env?: EnvOverrides;
 }
 
 export type ProviderId = string;
@@ -286,6 +298,9 @@ export interface TestSuiteConfig {
 
   // Determines whether or not sharing is enabled.
   sharing?: boolean;
+
+  // Envar overrides
+  env?: EnvOverrides;
 }
 
 export type UnifiedConfig = TestSuiteConfig & {
