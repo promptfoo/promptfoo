@@ -19,6 +19,7 @@ import {
 
 import type {
   ApiProvider,
+  EnvOverrides,
   ProviderOptions,
   ProviderFunction,
   ProviderId,
@@ -34,6 +35,7 @@ export async function loadApiProviders(
     | ProviderFunction,
   options: {
     basePath?: string;
+    env?: EnvOverrides;
   } = {},
 ): Promise<ApiProvider[]> {
   if (typeof providerPaths === 'string') {

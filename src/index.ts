@@ -13,7 +13,9 @@ export { generateTable } from './table';
 async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions = {}) {
   const constructedTestSuite: TestSuite = {
     ...testSuite,
-    providers: await loadApiProviders(testSuite.providers),
+    providers: await loadApiProviders(testSuite.providers, {
+      env: testSuite.env,
+    }),
     tests: await readTests(testSuite.tests),
 
     // Full prompts expected (not filepaths)
