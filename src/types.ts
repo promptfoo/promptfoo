@@ -36,6 +36,7 @@ export interface ProviderOptions {
 export interface ApiProvider {
   id: () => string;
   callApi: (prompt: string) => Promise<ProviderResponse>;
+  callEmbeddingApi?: (prompt: string) => Promise<ProviderEmbeddingResponse>;
 }
 
 export interface TokenUsage {

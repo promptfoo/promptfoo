@@ -30,9 +30,10 @@ class OpenAiGenericProvider implements ApiProvider {
 
   config: OpenAiCompletionOptions;
 
-  constructor(modelName: string, config?: OpenAiCompletionOptions) {
+  constructor(modelName: string, config?: OpenAiCompletionOptions, id?: string) {
     this.modelName = modelName;
     this.config = config || {};
+    this.id = id ? () => id : this.id;
   }
 
   id(): string {
@@ -141,8 +142,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
     if (!OpenAiCompletionProvider.OPENAI_COMPLETION_MODELS.includes(modelName)) {
       logger.warn(`Using unknown OpenAI completion model: ${modelName}`);
     }
-    super(modelName, config);
-    this.id = id ? () => id : this.id;
+    super(modelName, config, id);
   }
 
   async callApi(prompt: string): Promise<ProviderResponse> {
@@ -233,8 +233,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     if (!OpenAiChatCompletionProvider.OPENAI_CHAT_MODELS.includes(modelName)) {
       logger.warn(`Using unknown OpenAI chat model: ${modelName}`);
     }
-    super(modelName, config);
-    this.id = id ? () => id : this.id;
+    super(modelName, config, id);
   }
 
   async callApi(prompt: string): Promise<ProviderResponse> {

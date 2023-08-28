@@ -1,6 +1,7 @@
-import { OpenAiChatCompletionProvider } from '../src/providers/openai';
+import { getGradingProvider } from '../src/matchers';
+import { OpenAiChatCompletionProvider, OpenAiEmbeddingProvider } from '../src/providers/openai';
 import { matchesSimilarity, matchesLlmRubric } from '../src/matchers';
-import { DefaultEmbeddingProvider } from '../src/providers/openai';
+import { DefaultEmbeddingProvider, DefaultGradingProvider } from '../src/providers/openai';
 
 import { TestGrader } from './assertions.test';
 
@@ -69,6 +70,38 @@ describe('matchesSimilarity', () => {
     expect(result.pass).toBeTruthy();
     expect(result.reason).toBe('Similarity 0 is less than threshold 0.9');
   });
+
+  it('should use the overridden simmilarity grading config', async () => {
+    const expected = 'Expected output';
+    const output = 'Sample output';
+    const threshold = 0.5;
+    const grading: GradingConfig = {
+      provider: {
+        id: 'openai:embedding:text-embedding-ada-9999999',
+        config: {
+          apiKey: 'abc123',
+          temperature: 3.1415926,
+        },
+      },
+    };
+
+    const mockCallApi = jest.spyOn(OpenAiEmbeddingProvider.prototype, 'callEmbeddingApi');
+    mockCallApi.mockImplementation(function (this: OpenAiChatCompletionProvider) {
+      expect(this.config.temperature).toBe(3.1415926);
+      expect(this.getApiKey()).toBe('abc123');
+      return Promise.resolve({
+        embedding: [1, 0, 0],
+        tokenUsage: { total: 5, prompt: 2, completion: 3 },
+      });
+    });
+
+    const result = await matchesSimilarity(expected, output, threshold, false, grading);
+    expect(result.pass).toBeTruthy();
+    expect(result.reason).toBe('Similarity 1 is greater than threshold 0.5');
+    expect(mockCallApi).toHaveBeenCalled();
+
+    mockCallApi.mockRestore();
+  });
 });
 
 describe('matchesLlmRubric', () => {
@@ -102,7 +135,7 @@ describe('matchesLlmRubric', () => {
     expect(result.reason).toBe('Grading failed');
   });
 
-  it('should pass when the grading config is overridden', async () => {
+  it('should use the overridden llm rubric grading config', async () => {
     const expected = 'Expected output';
     const output = 'Sample output';
     const options: GradingConfig = {
@@ -132,5 +165,38 @@ describe('matchesLlmRubric', () => {
     expect(mockCallApi).toHaveBeenCalled();
 
     mockCallApi.mockRestore();
+  });
+});
+
+describe('getGradingProvider', () => {
+  it('should return the correct provider when provider is a string', async () => {
+    const provider = await getGradingProvider(
+      'openai:chat:gpt-3.5-turbo-foobar',
+      DefaultGradingProvider,
+    );
+    // ok for this not to match exactly when the string is parsed
+    expect(provider.id()).toBe('openai:gpt-3.5-turbo-foobar');
+  });
+
+  it('should return the correct provider when provider is an ApiProvider', async () => {
+    const provider = await getGradingProvider(DefaultEmbeddingProvider, DefaultGradingProvider);
+    expect(provider).toBe(DefaultEmbeddingProvider);
+  });
+
+  it('should return the correct provider when provider is ProviderOptions', async () => {
+    const providerOptions = {
+      id: 'openai:chat:gpt-3.5-turbo-foobar',
+      config: {
+        apiKey: 'abc123',
+        temperature: 3.1415926,
+      },
+    };
+    const provider = await getGradingProvider(providerOptions, DefaultGradingProvider);
+    expect(provider.id()).toBe('openai:chat:gpt-3.5-turbo-foobar');
+  });
+
+  it('should return the default provider when provider is not provided', async () => {
+    const provider = await getGradingProvider(undefined, DefaultGradingProvider);
+    expect(provider).toBe(DefaultGradingProvider);
   });
 });

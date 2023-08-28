@@ -1,6 +1,10 @@
 import path from 'path';
 
-import { OpenAiCompletionProvider, OpenAiChatCompletionProvider } from './providers/openai';
+import {
+  OpenAiCompletionProvider,
+  OpenAiChatCompletionProvider,
+  OpenAiEmbeddingProvider,
+} from './providers/openai';
 import { AnthropicCompletionProvider } from './providers/anthropic';
 import { ReplicateProvider } from './providers/replicate';
 import { LocalAiCompletionProvider, LocalAiChatProvider } from './providers/localai';
@@ -85,9 +89,23 @@ export async function loadApiProvider(
     const modelName = splits[2];
 
     if (modelType === 'chat') {
-      return new OpenAiChatCompletionProvider(modelName || 'gpt-3.5-turbo', options.config);
+      return new OpenAiChatCompletionProvider(
+        modelName || 'gpt-3.5-turbo',
+        options.config,
+        options.id,
+      );
+    } else if (modelType === 'embedding') {
+      return new OpenAiEmbeddingProvider(
+        modelName || 'text-embedding-ada-002',
+        options.config,
+        options.id,
+      );
     } else if (modelType === 'completion') {
-      return new OpenAiCompletionProvider(modelName || 'text-davinci-003', options.config);
+      return new OpenAiCompletionProvider(
+        modelName || 'text-davinci-003',
+        options.config,
+        options.id,
+      );
     } else if (OpenAiChatCompletionProvider.OPENAI_CHAT_MODELS.includes(modelType)) {
       return new OpenAiChatCompletionProvider(modelType, options.config, options.id);
     } else if (OpenAiCompletionProvider.OPENAI_COMPLETION_MODELS.includes(modelType)) {

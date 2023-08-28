@@ -8,14 +8,48 @@ import type { ApiProvider, GradingConfig, GradingResult, ProviderOptions } from 
 
 const nunjucks = getNunjucksEngine();
 
+export async function getGradingProvider(
+  provider: GradingConfig['provider'],
+  defaultProvider: ApiProvider,
+): Promise<ApiProvider> {
+  let finalProvider: ApiProvider;
+  if (typeof provider === 'string') {
+    finalProvider = await loadApiProvider(provider);
+  } else if (
+    typeof provider === 'object' &&
+    typeof (provider as ApiProvider).callApi === 'function'
+  ) {
+    // Defined directly as an ApiProvider
+    finalProvider = provider as ApiProvider;
+  } else if (typeof provider === 'object') {
+    // Defined as ProviderOptions
+    const providerId = typeof provider.id === 'string' ? provider.id : provider.id?.();
+    invariant(providerId, 'Provider supplied to llm-rubric must have an id');
+    // TODO(ian): set basepath if invoked from filesystem config
+    finalProvider = await loadApiProvider(providerId, provider as ProviderOptions);
+  } else {
+    finalProvider = defaultProvider;
+  }
+  return finalProvider;
+}
+
 export async function matchesSimilarity(
   expected: string,
   output: string,
   threshold: number,
   inverse: boolean = false,
+  grading?: GradingConfig,
 ): Promise<Omit<GradingResult, 'assertion'>> {
-  const expectedEmbedding = await DefaultEmbeddingProvider.callEmbeddingApi(expected);
-  const outputEmbedding = await DefaultEmbeddingProvider.callEmbeddingApi(output);
+  let provider = grading?.provider;
+  let finalProvider = await getGradingProvider(provider, DefaultEmbeddingProvider);
+
+  invariant(
+    finalProvider.callEmbeddingApi,
+    'Provider must implement callEmbeddingApi for similarity check',
+  );
+
+  const expectedEmbedding = await finalProvider.callEmbeddingApi(expected);
+  const outputEmbedding = await finalProvider.callEmbeddingApi(output);
 
   const tokensUsed = {
     total: (expectedEmbedding.tokenUsage?.total || 0) + (outputEmbedding.tokenUsage?.total || 0),
@@ -81,21 +115,7 @@ export async function matchesLlmRubric(
   });
 
   let provider = grading.provider;
-  let finalProvider: ApiProvider;
-  if (typeof provider === 'string') {
-    finalProvider = await loadApiProvider(provider);
-  } else if (typeof provider === 'object' && (typeof (provider as ApiProvider).callApi === 'function')) {
-    // Defined directly as an ApiProvider
-    finalProvider = provider as ApiProvider;
-  } else if (typeof provider === 'object') {
-    // Defined as ProviderOptions
-    const providerId = typeof provider.id === 'string' ? provider.id : provider.id?.();
-    invariant(providerId, 'Provider supplied to llm-rubric must have an id')
-    // TODO(ian): set basepath if invoked from filesystem config
-    finalProvider = await loadApiProvider(providerId, provider as ProviderOptions);
-  } else {
-    finalProvider = DefaultGradingProvider;
-  }
+  let finalProvider = await getGradingProvider(provider, DefaultGradingProvider);
   const resp = await finalProvider.callApi(prompt);
   if (resp.error || !resp.output) {
     return {
