@@ -1,9 +1,10 @@
+import invariant from 'tiny-invariant';
 import { DefaultEmbeddingProvider, DefaultGradingProvider } from './providers/openai';
 import { cosineSimilarity, getNunjucksEngine } from './util';
 import { loadApiProvider } from './providers';
 import { DEFAULT_GRADING_PROMPT } from './prompts';
 
-import type { GradingConfig, GradingResult } from './types';
+import type { GradingConfig, GradingResult, ProviderOptions } from './types';
 
 const nunjucks = getNunjucksEngine();
 
@@ -79,9 +80,16 @@ export async function matchesLlmRubric(
     rubric: expected.replace(/\n/g, '\\n').replace(/"/g, '\\"'),
   });
 
-  let provider = grading.provider || DefaultGradingProvider;
+  let provider = grading.provider;
   if (typeof provider === 'string') {
     provider = await loadApiProvider(provider);
+  } else if (typeof provider === 'object') {
+    const providerId = typeof provider.id === 'string' ? provider.id : provider.id?.();
+    invariant(providerId, 'Provider supplied to llm-rubric must have an id')
+    // TODO(ian): set basepath if invoked from filesystem config
+    provider = await loadApiProvider(providerId, provider as ProviderOptions);
+  } else {
+    provider = DefaultGradingProvider;
   }
   const resp = await provider.callApi(prompt);
   if (resp.error || !resp.output) {

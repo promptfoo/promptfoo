@@ -65,7 +65,7 @@ export type VarMapping = Record<string, string>;
 
 export interface GradingConfig {
   rubricPrompt?: string;
-  provider?: string | ApiProvider;
+  provider?: string | ProviderOptions | ApiProvider;
 }
 
 export interface PromptConfig {
