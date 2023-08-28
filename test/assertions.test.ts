@@ -711,6 +711,7 @@ describe('runAssertion', () => {
   });
 
   it('should use the provider from the assertion if it exists', async () => {
+    // Assertion grader passes
     const output = 'Expected output';
     const assertion: Assertion = {
       type: 'llm-rubric',
@@ -718,6 +719,7 @@ describe('runAssertion', () => {
       provider: Grader,
     };
 
+    // Test grader fails
     const BogusGrader: ApiProvider = {
       id(): string {
         return 'BogusGrader';
@@ -726,7 +728,6 @@ describe('runAssertion', () => {
         throw new Error('Should not be called');
       },
     };
-
     const test: AtomicTestCase = {
       assert: [assertion],
       options: {
@@ -734,6 +735,7 @@ describe('runAssertion', () => {
       },
     };
 
+    // Expect test to pass because assertion grader takes priority
     const result: GradingResult = await runAssertion(assertion, test, output);
     expect(result.pass).toBeTruthy();
     expect(result.reason).toBe('Test grading output');

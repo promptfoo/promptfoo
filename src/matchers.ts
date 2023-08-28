@@ -4,7 +4,7 @@ import { cosineSimilarity, getNunjucksEngine } from './util';
 import { loadApiProvider } from './providers';
 import { DEFAULT_GRADING_PROMPT } from './prompts';
 
-import type { GradingConfig, GradingResult, ProviderOptions } from './types';
+import type { ApiProvider, GradingConfig, GradingResult, ProviderOptions } from './types';
 
 const nunjucks = getNunjucksEngine();
 
@@ -81,17 +81,22 @@ export async function matchesLlmRubric(
   });
 
   let provider = grading.provider;
+  let finalProvider: ApiProvider;
   if (typeof provider === 'string') {
-    provider = await loadApiProvider(provider);
+    finalProvider = await loadApiProvider(provider);
+  } else if (typeof provider === 'object' && (typeof (provider as ApiProvider).callApi === 'function')) {
+    // Defined directly as an ApiProvider
+    finalProvider = provider as ApiProvider;
   } else if (typeof provider === 'object') {
+    // Defined as ProviderOptions
     const providerId = typeof provider.id === 'string' ? provider.id : provider.id?.();
     invariant(providerId, 'Provider supplied to llm-rubric must have an id')
     // TODO(ian): set basepath if invoked from filesystem config
-    provider = await loadApiProvider(providerId, provider as ProviderOptions);
+    finalProvider = await loadApiProvider(providerId, provider as ProviderOptions);
   } else {
-    provider = DefaultGradingProvider;
+    finalProvider = DefaultGradingProvider;
   }
-  const resp = await provider.callApi(prompt);
+  const resp = await finalProvider.callApi(prompt);
   if (resp.error || !resp.output) {
     return {
       pass: false,

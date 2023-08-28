@@ -1,3 +1,4 @@
+import { OpenAiChatCompletionProvider } from '../src/providers/openai';
 import { matchesSimilarity, matchesLlmRubric } from '../src/matchers';
 import { DefaultEmbeddingProvider } from '../src/providers/openai';
 
@@ -99,5 +100,37 @@ describe('matchesLlmRubric', () => {
     const result = await matchesLlmRubric(expected, output, options);
     expect(result.pass).toBeFalsy();
     expect(result.reason).toBe('Grading failed');
+  });
+
+  it('should pass when the grading config is overridden', async () => {
+    const expected = 'Expected output';
+    const output = 'Sample output';
+    const options: GradingConfig = {
+      rubricPrompt: 'Grading prompt',
+      provider: {
+        id: 'openai:gpt-3.5-turbo',
+        config: {
+          apiKey: 'abc123',
+          temperature: 3.1415926,
+        },
+      },
+    };
+
+    const mockCallApi = jest.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi');
+    mockCallApi.mockImplementation(function (this: OpenAiChatCompletionProvider) {
+      expect(this.config.temperature).toBe(3.1415926);
+      expect(this.getApiKey()).toBe('abc123');
+      return Promise.resolve({
+        output: JSON.stringify({ pass: true, reason: 'Grading passed' }),
+        tokenUsage: { total: 10, prompt: 5, completion: 5 },
+      });
+    });
+
+    const result = await matchesLlmRubric(expected, output, options);
+    expect(result.reason).toBe('Grading passed');
+    expect(result.pass).toBeTruthy();
+    expect(mockCallApi).toHaveBeenCalled();
+
+    mockCallApi.mockRestore();
   });
 });
