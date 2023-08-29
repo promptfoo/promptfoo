@@ -17,7 +17,7 @@ const defaultProviders: ProviderOptions[] = ([] as (ProviderOptions & { id: stri
     [
       'replicate:replicate/codellama-7b-instruct:0103579e86fc75ba0d65912890fa19ef03c84a68554635319accf2e0ba93d3ae',
       'replicate:replicate/codellama-13b-instruct:da5676342de1a5a335b848383af297f592b816b950a43d251a0a9edd0113604b',
-      'replicate:replicate:replicate/llama-2-70b-chat:2796ee9483c3fd7aa2e171d38f4ca12251a30609463dcfd4cd76703f22e96cdf',
+      'replicate:replicate/llama-2-70b-chat:2796ee9483c3fd7aa2e171d38f4ca12251a30609463dcfd4cd76703f22e96cdf',
     ].map((id) => ({
       id,
       config: {
@@ -134,6 +134,21 @@ const defaultProviders: ProviderOptions[] = ([] as (ProviderOptions & { id: stri
   )
   .sort((a, b) => a.id.localeCompare(b.id));
 
+const PREFIX_TO_PROVIDER: Record<string, string> = {
+  anthropic: 'Anthropic',
+  azureopenai: 'Azure',
+  openai: 'OpenAI',
+  replicate: 'Replicate',
+};
+
+function getGroupName(label?: string) {
+  if (!label) {
+    return 'Other';
+  }
+  const name = label.split(':')[0];
+  return PREFIX_TO_PROVIDER[name] || name;
+}
+
 interface ProviderSelectorProps {
   providers: ProviderOptions[];
   onChange: (providers: ProviderOptions[]) => void;
@@ -183,7 +198,7 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange
         freeSolo
         options={defaultProviders}
         value={providers}
-        groupBy={(option) => option.id.split(':')[0]}
+        groupBy={(option) => getGroupName(option.id)}
         onChange={(event, newValue: (string | ProviderOptions)[]) => {
           onChange(newValue.map((value) => (typeof value === 'string' ? { id: value } : value)));
         }}
@@ -191,10 +206,22 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange
           if (!option) {
             return '';
           }
+
+          let optionString: string = '';
           if (typeof option === 'string') {
-            return option;
+            optionString = option;
           }
-          return (option as ProviderOptions).id || 'Unknown provider';
+          if (
+            (option as ProviderOptions).id &&
+            typeof (option as ProviderOptions).id === 'string'
+          ) {
+            optionString = (option as ProviderOptions).id!;
+          }
+          const splits = optionString.split(':');
+          if (splits.length > 1) {
+            return splits[1];
+          }
+          return 'Unknown provider';
         }}
         renderTags={(value, getTagProps) =>
           value.map((provider, index: number) => {
