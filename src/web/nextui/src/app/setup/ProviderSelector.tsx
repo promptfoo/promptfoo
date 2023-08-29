@@ -183,6 +183,7 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange
         freeSolo
         options={defaultProviders}
         value={providers}
+        groupBy={(option) => option.id.split(':')[0]}
         onChange={(event, newValue: (string | ProviderOptions)[]) => {
           onChange(newValue.map((value) => (typeof value === 'string' ? { id: value } : value)));
         }}
