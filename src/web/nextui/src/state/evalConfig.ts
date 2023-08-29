@@ -1,13 +1,15 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-import type { ProviderOptions, TestCase, UnifiedConfig } from '@/../../../types';
+import type { EnvOverrides, ProviderOptions, TestCase, UnifiedConfig } from '@/../../../types';
 
 export interface State {
+  env: EnvOverrides;
   testCases: TestCase[];
   description: string;
   providers: ProviderOptions[];
   prompts: string[];
+  setEnv: (env: EnvOverrides) => void;
   setTestCases: (testCases: TestCase[]) => void;
   setDescription: (description: string) => void;
   setProviders: (providers: ProviderOptions[]) => void;
@@ -18,10 +20,12 @@ export interface State {
 export const useStore = create<State>()(
   persist(
     (set) => ({
+      env: {},
       testCases: [],
       description: '',
       providers: [],
       prompts: [],
+      setEnv: (env) => set({ env }),
       setTestCases: (testCases) => set({ testCases }),
       setDescription: (description) => set({ description }),
       setProviders: (providers) => set({ providers }),
