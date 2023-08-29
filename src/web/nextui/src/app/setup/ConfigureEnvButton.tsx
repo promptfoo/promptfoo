@@ -8,6 +8,7 @@ import TextField from '@mui/material/TextField';
 import SettingsIcon from '@mui/icons-material/Settings';
 
 import {useStore} from '@/state/evalConfig';
+import type {EnvOverrides} from '@/../../../types';
 
 const ConfigureEnvButton: React.FC = () => {
   const {setEnv} = useStore();
@@ -26,11 +27,11 @@ const ConfigureEnvButton: React.FC = () => {
   };
 
   const handleSave = () => {
-    const newEnv = {};
-    if (openAIKey) newEnv["OPENAI_API_KEY"] = openAIKey;
-    if (azureKey) newEnv["AZURE_API_KEY"] = azureKey;
-    if (anthropicKey) newEnv["ANTHROPIC_API_KEY"] = anthropicKey;
-    if (replicateKey) newEnv["REPLICATE_API_KEY"] = replicateKey;
+    const newEnv:EnvOverrides = {};
+    if (openAIKey) newEnv.OPENAI_API_KEY = openAIKey;
+    if (azureKey) newEnv.AZURE_OPENAI_API_KEY = azureKey;
+    if (anthropicKey) newEnv.ANTHROPIC_API_KEY = anthropicKey;
+    if (replicateKey) newEnv.REPLICATE_API_KEY = replicateKey;
     setEnv(newEnv);
     handleClose();
   };
