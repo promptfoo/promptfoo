@@ -22,7 +22,30 @@ const ConfigureEnvButton: React.FC = () => {
       </Button>
       <Dialog open={dialogOpen} onClose={handleClose}>
         <DialogTitle>Configure APIs</DialogTitle>
-        {/* Add your form or other dialog content here */}
+        <DialogContent>
+          <form noValidate autoComplete="off">
+            <TextField
+              label="OpenAI API key"
+              fullWidth
+              margin="normal"
+            />
+            <TextField
+              label="Azure API key"
+              fullWidth
+              margin="normal"
+            />
+            <TextField
+              label="Anthropic API key"
+              fullWidth
+              margin="normal"
+            />
+            <TextField
+              label="Replicate API key"
+              fullWidth
+              margin="normal"
+            />
+          </form>
+        </DialogContent>
       </Dialog>
     </>
   );
