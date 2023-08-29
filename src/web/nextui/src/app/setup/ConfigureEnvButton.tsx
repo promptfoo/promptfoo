@@ -1,10 +1,15 @@
 import React, { useState } from 'react';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
+import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
+import TextField from '@mui/material/TextField';
 import SettingsIcon from '@mui/icons-material/Settings';
 
+import {useStore} from '@/state/evalConfig';
+
 const ConfigureEnvButton: React.FC = () => {
+  const {setEnv} = useStore();
   const [dialogOpen, setDialogOpen] = useState(false);
 
   const handleOpen = () => {
@@ -46,6 +51,14 @@ const ConfigureEnvButton: React.FC = () => {
             />
           </form>
         </DialogContent>
+        <DialogActions>
+          <Button onClick={handleClose} color="primary">
+            Cancel
+          </Button>
+          <Button onClick={handleClose} color="primary">
+            Save
+          </Button>
+        </DialogActions>
       </Dialog>
     </>
   );
