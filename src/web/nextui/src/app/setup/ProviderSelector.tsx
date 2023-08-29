@@ -7,11 +7,47 @@ import type { ProviderOptions } from '@/../../../types';
 const defaultProviders: ProviderOptions[] = ([] as (ProviderOptions & { id: string })[])
   .concat(
     [
-      'replicate:replicate/llama70b-v2-chat:e951f18578850b652510200860fc4ea62b3b16fac280f83ff32282f87bbd2e48',
       'replicate:replicate/flan-t5-small:69716ad8c34274043bf4a135b7315c7c569ec931d8f23d6826e249e1c142a264',
     ].map((id) => ({
       id,
       config: { apiKey: '', temperature: 0.5, max_length: 1024, repetition_penality: 1.0 },
+    })),
+  )
+  .concat(
+    [
+      'replicate:replicate/codellama-7b-instruct:0103579e86fc75ba0d65912890fa19ef03c84a68554635319accf2e0ba93d3ae',
+      'replicate:replicate/codellama-13b-instruct:da5676342de1a5a335b848383af297f592b816b950a43d251a0a9edd0113604b',
+      'replicate:replicate:replicate/llama-2-70b-chat:2796ee9483c3fd7aa2e171d38f4ca12251a30609463dcfd4cd76703f22e96cdf',
+    ].map((id) => ({
+      id,
+      config: {
+        apiKey: '',
+        system_prompt: '',
+        temperature: 0.75,
+        top_p: 0.9,
+        top_k: 50,
+        max_new_tokens: 128,
+        min_new_tokens: -1,
+      },
+    })),
+  )
+  .concat(
+    [
+      'replicate:replicate/codellama-7b:6880b103613a9cd23950c5fd6c140197e519905bd0dd00e448c4858bdd06090a',
+      'replicate:replicate/codellama-13b-python:09b87c02dfa403e0c3289166dece62286b3bce49bae39a9c9204713cf94b8b7d',
+      'replicate:replicate/codellama-13b:1c914d844307b0588599b8393480a3ba917b660c7e9dfae681542b5325f228db',
+      'replicate:replicate/codellama-34b-python:9048743d22a7b19cd0abb018066809ea6af4f2b4717bef9aad3c5ae21ceac00d',
+      'replicate:replicate/codellama-34b:0666717e5ead8557dff55ee8f11924b5c0309f5f1ca52f64bb8eec405fdb38a7',
+    ].map((id) => ({
+      id,
+      config: {
+        apiKey: '',
+        temperature: 0.75,
+        top_p: 0.9,
+        top_k: 50,
+        max_new_tokens: 128,
+        min_new_tokens: -1,
+      },
     })),
   )
   .concat(
