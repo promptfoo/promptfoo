@@ -1,10 +1,10 @@
 import assertions from './assertions';
-import providers from './providers';
+import providers, { loadApiProvider } from './providers';
 import telemetry from './telemetry';
 import { evaluate as doEvaluate } from './evaluator';
 import { loadApiProviders } from './providers';
 import { readTests, writeLatestResults, writeOutput } from './util';
-import type { EvaluateOptions, TestSuite, EvaluateTestSuite } from './types';
+import type { EvaluateOptions, TestSuite, EvaluateTestSuite, TestCase, Assertion } from './types';
 
 export * from './types';
 
@@ -25,6 +25,19 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
     })),
   };
   telemetry.maybeShowNotice();
+
+  for (const test of constructedTestSuite.tests) {
+    if ((test as TestCase).options?.provider) {
+      (test as TestCase).options.provider = await loadApiProvider((test as TestCase).options.provider);
+    }
+    if ((test as TestCase).assert) {
+      for (const assertion of (test as TestCase).assert) {
+        if ((assertion as Assertion).provider) {
+          (assertion as Assertion).provider = await loadApiProvider((assertion as Assertion).provider);
+        }
+      }
+    }
+  }
 
   const ret = await doEvaluate(constructedTestSuite, options);
 
