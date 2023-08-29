@@ -39,9 +39,7 @@ const ConfigureEnvButton: React.FC = () => {
         <DialogTitle>Configure APIs</DialogTitle>
         <DialogContent>
           <Accordion defaultExpanded>
-            <AccordionSummary>
-              OpenAI
-            </AccordionSummary>
+            <AccordionSummary>OpenAI</AccordionSummary>
             <AccordionDetails>
               <TextField
                 label="OpenAI API key"
@@ -67,9 +65,7 @@ const ConfigureEnvButton: React.FC = () => {
             </AccordionDetails>
           </Accordion>
           <Accordion>
-            <AccordionSummary>
-              Azure
-            </AccordionSummary>
+            <AccordionSummary>Azure</AccordionSummary>
             <AccordionDetails>
               <TextField
                 label="Azure API key"
@@ -81,9 +77,7 @@ const ConfigureEnvButton: React.FC = () => {
             </AccordionDetails>
           </Accordion>
           <Accordion>
-            <AccordionSummary>
-              Anthropic
-            </AccordionSummary>
+            <AccordionSummary>Anthropic</AccordionSummary>
             <AccordionDetails>
               <TextField
                 label="Anthropic API key"
@@ -95,9 +89,7 @@ const ConfigureEnvButton: React.FC = () => {
             </AccordionDetails>
           </Accordion>
           <Accordion>
-            <AccordionSummary>
-              Replicate
-            </AccordionSummary>
+            <AccordionSummary>Replicate</AccordionSummary>
             <AccordionDetails>
               <TextField
                 label="Replicate API key"
