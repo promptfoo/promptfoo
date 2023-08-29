@@ -35,8 +35,8 @@ const ConfigureEnvButton: React.FC = () => {
       <Button variant="outlined" startIcon={<SettingsIcon />} onClick={handleOpen}>
         API keys
       </Button>
-      <Dialog open={dialogOpen} onClose={handleClose}>
-        <DialogTitle>Configure APIs</DialogTitle>
+      <Dialog open={dialogOpen} onClose={handleClose} fullWidth maxWidth="md">
+        <DialogTitle>Provider settings</DialogTitle>
         <DialogContent>
           <Accordion defaultExpanded>
             <AccordionSummary>OpenAI</AccordionSummary>
