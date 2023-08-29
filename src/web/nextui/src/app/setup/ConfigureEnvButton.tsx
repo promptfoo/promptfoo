@@ -38,7 +38,7 @@ const ConfigureEnvButton: React.FC = () => {
       <Dialog open={dialogOpen} onClose={handleClose}>
         <DialogTitle>Configure APIs</DialogTitle>
         <DialogContent>
-          <Accordion>
+          <Accordion defaultExpanded>
             <AccordionSummary>
               OpenAI
             </AccordionSummary>
