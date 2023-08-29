@@ -2,15 +2,31 @@ import logger from '../logger';
 import { fetchWithCache } from '../cache';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
 
-import type { ApiProvider, ProviderResponse } from '../types.js';
+import type { ApiProvider, EnvOverrides, ProviderResponse } from '../types.js';
+
+interface LocalAiCompletionOptions {
+  apiBaseUrl?: string;
+  temperature?: number;
+}
 
 class LocalAiGenericProvider implements ApiProvider {
   modelName: string;
   apiBaseUrl: string;
+  config: LocalAiCompletionOptions;
 
-  constructor(modelName: string) {
+  constructor(
+    modelName: string,
+    options: { config?: LocalAiCompletionOptions; id?: string; env?: EnvOverrides } = {},
+  ) {
+    const { id, config, env } = options;
     this.modelName = modelName;
-    this.apiBaseUrl = process.env.LOCALAI_BASE_URL || 'http://localhost:8080/v1';
+    this.apiBaseUrl =
+      config?.apiBaseUrl ||
+      env?.LOCALAI_BASE_URL ||
+      process.env.LOCALAI_BASE_URL ||
+      'http://localhost:8080/v1';
+    this.config = config || {};
+    this.id = id ? () => id : this.id;
   }
 
   id(): string {
@@ -33,7 +49,7 @@ export class LocalAiChatProvider extends LocalAiGenericProvider {
     const body = {
       model: this.modelName,
       messages: messages,
-      temperature: process.env.LOCALAI_TEMPERATURE || 0.7,
+      temperature: this.config.temperature || process.env.LOCALAI_TEMPERATURE || 0.7,
     };
     logger.debug(`Calling LocalAI API: ${JSON.stringify(body)}`);
 
@@ -74,7 +90,7 @@ export class LocalAiCompletionProvider extends LocalAiGenericProvider {
     const body = {
       model: this.modelName,
       prompt,
-      temperature: process.env.LOCALAI_TEMPERATURE || 0.7,
+      temperature: this.config.temperature || process.env.LOCALAI_TEMPERATURE || 0.7,
     };
     logger.debug(`Calling LocalAI API: ${JSON.stringify(body)}`);
 

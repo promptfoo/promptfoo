@@ -87,7 +87,7 @@ describe('providers', () => {
       temperature: 3.1415926,
       max_tokens: 201,
     };
-    const provider = new OpenAiChatCompletionProvider('gpt-3.5-turbo', config);
+    const provider = new OpenAiChatCompletionProvider('gpt-3.5-turbo', {config});
     const prompt = 'Test prompt';
     await provider.callApi(prompt);
 
@@ -281,7 +281,9 @@ describe('providers', () => {
         config: { foo: 'bar' },
       },
     };
-    const provider = await loadApiProvider('openai:chat', rawProviderConfig['openai:chat']);
+    const provider = await loadApiProvider('openai:chat', {
+      options: rawProviderConfig['openai:chat'],
+    });
     expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
   });
 

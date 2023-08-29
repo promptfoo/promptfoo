@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import logger from '../logger';
 
-import type { ApiProvider, ProviderResponse } from '../types.js';
+import type { ApiProvider, EnvOverrides, ProviderResponse } from '../types.js';
 
 interface AnthropicCompletionOptions {
   apiKey?: string;
@@ -24,11 +24,16 @@ export class AnthropicCompletionProvider implements ApiProvider {
   anthropic: Anthropic;
   config: AnthropicCompletionOptions;
 
-  constructor(modelName: string, config?: AnthropicCompletionOptions) {
+  constructor(
+    modelName: string,
+    options: { config?: AnthropicCompletionOptions; id?: string; env?: EnvOverrides } = {},
+  ) {
+    const { config, id, env } = options;
     this.modelName = modelName;
-    this.apiKey = config?.apiKey || process.env.ANTHROPIC_API_KEY;
+    this.apiKey = config?.apiKey || env?.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY;
     this.anthropic = new Anthropic({ apiKey: this.apiKey });
     this.config = config || {};
+    this.id = id ? () => id : this.id;
   }
 
   id(): string {

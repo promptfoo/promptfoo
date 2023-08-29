@@ -7,8 +7,10 @@ import { REQUEST_TIMEOUT_MS } from './shared';
 export class WebhookProvider implements ApiProvider {
   webhookUrl: string;
 
-  constructor(webhookUrl: string) {
+  constructor(webhookUrl: string, options: { id?: string } = {}) {
+    const { id } = options;
     this.webhookUrl = webhookUrl;
+    this.id = id ? () => id : this.id;
   }
 
   id(): string {

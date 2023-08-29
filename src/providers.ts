@@ -38,8 +38,9 @@ export async function loadApiProviders(
     env?: EnvOverrides;
   } = {},
 ): Promise<ApiProvider[]> {
+  const { basePath, env } = options;
   if (typeof providerPaths === 'string') {
-    return [await loadApiProvider({ providerPath: providerPaths, basePath: options.basePath })];
+    return [await loadApiProvider(providerPaths, { basePath, env })];
   } else if (typeof providerPaths === 'function') {
     return [
       {
@@ -51,7 +52,7 @@ export async function loadApiProviders(
     return Promise.all(
       providerPaths.map((provider, idx) => {
         if (typeof provider === 'string') {
-          return loadApiProvider({ providerPath: provider, basePath: options.basePath });
+          return loadApiProvider(provider, { basePath, env });
         } else if (typeof provider === 'function') {
           return {
             id: () => `custom-function-${idx}`,
@@ -59,13 +60,17 @@ export async function loadApiProviders(
           };
         } else if (provider.id) {
           // List of ProviderConfig objects
-          return loadApiProvider({ providerPath: (provider as ProviderOptions).id!, options: provider, basePath: options.basePath });
+          return loadApiProvider((provider as ProviderOptions).id!, {
+            options: provider,
+            basePath,
+            env,
+          });
         } else {
           // List of { id: string, config: ProviderConfig } objects
           const id = Object.keys(provider)[0];
           const providerObject = (provider as ProviderOptionsMap)[id];
           const context = { ...providerObject, id: providerObject.id || id };
-          return loadApiProvider({ providerPath: id, options: context, basePath: options.basePath });
+          return loadApiProvider(id, { options: context, basePath, env });
         }
       }),
     );
@@ -73,15 +78,20 @@ export async function loadApiProviders(
   throw new Error('Invalid providers list');
 }
 
-export async function loadApiProvider({
-  providerPath,
-  options = {},
-  basePath,
-}: {
-  providerPath: string;
-  options?: ProviderOptions;
-  basePath?: string;
-}): Promise<ApiProvider> {
+export async function loadApiProvider(
+  providerPath: string,
+  context: {
+    options?: ProviderOptions;
+    basePath?: string;
+    env?: EnvOverrides;
+  } = {},
+): Promise<ApiProvider> {
+  const { options = {}, basePath, env } = context;
+  const providerOptions = {
+    id: options.id,
+    config: options.config,
+    env,
+  };
   if (providerPath?.startsWith('exec:')) {
     // Load script module
     const scriptPath = providerPath.split(':')[1];
@@ -96,27 +106,19 @@ export async function loadApiProvider({
     const modelName = splits[2];
 
     if (modelType === 'chat') {
-      return new OpenAiChatCompletionProvider(
-        modelName || 'gpt-3.5-turbo',
-        options.config,
-        options.id,
-      );
+      return new OpenAiChatCompletionProvider(modelName || 'gpt-3.5-turbo', providerOptions);
     } else if (modelType === 'embedding') {
-      return new OpenAiEmbeddingProvider(
-        modelName || 'text-embedding-ada-002',
-        options.config,
-        options.id,
-      );
+      return new OpenAiEmbeddingProvider(modelName || 'text-embedding-ada-002', {
+        id: options.id,
+        config: options.config,
+        env,
+      });
     } else if (modelType === 'completion') {
-      return new OpenAiCompletionProvider(
-        modelName || 'text-davinci-003',
-        options.config,
-        options.id,
-      );
+      return new OpenAiCompletionProvider(modelName || 'text-davinci-003', providerOptions);
     } else if (OpenAiChatCompletionProvider.OPENAI_CHAT_MODELS.includes(modelType)) {
-      return new OpenAiChatCompletionProvider(modelType, options.config, options.id);
+      return new OpenAiChatCompletionProvider(modelType, providerOptions);
     } else if (OpenAiCompletionProvider.OPENAI_COMPLETION_MODELS.includes(modelType)) {
-      return new OpenAiCompletionProvider(modelType, options.config, options.id);
+      return new OpenAiCompletionProvider(modelType, providerOptions);
     } else {
       throw new Error(
         `Unknown OpenAI model type: ${modelType}. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>`,
@@ -129,9 +131,9 @@ export async function loadApiProvider({
     const deploymentName = splits[2];
 
     if (modelType === 'chat') {
-      return new AzureOpenAiChatCompletionProvider(deploymentName, options.config, options.id);
+      return new AzureOpenAiChatCompletionProvider(deploymentName, providerOptions);
     } else if (modelType === 'completion') {
-      return new AzureOpenAiCompletionProvider(deploymentName, options.config, options.id);
+      return new AzureOpenAiCompletionProvider(deploymentName, providerOptions);
     } else {
       throw new Error(
         `Unknown Azure OpenAI model type: ${modelType}. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>`,
@@ -144,9 +146,9 @@ export async function loadApiProvider({
     const modelName = splits[2];
 
     if (modelType === 'completion') {
-      return new AnthropicCompletionProvider(modelName || 'claude-instant-1', options.config);
+      return new AnthropicCompletionProvider(modelName || 'claude-instant-1', providerOptions);
     } else if (AnthropicCompletionProvider.ANTHROPIC_COMPLETION_MODELS.includes(modelType)) {
-      return new AnthropicCompletionProvider(modelType, options.config);
+      return new AnthropicCompletionProvider(modelType, providerOptions);
     } else {
       throw new Error(
         `Unknown Anthropic model type: ${modelType}. Use one of the following providers: anthropic:completion:<model name>`,
@@ -157,29 +159,29 @@ export async function loadApiProvider({
     const splits = providerPath.split(':');
     const modelName = splits.slice(1).join(':');
 
-    return new ReplicateProvider(modelName, options.config);
+    return new ReplicateProvider(modelName, providerOptions);
   }
 
   if (providerPath.startsWith('webhook:')) {
     const webhookUrl = providerPath.substring('webhook:'.length);
-    return new WebhookProvider(webhookUrl);
+    return new WebhookProvider(webhookUrl, providerOptions);
   } else if (providerPath === 'llama' || providerPath.startsWith('llama:')) {
     const modelName = providerPath.split(':')[1];
-    return new LlamaProvider(modelName, options.config);
+    return new LlamaProvider(modelName, providerOptions);
   } else if (providerPath.startsWith('ollama:')) {
     const modelName = providerPath.split(':')[1];
-    return new OllamaProvider(modelName);
+    return new OllamaProvider(modelName, providerOptions);
   } else if (providerPath?.startsWith('localai:')) {
     const splits = providerPath.split(':');
     const modelType = splits[1];
     const modelName = splits[2];
 
     if (modelType === 'chat') {
-      return new LocalAiChatProvider(modelName);
+      return new LocalAiChatProvider(modelName, providerOptions);
     } else if (modelType === 'completion') {
-      return new LocalAiCompletionProvider(modelName);
+      return new LocalAiCompletionProvider(modelName, providerOptions);
     } else {
-      return new LocalAiChatProvider(modelType);
+      return new LocalAiChatProvider(modelType, providerOptions);
     }
   }
 

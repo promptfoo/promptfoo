@@ -2,7 +2,12 @@ import logger from '../logger';
 import { fetchWithCache } from '../cache';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
 
-import type { ApiProvider, ProviderEmbeddingResponse, ProviderResponse } from '../types.js';
+import type {
+  ApiProvider,
+  EnvOverrides,
+  ProviderEmbeddingResponse,
+  ProviderResponse,
+} from '../types.js';
 
 const DEFAULT_OPENAI_HOST = 'api.openai.com';
 
@@ -29,8 +34,14 @@ class OpenAiGenericProvider implements ApiProvider {
   modelName: string;
 
   config: OpenAiCompletionOptions;
+  env?: EnvOverrides;
 
-  constructor(modelName: string, config?: OpenAiCompletionOptions, id?: string) {
+  constructor(
+    modelName: string,
+    options: { config?: OpenAiCompletionOptions; id?: string; env?: EnvOverrides } = {},
+  ) {
+    const { config, id, env } = options;
+    this.env = env;
     this.modelName = modelName;
     this.config = config || {};
     this.id = id ? () => id : this.id;
@@ -45,15 +56,22 @@ class OpenAiGenericProvider implements ApiProvider {
   }
 
   getOrganization(): string | undefined {
-    return this.config.organization || process.env.OPENAI_ORGANIZATION;
+    return (
+      this.config.organization || this.env?.OPENAI_ORGANIZATION || process.env.OPENAI_ORGANIZATION
+    );
   }
 
   getApiHost(): string | undefined {
-    return this.config.apiHost || process.env.OPENAI_API_HOST || DEFAULT_OPENAI_HOST;
+    return (
+      this.config.apiHost ||
+      this.env?.OPENAI_API_HOST ||
+      process.env.OPENAI_API_HOST ||
+      DEFAULT_OPENAI_HOST
+    );
   }
 
   getApiKey(): string | undefined {
-    return this.config.apiKey || process.env.OPENAI_API_KEY;
+    return this.config.apiKey || this.env?.OPENAI_API_KEY || process.env.OPENAI_API_KEY;
   }
 
   // @ts-ignore: Prompt is not used in this implementation
@@ -138,11 +156,14 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
     'text-ada-001',
   ];
 
-  constructor(modelName: string, config?: OpenAiCompletionOptions, id?: string) {
+  constructor(
+    modelName: string,
+    options: { config?: OpenAiCompletionOptions; id?: string; env?: EnvOverrides } = {},
+  ) {
     if (!OpenAiCompletionProvider.OPENAI_COMPLETION_MODELS.includes(modelName)) {
       logger.warn(`Using unknown OpenAI completion model: ${modelName}`);
     }
-    super(modelName, config, id);
+    super(modelName, options);
   }
 
   async callApi(prompt: string): Promise<ProviderResponse> {
@@ -229,11 +250,14 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     'gpt-3.5-turbo-16k-0613',
   ];
 
-  constructor(modelName: string, config?: OpenAiCompletionOptions, id?: string) {
+  constructor(
+    modelName: string,
+    options: { config?: OpenAiCompletionOptions; id?: string; env?: EnvOverrides } = {},
+  ) {
     if (!OpenAiChatCompletionProvider.OPENAI_CHAT_MODELS.includes(modelName)) {
       logger.warn(`Using unknown OpenAI chat model: ${modelName}`);
     }
-    super(modelName, config, id);
+    super(modelName, options);
   }
 
   async callApi(prompt: string): Promise<ProviderResponse> {

@@ -4,7 +4,7 @@ import fetch from 'node-fetch';
 import logger from '../logger';
 import { getCache, isCacheEnabled } from '../cache';
 
-import type { ApiProvider, ProviderResponse } from '../types.js';
+import type { ApiProvider, EnvOverrides, ProviderResponse } from '../types.js';
 
 interface ReplicateCompletionOptions {
   apiKey?: string;
@@ -22,11 +22,20 @@ export class ReplicateProvider implements ApiProvider {
   replicate: any;
   config: ReplicateCompletionOptions;
 
-  constructor(modelName: string, config?: ReplicateCompletionOptions) {
+  constructor(
+    modelName: string,
+    options: { config?: ReplicateCompletionOptions; id?: string; env?: EnvOverrides } = {},
+  ) {
+    const { config, id, env } = options;
     this.modelName = modelName;
     this.apiKey =
-      config?.apiKey || process.env.REPLICATE_API_TOKEN || process.env.REPLICATE_API_KEY;
+      config?.apiKey ||
+      env?.REPLICATE_API_KEY ||
+      env?.REPLICATE_API_TOKEN ||
+      process.env.REPLICATE_API_TOKEN ||
+      process.env.REPLICATE_API_KEY;
     this.config = config || {};
+    this.id = id ? () => id : this.id;
   }
 
   id(): string {

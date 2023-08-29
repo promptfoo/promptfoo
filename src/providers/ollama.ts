@@ -23,8 +23,10 @@ interface OllamaJsonL {
 export class OllamaProvider implements ApiProvider {
   modelName: string;
 
-  constructor(modelName: string) {
+  constructor(modelName: string, options: { id?: string } = {}) {
+    const { id } = options;
     this.modelName = modelName;
+    this.id = id ? () => id : this.id;
   }
 
   id(): string {
