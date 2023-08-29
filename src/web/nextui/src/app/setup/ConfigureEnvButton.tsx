@@ -44,20 +44,6 @@ const ConfigureEnvButton: React.FC = () => {
               onChange={(e) => setEnv({ ...env, OPENAI_API_KEY: e.target.value })}
             />
             <TextField
-              label="Azure API key"
-              fullWidth
-              margin="normal"
-              value={env.AZURE_OPENAI_API_KEY}
-              onChange={(e) => setEnv({ ...env, AZURE_OPENAI_API_KEY: e.target.value })}
-            />
-            <TextField
-              label="Anthropic API key"
-              fullWidth
-              margin="normal"
-              value={env.ANTHROPIC_API_KEY}
-              onChange={(e) => setEnv({ ...env, ANTHROPIC_API_KEY: e.target.value })}
-            />
-            <TextField
               label="OpenAI API host"
               fullWidth
               margin="normal"
@@ -70,6 +56,20 @@ const ConfigureEnvButton: React.FC = () => {
               margin="normal"
               value={env.OPENAI_ORGANIZATION}
               onChange={(e) => setEnv({ ...env, OPENAI_ORGANIZATION: e.target.value })}
+            />
+            <TextField
+              label="Azure API key"
+              fullWidth
+              margin="normal"
+              value={env.AZURE_OPENAI_API_KEY}
+              onChange={(e) => setEnv({ ...env, AZURE_OPENAI_API_KEY: e.target.value })}
+            />
+            <TextField
+              label="Anthropic API key"
+              fullWidth
+              margin="normal"
+              value={env.ANTHROPIC_API_KEY}
+              onChange={(e) => setEnv({ ...env, ANTHROPIC_API_KEY: e.target.value })}
             />
             <TextField
               label="Replicate API key"
