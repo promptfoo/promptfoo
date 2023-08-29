@@ -13,10 +13,12 @@ import type {EnvOverrides} from '@/../../../types';
 const ConfigureEnvButton: React.FC = () => {
   const {setEnv} = useStore();
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [openAIKey, setOpenAIKey] = useState("");
-  const [azureKey, setAzureKey] = useState("");
-  const [anthropicKey, setAnthropicKey] = useState("");
-  const [replicateKey, setReplicateKey] = useState("");
+  const [env, setEnv] = useState({
+    OPENAI_API_KEY: "",
+    AZURE_OPENAI_API_KEY: "",
+    ANTHROPIC_API_KEY: "",
+    REPLICATE_API_KEY: "",
+  });
 
   const handleOpen = () => {
     setDialogOpen(true);
@@ -27,12 +29,7 @@ const ConfigureEnvButton: React.FC = () => {
   };
 
   const handleSave = () => {
-    const newEnv:EnvOverrides = {};
-    if (openAIKey) newEnv.OPENAI_API_KEY = openAIKey;
-    if (azureKey) newEnv.AZURE_OPENAI_API_KEY = azureKey;
-    if (anthropicKey) newEnv.ANTHROPIC_API_KEY = anthropicKey;
-    if (replicateKey) newEnv.REPLICATE_API_KEY = replicateKey;
-    setEnv(newEnv);
+    setEnv(env);
     handleClose();
   };
 
@@ -49,29 +46,29 @@ const ConfigureEnvButton: React.FC = () => {
               label="OpenAI API key"
               fullWidth
               margin="normal"
-              value={openAIKey}
-              onChange={(e) => setOpenAIKey(e.target.value)}
+              value={env.OPENAI_API_KEY}
+              onChange={(e) => setEnv({ ...env, OPENAI_API_KEY: e.target.value })}
             />
             <TextField
               label="Azure API key"
               fullWidth
               margin="normal"
-              value={azureKey}
-              onChange={(e) => setAzureKey(e.target.value)}
+              value={env.AZURE_OPENAI_API_KEY}
+              onChange={(e) => setEnv({ ...env, AZURE_OPENAI_API_KEY: e.target.value })}
             />
             <TextField
               label="Anthropic API key"
               fullWidth
               margin="normal"
-              value={anthropicKey}
-              onChange={(e) => setAnthropicKey(e.target.value)}
+              value={env.ANTHROPIC_API_KEY}
+              onChange={(e) => setEnv({ ...env, ANTHROPIC_API_KEY: e.target.value })}
             />
             <TextField
               label="Replicate API key"
               fullWidth
               margin="normal"
-              value={replicateKey}
-              onChange={(e) => setReplicateKey(e.target.value)}
+              value={env.REPLICATE_API_KEY}
+              onChange={(e) => setEnv({ ...env, REPLICATE_API_KEY: e.target.value })}
             />
           </form>
         </DialogContent>
