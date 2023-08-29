@@ -12,6 +12,10 @@ import {useStore} from '@/state/evalConfig';
 const ConfigureEnvButton: React.FC = () => {
   const {setEnv} = useStore();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [openAIKey, setOpenAIKey] = useState("");
+  const [azureKey, setAzureKey] = useState("");
+  const [anthropicKey, setAnthropicKey] = useState("");
+  const [replicateKey, setReplicateKey] = useState("");
 
   const handleOpen = () => {
     setDialogOpen(true);
@@ -19,6 +23,16 @@ const ConfigureEnvButton: React.FC = () => {
 
   const handleClose = () => {
     setDialogOpen(false);
+  };
+
+  const handleSave = () => {
+    const newEnv = {};
+    if (openAIKey) newEnv["OPENAI_API_KEY"] = openAIKey;
+    if (azureKey) newEnv["AZURE_API_KEY"] = azureKey;
+    if (anthropicKey) newEnv["ANTHROPIC_API_KEY"] = anthropicKey;
+    if (replicateKey) newEnv["REPLICATE_API_KEY"] = replicateKey;
+    setEnv(newEnv);
+    handleClose();
   };
 
   return (
@@ -34,21 +48,29 @@ const ConfigureEnvButton: React.FC = () => {
               label="OpenAI API key"
               fullWidth
               margin="normal"
+              value={openAIKey}
+              onChange={(e) => setOpenAIKey(e.target.value)}
             />
             <TextField
               label="Azure API key"
               fullWidth
               margin="normal"
+              value={azureKey}
+              onChange={(e) => setAzureKey(e.target.value)}
             />
             <TextField
               label="Anthropic API key"
               fullWidth
               margin="normal"
+              value={anthropicKey}
+              onChange={(e) => setAnthropicKey(e.target.value)}
             />
             <TextField
               label="Replicate API key"
               fullWidth
               margin="normal"
+              value={replicateKey}
+              onChange={(e) => setReplicateKey(e.target.value)}
             />
           </form>
         </DialogContent>
@@ -56,7 +78,7 @@ const ConfigureEnvButton: React.FC = () => {
           <Button onClick={handleClose} color="primary">
             Cancel
           </Button>
-          <Button onClick={handleClose} color="primary" variant="contained">
+          <Button onClick={handleSave} color="primary" variant="contained">
             Save
           </Button>
         </DialogActions>
