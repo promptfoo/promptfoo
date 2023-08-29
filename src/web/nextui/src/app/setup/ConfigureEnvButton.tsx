@@ -58,6 +58,20 @@ const ConfigureEnvButton: React.FC = () => {
               onChange={(e) => setEnv({ ...env, ANTHROPIC_API_KEY: e.target.value })}
             />
             <TextField
+              label="OpenAI API host"
+              fullWidth
+              margin="normal"
+              value={env.OPENAI_API_HOST}
+              onChange={(e) => setEnv({ ...env, OPENAI_API_HOST: e.target.value })}
+            />
+            <TextField
+              label="OpenAI organization"
+              fullWidth
+              margin="normal"
+              value={env.OPENAI_ORGANIZATION}
+              onChange={(e) => setEnv({ ...env, OPENAI_ORGANIZATION: e.target.value })}
+            />
+            <TextField
               label="Replicate API key"
               fullWidth
               margin="normal"
