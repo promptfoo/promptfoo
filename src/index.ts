@@ -1,10 +1,12 @@
+import invariant from 'tiny-invariant';
+
 import assertions from './assertions';
 import providers, { loadApiProvider } from './providers';
 import telemetry from './telemetry';
 import { evaluate as doEvaluate } from './evaluator';
 import { loadApiProviders } from './providers';
 import { readTests, writeLatestResults, writeOutput } from './util';
-import type { EvaluateOptions, TestSuite, EvaluateTestSuite, TestCase, Assertion } from './types';
+import type { EvaluateOptions, TestSuite, EvaluateTestSuite, ProviderOptions } from './types';
 
 export * from './types';
 
@@ -24,20 +26,30 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
       display: promptContent,
     })),
   };
-  telemetry.maybeShowNotice();
 
-  for (const test of constructedTestSuite.tests) {
-    if ((test as TestCase).options?.provider) {
-      (test as TestCase).options.provider = await loadApiProvider((test as TestCase).options.provider);
+  // Resolve nested providers
+  for (const test of constructedTestSuite.tests || []) {
+    if (test.options?.provider && typeof test.options.provider === 'function') {
+      test.options.provider = await loadApiProvider(test.options.provider);
     }
-    if ((test as TestCase).assert) {
-      for (const assertion of (test as TestCase).assert) {
-        if ((assertion as Assertion).provider) {
-          (assertion as Assertion).provider = await loadApiProvider((assertion as Assertion).provider);
+    if (test.assert) {
+      for (const assertion of test.assert) {
+        if (assertion.provider) {
+          if (typeof assertion.provider === 'object') {
+            const casted = assertion.provider as ProviderOptions;
+            invariant(casted.id, 'Provider object must have an id');
+            assertion.provider = await loadApiProvider(casted.id, { options: casted });
+          } else if (typeof assertion.provider === 'string') {
+            assertion.provider = await loadApiProvider(assertion.provider);
+          } else {
+            // It's a function, no need to do anything
+          }
         }
       }
     }
   }
+
+  telemetry.maybeShowNotice();
 
   const ret = await doEvaluate(constructedTestSuite, options);
 
