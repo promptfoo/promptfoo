@@ -19,6 +19,8 @@ import './YamlEditor.css';
 
 const YamlEditorComponent: React.FC = () => {
   const {
+    env,
+    setEnv,
     description,
     setDescription,
     providers,
@@ -46,6 +48,7 @@ const YamlEditorComponent: React.FC = () => {
 
   React.useEffect(() => {
     const testSuite = {
+      env,
       description,
       providers,
       prompts,
@@ -53,9 +56,10 @@ const YamlEditorComponent: React.FC = () => {
     };
 
     setCode(yaml.dump(testSuite));
-  }, [description, providers, prompts, testCases]);
+  }, [env, description, providers, prompts, testCases]);
 
   const handleChange = (yamlObj: any) => {
+    setEnv(yamlObj.env || {});
     setDescription(yamlObj.description || '');
     setProviders(yamlObj.providers || []);
     setPrompts(yamlObj.prompts || []);

@@ -9,7 +9,7 @@ import { IS_RUNNING_LOCALLY, NEXTJS_BASE_URL } from '@/constants';
 
 const RunTestSuiteButton: React.FC = () => {
   const router = useRouter();
-  const { description, providers, prompts, testCases } = useStore();
+  const { env, description, providers, prompts, testCases } = useStore();
   const [isRunning, setIsRunning] = useState(false);
   const [progressPercent, setProgressPercent] = useState(0);
 
@@ -17,6 +17,7 @@ const RunTestSuiteButton: React.FC = () => {
     setIsRunning(true);
 
     const testSuite = {
+      env,
       description,
       providers,
       prompts,

@@ -7,18 +7,12 @@ import DialogTitle from '@mui/material/DialogTitle';
 import TextField from '@mui/material/TextField';
 import SettingsIcon from '@mui/icons-material/Settings';
 
-import {useStore} from '@/state/evalConfig';
-import type {EnvOverrides} from '@/../../../types';
+import { useStore } from '@/state/evalConfig';
 
 const ConfigureEnvButton: React.FC = () => {
-  const {setEnv} = useStore();
+  const { env: defaultEnv, setEnv: saveEnv } = useStore();
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [env, setEnv] = useState({
-    OPENAI_API_KEY: "",
-    AZURE_OPENAI_API_KEY: "",
-    ANTHROPIC_API_KEY: "",
-    REPLICATE_API_KEY: "",
-  });
+  const [env, setEnv] = useState(defaultEnv);
 
   const handleOpen = () => {
     setDialogOpen(true);
@@ -29,7 +23,7 @@ const ConfigureEnvButton: React.FC = () => {
   };
 
   const handleSave = () => {
-    setEnv(env);
+    saveEnv(env);
     handleClose();
   };
 

@@ -1,7 +1,13 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-import type { EnvOverrides, ProviderOptions, TestCase, UnifiedConfig } from '@/../../../types';
+import type {
+  EnvOverrides,
+  EvaluateTestSuite,
+  ProviderOptions,
+  TestCase,
+  UnifiedConfig,
+} from '@/../../../types';
 
 export interface State {
   env: EnvOverrides;
@@ -15,11 +21,12 @@ export interface State {
   setProviders: (providers: ProviderOptions[]) => void;
   setPrompts: (prompts: string[]) => void;
   setStateFromConfig: (config: Partial<UnifiedConfig>) => void;
+  getTestSuite: () => EvaluateTestSuite;
 }
 
 export const useStore = create<State>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       env: {},
       testCases: [],
       description: '',
@@ -54,6 +61,16 @@ export const useStore = create<State>()(
           }
         }
         set(updates);
+      },
+      getTestSuite: () => {
+        const { description, testCases, providers, prompts, env } = get();
+        return {
+          env,
+          description,
+          providers,
+          prompts,
+          tests: testCases,
+        };
       },
     }),
     {
