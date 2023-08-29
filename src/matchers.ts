@@ -26,7 +26,7 @@ export async function getGradingProvider(
     const providerId = typeof provider.id === 'string' ? provider.id : provider.id?.();
     invariant(providerId, 'Provider supplied to llm-rubric must have an id');
     // TODO(ian): set basepath if invoked from filesystem config
-    finalProvider = await loadApiProvider(providerId, provider as ProviderOptions);
+    finalProvider = await loadApiProvider(providerId, { options: provider as ProviderOptions });
   } else {
     finalProvider = defaultProvider;
   }

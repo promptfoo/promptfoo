@@ -6,13 +6,14 @@ import { LlamaProvider } from '../src/providers/llama';
 
 import { disableCache, enableCache } from '../src/cache.js';
 import { loadApiProvider, loadApiProviders } from '../src/providers.js';
-import type { ProviderOptionsMap, ProviderFunction } from '../src/types';
 import {
   AzureOpenAiChatCompletionProvider,
   AzureOpenAiCompletionProvider,
 } from '../src/providers/azureopenai';
 import { OllamaProvider } from '../src/providers/ollama';
 import { WebhookProvider } from '../src/providers/webhook';
+
+import type { ProviderOptionsMap, ProviderFunction } from '../src/types';
 
 jest.mock('node-fetch', () => jest.fn());
 
@@ -87,7 +88,7 @@ describe('providers', () => {
       temperature: 3.1415926,
       max_tokens: 201,
     };
-    const provider = new OpenAiChatCompletionProvider('gpt-3.5-turbo', config);
+    const provider = new OpenAiChatCompletionProvider('gpt-3.5-turbo', { config });
     const prompt = 'Test prompt';
     await provider.callApi(prompt);
 
@@ -281,7 +282,9 @@ describe('providers', () => {
         config: { foo: 'bar' },
       },
     };
-    const provider = await loadApiProvider('openai:chat', rawProviderConfig['openai:chat']);
+    const provider = await loadApiProvider('openai:chat', {
+      options: rawProviderConfig['openai:chat'],
+    });
     expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
   });
 

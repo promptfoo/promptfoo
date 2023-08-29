@@ -1,8 +1,8 @@
 import logger from '../logger';
 import { fetchWithCache } from '../cache';
+import { REQUEST_TIMEOUT_MS } from './shared';
 
 import type { ApiProvider, ProviderResponse } from '../types.js';
-import { REQUEST_TIMEOUT_MS } from './shared';
 
 interface OllamaJsonL {
   model: string;
@@ -23,8 +23,10 @@ interface OllamaJsonL {
 export class OllamaProvider implements ApiProvider {
   modelName: string;
 
-  constructor(modelName: string) {
+  constructor(modelName: string, options: { id?: string } = {}) {
+    const { id } = options;
     this.modelName = modelName;
+    this.id = id ? () => id : this.id;
   }
 
   id(): string {

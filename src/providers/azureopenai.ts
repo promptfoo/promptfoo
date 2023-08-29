@@ -2,7 +2,12 @@ import logger from '../logger';
 import { fetchWithCache } from '../cache';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
 
-import type { ApiProvider, ProviderEmbeddingResponse, ProviderResponse } from '../types.js';
+import type {
+  ApiProvider,
+  EnvOverrides,
+  ProviderEmbeddingResponse,
+  ProviderResponse,
+} from '../types.js';
 
 interface AzureOpenAiCompletionOptions {
   apiKey?: string;
@@ -27,14 +32,19 @@ class AzureOpenAiGenericProvider implements ApiProvider {
 
   config: AzureOpenAiCompletionOptions;
 
-  constructor(deploymentName: string, config?: AzureOpenAiCompletionOptions) {
+  constructor(
+    deploymentName: string,
+    options: { config?: AzureOpenAiCompletionOptions; id?: string; env?: EnvOverrides } = {},
+  ) {
+    const { config, id, env } = options;
+
     this.deploymentName = deploymentName;
 
-    this.apiKey = config?.apiKey || process.env.AZURE_OPENAI_API_KEY;
-
-    this.apiHost = process.env.AZURE_OPENAI_API_HOST;
+    this.apiKey = config?.apiKey || env?.AZURE_OPENAI_API_KEY || process.env.AZURE_OPENAI_API_KEY;
+    this.apiHost = env?.AZURE_OPENAI_API_HOST || process.env.AZURE_OPENAI_API_HOST;
 
     this.config = config || {};
+    this.id = id ? () => id : this.id;
   }
 
   id(): string {
@@ -121,11 +131,6 @@ export class AzureOpenAiEmbeddingProvider extends AzureOpenAiGenericProvider {
 }
 
 export class AzureOpenAiCompletionProvider extends AzureOpenAiGenericProvider {
-  constructor(deploymentName: string, config?: AzureOpenAiCompletionOptions, id?: string) {
-    super(deploymentName, config);
-    this.id = id ? () => id : this.id;
-  }
-
   async callApi(prompt: string): Promise<ProviderResponse> {
     if (!this.apiKey) {
       throw new Error(
@@ -199,11 +204,6 @@ export class AzureOpenAiCompletionProvider extends AzureOpenAiGenericProvider {
 }
 
 export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvider {
-  constructor(deploymentName: string, config?: AzureOpenAiCompletionOptions, id?: string) {
-    super(deploymentName, config);
-    this.id = id ? () => id : this.id;
-  }
-
   async callApi(prompt: string): Promise<ProviderResponse> {
     if (!this.apiKey) {
       throw new Error(

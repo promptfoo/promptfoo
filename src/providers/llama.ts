@@ -25,11 +25,13 @@ interface LlamaCompletionOptions {
 
 export class LlamaProvider implements ApiProvider {
   modelName: string;
-  options?: LlamaCompletionOptions;
+  config?: LlamaCompletionOptions;
 
-  constructor(modelName: string, options?: LlamaCompletionOptions) {
+  constructor(modelName: string, options: { config?: LlamaCompletionOptions; id?: string } = {}) {
+    const { config, id } = options;
     this.modelName = modelName;
-    this.options = options;
+    this.config = config;
+    this.id = id ? () => id : this.id;
   }
 
   id(): string {
@@ -41,7 +43,7 @@ export class LlamaProvider implements ApiProvider {
   }
 
   async callApi(prompt: string, options?: LlamaCompletionOptions): Promise<ProviderResponse> {
-    options = Object.assign({}, this.options, options);
+    options = Object.assign({}, this.config, options);
     const body = {
       prompt,
       n_predict: options?.n_predict || 512,
