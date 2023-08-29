@@ -10,7 +10,7 @@ const defaultProviders: ProviderOptions[] = ([] as (ProviderOptions & { id: stri
       'replicate:replicate/flan-t5-small:69716ad8c34274043bf4a135b7315c7c569ec931d8f23d6826e249e1c142a264',
     ].map((id) => ({
       id,
-      config: { apiKey: '', temperature: 0.5, max_length: 1024, repetition_penality: 1.0 },
+      config: { temperature: 0.5, max_length: 1024, repetition_penality: 1.0 },
     })),
   )
   .concat(
@@ -21,7 +21,6 @@ const defaultProviders: ProviderOptions[] = ([] as (ProviderOptions & { id: stri
     ].map((id) => ({
       id,
       config: {
-        apiKey: '',
         system_prompt: '',
         temperature: 0.75,
         top_p: 0.9,
@@ -41,7 +40,6 @@ const defaultProviders: ProviderOptions[] = ([] as (ProviderOptions & { id: stri
     ].map((id) => ({
       id,
       config: {
-        apiKey: '',
         temperature: 0.75,
         top_p: 0.9,
         top_k: 50,
@@ -57,7 +55,6 @@ const defaultProviders: ProviderOptions[] = ([] as (ProviderOptions & { id: stri
     ].map((id) => ({
       id,
       config: {
-        apiKey: '',
         temperature: 0.95,
         top_p: 0.95,
         top_k: 250,
@@ -74,7 +71,7 @@ const defaultProviders: ProviderOptions[] = ([] as (ProviderOptions & { id: stri
       'anthropic:claude-1-100k',
       'anthropic:claude-instant-1',
       'anthropic:claude-instant-1-100k',
-    ].map((id) => ({ id, config: { apiKey: '', max_tokens_to_sample: 256, temperature: 0.5 } })),
+    ].map((id) => ({ id, config: { max_tokens_to_sample: 256, temperature: 0.5 } })),
   )
   .concat(
     [
@@ -91,7 +88,6 @@ const defaultProviders: ProviderOptions[] = ([] as (ProviderOptions & { id: stri
     ].map((id) => ({
       id,
       config: {
-        apiKey: '',
         organization: '',
         apiHost: 'api.openai.com',
         temperature: 0.5,
@@ -120,7 +116,6 @@ const defaultProviders: ProviderOptions[] = ([] as (ProviderOptions & { id: stri
     ].map((id) => ({
       id,
       config: {
-        apiKey: '',
         temperature: 0.5,
         max_tokens: 1024,
         top_p: 1.0,

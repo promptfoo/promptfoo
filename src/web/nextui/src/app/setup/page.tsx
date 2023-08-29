@@ -14,6 +14,7 @@ import DialogTitle from '@mui/material/DialogTitle';
 import { ErrorBoundary } from 'react-error-boundary';
 
 import RunTestSuiteButton from './RunTestSuiteButton';
+import ConfigureEnvButton from './ConfigureEnvButton';
 import PromptsSection from './PromptsSection';
 import TestCasesSection from './TestCasesSection';
 import ProviderSelector from './ProviderSelector';
@@ -99,6 +100,7 @@ const EvaluateTestSuiteCreator: React.FC = () => {
         <Typography variant="h4">Set up an evaluation</Typography>
         <Stack direction="row" spacing={2}>
           <RunTestSuiteButton />
+          <ConfigureEnvButton />
           <Button variant="outlined" color="primary" onClick={() => setResetDialogOpen(true)}>
             Reset
           </Button>

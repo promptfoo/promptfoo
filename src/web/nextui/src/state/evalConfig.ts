@@ -1,27 +1,38 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-import type { ProviderOptions, TestCase, UnifiedConfig } from '@/../../../types';
+import type {
+  EnvOverrides,
+  EvaluateTestSuite,
+  ProviderOptions,
+  TestCase,
+  UnifiedConfig,
+} from '@/../../../types';
 
 export interface State {
+  env: EnvOverrides;
   testCases: TestCase[];
   description: string;
   providers: ProviderOptions[];
   prompts: string[];
+  setEnv: (env: EnvOverrides) => void;
   setTestCases: (testCases: TestCase[]) => void;
   setDescription: (description: string) => void;
   setProviders: (providers: ProviderOptions[]) => void;
   setPrompts: (prompts: string[]) => void;
   setStateFromConfig: (config: Partial<UnifiedConfig>) => void;
+  getTestSuite: () => EvaluateTestSuite;
 }
 
 export const useStore = create<State>()(
   persist(
-    (set) => ({
+    (set, get) => ({
+      env: {},
       testCases: [],
       description: '',
       providers: [],
       prompts: [],
+      setEnv: (env) => set({ env }),
       setTestCases: (testCases) => set({ testCases }),
       setDescription: (description) => set({ description }),
       setProviders: (providers) => set({ providers }),
@@ -50,6 +61,16 @@ export const useStore = create<State>()(
           }
         }
         set(updates);
+      },
+      getTestSuite: () => {
+        const { description, testCases, providers, prompts, env } = get();
+        return {
+          env,
+          description,
+          providers,
+          prompts,
+          tests: testCases,
+        };
       },
     }),
     {
