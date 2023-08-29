@@ -35,50 +35,76 @@ const ConfigureEnvButton: React.FC = () => {
       <Dialog open={dialogOpen} onClose={handleClose}>
         <DialogTitle>Configure APIs</DialogTitle>
         <DialogContent>
-          <form noValidate autoComplete="off">
-            <TextField
-              label="OpenAI API key"
-              fullWidth
-              margin="normal"
-              value={env.OPENAI_API_KEY}
-              onChange={(e) => setEnv({ ...env, OPENAI_API_KEY: e.target.value })}
-            />
-            <TextField
-              label="OpenAI API host"
-              fullWidth
-              margin="normal"
-              value={env.OPENAI_API_HOST}
-              onChange={(e) => setEnv({ ...env, OPENAI_API_HOST: e.target.value })}
-            />
-            <TextField
-              label="OpenAI organization"
-              fullWidth
-              margin="normal"
-              value={env.OPENAI_ORGANIZATION}
-              onChange={(e) => setEnv({ ...env, OPENAI_ORGANIZATION: e.target.value })}
-            />
-            <TextField
-              label="Azure API key"
-              fullWidth
-              margin="normal"
-              value={env.AZURE_OPENAI_API_KEY}
-              onChange={(e) => setEnv({ ...env, AZURE_OPENAI_API_KEY: e.target.value })}
-            />
-            <TextField
-              label="Anthropic API key"
-              fullWidth
-              margin="normal"
-              value={env.ANTHROPIC_API_KEY}
-              onChange={(e) => setEnv({ ...env, ANTHROPIC_API_KEY: e.target.value })}
-            />
-            <TextField
-              label="Replicate API key"
-              fullWidth
-              margin="normal"
-              value={env.REPLICATE_API_KEY}
-              onChange={(e) => setEnv({ ...env, REPLICATE_API_KEY: e.target.value })}
-            />
-          </form>
+          <Accordion>
+            <AccordionSummary>
+              OpenAI
+            </AccordionSummary>
+            <AccordionDetails>
+              <TextField
+                label="OpenAI API key"
+                fullWidth
+                margin="normal"
+                value={env.OPENAI_API_KEY}
+                onChange={(e) => setEnv({ ...env, OPENAI_API_KEY: e.target.value })}
+              />
+              <TextField
+                label="OpenAI API host"
+                fullWidth
+                margin="normal"
+                value={env.OPENAI_API_HOST}
+                onChange={(e) => setEnv({ ...env, OPENAI_API_HOST: e.target.value })}
+              />
+              <TextField
+                label="OpenAI organization"
+                fullWidth
+                margin="normal"
+                value={env.OPENAI_ORGANIZATION}
+                onChange={(e) => setEnv({ ...env, OPENAI_ORGANIZATION: e.target.value })}
+              />
+            </AccordionDetails>
+          </Accordion>
+          <Accordion>
+            <AccordionSummary>
+              Azure
+            </AccordionSummary>
+            <AccordionDetails>
+              <TextField
+                label="Azure API key"
+                fullWidth
+                margin="normal"
+                value={env.AZURE_OPENAI_API_KEY}
+                onChange={(e) => setEnv({ ...env, AZURE_OPENAI_API_KEY: e.target.value })}
+              />
+            </AccordionDetails>
+          </Accordion>
+          <Accordion>
+            <AccordionSummary>
+              Anthropic
+            </AccordionSummary>
+            <AccordionDetails>
+              <TextField
+                label="Anthropic API key"
+                fullWidth
+                margin="normal"
+                value={env.ANTHROPIC_API_KEY}
+                onChange={(e) => setEnv({ ...env, ANTHROPIC_API_KEY: e.target.value })}
+              />
+            </AccordionDetails>
+          </Accordion>
+          <Accordion>
+            <AccordionSummary>
+              Replicate
+            </AccordionSummary>
+            <AccordionDetails>
+              <TextField
+                label="Replicate API key"
+                fullWidth
+                margin="normal"
+                value={env.REPLICATE_API_KEY}
+                onChange={(e) => setEnv({ ...env, REPLICATE_API_KEY: e.target.value })}
+              />
+            </AccordionDetails>
+          </Accordion>
         </DialogContent>
         <DialogActions>
           <Button onClick={handleClose} color="primary">
