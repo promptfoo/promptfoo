@@ -17,7 +17,7 @@ const ConfigureEnvButton: React.FC = () => {
 
   return (
     <>
-      <Button startIcon={<SettingsIcon />} onClick={handleOpen}>
+      <Button variant="outlined" startIcon={<SettingsIcon />} onClick={handleOpen}>
         API keys
       </Button>
       <Dialog open={dialogOpen} onClose={handleClose}>
