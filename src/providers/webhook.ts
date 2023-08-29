@@ -1,8 +1,9 @@
 import logger from '../logger';
 import { fetchWithCache } from '../cache';
 
-import type { ApiProvider, ProviderResponse } from '../types.js';
 import { REQUEST_TIMEOUT_MS } from './shared';
+
+import type { ApiProvider, ProviderResponse } from '../types.js';
 
 export class WebhookProvider implements ApiProvider {
   webhookUrl: string;
