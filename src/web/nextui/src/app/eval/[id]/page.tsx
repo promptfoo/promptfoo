@@ -43,7 +43,9 @@ export default async function Page({ params }: { params: { id: string } }) {
     };
   } else {
     // Cloudflare KV
-    const response = await fetch(`https://api.promptfoo.dev/eval/${params.id}`);
+    const response = await fetch(`https://api.promptfoo.dev/eval/${params.id}`, {
+      cache: 'no-store',
+    });
     if (!response.ok) {
       notFound();
     }
@@ -51,3 +53,5 @@ export default async function Page({ params }: { params: { id: string } }) {
   }
   return <Eval preloadedData={sharedResults} recentFiles={recentFiles} />;
 }
+
+export const dynamic = 'force-dynamic';
