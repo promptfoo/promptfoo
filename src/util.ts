@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 
+import invariant from 'tiny-invariant';
 import $RefParser from '@apidevtools/json-schema-ref-parser';
 import fetch from 'node-fetch';
 import yaml from 'js-yaml';
@@ -26,6 +27,7 @@ import type {
   Prompt,
   ProviderOptionsMap,
   TestSuite,
+  ProviderOptions,
 } from './types';
 
 export function readProviderPromptMap(
@@ -53,11 +55,18 @@ export function readProviderPromptMap(
 
   for (const provider of config.providers) {
     if (typeof provider === 'object') {
-      const rawProvider = provider as ProviderOptionsMap;
-      const originalId = Object.keys(rawProvider)[0];
-      const providerObject = rawProvider[originalId];
-      const id = providerObject.id || originalId;
-      ret[id] = rawProvider[originalId].prompts || allPrompts;
+      // It's either a ProviderOptionsMap or a ProviderOptions
+      if (provider.id) {
+        const rawProvider = provider as ProviderOptions;
+        invariant(rawProvider.id, 'You must specify an `id` on the Provider when you override options.prompts');
+        ret[rawProvider.id] = rawProvider.prompts || allPrompts;
+      } else {
+        const rawProvider = provider as ProviderOptionsMap;
+        const originalId = Object.keys(rawProvider)[0];
+        const providerObject = rawProvider[originalId];
+        const id = providerObject.id || originalId;
+        ret[id] = rawProvider[originalId].prompts || allPrompts;
+      }
     }
   }
 
