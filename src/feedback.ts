@@ -19,10 +19,13 @@ export function gatherFeedback(message?: string) {
       }
     });
 
-    reader.question('\n\nPlease enter your feedback. Leave your email address if you want to hear back:\n\n> ', (input: string) => {
-      reader.close();
-      sendFeedback(input);
-    });
+    reader.question(
+      '\n\nPlease enter your feedback. Leave your email address if you want to hear back:\n\n> ',
+      (input: string) => {
+        reader.close();
+        sendFeedback(input);
+      },
+    );
   }
 }
 
@@ -40,6 +43,8 @@ export async function sendFeedback(feedback: string) {
   if (resp.ok) {
     logger.info('Feedback sent. Thank you!');
   } else {
-    logger.info('Sorry, feedback failed to send for some reason. You can also open an issue at https://github.com/promptfoo/promptfoo/issues/new');
+    logger.info(
+      'Sorry, feedback failed to send for some reason. You can also open an issue at https://github.com/promptfoo/promptfoo/issues/new',
+    );
   }
 }

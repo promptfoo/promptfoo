@@ -28,7 +28,6 @@ import { startServer } from './web/server';
 import { checkForUpdates } from './updates';
 import { gatherFeedback } from './feedback';
 
-
 import type {
   CommandLineOptions,
   EvaluateOptions,
@@ -420,7 +419,11 @@ async function main() {
           logger.info(`${chalk.green('✔')} Evaluation complete.\n`);
           logger.info(`Run ${chalk.greenBright('promptfoo view')} to use the local web viewer`);
           logger.info(`Run ${chalk.greenBright('promptfoo share')} to create a shareable URL`);
-          logger.info(`Run ${chalk.greenBright('promptfoo feedback')} to share feedback with the developers of this tool`);
+          logger.info(
+            `Run ${chalk.greenBright(
+              'promptfoo feedback',
+            )} to share feedback with the developers of this tool`,
+          );
         }
       }
       logger.info(border);
