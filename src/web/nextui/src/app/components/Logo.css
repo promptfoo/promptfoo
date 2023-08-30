@@ -1,6 +1,6 @@
 .logo {
   display: flex;
-  font-family: mono;
+  font-family: monospace, monospace;
   font-size: 0.8rem;
   align-items: center;
   gap: 8px;
