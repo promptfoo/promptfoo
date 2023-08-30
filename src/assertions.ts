@@ -113,7 +113,7 @@ export async function runAssertion(
   if (renderedValue && typeof renderedValue === 'string') {
     renderedValue = nunjucks.renderString(renderedValue, test.vars || {});
   } else if (renderedValue && Array.isArray(renderedValue)) {
-    renderedValue = renderedValue.map((v) => nunjucks.renderString(v, test.vars || {}));
+    renderedValue = renderedValue.map((v) => nunjucks.renderString(String(v), test.vars || {}));
   }
 
   if (baseType === 'equals') {
@@ -182,7 +182,7 @@ export async function runAssertion(
       Array.isArray(renderedValue),
       '"contains-any" assertion type must have an array value',
     );
-    pass = renderedValue.some((value) => output.includes(value)) !== inverse;
+    pass = renderedValue.some((value) => output.includes(String(value))) !== inverse;
     return {
       pass,
       score: pass ? 1 : 0,
@@ -199,7 +199,7 @@ export async function runAssertion(
       Array.isArray(renderedValue),
       '"contains-all" assertion type must have an array value',
     );
-    pass = renderedValue.every((value) => output.includes(value)) !== inverse;
+    pass = renderedValue.every((value) => output.includes(String(value))) !== inverse;
     return {
       pass,
       score: pass ? 1 : 0,
