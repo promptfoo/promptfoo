@@ -26,6 +26,8 @@ import { disableCache, clearCache } from './cache';
 import { getDirectory } from './esm';
 import { startServer } from './web/server';
 import { checkForUpdates } from './updates';
+import { gatherFeedback } from './feedback';
+
 
 import type {
   CommandLineOptions,
@@ -187,6 +189,13 @@ async function main() {
         name: 'cache_clear',
       });
       await telemetry.send();
+    });
+
+  program
+    .command('feedback [message]')
+    .description('Send feedback to the promptfoo developers')
+    .action((message?: string) => {
+      gatherFeedback(message);
     });
 
   program
@@ -411,6 +420,7 @@ async function main() {
           logger.info(`${chalk.green('✔')} Evaluation complete.\n`);
           logger.info(`Run ${chalk.greenBright('promptfoo view')} to use the local web viewer`);
           logger.info(`Run ${chalk.greenBright('promptfoo share')} to create a shareable URL`);
+          logger.info(`Run ${chalk.greenBright('promptfoo feedback')} to share feedback with the developers of this tool`);
         }
       }
       logger.info(border);
