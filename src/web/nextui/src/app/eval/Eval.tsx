@@ -19,7 +19,11 @@ interface EvalOptions {
   recentFiles?: string[];
 }
 
-export default function Eval({ fetchId, preloadedData, recentFiles: defaultRecentFiles }: EvalOptions) {
+export default function Eval({
+  fetchId,
+  preloadedData,
+  recentFiles: defaultRecentFiles,
+}: EvalOptions) {
   const router = useRouter();
   const { table, setTable, setConfig } = useStore();
   const [loaded, setLoaded] = React.useState<boolean>(false);
@@ -103,7 +107,5 @@ export default function Eval({ fetchId, preloadedData, recentFiles: defaultRecen
     );
   }
 
-  return (
-    <ResultsView recentFiles={recentFiles} onRecentFileSelected={handleRecentFileSelection} />
-  );
+  return <ResultsView recentFiles={recentFiles} onRecentFileSelected={handleRecentFileSelection} />;
 }

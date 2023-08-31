@@ -376,7 +376,9 @@ async function main() {
 
       if (delay > 0) {
         maxConcurrency = 1;
-        logger.info(`Running at concurrency=1 because ${delay}ms delay was requested between API calls`);
+        logger.info(
+          `Running at concurrency=1 because ${delay}ms delay was requested between API calls`,
+        );
       }
 
       const options: EvaluateOptions = {
