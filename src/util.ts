@@ -431,7 +431,7 @@ export async function fetchWithRetries(
       return await fetchWithTimeout(url, options, timeout);
     } catch (error) {
       lastError = error;
-      const waitTime = Math.pow(2, i) * backoff;
+      const waitTime = Math.pow(2, i) * (backoff + 1000 * Math.random());
       await new Promise((resolve) => setTimeout(resolve, waitTime));
     }
   }

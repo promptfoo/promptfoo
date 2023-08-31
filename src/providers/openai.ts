@@ -28,6 +28,7 @@ interface OpenAiCompletionOptions {
   apiKey?: string;
   apiHost?: string;
   organization?: string;
+  sleepBetweenCallsMs?: number;
 }
 
 class OpenAiGenericProvider implements ApiProvider {
@@ -313,6 +314,16 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       return {
         error: `API call error: ${String(err)}`,
       };
+    }
+
+    if (!cached) {
+      const sleep =
+        this.config.sleepBetweenCallsMs ??
+        (process.env.PROMPTFOO_SLEEP_MS ? parseInt(process.env.PROMPTFOO_SLEEP_MS, 10) : 0);
+      if (sleep) {
+        logger.debug(`Sleeping for ${sleep}ms`);
+        await new Promise((resolve) => setTimeout(resolve, sleep));
+      }
     }
 
     logger.debug(`\tOpenAI API response: ${JSON.stringify(data)}`);
