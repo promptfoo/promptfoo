@@ -43,15 +43,8 @@ export default async function Page({ params }: { params: { id: string } }) {
     };
   } else {
     // Cloudflare KV
-    const response = await fetch(`https://api.promptfoo.dev/eval/${params.id}`, {
-      cache: 'no-store',
-    });
-    if (!response.ok) {
-      notFound();
-    }
-    sharedResults = await response.json();
+    // Next.js chokes on large evals, so the client will fetch them separately.
+    return <Eval fetchId={params.id} />;
   }
   return <Eval preloadedData={sharedResults} recentFiles={recentFiles} />;
 }
-
-export const dynamic = 'force-dynamic';

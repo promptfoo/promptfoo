@@ -14,14 +14,16 @@ import type { EvalTable, SharedResults } from './types';
 import './Eval.css';
 
 interface EvalOptions {
+  fetchId?: string;
   preloadedData?: SharedResults;
   recentFiles?: string[];
 }
 
-export default function Eval({ preloadedData, recentFiles: defaultRecentFiles }: EvalOptions) {
+export default function Eval({ fetchId, preloadedData, recentFiles: defaultRecentFiles }: EvalOptions) {
   const router = useRouter();
   const { table, setTable, setConfig } = useStore();
   const [loaded, setLoaded] = React.useState<boolean>(false);
+  const [failed, setFailed] = React.useState<boolean>(false);
   const [recentFiles, setRecentFiles] = React.useState<string[]>(defaultRecentFiles || []);
 
   const fetchRecentFiles = async () => {
@@ -47,6 +49,19 @@ export default function Eval({ preloadedData, recentFiles: defaultRecentFiles }:
       setTable(preloadedData.data.results?.table as EvalTable);
       setConfig(preloadedData.data.config);
       setLoaded(true);
+    } else if (fetchId) {
+      const doIt = async () => {
+        const response = await fetch(`https://api.promptfoo.dev/eval/${fetchId}`);
+        if (!response.ok) {
+          setFailed(true);
+          return;
+        }
+        const results = await response.json();
+        setTable(results.data.results?.table as EvalTable);
+        setConfig(results.data.config);
+        setLoaded(true);
+      };
+      doIt();
     } else if (IS_RUNNING_LOCALLY) {
       const socket = SocketIOClient(API_BASE_URL);
 
@@ -71,16 +86,24 @@ export default function Eval({ preloadedData, recentFiles: defaultRecentFiles }:
     } else {
       alert('No preloaded data and not running locally. Configuration error?');
     }
-  }, [setTable, setConfig, preloadedData]);
+  }, [fetchId, setTable, setConfig, preloadedData]);
 
-  return loaded && table ? (
-    <ResultsView recentFiles={recentFiles} onRecentFileSelected={handleRecentFileSelection} />
-  ) : (
-    <div className="loading">
-      <div>
-        <CircularProgress size={22} />
+  if (failed) {
+    return <div className="loading">404 Eval not found</div>;
+  }
+
+  if (!loaded || !table) {
+    return (
+      <div className="loading">
+        <div>
+          <CircularProgress size={22} />
+        </div>
+        <div>Loading eval data</div>
       </div>
-      <div>Loading eval data</div>
-    </div>
+    );
+  }
+
+  return (
+    <ResultsView recentFiles={recentFiles} onRecentFileSelected={handleRecentFileSelection} />
   );
 }
