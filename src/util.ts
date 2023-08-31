@@ -420,15 +420,18 @@ export async function fetchWithRetries(
   url: RequestInfo,
   options: RequestInit = {},
   timeout: number,
-  retries: number = 3,
+  retries: number = 4,
 ): Promise<Response> {
   let lastError;
+  const backoff = process.env.PROMPTFOO_REQUEST_BACKOFF_MS
+    ? parseInt(process.env.PROMPTFOO_REQUEST_BACKOFF_MS, 10)
+    : 5000;
   for (let i = 0; i < retries; i++) {
     try {
       return await fetchWithTimeout(url, options, timeout);
     } catch (error) {
       lastError = error;
-      const waitTime = Math.pow(2, i) * 1000; // Exponential backoff
+      const waitTime = Math.pow(2, i) * backoff;
       await new Promise((resolve) => setTimeout(resolve, waitTime));
     }
   }
