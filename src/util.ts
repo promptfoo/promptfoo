@@ -468,10 +468,12 @@ export function writeLatestResults(results: EvaluateSummary, config: Partial<Uni
       ),
     );
 
+    // Use copy instead of symlink to avoid issues with Windows permissions.
     try {
+      // Backwards compatibility: delete old symlink.
       fs.unlinkSync(latestResultsPath);
     } catch {}
-    fs.symlinkSync(newResultsPath, latestResultsPath);
+    fs.copyFileSync(newResultsPath, latestResultsPath);
 
     cleanupOldResults();
   } catch (err) {
