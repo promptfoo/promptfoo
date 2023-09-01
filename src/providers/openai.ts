@@ -25,6 +25,7 @@ interface OpenAiCompletionOptions {
   }[];
   function_call?: 'none' | 'auto';
   stop?: string[];
+
   apiKey?: string;
   apiHost?: string;
   organization?: string;
@@ -328,6 +329,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
               prompt: data.usage.prompt_tokens,
               completion: data.usage.completion_tokens,
             },
+        cached,
       };
     } catch (err) {
       return {

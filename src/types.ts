@@ -7,6 +7,7 @@ export interface CommandLineOptions {
   // Shared with EvaluateOptions
   maxConcurrency: string;
   repeat: string;
+  delay: string;
 
   // Command line only
   vars?: string;
@@ -62,6 +63,7 @@ export interface ProviderResponse {
   error?: string;
   output?: string;
   tokenUsage?: Partial<TokenUsage>;
+  cached?: boolean;
 }
 
 export interface ProviderEmbeddingResponse {
@@ -96,6 +98,7 @@ export interface EvaluateOptions {
   progressCallback?: (progress: number, total: number) => void;
   generateSuggestions?: boolean;
   repeat?: number;
+  delay?: number;
 }
 
 export interface Prompt {
