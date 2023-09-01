@@ -132,6 +132,12 @@ describe('runAssertion', () => {
     value: 'output.length * 10',
   };
 
+  const javascriptStringAssertionWithNumberAndThreshold: Assertion = {
+    type: 'javascript',
+    value: 'output.length * 10',
+    threshold: 0.5,
+  };
+
   const javascriptFunctionAssertion: Assertion = {
     type: 'javascript',
     value: async (output: string) => ({
@@ -292,6 +298,32 @@ describe('runAssertion', () => {
     expect(result.pass).toBeTruthy();
     expect(result.score).toBe(output.length * 10);
     expect(result.reason).toBe('Assertion passed');
+  });
+
+  it('should pass when javascript returns a number above threshold', async () => {
+    const output = 'Expected output';
+
+    const result: GradingResult = await runAssertion(
+      javascriptStringAssertionWithNumberAndThreshold,
+      {} as AtomicTestCase,
+      output,
+    );
+    expect(result.pass).toBeTruthy();
+    expect(result.score).toBe(output.length * 10);
+    expect(result.reason).toBe('Assertion passed');
+  });
+
+  it('should fail when javascript returns a number below threshold', async () => {
+    const output = '';
+
+    const result: GradingResult = await runAssertion(
+      javascriptStringAssertionWithNumberAndThreshold,
+      {} as AtomicTestCase,
+      output,
+    );
+    expect(result.pass).toBeFalsy();
+    expect(result.score).toBe(output.length * 10);
+    expect(result.reason).toMatch('Custom function returned false');
   });
 
   it('should fail when the javascript assertion fails', async () => {

@@ -310,7 +310,11 @@ export async function runAssertion(
         pass = result !== inverse;
         score = 1.0;
       } else if (typeof result === 'number') {
-        pass = true;
+        if (typeof assertion.threshold !== 'undefined' && result < assertion.threshold) {
+          pass = false;
+        } else {
+          pass = true;
+        }
         score = result;
       } else if (typeof result === 'object') {
         return result;
@@ -362,6 +366,9 @@ ${renderedValue}`,
           throw new Error(
             'Python code must return a boolean, number, or {pass, score, reason} object',
           );
+        }
+        if (typeof assertion.threshold !== 'undefined' && score < assertion.threshold) {
+          pass = false;
         }
       }
     } catch (err) {
