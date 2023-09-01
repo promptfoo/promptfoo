@@ -62,6 +62,7 @@ export interface ProviderResponse {
   error?: string;
   output?: string;
   tokenUsage?: Partial<TokenUsage>;
+  cached?: boolean;
 }
 
 export interface ProviderEmbeddingResponse {

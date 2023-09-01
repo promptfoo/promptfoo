@@ -120,6 +120,14 @@ class Evaluator {
       const endTime = Date.now();
       latencyMs = endTime - startTime;
 
+      if (!response.cached && process.env.PROMPTFOO_SLEEP_MS) {
+        const sleep = parseInt(process.env.PROMPTFOO_SLEEP_MS, 10) || 0;
+        if (sleep) {
+          logger.debug(`Sleeping for ${sleep}ms`);
+          await new Promise((resolve) => setTimeout(resolve, sleep));
+        }
+      }
+
       const ret: EvaluateResult = {
         ...setup,
         response,

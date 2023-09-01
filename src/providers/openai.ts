@@ -316,16 +316,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       };
     }
 
-    if (!cached) {
-      const sleep =
-        this.config.sleepBetweenCallsMs ??
-        (process.env.PROMPTFOO_SLEEP_MS ? parseInt(process.env.PROMPTFOO_SLEEP_MS, 10) : 0);
-      if (sleep) {
-        logger.debug(`Sleeping for ${sleep}ms`);
-        await new Promise((resolve) => setTimeout(resolve, sleep));
-      }
-    }
-
     logger.debug(`\tOpenAI API response: ${JSON.stringify(data)}`);
     try {
       const message = data.choices[0].message;
@@ -339,6 +329,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
               prompt: data.usage.prompt_tokens,
               completion: data.usage.completion_tokens,
             },
+        cached,
       };
     } catch (err) {
       return {
