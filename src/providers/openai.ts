@@ -25,10 +25,10 @@ interface OpenAiCompletionOptions {
   }[];
   function_call?: 'none' | 'auto';
   stop?: string[];
+
   apiKey?: string;
   apiHost?: string;
   organization?: string;
-  sleepBetweenCallsMs?: number;
 }
 
 class OpenAiGenericProvider implements ApiProvider {
