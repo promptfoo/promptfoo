@@ -236,6 +236,13 @@ async function main() {
         : undefined,
     )
     .option(
+      '--delayMs <number>',
+      'Delay between each test (in milliseconds)',
+      defaultConfig.evaluateOptions?.delayMs
+        ? String(defaultConfig.evaluateOptions.delayMs)
+        : undefined,
+    )
+    .option(
       '--table-cell-max-length <number>',
       'Truncate console table cells to this length',
       '250',
@@ -363,8 +370,15 @@ async function main() {
         defaultTest,
       };
 
-      const maxConcurrency = parseInt(cmdObj.maxConcurrency || '', 10);
+      let maxConcurrency = parseInt(cmdObj.maxConcurrency || '', 10);
       const iterations = parseInt(cmdObj.repeat || '', 10);
+      const delayMs = parseInt(cmdObj.delayMs || '', 0);
+
+      if (delayMs > 0) {
+        maxConcurrency = 1;
+        logger.info(`Running at concurrency=1 because ${delayMs}ms delay was requested between API calls`);
+      }
+
       const options: EvaluateOptions = {
         showProgressBar:
           typeof cmdObj.progressBar === 'undefined'
@@ -372,6 +386,7 @@ async function main() {
             : cmdObj.progressBar,
         maxConcurrency: !isNaN(maxConcurrency) && maxConcurrency > 0 ? maxConcurrency : undefined,
         repeat: !isNaN(iterations) && iterations > 0 ? iterations : 1,
+        delayMs: !isNaN(delayMs) && delayMs > 0 ? delayMs : undefined,
         ...evaluateOptions,
       };
 
