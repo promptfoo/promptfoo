@@ -49,6 +49,56 @@ describe('runAssertions', () => {
     expect(result.pass).toBeFalsy();
     expect(result.reason).toBe('Expected output "Expected output"');
   });
+
+  it('should fail when combined score is less than threshold', async () => {
+    const output = 'Different output';
+
+    const result: GradingResult = await runAssertions(
+      {
+        threshold: 0.5,
+        assert: [
+          {
+            type: 'equals',
+            value: 'Hello world',
+            weight: 2,
+          },
+          {
+            type: 'contains',
+            value: 'world',
+            weight: 1,
+          },
+        ],
+      },
+      'Hi there world',
+    );
+    expect(result.pass).toBeFalsy();
+    expect(result.reason).toBe('Aggregate score 0.33 < 0.5 threshold');
+  });
+
+  it('should pass when combined score is greater than threshold', async () => {
+    const output = 'Different output';
+
+    const result: GradingResult = await runAssertions(
+      {
+        threshold: 0.25,
+        assert: [
+          {
+            type: 'equals',
+            value: 'Hello world',
+            weight: 2,
+          },
+          {
+            type: 'contains',
+            value: 'world',
+            weight: 1,
+          },
+        ],
+      },
+      'Hi there world',
+    );
+    expect(result.pass).toBeTruthy();
+    expect(result.reason).toBe('Aggregate score 0.33 ≥ 0.25 threshold');
+  });
 });
 
 describe('runAssertion', () => {
