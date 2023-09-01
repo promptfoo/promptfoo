@@ -236,10 +236,10 @@ async function main() {
         : undefined,
     )
     .option(
-      '--delayMs <number>',
+      '--delay <number>',
       'Delay between each test (in milliseconds)',
-      defaultConfig.evaluateOptions?.delayMs
-        ? String(defaultConfig.evaluateOptions.delayMs)
+      defaultConfig.evaluateOptions?.delay
+        ? String(defaultConfig.evaluateOptions.delay)
         : undefined,
     )
     .option(
@@ -372,11 +372,11 @@ async function main() {
 
       let maxConcurrency = parseInt(cmdObj.maxConcurrency || '', 10);
       const iterations = parseInt(cmdObj.repeat || '', 10);
-      const delayMs = parseInt(cmdObj.delayMs || '', 0);
+      const delay = parseInt(cmdObj.delay || '', 0);
 
-      if (delayMs > 0) {
+      if (delay > 0) {
         maxConcurrency = 1;
-        logger.info(`Running at concurrency=1 because ${delayMs}ms delay was requested between API calls`);
+        logger.info(`Running at concurrency=1 because ${delay}ms delay was requested between API calls`);
       }
 
       const options: EvaluateOptions = {
@@ -386,7 +386,7 @@ async function main() {
             : cmdObj.progressBar,
         maxConcurrency: !isNaN(maxConcurrency) && maxConcurrency > 0 ? maxConcurrency : undefined,
         repeat: !isNaN(iterations) && iterations > 0 ? iterations : 1,
-        delayMs: !isNaN(delayMs) && delayMs > 0 ? delayMs : undefined,
+        delay: !isNaN(delay) && delay > 0 ? delay : undefined,
         ...evaluateOptions,
       };
 

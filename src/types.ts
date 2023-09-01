@@ -7,7 +7,7 @@ export interface CommandLineOptions {
   // Shared with EvaluateOptions
   maxConcurrency: string;
   repeat: string;
-  delayMs: string;
+  delay: string;
 
   // Command line only
   vars?: string;
@@ -98,7 +98,7 @@ export interface EvaluateOptions {
   progressCallback?: (progress: number, total: number) => void;
   generateSuggestions?: boolean;
   repeat?: number;
-  delayMs?: number;
+  delay?: number;
 }
 
 export interface Prompt {

@@ -27,7 +27,7 @@ import type {
 interface RunEvalOptions {
   provider: ApiProvider;
   prompt: Prompt;
-  delayMs: number;
+  delay: number;
 
   test: AtomicTestCase;
 
@@ -96,7 +96,7 @@ class Evaluator {
     prompt,
     test,
     includeProviderId,
-    delayMs,
+    delay,
   }: RunEvalOptions): Promise<EvaluateResult> {
     const vars = test.vars || {};
     const renderedPrompt = nunjucks.renderString(prompt.raw, vars);
@@ -123,8 +123,8 @@ class Evaluator {
       latencyMs = endTime - startTime;
 
       if (!response.cached) {
-        let sleep = delayMs;
-        if (!delayMs && process.env.PROMPTFOO_DELAY_MS) {
+        let sleep = delay;
+        if (!delay && process.env.PROMPTFOO_DELAY_MS) {
           sleep = parseInt(process.env.PROMPTFOO_DELAY_MS, 10) || 0;
         }
         if (sleep) {
@@ -368,7 +368,7 @@ class Evaluator {
                 }
               }
               runEvalOptions.push({
-                delayMs: options.delayMs || 0,
+                delay: options.delay || 0,
                 provider,
                 prompt: {
                   ...prompt,
