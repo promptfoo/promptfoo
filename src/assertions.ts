@@ -80,10 +80,22 @@ export async function runAssertions(test: AtomicTestCase, output: string): Promi
     }
   }
 
+  const finalScore = totalScore / totalWeight;
+  let finalReason = allPass ? 'All assertions passed' : failedReason;
+  if (test.threshold) {
+    // Existence of a test threshold overrides the pass/fail status of individual assertions
+    allPass = finalScore >= test.threshold;
+    if (allPass) {
+      finalReason = `Aggregate score ${finalScore.toFixed(2)} ≥ ${test.threshold} threshold`;
+    } else {
+      finalReason = `Aggregate score ${finalScore.toFixed(2)} < ${test.threshold} threshold`;
+    }
+  }
+
   return {
     pass: allPass,
-    score: totalScore / totalWeight,
-    reason: allPass ? 'All assertions passed' : failedReason,
+    score: finalScore,
+    reason: finalReason,
     tokensUsed,
     componentResults,
     assertion: null,

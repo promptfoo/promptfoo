@@ -222,6 +222,9 @@ export interface TestCase {
 
   // Additional configuration settings for the prompt
   options?: PromptConfig & OutputConfig & GradingConfig;
+
+  // The required score for this test case.  If not provided, the test case is graded pass/fail.
+  threshold?: number;
 }
 
 export interface Scenario {
