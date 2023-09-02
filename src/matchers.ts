@@ -194,15 +194,19 @@ export async function matchesFactuality(
     const failing = grading.failChoices || 'D';
 
     let pass = passing.includes(option) && !failing.includes(option);
-    const optionReasons = {
-      'A': `The submitted answer is a subset of the expert answer and is fully consistent with it.`,
-      'B': `The submitted answer is a superset of the expert answer and is fully consistent with it.`,
-      'C': `The submitted answer contains all the same details as the expert answer.`,
-      'D': `There is a disagreement between the submitted answer and the expert answer.`,
-      'E': `The answers differ, but these differences don't matter from the perspective of factuality.`,
+    const optionReasons: Record<string, string> = {
+      A: `The submitted answer is a subset of the expert answer and is fully consistent with it.`,
+      B: `The submitted answer is a superset of the expert answer and is fully consistent with it.`,
+      C: `The submitted answer contains all the same details as the expert answer.`,
+      D: `There is a disagreement between the submitted answer and the expert answer.`,
+      E: `The answers differ, but these differences don't matter from the perspective of factuality.`,
     };
-    reason = optionReasons[option] || `Invalid option: ${option}`;
-    pass = reason !== `Invalid option: ${option}`;
+    if (optionReasons[option]) {
+      reason = optionReasons[option];
+    } else {
+      pass = false;
+      reason = `Invalid option: ${option}`;
+    }
 
     return {
       pass,
@@ -218,7 +222,7 @@ export async function matchesFactuality(
     return {
       pass: false,
       score: 0,
-      reason: `Error parsing output: ${err.message}`,
+      reason: `Error parsing output: ${(err as Error).message}`,
       tokensUsed: {
         total: resp.tokenUsage?.total || 0,
         prompt: resp.tokenUsage?.prompt || 0,

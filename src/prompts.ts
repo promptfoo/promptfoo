@@ -41,7 +41,7 @@ The submitted answer may either be a subset or superset of the expert answer, or
 (C) The submitted answer contains all the same details as the expert answer.
 (D) There is a disagreement between the submitted answer and the expert answer.
 (E) The answers differ, but these differences don't matter from the perspective of factuality.`,
-  }
+  },
 ]);
 
 export const SUGGEST_PROMPTS_SYSTEM_MESSAGE = {
