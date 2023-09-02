@@ -42,27 +42,26 @@ export class LlamaProvider implements ApiProvider {
     return `[Llama Provider ${this.modelName}]`;
   }
 
-  async callApi(prompt: string, options?: LlamaCompletionOptions): Promise<ProviderResponse> {
-    options = Object.assign({}, this.config, options);
+  async callApi(prompt: string): Promise<ProviderResponse> {
     const body = {
       prompt,
-      n_predict: options?.n_predict || 512,
-      temperature: options?.temperature,
-      top_k: options?.top_k,
-      top_p: options?.top_p,
-      n_keep: options?.n_keep,
-      stop: options?.stop,
-      repeat_penalty: options?.repeat_penalty,
-      repeat_last_n: options?.repeat_last_n,
-      penalize_nl: options?.penalize_nl,
-      presence_penalty: options?.presence_penalty,
-      frequency_penalty: options?.frequency_penalty,
-      mirostat: options?.mirostat,
-      mirostat_tau: options?.mirostat_tau,
-      mirostat_eta: options?.mirostat_eta,
-      seed: options?.seed,
-      ignore_eos: options?.ignore_eos,
-      logit_bias: options?.logit_bias,
+      n_predict: this.config?.n_predict || 512,
+      temperature: this.config?.temperature,
+      top_k: this.config?.top_k,
+      top_p: this.config?.top_p,
+      n_keep: this.config?.n_keep,
+      stop: this.config?.stop,
+      repeat_penalty: this.config?.repeat_penalty,
+      repeat_last_n: this.config?.repeat_last_n,
+      penalize_nl: this.config?.penalize_nl,
+      presence_penalty: this.config?.presence_penalty,
+      frequency_penalty: this.config?.frequency_penalty,
+      mirostat: this.config?.mirostat,
+      mirostat_tau: this.config?.mirostat_tau,
+      mirostat_eta: this.config?.mirostat_eta,
+      seed: this.config?.seed,
+      ignore_eos: this.config?.ignore_eos,
+      logit_bias: this.config?.logit_bias,
     };
 
     let response;
