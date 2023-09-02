@@ -187,18 +187,41 @@ export async function matchesFactuality(
   }
 
   try {
-    // TODO: Parse output and create GradingResult.
-    parsed.tokensUsed = {
-      total: resp.tokenUsage?.total || 0,
-      prompt: resp.tokenUsage?.prompt || 0,
-      completion: resp.tokenUsage?.completion || 0,
+    const option = resp.output.trim().charAt(1); // Extract the option character
+    let pass = false;
+    let reason = '';
+
+    switch (option) {
+      case 'A':
+      case 'B':
+      case 'C':
+        pass = true;
+        reason = `The submitted answer is consistent with the expert answer. Option: ${option}`;
+        break;
+      case 'D':
+      case 'E':
+        pass = false;
+        reason = `The submitted answer is not consistent with the expert answer. Option: ${option}`;
+        break;
+      default:
+        reason = `Invalid option: ${option}`;
+    }
+
+    return {
+      pass,
+      score: pass ? 1 : 0,
+      reason,
+      tokensUsed: {
+        total: resp.tokenUsage?.total || 0,
+        prompt: resp.tokenUsage?.prompt || 0,
+        completion: resp.tokenUsage?.completion || 0,
+      },
     };
-    return { ...parsed, score: parsed.pass ? 1 : 0 };
   } catch (err) {
     return {
       pass: false,
       score: 0,
-      reason: `Output is not valid JSON: ${resp.output}`,
+      reason: `Error parsing output: ${err.message}`,
       tokensUsed: {
         total: resp.tokenUsage?.total || 0,
         prompt: resp.tokenUsage?.prompt || 0,
