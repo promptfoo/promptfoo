@@ -2,7 +2,11 @@ import invariant from 'tiny-invariant';
 import { DefaultEmbeddingProvider, DefaultGradingProvider } from './providers/openai';
 import { cosineSimilarity, getNunjucksEngine } from './util';
 import { loadApiProvider } from './providers';
-import { DEFAULT_GRADING_PROMPT, OPENAI_FACTUALITY_PROMPT } from './prompts';
+import {
+  DEFAULT_GRADING_PROMPT,
+  OPENAI_CLOSED_QA_PROMPT,
+  OPENAI_FACTUALITY_PROMPT,
+} from './prompts';
 
 import type { ApiProvider, GradingConfig, GradingResult, ProviderOptions } from './types';
 
@@ -190,8 +194,8 @@ export async function matchesFactuality(
     const option = resp.output.trim().charAt(1); // Extract the option character
     let reason = '';
 
-    const passing = grading.passChoices || 'ABCE';
-    const failing = grading.failChoices || 'D';
+    const passing = grading.choices?.pass || 'ABCE';
+    const failing = grading.choices?.fail || 'D';
 
     let pass = passing.includes(option) && !failing.includes(option);
     const optionReasons: Record<string, string> = {
@@ -208,6 +212,79 @@ export async function matchesFactuality(
       reason = `Invalid option: ${option}`;
     }
 
+    let score = pass ? 1 : 0;
+    if (grading.choices?.scores) {
+      score = grading.choices.scores[option] || score;
+    }
+
+    return {
+      pass,
+      score,
+      reason,
+      tokensUsed: {
+        total: resp.tokenUsage?.total || 0,
+        prompt: resp.tokenUsage?.prompt || 0,
+        completion: resp.tokenUsage?.completion || 0,
+      },
+    };
+  } catch (err) {
+    return {
+      pass: false,
+      score: 0,
+      reason: `Error parsing output: ${(err as Error).message}`,
+      tokensUsed: {
+        total: resp.tokenUsage?.total || 0,
+        prompt: resp.tokenUsage?.prompt || 0,
+        completion: resp.tokenUsage?.completion || 0,
+      },
+    };
+  }
+}
+
+export async function matchesClosedQa(
+  input: string,
+  expected: string,
+  output: string,
+  grading?: GradingConfig,
+): Promise<Omit<GradingResult, 'assertion'>> {
+  if (!grading) {
+    throw new Error(
+      'Cannot grade output without grading config. Specify --grader option or grading config.',
+    );
+  }
+
+  const prompt = nunjucks.renderString(grading.rubricPrompt || OPENAI_CLOSED_QA_PROMPT, {
+    input: input.replace(/\n/g, '\\n').replace(/"/g, '\\"'),
+    criteria: expected.replace(/\n/g, '\\n').replace(/"/g, '\\"'),
+    completion: output.replace(/\n/g, '\\n').replace(/"/g, '\\"'),
+  });
+
+  let provider = grading.provider;
+  let finalProvider = await getGradingProvider(provider, DefaultGradingProvider);
+  const resp = await finalProvider.callApi(prompt);
+  if (resp.error || !resp.output) {
+    return {
+      pass: false,
+      score: 0,
+      reason: resp.error || 'No output',
+      tokensUsed: {
+        total: resp.tokenUsage?.total || 0,
+        prompt: resp.tokenUsage?.prompt || 0,
+        completion: resp.tokenUsage?.completion || 0,
+      },
+    };
+  }
+
+  try {
+    const pass = resp.output.endsWith('Y');
+    let reason;
+    if (pass) {
+      reason = 'The submission meets the criterion';
+    } else if (resp.output.endsWith('N')) {
+      reason = 'The submission does not meet the criterion';
+    } else {
+      reason = 'Model grader received an ambiguous response';
+    }
     return {
       pass,
       score: pass ? 1 : 0,

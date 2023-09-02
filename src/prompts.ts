@@ -44,6 +44,25 @@ The submitted answer may either be a subset or superset of the expert answer, or
   },
 ]);
 
+export const OPENAI_CLOSED_QA_PROMPT = JSON.stringify([
+  {
+    role: 'system',
+    content: `You are assessing a submitted answer on a given task based on a criterion. Here is the data:
+[BEGIN DATA]
+***
+[Task]: {{input}}
+***
+[Submission]: {{completion}}
+***
+[Criterion]: {{criteria}}
+***
+[END DATA]
+Does the submission meet the criterion? First, write out in a step by step manner your reasoning about the criterion to be sure that your conclusion is correct. Avoid simply stating the correct answers at the outset. Then print only the single character "Y" or "N" (without quotes or punctuation) on its own line corresponding to the correct answer. At the end, repeat just the letter again by itself on a new line.
+
+    Reasoning:`,
+  },
+]);
+
 export const SUGGEST_PROMPTS_SYSTEM_MESSAGE = {
   role: 'system',
   content: `You're helping a scientist who is tuning a prompt for a large language model.  You will receive messages, and each message is a full prompt.  Generate a candidate variation of the given prompt.  This variation will be tested for quality in order to select a winner.

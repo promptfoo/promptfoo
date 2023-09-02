@@ -5,7 +5,12 @@ import { distance as levenshtein } from 'fastest-levenshtein';
 
 import telemetry from './telemetry';
 import { fetchWithRetries, getNunjucksEngine } from './util';
-import { matchesSimilarity, matchesLlmRubric, matchesFactuality } from './matchers';
+import {
+  matchesSimilarity,
+  matchesLlmRubric,
+  matchesFactuality,
+  matchesClosedQa,
+} from './matchers';
 
 import type { Assertion, AssertionType, GradingResult, AtomicTestCase } from './types';
 
@@ -462,6 +467,28 @@ ${assertion.value}`,
     };
   }
 
+  if (baseType === 'model-graded-closedqa') {
+    invariant(
+      typeof renderedValue === 'string',
+      'model-graded-closedqa assertion type must have a string value',
+    );
+
+    // Assertion provider overrides test provider
+    test.options = test.options || {};
+    test.options.provider = assertion.provider || test.options.provider;
+    test.options.rubricPrompt = assertion.rubricPrompt || test.options.rubricPrompt;
+
+    if (test.options.rubricPrompt) {
+      // Substitute vars in prompt
+      test.options.rubricPrompt = nunjucks.renderString(test.options.rubricPrompt, test.vars || {});
+    }
+
+    return {
+      assertion,
+      ...(await matchesClosedQa(prompt, renderedValue, output, test.options)),
+    };
+  }
+
   if (baseType === 'webhook') {
     invariant(renderedValue, '"webhook" assertion type must have a URL value');
     invariant(typeof renderedValue === 'string', '"webhook" assertion type must have a URL value');
@@ -628,4 +655,5 @@ export default {
   matchesSimilarity,
   matchesLlmRubric,
   matchesFactuality,
+  matchesClosedQa,
 };
