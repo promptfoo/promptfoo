@@ -194,26 +194,15 @@ export async function matchesFactuality(
     const failing = grading.failChoices || 'D';
 
     let pass = passing.includes(option) && !failing.includes(option);
-    switch (option) {
-      case 'A':
-        reason = `The submitted answer is a subset of the expert answer and is fully consistent with it.`;
-        break;
-      case 'B':
-        reason = `The submitted answer is a superset of the expert answer and is fully consistent with it.`;
-        break;
-      case 'C':
-        reason = `The submitted answer contains all the same details as the expert answer.`;
-        break;
-      case 'D':
-        reason = `There is a disagreement between the submitted answer and the expert answer.`;
-        break;
-      case 'E':
-        reason = `The answers differ, but these differences don't matter from the perspective of factuality.`;
-        break;
-      default:
-        pass = false;
-        reason = `Invalid option: ${option}`;
-    }
+    const optionReasons = {
+      'A': `The submitted answer is a subset of the expert answer and is fully consistent with it.`,
+      'B': `The submitted answer is a superset of the expert answer and is fully consistent with it.`,
+      'C': `The submitted answer contains all the same details as the expert answer.`,
+      'D': `There is a disagreement between the submitted answer and the expert answer.`,
+      'E': `The answers differ, but these differences don't matter from the perspective of factuality.`,
+    };
+    reason = optionReasons[option] || `Invalid option: ${option}`;
+    pass = reason !== `Invalid option: ${option}`;
 
     return {
       pass,
