@@ -48,7 +48,12 @@ export interface ProviderOptions {
 
 export interface ApiProvider {
   id: () => string;
-  callApi: (prompt: string) => Promise<ProviderResponse>;
+  callApi: (
+    prompt: string,
+    context?: {
+      vars: Record<string, string | object>;
+    },
+  ) => Promise<ProviderResponse>;
   callEmbeddingApi?: (prompt: string) => Promise<ProviderEmbeddingResponse>;
 }
 
@@ -210,7 +215,7 @@ export interface Assertion {
 }
 
 // Each test case is graded pass/fail.  A test case represents a unique input to the LLM after substituting `vars` in the prompt.
-export interface TestCase {
+export interface TestCase<Vars = Record<string, string | string[] | object>> {
   // Optional description of what you're testing
   description?: string;
 
@@ -239,7 +244,7 @@ export interface Scenario {
 }
 
 // Same as a TestCase, except the `vars` object has been flattened into its final form.
-export interface AtomicTestCase extends TestCase {
+export interface AtomicTestCase<Vars = Record<string, string | object>> extends TestCase {
   vars?: Record<string, string | object>;
 }
 

@@ -118,7 +118,9 @@ class Evaluator {
     let latencyMs = 0;
     try {
       const startTime = Date.now();
-      const response = await provider.callApi(renderedPrompt);
+      const response = await provider.callApi(renderedPrompt, {
+        vars,
+      });
       const endTime = Date.now();
       latencyMs = endTime - startTime;
 
@@ -152,7 +154,9 @@ class Evaluator {
             'context',
             postprocess.includes('\n') ? postprocess : `return ${postprocess}`,
           );
-          processedResponse.output = postprocessFn(processedResponse.output);
+          processedResponse.output = postprocessFn(processedResponse.output, {
+            vars,
+          });
           if (processedResponse.output == null) {
             throw new Error('Postprocess function did not return a value');
           }
