@@ -18,7 +18,12 @@ export function generateTable(summary: EvaluateSummary, tableCellMaxLength = 250
   // Skip first row (header) and add the rest. Color PASS/FAIL
   for (const row of summary.table.body.slice(0, maxRows)) {
     table.push([
-      ...row.vars,
+      ...row.vars.map((v) => {
+        if (v.length > tableCellMaxLength) {
+          v = v.slice(0, tableCellMaxLength) + '...';
+        }
+        return v;
+      }),
       ...row.outputs.map(({ pass, score, text }) => {
         if (text.length > tableCellMaxLength) {
           text = text.slice(0, tableCellMaxLength) + '...';
