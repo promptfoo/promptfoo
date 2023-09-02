@@ -188,31 +188,30 @@ export async function matchesFactuality(
 
   try {
     const option = resp.output.trim().charAt(1); // Extract the option character
-    let pass = false;
     let reason = '';
 
+    const passing = grading.passChoices || 'ABCE';
+    const failing = grading.failChoices || 'D';
+
+    let pass = passing.includes(option) && !failing.includes(option);
     switch (option) {
       case 'A':
-        pass = true;
         reason = `The submitted answer is a subset of the expert answer and is fully consistent with it.`;
         break;
       case 'B':
-        pass = true;
         reason = `The submitted answer is a superset of the expert answer and is fully consistent with it.`;
         break;
       case 'C':
-        pass = true;
         reason = `The submitted answer contains all the same details as the expert answer.`;
         break;
       case 'D':
-        pass = false;
         reason = `There is a disagreement between the submitted answer and the expert answer.`;
         break;
       case 'E':
-        pass = false;
         reason = `The answers differ, but these differences don't matter from the perspective of factuality.`;
         break;
       default:
+        pass = false;
         reason = `Invalid option: ${option}`;
     }
 
