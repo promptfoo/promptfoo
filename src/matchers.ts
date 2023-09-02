@@ -2,7 +2,7 @@ import invariant from 'tiny-invariant';
 import { DefaultEmbeddingProvider, DefaultGradingProvider } from './providers/openai';
 import { cosineSimilarity, getNunjucksEngine } from './util';
 import { loadApiProvider } from './providers';
-import { DEFAULT_GRADING_PROMPT } from './prompts';
+import { DEFAULT_GRADING_PROMPT, OPENAI_FACTUALITY_PROMPT } from './prompts';
 
 import type { ApiProvider, GradingConfig, GradingResult, ProviderOptions } from './types';
 
@@ -132,6 +132,62 @@ export async function matchesLlmRubric(
 
   try {
     const parsed = JSON.parse(resp.output) as Omit<GradingResult, 'score'>;
+    parsed.tokensUsed = {
+      total: resp.tokenUsage?.total || 0,
+      prompt: resp.tokenUsage?.prompt || 0,
+      completion: resp.tokenUsage?.completion || 0,
+    };
+    return { ...parsed, score: parsed.pass ? 1 : 0 };
+  } catch (err) {
+    return {
+      pass: false,
+      score: 0,
+      reason: `Output is not valid JSON: ${resp.output}`,
+      tokensUsed: {
+        total: resp.tokenUsage?.total || 0,
+        prompt: resp.tokenUsage?.prompt || 0,
+        completion: resp.tokenUsage?.completion || 0,
+      },
+    };
+  }
+}
+
+export async function matchesFactuality(
+  input: string,
+  expected: string,
+  output: string,
+  grading?: GradingConfig,
+): Promise<Omit<GradingResult, 'assertion'>> {
+  if (!grading) {
+    throw new Error(
+      'Cannot grade output without grading config. Specify --grader option or grading config.',
+    );
+  }
+
+  const prompt = nunjucks.renderString(grading.rubricPrompt || OPENAI_FACTUALITY_PROMPT, {
+    input: input.replace(/\n/g, '\\n').replace(/"/g, '\\"'),
+    ideal: expected.replace(/\n/g, '\\n').replace(/"/g, '\\"'),
+    completion: output.replace(/\n/g, '\\n').replace(/"/g, '\\"'),
+  });
+
+  let provider = grading.provider;
+  let finalProvider = await getGradingProvider(provider, DefaultGradingProvider);
+  const resp = await finalProvider.callApi(prompt);
+  if (resp.error || !resp.output) {
+    return {
+      pass: false,
+      score: 0,
+      reason: resp.error || 'No output',
+      tokensUsed: {
+        total: resp.tokenUsage?.total || 0,
+        prompt: resp.tokenUsage?.prompt || 0,
+        completion: resp.tokenUsage?.completion || 0,
+      },
+    };
+  }
+
+  try {
+    // TODO: Parse output and create GradingResult.
     parsed.tokensUsed = {
       total: resp.tokenUsage?.total || 0,
       prompt: resp.tokenUsage?.prompt || 0,
