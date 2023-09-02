@@ -193,15 +193,24 @@ export async function matchesFactuality(
 
     switch (option) {
       case 'A':
+        pass = true;
+        reason = `The submitted answer is a subset of the expert answer and is fully consistent with it.`;
+        break;
       case 'B':
+        pass = true;
+        reason = `The submitted answer is a superset of the expert answer and is fully consistent with it.`;
+        break;
       case 'C':
         pass = true;
-        reason = `The submitted answer is consistent with the expert answer. Option: ${option}`;
+        reason = `The submitted answer contains all the same details as the expert answer.`;
         break;
       case 'D':
+        pass = false;
+        reason = `There is a disagreement between the submitted answer and the expert answer.`;
+        break;
       case 'E':
         pass = false;
-        reason = `The submitted answer is not consistent with the expert answer. Option: ${option}`;
+        reason = `The answers differ, but these differences don't matter from the perspective of factuality.`;
         break;
       default:
         reason = `Invalid option: ${option}`;
