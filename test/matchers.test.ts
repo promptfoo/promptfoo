@@ -168,6 +168,20 @@ describe('matchesLlmRubric', () => {
   });
 });
 
+describe('matchesFactuality', () => {
+  it('should pass when the factuality check passes', async () => {
+    // Add your test logic here
+  });
+
+  it('should fail when the factuality check fails', async () => {
+    // Add your test logic here
+  });
+
+  it('should throw an error when an error occurs', async () => {
+    // Add your test logic here
+  });
+});
+
 describe('getGradingProvider', () => {
   it('should return the correct provider when provider is a string', async () => {
     const provider = await getGradingProvider(
