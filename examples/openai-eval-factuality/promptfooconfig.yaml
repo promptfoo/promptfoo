@@ -1,0 +1,14 @@
+providers: [openai:gpt-3.5-turbo]
+prompts: [prompts/name_capitals_concise.txt, prompts/name_capitals_verbose.txt]
+tests:
+  - vars:
+      location: Sacramento
+
+    assert:
+      # Ensure the answer agrees with the provided facts
+      - type: model-graded-factuality
+        value: The capital of California is Sacramento
+
+      # Ensure the answer meets the criteria
+      - type: model-graded-closedqa
+        value: Does not include any extra information or facts about Sacramento

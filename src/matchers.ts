@@ -281,7 +281,7 @@ export async function matchesClosedQa(
     if (pass) {
       reason = 'The submission meets the criterion';
     } else if (resp.output.endsWith('N')) {
-      reason = 'The submission does not meet the criterion';
+      reason = `The submission does not meet the criterion: ${resp.output}`;
     } else {
       reason = 'Model grader received an ambiguous response';
     }
