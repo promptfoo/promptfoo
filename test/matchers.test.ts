@@ -170,15 +170,48 @@ describe('matchesLlmRubric', () => {
 
 describe('matchesFactuality', () => {
   it('should pass when the factuality check passes', async () => {
-    // Add your test logic here
+    const input = 'Input text';
+    const expected = 'Expected output';
+    const output = 'Sample output';
+    const grading = {};
+
+    jest.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce({
+      output: JSON.stringify({ pass: true, reason: 'Factuality check passed' }),
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    const result = await matchesFactuality(input, expected, output, grading);
+    expect(result.pass).toBeTruthy();
+    expect(result.reason).toBe('Factuality check passed');
   });
 
   it('should fail when the factuality check fails', async () => {
-    // Add your test logic here
+    const input = 'Input text';
+    const expected = 'Expected output';
+    const output = 'Sample output';
+    const grading = {};
+
+    jest.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce({
+      output: JSON.stringify({ pass: false, reason: 'Factuality check failed' }),
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    const result = await matchesFactuality(input, expected, output, grading);
+    expect(result.pass).toBeFalsy();
+    expect(result.reason).toBe('Factuality check failed');
   });
 
   it('should throw an error when an error occurs', async () => {
-    // Add your test logic here
+    const input = 'Input text';
+    const expected = 'Expected output';
+    const output = 'Sample output';
+    const grading = {};
+
+    jest.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(() => {
+      throw new Error('An error occurred');
+    });
+
+    await expect(matchesFactuality(input, expected, output, grading)).rejects.toThrow('An error occurred');
   });
 });
 
