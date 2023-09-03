@@ -1,6 +1,6 @@
 import { getGradingProvider } from '../src/matchers';
 import { OpenAiChatCompletionProvider, OpenAiEmbeddingProvider } from '../src/providers/openai';
-import { matchesSimilarity, matchesLlmRubric } from '../src/matchers';
+import { matchesSimilarity, matchesLlmRubric, matchesFactuality, matchesClosedQa } from '../src/matchers';
 import { DefaultEmbeddingProvider, DefaultGradingProvider } from '../src/providers/openai';
 
 import { TestGrader } from './assertions.test';
@@ -176,13 +176,13 @@ describe('matchesFactuality', () => {
     const grading = {};
 
     jest.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce({
-      output: JSON.stringify({ pass: true, reason: 'Factuality check passed' }),
+      output: '(A) The submitted answer is a subset of the expert answer and is fully consistent with it.',
       tokenUsage: { total: 10, prompt: 5, completion: 5 },
     });
 
     const result = await matchesFactuality(input, expected, output, grading);
     expect(result.pass).toBeTruthy();
-    expect(result.reason).toBe('Factuality check passed');
+    expect(result.reason).toBe('The submitted answer is a subset of the expert answer and is fully consistent with it.');
   });
 
   it('should fail when the factuality check fails', async () => {
@@ -190,15 +190,14 @@ describe('matchesFactuality', () => {
     const expected = 'Expected output';
     const output = 'Sample output';
     const grading = {};
-
     jest.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce({
-      output: JSON.stringify({ pass: false, reason: 'Factuality check failed' }),
+      output: '(D) There is a disagreement between the submitted answer and the expert answer.',
       tokenUsage: { total: 10, prompt: 5, completion: 5 },
     });
 
     const result = await matchesFactuality(input, expected, output, grading);
     expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe('Factuality check failed');
+    expect(result.reason).toBe('There is a disagreement between the submitted answer and the expert answer.');
   });
 
   it('should throw an error when an error occurs', async () => {
