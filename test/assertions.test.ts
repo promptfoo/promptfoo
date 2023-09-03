@@ -37,7 +37,7 @@ describe('runAssertions', () => {
   it('should pass when all assertions pass', async () => {
     const output = 'Expected output';
 
-    const result: GradingResult = await runAssertions(test, output);
+    const result: GradingResult = await runAssertions('Some prompt', test, output);
     expect(result.pass).toBeTruthy();
     expect(result.reason).toBe('All assertions passed');
   });
@@ -45,7 +45,7 @@ describe('runAssertions', () => {
   it('should fail when any assertion fails', async () => {
     const output = 'Different output';
 
-    const result: GradingResult = await runAssertions(test, output);
+    const result: GradingResult = await runAssertions('Some prompt', test, output);
     expect(result.pass).toBeFalsy();
     expect(result.reason).toBe('Expected output "Expected output"');
   });
@@ -54,6 +54,7 @@ describe('runAssertions', () => {
     const output = 'Different output';
 
     const result: GradingResult = await runAssertions(
+      'Some prompt',
       {
         threshold: 0.5,
         assert: [
@@ -79,6 +80,7 @@ describe('runAssertions', () => {
     const output = 'Different output';
 
     const result: GradingResult = await runAssertions(
+      'Some prompt',
       {
         threshold: 0.25,
         assert: [
@@ -212,6 +214,7 @@ describe('runAssertion', () => {
     const output = 'Expected output';
 
     const result: GradingResult = await runAssertion(
+      'Some prompt',
       equalityAssertion,
       {} as AtomicTestCase,
       output,
@@ -224,6 +227,7 @@ describe('runAssertion', () => {
     const output = 'Different output';
 
     const result: GradingResult = await runAssertion(
+      'Some prompt',
       equalityAssertion,
       {} as AtomicTestCase,
       output,
@@ -235,7 +239,12 @@ describe('runAssertion', () => {
   it('should pass when the is-json assertion passes', async () => {
     const output = '{"key": "value"}';
 
-    const result: GradingResult = await runAssertion(isJsonAssertion, {} as AtomicTestCase, output);
+    const result: GradingResult = await runAssertion(
+      'Some prompt',
+      isJsonAssertion,
+      {} as AtomicTestCase,
+      output,
+    );
     expect(result.pass).toBeTruthy();
     expect(result.reason).toBe('Assertion passed');
   });
@@ -243,7 +252,12 @@ describe('runAssertion', () => {
   it('should fail when the is-json assertion fails', async () => {
     const output = 'Not valid JSON';
 
-    const result: GradingResult = await runAssertion(isJsonAssertion, {} as AtomicTestCase, output);
+    const result: GradingResult = await runAssertion(
+      'Some prompt',
+      isJsonAssertion,
+      {} as AtomicTestCase,
+      output,
+    );
     expect(result.pass).toBeFalsy();
     expect(result.reason).toContain('Expected output to be valid JSON');
   });
@@ -252,6 +266,7 @@ describe('runAssertion', () => {
     const output = '{"latitude": 80.123, "longitude": -1}';
 
     const result: GradingResult = await runAssertion(
+      'Some prompt',
       isJsonAssertionWithSchema,
       {} as AtomicTestCase,
       output,
@@ -264,6 +279,7 @@ describe('runAssertion', () => {
     const output = '{"latitude": "high", "longitude": [-1]}';
 
     const result: GradingResult = await runAssertion(
+      'Some prompt',
       isJsonAssertionWithSchema,
       {} as AtomicTestCase,
       output,
@@ -279,6 +295,7 @@ describe('runAssertion', () => {
       'this is some other stuff \n\n {"key": "value", "key2": {"key3": "value2", "key4": ["value3", "value4"]}} \n\n blah blah';
 
     const result: GradingResult = await runAssertion(
+      'Some prompt',
       containsJsonAssertion,
       {} as AtomicTestCase,
       output,
@@ -291,6 +308,7 @@ describe('runAssertion', () => {
     const output = 'Not valid JSON';
 
     const result: GradingResult = await runAssertion(
+      'Some prompt',
       containsJsonAssertion,
       {} as AtomicTestCase,
       output,
@@ -303,6 +321,7 @@ describe('runAssertion', () => {
     const output = 'here is the answer\n\n```{"latitude": 80.123, "longitude": -1}```';
 
     const result: GradingResult = await runAssertion(
+      'Some prompt',
       containsJsonAssertionWithSchema,
       {} as AtomicTestCase,
       output,
@@ -315,6 +334,7 @@ describe('runAssertion', () => {
     const output = 'here is the answer\n\n```{"latitude": "medium", "longitude": -1}```';
 
     const result: GradingResult = await runAssertion(
+      'Some prompt',
       containsJsonAssertionWithSchema,
       {} as AtomicTestCase,
       output,
@@ -329,6 +349,7 @@ describe('runAssertion', () => {
     const output = 'Expected output';
 
     const result: GradingResult = await runAssertion(
+      'Some prompt',
       javascriptStringAssertion,
       {} as AtomicTestCase,
       output,
@@ -341,6 +362,7 @@ describe('runAssertion', () => {
     const output = 'Expected output';
 
     const result: GradingResult = await runAssertion(
+      'Some prompt',
       javascriptStringAssertionWithNumber,
       {} as AtomicTestCase,
       output,
@@ -354,6 +376,7 @@ describe('runAssertion', () => {
     const output = 'Expected output';
 
     const result: GradingResult = await runAssertion(
+      'Some prompt',
       javascriptStringAssertionWithNumberAndThreshold,
       {} as AtomicTestCase,
       output,
@@ -367,6 +390,7 @@ describe('runAssertion', () => {
     const output = '';
 
     const result: GradingResult = await runAssertion(
+      'Some prompt',
       javascriptStringAssertionWithNumberAndThreshold,
       {} as AtomicTestCase,
       output,
@@ -380,6 +404,7 @@ describe('runAssertion', () => {
     const output = 'Different output';
 
     const result: GradingResult = await runAssertion(
+      'Some prompt',
       javascriptStringAssertion,
       {} as AtomicTestCase,
       output,
@@ -396,6 +421,7 @@ describe('runAssertion', () => {
       value: 'output === "Expected output" && context.vars.foo === "bar"',
     };
     const result: GradingResult = await runAssertion(
+      'Some prompt',
       javascriptStringAssertionWithVars,
       { vars: { foo: 'bar' } } as AtomicTestCase,
       output,
@@ -412,6 +438,7 @@ describe('runAssertion', () => {
       value: 'output === "Expected output" && context.vars.foo === "something else"',
     };
     const result: GradingResult = await runAssertion(
+      'Some prompt',
       javascriptStringAssertionWithVars,
       { vars: { foo: 'bar' } } as AtomicTestCase,
       output,
@@ -426,6 +453,7 @@ describe('runAssertion', () => {
     const output = 'Expected output';
 
     const result: GradingResult = await runAssertion(
+      'Some prompt',
       javascriptFunctionAssertion,
       {} as AtomicTestCase,
       output,
@@ -439,6 +467,7 @@ describe('runAssertion', () => {
     const output = 'Expected output';
 
     const result: GradingResult = await runAssertion(
+      'Some prompt',
       javascriptFunctionFailAssertion,
       {} as AtomicTestCase,
       output,
@@ -452,6 +481,7 @@ describe('runAssertion', () => {
     const output = 'Expected output';
 
     const result: GradingResult = await runAssertion(
+      'Some prompt',
       javascriptMultilineStringAssertion,
       {} as AtomicTestCase,
       output,
@@ -464,6 +494,7 @@ describe('runAssertion', () => {
     const output = 'Not the expected output';
 
     const result: GradingResult = await runAssertion(
+      'Some prompt',
       javascriptMultilineStringAssertion,
       {} as AtomicTestCase,
       output,
@@ -481,6 +512,7 @@ describe('runAssertion', () => {
     const output = 'Expected output';
 
     const result: GradingResult = await runAssertion(
+      'Some prompt',
       notContainsAssertion,
       {} as AtomicTestCase,
       output,
@@ -493,6 +525,7 @@ describe('runAssertion', () => {
     const output = 'Unexpected output';
 
     const result: GradingResult = await runAssertion(
+      'Some prompt',
       notContainsAssertion,
       {} as AtomicTestCase,
       output,
@@ -511,6 +544,7 @@ describe('runAssertion', () => {
     const output = 'EXPECTED OUTPUT';
 
     const result: GradingResult = await runAssertion(
+      'Some prompt',
       containsLowerAssertion,
       {} as AtomicTestCase,
       output,
@@ -523,6 +557,7 @@ describe('runAssertion', () => {
     const output = 'Different output';
 
     const result: GradingResult = await runAssertion(
+      'Some prompt',
       containsLowerAssertion,
       {} as AtomicTestCase,
       output,
@@ -541,6 +576,7 @@ describe('runAssertion', () => {
     const output = 'Expected output';
 
     const result: GradingResult = await runAssertion(
+      'Some prompt',
       notContainsLowerAssertion,
       {} as AtomicTestCase,
       output,
@@ -553,6 +589,7 @@ describe('runAssertion', () => {
     const output = 'UNEXPECTED OUTPUT';
 
     const result: GradingResult = await runAssertion(
+      'Some prompt',
       notContainsLowerAssertion,
       {} as AtomicTestCase,
       output,
@@ -571,6 +608,7 @@ describe('runAssertion', () => {
     const output = 'This output contains option1';
 
     const result: GradingResult = await runAssertion(
+      'Some prompt',
       containsAnyAssertion,
       {} as AtomicTestCase,
       output,
@@ -583,6 +621,7 @@ describe('runAssertion', () => {
     const output = 'This output does not contain any option';
 
     const result: GradingResult = await runAssertion(
+      'Some prompt',
       containsAnyAssertion,
       {} as AtomicTestCase,
       output,
@@ -601,6 +640,7 @@ describe('runAssertion', () => {
     const output = 'This output contains option1, option2, and option3';
 
     const result: GradingResult = await runAssertion(
+      'Some prompt',
       containsAllAssertion,
       {} as AtomicTestCase,
       output,
@@ -613,6 +653,7 @@ describe('runAssertion', () => {
     const output = 'This output contains only option1 and option2';
 
     const result: GradingResult = await runAssertion(
+      'Some prompt',
       containsAllAssertion,
       {} as AtomicTestCase,
       output,
@@ -631,6 +672,7 @@ describe('runAssertion', () => {
     const output = 'This output contains 123-45-6789';
 
     const result: GradingResult = await runAssertion(
+      'Some prompt',
       containsRegexAssertion,
       {} as AtomicTestCase,
       output,
@@ -643,6 +685,7 @@ describe('runAssertion', () => {
     const output = 'This output does not contain the pattern';
 
     const result: GradingResult = await runAssertion(
+      'Some prompt',
       containsRegexAssertion,
       {} as AtomicTestCase,
       output,
@@ -661,6 +704,7 @@ describe('runAssertion', () => {
     const output = 'This output does not contain the pattern';
 
     const result: GradingResult = await runAssertion(
+      'Some prompt',
       notContainsRegexAssertion,
       {} as AtomicTestCase,
       output,
@@ -673,6 +717,7 @@ describe('runAssertion', () => {
     const output = 'This output contains 123-45-6789';
 
     const result: GradingResult = await runAssertion(
+      'Some prompt',
       notContainsRegexAssertion,
       {} as AtomicTestCase,
       output,
@@ -697,6 +742,7 @@ describe('runAssertion', () => {
       );
 
     const result: GradingResult = await runAssertion(
+      'Some prompt',
       webhookAssertion,
       {} as AtomicTestCase,
       output,
@@ -715,6 +761,7 @@ describe('runAssertion', () => {
       );
 
     const result: GradingResult = await runAssertion(
+      'Some prompt',
       webhookAssertion,
       {} as AtomicTestCase,
       output,
@@ -731,6 +778,7 @@ describe('runAssertion', () => {
       .mockImplementation(() => Promise.resolve(new Response('', { status: 500 })));
 
     const result: GradingResult = await runAssertion(
+      'Some prompt',
       webhookAssertion,
       {} as AtomicTestCase,
       output,
@@ -749,7 +797,12 @@ describe('runAssertion', () => {
   it('should pass when the rouge-n assertion passes', async () => {
     const output = 'This is the expected output.';
 
-    const result: GradingResult = await runAssertion(rougeNAssertion, {} as AtomicTestCase, output);
+    const result: GradingResult = await runAssertion(
+      'Some prompt',
+      rougeNAssertion,
+      {} as AtomicTestCase,
+      output,
+    );
     expect(result.pass).toBeTruthy();
     expect(result.reason).toBe('ROUGE-N score 1 is greater than or equal to threshold 0.75');
   });
@@ -757,7 +810,12 @@ describe('runAssertion', () => {
   it('should fail when the rouge-n assertion fails', async () => {
     const output = 'some different output';
 
-    const result: GradingResult = await runAssertion(rougeNAssertion, {} as AtomicTestCase, output);
+    const result: GradingResult = await runAssertion(
+      'Some prompt',
+      rougeNAssertion,
+      {} as AtomicTestCase,
+      output,
+    );
     expect(result.pass).toBeFalsy();
     expect(result.reason).toBe('ROUGE-N score 0.2 is less than threshold 0.75');
   });
@@ -772,6 +830,7 @@ describe('runAssertion', () => {
     const output = 'Expected output';
 
     const result: GradingResult = await runAssertion(
+      'Some prompt',
       startsWithAssertion,
       {} as AtomicTestCase,
       output,
@@ -784,6 +843,7 @@ describe('runAssertion', () => {
     const output = 'Different output';
 
     const result: GradingResult = await runAssertion(
+      'Some prompt',
       startsWithAssertion,
       {} as AtomicTestCase,
       output,
@@ -818,7 +878,7 @@ describe('runAssertion', () => {
     };
 
     // Expect test to pass because assertion grader takes priority
-    const result: GradingResult = await runAssertion(assertion, test, output);
+    const result: GradingResult = await runAssertion('Some prompt', assertion, test, output);
     expect(result.pass).toBeTruthy();
     expect(result.reason).toBe('Test grading output');
   });
@@ -834,6 +894,7 @@ describe('runAssertion', () => {
     const output = 'Expected output';
 
     const result: GradingResult = await runAssertion(
+      'Some prompt',
       levenshteinAssertion,
       {} as AtomicTestCase,
       output,
@@ -846,6 +907,7 @@ describe('runAssertion', () => {
     const output = 'Different output';
 
     const result: GradingResult = await runAssertion(
+      'Some prompt',
       levenshteinAssertion,
       {} as AtomicTestCase,
       output,

@@ -63,9 +63,7 @@ See the [Configuration docs](https://www.promptfoo.dev/docs/configuration/guide)
 
 ```yaml
 prompts: [prompt1.txt, prompt2.txt]
-providers: [openai:gpt-3.5-turbo, localai:chat:vicuna]
-defaultTest:
-  assert:
+providers: [openai:gpt-3.5-turbo, ollama:llama2:70b]
 tests:
   - description: 'Test translation to French'
     vars:
@@ -74,41 +72,44 @@ tests:
     assert:
       - type: contains-json
       - type: javascript
-        value: output.startsWith('Bonjour')
+        value: output.length < 100
+
   - description: 'Test translation to German'
     vars:
       language: German
       input: How's it going?
     assert:
+      - type: model-graded-closedqa
+        value: does not describe self as an AI, model, or chatbot
       - type: similar
         value: was geht
         threshold: 0.6 # cosine similarity
-      - type: llm-rubric
-        value: does not describe self as an AI, model, or chatbot
 ```
 
 ### Supported assertion types
 
 See [Test assertions](https://promptfoo.dev/docs/configuration/expected-outputs) for full details.
 
-| Assertion Type  | Returns true if...                                                        |
-| --------------- | ------------------------------------------------------------------------- |
-| `equals`        | output matches exactly                                                    |
-| `contains`      | output contains substring                                                 |
-| `icontains`     | output contains substring, case insensitive                               |
-| `regex`         | output matches regex                                                      |
-| `starts-with`   | output starts with string                                                 |
-| `contains-any ` | output contains any of the listed substrings                              |
-| `contains-all`  | output contains all list of substrings                                    |
-| `is-json`       | output is valid json (optional json schema validation)                    |
-| `contains-json` | output contains valid json (optional json schema validation)              |
-| `javascript`    | provided Javascript function validates the output                         |
-| `python`        | provided Python function validates the output                             |
-| `webhook`       | provided webhook returns `{pass: true}`                                   |
-| `similar`       | embeddings and cosine similarity are above a threshold                    |
-| `llm-rubric`    | LLM output matches a given rubric, using a Language Model to grade output |
-| `rouge-n`       | Rouge-N score is above a given threshold                                  |
-| `levenshtein`   | Levenshtein distance is below a threshold                                 |
+| Assertion Type            | Returns true if...                                                              |
+| ------------------------- | ------------------------------------------------------------------------------- |
+| `equals`                  | output matches exactly                                                          |
+| `contains`                | output contains substring                                                       |
+| `icontains`               | output contains substring, case insensitive                                     |
+| `regex`                   | output matches regex                                                            |
+| `starts-with`             | output starts with string                                                       |
+| `contains-any `           | output contains any of the listed substrings                                    |
+| `contains-all`            | output contains all list of substrings                                          |
+| `is-json`                 | output is valid json (optional json schema validation)                          |
+| `contains-json`           | output contains valid json (optional json schema validation)                    |
+| `javascript`              | provided Javascript function validates the output                               |
+| `python`                  | provided Python function validates the output                                   |
+| `webhook`                 | provided webhook returns `{pass: true}`                                         |
+| `similar`                 | embeddings and cosine similarity are above a threshold                          |
+| `llm-rubric`              | LLM output matches a given rubric, using a Language Model to grade output       |
+| `model-graded-factuality` | LLM output adheres to the given facts, using Factuality method from OpenAI eval |
+| `model-graded-closedqa`   | LLM output adheres to given criteria, using Closed QA method from OpenAI eval   |
+| `rouge-n`                 | Rouge-N score is above a given threshold                                        |
+| `levenshtein`             | Levenshtein distance is below a threshold                                       |
 
 Every test type can be negated by prepending `not-`. For example, `not-equals` or `not-regex`.
 
@@ -188,7 +189,7 @@ You can also use `promptfoo` as a library in your project by importing the `eval
 - `testSuite`: the Javascript equivalent of the promptfooconfig.yaml
 
   ```typescript
-  interface TestSuiteConfig {
+  interface EvaluateTestSuite {
     providers: string[]; // Valid provider name (e.g. openai:gpt-3.5-turbo)
     prompts: string[]; // List of prompts
     tests: string | TestCase[]; // Path to a CSV file, or list of test cases
@@ -198,18 +199,27 @@ You can also use `promptfoo` as a library in your project by importing the `eval
   }
 
   interface TestCase {
+    // Optional description of what you're testing
     description?: string;
-    vars?: Record<string, string>;
+
+    // Key-value pairs to substitute in the prompt
+    vars?: Record<string, string | string[] | object>;
+
+    // Optional list of automatic checks to run on the LLM output
     assert?: Assertion[];
 
-    prompt?: PromptConfig;
-    grading?: GradingConfig;
+    // Additional configuration settings for the prompt
+    options?: PromptConfig & OutputConfig & GradingConfig;
+
+    // The required score for this test case.  If not provided, the test case is graded pass/fail.
+    threshold?: number;
   }
 
   interface Assertion {
     type: string;
     value?: string;
-    threshold?: number; // For similarity assertions
+    threshold?: number; // Required score for pass
+    weight?: number; // The weight of this assertion compared to other assertions in the test case. Defaults to 1.
     provider?: ApiProvider; // For assertions that require an LLM provider
   }
   ```

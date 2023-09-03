@@ -1,6 +1,11 @@
 import { getGradingProvider } from '../src/matchers';
 import { OpenAiChatCompletionProvider, OpenAiEmbeddingProvider } from '../src/providers/openai';
-import { matchesSimilarity, matchesLlmRubric } from '../src/matchers';
+import {
+  matchesSimilarity,
+  matchesLlmRubric,
+  matchesFactuality,
+  matchesClosedQa,
+} from '../src/matchers';
 import { DefaultEmbeddingProvider, DefaultGradingProvider } from '../src/providers/openai';
 
 import { TestGrader } from './assertions.test';
@@ -165,6 +170,108 @@ describe('matchesLlmRubric', () => {
     expect(mockCallApi).toHaveBeenCalled();
 
     mockCallApi.mockRestore();
+  });
+});
+
+describe('matchesFactuality', () => {
+  it('should pass when the factuality check passes', async () => {
+    const input = 'Input text';
+    const expected = 'Expected output';
+    const output = 'Sample output';
+    const grading = {};
+
+    jest.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce({
+      output:
+        '(A) The submitted answer is a subset of the expert answer and is fully consistent with it.',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    const result = await matchesFactuality(input, expected, output, grading);
+    expect(result.pass).toBeTruthy();
+    expect(result.reason).toBe(
+      'The submitted answer is a subset of the expert answer and is fully consistent with it.',
+    );
+  });
+
+  it('should fail when the factuality check fails', async () => {
+    const input = 'Input text';
+    const expected = 'Expected output';
+    const output = 'Sample output';
+    const grading = {};
+    jest.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce({
+      output: '(D) There is a disagreement between the submitted answer and the expert answer.',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    const result = await matchesFactuality(input, expected, output, grading);
+    expect(result.pass).toBeFalsy();
+    expect(result.reason).toBe(
+      'There is a disagreement between the submitted answer and the expert answer.',
+    );
+  });
+
+  it('should throw an error when an error occurs', async () => {
+    const input = 'Input text';
+    const expected = 'Expected output';
+    const output = 'Sample output';
+    const grading = {};
+
+    jest.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(() => {
+      throw new Error('An error occurred');
+    });
+
+    await expect(matchesFactuality(input, expected, output, grading)).rejects.toThrow(
+      'An error occurred',
+    );
+  });
+});
+
+describe('matchesClosedQa', () => {
+  it('should pass when the closed QA check passes', async () => {
+    const input = 'Input text';
+    const expected = 'Expected output';
+    const output = 'Sample output';
+    const grading = {};
+
+    jest.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce({
+      output: 'foo \n \n bar\n Y Y',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    const result = await matchesClosedQa(input, expected, output, grading);
+    expect(result.pass).toBeTruthy();
+    expect(result.reason).toBe('The submission meets the criterion');
+  });
+
+  it('should fail when the closed QA check fails', async () => {
+    const input = 'Input text';
+    const expected = 'Expected output';
+    const output = 'Sample output';
+    const grading = {};
+
+    jest.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce({
+      output: 'foo bar N',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    const result = await matchesClosedQa(input, expected, output, grading);
+    expect(result.pass).toBeFalsy();
+    expect(result.reason).toBe('The submission does not meet the criterion: foo bar N');
+  });
+
+  it('should throw an error when an error occurs', async () => {
+    const input = 'Input text';
+    const expected = 'Expected output';
+    const output = 'Sample output';
+    const grading = {};
+
+    jest.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(() => {
+      throw new Error('An error occurred');
+    });
+
+    await expect(matchesClosedQa(input, expected, output, grading)).rejects.toThrow(
+      'An error occurred',
+    );
   });
 });
 

@@ -5,7 +5,12 @@ import { distance as levenshtein } from 'fastest-levenshtein';
 
 import telemetry from './telemetry';
 import { fetchWithRetries, getNunjucksEngine } from './util';
-import { matchesSimilarity, matchesLlmRubric } from './matchers';
+import {
+  matchesSimilarity,
+  matchesLlmRubric,
+  matchesFactuality,
+  matchesClosedQa,
+} from './matchers';
 
 import type { Assertion, AssertionType, GradingResult, AtomicTestCase } from './types';
 
@@ -40,7 +45,11 @@ function handleRougeScore(
   };
 }
 
-export async function runAssertions(test: AtomicTestCase, output: string): Promise<GradingResult> {
+export async function runAssertions(
+  prompt: string,
+  test: AtomicTestCase,
+  output: string,
+): Promise<GradingResult> {
   const tokensUsed = {
     total: 0,
     prompt: 0,
@@ -61,7 +70,7 @@ export async function runAssertions(test: AtomicTestCase, output: string): Promi
     const weight = assertion.weight || 1;
     totalWeight += weight;
 
-    const result = await runAssertion(assertion, test, output);
+    const result = await runAssertion(prompt, assertion, test, output);
     totalScore += result.score * weight;
     componentResults.push(result);
 
@@ -103,6 +112,7 @@ export async function runAssertions(test: AtomicTestCase, output: string): Promi
 }
 
 export async function runAssertion(
+  prompt: string,
   assertion: Assertion,
   test: AtomicTestCase,
   output: string,
@@ -403,10 +413,9 @@ ${assertion.value}`,
   }
 
   if (baseType === 'similar') {
-    invariant(renderedValue, 'Similarity assertion must have a string value');
     invariant(
       typeof renderedValue === 'string',
-      '"contains" assertion type must have a string value',
+      'Similarity assertion type must have a string value',
     );
     return {
       assertion,
@@ -415,7 +424,6 @@ ${assertion.value}`,
   }
 
   if (baseType === 'llm-rubric') {
-    invariant(renderedValue, 'Similarity assertion must have a string value');
     invariant(
       typeof renderedValue === 'string',
       '"contains" assertion type must have a string value',
@@ -434,6 +442,50 @@ ${assertion.value}`,
     return {
       assertion,
       ...(await matchesLlmRubric(renderedValue, output, test.options)),
+    };
+  }
+
+  if (baseType === 'model-graded-factuality') {
+    invariant(
+      typeof renderedValue === 'string',
+      'model-graded-factuality assertion type must have a string value',
+    );
+
+    // Assertion provider overrides test provider
+    test.options = test.options || {};
+    test.options.provider = assertion.provider || test.options.provider;
+    test.options.rubricPrompt = assertion.rubricPrompt || test.options.rubricPrompt;
+
+    if (test.options.rubricPrompt) {
+      // Substitute vars in prompt
+      test.options.rubricPrompt = nunjucks.renderString(test.options.rubricPrompt, test.vars || {});
+    }
+
+    return {
+      assertion,
+      ...(await matchesFactuality(prompt, renderedValue, output, test.options)),
+    };
+  }
+
+  if (baseType === 'model-graded-closedqa') {
+    invariant(
+      typeof renderedValue === 'string',
+      'model-graded-closedqa assertion type must have a string value',
+    );
+
+    // Assertion provider overrides test provider
+    test.options = test.options || {};
+    test.options.provider = assertion.provider || test.options.provider;
+    test.options.rubricPrompt = assertion.rubricPrompt || test.options.rubricPrompt;
+
+    if (test.options.rubricPrompt) {
+      // Substitute vars in prompt
+      test.options.rubricPrompt = nunjucks.renderString(test.options.rubricPrompt, test.vars || {});
+    }
+
+    return {
+      assertion,
+      ...(await matchesClosedQa(prompt, renderedValue, output, test.options)),
     };
   }
 
@@ -602,4 +654,6 @@ export function assertionFromString(expected: string): Assertion {
 export default {
   matchesSimilarity,
   matchesLlmRubric,
+  matchesFactuality,
+  matchesClosedQa,
 };
