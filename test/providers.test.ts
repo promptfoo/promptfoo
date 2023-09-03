@@ -265,6 +265,12 @@ describe('providers', () => {
     expect(provider).toBeInstanceOf(AnthropicCompletionProvider);
   });
 
+  test('loadApiProvider with ollama:modelName', async () => {
+    const provider = await loadApiProvider('ollama:llama2:13b');
+    expect(provider).toBeInstanceOf(OllamaProvider);
+    expect(provider.id()).toBe('ollama:llama2:13b');
+  });
+
   test('loadApiProvider with llama:modelName', async () => {
     const provider = await loadApiProvider('llama');
     expect(provider).toBeInstanceOf(LlamaProvider);

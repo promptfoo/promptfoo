@@ -169,7 +169,7 @@ export async function loadApiProvider(
     const modelName = providerPath.split(':')[1];
     return new LlamaProvider(modelName, providerOptions);
   } else if (providerPath.startsWith('ollama:')) {
-    const modelName = providerPath.split(':')[1];
+    const modelName = providerPath.split(':').slice(1).join(':');
     return new OllamaProvider(modelName, providerOptions);
   } else if (providerPath?.startsWith('localai:')) {
     const splits = providerPath.split(':');
