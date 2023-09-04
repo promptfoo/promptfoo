@@ -86,10 +86,12 @@ export type VarMapping = Record<string, string>;
 export interface GradingConfig {
   rubricPrompt?: string;
   provider?: string | ProviderOptions | ApiProvider;
-  choices?: {
-    pass?: string | string[];
-    fail?: string | string[];
-    scores?: Record<string, number>;
+  closedQa?: {
+    subset?: number;
+    superset?: number;
+    agree?: number;
+    disagree?: number;
+    differButFactual?: number;
   };
 }
 

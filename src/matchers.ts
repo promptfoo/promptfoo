@@ -194,8 +194,17 @@ export async function matchesFactuality(
     const option = resp.output.trim().charAt(1); // Extract the option character
     let reason = '';
 
-    const passing = grading.choices?.pass || 'ABCE';
-    const failing = grading.choices?.fail || 'D';
+    const scoreLookup: Record<string, number> = {
+      A: grading.closedQa?.subset ?? 1,
+      B: grading.closedQa?.superset ?? 1,
+      C: grading.closedQa?.agree ?? 1,
+      D: grading.closedQa?.disagree ?? 0,
+      E: grading.closedQa?.differButFactual ?? 1,
+    };
+
+    // Passing is defined as scores with value >0, and failing as scores with value 0.
+    const passing = Object.keys(scoreLookup).filter((key) => scoreLookup[key] > 0);
+    const failing = Object.keys(scoreLookup).filter((key) => scoreLookup[key] === 0);
 
     let pass = passing.includes(option) && !failing.includes(option);
     const optionReasons: Record<string, string> = {
@@ -213,8 +222,8 @@ export async function matchesFactuality(
     }
 
     let score = pass ? 1 : 0;
-    if (grading.choices?.scores) {
-      score = grading.choices.scores[option] || score;
+    if (typeof scoreLookup[option] !== 'undefined') {
+      score = scoreLookup[option];
     }
 
     return {

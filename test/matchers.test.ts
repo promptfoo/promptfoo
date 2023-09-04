@@ -210,6 +210,34 @@ describe('matchesFactuality', () => {
     );
   });
 
+  it('should use the overridden factuality grading config', async () => {
+    const input = 'Input text';
+    const expected = 'Expected output';
+    const output = 'Sample output';
+    const grading = {
+      closedQa: {
+        subset: 0.8,
+        superset: 0.9,
+        agree: 1,
+        disagree: 0,
+        differButFactual: 0.7,
+      },
+    };
+
+    jest.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce({
+      output:
+        '(A) The submitted answer is a subset of the expert answer and is fully consistent with it.',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    const result = await matchesFactuality(input, expected, output, grading);
+    expect(result.score).toBe(0.8);
+    expect(result.pass).toBeTruthy();
+    expect(result.reason).toBe(
+      'The submitted answer is a subset of the expert answer and is fully consistent with it.',
+    );
+  });
+
   it('should throw an error when an error occurs', async () => {
     const input = 'Input text';
     const expected = 'Expected output';
