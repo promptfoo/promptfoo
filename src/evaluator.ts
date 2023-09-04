@@ -71,6 +71,35 @@ function generateVarCombinations(
   return combinations;
 }
 
+export function renderPrompt(rawPrompt: string, vars: Record<string, string | object>): string {
+  try {
+    const parsed = JSON.parse(rawPrompt);
+
+    // Remove any trailing newlines from vars
+    for (const key of Object.keys(vars)) {
+      if (typeof vars[key] === 'string') {
+        vars[key] = (vars[key] as string).replace(/\n$/, '');
+      }
+    }
+
+    // The _raw_ prompt is valid JSON. That means that the user likely wants to substitute vars _within_ the JSON itself.
+    // Recursively walk the JSON structure. If we find a string, render it with nunjucks.
+    const walk = (obj: any) => {
+      if (typeof obj === 'string') {
+        return nunjucks.renderString(obj, vars);
+      } else if (typeof obj === 'object') {
+        for (const key of Object.keys(obj)) {
+          obj[key] = walk(obj[key]);
+        }
+      }
+      return obj;
+    };
+    return JSON.stringify(walk(parsed));
+  } catch (err) {
+    return nunjucks.renderString(rawPrompt, vars);
+  }
+}
+
 class Evaluator {
   testSuite: TestSuite;
   options: EvaluateOptions;
@@ -99,7 +128,7 @@ class Evaluator {
     delay,
   }: RunEvalOptions): Promise<EvaluateResult> {
     const vars = test.vars || {};
-    const renderedPrompt = nunjucks.renderString(prompt.raw, vars);
+    const renderedPrompt = renderPrompt(prompt.raw, vars);
 
     // Note that we're using original prompt, not renderedPrompt
     let promptDisplay = prompt.display;
