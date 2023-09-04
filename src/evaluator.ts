@@ -73,6 +73,10 @@ function generateVarCombinations(
 
 export function renderPrompt(rawPrompt: string, vars: Record<string, string | object>): string {
   try {
+    if (process.env.PROMPTFOO_DISABLE_JSON_AUTOESCAPE) {
+      return nunjucks.renderString(rawPrompt, vars);
+    }
+
     const parsed = JSON.parse(rawPrompt);
 
     // Remove any trailing newlines from vars
