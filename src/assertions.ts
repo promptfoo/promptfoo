@@ -316,6 +316,7 @@ export async function runAssertion(
   }
 
   const context = {
+    prompt,
     vars: test.vars || {},
   };
 
@@ -495,6 +496,7 @@ ${assertion.value}`,
 
     try {
       const context = {
+        prompt,
         vars: test.vars || {},
       };
       const response = await fetchWithRetries(
