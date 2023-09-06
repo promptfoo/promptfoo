@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 
 import promptfoo from '@/../../../index';
 
+import { IS_RUNNING_LOCALLY } from '@/constants';
 import { createJob, createResult, updateJob } from '@/database';
 
 import type { EvaluateTestSuite } from '@/../../../types';
@@ -31,8 +32,8 @@ async function runWithDatabase(testSuite: EvaluateTestSuite) {
 
 export async function POST(req: Request) {
   const testSuite = (await req.json()) as EvaluateTestSuite;
-  if (!process.env.NEXT_PUBLIC_PROMPTFOO_WITH_DATABASE) {
-    throw new Error('This route should only be used in database mode');
+  if (IS_RUNNING_LOCALLY) {
+    throw new Error('This route should only be used in hosted mode');
   }
   return runWithDatabase(testSuite);
 }
