@@ -17,6 +17,8 @@ import Copy from '@mui/icons-material/ContentCopy';
 import PromptDialog from './PromptDialog';
 import { useStore } from '@/state/evalConfig';
 
+import './PromptsSection.css';
+
 const PromptsSection: React.FC = () => {
   const [promptDialogOpen, setPromptDialogOpen] = useState(false);
   const [editingPromptIndex, setEditingPromptIndex] = useState<number | null>(null);
@@ -130,14 +132,7 @@ const PromptsSection: React.FC = () => {
                         .split(/({{\w+}})/g)
                         .map((part, i) =>
                           /{{\w+}}/g.test(part) ? (
-                            <span
-                              key={i}
-                              style={{
-                                backgroundColor: 'linen',
-                                padding: '0.25rem',
-                                borderRadius: '4px',
-                              }}
-                            >
+                            <span key={i} className="prompt-var-highlight">
                               {part}
                             </span>
                           ) : (

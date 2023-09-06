@@ -24,6 +24,7 @@
   --header-background-color: #fffdf7;
   --insert-highlight-color: #d4fcbc;
   --delete-highlight-color: #fbb6c2;
+  --prompt-highlight-color: linen;
 }
 
 /* Dark mode colors */
@@ -41,6 +42,7 @@
   --header-background-color: #333;
   --insert-highlight-color: #4f8a34;
   --delete-highlight-color: #8a3434;
+  --prompt-highlight-color: #67605a;
 }
 
 html {
