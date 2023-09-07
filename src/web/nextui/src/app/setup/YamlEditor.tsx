@@ -98,7 +98,7 @@ const YamlEditorComponent: React.FC = () => {
         padding={10}
         style={{
           fontFamily: '"Fira code", "Fira Mono", monospace',
-          fontSize: 12,
+          fontSize: 14,
         }}
         disabled={isReadOnly}
         className={isReadOnly ? '' : 'glowing-border'}
