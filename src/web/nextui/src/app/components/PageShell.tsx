@@ -17,18 +17,16 @@ function PageShell({ children }: { children: React.ReactNode }) {
   const prefersDarkMode = useMediaQuery('(prefers-color-scheme: dark)');
   const [darkMode, setDarkMode] = React.useState(prefersDarkMode);
 
-  const theme = React.useMemo(
-    () =>
-      createTheme({
-        typography: {
-          fontFamily: 'inherit',
-        },
-        palette: {
-          mode: darkMode ? 'dark' : 'light',
-        },
-      }),
-    [darkMode],
-  );
+  const theme = React.useMemo(() => {
+    return createTheme({
+      typography: {
+        fontFamily: 'inherit',
+      },
+      palette: {
+        mode: darkMode || prefersDarkMode ? 'dark' : 'light',
+      },
+    });
+  }, [darkMode, prefersDarkMode]);
 
   const toggleDarkMode = () => {
     setDarkMode(!darkMode);
