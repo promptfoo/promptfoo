@@ -62,7 +62,7 @@ class PalmGenericProvider implements ApiProvider {
 }
 
 export class PalmChatProvider extends PalmGenericProvider {
-  static CHAT_MODELS = ['text-bison-001'];
+  static CHAT_MODELS = ['chat-bison-001'];
 
   constructor(
     modelName: string,
