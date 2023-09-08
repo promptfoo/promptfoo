@@ -17,16 +17,16 @@ export default function Login() {
 
   const [user, setUser] = React.useState<User | null>(null)
 
-  const fetchUser = async () => {
+  const fetchUser = React.useCallback(async () => {
     const { data, error } = await supabase.auth.refreshSession()
     if (data) {
       setUser(data.user)
     }
-  }
+  }, [])
 
   React.useEffect(() => {
     fetchUser()
-  }, [])
+  }, [fetchUser])
 
   const handleSignUp = async () => {
     if (!user) {
