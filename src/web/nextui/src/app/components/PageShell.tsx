@@ -7,6 +7,7 @@ import { Stack } from '@mui/material';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 
 import Logo from './Logo';
+import LoggedInAs from './LoggedInAs';
 import DarkMode from './DarkMode';
 
 import './PageShell.css';
@@ -79,7 +80,10 @@ function Navigation({
       <Logo />
       <Link href="/setup">New Eval</Link>
       <Link href="/eval">View Evals</Link>
-      <DarkMode darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} />
+      <div className="right-aligned">
+        <LoggedInAs />
+        <DarkMode darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} />
+      </div>
     </Stack>
   );
 }

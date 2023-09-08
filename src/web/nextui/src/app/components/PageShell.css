@@ -1,5 +1,6 @@
 .nav {
   padding: 0.25rem 0 0.25rem 1rem;
+  gap: 1rem;
   background-color: #eee;
   margin-bottom: 1rem;
 }
@@ -9,7 +10,6 @@
 }
 
 .nav a {
-  padding: 0 0.5rem;
   text-decoration: none;
   color: #000;
   align-self: center;
@@ -19,7 +19,10 @@
   color: #f0f0f0;
 }
 
-.nav div:last-child {
+.nav .right-aligned {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
   margin-left: auto;
   margin-right: 0.5rem;
 }
