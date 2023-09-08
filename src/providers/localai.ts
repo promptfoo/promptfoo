@@ -45,7 +45,7 @@ class LocalAiGenericProvider implements ApiProvider {
 
 export class LocalAiChatProvider extends LocalAiGenericProvider {
   async callApi(prompt: string): Promise<ProviderResponse> {
-    const messages = parseChatPrompt(prompt);
+    const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
     const body = {
       model: this.modelName,
       messages: messages,
