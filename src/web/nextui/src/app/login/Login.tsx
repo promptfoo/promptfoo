@@ -13,28 +13,47 @@ export default function Login() {
   const router = useRouter()
   const supabase = createClientComponentClient<Database>()
 
+  const [user, setUser] = useState(null)
+
+  useEffect(() => {
+    fetchUser()
+  }, [])
+
+  const fetchUser = async () => {
+    const { data, error } = await supabase.auth.refreshSession()
+    if (data) {
+      setUser(data.user)
+    }
+  }
+
   const handleSignUp = async () => {
-    await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: `${location.origin}/auth/callback`,
-      },
-    })
-    router.refresh()
+    if (!user) {
+      await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: `${location.origin}/auth/callback`,
+        },
+      })
+      fetchUser()
+    }
   }
 
   const handleSignIn = async () => {
-    await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
-    router.refresh()
+    if (!user) {
+      await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
+      fetchUser()
+    }
   }
 
   const handleSignOut = async () => {
-    await supabase.auth.signOut()
-    router.refresh()
+    if (user) {
+      await supabase.auth.signOut()
+      fetchUser()
+    }
   }
 
   return (
@@ -69,33 +88,39 @@ export default function Login() {
           onChange={(e) => setPassword(e.target.value)}
           value={password}
         />
-        <Button
-          type="submit"
-          fullWidth
-          variant="contained"
-          color="primary"
-          onClick={handleSignUp}
-        >
-          Sign Up
-        </Button>
-        <Button
-          type="submit"
-          fullWidth
-          variant="contained"
-          color="primary"
-          onClick={handleSignIn}
-        >
-          Sign In
-        </Button>
-        <Button
-          type="submit"
-          fullWidth
-          variant="contained"
-          color="primary"
-          onClick={handleSignOut}
-        >
-          Sign Out
-        </Button>
+        {!user && (
+          <>
+            <Button
+              type="submit"
+              fullWidth
+              variant="contained"
+              color="primary"
+              onClick={handleSignUp}
+            >
+              Sign Up
+            </Button>
+            <Button
+              type="submit"
+              fullWidth
+              variant="contained"
+              color="primary"
+              onClick={handleSignIn}
+            >
+              Sign In
+            </Button>
+          </>
+        )}
+        {user && (
+          <Button
+            type="submit"
+            fullWidth
+            variant="contained"
+            color="primary"
+            onClick={handleSignOut}
+          >
+            Sign Out
+          </Button>
+        )}
       </form>
     </Container>
   )
