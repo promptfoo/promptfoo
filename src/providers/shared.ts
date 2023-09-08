@@ -4,21 +4,19 @@ export const REQUEST_TIMEOUT_MS = process.env.REQUEST_TIMEOUT_MS
   ? parseInt(process.env.REQUEST_TIMEOUT_MS, 10)
   : 300_000;
 
-export function parseChatPrompt(
-  prompt: string,
-): { role: string; content: string; name?: string }[] {
+export function parseChatPrompt<T>(prompt: string, defaultValue: T): T {
   const trimmedPrompt = prompt.trim();
   if (trimmedPrompt.startsWith('- role:')) {
     try {
-      // Try YAML
-      return yaml.load(prompt) as { role: string; content: string }[];
+      // Try YAML - some legacy OpenAI prompts are YAML :(
+      return yaml.load(prompt) as T;
     } catch (err) {
       throw new Error(`Chat Completion prompt is not a valid YAML string: ${err}\n\n${prompt}`);
     }
   } else {
     try {
       // Try JSON
-      return JSON.parse(prompt) as { role: string; content: string }[];
+      return JSON.parse(prompt) as T;
     } catch (err) {
       if (
         process.env.PROMPTFOO_REQUIRE_JSON_PROMPTS ||
@@ -27,8 +25,8 @@ export function parseChatPrompt(
       ) {
         throw new Error(`Chat Completion prompt is not a valid JSON string: ${err}\n\n${prompt}`);
       }
-      // Fall back to wrapping the prompt in a user message
-      return [{ role: 'user', content: prompt }];
+      // Fall back to the provided default value
+      return defaultValue;
     }
   }
 }

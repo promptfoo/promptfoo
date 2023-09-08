@@ -40,6 +40,11 @@ export interface EnvOverrides {
   LOCALAI_BASE_URL?: string;
   PALM_API_KEY?: string;
   PALM_API_HOST?: string;
+  VERTEX_API_KEY?: string;
+  VERTEX_API_HOST?: string;
+  VERTEX_PROJECT_ID?: string;
+  VERTEX_REGION?: string;
+  VERTEX_PUBLISHER?: string;
 }
 
 export interface ProviderOptions {

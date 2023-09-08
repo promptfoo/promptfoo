@@ -1,19 +1,15 @@
 import logger from '../logger';
 import { fetchWithCache } from '../cache';
-import { REQUEST_TIMEOUT_MS } from './shared';
+import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 
-import type {
-  ApiProvider,
-  EnvOverrides,
-  ProviderResponse,
-} from '../types.js';
+import type { ApiProvider, EnvOverrides, ProviderResponse } from '../types.js';
 
 const DEFAULT_API_HOST = 'generativelanguage.googleapis.com';
 
 interface PalmCompletionOptions {
   apiKey?: string;
   apiHost?: string;
-  safetySettings?: {category: string, probability: string}[];
+  safetySettings?: { category: string; probability: string }[];
   stopSequences?: string[];
   temperature?: number;
   maxOutputTokens?: number;
@@ -85,23 +81,25 @@ export class PalmChatProvider extends PalmGenericProvider {
       );
     }
 
-    const messages = JSON.parse(prompt);
-
+    // https://developers.generativeai.google/tutorials/curl_quickstart
+    const messages = parseChatPrompt(prompt, [{ content: prompt }]);
     const body = {
       prompt: { messages },
       safetySettings: this.config.safetySettings,
-       stopSequences: this.config.stopSequences,
-       temperature: this.config.temperature,
-       maxOutputTokens: this.config.maxOutputTokens,
-       topP: this.config.topP,
-       topK: this.config.topK,
+      stopSequences: this.config.stopSequences,
+      temperature: this.config.temperature,
+      maxOutputTokens: this.config.maxOutputTokens,
+      topP: this.config.topP,
+      topK: this.config.topK,
     };
     logger.debug(`Calling Google PaLM API: ${JSON.stringify(body)}`);
 
     let data;
     try {
       ({ data } = (await fetchWithCache(
-        `https://${this.getApiHost()}/v1beta2/models/${this.modelName}:generateMessage?key=${this.getApiKey()}`,
+        `https://${this.getApiHost()}/v1beta2/models/${
+          this.modelName
+        }:generateMessage?key=${this.getApiKey()}`,
         {
           method: 'POST',
           headers: {

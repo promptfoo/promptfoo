@@ -1,0 +1,77 @@
+# This configuration runs each prompt through a series of example inputs and checks if they meet requirements.
+
+prompts: [prompts.txt]
+providers: [vertex:chat-bison]
+tests:
+  - vars:
+      question: What's the weather in New York?
+  - vars:
+      question: Who won the latest football match between the Giants and 49ers?
+  - vars:
+      question: "Which magazine was started first Arthur's Magazine or First for Women?"
+  - vars:
+      question: 'The Oberoi family is part of a hotel company that has a head office in what city?'
+  - vars:
+      question: 'Musician and satirist Allie Goertz wrote a song about the "The Simpsons" character Milhouse, who Matt Groening named after who?'
+  - vars:
+      question: "What nationality was James Henry Miller's wife?"
+  - vars:
+      question: 'Cadmium Chloride is slightly soluble in this chemical, it is also called what?'
+  - vars:
+      question: 'Which tennis player won more Grand Slam titles, Henri Leconte or Jonathan Stark?'
+  - vars:
+      question: "Which genus of moth in the world's seventh-largest country contains only one species?"
+  - vars:
+      question: 'Who was once considered the best kick boxer in the world, however he has been involved in a number of controversies relating to his "unsportsmanlike conducts" in the sport and crimes of violence outside of the ring.'
+  - vars:
+      question: 'The Dutch-Belgian television series that "House of Anubis" was based on first aired in what year?'
+  - vars:
+      question: 'What is the length of the track where the 2013 Liqui Moly Bathurst 12 Hour was staged?'
+  - vars:
+      question: 'Fast Cars, Danger, Fire and Knives includes guest appearances from which hip hop record executive?'
+  - vars:
+      question: 'Gunmen from Laredo starred which narrator of "Frontier"?'
+  - vars:
+      question: 'Where did the form of music played by Die Rhöner Säuwäntzt originate?'
+  - vars:
+      question: 'In which American football game was Malcolm Smith named Most Valuable player?'
+  - vars:
+      question: 'What U.S Highway gives access to Zilpo Road, and is also known as Midland Trail?'
+  - vars:
+      question: 'The 1988 American comedy film, The Great Outdoors, starred a four-time Academy Award nominee, who received a star on the Hollywood Walk of Fame in what year?'
+  - vars:
+      question: 'What are the names of the current members of  American heavy metal band who wrote the music for  Hurt Locker The Musical?'
+  - vars:
+      question: 'Human Error" is the season finale of the third season of a tv show that aired on what network?'
+  - vars:
+      question: 'Dua Lipa, an English singer, songwriter and model, the album spawned the number-one single "New Rules" is a song by English singer Dua Lipa from her eponymous debut studio album, released in what year?'
+  - vars:
+      question: 'American politician Joe Heck ran unsuccessfully against Democrat Catherine Cortez Masto, a woman who previously served as the 32nd Attorney General of where?'
+  - vars:
+      question: 'Which state does the drug stores, of which the CEO is Warren Bryant, are located?'
+  - vars:
+      question: 'Which  American politician did Donahue replaced '
+  - vars:
+      question: 'Which band was founded first, Hole, the rock band that Courtney Love was a frontwoman of, or The Wolfhounds?'
+  - vars:
+      question: 'How old is the female main protagonist of Catching Fire?'
+  - vars:
+      question: 'Chang Ucchin was born in korea during a time that ended with the conclusion of what?'
+  - vars:
+      question: 'Who is the director of the 2003 film which has scenes in it filmed at the Quality Cafe in Los Angeles?'
+  - vars:
+      question: "Which actress played the part of fictitious character Kimberly Ann Hart, in the franchise built around a live action superhero television series taking much of its footage from the Japanese tokusatsu 'Super Sentai'?"
+  - vars:
+      question: 'Who was born first, Pablo Trapero or Aleksander Ford?'
+  - vars:
+      question: "Are Jane and First for Women both women's magazines?"
+  - vars:
+      question: 'What profession does Nicholas Ray and Elia Kazan have in common?'
+  - vars:
+      question: 'Where is the company that purchased Aixam based in?'
+  - vars:
+      question: 'Which documentary is about Finnish rock groups, Adam Clayton Powell or The Saimaa Gesture?'
+  - vars:
+      question: 'Who was inducted into the Rock and Roll Hall of Fame, David Lee Roth or Cia Berg?'
+  - vars:
+      question: "Zimbabwe's Guwe Secondary School has a sister school in what New York county?"
