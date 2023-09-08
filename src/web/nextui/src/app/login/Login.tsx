@@ -1,5 +1,4 @@
-'use client'
-
+import { Button, TextField, Container, Typography } from '@mui/material'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
@@ -37,17 +36,65 @@ export default function Login() {
   }
 
   return (
-    <form>
-      <input name="email" onChange={(e) => setEmail(e.target.value)} value={email} />
-      <input
-        type="password"
-        name="password"
-        onChange={(e) => setPassword(e.target.value)}
-        value={password}
-      />
-      <button onClick={handleSignUp}>Sign up</button>
-      <button onClick={handleSignIn}>Sign in</button>
-      <button onClick={handleSignOut}>Sign out</button>
-    </form>
+    <Container component="main" maxWidth="xs">
+      <Typography component="h1" variant="h5">
+        Sign in
+      </Typography>
+      <form>
+        <TextField
+          variant="outlined"
+          margin="normal"
+          required
+          fullWidth
+          id="email"
+          label="Email Address"
+          name="email"
+          autoComplete="email"
+          autoFocus
+          onChange={(e) => setEmail(e.target.value)}
+          value={email}
+        />
+        <TextField
+          variant="outlined"
+          margin="normal"
+          required
+          fullWidth
+          name="password"
+          label="Password"
+          type="password"
+          id="password"
+          autoComplete="current-password"
+          onChange={(e) => setPassword(e.target.value)}
+          value={password}
+        />
+        <Button
+          type="submit"
+          fullWidth
+          variant="contained"
+          color="primary"
+          onClick={handleSignUp}
+        >
+          Sign Up
+        </Button>
+        <Button
+          type="submit"
+          fullWidth
+          variant="contained"
+          color="primary"
+          onClick={handleSignIn}
+        >
+          Sign In
+        </Button>
+        <Button
+          type="submit"
+          fullWidth
+          variant="contained"
+          color="primary"
+          onClick={handleSignOut}
+        >
+          Sign Out
+        </Button>
+      </form>
+    </Container>
   )
 }
