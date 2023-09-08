@@ -1,23 +1,21 @@
 'use client';
 
-import { Button, TextField, Container, Typography } from '@mui/material'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import React from 'react';
+import Button from '@mui/material/Button'
+import TextField from '@mui/material/TextField'
+import Container from '@mui/material/Container'
+import Typography from '@mui/material/Typography'
+import { createClientComponentClient, User } from '@supabase/auth-helpers-nextjs'
 import { useRouter } from 'next/navigation'
-import { useState } from 'react'
 
 import type { Database } from '@/types/supabase';
 
 export default function Login() {
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const router = useRouter()
+  const [email, setEmail] = React.useState('')
+  const [password, setPassword] = React.useState('')
   const supabase = createClientComponentClient<Database>()
 
-  const [user, setUser] = useState(null)
-
-  useEffect(() => {
-    fetchUser()
-  }, [])
+  const [user, setUser] = React.useState<User | null>(null)
 
   const fetchUser = async () => {
     const { data, error } = await supabase.auth.refreshSession()
@@ -25,6 +23,10 @@ export default function Login() {
       setUser(data.user)
     }
   }
+
+  React.useEffect(() => {
+    fetchUser()
+  }, [])
 
   const handleSignUp = async () => {
     if (!user) {
