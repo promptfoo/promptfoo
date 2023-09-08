@@ -1,6 +1,6 @@
 import logger from '../logger';
 import { fetchWithCache } from '../cache';
-import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
+import { REQUEST_TIMEOUT_MS } from './shared';
 
 import type {
   ApiProvider,
@@ -8,22 +8,28 @@ import type {
   ProviderResponse,
 } from '../types.js';
 
-const DEFAULT_GOOGLE_HOST = 'generativelanguage.googleapis.com';
+const DEFAULT_API_HOST = 'generativelanguage.googleapis.com';
 
-interface GoogleCompletionOptions {
+interface PalmCompletionOptions {
   apiKey?: string;
   apiHost?: string;
+  safetySettings?: {category: string, probability: string}[];
+  stopSequences?: string[];
+  temperature?: number;
+  maxOutputTokens?: number;
+  topP?: number;
+  topK?: number;
 }
 
-class GoogleGenericProvider implements ApiProvider {
+class PalmGenericProvider implements ApiProvider {
   modelName: string;
 
-  config: GoogleCompletionOptions;
+  config: PalmCompletionOptions;
   env?: EnvOverrides;
 
   constructor(
     modelName: string,
-    options: { config?: GoogleCompletionOptions; id?: string; env?: EnvOverrides } = {},
+    options: { config?: PalmCompletionOptions; id?: string; env?: EnvOverrides } = {},
   ) {
     const { config, id, env } = options;
     this.env = env;
@@ -33,24 +39,24 @@ class GoogleGenericProvider implements ApiProvider {
   }
 
   id(): string {
-    return `google:${this.modelName}`;
+    return `palm:${this.modelName}`;
   }
 
   toString(): string {
-    return `[Google Provider ${this.modelName}]`;
+    return `[Google PaLM Provider ${this.modelName}]`;
   }
 
   getApiHost(): string | undefined {
     return (
       this.config.apiHost ||
-      this.env?.GOOGLE_API_HOST ||
-      process.env.GOOGLE_API_HOST ||
-      DEFAULT_GOOGLE_HOST
+      this.env?.PALM_API_HOST ||
+      process.env.PALM_API_HOST ||
+      DEFAULT_API_HOST
     );
   }
 
   getApiKey(): string | undefined {
-    return this.config.apiKey || this.env?.GOOGLE_API_KEY || process.env.GOOGLE_API_KEY;
+    return this.config.apiKey || this.env?.PALM_API_KEY || process.env.PALM_API_KEY;
   }
 
   // @ts-ignore: Prompt is not used in this implementation
@@ -59,15 +65,15 @@ class GoogleGenericProvider implements ApiProvider {
   }
 }
 
-export class GoogleChatProvider extends GoogleGenericProvider {
-  static GOOGLE_CHAT_MODELS = ['text-bison-001'];
+export class PalmChatProvider extends PalmGenericProvider {
+  static CHAT_MODELS = ['text-bison-001'];
 
   constructor(
     modelName: string,
-    options: { config?: GoogleCompletionOptions; id?: string; env?: EnvOverrides } = {},
+    options: { config?: PalmCompletionOptions; id?: string; env?: EnvOverrides } = {},
   ) {
-    if (!GoogleChatProvider.GOOGLE_CHAT_MODELS.includes(modelName)) {
-      logger.warn(`Using unknown Google chat model: ${modelName}`);
+    if (!PalmChatProvider.CHAT_MODELS.includes(modelName)) {
+      logger.warn(`Using unknown Google PaLM chat model: ${modelName}`);
     }
     super(modelName, options);
   }
@@ -75,16 +81,22 @@ export class GoogleChatProvider extends GoogleGenericProvider {
   async callApi(prompt: string): Promise<ProviderResponse> {
     if (!this.getApiKey()) {
       throw new Error(
-        'Google API key is not set. Set the GOOGLE_API_KEY environment variable or add `apiKey` to the provider config.',
+        'Google PaLM API key is not set. Set the PALM_API_KEY environment variable or add `apiKey` to the provider config.',
       );
     }
 
-    const messages = parseChatPrompt(prompt);
+    const messages = JSON.parse(prompt);
 
     const body = {
       prompt: { messages },
+      safetySettings: this.config.safetySettings,
+       stopSequences: this.config.stopSequences,
+       temperature: this.config.temperature,
+       maxOutputTokens: this.config.maxOutputTokens,
+       topP: this.config.topP,
+       topK: this.config.topK,
     };
-    logger.debug(`Calling Google API: ${JSON.stringify(body)}`);
+    logger.debug(`Calling Google PaLM API: ${JSON.stringify(body)}`);
 
     let data;
     try {
@@ -105,7 +117,7 @@ export class GoogleChatProvider extends GoogleGenericProvider {
       };
     }
 
-    logger.debug(`\tGoogle API response: ${JSON.stringify(data)}`);
+    logger.debug(`\tPaLM API response: ${JSON.stringify(data)}`);
     try {
       const output = data.candidates[0].content;
       return {
