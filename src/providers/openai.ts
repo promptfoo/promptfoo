@@ -268,7 +268,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       );
     }
 
-    const messages = parseChatPrompt(prompt);
+    const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
     let stop: string;
     try {

@@ -89,6 +89,36 @@ const ConfigureEnvButton: React.FC = () => {
             </AccordionDetails>
           </Accordion>
           <Accordion>
+            <AccordionSummary>Google Vertex AI</AccordionSummary>
+            <AccordionDetails>
+              <TextField
+                label="Vertex API Key"
+                fullWidth
+                margin="normal"
+                value={env.VERTEX_API_KEY}
+                onChange={(e) => setEnv({ ...env, VERTEX_API_KEY: e.target.value })}
+              />
+            </AccordionDetails>
+            <AccordionDetails>
+              <TextField
+                label="Vertex Project ID"
+                fullWidth
+                margin="normal"
+                value={env.VERTEX_PROJECT_ID}
+                onChange={(e) => setEnv({ ...env, VERTEX_PROJECT_ID: e.target.value })}
+              />
+            </AccordionDetails>
+            <AccordionDetails>
+              <TextField
+                label="Vertex Region"
+                fullWidth
+                margin="normal"
+                value={env.VERTEX_REGION}
+                onChange={(e) => setEnv({ ...env, VERTEX_REGION: e.target.value })}
+              />
+            </AccordionDetails>
+          </Accordion>
+          <Accordion>
             <AccordionSummary>Replicate</AccordionSummary>
             <AccordionDetails>
               <TextField

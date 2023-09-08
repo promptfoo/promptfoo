@@ -8,8 +8,10 @@ import {
 import { AnthropicCompletionProvider } from './providers/anthropic';
 import { ReplicateProvider } from './providers/replicate';
 import { LocalAiCompletionProvider, LocalAiChatProvider } from './providers/localai';
+import { PalmChatProvider } from './providers/palm';
 import { LlamaProvider } from './providers/llama';
 import { OllamaProvider } from './providers/ollama';
+import { VertexChatProvider } from './providers/vertex';
 import { WebhookProvider } from './providers/webhook';
 import { ScriptCompletionProvider } from './providers/scriptCompletion';
 import {
@@ -171,6 +173,12 @@ export async function loadApiProvider(
   } else if (providerPath.startsWith('ollama:')) {
     const modelName = providerPath.split(':').slice(1).join(':');
     return new OllamaProvider(modelName, providerOptions);
+  } else if (providerPath.startsWith('palm:')) {
+    const modelName = providerPath.split(':')[1];
+    return new PalmChatProvider(modelName, providerOptions);
+  } else if (providerPath.startsWith('vertex')) {
+    const modelName = providerPath.split(':')[1];
+    return new VertexChatProvider(modelName, providerOptions);
   } else if (providerPath?.startsWith('localai:')) {
     const splits = providerPath.split(':');
     const modelType = splits[1];

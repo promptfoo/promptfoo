@@ -214,7 +214,7 @@ export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvide
       throw new Error('Azure OpenAI API host must be set');
     }
 
-    const messages = parseChatPrompt(prompt);
+    const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
     let stop: string;
     try {

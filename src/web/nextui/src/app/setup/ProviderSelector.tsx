@@ -127,6 +127,26 @@ const defaultProviders: ProviderOptions[] = ([] as (ProviderOptions & { id: stri
       },
     })),
   )
+  .concat(
+    [
+      'vertex:chat-bison@001',
+      'vertex:chat-bison',
+      'vertex:chat-bison-32k',
+      'vertex:chat-bison-32k@001',
+    ].map((id) => ({
+      id,
+      config: {
+        context: undefined,
+        examples: undefined,
+        temperature: 0,
+        maxOutputTokens: 1024,
+        topP: 0.95,
+        topK: 40,
+        safetySettings: undefined,
+        stopSequence: undefined,
+      },
+    })),
+  )
   .sort((a, b) => a.id.localeCompare(b.id));
 
 const PREFIX_TO_PROVIDER: Record<string, string> = {
