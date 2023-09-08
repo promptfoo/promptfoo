@@ -119,6 +119,7 @@ export interface Prompt {
 }
 
 export interface EvaluateResult {
+  provider: Pick<ProviderOptions, 'id'>;
   prompt: Prompt;
   vars: Record<string, string | object>;
   response?: ProviderResponse;

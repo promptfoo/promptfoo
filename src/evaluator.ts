@@ -141,6 +141,9 @@ class Evaluator {
     }
 
     const setup = {
+      provider: {
+        id: provider.id(),
+      },
       prompt: {
         raw: renderedPrompt,
         display: promptDisplay,
