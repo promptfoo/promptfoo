@@ -1,3 +1,5 @@
+'use client';
+
 import { Button, TextField, Container, Typography } from '@mui/material'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { useRouter } from 'next/navigation'
