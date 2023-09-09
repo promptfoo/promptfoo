@@ -28,6 +28,12 @@ export default function LoggedInAs() {
     setAnchorEl(event.currentTarget);
   };
 
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    fetchUser();
+    handleClose();
+  };
+
   const handleClose = () => {
     setAnchorEl(null);
   };
@@ -64,7 +70,7 @@ export default function LoggedInAs() {
         onClose={handleClose}
       >
         <MenuItem disabled>{user.email}</MenuItem>
-        <MenuItem onClick={handleClose}>Logout</MenuItem>
+        <MenuItem onClick={handleLogout}>Logout</MenuItem>
       </Menu>
     </div>
   );
