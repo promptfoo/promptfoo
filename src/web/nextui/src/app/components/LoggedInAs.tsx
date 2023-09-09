@@ -41,7 +41,7 @@ export default function LoggedInAs() {
 
   if (!user) {
     return (
-      <Link href="/login/">Login</Link>
+      <Link href="/auth/login/">Login</Link>
     );
   }
 

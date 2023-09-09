@@ -7,16 +7,12 @@ import TextField from '@mui/material/TextField'
 import Container from '@mui/material/Container'
 import Typography from '@mui/material/Typography'
 import { createClientComponentClient, User } from '@supabase/auth-helpers-nextjs'
-import { useRouter } from 'next/navigation';
 
 import type { Database } from '@/types/supabase';
 
 export default function Login() {
-  const router = useRouter();
   const [email, setEmail] = React.useState('')
   const [password, setPassword] = React.useState('')
-  const [error, setError] = React.useState('')
-  const [loading, setLoading] = React.useState(false)
   const supabase = createClientComponentClient<Database>()
 
   const [user, setUser] = React.useState<User | null>(null)
@@ -32,43 +28,27 @@ export default function Login() {
     fetchUser()
   }, [fetchUser])
 
-  const handleSignIn = async (event: React.FormEvent) => {
-    setLoading(true);
-    event.stopPropagation();
-    event.preventDefault();
-
+  const handleSignUp = async () => {
     if (!user) {
-      const { data, error } = await supabase.auth.signInWithPassword({
+      await supabase.auth.signUp({
         email,
         password,
+        options: {
+          emailRedirectTo: `${location.origin}/auth/callback`,
+        },
       })
-
-      if (error) {
-        setError(error.message)
-      } else {
-        router.push('/');
-        // fetchUser();
-      }
     }
-    setLoading(false);
-  }
-
-  if (user) {
-    return (
-      <div style={{textAlign: 'center'}}>You&apos;re already logged in as {user.email}.</div>
-    );
   }
 
   return (
     <Container component="main" maxWidth="xs">
       <Typography component="h1" variant="h5">
-        Sign in
+        Sign up
       </Typography>
       <form>
         {!user && (
           <>
             <TextField
-              disabled={loading}
               variant="outlined"
               margin="normal"
               required
@@ -80,10 +60,8 @@ export default function Login() {
               autoFocus
               onChange={(e) => setEmail(e.target.value)}
               value={email}
-              error={Boolean(error)}
             />
             <TextField
-              disabled={loading}
               variant="outlined"
               margin="normal"
               required
@@ -95,25 +73,21 @@ export default function Login() {
               autoComplete="current-password"
               onChange={(e) => setPassword(e.target.value)}
               value={password}
-              error={Boolean(error)}
-              helperText={error}
             />
             <Button
-              type="submit"
-              disabled={loading}
               sx={{marginTop: '1em'}}
               fullWidth
               variant="contained"
               color="primary"
-              onClick={handleSignIn}
+              onClick={handleSignUp}
             >
-              Sign In
+              Sign Up
             </Button>
-          <p>
-            Don&apos;t have an account yet? <Link href="/auth/signup">Sign up</Link>
-          </p>
           </>
         )}
+        <p>
+          Already have an account? <Link href="/auth/login">Sign in</Link>
+        </p>
       </form>
     </Container>
   )
