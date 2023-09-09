@@ -26,10 +26,10 @@ export default function LoggedInAs() {
 
   if (!user) {
     return (
-      <Link href="/auth/login/">
+      <Link href="/auth/signup/">
         <IconButton
           edge="end"
-          aria-label="account of current user"
+          aria-label="User not logged in"
           aria-controls="menu-appbar"
           aria-haspopup="true"
           color="inherit"
@@ -50,7 +50,7 @@ export default function LoggedInAs() {
         onClick={handleMenu}
         color="inherit"
       >
-        <Avatar sx={{ width: '1em', height: '1em' }} />
+        <Avatar sx={{ width: '1em', height: '1em', bgcolor: '#1976d2' }} />
       </IconButton>
       <Menu
         id="menu-appbar"

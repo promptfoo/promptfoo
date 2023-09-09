@@ -62,6 +62,11 @@ export default function Login() {
       <Typography component="h1" variant="h5">
         Sign up
       </Typography>
+      <p>
+        <Typography variant="body1">
+          An account helps you easily save, view, and share your evals.
+        </Typography>
+      </p>
       <form>
         {!user && (
           <>
