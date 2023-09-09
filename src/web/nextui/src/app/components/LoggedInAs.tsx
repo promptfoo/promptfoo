@@ -25,7 +25,19 @@ export default function LoggedInAs() {
   };
 
   if (!user) {
-    return <Link href="/auth/login/">Login</Link>;
+    return (
+      <Link href="/auth/login/">
+        <IconButton
+          edge="end"
+          aria-label="account of current user"
+          aria-controls="menu-appbar"
+          aria-haspopup="true"
+          color="inherit"
+        >
+          <Avatar sx={{ width: '1em', height: '1em' }} />
+        </IconButton>
+      </Link>
+    );
   }
 
   return (
