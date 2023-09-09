@@ -63,7 +63,7 @@ export default function LoggedInAs() {
         open={Boolean(anchorEl)}
         onClose={handleClose}
       >
-        <MenuItem>{user.email}</MenuItem>
+        <MenuItem disabled>{user.email}</MenuItem>
         <MenuItem onClick={handleClose}>Logout</MenuItem>
       </Menu>
     </div>
