@@ -34,6 +34,7 @@ export default function Login() {
 
   const handleSignUp = async (event: React.FormEvent) => {
     setLoading(true);
+    setError('');
     event.stopPropagation();
     event.preventDefault();
 
@@ -50,7 +51,6 @@ export default function Login() {
         setError(error.message);
       } else {
         // fetchUser();
-        // supabase.auth.signInAsUser(data?.user);
         router.push('/');
       }
     }
