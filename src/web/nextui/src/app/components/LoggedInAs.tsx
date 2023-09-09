@@ -3,7 +3,6 @@ import Avatar from '@mui/material/Avatar';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import IconButton from '@mui/material/IconButton';
-
 import { createClientComponentClient, User } from '@supabase/auth-helpers-nextjs'
 
 import type { Database } from '@/types/supabase';
@@ -33,6 +32,10 @@ export default function LoggedInAs() {
     setAnchorEl(null);
   };
 
+  if (!user) {
+    return null;
+  }
+
   return (
     <div>
       <IconButton
@@ -43,7 +46,7 @@ export default function LoggedInAs() {
         onClick={handleMenu}
         color="inherit"
       >
-        <Avatar />
+        <Avatar sx={{ width: '1em', height: '1em' }} />
       </IconButton>
       <Menu
         id="menu-appbar"
@@ -60,7 +63,7 @@ export default function LoggedInAs() {
         open={Boolean(anchorEl)}
         onClose={handleClose}
       >
-        <MenuItem onClick={handleClose}>{user ? user.email : ''}</MenuItem>
+        <MenuItem>{user.email}</MenuItem>
         <MenuItem onClick={handleClose}>Logout</MenuItem>
       </Menu>
     </div>
