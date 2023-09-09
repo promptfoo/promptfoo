@@ -5,11 +5,10 @@ import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import IconButton from '@mui/material/IconButton';
 
-import { AuthProvider, useAuth } from '@/supabase';
+import { useAuth } from '@/supabase';
 
 export default function LoggedInAs() {
-  console.log(useAuth());
-  const {user, logout} = useAuth();
+  const { user, logout } = useAuth();
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
 
   const handleMenu = (event: React.MouseEvent<HTMLElement>) => {
@@ -25,14 +24,11 @@ export default function LoggedInAs() {
     setAnchorEl(null);
   };
 
-  console.log('frickccckckck', user, logout);
-
   if (!user) {
     return <Link href="/auth/login/">Login</Link>;
   }
 
   return (
-    <AuthProvider>
     <div>
       <IconButton
         edge="end"
@@ -62,6 +58,6 @@ export default function LoggedInAs() {
         <MenuItem disabled>Logged in as {user.email}</MenuItem>
         <MenuItem onClick={handleLogout}>Logout</MenuItem>
       </Menu>
-    </div></AuthProvider>
+    </div>
   );
 }

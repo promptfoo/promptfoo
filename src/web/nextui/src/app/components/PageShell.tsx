@@ -9,6 +9,7 @@ import { ThemeProvider, createTheme } from '@mui/material/styles';
 import Logo from './Logo';
 import LoggedInAs from './LoggedInAs';
 import DarkMode from './DarkMode';
+import { AuthProvider } from '@/supabase';
 
 import './PageShell.css';
 
@@ -47,10 +48,12 @@ function PageShell({ children }: { children: React.ReactNode }) {
   return (
     <React.StrictMode>
       <ThemeProvider theme={theme}>
-        <Layout>
-          <Navigation darkMode={darkMode} onToggleDarkMode={toggleDarkMode} />
-          <div>{children}</div>
-        </Layout>
+        <AuthProvider>
+          <Layout>
+            <Navigation darkMode={darkMode} onToggleDarkMode={toggleDarkMode} />
+            <div>{children}</div>
+          </Layout>
+        </AuthProvider>
       </ThemeProvider>
     </React.StrictMode>
   );
