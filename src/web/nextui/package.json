@@ -16,8 +16,6 @@
     "@mui/material": "^5.14.4",
     "@prisma/client": "^5.2.0",
     "@supabase/auth-helpers-nextjs": "^0.7.4",
-    "@supabase/auth-ui-react": "^0.4.4",
-    "@supabase/auth-ui-shared": "^0.1.6",
     "@supabase/supabase-js": "^2.33.1",
     "@tanstack/react-table": "^8.9.3",
     "@types/diff": "^5.0.3",
