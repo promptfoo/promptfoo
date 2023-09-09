@@ -13,6 +13,8 @@ import type { Database } from '@/types/supabase';
 export default function Login() {
   const [email, setEmail] = React.useState('')
   const [password, setPassword] = React.useState('')
+  const [error, setError] = React.useState('')
+  const [loading, setLoading] = React.useState(false)
   const supabase = createClientComponentClient<Database>()
 
   const [user, setUser] = React.useState<User | null>(null)
@@ -28,16 +30,27 @@ export default function Login() {
     fetchUser()
   }, [fetchUser])
 
-  const handleSignUp = async () => {
+  const handleSignUp = async (event: React.FormEvent) => {
+    setLoading(true);
+    event.stopPropagation();
+    event.preventDefault();
+
     if (!user) {
-      await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
           emailRedirectTo: `${location.origin}/auth/callback`,
         },
       })
+
+      if (error) {
+        setError(error.message)
+      } else {
+        // fetchUser();
+      }
     }
+    setLoading(false);
   }
 
   return (
@@ -49,6 +62,7 @@ export default function Login() {
         {!user && (
           <>
             <TextField
+              disabled={loading}
               variant="outlined"
               margin="normal"
               required
@@ -60,8 +74,10 @@ export default function Login() {
               autoFocus
               onChange={(e) => setEmail(e.target.value)}
               value={email}
+              error={Boolean(error)}
             />
             <TextField
+              disabled={loading}
               variant="outlined"
               margin="normal"
               required
@@ -73,8 +89,12 @@ export default function Login() {
               autoComplete="current-password"
               onChange={(e) => setPassword(e.target.value)}
               value={password}
+              error={Boolean(error)}
+              helperText={error}
             />
             <Button
+              type="submit"
+              disabled={loading}
               sx={{marginTop: '1em'}}
               fullWidth
               variant="contained"
