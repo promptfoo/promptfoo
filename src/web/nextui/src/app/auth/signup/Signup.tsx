@@ -2,33 +2,35 @@
 
 import React from 'react';
 import Link from 'next/link';
-import Button from '@mui/material/Button'
-import TextField from '@mui/material/TextField'
-import Container from '@mui/material/Container'
-import Typography from '@mui/material/Typography'
-import { createClientComponentClient, User } from '@supabase/auth-helpers-nextjs'
+import Button from '@mui/material/Button';
+import TextField from '@mui/material/TextField';
+import Container from '@mui/material/Container';
+import Typography from '@mui/material/Typography';
+import { useRouter } from 'next/navigation';
 
-import type { Database } from '@/types/supabase';
+import { supabase } from '@/supabase';
+
+import type { User } from '@supabase/auth-helpers-nextjs';
 
 export default function Login() {
-  const [email, setEmail] = React.useState('')
-  const [password, setPassword] = React.useState('')
-  const [error, setError] = React.useState('')
-  const [loading, setLoading] = React.useState(false)
-  const supabase = createClientComponentClient<Database>()
+  const router = useRouter();
+  const [email, setEmail] = React.useState('');
+  const [password, setPassword] = React.useState('');
+  const [error, setError] = React.useState('');
+  const [loading, setLoading] = React.useState(false);
 
-  const [user, setUser] = React.useState<User | null>(null)
+  const [user, setUser] = React.useState<User | null>(null);
 
   const fetchUser = React.useCallback(async () => {
-    const { data, error } = await supabase.auth.refreshSession()
+    const { data, error } = await supabase.auth.refreshSession();
     if (data) {
-      setUser(data.user)
+      setUser(data.user);
     }
-  }, [supabase.auth])
+  }, []);
 
   React.useEffect(() => {
-    fetchUser()
-  }, [fetchUser])
+    fetchUser();
+  }, [fetchUser]);
 
   const handleSignUp = async (event: React.FormEvent) => {
     setLoading(true);
@@ -42,16 +44,18 @@ export default function Login() {
         options: {
           emailRedirectTo: `${location.origin}/auth/callback`,
         },
-      })
+      });
 
       if (error) {
-        setError(error.message)
+        setError(error.message);
       } else {
         // fetchUser();
+        // supabase.auth.signInAsUser(data?.user);
+        router.push('/');
       }
     }
     setLoading(false);
-  }
+  };
 
   return (
     <Container component="main" maxWidth="xs">
@@ -95,7 +99,7 @@ export default function Login() {
             <Button
               type="submit"
               disabled={loading}
-              sx={{marginTop: '1em'}}
+              sx={{ marginTop: '1em' }}
               fullWidth
               variant="contained"
               color="primary"
@@ -110,5 +114,5 @@ export default function Login() {
         </p>
       </form>
     </Container>
-  )
+  );
 }

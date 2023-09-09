@@ -4,34 +4,20 @@ import Avatar from '@mui/material/Avatar';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import IconButton from '@mui/material/IconButton';
-import { createClientComponentClient, User } from '@supabase/auth-helpers-nextjs'
 
-import type { Database } from '@/types/supabase';
+import { AuthProvider, useAuth } from '@/supabase';
 
 export default function LoggedInAs() {
-  const supabase = createClientComponentClient<Database>()
-
-  const [user, setUser] = React.useState<User | null>(null)
+  console.log(useAuth());
+  const {user, logout} = useAuth();
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
-
-  const fetchUser = React.useCallback(async () => {
-    const { data, error } = await supabase.auth.refreshSession()
-    if (data) {
-      setUser(data.user)
-    }
-  }, [supabase.auth])
-
-  React.useEffect(() => {
-    fetchUser()
-  }, [fetchUser])
 
   const handleMenu = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
   };
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    fetchUser();
+    logout?.();
     handleClose();
   };
 
@@ -39,13 +25,14 @@ export default function LoggedInAs() {
     setAnchorEl(null);
   };
 
+  console.log('frickccckckck', user, logout);
+
   if (!user) {
-    return (
-      <Link href="/auth/login/">Login</Link>
-    );
+    return <Link href="/auth/login/">Login</Link>;
   }
 
   return (
+    <AuthProvider>
     <div>
       <IconButton
         edge="end"
@@ -75,6 +62,6 @@ export default function LoggedInAs() {
         <MenuItem disabled>Logged in as {user.email}</MenuItem>
         <MenuItem onClick={handleLogout}>Logout</MenuItem>
       </Menu>
-    </div>
+    </div></AuthProvider>
   );
 }
