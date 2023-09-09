@@ -1,4 +1,5 @@
 import React from 'react';
+import Link from 'next/link';
 import Avatar from '@mui/material/Avatar';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
@@ -39,7 +40,9 @@ export default function LoggedInAs() {
   };
 
   if (!user) {
-    return null;
+    return (
+      <Link href="/login/">Login</Link>
+    );
   }
 
   return (
@@ -69,7 +72,7 @@ export default function LoggedInAs() {
         open={Boolean(anchorEl)}
         onClose={handleClose}
       >
-        <MenuItem disabled>{user.email}</MenuItem>
+        <MenuItem disabled>Logged in as {user.email}</MenuItem>
         <MenuItem onClick={handleLogout}>Logout</MenuItem>
       </Menu>
     </div>
