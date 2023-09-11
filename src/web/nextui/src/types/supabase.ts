@@ -5,39 +5,6 @@ export type Json = string | number | boolean | null | { [key: string]: Json | un
 export interface Database {
   public: {
     Tables: {
-      _prisma_migrations: {
-        Row: {
-          applied_steps_count: number;
-          checksum: string;
-          finished_at: string | null;
-          id: string;
-          logs: string | null;
-          migration_name: string;
-          rolled_back_at: string | null;
-          started_at: string;
-        };
-        Insert: {
-          applied_steps_count?: number;
-          checksum: string;
-          finished_at?: string | null;
-          id: string;
-          logs?: string | null;
-          migration_name: string;
-          rolled_back_at?: string | null;
-          started_at?: string;
-        };
-        Update: {
-          applied_steps_count?: number;
-          checksum?: string;
-          finished_at?: string | null;
-          id?: string;
-          logs?: string | null;
-          migration_name?: string;
-          rolled_back_at?: string | null;
-          started_at?: string;
-        };
-        Relationships: [];
-      };
       EvaluationJob: {
         Row: {
           createdAt: string;
@@ -47,6 +14,7 @@ export interface Database {
           status: Database['public']['Enums']['JobStatus'];
           total: number;
           updatedAt: string;
+          userId: string | null;
         };
         Insert: {
           createdAt?: string;
@@ -56,6 +24,7 @@ export interface Database {
           status: Database['public']['Enums']['JobStatus'];
           total: number;
           updatedAt?: string;
+          userId?: string | null;
         };
         Update: {
           createdAt?: string;
@@ -65,12 +34,19 @@ export interface Database {
           status?: Database['public']['Enums']['JobStatus'];
           total?: number;
           updatedAt?: string;
+          userId?: string | null;
         };
         Relationships: [
           {
             foreignKeyName: 'EvaluationJob_evaluationResultId_fkey';
             columns: ['evaluationResultId'];
             referencedRelation: 'EvaluationResult';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'EvaluationJob_userId_fkey';
+            columns: ['userId'];
+            referencedRelation: 'users';
             referencedColumns: ['id'];
           },
         ];
@@ -82,6 +58,7 @@ export interface Database {
           id: string;
           results: Json;
           updatedAt: string;
+          userId: string | null;
           version: number;
         };
         Insert: {
@@ -90,6 +67,7 @@ export interface Database {
           id?: string;
           results: Json;
           updatedAt?: string;
+          userId?: string | null;
           version: number;
         };
         Update: {
@@ -98,9 +76,17 @@ export interface Database {
           id?: string;
           results?: Json;
           updatedAt?: string;
+          userId?: string | null;
           version?: number;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: 'EvaluationResult_userId_fkey';
+            columns: ['userId'];
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+        ];
       };
     };
     Views: {

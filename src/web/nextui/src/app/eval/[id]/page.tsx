@@ -1,6 +1,8 @@
 import React from 'react';
 import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
+import { cookies } from 'next/headers';
+import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
 
 import { API_BASE_URL } from '@/constants';
 import { getResult } from '@/database';
@@ -38,7 +40,8 @@ export default async function Page({ params }: { params: { id: string } }) {
     ]);
   } else if (decodedId.startsWith('remote:')) {
     const id = decodedId.slice('remote:'.length);
-    const result = await getResult(id);
+    const supabase = createServerComponentClient({ cookies });
+    const result = await getResult(supabase, id);
     sharedResults = {
       data: {
         version: result.version,

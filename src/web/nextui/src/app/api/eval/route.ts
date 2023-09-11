@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 
 import promptfoo from '@/../../../index';
 
@@ -8,7 +10,9 @@ import { createJob, createResult, updateJob } from '@/database';
 import type { EvaluateTestSuite } from '@/../../../types';
 
 async function runWithDatabase(testSuite: EvaluateTestSuite) {
-  const job = await createJob();
+  const supabase = createRouteHandlerClient({ cookies });
+
+  const job = await createJob(supabase);
 
   promptfoo
     .evaluate(
@@ -17,14 +21,14 @@ async function runWithDatabase(testSuite: EvaluateTestSuite) {
       }),
       {
         progressCallback: (progress, total) => {
-          updateJob(job.id, progress, total);
+          updateJob(supabase, job.id, progress, total);
           console.log(`[${job.id}] ${progress}/${total}`);
         },
       },
     )
     .then(async (result) => {
       console.log(`[${job.id}] Completed`);
-      await createResult(job.id, testSuite, result);
+      await createResult(supabase, job.id, testSuite, result);
     });
 
   return NextResponse.json({ id: job.id });

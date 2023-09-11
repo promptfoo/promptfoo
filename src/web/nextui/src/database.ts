@@ -1,6 +1,6 @@
 import { EvaluateSummary, EvaluateTestSuite } from '@/../../../types';
-import { supabase } from '@/supabase-server';
 
+import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/types/supabase';
 
 export type EvaluationJob = Database['public']['Tables']['EvaluationJob']['Row'];
@@ -10,11 +10,15 @@ export enum JobStatus {
   COMPLETE = 'COMPLETE',
 }
 
-export async function createJob(): Promise<EvaluationJob> {
+export async function createJob(supabase: SupabaseClient): Promise<EvaluationJob> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   const { data: job, error } = await supabase
     .from('EvaluationJob')
     .insert([
       {
+        userId: user?.id,
         status: JobStatus.IN_PROGRESS,
         progress: 0,
         total: 0,
@@ -27,7 +31,12 @@ export async function createJob(): Promise<EvaluationJob> {
   return job;
 }
 
-export async function updateJob(id: string, progress: number, total: number) {
+export async function updateJob(
+  supabase: SupabaseClient,
+  id: string,
+  progress: number,
+  total: number,
+) {
   const { error } = await supabase
     .from('EvaluationJob')
     .update({
@@ -39,14 +48,14 @@ export async function updateJob(id: string, progress: number, total: number) {
   if (error) throw error;
 }
 
-export async function getJob(id: string): Promise<EvaluationJob> {
+export async function getJob(supabase: SupabaseClient, id: string): Promise<EvaluationJob> {
   const { data: job, error } = await supabase.from('EvaluationJob').select().eq('id', id).single();
 
   if (error) throw error;
   return job;
 }
 
-export async function getResult(id: string): Promise<EvaluationResult> {
+export async function getResult(supabase: SupabaseClient, id: string): Promise<EvaluationResult> {
   const { data: result, error } = await supabase
     .from('EvaluationResult')
     .select()
@@ -58,14 +67,19 @@ export async function getResult(id: string): Promise<EvaluationResult> {
 }
 
 export async function createResult(
+  supabase: SupabaseClient,
   jobId: string,
   config: EvaluateTestSuite,
   results: EvaluateSummary,
 ): Promise<EvaluationResult> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   const { data: result, error } = await supabase
     .from('EvaluationResult')
     .insert([
       {
+        userId: user?.id,
         id: jobId, // eval id matches job id
         version: 1,
         config:
