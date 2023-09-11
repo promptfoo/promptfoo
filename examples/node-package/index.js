@@ -37,6 +37,12 @@ import promptfoo from '../../dist/src/index.js';
         ],
       },
     ],
+  }, {
+    // EvaluateOptions
+    maxConcurrency: 2,
+    progressCallback: (progress, total) => {
+      console.log(`PROGRESS: ${progress} / ${total}`);
+    },
   });
   console.log('RESULTS:');
   console.log(JSON.stringify(results, null, 2));
