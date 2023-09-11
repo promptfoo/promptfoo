@@ -51,11 +51,11 @@ export interface Database {
         Insert: {
           createdAt?: string;
           evaluationResultId?: string | null;
-          id: string;
+          id?: string;
           progress: number;
           status: Database['public']['Enums']['JobStatus'];
           total: number;
-          updatedAt: string;
+          updatedAt?: string;
         };
         Update: {
           createdAt?: string;
@@ -87,9 +87,9 @@ export interface Database {
         Insert: {
           config: Json;
           createdAt?: string;
-          id: string;
+          id?: string;
           results: Json;
-          updatedAt: string;
+          updatedAt?: string;
           version: number;
         };
         Update: {

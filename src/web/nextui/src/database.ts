@@ -1,44 +1,59 @@
-import { Prisma, PrismaClient, EvaluationJob, EvaluationResult, JobStatus } from '@prisma/client';
-
 import { EvaluateSummary, EvaluateTestSuite } from '@/../../../types';
+import { supabase } from '@/supabase-server';
 
-export { JobStatus } from '@prisma/client';
-export type { EvaluationJob } from '@prisma/client';
+import type { Database } from '@/types/supabase';
 
-const prisma = new PrismaClient();
+export type EvaluationJob = Database['public']['Tables']['EvaluationJob']['Row'];
+export type EvaluationResult = Database['public']['Tables']['EvaluationResult']['Row'];
+export enum JobStatus {
+  IN_PROGRESS = 'IN_PROGRESS',
+  COMPLETE = 'COMPLETE',
+}
 
 export async function createJob(): Promise<EvaluationJob> {
-  const job = await prisma.evaluationJob.create({
-    data: {
-      status: JobStatus.IN_PROGRESS,
-      progress: 0,
-      total: 0,
-    },
-  });
+  const { data: job, error } = await supabase
+    .from('EvaluationJob')
+    .insert([
+      {
+        status: JobStatus.IN_PROGRESS,
+        progress: 0,
+        total: 0,
+      },
+    ])
+    .select()
+    .single();
+
+  if (error) throw error;
   return job;
 }
 
 export async function updateJob(id: string, progress: number, total: number) {
-  await prisma.evaluationJob.update({
-    where: { id },
-    data: {
+  const { error } = await supabase
+    .from('EvaluationJob')
+    .update({
       progress,
       total,
-    },
-  });
+    })
+    .eq('id', id);
+
+  if (error) throw error;
 }
 
 export async function getJob(id: string): Promise<EvaluationJob> {
-  const job = await prisma.evaluationJob.findUniqueOrThrow({
-    where: { id },
-  });
+  const { data: job, error } = await supabase.from('EvaluationJob').select().eq('id', id).single();
+
+  if (error) throw error;
   return job;
 }
 
 export async function getResult(id: string): Promise<EvaluationResult> {
-  const result = await prisma.evaluationResult.findUniqueOrThrow({
-    where: { id },
-  });
+  const { data: result, error } = await supabase
+    .from('EvaluationResult')
+    .select()
+    .eq('id', id)
+    .single();
+
+  if (error) throw error;
   return result;
 }
 
@@ -47,26 +62,32 @@ export async function createResult(
   config: EvaluateTestSuite,
   results: EvaluateSummary,
 ): Promise<EvaluationResult> {
-  const result = await prisma.evaluationResult.create({
-    data: {
-      id: jobId, // eval id matches job id
-      version: 1,
-      config: config as unknown as Prisma.JsonObject,
-      results: results as unknown as Prisma.JsonObject,
-    },
-  });
-
-  await prisma.evaluationJob.update({
-    where: { id: jobId },
-    data: {
-      status: JobStatus.COMPLETE,
-      evaluationResult: {
-        connect: {
-          id: jobId,
-        },
+  const { data: result, error } = await supabase
+    .from('EvaluationResult')
+    .insert([
+      {
+        id: jobId, // eval id matches job id
+        version: 1,
+        config:
+          config as unknown as Database['public']['Tables']['EvaluationResult']['Insert']['config'],
+        results:
+          results as unknown as Database['public']['Tables']['EvaluationResult']['Insert']['results'],
       },
-    },
-  });
+    ])
+    .select()
+    .single();
+
+  if (error) throw error;
+
+  const { error: jobUpdateError } = await supabase
+    .from('EvaluationJob')
+    .update({
+      status: JobStatus.COMPLETE,
+      evaluationResultId: jobId,
+    })
+    .eq('id', jobId);
+
+  //if (jobUpdateError) throw jobUpdateError;
 
   return result;
 }

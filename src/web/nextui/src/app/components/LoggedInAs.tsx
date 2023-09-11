@@ -5,7 +5,7 @@ import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import IconButton from '@mui/material/IconButton';
 
-import { useAuth } from '@/supabase';
+import { useAuth } from '@/supabase-client';
 
 export default function LoggedInAs() {
   const { user, logout } = useAuth();

@@ -9,7 +9,7 @@ import { ThemeProvider, createTheme } from '@mui/material/styles';
 import Logo from './Logo';
 import LoggedInAs from './LoggedInAs';
 import DarkMode from './DarkMode';
-import { AuthProvider } from '@/supabase';
+import { AuthProvider } from '@/supabase-client';
 
 import './PageShell.css';
 

@@ -8,7 +8,7 @@ import Container from '@mui/material/Container';
 import Typography from '@mui/material/Typography';
 import { useRouter } from 'next/navigation';
 
-import { supabase } from '@/supabase';
+import { supabase } from '@/supabase-client';
 
 import type { User } from '@supabase/auth-helpers-nextjs';
 
