@@ -1,15 +1,19 @@
 'use client';
 
 import * as React from 'react';
+import invariant from 'tiny-invariant';
 import CircularProgress from '@mui/material/CircularProgress';
 import { io as SocketIOClient } from 'socket.io-client';
 import { useRouter } from 'next/navigation';
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 
 import ResultsView from './ResultsView';
 import { API_BASE_URL, IS_RUNNING_LOCALLY } from '@/constants';
 import { useStore } from './store';
 
-import type { EvalTable, SharedResults } from './types';
+import type {EvaluateSummary, UnifiedConfig, SharedResults} from '@/../../../types';
+import type {Database} from '@/types/supabase';
+import type { EvalTable } from './types';
 
 import './Eval.css';
 
@@ -31,9 +35,7 @@ export default function Eval({
   const [recentFiles, setRecentFiles] = React.useState<string[]>(defaultRecentFiles || []);
 
   const fetchRecentFiles = async () => {
-    if (!IS_RUNNING_LOCALLY) {
-      return;
-    }
+    invariant(IS_RUNNING_LOCALLY, 'Cannot fetch recent files when not running locally');
     const resp = await fetch(`${API_BASE_URL}/results`);
     const body = await resp.json();
     setRecentFiles(body.data);
@@ -88,7 +90,24 @@ export default function Eval({
         socket.disconnect();
       };
     } else {
-      alert('No preloaded data and not running locally. Configuration error?');
+      const doIt = async () => {
+        const supabase = createClientComponentClient<Database>();
+        const {data: {user}} = await supabase.auth.getUser();
+        if (!user) {
+          // TODO(ian): Logged out state
+          throw new Error('User not logged in');
+        }
+        const {data,error} = await supabase.from('EvaluationResult').select().eq('userId', user.id).limit(20);
+        if (data) {
+          setRecentFiles(data.map(r => `eval-${r.createdAt}.json`));
+          const results = data[0].results as unknown as EvaluateSummary;
+          const config = data[0].config as unknown as Partial<UnifiedConfig>;
+          setTable(results.table);
+          setConfig(config);
+          setLoaded(true);
+        }
+      };
+      doIt();
     }
   }, [fetchId, setTable, setConfig, preloadedData]);
 
