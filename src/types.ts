@@ -118,6 +118,7 @@ export interface EvaluateOptions {
   generateSuggestions?: boolean;
   repeat?: number;
   delay?: number;
+  useCache?: boolean;
 }
 
 export interface Prompt {

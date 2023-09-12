@@ -3,6 +3,7 @@ import invariant from 'tiny-invariant';
 import assertions from './assertions';
 import providers, { loadApiProvider } from './providers';
 import telemetry from './telemetry';
+import { disableCache } from './cache';
 import { evaluate as doEvaluate } from './evaluator';
 import { loadApiProviders } from './providers';
 import { readTests, writeLatestResults, writeOutput } from './util';
@@ -49,8 +50,13 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
     }
   }
 
+  // Other settings
+  if (options.useCache === false) {
+    disableCache();
+  }
   telemetry.maybeShowNotice();
 
+  // Run the eval!
   const ret = await doEvaluate(constructedTestSuite, options);
 
   if (testSuite.outputPath) {
