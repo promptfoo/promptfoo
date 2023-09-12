@@ -293,7 +293,7 @@ export interface TestSuite {
 
 export type ProviderId = string;
 
-export type ProviderFunction = (prompt: string) => Promise<ProviderResponse>;
+export type ProviderFunction = ApiProvider['callApi'];
 
 export type ProviderOptionsMap = Record<ProviderId, ProviderOptions>;
 
