@@ -55,6 +55,20 @@ export default function Eval({
       setTable(preloadedData.data.results?.table as EvalTable);
       setConfig(preloadedData.data.config);
       setLoaded(true);
+      if (!IS_RUNNING_LOCALLY) {
+        const doIt = async () => {
+          const supabase = createClientComponentClient<Database>();
+          const {data: {user}} = await supabase.auth.getUser();
+          if (!user) {
+            throw new Error('User not logged in');
+          }
+          const {data,error} = await supabase.from('EvaluationResult').select().eq('userId', user.id).limit(20);
+          if (data) {
+            setRecentFiles(data.map(r => `eval-${r.createdAt}.json`));
+          }
+        };
+        doIt();
+      }
     } else if (fetchId) {
       const doIt = async () => {
         const response = await fetch(`https://api.promptfoo.dev/eval/${fetchId}`);
