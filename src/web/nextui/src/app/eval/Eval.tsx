@@ -10,7 +10,6 @@ import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import ResultsView from './ResultsView';
 import { API_BASE_URL, IS_RUNNING_LOCALLY } from '@/constants';
 import { useStore } from './store';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 
 import type {EvaluateSummary, UnifiedConfig, SharedResults} from '@/../../../types';
 import type {Database} from '@/types/supabase';
@@ -18,17 +17,14 @@ import type { EvalTable } from './types';
 
 import './Eval.css';
 
-async function fetchRecentFilesFromSupabase() {
+async function fetchEvalsFromSupabase(): Promise<{id: string, createdAt: string}[]> {
   const supabase = createClientComponentClient<Database>();
   const {data: {user}} = await supabase.auth.getUser();
   if (!user) {
     throw new Error('User not logged in');
   }
-  const {data,error} = await supabase.from('EvaluationResult').select().eq('userId', user.id).limit(20);
-  if (data) {
-    return data.map(r => `eval-${r.createdAt}.json`);
-  }
-  return [];
+  const {data,error} = await supabase.from('EvaluationResult').select('id, createdAt').eq('userId', user.id).limit(100);
+  return data || [];
 }
 
 interface EvalOptions {
@@ -70,7 +66,9 @@ export default function Eval({
       setConfig(preloadedData.data.config);
       setLoaded(true);
       if (!IS_RUNNING_LOCALLY) {
-        fetchRecentFilesFromSupabase().then(setRecentFiles);
+        fetchEvalsFromSupabase().then(records => {
+          setRecentFiles(records.map(r => `eval-${r.createdAt}.json`));
+        });
       }
     } else if (fetchId) {
       const doIt = async () => {
@@ -107,8 +105,8 @@ export default function Eval({
         socket.disconnect();
       };
     } else {
-      fetchRecentFilesFromSupabase().then((files) => {
-        setRecentFiles(files);
+      fetchEvalsFromSupabase().then((records) => {
+        setRecentFiles(records.map(r => `eval-${r.createdAt}.json`));
         const results = files[0].results as unknown as EvaluateSummary;
         const config = files[0].config as unknown as Partial<UnifiedConfig>;
         setTable(results.table);
