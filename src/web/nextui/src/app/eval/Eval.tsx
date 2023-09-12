@@ -27,6 +27,16 @@ async function fetchEvalsFromSupabase(): Promise<{id: string, createdAt: string}
   return data || [];
 }
 
+async function fetchEvalFromSupabase(id: string): Promise<EvaluateSummary | null> {
+  const supabase = createClientComponentClient<Database>();
+  const { data, error } = await supabase
+    .from('EvaluationResult')
+    .select('*')
+    .eq('id', id)
+    .single();
+  return data || null;
+}
+
 interface EvalOptions {
   fetchId?: string;
   preloadedData?: SharedResults;
