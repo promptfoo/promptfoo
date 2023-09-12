@@ -5,8 +5,9 @@ import promptfoo from '../../dist/src/index.js';
     prompts: ['Rephrase this in French: {{body}}', 'Rephrase this like a pirate: {{body}}'],
     providers: [
       'openai:gpt-3.5-turbo',
-      (prompt) => {
+      (prompt, context) => {
         // Call LLM here...
+        console.log(`Prompt: ${prompt}, vars: ${JSON.stringify(context.vars)}`);
         return {
           output: '<LLM output>',
         };
