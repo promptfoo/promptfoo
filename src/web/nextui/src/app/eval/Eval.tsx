@@ -81,6 +81,8 @@ export default function Eval({
     }
   };
 
+  const [defaultEvalId, setDefaultEvalId] = React.useState<string>(recentEvals[0]?.id || '');
+
   React.useEffect(() => {
     if (preloadedData) {
       setTable(preloadedData.data.results?.table as EvalTable);
@@ -158,5 +160,5 @@ export default function Eval({
     );
   }
 
-  return <ResultsView recentEvals={recentEvals} onRecentEvalSelected={handleRecentEvalSelection} />;
+  return <ResultsView defaultEvalId={defaultEvalId} recentEvals={recentEvals} onRecentEvalSelected={handleRecentEvalSelection} />;
 }
