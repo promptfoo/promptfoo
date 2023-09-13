@@ -63,11 +63,12 @@ export default function Eval({
     recentEvalsProp || [],
   );
 
-  const fetchRecentEvals = async () => {
+  const fetchRecentFileEvals = async () => {
     invariant(IS_RUNNING_LOCALLY, 'Cannot fetch recent files when not running locally');
     const resp = await fetch(`${API_BASE_URL}/results`);
     const body = await resp.json();
     setRecentEvals(body.data);
+    return body.data;
   };
 
   const handleRecentEvalSelection = async (id: string) => {
@@ -85,7 +86,7 @@ export default function Eval({
   };
 
   const [defaultEvalId, setDefaultEvalId] = React.useState<string>(
-    defaultEvalIdProp || recentEvals[0]?.id || '',
+    defaultEvalIdProp || recentEvals[0]?.id,
   );
 
   React.useEffect(() => {
@@ -114,14 +115,18 @@ export default function Eval({
         setLoaded(true);
         setTable(data.results.table);
         setConfig(data.config);
-        fetchRecentEvals();
+        fetchRecentFileEvals().then((newRecentEvals) => {
+          setDefaultEvalId(newRecentEvals[0]?.id);
+        });
       });
 
       socket.on('update', (data) => {
         console.log('Received data update', data);
         setTable(data.results.table);
         setConfig(data.config);
-        fetchRecentEvals();
+        fetchRecentFileEvals().then((newRecentEvals) => {
+          setDefaultEvalId(newRecentEvals[0]?.id);
+        });
       });
 
       return () => {
@@ -149,7 +154,7 @@ export default function Eval({
         }
       });
     }
-  }, [fetchId, setTable, setConfig, preloadedData]);
+  }, [fetchId, setTable, setConfig, preloadedData, setDefaultEvalId]);
 
   if (failed) {
     return <div className="loading">404 Eval not found</div>;
