@@ -39,6 +39,7 @@ export default async function Page({ params }: { params: { id: string } }) {
       response2.json().then((res) => res.data),
     ]);
   } else if (decodedId.startsWith('remote:')) {
+    // Load this eval
     const id = decodedId.slice('remote:'.length);
     const supabase = createServerComponentClient({ cookies });
     const result = await getResult(supabase, id);
@@ -49,6 +50,22 @@ export default async function Page({ params }: { params: { id: string } }) {
         config: result.config as unknown as EvaluateTestSuite,
       },
     };
+
+    // Fetch default evals
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user) {
+      const { data, error } = await supabase
+        .from('EvaluationResult')
+        .select('id, createdAt')
+        .eq('userId', user.id)
+        .order('createdAt', { ascending: false })
+        .limit(100);
+      if (data) {
+        recentFiles = data.map((row) => ({ id: row.id, label: row.createdAt }));
+      }
+    }
   } else {
     // Cloudflare KV
     // Next.js chokes on large evals, so the client will fetch them separately.

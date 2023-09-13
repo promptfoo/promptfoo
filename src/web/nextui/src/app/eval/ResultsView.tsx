@@ -41,28 +41,11 @@ const ResponsiveStack = styled(Stack)(({ theme }) => ({
   },
 }));
 
-function filenameToDate(filename: string) {
-  const dateString = filename.slice('eval-'.length, filename.length - '.json'.length);
-
-  // Replace hyphens with colons where necessary (Windows compatibility).
-  const dateParts = dateString.split('T');
-  const timePart = dateParts[1].replace(/-/g, ':');
-  const formattedDateString = `${dateParts[0]}T${timePart}`;
-
-  const date = new Date(formattedDateString);
-  return date.toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    timeZoneName: 'short',
-  });
-}
-
 interface ResultsViewProps {
-  recentFiles: string[];
+  recentFiles: {
+    id: string;
+    label: string;
+  }[];
   onRecentFileSelected: (file: string) => void;
 }
 
@@ -188,12 +171,12 @@ export default function ResultsView({ recentFiles, onRecentFileSelected }: Resul
                   key={recentFiles.join(',')}
                   className="recent-files"
                   label="Previous runs"
-                  defaultValue={recentFiles[0]}
+                  defaultValue={recentFiles[0].id}
                   onChange={(e: SelectChangeEvent) => onRecentFileSelected(e.target.value)}
                 >
                   {recentFiles.map((file) => (
-                    <MenuItem key={file} value={file}>
-                      {filenameToDate(file)}
+                    <MenuItem key={file.id} value={file.id}>
+                      {file.label}
                     </MenuItem>
                   ))}
                 </Select>

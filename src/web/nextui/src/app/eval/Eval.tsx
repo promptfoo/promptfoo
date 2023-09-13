@@ -5,42 +5,47 @@ import invariant from 'tiny-invariant';
 import CircularProgress from '@mui/material/CircularProgress';
 import { io as SocketIOClient } from 'socket.io-client';
 import { useRouter } from 'next/navigation';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 
 import ResultsView from './ResultsView';
 import { API_BASE_URL, IS_RUNNING_LOCALLY } from '@/constants';
 import { useStore } from './store';
 
-import type {EvaluateSummary, UnifiedConfig, SharedResults} from '@/../../../types';
-import type {Database} from '@/types/supabase';
+import type { EvaluateSummary, UnifiedConfig, SharedResults } from '@/../../../types';
+import type { Database } from '@/types/supabase';
 import type { EvalTable } from './types';
 
 import './Eval.css';
 
-async function fetchEvalsFromSupabase(): Promise<{id: string, createdAt: string}[]> {
+async function fetchEvalsFromSupabase(): Promise<{ id: string; createdAt: string }[]> {
   const supabase = createClientComponentClient<Database>();
-  const {data: {user}} = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) {
     throw new Error('User not logged in');
   }
-  const {data,error} = await supabase.from('EvaluationResult').select('id, createdAt').eq('userId', user.id).limit(100);
+  const { data, error } = await supabase
+    .from('EvaluationResult')
+    .select('id, createdAt')
+    .eq('userId', user.id)
+    .order('createdAt', { ascending: false })
+    .limit(100);
   return data || [];
 }
 
-async function fetchEvalFromSupabase(id: string): Promise<EvaluateSummary | null> {
+async function fetchEvalFromSupabase(
+  id: string,
+): Promise<Database['public']['Tables']['EvaluationResult']['Row'] | null> {
   const supabase = createClientComponentClient<Database>();
-  const { data, error } = await supabase
-    .from('EvaluationResult')
-    .select('*')
-    .eq('id', id)
-    .single();
-  return data || null;
+  const { data, error } = await supabase.from('EvaluationResult').select('*').eq('id', id).single();
+  return data;
 }
 
 interface EvalOptions {
   fetchId?: string;
   preloadedData?: SharedResults;
-  recentFiles?: string[];
+  recentFiles?: { id: string; label: string }[];
 }
 
 export default function Eval({
@@ -52,7 +57,9 @@ export default function Eval({
   const { table, setTable, setConfig } = useStore();
   const [loaded, setLoaded] = React.useState<boolean>(false);
   const [failed, setFailed] = React.useState<boolean>(false);
-  const [recentFiles, setRecentFiles] = React.useState<string[]>(defaultRecentFiles || []);
+  const [recentFiles, setRecentFiles] = React.useState<{ id: string; label: string }[]>(
+    defaultRecentFiles || [],
+  );
 
   const fetchRecentFiles = async () => {
     invariant(IS_RUNNING_LOCALLY, 'Cannot fetch recent files when not running locally');
@@ -61,13 +68,25 @@ export default function Eval({
     setRecentFiles(body.data);
   };
 
-  const handleRecentFileSelection = async (file: string) => {
-    const resp = await fetch(`${API_BASE_URL}/results/${file}`);
-    const body = await resp.json();
-    setTable(body.data.results.table);
-    setConfig(body.data.config);
-    // TODO(ian): This requires next.js standalone server
-    // router.push(`/eval/local:${encodeURIComponent(file)}`);
+  const handleRecentFileSelection = async (id: string) => {
+    if (IS_RUNNING_LOCALLY) {
+      const resp = await fetch(`${API_BASE_URL}/results/${id}`);
+      const body = await resp.json();
+      setTable(body.data.results.table);
+      setConfig(body.data.config);
+      // TODO(ian): This requires next.js standalone server
+      // router.push(`/eval/local:${encodeURIComponent(file)}`);
+    } else {
+      /*
+      const evalRun = await fetchEvalFromSupabase(id);
+      invariant(evalRun, 'Eval not found');
+      const results = evalRun.results as unknown as EvaluateSummary;
+      const config = evalRun.config as unknown as Partial<UnifiedConfig>;
+      setTable(results.table);
+      setConfig(config);
+      */
+      router.push(`/eval/remote:${encodeURIComponent(id)}`);
+    }
   };
 
   React.useEffect(() => {
@@ -75,11 +94,6 @@ export default function Eval({
       setTable(preloadedData.data.results?.table as EvalTable);
       setConfig(preloadedData.data.config);
       setLoaded(true);
-      if (!IS_RUNNING_LOCALLY) {
-        fetchEvalsFromSupabase().then(records => {
-          setRecentFiles(records.map(r => `eval-${r.createdAt}.json`));
-        });
-      }
     } else if (fetchId) {
       const doIt = async () => {
         const response = await fetch(`https://api.promptfoo.dev/eval/${fetchId}`);
@@ -115,13 +129,24 @@ export default function Eval({
         socket.disconnect();
       };
     } else {
+      // TODO(ian): Move this to server
       fetchEvalsFromSupabase().then((records) => {
-        setRecentFiles(records.map(r => `eval-${r.createdAt}.json`));
-        const results = files[0].results as unknown as EvaluateSummary;
-        const config = files[0].config as unknown as Partial<UnifiedConfig>;
-        setTable(results.table);
-        setConfig(config);
-        setLoaded(true);
+        setRecentFiles(
+          records.map((r) => ({
+            id: r.id,
+            label: r.createdAt,
+          })),
+        );
+        if (records.length > 0) {
+          fetchEvalFromSupabase(records[0].id).then((evalRun) => {
+            invariant(evalRun, 'Eval not found');
+            const results = evalRun.results as unknown as EvaluateSummary;
+            const config = evalRun.config as unknown as Partial<UnifiedConfig>;
+            setTable(results.table);
+            setConfig(config);
+            setLoaded(true);
+          });
+        }
       });
     }
   }, [fetchId, setTable, setConfig, preloadedData]);

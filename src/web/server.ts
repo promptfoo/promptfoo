@@ -26,6 +26,26 @@ interface Job {
 
 const evalJobs = new Map<string, Job>();
 
+function filenameToDate(filename: string) {
+  const dateString = filename.slice('eval-'.length, filename.length - '.json'.length);
+
+  // Replace hyphens with colons where necessary (Windows compatibility).
+  const dateParts = dateString.split('T');
+  const timePart = dateParts[1].replace(/-/g, ':');
+  const formattedDateString = `${dateParts[0]}T${timePart}`;
+
+  const date = new Date(formattedDateString);
+  return date.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    timeZoneName: 'short',
+  });
+}
+
 export function startServer(port = 15500, skipConfirmation = false) {
   const app = express();
 
@@ -70,7 +90,9 @@ export function startServer(port = 15500, skipConfirmation = false) {
   app.get('/results', (req, res) => {
     const previousResults = listPreviousResults();
     previousResults.reverse();
-    res.json({ data: previousResults });
+    res.json({
+      data: previousResults.map((filename) => ({ id: filename, label: filenameToDate(filename) })),
+    });
   });
 
   app.post('/api/eval', (req, res) => {
