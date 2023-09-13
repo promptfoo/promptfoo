@@ -22,6 +22,7 @@ export async function generateStaticParams() {
 export default async function Page({ params }: { params: { id: string } }) {
   let sharedResults: SharedResults;
   let recentFiles;
+  let defaultEvalId: string | undefined;
   const decodedId = decodeURIComponent(params.id);
   if (decodedId.startsWith('local:')) {
     // Load local file and list of recent files in parallel
@@ -40,7 +41,10 @@ export default async function Page({ params }: { params: { id: string } }) {
     ]);
   } else if (decodedId.startsWith('remote:')) {
     // Load this eval
+    // TODO(ian): Does this also choke on large evals?
     const id = decodedId.slice('remote:'.length);
+    defaultEvalId = id;
+
     const supabase = createServerComponentClient({ cookies });
     const result = await getResult(supabase, id);
     sharedResults = {
@@ -71,5 +75,7 @@ export default async function Page({ params }: { params: { id: string } }) {
     // Next.js chokes on large evals, so the client will fetch them separately.
     return <Eval fetchId={params.id} />;
   }
-  return <Eval preloadedData={sharedResults} recentEvals={recentFiles} />;
+  return (
+    <Eval preloadedData={sharedResults} recentEvals={recentFiles} defaultEvalId={defaultEvalId} />
+  );
 }

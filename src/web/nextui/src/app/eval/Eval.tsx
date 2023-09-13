@@ -46,19 +46,21 @@ interface EvalOptions {
   fetchId?: string;
   preloadedData?: SharedResults;
   recentEvals?: { id: string; label: string }[];
+  defaultEvalId?: string;
 }
 
 export default function Eval({
   fetchId,
   preloadedData,
-  recentEvals: defaultRecentEvals,
+  recentEvals: recentEvalsProp,
+  defaultEvalId: defaultEvalIdProp,
 }: EvalOptions) {
   const router = useRouter();
   const { table, setTable, setConfig } = useStore();
   const [loaded, setLoaded] = React.useState<boolean>(false);
   const [failed, setFailed] = React.useState<boolean>(false);
   const [recentEvals, setRecentEvals] = React.useState<{ id: string; label: string }[]>(
-    defaultRecentEvals || [],
+    recentEvalsProp || [],
   );
 
   const fetchRecentEvals = async () => {
@@ -77,11 +79,14 @@ export default function Eval({
       // TODO(ian): This requires next.js standalone server
       // router.push(`/eval/local:${encodeURIComponent(file)}`);
     } else {
+      setLoaded(false);
       router.push(`/eval/remote:${encodeURIComponent(id)}`);
     }
   };
 
-  const [defaultEvalId, setDefaultEvalId] = React.useState<string>(recentEvals[0]?.id || '');
+  const [defaultEvalId, setDefaultEvalId] = React.useState<string>(
+    defaultEvalIdProp || recentEvals[0]?.id || '',
+  );
 
   React.useEffect(() => {
     if (preloadedData) {
@@ -136,6 +141,7 @@ export default function Eval({
             invariant(evalRun, 'Eval not found');
             const results = evalRun.results as unknown as EvaluateSummary;
             const config = evalRun.config as unknown as Partial<UnifiedConfig>;
+            setDefaultEvalId(records[0].id);
             setTable(results.table);
             setConfig(config);
             setLoaded(true);
@@ -160,5 +166,11 @@ export default function Eval({
     );
   }
 
-  return <ResultsView defaultEvalId={defaultEvalId} recentEvals={recentEvals} onRecentEvalSelected={handleRecentEvalSelection} />;
+  return (
+    <ResultsView
+      defaultEvalId={defaultEvalId}
+      recentEvals={recentEvals}
+      onRecentEvalSelected={handleRecentEvalSelection}
+    />
+  );
 }

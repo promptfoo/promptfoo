@@ -47,9 +47,14 @@ interface ResultsViewProps {
     label: string;
   }[];
   onRecentEvalSelected: (file: string) => void;
+  defaultEvalId?: string;
 }
 
-export default function ResultsView({ recentEvals, onRecentEvalSelected }: ResultsViewProps) {
+export default function ResultsView({
+  recentEvals,
+  onRecentEvalSelected,
+  defaultEvalId,
+}: ResultsViewProps) {
   const router = useRouter();
   const { table, config } = useResultsViewStore();
   const { setStateFromConfig } = useMainStore();
@@ -171,7 +176,7 @@ export default function ResultsView({ recentEvals, onRecentEvalSelected }: Resul
                   key={recentEvals.join(',')}
                   className="recent-files"
                   label="Previous runs"
-                  defaultValue={recentEvals[0].id}
+                  defaultValue={defaultEvalId}
                   onChange={(e: SelectChangeEvent) => onRecentEvalSelected(e.target.value)}
                 >
                   {recentEvals.map((file) => (
