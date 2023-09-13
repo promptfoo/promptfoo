@@ -22,9 +22,7 @@ async function fetchEvalsFromSupabase(): Promise<{ id: string; createdAt: string
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) {
-    throw new Error('User not logged in');
-  }
+  invariant(user, 'User not logged in');
   const { data, error } = await supabase
     .from('EvaluationResult')
     .select('id, createdAt')
