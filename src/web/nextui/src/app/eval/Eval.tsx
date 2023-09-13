@@ -26,7 +26,7 @@ async function fetchEvalsFromSupabase(): Promise<{ id: string; createdAt: string
   const { data, error } = await supabase
     .from('EvaluationResult')
     .select('id, createdAt')
-    .eq('userId', user.id)
+    .eq('user_id', user.id)
     .order('createdAt', { ascending: false })
     .limit(100);
   return data || [];

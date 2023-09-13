@@ -21,7 +21,7 @@ export async function generateStaticParams() {
 
 export default async function Page({ params }: { params: { id: string } }) {
   let sharedResults: SharedResults;
-  let recentFiles;
+  let recentEvals: { id: string; label: string }[] = [];
   let defaultEvalId: string | undefined;
   const decodedId = decodeURIComponent(params.id);
   if (decodedId.startsWith('local:')) {
@@ -35,7 +35,7 @@ export default async function Page({ params }: { params: { id: string } }) {
       notFound();
     }
 
-    [sharedResults, recentFiles] = await Promise.all([
+    [sharedResults, recentEvals] = await Promise.all([
       response.json(),
       response2.json().then((res) => res.data),
     ]);
@@ -63,11 +63,11 @@ export default async function Page({ params }: { params: { id: string } }) {
       const { data, error } = await supabase
         .from('EvaluationResult')
         .select('id, createdAt')
-        .eq('userId', user.id)
+        .eq('user_id', user.id)
         .order('createdAt', { ascending: false })
         .limit(100);
       if (data) {
-        recentFiles = data.map((row) => ({ id: row.id, label: row.createdAt }));
+        recentEvals = data.map((row) => ({ id: row.id, label: row.createdAt }));
       }
     }
   } else {
@@ -76,6 +76,6 @@ export default async function Page({ params }: { params: { id: string } }) {
     return <Eval fetchId={params.id} />;
   }
   return (
-    <Eval preloadedData={sharedResults} recentEvals={recentFiles} defaultEvalId={defaultEvalId} />
+    <Eval preloadedData={sharedResults} recentEvals={recentEvals} defaultEvalId={defaultEvalId} />
   );
 }

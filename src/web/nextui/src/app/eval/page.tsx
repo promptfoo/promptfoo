@@ -4,7 +4,7 @@ import { cookies } from 'next/headers';
 import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
 
 import Eval from './Eval';
-import {IS_RUNNING_LOCALLY} from '@/constants';
+import { IS_RUNNING_LOCALLY } from '@/constants';
 
 export default async function Page() {
   if (!IS_RUNNING_LOCALLY) {
@@ -16,8 +16,8 @@ export default async function Page() {
     if (!user) {
       return (
         <div style={{ textAlign: 'center' }}>
-          <Link href="/auth/login">Log in</Link> or <Link href="/auth/signup">Sign Up</Link> to view
-          past evals.
+          <Link href="/auth/login">Log in</Link> or <Link href="/auth/signup">Sign Up</Link> to save
+          and view past evals.
         </div>
       );
     }

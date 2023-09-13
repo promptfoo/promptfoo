@@ -1,3 +1,5 @@
+import { NIL as NULL_UUID } from 'uuid';
+
 import { EvaluateSummary, EvaluateTestSuite } from '@/../../../types';
 
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -18,7 +20,7 @@ export async function createJob(supabase: SupabaseClient): Promise<EvaluationJob
     .from('EvaluationJob')
     .insert([
       {
-        userId: user?.id,
+        user_id: user?.id,
         status: JobStatus.IN_PROGRESS,
         progress: 0,
         total: 0,
@@ -75,19 +77,18 @@ export async function createResult(
   const {
     data: { user },
   } = await supabase.auth.getUser();
+  const record = {
+    user_id: user?.id,
+    id: jobId, // eval id matches job id
+    version: 1,
+    config:
+      config as unknown as Database['public']['Tables']['EvaluationResult']['Insert']['config'],
+    results:
+      results as unknown as Database['public']['Tables']['EvaluationResult']['Insert']['results'],
+  };
   const { data: result, error } = await supabase
     .from('EvaluationResult')
-    .insert([
-      {
-        userId: user?.id,
-        id: jobId, // eval id matches job id
-        version: 1,
-        config:
-          config as unknown as Database['public']['Tables']['EvaluationResult']['Insert']['config'],
-        results:
-          results as unknown as Database['public']['Tables']['EvaluationResult']['Insert']['results'],
-      },
-    ])
+    .insert(record)
     .select()
     .single();
 

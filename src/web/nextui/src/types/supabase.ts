@@ -1,5 +1,3 @@
-// https://supabase.com/dashboard/project/vhywkeydkitmauabqnwv/api?page=tables-intro
-
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
 export interface Database {
@@ -14,7 +12,7 @@ export interface Database {
           status: Database['public']['Enums']['JobStatus'];
           total: number;
           updatedAt: string;
-          userId: string | null;
+          user_id: string | null;
         };
         Insert: {
           createdAt?: string;
@@ -24,7 +22,7 @@ export interface Database {
           status: Database['public']['Enums']['JobStatus'];
           total: number;
           updatedAt?: string;
-          userId?: string | null;
+          user_id?: string | null;
         };
         Update: {
           createdAt?: string;
@@ -34,7 +32,7 @@ export interface Database {
           status?: Database['public']['Enums']['JobStatus'];
           total?: number;
           updatedAt?: string;
-          userId?: string | null;
+          user_id?: string | null;
         };
         Relationships: [
           {
@@ -44,8 +42,8 @@ export interface Database {
             referencedColumns: ['id'];
           },
           {
-            foreignKeyName: 'EvaluationJob_userId_fkey';
-            columns: ['userId'];
+            foreignKeyName: 'EvaluationJob_user_id_fkey';
+            columns: ['user_id'];
             referencedRelation: 'users';
             referencedColumns: ['id'];
           },
@@ -58,7 +56,7 @@ export interface Database {
           id: string;
           results: Json;
           updatedAt: string;
-          userId: string | null;
+          user_id: string | null;
           version: number;
         };
         Insert: {
@@ -67,7 +65,7 @@ export interface Database {
           id?: string;
           results: Json;
           updatedAt?: string;
-          userId?: string | null;
+          user_id?: string | null;
           version: number;
         };
         Update: {
@@ -76,13 +74,13 @@ export interface Database {
           id?: string;
           results?: Json;
           updatedAt?: string;
-          userId?: string | null;
+          user_id?: string | null;
           version?: number;
         };
         Relationships: [
           {
-            foreignKeyName: 'EvaluationResult_userId_fkey';
-            columns: ['userId'];
+            foreignKeyName: 'EvaluationResult_user_id_fkey';
+            columns: ['user_id'];
             referencedRelation: 'users';
             referencedColumns: ['id'];
           },
