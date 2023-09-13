@@ -51,7 +51,7 @@ export default async function Page({ params }: { params: { id: string } }) {
       },
     };
 
-    // Fetch default evals
+    // Fetch recent evals
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -71,5 +71,5 @@ export default async function Page({ params }: { params: { id: string } }) {
     // Next.js chokes on large evals, so the client will fetch them separately.
     return <Eval fetchId={params.id} />;
   }
-  return <Eval preloadedData={sharedResults} recentFiles={recentFiles} />;
+  return <Eval preloadedData={sharedResults} recentEvals={recentFiles} />;
 }

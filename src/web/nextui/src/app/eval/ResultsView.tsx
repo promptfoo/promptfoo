@@ -42,14 +42,14 @@ const ResponsiveStack = styled(Stack)(({ theme }) => ({
 }));
 
 interface ResultsViewProps {
-  recentFiles: {
+  recentEvals: {
     id: string;
     label: string;
   }[];
-  onRecentFileSelected: (file: string) => void;
+  onRecentEvalSelected: (file: string) => void;
 }
 
-export default function ResultsView({ recentFiles, onRecentFileSelected }: ResultsViewProps) {
+export default function ResultsView({ recentEvals, onRecentEvalSelected }: ResultsViewProps) {
   const router = useRouter();
   const { table, config } = useResultsViewStore();
   const { setStateFromConfig } = useMainStore();
@@ -164,17 +164,17 @@ export default function ResultsView({ recentFiles, onRecentFileSelected }: Resul
       <Paper py="md">
         <ResponsiveStack direction="row" spacing={4} alignItems="center">
           <Box>
-            {recentFiles && recentFiles.length > 0 && (
+            {recentEvals && recentEvals.length > 0 && (
               <FormControl sx={{ m: 1, minWidth: 200 }} size="small">
                 <InputLabel>View run</InputLabel>
                 <Select
-                  key={recentFiles.join(',')}
+                  key={recentEvals.join(',')}
                   className="recent-files"
                   label="Previous runs"
-                  defaultValue={recentFiles[0].id}
-                  onChange={(e: SelectChangeEvent) => onRecentFileSelected(e.target.value)}
+                  defaultValue={recentEvals[0].id}
+                  onChange={(e: SelectChangeEvent) => onRecentEvalSelected(e.target.value)}
                 >
-                  {recentFiles.map((file) => (
+                  {recentEvals.map((file) => (
                     <MenuItem key={file.id} value={file.id}>
                       {file.label}
                     </MenuItem>

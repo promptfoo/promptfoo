@@ -45,30 +45,30 @@ async function fetchEvalFromSupabase(
 interface EvalOptions {
   fetchId?: string;
   preloadedData?: SharedResults;
-  recentFiles?: { id: string; label: string }[];
+  recentEvals?: { id: string; label: string }[];
 }
 
 export default function Eval({
   fetchId,
   preloadedData,
-  recentFiles: defaultRecentFiles,
+  recentEvals: defaultRecentEvals,
 }: EvalOptions) {
   const router = useRouter();
   const { table, setTable, setConfig } = useStore();
   const [loaded, setLoaded] = React.useState<boolean>(false);
   const [failed, setFailed] = React.useState<boolean>(false);
-  const [recentFiles, setRecentFiles] = React.useState<{ id: string; label: string }[]>(
-    defaultRecentFiles || [],
+  const [recentEvals, setRecentEvals] = React.useState<{ id: string; label: string }[]>(
+    defaultRecentEvals || [],
   );
 
-  const fetchRecentFiles = async () => {
+  const fetchRecentEvals = async () => {
     invariant(IS_RUNNING_LOCALLY, 'Cannot fetch recent files when not running locally');
     const resp = await fetch(`${API_BASE_URL}/results`);
     const body = await resp.json();
-    setRecentFiles(body.data);
+    setRecentEvals(body.data);
   };
 
-  const handleRecentFileSelection = async (id: string) => {
+  const handleRecentEvalSelection = async (id: string) => {
     if (IS_RUNNING_LOCALLY) {
       const resp = await fetch(`${API_BASE_URL}/results/${id}`);
       const body = await resp.json();
@@ -77,14 +77,6 @@ export default function Eval({
       // TODO(ian): This requires next.js standalone server
       // router.push(`/eval/local:${encodeURIComponent(file)}`);
     } else {
-      /*
-      const evalRun = await fetchEvalFromSupabase(id);
-      invariant(evalRun, 'Eval not found');
-      const results = evalRun.results as unknown as EvaluateSummary;
-      const config = evalRun.config as unknown as Partial<UnifiedConfig>;
-      setTable(results.table);
-      setConfig(config);
-      */
       router.push(`/eval/remote:${encodeURIComponent(id)}`);
     }
   };
@@ -115,14 +107,14 @@ export default function Eval({
         setLoaded(true);
         setTable(data.results.table);
         setConfig(data.config);
-        fetchRecentFiles();
+        fetchRecentEvals();
       });
 
       socket.on('update', (data) => {
         console.log('Received data update', data);
         setTable(data.results.table);
         setConfig(data.config);
-        fetchRecentFiles();
+        fetchRecentEvals();
       });
 
       return () => {
@@ -131,7 +123,7 @@ export default function Eval({
     } else {
       // TODO(ian): Move this to server
       fetchEvalsFromSupabase().then((records) => {
-        setRecentFiles(
+        setRecentEvals(
           records.map((r) => ({
             id: r.id,
             label: r.createdAt,
@@ -166,5 +158,5 @@ export default function Eval({
     );
   }
 
-  return <ResultsView recentFiles={recentFiles} onRecentFileSelected={handleRecentFileSelection} />;
+  return <ResultsView recentEvals={recentEvals} onRecentEvalSelected={handleRecentEvalSelection} />;
 }
