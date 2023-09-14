@@ -8,13 +8,14 @@ import {
   readTestsFile,
   readPrompts,
   writeOutput,
+  readTest,
   readTests,
   readGlobalConfig,
   maybeRecordFirstRun,
   resetGlobalConfig,
 } from '../src/util';
 
-import type { EvaluateResult, EvaluateTable, Prompt, TestCase } from '../src/types';
+import type { AssertionType, EvaluateResult, EvaluateTable, Prompt, TestCase } from '../src/types';
 
 jest.mock('node-fetch', () => jest.fn());
 jest.mock('glob', () => ({
@@ -35,6 +36,10 @@ jest.mock('../src/esm.js');
 function toPrompt(text: string): Prompt {
   return { raw: text, display: text };
 }
+
+beforeEach(() => {
+  jest.clearAllMocks();
+});
 
 describe('util', () => {
   afterEach(() => {
@@ -401,6 +406,65 @@ describe('util', () => {
 
       expect(fs.readFileSync).toHaveBeenCalledTimes(1);
       expect(result).toBe(false);
+    });
+  });
+});
+
+describe('readTest', () => {
+  test('readTest with string input (path to test config)', async () => {
+    const testPath = 'test1.yaml';
+    const testContent = {
+      description: 'Test 1',
+      vars: { var1: 'value1', var2: 'value2' },
+      assert: [{ type: 'equals', value: 'value1' }],
+    };
+    (fs.readFileSync as jest.Mock).mockReturnValueOnce(yaml.dump(testContent));
+
+    const result = await readTest(testPath);
+
+    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+    expect(result).toEqual(testContent);
+  });
+
+  test('readTest with TestCase input', async () => {
+    const input: TestCase = {
+      description: 'Test 1',
+      vars: { var1: 'value1', var2: 'value2' },
+      assert: [{ type: 'equals', value: 'value1' }],
+    };
+
+    const result = await readTest(input);
+
+    expect(result).toEqual(input);
+  });
+
+  test('readTest with invalid input', async () => {
+    const input: any = 123;
+
+    await expect(readTest(input)).rejects.toThrow();
+  });
+
+  test('readTest with TestCase that contains a vars glob input', async () => {
+    const input = {
+      description: 'Test 1',
+      vars: 'vars/*.yaml',
+      assert: [{ type: 'equals' as AssertionType, value: 'value1' }],
+    };
+    const varsContent1 = { var1: 'value1' };
+    const varsContent2 = { var2: 'value2' };
+    (globSync as jest.Mock).mockReturnValueOnce(['vars/vars1.yaml', 'vars/vars2.yaml']);
+    (fs.readFileSync as jest.Mock)
+      .mockReturnValueOnce(yaml.dump(varsContent1))
+      .mockReturnValueOnce(yaml.dump(varsContent2));
+
+    const result = await readTest(input);
+
+    expect(globSync).toHaveBeenCalledTimes(1);
+    expect(fs.readFileSync).toHaveBeenCalledTimes(2);
+    expect(result).toEqual({
+      description: 'Test 1',
+      vars: { var1: 'value1', var2: 'value2' },
+      assert: [{ type: 'equals', value: 'value1' }],
     });
   });
 });

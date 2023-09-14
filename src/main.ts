@@ -17,6 +17,7 @@ import {
   readLatestResults,
   readPrompts,
   readProviderPromptMap,
+  readTest,
   readTests,
   writeLatestResults,
   writeOutput,
@@ -296,6 +297,11 @@ async function main() {
       if (configPath) {
         fileConfig = await readConfig(configPath);
       }
+
+      // Use basepath in cases where path was supplied in the config file
+      const basePath = configPath ? dirname(configPath) : '';
+
+      const defaultTestRaw = fileConfig.defaultTest || defaultConfig.defaultTest;
       const config: Partial<UnifiedConfig> = {
         prompts: cmdObj.prompts || fileConfig.prompts || defaultConfig.prompts,
         providers: cmdObj.providers || fileConfig.providers || defaultConfig.providers,
@@ -305,7 +311,10 @@ async function main() {
           process.env.PROMPTFOO_DISABLE_SHARING === '1'
             ? false
             : fileConfig.sharing ?? defaultConfig.sharing ?? true,
-        defaultTest: fileConfig.defaultTest || defaultConfig.defaultTest,
+        defaultTest:
+          typeof defaultTestRaw === 'string'
+            ? await readTest(defaultTestRaw, basePath)
+            : defaultTestRaw,
       };
 
       // Validation
@@ -322,8 +331,6 @@ async function main() {
 
       // Parse prompts, providers, and tests
 
-      // Use basepath in cases where path was supplied in the config file
-      const basePath = configPath ? dirname(configPath) : '';
       const parsedPrompts = readPrompts(config.prompts, cmdObj.prompts ? undefined : basePath);
       const parsedProviders = await loadApiProviders(config.providers, { basePath });
       const parsedTests: TestCase[] = await readTests(

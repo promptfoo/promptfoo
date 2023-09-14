@@ -290,6 +290,51 @@ export async function readTestsFile(varsPath: string, basePath: string = ''): Pr
   return rows;
 }
 
+type TestCaseWithVarsFile = TestCase<
+  Record<string, string | string[] | object> | string | string[]
+>;
+export async function readTest(
+  test: string | TestCaseWithVarsFile,
+  basePath: string = '',
+): Promise<TestCase> {
+  const loadTestWithVars = async (
+    testCase: TestCaseWithVarsFile,
+    testBasePath: string,
+  ): Promise<TestCase> => {
+    const ret: TestCase = { ...testCase, vars: undefined };
+    if (typeof testCase.vars === 'string' || Array.isArray(testCase.vars)) {
+      ret.vars = await readVarsFiles(testCase.vars, testBasePath);
+    } else {
+      ret.vars = testCase.vars;
+    }
+    return ret;
+  };
+
+  let testCase: TestCase;
+
+  if (typeof test === 'string') {
+    const testFilePath = path.resolve(basePath, test);
+    const testBasePath = path.dirname(testFilePath);
+    const rawTestCase = yaml.load(fs.readFileSync(testFilePath, 'utf-8')) as TestCaseWithVarsFile;
+    testCase = await loadTestWithVars(rawTestCase, testBasePath);
+  } else {
+    testCase = await loadTestWithVars(test, basePath);
+  }
+
+  // Validation of the shape of test
+  if (!testCase.assert && !testCase.vars) {
+    throw new Error(
+      `Test case must have either "assert" or "vars" property. Instead got ${JSON.stringify(
+        testCase,
+        null,
+        2,
+      )}`,
+    );
+  }
+
+  return testCase;
+}
+
 export async function readTests(
   tests: string | string[] | TestCase[] | undefined,
   basePath: string = '',
@@ -299,24 +344,22 @@ export async function readTests(
   const loadTestsFromGlob = async (loadTestsGlob: string) => {
     const resolvedPath = path.resolve(basePath, loadTestsGlob);
     const testFiles = globSync(resolvedPath);
+    const ret = [];
     for (const testFile of testFiles) {
       const testFileContent = yaml.load(fs.readFileSync(testFile, 'utf-8')) as TestCase[];
       for (const testCase of testFileContent) {
-        if (typeof testCase.vars === 'string' || Array.isArray(testCase.vars)) {
-          const testcaseBasePath = path.dirname(testFile);
-          testCase.vars = await readVarsFiles(testCase.vars, testcaseBasePath);
-        }
+        ret.push(await readTest(testCase, path.dirname(testFile)));
       }
-      ret.push(...testFileContent);
     }
+    return ret;
   };
 
   if (typeof tests === 'string') {
     if (tests.endsWith('yaml') || tests.endsWith('yml')) {
-      // Load testcase config from yaml
-      await loadTestsFromGlob(tests);
+      // Points to a tests file with multiple test cases
+      return loadTestsFromGlob(tests);
     } else {
-      // Legacy load CSV
+      // Points to a legacy vars.csv
       const vars = await readTestsFile(tests, basePath);
       return vars.map((row, idx) => {
         const test = testCaseFromCsvRow(row);
@@ -325,27 +368,14 @@ export async function readTests(
       });
     }
   } else if (Array.isArray(tests)) {
-    for (const maybeTestsGlob of tests) {
-      if (typeof maybeTestsGlob === 'string') {
-        // Assume it's a filepath
-        await loadTestsFromGlob(maybeTestsGlob);
+    for (const globOrTest of tests) {
+      if (typeof globOrTest === 'string') {
+        // Resolve globs
+        ret.push(...(await loadTestsFromGlob(globOrTest)));
       } else {
-        // Assume it's a full test case
-        ret.push(maybeTestsGlob);
+        // It's just a TestCase
+        ret.push(await readTest(globOrTest, basePath));
       }
-    }
-  }
-
-  // Some validation of the shape of tests
-  for (const test of ret) {
-    if (!test.assert && !test.vars) {
-      throw new Error(
-        `Test case must have either "assert" or "vars" property. Instead got ${JSON.stringify(
-          test,
-          null,
-          2,
-        )}`,
-      );
     }
   }
 
