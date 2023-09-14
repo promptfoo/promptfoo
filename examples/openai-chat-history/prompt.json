@@ -1,0 +1,14 @@
+[
+  {% for message in messages %}
+    {% for role, content in message %}
+      {
+        "role": "{{ role }}",
+        "content": "{{ content }}"
+      },
+    {% endfor %}
+  {% endfor %}
+  {
+    "role": "user",
+    "content": "{{ question }}"
+  }
+]

@@ -1,0 +1,20 @@
+prompts: [prompt.json]
+providers: [openai:gpt-3.5-turbo]
+
+# Set up the conversation history
+defaultTest:
+  vars:
+    messages:
+      - user: Who founded Facebook?
+      - assistant: Mark Zuckerberg
+      - user: What's his favorite food?
+      - assistant: Pizza
+
+# Test multiple follow-ups
+tests:
+  - vars:
+      question: Did he create any other companies?
+  - vars:
+      question: What is his role at Internet.org?
+  - vars:
+      question: Will he let me borrow $5?
