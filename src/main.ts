@@ -270,7 +270,7 @@ async function main() {
       '--no-cache',
       'Do not read or write results to disk cache',
       // TODO(ian): Remove commandLineOptions.cache in v1
-      defaultConfig?.commandLineOptions?.cache ?? defaultConfig?.evaluateOptions?.useCache,
+      defaultConfig?.commandLineOptions?.cache ?? defaultConfig?.evaluateOptions?.cache,
     )
     .option('--no-progress-bar', 'Do not show progress bar')
     .option('--no-table', 'Do not output table in CLI', defaultConfig?.commandLineOptions?.table)
