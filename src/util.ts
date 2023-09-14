@@ -332,9 +332,9 @@ export async function readTest(
   }
 
   // Validation of the shape of test
-  if (!testCase.assert && !testCase.vars) {
+  if (!testCase.assert && !testCase.vars && !testCase.options) {
     throw new Error(
-      `Test case must have either "assert" or "vars" property. Instead got ${JSON.stringify(
+      `Test case must have either assert, vars, or options property. Instead got ${JSON.stringify(
         testCase,
         null,
         2,
