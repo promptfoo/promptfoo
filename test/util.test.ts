@@ -8,6 +8,7 @@ import {
   readTestsFile,
   readPrompts,
   writeOutput,
+  readTest,
   readTests,
   readGlobalConfig,
   maybeRecordFirstRun,
