@@ -1,6 +1,6 @@
 To get started, set your OPENAI_API_KEY environment variable.
 
-Next, change a few of the prompts in prompts.txt and edit promptfooconfig.yaml.
+Next, have a look at prompt.json and edit promptfooconfig.yaml.
 
 Then run:
 ```
