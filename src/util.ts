@@ -297,7 +297,7 @@ export async function readTest(
   test: string | TestCaseWithVarsFile,
   basePath: string = '',
 ): Promise<TestCase> {
-  const loadVarsForTest = async (
+  const loadTestWithVars = async (
     testCase: TestCaseWithVarsFile,
     testBasePath: string,
   ): Promise<TestCase> => {
@@ -316,9 +316,9 @@ export async function readTest(
     const testFilePath = path.resolve(basePath, test);
     const testBasePath = path.dirname(testFilePath);
     const rawTestCase = yaml.load(fs.readFileSync(testFilePath, 'utf-8')) as TestCaseWithVarsFile;
-    testCase = await loadVarsForTest(rawTestCase, testBasePath);
+    testCase = await loadTestWithVars(rawTestCase, testBasePath);
   } else {
-    testCase = await loadVarsForTest(test, basePath);
+    testCase = await loadTestWithVars(test, basePath);
   }
 
   // Validation of the shape of test
@@ -348,7 +348,7 @@ export async function readTests(
     for (const testFile of testFiles) {
       const testFileContent = yaml.load(fs.readFileSync(testFile, 'utf-8')) as TestCase[];
       for (const testCase of testFileContent) {
-        ret.push(await readTest(testCase, testFile));
+        ret.push(await readTest(testCase, path.dirname(testFile)));
       }
     }
     return ret;
