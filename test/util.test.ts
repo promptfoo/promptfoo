@@ -405,6 +405,41 @@ describe('util', () => {
   });
 });
 
+describe('readTest', () => {
+  test('readTest with string input (path to test config)', async () => {
+    const testPath = 'test1.yaml';
+    const testContent = {
+      description: 'Test 1',
+      vars: { var1: 'value1', var2: 'value2' },
+      assert: [{ type: 'equals', value: 'value1' }],
+    };
+    (fs.readFileSync as jest.Mock).mockReturnValueOnce(yaml.dump(testContent));
+
+    const result = await readTest(testPath);
+
+    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+    expect(result).toEqual(testContent);
+  });
+
+  test('readTest with TestCase input', async () => {
+    const input: TestCase = {
+      description: 'Test 1',
+      vars: { var1: 'value1', var2: 'value2' },
+      assert: [{ type: 'equals', value: 'value1' }],
+    };
+
+    const result = await readTest(input);
+
+    expect(result).toEqual(input);
+  });
+
+  test('readTest with invalid input', async () => {
+    const input: any = 123;
+
+    await expect(readTest(input)).rejects.toThrow();
+  });
+});
+
 describe('readTests', () => {
   afterEach(() => {
     jest.resetAllMocks();
