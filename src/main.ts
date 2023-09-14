@@ -312,10 +312,7 @@ async function main() {
           process.env.PROMPTFOO_DISABLE_SHARING === '1'
             ? false
             : fileConfig.sharing ?? defaultConfig.sharing ?? true,
-        defaultTest:
-          typeof defaultTestRaw === 'string'
-            ? await readTest(defaultTestRaw, basePath)
-            : defaultTestRaw,
+        defaultTest: defaultTestRaw ? await readTest(defaultTestRaw, basePath) : undefined,
       };
 
       // Validation

@@ -4,7 +4,8 @@ providers: [openai:gpt-3.5-turbo]
 # Set up the conversation history
 defaultTest:
   vars:
-    messages:
+    system_message: file://system_message.txt
+    previous_messages:
       - user: Who founded Facebook?
       - assistant: Mark Zuckerberg
       - user: What's his favorite food?

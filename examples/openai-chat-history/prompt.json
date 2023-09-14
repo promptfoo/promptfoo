@@ -1,5 +1,9 @@
 [
-  {% for message in messages %}
+  {
+    "role": "system",
+    "content": "{{ system_message }}"
+  },
+  {% for message in previous_messages %}
     {% for role, content in message %}
       {
         "role": "{{ role }}",
