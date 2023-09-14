@@ -471,18 +471,17 @@ describe('readTest', () => {
   test('readTest with TestCase that contains a var with file:// prefix', async () => {
     const input = {
       description: 'Test 1',
-      vars: { var1: 'file://vars/var1.yaml' },
+      vars: { var1: 'file://vars/var1.yaml', var2: 'a normal var' },
       assert: [{ type: 'equals' as AssertionType, value: 'value1' }],
     };
-    const varsContent1 = { var1: 'value1' };
-    (fs.readFileSync as jest.Mock).mockReturnValueOnce(yaml.dump(varsContent1));
+    (fs.readFileSync as jest.Mock).mockReturnValueOnce('value1');
 
     const result = await readTest(input);
 
     expect(fs.readFileSync).toHaveBeenCalledTimes(1);
     expect(result).toEqual({
       description: 'Test 1',
-      vars: { var1: 'value1' },
+      vars: { var1: 'value1', var2: 'a normal var' },
       assert: [{ type: 'equals', value: 'value1' }],
     });
   });
