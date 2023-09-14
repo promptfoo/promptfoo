@@ -304,8 +304,17 @@ export async function readTest(
     const ret: TestCase = { ...testCase, vars: undefined };
     if (typeof testCase.vars === 'string' || Array.isArray(testCase.vars)) {
       ret.vars = await readVarsFiles(testCase.vars, testBasePath);
-    } else {
-      ret.vars = testCase.vars;
+    } else if (typeof testCase.vars === 'object') {
+      // Try treating the values of the object as filepaths, and load from disk
+      const vars: Record<string, string | string[] | object> = {};
+      for (const [key, value] of Object.entries(testCase.vars)) {
+        if (typeof value === 'string' && value.startsWith('file://')) {
+          vars[key] = yaml.load(fs.readFileSync(value.slice('file://'.length), 'utf-8')) as string;
+        } else {
+          vars[key] = value;
+        }
+      }
+      ret.vars = vars;
     }
     return ret;
   };

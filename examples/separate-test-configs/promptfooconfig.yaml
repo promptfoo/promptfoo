@@ -18,3 +18,8 @@ tests:
   - vars:
       topic: the internet
       content_type: witty tweets
+
+  # Use the file:// prefix to load entire files as vars
+  - vars:
+      topic: file://vars/var_topic.yaml
+      content_type: file://vars/var_content_type.yaml
