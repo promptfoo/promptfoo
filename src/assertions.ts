@@ -234,10 +234,7 @@ export async function runAssertion(
 
   if (baseType === 'regex') {
     invariant(renderedValue, '"regex" assertion type must have a string value');
-    invariant(
-      typeof renderedValue === 'string',
-      '"contains" assertion type must have a string value',
-    );
+    invariant(typeof renderedValue === 'string', '"regex" assertion type must have a string value');
     const regex = new RegExp(renderedValue);
     pass = regex.test(output) !== inverse;
     return {
@@ -426,8 +423,8 @@ ${assertion.value}`,
 
   if (baseType === 'llm-rubric') {
     invariant(
-      typeof renderedValue === 'string',
-      '"contains" assertion type must have a string value',
+      typeof renderedValue === 'string' || typeof renderedValue === 'undefined',
+      '"llm-rubric" assertion type must have a string value',
     );
 
     // Assertion provider overrides test provider
@@ -436,13 +433,14 @@ ${assertion.value}`,
     test.options.rubricPrompt = assertion.rubricPrompt || test.options.rubricPrompt;
 
     if (test.options.rubricPrompt) {
-      // Substitute vars in prompt
-      test.options.rubricPrompt = nunjucks.renderString(test.options.rubricPrompt, test.vars || {});
+      if (typeof test.options.rubricPrompt === 'object') {
+        test.options.rubricPrompt = JSON.stringify(test.options.rubricPrompt);
+      }
     }
 
     return {
       assertion,
-      ...(await matchesLlmRubric(renderedValue, output, test.options)),
+      ...(await matchesLlmRubric(renderedValue || '', output, test.options, test.vars)),
     };
   }
 
@@ -464,7 +462,7 @@ ${assertion.value}`,
 
     return {
       assertion,
-      ...(await matchesFactuality(prompt, renderedValue, output, test.options)),
+      ...(await matchesFactuality(prompt, renderedValue, output, test.options, test.vars)),
     };
   }
 
@@ -486,7 +484,7 @@ ${assertion.value}`,
 
     return {
       assertion,
-      ...(await matchesClosedQa(prompt, renderedValue, output, test.options)),
+      ...(await matchesClosedQa(prompt, renderedValue, output, test.options, test.vars)),
     };
   }
 
