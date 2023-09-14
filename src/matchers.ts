@@ -12,6 +12,23 @@ import type { ApiProvider, GradingConfig, GradingResult, ProviderOptions } from 
 
 const nunjucks = getNunjucksEngine();
 
+function fromVars(vars?: Record<string, string | object>) {
+  if (!vars) {
+    return {};
+  }
+
+  const ret: Record<string, string> = {};
+  for (const [key, value] of Object.entries(vars)) {
+    if (typeof value === 'object') {
+      ret[key] = JSON.stringify(value);
+    } else {
+      ret[key] = value;
+    }
+  }
+
+  return ret;
+}
+
 export async function getGradingProvider(
   provider: GradingConfig['provider'],
   defaultProvider: ApiProvider,
@@ -106,6 +123,7 @@ export async function matchesLlmRubric(
   expected: string,
   output: string,
   grading?: GradingConfig,
+  vars?: Record<string, string | object>,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   if (!grading) {
     throw new Error(
@@ -116,6 +134,7 @@ export async function matchesLlmRubric(
   const prompt = nunjucks.renderString(grading.rubricPrompt || DEFAULT_GRADING_PROMPT, {
     output: output.replace(/\n/g, '\\n').replace(/"/g, '\\"'),
     rubric: expected.replace(/\n/g, '\\n').replace(/"/g, '\\"'),
+    ...fromVars(vars),
   });
 
   let provider = grading.provider;
@@ -135,13 +154,13 @@ export async function matchesLlmRubric(
   }
 
   try {
-    const parsed = JSON.parse(resp.output) as Omit<GradingResult, 'score'>;
+    const parsed = JSON.parse(resp.output) as GradingResult;
     parsed.tokensUsed = {
       total: resp.tokenUsage?.total || 0,
       prompt: resp.tokenUsage?.prompt || 0,
       completion: resp.tokenUsage?.completion || 0,
     };
-    return { ...parsed, score: parsed.pass ? 1 : 0 };
+    return { ...parsed };
   } catch (err) {
     return {
       pass: false,
@@ -161,6 +180,7 @@ export async function matchesFactuality(
   expected: string,
   output: string,
   grading?: GradingConfig,
+  vars?: Record<string, string | object>,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   if (!grading) {
     throw new Error(
@@ -172,6 +192,7 @@ export async function matchesFactuality(
     input: input.replace(/\n/g, '\\n').replace(/"/g, '\\"'),
     ideal: expected.replace(/\n/g, '\\n').replace(/"/g, '\\"'),
     completion: output.replace(/\n/g, '\\n').replace(/"/g, '\\"'),
+    ...fromVars(vars),
   });
 
   let provider = grading.provider;
@@ -255,6 +276,7 @@ export async function matchesClosedQa(
   expected: string,
   output: string,
   grading?: GradingConfig,
+  vars?: Record<string, string | object>,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   if (!grading) {
     throw new Error(
@@ -266,6 +288,7 @@ export async function matchesClosedQa(
     input: input.replace(/\n/g, '\\n').replace(/"/g, '\\"'),
     criteria: expected.replace(/\n/g, '\\n').replace(/"/g, '\\"'),
     completion: output.replace(/\n/g, '\\n').replace(/"/g, '\\"'),
+    ...fromVars(vars),
   });
 
   let provider = grading.provider;

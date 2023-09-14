@@ -1,0 +1,46 @@
+prompts: [prompts.txt]
+providers: [openai:gpt-3.5-turbo]
+defaultTest:
+  options:
+    # ---
+    # Custom grading prompt:
+    # ---
+    rubricPrompt:
+      - role: system
+        content: >-
+          Grade the output by the following specifications, keeping track of the points scored:
+
+          Did the output mention {{x}}? +1 point
+          Did the output describe {{y}}? + 1 point
+          Did the output ask to clarify {{z}}? +1 point
+
+          Calculate the score but always pass the test. Output your response in the following JSON format:
+          {pass: true, score: number, reason: string}
+      - role: user
+        content: 'Output: {{ output }}'
+
+#    ---
+#    You can also provide an OpenAI prompt directly as pure JSON:
+#    ---
+#
+#    rubricPrompt: >-
+#      [
+#        {
+#          "role": "system",
+#          "content": "Grade the output by the following specifications, keeping track of the points scored:\n Did the output mention {{x}}? +1 point\n Did the output describe {{y}}? + 1 point\n Did the output ask to clarify {{z}}? +1 point\n\n Output your response in the following JSON format:\n {pass: bool, score: number, reason: string}"
+#        },
+#        {
+#          "role": "user",
+#          "content": "Output: {{ output }}"
+#        }
+#      ]
+#
+
+tests:
+  - vars:
+      topic: the economy
+      x: the Federal Reserve
+      y: macroeconomics
+      z: the specific question the user wants to ask
+    assert:
+      - type: llm-rubric
