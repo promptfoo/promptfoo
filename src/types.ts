@@ -235,7 +235,7 @@ export interface TestCase<Vars = Record<string, string | string[] | object>> {
   description?: string;
 
   // Key-value pairs to substitute in the prompt
-  vars?: Record<string, string | string[] | object>;
+  vars?: Vars;
 
   // Optional list of automatic checks to run on the LLM output
   assert?: Assertion[];

@@ -15,7 +15,7 @@ import {
   resetGlobalConfig,
 } from '../src/util';
 
-import type { EvaluateResult, EvaluateTable, Prompt, TestCase } from '../src/types';
+import type { AssertionType, EvaluateResult, EvaluateTable, Prompt, TestCase } from '../src/types';
 
 jest.mock('node-fetch', () => jest.fn());
 jest.mock('glob', () => ({
@@ -36,6 +36,10 @@ jest.mock('../src/esm.js');
 function toPrompt(text: string): Prompt {
   return { raw: text, display: text };
 }
+
+beforeEach(() => {
+  jest.clearAllMocks();
+});
 
 describe('util', () => {
   afterEach(() => {
@@ -441,10 +445,10 @@ describe('readTest', () => {
   });
 
   test('readTest with TestCase that contains a vars glob input', async () => {
-    const input: TestCase = {
+    const input = {
       description: 'Test 1',
       vars: 'vars/*.yaml',
-      assert: [{ type: 'equals', value: 'value1' }],
+      assert: [{ type: 'equals' as AssertionType, value: 'value1' }],
     };
     const varsContent1 = { var1: 'value1' };
     const varsContent2 = { var2: 'value2' };
