@@ -18,7 +18,8 @@ These prompts are nunjucks templates, so you can use logic like this:
 If you prefer, you can break prompts into multiple files (make sure to edit promptfooconfig.yaml accordingly)
 `;
 
-export const DEFAULT_YAML_CONFIG = `# This configuration runs each prompt through a series of example inputs and checks if they meet requirements.
+export const DEFAULT_YAML_CONFIG = `---
+# This configuration runs each prompt through a series of example inputs and checks if they meet requirements.
 
 prompts: [prompts.txt]
 providers: [openai:gpt-3.5-turbo-0613]
