@@ -154,13 +154,18 @@ export async function matchesLlmRubric(
   }
 
   try {
-    const parsed = JSON.parse(resp.output) as GradingResult;
+    const parsed = JSON.parse(resp.output) as Partial<GradingResult>;
     parsed.tokensUsed = {
       total: resp.tokenUsage?.total || 0,
       prompt: resp.tokenUsage?.prompt || 0,
       completion: resp.tokenUsage?.completion || 0,
     };
-    return { ...parsed };
+    const pass = parsed.pass ?? (typeof parsed.score === 'undefined' ? true : parsed.score > 0);
+    return {
+      pass,
+      score: parsed.score ?? (pass ? 1.0 : 0.0),
+      reason: parsed.reason || (pass ? 'Grading passed' : 'Grading failed'),
+    };
   } catch (err) {
     return {
       pass: false,
