@@ -1,3 +1,4 @@
+---
 prompts: prompts.txt
 providers: customProvider.js
 tests: vars.csv

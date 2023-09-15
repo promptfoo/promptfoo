@@ -1,3 +1,4 @@
+---
 prompts: prompt.txt
 providers:
   - openai:chat:gpt-4-0613

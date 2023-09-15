@@ -1,3 +1,4 @@
+---
 # prettier-ignore
 prompts: [prompt.txt]
 providers:

@@ -1,3 +1,4 @@
+---
 prompts:
   prompts/chat_prompt.json: chat_prompt
 

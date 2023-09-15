@@ -1,3 +1,4 @@
+---
 prompts:
   prompts/chat_prompt.json: chat_prompt
   prompts/completion_prompt.txt: completion_prompt

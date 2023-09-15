@@ -1,3 +1,4 @@
+---
 # This configuration runs each prompt through a series of example inputs and checks if they meet requirements.
 
 prompts: [prompts.txt]

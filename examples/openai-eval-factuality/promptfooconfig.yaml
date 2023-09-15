@@ -1,3 +1,4 @@
+---
 providers: [openai:gpt-3.5-turbo]
 prompts: [prompts/name_capitals_concise.txt, prompts/name_capitals_verbose.txt]
 tests:

@@ -1,3 +1,4 @@
+---
 prompts: prompts.txt
 providers: openai:gpt-4-0613
 defaultTest:

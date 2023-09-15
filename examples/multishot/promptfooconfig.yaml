@@ -1,3 +1,4 @@
+---
 prompts: [prompt1.json, prompt2.json]
 providers: [openai:gpt-3.5-turbo]
 tests:
