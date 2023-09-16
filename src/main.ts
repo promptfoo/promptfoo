@@ -365,6 +365,7 @@ async function main() {
         ...config.defaultTest,
       };
 
+      console.log('parsedPrompts', parsedPrompts);
       const testSuite: TestSuite = {
         description: config.description,
         prompts: parsedPrompts,
