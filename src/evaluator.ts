@@ -71,10 +71,13 @@ function generateVarCombinations(
   return combinations;
 }
 
-export function renderPrompt(prompt: Prompt, vars: Record<string, string | object>): string {
+export async function renderPrompt(
+  prompt: Prompt,
+  vars: Record<string, string | object>,
+): Promise<string> {
   let basePrompt = prompt.raw;
   if (prompt.function) {
-    const result = prompt.function({ vars });
+    const result = await prompt.function({ vars });
     if (typeof result === 'string') {
       basePrompt = result;
     } else if (typeof result === 'object') {
@@ -145,7 +148,7 @@ class Evaluator {
     delay,
   }: RunEvalOptions): Promise<EvaluateResult> {
     const vars = test.vars || {};
-    const renderedPrompt = renderPrompt(prompt, vars);
+    const renderedPrompt = await renderPrompt(prompt, vars);
 
     // Note that we're using original prompt, not renderedPrompt
     let promptDisplay = prompt.display;

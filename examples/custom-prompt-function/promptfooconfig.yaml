@@ -1,0 +1,9 @@
+prompts: [prompt_chat.js, prompt_string.js]
+providers: [openai:gpt-3.5-turbo-0613]
+tests:
+  - vars:
+      topic: the weather
+  - vars:
+      topic: bob dylan
+  - vars:
+      topic: the Roman Empire

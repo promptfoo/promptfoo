@@ -207,7 +207,11 @@ export function readPrompts(
       const ext = path.parse(promptPath).ext;
       if (ext === '.js') {
         const promptFunction = require(promptPath);
-        promptContents.push({ raw: String(promptFunction), display: String(promptFunction), function: promptFunction });
+        promptContents.push({
+          raw: String(promptFunction),
+          display: String(promptFunction),
+          function: promptFunction,
+        });
       } else {
         const fileContent = fs.readFileSync(promptPath, 'utf-8');
         let display: string | undefined;
@@ -231,7 +235,11 @@ export function readPrompts(
     }
   }
 
-  if (promptContents.length === 1 && inputType !== PromptInputType.NAMED && !promptContents[0]['function']) {
+  if (
+    promptContents.length === 1 &&
+    inputType !== PromptInputType.NAMED &&
+    !promptContents[0]['function']
+  ) {
     // Split raw text file into multiple prompts
     const content = promptContents[0].raw;
     promptContents = content
