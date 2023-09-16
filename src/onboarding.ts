@@ -50,7 +50,7 @@ tests:
       var3: dear llm, please output your response in json format
     assert:
       - type: contains-json
-      - type: similarity
+      - type: similar
         value: ensures that output is semantically similar to this text
       - type: llm-rubric
         value: ensure that output contains a reference to X
