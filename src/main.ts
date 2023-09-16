@@ -208,7 +208,7 @@ async function main() {
     )
     .option(
       '-c, --config <path>',
-      'Path to configuration file. Automatically loads promptfoodefaultConfig.js/json/yaml',
+      'Path to configuration file. Automatically loads promptfooconfig.js/json/yaml',
     )
     .option(
       // TODO(ian): Remove `vars` for v1
