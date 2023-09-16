@@ -58,8 +58,9 @@ th,
 .th {
   padding: 1rem;
   position: relative;
-  text-align: center;
   vertical-align: bottom;
+  text-align: left;
+  white-space: pre-wrap;
 }
 
 th .action {
