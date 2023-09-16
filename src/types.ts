@@ -124,7 +124,7 @@ export interface EvaluateOptions {
 export interface Prompt {
   raw: string;
   display: string;
-  function?: (context: { vars: Record<string, string | object> }) => string;
+  function?: (context: { vars: Record<string, string | object> }) => string | object;
 }
 
 export interface EvaluateResult {

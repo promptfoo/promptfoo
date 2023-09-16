@@ -72,8 +72,19 @@ function generateVarCombinations(
 }
 
 export function renderPrompt(prompt: Prompt, vars: Record<string, string | object>): string {
-  console.log('function', prompt.function);
-  const basePrompt = prompt.function ? prompt.function({ vars }) : prompt.raw;
+  let basePrompt = prompt.raw;
+  if (prompt.function) {
+    const result = prompt.function({ vars });
+    if (typeof result === 'string') {
+      basePrompt = result;
+    } else if (typeof result === 'object') {
+      basePrompt = JSON.stringify(result);
+    } else {
+      throw new Error(`Prompt function must return a string or object, got ${typeof result}`);
+    }
+    // TODO(ian): Handle promise
+  }
+
   try {
     if (process.env.PROMPTFOO_DISABLE_JSON_AUTOESCAPE) {
       return nunjucks.renderString(basePrompt, vars);

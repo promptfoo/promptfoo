@@ -231,7 +231,8 @@ export function readPrompts(
     }
   }
 
-  if (promptContents.length === 1 && inputType !== PromptInputType.NAMED) {
+  if (promptContents.length === 1 && inputType !== PromptInputType.NAMED && !promptContents[0]['function']) {
+    // Split raw text file into multiple prompts
     const content = promptContents[0].raw;
     promptContents = content
       .split(PROMPT_DELIMITER)
