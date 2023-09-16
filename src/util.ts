@@ -205,6 +205,11 @@ export function readPrompts(
       promptContents.push(...fileContents.map((content) => ({ raw: content, display: content })));
     } else {
       const fileContent = fs.readFileSync(promptPath, 'utf-8');
+      const ext = path.parse(promptPath).ext;
+      if (ext === '.js') {
+        const promptFunction = require(promptPath);
+        promptContents.push({ raw: fileContent, display: fileContent, function: promptFunction });
+      } else {
 
       let display: string | undefined;
       if (inputType === PromptInputType.NAMED) {
