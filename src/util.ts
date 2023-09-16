@@ -204,30 +204,30 @@ export function readPrompts(
       });
       promptContents.push(...fileContents.map((content) => ({ raw: content, display: content })));
     } else {
-      const fileContent = fs.readFileSync(promptPath, 'utf-8');
       const ext = path.parse(promptPath).ext;
       if (ext === '.js') {
         const promptFunction = require(promptPath);
-        promptContents.push({ raw: fileContent, display: fileContent, function: promptFunction });
+        promptContents.push({ raw: String(promptFunction), display: String(promptFunction), function: promptFunction });
       } else {
+        const fileContent = fs.readFileSync(promptPath, 'utf-8');
+        let display: string | undefined;
+        if (inputType === PromptInputType.NAMED) {
+          display = resolvedPathToDisplay.get(promptPath) || promptPath;
+        } else {
+          display = fileContent.length > 200 ? promptPath : fileContent;
 
-      let display: string | undefined;
-      if (inputType === PromptInputType.NAMED) {
-        display = resolvedPathToDisplay.get(promptPath) || promptPath;
-      } else {
-        display = fileContent.length > 200 ? promptPath : fileContent;
-
-        const ext = path.parse(promptPath).ext;
-        if (ext === '.jsonl') {
-          // Special case for JSONL file
-          const jsonLines = fileContent.split(/\r?\n/).filter((line) => line.length > 0);
-          for (const json of jsonLines) {
-            promptContents.push({ raw: json, display: json });
+          const ext = path.parse(promptPath).ext;
+          if (ext === '.jsonl') {
+            // Special case for JSONL file
+            const jsonLines = fileContent.split(/\r?\n/).filter((line) => line.length > 0);
+            for (const json of jsonLines) {
+              promptContents.push({ raw: json, display: json });
+            }
+            continue;
           }
-          continue;
         }
+        promptContents.push({ raw: fileContent, display });
       }
-      promptContents.push({ raw: fileContent, display });
     }
   }
 

@@ -71,13 +71,15 @@ function generateVarCombinations(
   return combinations;
 }
 
-export function renderPrompt(rawPrompt: string, vars: Record<string, string | object>): string {
+export function renderPrompt(prompt: Prompt, vars: Record<string, string | object>): string {
+  console.log('function', prompt.function);
+  const basePrompt = prompt.function ? prompt.function({ vars }) : prompt.raw;
   try {
     if (process.env.PROMPTFOO_DISABLE_JSON_AUTOESCAPE) {
-      return nunjucks.renderString(rawPrompt, vars);
+      return nunjucks.renderString(basePrompt, vars);
     }
 
-    const parsed = JSON.parse(rawPrompt);
+    const parsed = JSON.parse(basePrompt);
 
     // Remove any trailing newlines from vars
     for (const key of Object.keys(vars)) {
@@ -100,7 +102,7 @@ export function renderPrompt(rawPrompt: string, vars: Record<string, string | ob
     };
     return JSON.stringify(walk(parsed));
   } catch (err) {
-    return nunjucks.renderString(rawPrompt, vars);
+    return nunjucks.renderString(basePrompt, vars);
   }
 }
 
@@ -132,7 +134,7 @@ class Evaluator {
     delay,
   }: RunEvalOptions): Promise<EvaluateResult> {
     const vars = test.vars || {};
-    const renderedPrompt = renderPrompt(prompt.raw, vars);
+    const renderedPrompt = renderPrompt(prompt, vars);
 
     // Note that we're using original prompt, not renderedPrompt
     let promptDisplay = prompt.display;
