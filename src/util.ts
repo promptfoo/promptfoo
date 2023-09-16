@@ -168,11 +168,13 @@ export function readPrompts(
   let resolvedPath: string | undefined;
   const resolvedPathToDisplay = new Map<string, string>();
   if (typeof promptPathOrGlobs === 'string') {
+    // Path to a prompt file
     resolvedPath = path.resolve(basePath, promptPathOrGlobs);
     promptPaths = [resolvedPath];
     resolvedPathToDisplay.set(resolvedPath, promptPathOrGlobs);
     inputType = PromptInputType.STRING;
   } else if (Array.isArray(promptPathOrGlobs)) {
+    // List of paths to prompt files
     promptPaths = promptPathOrGlobs.flatMap((pathOrGlob) => {
       resolvedPath = path.resolve(basePath, pathOrGlob);
       resolvedPathToDisplay.set(resolvedPath, pathOrGlob);
@@ -180,6 +182,7 @@ export function readPrompts(
     });
     inputType = PromptInputType.ARRAY;
   } else if (typeof promptPathOrGlobs === 'object') {
+    // Display/contents mapping
     promptPaths = Object.keys(promptPathOrGlobs).map((key) => {
       resolvedPath = path.resolve(basePath, key);
       resolvedPathToDisplay.set(resolvedPath, promptPathOrGlobs[key]);
