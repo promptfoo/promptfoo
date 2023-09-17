@@ -1,8 +1,8 @@
 import { getLatestVersion, checkForUpdates } from '../src/updates';
-import { fetchWithTimeout } from '../src/util';
+import { fetchWithTimeout } from '../src/fetch';
 import packageJson from '../package.json';
 
-jest.mock('../src/util', () => ({
+jest.mock('../src/fetch', () => ({
   fetchWithTimeout: jest.fn(),
 }));
 

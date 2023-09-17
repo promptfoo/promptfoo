@@ -2,7 +2,7 @@ import chalk from 'chalk';
 import semverGt from 'semver/functions/gt';
 
 import logger from './logger';
-import { fetchWithTimeout } from './util';
+import { fetchWithTimeout } from './fetch';
 import packageJson from '../package.json';
 
 const VERSION = packageJson.version;

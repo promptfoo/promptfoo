@@ -1,6 +1,6 @@
 import { Response } from 'node-fetch';
 import { runAssertions, runAssertion, assertionFromString } from '../src/assertions';
-import * as util from '../src/util';
+import * as fetch from '../src/fetch';
 
 import type {
   Assertion,
@@ -736,7 +736,7 @@ describe('runAssertion', () => {
     const output = 'Expected output';
 
     jest
-      .spyOn(util, 'fetchWithRetries')
+      .spyOn(fetch, 'fetchWithRetries')
       .mockImplementation(() =>
         Promise.resolve(new Response(JSON.stringify({ pass: true }), { status: 200 })),
       );
@@ -755,7 +755,7 @@ describe('runAssertion', () => {
     const output = 'Different output';
 
     jest
-      .spyOn(util, 'fetchWithRetries')
+      .spyOn(fetch, 'fetchWithRetries')
       .mockImplementation(() =>
         Promise.resolve(new Response(JSON.stringify({ pass: false }), { status: 200 })),
       );
@@ -774,7 +774,7 @@ describe('runAssertion', () => {
     const output = 'Expected output';
 
     jest
-      .spyOn(util, 'fetchWithRetries')
+      .spyOn(fetch, 'fetchWithRetries')
       .mockImplementation(() => Promise.resolve(new Response('', { status: 500 })));
 
     const result: GradingResult = await runAssertion(
