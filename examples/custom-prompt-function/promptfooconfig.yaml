@@ -1,4 +1,10 @@
-prompts: ['prompt_chat.js', 'prompt_string.js', 'prompt_multiple.js:prompt2', 'prompt_python.py:generate_prompt']
+prompts:
+  [
+    'prompt_chat.js',
+    'prompt_string.js',
+    'prompt_multiple.js:prompt2',
+    'prompt_python.py:generate_prompt',
+  ]
 providers: [openai:gpt-3.5-turbo-0613]
 tests:
   - vars:

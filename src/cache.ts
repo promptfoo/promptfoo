@@ -5,7 +5,8 @@ import cacheManager from 'cache-manager';
 import fsStore from 'cache-manager-fs-hash';
 
 import logger from './logger';
-import { getConfigDirectoryPath, fetchWithRetries } from './util';
+import { fetchWithRetries } from './fetch';
+import { getConfigDirectoryPath } from './util';
 
 import type { Cache } from 'cache-manager';
 import type { RequestInfo, RequestInit } from 'node-fetch';

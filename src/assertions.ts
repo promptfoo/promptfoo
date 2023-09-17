@@ -4,7 +4,8 @@ import Ajv from 'ajv';
 import { distance as levenshtein } from 'fastest-levenshtein';
 
 import telemetry from './telemetry';
-import { fetchWithRetries, getNunjucksEngine } from './util';
+import { fetchWithRetries } from './fetch';
+import { getNunjucksEngine } from './util';
 import {
   matchesSimilarity,
   matchesLlmRubric,
