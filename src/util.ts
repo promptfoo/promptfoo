@@ -168,18 +168,26 @@ export function readPrompts(
   let resolvedPath: string | undefined;
   const resolvedPathToDisplay = new Map<string, string>();
   if (typeof promptPathOrGlobs === 'string') {
+    // Path to a prompt file
     resolvedPath = path.resolve(basePath, promptPathOrGlobs);
     promptPaths = [resolvedPath];
     resolvedPathToDisplay.set(resolvedPath, promptPathOrGlobs);
     inputType = PromptInputType.STRING;
   } else if (Array.isArray(promptPathOrGlobs)) {
+    // List of paths to prompt files
     promptPaths = promptPathOrGlobs.flatMap((pathOrGlob) => {
       resolvedPath = path.resolve(basePath, pathOrGlob);
       resolvedPathToDisplay.set(resolvedPath, pathOrGlob);
-      return globSync(resolvedPath);
+      const globbedPaths = globSync(resolvedPath);
+      if (globbedPaths.length > 0) {
+        return globbedPaths;
+      }
+      // globSync will return empty if no files match, which is the case when the path includes a function name like: file.js:func
+      return [resolvedPath];
     });
     inputType = PromptInputType.ARRAY;
   } else if (typeof promptPathOrGlobs === 'object') {
+    // Display/contents mapping
     promptPaths = Object.keys(promptPathOrGlobs).map((key) => {
       resolvedPath = path.resolve(basePath, key);
       resolvedPathToDisplay.set(resolvedPath, promptPathOrGlobs[key]);
@@ -188,7 +196,10 @@ export function readPrompts(
     inputType = PromptInputType.NAMED;
   }
 
-  for (const promptPath of promptPaths) {
+  for (const promptPathRaw of promptPaths) {
+    const parsedPath = path.parse(promptPathRaw);
+    const [filename, functionName] = parsedPath.base.split(':');
+    const promptPath = path.join(parsedPath.dir, filename);
     const stat = fs.statSync(promptPath);
     if (stat.isDirectory()) {
       // FIXME(ian): Make directory handling share logic with file handling.
@@ -201,29 +212,62 @@ export function readPrompts(
       });
       promptContents.push(...fileContents.map((content) => ({ raw: content, display: content })));
     } else {
-      const fileContent = fs.readFileSync(promptPath, 'utf-8');
-
-      let display: string | undefined;
-      if (inputType === PromptInputType.NAMED) {
-        display = resolvedPathToDisplay.get(promptPath) || promptPath;
-      } else {
-        display = fileContent.length > 200 ? promptPath : fileContent;
-
-        const ext = path.parse(promptPath).ext;
-        if (ext === '.jsonl') {
-          // Special case for JSONL file
-          const jsonLines = fileContent.split(/\r?\n/).filter((line) => line.length > 0);
-          for (const json of jsonLines) {
-            promptContents.push({ raw: json, display: json });
-          }
-          continue;
+      const ext = path.parse(promptPath).ext;
+      if (ext === '.js') {
+        const importedModule = require(promptPath);
+        let promptFunction;
+        if (functionName) {
+          promptFunction = importedModule[functionName];
+        } else {
+          promptFunction = importedModule.default || importedModule;
         }
+        promptContents.push({
+          raw: String(promptFunction),
+          display: String(promptFunction),
+          function: promptFunction,
+        });
+      } else if (ext === '.py') {
+        const fileContent = fs.readFileSync(promptPath, 'utf-8');
+        const promptFunction = (context: { vars: Record<string, string | object> }) => {
+          const { execSync } = require('child_process');
+          const contextString = JSON.stringify(context).replace(/'/g, "\\'");
+          const output = execSync(`python ${promptPath} '${contextString}'`);
+          return output.toString();
+        };
+        promptContents.push({
+          raw: fileContent,
+          display: fileContent,
+          function: promptFunction,
+        });
+      } else {
+        const fileContent = fs.readFileSync(promptPath, 'utf-8');
+        let display: string | undefined;
+        if (inputType === PromptInputType.NAMED) {
+          display = resolvedPathToDisplay.get(promptPath) || promptPath;
+        } else {
+          display = fileContent.length > 200 ? promptPath : fileContent;
+
+          const ext = path.parse(promptPath).ext;
+          if (ext === '.jsonl') {
+            // Special case for JSONL file
+            const jsonLines = fileContent.split(/\r?\n/).filter((line) => line.length > 0);
+            for (const json of jsonLines) {
+              promptContents.push({ raw: json, display: json });
+            }
+            continue;
+          }
+        }
+        promptContents.push({ raw: fileContent, display });
       }
-      promptContents.push({ raw: fileContent, display });
     }
   }
 
-  if (promptContents.length === 1 && inputType !== PromptInputType.NAMED) {
+  if (
+    promptContents.length === 1 &&
+    inputType !== PromptInputType.NAMED &&
+    !promptContents[0]['function']
+  ) {
+    // Split raw text file into multiple prompts
     const content = promptContents[0].raw;
     promptContents = content
       .split(PROMPT_DELIMITER)

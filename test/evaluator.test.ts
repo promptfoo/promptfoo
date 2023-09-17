@@ -578,27 +578,27 @@ it('should use the options from the test if they exist', async () => {
 });
 
 describe('renderPrompt', () => {
-  it('should render a prompt with a single variable', () => {
-    const prompt = 'Test prompt {{ var1 }}';
-    const renderedPrompt = renderPrompt(prompt, { var1: 'value1' });
+  it('should render a prompt with a single variable', async () => {
+    const prompt = toPrompt('Test prompt {{ var1 }}');
+    const renderedPrompt = await renderPrompt(prompt, { var1: 'value1' });
     expect(renderedPrompt).toBe('Test prompt value1');
   });
 
-  it('should render a JSON prompt', () => {
-    const prompt = '[{"text": "Test prompt "}, {"text": "{{ var1 }}"}]';
-    const renderedPrompt = renderPrompt(prompt, { var1: 'value1' });
+  it('should render a JSON prompt', async () => {
+    const prompt = toPrompt('[{"text": "Test prompt "}, {"text": "{{ var1 }}"}]');
+    const renderedPrompt = await renderPrompt(prompt, { var1: 'value1' });
     expect(renderedPrompt).toBe('[{"text":"Test prompt "},{"text":"value1"}]');
   });
 
-  it('should render a JSON prompt and escape the var string', () => {
-    const prompt = '[{"text": "Test prompt "}, {"text": "{{ var1 }}"}]';
-    const renderedPrompt = renderPrompt(prompt, { var1: 'He said "hello world!"' });
+  it('should render a JSON prompt and escape the var string', async () => {
+    const prompt = toPrompt('[{"text": "Test prompt "}, {"text": "{{ var1 }}"}]');
+    const renderedPrompt = await renderPrompt(prompt, { var1: 'He said "hello world!"' });
     expect(renderedPrompt).toBe('[{"text":"Test prompt "},{"text":"He said \\"hello world!\\""}]');
   });
 
-  it('should render a JSON prompt with nested JSON', () => {
-    const prompt = '[{"text": "Test prompt "}, {"text": "{{ var1 }}"}]';
-    const renderedPrompt = renderPrompt(prompt, { var1: '{"nested": "value1"}' });
+  it('should render a JSON prompt with nested JSON', async () => {
+    const prompt = toPrompt('[{"text": "Test prompt "}, {"text": "{{ var1 }}"}]');
+    const renderedPrompt = await renderPrompt(prompt, { var1: '{"nested": "value1"}' });
     expect(renderedPrompt).toBe(
       '[{"text":"Test prompt "},{"text":"{\\"nested\\": \\"value1\\"}"}]',
     );
