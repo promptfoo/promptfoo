@@ -2,73 +2,15 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 
-import invariant from 'tiny-invariant';
 import $RefParser from '@apidevtools/json-schema-ref-parser';
 import yaml from 'js-yaml';
 import nunjucks from 'nunjucks';
-import { globSync } from 'glob';
 import { stringify } from 'csv-stringify/sync';
 
 import logger from './logger';
 import { getDirectory } from './esm';
 
-import type {
-  EvaluateSummary,
-  EvaluateTableOutput,
-  UnifiedConfig,
-  Prompt,
-  ProviderOptionsMap,
-  TestSuite,
-  ProviderOptions,
-} from './types';
-
-export function readProviderPromptMap(
-  config: Partial<UnifiedConfig>,
-  parsedPrompts: Prompt[],
-): TestSuite['providerPromptMap'] {
-  const ret: Record<string, string[]> = {};
-
-  if (!config.providers) {
-    return ret;
-  }
-
-  const allPrompts = [];
-  for (const prompt of parsedPrompts) {
-    allPrompts.push(prompt.display);
-  }
-
-  if (typeof config.providers === 'string') {
-    return { [config.providers]: allPrompts };
-  }
-
-  if (typeof config.providers === 'function') {
-    return { 'Custom function': allPrompts };
-  }
-
-  for (const provider of config.providers) {
-    if (typeof provider === 'object') {
-      // It's either a ProviderOptionsMap or a ProviderOptions
-      if (provider.id) {
-        const rawProvider = provider as ProviderOptions;
-        invariant(
-          rawProvider.id,
-          'You must specify an `id` on the Provider when you override options.prompts',
-        );
-        ret[rawProvider.id] = rawProvider.prompts || allPrompts;
-      } else {
-        const rawProvider = provider as ProviderOptionsMap;
-        const originalId = Object.keys(rawProvider)[0];
-        const providerObject = rawProvider[originalId];
-        const id = providerObject.id || originalId;
-        ret[id] = rawProvider[originalId].prompts || allPrompts;
-      }
-    }
-  }
-
-  return ret;
-}
-
-const PROMPT_DELIMITER = '---';
+import type { EvaluateSummary, EvaluateTableOutput, UnifiedConfig } from './types';
 
 let globalConfigCache: any = null;
 
@@ -133,134 +75,6 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
     default:
       throw new Error(`Unsupported configuration file format: ${ext}`);
   }
-}
-
-enum PromptInputType {
-  STRING = 1,
-  ARRAY = 2,
-  NAMED = 3,
-}
-
-export function readPrompts(
-  promptPathOrGlobs: string | string[] | Record<string, string>,
-  basePath: string = '',
-): Prompt[] {
-  let promptPaths: string[] = [];
-  let promptContents: Prompt[] = [];
-
-  let inputType: PromptInputType | undefined;
-  let resolvedPath: string | undefined;
-  const resolvedPathToDisplay = new Map<string, string>();
-  if (typeof promptPathOrGlobs === 'string') {
-    // Path to a prompt file
-    resolvedPath = path.resolve(basePath, promptPathOrGlobs);
-    promptPaths = [resolvedPath];
-    resolvedPathToDisplay.set(resolvedPath, promptPathOrGlobs);
-    inputType = PromptInputType.STRING;
-  } else if (Array.isArray(promptPathOrGlobs)) {
-    // List of paths to prompt files
-    promptPaths = promptPathOrGlobs.flatMap((pathOrGlob) => {
-      resolvedPath = path.resolve(basePath, pathOrGlob);
-      resolvedPathToDisplay.set(resolvedPath, pathOrGlob);
-      const globbedPaths = globSync(resolvedPath);
-      if (globbedPaths.length > 0) {
-        return globbedPaths;
-      }
-      // globSync will return empty if no files match, which is the case when the path includes a function name like: file.js:func
-      return [resolvedPath];
-    });
-    inputType = PromptInputType.ARRAY;
-  } else if (typeof promptPathOrGlobs === 'object') {
-    // Display/contents mapping
-    promptPaths = Object.keys(promptPathOrGlobs).map((key) => {
-      resolvedPath = path.resolve(basePath, key);
-      resolvedPathToDisplay.set(resolvedPath, promptPathOrGlobs[key]);
-      return resolvedPath;
-    });
-    inputType = PromptInputType.NAMED;
-  }
-
-  for (const promptPathRaw of promptPaths) {
-    const parsedPath = path.parse(promptPathRaw);
-    const [filename, functionName] = parsedPath.base.split(':');
-    const promptPath = path.join(parsedPath.dir, filename);
-    const stat = fs.statSync(promptPath);
-    if (stat.isDirectory()) {
-      // FIXME(ian): Make directory handling share logic with file handling.
-      const filesInDirectory = fs.readdirSync(promptPath);
-      const fileContents = filesInDirectory.map((fileName) => {
-        const joinedPath = path.join(promptPath, fileName);
-        resolvedPath = path.resolve(basePath, joinedPath);
-        resolvedPathToDisplay.set(resolvedPath, joinedPath);
-        return fs.readFileSync(resolvedPath, 'utf-8');
-      });
-      promptContents.push(...fileContents.map((content) => ({ raw: content, display: content })));
-    } else {
-      const ext = path.parse(promptPath).ext;
-      if (ext === '.js') {
-        const importedModule = require(promptPath);
-        let promptFunction;
-        if (functionName) {
-          promptFunction = importedModule[functionName];
-        } else {
-          promptFunction = importedModule.default || importedModule;
-        }
-        promptContents.push({
-          raw: String(promptFunction),
-          display: String(promptFunction),
-          function: promptFunction,
-        });
-      } else if (ext === '.py') {
-        const fileContent = fs.readFileSync(promptPath, 'utf-8');
-        const promptFunction = (context: { vars: Record<string, string | object> }) => {
-          const { execSync } = require('child_process');
-          const contextString = JSON.stringify(context).replace(/'/g, "\\'");
-          const output = execSync(`python ${promptPath} '${contextString}'`);
-          return output.toString();
-        };
-        promptContents.push({
-          raw: fileContent,
-          display: fileContent,
-          function: promptFunction,
-        });
-      } else {
-        const fileContent = fs.readFileSync(promptPath, 'utf-8');
-        let display: string | undefined;
-        if (inputType === PromptInputType.NAMED) {
-          display = resolvedPathToDisplay.get(promptPath) || promptPath;
-        } else {
-          display = fileContent.length > 200 ? promptPath : fileContent;
-
-          const ext = path.parse(promptPath).ext;
-          if (ext === '.jsonl') {
-            // Special case for JSONL file
-            const jsonLines = fileContent.split(/\r?\n/).filter((line) => line.length > 0);
-            for (const json of jsonLines) {
-              promptContents.push({ raw: json, display: json });
-            }
-            continue;
-          }
-        }
-        promptContents.push({ raw: fileContent, display });
-      }
-    }
-  }
-
-  if (
-    promptContents.length === 1 &&
-    inputType !== PromptInputType.NAMED &&
-    !promptContents[0]['function']
-  ) {
-    // Split raw text file into multiple prompts
-    const content = promptContents[0].raw;
-    promptContents = content
-      .split(PROMPT_DELIMITER)
-      .map((p) => ({ raw: p.trim(), display: p.trim() }));
-  }
-  if (promptContents.length === 0) {
-    throw new Error(`There are no prompts in ${JSON.stringify(promptPathOrGlobs)}`);
-  }
-  return promptContents;
 }
 
 export function writeOutput(
@@ -382,16 +196,6 @@ export function readLatestResults():
   | { results: EvaluateSummary; config: Partial<UnifiedConfig> }
   | undefined {
   return JSON.parse(fs.readFileSync(getLatestResultsPath(), 'utf-8'));
-}
-
-export function cosineSimilarity(vecA: number[], vecB: number[]) {
-  if (vecA.length !== vecB.length) {
-    throw new Error('Vectors must be of equal length');
-  }
-  const dotProduct = vecA.reduce((acc, val, idx) => acc + val * vecB[idx], 0);
-  const vecAMagnitude = Math.sqrt(vecA.reduce((acc, val) => acc + val * val, 0));
-  const vecBMagnitude = Math.sqrt(vecB.reduce((acc, val) => acc + val * val, 0));
-  return dotProduct / (vecAMagnitude * vecBMagnitude);
 }
 
 export function getNunjucksEngine() {

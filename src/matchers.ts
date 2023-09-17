@@ -1,6 +1,6 @@
 import invariant from 'tiny-invariant';
 import { DefaultEmbeddingProvider, DefaultGradingProvider } from './providers/openai';
-import { cosineSimilarity, getNunjucksEngine } from './util';
+import { getNunjucksEngine } from './util';
 import { loadApiProvider } from './providers';
 import {
   DEFAULT_GRADING_PROMPT,
@@ -11,6 +11,16 @@ import {
 import type { ApiProvider, GradingConfig, GradingResult, ProviderOptions } from './types';
 
 const nunjucks = getNunjucksEngine();
+
+function cosineSimilarity(vecA: number[], vecB: number[]) {
+  if (vecA.length !== vecB.length) {
+    throw new Error('Vectors must be of equal length');
+  }
+  const dotProduct = vecA.reduce((acc, val, idx) => acc + val * vecB[idx], 0);
+  const vecAMagnitude = Math.sqrt(vecA.reduce((acc, val) => acc + val * val, 0));
+  const vecBMagnitude = Math.sqrt(vecB.reduce((acc, val) => acc + val * val, 0));
+  return dotProduct / (vecAMagnitude * vecBMagnitude);
+}
 
 function fromVars(vars?: Record<string, string | object>) {
   if (!vars) {
