@@ -6,7 +6,8 @@ import telemetry from './telemetry';
 import { disableCache } from './cache';
 import { evaluate as doEvaluate } from './evaluator';
 import { loadApiProviders } from './providers';
-import { readTests, writeLatestResults, writeOutput } from './util';
+import { readTests } from './testCases';
+import { writeLatestResults, writeOutput } from './util';
 import type { EvaluateOptions, TestSuite, EvaluateTestSuite, ProviderOptions } from './types';
 
 export * from './types';

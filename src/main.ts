@@ -10,15 +10,13 @@ import telemetry from './telemetry';
 import logger, { getLogLevel, setLogLevel } from './logger';
 import { loadApiProvider, loadApiProviders } from './providers';
 import { evaluate } from './evaluator';
+import { readPrompts, readProviderPromptMap } from './prompts';
+import { readTest, readTests } from './testCases';
 import {
   cleanupOldResults,
   maybeReadConfig,
   readConfig,
   readLatestResults,
-  readPrompts,
-  readProviderPromptMap,
-  readTest,
-  readTests,
   writeLatestResults,
   writeOutput,
 } from './util';
