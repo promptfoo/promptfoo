@@ -82,7 +82,11 @@ export async function readTest(
       for (const [key, value] of Object.entries(testCase.vars)) {
         if (typeof value === 'string' && value.startsWith('file://')) {
           // Load file from disk.
-          vars[key] = yaml.load(fs.readFileSync(value.slice('file://'.length), 'utf-8')) as string;
+          if (value.endsWith('.yaml') || value.endsWith('.yml')) {
+            vars[key] = yaml.load(fs.readFileSync(value.slice('file://'.length), 'utf-8')) as string;
+          } else {
+            vars[key] = fs.readFileSync(value.slice('file://'.length), 'utf-8');
+          }
         } else {
           // This is a normal key:value.
           vars[key] = value;
