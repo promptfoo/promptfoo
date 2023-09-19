@@ -17,3 +17,4 @@ src/web/nextui/node_modules
 src/web/nextui/.next
 src/web/nextui/out
 src/web/nextui/.env
+venv
