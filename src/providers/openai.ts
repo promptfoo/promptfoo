@@ -150,6 +150,8 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
 
 export class OpenAiCompletionProvider extends OpenAiGenericProvider {
   static OPENAI_COMPLETION_MODELS = [
+    'gpt-3.5-turbo-instruct',
+    'gpt-3.5-turbo-instruct-0914',
     'text-davinci-003',
     'text-davinci-002',
     'text-curie-001',
