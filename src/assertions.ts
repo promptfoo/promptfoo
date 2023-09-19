@@ -416,9 +416,12 @@ ${assertion.value}`,
       typeof renderedValue === 'string',
       'Similarity assertion type must have a string value',
     );
+    // Assertion provider overrides test provider
+    test.options = test.options || {};
+    test.options.provider = assertion.provider || test.options.provider;
     return {
       assertion,
-      ...(await matchesSimilarity(renderedValue, output, assertion.threshold || 0.75, inverse)),
+      ...(await matchesSimilarity(renderedValue, output, assertion.threshold || 0.75, inverse, test.options)),
     };
   }
 
