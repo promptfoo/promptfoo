@@ -380,11 +380,8 @@ context = data["context"]
 
 ${isMultiline ? escapedRenderedValue : `print(json.dumps(${escapedRenderedValue}))`}
 `;
-      if (os.platform() === 'win32') {
-        pythonScript = pythonScript.split('\n').map(line => line.trim()).join('^' + '\n');
-      }
       const pythonProcessInput = JSON.stringify({ output, context });
-      const result = execSync(`python -c '${pythonScript}'`, {
+      const result = execSync(`python -c '${pythonScript.replace(/\n/g, ';')}'`, {
         input: pythonProcessInput,
       })
         .toString()
