@@ -1,3 +1,5 @@
+import os from 'os';
+
 import rouge from 'rouge';
 import invariant from 'tiny-invariant';
 import Ajv from 'ajv';
@@ -368,7 +370,7 @@ ${renderedValue}`,
       const { execSync } = require('child_process');
       const isMultiline = renderedValue.includes('\n');
       const escapedRenderedValue = renderedValue.replace(/'/g, "\\\\'");
-      const pythonScript = `
+      let pythonScript = `
 import json
 import sys
 
@@ -378,7 +380,9 @@ context = data["context"]
 
 ${isMultiline ? escapedRenderedValue : `print(json.dumps(${escapedRenderedValue}))`}
 `;
-      console.log(pythonScript);
+      if (os.platform() === 'win32') {
+        pythonScript = pythonScript.replace(/\n/g, "^\n");
+      }
       const pythonProcessInput = JSON.stringify({ output, context });
       const result = execSync(`python -c '${pythonScript}'`, {
         input: pythonProcessInput,
