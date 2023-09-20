@@ -377,11 +377,12 @@ import sys
 data = json.load(sys.stdin)
 output = data["output"]
 context = data["context"]
+value = data["value"]
 
-${isMultiline ? escapedRenderedValue : `print(json.dumps(${escapedRenderedValue}))`}
+${isMultiline ? 'exec(value)': 'print(json.dumps(eval(value)))'}
 `;
-      const pythonProcessInput = JSON.stringify({ output, context });
-      const result = execSync(`python -c '${pythonScript.replace(/\n/g, ';')}'`, {
+      const pythonProcessInput = JSON.stringify({ output, context, value: renderedValue });
+      const result = execSync(`python -c '${pythonScript}'`, {
         input: pythonProcessInput,
       })
         .toString()
