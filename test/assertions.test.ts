@@ -915,6 +915,27 @@ describe('runAssertion', () => {
     expect(result.pass).toBeFalsy();
     expect(result.reason).toBe('Levenshtein distance 8 is greater than threshold 5');
   });
+
+  it('should handle output strings with both single and double quotes correctly in python assertion', async () => {
+    const output =
+      'This is a string with "double quotes"\n and \'single quotes\' \n\n and some \n\t newlines.';
+
+    const pythonAssertion: Assertion = {
+      type: 'python',
+      value: '0.5',
+    };
+
+    const result: GradingResult = await runAssertion(
+      'Some prompt',
+      pythonAssertion,
+      {} as AtomicTestCase,
+      output,
+    );
+
+    expect(result.reason).toBe('Assertion passed');
+    expect(result.score).toBe(0.5);
+    expect(result.pass).toBeTruthy();
+  });
 });
 
 describe('assertionFromString', () => {
