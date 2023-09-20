@@ -3,8 +3,8 @@ providers: openai:gpt-3.5-turbo
 
 # The defaultTest configuration is applied to every test case in this config.
 defaultTest:
-  options:
-    suffix: Be extremely concise
+  vars:
+    system_message: file://system_prompt.txt
 
 # Loads & runs all test cases matching these filepaths
 tests:

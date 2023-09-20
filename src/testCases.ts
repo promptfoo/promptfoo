@@ -83,11 +83,11 @@ export async function readTest(
         if (typeof value === 'string' && value.startsWith('file://')) {
           // Load file from disk.
           if (value.endsWith('.yaml') || value.endsWith('.yml')) {
-            vars[key] = yaml.load(
-              fs.readFileSync(value.slice('file://'.length), 'utf-8'),
-            ) as string;
+            vars[key] = (
+              yaml.load(fs.readFileSync(value.slice('file://'.length), 'utf-8')) as string
+            ).trim();
           } else {
-            vars[key] = fs.readFileSync(value.slice('file://'.length), 'utf-8');
+            vars[key] = fs.readFileSync(value.slice('file://'.length), 'utf-8').trim();
           }
         } else {
           // This is a normal key:value.
