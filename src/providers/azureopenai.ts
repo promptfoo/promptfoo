@@ -21,7 +21,7 @@ interface AzureOpenAiCompletionOptions {
     description?: string;
     parameters: any;
   }[];
-  function_call?: 'none' | 'auto';
+  function_call?: 'none' | 'auto' | { name: string; };
   stop?: string[];
 }
 
