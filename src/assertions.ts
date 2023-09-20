@@ -369,16 +369,16 @@ ${renderedValue}`,
     try {
       const { execSync } = require('child_process');
       const isMultiline = renderedValue.includes('\n');
-      const escapedRenderedValue = renderedValue.replace(/'/g, "\\\\'");
+      const escapedRenderedValue = renderedValue.replace(/"/g, '\\\\"');
       let pythonScript = `import json
 import sys
 data = json.load(sys.stdin)
-output = data["output"]
-context = data["context"]
-value = data["value"]
+output = data['output']
+context = data['context']
+value = data['value']
 ${isMultiline ? 'exec(value)': 'print(json.dumps(eval(value)))'}`;
       const pythonProcessInput = JSON.stringify({ output, context, value: renderedValue });
-      const result = execSync(`python -c '${pythonScript.replace(/\n/g, ";")}'`, {
+      const result = execSync(`python -c "${pythonScript.replace(/\n/g, ";")}"`, {
         input: pythonProcessInput,
       })
         .toString()
