@@ -373,7 +373,7 @@ data = json.load(sys.stdin)
 output = data['output']
 context = data['context']
 
-print(json.dumps(${assertion.value}))
+${assertion.value}
       `;
       const pythonProcessInput = JSON.stringify({ output, context });
       const result = execSync('python -c "' + pythonScript + '"', {
