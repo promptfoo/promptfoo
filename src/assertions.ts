@@ -372,13 +372,13 @@ import json
 import sys
 
 data = json.load(sys.stdin)
-output = data['output']
-context = data['context']
+output = data["output"]
+context = data["context"]
 
 ${isMultiline ? renderedValue : `print(json.dumps(${renderedValue}))`}
 `;
       const pythonProcessInput = JSON.stringify({ output, context });
-      const result = execSync('python -c "' + pythonScript + '"', {
+      const result = execSync(`python -c '${pythonScript}'`, {
         input: pythonProcessInput,
       })
         .toString()
