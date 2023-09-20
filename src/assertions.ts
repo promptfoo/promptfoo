@@ -363,8 +363,10 @@ ${renderedValue}`,
   }
 
   if (baseType === 'python') {
+    invariant(typeof renderedValue === 'string', 'python assertion must have a string value');
     try {
       const { execSync } = require('child_process');
+      const isMultiline = renderedValue.includes('\n');
       const pythonScript = `
 import json
 import sys
@@ -373,8 +375,8 @@ data = json.load(sys.stdin)
 output = data['output']
 context = data['context']
 
-${assertion.value}
-      `;
+${isMultiline ? renderedValue : `print(json.dumps(${renderedValue}))`}
+`;
       const pythonProcessInput = JSON.stringify({ output, context });
       const result = execSync('python -c "' + pythonScript + '"', {
         input: pythonProcessInput,
