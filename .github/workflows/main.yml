@@ -12,6 +12,7 @@ jobs:
     strategy:
       matrix:
         node: ['16.x', '18.x', '20.x']
+        python: ['3.7']
         os: [ubuntu-latest, windows-latest, macOS-latest]
 
     steps:
@@ -22,6 +23,11 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.node }}
+
+      - name: Use Python ${{ matrix.python }}
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python }}
 
       - name: Install deps and build (with cache)
         uses: bahmutov/npm-install@v1

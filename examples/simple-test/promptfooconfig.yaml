@@ -28,6 +28,8 @@ tests:
       # Look for substring
       - type: javascript
         value: output.startsWith('Ahoy')
+      - type: python
+        value: max(0, len(output) - 300)
 
       # Check for semantic similarity
       - type: similar

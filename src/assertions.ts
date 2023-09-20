@@ -365,11 +365,20 @@ ${renderedValue}`,
   if (baseType === 'python') {
     try {
       const { execSync } = require('child_process');
-      const escapedOutput = output.replace(/'/g, "\\'").replace(/"/g, '\\"');
-      const escapedContext = JSON.stringify(context).replace(/'/g, "\\'").replace(/"/g, '\\"');
-      const result = execSync(
-        `python -c "import json; import math; import os; import sys; import re; import datetime; import random; import collections; output='${escapedOutput}'; context='${escapedContext}'; print(json.dumps(${assertion.value}))"`,
-      )
+      const pythonScript = `
+import json
+import sys
+
+data = json.load(sys.stdin)
+output = data['output']
+context = data['context']
+
+print(json.dumps(${assertion.value}))
+      `;
+      const pythonProcessInput = JSON.stringify({ output, context });
+      const result = execSync('python -c "' + pythonScript + '"', {
+        input: pythonProcessInput,
+      })
         .toString()
         .trim();
       if (result === 'true') {
@@ -379,13 +388,19 @@ ${renderedValue}`,
         pass = false;
         score = 0.0;
       } else if (result.startsWith('{')) {
-        return JSON.parse(result);
+        const parsed = JSON.parse(result);
+        if (!parsed.hasOwnProperty('pass') || !parsed.hasOwnProperty('score')) {
+          throw new Error(
+            'Python assertion must return a boolean, number, or {pass, score, reason} object',
+          );
+        }
+        return parsed;
       } else {
         pass = true;
         score = parseFloat(result);
         if (isNaN(score)) {
           throw new Error(
-            'Python code must return a boolean, number, or {pass, score, reason} object',
+            'Python assertion must return a boolean, number, or {pass, score, reason} object',
           );
         }
         if (typeof assertion.threshold !== 'undefined' && score < assertion.threshold) {
