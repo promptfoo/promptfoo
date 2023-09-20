@@ -932,9 +932,9 @@ describe('runAssertion', () => {
       output,
     );
 
-    expect(result.pass).toBeTruthy();
     expect(result.reason).toBe('Assertion passed');
     expect(result.score).toBe(0.5);
+    expect(result.pass).toBeTruthy();
   });
 });
 
