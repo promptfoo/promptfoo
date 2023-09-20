@@ -83,7 +83,9 @@ export async function readTest(
         if (typeof value === 'string' && value.startsWith('file://')) {
           // Load file from disk.
           if (value.endsWith('.yaml') || value.endsWith('.yml')) {
-            vars[key] = yaml.load(fs.readFileSync(value.slice('file://'.length), 'utf-8')) as string;
+            vars[key] = yaml.load(
+              fs.readFileSync(value.slice('file://'.length), 'utf-8'),
+            ) as string;
           } else {
             vars[key] = fs.readFileSync(value.slice('file://'.length), 'utf-8');
           }

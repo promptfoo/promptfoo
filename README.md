@@ -129,17 +129,17 @@ See [example CSV](https://github.com/typpo/promptfoo/blob/main/examples/simple-t
 
 If you're looking to customize your usage, you have a wide set of parameters at your disposal.
 
-| Option                              | Description                                                                                                                                                                                                            |
-| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `-p, --prompts <paths...>`          | Paths to [prompt files](https://promptfoo.dev/docs/configuration/parameters#prompt-files), directory, or glob                                                                                                          |
+| Option                              | Description                                                                                                                                                                        |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `-p, --prompts <paths...>`          | Paths to [prompt files](https://promptfoo.dev/docs/configuration/parameters#prompt-files), directory, or glob                                                                      |
 | `-r, --providers <name or path...>` | One of: openai:chat, openai:completion, openai:model-name, localai:chat:model-name, localai:completion:model-name. See [API providers][providers-docs]                             |
-| `-o, --output <path>`               | Path to [output file](https://promptfoo.dev/docs/configuration/parameters#output-file) (csv, json, yaml, html)                                                                                                         |
-| `--tests <path>`                    | Path to [external test file](https://promptfoo.dev/docs/configurationexpected-outputsassertions#load-an-external-tests-file)                                                                                           |
-| `-c, --config <path>`               | Path to [configuration file](https://promptfoo.dev/docs/configuration/guide). `promptfooconfig.js/json/yaml` is automatically loaded if present                                                                        |
-| `-j, --max-concurrency <number>`    | Maximum number of concurrent API calls                                                                                                                                                                                 |
-| `--table-cell-max-length <number>`  | Truncate console table cells to this length                                                                                                                                                                            |
-| `--prompt-prefix <path>`            | This prefix is prepended to every prompt                                                                                                                                                                               |
-| `--prompt-suffix <path>`            | This suffix is append to every prompt                                                                                                                                                                                  |
+| `-o, --output <path>`               | Path to [output file](https://promptfoo.dev/docs/configuration/parameters#output-file) (csv, json, yaml, html)                                                                     |
+| `--tests <path>`                    | Path to [external test file](https://promptfoo.dev/docs/configurationexpected-outputsassertions#load-an-external-tests-file)                                                       |
+| `-c, --config <path>`               | Path to [configuration file](https://promptfoo.dev/docs/configuration/guide). `promptfooconfig.js/json/yaml` is automatically loaded if present                                    |
+| `-j, --max-concurrency <number>`    | Maximum number of concurrent API calls                                                                                                                                             |
+| `--table-cell-max-length <number>`  | Truncate console table cells to this length                                                                                                                                        |
+| `--prompt-prefix <path>`            | This prefix is prepended to every prompt                                                                                                                                           |
+| `--prompt-suffix <path>`            | This suffix is append to every prompt                                                                                                                                              |
 | `--grader`                          | [Provider][providers-docs] that will conduct the evaluation, if you are [using LLM to grade your output](https://promptfoo.dev/docs/configuration/expected-outputs#llm-evaluation) |
 
 After running an eval, you may optionally use the `view` command to open the web viewer:

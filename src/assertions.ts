@@ -421,7 +421,13 @@ ${assertion.value}`,
     test.options.provider = assertion.provider || test.options.provider;
     return {
       assertion,
-      ...(await matchesSimilarity(renderedValue, output, assertion.threshold || 0.75, inverse, test.options)),
+      ...(await matchesSimilarity(
+        renderedValue,
+        output,
+        assertion.threshold || 0.75,
+        inverse,
+        test.options,
+      )),
     };
   }
 
