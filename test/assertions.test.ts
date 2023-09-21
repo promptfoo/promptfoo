@@ -953,12 +953,12 @@ describe('runAssertion', () => {
     fs.writeFileSync(
       tempFilePath,
       `module.exports = function(output, context) {
-        return output;
+        return output === 'Expected output';
       };`
     );
 
     const fileAssertion: Assertion = {
-      type: 'equals',
+      type: 'javascript',
       value: `file://${tempFilePath}`,
     };
 
