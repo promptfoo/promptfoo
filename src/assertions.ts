@@ -137,22 +137,30 @@ export async function runAssertion(
   // renderString for assertion values
   if (renderedValue && typeof renderedValue === 'string') {
     if (renderedValue && typeof renderedValue === 'string') {
-      if (renderedValue.startsWith('file://')) {
-        const filePath = renderedValue.slice('file://'.length);
-        if (filePath.endsWith('.js')) {
-          const requiredModule = require(path.resolve(filePath));
-          if (typeof requiredModule === 'function') {
-            renderedValue = requiredModule(output, { vars: test.vars || {} });
-          } else if (requiredModule.default && typeof requiredModule.default === 'function') {
-            renderedValue = requiredModule.default(output, { vars: test.vars || {} });
+      if (renderedValue && typeof renderedValue === 'string') {
+        if (renderedValue.startsWith('file://')) {
+          const filePath = renderedValue.slice('file://'.length);
+          if (filePath.endsWith('.js')) {
+            const requiredModule = require(path.resolve(filePath));
+            if (typeof requiredModule === 'function') {
+              renderedValue = requiredModule(output, { vars: test.vars || {} });
+            } else if (requiredModule.default && typeof requiredModule.default === 'function') {
+              renderedValue = requiredModule.default(output, { vars: test.vars || {} });
+            } else {
+              throw new Error('The JavaScript file must export a function or have a default export as a function');
+            }
+          } else if (filePath.endsWith('.py')) {
+            const { execSync } = require('child_process');
+            const pythonScriptOutput = execSync(`python ${filePath} ${output} '${JSON.stringify({ vars: test.vars || {} })}'`).toString();
+            renderedValue = pythonScriptOutput.trim();
           } else {
-            throw new Error('The JavaScript file must export a function or have a default export as a function');
+            throw new Error('Only JavaScript and Python files are supported for file:// syntax in assertion values');
           }
         } else {
-          throw new Error('Only JavaScript files are supported for file:// syntax in assertion values');
+          renderedValue = nunjucks.renderString(renderedValue, test.vars || {});
         }
-      } else {
-        renderedValue = nunjucks.renderString(renderedValue, test.vars || {});
+      } else if (renderedValue && Array.isArray(renderedValue)) {
+        renderedValue = renderedValue.map((v) => nunjucks.renderString(String(v), test.vars || {}));
       }
     } else if (renderedValue && Array.isArray(renderedValue)) {
       renderedValue = renderedValue.map((v) => nunjucks.renderString(String(v), test.vars || {}));
