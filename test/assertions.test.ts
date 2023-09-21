@@ -948,10 +948,10 @@ describe('runAssertion', () => {
   it('should pass when the file:// assertion with .js file passes', async () => {
     const output = 'Expected output';
 
-    // Create a temporary JavaScript file
-    const tempFilePath = path.join(__dirname, 'temp.js');
+    // Create a temporary JavaScript file using the tmp package
+    const tempFile = tmp.fileSync({ postfix: '.js' });
     fs.writeFileSync(
-      tempFilePath,
+      tempFile.name,
       `module.exports = function(output, context) {
         return output === 'Expected output';
       };`
@@ -959,7 +959,7 @@ describe('runAssertion', () => {
 
     const fileAssertion: Assertion = {
       type: 'javascript',
-      value: `file://${tempFilePath}`,
+      value: `file://${tempFile.name}`,
     };
 
     const result: GradingResult = await runAssertion(
@@ -969,8 +969,7 @@ describe('runAssertion', () => {
       output,
     );
 
-    // Delete the temporary JavaScript file
-    fs.unlinkSync(tempFilePath);
+    // The temporary file will be automatically deleted when the process exits
 
     expect(result.pass).toBeTruthy();
     expect(result.reason).toBe('Assertion passed');
