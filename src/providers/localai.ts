@@ -75,7 +75,7 @@ export class LocalAiChatProvider extends LocalAiGenericProvider {
     logger.debug(`	LocalAI API response: ${JSON.stringify(data)}`);
     try {
       return {
-        output: data.choices[0].text,
+        output: data.choices[0].message,
       };
     } catch (err) {
       return {
