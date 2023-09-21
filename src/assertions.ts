@@ -151,8 +151,8 @@ export async function runAssertion(
             }
           } else if (filePath.endsWith('.py')) {
             const { execSync } = require('child_process');
-            const escapedOutput = output.replace(/"/g, '\\"');
-            const escapedContext = JSON.stringify({ vars: test.vars || {} }).replace(/"/g, '\\"');
+            const escapedOutput = output.replace(/"/g, '\\"').replace(/\n/g, '\\n');
+            const escapedContext = JSON.stringify({ vars: test.vars || {} }).replace(/"/g, '\\"').replace(/\n/g, '\\n');
             const pythonScriptOutput = execSync(`python ${filePath} "${escapedOutput}" "${escapedContext}"`).toString();
             renderedValue = pythonScriptOutput.trim();
           } else {
