@@ -17,6 +17,7 @@ import { ScriptCompletionProvider } from './providers/scriptCompletion';
 import {
   AzureOpenAiChatCompletionProvider,
   AzureOpenAiCompletionProvider,
+  AzureOpenAiEmbeddingProvider,
 } from './providers/azureopenai';
 
 import type {
@@ -110,11 +111,7 @@ export async function loadApiProvider(
     if (modelType === 'chat') {
       return new OpenAiChatCompletionProvider(modelName || 'gpt-3.5-turbo', providerOptions);
     } else if (modelType === 'embedding') {
-      return new OpenAiEmbeddingProvider(modelName || 'text-embedding-ada-002', {
-        id: options.id,
-        config: options.config,
-        env,
-      });
+      return new OpenAiEmbeddingProvider(modelName || 'text-embedding-ada-002', providerOptions);
     } else if (modelType === 'completion') {
       return new OpenAiCompletionProvider(modelName || 'text-davinci-003', providerOptions);
     } else if (OpenAiChatCompletionProvider.OPENAI_CHAT_MODELS.includes(modelType)) {
@@ -134,6 +131,8 @@ export async function loadApiProvider(
 
     if (modelType === 'chat') {
       return new AzureOpenAiChatCompletionProvider(deploymentName, providerOptions);
+    } else if (modelType === 'embedding') {
+      return new AzureOpenAiEmbeddingProvider(deploymentName || 'text-embedding-ada-002', providerOptions);
     } else if (modelType === 'completion') {
       return new AzureOpenAiCompletionProvider(deploymentName, providerOptions);
     } else {
