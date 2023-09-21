@@ -1,6 +1,8 @@
 import { Response } from 'node-fetch';
 import { runAssertions, runAssertion, assertionFromString } from '../src/assertions';
 import * as fetch from '../src/fetch';
+import fs from 'fs';
+import path from 'path';
 
 import type {
   Assertion,
@@ -941,6 +943,37 @@ describe('runAssertion', () => {
     );
     expect(result.pass).toBeFalsy();
     expect(result.reason).toBe('Levenshtein distance 8 is greater than threshold 5');
+  });
+
+  it('should pass when the file:// assertion with .js file passes', async () => {
+    const output = 'Expected output';
+
+    // Create a temporary JavaScript file
+    const tempFilePath = path.join(__dirname, 'temp.js');
+    fs.writeFileSync(
+      tempFilePath,
+      `module.exports = function(output, context) {
+        return output;
+      };`
+    );
+
+    const fileAssertion: Assertion = {
+      type: 'equals',
+      value: `file://${tempFilePath}`,
+    };
+
+    const result: GradingResult = await runAssertion(
+      'Some prompt',
+      fileAssertion,
+      {} as AtomicTestCase,
+      output,
+    );
+
+    // Delete the temporary JavaScript file
+    fs.unlinkSync(tempFilePath);
+
+    expect(result.pass).toBeTruthy();
+    expect(result.reason).toBe('Assertion passed');
   });
 
   it('should handle output strings with both single and double quotes correctly in python assertion', async () => {
