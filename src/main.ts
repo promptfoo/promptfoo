@@ -9,7 +9,7 @@ import { Command } from 'commander';
 import telemetry from './telemetry';
 import logger, { getLogLevel, setLogLevel } from './logger';
 import { loadApiProvider, loadApiProviders } from './providers';
-import { evaluate } from './evaluator';
+import { evaluate, DEFAULT_MAX_CONCURRENCY } from './evaluator';
 import { readPrompts, readProviderPromptMap } from './prompts';
 import { readTest, readTests } from './testCases';
 import {
@@ -226,21 +226,21 @@ async function main() {
       'Maximum number of concurrent API calls',
       defaultConfig.evaluateOptions?.maxConcurrency
         ? String(defaultConfig.evaluateOptions.maxConcurrency)
-        : undefined,
+        : `${DEFAULT_MAX_CONCURRENCY}`,
     )
     .option(
       '--repeat <number>',
       'Number of times to run each test',
       defaultConfig.evaluateOptions?.repeat
         ? String(defaultConfig.evaluateOptions.repeat)
-        : undefined,
+        : '1',
     )
     .option(
       '--delay <number>',
       'Delay between each test (in milliseconds)',
       defaultConfig.evaluateOptions?.delay
         ? String(defaultConfig.evaluateOptions.delay)
-        : undefined,
+        : '0',
     )
     .option(
       '--table-cell-max-length <number>',

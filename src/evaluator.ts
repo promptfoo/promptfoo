@@ -38,7 +38,7 @@ interface RunEvalOptions {
   repeatIndex: number;
 }
 
-const DEFAULT_MAX_CONCURRENCY = 4;
+export const DEFAULT_MAX_CONCURRENCY = 4;
 
 const nunjucks = getNunjucksEngine();
 
