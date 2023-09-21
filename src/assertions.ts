@@ -139,7 +139,8 @@ export async function runAssertion(
     if (renderedValue.startsWith('file://')) {
       const filePath = renderedValue.slice('file://'.length);
       if (filePath.endsWith('.js')) {
-        renderedValue = require(path.resolve(filePath)).default;
+        const requiredModule = require(path.resolve(filePath));
+        renderedValue = requiredModule.default || requiredModule;
       } else {
         throw new Error('Only JavaScript files are supported for file:// syntax in assertion values');
       }
