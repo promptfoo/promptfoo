@@ -136,7 +136,16 @@ export async function runAssertion(
   let renderedValue = assertion.value;
   // renderString for assertion values
   if (renderedValue && typeof renderedValue === 'string') {
-    renderedValue = nunjucks.renderString(renderedValue, test.vars || {});
+    if (renderedValue.startsWith('file://')) {
+      const filePath = renderedValue.slice('file://'.length);
+      if (filePath.endsWith('.js')) {
+        renderedValue = require(path.resolve(filePath)).default;
+      } else {
+        throw new Error('Only JavaScript files are supported for file:// syntax in assertion values');
+      }
+    } else {
+      renderedValue = nunjucks.renderString(renderedValue, test.vars || {});
+    }
   } else if (renderedValue && Array.isArray(renderedValue)) {
     renderedValue = renderedValue.map((v) => nunjucks.renderString(String(v), test.vars || {}));
   }
