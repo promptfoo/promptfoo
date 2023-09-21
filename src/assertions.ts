@@ -151,7 +151,9 @@ export async function runAssertion(
             }
           } else if (filePath.endsWith('.py')) {
             const { execSync } = require('child_process');
-            const pythonScriptOutput = execSync(`python ${filePath} ${output} '${JSON.stringify({ vars: test.vars || {} })}'`).toString();
+            const escapedOutput = output.replace(/"/g, '\\"');
+            const escapedContext = JSON.stringify({ vars: test.vars || {} }).replace(/"/g, '\\"');
+            const pythonScriptOutput = execSync(`python ${filePath} "${escapedOutput}" "${escapedContext}"`).toString();
             renderedValue = pythonScriptOutput.trim();
           } else {
             throw new Error('Only JavaScript and Python files are supported for file:// syntax in assertion values');
