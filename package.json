@@ -5,6 +5,7 @@
   "version": "0.24.1",
   "license": "MIT",
   "type": "commonjs",
+  "repository": "promptfoo/promptfoo",
   "main": "dist/src/index.js",
   "exports": {
     ".": {
