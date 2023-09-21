@@ -26,7 +26,7 @@ interface Job {
 
 const evalJobs = new Map<string, Job>();
 
-export function startServer(port = 15500) {
+export function startServer(port = 15500, skipConfirmation = false) {
   const app = express();
 
   const staticDir = path.join(getDirectory(), 'web', 'nextui');
@@ -138,21 +138,29 @@ export function startServer(port = 15500) {
     const url = `http://localhost:${port}`;
     logger.info(`Server listening at ${url}`);
 
-    const rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout,
-    });
-    rl.question('Do you want to open the browser to the URL? (y/N): ', async (answer) => {
-      if (answer.toLowerCase().startsWith('y')) {
-        try {
-          await opener(url);
-          logger.info(`Opening browser to: ${url}`);
-        } catch (err) {
-          logger.error(`Failed to open browser: ${String(err)}`);
-        }
+    const openUrl = async () => {
+      try {
+        logger.info('Press Ctrl+C to stop the server');
+        await opener(url);
+      } catch (err) {
+        logger.error(`Failed to open browser: ${String(err)}`);
       }
-      rl.close();
-      logger.info('Press Ctrl+C to stop the server');
-    });
+    };
+
+    if (skipConfirmation) {
+      openUrl();
+    } else {
+      const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+      });
+      rl.question('Do you want to open the browser to the URL? (y/N): ', async (answer) => {
+        if (answer.toLowerCase().startsWith('y')) {
+          openUrl();
+        }
+        rl.close();
+        logger.info('Press Ctrl+C to stop the server');
+      });
+    }
   });
 }

@@ -121,13 +121,14 @@ async function main() {
     .command('view')
     .description('Start browser ui')
     .option('-p, --port <number>', 'Port number', '15500')
-    .action(async (cmdObj: { port: number } & Command) => {
+    .option('-y, --yes', 'Skip confirmation and auto-open the URL')
+    .action(async (cmdObj: { port: number; yes: boolean } & Command) => {
       telemetry.maybeShowNotice();
       telemetry.record('command_used', {
         name: 'view',
       });
       await telemetry.send();
-      startServer(cmdObj.port);
+      startServer(cmdObj.port, cmdObj.yes);
     });
 
   program
