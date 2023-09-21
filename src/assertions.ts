@@ -1,4 +1,4 @@
-import os from 'os';
+import path from 'path';
 
 import rouge from 'rouge';
 import invariant from 'tiny-invariant';
@@ -132,42 +132,36 @@ export async function runAssertion(
     type: baseType,
   });
 
-  //render assertion values
+  // Render assertion values
   let renderedValue = assertion.value;
-  // renderString for assertion values
-  if (renderedValue && typeof renderedValue === 'string') {
-    if (renderedValue && typeof renderedValue === 'string') {
-      if (renderedValue && typeof renderedValue === 'string') {
-        if (renderedValue.startsWith('file://')) {
-          const filePath = renderedValue.slice('file://'.length);
-          if (filePath.endsWith('.js')) {
-            const requiredModule = require(path.resolve(filePath));
-            if (typeof requiredModule === 'function') {
-              renderedValue = requiredModule(output, { vars: test.vars || {} });
-            } else if (requiredModule.default && typeof requiredModule.default === 'function') {
-              renderedValue = requiredModule.default(output, { vars: test.vars || {} });
-            } else {
-              throw new Error('The JavaScript file must export a function or have a default export as a function');
-            }
-          } else if (filePath.endsWith('.py')) {
-            const { execSync } = require('child_process');
-            const escapedOutput = output.replace(/"/g, '\\"').replace(/\n/g, '\\n');
-            const escapedContext = JSON.stringify({ vars: test.vars || {} }).replace(/"/g, '\\"').replace(/\n/g, '\\n');
-            const pythonScriptOutput = execSync(`python ${filePath} "${escapedOutput}" "${escapedContext}"`).toString();
-            renderedValue = pythonScriptOutput.trim();
-          } else {
-            throw new Error('Only JavaScript and Python files are supported for file:// syntax in assertion values');
-          }
+  if (typeof renderedValue === 'string') {
+    if (renderedValue.startsWith('file://')) {
+      // Load the file
+      const filePath = renderedValue.slice('file://'.length);
+      if (filePath.endsWith('.js')) {
+        const requiredModule = require(path.resolve(filePath));
+        if (typeof requiredModule === 'function') {
+          renderedValue = requiredModule(output, { vars: test.vars || {} });
+        } else if (requiredModule.default && typeof requiredModule.default === 'function') {
+          renderedValue = requiredModule.default(output, { vars: test.vars || {} });
         } else {
-          renderedValue = nunjucks.renderString(renderedValue, test.vars || {});
+          throw new Error(`Assertion malformed: ${filePath} must export a function or have a default export as a function`);
         }
-      } else if (renderedValue && Array.isArray(renderedValue)) {
-        renderedValue = renderedValue.map((v) => nunjucks.renderString(String(v), test.vars || {}));
+      } else if (filePath.endsWith('.py')) {
+        const { execSync } = require('child_process');
+        const escapedOutput = output.replace(/"/g, '\\"').replace(/\n/g, '\\n');
+        const escapedContext = JSON.stringify({ vars: test.vars || {} }).replace(/"/g, '\\"').replace(/\n/g, '\\n');
+        const pythonScriptOutput = execSync(`python ${filePath} "${escapedOutput}" "${escapedContext}"`).toString();
+        renderedValue = pythonScriptOutput.trim();
+      } else {
+        throw new Error(`Assertion malformed: ${filePath} must end in .js or .py`);
       }
-    } else if (renderedValue && Array.isArray(renderedValue)) {
-      renderedValue = renderedValue.map((v) => nunjucks.renderString(String(v), test.vars || {}));
+    } else {
+      // It's a normal string value
+      renderedValue = nunjucks.renderString(renderedValue, test.vars || {});
     }
   } else if (renderedValue && Array.isArray(renderedValue)) {
+    // Unpack the array
     renderedValue = renderedValue.map((v) => nunjucks.renderString(String(v), test.vars || {}));
   }
 

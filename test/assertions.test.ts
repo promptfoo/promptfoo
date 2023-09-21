@@ -1,8 +1,6 @@
 import { Response } from 'node-fetch';
 import { runAssertions, runAssertion, assertionFromString } from '../src/assertions';
 import * as fetch from '../src/fetch';
-import fs from 'fs';
-import path from 'path';
 
 import type {
   Assertion,
@@ -948,18 +946,15 @@ describe('runAssertion', () => {
   it('should pass when the file:// assertion with .js file passes', async () => {
     const output = 'Expected output';
 
-    // Create a temporary JavaScript file using the tmp package
-    const tempFile = tmp.fileSync({ postfix: '.js' });
-    fs.writeFileSync(
-      tempFile.name,
-      `module.exports = function(output, context) {
-        return output === 'Expected output';
-      };`
-    );
+    // https://stackoverflow.com/a/47728913
+    // https://stackoverflow.com/a/56052635
+    jest.doMock('/path/to/assert.js', () => {
+      return jest.fn((output: string) => output === 'Expected output');
+    }, { virtual: true });
 
     const fileAssertion: Assertion = {
       type: 'javascript',
-      value: `file://${tempFile.name}`,
+      value: 'file:///path/to/assert.js',
     };
 
     const result: GradingResult = await runAssertion(
@@ -969,8 +964,7 @@ describe('runAssertion', () => {
       output,
     );
 
-    // The temporary file will be automatically deleted when the process exits
-
+    console.log(result)
     expect(result.pass).toBeTruthy();
     expect(result.reason).toBe('Assertion passed');
   });
