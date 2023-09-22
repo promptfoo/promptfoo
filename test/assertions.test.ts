@@ -304,6 +304,33 @@ describe('runAssertion', () => {
     expect(result.reason).toBe('Assertion passed');
   });
 
+  it('should pass when the contains-json assertion passes with multiple json values', async () => {
+    const output =
+      'this is some other stuff \n\n {"key": "value", "key2": {"key3": "value2", "key4": ["value3", "value4"]}} another {"key": "value", "key2": {"key3": "value2", "key4": ["value3", "value4"]}}\n\n blah blah';
+
+    const result: GradingResult = await runAssertion(
+      'Some prompt',
+      containsJsonAssertion,
+      {} as AtomicTestCase,
+      output,
+    );
+    expect(result.pass).toBeTruthy();
+    expect(result.reason).toBe('Assertion passed');
+  });
+
+  it('should pass when the contains-json assertion passes with valid and invalid json', async () => {
+    const output = 'There is an extra opening bracket \n\n { {"key": "value"} \n\n blah blah';
+
+    const result: GradingResult = await runAssertion(
+      'Some prompt',
+      containsJsonAssertion,
+      {} as AtomicTestCase,
+      output,
+    );
+    expect(result.pass).toBeTruthy();
+    expect(result.reason).toBe('Assertion passed');
+  });
+
   it('should fail when the contains-json assertion fails', async () => {
     const output = 'Not valid JSON';
 

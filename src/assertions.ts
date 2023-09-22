@@ -283,34 +283,31 @@ export async function runAssertion(
       assertion,
     };
   }
-
   if (baseType === 'contains-json') {
-    const jsonMatch = containsJSON(output);
-    pass = jsonMatch !== inverse;
-
-    if (pass && renderedValue) {
-      invariant(
-        typeof renderedValue === 'object',
-        'contains-json assertion must have an object value',
-      );
-      const validate = ajv.compile(renderedValue);
-      pass = validate(jsonMatch);
-      if (!pass) {
-        return {
-          pass,
-          score: 0,
-          reason: `JSON does not conform to the provided schema. Errors: ${ajv.errorsText(
+    let errorMessage = 'Expected output to contain valid JSON';
+    let jsonOutputs = containsJSON(output);
+    for (const jsonMatch of jsonOutputs) {
+      pass = jsonMatch !== inverse;
+      if (pass && renderedValue) {
+        invariant(
+          typeof renderedValue === 'object',
+          'contains-json assertion must have an object value',
+        );
+        const validate = ajv.compile(renderedValue);
+        pass = validate(jsonMatch);
+        if (pass) {
+          break;
+        } else {
+          errorMessage = `JSON does not conform to the provided schema. Errors: ${ajv.errorsText(
             validate.errors,
-          )}`,
-          assertion,
-        };
+          )}`;
+        }
       }
     }
-
     return {
       pass,
       score: pass ? 1 : 0,
-      reason: pass ? 'Assertion passed' : 'Expected output to contain valid JSON',
+      reason: pass ? 'Assertion passed' : errorMessage,
       assertion,
     };
   }
@@ -597,21 +594,34 @@ ${assertion.value}`,
   throw new Error('Unknown assertion type: ' + assertion.type);
 }
 
-function containsJSON(str: string): boolean {
-  // Regular expression to check for JSON-like pattern
-  const jsonPattern = /({[\s\S]*}|\[[\s\S]*])/;
+function containsJSON(str: string): any {
+  // This will extract all json objects from a string
 
-  const match = str.match(jsonPattern);
-
-  if (!match) {
-    return false;
+  let jsonObjects = [];
+  let openBracket = str.indexOf('{');
+  let closeBracket = str.indexOf('}', openBracket);
+  // Iterate over the string until we find a valid JSON-like pattern
+  // Iterate over all trailing } until the contents parse as json
+  while (openBracket !== -1) {
+    const jsonStr = str.slice(openBracket, closeBracket + 1);
+    try {
+      jsonObjects.push(JSON.parse(jsonStr));
+      // This is a valid JSON object, so start looking for
+      // an opening bracket after the last closing bracket
+      openBracket = str.indexOf('{', closeBracket + 1);
+      closeBracket = str.indexOf('}', openBracket);
+    } catch (err) {
+      // Not a valid object, move on to the next closing bracket
+      closeBracket = str.indexOf('}', closeBracket + 1);
+      while (closeBracket === -1) {
+        // No closing brackets made a valid json object, so
+        // start looking with the next opening bracket
+        openBracket = str.indexOf('{', openBracket + 1);
+        closeBracket = str.indexOf('}', openBracket);
+      }
+    }
   }
-
-  try {
-    return JSON.parse(match[0]);
-  } catch (error) {
-    return false;
-  }
+  return jsonObjects;
 }
 
 export function assertionFromString(expected: string): Assertion {
