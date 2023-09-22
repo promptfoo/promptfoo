@@ -16,7 +16,9 @@ let cacheInstance: Cache | undefined;
 let enabled =
   typeof process.env.PROMPTFOO_CACHE_ENABLED === 'undefined'
     ? true
-    : Boolean(process.env.PROMPTFOO_CACHE_ENABLED);
+    : process.env.PROMPTFOO_CACHE_ENABLED === '1' ||
+      process.env.PROMPTFOO_CACHE_ENABLED === 'true' ||
+      process.env.PROMPTFOO_CACHE_ENABLED === 'yes';
 
 const cacheType =
   process.env.PROMPTFOO_CACHE_TYPE || (process.env.NODE_ENV === 'test' ? 'memory' : 'disk');
