@@ -15,7 +15,7 @@ jest.mock('fs', () => ({
   mkdirSync: jest.fn(),
 }));
 
-jest.mock('../src/esm.js');
+jest.mock('../src/esm');
 
 beforeEach(() => {
   jest.clearAllMocks();

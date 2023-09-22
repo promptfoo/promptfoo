@@ -4,8 +4,8 @@ import { OpenAiCompletionProvider, OpenAiChatCompletionProvider } from '../src/p
 import { AnthropicCompletionProvider } from '../src/providers/anthropic';
 import { LlamaProvider } from '../src/providers/llama';
 
-import { disableCache, enableCache } from '../src/cache.js';
-import { loadApiProvider, loadApiProviders } from '../src/providers.js';
+import { disableCache, enableCache } from '../src/cache';
+import { loadApiProvider, loadApiProviders } from '../src/providers';
 import {
   AzureOpenAiChatCompletionProvider,
   AzureOpenAiCompletionProvider,
@@ -17,7 +17,7 @@ import type { ProviderOptionsMap, ProviderFunction } from '../src/types';
 
 jest.mock('node-fetch', () => jest.fn());
 
-jest.mock('../src/esm.js');
+jest.mock('../src/esm');
 
 describe('providers', () => {
   afterEach(() => {

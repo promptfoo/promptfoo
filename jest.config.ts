@@ -10,9 +10,11 @@ const config: Config = {
       useESM: true,
     },
   },
+  /*
   moduleNameMapper: {
     '(.+)\\.js': '$1',
   },
+  */
   extensionsToTreatAsEsm: ['.ts'],
   setupFiles: ['<rootDir>/.jest/setEnvVars.js'],
   testPathIgnorePatterns: ['<rootDir>/examples', '<rootDir>/node_modules', '<rootDir>/dist'],
