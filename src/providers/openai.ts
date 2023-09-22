@@ -9,8 +9,6 @@ import type {
   ProviderResponse,
 } from '../types.js';
 
-const DEFAULT_OPENAI_HOST = 'api.openai.com';
-
 interface OpenAiCompletionOptions {
   temperature?: number;
   max_tokens?: number;
@@ -27,7 +25,7 @@ interface OpenAiCompletionOptions {
   stop?: string[];
 
   apiKey?: string;
-  apiHost?: string;
+  apiBaseUrl?: string;
   organization?: string;
 }
 
@@ -62,12 +60,12 @@ class OpenAiGenericProvider implements ApiProvider {
     );
   }
 
-  getApiHost(): string | undefined {
+  getApiUrl(): string | undefined {
     return (
-      this.config.apiHost ||
-      this.env?.OPENAI_API_HOST ||
-      process.env.OPENAI_API_HOST ||
-      DEFAULT_OPENAI_HOST
+      this.config.apiBaseUrl ||
+      this.env?.OPENAI_API_BASE_URL ||
+      process.env.OPENAI_API_BASE_URL ||
+      'https://api.openai.com'
     );
   }
 
@@ -95,7 +93,7 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
       cached = false;
     try {
       ({ data, cached } = (await fetchWithCache(
-        `https://${this.getApiHost()}/v1/embeddings`,
+        `${this.getApiUrl()}/v1/embeddings`,
         {
           method: 'POST',
           headers: {
@@ -202,7 +200,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       cached = false;
     try {
       ({ data, cached } = (await fetchWithCache(
-        `https://${this.getApiHost()}/v1/completions`,
+        `${this.getApiUrl()}/v1/completions`,
         {
           method: 'POST',
           headers: {
@@ -300,7 +298,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       cached = false;
     try {
       ({ data, cached } = (await fetchWithCache(
-        `https://${this.getApiHost()}/v1/chat/completions`,
+        `${this.getApiUrl()}/v1/chat/completions`,
         {
           method: 'POST',
           headers: {
