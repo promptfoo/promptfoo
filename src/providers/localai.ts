@@ -2,7 +2,7 @@ import logger from '../logger';
 import { fetchWithCache } from '../cache';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
 
-import type { ApiProvider, EnvOverrides, ProviderResponse } from '../types.js';
+import type { ApiProvider, EnvOverrides, ProviderEmbeddingResponse, ProviderResponse } from '../types.js';
 
 interface LocalAiCompletionOptions {
   apiBaseUrl?: string;
@@ -77,6 +77,50 @@ export class LocalAiChatProvider extends LocalAiGenericProvider {
       return {
         output: data.choices[0].message.content,
       };
+    } catch (err) {
+      return {
+        error: `API response error: ${String(err)}: ${JSON.stringify(data)}`,
+      };
+    }
+  }
+}
+
+export class LocalAiEmbeddingProvider extends LocalAiGenericProvider {
+  async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
+    const body = {
+      input: text,
+      model: this.modelName,
+    };
+    let data,
+      cached = false;
+    try {
+      ({ data, cached } = (await fetchWithCache(
+        `${this.apiBaseUrl}/embeddings`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(body),
+        },
+        REQUEST_TIMEOUT_MS,
+      )) as unknown as any);
+    } catch (err) {
+      return {
+        error: `API call error: ${String(err)}`,
+      };
+    }
+    logger.debug(`\tLocalAI API response (embeddings): ${JSON.stringify(data)}`);
+
+    try {
+      const embedding = data?.data?.[0]?.embedding;
+      if (!embedding) {
+        throw new Error('No embedding returned');
+      }
+      const ret = {
+        embedding,
+      };
+      return ret;
     } catch (err) {
       return {
         error: `API response error: ${String(err)}: ${JSON.stringify(data)}`,

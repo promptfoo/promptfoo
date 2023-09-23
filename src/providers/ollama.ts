@@ -2,7 +2,7 @@ import logger from '../logger';
 import { fetchWithCache } from '../cache';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
-import type { ApiProvider, ProviderResponse } from '../types.js';
+import type { ApiProvider, ProviderEmbeddingResponse, ProviderResponse } from '../types.js';
 
 interface OllamaJsonL {
   model: string;
@@ -81,6 +81,51 @@ export class OllamaProvider implements ApiProvider {
 
       return {
         output,
+      };
+    } catch (err) {
+      return {
+        error: `API response error: ${String(err)}: ${JSON.stringify(response.data)}`,
+      };
+    }
+  }
+}
+
+export class OllamaEmbeddingProvider extends OllamaProvider {
+  async callEmbeddingApi(prompt: string): Promise<ProviderEmbeddingResponse> {
+    const params = {
+      model: this.modelName,
+      prompt,
+    };
+
+    logger.debug(`Calling Ollama API: ${JSON.stringify(params)}`);
+    let response;
+    try {
+      response = await fetchWithCache(
+        `${process.env.OLLAMA_BASE_URL || 'http://localhost:11434'}/api/embeddings`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(params),
+        },
+        REQUEST_TIMEOUT_MS,
+        'json',
+      );
+    } catch (err) {
+      return {
+        error: `API call error: ${String(err)}`,
+      };
+    }
+    logger.debug(`\tOllama API response: ${JSON.stringify(response.data)}`);
+
+    try {
+      const embedding = response.data.embeddings as number[];
+      if (!embedding) {
+        throw new Error('No embedding returned');
+      }
+      return {
+        embedding,
       };
     } catch (err) {
       return {
