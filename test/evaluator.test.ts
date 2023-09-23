@@ -1,10 +1,10 @@
-import { evaluate, renderPrompt } from '../src/evaluator.js';
+import { evaluate, renderPrompt } from '../src/evaluator';
 
-import type { ApiProvider, TestSuite, Prompt } from '../src/types.js';
+import type { ApiProvider, TestSuite, Prompt } from '../src/types';
 
 jest.mock('node-fetch', () => jest.fn());
 
-jest.mock('../src/esm.js');
+jest.mock('../src/esm');
 
 const mockApiProvider: ApiProvider = {
   id: jest.fn().mockReturnValue('test-provider'),

@@ -119,4 +119,22 @@ describe('prompts', () => {
     expect(fs.readFileSync).toHaveBeenCalledTimes(1);
     expect(result).toEqual([toPrompt(JSON.stringify(data[0])), toPrompt(JSON.stringify(data[1]))]);
   });
+
+  test('readPrompts with .py file', () => {
+    const code = `print('dummy prompt')`;
+    (fs.readFileSync as jest.Mock).mockReturnValue(code);
+    const result = readPrompts('prompt.py');
+    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+    expect(result[0].raw).toEqual(code);
+    expect(result[0].display).toEqual(code);
+    expect(result[0].function).toBeDefined();
+  });
+
+  test('readPrompts with .js file', () => {
+    jest.doMock(path.resolve('prompt.js'), () => {
+      return jest.fn(() => console.log('dummy prompt'));
+    }, { virtual: true });
+    const result = readPrompts('prompt.js');
+    expect(result[0].function).toBeDefined();
+  });
 });
