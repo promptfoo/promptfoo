@@ -122,9 +122,9 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
     try {
       const embedding = data?.data?.[0]?.embedding;
       if (!embedding) {
-        throw new Error(`No embedding found in OpenAI embeddings API response: ${JSON.stringify(data)}`);
+        throw new Error('No embedding found in OpenAI embeddings API response');
       }
-      const ret = {
+      return {
         embedding,
         tokenUsage: cached
           ? { cached: data.usage.total_tokens }
@@ -134,7 +134,6 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
               completion: data.usage.completion_tokens,
             },
       };
-      return ret;
     } catch (err) {
       return {
         error: `API response error: ${String(err)}: ${JSON.stringify(data)}`,
