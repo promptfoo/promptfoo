@@ -85,12 +85,68 @@ export class LocalAiChatProvider extends LocalAiGenericProvider {
   }
 }
 
+export class LocalAiEmbeddingProvider extends LocalAiGenericProvider {
+  async callEmbeddingApi(text: string): Promise<ProviderResponse> {
+    const body = {
+      input: text,
+      model: this.modelName,
+    };
+    let data,
+      cached = false;
+    try {
+      ({ data, cached } = (await fetchWithCache(
+        `${this.apiBaseUrl}/embeddings`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(body),
+        },
+        REQUEST_TIMEOUT_MS,
+      )) as unknown as any);
+    } catch (err) {
+      return {
+        error: `API call error: ${String(err)}`,
+      };
+    }
+    logger.debug(`\tLocalAI API response (embeddings): ${JSON.stringify(data)}`);
+
+    try {
+      const embedding = data?.data?.[0]?.embedding;
+      if (!embedding) {
+        throw new Error('No embedding returned');
+      }
+      const ret = {
+        embedding,
+        tokenUsage: cached
+          ? { cached: data.usage.total_tokens }
+          : {
+              total: data.usage.total_tokens,
+              prompt: data.usage.prompt_tokens,
+              completion: data.usage.completion_tokens,
+            },
+      };
+      return ret;
+    } catch (err) {
+      return {
+        error: `API response error: ${String(err)}: ${JSON.stringify(data)}`,
+        tokenUsage: {
+          total: data?.usage?.total_tokens,
+          prompt: data?.usage?.prompt_tokens,
+          completion: data?.usage?.completion_tokens,
+        },
+      };
+    }
+  }
+}
+
 export class LocalAiCompletionProvider extends LocalAiGenericProvider {
   async callApi(prompt: string): Promise<ProviderResponse> {
     const body = {
       model: this.modelName,
       prompt,
-      temperature: this.config.temperature || process.env.LOCALAI_TEMPERATURE || 0.7,
+      temperature: this.config.temperature || process.env.LOCALAI_TEMPERATURE || '0.7',
     };
     logger.debug(`Calling LocalAI API: ${JSON.stringify(body)}`);
 
