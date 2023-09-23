@@ -1,4 +1,5 @@
 import React from 'react';
+import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 
 import { API_BASE_URL } from '@/constants';
@@ -7,6 +8,10 @@ import { EvaluateSummary, EvaluateTestSuite, SharedResults } from '@/../../../ty
 import Eval from '../Eval';
 
 import './page.css';
+
+export const metadata: Metadata = {
+  robots: 'noindex',
+};
 
 export async function generateStaticParams() {
   return [];
