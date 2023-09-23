@@ -117,7 +117,7 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
         },
       };
     }
-    logger.debug(`\tOpenAI API response (embeddings): ${JSON.stringify(data)}`);
+    logger.debug(`\tOpenAI embeddings API response: ${JSON.stringify(data)}`);
 
     try {
       const embedding = data?.data?.[0]?.embedding;
@@ -219,7 +219,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
         error: `API call error: ${String(err)}`,
       };
     }
-    logger.debug(`\tOpenAI API response: ${JSON.stringify(data)}`);
+    logger.debug(`\tOpenAI completions API response: ${JSON.stringify(data)}`);
     try {
       return {
         output: data.choices[0].text,
@@ -318,7 +318,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       };
     }
 
-    logger.debug(`\tOpenAI API response: ${JSON.stringify(data)}`);
+    logger.debug(`\tOpenAI chat completions API response: ${JSON.stringify(data)}`);
     try {
       const message = data.choices[0].message;
       const output = message.content === null ? message.function_call : message.content;
