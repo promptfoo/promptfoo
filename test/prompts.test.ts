@@ -131,10 +131,10 @@ describe('prompts', () => {
   });
 
   test('readPrompts with .js file', () => {
-    jest.doMock('/path/to/prompt.js', () => {
+    jest.doMock('prompt.js', () => {
       return jest.fn(() => console.log('dummy prompt'));
     }, { virtual: true });
-    const result = readPrompts('/path/to/prompt.js');
+    const result = readPrompts('prompt.js');
     expect(result[0].function).toBeDefined();
   });
 });
