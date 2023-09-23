@@ -122,7 +122,7 @@ export class OllamaEmbeddingProvider extends OllamaProvider {
     try {
       const embedding = response.data.embeddings as number[];
       if (!embedding) {
-        throw new Error('No embedding returned');
+        throw new Error(`No embedding found in Ollama embeddings API response: ${JSON.stringify(response.data)}`);
       }
       return {
         embedding,
