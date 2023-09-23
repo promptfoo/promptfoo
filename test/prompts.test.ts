@@ -131,7 +131,7 @@ describe('prompts', () => {
   });
 
   test('readPrompts with .js file', () => {
-    jest.doMock('prompt.js', () => {
+    jest.doMock(path.resolve('prompt.js'), () => {
       return jest.fn(() => console.log('dummy prompt'));
     }, { virtual: true });
     const result = readPrompts('prompt.js');
