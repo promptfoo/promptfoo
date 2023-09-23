@@ -117,10 +117,9 @@ export class LocalAiEmbeddingProvider extends LocalAiGenericProvider {
       if (!embedding) {
         throw new Error(`No embedding found in LocalAI embeddings API response: ${JSON.stringify(data)}`);
       }
-      const ret = {
+      return {
         embedding,
       };
-      return ret;
     } catch (err) {
       return {
         error: `API response error: ${String(err)}: ${JSON.stringify(data)}`,
