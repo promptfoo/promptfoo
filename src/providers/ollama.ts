@@ -89,3 +89,48 @@ export class OllamaProvider implements ApiProvider {
     }
   }
 }
+
+export class OllamaEmbeddingProvider extends OllamaProvider {
+  async callEmbeddingApi(prompt: string): Promise<ProviderResponse> {
+    const params = {
+      model: this.modelName,
+      prompt,
+    };
+
+    logger.debug(`Calling Ollama API: ${JSON.stringify(params)}`);
+    let response;
+    try {
+      response = await fetchWithCache(
+        `${process.env.OLLAMA_BASE_URL || 'http://localhost:11434'}/api/embeddings`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(params),
+        },
+        REQUEST_TIMEOUT_MS,
+        'json',
+      );
+    } catch (err) {
+      return {
+        error: `API call error: ${String(err)}`,
+      };
+    }
+    logger.debug(`\tOllama API response: ${JSON.stringify(response.data)}`);
+
+    try {
+      const embedding = response.data.embeddings;
+      if (!embedding) {
+        throw new Error('No embedding returned');
+      }
+      return {
+        embedding,
+      };
+    } catch (err) {
+      return {
+        error: `API response error: ${String(err)}: ${JSON.stringify(response.data)}`,
+      };
+    }
+  }
+}
