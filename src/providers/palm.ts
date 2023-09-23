@@ -85,19 +85,20 @@ export class PalmChatProvider extends PalmGenericProvider {
     const messages = parseChatPrompt(prompt, [{ content: prompt }]);
     const body = {
       prompt: { messages },
-      safetySettings: this.config.safetySettings,
-      stopSequences: this.config.stopSequences,
       temperature: this.config.temperature,
-      maxOutputTokens: this.config.maxOutputTokens,
       topP: this.config.topP,
       topK: this.config.topK,
+
+      safetySettings: this.config.safetySettings,
+      stopSequences: this.config.stopSequences,
+      maxOutputTokens: this.config.maxOutputTokens,
     };
     logger.debug(`Calling Google PaLM API: ${JSON.stringify(body)}`);
 
     let data;
     try {
       ({ data } = (await fetchWithCache(
-        `https://${this.getApiHost()}/v1beta2/models/${
+        `https://${this.getApiHost()}/v1beta3/models/${
           this.modelName
         }:generateMessage?key=${this.getApiKey()}`,
         {
@@ -116,6 +117,13 @@ export class PalmChatProvider extends PalmGenericProvider {
     }
 
     logger.debug(`\tPaLM API response: ${JSON.stringify(data)}`);
+
+    if (!data?.candidates || data.candidates.length === 0) {
+      return {
+        error: `API did not return any candidate responses: ${JSON.stringify(data)}`,
+      };
+    }
+
     try {
       const output = data.candidates[0].content;
       return {
