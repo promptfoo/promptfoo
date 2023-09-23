@@ -72,7 +72,7 @@ export class LocalAiChatProvider extends LocalAiGenericProvider {
         error: `API call error: ${String(err)}`,
       };
     }
-    logger.debug(`	LocalAI API response: ${JSON.stringify(data)}`);
+    logger.debug(`\tLocalAI API chat completions response: ${JSON.stringify(data)}`);
     try {
       return {
         output: data.choices[0].message.content,
@@ -110,7 +110,7 @@ export class LocalAiEmbeddingProvider extends LocalAiGenericProvider {
         error: `API call error: ${String(err)}`,
       };
     }
-    logger.debug(`\tLocalAI API response (embeddings): ${JSON.stringify(data)}`);
+    logger.debug(`\tLocalAI embeddings API response: ${JSON.stringify(data)}`);
 
     try {
       const embedding = data?.data?.[0]?.embedding;
@@ -157,7 +157,7 @@ export class LocalAiCompletionProvider extends LocalAiGenericProvider {
         error: `API call error: ${String(err)}`,
       };
     }
-    logger.debug(`	LocalAI API response: ${JSON.stringify(data)}`);
+    logger.debug(`\tLocalAI completions API response: ${JSON.stringify(data)}`);
     try {
       return {
         output: data.choices[0].text,

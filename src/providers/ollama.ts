@@ -63,7 +63,7 @@ export class OllamaProvider implements ApiProvider {
         error: `API call error: ${String(err)}`,
       };
     }
-    logger.debug(`\tOllama API response: ${response.data}`);
+    logger.debug(`\tOllama generate API response: ${response.data}`);
 
     try {
       const output = response.data
@@ -117,7 +117,7 @@ export class OllamaEmbeddingProvider extends OllamaProvider {
         error: `API call error: ${String(err)}`,
       };
     }
-    logger.debug(`\tOllama API response: ${JSON.stringify(response.data)}`);
+    logger.debug(`\tOllama embeddings API response: ${JSON.stringify(response.data)}`);
 
     try {
       const embedding = response.data.embeddings as number[];
