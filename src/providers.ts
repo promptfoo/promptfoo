@@ -7,10 +7,10 @@ import {
 } from './providers/openai';
 import { AnthropicCompletionProvider } from './providers/anthropic';
 import { ReplicateProvider } from './providers/replicate';
-import { LocalAiCompletionProvider, LocalAiChatProvider } from './providers/localai';
+import { LocalAiCompletionProvider, LocalAiChatProvider, LocalAiEmbeddingProvider } from './providers/localai';
 import { PalmChatProvider } from './providers/palm';
 import { LlamaProvider } from './providers/llama';
-import { OllamaProvider } from './providers/ollama';
+import { OllamaEmbeddingProvider, OllamaProvider } from './providers/ollama';
 import { VertexChatProvider } from './providers/vertex';
 import { WebhookProvider } from './providers/webhook';
 import { ScriptCompletionProvider } from './providers/scriptCompletion';
@@ -110,7 +110,7 @@ export async function loadApiProvider(
 
     if (modelType === 'chat') {
       return new OpenAiChatCompletionProvider(modelName || 'gpt-3.5-turbo', providerOptions);
-    } else if (modelType === 'embedding') {
+    } else if (modelType === 'embedding' || modelType === 'embeddings') {
       return new OpenAiEmbeddingProvider(modelName || 'text-embedding-ada-002', providerOptions);
     } else if (modelType === 'completion') {
       return new OpenAiCompletionProvider(modelName || 'text-davinci-003', providerOptions);
@@ -131,7 +131,7 @@ export async function loadApiProvider(
 
     if (modelType === 'chat') {
       return new AzureOpenAiChatCompletionProvider(deploymentName, providerOptions);
-    } else if (modelType === 'embedding') {
+    } else if (modelType === 'embedding' || modelType === 'embeddings') {
       return new AzureOpenAiEmbeddingProvider(deploymentName || 'text-embedding-ada-002', providerOptions);
     } else if (modelType === 'completion') {
       return new AzureOpenAiCompletionProvider(deploymentName, providerOptions);
@@ -169,6 +169,9 @@ export async function loadApiProvider(
   } else if (providerPath === 'llama' || providerPath.startsWith('llama:')) {
     const modelName = providerPath.split(':')[1];
     return new LlamaProvider(modelName, providerOptions);
+  } else if (providerPath.startsWith('ollama:embeddings:') || providerPath.startsWith('ollama:embedding:')) {
+    const modelName = providerPath.split(':')[2];
+    return new OllamaEmbeddingProvider(modelName, providerOptions);
   } else if (providerPath.startsWith('ollama:')) {
     const modelName = providerPath.split(':').slice(1).join(':');
     return new OllamaProvider(modelName, providerOptions);
@@ -187,6 +190,8 @@ export async function loadApiProvider(
       return new LocalAiChatProvider(modelName, providerOptions);
     } else if (modelType === 'completion') {
       return new LocalAiCompletionProvider(modelName, providerOptions);
+    } else if (modelType === 'embedding' || modelType === 'embeddings') {
+      return new LocalAiEmbeddingProvider(modelName, providerOptions);
     } else {
       return new LocalAiChatProvider(modelType, providerOptions);
     }

@@ -2,7 +2,7 @@ import logger from '../logger';
 import { fetchWithCache } from '../cache';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
 
-import type { ApiProvider, EnvOverrides, ProviderResponse } from '../types.js';
+import type { ApiProvider, EnvOverrides, ProviderEmbeddingResponse, ProviderResponse } from '../types.js';
 
 interface LocalAiCompletionOptions {
   apiBaseUrl?: string;
@@ -86,7 +86,7 @@ export class LocalAiChatProvider extends LocalAiGenericProvider {
 }
 
 export class LocalAiEmbeddingProvider extends LocalAiGenericProvider {
-  async callEmbeddingApi(text: string): Promise<ProviderResponse> {
+  async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
     const body = {
       input: text,
       model: this.modelName,
@@ -119,23 +119,11 @@ export class LocalAiEmbeddingProvider extends LocalAiGenericProvider {
       }
       const ret = {
         embedding,
-        tokenUsage: cached
-          ? { cached: data.usage.total_tokens }
-          : {
-              total: data.usage.total_tokens,
-              prompt: data.usage.prompt_tokens,
-              completion: data.usage.completion_tokens,
-            },
       };
       return ret;
     } catch (err) {
       return {
         error: `API response error: ${String(err)}: ${JSON.stringify(data)}`,
-        tokenUsage: {
-          total: data?.usage?.total_tokens,
-          prompt: data?.usage?.prompt_tokens,
-          completion: data?.usage?.completion_tokens,
-        },
       };
     }
   }
@@ -146,7 +134,7 @@ export class LocalAiCompletionProvider extends LocalAiGenericProvider {
     const body = {
       model: this.modelName,
       prompt,
-      temperature: this.config.temperature || process.env.LOCALAI_TEMPERATURE || '0.7',
+      temperature: this.config.temperature || process.env.LOCALAI_TEMPERATURE || 0.7,
     };
     logger.debug(`Calling LocalAI API: ${JSON.stringify(body)}`);
 

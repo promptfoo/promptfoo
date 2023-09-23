@@ -2,7 +2,7 @@ import logger from '../logger';
 import { fetchWithCache } from '../cache';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
-import type { ApiProvider, ProviderResponse } from '../types.js';
+import type { ApiProvider, ProviderEmbeddingResponse, ProviderResponse } from '../types.js';
 
 interface OllamaJsonL {
   model: string;
@@ -91,7 +91,7 @@ export class OllamaProvider implements ApiProvider {
 }
 
 export class OllamaEmbeddingProvider extends OllamaProvider {
-  async callEmbeddingApi(prompt: string): Promise<ProviderResponse> {
+  async callEmbeddingApi(prompt: string): Promise<ProviderEmbeddingResponse> {
     const params = {
       model: this.modelName,
       prompt,
@@ -120,7 +120,7 @@ export class OllamaEmbeddingProvider extends OllamaProvider {
     logger.debug(`\tOllama API response: ${JSON.stringify(response.data)}`);
 
     try {
-      const embedding = response.data.embeddings;
+      const embedding = response.data.embeddings as number[];
       if (!embedding) {
         throw new Error('No embedding returned');
       }
