@@ -33,6 +33,7 @@ export interface EnvOverrides {
   AZURE_OPENAI_API_HOST?: string;
   AZURE_OPENAI_API_KEY?: string;
   OPENAI_API_KEY?: string;
+  OPENAI_API_HOST?: string;
   OPENAI_API_BASE_URL?: string;
   OPENAI_ORGANIZATION?: string;
   REPLICATE_API_KEY?: string;

@@ -25,6 +25,7 @@ interface OpenAiCompletionOptions {
   stop?: string[];
 
   apiKey?: string;
+  apiHost?: string;
   apiBaseUrl?: string;
   organization?: string;
 }
@@ -60,7 +61,11 @@ class OpenAiGenericProvider implements ApiProvider {
     );
   }
 
-  getApiUrl(): string | undefined {
+  getApiUrl(): string {
+    let apiHost;
+    if ((apiHost = this.config.apiHost || this.env?.OPENAI_API_HOST || process.env.OPENAI_API_HOST)) {
+     return `https://${apiHost}}`;
+    }
     return (
       this.config.apiBaseUrl ||
       this.env?.OPENAI_API_BASE_URL ||
