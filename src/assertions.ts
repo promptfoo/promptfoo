@@ -373,9 +373,9 @@ data = json.load(sys.stdin)
 output = data['output']
 context = data['context']
 value = data['value']
-${isMultiline ? 'exec(value)': 'print(json.dumps(eval(value)))'}`;
+${isMultiline ? 'exec(value)' : 'print(json.dumps(eval(value)))'}`;
       const pythonProcessInput = JSON.stringify({ output, context, value: renderedValue });
-      const result = execSync(`python -c "${pythonScript.replace(/\n/g, ";")}"`, {
+      const result = execSync(`python -c "${pythonScript.replace(/\n/g, ';')}"`, {
         input: pythonProcessInput,
       })
         .toString()
@@ -547,6 +547,17 @@ ${assertion.value}`,
           : inverse
           ? 1 - jsonResponse.score
           : jsonResponse.score;
+
+      const reason =
+        jsonResponse.reason ||
+        (pass ? 'Assertion passed' : `Webhook returned ${inverse ? 'true' : 'false'}`);
+
+      return {
+        pass,
+        score,
+        reason,
+        assertion,
+      };
     } catch (err) {
       return {
         pass: false,
@@ -555,13 +566,6 @@ ${assertion.value}`,
         assertion,
       };
     }
-
-    return {
-      pass,
-      score,
-      reason: pass ? 'Assertion passed' : `Webhook returned ${inverse ? 'true' : 'false'}`,
-      assertion,
-    };
   }
 
   if (baseType === 'rouge-n') {
