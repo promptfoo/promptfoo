@@ -122,7 +122,7 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
     try {
       const embedding = data?.data?.[0]?.embedding;
       if (!embedding) {
-        throw new Error('No embedding returned');
+        throw new Error(`No embedding found in OpenAI embeddings API response: ${JSON.stringify(data)}`);
       }
       const ret = {
         embedding,
