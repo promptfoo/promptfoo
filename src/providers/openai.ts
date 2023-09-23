@@ -62,8 +62,8 @@ class OpenAiGenericProvider implements ApiProvider {
   }
 
   getApiUrl(): string {
-    let apiHost;
-    if ((apiHost = this.config.apiHost || this.env?.OPENAI_API_HOST || process.env.OPENAI_API_HOST)) {
+    const apiHost = this.config.apiHost || this.env?.OPENAI_API_HOST || process.env.OPENAI_API_HOST;
+    if (apiHost) {
      return `https://${apiHost}}`;
     }
     return (
