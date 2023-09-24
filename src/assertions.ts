@@ -134,6 +134,7 @@ export async function runAssertion(
 
   // Render assertion values
   let renderedValue = assertion.value;
+  let valueFromScript: string | boolean | number | GradingResult | undefined;
   if (typeof renderedValue === 'string') {
     if (renderedValue.startsWith('file://')) {
       // Load the file
@@ -141,9 +142,9 @@ export async function runAssertion(
       if (filePath.endsWith('.js')) {
         const requiredModule = require(path.resolve(filePath));
         if (typeof requiredModule === 'function') {
-          renderedValue = requiredModule(output, { vars: test.vars || {} });
+          valueFromScript = requiredModule(output, { vars: test.vars || {} });
         } else if (requiredModule.default && typeof requiredModule.default === 'function') {
-          renderedValue = requiredModule.default(output, { vars: test.vars || {} });
+          valueFromScript = requiredModule.default(output, { vars: test.vars || {} });
         } else {
           throw new Error(`Assertion malformed: ${filePath} must export a function or have a default export as a function`);
         }
@@ -152,7 +153,7 @@ export async function runAssertion(
         const escapedOutput = output.replace(/"/g, '\\"').replace(/\n/g, '\\n');
         const escapedContext = JSON.stringify({ vars: test.vars || {} }).replace(/"/g, '\\"').replace(/\n/g, '\\n');
         const pythonScriptOutput = execSync(`python ${filePath} "${escapedOutput}" "${escapedContext}"`).toString();
-        renderedValue = pythonScriptOutput.trim();
+        valueFromScript = pythonScriptOutput.trim();
       } else {
         throw new Error(`Assertion malformed: ${filePath} must end in .js or .py`);
       }
@@ -347,9 +348,15 @@ export async function runAssertion(
         return assertion.value(output, test, assertion);
       }
       invariant(typeof renderedValue === 'string', 'javascript assertion must have a string value');
-      const functionBody = renderedValue.includes('\n') ? renderedValue : `return ${renderedValue}`;
-      const customFunction = new Function('output', 'context', functionBody);
-      const result = customFunction(output, context) as any;
+      let result: boolean | number | GradingResult;
+      if (valueFromScript) {
+        invariant(typeof valueFromScript === 'boolean' || typeof valueFromScript === 'number' || typeof valueFromScript === 'object', `Javascript assertion script must return a boolean, number, or object (${assertion.value})`);
+        result = valueFromScript;
+      } else {
+        const functionBody = renderedValue.includes('\n') ? renderedValue : `return ${renderedValue}`;
+        const customFunction = new Function('output', 'context', functionBody);
+        result = customFunction(output, context) as boolean | number | GradingResult;
+      }
       if (typeof result === 'boolean') {
         pass = result !== inverse;
         score = 1.0;
@@ -388,22 +395,28 @@ ${renderedValue}`,
   if (baseType === 'python') {
     invariant(typeof renderedValue === 'string', 'python assertion must have a string value');
     try {
-      const { execSync } = require('child_process');
-      const isMultiline = renderedValue.includes('\n');
-      const escapedRenderedValue = renderedValue.replace(/"/g, '\\\\"');
-      let pythonScript = `import json
-import sys
-data = json.load(sys.stdin)
-output = data['output']
-context = data['context']
-value = data['value']
-${isMultiline ? 'exec(value)' : 'print(json.dumps(eval(value)))'}`;
-      const pythonProcessInput = JSON.stringify({ output, context, value: renderedValue });
-      const result = execSync(`python -c "${pythonScript.replace(/\n/g, ';')}"`, {
-        input: pythonProcessInput,
-      })
-        .toString()
-        .trim();
+      let result: string;
+      if (valueFromScript) {
+        invariant(typeof valueFromScript === 'string', `Python assertion script must return a string (${assertion.value})`);
+        result = valueFromScript;
+      } else {
+        const { execSync } = require('child_process');
+        const isMultiline = renderedValue.includes('\n');
+        const escapedRenderedValue = renderedValue.replace(/"/g, '\\\\"');
+        let pythonScript = `import json
+  import sys
+  data = json.load(sys.stdin)
+  output = data['output']
+  context = data['context']
+  value = data['value']
+  ${isMultiline ? 'exec(value)' : 'print(json.dumps(eval(value)))'}`;
+        const pythonProcessInput = JSON.stringify({ output, context, value: renderedValue });
+        result = execSync(`python -c "${pythonScript.replace(/\n/g, ';')}"`, {
+          input: pythonProcessInput,
+        })
+          .toString()
+          .trim() as string;
+      }
       if (result === 'true') {
         pass = true;
         score = 1.0;
