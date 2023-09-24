@@ -1002,6 +1002,9 @@ describe('runAssertion', () => {
     ['boolean', 'True', true, 'Assertion passed'],
     ['number', '0.5', true, 'Assertion passed'],
     ['GradingResult', '{"pass": true, "score": 1, "reason": "Custom reason"}', true, 'Custom reason'],
+    ['boolean', 'False', false, 'Python code returned false'],
+    ['number', '0', false, 'Python code returned false'],
+    ['GradingResult', '{"pass": false, "score": 0, "reason": "Custom reason"}', false, 'Custom reason'],
   ])('should pass when the file:// assertion with .py file returns a %s', async (type, pythonOutput, expectedPass, expectedReason) => {
     const output = 'Expected output';
 
@@ -1024,7 +1027,7 @@ describe('runAssertion', () => {
     );
 
     expect(result.pass).toBe(expectedPass);
-    expect(result.reason).toBe(expectedReason);
+    expect(result.reason).toContain(expectedReason);
   });
 });
 
