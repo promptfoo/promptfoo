@@ -14,6 +14,7 @@
   /* Light mode colors */
   --background-color: #ffffff;
   --text-color: #404040;
+  --link-color: #2e6585;
   --border-color: lightgray;
   --table-border-color: lightgray;
   --pass-color: green;
@@ -32,6 +33,7 @@
   /* Keep synced with prefers-color-scheme above */
   --background-color: #1a1a1a;
   --text-color: #f0f0f0;
+  --link-color: #2e6585;
   --border-color: #444444;
   --table-border-color: #444444;
   --pass-color: #4caf50;
@@ -53,6 +55,15 @@ html {
 
 body {
   margin: 0;
+}
+
+a {
+  color: var(--link-color);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
 }
 
 * {

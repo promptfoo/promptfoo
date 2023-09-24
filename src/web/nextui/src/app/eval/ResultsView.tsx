@@ -41,32 +41,20 @@ const ResponsiveStack = styled(Stack)(({ theme }) => ({
   },
 }));
 
-function filenameToDate(filename: string) {
-  const dateString = filename.slice('eval-'.length, filename.length - '.json'.length);
-
-  // Replace hyphens with colons where necessary (Windows compatibility).
-  const dateParts = dateString.split('T');
-  const timePart = dateParts[1].replace(/-/g, ':');
-  const formattedDateString = `${dateParts[0]}T${timePart}`;
-
-  const date = new Date(formattedDateString);
-  return date.toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    timeZoneName: 'short',
-  });
-}
-
 interface ResultsViewProps {
-  recentFiles: string[];
-  onRecentFileSelected: (file: string) => void;
+  recentEvals: {
+    id: string;
+    label: string;
+  }[];
+  onRecentEvalSelected: (file: string) => void;
+  defaultEvalId?: string;
 }
 
-export default function ResultsView({ recentFiles, onRecentFileSelected }: ResultsViewProps) {
+export default function ResultsView({
+  recentEvals,
+  onRecentEvalSelected,
+  defaultEvalId,
+}: ResultsViewProps) {
   const router = useRouter();
   const { table, config } = useResultsViewStore();
   const { setStateFromConfig } = useMainStore();
@@ -181,19 +169,19 @@ export default function ResultsView({ recentFiles, onRecentFileSelected }: Resul
       <Paper py="md">
         <ResponsiveStack direction="row" spacing={4} alignItems="center">
           <Box>
-            {recentFiles && recentFiles.length > 0 && (
+            {recentEvals && recentEvals.length > 0 && (
               <FormControl sx={{ m: 1, minWidth: 200 }} size="small">
                 <InputLabel>View run</InputLabel>
                 <Select
-                  key={recentFiles.join(',')}
+                  key={recentEvals.join(',')}
                   className="recent-files"
                   label="Previous runs"
-                  defaultValue={recentFiles[0]}
-                  onChange={(e: SelectChangeEvent) => onRecentFileSelected(e.target.value)}
+                  defaultValue={defaultEvalId}
+                  onChange={(e: SelectChangeEvent) => onRecentEvalSelected(e.target.value)}
                 >
-                  {recentFiles.map((file) => (
-                    <MenuItem key={file} value={file}>
-                      {filenameToDate(file)}
+                  {recentEvals.map((file) => (
+                    <MenuItem key={file.id} value={file.id}>
+                      {file.label}
                     </MenuItem>
                   ))}
                 </Select>

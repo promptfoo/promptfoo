@@ -1,11 +1,3 @@
-nav {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1rem;
-  color: var(--text-color);
-}
-
 .dark-mode-toggle {
   display: flex;
   background-color: transparent;

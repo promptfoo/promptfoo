@@ -198,6 +198,8 @@ type BaseAssertionTypes =
   | 'python'
   | 'similar'
   | 'llm-rubric'
+  | 'model-graded-closedqa'
+  | 'model-graded-factuality'
   | 'webhook'
   | 'rouge-n'
   | 'rouge-s'

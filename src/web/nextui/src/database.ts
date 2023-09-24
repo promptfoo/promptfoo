@@ -1,72 +1,108 @@
-import { Prisma, PrismaClient, EvaluationJob, EvaluationResult, JobStatus } from '@prisma/client';
+import { NIL as NULL_UUID } from 'uuid';
 
 import { EvaluateSummary, EvaluateTestSuite } from '@/../../../types';
 
-export { JobStatus } from '@prisma/client';
-export type { EvaluationJob } from '@prisma/client';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import type { Database } from '@/types/supabase';
 
-const prisma = new PrismaClient();
+export type EvaluationJob = Database['public']['Tables']['EvaluationJob']['Row'];
+export type EvaluationResult = Database['public']['Tables']['EvaluationResult']['Row'];
+export enum JobStatus {
+  IN_PROGRESS = 'IN_PROGRESS',
+  COMPLETE = 'COMPLETE',
+}
 
-export async function createJob(): Promise<EvaluationJob> {
-  const job = await prisma.evaluationJob.create({
-    data: {
-      status: JobStatus.IN_PROGRESS,
-      progress: 0,
-      total: 0,
-    },
-  });
+export async function createJob(supabase: SupabaseClient): Promise<EvaluationJob> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const { data: job, error } = await supabase
+    .from('EvaluationJob')
+    .insert([
+      {
+        user_id: user?.id,
+        status: JobStatus.IN_PROGRESS,
+        progress: 0,
+        total: 0,
+      },
+    ])
+    .select()
+    .single();
+
+  if (error) throw error;
   return job;
 }
 
-export async function updateJob(id: string, progress: number, total: number) {
-  await prisma.evaluationJob.update({
-    where: { id },
-    data: {
+export async function updateJob(
+  supabase: SupabaseClient,
+  id: string,
+  progress: number,
+  total: number,
+) {
+  const { error } = await supabase
+    .from('EvaluationJob')
+    .update({
       progress,
       total,
-    },
-  });
+    })
+    .eq('id', id);
+
+  if (error) throw error;
 }
 
-export async function getJob(id: string): Promise<EvaluationJob> {
-  const job = await prisma.evaluationJob.findUniqueOrThrow({
-    where: { id },
-  });
+export async function getJob(supabase: SupabaseClient, id: string): Promise<EvaluationJob> {
+  const { data: job, error } = await supabase.from('EvaluationJob').select().eq('id', id).single();
+
+  if (error) throw error;
   return job;
 }
 
-export async function getResult(id: string): Promise<EvaluationResult> {
-  const result = await prisma.evaluationResult.findUniqueOrThrow({
-    where: { id },
-  });
+export async function getResult(supabase: SupabaseClient, id: string): Promise<EvaluationResult> {
+  const { data: result, error } = await supabase
+    .from('EvaluationResult')
+    .select()
+    .eq('id', id)
+    .single();
+
+  if (error) throw error;
   return result;
 }
 
 export async function createResult(
+  supabase: SupabaseClient,
   jobId: string,
   config: EvaluateTestSuite,
   results: EvaluateSummary,
 ): Promise<EvaluationResult> {
-  const result = await prisma.evaluationResult.create({
-    data: {
-      id: jobId, // eval id matches job id
-      version: 1,
-      config: config as unknown as Prisma.JsonObject,
-      results: results as unknown as Prisma.JsonObject,
-    },
-  });
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const record = {
+    user_id: user?.id,
+    id: jobId, // eval id matches job id
+    version: 1,
+    config:
+      config as unknown as Database['public']['Tables']['EvaluationResult']['Insert']['config'],
+    results:
+      results as unknown as Database['public']['Tables']['EvaluationResult']['Insert']['results'],
+  };
+  const { data: result, error } = await supabase
+    .from('EvaluationResult')
+    .insert(record)
+    .select()
+    .single();
 
-  await prisma.evaluationJob.update({
-    where: { id: jobId },
-    data: {
+  if (error) throw error;
+
+  const { error: jobUpdateError } = await supabase
+    .from('EvaluationJob')
+    .update({
       status: JobStatus.COMPLETE,
-      evaluationResult: {
-        connect: {
-          id: jobId,
-        },
-      },
-    },
-  });
+      evaluationResultId: jobId,
+    })
+    .eq('id', jobId);
+
+  //if (jobUpdateError) throw jobUpdateError;
 
   return result;
 }
