@@ -972,6 +972,31 @@ describe('runAssertion', () => {
     expect(result.reason).toBe(expectedReason);
   });
 
+  it.each([
+    ['boolean', 'True', true, 'Assertion passed'],
+    ['number', '0.5', true, 'Assertion passed'],
+    ['GradingResult', '{"pass": true, "score": 1, "reason": "Custom reason"}', true, 'Custom reason'],
+  ])('should pass when the file:// assertion with .py file returns a %s', async (type, pythonOutput, expectedPass, expectedReason) => {
+    const output = 'Expected output';
+
+    jest.spyOn(child_process, 'execSync').mockImplementation(() => Buffer.from(pythonOutput));
+
+    const fileAssertion: Assertion = {
+      type: 'python',
+      value: 'file:///path/to/assert.py',
+    };
+
+    const result: GradingResult = await runAssertion(
+      'Some prompt',
+      fileAssertion,
+      {} as AtomicTestCase,
+      output,
+    );
+
+    expect(result.pass).toBe(expectedPass);
+    expect(result.reason).toBe(expectedReason);
+  });
+
   it('should handle output strings with both single and double quotes correctly in python assertion', async () => {
     const output =
       'This is a string with "double quotes"\n and \'single quotes\' \n\n and some \n\t newlines.';
