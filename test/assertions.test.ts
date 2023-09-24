@@ -24,6 +24,10 @@ export class TestGrader implements ApiProvider {
 }
 const Grader = new TestGrader();
 
+beforeEach(() => {
+  jest.resetModules();
+});
+
 describe('runAssertions', () => {
   const test: AtomicTestCase = {
     assert: [
