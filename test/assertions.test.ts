@@ -943,7 +943,7 @@ describe('runAssertion', () => {
     expect(result.reason).toBe('Levenshtein distance 8 is greater than threshold 5');
   });
 
-  it('should pass when the file:// assertion with .js file passes', async () => {
+  it('should pass when the file:// assertion with .js file returns a boolean', async () => {
     const output = 'Expected output';
 
     // https://stackoverflow.com/a/47728913
