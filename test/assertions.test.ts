@@ -1,4 +1,5 @@
-import * as child_process from 'child_process';
+jest.mock('child_process');
+const child_process = require('child_process');
 
 import { Response } from 'node-fetch';
 import { runAssertions, runAssertion, assertionFromString } from '../src/assertions';
@@ -981,7 +982,7 @@ describe('runAssertion', () => {
   ])('should pass when the file:// assertion with .py file returns a %s', async (type, pythonOutput, expectedPass, expectedReason) => {
     const output = 'Expected output';
 
-    jest.spyOn(child_process, 'execSync').mockImplementation(() => Buffer.from(pythonOutput));
+    child_process.execSync.mockImplementation(() => Buffer.from(pythonOutput));
 
     const fileAssertion: Assertion = {
       type: 'python',
