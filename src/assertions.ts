@@ -349,7 +349,7 @@ export async function runAssertion(
       }
       invariant(typeof renderedValue === 'string', 'javascript assertion must have a string value');
       let result: boolean | number | GradingResult;
-      if (valueFromScript) {
+      if (typeof valueFromScript !== 'undefined') {
         invariant(typeof valueFromScript === 'boolean' || typeof valueFromScript === 'number' || typeof valueFromScript === 'object', `Javascript assertion script must return a boolean, number, or object (${assertion.value})`);
         result = valueFromScript;
       } else {
@@ -361,11 +361,7 @@ export async function runAssertion(
         pass = result !== inverse;
         score = 1.0;
       } else if (typeof result === 'number') {
-        if (typeof assertion.threshold !== 'undefined' && result < assertion.threshold) {
-          pass = false;
-        } else {
-          pass = true;
-        }
+        pass = assertion.threshold ? result >= assertion.threshold : result > 0;
         score = result;
       } else if (typeof result === 'object') {
         return result;
@@ -396,7 +392,7 @@ ${renderedValue}`,
     invariant(typeof renderedValue === 'string', 'python assertion must have a string value');
     try {
       let result: string;
-      if (valueFromScript) {
+      if (typeof valueFromScript !== 'undefined') {
         invariant(typeof valueFromScript === 'string', `Python assertion script must return a string (${assertion.value})`);
         result = valueFromScript;
       } else {
@@ -433,8 +429,8 @@ ${renderedValue}`,
         }
         return parsed;
       } else {
-        pass = true;
         score = parseFloat(result);
+        pass = assertion.threshold ? score >= assertion.threshold : score > 0;
         if (isNaN(score)) {
           throw new Error(
             'Python assertion must return a boolean, number, or {pass, score, reason} object',
