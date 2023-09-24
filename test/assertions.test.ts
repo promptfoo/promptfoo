@@ -951,6 +951,9 @@ describe('runAssertion', () => {
     ['boolean', jest.fn((output: string) => output === 'Expected output'), true, 'Assertion passed'],
     ['number', jest.fn((output: string) => output.length), true, 'Assertion passed'],
     ['GradingResult', jest.fn((output: string) => ({ pass: true, score: 1, reason: 'Custom reason' })), true, 'Custom reason'],
+    ['boolean', jest.fn((output: string) => output !== 'Expected output'), false, 'Assertion failed'],
+    ['number', jest.fn((output: string) => output.length * 0), false, 'Assertion failed'],
+    ['GradingResult', jest.fn((output: string) => ({ pass: false, score: 0, reason: 'Custom reason' })), false, 'Custom reason'],
   ])('should pass when the file:// assertion with .js file returns a %s', async (type, mockFn, expectedPass, expectedReason) => {
     const output = 'Expected output';
 
