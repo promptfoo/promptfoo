@@ -1,5 +1,4 @@
-jest.mock('child_process');
-const child_process = require('child_process');
+// Remove the global mock of child_process
 
 import { Response } from 'node-fetch';
 import { runAssertions, runAssertion, assertionFromString } from '../src/assertions';
@@ -982,7 +981,12 @@ describe('runAssertion', () => {
   ])('should pass when the file:// assertion with .py file returns a %s', async (type, pythonOutput, expectedPass, expectedReason) => {
     const output = 'Expected output';
 
-    child_process.execSync.mockImplementation(() => Buffer.from(pythonOutput));
+    // Mock child_process within the test case
+    jest.mock('child_process', () => {
+      return {
+        execSync: jest.fn(() => Buffer.from(pythonOutput)),
+      };
+    });
 
     const fileAssertion: Assertion = {
       type: 'python',
