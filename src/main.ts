@@ -231,16 +231,12 @@ async function main() {
     .option(
       '--repeat <number>',
       'Number of times to run each test',
-      defaultConfig.evaluateOptions?.repeat
-        ? String(defaultConfig.evaluateOptions.repeat)
-        : '1',
+      defaultConfig.evaluateOptions?.repeat ? String(defaultConfig.evaluateOptions.repeat) : '1',
     )
     .option(
       '--delay <number>',
       'Delay between each test (in milliseconds)',
-      defaultConfig.evaluateOptions?.delay
-        ? String(defaultConfig.evaluateOptions.delay)
-        : '0',
+      defaultConfig.evaluateOptions?.delay ? String(defaultConfig.evaluateOptions.delay) : '0',
     )
     .option(
       '--table-cell-max-length <number>',

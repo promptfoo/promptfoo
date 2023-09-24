@@ -950,32 +950,55 @@ describe('runAssertion', () => {
   });
 
   it.each([
-    ['boolean', jest.fn((output: string) => output === 'Expected output'), true, 'Assertion passed'],
+    [
+      'boolean',
+      jest.fn((output: string) => output === 'Expected output'),
+      true,
+      'Assertion passed',
+    ],
     ['number', jest.fn((output: string) => output.length), true, 'Assertion passed'],
-    ['GradingResult', jest.fn((output: string) => ({ pass: true, score: 1, reason: 'Custom reason' })), true, 'Custom reason'],
-    ['boolean', jest.fn((output: string) => output !== 'Expected output'), false, 'Custom function returned false'],
+    [
+      'GradingResult',
+      jest.fn((output: string) => ({ pass: true, score: 1, reason: 'Custom reason' })),
+      true,
+      'Custom reason',
+    ],
+    [
+      'boolean',
+      jest.fn((output: string) => output !== 'Expected output'),
+      false,
+      'Custom function returned false',
+    ],
     ['number', jest.fn((output: string) => 0), false, 'Custom function returned false'],
-    ['GradingResult', jest.fn((output: string) => ({ pass: false, score: 0.1, reason: 'Custom reason' })), false, 'Custom reason'],
-  ])('should pass when the file:// assertion with .js file returns a %s', async (type, mockFn, expectedPass, expectedReason) => {
-    const output = 'Expected output';
+    [
+      'GradingResult',
+      jest.fn((output: string) => ({ pass: false, score: 0.1, reason: 'Custom reason' })),
+      false,
+      'Custom reason',
+    ],
+  ])(
+    'should pass when the file:// assertion with .js file returns a %s',
+    async (type, mockFn, expectedPass, expectedReason) => {
+      const output = 'Expected output';
 
-    jest.doMock(path.resolve('/path/to/assert.js'), () => mockFn, { virtual: true });
+      jest.doMock(path.resolve('/path/to/assert.js'), () => mockFn, { virtual: true });
 
-    const fileAssertion: Assertion = {
-      type: 'javascript',
-      value: 'file:///path/to/assert.js',
-    };
+      const fileAssertion: Assertion = {
+        type: 'javascript',
+        value: 'file:///path/to/assert.js',
+      };
 
-    const result: GradingResult = await runAssertion(
-      'Some prompt',
-      fileAssertion,
-      {} as AtomicTestCase,
-      output,
-    );
+      const result: GradingResult = await runAssertion(
+        'Some prompt',
+        fileAssertion,
+        {} as AtomicTestCase,
+        output,
+      );
 
-    expect(result.pass).toBe(expectedPass);
-    expect(result.reason).toContain(expectedReason);
-  });
+      expect(result.pass).toBe(expectedPass);
+      expect(result.reason).toContain(expectedReason);
+    },
+  );
 
   it('should handle output strings with both single and double quotes correctly in python assertion', async () => {
     // Due to terrible sins related to mocking, this test must appear before
@@ -1003,34 +1026,47 @@ describe('runAssertion', () => {
   it.each([
     ['boolean', 'True', true, 'Assertion passed'],
     ['number', '0.5', true, 'Assertion passed'],
-    ['GradingResult', '{"pass": true, "score": 1, "reason": "Custom reason"}', true, 'Custom reason'],
+    [
+      'GradingResult',
+      '{"pass": true, "score": 1, "reason": "Custom reason"}',
+      true,
+      'Custom reason',
+    ],
     ['boolean', 'False', false, 'Python code returned false'],
     ['number', '0', false, 'Python code returned false'],
-    ['GradingResult', '{"pass": false, "score": 0, "reason": "Custom reason"}', false, 'Custom reason'],
-  ])('should pass when the file:// assertion with .py file returns a %s', async (type, pythonOutput, expectedPass, expectedReason) => {
-    const output = 'Expected output';
+    [
+      'GradingResult',
+      '{"pass": false, "score": 0, "reason": "Custom reason"}',
+      false,
+      'Custom reason',
+    ],
+  ])(
+    'should pass when the file:// assertion with .py file returns a %s',
+    async (type, pythonOutput, expectedPass, expectedReason) => {
+      const output = 'Expected output';
 
-    jest.doMock('child_process', () => {
-      return {
-        execSync: jest.fn(() => Buffer.from(pythonOutput)),
+      jest.doMock('child_process', () => {
+        return {
+          execSync: jest.fn(() => Buffer.from(pythonOutput)),
+        };
+      });
+
+      const fileAssertion: Assertion = {
+        type: 'python',
+        value: 'file:///path/to/assert.py',
       };
-    });
 
-    const fileAssertion: Assertion = {
-      type: 'python',
-      value: 'file:///path/to/assert.py',
-    };
+      const result: GradingResult = await runAssertion(
+        'Some prompt',
+        fileAssertion,
+        {} as AtomicTestCase,
+        output,
+      );
 
-    const result: GradingResult = await runAssertion(
-      'Some prompt',
-      fileAssertion,
-      {} as AtomicTestCase,
-      output,
-    );
-
-    expect(result.pass).toBe(expectedPass);
-    expect(result.reason).toContain(expectedReason);
-  });
+      expect(result.pass).toBe(expectedPass);
+      expect(result.reason).toContain(expectedReason);
+    },
+  );
 });
 
 describe('assertionFromString', () => {

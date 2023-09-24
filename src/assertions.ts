@@ -146,13 +146,19 @@ export async function runAssertion(
         } else if (requiredModule.default && typeof requiredModule.default === 'function') {
           valueFromScript = requiredModule.default(output, { vars: test.vars || {} });
         } else {
-          throw new Error(`Assertion malformed: ${filePath} must export a function or have a default export as a function`);
+          throw new Error(
+            `Assertion malformed: ${filePath} must export a function or have a default export as a function`,
+          );
         }
       } else if (filePath.endsWith('.py')) {
         const { execSync } = require('child_process');
         const escapedOutput = output.replace(/"/g, '\\"').replace(/\n/g, '\\n');
-        const escapedContext = JSON.stringify({ vars: test.vars || {} }).replace(/"/g, '\\"').replace(/\n/g, '\\n');
-        const pythonScriptOutput = execSync(`python ${filePath} "${escapedOutput}" "${escapedContext}"`).toString();
+        const escapedContext = JSON.stringify({ vars: test.vars || {} })
+          .replace(/"/g, '\\"')
+          .replace(/\n/g, '\\n');
+        const pythonScriptOutput = execSync(
+          `python ${filePath} "${escapedOutput}" "${escapedContext}"`,
+        ).toString();
         valueFromScript = pythonScriptOutput.trim();
       } else {
         throw new Error(`Assertion malformed: ${filePath} must end in .js or .py`);
@@ -350,10 +356,17 @@ export async function runAssertion(
       invariant(typeof renderedValue === 'string', 'javascript assertion must have a string value');
       let result: boolean | number | GradingResult;
       if (typeof valueFromScript !== 'undefined') {
-        invariant(typeof valueFromScript === 'boolean' || typeof valueFromScript === 'number' || typeof valueFromScript === 'object', `Javascript assertion script must return a boolean, number, or object (${assertion.value})`);
+        invariant(
+          typeof valueFromScript === 'boolean' ||
+            typeof valueFromScript === 'number' ||
+            typeof valueFromScript === 'object',
+          `Javascript assertion script must return a boolean, number, or object (${assertion.value})`,
+        );
         result = valueFromScript;
       } else {
-        const functionBody = renderedValue.includes('\n') ? renderedValue : `return ${renderedValue}`;
+        const functionBody = renderedValue.includes('\n')
+          ? renderedValue
+          : `return ${renderedValue}`;
         const customFunction = new Function('output', 'context', functionBody);
         result = customFunction(output, context) as boolean | number | GradingResult;
       }
@@ -393,7 +406,10 @@ ${renderedValue}`,
     try {
       let result: string;
       if (typeof valueFromScript !== 'undefined') {
-        invariant(typeof valueFromScript === 'string', `Python assertion script must return a string (${assertion.value})`);
+        invariant(
+          typeof valueFromScript === 'string',
+          `Python assertion script must return a string (${assertion.value})`,
+        );
         result = valueFromScript;
       } else {
         const { execSync } = require('child_process');

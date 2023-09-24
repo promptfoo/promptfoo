@@ -7,7 +7,11 @@ import {
 } from './providers/openai';
 import { AnthropicCompletionProvider } from './providers/anthropic';
 import { ReplicateProvider } from './providers/replicate';
-import { LocalAiCompletionProvider, LocalAiChatProvider, LocalAiEmbeddingProvider } from './providers/localai';
+import {
+  LocalAiCompletionProvider,
+  LocalAiChatProvider,
+  LocalAiEmbeddingProvider,
+} from './providers/localai';
 import { PalmChatProvider } from './providers/palm';
 import { LlamaProvider } from './providers/llama';
 import { OllamaEmbeddingProvider, OllamaProvider } from './providers/ollama';
@@ -132,7 +136,10 @@ export async function loadApiProvider(
     if (modelType === 'chat') {
       return new AzureOpenAiChatCompletionProvider(deploymentName, providerOptions);
     } else if (modelType === 'embedding' || modelType === 'embeddings') {
-      return new AzureOpenAiEmbeddingProvider(deploymentName || 'text-embedding-ada-002', providerOptions);
+      return new AzureOpenAiEmbeddingProvider(
+        deploymentName || 'text-embedding-ada-002',
+        providerOptions,
+      );
     } else if (modelType === 'completion') {
       return new AzureOpenAiCompletionProvider(deploymentName, providerOptions);
     } else {
@@ -169,7 +176,10 @@ export async function loadApiProvider(
   } else if (providerPath === 'llama' || providerPath.startsWith('llama:')) {
     const modelName = providerPath.split(':')[1];
     return new LlamaProvider(modelName, providerOptions);
-  } else if (providerPath.startsWith('ollama:embeddings:') || providerPath.startsWith('ollama:embedding:')) {
+  } else if (
+    providerPath.startsWith('ollama:embeddings:') ||
+    providerPath.startsWith('ollama:embedding:')
+  ) {
     const modelName = providerPath.split(':')[2];
     return new OllamaEmbeddingProvider(modelName, providerOptions);
   } else if (providerPath.startsWith('ollama:')) {
