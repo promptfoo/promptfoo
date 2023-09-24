@@ -63,7 +63,7 @@ export default function Eval({
 
   const fetchRecentFileEvals = async () => {
     invariant(IS_RUNNING_LOCALLY, 'Cannot fetch recent files when not running locally');
-    const resp = await fetch(`${API_BASE_URL}/results`);
+    const resp = await fetch(`${API_BASE_URL}/results`, { cache: 'no-store' });
     const body = await resp.json();
     setRecentEvals(body.data);
     return body.data;
@@ -71,7 +71,7 @@ export default function Eval({
 
   const handleRecentEvalSelection = async (id: string) => {
     if (IS_RUNNING_LOCALLY) {
-      const resp = await fetch(`${API_BASE_URL}/results/${id}`);
+      const resp = await fetch(`${API_BASE_URL}/results/${id}`, { cache: 'no-store' });
       const body = await resp.json();
       setTable(body.data.results.table);
       setConfig(body.data.config);

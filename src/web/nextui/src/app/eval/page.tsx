@@ -8,6 +8,9 @@ import { IS_RUNNING_LOCALLY } from '@/constants';
 
 export const dynamic = IS_RUNNING_LOCALLY ? 'auto' : 'force-dynamic';
 
+// Don't cache database lookups.
+export const revalidate = 0
+
 export default async function Page() {
   if (!IS_RUNNING_LOCALLY) {
     const supabase = createServerComponentClient({ cookies });

@@ -4,7 +4,7 @@ import { cookies } from 'next/headers';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 
 import { getJob, getResult, JobStatus, EvaluationJob } from '@/database';
-import {IS_RUNNING_LOCALLY} from '@/constants';
+import { IS_RUNNING_LOCALLY } from '@/constants';
 
 export const dynamic = IS_RUNNING_LOCALLY ? 'auto' : 'force-dynamic';
 
