@@ -1,4 +1,4 @@
-import os from 'os';
+import path from 'path';
 
 import rouge from 'rouge';
 import invariant from 'tiny-invariant';
@@ -132,12 +132,37 @@ export async function runAssertion(
     type: baseType,
   });
 
-  //render assertion values
+  // Render assertion values
   let renderedValue = assertion.value;
-  // renderString for assertion values
-  if (renderedValue && typeof renderedValue === 'string') {
-    renderedValue = nunjucks.renderString(renderedValue, test.vars || {});
+  let valueFromScript: string | boolean | number | GradingResult | undefined;
+  if (typeof renderedValue === 'string') {
+    if (renderedValue.startsWith('file://')) {
+      // Load the file
+      const filePath = renderedValue.slice('file://'.length);
+      if (filePath.endsWith('.js')) {
+        const requiredModule = require(path.resolve(filePath));
+        if (typeof requiredModule === 'function') {
+          valueFromScript = requiredModule(output, { vars: test.vars || {} });
+        } else if (requiredModule.default && typeof requiredModule.default === 'function') {
+          valueFromScript = requiredModule.default(output, { vars: test.vars || {} });
+        } else {
+          throw new Error(`Assertion malformed: ${filePath} must export a function or have a default export as a function`);
+        }
+      } else if (filePath.endsWith('.py')) {
+        const { execSync } = require('child_process');
+        const escapedOutput = output.replace(/"/g, '\\"').replace(/\n/g, '\\n');
+        const escapedContext = JSON.stringify({ vars: test.vars || {} }).replace(/"/g, '\\"').replace(/\n/g, '\\n');
+        const pythonScriptOutput = execSync(`python ${filePath} "${escapedOutput}" "${escapedContext}"`).toString();
+        valueFromScript = pythonScriptOutput.trim();
+      } else {
+        throw new Error(`Assertion malformed: ${filePath} must end in .js or .py`);
+      }
+    } else {
+      // It's a normal string value
+      renderedValue = nunjucks.renderString(renderedValue, test.vars || {});
+    }
   } else if (renderedValue && Array.isArray(renderedValue)) {
+    // Unpack the array
     renderedValue = renderedValue.map((v) => nunjucks.renderString(String(v), test.vars || {}));
   }
 
@@ -323,18 +348,20 @@ export async function runAssertion(
         return assertion.value(output, test, assertion);
       }
       invariant(typeof renderedValue === 'string', 'javascript assertion must have a string value');
-      const functionBody = renderedValue.includes('\n') ? renderedValue : `return ${renderedValue}`;
-      const customFunction = new Function('output', 'context', functionBody);
-      const result = customFunction(output, context) as any;
+      let result: boolean | number | GradingResult;
+      if (typeof valueFromScript !== 'undefined') {
+        invariant(typeof valueFromScript === 'boolean' || typeof valueFromScript === 'number' || typeof valueFromScript === 'object', `Javascript assertion script must return a boolean, number, or object (${assertion.value})`);
+        result = valueFromScript;
+      } else {
+        const functionBody = renderedValue.includes('\n') ? renderedValue : `return ${renderedValue}`;
+        const customFunction = new Function('output', 'context', functionBody);
+        result = customFunction(output, context) as boolean | number | GradingResult;
+      }
       if (typeof result === 'boolean') {
         pass = result !== inverse;
         score = 1.0;
       } else if (typeof result === 'number') {
-        if (typeof assertion.threshold !== 'undefined' && result < assertion.threshold) {
-          pass = false;
-        } else {
-          pass = true;
-        }
+        pass = assertion.threshold ? result >= assertion.threshold : result > 0;
         score = result;
       } else if (typeof result === 'object') {
         return result;
@@ -364,26 +391,33 @@ ${renderedValue}`,
   if (baseType === 'python') {
     invariant(typeof renderedValue === 'string', 'python assertion must have a string value');
     try {
-      const { execSync } = require('child_process');
-      const isMultiline = renderedValue.includes('\n');
-      const escapedRenderedValue = renderedValue.replace(/"/g, '\\\\"');
-      let pythonScript = `import json
-import sys
-data = json.load(sys.stdin)
-output = data['output']
-context = data['context']
-value = data['value']
-${isMultiline ? 'exec(value)' : 'print(json.dumps(eval(value)))'}`;
-      const pythonProcessInput = JSON.stringify({ output, context, value: renderedValue });
-      const result = execSync(`python -c "${pythonScript.replace(/\n/g, ';')}"`, {
-        input: pythonProcessInput,
-      })
-        .toString()
-        .trim();
-      if (result === 'true') {
+      let result: string;
+      if (typeof valueFromScript !== 'undefined') {
+        invariant(typeof valueFromScript === 'string', `Python assertion script must return a string (${assertion.value})`);
+        result = valueFromScript;
+      } else {
+        const { execSync } = require('child_process');
+        const isMultiline = renderedValue.includes('\n');
+        const escapedRenderedValue = renderedValue.replace(/"/g, '\\\\"');
+        let pythonScript = `import json
+  import sys
+  data = json.load(sys.stdin)
+  output = data['output']
+  context = data['context']
+  value = data['value']
+  ${isMultiline ? 'exec(value)' : 'print(json.dumps(eval(value)))'}`;
+        const pythonProcessInput = JSON.stringify({ output, context, value: renderedValue });
+        result = execSync(`python -c "${pythonScript.replace(/\n/g, ';')}"`, {
+          input: pythonProcessInput,
+        })
+          .toString()
+          .trim() as string;
+      }
+
+      if (result.toLowerCase() === 'true') {
         pass = true;
         score = 1.0;
-      } else if (result === 'false') {
+      } else if (result.toLowerCase() === 'false') {
         pass = false;
         score = 0.0;
       } else if (result.startsWith('{')) {
@@ -395,8 +429,8 @@ ${isMultiline ? 'exec(value)' : 'print(json.dumps(eval(value)))'}`;
         }
         return parsed;
       } else {
-        pass = true;
         score = parseFloat(result);
+        pass = assertion.threshold ? score >= assertion.threshold : score > 0;
         if (isNaN(score)) {
           throw new Error(
             'Python assertion must return a boolean, number, or {pass, score, reason} object',
