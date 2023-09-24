@@ -23,3 +23,11 @@ tests:
   - vars:
       topic: file://vars/var_topic.yaml
       content_type: file://vars/var_content_type.yaml
+
+  # You can also use the file:// prefix to load assertions
+  - vars:
+      topic: fruit loops
+      content_type: Youtube intro
+    assert:
+      - type: javascript
+        value: file://asserts/assert.js
