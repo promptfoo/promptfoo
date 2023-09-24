@@ -1,3 +1,5 @@
+import * as path from 'path';
+
 import { Response } from 'node-fetch';
 import { runAssertions, runAssertion, assertionFromString } from '../src/assertions';
 import * as fetch from '../src/fetch';
@@ -957,7 +959,7 @@ describe('runAssertion', () => {
   ])('should pass when the file:// assertion with .js file returns a %s', async (type, mockFn, expectedPass, expectedReason) => {
     const output = 'Expected output';
 
-    jest.doMock('/path/to/assert.js', () => mockFn, { virtual: true });
+    jest.doMock(path.resolve('/path/to/assert.js'), () => mockFn, { virtual: true });
 
     const fileAssertion: Assertion = {
       type: 'javascript',
