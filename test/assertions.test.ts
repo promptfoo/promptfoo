@@ -943,14 +943,14 @@ describe('runAssertion', () => {
     expect(result.reason).toBe('Levenshtein distance 8 is greater than threshold 5');
   });
 
-  it('should pass when the file:// assertion with .js file returns a boolean', async () => {
+  it.each([
+    ['boolean', jest.fn((output: string) => output === 'Expected output'), true, 'Assertion passed'],
+    ['number', jest.fn((output: string) => output.length), true, 'Assertion passed'],
+    ['GradingResult', jest.fn((output: string) => ({ pass: true, score: 1, reason: 'Custom reason' })), true, 'Custom reason'],
+  ])('should pass when the file:// assertion with .js file returns a %s', async (type, mockFn, expectedPass, expectedReason) => {
     const output = 'Expected output';
 
-    // https://stackoverflow.com/a/47728913
-    // https://stackoverflow.com/a/56052635
-    jest.doMock('/path/to/assert.js', () => {
-      return jest.fn((output: string) => output === 'Expected output');
-    }, { virtual: true });
+    jest.doMock('/path/to/assert.js', () => mockFn, { virtual: true });
 
     const fileAssertion: Assertion = {
       type: 'javascript',
@@ -964,9 +964,8 @@ describe('runAssertion', () => {
       output,
     );
 
-    console.log(result)
-    expect(result.pass).toBeTruthy();
-    expect(result.reason).toBe('Assertion passed');
+    expect(result.pass).toBe(expectedPass);
+    expect(result.reason).toBe(expectedReason);
   });
 
   it('should handle output strings with both single and double quotes correctly in python assertion', async () => {
