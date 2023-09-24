@@ -417,10 +417,11 @@ ${renderedValue}`,
           .toString()
           .trim() as string;
       }
-      if (result === 'true') {
+
+      if (result.toLowerCase() === 'true') {
         pass = true;
         score = 1.0;
-      } else if (result === 'false') {
+      } else if (result.toLowerCase() === 'false') {
         pass = false;
         score = 0.0;
       } else if (result.startsWith('{')) {

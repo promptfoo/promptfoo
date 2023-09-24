@@ -972,10 +972,33 @@ describe('runAssertion', () => {
     expect(result.reason).toBe(expectedReason);
   });
 
+  it('should handle output strings with both single and double quotes correctly in python assertion', async () => {
+    // Due to terrible sins related to mocking, this test must appear before
+    // the `child_process` mock below.
+    const output =
+      'This is a string with "double quotes"\n and \'single quotes\' \n\n and some \n\t newlines.';
+
+    const pythonAssertion: Assertion = {
+      type: 'python',
+      value: '0.5',
+    };
+
+    const result: GradingResult = await runAssertion(
+      'Some prompt',
+      pythonAssertion,
+      {} as AtomicTestCase,
+      output,
+    );
+
+    expect(result.reason).toBe('Assertion passed');
+    expect(result.score).toBe(0.5);
+    expect(result.pass).toBeTruthy();
+  });
+
   it.each([
     ['boolean', 'True', true, 'Assertion passed'],
-    //['number', '0.5', true, 'Assertion passed'],
-    //['GradingResult', '{"pass": true, "score": 1, "reason": "Custom reason"}', true, 'Custom reason'],
+    ['number', '0.5', true, 'Assertion passed'],
+    ['GradingResult', '{"pass": true, "score": 1, "reason": "Custom reason"}', true, 'Custom reason'],
   ])('should pass when the file:// assertion with .py file returns a %s', async (type, pythonOutput, expectedPass, expectedReason) => {
     const output = 'Expected output';
 
@@ -999,27 +1022,6 @@ describe('runAssertion', () => {
 
     expect(result.pass).toBe(expectedPass);
     expect(result.reason).toBe(expectedReason);
-  });
-
-  it('should handle output strings with both single and double quotes correctly in python assertion', async () => {
-    const output =
-      'This is a string with "double quotes"\n and \'single quotes\' \n\n and some \n\t newlines.';
-
-    const pythonAssertion: Assertion = {
-      type: 'python',
-      value: '0.5',
-    };
-
-    const result: GradingResult = await runAssertion(
-      'Some prompt',
-      pythonAssertion,
-      {} as AtomicTestCase,
-      output,
-    );
-
-    expect(result.reason).toBe('Assertion passed');
-    expect(result.score).toBe(0.5);
-    expect(result.pass).toBeTruthy();
   });
 });
 
