@@ -6,6 +6,8 @@ import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
 import Eval from './Eval';
 import { IS_RUNNING_LOCALLY } from '@/constants';
 
+export const dynamic = IS_RUNNING_LOCALLY ? 'auto' : 'force-dynamic';
+
 export default async function Page() {
   if (!IS_RUNNING_LOCALLY) {
     const supabase = createServerComponentClient({ cookies });

@@ -4,7 +4,7 @@ import { notFound } from 'next/navigation';
 import { cookies } from 'next/headers';
 import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
 
-import { API_BASE_URL } from '@/constants';
+import { API_BASE_URL, IS_RUNNING_LOCALLY } from '@/constants';
 import { getResult } from '@/database';
 import { EvaluateSummary, EvaluateTestSuite, SharedResults } from '@/../../../types';
 import Eval from '../Eval';
@@ -14,6 +14,8 @@ import './page.css';
 export const metadata: Metadata = {
   robots: 'noindex',
 };
+
+export const dynamic = IS_RUNNING_LOCALLY ? 'auto' : 'force-dynamic';
 
 export async function generateStaticParams() {
   return [];

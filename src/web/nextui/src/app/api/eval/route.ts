@@ -9,6 +9,8 @@ import { createJob, createResult, updateJob } from '@/database';
 
 import type { EvaluateTestSuite } from '@/../../../types';
 
+export const dynamic = IS_RUNNING_LOCALLY ? 'auto' : 'force-dynamic';
+
 async function runWithDatabase(testSuite: EvaluateTestSuite) {
   const supabase = createRouteHandlerClient({ cookies });
 

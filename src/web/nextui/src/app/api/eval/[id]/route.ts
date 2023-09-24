@@ -4,6 +4,9 @@ import { cookies } from 'next/headers';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 
 import { getJob, getResult, JobStatus, EvaluationJob } from '@/database';
+import {IS_RUNNING_LOCALLY} from '@/constants';
+
+export const dynamic = IS_RUNNING_LOCALLY ? 'auto' : 'force-dynamic';
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const supabase = createRouteHandlerClient({ cookies });
