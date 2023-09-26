@@ -52,10 +52,10 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
                 <TableCell>{result.pass ? '✅' : '❌'}</TableCell>
                 <TableCell>{result.score}</TableCell>
                 <TableCell>{result.assertion?.type || ''}</TableCell>
-                <TableCell>
+                <TableCell style={{ whiteSpace: 'pre-wrap' }}>
                   {result.assertion?.value ? String(result.assertion.value) : '-'}
                 </TableCell>
-                <TableCell>{result.reason}</TableCell>
+                <TableCell style={{ whiteSpace: 'pre-wrap' }}>{result.reason}</TableCell>
               </TableRow>
             ))}
           </TableBody>
