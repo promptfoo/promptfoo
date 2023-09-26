@@ -12,7 +12,7 @@ import Eval from '../Eval';
 import './page.css';
 
 export const metadata: Metadata = {
-  robots: 'noindex',
+  robots: 'noindex,nofollow',
 };
 
 export const dynamic = IS_RUNNING_LOCALLY ? 'auto' : 'force-dynamic';
