@@ -512,6 +512,8 @@ ${assertion.value}`,
       }
     }
 
+    // Update the assertion value. This allows the web view to display the prompt.
+    assertion.value = assertion.value || test.options.rubricPrompt;
     return {
       assertion,
       ...(await matchesLlmRubric(renderedValue || '', output, test.options, test.vars)),
