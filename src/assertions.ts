@@ -177,7 +177,7 @@ export async function runAssertion(
     return {
       pass,
       score: pass ? 1 : 0,
-      reason: pass ? 'Assertion passed' : `Expected output "${renderedValue}"`,
+      reason: pass ? 'Assertion passed' : `Expected output "${renderedValue}" but got "${output}"`,
       assertion,
     };
   }

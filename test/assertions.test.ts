@@ -53,7 +53,7 @@ describe('runAssertions', () => {
 
     const result: GradingResult = await runAssertions('Some prompt', test, output);
     expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe('Expected output "Expected output"');
+    expect(result.reason).toBe('Expected output "Expected output" but got "Different output"');
   });
 
   it('should fail when combined score is less than threshold', async () => {
@@ -239,7 +239,7 @@ describe('runAssertion', () => {
       output,
     );
     expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe('Expected output "Expected output"');
+    expect(result.reason).toBe('Expected output "Expected output" but got "Different output"');
   });
 
   it('should pass when the is-json assertion passes', async () => {
@@ -446,7 +446,24 @@ describe('runAssertion', () => {
     expect(result.reason).toBe('Custom function returned false\noutput === "Expected output"');
   });
 
-  it('should pass when the function assertion passes - with vars', async () => {
+  it('should pass when assertion passes - with vars', async () => {
+    const output = 'Expected output';
+
+    const assertion: Assertion = {
+      type: 'equals',
+      value: '{{ foo }}',
+    };
+    const result: GradingResult = await runAssertion(
+      'variable value',
+      assertion,
+      { vars: { foo: 'Expected output' } } as AtomicTestCase,
+      output,
+    );
+    expect(result.pass).toBeTruthy();
+    expect(result.reason).toBe('Assertion passed');
+  });
+
+  it('should pass when javascript function assertion passes - with vars', async () => {
     const output = 'Expected output';
 
     const javascriptStringAssertionWithVars: Assertion = {
