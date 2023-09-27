@@ -354,9 +354,10 @@ export async function runAssertion(
         const ret = assertion.value(output, test, assertion);
         if (ret && !ret.assertion) {
           // Populate the assertion object if the custom function didn't return it.
+          const functionString = assertion.value.toString();
           ret.assertion = {
             type: 'javascript',
-            value: assertion.value.toString(),
+            value: functionString.length > 50 ? functionString.slice(0, 50) + '...' : functionString,
           };
         }
         return ret;
