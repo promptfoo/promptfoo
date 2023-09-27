@@ -4,6 +4,43 @@ import { REQUEST_TIMEOUT_MS } from './shared';
 
 import type { ApiProvider, ProviderEmbeddingResponse, ProviderResponse } from '../types.js';
 
+interface OllamaCompletionOptions {
+  // From https://github.com/jmorganca/ollama/blob/v0.1.0/api/types.go#L161
+  num_predict?: number;
+  top_k?: number;
+  top_p?: number;
+  tfs_z?: number;
+  seed?: number;
+  useNUMA?: boolean;
+  num_ctx?: number;
+  num_keep?: number;
+  num_batch?: number;
+  num_gqa?: number;
+  num_gpu?: number;
+  main_gpu?: number;
+  low_vram?: boolean;
+  f16_kv?: boolean;
+  logits_all?: boolean;
+  vocab_only?: boolean;
+  use_mmap?: boolean;
+  use_mlock?: boolean;
+  embedding_only?: boolean;
+  rope_frequency_base?: number;
+  rope_frequency_scale?: number;
+  typical_p?: number;
+  repeat_last_n?: number;
+  temperature?: number;
+  repeat_penalty?: number;
+  presence_penalty?: number;
+  frequency_penalty?: number;
+  mirostat?: number;
+  mirostat_tau?: number;
+  mirostat_eta?: number;
+  penalize_newline?: boolean;
+  stop?: string[];
+  num_thread?: number;
+}
+
 interface OllamaJsonL {
   model: string;
   created_at: string;
@@ -22,11 +59,13 @@ interface OllamaJsonL {
 
 export class OllamaProvider implements ApiProvider {
   modelName: string;
+  config: OllamaCompletionOptions;
 
-  constructor(modelName: string, options: { id?: string } = {}) {
-    const { id } = options;
+  constructor(modelName: string, options: { id?: string, config?: OllamaCompletionOptions } = {}) {
+    const { id, config } = options;
     this.modelName = modelName;
     this.id = id ? () => id : this.id;
+    this.config = config || {};
   }
 
   id(): string {
@@ -41,6 +80,7 @@ export class OllamaProvider implements ApiProvider {
     const params = {
       model: this.modelName,
       prompt,
+      options: this.config,
     };
 
     logger.debug(`Calling Ollama API: ${JSON.stringify(params)}`);
