@@ -110,7 +110,7 @@ export function writeOutput(
     });
     fs.writeFileSync(outputPath, htmlOutput);
   } else {
-    throw new Error('Unsupported output file format. Use CSV, JSON, or YAML.');
+    throw new Error(`Unsupported output file format ${outputExtension}, please use csv, txt, json, yaml, yml, html.`);
   }
 }
 

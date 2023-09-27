@@ -218,7 +218,7 @@ async function main() {
     .option('-t, --tests <path>', 'Path to CSV with test cases')
     .option(
       '-o, --output <path>',
-      'Path to output file (csv, json, yaml, html)',
+      'Path to output file (csv, txt, json, yaml, yml, html)',
       defaultConfig.outputPath,
     )
     .option(
