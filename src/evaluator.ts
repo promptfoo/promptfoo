@@ -544,6 +544,7 @@ class Evaluator {
           score: row.score,
           text: resultText,
           prompt: row.prompt.raw,
+          provider: row.provider.id,
           latencyMs: row.latencyMs,
           tokenUsage: row.response?.tokenUsage,
           gradingResult: row.gradingResult,

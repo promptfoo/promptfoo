@@ -146,6 +146,7 @@ export interface EvaluateTableOutput {
   text: string;
   prompt: string;
   latencyMs: number;
+  provider?: string;
   tokenUsage?: Partial<TokenUsage>;
   gradingResult?: GradingResult;
 }

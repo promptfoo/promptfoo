@@ -23,6 +23,7 @@ interface EvalOutputPromptDialogProps {
   open: boolean;
   onClose: () => void;
   prompt: string;
+  provider?: string;
   output?: string;
   gradingResults?: GradingResult[];
 }
@@ -69,6 +70,7 @@ export default function EvalOutputPromptDialog({
   open,
   onClose,
   prompt,
+  provider,
   output,
   gradingResults,
 }: EvalOutputPromptDialogProps) {
@@ -85,7 +87,7 @@ export default function EvalOutputPromptDialog({
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="lg">
-      <DialogTitle>Details</DialogTitle>
+      <DialogTitle>Details{provider && `: ${provider}`}</DialogTitle>
       <DialogContent>
         <Box mb={2}>
           <Typography variant="subtitle1" style={{ marginBottom: '1rem' }}>

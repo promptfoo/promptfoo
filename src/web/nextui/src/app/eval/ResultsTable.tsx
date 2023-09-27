@@ -195,6 +195,7 @@ function EvalOutputCell({
               open={openPrompt}
               onClose={handlePromptClose}
               prompt={output.prompt}
+              provider={output.provider}
               gradingResults={output.gradingResult?.componentResults}
               output={text}
             />
