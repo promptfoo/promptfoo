@@ -76,7 +76,7 @@ export async function matchesSimilarity(
 
   invariant(
     finalProvider.callEmbeddingApi,
-    'Provider must implement callEmbeddingApi for similarity check',
+    `Provider ${finalProvider.id} must implement callEmbeddingApi for similarity check`,
   );
 
   const expectedEmbedding = await finalProvider.callEmbeddingApi(expected);
