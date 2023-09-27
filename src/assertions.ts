@@ -351,7 +351,15 @@ export async function runAssertion(
   if (baseType === 'javascript') {
     try {
       if (typeof assertion.value === 'function') {
-        return assertion.value(output, test, assertion);
+        const ret = assertion.value(output, test, assertion);
+        if (ret && !ret.assertion) {
+          // Populate the assertion object if the custom function didn't return it.
+          ret.assertion = {
+            type: 'javascript',
+            value: assertion.value.toString(),
+          };
+        }
+        return ret;
       }
       invariant(typeof renderedValue === 'string', 'javascript assertion must have a string value');
       let result: boolean | number | GradingResult;
@@ -512,6 +520,8 @@ ${assertion.value}`,
       }
     }
 
+    // Update the assertion value. This allows the web view to display the prompt.
+    assertion.value = assertion.value || test.options.rubricPrompt;
     return {
       assertion,
       ...(await matchesLlmRubric(renderedValue || '', output, test.options, test.vars)),
