@@ -1,0 +1,18 @@
+Your first prompt goes here
+---
+Next prompt goes here. You can substitute variables like this: {{var1}} {{var2}} {{var3}}
+---
+This is the next prompt.
+
+These prompts are nunjucks templates, so you can use logic like this:
+{% if var1 %}
+  {{ var1 }}
+{% endif %}
+---
+[
+  {"role": "system", "content": "This is another prompt. JSON is supported."},
+  {"role": "user", "content": "Using this format, you may construct multi-shot OpenAI prompts"}
+  {"role": "user", "content": "Variable substitution still works: {{ var3 }}"}
+]
+---
+If you prefer, you can break prompts into multiple files (make sure to edit promptfooconfig.yaml accordingly)
