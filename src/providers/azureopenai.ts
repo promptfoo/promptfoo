@@ -10,6 +10,7 @@ import type {
 } from '../types.js';
 
 interface AzureOpenAiCompletionOptions {
+  apiHost?: string;
   apiKey?: string;
   temperature?: number;
   top_p?: number;
@@ -41,7 +42,7 @@ class AzureOpenAiGenericProvider implements ApiProvider {
     this.deploymentName = deploymentName;
 
     this.apiKey = config?.apiKey || env?.AZURE_OPENAI_API_KEY || process.env.AZURE_OPENAI_API_KEY;
-    this.apiHost = env?.AZURE_OPENAI_API_HOST || process.env.AZURE_OPENAI_API_HOST;
+    this.apiHost = config?.apiHost || env?.AZURE_OPENAI_API_HOST || process.env.AZURE_OPENAI_API_HOST;
 
     this.config = config || {};
     this.id = id ? () => id : this.id;
