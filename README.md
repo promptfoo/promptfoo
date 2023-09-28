@@ -3,6 +3,7 @@
 [![npm](https://img.shields.io/npm/v/promptfoo)](https://npmjs.com/package/promptfoo)
 [![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/typpo/promptfoo/main.yml)](https://github.com/typpo/promptfoo/actions/workflows/main.yml)
 ![MIT license](https://img.shields.io/github/license/typpo/promptfoo)
+[![Discord](https://dcbadge.vercel.app/api/server/gHPS9jjfbs?style=flat&compact=true)](https://discord.gg/gHPS9jjfbs)
 
 `promptfoo` is a tool for testing and evaluating LLM output quality.
 
