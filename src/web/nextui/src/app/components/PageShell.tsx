@@ -10,6 +10,7 @@ import Logo from './Logo';
 import LoggedInAs from './LoggedInAs';
 import DarkMode from './DarkMode';
 import { AuthProvider } from '@/supabase-client';
+import { IS_RUNNING_LOCALLY } from '@/constants';
 
 import './PageShell.css';
 
@@ -84,7 +85,7 @@ function Navigation({
       <Link href="/setup">New Eval</Link>
       <Link href="/eval">View Evals</Link>
       <div className="right-aligned">
-        <LoggedInAs />
+        {IS_RUNNING_LOCALLY ? null : <LoggedInAs />}
         <DarkMode darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} />
       </div>
     </Stack>
