@@ -88,7 +88,7 @@ export function writeOutput(
   const outputToSimpleString = (output: EvaluateTableOutput) =>
     `${output.pass ? '[PASS]' : '[FAIL]'} (${output.score.toFixed(2)}) ${output.text}`;
 
-  if (outputExtension === 'csv' || outputExtension === 'txt') {
+  if (outputExtension === 'csv') {
     const csvOutput = stringify([
       [...results.table.head.prompts, ...results.table.head.vars],
       ...results.table.body.map((row) => [...row.outputs.map(outputToSimpleString), ...row.vars]),
@@ -96,7 +96,7 @@ export function writeOutput(
     fs.writeFileSync(outputPath, csvOutput);
   } else if (outputExtension === 'json') {
     fs.writeFileSync(outputPath, JSON.stringify({ results, config, shareableUrl }, null, 2));
-  } else if (outputExtension === 'yaml' || outputExtension === 'yml') {
+  } else if (outputExtension === 'yaml' || outputExtension === 'yml' || outputExtension === 'txt') {
     fs.writeFileSync(outputPath, yaml.dump({ results, config, shareableUrl }));
   } else if (outputExtension === 'html') {
     const template = fs.readFileSync(`${getDirectory()}/tableOutput.html`, 'utf-8');
