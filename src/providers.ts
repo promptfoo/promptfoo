@@ -162,6 +162,10 @@ export async function loadApiProvider(
         `Unknown Anthropic model type: ${modelType}. Use one of the following providers: anthropic:completion:<model name>`,
       );
     }
+  } else if (providerPath?.startsWith('huggingface:')) {
+    // Load Huggingface module
+    const modelName = providerPath.split(':')[1];
+    return new HuggingfaceProvider(modelName, providerOptions);
   } else if (providerPath?.startsWith('replicate:')) {
     // Load Replicate module
     const splits = providerPath.split(':');
