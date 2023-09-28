@@ -100,10 +100,15 @@ export class OllamaProvider implements ApiProvider {
       );
     } catch (err) {
       return {
-        error: `API call error: ${String(err)}`,
+        error: `API call error: ${String(err)}. Output:\n${response?.data}`,
       };
     }
     logger.debug(`\tOllama generate API response: ${response.data}`);
+    if (response.data.error) {
+      return {
+        error: `Ollama error: ${response.data.error}`,
+      };
+    }
 
     try {
       const output = response.data
@@ -124,7 +129,7 @@ export class OllamaProvider implements ApiProvider {
       };
     } catch (err) {
       return {
-        error: `API response error: ${String(err)}: ${JSON.stringify(response.data)}`,
+        error: `Ollama API response error: ${String(err)}: ${JSON.stringify(response.data)}`,
       };
     }
   }

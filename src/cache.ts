@@ -55,7 +55,7 @@ export async function fetchWithCache(
     const resp = await fetchWithRetries(url, options, timeout);
     return {
       cached: false,
-      data: await resp.json(),
+      data: format === 'json' ? await resp.json() : await resp.text(),
     };
   }
 
