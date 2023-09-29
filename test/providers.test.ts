@@ -243,9 +243,9 @@ describe('providers', () => {
 
   test('HuggingfaceFeatureExtractionProvider callEmbeddingApi', async () => {
     const mockResponse = {
-      json: jest.fn().mockResolvedValue([
+      json: jest.fn().mockResolvedValue(
         [0.1, 0.2, 0.3, 0.4, 0.5],
-      ]),
+      ),
     };
     (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
 
