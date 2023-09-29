@@ -12,6 +12,7 @@ import {
 } from '../src/providers/azureopenai';
 import { OllamaProvider } from '../src/providers/ollama';
 import { WebhookProvider } from '../src/providers/webhook';
+import { HuggingfaceTextGenerationProvider, HuggingfaceFeatureExtractionProvider } from '../src/providers/huggingface';
 
 import type { ProviderOptionsMap, ProviderFunction } from '../src/types';
 

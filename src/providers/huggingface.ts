@@ -128,14 +128,14 @@ export class HuggingfaceFeatureExtractionProvider implements ApiProvider {
            error: `API call error: ${response.data.error}`,
          };
        }
-       if (!response.data[0]) {
+       if (!Array.isArray(response.data) || response.data.length < 1) {
          return {
            error: `Malformed response data: ${response.data}`,
          };
        }
 
        return {
-         embedding: response.data,
+         embedding: response.data[0],
        };
      } catch(err) {
        return {
