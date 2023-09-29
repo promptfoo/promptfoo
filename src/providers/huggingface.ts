@@ -112,31 +112,35 @@ export class HuggingfaceFeatureExtractionProvider implements ApiProvider {
        inputs: text,
      };
 
-     const response = await fetch(`https://api-inference.huggingface.co/models/${this.modelName}`, {
-       method: 'POST',
-       headers: {
-         'Content-Type': 'application/json',
-         'Authorization': `Bearer ${process.env.HF_API_TOKEN}`,
-       },
-       body: JSON.stringify(params),
-     });
+     let response;
+     try {
+       response = await fetchWithCache(`https://api-inference.huggingface.co/models/${this.modelName}`, {
+         method: 'POST',
+         headers: {
+           'Content-Type': 'application/json',
+           'Authorization': `Bearer ${process.env.HF_API_TOKEN}`,
+         },
+         body: JSON.stringify(params),
+       }, REQUEST_TIMEOUT_MS);
 
-     if (!response.ok) {
-       try {
-         const json = await response.json();
+       if (response.data.error) {
          return {
-           error: `API call error: ${json.error}\nHTTP ${response.status} ${response.statusText}`,
-         };
-       } catch {
-         return {
-           error: `API call error: ${response.status} ${response.statusText}`,
+           error: `API call error: ${response.data.error}`,
          };
        }
-     }
+       if (!response.data[0]) {
+         return {
+           error: `Malformed response data: ${response.data}`,
+         };
+       }
 
-     const data = await response.json();
-     return {
-       embedding: data,
-     };
+       return {
+         embedding: response.data,
+       };
+     } catch(err) {
+       return {
+         error: `API call error: ${String(err)}. Output:\n${response?.data}`,
+       };
+     }
    }
  }
