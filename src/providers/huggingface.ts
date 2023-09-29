@@ -52,7 +52,7 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.HF_API_TOKEN}`,
+          ...(process.env.HF_API_TOKEN ? { 'Authorization': `Bearer ${process.env.HF_API_TOKEN}` } : {}),
         },
         body: JSON.stringify(params),
       }, REQUEST_TIMEOUT_MS);
@@ -118,7 +118,7 @@ export class HuggingfaceFeatureExtractionProvider implements ApiProvider {
          method: 'POST',
          headers: {
            'Content-Type': 'application/json',
-           'Authorization': `Bearer ${process.env.HF_API_TOKEN}`,
+           ...(process.env.HF_API_TOKEN ? { 'Authorization': `Bearer ${process.env.HF_API_TOKEN}` } : {}),
          },
          body: JSON.stringify(params),
        }, REQUEST_TIMEOUT_MS);
