@@ -23,6 +23,7 @@ import {
   AzureOpenAiCompletionProvider,
   AzureOpenAiEmbeddingProvider,
 } from './providers/azureopenai';
+import { HuggingfaceTextGenerationProvider } from './providers/huggingface';
 
 import type {
   ApiProvider,
@@ -163,14 +164,11 @@ export async function loadApiProvider(
       );
     }
   } else if (providerPath?.startsWith('huggingface:')) {
-    // Load Huggingface module
     const modelName = providerPath.split(':')[1];
-    return new HuggingfaceProvider(modelName, providerOptions);
+    return new HuggingfaceTextGenerationProvider(modelName, providerOptions);
   } else if (providerPath?.startsWith('replicate:')) {
-    // Load Replicate module
     const splits = providerPath.split(':');
     const modelName = splits.slice(1).join(':');
-
     return new ReplicateProvider(modelName, providerOptions);
   }
 

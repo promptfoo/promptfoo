@@ -15,7 +15,7 @@ interface HuggingfaceCompletionOptions {
   wait_for_model?: boolean;
 }
 
-export class HuggingfaceProvider implements ApiProvider {
+export class HuggingfaceTextGenerationProvider implements ApiProvider {
   modelName: string;
   config: HuggingfaceCompletionOptions;
 
@@ -31,13 +31,16 @@ export class HuggingfaceProvider implements ApiProvider {
   }
 
   toString(): string {
-    return `[Huggingface Provider ${this.modelName}]`;
+    return `[Huggingface Text Generation Provider ${this.modelName}]`;
   }
 
   async callApi(prompt: string): Promise<ProviderResponse> {
     const params = {
       inputs: prompt,
-      parameters: this.config,
+      parameters: {
+        return_full_text: this.config.return_full_text ?? false,
+        ...this.config
+      },
     };
 
     const response = await fetch(`https://api-inference.huggingface.co/models/${this.modelName}`, {
@@ -50,9 +53,16 @@ export class HuggingfaceProvider implements ApiProvider {
     });
 
     if (!response.ok) {
-      return {
-        error: `API call error: ${response.statusText}`,
-      };
+      try {
+        const badResponse = await response.json();
+        return {
+          error: `API call error: ${badResponse.error}\nHTTP ${response.status} ${response.statusText}`,
+        };
+      } catch {
+        return {
+          error: `API call error: ${response.status} ${response.statusText}`,
+        };
+      }
     }
 
     const data = await response.json();
