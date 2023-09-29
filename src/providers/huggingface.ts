@@ -1,7 +1,8 @@
 import fetch from 'node-fetch';
-import { ApiProvider, ProviderResponse } from '../types.js';
 
-interface HuggingfaceCompletionOptions {
+import type { ApiProvider, ProviderEmbeddingResponse, ProviderResponse } from '../types.js';
+
+interface HuggingfaceTextGenerationOptions {
   top_k?: number;
   top_p?: number;
   temperature?: number;
@@ -17,9 +18,9 @@ interface HuggingfaceCompletionOptions {
 
 export class HuggingfaceTextGenerationProvider implements ApiProvider {
   modelName: string;
-  config: HuggingfaceCompletionOptions;
+  config: HuggingfaceTextGenerationOptions;
 
-  constructor(modelName: string, options: { id?: string, config?: HuggingfaceCompletionOptions } = {}) {
+  constructor(modelName: string, options: { id?: string, config?: HuggingfaceTextGenerationOptions } = {}) {
     const { id, config } = options;
     this.modelName = modelName;
     this.id = id ? () => id : this.id;
@@ -27,7 +28,7 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
   }
 
   id(): string {
-    return `huggingface:${this.modelName}`;
+    return `huggingface:text-generation:${this.modelName}`;
   }
 
   toString(): string {
@@ -54,9 +55,9 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
 
     if (!response.ok) {
       try {
-        const badResponse = await response.json();
+        const json = await response.json();
         return {
-          error: `API call error: ${badResponse.error}\nHTTP ${response.status} ${response.statusText}`,
+          error: `API call error: ${json.error}\nHTTP ${response.status} ${response.statusText}`,
         };
       } catch {
         return {
@@ -71,3 +72,65 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
     };
   }
 }
+
+interface HuggingfaceFeatureExtractionOptions {
+  use_cache?: boolean;
+  wait_for_model?: boolean;
+}
+
+export class HuggingfaceFeatureExtractionProvider implements ApiProvider {
+   modelName: string;
+   config: HuggingfaceFeatureExtractionOptions;
+
+   constructor(modelName: string, options: { id?: string, config?: HuggingfaceFeatureExtractionOptions } = {}) {
+     const { id, config } = options;
+     this.modelName = modelName;
+     this.id = id ? () => id : this.id;
+     this.config = config || {};
+   }
+
+   id(): string {
+     return `huggingface:feature-extraction:${this.modelName}`;
+   }
+
+   toString(): string {
+     return `[Huggingface Feature Extraction Provider ${this.modelName}]`;
+   }
+
+   async callApi(): Promise<ProviderResponse> {
+     throw new Error('Cannot use a feature extraction provider for text generation');
+   }
+
+   async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
+     const params = {
+       inputs: text,
+     };
+
+     const response = await fetch(`https://api-inference.huggingface.co/models/${this.modelName}`, {
+       method: 'POST',
+       headers: {
+         'Content-Type': 'application/json',
+         'Authorization': `Bearer ${process.env.HF_API_TOKEN}`,
+       },
+       body: JSON.stringify(params),
+     });
+
+     if (!response.ok) {
+       try {
+         const json = await response.json();
+         return {
+           error: `API call error: ${json.error}\nHTTP ${response.status} ${response.statusText}`,
+         };
+       } catch {
+         return {
+           error: `API call error: ${response.status} ${response.statusText}`,
+         };
+       }
+     }
+
+     const data = await response.json();
+     return {
+       embedding: data,
+     };
+   }
+ }
