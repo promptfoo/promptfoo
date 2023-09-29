@@ -265,6 +265,36 @@ describe('providers', () => {
     expect(provider).toBeInstanceOf(AnthropicCompletionProvider);
   });
 
+  test('HuggingfaceTextGenerationProvider callApi', async () => {
+    const mockResponse = {
+      json: jest.fn().mockResolvedValue([
+        { generated_text: 'Test output' },
+      ]),
+    };
+    (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
+
+    const provider = new HuggingfaceTextGenerationProvider('gpt2');
+    const result = await provider.callApi('Test prompt');
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(result.output).toBe('Test output');
+  });
+
+  test('HuggingfaceFeatureExtractionProvider callEmbeddingApi', async () => {
+    const mockResponse = {
+      json: jest.fn().mockResolvedValue([
+        [0.1, 0.2, 0.3, 0.4, 0.5],
+      ]),
+    };
+    (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
+
+    const provider = new HuggingfaceFeatureExtractionProvider('distilbert-base-uncased');
+    const result = await provider.callEmbeddingApi('Test text');
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(result.embedding).toEqual([0.1, 0.2, 0.3, 0.4, 0.5]);
+  });
+
   test('loadApiProvider with ollama:modelName', async () => {
     const provider = await loadApiProvider('ollama:llama2:13b');
     expect(provider).toBeInstanceOf(OllamaProvider);
