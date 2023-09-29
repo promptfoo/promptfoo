@@ -23,6 +23,7 @@ import {
   AzureOpenAiCompletionProvider,
   AzureOpenAiEmbeddingProvider,
 } from './providers/azureopenai';
+import { HuggingfaceFeatureExtractionProvider, HuggingfaceTextGenerationProvider } from './providers/huggingface';
 
 import type {
   ApiProvider,
@@ -162,11 +163,26 @@ export async function loadApiProvider(
         `Unknown Anthropic model type: ${modelType}. Use one of the following providers: anthropic:completion:<model name>`,
       );
     }
+  } else if (providerPath?.startsWith('huggingface:')) {
+    const splits = providerPath.split(':');
+    if (splits.length < 3) {
+      throw new Error(
+        `Invalid Huggingface provider path: ${providerPath}. Use one of the following providers: huggingface:feature-extraction:<model name>, huggingface:text-generation:<model name>`,
+      );
+    }
+    const modelName = splits.slice(2).join(':');
+    if (splits[1] === 'feature-extraction') {
+      return new HuggingfaceFeatureExtractionProvider(modelName, providerOptions);
+    } else if (splits[1] === 'text-generation') {
+      return new HuggingfaceTextGenerationProvider(modelName, providerOptions);
+    } else {
+      throw new Error(
+        `Invalid Huggingface provider path: ${providerPath}. Use one of the following providers: huggingface:feature-extraction:<model name>, huggingface:text-generation:<model name>`,
+      );
+    }
   } else if (providerPath?.startsWith('replicate:')) {
-    // Load Replicate module
     const splits = providerPath.split(':');
     const modelName = splits.slice(1).join(':');
-
     return new ReplicateProvider(modelName, providerOptions);
   }
 

@@ -136,10 +136,10 @@ export class OllamaProvider implements ApiProvider {
 }
 
 export class OllamaEmbeddingProvider extends OllamaProvider {
-  async callEmbeddingApi(prompt: string): Promise<ProviderEmbeddingResponse> {
+  async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
     const params = {
       model: this.modelName,
-      prompt,
+      prompt: text,
     };
 
     logger.debug(`Calling Ollama API: ${JSON.stringify(params)}`);
