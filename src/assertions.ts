@@ -381,7 +381,7 @@ export async function runAssertion(
       }
       if (typeof result === 'boolean') {
         pass = result !== inverse;
-        score = 1.0;
+        score = pass ? 1 : 0;
       } else if (typeof result === 'number') {
         pass = assertion.threshold ? result >= assertion.threshold : result > 0;
         score = result;

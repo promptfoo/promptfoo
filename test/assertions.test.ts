@@ -433,6 +433,25 @@ describe('runAssertion', () => {
     expect(result.reason).toMatch('Custom function returned false');
   });
 
+  it('should set score when javascript returns false', async () => {
+    const output = 'Test output';
+
+    const assertion: Assertion = {
+      type: 'javascript',
+      value: 'output.length < 1',
+    };
+
+    const result: GradingResult = await runAssertion(
+      'Some prompt',
+      assertion,
+      {} as AtomicTestCase,
+      output,
+    );
+    expect(result.pass).toBeFalsy();
+    expect(result.score).toBe(0);
+    expect(result.reason).toMatch('Custom function returned false');
+  });
+
   it('should fail when the javascript assertion fails', async () => {
     const output = 'Different output';
 
