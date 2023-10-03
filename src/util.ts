@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { createHash } from 'crypto';
 
 import $RefParser from '@apidevtools/json-schema-ref-parser';
 import yaml from 'js-yaml';
@@ -10,7 +11,7 @@ import { stringify } from 'csv-stringify/sync';
 import logger from './logger';
 import { getDirectory } from './esm';
 
-import type { EvaluateSummary, EvaluateTableOutput, UnifiedConfig } from './types';
+import type { EvaluateSummary, EvaluateTableOutput, UnifiedConfig, Prompt, PromptWithMetadata, TestCase, TestCasesWithMetadata, ResultsFile, TestCasesWithMetadataPrompt } from './types';
 
 let globalConfigCache: any = null;
 
@@ -128,24 +129,19 @@ export function writeLatestResults(results: EvaluateSummary, config: Partial<Uni
   const resultsDirectory = path.join(getConfigDirectoryPath(), 'output');
 
   // Replace hyphens with colons (Windows compatibility).
-  const timestamp = new Date().toISOString().replace(/:/g, '-');
-
-  const newResultsPath = path.join(resultsDirectory, `eval-${timestamp}.json`);
+  const filename = dateToFilename(new Date());
+  const newResultsPath = path.join(resultsDirectory, filename);
   const latestResultsPath = getLatestResultsPath();
   try {
     fs.mkdirSync(resultsDirectory, { recursive: true });
-    fs.writeFileSync(
-      newResultsPath,
-      JSON.stringify(
-        {
-          version: 1,
-          config,
-          results,
-        },
-        null,
-        2,
-      ),
-    );
+
+    const resultsFileData: ResultsFile = {
+      version: 2,
+      createdAt: new Date().toISOString(),
+      config,
+      results,
+    };
+    fs.writeFileSync(newResultsPath, JSON.stringify(resultsFileData, null, 2));
 
     // Use copy instead of symlink to avoid issues with Windows permissions.
     try {
@@ -179,23 +175,178 @@ export function cleanupOldResults(remaining = RESULT_HISTORY_LENGTH) {
   }
 }
 
-export function readResult(
-  name: string,
-): { results: EvaluateSummary; config: Partial<UnifiedConfig> } | undefined {
+export function filenameToDate(filename: string) {
+  const dateString = filename.slice('eval-'.length, filename.length - '.json'.length);
+
+  // Replace hyphens with colons where necessary (Windows compatibility).
+  const dateParts = dateString.split('T');
+  const timePart = dateParts[1].replace(/-/g, ':');
+  const formattedDateString = `${dateParts[0]}T${timePart}`;
+
+  const date = new Date(formattedDateString);
+  return date.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    timeZoneName: 'short',
+  });
+}
+
+export function dateToFilename(date: Date) {
+  return `eval-${date.toISOString().replace(/:/g, '-')}.json`;
+}
+
+export function readResult(name: string): {result: ResultsFile, createdAt: Date} | undefined {
   const resultsDirectory = path.join(getConfigDirectoryPath(), 'output');
   const resultsPath = path.join(resultsDirectory, name);
   try {
-    const results = JSON.parse(fs.readFileSync(fs.realpathSync(resultsPath), 'utf-8'));
-    return results;
+    const result = JSON.parse(fs.readFileSync(fs.realpathSync(resultsPath), 'utf-8')) as ResultsFile;
+    // The file is named eval-2023-10-02T22:47:01.127Z.json, for example. Extract the date from the filename.
+    //const dateString = name.slice(5, -5).replace(/T(\d{2})-(\d{2})-(\d{2})/, 'T$1:$2:$3');
+    //console.log(dateString)
+    //const createdAt = new Date(dateString);
+    const createdAt = new Date(filenameToDate(name));
+    return { result, createdAt };
   } catch (err) {
     logger.error(`Failed to read results from ${resultsPath}:\n${err}`);
   }
 }
 
-export function readLatestResults():
-  | { results: EvaluateSummary; config: Partial<UnifiedConfig> }
-  | undefined {
+export function readLatestResults(): ResultsFile | undefined {
   return JSON.parse(fs.readFileSync(getLatestResultsPath(), 'utf-8'));
+}
+
+export function getPromptsForTestCases(testCases: TestCase[]) {
+   const testCasesJson = JSON.stringify(testCases);
+   const testCasesSha256 = createHash('sha256').update(testCasesJson).digest('hex');
+   return getPromptsForTestCasesHash(testCasesSha256);
+}
+
+export function getPromptsForTestCasesHash(testCasesSha256: string) {
+   return getPromptsWithPredicate(result => {
+     const testsJson = JSON.stringify(result.config.tests);
+     const hash = createHash('sha256').update(testsJson).digest('hex');
+     return hash === testCasesSha256;
+   });
+}
+
+function sha256(str: string) {
+  return createHash('sha256').update(str).digest('hex');
+}
+
+export function getPrompts() {
+  return getPromptsWithPredicate(() => true);
+}
+
+export function getPromptsWithPredicate(predicate: (result: ResultsFile) => boolean): PromptWithMetadata[] {
+  const resultsFiles = listPreviousResults();
+  const groupedPrompts: { [hash: string]: PromptWithMetadata } = {};
+
+  for (const filePath of resultsFiles) {
+    const file = readResult(filePath);
+    if (!file) {
+      continue;
+    }
+    const { result, createdAt } = file;
+    if (result && predicate(result)) {
+      for (const prompt of result.results.table.head.prompts) {
+        const promptId = sha256(prompt.raw);
+        const datasetId = result.config.tests ? sha256(JSON.stringify(result.config.tests)) : 'No dataset';
+        if (promptId in groupedPrompts) {
+          groupedPrompts[promptId].date = new Date(Math.max(groupedPrompts[promptId].date.getTime(), new Date(createdAt).getTime()));
+          groupedPrompts[promptId].count += 1;
+          groupedPrompts[promptId].evals.push({
+            id: filePath,
+            datasetId,
+            metrics: prompt.metrics,
+          });
+        } else {
+          groupedPrompts[promptId] = {
+            id: promptId,
+            prompt,
+            date: new Date(createdAt),
+            count: 1,
+            recentEvalId: filePath,
+            evals: [{
+              id: filePath,
+              datasetId,
+              metrics: prompt.metrics,
+            }],
+          };
+        }
+      }
+    }
+  }
+
+  return Object.values(groupedPrompts);/*.map(({ prompt, date, count, evalId }) => ({
+    prompt,
+    date,
+    count,
+    evalId,
+  }));*/
+}
+
+export function getTestCases() {
+  return getTestCasesWithPredicate(() => true);
+}
+
+export function getTestCasesWithPredicate(predicate: (result: ResultsFile) => boolean): TestCasesWithMetadata[] {
+  const resultsFiles = listPreviousResults();
+  const groupedTestCases: { [hash: string]: TestCasesWithMetadata } = {};
+
+  for (const filePath of resultsFiles) {
+    const file = readResult(filePath);
+    if (!file) {
+      continue;
+    }
+    const { result, createdAt } = file;
+    const testCases = result?.config?.tests;
+    if (testCases && predicate(result)) {
+      const datasetId = sha256(JSON.stringify(testCases));
+      if (datasetId in groupedTestCases) {
+        groupedTestCases[datasetId].date = new Date(Math.max(groupedTestCases[datasetId].date.getTime(), new Date(createdAt).getTime()));
+        groupedTestCases[datasetId].count += 1;
+        const newPrompts = result.results.table.head.prompts.map(prompt => ({id: sha256(prompt.raw), prompt, evalId: filePath}));
+        const promptsById: Record<string, TestCasesWithMetadataPrompt> = {};
+        for (const prompt of groupedTestCases[datasetId].prompts.concat(newPrompts)) {
+          if (!(prompt.id in promptsById)) {
+            promptsById[prompt.id] = prompt;
+          }
+        }
+        groupedTestCases[datasetId].prompts = Object.values(promptsById);
+        groupedTestCases[datasetId].evalIds.push(filePath);
+      } else {
+        const newPrompts = result.results.table.head.prompts.map(prompt => ({id: createHash('sha256').update(prompt.raw).digest('hex'), prompt, evalId: filePath}));
+        const promptsById: Record<string, TestCasesWithMetadataPrompt> = {};
+        for (const prompt of newPrompts) {
+          if (!(prompt.id in promptsById)) {
+            promptsById[prompt.id] = prompt;
+          }
+        }
+        groupedTestCases[datasetId] = {
+          id: datasetId,
+          testCases,
+          date: new Date(createdAt),
+          count: 1,
+          recentEvalId: filePath,
+          evalIds: [filePath],
+          prompts: Object.values(promptsById),
+        };
+      }
+    }
+  }
+
+  return Object.values(groupedTestCases)/*.map(({ testCases, date, count, evalId, id, topPrompts }) => ({
+    id,
+    testCases,
+    date,
+    count,
+    evalId,
+    topPrompts,
+  }));*/
 }
 
 export function getNunjucksEngine() {

@@ -4,7 +4,7 @@ import * as React from 'react';
 import invariant from 'tiny-invariant';
 import CircularProgress from '@mui/material/CircularProgress';
 import { io as SocketIOClient } from 'socket.io-client';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 
 import ResultsView from './ResultsView';
@@ -69,12 +69,16 @@ export default function Eval({
     return body.data;
   };
 
+  const fetchEvalById = async (id: string) => {
+    const resp = await fetch(`${API_BASE_URL}/results/${id}`, { cache: 'no-store' });
+    const body = await resp.json();
+    setTable(body.data.results.table);
+    setConfig(body.data.config);
+  };
+
   const handleRecentEvalSelection = async (id: string) => {
     if (IS_RUNNING_LOCALLY) {
-      const resp = await fetch(`${API_BASE_URL}/results/${id}`, { cache: 'no-store' });
-      const body = await resp.json();
-      setTable(body.data.results.table);
-      setConfig(body.data.config);
+      fetchEvalById(id);
       // TODO(ian): This requires next.js standalone server
       // router.push(`/eval/local:${encodeURIComponent(file)}`);
     } else {
@@ -87,8 +91,17 @@ export default function Eval({
     defaultEvalIdProp || recentEvals[0]?.id,
   );
 
+  const searchParams = useSearchParams();
+  const file = searchParams ? searchParams.get('file') : null;
+
   React.useEffect(() => {
-    if (preloadedData) {
+    if (file) {
+      const doIt = async () => {
+        await fetchEvalById(file);
+        setLoaded(true);
+      };
+      doIt();
+    } else if (preloadedData) {
       setTable(preloadedData.data.results?.table as EvalTable);
       setConfig(preloadedData.data.config);
       setLoaded(true);
@@ -152,7 +165,7 @@ export default function Eval({
         }
       });
     }
-  }, [fetchId, setTable, setConfig, preloadedData, setDefaultEvalId]);
+  }, [fetchId, setTable, setConfig, preloadedData, setDefaultEvalId, file]);
 
   if (failed) {
     return <div className="loading">404 Eval not found</div>;

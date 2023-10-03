@@ -55,6 +55,7 @@ export default async function Page({ params }: { params: { id: string } }) {
     sharedResults = {
       data: {
         version: result.version,
+        createdAt: result.createdAt,
         results: result.results as unknown as EvaluateSummary,
         config: result.config as unknown as EvaluateTestSuite,
       },

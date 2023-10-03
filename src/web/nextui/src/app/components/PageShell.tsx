@@ -83,7 +83,9 @@ function Navigation({
     <Stack direction="row" spacing={2} className="nav">
       <Logo />
       <Link href="/setup">New Eval</Link>
-      <Link href="/eval">View Evals</Link>
+      <Link href="/eval">Evals</Link>
+      <Link href="/prompts">Prompts</Link>
+      <Link href="/datasets">Datasets</Link>
       <div className="right-aligned">
         {IS_RUNNING_LOCALLY ? null : <LoggedInAs />}
         <DarkMode darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} />

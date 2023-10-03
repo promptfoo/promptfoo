@@ -434,6 +434,7 @@ export default function ResultsTable({
 
   return (
     <table
+      className="results-table"
       style={{
         wordBreak,
       }}
