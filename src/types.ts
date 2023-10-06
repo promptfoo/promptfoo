@@ -191,6 +191,8 @@ type BaseAssertionTypes =
   | 'icontains'
   | 'contains-all'
   | 'contains-any'
+  | 'icontains-all'
+  | 'icontains-any'
   | 'starts-with'
   | 'regex'
   | 'is-json'

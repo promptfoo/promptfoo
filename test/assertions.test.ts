@@ -699,6 +699,38 @@ describe('runAssertion', () => {
     expect(result.reason).toBe('Expected output to contain one of "option1, option2, option3"');
   });
 
+  it('should pass when the icontains-any assertion passes', async () => {
+    const output = 'This output contains OPTION1';
+
+    const result: GradingResult = await runAssertion(
+      'Some prompt',
+      {
+        type: 'icontains-any',
+        value: ['option1', 'option2', 'option3'],
+      },
+      {} as AtomicTestCase,
+      output,
+    );
+    expect(result.pass).toBeTruthy();
+    expect(result.reason).toBe('Assertion passed');
+  });
+
+  it('should fail when the icontains-any assertion fails', async () => {
+    const output = 'This output does not contain any option';
+
+    const result: GradingResult = await runAssertion(
+      'Some prompt',
+      {
+        type: 'icontains-any',
+        value: ['option1', 'option2', 'option3'],
+      },
+      {} as AtomicTestCase,
+      output,
+    );
+    expect(result.pass).toBeFalsy();
+    expect(result.reason).toBe('Expected output to contain one of "option1, option2, option3"');
+  });
+
   // Test for contains-all assertion
   const containsAllAssertion: Assertion = {
     type: 'contains-all',
@@ -729,6 +761,38 @@ describe('runAssertion', () => {
     );
     expect(result.pass).toBeFalsy();
     expect(result.reason).toBe('Expected output to contain all of "option1, option2, option3"');
+  });
+
+  it('should pass when the icontains-all assertion passes', async () => {
+    const output = 'This output contains OPTION1, option2, and opTiOn3';
+
+    const result: GradingResult = await runAssertion(
+      'Some prompt',
+      {
+        type: 'icontains-all',
+        value: ['option1', 'option2', 'option3'],
+      },
+      {} as AtomicTestCase,
+      output,
+    );
+    expect(result.pass).toBeTruthy();
+    expect(result.reason).toBe('Assertion passed');
+  });
+
+  it('should fail when the icontains-all assertion fails', async () => {
+    const output = 'This output contains OPTION1, option2, and opTiOn3';
+
+    const result: GradingResult = await runAssertion(
+      'Some prompt',
+      {
+        type: 'icontains-all',
+        value: ['option1', 'option2', 'option3', 'option4'],
+      },
+      {} as AtomicTestCase,
+      output,
+    );
+    expect(result.pass).toBeFalsy();
+    expect(result.reason).toBe('Expected output to contain all of "option1, option2, option3, option4"');
   });
 
   // Test for regex assertion
