@@ -249,6 +249,23 @@ export async function runAssertion(
     };
   }
 
+  if (baseType === 'icontains-any') {
+    invariant(renderedValue, '"icontains-any" assertion type must have a value');
+    invariant(
+      Array.isArray(renderedValue),
+      '"icontains-any" assertion type must have an array value',
+    );
+    pass = renderedValue.some((value) => output.toLowerCase().includes(String(value).toLowerCase())) !== inverse;
+    return {
+      pass,
+      score: pass ? 1 : 0,
+      reason: pass
+        ? 'Assertion passed'
+        : `Expected output to ${inverse ? 'not ' : ''}contain one of "${renderedValue.join(', ')}"`,
+      assertion,
+    };
+  }
+
   if (baseType === 'contains-all') {
     invariant(renderedValue, '"contains-all" assertion type must have a value');
     invariant(
@@ -256,6 +273,23 @@ export async function runAssertion(
       '"contains-all" assertion type must have an array value',
     );
     pass = renderedValue.every((value) => output.includes(String(value))) !== inverse;
+    return {
+      pass,
+      score: pass ? 1 : 0,
+      reason: pass
+        ? 'Assertion passed'
+        : `Expected output to ${inverse ? 'not ' : ''}contain all of "${renderedValue.join(', ')}"`,
+      assertion,
+    };
+  }
+
+  if (baseType === 'icontains-all') {
+    invariant(renderedValue, '"icontains-all" assertion type must have a value');
+    invariant(
+      Array.isArray(renderedValue),
+      '"icontains-all" assertion type must have an array value',
+    );
+    pass = renderedValue.every((value) => output.toLowerCase().includes(String(value).toLowerCase())) !== inverse;
     return {
       pass,
       score: pass ? 1 : 0,
@@ -709,7 +743,7 @@ export function assertionFromString(expected: string): Assertion {
 
   // New options
   const assertionRegex =
-    /^(not-)?(equals|contains-any|contains-all|contains-json|is-json|regex|icontains|contains|webhook|rouge-n|similar|starts-with|levenshtein)(?:\((\d+(?:\.\d+)?)\))?(?::(.*))?$/;
+    /^(not-)?(equals|contains-any|contains-all|icontains-any|icontains-all|contains-json|is-json|regex|icontains|contains|webhook|rouge-n|similar|starts-with|levenshtein)(?:\((\d+(?:\.\d+)?)\))?(?::(.*))?$/;
   const regexMatch = expected.match(assertionRegex);
 
   if (regexMatch) {
@@ -717,7 +751,7 @@ export function assertionFromString(expected: string): Assertion {
     const fullType = notPrefix ? `not-${type}` : type;
     const threshold = parseFloat(thresholdStr);
 
-    if (type === 'contains-any' || type === 'contains-all') {
+    if (type === 'contains-any' || type === 'contains-all' || type === 'icontains-any' || type === 'icontains-all') {
       return {
         type: fullType as AssertionType,
         value: value.split(',').map((s) => s.trim()),
