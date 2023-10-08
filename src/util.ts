@@ -217,19 +217,19 @@ export function readLatestResults(): ResultsFile | undefined {
 
 export function getPromptsForTestCases(testCases: TestCase[]) {
    const testCasesJson = JSON.stringify(testCases);
-   const testCasesSha256 = createHash('sha256').update(testCasesJson).digest('hex');
+   const testCasesSha256 = sha256(testCasesJson);
    return getPromptsForTestCasesHash(testCasesSha256);
 }
 
 export function getPromptsForTestCasesHash(testCasesSha256: string) {
    return getPromptsWithPredicate(result => {
      const testsJson = JSON.stringify(result.config.tests);
-     const hash = createHash('sha256').update(testsJson).digest('hex');
+     const hash = sha256(testsJson);
      return hash === testCasesSha256;
    });
 }
 
-function sha256(str: string) {
+export function sha256(str: string) {
   return createHash('sha256').update(str).digest('hex');
 }
 
@@ -250,7 +250,7 @@ export function getPromptsWithPredicate(predicate: (result: ResultsFile) => bool
     if (result && predicate(result)) {
       for (const prompt of result.results.table.head.prompts) {
         const promptId = sha256(prompt.raw);
-        const datasetId = result.config.tests ? sha256(JSON.stringify(result.config.tests)) : 'No dataset';
+        const datasetId = result.config.tests ? sha256(JSON.stringify(result.config.tests)) : '-';
         if (promptId in groupedPrompts) {
           groupedPrompts[promptId].recentEvalDate = new Date(Math.max(groupedPrompts[promptId].recentEvalDate.getTime(), new Date(createdAt).getTime()));
           groupedPrompts[promptId].count += 1;
@@ -343,6 +343,26 @@ export function getTestCasesWithPredicate(predicate: (result: ResultsFile) => bo
     evalId,
     topPrompts,
   }));*/
+}
+
+export function getPromptFromHash(hash: string) {
+  const prompts = getPrompts();
+  for (const prompt of prompts) {
+    if (prompt.id.startsWith(hash)) {
+      return prompt;
+    }
+  }
+  return undefined;
+}
+
+export function getDatasetFromHash(hash: string) {
+  const datasets = getTestCases();
+  for (const dataset of datasets) {
+    if (dataset.id.startsWith(hash)) {
+      return dataset;
+    }
+  }
+  return undefined;
 }
 
 export function getNunjucksEngine() {

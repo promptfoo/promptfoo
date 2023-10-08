@@ -19,6 +19,12 @@ import {
   readLatestResults,
   writeLatestResults,
   writeOutput,
+  listPreviousResults,
+  readResult,
+  getPrompts,
+  getTestCases,
+  getPromptFromHash,
+  sha256,
 } from './util';
 import { DEFAULT_README, DEFAULT_YAML_CONFIG, DEFAULT_PROMPTS } from './onboarding';
 import { disableCache, clearCache } from './cache';
@@ -34,7 +40,7 @@ import type {
   TestSuite,
   UnifiedConfig,
 } from './types';
-import { generateTable } from './table';
+import { generateTable, wrapTable } from './table';
 import { createShareableUrl } from './share';
 
 function createDummyFiles(directory: string | null) {
@@ -68,6 +74,11 @@ function createDummyFiles(directory: string | null) {
     logger.info(chalk.green.bold(`Wrote prompts.txt and promptfooconfig.yaml to ./${directory}`));
     logger.info(chalk.green(`\`cd ${directory}\` and open README.md to get started!`));
   }
+}
+
+function printBorder() {
+  const border = '='.repeat((process.stdout.columns || 80) - 10);
+  logger.info(border);
 }
 
 async function main() {
@@ -421,8 +432,7 @@ async function main() {
 
       telemetry.maybeShowNotice();
 
-      const border = '='.repeat((process.stdout.columns || 80) - 10);
-      logger.info(border);
+      printBorder();
       if (!cmdObj.write) {
         logger.info(`${chalk.green('✔')} Evaluation complete`);
       } else {
@@ -443,7 +453,7 @@ async function main() {
           );
         }
       }
-      logger.info(border);
+      printBorder();
       logger.info(chalk.green.bold(`Successes: ${summary.stats.successes}`));
       logger.info(chalk.red.bold(`Failures: ${summary.stats.failures}`));
       logger.info(
@@ -460,6 +470,161 @@ async function main() {
       if (cmdObj.view) {
         startServer(parseInt(cmdObj.view, 10) || 15500);
       }
+    });
+
+    const listCommand = program.command('list').description('List various resources');
+
+    listCommand.command('evals [all]')
+     .description('List recent evaluations. By default, shows the first 20 evaluations. Use "all" to show all evaluations.')
+     .action(async (all: string | null) => {
+       telemetry.maybeShowNotice();
+       telemetry.record('command_used', {
+         name: 'list evals',
+       });
+       await telemetry.send();
+
+       let resultsFiles = listPreviousResults().sort((a, b) => b.localeCompare(a));
+       if (!all) {
+         resultsFiles = resultsFiles.slice(0, 20);
+       }
+       const tableData = [];
+
+       for (const filePath of resultsFiles) {
+         const file = readResult(filePath);
+         if (file) {
+           const vars = file.result.results.table.head.vars;
+           let varsStr = vars.slice(0, 5).join(', ');
+           if (vars.length > 5) {
+             varsStr += ` (and ${vars.length - 5} more...)`;
+           }
+
+           const prompts = file.result.results.table.head.prompts;
+           let promptsStr = prompts.slice(0, 5).map(p => sha256(p.raw).slice(0, 6)).join(', ');
+           if (prompts.length > 5) {
+             promptsStr += ` (and ${prompts.length - 5} more...)`;
+            }
+           tableData.push({
+             ID: filePath,
+             'Prompts': promptsStr,
+             'Vars': varsStr,
+           });
+         }
+       }
+
+       logger.info(wrapTable(tableData));
+
+       printBorder();
+       logger.info(`Run ${chalk.green('promptfoo show [index]')} to see details of a specific evaluation.`);
+       logger.info(`Run ${chalk.gray('promptfoo list all')} to see all saved evaluations.`);
+     });
+
+    listCommand.command('prompts')
+     .description('List prompts used')
+     .action(async () => {
+       telemetry.maybeShowNotice();
+       telemetry.record('command_used', {
+         name: 'list prompts',
+       });
+       await telemetry.send();
+
+       const prompts = getPrompts().sort((a, b) => b.recentEvalId.localeCompare(a.recentEvalId));
+       const tableData = prompts.map(prompt => ({
+         ID: prompt.id.slice(0, 6),
+         'Raw': prompt.prompt.raw.slice(0, 100) + (prompt.prompt.raw.length > 100 ? '...' : ''),
+         '# evals': prompt.count,
+         'Most recent eval': prompt.recentEvalId,
+       }));
+
+       logger.info(wrapTable(tableData));
+     });
+
+    listCommand.command('datasets')
+     .description('List datasets used')
+     .action(async () => {
+       telemetry.maybeShowNotice();
+       telemetry.record('command_used', {
+         name: 'list datasets',
+       });
+       await telemetry.send();
+
+       const datasets = getTestCases().sort((a, b) => b.recentEvalId.localeCompare(a.recentEvalId));
+       const tableData = datasets.map(dataset => ({
+         ID: dataset.id.slice(0, 6),
+         'Highest scoring prompt': dataset.prompts.sort((a, b) => (b.prompt.metrics?.score || 0) - (a.prompt.metrics?.score || 0))[0].id.slice(0, 6),
+         '# evals': dataset.count,
+         '# prompts': dataset.prompts.length,
+         'Most recent eval': dataset.recentEvalId,
+       }));
+
+       logger.info(wrapTable(tableData));
+     });
+
+    const showCommand = program.command('show').description('Show details of a specific resource');
+    showCommand
+      .command('eval [index]')
+      .description('Show details of the nth most recent eval. If index is not set, default to 0.')
+      .action(async (index: string | null) => {
+        telemetry.maybeShowNotice();
+        telemetry.record('command_used', {
+          name: 'show',
+        });
+        await telemetry.send();
+
+        const resultsFiles = listPreviousResults().sort((a, b) => b.localeCompare(a));
+        const evalIndex = index ? parseInt(index, 10) : 0;
+
+        if (evalIndex < 0 || evalIndex >= resultsFiles.length) {
+          logger.error(`Invalid index. Please provide an index between 0 and ${resultsFiles.length - 1}.`);
+          return;
+        }
+
+        const filePath = resultsFiles[evalIndex];
+        const file = readResult(filePath);
+
+        if (!file) {
+          logger.error(`Failed to read evaluation result at index ${evalIndex}.`);
+          return;
+        }
+
+        const { prompts, vars } = file.result.results.table.head;
+        logger.info(generateTable(file.result.results, 100, 25));
+        if (file.result.results.table.body.length > 25) {
+          const rowsLeft = file.result.results.table.body.length - 25;
+          logger.info(`... ${rowsLeft} more row${rowsLeft === 1 ? '' : 's'} not shown ...\n`);
+        }
+
+        printBorder();
+        logger.info(`Evaluation ${chalk.cyan(filePath)}`);
+        logger.info(`${prompts.length} prompts`);
+        logger.info(`${vars.length} variables: ${vars.slice(0, 5).join(', ')}${vars.length > 5 ? ` (and ${vars.length - 5} more...)` : ''}`);
+      });
+
+    showCommand.command('prompt <id>').description('Show details of a specific prompt').action(async (id: string) => {
+      const prompt = getPromptFromHash(id);
+      if (!prompt) {
+        logger.error(`Prompt with ID ${id} not found.`);
+        return;
+      }
+
+      printBorder();
+      logger.info(chalk.cyan(prompt.prompt.raw));
+      printBorder();
+      logger.info(chalk.bold(`Prompt ${id}`));
+      printBorder();
+
+      logger.info(`This prompt is used in the following evals:`);
+      const table = [];
+      for (const evl of prompt.evals.sort((a, b) => b.id.localeCompare(a.id)).slice(0, 10)) {
+        table.push({
+          'Eval ID': evl.id,
+          'Dataset ID': evl.datasetId.slice(0, 6),
+          'Raw score': evl.metrics?.score || '-',
+          'Pass rate': evl.metrics && evl.metrics.testPassCount + evl.metrics.testFailCount > 0 ? `${(evl.metrics.testPassCount / (evl.metrics.testPassCount + evl.metrics.testFailCount) * 100).toFixed(2)}%` : '-',
+          'Pass count': evl.metrics?.testPassCount || '-',
+          'Fail count': evl.metrics?.testFailCount || '-',
+        });
+      }
+      logger.info(wrapTable(table));
     });
 
   program.parse(process.argv);
