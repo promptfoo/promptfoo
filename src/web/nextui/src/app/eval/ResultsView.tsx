@@ -99,7 +99,8 @@ export default function ResultsView({
         },
         body: JSON.stringify({
           data: {
-            version: 1,
+            version: 2,
+            createdAt: new Date().toISOString(),
             results: {
               table,
             },

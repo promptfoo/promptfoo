@@ -549,6 +549,21 @@ class Evaluator {
           tokenUsage: row.response?.tokenUsage,
           gradingResult: row.gradingResult,
         };
+
+        table.head.prompts[colIndex].metrics = table.head.prompts[colIndex].metrics || {
+          score: 0,
+          testPassCount: 0,
+          testFailCount: 0,
+          assertPassCount: 0,
+          assertFailCount: 0,
+        };
+        const metrics = table.head.prompts[colIndex].metrics;
+        invariant(metrics, 'Expected prompt.metrics to be set');
+        metrics.score += row.score;
+        metrics.testPassCount += row.success ? 1 : 0;
+        metrics.testFailCount += row.success ? 0 : 1;
+        metrics.assertPassCount += row.gradingResult?.componentResults?.filter(r => r.pass).length || 0;
+        metrics.assertFailCount += row.gradingResult?.componentResults?.filter(r => !r.pass).length || 0;
       },
     );
 

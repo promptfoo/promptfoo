@@ -8,7 +8,9 @@ export async function createShareableUrl(
 ): Promise<string> {
   const sharedResults: SharedResults = {
     data: {
-      version: 1,
+      version: 2,
+      // TODO(ian): Take date from results, if applicable.
+      createdAt: new Date().toISOString(),
       results,
       config,
     },

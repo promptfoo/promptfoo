@@ -1,16 +1,11 @@
 'use client';
 
 import React from 'react';
-import Link from 'next/link';
 import useMediaQuery from '@mui/material/useMediaQuery';
-import { Stack } from '@mui/material';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 
-import Logo from './Logo';
-import LoggedInAs from './LoggedInAs';
-import DarkMode from './DarkMode';
 import { AuthProvider } from '@/supabase-client';
-import { IS_RUNNING_LOCALLY } from '@/constants';
+import Navigation from '@/app/components/Navigation';
 
 import './PageShell.css';
 
@@ -64,30 +59,3 @@ function Layout({ children }: { children: React.ReactNode }) {
   return <div>{children}</div>;
 }
 
-function Navigation({
-  darkMode,
-  onToggleDarkMode,
-}: {
-  darkMode: boolean;
-  onToggleDarkMode: () => void;
-}) {
-  if (process.env.NEXT_PUBLIC_NO_BROWSING) {
-    return (
-      <Stack direction="row" spacing={2} className="nav">
-        <Logo />
-        <DarkMode darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} />
-      </Stack>
-    );
-  }
-  return (
-    <Stack direction="row" spacing={2} className="nav">
-      <Logo />
-      <Link href="/setup">New Eval</Link>
-      <Link href="/eval">View Evals</Link>
-      <div className="right-aligned">
-        {IS_RUNNING_LOCALLY ? null : <LoggedInAs />}
-        <DarkMode darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} />
-      </div>
-    </Stack>
-  );
-}

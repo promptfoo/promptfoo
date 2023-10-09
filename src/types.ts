@@ -126,6 +126,21 @@ export interface Prompt {
   raw: string;
   display: string;
   function?: (context: { vars: Record<string, string | object> }) => Promise<string | object>;
+  metrics?: { score: number, testPassCount: number, testFailCount: number, assertPassCount: number, assertFailCount: number };
+}
+
+// Used when building prompts index from files.
+export interface PromptWithMetadata {
+  id: string;
+  prompt: Prompt;
+  recentEvalDate: Date;
+  recentEvalId: string;
+  evals: {
+    id: string;
+    datasetId: string;
+    metrics: Prompt['metrics'];
+  }[];
+  count: number;
 }
 
 export interface EvaluateResult {
@@ -235,6 +250,23 @@ export interface Assertion {
   provider?: GradingConfig['provider'];
 
   rubricPrompt?: GradingConfig['rubricPrompt'];
+}
+
+// Used when building prompts index from files.
+export interface TestCasesWithMetadataPrompt {
+  prompt: Prompt;
+  id: string;
+  evalId: string;
+}
+
+export interface TestCasesWithMetadata {
+  id: string;
+  testCases: string | string[] | TestCase[];
+  recentEvalDate: Date;
+  recentEvalId: string;
+  evalIds: string[];
+  count: number;
+  prompts: TestCasesWithMetadataPrompt[];
 }
 
 // Each test case is graded pass/fail.  A test case represents a unique input to the LLM after substituting `vars` in the prompt.
@@ -352,9 +384,12 @@ export interface EvaluateTestSuite extends TestSuiteConfig {
 }
 
 export interface SharedResults {
-  data: {
-    version: number;
-    results: EvaluateSummary;
-    config: Partial<UnifiedConfig>;
-  };
+  data: ResultsFile;
+}
+
+export interface ResultsFile {
+  version: number;
+  createdAt: string;
+  results: EvaluateSummary;
+  config: Partial<UnifiedConfig>;
 }

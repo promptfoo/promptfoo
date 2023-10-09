@@ -11,11 +11,11 @@ import cors from 'cors';
 import compression from 'compression';
 import opener from 'opener';
 import { Server as SocketIOServer } from 'socket.io';
-import promptfoo, { EvaluateSummary, EvaluateTestSuite } from '../index';
+import promptfoo, { EvaluateSummary, EvaluateTestSuite, PromptWithMetadata } from '../index';
 
 import logger from '../logger';
 import { getDirectory } from '../esm';
-import { getLatestResultsPath, listPreviousResults, readResult } from '../util';
+import { getLatestResultsPath, getPrompts, getPromptsForTestCasesHash, listPreviousResults, readResult, filenameToDate, getTestCases } from '../util';
 
 interface Job {
   status: 'in-progress' | 'complete';
@@ -24,27 +24,11 @@ interface Job {
   result: EvaluateSummary | null;
 }
 
+// Running jobs
 const evalJobs = new Map<string, Job>();
 
-function filenameToDate(filename: string) {
-  const dateString = filename.slice('eval-'.length, filename.length - '.json'.length);
-
-  // Replace hyphens with colons where necessary (Windows compatibility).
-  const dateParts = dateString.split('T');
-  const timePart = dateParts[1].replace(/-/g, ':');
-  const formattedDateString = `${dateParts[0]}T${timePart}`;
-
-  const date = new Date(formattedDateString);
-  return date.toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    timeZoneName: 'short',
-  });
-}
+// Prompts cache
+let allPrompts: PromptWithMetadata[] | null = null;
 
 export function startServer(port = 15500, skipConfirmation = false) {
   const app = express();
@@ -77,6 +61,7 @@ export function startServer(port = 15500, skipConfirmation = false) {
     const watcher = debounce((curr: Stats, prev: Stats) => {
       if (curr.mtime !== prev.mtime) {
         socket.emit('update', readLatestJson());
+        allPrompts = null;
       }
     }, 250);
     fs.watchFile(latestJsonPath, watcher);
@@ -148,12 +133,29 @@ export function startServer(port = 15500, skipConfirmation = false) {
       res.status(400).send('Invalid filename');
       return;
     }
-    const result = readResult(safeFilename);
-    if (!result) {
+    const file = readResult(safeFilename);
+    if (!file) {
       res.status(404).send('Result not found');
       return;
     }
-    res.json({ data: result });
+    res.json({ data: file.result });
+  });
+
+  app.get('/api/prompts', (req, res) => {
+    if (allPrompts == null) {
+      allPrompts = getPrompts();
+    }
+    res.json({ data: allPrompts });
+  });
+
+  app.get('/api/prompts/:sha256hash', (req, res) => {
+    const sha256hash = req.params.sha256hash;
+    const prompts = getPromptsForTestCasesHash(sha256hash);
+    res.json({ data: prompts });
+  });
+
+  app.get('/api/datasets', (req, res) => {
+    res.json({ data: getTestCases() });
   });
 
   httpServer.listen(port, () => {

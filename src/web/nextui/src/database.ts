@@ -80,7 +80,8 @@ export async function createResult(
   const record = {
     user_id: user?.id,
     id: jobId, // eval id matches job id
-    version: 1,
+    // TODO(ian): Doesn't actually have the `createdAt` field
+    version: 2,
     config:
       config as unknown as Database['public']['Tables']['EvaluationResult']['Insert']['config'],
     results:
