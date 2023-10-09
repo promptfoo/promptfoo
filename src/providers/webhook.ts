@@ -7,11 +7,13 @@ import type { ApiProvider, ProviderResponse } from '../types.js';
 
 export class WebhookProvider implements ApiProvider {
   webhookUrl: string;
+  config?: object;
 
-  constructor(webhookUrl: string, options: { id?: string } = {}) {
-    const { id } = options;
+  constructor(webhookUrl: string, options: { id?: string, config?: object } = {}) {
+    const { id, config } = options;
     this.webhookUrl = webhookUrl;
     this.id = id ? () => id : this.id;
+    this.config = config;
   }
 
   id(): string {
@@ -23,9 +25,12 @@ export class WebhookProvider implements ApiProvider {
   }
 
   async callApi(prompt: string): Promise<ProviderResponse> {
-    const params = {
+    const params: {prompt: string, config?: object} = {
       prompt,
     };
+    if (this.config) {
+      params.config = this.config;
+    }
 
     logger.debug(`Calling Webhook: ${this.webhookUrl} with params: ${JSON.stringify(params)}`);
     let response;
