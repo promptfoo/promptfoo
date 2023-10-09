@@ -133,7 +133,7 @@ export interface Prompt {
 export interface PromptWithMetadata {
   id: string;
   prompt: Prompt;
-  date: Date;
+  recentEvalDate: Date;
   recentEvalId: string;
   evals: {
     id: string;
@@ -262,7 +262,7 @@ export interface TestCasesWithMetadataPrompt {
 export interface TestCasesWithMetadata {
   id: string;
   testCases: string | string[] | TestCase[];
-  date: Date;
+  recentEvalDate: Date;
   recentEvalId: string;
   evalIds: string[];
   count: number;

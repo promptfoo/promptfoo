@@ -98,7 +98,7 @@ export default function Datasets() {
                   return uniqueVarsKeys.length > 0 ? uniqueVarsKeys.join(', ') : 'None';
                 })()}
               </TableCell>
-              <TableCell style={{width: '20%'}}>{testCasesData.date ? <Link href={`/eval?file=${testCasesData.recentEvalId}`}>{testCasesData.date}</Link> : 'Unknown'}</TableCell>
+              <TableCell style={{width: '20%'}}>{testCasesData.recentEvalDate ? <Link href={`/eval?file=${testCasesData.recentEvalId}`}>{testCasesData.recentEvalDate.toISOString()}</Link> : 'Unknown'}</TableCell>
               <TableCell style={{width: '10%'}}>{testCasesData.count}</TableCell>
             </TableRow>
           ))}

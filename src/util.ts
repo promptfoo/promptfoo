@@ -204,10 +204,6 @@ export function readResult(name: string): {result: ResultsFile, createdAt: Date}
   const resultsPath = path.join(resultsDirectory, name);
   try {
     const result = JSON.parse(fs.readFileSync(fs.realpathSync(resultsPath), 'utf-8')) as ResultsFile;
-    // The file is named eval-2023-10-02T22:47:01.127Z.json, for example. Extract the date from the filename.
-    //const dateString = name.slice(5, -5).replace(/T(\d{2})-(\d{2})-(\d{2})/, 'T$1:$2:$3');
-    //console.log(dateString)
-    //const createdAt = new Date(dateString);
     const createdAt = new Date(filenameToDate(name));
     return { result, createdAt };
   } catch (err) {
@@ -256,7 +252,7 @@ export function getPromptsWithPredicate(predicate: (result: ResultsFile) => bool
         const promptId = sha256(prompt.raw);
         const datasetId = result.config.tests ? sha256(JSON.stringify(result.config.tests)) : 'No dataset';
         if (promptId in groupedPrompts) {
-          groupedPrompts[promptId].date = new Date(Math.max(groupedPrompts[promptId].date.getTime(), new Date(createdAt).getTime()));
+          groupedPrompts[promptId].recentEvalDate = new Date(Math.max(groupedPrompts[promptId].recentEvalDate.getTime(), new Date(createdAt).getTime()));
           groupedPrompts[promptId].count += 1;
           groupedPrompts[promptId].evals.push({
             id: filePath,
@@ -267,7 +263,7 @@ export function getPromptsWithPredicate(predicate: (result: ResultsFile) => bool
           groupedPrompts[promptId] = {
             id: promptId,
             prompt,
-            date: new Date(createdAt),
+            recentEvalDate: new Date(createdAt),
             count: 1,
             recentEvalId: filePath,
             evals: [{
@@ -307,7 +303,7 @@ export function getTestCasesWithPredicate(predicate: (result: ResultsFile) => bo
     if (testCases && predicate(result)) {
       const datasetId = sha256(JSON.stringify(testCases));
       if (datasetId in groupedTestCases) {
-        groupedTestCases[datasetId].date = new Date(Math.max(groupedTestCases[datasetId].date.getTime(), new Date(createdAt).getTime()));
+        groupedTestCases[datasetId].recentEvalDate = new Date(Math.max(groupedTestCases[datasetId].recentEvalDate.getTime(), new Date(createdAt).getTime()));
         groupedTestCases[datasetId].count += 1;
         const newPrompts = result.results.table.head.prompts.map(prompt => ({id: sha256(prompt.raw), prompt, evalId: filePath}));
         const promptsById: Record<string, TestCasesWithMetadataPrompt> = {};
@@ -329,7 +325,7 @@ export function getTestCasesWithPredicate(predicate: (result: ResultsFile) => bo
         groupedTestCases[datasetId] = {
           id: datasetId,
           testCases,
-          date: new Date(createdAt),
+          recentEvalDate: new Date(createdAt),
           count: 1,
           recentEvalId: filePath,
           evalIds: [filePath],
