@@ -173,7 +173,7 @@ export async function runAssertion(
   }
 
   if (baseType === 'equals') {
-    pass = renderedValue === output;
+    pass = renderedValue == output;
     return {
       pass,
       score: pass ? 1 : 0,

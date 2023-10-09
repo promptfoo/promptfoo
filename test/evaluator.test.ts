@@ -413,6 +413,41 @@ describe('evaluator', () => {
     expect(summary.results[0].response?.output).toBe('Test output postprocessed');
   });
 
+  test('evaluate with postprocess option - json provider', async () => {
+    const mockApiJsonProvider: ApiProvider = {
+      id: jest.fn().mockReturnValue('test-provider-json'),
+      callApi: jest.fn().mockResolvedValue({
+        output: '{"output": "testing", "value": 123}',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiJsonProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          assert: [
+            {
+              type: 'equals',
+              value: '123',
+            },
+          ],
+          options: {
+            postprocess: `JSON.parse(output).value`
+          },
+        },
+      ],
+    };
+
+    const summary = await evaluate(testSuite, {});
+
+    expect(mockApiJsonProvider.callApi).toHaveBeenCalledTimes(1);
+    expect(summary.stats.successes).toBe(1);
+    expect(summary.stats.failures).toBe(0);
+    expect(summary.results[0].response?.output).toBe(123);
+  });
+
   test('evaluate with providerPromptMap', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
