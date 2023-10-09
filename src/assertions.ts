@@ -139,7 +139,7 @@ export async function runAssertion(
     if (renderedValue.startsWith('file://')) {
       // Load the file
       const filePath = renderedValue.slice('file://'.length);
-      if (filePath.endsWith('.js')) {
+      if (filePath.endsWith('.js') || filePath.endsWith('.cjs')) {
         const requiredModule = require(path.resolve(filePath));
         if (typeof requiredModule === 'function') {
           valueFromScript = requiredModule(output, { vars: test.vars || {} });

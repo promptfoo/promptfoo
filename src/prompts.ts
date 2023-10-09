@@ -122,7 +122,7 @@ export function readPrompts(
       promptContents.push(...fileContents.map((content) => ({ raw: content, display: content })));
     } else {
       const ext = path.parse(promptPath).ext;
-      if (ext === '.js') {
+      if (ext === '.js' || ext === '.cjs') {
         const importedModule = require(promptPath);
         let promptFunction;
         if (functionName) {
