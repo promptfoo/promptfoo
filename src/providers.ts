@@ -23,7 +23,10 @@ import {
   AzureOpenAiCompletionProvider,
   AzureOpenAiEmbeddingProvider,
 } from './providers/azureopenai';
-import { HuggingfaceFeatureExtractionProvider, HuggingfaceTextGenerationProvider } from './providers/huggingface';
+import {
+  HuggingfaceFeatureExtractionProvider,
+  HuggingfaceTextGenerationProvider,
+} from './providers/huggingface';
 
 import type {
   ApiProvider,

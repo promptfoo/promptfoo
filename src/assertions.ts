@@ -255,7 +255,9 @@ export async function runAssertion(
       Array.isArray(renderedValue),
       '"icontains-any" assertion type must have an array value',
     );
-    pass = renderedValue.some((value) => output.toLowerCase().includes(String(value).toLowerCase())) !== inverse;
+    pass =
+      renderedValue.some((value) => output.toLowerCase().includes(String(value).toLowerCase())) !==
+      inverse;
     return {
       pass,
       score: pass ? 1 : 0,
@@ -289,7 +291,9 @@ export async function runAssertion(
       Array.isArray(renderedValue),
       '"icontains-all" assertion type must have an array value',
     );
-    pass = renderedValue.every((value) => output.toLowerCase().includes(String(value).toLowerCase())) !== inverse;
+    pass =
+      renderedValue.every((value) => output.toLowerCase().includes(String(value).toLowerCase())) !==
+      inverse;
     return {
       pass,
       score: pass ? 1 : 0,
@@ -391,7 +395,8 @@ export async function runAssertion(
           const functionString = assertion.value.toString();
           ret.assertion = {
             type: 'javascript',
-            value: functionString.length > 50 ? functionString.slice(0, 50) + '...' : functionString,
+            value:
+              functionString.length > 50 ? functionString.slice(0, 50) + '...' : functionString,
           };
         }
         return ret;
@@ -751,7 +756,12 @@ export function assertionFromString(expected: string): Assertion {
     const fullType = notPrefix ? `not-${type}` : type;
     const threshold = parseFloat(thresholdStr);
 
-    if (type === 'contains-any' || type === 'contains-all' || type === 'icontains-any' || type === 'icontains-all') {
+    if (
+      type === 'contains-any' ||
+      type === 'contains-all' ||
+      type === 'icontains-any' ||
+      type === 'icontains-all'
+    ) {
       return {
         type: fullType as AssertionType,
         value: value.split(',').map((s) => s.trim()),

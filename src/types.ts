@@ -126,7 +126,13 @@ export interface Prompt {
   raw: string;
   display: string;
   function?: (context: { vars: Record<string, string | object> }) => Promise<string | object>;
-  metrics?: { score: number, testPassCount: number, testFailCount: number, assertPassCount: number, assertFailCount: number };
+  metrics?: {
+    score: number;
+    testPassCount: number;
+    testFailCount: number;
+    assertPassCount: number;
+    assertFailCount: number;
+  };
 }
 
 // Used when building prompts index from files.

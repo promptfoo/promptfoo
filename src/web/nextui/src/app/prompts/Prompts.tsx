@@ -13,17 +13,17 @@ import TableSortLabel from '@mui/material/TableSortLabel';
 import Tooltip from '@mui/material/Tooltip';
 import { useSearchParams } from 'next/navigation';
 
-import {API_BASE_URL} from '@/constants';
+import { API_BASE_URL } from '@/constants';
 import PromptDialog from './PromptDialog';
 
-import type {PromptWithMetadata} from '@/../../../types';
+import type { PromptWithMetadata } from '@/../../../types';
 
 const MAX_CELL_LENGTH = 500;
 
 export default function Prompts() {
   const searchParams = useSearchParams();
 
-  const [prompts, setPrompts] = useState<(PromptWithMetadata & {recentEvalDate: string})[]>([]);
+  const [prompts, setPrompts] = useState<(PromptWithMetadata & { recentEvalDate: string })[]>([]);
   const [sortField, setSortField] = useState<string | null>('date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [page, setPage] = useState(1);
@@ -73,21 +73,33 @@ export default function Prompts() {
       <Table>
         <TableHead>
           <TableRow>
-            <TableCell style={{width: '10%'}}>ID</TableCell>
-            <TableCell style={{width: '60%'}}>
-              <TableSortLabel active={sortField === 'raw'} direction={sortField === 'raw' ? sortOrder : 'asc'} onClick={() => handleSort('raw')}>
+            <TableCell style={{ width: '10%' }}>ID</TableCell>
+            <TableCell style={{ width: '60%' }}>
+              <TableSortLabel
+                active={sortField === 'raw'}
+                direction={sortField === 'raw' ? sortOrder : 'asc'}
+                onClick={() => handleSort('raw')}
+              >
                 Prompt
               </TableSortLabel>
             </TableCell>
-            <TableCell style={{width: '20%'}}>
+            <TableCell style={{ width: '20%' }}>
               <Tooltip title="The date of the most recent eval for this prompt">
-                <TableSortLabel active={sortField === 'date'} direction={sortField === 'date' ? sortOrder : 'asc'} onClick={() => handleSort('date')}>
+                <TableSortLabel
+                  active={sortField === 'date'}
+                  direction={sortField === 'date' ? sortOrder : 'asc'}
+                  onClick={() => handleSort('date')}
+                >
                   Most recent eval
                 </TableSortLabel>
               </Tooltip>
             </TableCell>
-            <TableCell style={{width: '10%'}}>
-              <TableSortLabel active={sortField === 'count'} direction={sortField === 'count' ? sortOrder : 'asc'} onClick={() => handleSort('count')}>
+            <TableCell style={{ width: '10%' }}>
+              <TableSortLabel
+                active={sortField === 'count'}
+                direction={sortField === 'count' ? sortOrder : 'asc'}
+                onClick={() => handleSort('count')}
+              >
                 # Evals
               </TableSortLabel>
             </TableCell>
@@ -96,20 +108,43 @@ export default function Prompts() {
         <TableBody>
           {prompts.slice((page - 1) * rowsPerPage, page * rowsPerPage).map((promptRow, index) => (
             <TableRow key={index} hover>
-              <TableCell style={{width: '10%'}}>{promptRow.id.slice(0, 6)}</TableCell>
-              <TableCell style={{width: '60%', whiteSpace: 'pre-wrap', cursor: 'pointer'}} onClick={() => handleClickOpen(index)}>
-                {promptRow.prompt.raw.length > MAX_CELL_LENGTH ? promptRow.prompt.raw.slice(0, MAX_CELL_LENGTH) + '...' : promptRow.prompt.raw}
+              <TableCell style={{ width: '10%' }}>{promptRow.id.slice(0, 6)}</TableCell>
+              <TableCell
+                style={{ width: '60%', whiteSpace: 'pre-wrap', cursor: 'pointer' }}
+                onClick={() => handleClickOpen(index)}
+              >
+                {promptRow.prompt.raw.length > MAX_CELL_LENGTH
+                  ? promptRow.prompt.raw.slice(0, MAX_CELL_LENGTH) + '...'
+                  : promptRow.prompt.raw}
               </TableCell>
-              <TableCell style={{width: '20%'}}>{promptRow.recentEvalDate ? <Link href={`/eval?file=${promptRow.recentEvalId}`}>{promptRow.recentEvalDate}</Link> : 'Unknown'}</TableCell>
-              <TableCell style={{width: '10%'}}>{promptRow.count}</TableCell>
+              <TableCell style={{ width: '20%' }}>
+                {promptRow.recentEvalDate ? (
+                  <Link href={`/eval?file=${promptRow.recentEvalId}`}>
+                    {promptRow.recentEvalDate}
+                  </Link>
+                ) : (
+                  'Unknown'
+                )}
+              </TableCell>
+              <TableCell style={{ width: '10%' }}>{promptRow.count}</TableCell>
             </TableRow>
           ))}
         </TableBody>
       </Table>
       {Math.ceil(prompts.length / rowsPerPage) > 1 && (
-        <Pagination count={Math.ceil(prompts.length / rowsPerPage)} page={page} onChange={(event, value) => setPage(value)} />
+        <Pagination
+          count={Math.ceil(prompts.length / rowsPerPage)}
+          page={page}
+          onChange={(event, value) => setPage(value)}
+        />
       )}
-      {prompts[selectedPromptIndex] && <PromptDialog openDialog={openDialog} handleClose={handleClose} selectedPrompt={prompts[selectedPromptIndex]} />}
+      {prompts[selectedPromptIndex] && (
+        <PromptDialog
+          openDialog={openDialog}
+          handleClose={handleClose}
+          selectedPrompt={prompts[selectedPromptIndex]}
+        />
+      )}
     </Box>
   );
 }

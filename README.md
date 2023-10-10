@@ -100,8 +100,8 @@ See [Test assertions](https://promptfoo.dev/docs/configuration/expected-outputs)
 | `starts-with`             | output starts with string                                                       |
 | `contains-any`            | output contains any of the listed substrings                                    |
 | `contains-all`            | output contains all list of substrings                                          |
-| `icontains-any`           | output contains any of the listed substrings, case insensitive                                    |
-| `icontains-all`           | output contains all list of substrings, case insensitive                                          |
+| `icontains-any`           | output contains any of the listed substrings, case insensitive                  |
+| `icontains-all`           | output contains all list of substrings, case insensitive                        |
 | `is-json`                 | output is valid json (optional json schema validation)                          |
 | `contains-json`           | output contains valid json (optional json schema validation)                    |
 | `javascript`              | provided Javascript function validates the output                               |

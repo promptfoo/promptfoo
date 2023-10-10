@@ -15,7 +15,15 @@ import promptfoo, { EvaluateSummary, EvaluateTestSuite, PromptWithMetadata } fro
 
 import logger from '../logger';
 import { getDirectory } from '../esm';
-import { getLatestResultsPath, getPrompts, getPromptsForTestCasesHash, listPreviousResults, readResult, filenameToDate, getTestCases } from '../util';
+import {
+  getLatestResultsPath,
+  getPrompts,
+  getPromptsForTestCasesHash,
+  listPreviousResults,
+  readResult,
+  filenameToDate,
+  getTestCases,
+} from '../util';
 
 interface Job {
   status: 'in-progress' | 'complete';

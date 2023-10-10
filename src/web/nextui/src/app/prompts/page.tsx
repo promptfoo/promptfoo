@@ -1,4 +1,4 @@
-import Prompts from "./Prompts";
+import Prompts from './Prompts';
 
 export default function Page() {
   return (

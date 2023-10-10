@@ -792,7 +792,9 @@ describe('runAssertion', () => {
       output,
     );
     expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe('Expected output to contain all of "option1, option2, option3, option4"');
+    expect(result.reason).toBe(
+      'Expected output to contain all of "option1, option2, option3, option4"',
+    );
   });
 
   // Test for regex assertion

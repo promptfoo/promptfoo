@@ -9,10 +9,12 @@ import { IS_RUNNING_LOCALLY } from '@/constants';
 
 import './Navigation.css';
 
-function NavLink({href, label}: {href: string, label: string}) {
+function NavLink({ href, label }: { href: string; label: string }) {
   const pathname = usePathname() || '';
   return (
-    <Link href={href} className={pathname.startsWith(href) ? 'active': ''}>{label}</Link>
+    <Link href={href} className={pathname.startsWith(href) ? 'active' : ''}>
+      {label}
+    </Link>
   );
 }
 

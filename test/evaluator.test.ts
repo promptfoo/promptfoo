@@ -434,7 +434,7 @@ describe('evaluator', () => {
             },
           ],
           options: {
-            postprocess: `JSON.parse(output).value`
+            postprocess: `JSON.parse(output).value`,
           },
         },
       ],

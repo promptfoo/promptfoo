@@ -562,8 +562,10 @@ class Evaluator {
         metrics.score += row.score;
         metrics.testPassCount += row.success ? 1 : 0;
         metrics.testFailCount += row.success ? 0 : 1;
-        metrics.assertPassCount += row.gradingResult?.componentResults?.filter(r => r.pass).length || 0;
-        metrics.assertFailCount += row.gradingResult?.componentResults?.filter(r => !r.pass).length || 0;
+        metrics.assertPassCount +=
+          row.gradingResult?.componentResults?.filter((r) => r.pass).length || 0;
+        metrics.assertFailCount +=
+          row.gradingResult?.componentResults?.filter((r) => !r.pass).length || 0;
       },
     );
 

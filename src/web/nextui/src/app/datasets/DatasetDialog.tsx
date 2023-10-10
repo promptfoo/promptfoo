@@ -15,15 +15,15 @@ import Typography from '@mui/material/Typography';
 import TextareaAutosize from '@mui/material/TextareaAutosize';
 import Pagination from '@mui/material/Pagination';
 
-import type {TestCasesWithMetadata} from '@/../../../types';
+import type { TestCasesWithMetadata } from '@/../../../types';
 
 interface DatasetDialogProps {
   openDialog: boolean;
   handleClose: () => void;
-  testCase: TestCasesWithMetadata & {recentEvalDate: string};
+  testCase: TestCasesWithMetadata & { recentEvalDate: string };
 }
 
-export default function DatasetDialog({openDialog, handleClose, testCase}: DatasetDialogProps) {
+export default function DatasetDialog({ openDialog, handleClose, testCase }: DatasetDialogProps) {
   const [page, setPage] = useState(1);
   const rowsPerPage = 10;
 
@@ -35,14 +35,18 @@ export default function DatasetDialog({openDialog, handleClose, testCase}: Datas
     <Dialog open={openDialog} onClose={handleClose} fullWidth maxWidth="lg">
       <DialogTitle>Dataset {testCase.id.slice(0, 6)}</DialogTitle>
       <DialogContent>
-        <Typography variant="h6" style={{marginTop: '1rem'}}>Test cases</Typography>
+        <Typography variant="h6" style={{ marginTop: '1rem' }}>
+          Test cases
+        </Typography>
         <TextareaAutosize
           readOnly
           value={testCase && yaml.dump(testCase.testCases)}
           style={{ width: '100%', padding: '0.75rem' }}
           maxRows={15}
         />
-        <Typography variant="h6" style={{marginTop: '1rem'}}>Used in...</Typography>
+        <Typography variant="h6" style={{ marginTop: '1rem' }}>
+          Used in...
+        </Typography>
         <Table>
           <TableHead>
             <TableRow>
@@ -56,28 +60,49 @@ export default function DatasetDialog({openDialog, handleClose, testCase}: Datas
             </TableRow>
           </TableHead>
           <TableBody>
-            {testCase?.prompts?.slice((page - 1) * rowsPerPage, page * rowsPerPage).sort((a, b) => b.evalId.localeCompare(a.evalId)).map((promptData, index) => (
-              <TableRow key={index} hover>
-                <TableCell><Link href={`/eval/?file=${promptData.evalFilepath}`}>{promptData.evalId.slice(0, 6)}</Link></TableCell>
-                <TableCell style={{minWidth: '8em'}}><Link href={`/prompts/?id=${promptData.id}`}>{promptData.id.slice(0, 6)}</Link></TableCell>
-                <TableCell>{promptData.prompt.metrics?.score.toFixed(2) ?? '-'}</TableCell>
-                <TableCell>
-                  {
-                    promptData.prompt.metrics?.testPassCount !== undefined && promptData.prompt.metrics?.testFailCount !== undefined
-                      ? ((promptData.prompt.metrics?.testPassCount / (promptData.prompt.metrics?.testPassCount + promptData.prompt.metrics?.testFailCount)) * 100.0).toFixed(2) + '%'
-                      : '-'
-                  }
-                </TableCell>
-                <TableCell>{promptData.prompt.metrics?.testPassCount ?? '-'}</TableCell>
-                <TableCell>{promptData.prompt.metrics?.testFailCount ?? '-'}</TableCell>
-                <TableCell>{promptData.prompt.raw.length > 250 ? promptData.prompt.raw.slice(0, 250) + '...' : promptData.prompt.raw}</TableCell>
-              </TableRow>
-            ))}
+            {testCase?.prompts
+              ?.slice((page - 1) * rowsPerPage, page * rowsPerPage)
+              .sort((a, b) => b.evalId.localeCompare(a.evalId))
+              .map((promptData, index) => (
+                <TableRow key={index} hover>
+                  <TableCell>
+                    <Link href={`/eval/?file=${promptData.evalFilepath}`}>
+                      {promptData.evalId.slice(0, 6)}
+                    </Link>
+                  </TableCell>
+                  <TableCell style={{ minWidth: '8em' }}>
+                    <Link href={`/prompts/?id=${promptData.id}`}>{promptData.id.slice(0, 6)}</Link>
+                  </TableCell>
+                  <TableCell>{promptData.prompt.metrics?.score.toFixed(2) ?? '-'}</TableCell>
+                  <TableCell>
+                    {promptData.prompt.metrics?.testPassCount !== undefined &&
+                    promptData.prompt.metrics?.testFailCount !== undefined
+                      ? (
+                          (promptData.prompt.metrics?.testPassCount /
+                            (promptData.prompt.metrics?.testPassCount +
+                              promptData.prompt.metrics?.testFailCount)) *
+                          100.0
+                        ).toFixed(2) + '%'
+                      : '-'}
+                  </TableCell>
+                  <TableCell>{promptData.prompt.metrics?.testPassCount ?? '-'}</TableCell>
+                  <TableCell>{promptData.prompt.metrics?.testFailCount ?? '-'}</TableCell>
+                  <TableCell>
+                    {promptData.prompt.raw.length > 250
+                      ? promptData.prompt.raw.slice(0, 250) + '...'
+                      : promptData.prompt.raw}
+                  </TableCell>
+                </TableRow>
+              ))}
           </TableBody>
         </Table>
-        {Math.ceil((testCase?.prompts?.length || 0) / rowsPerPage) > 1 &&
-          <Pagination count={Math.ceil(testCase.prompts.length / rowsPerPage)} page={page} onChange={handleChangePage} />
-        }
+        {Math.ceil((testCase?.prompts?.length || 0) / rowsPerPage) > 1 && (
+          <Pagination
+            count={Math.ceil(testCase.prompts.length / rowsPerPage)}
+            page={page}
+            onChange={handleChangePage}
+          />
+        )}
       </DialogContent>
       <DialogActions>
         <Button onClick={handleClose}>Close</Button>

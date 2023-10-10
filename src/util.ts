@@ -11,7 +11,17 @@ import { stringify } from 'csv-stringify/sync';
 import logger from './logger';
 import { getDirectory } from './esm';
 
-import type { EvaluateSummary, EvaluateTableOutput, UnifiedConfig, PromptWithMetadata, TestCase, TestCasesWithMetadata, ResultsFile, TestCasesWithMetadataPrompt, EvalWithMetadata } from './types';
+import type {
+  EvaluateSummary,
+  EvaluateTableOutput,
+  UnifiedConfig,
+  PromptWithMetadata,
+  TestCase,
+  TestCasesWithMetadata,
+  ResultsFile,
+  TestCasesWithMetadataPrompt,
+  EvalWithMetadata,
+} from './types';
 
 let globalConfigCache: any = null;
 
@@ -111,7 +121,9 @@ export function writeOutput(
     });
     fs.writeFileSync(outputPath, htmlOutput);
   } else {
-    throw new Error(`Unsupported output file format ${outputExtension}, please use csv, txt, json, yaml, yml, html.`);
+    throw new Error(
+      `Unsupported output file format ${outputExtension}, please use csv, txt, json, yaml, yml, html.`,
+    );
   }
 }
 
@@ -199,16 +211,20 @@ export function dateToFilename(date: Date) {
   return `eval-${date.toISOString().replace(/:/g, '-')}.json`;
 }
 
-export function readResult(name: string): {id: string, result: ResultsFile, createdAt: Date} | undefined {
+export function readResult(
+  name: string,
+): { id: string; result: ResultsFile; createdAt: Date } | undefined {
   const resultsDirectory = path.join(getConfigDirectoryPath(), 'output');
   const resultsPath = path.join(resultsDirectory, name);
   try {
-    const result = JSON.parse(fs.readFileSync(fs.realpathSync(resultsPath), 'utf-8')) as ResultsFile;
+    const result = JSON.parse(
+      fs.readFileSync(fs.realpathSync(resultsPath), 'utf-8'),
+    ) as ResultsFile;
     const createdAt = new Date(filenameToDate(name));
     return {
       id: sha256(JSON.stringify(result.config)),
       result,
-      createdAt
+      createdAt,
     };
   } catch (err) {
     logger.error(`Failed to read results from ${resultsPath}:\n${err}`);
@@ -220,17 +236,17 @@ export function readLatestResults(): ResultsFile | undefined {
 }
 
 export function getPromptsForTestCases(testCases: TestCase[]) {
-   const testCasesJson = JSON.stringify(testCases);
-   const testCasesSha256 = sha256(testCasesJson);
-   return getPromptsForTestCasesHash(testCasesSha256);
+  const testCasesJson = JSON.stringify(testCases);
+  const testCasesSha256 = sha256(testCasesJson);
+  return getPromptsForTestCasesHash(testCasesSha256);
 }
 
 export function getPromptsForTestCasesHash(testCasesSha256: string) {
-   return getPromptsWithPredicate(result => {
-     const testsJson = JSON.stringify(result.config.tests);
-     const hash = sha256(testsJson);
-     return hash === testCasesSha256;
-   });
+  return getPromptsWithPredicate((result) => {
+    const testsJson = JSON.stringify(result.config.tests);
+    const hash = sha256(testsJson);
+    return hash === testCasesSha256;
+  });
 }
 
 export function sha256(str: string) {
@@ -241,7 +257,9 @@ export function getPrompts() {
   return getPromptsWithPredicate(() => true);
 }
 
-export function getPromptsWithPredicate(predicate: (result: ResultsFile) => boolean): PromptWithMetadata[] {
+export function getPromptsWithPredicate(
+  predicate: (result: ResultsFile) => boolean,
+): PromptWithMetadata[] {
   const resultsFiles = listPreviousResults();
   const groupedPrompts: { [hash: string]: PromptWithMetadata } = {};
 
@@ -257,7 +275,12 @@ export function getPromptsWithPredicate(predicate: (result: ResultsFile) => bool
         const promptId = sha256(prompt.raw);
         const datasetId = result.config.tests ? sha256(JSON.stringify(result.config.tests)) : '-';
         if (promptId in groupedPrompts) {
-          groupedPrompts[promptId].recentEvalDate = new Date(Math.max(groupedPrompts[promptId].recentEvalDate.getTime(), new Date(createdAt).getTime()));
+          groupedPrompts[promptId].recentEvalDate = new Date(
+            Math.max(
+              groupedPrompts[promptId].recentEvalDate.getTime(),
+              new Date(createdAt).getTime(),
+            ),
+          );
           groupedPrompts[promptId].count += 1;
           groupedPrompts[promptId].evals.push({
             id: evalId,
@@ -273,12 +296,14 @@ export function getPromptsWithPredicate(predicate: (result: ResultsFile) => bool
             recentEvalDate: new Date(createdAt),
             recentEvalId: evalId,
             recentEvalFilepath: filePath,
-            evals: [{
-              id: evalId,
-              filePath,
-              datasetId,
-              metrics: prompt.metrics,
-            }],
+            evals: [
+              {
+                id: evalId,
+                filePath,
+                datasetId,
+                metrics: prompt.metrics,
+              },
+            ],
           };
         }
       }
@@ -292,7 +317,9 @@ export function getTestCases() {
   return getTestCasesWithPredicate(() => true);
 }
 
-export function getTestCasesWithPredicate(predicate: (result: ResultsFile) => boolean): TestCasesWithMetadata[] {
+export function getTestCasesWithPredicate(
+  predicate: (result: ResultsFile) => boolean,
+): TestCasesWithMetadata[] {
   const resultsFiles = listPreviousResults();
   const groupedTestCases: { [hash: string]: TestCasesWithMetadata } = {};
 
@@ -307,9 +334,19 @@ export function getTestCasesWithPredicate(predicate: (result: ResultsFile) => bo
       const evalId = sha256(JSON.stringify(result.config));
       const datasetId = sha256(JSON.stringify(testCases));
       if (datasetId in groupedTestCases) {
-        groupedTestCases[datasetId].recentEvalDate = new Date(Math.max(groupedTestCases[datasetId].recentEvalDate.getTime(), new Date(createdAt).getTime()));
+        groupedTestCases[datasetId].recentEvalDate = new Date(
+          Math.max(
+            groupedTestCases[datasetId].recentEvalDate.getTime(),
+            new Date(createdAt).getTime(),
+          ),
+        );
         groupedTestCases[datasetId].count += 1;
-        const newPrompts = result.results.table.head.prompts.map(prompt => ({id: sha256(prompt.raw), prompt, evalId, evalFilepath: filePath}));
+        const newPrompts = result.results.table.head.prompts.map((prompt) => ({
+          id: sha256(prompt.raw),
+          prompt,
+          evalId,
+          evalFilepath: filePath,
+        }));
         const promptsById: Record<string, TestCasesWithMetadataPrompt> = {};
         for (const prompt of groupedTestCases[datasetId].prompts.concat(newPrompts)) {
           if (!(prompt.id in promptsById)) {
@@ -318,7 +355,12 @@ export function getTestCasesWithPredicate(predicate: (result: ResultsFile) => bo
         }
         groupedTestCases[datasetId].prompts = Object.values(promptsById);
       } else {
-        const newPrompts = result.results.table.head.prompts.map(prompt => ({id: createHash('sha256').update(prompt.raw).digest('hex'), prompt, evalId, evalFilepath: filePath}));
+        const newPrompts = result.results.table.head.prompts.map((prompt) => ({
+          id: createHash('sha256').update(prompt.raw).digest('hex'),
+          prompt,
+          evalId,
+          evalFilepath: filePath,
+        }));
         const promptsById: Record<string, TestCasesWithMetadataPrompt> = {};
         for (const prompt of newPrompts) {
           if (!(prompt.id in promptsById)) {
@@ -375,7 +417,9 @@ export function getEvalFromHash(hash: string) {
   return undefined;
 }
 
-export function getEvalsWithPredicate(predicate: (result: ResultsFile) => boolean): EvalWithMetadata[] {
+export function getEvalsWithPredicate(
+  predicate: (result: ResultsFile) => boolean,
+): EvalWithMetadata[] {
   const ret: EvalWithMetadata[] = [];
   const resultsFiles = listPreviousResults();
   for (const filePath of resultsFiles) {
@@ -409,4 +453,3 @@ export function printBorder() {
   const border = '='.repeat((process.stdout.columns || 80) - 10);
   logger.info(border);
 }
-

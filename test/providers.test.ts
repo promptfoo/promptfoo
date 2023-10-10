@@ -12,7 +12,10 @@ import {
 } from '../src/providers/azureopenai';
 import { OllamaProvider } from '../src/providers/ollama';
 import { WebhookProvider } from '../src/providers/webhook';
-import { HuggingfaceTextGenerationProvider, HuggingfaceFeatureExtractionProvider } from '../src/providers/huggingface';
+import {
+  HuggingfaceTextGenerationProvider,
+  HuggingfaceFeatureExtractionProvider,
+} from '../src/providers/huggingface';
 
 import type { ProviderOptionsMap, ProviderFunction } from '../src/types';
 
@@ -228,9 +231,7 @@ describe('providers', () => {
 
   test('HuggingfaceTextGenerationProvider callApi', async () => {
     const mockResponse = {
-      json: jest.fn().mockResolvedValue([
-        { generated_text: 'Test output' },
-      ]),
+      json: jest.fn().mockResolvedValue([{ generated_text: 'Test output' }]),
     };
     (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
 
@@ -243,9 +244,7 @@ describe('providers', () => {
 
   test('HuggingfaceFeatureExtractionProvider callEmbeddingApi', async () => {
     const mockResponse = {
-      json: jest.fn().mockResolvedValue(
-        [0.1, 0.2, 0.3, 0.4, 0.5],
-      ),
+      json: jest.fn().mockResolvedValue([0.1, 0.2, 0.3, 0.4, 0.5]),
     };
     (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
 
@@ -255,7 +254,6 @@ describe('providers', () => {
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(result.embedding).toEqual([0.1, 0.2, 0.3, 0.4, 0.5]);
   });
-
 
   test('loadApiProvider with openai:chat', async () => {
     const provider = await loadApiProvider('openai:chat');

@@ -61,7 +61,7 @@ export class OllamaProvider implements ApiProvider {
   modelName: string;
   config: OllamaCompletionOptions;
 
-  constructor(modelName: string, options: { id?: string, config?: OllamaCompletionOptions } = {}) {
+  constructor(modelName: string, options: { id?: string; config?: OllamaCompletionOptions } = {}) {
     const { id, config } = options;
     this.modelName = modelName;
     this.id = id ? () => id : this.id;

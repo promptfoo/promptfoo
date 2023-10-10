@@ -13,27 +13,31 @@ import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
 import Link from 'next/link';
 
-import type {PromptWithMetadata} from '@/../../../types';
+import type { PromptWithMetadata } from '@/../../../types';
 
 interface PromptDialogProps {
   openDialog: boolean;
   handleClose: () => void;
-  selectedPrompt: PromptWithMetadata & {recentEvalDate: string};
+  selectedPrompt: PromptWithMetadata & { recentEvalDate: string };
 }
 
-const PromptDialog: React.FC<PromptDialogProps> = ({openDialog, handleClose, selectedPrompt}) => {
+const PromptDialog: React.FC<PromptDialogProps> = ({ openDialog, handleClose, selectedPrompt }) => {
   return (
     <Dialog open={openDialog} onClose={handleClose} fullWidth maxWidth="lg">
       <DialogTitle>Prompt {selectedPrompt.id.slice(0, 6)}</DialogTitle>
       <DialogContent>
-        <Typography variant="h6" style={{marginTop: '1rem'}}>Prompt</Typography>
+        <Typography variant="h6" style={{ marginTop: '1rem' }}>
+          Prompt
+        </Typography>
         <TextareaAutosize
           readOnly
           value={selectedPrompt?.prompt?.raw}
           style={{ width: '100%', padding: '0.75rem' }}
           maxRows={50}
         />
-        <Typography variant="h6" style={{marginTop: '1rem'}}>Used in...</Typography>
+        <Typography variant="h6" style={{ marginTop: '1rem' }}>
+          Used in...
+        </Typography>
         <Table>
           <TableHead>
             <TableRow>
@@ -46,23 +50,34 @@ const PromptDialog: React.FC<PromptDialogProps> = ({openDialog, handleClose, sel
             </TableRow>
           </TableHead>
           <TableBody>
-            {selectedPrompt?.evals.sort((a,b) => b.id.localeCompare(a.id)).map((evalData) => {
-              const passCount = evalData.metrics?.testPassCount ?? 0;
-              const failCount = evalData.metrics?.testFailCount ?? 0;
-              const passRate = passCount + failCount > 0 ? ((passCount / (passCount + failCount)) * 100.0).toFixed(2) + '%' : '-';
-              return (
-                <TableRow key={`eval-${evalData.id}`}>
-                  <TableCell>
-                    <Link href={`/eval/?file=${evalData.filePath}`}>{evalData.id.slice(0, 6)}</Link>
-                  </TableCell>
-                  <TableCell><Link href={`/datasets/?id=${evalData.datasetId}`}>{evalData.datasetId.slice(0, 6)}</Link></TableCell>
-                  <TableCell>{evalData.metrics?.score.toFixed(2) ?? '-'}</TableCell>
-                  <TableCell>{passRate}</TableCell>
-                  <TableCell>{passCount}</TableCell>
-                  <TableCell>{failCount}</TableCell>
-                </TableRow>
-              );
-            })}
+            {selectedPrompt?.evals
+              .sort((a, b) => b.id.localeCompare(a.id))
+              .map((evalData) => {
+                const passCount = evalData.metrics?.testPassCount ?? 0;
+                const failCount = evalData.metrics?.testFailCount ?? 0;
+                const passRate =
+                  passCount + failCount > 0
+                    ? ((passCount / (passCount + failCount)) * 100.0).toFixed(2) + '%'
+                    : '-';
+                return (
+                  <TableRow key={`eval-${evalData.id}`}>
+                    <TableCell>
+                      <Link href={`/eval/?file=${evalData.filePath}`}>
+                        {evalData.id.slice(0, 6)}
+                      </Link>
+                    </TableCell>
+                    <TableCell>
+                      <Link href={`/datasets/?id=${evalData.datasetId}`}>
+                        {evalData.datasetId.slice(0, 6)}
+                      </Link>
+                    </TableCell>
+                    <TableCell>{evalData.metrics?.score.toFixed(2) ?? '-'}</TableCell>
+                    <TableCell>{passRate}</TableCell>
+                    <TableCell>{passCount}</TableCell>
+                    <TableCell>{failCount}</TableCell>
+                  </TableRow>
+                );
+              })}
           </TableBody>
         </Table>
       </DialogContent>
