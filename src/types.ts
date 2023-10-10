@@ -135,8 +135,10 @@ export interface PromptWithMetadata {
   prompt: Prompt;
   recentEvalDate: Date;
   recentEvalId: string;
+  recentEvalFilepath: string;
   evals: {
     id: string;
+    filePath: string;
     datasetId: string;
     metrics: Prompt['metrics'];
   }[];
@@ -257,6 +259,7 @@ export interface TestCasesWithMetadataPrompt {
   prompt: Prompt;
   id: string;
   evalId: string;
+  evalFilepath: string;
 }
 
 export interface TestCasesWithMetadata {
@@ -264,7 +267,7 @@ export interface TestCasesWithMetadata {
   testCases: string | string[] | TestCase[];
   recentEvalDate: Date;
   recentEvalId: string;
-  evalIds: string[];
+  recentEvalFilepath: string;
   count: number;
   prompts: TestCasesWithMetadataPrompt[];
 }
@@ -376,6 +379,14 @@ export type UnifiedConfig = TestSuiteConfig & {
   evaluateOptions: EvaluateOptions;
   commandLineOptions: Partial<CommandLineOptions>;
 };
+
+export interface EvalWithMetadata {
+  id: string;
+  filePath: string;
+  date: Date;
+  config: Partial<UnifiedConfig>;
+  results: EvaluateSummary;
+}
 
 // node.js package interface
 export interface EvaluateTestSuite extends TestSuiteConfig {

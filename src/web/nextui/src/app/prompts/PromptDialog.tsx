@@ -18,7 +18,7 @@ import type {PromptWithMetadata} from '@/../../../types';
 interface PromptDialogProps {
   openDialog: boolean;
   handleClose: () => void;
-  selectedPrompt: PromptWithMetadata & {date: string};
+  selectedPrompt: PromptWithMetadata & {recentEvalDate: string};
 }
 
 const PromptDialog: React.FC<PromptDialogProps> = ({openDialog, handleClose, selectedPrompt}) => {
@@ -47,16 +47,17 @@ const PromptDialog: React.FC<PromptDialogProps> = ({openDialog, handleClose, sel
           </TableHead>
           <TableBody>
             {selectedPrompt?.evals.sort((a,b) => b.id.localeCompare(a.id)).map((evalData) => {
-              const passCount = evalData.metrics?.testPassCount || 0;
-              const failCount = evalData.metrics?.testFailCount || 0;
+              const passCount = evalData.metrics?.testPassCount ?? 0;
+              const failCount = evalData.metrics?.testFailCount ?? 0;
               const passRate = passCount + failCount > 0 ? ((passCount / (passCount + failCount)) * 100.0).toFixed(2) + '%' : '-';
               return (
                 <TableRow key={`eval-${evalData.id}`}>
                   <TableCell>
-                    <Link href={`/eval/?file=${evalData.id}`}>{evalData.id}</Link>
+                    <Link href={`/eval/?file=${evalData.filePath}`}>{evalData.id.slice(0, 6)}</Link>
                   </TableCell>
+                  {/* TODO(ian): make this a link to the dataset */}
                   <TableCell>{evalData.datasetId.slice(0, 6)}</TableCell>
-                  <TableCell>{evalData.metrics?.score.toFixed(2)}</TableCell>
+                  <TableCell>{evalData.metrics?.score.toFixed(2) ?? '-'}</TableCell>
                   <TableCell>{passRate}</TableCell>
                   <TableCell>{passCount}</TableCell>
                   <TableCell>{failCount}</TableCell>

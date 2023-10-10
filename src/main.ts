@@ -15,6 +15,7 @@ import { readTest, readTests } from './testCases';
 import {
   cleanupOldResults,
   maybeReadConfig,
+  printBorder,
   readConfig,
   readLatestResults,
   writeLatestResults,
@@ -26,6 +27,8 @@ import { getDirectory } from './esm';
 import { startServer } from './web/server';
 import { checkForUpdates } from './updates';
 import { gatherFeedback } from './feedback';
+import { listCommand } from './commands/list';
+import { showCommand } from './commands/show';
 
 import type {
   CommandLineOptions,
@@ -34,7 +37,7 @@ import type {
   TestSuite,
   UnifiedConfig,
 } from './types';
-import { generateTable } from './table';
+import { generateTable, wrapTable } from './table';
 import { createShareableUrl } from './share';
 
 function createDummyFiles(directory: string | null) {
@@ -421,8 +424,7 @@ async function main() {
 
       telemetry.maybeShowNotice();
 
-      const border = '='.repeat((process.stdout.columns || 80) - 10);
-      logger.info(border);
+      printBorder();
       if (!cmdObj.write) {
         logger.info(`${chalk.green('✔')} Evaluation complete`);
       } else {
@@ -443,7 +445,7 @@ async function main() {
           );
         }
       }
-      logger.info(border);
+      printBorder();
       logger.info(chalk.green.bold(`Successes: ${summary.stats.successes}`));
       logger.info(chalk.red.bold(`Failures: ${summary.stats.failures}`));
       logger.info(
@@ -461,6 +463,9 @@ async function main() {
         startServer(parseInt(cmdObj.view, 10) || 15500);
       }
     });
+
+  listCommand(program);
+  showCommand(program);
 
   program.parse(process.argv);
 

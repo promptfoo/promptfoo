@@ -20,7 +20,7 @@ import type {TestCasesWithMetadata} from '@/../../../types';
 interface DatasetDialogProps {
   openDialog: boolean;
   handleClose: () => void;
-  testCase: TestCasesWithMetadata & {date: string};
+  testCase: TestCasesWithMetadata & {recentEvalDate: string};
 }
 
 export default function DatasetDialog({openDialog, handleClose, testCase}: DatasetDialogProps) {
@@ -58,9 +58,10 @@ export default function DatasetDialog({openDialog, handleClose, testCase}: Datas
           <TableBody>
             {testCase?.prompts?.slice((page - 1) * rowsPerPage, page * rowsPerPage).sort((a, b) => b.evalId.localeCompare(a.evalId)).map((promptData, index) => (
               <TableRow key={index} hover>
-                <TableCell><Link href={`/eval/?file=${promptData.evalId}`}>{promptData.evalId}</Link></TableCell>
+                <TableCell><Link href={`/eval/?file=${promptData.evalFilepath}`}>{promptData.evalId.slice(0, 6)}</Link></TableCell>
+                {/* TODO(ian): make this a link to the prompt */}
                 <TableCell style={{minWidth: '8em'}}>{promptData.id.slice(0, 6)}</TableCell>
-                <TableCell>{promptData.prompt.metrics?.score || '-'}</TableCell>
+                <TableCell>{promptData.prompt.metrics?.score.toFixed(2) ?? '-'}</TableCell>
                 <TableCell>
                   {
                     promptData.prompt.metrics?.testPassCount !== undefined && promptData.prompt.metrics?.testFailCount !== undefined
@@ -68,8 +69,8 @@ export default function DatasetDialog({openDialog, handleClose, testCase}: Datas
                       : '-'
                   }
                 </TableCell>
-                <TableCell>{promptData.prompt.metrics?.testPassCount || '-'}</TableCell>
-                <TableCell>{promptData.prompt.metrics?.testFailCount || '-'}</TableCell>
+                <TableCell>{promptData.prompt.metrics?.testPassCount ?? '-'}</TableCell>
+                <TableCell>{promptData.prompt.metrics?.testFailCount ?? '-'}</TableCell>
                 <TableCell>{promptData.prompt.raw.length > 250 ? promptData.prompt.raw.slice(0, 250) + '...' : promptData.prompt.raw}</TableCell>
               </TableRow>
             ))}
