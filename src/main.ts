@@ -14,17 +14,18 @@ import { readPrompts, readProviderPromptMap } from './prompts';
 import { readTest, readTests } from './testCases';
 import {
   cleanupOldResults,
+  getDatasetFromHash,
+  getEvalFromHash,
+  getEvals,
+  getPromptFromHash,
+  getPrompts,
+  getTestCases,
   maybeReadConfig,
   readConfig,
   readLatestResults,
+  sha256,
   writeLatestResults,
   writeOutput,
-  getPrompts,
-  getTestCases,
-  getPromptFromHash,
-  sha256,
-  getEvalFromHash,
-  getEvals,
 } from './util';
 import { DEFAULT_README, DEFAULT_YAML_CONFIG, DEFAULT_PROMPTS } from './onboarding';
 import { disableCache, clearCache } from './cache';

@@ -62,7 +62,8 @@ export default function Prompts() {
       <Table>
         <TableHead>
           <TableRow>
-            <TableCell style={{width: '70%'}}>
+            <TableCell style={{width: '10%'}}>ID</TableCell>
+            <TableCell style={{width: '60%'}}>
               <TableSortLabel active={sortField === 'raw'} direction={sortField === 'raw' ? sortOrder : 'asc'} onClick={() => handleSort('raw')}>
                 Prompt
               </TableSortLabel>
@@ -84,7 +85,8 @@ export default function Prompts() {
         <TableBody>
           {prompts.slice((page - 1) * rowsPerPage, page * rowsPerPage).map((promptRow, index) => (
             <TableRow key={index} hover>
-              <TableCell style={{width: '70%', whiteSpace: 'pre-wrap', cursor: 'pointer'}} onClick={() => handleClickOpen(index)}>
+              <TableCell style={{width: '10%'}}>{promptRow.id.slice(0, 6)}</TableCell>
+              <TableCell style={{width: '60%', whiteSpace: 'pre-wrap', cursor: 'pointer'}} onClick={() => handleClickOpen(index)}>
                 {promptRow.prompt.raw.length > MAX_CELL_LENGTH ? promptRow.prompt.raw.slice(0, MAX_CELL_LENGTH) + '...' : promptRow.prompt.raw}
               </TableCell>
               <TableCell style={{width: '20%'}}>{promptRow.recentEvalDate ? <Link href={`/eval?file=${promptRow.recentEvalId}`}>{promptRow.recentEvalDate}</Link> : 'Unknown'}</TableCell>
