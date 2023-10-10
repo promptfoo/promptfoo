@@ -193,11 +193,11 @@ function EvalOutputCell({
       <div className="cell-actions">
         {output.prompt && (
           <>
-              <span className="action" onClick={handlePromptOpen}>
-                <Tooltip title="View ouput and test details">
-                  <span>🔎</span>
-                </Tooltip>
-              </span>
+            <span className="action" onClick={handlePromptOpen}>
+              <Tooltip title="View ouput and test details">
+                <span>🔎</span>
+              </Tooltip>
+            </span>
             <EvalOutputPromptDialog
               open={openPrompt}
               onClose={handlePromptClose}
@@ -229,7 +229,7 @@ function TableHeader({
   smallText,
   expandedText,
   resourceId,
-}: TruncatedTextProps & { smallText: string; expandedText?: string, resourceId?: string }) {
+}: TruncatedTextProps & { smallText: string; expandedText?: string; resourceId?: string }) {
   const [openPrompt, setOpen] = React.useState(false);
   const handlePromptOpen = () => {
     setOpen(true);

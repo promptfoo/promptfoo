@@ -9,7 +9,7 @@ export class WebhookProvider implements ApiProvider {
   webhookUrl: string;
   config?: object;
 
-  constructor(webhookUrl: string, options: { id?: string, config?: object } = {}) {
+  constructor(webhookUrl: string, options: { id?: string; config?: object } = {}) {
     const { id, config } = options;
     this.webhookUrl = webhookUrl;
     this.id = id ? () => id : this.id;
@@ -25,7 +25,7 @@ export class WebhookProvider implements ApiProvider {
   }
 
   async callApi(prompt: string): Promise<ProviderResponse> {
-    const params: {prompt: string, config?: object} = {
+    const params: { prompt: string; config?: object } = {
       prompt,
     };
     if (this.config) {

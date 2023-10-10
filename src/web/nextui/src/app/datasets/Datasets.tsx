@@ -21,9 +21,9 @@ import type { TestCase, TestCasesWithMetadata } from '@/../../../types';
 export default function Datasets() {
   const searchParams = useSearchParams();
 
-  const [testCases, setTestCases] = useState<(TestCasesWithMetadata & { recentEvalDate: string })[]>(
-    [],
-  );
+  const [testCases, setTestCases] = useState<
+    (TestCasesWithMetadata & { recentEvalDate: string })[]
+  >([]);
   const [sortField, setSortField] = useState<string | null>('date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [page, setPage] = useState(1);
