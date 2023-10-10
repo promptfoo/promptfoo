@@ -11,6 +11,7 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import TableSortLabel from '@mui/material/TableSortLabel';
 import Tooltip from '@mui/material/Tooltip';
+import { useSearchParams } from 'next/navigation';
 
 import DatasetDialog from './DatasetDialog';
 import {API_BASE_URL} from '@/constants';
@@ -18,6 +19,8 @@ import {API_BASE_URL} from '@/constants';
 import type {TestCase, TestCasesWithMetadata} from '@/../../../types';
 
 export default function Datasets() {
+  const searchParams = useSearchParams();
+
   const [testCases, setPrompts] = useState<(TestCasesWithMetadata & {recentEvalDate: string})[]>([]);
   const [sortField, setSortField] = useState<string | null>('date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
@@ -44,7 +47,15 @@ export default function Datasets() {
         });
         setPrompts(sortedData);
       });
-  }, [sortField, sortOrder]);
+
+    const testCaseId = searchParams?.get('id');
+    if (testCaseId) {
+      const testCaseIndex = testCases.findIndex((testCase) => testCase.id.startsWith(testCaseId));
+      if (testCaseIndex !== -1) {
+        handleClickOpen(testCaseIndex);
+      }
+    }
+  }, [sortField, sortOrder, searchParams, testCases]);
 
   const handleClickOpen = (index: number) => {
     setDialogTestCaseIndex(index);

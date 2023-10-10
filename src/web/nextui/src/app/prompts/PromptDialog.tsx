@@ -55,8 +55,7 @@ const PromptDialog: React.FC<PromptDialogProps> = ({openDialog, handleClose, sel
                   <TableCell>
                     <Link href={`/eval/?file=${evalData.filePath}`}>{evalData.id.slice(0, 6)}</Link>
                   </TableCell>
-                  {/* TODO(ian): make this a link to the dataset */}
-                  <TableCell>{evalData.datasetId.slice(0, 6)}</TableCell>
+                  <TableCell><Link href={`/datasets/?id=${evalData.datasetId}`}>{evalData.datasetId.slice(0, 6)}</Link></TableCell>
                   <TableCell>{evalData.metrics?.score.toFixed(2) ?? '-'}</TableCell>
                   <TableCell>{passRate}</TableCell>
                   <TableCell>{passCount}</TableCell>

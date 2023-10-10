@@ -11,6 +11,7 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import TableSortLabel from '@mui/material/TableSortLabel';
 import Tooltip from '@mui/material/Tooltip';
+import { useSearchParams } from 'next/navigation';
 
 import {API_BASE_URL} from '@/constants';
 import PromptDialog from './PromptDialog';
@@ -20,6 +21,8 @@ import type {PromptWithMetadata} from '@/../../../types';
 const MAX_CELL_LENGTH = 500;
 
 export default function Prompts() {
+  const searchParams = useSearchParams();
+
   const [prompts, setPrompts] = useState<(PromptWithMetadata & {recentEvalDate: string})[]>([]);
   const [sortField, setSortField] = useState<string | null>('date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
@@ -46,7 +49,15 @@ export default function Prompts() {
         });
         setPrompts(sortedData);
       });
-  }, [sortField, sortOrder]);
+
+    const promptId = searchParams?.get('id');
+    if (promptId) {
+      const promptIndex = prompts.findIndex((prompt) => prompt.id.startsWith(promptId));
+      if (promptIndex !== -1) {
+        handleClickOpen(promptIndex);
+      }
+    }
+  }, [sortField, sortOrder, searchParams, prompts]);
 
   const handleClickOpen = (index: number) => {
     setOpenDialog(true);

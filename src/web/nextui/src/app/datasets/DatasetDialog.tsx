@@ -59,8 +59,7 @@ export default function DatasetDialog({openDialog, handleClose, testCase}: Datas
             {testCase?.prompts?.slice((page - 1) * rowsPerPage, page * rowsPerPage).sort((a, b) => b.evalId.localeCompare(a.evalId)).map((promptData, index) => (
               <TableRow key={index} hover>
                 <TableCell><Link href={`/eval/?file=${promptData.evalFilepath}`}>{promptData.evalId.slice(0, 6)}</Link></TableCell>
-                {/* TODO(ian): make this a link to the prompt */}
-                <TableCell style={{minWidth: '8em'}}>{promptData.id.slice(0, 6)}</TableCell>
+                <TableCell style={{minWidth: '8em'}}><Link href={`/prompts/?id=${promptData.id}`}>{promptData.id.slice(0, 6)}</Link></TableCell>
                 <TableCell>{promptData.prompt.metrics?.score.toFixed(2) ?? '-'}</TableCell>
                 <TableCell>
                   {
