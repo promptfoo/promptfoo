@@ -18,7 +18,7 @@ import {API_BASE_URL} from '@/constants';
 import type {TestCase, TestCasesWithMetadata} from '@/../../../types';
 
 export default function Datasets() {
-  const [testCases, setPrompts] = useState<(TestCasesWithMetadata & {date: string})[]>([]);
+  const [testCases, setPrompts] = useState<(TestCasesWithMetadata & {recentEvalDate: string})[]>([]);
   const [sortField, setSortField] = useState<string | null>('date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [page, setPage] = useState(1);
@@ -65,30 +65,37 @@ export default function Datasets() {
                 Dataset
               </TableSortLabel>
             </TableCell>
-            <TableCell style={{width: '35%'}}>
-              Variables
-            </TableCell>
             <TableCell style={{width: '20%'}}>
-              <Tooltip title="The date of the most recent eval for this set of test cases">
-                <TableSortLabel active={sortField === 'date'} direction={sortField === 'date' ? sortOrder : 'asc'} onClick={() => handleSort('date')}>
-                  Most recent eval
-                </TableSortLabel>
-              </Tooltip>
+              Variables
             </TableCell>
             <TableCell style={{width: '10%'}}>
               <TableSortLabel active={sortField === 'count'} direction={sortField === 'count' ? sortOrder : 'asc'} onClick={() => handleSort('count')}>
-                # Evals
+                Total # evals
               </TableSortLabel>
+            </TableCell>
+            <TableCell style={{width: '30%'}}>
+              <Tooltip title="The date of the most recent eval for this set of test cases">
+                <TableSortLabel active={sortField === 'date'} direction={sortField === 'date' ? sortOrder : 'asc'} onClick={() => handleSort('date')}>
+                  Most recent eval date
+                </TableSortLabel>
+              </Tooltip>
+            </TableCell>
+            <TableCell style={{width: '20%'}}>
+              <Tooltip title="The ID of the most recent eval for this set of test cases">
+                <TableSortLabel active={sortField === 'evalId'} direction={sortField === 'evalId' ? sortOrder : 'asc'} onClick={() => handleSort('evalId')}>
+                  Most recent eval ID
+                </TableSortLabel>
+              </Tooltip>
             </TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
           {testCases.slice((page - 1) * rowsPerPage, page * rowsPerPage).map((testCasesData, index) => (
-            <TableRow key={index} hover>
-              <TableCell style={{width: '20%', whiteSpace: 'pre-wrap', cursor: 'pointer'}} onClick={() => handleClickOpen(index)}>
+            <TableRow key={index} hover onClick={() => handleClickOpen(index)} style={{cursor: 'pointer'}}>
+              <TableCell style={{width: '20%', whiteSpace: 'pre-wrap'}}>
                 {testCasesData.testCases.length} test cases
               </TableCell>
-              <TableCell style={{width: '35%', whiteSpace: 'pre-wrap', cursor: 'pointer'}} onClick={() => handleClickOpen(index)}>
+              <TableCell style={{width: '20%', whiteSpace: 'pre-wrap'}}>
                 {(() => {
                   if (typeof testCasesData.testCases === 'string' || typeof testCasesData.testCases[0] === 'string') {
                     return '';
@@ -98,8 +105,9 @@ export default function Datasets() {
                   return uniqueVarsKeys.length > 0 ? uniqueVarsKeys.join(', ') : 'None';
                 })()}
               </TableCell>
-              <TableCell style={{width: '20%'}}>{testCasesData.recentEvalDate ? <Link href={`/eval?file=${testCasesData.recentEvalId}`}>{testCasesData.recentEvalDate.toISOString()}</Link> : 'Unknown'}</TableCell>
               <TableCell style={{width: '10%'}}>{testCasesData.count}</TableCell>
+              <TableCell style={{width: '30%'}}>{testCasesData.recentEvalDate || 'Unknown'}</TableCell>
+              <TableCell style={{width: '20%'}}>{testCasesData.recentEvalId ? <Link href={`/eval?file=${testCasesData.recentEvalFilepath}`}>{testCasesData.recentEvalId.slice(0, 6)}</Link> : 'Unknown'}</TableCell>
             </TableRow>
           ))}
         </TableBody>

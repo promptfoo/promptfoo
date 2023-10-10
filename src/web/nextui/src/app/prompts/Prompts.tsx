@@ -20,7 +20,7 @@ import type {PromptWithMetadata} from '@/../../../types';
 const MAX_CELL_LENGTH = 500;
 
 export default function Prompts() {
-  const [prompts, setPrompts] = useState<(PromptWithMetadata & {date: string})[]>([]);
+  const [prompts, setPrompts] = useState<(PromptWithMetadata & {recentEvalDate: string})[]>([]);
   const [sortField, setSortField] = useState<string | null>('date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [page, setPage] = useState(1);
@@ -87,7 +87,7 @@ export default function Prompts() {
               <TableCell style={{width: '70%', whiteSpace: 'pre-wrap', cursor: 'pointer'}} onClick={() => handleClickOpen(index)}>
                 {promptRow.prompt.raw.length > MAX_CELL_LENGTH ? promptRow.prompt.raw.slice(0, MAX_CELL_LENGTH) + '...' : promptRow.prompt.raw}
               </TableCell>
-              <TableCell style={{width: '20%'}}>{promptRow.recentEvalDate ? <Link href={`/eval?file=${promptRow.recentEvalId}`}>{promptRow.recentEvalDate.toISOString()}</Link> : 'Unknown'}</TableCell>
+              <TableCell style={{width: '20%'}}>{promptRow.recentEvalDate ? <Link href={`/eval?file=${promptRow.recentEvalId}`}>{promptRow.recentEvalDate}</Link> : 'Unknown'}</TableCell>
               <TableCell style={{width: '10%'}}>{promptRow.count}</TableCell>
             </TableRow>
           ))}

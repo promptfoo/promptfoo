@@ -18,7 +18,7 @@ import type {PromptWithMetadata} from '@/../../../types';
 interface PromptDialogProps {
   openDialog: boolean;
   handleClose: () => void;
-  selectedPrompt: PromptWithMetadata & {date: string};
+  selectedPrompt: PromptWithMetadata & {recentEvalDate: string};
 }
 
 const PromptDialog: React.FC<PromptDialogProps> = ({openDialog, handleClose, selectedPrompt}) => {
@@ -53,7 +53,7 @@ const PromptDialog: React.FC<PromptDialogProps> = ({openDialog, handleClose, sel
               return (
                 <TableRow key={`eval-${evalData.id}`}>
                   <TableCell>
-                    <Link href={`/eval/?file=${evalData.id}`}>{evalData.id}</Link>
+                    <Link href={`/eval/?file=${evalData.filePath}`}>{evalData.id.slice(0, 6)}</Link>
                   </TableCell>
                   <TableCell>{evalData.datasetId.slice(0, 6)}</TableCell>
                   <TableCell>{evalData.metrics?.score.toFixed(2)}</TableCell>
