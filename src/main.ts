@@ -609,6 +609,42 @@ async function main() {
       logger.info(`Run ${chalk.green('promptfoo show dataset <id>')} to see details of a specific dataset.`);
     });
 
+    showCommand.command('dataset <id>').description('Show details of a specific dataset').action(async (id: string) => {
+      telemetry.maybeShowNotice();
+      telemetry.record('command_used', {
+        name: 'show dataset',
+      });
+      await telemetry.send();
+
+      const dataset = getDatasetFromHash(id);
+      if (!dataset) {
+        logger.error(`Dataset with ID ${id} not found.`);
+        return;
+      }
+
+      printBorder();
+      logger.info(chalk.bold(`Dataset ${id}`));
+      printBorder();
+
+      logger.info(`This dataset is used in the following evals:`);
+      const table = [];
+      for (const prompt of dataset.prompts.sort((a, b) => b.evalId.localeCompare(a.evalId)).slice(0, 10)) {
+        table.push({
+          'Eval ID': prompt.evalId.slice(0, 6),
+          'Prompt ID': prompt.id.slice(0, 6),
+          'Raw score': prompt.prompt.metrics?.score.toFixed(2) || '-',
+          'Pass rate': prompt.prompt.metrics && prompt.prompt.metrics.testPassCount + prompt.prompt.metrics.testFailCount > 0 ? `${(prompt.prompt.metrics.testPassCount / (prompt.prompt.metrics.testPassCount + prompt.prompt.metrics.testFailCount) * 100).toFixed(2)}%` : '-',
+          'Pass count': prompt.prompt.metrics?.testPassCount || '-',
+          'Fail count': prompt.prompt.metrics?.testFailCount || '-',
+        });
+      }
+      logger.info(wrapTable(table));
+      printBorder();
+
+      logger.info(`Run ${chalk.green('promptfoo show eval <id>')} to see details of a specific evaluation.`);
+      logger.info(`Run ${chalk.green('promptfoo show prompt <id>')} to see details of a specific prompt.`);
+    });
+
   program.parse(process.argv);
 
   if (!process.argv.slice(2).length) {
