@@ -68,6 +68,10 @@ table.results-table,
   margin-left: 0.5rem;
 }
 
+.results-table th .action svg {
+  vertical-align: middle;
+}
+
 .results-table tr .cell {
 }
 

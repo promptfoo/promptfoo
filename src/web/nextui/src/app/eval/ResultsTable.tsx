@@ -11,7 +11,10 @@ import {
   useReactTable,
 } from '@tanstack/react-table';
 import Checkbox from '@mui/material/Checkbox';
+import Tooltip from '@mui/material/Tooltip';
 import FormControlLabel from '@mui/material/FormControlLabel';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import Link from 'next/link';
 
 import { useStore } from './store';
 
@@ -116,6 +119,8 @@ function EvalOutputCell({
     // TODO(ian): Plumb through failure message instead of parsing it out.
     chunks = text.split('---');
     text = chunks.slice(1).join('---');
+  } else {
+    chunks = [text];
   }
 
   if (filterMode === 'different' && firstOutput) {
@@ -188,9 +193,11 @@ function EvalOutputCell({
       <div className="cell-actions">
         {output.prompt && (
           <>
-            <span className="action" onClick={handlePromptOpen}>
-              🔎
-            </span>
+              <span className="action" onClick={handlePromptOpen}>
+                <Tooltip title="View ouput and test details">
+                  <span>🔎</span>
+                </Tooltip>
+              </span>
             <EvalOutputPromptDialog
               open={openPrompt}
               onClose={handlePromptClose}
@@ -202,10 +209,14 @@ function EvalOutputCell({
           </>
         )}
         <span className="action" onClick={() => handleClick(true)}>
-          👍
+          <Tooltip title="Mark test passed (score 1.0)">
+            <span>👍</span>
+          </Tooltip>
         </span>
         <span className="action" onClick={() => handleClick(false)}>
-          👎
+          <Tooltip title="Mark test failed (score 0.0)">
+            <span>👎</span>
+          </Tooltip>
         </span>
       </div>
     </>
@@ -217,7 +228,8 @@ function TableHeader({
   maxLength,
   smallText,
   expandedText,
-}: TruncatedTextProps & { smallText: string; expandedText?: string }) {
+  resourceId,
+}: TruncatedTextProps & { smallText: string; expandedText?: string, resourceId?: string }) {
   const [openPrompt, setOpen] = React.useState(false);
   const handlePromptOpen = () => {
     setOpen(true);
@@ -230,14 +242,25 @@ function TableHeader({
       <TruncatedText text={text} maxLength={maxLength} />
       {expandedText && (
         <>
-          <span className="action" onClick={handlePromptOpen}>
-            🔎
-          </span>
+          <Tooltip title="View prompt">
+            <span className="action" onClick={handlePromptOpen}>
+              🔎
+            </span>
+          </Tooltip>
           <EvalOutputPromptDialog
             open={openPrompt}
             onClose={handlePromptClose}
             prompt={expandedText}
           />
+          {resourceId && (
+            <Tooltip title="View other evals and datasets for this prompt">
+              <span className="action">
+                <Link href={`/prompts/?id=${resourceId}`} target="_blank">
+                  <OpenInNewIcon fontSize="small" />
+                </Link>
+              </span>
+            </Tooltip>
+          )}
         </>
       )}
       <div className="smalltext">{smallText}</div>
@@ -355,6 +378,7 @@ export default function ResultsTable({
                   text={typeof prompt === 'string' ? prompt : prompt.display}
                   expandedText={typeof prompt === 'string' ? undefined : prompt.raw}
                   maxLength={maxTextLength}
+                  resourceId={typeof prompt === 'string' ? undefined : prompt.id}
                 />
                 {filterMode === 'failures' && (
                   <FormControlLabel

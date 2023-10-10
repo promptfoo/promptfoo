@@ -123,6 +123,7 @@ export interface EvaluateOptions {
 }
 
 export interface Prompt {
+  id?: string;
   raw: string;
   display: string;
   function?: (context: { vars: Record<string, string | object> }) => Promise<string | object>;

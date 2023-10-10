@@ -8,7 +8,7 @@ import logger from './logger';
 import telemetry from './telemetry';
 import { runAssertions } from './assertions';
 import { generatePrompts } from './suggestions';
-import { getNunjucksEngine } from './util';
+import { getNunjucksEngine, sha256 } from './util';
 
 import type { SingleBar } from 'cli-progress';
 import type {
@@ -550,6 +550,7 @@ class Evaluator {
           gradingResult: row.gradingResult,
         };
 
+        table.head.prompts[colIndex].id = sha256(table.head.prompts[colIndex].raw);
         table.head.prompts[colIndex].metrics = table.head.prompts[colIndex].metrics || {
           score: 0,
           testPassCount: 0,
