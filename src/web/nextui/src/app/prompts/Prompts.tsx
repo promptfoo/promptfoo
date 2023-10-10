@@ -38,7 +38,6 @@ export default function Prompts() {
   };
 
   useEffect(() => {
-    //fetch(`${API_BASE_URL}/api/prompts?page=${page}&limit=${rowsPerPage}`)
     fetch(`${API_BASE_URL}/api/prompts`)
       .then((response) => response.json())
       .then((data) => {
@@ -49,7 +48,9 @@ export default function Prompts() {
         });
         setPrompts(sortedData);
       });
+  }, [sortField, sortOrder]);
 
+  useEffect(() => {
     const promptId = searchParams?.get('id');
     if (promptId) {
       const promptIndex = prompts.findIndex((prompt) => prompt.id.startsWith(promptId));
@@ -57,7 +58,7 @@ export default function Prompts() {
         handleClickOpen(promptIndex);
       }
     }
-  }, [sortField, sortOrder, searchParams, prompts]);
+  }, [prompts, searchParams]);
 
   const handleClickOpen = (index: number) => {
     setOpenDialog(true);

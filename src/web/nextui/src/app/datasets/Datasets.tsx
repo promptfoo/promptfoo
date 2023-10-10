@@ -21,7 +21,7 @@ import type { TestCase, TestCasesWithMetadata } from '@/../../../types';
 export default function Datasets() {
   const searchParams = useSearchParams();
 
-  const [testCases, setPrompts] = useState<(TestCasesWithMetadata & { recentEvalDate: string })[]>(
+  const [testCases, setTestCases] = useState<(TestCasesWithMetadata & { recentEvalDate: string })[]>(
     [],
   );
   const [sortField, setSortField] = useState<string | null>('date');
@@ -47,9 +47,11 @@ export default function Datasets() {
           if (sortOrder === 'asc') return a[sortField] > b[sortField] ? 1 : -1;
           return a[sortField] < b[sortField] ? 1 : -1;
         });
-        setPrompts(sortedData);
+        setTestCases(sortedData);
       });
+  }, [sortField, sortOrder]);
 
+  useEffect(() => {
     const testCaseId = searchParams?.get('id');
     if (testCaseId) {
       const testCaseIndex = testCases.findIndex((testCase) => testCase.id.startsWith(testCaseId));
@@ -57,7 +59,7 @@ export default function Datasets() {
         handleClickOpen(testCaseIndex);
       }
     }
-  }, [sortField, sortOrder, searchParams, testCases]);
+  }, [testCases, searchParams]);
 
   const handleClickOpen = (index: number) => {
     setDialogTestCaseIndex(index);
