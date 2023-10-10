@@ -174,7 +174,7 @@ export default function ResultsView({
               <FormControl sx={{ m: 1, minWidth: 200 }} size="small">
                 <InputLabel>View run</InputLabel>
                 <Select
-                  key={recentEvals.join(',')}
+                  key={recentEvals.map(e => e.id).join(',')}
                   className="recent-files"
                   label="Previous runs"
                   defaultValue={defaultEvalId}
