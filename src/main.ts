@@ -14,16 +14,10 @@ import { readPrompts, readProviderPromptMap } from './prompts';
 import { readTest, readTests } from './testCases';
 import {
   cleanupOldResults,
-  getDatasetFromHash,
-  getEvalFromHash,
-  getEvals,
-  getPromptFromHash,
-  getPrompts,
-  getTestCases,
   maybeReadConfig,
+  printBorder,
   readConfig,
   readLatestResults,
-  sha256,
   writeLatestResults,
   writeOutput,
 } from './util';
@@ -33,6 +27,8 @@ import { getDirectory } from './esm';
 import { startServer } from './web/server';
 import { checkForUpdates } from './updates';
 import { gatherFeedback } from './feedback';
+import { listCommand } from './commands/list';
+import { showCommand } from './commands/show';
 
 import type {
   CommandLineOptions,
@@ -75,11 +71,6 @@ function createDummyFiles(directory: string | null) {
     logger.info(chalk.green.bold(`Wrote prompts.txt and promptfooconfig.yaml to ./${directory}`));
     logger.info(chalk.green(`\`cd ${directory}\` and open README.md to get started!`));
   }
-}
-
-function printBorder() {
-  const border = '='.repeat((process.stdout.columns || 80) - 10);
-  logger.info(border);
 }
 
 async function main() {
@@ -473,178 +464,8 @@ async function main() {
       }
     });
 
-    const listCommand = program.command('list').description('List various resources');
-
-    listCommand.command('evals')
-     .description('List evaluations.')
-     .action(async () => {
-       telemetry.maybeShowNotice();
-       telemetry.record('command_used', {
-         name: 'list evals',
-       });
-       await telemetry.send();
-
-       const evals = getEvals();
-       const tableData = evals.map(evl => ({
-         'Eval ID': evl.id.slice(0, 6),
-         Filename: evl.filePath,
-         Prompts: evl.results.table.head.prompts.map(p => sha256(p.raw).slice(0, 6)).join(', '),
-         Vars: evl.results.table.head.vars.map(v => v).join(', '),
-       }));
-
-       logger.info(wrapTable(tableData));
-       printBorder();
-
-       logger.info(`Run ${chalk.green('promptfoo show eval <id>')} to see details of a specific evaluation.`);
-       logger.info(`Run ${chalk.green('promptfoo show prompt <id>')} to see details of a specific prompt.`);
-     });
-
-    listCommand.command('prompts')
-     .description('List prompts used')
-     .action(async () => {
-       telemetry.maybeShowNotice();
-       telemetry.record('command_used', {
-         name: 'list prompts',
-       });
-       await telemetry.send();
-
-       const prompts = getPrompts().sort((a, b) => b.recentEvalId.localeCompare(a.recentEvalId));
-       const tableData = prompts.map(prompt => ({
-         'Prompt ID': prompt.id.slice(0, 6),
-         'Raw': prompt.prompt.raw.slice(0, 100) + (prompt.prompt.raw.length > 100 ? '...' : ''),
-         '# evals': prompt.count,
-         'Most recent eval': prompt.recentEvalId.slice(0, 6),
-       }));
-
-       logger.info(wrapTable(tableData));
-       printBorder();
-       logger.info(`Run ${chalk.green('promptfoo show eval <id>')} to see details of a specific evaluation.`);
-     });
-
-    listCommand.command('datasets')
-     .description('List datasets used')
-     .action(async () => {
-       telemetry.maybeShowNotice();
-       telemetry.record('command_used', {
-         name: 'list datasets',
-       });
-       await telemetry.send();
-
-       const datasets = getTestCases().sort((a, b) => b.recentEvalId.localeCompare(a.recentEvalId));
-       const tableData = datasets.map(dataset => ({
-         ID: dataset.id.slice(0, 6),
-         'Highest scoring prompt': dataset.prompts.sort((a, b) => (b.prompt.metrics?.score || 0) - (a.prompt.metrics?.score || 0))[0].id.slice(0, 6),
-         '# evals': dataset.count,
-         '# prompts': dataset.prompts.length,
-         'Most recent eval': dataset.recentEvalId,
-       }));
-
-       logger.info(wrapTable(tableData));
-     });
-
-    const showCommand = program.command('show').description('Show details of a specific resource');
-    showCommand
-      .command('eval <id>')
-      .description('Show details of a specific evaluation')
-      .action(async (id: string) => {
-        telemetry.maybeShowNotice();
-        telemetry.record('command_used', {
-          name: 'show eval',
-        });
-        await telemetry.send();
-
-        const evl = getEvalFromHash(id);
-        if (!evl) {
-          logger.error(`No evaluation found with ID ${id}`);
-          return;
-        }
-
-        const { prompts, vars } = evl.results.table.head;
-        logger.info(generateTable(evl.results, 100, 25));
-        if (evl.results.table.body.length > 25) {
-          const rowsLeft = evl.results.table.body.length - 25;
-          logger.info(`... ${rowsLeft} more row${rowsLeft === 1 ? '' : 's'} not shown ...\n`);
-        }
-
-        printBorder();
-        logger.info(`Evaluation ${id}`);
-        logger.info(`${prompts.length} prompts`);
-        logger.info(`${vars.length} variables: ${vars.slice(0, 5).join(', ')}${vars.length > 5 ? ` (and ${vars.length - 5} more...)` : ''}`);
-      });
-
-    showCommand.command('prompt <id>').description('Show details of a specific prompt').action(async (id: string) => {
-      telemetry.maybeShowNotice();
-      telemetry.record('command_used', {
-        name: 'show prompt',
-      });
-      await telemetry.send();
-
-      const prompt = getPromptFromHash(id);
-      if (!prompt) {
-        logger.error(`Prompt with ID ${id} not found.`);
-        return;
-      }
-
-      printBorder();
-      logger.info(chalk.cyan(prompt.prompt.raw));
-      printBorder();
-      logger.info(chalk.bold(`Prompt ${id}`));
-      printBorder();
-
-      logger.info(`This prompt is used in the following evals:`);
-      const table = [];
-      for (const evl of prompt.evals.sort((a, b) => b.id.localeCompare(a.id)).slice(0, 10)) {
-        table.push({
-          'Eval ID': evl.id.slice(0, 6),
-          'Dataset ID': evl.datasetId.slice(0, 6),
-          'Raw score': evl.metrics?.score.toFixed(2) || '-',
-          'Pass rate': evl.metrics && evl.metrics.testPassCount + evl.metrics.testFailCount > 0 ? `${(evl.metrics.testPassCount / (evl.metrics.testPassCount + evl.metrics.testFailCount) * 100).toFixed(2)}%` : '-',
-          'Pass count': evl.metrics?.testPassCount || '-',
-          'Fail count': evl.metrics?.testFailCount || '-',
-        });
-      }
-      logger.info(wrapTable(table));
-      printBorder();
-
-      logger.info(`Run ${chalk.green('promptfoo show eval <id>')} to see details of a specific evaluation.`);
-      logger.info(`Run ${chalk.green('promptfoo show dataset <id>')} to see details of a specific dataset.`);
-    });
-
-    showCommand.command('dataset <id>').description('Show details of a specific dataset').action(async (id: string) => {
-      telemetry.maybeShowNotice();
-      telemetry.record('command_used', {
-        name: 'show dataset',
-      });
-      await telemetry.send();
-
-      const dataset = getDatasetFromHash(id);
-      if (!dataset) {
-        logger.error(`Dataset with ID ${id} not found.`);
-        return;
-      }
-
-      printBorder();
-      logger.info(chalk.bold(`Dataset ${id}`));
-      printBorder();
-
-      logger.info(`This dataset is used in the following evals:`);
-      const table = [];
-      for (const prompt of dataset.prompts.sort((a, b) => b.evalId.localeCompare(a.evalId)).slice(0, 10)) {
-        table.push({
-          'Eval ID': prompt.evalId.slice(0, 6),
-          'Prompt ID': prompt.id.slice(0, 6),
-          'Raw score': prompt.prompt.metrics?.score.toFixed(2) || '-',
-          'Pass rate': prompt.prompt.metrics && prompt.prompt.metrics.testPassCount + prompt.prompt.metrics.testFailCount > 0 ? `${(prompt.prompt.metrics.testPassCount / (prompt.prompt.metrics.testPassCount + prompt.prompt.metrics.testFailCount) * 100).toFixed(2)}%` : '-',
-          'Pass count': prompt.prompt.metrics?.testPassCount || '-',
-          'Fail count': prompt.prompt.metrics?.testFailCount || '-',
-        });
-      }
-      logger.info(wrapTable(table));
-      printBorder();
-
-      logger.info(`Run ${chalk.green('promptfoo show eval <id>')} to see details of a specific evaluation.`);
-      logger.info(`Run ${chalk.green('promptfoo show prompt <id>')} to see details of a specific prompt.`);
-    });
+  listCommand(program);
+  showCommand(program);
 
   program.parse(process.argv);
 

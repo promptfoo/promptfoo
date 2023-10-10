@@ -404,3 +404,9 @@ export function getNunjucksEngine() {
   });
   return nunjucks;
 }
+
+export function printBorder() {
+  const border = '='.repeat((process.stdout.columns || 80) - 10);
+  logger.info(border);
+}
+
