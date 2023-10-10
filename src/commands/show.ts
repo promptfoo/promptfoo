@@ -7,7 +7,9 @@ import logger from '../logger';
 import telemetry from '../telemetry';
 
 export function showCommand(program: Command) {
-  const showCommand = program.command('show').description('Show details of a specific resource');
+  const showCommand = program.command('show <id>').description('Show details of a specific resource').action(async (id: string) => {
+
+  });
 
   showCommand
     .command('eval <id>')
