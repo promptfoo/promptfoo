@@ -1,0 +1,3 @@
+prompts: [prompts.txt]
+providers: [openai:gpt-3.5-turbo-0613]
+tests: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit?usp=sharing
