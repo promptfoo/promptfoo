@@ -1,3 +1,4 @@
+import logger from '../logger';
 import { exec } from 'child_process';
 
 import { ApiProvider, ProviderOptions, ProviderResponse } from '../types';
@@ -25,9 +26,12 @@ export class ScriptCompletionProvider implements ApiProvider {
       // TODO(ian): Caching
       exec(command, (error, stdout, stderr) => {
         if (error) {
+          logger.debug(`Error running script ${this.scriptPath}: ${error.message}`);
           reject(error);
         } else {
-          resolve({ output: stripText(stdout.trim()) });
+          const output = stripText(stdout.trim());
+          logger.debug(`Output from script ${this.scriptPath}: ${output}`);
+          resolve({ output });
         }
       });
     }) as Promise<ProviderResponse>;
