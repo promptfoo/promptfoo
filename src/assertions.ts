@@ -739,7 +739,7 @@ export function assertionFromString(expected: string): Assertion {
       value: functionBody,
     };
   }
-  if (expected.startsWith('grade:')) {
+  if (expected.startsWith('grade:') || expected.startsWith('llm-rubric:')) {
     return {
       type: 'llm-rubric',
       value: expected.slice(6),
@@ -748,7 +748,7 @@ export function assertionFromString(expected: string): Assertion {
 
   // New options
   const assertionRegex =
-    /^(not-)?(equals|contains-any|contains-all|icontains-any|icontains-all|contains-json|is-json|regex|icontains|contains|webhook|rouge-n|similar|starts-with|levenshtein)(?:\((\d+(?:\.\d+)?)\))?(?::(.*))?$/;
+    /^(not-)?(equals|contains-any|contains-all|icontains-any|icontains-all|contains-json|is-json|regex|icontains|contains|webhook|rouge-n|similar|starts-with|levenshtein|model-graded-factuality|model-graded-closedqa)(?:\((\d+(?:\.\d+)?)\))?(?::(.*))?$/;
   const regexMatch = expected.match(assertionRegex);
 
   if (regexMatch) {

@@ -47,13 +47,11 @@ export async function readTestsFile(varsPath: string, basePath: string = ''): Pr
   const fileExtension = parsePath(varsPath).ext.slice(1);
   let rows: CsvRow[] = [];
 
-  if (fileExtension === 'csv') {
-    if (varsPath.startsWith('https://docs.google.com/spreadsheets/')) {
-      const csvData = await fetchCsvFromGoogleSheet(varsPath);
-      rows = parseCsv(csvData, { columns: true });
-    } else {
-      rows = parseCsv(fs.readFileSync(resolvedVarsPath, 'utf-8'), { columns: true });
-    }
+  if (varsPath.startsWith('https://docs.google.com/spreadsheets/')) {
+    const csvData = await fetchCsvFromGoogleSheet(varsPath);
+    rows = parseCsv(csvData, { columns: true });
+  } else if (fileExtension === 'csv') {
+    rows = parseCsv(fs.readFileSync(resolvedVarsPath, 'utf-8'), { columns: true });
   } else if (fileExtension === 'json') {
     rows = parseJson(fs.readFileSync(resolvedVarsPath, 'utf-8'));
   } else if (fileExtension === 'yaml' || fileExtension === 'yml') {
