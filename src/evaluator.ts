@@ -148,6 +148,7 @@ class Evaluator {
     delay,
   }: RunEvalOptions): Promise<EvaluateResult> {
     const vars = test.vars || {};
+    vars._lastOutput = 'TODO';
     const renderedPrompt = await renderPrompt(prompt, vars);
 
     // Note that we're using original prompt, not renderedPrompt
