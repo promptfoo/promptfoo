@@ -124,6 +124,7 @@ class Evaluator {
   testSuite: TestSuite;
   options: EvaluateOptions;
   stats: EvaluateStats;
+  previousOutput: string | undefined;
 
   constructor(testSuite: TestSuite, options: EvaluateOptions) {
     this.testSuite = testSuite;
@@ -138,6 +139,7 @@ class Evaluator {
         cached: 0,
       },
     };
+    this.previousOutput = undefined;
   }
 
   async runEval({
@@ -148,7 +150,7 @@ class Evaluator {
     delay,
   }: RunEvalOptions): Promise<EvaluateResult> {
     const vars = test.vars || {};
-    vars._lastOutput = 'TODO';
+    vars._lastOutput = this.previousOutput || 'No previous output';
     const renderedPrompt = await renderPrompt(prompt, vars);
 
     // Note that we're using original prompt, not renderedPrompt
@@ -176,6 +178,8 @@ class Evaluator {
       });
       const endTime = Date.now();
       latencyMs = endTime - startTime;
+
+      this.previousOutput = response.output;
 
       if (!response.cached) {
         let sleep = delay;
