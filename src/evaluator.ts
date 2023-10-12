@@ -150,7 +150,7 @@ class Evaluator {
     delay,
   }: RunEvalOptions): Promise<EvaluateResult> {
     const vars = test.vars || {};
-    vars._lastOutput = this.previousOutput || 'No previous output';
+    vars._lastOutput = this.previousOutput || 'undefined';
     const renderedPrompt = await renderPrompt(prompt, vars);
 
     // Note that we're using original prompt, not renderedPrompt
