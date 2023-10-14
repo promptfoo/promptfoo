@@ -12,11 +12,11 @@ With promptfoo, you can:
 - **Systematically test prompts & models** against predefined test cases
 - **Evaluate quality and catch regressions** by comparing LLM outputs side-by-side
 - **Speed up evaluations** with caching and concurrency
-- **Score outputs automatically** by defining test cases
-- Use as a CLI, library, or in CI/CD
-- Use OpenAI, Anthropic, Azure, Google, open-source models like Llama, or integrate custom API providers for any LLM API
+- **Score outputs automatically** by defining [test cases](https://promptfoo.dev/docs/configuration/expected-outputs)
+- Use as a [CLI](https://promptfoo.dev/docs/usage/command-line), [library](https://promptfoo.dev/docs/usage/node-package), or in [CI/CD](https://promptfoo.dev/docs/integrations/github-action)
+- Use OpenAI, Anthropic, Azure, Google, HuggingFace, open-source models like Llama, or integrate custom API providers for [any LLM API](https://promptfoo.dev/docs/providers)
 
-The goal: **test-driven prompt engineering**, rather than trial-and-error.
+The goal: **test-driven LLM development** instead of trial-and-error.
 
 # [» View full documentation «](https://promptfoo.dev/docs/intro)
 
@@ -29,6 +29,17 @@ Here's an example of a side-by-side comparison of multiple prompts and inputs:
 It works on the command line too:
 
 ![Prompt evaluation](https://github.com/typpo/promptfoo/assets/310310/480e1114-d049-40b9-bd5f-f81c15060284)
+
+## Why choose promptfoo?
+
+There are many different ways to evaluate prompts. Here are some reasons to consider promptfoo:
+
+- **Battle-tested**: promptfoo was built to eval & improve LLM apps serving over 10 million users in production. The tooling is flexible and can be adapted to many setups.
+- **Simple, declarative test cases**: Define your evals without writing code or working with heavy notebooks.
+- **Language agnostic**: Use Javascript, Python, or whatever else you're working in.
+- **Share & collaborate**: Built-in share functionality & web viewer for working with teammates.
+- **Open-source**: LLM evals are a commodity and should be served by 100% open-source projects with no strings attached.
+- **Private**: This software runs completely locally. Your evals run on your machine and talk directly with the LLM.
 
 ## Workflow
 
@@ -45,7 +56,7 @@ As you collect more examples and establish a user feedback loop, continue to bui
 To get started, run this command:
 
 ```
-npx promptfoo init
+npx promptfoo@latest init
 ```
 
 This will create some placeholders in your current directory: `prompts.txt` and `promptfooconfig.yaml`.
@@ -53,7 +64,7 @@ This will create some placeholders in your current directory: `prompts.txt` and 
 After editing the prompts and variables to your liking, run the eval command to kick off an evaluation:
 
 ```
-npx promptfoo eval
+npx promptfoo@latest eval
 ```
 
 ### Configuration
