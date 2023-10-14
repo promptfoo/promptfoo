@@ -589,7 +589,41 @@ describe('evaluator', () => {
     expect(summary.results[2].response?.output).toBe('French Hola');
     expect(summary.results[3].response?.output).toBe('French Bonjour');
   });
+
+  test('evaluate with _conversation variable', async () => {
+    const mockApiProvider: ApiProvider = {
+      id: jest.fn().mockReturnValue('test-provider'),
+      callApi: jest.fn().mockImplementation((prompt) => {
+        return Promise.resolve({
+          output: prompt,
+          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+        });
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('{{ var1 }} {{ _conversation[0].output }}')],
+      tests: [
+        {
+          vars: { var1: 'First run' },
+        },
+        {
+          vars: { var1: 'Second run' },
+        },
+      ],
+    };
+
+    const summary = await evaluate(testSuite, {});
+
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
+    expect(summary.stats.successes).toBe(2);
+    expect(summary.stats.failures).toBe(0);
+    expect(summary.results[0].response?.output).toBe('First run ');
+    expect(summary.results[1].response?.output).toBe('Second run First run ');
+  });
 });
+
 it('should use the options from the test if they exist', async () => {
   const testSuite: TestSuite = {
     providers: [mockApiProvider],
