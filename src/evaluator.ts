@@ -124,6 +124,7 @@ class Evaluator {
   testSuite: TestSuite;
   options: EvaluateOptions;
   stats: EvaluateStats;
+  conversations: Record<string, { prompt: string | object; input: string; output: string }[]>;
 
   constructor(testSuite: TestSuite, options: EvaluateOptions) {
     this.testSuite = testSuite;
@@ -138,6 +139,7 @@ class Evaluator {
         cached: 0,
       },
     };
+    this.conversations = {};
   }
 
   async runEval({
@@ -147,14 +149,24 @@ class Evaluator {
     includeProviderId,
     delay,
   }: RunEvalOptions): Promise<EvaluateResult> {
-    const vars = test.vars || {};
-    const renderedPrompt = await renderPrompt(prompt, vars);
-
-    // Note that we're using original prompt, not renderedPrompt
+    // Use the original prompt to set the display, not renderedPrompt
     let promptDisplay = prompt.display;
     if (includeProviderId) {
       promptDisplay = `[${provider.id()}] ${promptDisplay}`;
     }
+
+    // Set up the special _conversation variable
+    const vars = test.vars || {};
+    const conversationKey = `${provider.id()}:${prompt.id}`;
+    vars._conversation = this.conversations[conversationKey] || [];
+
+    // Render the prompt
+    const renderedPrompt = await renderPrompt(prompt, vars);
+
+    let renderedJson = undefined;
+    try {
+      renderedJson = JSON.parse(renderedPrompt);
+    } catch {}
 
     const setup = {
       provider: {
@@ -167,6 +179,7 @@ class Evaluator {
       vars,
     };
 
+    // Call the API
     let latencyMs = 0;
     try {
       const startTime = Date.now();
@@ -175,6 +188,19 @@ class Evaluator {
       });
       const endTime = Date.now();
       latencyMs = endTime - startTime;
+
+      let conversationLastInput = undefined;
+      if (renderedJson && Array.isArray(renderedJson)) {
+        const lastElt = renderedJson[renderedJson.length - 1];
+        // Use the `content` field if present (OpenAI chat format)
+        conversationLastInput = lastElt?.content || lastElt;
+      }
+      this.conversations[conversationKey] = this.conversations[conversationKey] || [];
+      this.conversations[conversationKey].push({
+        prompt: renderedJson || renderedPrompt,
+        input: conversationLastInput || renderedJson || renderedPrompt,
+        output: response.output || '',
+      });
 
       if (!response.cached) {
         let sleep = delay;
@@ -321,7 +347,15 @@ class Evaluator {
           testSuite.providers.length > 1 ? `[${provider.id()}] ${prompt.display}` : prompt.display;
         prompts.push({
           ...prompt,
+          id: sha256(prompt.raw),
           display: updatedDisplay,
+          metrics: {
+            score: 0,
+            testPassCount: 0,
+            testFailCount: 0,
+            assertPassCount: 0,
+            assertFailCount: 0,
+          },
         });
       }
     }
@@ -390,7 +424,6 @@ class Evaluator {
 
     // Set up eval cases
     const runEvalOptions: RunEvalOptions[] = [];
-    let totalVarCombinations = 0;
     let rowIndex = 0;
     for (const testCase of tests) {
       // Handle default properties
@@ -408,7 +441,6 @@ class Evaluator {
 
       // Finalize test case eval
       const varCombinations = generateVarCombinations(testCase.vars || {});
-      totalVarCombinations += varCombinations.length;
 
       const numRepeat = this.options.repeat || 1;
       for (let repeatIndex = 0; repeatIndex < numRepeat; repeatIndex++) {
@@ -456,7 +488,17 @@ class Evaluator {
       body: [],
     };
 
-    // Set up progress bar...
+    // Determine run parameters
+    let concurrency = options.maxConcurrency || DEFAULT_MAX_CONCURRENCY;
+    const usesConversation = prompts.some((p) => p.raw.includes('_conversation'));
+    if (usesConversation && concurrency > 1) {
+      logger.info(
+        `Setting concurrency to 1 because the ${chalk.cyan('_conversation')} variable is used.`,
+      );
+      concurrency = 1;
+    }
+
+    // Start the progress bar...
     let progressbar: SingleBar | undefined;
     if (options.showProgressBar) {
       const cliProgress = await import('cli-progress');
@@ -481,7 +523,7 @@ class Evaluator {
     const results: EvaluateResult[] = [];
     await async.forEachOfLimit(
       runEvalOptions,
-      options.maxConcurrency || DEFAULT_MAX_CONCURRENCY,
+      concurrency,
       async (evalStep: RunEvalOptions, index: number | string) => {
         const row = await this.runEval(evalStep);
 
@@ -550,14 +592,6 @@ class Evaluator {
           gradingResult: row.gradingResult,
         };
 
-        table.head.prompts[colIndex].id = sha256(table.head.prompts[colIndex].raw);
-        table.head.prompts[colIndex].metrics = table.head.prompts[colIndex].metrics || {
-          score: 0,
-          testPassCount: 0,
-          testFailCount: 0,
-          assertPassCount: 0,
-          assertFailCount: 0,
-        };
         const metrics = table.head.prompts[colIndex].metrics;
         invariant(metrics, 'Expected prompt.metrics to be set');
         metrics.score += row.score;

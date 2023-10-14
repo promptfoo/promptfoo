@@ -1,0 +1,16 @@
+prompts: [prompt.json]
+providers: [openai:gpt-3.5-turbo]
+
+# Set up the system message for all tests
+defaultTest:
+  vars:
+    system_message: You are a helpful assistant
+
+# Test out a conversation with multiple turns
+tests:
+  - vars:
+      question: Who founded Facebook?
+  - vars:
+      question: Where does he live?
+  - vars:
+      question: Which state is that in?

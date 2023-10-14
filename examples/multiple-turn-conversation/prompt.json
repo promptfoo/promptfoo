@@ -1,0 +1,20 @@
+[
+  {
+    "role": "system",
+    "content": "{{ system_message }}"
+  },
+  {% for completion in _conversation %}
+    {
+      "role": "user",
+      "content": "{{ completion.prompt[completion.prompt.length - 1].content }}"
+    },
+    {
+      "role": "assistant",
+      "content": "{{ completion.output }}"
+    },
+  {% endfor %}
+  {
+    "role": "user",
+    "content": "{{ question }}"
+  }
+]
