@@ -11,6 +11,6 @@ tests:
   - vars:
       question: Who founded Facebook?
   - vars:
-      question: What's his favorite food?
+      question: Where does he live?
   - vars:
-      question: Will he let me borrow $5?
+      question: Which state is that in?

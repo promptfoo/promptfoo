@@ -6,7 +6,7 @@
   {% for completion in _conversation %}
     {
       "role": "user",
-      "content": "{{ completion.input[completion.input.length - 1].content }}"
+      "content": "{{ completion.prompt[completion.prompt.length - 1].content }}"
     },
     {
       "role": "assistant",

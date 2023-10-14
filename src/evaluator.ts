@@ -124,7 +124,7 @@ class Evaluator {
   testSuite: TestSuite;
   options: EvaluateOptions;
   stats: EvaluateStats;
-  conversations: Record<string, { prompt: string | object; output: string }[]>;
+  conversations: Record<string, { prompt: string | object; input: string, output: string }[]>;
 
   constructor(testSuite: TestSuite, options: EvaluateOptions) {
     this.testSuite = testSuite;
@@ -149,16 +149,24 @@ class Evaluator {
     includeProviderId,
     delay,
   }: RunEvalOptions): Promise<EvaluateResult> {
-    const vars = test.vars || {};
-    const conversationKey = `${provider.id()}:${prompt.id}`;
-    vars._conversation = this.conversations[conversationKey] || [];
-    const renderedPrompt = await renderPrompt(prompt, vars);
-
-    // Note that we're using original prompt, not renderedPrompt
+    // Use the original prompt to set the display, not renderedPrompt
     let promptDisplay = prompt.display;
     if (includeProviderId) {
       promptDisplay = `[${provider.id()}] ${promptDisplay}`;
     }
+
+    // Set up the special _conversation variable
+    const vars = test.vars || {};
+    const conversationKey = `${provider.id()}:${prompt.id}`;
+    vars._conversation = this.conversations[conversationKey] || [];
+
+    // Render the prompt
+    const renderedPrompt = await renderPrompt(prompt, vars);
+
+    let renderedJson = undefined;
+    try {
+      renderedJson = JSON.parse(renderedPrompt);
+    } catch {}
 
     const setup = {
       provider: {
@@ -171,6 +179,7 @@ class Evaluator {
       vars,
     };
 
+    // Call the API
     let latencyMs = 0;
     try {
       const startTime = Date.now();
@@ -180,9 +189,16 @@ class Evaluator {
       const endTime = Date.now();
       latencyMs = endTime - startTime;
 
+      let conversationLastInput = undefined;
+      if (renderedJson && Array.isArray(renderedJson)) {
+        const lastElt = renderedJson[renderedJson.length - 1];
+        // Use the `content` field if present (OpenAI chat format)
+        conversationLastInput = lastElt?.content || lastElt;
+      }
       this.conversations[conversationKey] = this.conversations[conversationKey] || [];
       this.conversations[conversationKey].push({
-        prompt: renderedPrompt,
+        prompt: renderedJson || renderedPrompt,
+        input: conversationLastInput || renderedJson || renderedPrompt,
         output: response.output || '',
       });
 
