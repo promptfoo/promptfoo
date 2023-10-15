@@ -1,4 +1,5 @@
 import invariant from 'tiny-invariant';
+import logger from './logger';
 import { DefaultEmbeddingProvider, DefaultGradingProvider } from './providers/openai';
 import { getNunjucksEngine } from './util';
 import { loadApiProvider } from './providers';
@@ -74,8 +75,15 @@ export async function matchesSimilarity(
   let provider = grading?.provider;
   let finalProvider = await getGradingProvider(provider, DefaultEmbeddingProvider);
 
+  if (typeof finalProvider.callEmbeddingApi !== 'function') {
+    logger.warn(
+      `Provider ${finalProvider.id} does not implement callEmbeddingApi for similarity check, falling back to default`,
+    );
+    finalProvider = DefaultEmbeddingProvider;
+  }
+
   invariant(
-    finalProvider.callEmbeddingApi,
+    typeof finalProvider.callEmbeddingApi === 'function',
     `Provider ${finalProvider.id} must implement callEmbeddingApi for similarity check`,
   );
 
