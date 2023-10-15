@@ -2,10 +2,10 @@ const fetch = require('node-fetch');
 
 class CustomApiProvider {
   constructor(options) {
-    // Provider ID can be overridden by the config file (e.g. when using multiple of the same provider)
+    // The caller may override Provider ID (e.g. when using multiple instances of the same provider)
     this.providerId = options.id || 'custom provider';
 
-    // options.config contains any custom options passed to the provider
+    // The config object contains any options passed to the provider in the config file.
     this.config = options.config;
   }
 
