@@ -136,12 +136,12 @@ export default function Datasets() {
                 <TableCell style={{ width: '20%', whiteSpace: 'pre-wrap' }}>
                   {(() => {
                     if (
-                      typeof testCasesData.testCases === 'string' ||
+                      !Array.isArray(testCasesData.testCases) ||
                       typeof testCasesData.testCases[0] === 'string'
                     ) {
                       return '';
                     }
-                    const allVarsKeys = (testCasesData.testCases as TestCase[]).flatMap(
+                    const allVarsKeys = ((testCasesData.testCases as TestCase[]) || []).flatMap(
                       (testCase) => Object.keys(testCase.vars || {}),
                     );
                     const uniqueVarsKeys = Array.from(new Set(allVarsKeys));
