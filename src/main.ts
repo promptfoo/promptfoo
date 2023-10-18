@@ -220,7 +220,7 @@ async function main() {
     )
     .option('-t, --tests <path>', 'Path to CSV with test cases')
     .option(
-      '-o, --output <path>',
+      '-o, --output <paths...>',
       'Path to output file (csv, txt, json, yaml, yml, html)',
       defaultConfig.outputPath,
     )

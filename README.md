@@ -209,7 +209,7 @@ You can also use `promptfoo` as a library in your project by importing the `eval
     tests: string | TestCase[]; // Path to a CSV file, or list of test cases
 
     defaultTest?: Omit<TestCase, 'description'>; // Optional: add default vars and assertions on test case
-    outputPath?: string; // Optional: write results to file
+    outputPath?: string | string[]; // Optional: write results to file
   }
 
   interface TestCase {
