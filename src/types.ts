@@ -2,7 +2,7 @@ export interface CommandLineOptions {
   // Shared with TestSuite
   prompts: string[];
   providers: string[];
-  output: string;
+  output: string[];
 
   // Shared with EvaluateOptions
   maxConcurrency: string;

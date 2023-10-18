@@ -20,6 +20,7 @@ import {
   readLatestResults,
   writeLatestResults,
   writeOutput,
+  writeMultipleOutputs,
 } from './util';
 import { DEFAULT_README, DEFAULT_YAML_CONFIG, DEFAULT_PROMPTS } from './onboarding';
 import { disableCache, clearCache } from './cache';
@@ -409,8 +410,12 @@ async function main() {
         cmdObj.share && config.sharing ? await createShareableUrl(summary, config) : null;
 
       if (cmdObj.output) {
+        if (typeof cmdObj.output === 'string') {
+          writeOutput(cmdObj.output, summary, config, shareableUrl);
+        } else if (Array.isArray(cmdObj.output)) {
+          writeMultipleOutputs(cmdObj.output, summary, config, shareableUrl);
+        }
         logger.info(chalk.yellow(`Writing output to ${cmdObj.output}`));
-        writeOutput(cmdObj.output, summary, config, shareableUrl);
       } else if (cmdObj.table && getLogLevel() !== 'debug') {
         // Output table by default
         const table = generateTable(summary, parseInt(cmdObj.tableCellMaxLength || '', 10));
