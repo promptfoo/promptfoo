@@ -188,7 +188,7 @@ export async function matchesLlmRubric(
     return {
       pass: false,
       score: 0,
-      reason: `Output is not valid JSON: ${resp.output}`,
+      reason: `llm-rubric produced malformed response: ${resp.output}`,
       tokensUsed: {
         total: resp.tokenUsage?.total || 0,
         prompt: resp.tokenUsage?.prompt || 0,
@@ -336,9 +336,9 @@ export async function matchesClosedQa(
     if (pass) {
       reason = 'The submission meets the criterion';
     } else if (resp.output.endsWith('N')) {
-      reason = `The submission does not meet the criterion: ${resp.output}`;
+      reason = `The submission does not meet the criterion:\n${resp.output}`;
     } else {
-      reason = 'Model grader received an ambiguous response';
+      reason = `Model grader produced a malformed response:\n${resp.output}`;
     }
     return {
       pass,

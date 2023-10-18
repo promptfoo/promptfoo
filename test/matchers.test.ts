@@ -284,7 +284,7 @@ describe('matchesClosedQa', () => {
 
     const result = await matchesClosedQa(input, expected, output, grading);
     expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe('The submission does not meet the criterion: foo bar N');
+    expect(result.reason).toBe('The submission does not meet the criterion:\nfoo bar N');
   });
 
   it('should throw an error when an error occurs', async () => {
