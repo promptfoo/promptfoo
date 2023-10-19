@@ -1078,6 +1078,7 @@ describe('runAssertion', () => {
       false,
       'Custom reason',
     ],
+    ['boolean Promise', jest.fn((output: string) => Promise.resolve(true)), true, 'Assertion passed'],
   ])(
     'should pass when the file:// assertion with .js file returns a %s',
     async (type, mockFn, expectedPass, expectedReason) => {
