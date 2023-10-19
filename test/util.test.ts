@@ -2,7 +2,13 @@ import * as fs from 'fs';
 
 import yaml from 'js-yaml';
 
-import { writeOutput, writeMultipleOutputs, readGlobalConfig, maybeRecordFirstRun, resetGlobalConfig } from '../src/util';
+import {
+  writeOutput,
+  writeMultipleOutputs,
+  readGlobalConfig,
+  maybeRecordFirstRun,
+  resetGlobalConfig,
+} from '../src/util';
 
 import type { EvaluateResult, EvaluateTable } from '../src/types';
 

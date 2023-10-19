@@ -142,9 +142,13 @@ export async function runAssertion(
       if (filePath.endsWith('.js') || filePath.endsWith('.cjs')) {
         const requiredModule = require(path.resolve(filePath));
         if (typeof requiredModule === 'function') {
-          valueFromScript = await Promise.resolve(requiredModule(output, { vars: test.vars || {} }));
+          valueFromScript = await Promise.resolve(
+            requiredModule(output, { vars: test.vars || {} }),
+          );
         } else if (requiredModule.default && typeof requiredModule.default === 'function') {
-          valueFromScript = await Promise.resolve(requiredModule.default(output, { vars: test.vars || {} }));
+          valueFromScript = await Promise.resolve(
+            requiredModule.default(output, { vars: test.vars || {} }),
+          );
         } else {
           throw new Error(
             `Assertion malformed: ${filePath} must export a function or have a default export as a function`,
