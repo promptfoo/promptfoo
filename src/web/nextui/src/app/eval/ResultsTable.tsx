@@ -230,12 +230,12 @@ function TableHeader({
   expandedText,
   resourceId,
 }: TruncatedTextProps & { smallText: string; expandedText?: string; resourceId?: string }) {
-  const [openPrompt, setOpen] = React.useState(false);
+  const [promptOpen, setPromptOpen] = React.useState(false);
   const handlePromptOpen = () => {
-    setOpen(true);
+    setPromptOpen(true);
   };
   const handlePromptClose = () => {
-    setOpen(false);
+    setPromptOpen(false);
   };
   return (
     <div>
@@ -248,7 +248,7 @@ function TableHeader({
             </span>
           </Tooltip>
           <EvalOutputPromptDialog
-            open={openPrompt}
+            open={promptOpen}
             onClose={handlePromptClose}
             prompt={expandedText}
           />
