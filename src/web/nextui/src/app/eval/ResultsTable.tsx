@@ -45,8 +45,8 @@ function formatRowOutput(output: EvaluateTableOutput | string) {
   return output;
 }
 
-function scoreToString(score: number) {
-  if (score === 0 || score === 1) {
+function scoreToString(score: number | null) {
+  if (score === null || score === 0 || score === 1) {
     // Don't show boolean scores.
     return '';
   }
@@ -365,7 +365,7 @@ export default function ResultsTable({
         columnHelper.accessor((row: EvalRow) => formatRowOutput(row.outputs[idx]), {
           id: `Prompt ${idx + 1}`,
           header: () => {
-            const pct = ((numGoodTests[idx] / body.length) * 100.0).toFixed(2);
+            const pct = numGoodTests[idx] && body.length ? ((numGoodTests[idx] / body.length) * 100.0).toFixed(2) : '0.00';
             const isHighestPassing =
               numGoodTests[idx] === highestPassingCount && highestPassingCount !== 0;
             const columnId = `Prompt ${idx + 1}`;
