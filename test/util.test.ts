@@ -2,7 +2,7 @@ import * as fs from 'fs';
 
 import yaml from 'js-yaml';
 
-import { writeOutput, readGlobalConfig, maybeRecordFirstRun, resetGlobalConfig } from '../src/util';
+import { writeOutput, writeMultipleOutputs, readGlobalConfig, maybeRecordFirstRun, resetGlobalConfig } from '../src/util';
 
 import type { EvaluateResult, EvaluateTable } from '../src/types';
 
@@ -203,6 +203,67 @@ describe('util', () => {
     writeOutput(outputPath, summary, config, shareableUrl);
 
     expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
+  });
+
+  test('writeOutput with json and txt output', () => {
+    const outputPath = ['output.json', 'output.txt'];
+    const results: EvaluateResult[] = [
+      {
+        success: true,
+        score: 1.0,
+        latencyMs: 1000,
+        provider: {
+          id: 'foo',
+        },
+        prompt: {
+          raw: 'Test prompt',
+          display: '[display] Test prompt',
+        },
+        response: {
+          output: 'Test output',
+        },
+        vars: {
+          var1: 'value1',
+          var2: 'value2',
+        },
+      },
+    ];
+    const table: EvaluateTable = {
+      head: {
+        prompts: [{ raw: 'Test prompt', display: '[display] Test prompt' }],
+        vars: ['var1', 'var2'],
+      },
+      body: [
+        {
+          outputs: [
+            { pass: true, score: 1.0, text: 'Test output', prompt: 'Test prompt', latencyMs: 1000 },
+          ],
+          vars: ['value1', 'value2'],
+        },
+      ],
+    };
+    const summary = {
+      version: 1,
+      stats: {
+        successes: 1,
+        failures: 1,
+        tokenUsage: {
+          total: 10,
+          prompt: 5,
+          completion: 5,
+          cached: 0,
+        },
+      },
+      results,
+      table,
+    };
+    const config = {
+      description: 'test',
+    };
+    const shareableUrl = null;
+    writeMultipleOutputs(outputPath, summary, config, shareableUrl);
+
+    expect(fs.writeFileSync).toHaveBeenCalledTimes(2);
   });
 
   describe('readCliConfig', () => {

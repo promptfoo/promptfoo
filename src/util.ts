@@ -88,6 +88,17 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
   }
 }
 
+export function writeMultipleOutputs(
+  outputPaths: string[],
+  results: EvaluateSummary,
+  config: Partial<UnifiedConfig>,
+  shareableUrl: string | null,
+): void {
+  for (const outputPath of outputPaths) {
+    writeOutput(outputPath, results, config, shareableUrl);
+  }
+}
+
 export function writeOutput(
   outputPath: string,
   results: EvaluateSummary,

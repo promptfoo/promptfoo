@@ -2,7 +2,7 @@ export interface CommandLineOptions {
   // Shared with TestSuite
   prompts: string[];
   providers: string[];
-  output: string;
+  output: string[];
 
   // Shared with EvaluateOptions
   maxConcurrency: string;
@@ -373,7 +373,7 @@ export interface TestSuiteConfig {
   defaultTest?: Omit<TestCase, 'description'>;
 
   // Path to write output. Writes to console/web viewer if not set.
-  outputPath?: string;
+  outputPath?: string | string[];
 
   // Determines whether or not sharing is enabled.
   sharing?: boolean;

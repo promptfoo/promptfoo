@@ -7,7 +7,7 @@ import { disableCache } from './cache';
 import { evaluate as doEvaluate } from './evaluator';
 import { loadApiProviders } from './providers';
 import { readTests } from './testCases';
-import { writeLatestResults, writeOutput } from './util';
+import { writeLatestResults, writeMultipleOutputs, writeOutput } from './util';
 import type { EvaluateOptions, TestSuite, EvaluateTestSuite, ProviderOptions } from './types';
 
 export * from './types';
@@ -61,7 +61,11 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
   const ret = await doEvaluate(constructedTestSuite, options);
 
   if (testSuite.outputPath) {
-    writeOutput(testSuite.outputPath, ret, testSuite, null);
+    if (typeof testSuite.outputPath === 'string') {
+      writeOutput(testSuite.outputPath, ret, testSuite, null);
+    } else if (Array.isArray(testSuite.outputPath)) {
+      writeMultipleOutputs(testSuite.outputPath, ret, testSuite, null);
+    }
   }
 
   if (testSuite.writeLatestResults) {
