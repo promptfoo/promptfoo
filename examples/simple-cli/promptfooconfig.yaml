@@ -1,5 +1,7 @@
 description: A translator built with LLM
-prompts: [prompts.txt]
+prompts:
+  - prompts.txt
+  - :) hehe hi
 providers: [openai:gpt-3.5-turbo]
 tests:
   - vars:

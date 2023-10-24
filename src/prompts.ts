@@ -1,8 +1,11 @@
 import * as path from 'path';
 import * as fs from 'fs';
 
+import chalk from 'chalk';
 import invariant from 'tiny-invariant';
 import { globSync } from 'glob';
+
+import logger from './logger';
 
 import type {
   UnifiedConfig,
@@ -60,6 +63,10 @@ export function readProviderPromptMap(
   return ret;
 }
 
+function looksKindaLikeAFilename(str: string): boolean {
+  return str.includes('/') || str.includes('\\') || str.charAt(str.length - 3) === '.' || str.charAt(str.length - 4) === '.';
+}
+
 enum PromptInputType {
   STRING = 1,
   ARRAY = 2,
@@ -86,11 +93,13 @@ export function readPrompts(
   } else if (Array.isArray(promptPathOrGlobs)) {
     // List of paths to prompt files or raw prompts
     promptPaths = promptPathOrGlobs.flatMap((pathOrGlob) => {
-      // Check if it's a raw prompt
-      if (!pathOrGlob.includes('/') && !pathOrGlob.includes('\\')) {
+      /*
+      if (!pathOrGlob.includes('/') && !pathOrGlob.includes('\\') && !pathOrGlob.includes('.')) {
+        // It's raw text
         promptContents.push({ raw: pathOrGlob, display: pathOrGlob });
         return [];
       }
+      */
 
       resolvedPath = path.resolve(basePath, pathOrGlob);
       resolvedPathToDisplay.set(resolvedPath, pathOrGlob);
@@ -116,8 +125,24 @@ export function readPrompts(
     const parsedPath = path.parse(promptPathRaw);
     const [filename, functionName] = parsedPath.base.split(':');
     const promptPath = path.join(parsedPath.dir, filename);
-    const stat = fs.statSync(promptPath);
-    if (stat.isDirectory()) {
+    let stat;
+    let usedRaw = false;
+    try {
+      stat = fs.statSync(promptPath);
+    } catch (err) {
+      if (process.env.PROMPTFOO_STRICT_FILES) {
+        throw err;
+      }
+      // If the path doesn't exist, it's probably a raw prompt
+      promptContents.push({ raw: promptPathRaw, display: promptPathRaw });
+      usedRaw = true;
+    }
+    if (usedRaw) {
+      // If looks like a filepath, print a warning
+      if (looksKindaLikeAFilename(promptPathRaw)) {
+        logger.warn(`Could not find prompt file: "${chalk.gray(promptPathRaw)}". Treating it as raw text.`);
+      }
+    } else if (stat?.isDirectory()) {
       // FIXME(ian): Make directory handling share logic with file handling.
       const filesInDirectory = fs.readdirSync(promptPath);
       const fileContents = filesInDirectory.map((fileName) => {
