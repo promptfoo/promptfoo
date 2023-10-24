@@ -17,6 +17,7 @@ import {
   maybeReadConfig,
   printBorder,
   readConfig,
+  readFilters,
   readLatestResults,
   writeLatestResults,
   writeOutput,
@@ -38,7 +39,7 @@ import type {
   TestSuite,
   UnifiedConfig,
 } from './types';
-import { generateTable, wrapTable } from './table';
+import { generateTable } from './table';
 import { createShareableUrl } from './share';
 
 function createDummyFiles(directory: string | null) {
@@ -372,6 +373,7 @@ async function main() {
         tests: parsedTests,
         scenarios: config.scenarios,
         defaultTest,
+        filters: readFilters(fileConfig.filters || defaultConfig.filters || {}, basePath),
       };
 
       let maxConcurrency = parseInt(cmdObj.maxConcurrency || '', 10);

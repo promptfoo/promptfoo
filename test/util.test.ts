@@ -1,4 +1,7 @@
 import * as fs from 'fs';
+import * as path from 'path';
+
+import { globSync } from 'glob';
 
 import yaml from 'js-yaml';
 
@@ -8,9 +11,14 @@ import {
   readGlobalConfig,
   maybeRecordFirstRun,
   resetGlobalConfig,
+  readFilters,
 } from '../src/util';
 
 import type { EvaluateResult, EvaluateTable } from '../src/types';
+
+jest.mock('glob', () => ({
+  globSync: jest.fn(),
+}));
 
 jest.mock('fs', () => ({
   readFileSync: jest.fn(),
@@ -328,5 +336,16 @@ describe('util', () => {
       expect(fs.readFileSync).toHaveBeenCalledTimes(1);
       expect(result).toBe(false);
     });
+  });
+
+  test('readFilters', () => {
+    const mockFilter = jest.fn();
+    jest.doMock(path.resolve('filter.js'), () => mockFilter, { virtual: true });
+
+    (globSync as jest.Mock).mockImplementation((pathOrGlob) => [pathOrGlob]);
+
+    const filters = readFilters({ testFilter: 'filter.js' });
+
+    expect(filters.testFilter).toBe(mockFilter);
   });
 });

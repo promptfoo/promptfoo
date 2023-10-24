@@ -7,20 +7,22 @@ import $RefParser from '@apidevtools/json-schema-ref-parser';
 import yaml from 'js-yaml';
 import nunjucks from 'nunjucks';
 import { stringify } from 'csv-stringify/sync';
+import { globSync } from 'glob';
 
 import logger from './logger';
 import { getDirectory } from './esm';
 
 import type {
+  EvalWithMetadata,
   EvaluateSummary,
   EvaluateTableOutput,
-  UnifiedConfig,
+  NunjucksFilterMap,
   PromptWithMetadata,
+  ResultsFile,
   TestCase,
   TestCasesWithMetadata,
-  ResultsFile,
   TestCasesWithMetadataPrompt,
-  EvalWithMetadata,
+  UnifiedConfig,
 } from './types';
 
 let globalConfigCache: any = null;
@@ -453,11 +455,31 @@ export function getEvalsWithPredicate(
   return ret;
 }
 
-export function getNunjucksEngine() {
-  nunjucks.configure({
+export function readFilters(filters: Record<string, string>, basePath: string = ''): NunjucksFilterMap {
+  const ret: NunjucksFilterMap = {};
+  for (const [name, filterPath] of Object.entries(filters)) {
+    const globPath = path.join(basePath, filterPath);
+    const filePaths = globSync(globPath);
+    for (const filePath of filePaths) {
+      const finalPath = path.resolve(filePath);
+      const importedModule = require(finalPath);
+      ret[name] = importedModule.default || importedModule;
+    }
+  }
+  return ret;
+}
+
+export function getNunjucksEngine(filters?: NunjucksFilterMap) {
+  const env = nunjucks.configure({
     autoescape: false,
   });
-  return nunjucks;
+
+  if (filters) {
+    for (const [name, filter] of Object.entries(filters)) {
+      env.addFilter(name, filter);
+    }
+  }
+  return env;
 }
 
 export function printBorder() {
