@@ -84,10 +84,13 @@ export function readPrompts(
     resolvedPathToDisplay.set(resolvedPath, promptPathOrGlobs);
     inputType = PromptInputType.STRING;
   } else if (Array.isArray(promptPathOrGlobs)) {
-    // List of paths to prompt files
+    // List of paths to prompt files or raw prompts
     promptPaths = promptPathOrGlobs.flatMap((pathOrGlob) => {
-      // Could be a raw prompt
-      // TODO: implement
+      // Check if it's a raw prompt
+      if (!pathOrGlob.includes('/') && !pathOrGlob.includes('\\')) {
+        promptContents.push({ raw: pathOrGlob, display: pathOrGlob });
+        return [];
+      }
 
       resolvedPath = path.resolve(basePath, pathOrGlob);
       resolvedPathToDisplay.set(resolvedPath, pathOrGlob);
