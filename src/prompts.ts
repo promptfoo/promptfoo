@@ -64,6 +64,7 @@ enum PromptInputType {
   STRING = 1,
   ARRAY = 2,
   NAMED = 3,
+  RAW = 4,
 }
 
 export function readPrompts(
@@ -77,6 +78,9 @@ export function readPrompts(
   let resolvedPath: string | undefined;
   const resolvedPathToDisplay = new Map<string, string>();
   if (typeof promptPathOrGlobs === 'string') {
+    // Could be a raw prompt
+    // TODO: implement
+
     // Path to a prompt file
     resolvedPath = path.resolve(basePath, promptPathOrGlobs);
     promptPaths = [resolvedPath];
