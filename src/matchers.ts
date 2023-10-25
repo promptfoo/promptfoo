@@ -150,8 +150,8 @@ export async function matchesLlmRubric(
   }
 
   const prompt = nunjucks.renderString(grading.rubricPrompt || DEFAULT_GRADING_PROMPT, {
-    output: output.replace(/\n/g, '\\n').replace(/"/g, '\\"'),
-    rubric: expected.replace(/\n/g, '\\n').replace(/"/g, '\\"'),
+    output: JSON.stringify(output).slice(1, -1),
+    rubric: JSON.stringify(expected).slice(1, -1),
     ...fromVars(vars),
   });
 
@@ -212,9 +212,9 @@ export async function matchesFactuality(
   }
 
   const prompt = nunjucks.renderString(grading.rubricPrompt || OPENAI_FACTUALITY_PROMPT, {
-    input: input.replace(/\n/g, '\\n').replace(/"/g, '\\"'),
-    ideal: expected.replace(/\n/g, '\\n').replace(/"/g, '\\"'),
-    completion: output.replace(/\n/g, '\\n').replace(/"/g, '\\"'),
+    input: JSON.stringify(input).slice(1, -1),
+    ideal: JSON.stringify(expected).slice(1, -1),
+    completion: JSON.stringify(output).slice(1, -1),
     ...fromVars(vars),
   });
 
@@ -308,9 +308,9 @@ export async function matchesClosedQa(
   }
 
   const prompt = nunjucks.renderString(grading.rubricPrompt || OPENAI_CLOSED_QA_PROMPT, {
-    input: input.replace(/\n/g, '\\n').replace(/"/g, '\\"'),
-    criteria: expected.replace(/\n/g, '\\n').replace(/"/g, '\\"'),
-    completion: output.replace(/\n/g, '\\n').replace(/"/g, '\\"'),
+    input: JSON.stringify(input).slice(1, -1),
+    criteria: JSON.stringify(expected).slice(1, -1),
+    completion: JSON.stringify(output).slice(1, -1),
     ...fromVars(vars),
   });
 

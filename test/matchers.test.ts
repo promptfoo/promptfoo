@@ -301,6 +301,32 @@ describe('matchesClosedQa', () => {
       'An error occurred',
     );
   });
+
+  it('should handle input, criteria, and completion that need escaping', async () => {
+    const input = 'Input "text" with \\ escape characters and \\"nested\\" escapes';
+    const expected = 'Expected "output" with \\\\ escape characters and \\"nested\\" escapes';
+    const output = 'Sample "output" with \\\\ escape characters and \\"nested\\" escapes';
+    const grading = {};
+
+    let isJson = false;
+    jest.spyOn(DefaultGradingProvider, 'callApi').mockImplementation((prompt) => {
+      try {
+        JSON.parse(prompt);
+        isJson = true;
+      } catch (err) {
+        isJson = false;
+      }
+      return Promise.resolve({
+        output: 'foo \n \n bar\n Y Y',
+        tokenUsage: { total: 10, prompt: 5, completion: 5 },
+      });
+    });
+
+    const result = await matchesClosedQa(input, expected, output, grading);
+    expect(isJson).toBeTruthy();
+    expect(result.pass).toBeTruthy();
+    expect(result.reason).toBe('The submission meets the criterion');
+  });
 });
 
 describe('getGradingProvider', () => {
