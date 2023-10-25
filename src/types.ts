@@ -342,7 +342,7 @@ export interface TestSuite {
   defaultTest?: Partial<TestCase>;
 
   // Nunjucks filters
-  filters?: NunjucksFilterMap;
+  nunjucksFilters?: NunjucksFilterMap;
 
   // Envar overrides
   env?: EnvOverrides;
@@ -386,7 +386,7 @@ export interface TestSuiteConfig {
   sharing?: boolean;
 
   // Nunjucks filters
-  filters?: Record<string, FilePath>;
+  nunjucksFilters?: Record<string, FilePath>;
 
   // Envar overrides
   env?: EnvOverrides;

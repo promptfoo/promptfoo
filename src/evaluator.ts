@@ -31,7 +31,7 @@ interface RunEvalOptions {
   delay: number;
 
   test: AtomicTestCase;
-  filters?: NunjucksFilterMap;
+  nunjucksFilters?: NunjucksFilterMap;
 
   includeProviderId?: boolean;
 
@@ -150,7 +150,7 @@ class Evaluator {
     test,
     includeProviderId,
     delay,
-    filters,
+    nunjucksFilters: filters,
   }: RunEvalOptions): Promise<EvaluateResult> {
     // Use the original prompt to set the display, not renderedPrompt
     let promptDisplay = prompt.display;
@@ -466,7 +466,7 @@ class Evaluator {
                   raw: prependToPrompt + prompt.raw + appendToPrompt,
                 },
                 test: { ...testCase, vars, options: testCase.options },
-                filters: testSuite.filters,
+                nunjucksFilters: testSuite.nunjucksFilters,
                 includeProviderId: testSuite.providers.length > 1,
                 rowIndex,
                 colIndex,
