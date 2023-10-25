@@ -7,7 +7,7 @@ import { disableCache } from './cache';
 import { evaluate as doEvaluate } from './evaluator';
 import { loadApiProviders } from './providers';
 import { readTests } from './testCases';
-import { writeLatestResults, writeMultipleOutputs, writeOutput } from './util';
+import { readFilters, writeLatestResults, writeMultipleOutputs, writeOutput } from './util';
 import type { EvaluateOptions, TestSuite, EvaluateTestSuite, ProviderOptions } from './types';
 
 export * from './types';
@@ -21,6 +21,8 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
       env: testSuite.env,
     }),
     tests: await readTests(testSuite.tests),
+
+    nunjucksFilters: readFilters(testSuite.nunjucksFilters || {}),
 
     // Full prompts expected (not filepaths)
     prompts: testSuite.prompts.map((promptContent) => ({

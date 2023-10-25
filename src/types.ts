@@ -1,8 +1,10 @@
+export type FilePath = string;
+
 export interface CommandLineOptions {
   // Shared with TestSuite
-  prompts: string[];
-  providers: string[];
-  output: string[];
+  prompts: FilePath[];
+  providers: FilePath[];
+  output: FilePath[];
 
   // Shared with EvaluateOptions
   maxConcurrency: string;
@@ -10,9 +12,9 @@ export interface CommandLineOptions {
   delay: string;
 
   // Command line only
-  vars?: string;
-  tests?: string;
-  config?: string;
+  vars?: FilePath;
+  tests?: FilePath;
+  config?: FilePath;
   verbose?: boolean;
   grader?: string;
   view?: string;
@@ -145,7 +147,7 @@ export interface PromptWithMetadata {
   recentEvalFilepath: string;
   evals: {
     id: string;
-    filePath: string;
+    filePath: FilePath;
     datasetId: string;
     metrics: Prompt['metrics'];
   }[];
@@ -266,15 +268,15 @@ export interface TestCasesWithMetadataPrompt {
   prompt: Prompt;
   id: string;
   evalId: string;
-  evalFilepath: string;
+  evalFilepath: FilePath;
 }
 
 export interface TestCasesWithMetadata {
   id: string;
-  testCases: string | string[] | TestCase[];
+  testCases: FilePath | FilePath[] | TestCase[];
   recentEvalDate: Date;
   recentEvalId: string;
-  recentEvalFilepath: string;
+  recentEvalFilepath: FilePath;
   count: number;
   prompts: TestCasesWithMetadataPrompt[];
 }
@@ -313,6 +315,8 @@ export interface AtomicTestCase<Vars = Record<string, string | object>> extends 
   vars?: Record<string, string | object>;
 }
 
+export type NunjucksFilterMap = Record<string, (...args: any[]) => string>;
+
 // The test suite defines the "knobs" that we are tuning in prompt engineering: providers and prompts
 export interface TestSuite {
   // Optional description of what your LLM is trying to do
@@ -336,6 +340,9 @@ export interface TestSuite {
 
   // Default test case config
   defaultTest?: Partial<TestCase>;
+
+  // Nunjucks filters
+  nunjucksFilters?: NunjucksFilterMap;
 
   // Envar overrides
   env?: EnvOverrides;
@@ -361,10 +368,10 @@ export interface TestSuiteConfig {
     | ProviderFunction;
 
   // One or more prompt files to load
-  prompts: string | string[];
+  prompts: FilePath | FilePath[];
 
   // Path to a test file, OR list of LLM prompt variations (aka "test case")
-  tests: string | string[] | TestCase[];
+  tests: FilePath | FilePath[] | TestCase[];
 
   // Scenarios, groupings of data and tests to be evaluated
   scenarios?: Scenario[];
@@ -373,10 +380,13 @@ export interface TestSuiteConfig {
   defaultTest?: Omit<TestCase, 'description'>;
 
   // Path to write output. Writes to console/web viewer if not set.
-  outputPath?: string | string[];
+  outputPath?: FilePath | FilePath[];
 
   // Determines whether or not sharing is enabled.
   sharing?: boolean;
+
+  // Nunjucks filters
+  nunjucksFilters?: Record<string, FilePath>;
 
   // Envar overrides
   env?: EnvOverrides;
@@ -389,7 +399,7 @@ export type UnifiedConfig = TestSuiteConfig & {
 
 export interface EvalWithMetadata {
   id: string;
-  filePath: string;
+  filePath: FilePath;
   date: Date;
   config: Partial<UnifiedConfig>;
   results: EvaluateSummary;

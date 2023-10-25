@@ -1,0 +1,11 @@
+prompts: [prompts.txt]
+providers: [openai:gpt-3.5-turbo]
+nunjucksFilters:
+  allcaps: ./allcaps.js
+tests:
+  - vars:
+      language: French
+      body: Hello world
+  - vars:
+      language: French
+      body: I'm hungry

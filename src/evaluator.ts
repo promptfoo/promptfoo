@@ -13,15 +13,16 @@ import { getNunjucksEngine, sha256 } from './util';
 import type { SingleBar } from 'cli-progress';
 import type {
   ApiProvider,
+  AtomicTestCase,
   EvaluateOptions,
   EvaluateResult,
   EvaluateStats,
   EvaluateSummary,
   EvaluateTable,
-  TestSuite,
+  NunjucksFilterMap,
   Prompt,
   TestCase,
-  AtomicTestCase,
+  TestSuite,
 } from './types';
 
 interface RunEvalOptions {
@@ -30,6 +31,7 @@ interface RunEvalOptions {
   delay: number;
 
   test: AtomicTestCase;
+  nunjucksFilters?: NunjucksFilterMap;
 
   includeProviderId?: boolean;
 
@@ -39,8 +41,6 @@ interface RunEvalOptions {
 }
 
 export const DEFAULT_MAX_CONCURRENCY = 4;
-
-const nunjucks = getNunjucksEngine();
 
 function generateVarCombinations(
   vars: Record<string, string | string[] | any>,
@@ -74,7 +74,9 @@ function generateVarCombinations(
 export async function renderPrompt(
   prompt: Prompt,
   vars: Record<string, string | object>,
+  nunjucksFilters?: NunjucksFilterMap,
 ): Promise<string> {
+  const nunjucks = getNunjucksEngine(nunjucksFilters);
   let basePrompt = prompt.raw;
   if (prompt.function) {
     const result = await prompt.function({ vars });
@@ -148,6 +150,7 @@ class Evaluator {
     test,
     includeProviderId,
     delay,
+    nunjucksFilters: filters,
   }: RunEvalOptions): Promise<EvaluateResult> {
     // Use the original prompt to set the display, not renderedPrompt
     let promptDisplay = prompt.display;
@@ -161,7 +164,7 @@ class Evaluator {
     vars._conversation = this.conversations[conversationKey] || [];
 
     // Render the prompt
-    const renderedPrompt = await renderPrompt(prompt, vars);
+    const renderedPrompt = await renderPrompt(prompt, vars, filters);
 
     let renderedJson = undefined;
     try {
@@ -463,6 +466,7 @@ class Evaluator {
                   raw: prependToPrompt + prompt.raw + appendToPrompt,
                 },
                 test: { ...testCase, vars, options: testCase.options },
+                nunjucksFilters: testSuite.nunjucksFilters,
                 includeProviderId: testSuite.providers.length > 1,
                 rowIndex,
                 colIndex,
