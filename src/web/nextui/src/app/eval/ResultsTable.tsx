@@ -351,7 +351,7 @@ export default function ResultsTable({
               />
             ),
             cell: (info: CellContext<EvalRow, string>) => (
-              <TruncatedText text={info.getValue()} maxLength={maxTextLength} />
+              <TruncatedText className="var-cell" text={info.getValue()} maxLength={maxTextLength} />
             ),
             // Minimize the size of Variable columns.
             size: 50,

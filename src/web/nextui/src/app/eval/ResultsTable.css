@@ -72,6 +72,10 @@ table.results-table,
   vertical-align: middle;
 }
 
+.results-table .var-cell {
+  white-space: pre-wrap;
+}
+
 .results-table tr .cell {
 }
 
