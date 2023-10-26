@@ -56,9 +56,10 @@ function scoreToString(score: number | null) {
 interface TruncatedTextProps {
   text: string | number;
   maxLength: number;
+  className?: string;
 }
 
-function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
+function TruncatedText({ text: rawText, maxLength, className }: TruncatedTextProps) {
   const [isTruncated, setIsTruncated] = React.useState<boolean>(true);
   let text = typeof rawText === 'string' ? rawText : JSON.stringify(rawText);
   text = text.replace(/\n/g, '<br>');
@@ -69,17 +70,17 @@ function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
 
   const renderTruncatedText = () => {
     if (text.length <= maxLength) {
-      return <span dangerouslySetInnerHTML={{ __html: text }} />;
+      return <span dangerouslySetInnerHTML={{ __html: text }} className={className} />;
     }
     if (isTruncated) {
       return (
-        <span style={{ cursor: 'pointer' }} onClick={toggleTruncate}>
+        <span style={{ cursor: 'pointer' }} onClick={toggleTruncate} className={className}>
           <span dangerouslySetInnerHTML={{ __html: text.substring(0, maxLength) }} /> ...
         </span>
       );
     } else {
       return (
-        <span style={{ cursor: 'pointer' }} onClick={toggleTruncate}>
+        <span style={{ cursor: 'pointer' }} onClick={toggleTruncate} className={className}>
           <span dangerouslySetInnerHTML={{ __html: text }} />
         </span>
       );
