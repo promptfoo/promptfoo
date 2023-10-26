@@ -161,7 +161,9 @@ class Evaluator {
     // Set up the special _conversation variable
     const vars = test.vars || {};
     const conversationKey = `${provider.id()}:${prompt.id}`;
-    vars._conversation = this.conversations[conversationKey] || [];
+    if (!process.env.PROMPTFOO_DISABLE_CONVERSATION_VAR) {
+      vars._conversation = this.conversations[conversationKey] || [];
+    }
 
     // Render the prompt
     const renderedPrompt = await renderPrompt(prompt, vars, filters);
