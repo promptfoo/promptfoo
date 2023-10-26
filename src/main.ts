@@ -221,11 +221,7 @@ async function main() {
       defaultConfig?.commandLineOptions?.vars,
     )
     .option('-t, --tests <path>', 'Path to CSV with test cases')
-    .option(
-      '-o, --output <paths...>',
-      'Path to output file (csv, txt, json, yaml, yml, html)',
-      defaultConfig.outputPath,
-    )
+    .option('-o, --output <paths...>', 'Path to output file (csv, txt, json, yaml, yml, html)')
     .option(
       '-j, --max-concurrency <number>',
       'Maximum number of concurrent API calls',
@@ -411,13 +407,14 @@ async function main() {
       const shareableUrl =
         cmdObj.share && config.sharing ? await createShareableUrl(summary, config) : null;
 
-      if (cmdObj.output) {
-        if (typeof cmdObj.output === 'string') {
-          writeOutput(cmdObj.output, summary, config, shareableUrl);
-        } else if (Array.isArray(cmdObj.output)) {
-          writeMultipleOutputs(cmdObj.output, summary, config, shareableUrl);
+      const outputPath = cmdObj.output || fileConfig.outputPath || defaultConfig.outputPath;
+      if (outputPath) {
+        if (typeof outputPath === 'string') {
+          writeOutput(outputPath, summary, config, shareableUrl);
+        } else if (Array.isArray(outputPath)) {
+          writeMultipleOutputs(outputPath, summary, config, shareableUrl);
         }
-        logger.info(chalk.yellow(`Writing output to ${cmdObj.output}`));
+        logger.info(chalk.yellow(`Writing output to ${outputPath}`));
       } else if (cmdObj.table && getLogLevel() !== 'debug') {
         // Output table by default
         const table = generateTable(summary, parseInt(cmdObj.tableCellMaxLength || '', 10));
