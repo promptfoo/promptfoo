@@ -112,6 +112,12 @@ export function writeOutput(
   const outputToSimpleString = (output: EvaluateTableOutput) =>
     `${output.pass ? '[PASS]' : '[FAIL]'} (${output.score.toFixed(2)}) ${output.text}`;
 
+  // Ensure the directory exists
+  const outputDir = path.dirname(outputPath);
+  if (!fs.existsSync(outputDir)) {
+    fs.mkdirSync(outputDir, { recursive: true });
+  }
+
   if (outputExtension === 'csv') {
     const csvOutput = stringify([
       [...results.table.head.prompts, ...results.table.head.vars],
