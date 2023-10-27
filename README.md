@@ -292,6 +292,17 @@ We support OpenAI's API as well as a number of open-source models. It's also to 
 
 ## Development
 
+Here's how to build and run locally:
+
+```sh
+git clone https://github.com/promptfoo/promptfoo.git
+cd promptfoo
+
+npm i
+cd path/to/experiment-with-promptfoo   # contains your promptfooconfig.yaml
+npx path/to/promptfoo-source eval
+```
+
 Contributions are welcome! Please feel free to submit a pull request or open an issue.
 
 `promptfoo` includes several npm scripts to make development easier and more efficient. To use these scripts, run `npm run <script_name>` in the project directory.
