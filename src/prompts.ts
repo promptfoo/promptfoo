@@ -63,7 +63,7 @@ export function readProviderPromptMap(
   return ret;
 }
 
-function looksKindaLikeAFilename(str: string): boolean {
+function looksKindaLikeAFilepath(str: string): boolean {
   return !str.includes('\n') && (str.includes('/') || str.includes('\\') || str.includes('*') || str.charAt(str.length - 3) === '.' || str.charAt(str.length - 4) === '.');
 }
 
@@ -78,44 +78,54 @@ export function readPrompts(
   promptPathOrGlobs: string | string[] | Record<string, string>,
   basePath: string = '',
 ): Prompt[] {
-  let promptPaths: string[] = [];
+  let promptPathInfos: {raw: string, resolved: string}[] = [];
   let promptContents: Prompt[] = [];
 
   let inputType: PromptInputType | undefined;
   let resolvedPath: string | undefined;
+  const forceLoadFromFile = new Set<string>();
   const resolvedPathToDisplay = new Map<string, string>();
-  console.log('promptOrGlobs', promptPathOrGlobs);
   if (typeof promptPathOrGlobs === 'string') {
     // Path to a prompt file
+    if (promptPathOrGlobs.startsWith('file://')) {
+      promptPathOrGlobs = promptPathOrGlobs.slice('file://'.length);
+      // Ensure this path is not used as a raw prompt.
+      forceLoadFromFile.add(promptPathOrGlobs);
+    }
     resolvedPath = path.resolve(basePath, promptPathOrGlobs);
-    promptPaths = [resolvedPath];
+    promptPathInfos = [{raw: promptPathOrGlobs, resolved: resolvedPath}];
     resolvedPathToDisplay.set(resolvedPath, promptPathOrGlobs);
     inputType = PromptInputType.STRING;
   } else if (Array.isArray(promptPathOrGlobs)) {
     // List of paths to prompt files or raw prompts
-    promptPaths = promptPathOrGlobs.flatMap((pathOrGlob) => {
+    promptPathInfos = promptPathOrGlobs.flatMap((pathOrGlob) => {
+      if (pathOrGlob.startsWith('file://')) {
+        pathOrGlob = pathOrGlob.slice('file://'.length);
+        // Ensure this path is not used as a raw prompt.
+        forceLoadFromFile.add(pathOrGlob);
+      }
       resolvedPath = path.resolve(basePath, pathOrGlob);
       resolvedPathToDisplay.set(resolvedPath, pathOrGlob);
       const globbedPaths = globSync(resolvedPath);
       if (globbedPaths.length > 0) {
-        return globbedPaths;
+        return globbedPaths.map((globbedPath) => ({raw: pathOrGlob, resolved: globbedPath}));
       }
       // globSync will return empty if no files match, which is the case when the path includes a function name like: file.js:func
-      return [resolvedPath];
+      return [{raw: pathOrGlob, resolved: resolvedPath}];
     });
     inputType = PromptInputType.ARRAY;
   } else if (typeof promptPathOrGlobs === 'object') {
     // Display/contents mapping
-    promptPaths = Object.keys(promptPathOrGlobs).map((key) => {
+    promptPathInfos = Object.keys(promptPathOrGlobs).map((key) => {
       resolvedPath = path.resolve(basePath, key);
-      resolvedPathToDisplay.set(resolvedPath, promptPathOrGlobs[key]);
-      return resolvedPath;
+      resolvedPathToDisplay.set(resolvedPath, (promptPathOrGlobs as Record<string, string>)[key]);
+      return {raw: key, resolved: resolvedPath};
     });
     inputType = PromptInputType.NAMED;
   }
 
-  for (const promptPathRaw of promptPaths) {
-    const parsedPath = path.parse(promptPathRaw);
+  for (const promptPathInfo of promptPathInfos) {
+    const parsedPath = path.parse(promptPathInfo.resolved);
     let filename, functionName;
     if (parsedPath.base.includes(':') && (parsedPath.ext === 'js' || parsedPath.ext === 'cjs')) {
       [filename, functionName] = parsedPath.base.split(':');
@@ -128,16 +138,16 @@ export function readPrompts(
     try {
       stat = fs.statSync(promptPath);
     } catch (err) {
-      if (process.env.PROMPTFOO_STRICT_FILES) {
+      if (process.env.PROMPTFOO_STRICT_FILES || forceLoadFromFile.has(filename)) {
         throw err;
       }
       // If the path doesn't exist, it's probably a raw prompt
-      promptContents.push({ raw: promptPathRaw, display: promptPathRaw });
+      promptContents.push({ raw: promptPathInfo.raw, display: promptPathInfo.raw });
       usedRaw = true;
     }
     if (usedRaw) {
-      // If looks like a filepath, print a warning
-      if (looksKindaLikeAFilename(promptPath)) {
+      if (looksKindaLikeAFilepath(promptPathInfo.raw)) {
+        // It looks like a filepath, print a warning
         logger.warn(`Could not find prompt file: "${chalk.red(filename)}". Treating it as a text prompt.`);
       }
     } else if (stat?.isDirectory()) {

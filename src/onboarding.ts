@@ -20,7 +20,11 @@ If you prefer, you can break prompts into multiple files (make sure to edit prom
 
 export const DEFAULT_YAML_CONFIG = `# This configuration runs each prompt through a series of example inputs and checks if they meet requirements.
 
-prompts: [prompts.txt]
+prompts:
+  - "Example prompt 1"
+  - "Example prompt 2"
+  # You can also import prompts from file:
+  - file://prompts.txt
 providers: [openai:gpt-3.5-turbo-0613]
 tests:
   - description: First test case - automatic review
