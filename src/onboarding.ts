@@ -23,6 +23,9 @@ export const DEFAULT_YAML_CONFIG = `# This configuration runs each prompt throug
 prompts:
   - "Example prompt 1"
   - "Example prompt 2"
+  - |-
+    Example prompt 3
+    This is a multi-line prompt
   # You can also import prompts from file:
   - file://prompts.txt
 providers: [openai:gpt-3.5-turbo-0613]
