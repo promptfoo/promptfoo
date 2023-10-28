@@ -63,7 +63,7 @@ export function readProviderPromptMap(
   return ret;
 }
 
-function looksKindaLikeAFilepath(str: string): boolean {
+function maybeFilepath(str: string): boolean {
   return !str.includes('\n') && (str.includes('/') || str.includes('\\') || str.includes('*') || str.charAt(str.length - 3) === '.' || str.charAt(str.length - 4) === '.');
 }
 
@@ -71,7 +71,6 @@ enum PromptInputType {
   STRING = 1,
   ARRAY = 2,
   NAMED = 3,
-  RAW = 4,
 }
 
 export function readPrompts(
@@ -97,11 +96,10 @@ export function readPrompts(
     resolvedPathToDisplay.set(resolvedPath, promptPathOrGlobs);
     inputType = PromptInputType.STRING;
   } else if (Array.isArray(promptPathOrGlobs)) {
-    // List of paths to prompt files or raw prompts
     promptPathInfos = promptPathOrGlobs.flatMap((pathOrGlob) => {
       if (pathOrGlob.startsWith('file://')) {
         pathOrGlob = pathOrGlob.slice('file://'.length);
-        // Ensure this path is not used as a raw prompt.
+        // This path is explicitly marked as a file, ensure that it's not used as a raw prompt.
         forceLoadFromFile.add(pathOrGlob);
       }
       resolvedPath = path.resolve(basePath, pathOrGlob);
@@ -146,8 +144,8 @@ export function readPrompts(
       usedRaw = true;
     }
     if (usedRaw) {
-      if (looksKindaLikeAFilepath(promptPathInfo.raw)) {
-        // It looks like a filepath, print a warning
+      if (maybeFilepath(promptPathInfo.raw)) {
+        // It looks like a filepath, so falling back could be a mistake. Print a warning
         logger.warn(`Could not find prompt file: "${chalk.red(filename)}". Treating it as a text prompt.`);
       }
     } else if (stat?.isDirectory()) {
