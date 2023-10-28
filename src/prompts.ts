@@ -64,7 +64,7 @@ export function readProviderPromptMap(
 }
 
 function looksKindaLikeAFilename(str: string): boolean {
-  return str.includes('/') || str.includes('\\') || str.charAt(str.length - 3) === '.' || str.charAt(str.length - 4) === '.';
+  return !str.includes('\n') && (str.includes('/') || str.includes('\\') || str.includes('*') || str.charAt(str.length - 3) === '.' || str.charAt(str.length - 4) === '.');
 }
 
 enum PromptInputType {
@@ -84,6 +84,7 @@ export function readPrompts(
   let inputType: PromptInputType | undefined;
   let resolvedPath: string | undefined;
   const resolvedPathToDisplay = new Map<string, string>();
+  console.log('promptOrGlobs', promptPathOrGlobs);
   if (typeof promptPathOrGlobs === 'string') {
     // Path to a prompt file
     resolvedPath = path.resolve(basePath, promptPathOrGlobs);
@@ -93,14 +94,6 @@ export function readPrompts(
   } else if (Array.isArray(promptPathOrGlobs)) {
     // List of paths to prompt files or raw prompts
     promptPaths = promptPathOrGlobs.flatMap((pathOrGlob) => {
-      /*
-      if (!pathOrGlob.includes('/') && !pathOrGlob.includes('\\') && !pathOrGlob.includes('.')) {
-        // It's raw text
-        promptContents.push({ raw: pathOrGlob, display: pathOrGlob });
-        return [];
-      }
-      */
-
       resolvedPath = path.resolve(basePath, pathOrGlob);
       resolvedPathToDisplay.set(resolvedPath, pathOrGlob);
       const globbedPaths = globSync(resolvedPath);
@@ -123,7 +116,12 @@ export function readPrompts(
 
   for (const promptPathRaw of promptPaths) {
     const parsedPath = path.parse(promptPathRaw);
-    const [filename, functionName] = parsedPath.base.split(':');
+    let filename, functionName;
+    if (parsedPath.base.includes(':') && (parsedPath.ext === 'js' || parsedPath.ext === 'cjs')) {
+      [filename, functionName] = parsedPath.base.split(':');
+    } else {
+      filename = parsedPath.base;
+    }
     const promptPath = path.join(parsedPath.dir, filename);
     let stat;
     let usedRaw = false;
@@ -139,8 +137,8 @@ export function readPrompts(
     }
     if (usedRaw) {
       // If looks like a filepath, print a warning
-      if (looksKindaLikeAFilename(promptPathRaw)) {
-        logger.warn(`Could not find prompt file: "${chalk.gray(promptPathRaw)}". Treating it as raw text.`);
+      if (looksKindaLikeAFilename(promptPath)) {
+        logger.warn(`Could not find prompt file: "${chalk.red(filename)}". Treating it as a text prompt.`);
       }
     } else if (stat?.isDirectory()) {
       // FIXME(ian): Make directory handling share logic with file handling.
