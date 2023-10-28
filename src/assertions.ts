@@ -734,12 +734,22 @@ function containsJSON(str: string): any {
 
 export function assertionFromString(expected: string): Assertion {
   // Legacy options
-  if (expected.startsWith('javascript:') || expected.startsWith('fn:') || expected.startsWith('eval:')) {
+  if (
+    expected.startsWith('javascript:') ||
+    expected.startsWith('fn:') ||
+    expected.startsWith('eval:')
+  ) {
     // TODO(1.0): delete eval: legacy option
     let sliceLength;
-    if (expected.startsWith('javascript:')) { sliceLength = 'javascript:'.length; }
-    if (expected.startsWith('fn:')) { sliceLength = 'fn:'.length; }
-    if (expected.startsWith('eval:')) { sliceLength = 'eval:'.length; }
+    if (expected.startsWith('javascript:')) {
+      sliceLength = 'javascript:'.length;
+    }
+    if (expected.startsWith('fn:')) {
+      sliceLength = 'fn:'.length;
+    }
+    if (expected.startsWith('eval:')) {
+      sliceLength = 'eval:'.length;
+    }
 
     const functionBody = expected.slice(sliceLength);
     return {

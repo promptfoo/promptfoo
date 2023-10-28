@@ -1,6 +1,6 @@
 prompts:
-  - "Rephrase this in {{language}}: {{body}}"
-  - "Translate this to conversational {{language}}: {{body}}"
+  - 'Rephrase this in {{language}}: {{body}}'
+  - 'Translate this to conversational {{language}}: {{body}}'
 providers: [openai:gpt-3.5-turbo]
 tests:
   - vars:

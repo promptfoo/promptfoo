@@ -369,7 +369,10 @@ async function main() {
         tests: parsedTests,
         scenarios: config.scenarios,
         defaultTest,
-        nunjucksFilters: readFilters(fileConfig.nunjucksFilters || defaultConfig.nunjucksFilters || {}, basePath),
+        nunjucksFilters: readFilters(
+          fileConfig.nunjucksFilters || defaultConfig.nunjucksFilters || {},
+          basePath,
+        ),
       };
 
       let maxConcurrency = parseInt(cmdObj.maxConcurrency || '', 10);

@@ -64,7 +64,14 @@ export function readProviderPromptMap(
 }
 
 function maybeFilepath(str: string): boolean {
-  return !str.includes('\n') && (str.includes('/') || str.includes('\\') || str.includes('*') || str.charAt(str.length - 3) === '.' || str.charAt(str.length - 4) === '.');
+  return (
+    !str.includes('\n') &&
+    (str.includes('/') ||
+      str.includes('\\') ||
+      str.includes('*') ||
+      str.charAt(str.length - 3) === '.' ||
+      str.charAt(str.length - 4) === '.')
+  );
 }
 
 enum PromptInputType {
@@ -77,7 +84,7 @@ export function readPrompts(
   promptPathOrGlobs: string | string[] | Record<string, string>,
   basePath: string = '',
 ): Prompt[] {
-  let promptPathInfos: {raw: string, resolved: string}[] = [];
+  let promptPathInfos: { raw: string; resolved: string }[] = [];
   let promptContents: Prompt[] = [];
 
   let inputType: PromptInputType | undefined;
@@ -92,7 +99,7 @@ export function readPrompts(
       forceLoadFromFile.add(promptPathOrGlobs);
     }
     resolvedPath = path.resolve(basePath, promptPathOrGlobs);
-    promptPathInfos = [{raw: promptPathOrGlobs, resolved: resolvedPath}];
+    promptPathInfos = [{ raw: promptPathOrGlobs, resolved: resolvedPath }];
     resolvedPathToDisplay.set(resolvedPath, promptPathOrGlobs);
     inputType = PromptInputType.STRING;
   } else if (Array.isArray(promptPathOrGlobs)) {
@@ -106,10 +113,10 @@ export function readPrompts(
       resolvedPathToDisplay.set(resolvedPath, pathOrGlob);
       const globbedPaths = globSync(resolvedPath);
       if (globbedPaths.length > 0) {
-        return globbedPaths.map((globbedPath) => ({raw: pathOrGlob, resolved: globbedPath}));
+        return globbedPaths.map((globbedPath) => ({ raw: pathOrGlob, resolved: globbedPath }));
       }
       // globSync will return empty if no files match, which is the case when the path includes a function name like: file.js:func
-      return [{raw: pathOrGlob, resolved: resolvedPath}];
+      return [{ raw: pathOrGlob, resolved: resolvedPath }];
     });
     inputType = PromptInputType.ARRAY;
   } else if (typeof promptPathOrGlobs === 'object') {
@@ -117,7 +124,7 @@ export function readPrompts(
     promptPathInfos = Object.keys(promptPathOrGlobs).map((key) => {
       resolvedPath = path.resolve(basePath, key);
       resolvedPathToDisplay.set(resolvedPath, (promptPathOrGlobs as Record<string, string>)[key]);
-      return {raw: key, resolved: resolvedPath};
+      return { raw: key, resolved: resolvedPath };
     });
     inputType = PromptInputType.NAMED;
   }
@@ -146,7 +153,9 @@ export function readPrompts(
     if (usedRaw) {
       if (maybeFilepath(promptPathInfo.raw)) {
         // It looks like a filepath, so falling back could be a mistake. Print a warning
-        logger.warn(`Could not find prompt file: "${chalk.red(filename)}". Treating it as a text prompt.`);
+        logger.warn(
+          `Could not find prompt file: "${chalk.red(filename)}". Treating it as a text prompt.`,
+        );
       }
     } else if (stat?.isDirectory()) {
       // FIXME(ian): Make directory handling share logic with file handling.

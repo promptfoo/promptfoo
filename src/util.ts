@@ -461,7 +461,10 @@ export function getEvalsWithPredicate(
   return ret;
 }
 
-export function readFilters(filters: Record<string, string>, basePath: string = ''): NunjucksFilterMap {
+export function readFilters(
+  filters: Record<string, string>,
+  basePath: string = '',
+): NunjucksFilterMap {
   const ret: NunjucksFilterMap = {};
   for (const [name, filterPath] of Object.entries(filters)) {
     const globPath = path.join(basePath, filterPath);
