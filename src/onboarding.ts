@@ -19,8 +19,17 @@ If you prefer, you can break prompts into multiple files (make sure to edit prom
 `;
 
 export const DEFAULT_YAML_CONFIG = `# This configuration runs each prompt through a series of example inputs and checks if they meet requirements.
+# Learn more: https://promptfoo.dev/docs/configuration/guide
 
-prompts: [prompts.txt]
+prompts:
+  - "Example prompt 1"
+  - "Example prompt 2"
+  - |-
+    Example prompt 3
+    This is a multi-line prompt
+  # You may also import prompts from file. This path is relative to the config file.
+  # For more information on prompts, see https://promptfoo.dev/docs/configuration/parameters.
+  - file://prompts.txt
 providers: [openai:gpt-3.5-turbo-0613]
 tests:
   - description: First test case - automatic review
@@ -28,6 +37,7 @@ tests:
       var1: first variable's value
       var2: another value
       var3: some other value
+    # For more information on assertions, see https://promptfoo.dev/docs/configuration/expected-outputs
     assert:
       - type: equals
         value: expected LLM output goes here
@@ -52,13 +62,13 @@ tests:
       - type: contains-json
       - type: similar
         value: ensures that output is semantically similar to this text
-      - type: llm-rubric
+      - type: model-graded-closedqa
         value: ensure that output contains a reference to X
 `;
 
 export const DEFAULT_README = `To get started, set your OPENAI_API_KEY environment variable.
 
-Next, change a few of the prompts in prompts.txt and edit promptfooconfig.yaml.
+Next, edit promptfooconfig.yaml.
 
 Then run:
 \`\`\`
