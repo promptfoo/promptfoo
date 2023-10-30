@@ -190,9 +190,14 @@ export function readPrompts(
           const output = execSync(`python "${promptPath}" "${contextString}"`);
           return output.toString();
         };
+        let display = fileContent;
+        if (inputType === PromptInputType.NAMED) {
+          display = resolvedPathToDisplay.get(promptPath) || promptPath;
+        }
+
         promptContents.push({
           raw: fileContent,
-          display: fileContent,
+          display,
           function: promptFunction,
         });
       } else {
