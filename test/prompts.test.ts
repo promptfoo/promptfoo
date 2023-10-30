@@ -92,11 +92,14 @@ describe('prompts', () => {
     (fs.statSync as jest.Mock).mockReturnValue({ isDirectory: () => false });
 
     const result = readPrompts({
-      'prompts.txt': 'foo bar',
+      'prompts.txt': 'foo1',
+      'prompts.py': 'foo2',
     });
 
-    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
-    expect(result).toEqual([{ raw: 'some raw text', display: 'foo bar' }]);
+    expect(fs.readFileSync).toHaveBeenCalledTimes(2);
+    expect(result).toHaveLength(2);
+    expect(result[0]).toEqual({ raw: 'some raw text', display: 'foo1' });
+    expect(result[1]).toEqual(expect.objectContaining({ raw: 'some raw text', display: 'foo2' }));
   });
 
   test('readPrompts with JSONL file', () => {
