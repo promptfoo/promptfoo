@@ -22,6 +22,7 @@ import {
   writeLatestResults,
   writeOutput,
   writeMultipleOutputs,
+  setConfigDirectoryPath,
 } from './util';
 import { DEFAULT_README, DEFAULT_YAML_CONFIG, DEFAULT_PROMPTS } from './onboarding';
 import { disableCache, clearCache } from './cache';
@@ -123,16 +124,21 @@ async function main() {
     });
 
   program
-    .command('view')
+    .command('view [directory]')
     .description('Start browser ui')
     .option('-p, --port <number>', 'Port number', '15500')
     .option('-y, --yes', 'Skip confirmation and auto-open the URL')
-    .action(async (cmdObj: { port: number; yes: boolean } & Command) => {
+    .action(async (directory: string | undefined, cmdObj: { port: number; yes: boolean } & Command) => {
       telemetry.maybeShowNotice();
       telemetry.record('command_used', {
         name: 'view',
       });
       await telemetry.send();
+
+      console.log(directory);
+      if (directory) {
+        setConfigDirectoryPath(directory);
+      }
       startServer(cmdObj.port, cmdObj.yes);
     });
 
