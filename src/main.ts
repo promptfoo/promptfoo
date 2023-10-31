@@ -128,19 +128,20 @@ async function main() {
     .description('Start browser ui')
     .option('-p, --port <number>', 'Port number', '15500')
     .option('-y, --yes', 'Skip confirmation and auto-open the URL')
-    .action(async (directory: string | undefined, cmdObj: { port: number; yes: boolean } & Command) => {
-      telemetry.maybeShowNotice();
-      telemetry.record('command_used', {
-        name: 'view',
-      });
-      await telemetry.send();
+    .action(
+      async (directory: string | undefined, cmdObj: { port: number; yes: boolean } & Command) => {
+        telemetry.maybeShowNotice();
+        telemetry.record('command_used', {
+          name: 'view',
+        });
+        await telemetry.send();
 
-      console.log(directory);
-      if (directory) {
-        setConfigDirectoryPath(directory);
-      }
-      startServer(cmdObj.port, cmdObj.yes);
-    });
+        if (directory) {
+          setConfigDirectoryPath(directory);
+        }
+        startServer(cmdObj.port, cmdObj.yes);
+      },
+    );
 
   program
     .command('share')
