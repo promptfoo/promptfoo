@@ -146,10 +146,14 @@ export function writeOutput(
   }
 }
 
-const RESULT_HISTORY_LENGTH = parseInt(process.env.RESULT_HISTORY_LENGTH || '', 10) || 50;
+let configDirectoryPath: string | undefined = process.env.PROMPTFOO_CONFIG_DIR;
 
 export function getConfigDirectoryPath(): string {
-  return path.join(os.homedir(), '.promptfoo');
+  return configDirectoryPath || path.join(os.homedir(), '.promptfoo');
+}
+
+export function setConfigDirectoryPath(newPath: string): void {
+  configDirectoryPath = newPath;
 }
 
 export function getLatestResultsPath(): string {
@@ -198,6 +202,8 @@ export function listPreviousResults(): string[] {
   });
   return sortedFiles;
 }
+
+const RESULT_HISTORY_LENGTH = parseInt(process.env.RESULT_HISTORY_LENGTH || '', 10) || 50;
 
 export function cleanupOldResults(remaining = RESULT_HISTORY_LENGTH) {
   const sortedFiles = listPreviousResults();
