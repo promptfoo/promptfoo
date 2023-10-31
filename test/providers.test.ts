@@ -4,7 +4,7 @@ import { OpenAiCompletionProvider, OpenAiChatCompletionProvider } from '../src/p
 import { AnthropicCompletionProvider } from '../src/providers/anthropic';
 import { LlamaProvider } from '../src/providers/llama';
 
-import { disableCache, enableCache } from '../src/cache';
+import { clearCache, disableCache, enableCache } from '../src/cache';
 import { loadApiProvider, loadApiProviders } from '../src/providers';
 import {
   AzureOpenAiChatCompletionProvider,
@@ -24,8 +24,9 @@ jest.mock('node-fetch', () => jest.fn());
 jest.mock('../src/esm');
 
 describe('providers', () => {
-  afterEach(() => {
+  afterEach(async () => {
     jest.clearAllMocks();
+    await clearCache();
   });
 
   test('OpenAiCompletionProvider callApi', async () => {
@@ -51,6 +52,7 @@ describe('providers', () => {
         choices: [{ message: { content: 'Test output' } }],
         usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
       }),
+      ok: true,
     };
     (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
 
@@ -64,14 +66,41 @@ describe('providers', () => {
     expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
   });
 
-  test('OpenAiChatCompletionProvider callApi with cache disabled', async () => {
-    disableCache();
+  test('OpenAiChatCompletionProvider callApi with caching', async () => {
+    const mockResponse = {
+      json: jest.fn().mockResolvedValue({
+        choices: [{ message: { content: 'Test output 2' } }],
+        usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+      }),
+      ok: true,
+    };
+    (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
 
+    const provider = new OpenAiChatCompletionProvider('gpt-3.5-turbo');
+    const result = await provider.callApi(
+        JSON.stringify([{ role: 'user', content: 'Test prompt 2' }]),
+    );
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(result.output).toBe('Test output 2');
+    expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+
+    const result2 = await provider.callApi(
+        JSON.stringify([{ role: 'user', content: 'Test prompt 2' }]),
+    );
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(result2.output).toBe('Test output 2');
+    expect(result2.tokenUsage).toEqual({ cached: 10 });
+  });
+
+  test('OpenAiChatCompletionProvider callApi with cache disabled', async () => {
     const mockResponse = {
       json: jest.fn().mockResolvedValue({
         choices: [{ message: { content: 'Test output' } }],
         usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
       }),
+      ok: true,
     };
     (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
 
@@ -83,6 +112,16 @@ describe('providers', () => {
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(result.output).toBe('Test output');
     expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+
+    disableCache();
+
+    const result2 = await provider.callApi(
+        JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
+    );
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(result2.output).toBe('Test output');
+    expect(result2.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
 
     enableCache();
   });
@@ -175,6 +214,47 @@ describe('providers', () => {
     expect(provider.anthropic.completions.create).toHaveBeenCalledTimes(1);
     expect(result.output).toBe('Test output');
     expect(result.tokenUsage).toEqual({});
+  });
+
+  test('AnthropicCompletionProvider callApi with caching', async () => {
+    const provider = new AnthropicCompletionProvider('claude-1');
+    provider.anthropic.completions.create = jest.fn().mockResolvedValue({
+      completion: 'Test output',
+    });
+    const result = await provider.callApi('Test prompt');
+
+    expect(provider.anthropic.completions.create).toHaveBeenCalledTimes(1);
+    expect(result.output).toBe('Test output');
+    expect(result.tokenUsage).toEqual({});
+
+    (provider.anthropic.completions.create as jest.Mock).mockClear();
+    const result2 = await provider.callApi('Test prompt');
+
+    expect(provider.anthropic.completions.create).toHaveBeenCalledTimes(0);
+    expect(result2.output).toBe('Test output');
+    expect(result2.tokenUsage).toEqual({});
+  });
+
+  test('AnthropicCompletionProvider callApi with caching disabled', async () => {
+    const provider = new AnthropicCompletionProvider('claude-1');
+    provider.anthropic.completions.create = jest.fn().mockResolvedValue({
+      completion: 'Test output',
+    });
+    const result = await provider.callApi('Test prompt');
+
+    expect(provider.anthropic.completions.create).toHaveBeenCalledTimes(1);
+    expect(result.output).toBe('Test output');
+    expect(result.tokenUsage).toEqual({});
+
+    (provider.anthropic.completions.create as jest.Mock).mockClear();
+
+    disableCache();
+
+    const result2 = await provider.callApi('Test prompt');
+
+    expect(provider.anthropic.completions.create).toHaveBeenCalledTimes(1);
+    expect(result2.output).toBe('Test output');
+    expect(result2.tokenUsage).toEqual({});
   });
 
   test('LlamaProvider callApi', async () => {
