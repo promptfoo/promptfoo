@@ -25,6 +25,7 @@ import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import type { EvalRow, EvaluateTableOutput, FilterMode, GradingResult } from './types';
 
 import './ResultsTable.css';
+import { argv } from 'process';
 
 function formatRowOutput(output: EvaluateTableOutput | string) {
   if (typeof output === 'string') {
@@ -288,6 +289,7 @@ export default function ResultsTable({
   const { table, setTable } = useStore();
   invariant(table, 'Table should be defined');
   const { head, body } = table;
+  // TODO(ian): Switch this to use prompt.metrics field once most clients have updated.
   const numGoodTests = head.prompts.map((_, idx) =>
     body.reduce((acc, row) => {
       return acc + (row.outputs[idx].pass ? 1 : 0);
@@ -399,14 +401,37 @@ export default function ResultsTable({
                     label="Show failures"
                   />
                 )}
-                <div className={`summary ${isHighestPassing ? 'highlight' : ''}`}>
-                  Passing: <strong>{pct}%</strong> ({numGoodTests[idx]}/{body.length} cases
-                  {numAsserts[idx] ? (
+                <div className="summary">
+                  <span className={isHighestPassing ? 'highlight' : ''}>
+                    Passing: <strong>{pct}%</strong> ({numGoodTests[idx]}/{body.length} cases
+                    {numAsserts[idx] ? (
+                      <span>
+                        , {numGoodAsserts[idx]}/{numAsserts[idx]} asserts
+                      </span>
+                    ) : null}
+                    )
+                  </span>
+                  {(prompt.metrics?.totalLatencyMs || prompt.metrics?.tokenUsage?.total) && (
+                    <span> avg</span>
+                  )}
+                  {prompt.metrics?.totalLatencyMs && (
                     <span>
-                      , {numGoodAsserts[idx]}/{numAsserts[idx]} asserts
+                      {' '}
+                      {Intl.NumberFormat(undefined, {
+                        maximumFractionDigits: 0,
+                      }).format(prompt.metrics.totalLatencyMs / body.length)}
+                      ms
                     </span>
-                  ) : null}
-                  )
+                  )}
+                  {prompt.metrics?.tokenUsage?.total && (
+                    <span>
+                      {' '}
+                      {Intl.NumberFormat(undefined, {
+                        maximumFractionDigits: 0,
+                      }).format(prompt.metrics.tokenUsage.total / body.length)}{' '}
+                      tokens
+                    </span>
+                  )}
                 </div>
               </>
             );

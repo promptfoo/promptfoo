@@ -130,7 +130,10 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
       return {
         embedding,
         tokenUsage: cached
-          ? { cached: data.usage.total_tokens }
+          ? {
+              cached: data.usage.total_tokens,
+              total: data.usage.total_tokens,
+            }
           : {
               total: data.usage.total_tokens,
               prompt: data.usage.prompt_tokens,
@@ -226,7 +229,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       return {
         output: data.choices[0].text,
         tokenUsage: cached
-          ? { cached: data.usage.total_tokens }
+          ? { cached: data.usage.total_tokens, total: data.usage.total_tokens }
           : {
               total: data.usage.total_tokens,
               prompt: data.usage.prompt_tokens,
@@ -327,7 +330,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       return {
         output,
         tokenUsage: cached
-          ? { cached: data.usage.total_tokens }
+          ? { cached: data.usage.total_tokens, total: data.usage.total_tokens }
           : {
               total: data.usage.total_tokens,
               prompt: data.usage.prompt_tokens,
