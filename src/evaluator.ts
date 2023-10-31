@@ -615,7 +615,8 @@ class Evaluator {
         metrics.assertFailCount +=
           row.gradingResult?.componentResults?.filter((r) => !r.pass).length || 0;
         metrics.totalLatencyMs += row.latencyMs || 0;
-        metrics.tokenUsage.cached = (metrics.tokenUsage.cached || 0) + (row.response?.tokenUsage?.cached || 0);
+        metrics.tokenUsage.cached =
+          (metrics.tokenUsage.cached || 0) + (row.response?.tokenUsage?.cached || 0);
         metrics.tokenUsage.completion += row.response?.tokenUsage?.completion || 0;
         metrics.tokenUsage.prompt += row.response?.tokenUsage?.prompt || 0;
         metrics.tokenUsage.total += row.response?.tokenUsage?.total || 0;
