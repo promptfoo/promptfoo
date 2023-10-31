@@ -111,7 +111,7 @@ export class AzureOpenAiEmbeddingProvider extends AzureOpenAiGenericProvider {
       const ret = {
         embedding,
         tokenUsage: cached
-          ? { cached: data.usage.total_tokens }
+          ? { cached: data.usage.total_tokens, total: data.usage.total_tokens }
           : {
               total: data.usage.total_tokens,
               prompt: data.usage.prompt_tokens,
@@ -122,11 +122,16 @@ export class AzureOpenAiEmbeddingProvider extends AzureOpenAiGenericProvider {
     } catch (err) {
       return {
         error: `API response error: ${String(err)}: ${JSON.stringify(data)}`,
-        tokenUsage: {
-          total: data?.usage?.total_tokens,
-          prompt: data?.usage?.prompt_tokens,
-          completion: data?.usage?.completion_tokens,
-        },
+        tokenUsage: cached
+          ? {
+              cached: data.usage.total_tokens,
+              total: data.usage.total_tokens,
+            }
+          : {
+              total: data?.usage?.total_tokens,
+              prompt: data?.usage?.prompt_tokens,
+              completion: data?.usage?.completion_tokens,
+            },
       };
     }
   }
@@ -190,7 +195,7 @@ export class AzureOpenAiCompletionProvider extends AzureOpenAiGenericProvider {
       return {
         output: data.choices[0].text,
         tokenUsage: cached
-          ? { cached: data.usage.total_tokens }
+          ? { cached: data.usage.total_tokens, total: data.usage.total_tokens }
           : {
               total: data.usage.total_tokens,
               prompt: data.usage.prompt_tokens,
@@ -270,7 +275,7 @@ export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvide
       return {
         output,
         tokenUsage: cached
-          ? { cached: data.usage.total_tokens }
+          ? { cached: data.usage.total_tokens, total: data.usage.total_tokens }
           : {
               total: data.usage.total_tokens,
               prompt: data.usage.prompt_tokens,

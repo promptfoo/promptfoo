@@ -135,6 +135,8 @@ export interface Prompt {
     testFailCount: number;
     assertPassCount: number;
     assertFailCount: number;
+    totalLatencyMs: number;
+    tokenUsage: TokenUsage;
   };
 }
 
