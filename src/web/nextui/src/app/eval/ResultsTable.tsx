@@ -25,7 +25,6 @@ import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import type { EvalRow, EvaluateTableOutput, FilterMode, GradingResult } from './types';
 
 import './ResultsTable.css';
-import { argv } from 'process';
 
 function formatRowOutput(output: EvaluateTableOutput | string) {
   if (typeof output === 'string') {
