@@ -91,7 +91,7 @@ describe('providers', () => {
 
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(result2.output).toBe('Test output 2');
-    expect(result2.tokenUsage).toEqual({ cached: 10 });
+    expect(result2.tokenUsage).toEqual({ total: 10, cached: 10 });
   });
 
   test('OpenAiChatCompletionProvider callApi with cache disabled', async () => {
