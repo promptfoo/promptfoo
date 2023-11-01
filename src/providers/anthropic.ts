@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import logger from '../logger';
 
 import type { ApiProvider, EnvOverrides, ProviderResponse } from '../types.js';
+import { getCache, isCacheEnabled } from "../cache";
 
 interface AnthropicCompletionOptions {
   apiKey?: string;
@@ -70,6 +71,22 @@ export class AnthropicCompletionProvider implements ApiProvider {
     };
 
     logger.debug(`Calling Anthropic API: ${JSON.stringify(params)}`);
+
+    const cache = await getCache();
+    const cacheKey = `anthropic:${JSON.stringify(params)}`;
+
+    if (isCacheEnabled()) {
+      // Try to get the cached response
+      const cachedResponse = await cache.get(cacheKey);
+        if (cachedResponse) {
+            logger.debug(`Returning cached response for ${prompt}: ${cachedResponse}`);
+            return {
+              output: JSON.parse(cachedResponse as string),
+              tokenUsage: {},
+            };
+        }
+    }
+
     let response;
     try {
       response = await this.anthropic.completions.create(params);
@@ -79,6 +96,13 @@ export class AnthropicCompletionProvider implements ApiProvider {
       };
     }
     logger.debug(`\tAnthropic API response: ${JSON.stringify(response)}`);
+    if (isCacheEnabled()) {
+      try {
+        await cache.set(cacheKey, JSON.stringify(response.completion));
+      } catch (err) {
+        logger.error(`Failed to cache response: ${String(err)}`);
+      }
+    }
     try {
       return {
         output: response.completion,
