@@ -73,6 +73,7 @@ table.results-table,
 }
 
 .results-table tr .cell {
+  white-space: pre-wrap;
 }
 
 .results-table tr .cell-actions {
