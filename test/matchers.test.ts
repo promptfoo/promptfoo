@@ -336,7 +336,7 @@ describe('getGradingProvider', () => {
       DefaultGradingProvider,
     );
     // ok for this not to match exactly when the string is parsed
-    expect(provider.id()).toBe('openai:gpt-3.5-turbo-foobar');
+    expect(provider?.id()).toBe('openai:gpt-3.5-turbo-foobar');
   });
 
   it('should return the correct provider when provider is an ApiProvider', async () => {
@@ -353,7 +353,7 @@ describe('getGradingProvider', () => {
       },
     };
     const provider = await getGradingProvider(providerOptions, DefaultGradingProvider);
-    expect(provider.id()).toBe('openai:chat:gpt-3.5-turbo-foobar');
+    expect(provider?.id()).toBe('openai:chat:gpt-3.5-turbo-foobar');
   });
 
   it('should return the default provider when provider is not provided', async () => {
