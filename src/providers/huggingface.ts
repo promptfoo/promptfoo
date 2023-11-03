@@ -1,7 +1,11 @@
-import fetch from 'node-fetch';
 import { fetchWithCache } from '../cache';
 
-import type { ApiProvider, ProviderEmbeddingResponse, ProviderResponse } from '../types';
+import type {
+  ApiProvider,
+  ProviderClassificationResponse,
+  ProviderEmbeddingResponse,
+  ProviderResponse,
+} from '../types';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
 interface HuggingfaceTextGenerationOptions {
@@ -88,17 +92,15 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
   }
 }
 
-interface HuggingfaceFeatureExtractionOptions {
-  use_cache?: boolean;
-  wait_for_model?: boolean;
-}
+interface HuggingfaceTextClassificationOptions {}
+
 export class HuggingfaceTextClassificationProvider implements ApiProvider {
   modelName: string;
-  config: HuggingfaceTextGenerationOptions;
+  config: HuggingfaceTextClassificationOptions;
 
   constructor(
     modelName: string,
-    options: { id?: string; config?: HuggingfaceTextGenerationOptions } = {},
+    options: { id?: string; config?: HuggingfaceTextClassificationOptions } = {},
   ) {
     const { id, config } = options;
     this.modelName = modelName;
@@ -114,11 +116,10 @@ export class HuggingfaceTextClassificationProvider implements ApiProvider {
     return `[Huggingface Text Classification Provider ${this.modelName}]`;
   }
 
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callClassificationApi(prompt: string): Promise<ProviderClassificationResponse> {
     const params = {
       inputs: prompt,
       parameters: {
-        return_full_text: this.config.return_full_text ?? false,
         ...this.config,
       },
     };
@@ -145,14 +146,19 @@ export class HuggingfaceTextClassificationProvider implements ApiProvider {
           error: `API call error: ${response.data.error}`,
         };
       }
-      if (!Array.isArray(response.data)) {
+      if (!response.data[0] || !Array.isArray(response.data[0])) {
         return {
           error: `Malformed response data: ${response.data}`,
         };
       }
 
+      const scores: Record<string, number> = {};
+      response.data[0].forEach((item) => {
+        scores[item.label] = item.score;
+      });
+
       return {
-        output: response.data[0],
+        classification: scores,
       };
     } catch (err) {
       return {
@@ -160,6 +166,19 @@ export class HuggingfaceTextClassificationProvider implements ApiProvider {
       };
     }
   }
+
+  async callApi(prompt: string): Promise<ProviderResponse> {
+    const ret = await this.callClassificationApi(prompt);
+    return {
+      error: ret.error,
+      output: JSON.stringify(ret.classification),
+    };
+  }
+}
+
+interface HuggingfaceFeatureExtractionOptions {
+  use_cache?: boolean;
+  wait_for_model?: boolean;
 }
 
 export class HuggingfaceFeatureExtractionProvider implements ApiProvider {

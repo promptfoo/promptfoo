@@ -25,6 +25,7 @@ import {
 } from './providers/azureopenai';
 import {
   HuggingfaceFeatureExtractionProvider,
+  HuggingfaceTextClassificationProvider,
   HuggingfaceTextGenerationProvider,
 } from './providers/huggingface';
 
@@ -178,6 +179,8 @@ export async function loadApiProvider(
       return new HuggingfaceFeatureExtractionProvider(modelName, providerOptions);
     } else if (splits[1] === 'text-generation') {
       return new HuggingfaceTextGenerationProvider(modelName, providerOptions);
+    } else if (splits[1] === 'text-classification') {
+      return new HuggingfaceTextClassificationProvider(modelName, providerOptions);
     } else {
       throw new Error(
         `Invalid Huggingface provider path: ${providerPath}. Use one of the following providers: huggingface:feature-extraction:<model name>, huggingface:text-generation:<model name>`,

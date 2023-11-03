@@ -78,7 +78,7 @@ describe('providers', () => {
 
     const provider = new OpenAiChatCompletionProvider('gpt-3.5-turbo');
     const result = await provider.callApi(
-        JSON.stringify([{ role: 'user', content: 'Test prompt 2' }]),
+      JSON.stringify([{ role: 'user', content: 'Test prompt 2' }]),
     );
 
     expect(fetch).toHaveBeenCalledTimes(1);
@@ -86,7 +86,7 @@ describe('providers', () => {
     expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
 
     const result2 = await provider.callApi(
-        JSON.stringify([{ role: 'user', content: 'Test prompt 2' }]),
+      JSON.stringify([{ role: 'user', content: 'Test prompt 2' }]),
     );
 
     expect(fetch).toHaveBeenCalledTimes(1);
@@ -116,7 +116,7 @@ describe('providers', () => {
     disableCache();
 
     const result2 = await provider.callApi(
-        JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
+      JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
     );
 
     expect(fetch).toHaveBeenCalledTimes(2);

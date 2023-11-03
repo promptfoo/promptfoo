@@ -13,6 +13,7 @@ import {
   matchesLlmRubric,
   matchesFactuality,
   matchesClosedQa,
+  matchesClassification,
 } from './matchers';
 
 import type { Assertion, AssertionType, GradingResult, AtomicTestCase } from './types';
@@ -698,8 +699,24 @@ ${assertion.value}`,
     };
   }
 
-  if (baseType === 'contains-pii') {
+  if (baseType === 'classification') {
+    invariant(
+      typeof renderedValue === 'string',
+      '"classification" assertion type must have a string value',
+    );
 
+    // Assertion provider overrides test provider
+    test.options = test.options || {};
+    test.options.provider = assertion.provider || test.options.provider;
+    return {
+      assertion,
+      ...(await matchesClassification(
+        renderedValue,
+        output,
+        assertion.threshold ?? 1,
+        test.options,
+      )),
+    };
   }
 
   throw new Error('Unknown assertion type: ' + assertion.type);
@@ -803,7 +820,8 @@ export function assertionFromString(expected: string): Assertion {
       type === 'rouge-n' ||
       type === 'similar' ||
       type === 'starts-with' ||
-      type === 'levenshtein'
+      type === 'levenshtein' ||
+      type === 'classification'
     ) {
       return {
         type: fullType as AssertionType,
