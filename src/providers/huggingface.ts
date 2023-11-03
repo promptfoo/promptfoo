@@ -92,6 +92,75 @@ interface HuggingfaceFeatureExtractionOptions {
   use_cache?: boolean;
   wait_for_model?: boolean;
 }
+export class HuggingfaceTextClassificationProvider implements ApiProvider {
+  modelName: string;
+  config: HuggingfaceTextGenerationOptions;
+
+  constructor(
+    modelName: string,
+    options: { id?: string; config?: HuggingfaceTextGenerationOptions } = {},
+  ) {
+    const { id, config } = options;
+    this.modelName = modelName;
+    this.id = id ? () => id : this.id;
+    this.config = config || {};
+  }
+
+  id(): string {
+    return `huggingface:text-classification:${this.modelName}`;
+  }
+
+  toString(): string {
+    return `[Huggingface Text Classification Provider ${this.modelName}]`;
+  }
+
+  async callApi(prompt: string): Promise<ProviderResponse> {
+    const params = {
+      inputs: prompt,
+      parameters: {
+        return_full_text: this.config.return_full_text ?? false,
+        ...this.config,
+      },
+    };
+
+    let response;
+    try {
+      response = await fetchWithCache(
+        `https://api-inference.huggingface.co/models/${this.modelName}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(process.env.HF_API_TOKEN
+              ? { Authorization: `Bearer ${process.env.HF_API_TOKEN}` }
+              : {}),
+          },
+          body: JSON.stringify(params),
+        },
+        REQUEST_TIMEOUT_MS,
+      );
+
+      if (response.data.error) {
+        return {
+          error: `API call error: ${response.data.error}`,
+        };
+      }
+      if (!Array.isArray(response.data)) {
+        return {
+          error: `Malformed response data: ${response.data}`,
+        };
+      }
+
+      return {
+        output: response.data[0],
+      };
+    } catch (err) {
+      return {
+        error: `API call error: ${String(err)}. Output:\n${response?.data}`,
+      };
+    }
+  }
+}
 
 export class HuggingfaceFeatureExtractionProvider implements ApiProvider {
   modelName: string;
