@@ -361,3 +361,69 @@ describe('getGradingProvider', () => {
     expect(provider).toBe(DefaultGradingProvider);
   });
 });
+describe('matchesClassification', () => {
+  it('should pass when the classification score is above the threshold', async () => {
+    const expected = 'Expected output';
+    const output = 'Sample output';
+    const threshold = 0.5;
+    const grading: GradingConfig = {
+      provider: Grader,
+    };
+
+    jest.spyOn(Grader, 'callClassificationApi').mockResolvedValueOnce({
+      classification: { [expected]: 0.6 },
+    });
+
+    const result = await matchesClassification(expected, output, threshold, grading);
+    expect(result.pass).toBeTruthy();
+    expect(result.reason).toBe(`Classification ${expected} has score 0.6 >= ${threshold}`);
+  });
+
+  it('should fail when the classification score is below the threshold', async () => {
+    const expected = 'Expected output';
+    const output = 'Different output';
+    const threshold = 0.9;
+    const grading: GradingConfig = {
+      provider: Grader,
+    };
+
+    jest.spyOn(Grader, 'callClassificationApi').mockResolvedValueOnce({
+      classification: { [expected]: 0.6 },
+    });
+
+    const result = await matchesClassification(expected, output, threshold, grading);
+    expect(result.pass).toBeFalsy();
+    expect(result.reason).toBe(`Classification ${expected} has score 0.6 < ${threshold}`);
+  });
+
+  it('should use the overridden classification grading config', async () => {
+    const expected = 'Expected output';
+    const output = 'Sample output';
+    const threshold = 0.5;
+    const grading: GradingConfig = {
+      provider: {
+        id: 'openai:classification:text-classification-ada-9999999',
+        config: {
+          apiKey: 'abc123',
+          temperature: 3.1415926,
+        },
+      },
+    };
+
+    const mockCallApi = jest.spyOn(OpenAiChatCompletionProvider.prototype, 'callClassificationApi');
+    mockCallApi.mockImplementation(function (this: OpenAiChatCompletionProvider) {
+      expect(this.config.temperature).toBe(3.1415926);
+      expect(this.getApiKey()).toBe('abc123');
+      return Promise.resolve({
+        classification: { [expected]: 0.6 },
+      });
+    });
+
+    const result = await matchesClassification(expected, output, threshold, grading);
+    expect(result.pass).toBeTruthy();
+    expect(result.reason).toBe(`Classification ${expected} has score 0.6 >= ${threshold}`);
+    expect(mockCallApi).toHaveBeenCalled();
+
+    mockCallApi.mockRestore();
+  });
+});
