@@ -466,7 +466,6 @@ ${renderedValue}`,
       } else {
         const { execSync } = require('child_process');
         const isMultiline = renderedValue.includes('\n');
-        const escapedRenderedValue = renderedValue.replace(/"/g, '\\\\"');
         let pythonScript = `import json
   import sys
   data = json.load(sys.stdin)
@@ -697,6 +696,10 @@ ${assertion.value}`,
           }`,
       assertion,
     };
+  }
+
+  if (baseType === 'contains-pii') {
+
   }
 
   throw new Error('Unknown assertion type: ' + assertion.type);
