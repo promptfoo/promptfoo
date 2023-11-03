@@ -15,6 +15,7 @@ import { WebhookProvider } from '../src/providers/webhook';
 import {
   HuggingfaceTextGenerationProvider,
   HuggingfaceFeatureExtractionProvider,
+  HuggingfaceTextClassificationProvider,
 } from '../src/providers/huggingface';
 
 import type { ProviderOptionsMap, ProviderFunction } from '../src/types';
@@ -335,6 +336,34 @@ describe('providers', () => {
     expect(result.embedding).toEqual([0.1, 0.2, 0.3, 0.4, 0.5]);
   });
 
+  test('HuggingfaceTextClassificationProvider callClassificationApi', async () => {
+    const mockClassification = [
+      [
+        {
+          label: 'nothate',
+          score: 0.9,
+        },
+        {
+          label: 'hate',
+          score: 0.1,
+        },
+      ],
+    ];
+    const mockResponse = {
+      json: jest.fn().mockResolvedValue(mockClassification),
+    };
+    (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
+
+    const provider = new HuggingfaceTextClassificationProvider('foo');
+    const result = await provider.callClassificationApi('Test text');
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(result.classification).toEqual({
+      nothate: 0.9,
+      hate: 0.1,
+    });
+  });
+
   test('loadApiProvider with openai:chat', async () => {
     const provider = await loadApiProvider('openai:chat');
     expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
@@ -399,6 +428,16 @@ describe('providers', () => {
   test('loadApiProvider with huggingface:feature-extraction', async () => {
     const provider = await loadApiProvider('huggingface:feature-extraction:foobar/baz');
     expect(provider).toBeInstanceOf(HuggingfaceFeatureExtractionProvider);
+  });
+
+  test('loadApiProvider with huggingface:text-classification', async () => {
+    const provider = await loadApiProvider('huggingface:text-classification:foobar/baz');
+    expect(provider).toBeInstanceOf(HuggingfaceTextClassificationProvider);
+  });
+
+  test('loadApiProvider with hf:text-classification', async () => {
+    const provider = await loadApiProvider('hf:text-classification:foobar/baz');
+    expect(provider).toBeInstanceOf(HuggingfaceTextClassificationProvider);
   });
 
   test('loadApiProvider with RawProviderConfig', async () => {
