@@ -1,4 +1,4 @@
-import { getGradingProvider } from '../src/matchers';
+import { getGradingProvider, matchesClassification } from '../src/matchers';
 import { OpenAiChatCompletionProvider, OpenAiEmbeddingProvider } from '../src/providers/openai';
 import {
   matchesSimilarity,
@@ -10,7 +10,8 @@ import { DefaultEmbeddingProvider, DefaultGradingProvider } from '../src/provide
 
 import { TestGrader } from './assertions.test';
 
-import type { GradingConfig } from '../src/types';
+import type { GradingConfig, ProviderResponse, ProviderClassificationResponse, ApiProvider } from '../src/types';
+import {HuggingfaceTextClassificationProvider} from '../src/providers/huggingface';
 
 const Grader = new TestGrader();
 
@@ -362,17 +363,34 @@ describe('getGradingProvider', () => {
   });
 });
 describe('matchesClassification', () => {
+  class TestGrader implements ApiProvider {
+    async callApi(): Promise<ProviderResponse> {
+      throw new Error('Not implemented');
+    }
+
+    async callClassificationApi(): Promise<ProviderClassificationResponse> {
+      return {
+        classification: {
+          classA: 0.6,
+          classB: 0.5,
+        },
+      };
+    }
+
+    id(): string {
+      return 'TestClassificationProvider';
+    }
+  }
+
   it('should pass when the classification score is above the threshold', async () => {
-    const expected = 'Expected output';
+    const expected = 'classA';
     const output = 'Sample output';
     const threshold = 0.5;
-    const grading: GradingConfig = {
-      provider: Grader,
-    };
 
-    jest.spyOn(Grader, 'callClassificationApi').mockResolvedValueOnce({
-      classification: { [expected]: 0.6 },
-    });
+    const grader = new TestGrader();
+    const grading: GradingConfig = {
+      provider: grader,
+    };
 
     const result = await matchesClassification(expected, output, threshold, grading);
     expect(result.pass).toBeTruthy();
@@ -380,16 +398,14 @@ describe('matchesClassification', () => {
   });
 
   it('should fail when the classification score is below the threshold', async () => {
-    const expected = 'Expected output';
+    const expected = 'classA';
     const output = 'Different output';
     const threshold = 0.9;
-    const grading: GradingConfig = {
-      provider: Grader,
-    };
 
-    jest.spyOn(Grader, 'callClassificationApi').mockResolvedValueOnce({
-      classification: { [expected]: 0.6 },
-    });
+    const grader = new TestGrader();
+    const grading: GradingConfig = {
+      provider: grader,
+    };
 
     const result = await matchesClassification(expected, output, threshold, grading);
     expect(result.pass).toBeFalsy();
@@ -397,23 +413,18 @@ describe('matchesClassification', () => {
   });
 
   it('should use the overridden classification grading config', async () => {
-    const expected = 'Expected output';
+    const expected = 'classA';
     const output = 'Sample output';
     const threshold = 0.5;
+
     const grading: GradingConfig = {
       provider: {
-        id: 'openai:classification:text-classification-ada-9999999',
-        config: {
-          apiKey: 'abc123',
-          temperature: 3.1415926,
-        },
+        id: 'hf:text-classification:foobar',
       },
     };
 
-    const mockCallApi = jest.spyOn(OpenAiChatCompletionProvider.prototype, 'callClassificationApi');
-    mockCallApi.mockImplementation(function (this: OpenAiChatCompletionProvider) {
-      expect(this.config.temperature).toBe(3.1415926);
-      expect(this.getApiKey()).toBe('abc123');
+    const mockCallApi = jest.spyOn(HuggingfaceTextClassificationProvider.prototype, 'callClassificationApi');
+    mockCallApi.mockImplementation(function (this: HuggingfaceTextClassificationProvider) {
       return Promise.resolve({
         classification: { [expected]: 0.6 },
       });
