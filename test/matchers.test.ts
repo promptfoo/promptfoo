@@ -10,8 +10,13 @@ import { DefaultEmbeddingProvider, DefaultGradingProvider } from '../src/provide
 
 import { TestGrader } from './assertions.test';
 
-import type { GradingConfig, ProviderResponse, ProviderClassificationResponse, ApiProvider } from '../src/types';
-import {HuggingfaceTextClassificationProvider} from '../src/providers/huggingface';
+import type {
+  GradingConfig,
+  ProviderResponse,
+  ProviderClassificationResponse,
+  ApiProvider,
+} from '../src/types';
+import { HuggingfaceTextClassificationProvider } from '../src/providers/huggingface';
 
 const Grader = new TestGrader();
 
@@ -423,7 +428,10 @@ describe('matchesClassification', () => {
       },
     };
 
-    const mockCallApi = jest.spyOn(HuggingfaceTextClassificationProvider.prototype, 'callClassificationApi');
+    const mockCallApi = jest.spyOn(
+      HuggingfaceTextClassificationProvider.prototype,
+      'callClassificationApi',
+    );
     mockCallApi.mockImplementation(function (this: HuggingfaceTextClassificationProvider) {
       return Promise.resolve({
         classification: { [expected]: 0.6 },
