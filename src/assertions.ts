@@ -846,6 +846,7 @@ export function assertionFromString(expected: string): Assertion {
 // These exports are used by the node.js package (index.ts)
 export default {
   matchesSimilarity,
+  matchesClassification,
   matchesLlmRubric,
   matchesFactuality,
   matchesClosedQa,
