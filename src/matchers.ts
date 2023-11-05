@@ -42,9 +42,9 @@ function fromVars(vars?: Record<string, string | object>) {
 
 export async function getGradingProvider(
   provider: GradingConfig['provider'],
-  defaultProvider: ApiProvider,
-): Promise<ApiProvider> {
-  let finalProvider: ApiProvider;
+  defaultProvider: ApiProvider | null,
+): Promise<ApiProvider | null> {
+  let finalProvider: ApiProvider | null;
   if (typeof provider === 'string') {
     finalProvider = await loadApiProvider(provider);
   } else if (
@@ -75,6 +75,7 @@ export async function matchesSimilarity(
   let provider = grading?.provider;
   let finalProvider = await getGradingProvider(provider, DefaultEmbeddingProvider);
 
+  invariant(finalProvider, 'No provider found for similarity check');
   if (typeof finalProvider.callEmbeddingApi !== 'function') {
     logger.warn(
       `Provider ${finalProvider.id} does not implement callEmbeddingApi for similarity check, falling back to default`,
@@ -137,6 +138,49 @@ export async function matchesSimilarity(
   };
 }
 
+export async function matchesClassification(
+  expected: string,
+  output: string,
+  threshold: number,
+  grading?: GradingConfig,
+): Promise<Omit<GradingResult, 'assertion'>> {
+  let provider = grading?.provider;
+  let finalProvider = await getGradingProvider(provider, null);
+
+  invariant(finalProvider, 'No provider found for classification check');
+  if (typeof finalProvider.callClassificationApi !== 'function') {
+    throw new Error(`Provider ${finalProvider.id} does not implement callClassificationApi`);
+  }
+
+  invariant(
+    typeof finalProvider.callClassificationApi === 'function',
+    `Provider ${finalProvider.id} must implement callClassificationApi for classification check`,
+  );
+
+  const resp = await finalProvider.callClassificationApi(output);
+  if (resp.error || !resp.classification) {
+    return {
+      pass: false,
+      score: 0,
+      reason: resp.error || 'Unknown error fetching classification',
+    };
+  }
+
+  const score = resp.classification[expected] || 0;
+  if (score >= threshold) {
+    return {
+      pass: true,
+      score,
+      reason: `Classification ${expected} has score ${score} >= ${threshold}`,
+    };
+  }
+  return {
+    pass: false,
+    score,
+    reason: `Classification ${expected} has score ${score} < ${threshold}`,
+  };
+}
+
 export async function matchesLlmRubric(
   expected: string,
   output: string,
@@ -157,6 +201,7 @@ export async function matchesLlmRubric(
 
   let provider = grading.provider;
   let finalProvider = await getGradingProvider(provider, DefaultGradingProvider);
+  invariant(finalProvider, 'No provider found for llm-rubric check');
   const resp = await finalProvider.callApi(prompt);
   if (resp.error || !resp.output) {
     return {
@@ -220,6 +265,7 @@ export async function matchesFactuality(
 
   let provider = grading.provider;
   let finalProvider = await getGradingProvider(provider, DefaultGradingProvider);
+  invariant(finalProvider, 'No provider found for model-graded-factuality check');
   const resp = await finalProvider.callApi(prompt);
   if (resp.error || !resp.output) {
     return {
@@ -316,6 +362,7 @@ export async function matchesClosedQa(
 
   let provider = grading.provider;
   let finalProvider = await getGradingProvider(provider, DefaultGradingProvider);
+  invariant(finalProvider, 'No provider found for model-graded-closedqa check');
   const resp = await finalProvider.callApi(prompt);
   if (resp.error || !resp.output) {
     return {

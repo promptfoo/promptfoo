@@ -25,6 +25,7 @@ import {
 } from './providers/azureopenai';
 import {
   HuggingfaceFeatureExtractionProvider,
+  HuggingfaceTextClassificationProvider,
   HuggingfaceTextGenerationProvider,
 } from './providers/huggingface';
 
@@ -166,7 +167,7 @@ export async function loadApiProvider(
         `Unknown Anthropic model type: ${modelType}. Use one of the following providers: anthropic:completion:<model name>`,
       );
     }
-  } else if (providerPath?.startsWith('huggingface:')) {
+  } else if (providerPath?.startsWith('huggingface:') || providerPath?.startsWith('hf:')) {
     const splits = providerPath.split(':');
     if (splits.length < 3) {
       throw new Error(
@@ -178,6 +179,8 @@ export async function loadApiProvider(
       return new HuggingfaceFeatureExtractionProvider(modelName, providerOptions);
     } else if (splits[1] === 'text-generation') {
       return new HuggingfaceTextGenerationProvider(modelName, providerOptions);
+    } else if (splits[1] === 'text-classification') {
+      return new HuggingfaceTextClassificationProvider(modelName, providerOptions);
     } else {
       throw new Error(
         `Invalid Huggingface provider path: ${providerPath}. Use one of the following providers: huggingface:feature-extraction:<model name>, huggingface:text-generation:<model name>`,

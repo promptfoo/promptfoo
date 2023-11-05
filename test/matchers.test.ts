@@ -1,4 +1,4 @@
-import { getGradingProvider } from '../src/matchers';
+import { getGradingProvider, matchesClassification } from '../src/matchers';
 import { OpenAiChatCompletionProvider, OpenAiEmbeddingProvider } from '../src/providers/openai';
 import {
   matchesSimilarity,
@@ -10,7 +10,13 @@ import { DefaultEmbeddingProvider, DefaultGradingProvider } from '../src/provide
 
 import { TestGrader } from './assertions.test';
 
-import type { GradingConfig } from '../src/types';
+import type {
+  GradingConfig,
+  ProviderResponse,
+  ProviderClassificationResponse,
+  ApiProvider,
+} from '../src/types';
+import { HuggingfaceTextClassificationProvider } from '../src/providers/huggingface';
 
 const Grader = new TestGrader();
 
@@ -336,7 +342,7 @@ describe('getGradingProvider', () => {
       DefaultGradingProvider,
     );
     // ok for this not to match exactly when the string is parsed
-    expect(provider.id()).toBe('openai:gpt-3.5-turbo-foobar');
+    expect(provider?.id()).toBe('openai:gpt-3.5-turbo-foobar');
   });
 
   it('should return the correct provider when provider is an ApiProvider', async () => {
@@ -353,11 +359,90 @@ describe('getGradingProvider', () => {
       },
     };
     const provider = await getGradingProvider(providerOptions, DefaultGradingProvider);
-    expect(provider.id()).toBe('openai:chat:gpt-3.5-turbo-foobar');
+    expect(provider?.id()).toBe('openai:chat:gpt-3.5-turbo-foobar');
   });
 
   it('should return the default provider when provider is not provided', async () => {
     const provider = await getGradingProvider(undefined, DefaultGradingProvider);
     expect(provider).toBe(DefaultGradingProvider);
+  });
+});
+describe('matchesClassification', () => {
+  class TestGrader implements ApiProvider {
+    async callApi(): Promise<ProviderResponse> {
+      throw new Error('Not implemented');
+    }
+
+    async callClassificationApi(): Promise<ProviderClassificationResponse> {
+      return {
+        classification: {
+          classA: 0.6,
+          classB: 0.5,
+        },
+      };
+    }
+
+    id(): string {
+      return 'TestClassificationProvider';
+    }
+  }
+
+  it('should pass when the classification score is above the threshold', async () => {
+    const expected = 'classA';
+    const output = 'Sample output';
+    const threshold = 0.5;
+
+    const grader = new TestGrader();
+    const grading: GradingConfig = {
+      provider: grader,
+    };
+
+    const result = await matchesClassification(expected, output, threshold, grading);
+    expect(result.pass).toBeTruthy();
+    expect(result.reason).toBe(`Classification ${expected} has score 0.6 >= ${threshold}`);
+  });
+
+  it('should fail when the classification score is below the threshold', async () => {
+    const expected = 'classA';
+    const output = 'Different output';
+    const threshold = 0.9;
+
+    const grader = new TestGrader();
+    const grading: GradingConfig = {
+      provider: grader,
+    };
+
+    const result = await matchesClassification(expected, output, threshold, grading);
+    expect(result.pass).toBeFalsy();
+    expect(result.reason).toBe(`Classification ${expected} has score 0.6 < ${threshold}`);
+  });
+
+  it('should use the overridden classification grading config', async () => {
+    const expected = 'classA';
+    const output = 'Sample output';
+    const threshold = 0.5;
+
+    const grading: GradingConfig = {
+      provider: {
+        id: 'hf:text-classification:foobar',
+      },
+    };
+
+    const mockCallApi = jest.spyOn(
+      HuggingfaceTextClassificationProvider.prototype,
+      'callClassificationApi',
+    );
+    mockCallApi.mockImplementation(function (this: HuggingfaceTextClassificationProvider) {
+      return Promise.resolve({
+        classification: { [expected]: 0.6 },
+      });
+    });
+
+    const result = await matchesClassification(expected, output, threshold, grading);
+    expect(result.pass).toBeTruthy();
+    expect(result.reason).toBe(`Classification ${expected} has score 0.6 >= ${threshold}`);
+    expect(mockCallApi).toHaveBeenCalled();
+
+    mockCallApi.mockRestore();
   });
 });

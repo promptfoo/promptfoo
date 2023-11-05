@@ -65,6 +65,7 @@ export interface ApiProvider {
     },
   ) => Promise<ProviderResponse>;
   callEmbeddingApi?: (prompt: string) => Promise<ProviderEmbeddingResponse>;
+  callClassificationApi?: (prompt: string) => Promise<ProviderClassificationResponse>;
 }
 
 export interface TokenUsage {
@@ -85,6 +86,11 @@ export interface ProviderEmbeddingResponse {
   error?: string;
   embedding?: number[];
   tokenUsage?: Partial<TokenUsage>;
+}
+
+export interface ProviderClassificationResponse {
+  error?: string;
+  classification?: Record<string, number>;
 }
 
 export interface CsvRow {

@@ -1,7 +1,11 @@
-import fetch from 'node-fetch';
 import { fetchWithCache } from '../cache';
 
-import type { ApiProvider, ProviderEmbeddingResponse, ProviderResponse } from '../types';
+import type {
+  ApiProvider,
+  ProviderClassificationResponse,
+  ProviderEmbeddingResponse,
+  ProviderResponse,
+} from '../types';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
 interface HuggingfaceTextGenerationOptions {
@@ -85,6 +89,90 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
         error: `API call error: ${String(err)}. Output:\n${response?.data}`,
       };
     }
+  }
+}
+
+interface HuggingfaceTextClassificationOptions {}
+
+export class HuggingfaceTextClassificationProvider implements ApiProvider {
+  modelName: string;
+  config: HuggingfaceTextClassificationOptions;
+
+  constructor(
+    modelName: string,
+    options: { id?: string; config?: HuggingfaceTextClassificationOptions } = {},
+  ) {
+    const { id, config } = options;
+    this.modelName = modelName;
+    this.id = id ? () => id : this.id;
+    this.config = config || {};
+  }
+
+  id(): string {
+    return `huggingface:text-classification:${this.modelName}`;
+  }
+
+  toString(): string {
+    return `[Huggingface Text Classification Provider ${this.modelName}]`;
+  }
+
+  async callClassificationApi(prompt: string): Promise<ProviderClassificationResponse> {
+    const params = {
+      inputs: prompt,
+      parameters: {
+        ...this.config,
+      },
+    };
+
+    let response;
+    try {
+      response = await fetchWithCache(
+        `https://api-inference.huggingface.co/models/${this.modelName}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(process.env.HF_API_TOKEN
+              ? { Authorization: `Bearer ${process.env.HF_API_TOKEN}` }
+              : {}),
+          },
+          body: JSON.stringify(params),
+        },
+        REQUEST_TIMEOUT_MS,
+      );
+
+      if (response.data.error) {
+        return {
+          error: `API call error: ${response.data.error}`,
+        };
+      }
+      if (!response.data[0] || !Array.isArray(response.data[0])) {
+        return {
+          error: `Malformed response data: ${response.data}`,
+        };
+      }
+
+      const scores: Record<string, number> = {};
+      response.data[0].forEach((item) => {
+        scores[item.label] = item.score;
+      });
+
+      return {
+        classification: scores,
+      };
+    } catch (err) {
+      return {
+        error: `API call error: ${String(err)}. Output:\n${response?.data}`,
+      };
+    }
+  }
+
+  async callApi(prompt: string): Promise<ProviderResponse> {
+    const ret = await this.callClassificationApi(prompt);
+    return {
+      error: ret.error,
+      output: JSON.stringify(ret.classification),
+    };
   }
 }
 

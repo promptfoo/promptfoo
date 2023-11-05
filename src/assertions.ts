@@ -13,6 +13,7 @@ import {
   matchesLlmRubric,
   matchesFactuality,
   matchesClosedQa,
+  matchesClassification,
 } from './matchers';
 
 import type { Assertion, AssertionType, GradingResult, AtomicTestCase } from './types';
@@ -466,7 +467,6 @@ ${renderedValue}`,
       } else {
         const { execSync } = require('child_process');
         const isMultiline = renderedValue.includes('\n');
-        const escapedRenderedValue = renderedValue.replace(/"/g, '\\\\"');
         let pythonScript = `import json
   import sys
   data = json.load(sys.stdin)
@@ -699,6 +699,26 @@ ${assertion.value}`,
     };
   }
 
+  if (baseType === 'classifier') {
+    invariant(
+      typeof renderedValue === 'string',
+      '"classifier" assertion type must have a string value',
+    );
+
+    // Assertion provider overrides test provider
+    test.options = test.options || {};
+    test.options.provider = assertion.provider || test.options.provider;
+    return {
+      assertion,
+      ...(await matchesClassification(
+        renderedValue,
+        output,
+        assertion.threshold ?? 1,
+        test.options,
+      )),
+    };
+  }
+
   throw new Error('Unknown assertion type: ' + assertion.type);
 }
 
@@ -774,7 +794,7 @@ export function assertionFromString(expected: string): Assertion {
 
   // New options
   const assertionRegex =
-    /^(not-)?(equals|contains-any|contains-all|icontains-any|icontains-all|contains-json|is-json|regex|icontains|contains|webhook|rouge-n|similar|starts-with|levenshtein|model-graded-factuality|model-graded-closedqa)(?:\((\d+(?:\.\d+)?)\))?(?::(.*))?$/;
+    /^(not-)?(equals|contains-any|contains-all|icontains-any|icontains-all|contains-json|is-json|regex|icontains|contains|webhook|rouge-n|similar|starts-with|levenshtein|classifier|model-graded-factuality|model-graded-closedqa)(?:\((\d+(?:\.\d+)?)\))?(?::(.*))?$/;
   const regexMatch = expected.match(assertionRegex);
 
   if (regexMatch) {
@@ -800,7 +820,8 @@ export function assertionFromString(expected: string): Assertion {
       type === 'rouge-n' ||
       type === 'similar' ||
       type === 'starts-with' ||
-      type === 'levenshtein'
+      type === 'levenshtein' ||
+      type === 'classifier'
     ) {
       return {
         type: fullType as AssertionType,
@@ -825,6 +846,7 @@ export function assertionFromString(expected: string): Assertion {
 // These exports are used by the node.js package (index.ts)
 export default {
   matchesSimilarity,
+  matchesClassification,
   matchesLlmRubric,
   matchesFactuality,
   matchesClosedQa,
