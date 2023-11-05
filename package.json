@@ -27,6 +27,7 @@
   "scripts": {
     "tsc": "tsc",
     "local": "ts-node --esm --files src/main.ts",
+    "local:web": "cd src/web/nextui && npm run dev",
     "install:nextui": "cd src/web/nextui && npm install",
     "build:clean": "rm -rf dist",
     "build:nextui": "cd src/web/nextui && npm run build && { [ -z \"$NEXT_PUBLIC_PROMPTFOO_BUILD_STANDALONE_SERVER\" ] && cp -r out/ ../../../dist/src/web/nextui; } || true",
