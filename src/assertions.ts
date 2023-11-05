@@ -699,10 +699,10 @@ ${assertion.value}`,
     };
   }
 
-  if (baseType === 'classification') {
+  if (baseType === 'classifier') {
     invariant(
       typeof renderedValue === 'string',
-      '"classification" assertion type must have a string value',
+      '"classifier" assertion type must have a string value',
     );
 
     // Assertion provider overrides test provider
@@ -794,7 +794,7 @@ export function assertionFromString(expected: string): Assertion {
 
   // New options
   const assertionRegex =
-    /^(not-)?(equals|contains-any|contains-all|icontains-any|icontains-all|contains-json|is-json|regex|icontains|contains|webhook|rouge-n|similar|starts-with|levenshtein|model-graded-factuality|model-graded-closedqa)(?:\((\d+(?:\.\d+)?)\))?(?::(.*))?$/;
+    /^(not-)?(equals|contains-any|contains-all|icontains-any|icontains-all|contains-json|is-json|regex|icontains|contains|webhook|rouge-n|similar|starts-with|levenshtein|classifier|model-graded-factuality|model-graded-closedqa)(?:\((\d+(?:\.\d+)?)\))?(?::(.*))?$/;
   const regexMatch = expected.match(assertionRegex);
 
   if (regexMatch) {
@@ -821,7 +821,7 @@ export function assertionFromString(expected: string): Assertion {
       type === 'similar' ||
       type === 'starts-with' ||
       type === 'levenshtein' ||
-      type === 'classification'
+      type === 'classifier'
     ) {
       return {
         type: fullType as AssertionType,

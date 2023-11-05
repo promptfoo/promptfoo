@@ -1331,4 +1331,13 @@ describe('assertionFromString', () => {
     expect(result.value).toBe('Expected output');
     expect(result.threshold).toBe(5);
   });
+
+  it('should create a classifier assertion', () => {
+    const expected = 'classifier(0.5):classA';
+
+    const result: Assertion = assertionFromString(expected);
+    expect(result.type).toBe('classifier');
+    expect(result.value).toBe('classA');
+    expect(result.threshold).toBe(0.5);
+  });
 });
