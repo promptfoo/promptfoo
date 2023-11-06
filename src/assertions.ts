@@ -1,8 +1,10 @@
+import fs from 'fs';
 import path from 'path';
 
 import rouge from 'rouge';
 import invariant from 'tiny-invariant';
-import Ajv from 'ajv';
+import yaml from 'js-yaml';
+import Ajv, { ValidateFunction } from 'ajv';
 import { distance as levenshtein } from 'fastest-levenshtein';
 
 import telemetry from './telemetry';
@@ -197,8 +199,22 @@ export async function runAssertion(
     }
 
     if (pass && renderedValue) {
-      invariant(typeof renderedValue === 'object', 'is-json assertion must have an object value');
-      const validate = ajv.compile(renderedValue);
+      let validate: ValidateFunction;
+      if (typeof renderedValue === 'string' && renderedValue.startsWith('file://')) {
+        // Load the JSON schema from external file
+        const filePath = renderedValue.slice('file://'.length);
+        const fileContent = fs.readFileSync(filePath, 'utf-8');
+        const schema =
+          filePath.endsWith('.yaml') || filePath.endsWith('.yml')
+            ? yaml.load(fileContent)
+            : JSON.parse(fileContent);
+        validate = ajv.compile(schema);
+      } else if (typeof renderedValue === 'object') {
+        // Value is JSON schema
+        validate = ajv.compile(renderedValue);
+      } else {
+        throw new Error('is-json assertion must have a string or object value');
+      }
       pass = validate(parsedJson);
       if (!pass) {
         return {
