@@ -115,7 +115,7 @@ export async function loadApiProvider(
     // Load OpenAI module
     const splits = providerPath.split(':');
     const modelType = splits[1];
-    const modelName = splits[2];
+    const modelName = splits.slice(2).join(':');
 
     if (modelType === 'chat') {
       return new OpenAiChatCompletionProvider(modelName || 'gpt-3.5-turbo', providerOptions);

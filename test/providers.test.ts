@@ -384,6 +384,12 @@ describe('providers', () => {
     expect(provider).toBeInstanceOf(OpenAiCompletionProvider);
   });
 
+  test('loadApiProvider with OpenAI finetuned model', async () => {
+    const provider = await loadApiProvider('openai:chat:ft:gpt-3.5-turbo-0613:company-name::ID:');
+    expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
+    expect(provider.id()).toBe('openai:ft:gpt-3.5-turbo-0613:company-name::ID:');
+  });
+
   test('loadApiProvider with azureopenai:completion:modelName', async () => {
     const provider = await loadApiProvider('azureopenai:completion:text-davinci-003');
     expect(provider).toBeInstanceOf(AzureOpenAiCompletionProvider);
