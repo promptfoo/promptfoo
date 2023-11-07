@@ -303,7 +303,7 @@ cd path/to/experiment-with-promptfoo   # contains your promptfooconfig.yaml
 npx path/to/promptfoo-source eval
 ```
 
-The web UI is located in `src/web/nextui`. To run it in dev mode, run `npm run local:web`.  This will host the web UI at http://localhost:3000. The web UI expects `promptfoo view` to be running separately.
+The web UI is located in `src/web/nextui`. To run it in dev mode, run `npm run local:web`. This will host the web UI at http://localhost:3000. The web UI expects `promptfoo view` to be running separately.
 
 Contributions are welcome! Please feel free to submit a pull request or open an issue.
 
