@@ -10,18 +10,24 @@ function stripText(text: string) {
 }
 
 export class ScriptCompletionProvider implements ApiProvider {
-  constructor(private scriptPath: string, private config?: ProviderOptions) {}
+  constructor(private scriptPath: string, private options?: ProviderOptions) {}
 
   id() {
     return `exec:${this.scriptPath}`;
   }
 
-  async callApi(prompt: string) {
+  async callApi(prompt: string, vars?: Record<string, string | object>) {
     return new Promise((resolve, reject) => {
-      // TODO(ian): This config is real ugly.
-      const command = this.config?.config.basePath
-        ? `cd ${this.config.config.basePath} && ${this.scriptPath} "${prompt}"`
-        : `${this.scriptPath} "${prompt}"`;
+      const escapedPrompt = prompt.replace(/"/g, '\\"').replace(/\n/g, '\\n');
+      const escapedOptions = JSON.stringify(this.options || {})
+        .replace(/"/g, '\\"')
+        .replace(/\n/g, '\\n');
+      const escapedTestContext = JSON.stringify(vars || {})
+        .replace(/"/g, '\\"')
+        .replace(/\n/g, '\\n');
+      const command = this.options?.config.basePath
+        ? `cd ${this.options.config.basePath} && ${this.scriptPath} "${escapedPrompt}" "${escapedOptions}" "${escapedTestContext}"`
+        : `${this.scriptPath} "${escapedPrompt}" "${escapedOptions}" "${escapedTestContext}"`;
 
       // TODO(ian): Caching
       exec(command, (error, stdout, stderr) => {
