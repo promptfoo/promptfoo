@@ -379,11 +379,22 @@ export async function runAssertion(
     for (const jsonMatch of jsonOutputs) {
       pass = jsonMatch !== inverse;
       if (pass && renderedValue) {
-        invariant(
-          typeof renderedValue === 'object',
-          'contains-json assertion must have an object value',
-        );
-        const validate = ajv.compile(renderedValue);
+        let validate: ValidateFunction;
+        if (typeof renderedValue === 'string' && renderedValue.startsWith('file://')) {
+          // Load the JSON schema from external file
+          const filePath = renderedValue.slice('file://'.length);
+          const fileContent = fs.readFileSync(filePath, 'utf-8');
+          const schema =
+            filePath.endsWith('.yaml') || filePath.endsWith('.yml')
+              ? yaml.load(fileContent)
+              : JSON.parse(fileContent);
+          validate = ajv.compile(schema);
+        } else if (typeof renderedValue === 'object') {
+          // Value is JSON schema
+          validate = ajv.compile(renderedValue);
+        } else {
+          throw new Error('is-json assertion must have a string or object value');
+        }
         pass = validate(jsonMatch);
         if (pass) {
           break;
