@@ -1,3 +1,4 @@
+import * as fs from 'fs';
 import * as path from 'path';
 
 import { Response } from 'node-fetch';
@@ -11,6 +12,14 @@ import type {
   ProviderResponse,
   GradingResult,
 } from '../src/types';
+
+jest.mock('glob', () => ({
+  globSync: jest.fn(),
+}));
+
+jest.mock('fs', () => ({
+  readFileSync: jest.fn(),
+}));
 
 export class TestGrader implements ApiProvider {
   async callApi(): Promise<ProviderResponse> {
@@ -296,6 +305,82 @@ describe('runAssertion', () => {
     );
   });
 
+  it('should pass when the is-json assertion passes with external schema', async () => {
+    const assertion: Assertion = {
+      type: 'is-json',
+      value: 'file:///schema.json',
+    };
+
+    (fs.readFileSync as jest.Mock).mockReturnValue(
+      JSON.stringify({
+        required: ['latitude', 'longitude'],
+        type: 'object',
+        properties: {
+          latitude: {
+            type: 'number',
+            minimum: -90,
+            maximum: 90,
+          },
+          longitude: {
+            type: 'number',
+            minimum: -180,
+            maximum: 180,
+          },
+        },
+      }),
+    );
+
+    const output = '{"latitude": 80.123, "longitude": -1}';
+
+    const result: GradingResult = await runAssertion(
+      'Some prompt',
+      assertion,
+      {} as AtomicTestCase,
+      output,
+    );
+    expect(result.pass).toBeTruthy();
+    expect(result.reason).toBe('Assertion passed');
+  });
+
+  it('should fail when the is-json assertion fails with external schema', async () => {
+    const assertion: Assertion = {
+      type: 'is-json',
+      value: 'file:///schema.json',
+    };
+
+    (fs.readFileSync as jest.Mock).mockReturnValue(
+      JSON.stringify({
+        required: ['latitude', 'longitude'],
+        type: 'object',
+        properties: {
+          latitude: {
+            type: 'number',
+            minimum: -90,
+            maximum: 90,
+          },
+          longitude: {
+            type: 'number',
+            minimum: -180,
+            maximum: 180,
+          },
+        },
+      }),
+    );
+
+    const output = '{"latitude": "high", "longitude": [-1]}';
+
+    const result: GradingResult = await runAssertion(
+      'Some prompt',
+      assertion,
+      {} as AtomicTestCase,
+      output,
+    );
+    expect(result.pass).toBeFalsy();
+    expect(result.reason).toBe(
+      'JSON does not conform to the provided schema. Errors: data/latitude must be number',
+    );
+  });
+
   it('should pass when the contains-json assertion passes', async () => {
     const output =
       'this is some other stuff \n\n {"key": "value", "key2": {"key3": "value2", "key4": ["value3", "value4"]}} \n\n blah blah';
@@ -363,7 +448,83 @@ describe('runAssertion', () => {
     expect(result.reason).toBe('Assertion passed');
   });
 
+  it('should pass when the contains-json assertion passes with external schema', async () => {
+    const assertion: Assertion = {
+      type: 'contains-json',
+      value: 'file:///schema.json',
+    };
+
+    (fs.readFileSync as jest.Mock).mockReturnValue(
+      JSON.stringify({
+        required: ['latitude', 'longitude'],
+        type: 'object',
+        properties: {
+          latitude: {
+            type: 'number',
+            minimum: -90,
+            maximum: 90,
+          },
+          longitude: {
+            type: 'number',
+            minimum: -180,
+            maximum: 180,
+          },
+        },
+      }),
+    );
+
+    const output = 'here is the answer\n\n```{"latitude": 80.123, "longitude": -1}```';
+
+    const result: GradingResult = await runAssertion(
+      'Some prompt',
+      assertion,
+      {} as AtomicTestCase,
+      output,
+    );
+    expect(result.pass).toBeTruthy();
+    expect(result.reason).toBe('Assertion passed');
+  });
+
   it('should fail when the contains-json assertion fails with schema', async () => {
+    const assertion: Assertion = {
+      type: 'contains-json',
+      value: 'file:///schema.json',
+    };
+
+    (fs.readFileSync as jest.Mock).mockReturnValue(
+      JSON.stringify({
+        required: ['latitude', 'longitude'],
+        type: 'object',
+        properties: {
+          latitude: {
+            type: 'number',
+            minimum: -90,
+            maximum: 90,
+          },
+          longitude: {
+            type: 'number',
+            minimum: -180,
+            maximum: 180,
+          },
+        },
+      }),
+    );
+
+    const output = 'here is the answer\n\n```{"latitude": "medium", "longitude": -1}```';
+
+    const result: GradingResult = await runAssertion(
+      'Some prompt',
+      assertion,
+      {} as AtomicTestCase,
+      output,
+    );
+    expect(result.pass).toBeFalsy();
+    expect(result.reason).toBe(
+      'JSON does not conform to the provided schema. Errors: data/latitude must be number',
+    );
+  });
+
+  it('should fail when the contains-json assertion fails with external schema', async () => {
     const output = 'here is the answer\n\n```{"latitude": "medium", "longitude": -1}```';
 
     const result: GradingResult = await runAssertion(

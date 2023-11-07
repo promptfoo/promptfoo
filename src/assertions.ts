@@ -137,7 +137,7 @@ export async function runAssertion(
 
   // Render assertion values
   let renderedValue = assertion.value;
-  let valueFromScript: string | boolean | number | GradingResult | undefined;
+  let valueFromScript: string | boolean | number | GradingResult | object | undefined;
   if (typeof renderedValue === 'string') {
     if (renderedValue.startsWith('file://')) {
       // Load the file
@@ -167,6 +167,10 @@ export async function runAssertion(
           `python ${filePath} "${escapedOutput}" "${escapedContext}"`,
         ).toString();
         valueFromScript = pythonScriptOutput.trim();
+      } else if (filePath.endsWith('.json')) {
+        valueFromScript = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+      } else if (filePath.endsWith('.yaml') || filePath.endsWith('.yml')) {
+        valueFromScript = yaml.load(fs.readFileSync(filePath, 'utf8')) as object;
       } else {
         throw new Error(`Assertion malformed: ${filePath} must end in .js or .py`);
       }
@@ -201,14 +205,10 @@ export async function runAssertion(
     if (pass && renderedValue) {
       let validate: ValidateFunction;
       if (typeof renderedValue === 'string' && renderedValue.startsWith('file://')) {
-        // Load the JSON schema from external file
-        const filePath = renderedValue.slice('file://'.length);
-        const fileContent = fs.readFileSync(filePath, 'utf-8');
-        const schema =
-          filePath.endsWith('.yaml') || filePath.endsWith('.yml')
-            ? yaml.load(fileContent)
-            : JSON.parse(fileContent);
-        validate = ajv.compile(schema);
+        // Reference the JSON schema from external file
+        const schema = valueFromScript;
+        invariant(schema, 'is-json references a file that does not export a JSON schema');
+        validate = ajv.compile(schema as object);
       } else if (typeof renderedValue === 'object') {
         // Value is JSON schema
         validate = ajv.compile(renderedValue);
@@ -381,14 +381,10 @@ export async function runAssertion(
       if (pass && renderedValue) {
         let validate: ValidateFunction;
         if (typeof renderedValue === 'string' && renderedValue.startsWith('file://')) {
-          // Load the JSON schema from external file
-          const filePath = renderedValue.slice('file://'.length);
-          const fileContent = fs.readFileSync(filePath, 'utf-8');
-          const schema =
-            filePath.endsWith('.yaml') || filePath.endsWith('.yml')
-              ? yaml.load(fileContent)
-              : JSON.parse(fileContent);
-          validate = ajv.compile(schema);
+          // Reference the JSON schema from external file
+          const schema = valueFromScript;
+          invariant(schema, 'is-json references a file that does not export a JSON schema');
+          validate = ajv.compile(schema as object);
         } else if (typeof renderedValue === 'object') {
           // Value is JSON schema
           validate = ajv.compile(renderedValue);
@@ -442,7 +438,7 @@ export async function runAssertion(
             typeof valueFromScript === 'object',
           `Javascript assertion script must return a boolean, number, or object (${assertion.value})`,
         );
-        result = valueFromScript;
+        result = valueFromScript as boolean | number | GradingResult;
       } else {
         const functionBody = renderedValue.includes('\n')
           ? renderedValue
