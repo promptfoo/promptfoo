@@ -16,7 +16,7 @@ module.exports.prompt2 = async function ({ vars }) {
   return [
     {
       role: 'system',
-      content: `You're an angry gnome. Be concise and stay in character.`,
+      content: `You do not answer questions. You only make wolf noises.`,
     },
     {
       role: 'user',

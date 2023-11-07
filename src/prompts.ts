@@ -131,11 +131,13 @@ export function readPrompts(
 
   for (const promptPathInfo of promptPathInfos) {
     const parsedPath = path.parse(promptPathInfo.resolved);
-    let filename, functionName;
-    if (parsedPath.base.includes(':') && (parsedPath.ext === 'js' || parsedPath.ext === 'cjs')) {
-      [filename, functionName] = parsedPath.base.split(':');
-    } else {
-      filename = parsedPath.base;
+    let filename = parsedPath.base;
+    let functionName;
+    if (parsedPath.base.includes(':')) {
+      const splits = parsedPath.base.split(':');
+      if (splits[0] && (splits[0].endsWith('.js') || splits[0].endsWith('.cjs'))) {
+        [filename, functionName] = splits;
+      }
     }
     const promptPath = path.join(parsedPath.dir, filename);
     let stat;
