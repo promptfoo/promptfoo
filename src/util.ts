@@ -76,8 +76,9 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
   const ext = path.parse(configPath).ext;
   switch (ext) {
     case '.json':
-      const content = fs.readFileSync(configPath, 'utf-8');
-      return JSON.parse(content) as UnifiedConfig;
+      let json = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      json = (await $RefParser.dereference(json)) as UnifiedConfig;
+      return json;
     case '.js':
       return require(configPath) as UnifiedConfig;
     case '.yaml':
