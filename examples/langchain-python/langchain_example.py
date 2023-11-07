@@ -1,3 +1,4 @@
+import json
 import sys
 import os
 
@@ -11,4 +12,10 @@ llm = OpenAI(
 
 llm_math = LLMMathChain(llm=llm, verbose=True)
 
-llm_math.run(sys.argv[1])
+prompt = sys.argv[1]
+provider_options = json.loads(sys.argv[2])
+test_context = json.loads(sys.argv[3])
+
+# print("Vars: ", test_context['vars'])
+
+llm_math.run(prompt)
