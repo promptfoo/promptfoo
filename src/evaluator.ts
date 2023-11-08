@@ -563,16 +563,20 @@ class Evaluator {
         }
 
         let resultText: string | undefined;
+        const outputTextDisplay =
+          typeof row.response?.output === 'object'
+            ? JSON.stringify(row.response.output)
+            : row.response?.output || null;
         if (isTest) {
           if (row.success) {
-            resultText = `${row.response?.output || row.error || ''}`;
+            resultText = `${outputTextDisplay || row.error || ''}`;
           } else {
-            resultText = `${row.error}\n---\n${row.response?.output || ''}`;
+            resultText = `${row.error}\n---\n${outputTextDisplay || ''}`;
           }
         } else if (row.error) {
           resultText = `${row.error}`;
         } else {
-          resultText = row.response?.output || row.error || '';
+          resultText = outputTextDisplay || row.error || '';
         }
 
         const { rowIndex, colIndex } = evalStep;

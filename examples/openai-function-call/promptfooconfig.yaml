@@ -24,7 +24,6 @@ providers:
           }
         ]
 
-outputPath: output.csv
 defaultTest:
   # Apply this postprocessing option to every test case
   options:
