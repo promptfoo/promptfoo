@@ -40,7 +40,7 @@ export async function generatePrompts(prompt: string, num: number): Promise<Gene
 
   try {
     return {
-      prompts: [resp.output],
+      prompts: [String(resp.output)],
       tokensUsed: {
         total: resp.tokenUsage?.total || 0,
         prompt: resp.tokenUsage?.prompt || 0,

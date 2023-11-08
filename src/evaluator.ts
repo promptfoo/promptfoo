@@ -126,7 +126,10 @@ class Evaluator {
   testSuite: TestSuite;
   options: EvaluateOptions;
   stats: EvaluateStats;
-  conversations: Record<string, { prompt: string | object; input: string; output: string }[]>;
+  conversations: Record<
+    string,
+    { prompt: string | object; input: string; output: string | object }[]
+  >;
 
   constructor(testSuite: TestSuite, options: EvaluateOptions) {
     this.testSuite = testSuite;

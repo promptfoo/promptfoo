@@ -216,6 +216,7 @@ export async function matchesLlmRubric(
     };
   }
 
+  invariant(typeof resp.output === 'string', 'llm-rubric produced malformed response');
   try {
     const parsed = JSON.parse(resp.output) as Partial<GradingResult>;
     parsed.tokensUsed = {
@@ -280,6 +281,7 @@ export async function matchesFactuality(
     };
   }
 
+  invariant(typeof resp.output === 'string', 'model-graded-factuality produced malformed response');
   try {
     const option = resp.output.trim().charAt(1); // Extract the option character
     let reason = '';
@@ -377,6 +379,7 @@ export async function matchesClosedQa(
     };
   }
 
+  invariant(typeof resp.output === 'string', 'model-graded-closedqa produced malformed response');
   try {
     const pass = resp.output.endsWith('Y');
     let reason;
