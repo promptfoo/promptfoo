@@ -24,6 +24,8 @@ interface AzureOpenAiCompletionOptions {
   }[];
   function_call?: 'none' | 'auto' | { name: string };
   stop?: string[];
+  deployment_id?: string;
+  dataSources?: any;
 }
 
 class AzureOpenAiGenericProvider implements ApiProvider {
@@ -168,6 +170,8 @@ export class AzureOpenAiCompletionProvider extends AzureOpenAiGenericProvider {
         this.config.frequency_penalty ?? parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0'),
       best_of: this.config.best_of ?? parseInt(process.env.OPENAI_BEST_OF || '1'),
       stop,
+      ...(this.config.deployment_id ? { deployment_id: this.config.deployment_id } : {}),
+      ...(this.config.dataSources ? { dataSources: this.config.dataSources } : {}),
     };
     logger.debug(`Calling Azure OpenAI API: ${JSON.stringify(body)}`);
     let data,
@@ -244,6 +248,8 @@ export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvide
       functions: this.config.functions || undefined,
       function_call: this.config.function_call || undefined,
       stop,
+      ...(this.config.deployment_id ? { deployment_id: this.config.deployment_id } : {}),
+      ...(this.config.dataSources ? { dataSources: this.config.dataSources } : {}),
     };
     logger.debug(`Calling Azure OpenAI API: ${JSON.stringify(body)}`);
 
