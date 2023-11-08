@@ -25,6 +25,13 @@ const DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD = 0.8;
 const ajv = new Ajv();
 const nunjucks = getNunjucksEngine();
 
+function coerceString(value: string | object): string {
+  if (typeof value === 'string') {
+    return value;
+  }
+  return JSON.stringify(value);
+}
+
 function handleRougeScore(
   baseType: 'rouge-n',
   assertion: Assertion,
@@ -54,7 +61,7 @@ function handleRougeScore(
 export async function runAssertions(
   prompt: string,
   test: AtomicTestCase,
-  output: string,
+  output: string | object,
 ): Promise<GradingResult> {
   const tokensUsed = {
     total: 0,
@@ -121,7 +128,7 @@ export async function runAssertion(
   prompt: string,
   assertion: Assertion,
   test: AtomicTestCase,
-  output: string,
+  output: string | object,
 ): Promise<GradingResult> {
   let pass: boolean = false;
   let score: number = 0.0;
@@ -134,6 +141,8 @@ export async function runAssertion(
   telemetry.record('assertion_used', {
     type: baseType,
   });
+
+  const outputString = coerceString(output);
 
   // Render assertion values
   let renderedValue = assertion.value;
@@ -159,7 +168,7 @@ export async function runAssertion(
         }
       } else if (filePath.endsWith('.py')) {
         const { execSync } = require('child_process');
-        const escapedOutput = output.replace(/"/g, '\\"').replace(/\n/g, '\\n');
+        const escapedOutput = outputString.replace(/"/g, '\\"').replace(/\n/g, '\\n');
         const escapedContext = JSON.stringify({ vars: test.vars || {} })
           .replace(/"/g, '\\"')
           .replace(/\n/g, '\\n');
@@ -184,11 +193,13 @@ export async function runAssertion(
   }
 
   if (baseType === 'equals') {
-    pass = renderedValue == output;
+    pass = renderedValue == outputString;
     return {
       pass,
       score: pass ? 1 : 0,
-      reason: pass ? 'Assertion passed' : `Expected output "${renderedValue}" but got "${output}"`,
+      reason: pass
+        ? 'Assertion passed'
+        : `Expected output "${renderedValue}" but got "${outputString}"`,
       assertion,
     };
   }
@@ -196,7 +207,7 @@ export async function runAssertion(
   if (baseType === 'is-json') {
     let parsedJson;
     try {
-      parsedJson = JSON.parse(output);
+      parsedJson = JSON.parse(outputString);
       pass = !inverse;
     } catch (err) {
       pass = inverse;
@@ -242,7 +253,7 @@ export async function runAssertion(
       typeof renderedValue === 'string' || typeof renderedValue === 'number',
       '"contains" assertion type must have a string or number value',
     );
-    pass = output.includes(String(renderedValue)) !== inverse;
+    pass = outputString.includes(String(renderedValue)) !== inverse;
     return {
       pass,
       score: pass ? 1 : 0,
@@ -259,7 +270,7 @@ export async function runAssertion(
       Array.isArray(renderedValue),
       '"contains-any" assertion type must have an array value',
     );
-    pass = renderedValue.some((value) => output.includes(String(value))) !== inverse;
+    pass = renderedValue.some((value) => outputString.includes(String(value))) !== inverse;
     return {
       pass,
       score: pass ? 1 : 0,
@@ -277,8 +288,9 @@ export async function runAssertion(
       '"icontains-any" assertion type must have an array value',
     );
     pass =
-      renderedValue.some((value) => output.toLowerCase().includes(String(value).toLowerCase())) !==
-      inverse;
+      renderedValue.some((value) =>
+        outputString.toLowerCase().includes(String(value).toLowerCase()),
+      ) !== inverse;
     return {
       pass,
       score: pass ? 1 : 0,
@@ -295,7 +307,7 @@ export async function runAssertion(
       Array.isArray(renderedValue),
       '"contains-all" assertion type must have an array value',
     );
-    pass = renderedValue.every((value) => output.includes(String(value))) !== inverse;
+    pass = renderedValue.every((value) => outputString.includes(String(value))) !== inverse;
     return {
       pass,
       score: pass ? 1 : 0,
@@ -313,8 +325,9 @@ export async function runAssertion(
       '"icontains-all" assertion type must have an array value',
     );
     pass =
-      renderedValue.every((value) => output.toLowerCase().includes(String(value).toLowerCase())) !==
-      inverse;
+      renderedValue.every((value) =>
+        outputString.toLowerCase().includes(String(value).toLowerCase()),
+      ) !== inverse;
     return {
       pass,
       score: pass ? 1 : 0,
@@ -329,7 +342,7 @@ export async function runAssertion(
     invariant(renderedValue, '"regex" assertion type must have a string value');
     invariant(typeof renderedValue === 'string', '"regex" assertion type must have a string value');
     const regex = new RegExp(renderedValue);
-    pass = regex.test(output) !== inverse;
+    pass = regex.test(outputString) !== inverse;
     return {
       pass,
       score: pass ? 1 : 0,
@@ -346,7 +359,7 @@ export async function runAssertion(
       typeof renderedValue === 'string' || typeof renderedValue === 'number',
       '"icontains" assertion type must have a string or number value',
     );
-    pass = output.toLowerCase().includes(String(renderedValue).toLowerCase()) !== inverse;
+    pass = outputString.toLowerCase().includes(String(renderedValue).toLowerCase()) !== inverse;
     return {
       pass,
       score: pass ? 1 : 0,
@@ -363,7 +376,7 @@ export async function runAssertion(
       typeof renderedValue === 'string',
       '"starts-with" assertion type must have a string value',
     );
-    pass = output.startsWith(String(renderedValue)) !== inverse;
+    pass = outputString.startsWith(String(renderedValue)) !== inverse;
     return {
       pass,
       score: pass ? 1 : 0,
@@ -375,7 +388,7 @@ export async function runAssertion(
   }
   if (baseType === 'contains-json') {
     let errorMessage = 'Expected output to contain valid JSON';
-    let jsonOutputs = containsJSON(output);
+    let jsonOutputs = containsJSON(outputString);
     for (const jsonMatch of jsonOutputs) {
       pass = jsonMatch !== inverse;
       if (pass && renderedValue) {
@@ -417,7 +430,7 @@ export async function runAssertion(
   if (baseType === 'javascript') {
     try {
       if (typeof assertion.value === 'function') {
-        const ret = assertion.value(output, test, assertion);
+        const ret = assertion.value(outputString, test, assertion);
         if (ret && !ret.assertion) {
           // Populate the assertion object if the custom function didn't return it.
           const functionString = assertion.value.toString();
@@ -562,7 +575,7 @@ ${assertion.value}`,
       assertion,
       ...(await matchesSimilarity(
         renderedValue,
-        output,
+        outputString,
         assertion.threshold || 0.75,
         inverse,
         test.options,
@@ -591,7 +604,7 @@ ${assertion.value}`,
     assertion.value = assertion.value || test.options.rubricPrompt;
     return {
       assertion,
-      ...(await matchesLlmRubric(renderedValue || '', output, test.options, test.vars)),
+      ...(await matchesLlmRubric(renderedValue || '', outputString, test.options, test.vars)),
     };
   }
 
@@ -613,7 +626,7 @@ ${assertion.value}`,
 
     return {
       assertion,
-      ...(await matchesFactuality(prompt, renderedValue, output, test.options, test.vars)),
+      ...(await matchesFactuality(prompt, renderedValue, outputString, test.options, test.vars)),
     };
   }
 
@@ -635,7 +648,7 @@ ${assertion.value}`,
 
     return {
       assertion,
-      ...(await matchesClosedQa(prompt, renderedValue, output, test.options, test.vars)),
+      ...(await matchesClosedQa(prompt, renderedValue, outputString, test.options, test.vars)),
     };
   }
 
@@ -700,7 +713,7 @@ ${assertion.value}`,
       typeof renderedValue === 'string' || Array.isArray(renderedValue),
       '"rouge" assertion type must be a value (string or string array)',
     );
-    return handleRougeScore(baseType, assertion, renderedValue, output, inverse);
+    return handleRougeScore(baseType, assertion, renderedValue, outputString, inverse);
   }
 
   if (baseType === 'levenshtein') {
@@ -708,7 +721,7 @@ ${assertion.value}`,
       typeof renderedValue === 'string',
       '"levenshtein" assertion type must have a string value',
     );
-    const levDistance = levenshtein(output, renderedValue);
+    const levDistance = levenshtein(outputString, renderedValue);
     pass = levDistance <= (assertion.threshold || 5);
     return {
       pass,
@@ -735,7 +748,7 @@ ${assertion.value}`,
       assertion,
       ...(await matchesClassification(
         renderedValue,
-        output,
+        outputString,
         assertion.threshold ?? 1,
         test.options,
       )),

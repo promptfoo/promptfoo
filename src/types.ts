@@ -77,7 +77,7 @@ export interface TokenUsage {
 
 export interface ProviderResponse {
   error?: string;
-  output?: string;
+  output?: string | object;
   tokenUsage?: Partial<TokenUsage>;
   cached?: boolean;
 }
@@ -257,7 +257,11 @@ export interface Assertion {
     | string
     | string[]
     | object
-    | ((output: string, testCase: AtomicTestCase, assertion: Assertion) => Promise<GradingResult>);
+    | ((
+        output: string | object,
+        testCase: AtomicTestCase,
+        assertion: Assertion,
+      ) => Promise<GradingResult>);
 
   // The threshold value, only applicable for similarity (cosine distance)
   threshold?: number;

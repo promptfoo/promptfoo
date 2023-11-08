@@ -320,7 +320,7 @@ async function main() {
 
       // Validation
       if (!config.prompts || config.prompts.length === 0) {
-        logger.error(chalk.red('You must provide at least 1 prompt file'));
+        logger.error(chalk.red('You must provide at least 1 prompt'));
         process.exit(1);
       }
       if (!config.providers || config.providers.length === 0) {
