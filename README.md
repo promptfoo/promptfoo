@@ -1,4 +1,4 @@
-# promptfoo: test your prompts
+# promptfoo: test your LLM app
 
 [![npm](https://img.shields.io/npm/v/promptfoo)](https://npmjs.com/package/promptfoo)
 [![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/typpo/promptfoo/main.yml)](https://github.com/typpo/promptfoo/actions/workflows/main.yml)
@@ -9,7 +9,7 @@
 
 With promptfoo, you can:
 
-- **Systematically test prompts & models** against predefined test cases
+- **Systematically test prompts, models, and RAGs** with predefined test cases
 - **Evaluate quality and catch regressions** by comparing LLM outputs side-by-side
 - **Speed up evaluations** with caching and concurrency
 - **Score outputs automatically** by defining [test cases](https://promptfoo.dev/docs/configuration/expected-outputs)
