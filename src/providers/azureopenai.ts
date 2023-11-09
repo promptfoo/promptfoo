@@ -256,8 +256,12 @@ export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvide
     let data,
       cached = false;
     try {
+      const url = this.config.dataSources
+        ? `https://${this.apiHost}/openai/deployments/${this.deploymentName}/extensions/chat/completions?api-version=2023-07-01-preview`
+        : `https://${this.apiHost}/openai/deployments/${this.deploymentName}/chat/completions?api-version=2023-07-01-preview`;
+
       ({ data, cached } = (await fetchWithCache(
-        `https://${this.apiHost}/openai/deployments/${this.deploymentName}/extensions/chat/completions?api-version=2023-07-01-preview`,
+        url,
         {
           method: 'POST',
           headers: {
