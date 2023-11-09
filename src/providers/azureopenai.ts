@@ -280,7 +280,7 @@ export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvide
 
     logger.debug(`\tAzure OpenAI API response: ${JSON.stringify(data)}`);
     try {
-      const message = data.choices[0].messages.find(msg=>msg.role==='assistant');
+      const message = this.config.dataSources ? data.choices[0].messages.find(msg => msg.role === 'assistant') : data.choices[0].message;
       const output = message.content == null ? message.function_call : message.content;
       return {
         output,
