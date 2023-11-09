@@ -65,6 +65,14 @@ describe('runAssertions', () => {
     expect(result.reason).toBe('Expected output "Expected output" but got "Different output"');
   });
 
+  it('should handle output as an object', async () => {
+    const output = { key: 'value' };
+
+    const result: GradingResult = await runAssertions('Some prompt', test, output);
+    expect(result.pass).toBeFalsy();
+    expect(result.reason).toBe('Expected output "Expected output" but got "{"key":"value"}"');
+  });
+
   it('should fail when combined score is less than threshold', async () => {
     const output = 'Different output';
 
@@ -249,6 +257,19 @@ describe('runAssertion', () => {
     );
     expect(result.pass).toBeFalsy();
     expect(result.reason).toBe('Expected output "Expected output" but got "Different output"');
+  });
+
+  it('should handle output as an object', async () => {
+    const output = { key: 'value' };
+
+    const result: GradingResult = await runAssertion(
+      'Some prompt',
+      equalityAssertion,
+      {} as AtomicTestCase,
+      output,
+    );
+    expect(result.pass).toBeFalsy();
+    expect(result.reason).toBe('Expected output "Expected output" but got "{"key":"value"}"');
   });
 
   it('should pass when the is-json assertion passes', async () => {
