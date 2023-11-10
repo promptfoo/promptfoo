@@ -1,5 +1,5 @@
 name: CI
-on: [push]
+on: [push, pull_request]
 env:
   OPENAI_API_KEY: xxx
   AZURE_OPENAI_API_HOST: xxx
