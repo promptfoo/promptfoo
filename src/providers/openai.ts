@@ -22,6 +22,7 @@ interface OpenAiCompletionOptions {
     parameters: any;
   }[];
   function_call?: 'none' | 'auto' | { name: string };
+  response_format?: { type: 'json_object' };
   stop?: string[];
 
   apiKey?: string;
@@ -289,6 +290,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         this.config.frequency_penalty ?? parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0'),
       functions: this.config.functions || undefined,
       function_call: this.config.function_call || undefined,
+      response_format: this.config.response_format || undefined,
       stop,
     };
     logger.debug(`Calling OpenAI API: ${JSON.stringify(body)}`);
