@@ -23,6 +23,7 @@ interface OpenAiCompletionOptions {
   }[];
   function_call?: 'none' | 'auto' | { name: string };
   stop?: string[];
+  seed?: number;
 
   apiKey?: string;
   apiHost?: string;
@@ -192,6 +193,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
     const body = {
       model: this.modelName,
       prompt,
+      seed: this.config.seed || 0,
       max_tokens: this.config.max_tokens ?? parseInt(process.env.OPENAI_MAX_TOKENS || '1024'),
       temperature: this.config.temperature ?? parseFloat(process.env.OPENAI_TEMPERATURE || '0'),
       top_p: this.config.top_p ?? parseFloat(process.env.OPENAI_TOP_P || '1'),
@@ -291,6 +293,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     const body = {
       model: this.modelName,
       messages: messages,
+      seed: this.config.seed || 0,
       max_tokens: this.config.max_tokens ?? parseInt(process.env.OPENAI_MAX_TOKENS || '1024'),
       temperature: this.config.temperature ?? parseFloat(process.env.OPENAI_TEMPERATURE || '0'),
       top_p: this.config.top_p ?? parseFloat(process.env.OPENAI_TOP_P || '1'),
