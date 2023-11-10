@@ -113,6 +113,29 @@ describe('matchesSimilarity', () => {
 
     mockCallApi.mockRestore();
   });
+
+  it('should throw an error when API call fails', async () => {
+    const expected = 'Expected output';
+    const output = 'Sample output';
+    const threshold = 0.5;
+    const grading: GradingConfig = {
+      provider: {
+        id: 'openai:embedding:text-embedding-ada-9999999',
+        config: {
+          apiKey: 'abc123',
+          temperature: 3.1415926,
+        },
+      },
+    };
+
+    jest.spyOn(OpenAiEmbeddingProvider.prototype, 'callEmbeddingApi').mockRejectedValueOnce(
+      new Error('API call failed'),
+    );
+  
+    await expect(async () => {
+      await matchesSimilarity(expected, output, threshold, false, grading);
+    }).rejects.toThrow('API call failed');
+  });
 });
 
 describe('matchesLlmRubric', () => {

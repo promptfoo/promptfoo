@@ -111,14 +111,8 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
         REQUEST_TIMEOUT_MS,
       )) as unknown as any);
     } catch (err) {
-      return {
-        error: `API call error: ${String(err)}`,
-        tokenUsage: {
-          total: 0,
-          prompt: 0,
-          completion: 0,
-        },
-      };
+      logger.error(`API call error: ${err}`);
+      throw err;
     }
     logger.debug(`\tOpenAI embeddings API response: ${JSON.stringify(data)}`);
 
@@ -141,17 +135,12 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
             },
       };
     } catch (err) {
-      return {
-        error: `API response error: ${String(err)}: ${JSON.stringify(data)}`,
-        tokenUsage: {
-          total: data?.usage?.total_tokens,
-          prompt: data?.usage?.prompt_tokens,
-          completion: data?.usage?.completion_tokens,
-        },
-      };
+      logger.error(data.error.message);
+      throw err;
     }
   }
 }
+
 
 export class OpenAiCompletionProvider extends OpenAiGenericProvider {
   static OPENAI_COMPLETION_MODELS = [
