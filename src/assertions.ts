@@ -514,7 +514,7 @@ ${renderedValue}`,
   ${isMultiline ? 'exec(value)' : 'print(json.dumps(eval(value)))'}`;
         const pythonProcessInput = JSON.stringify({ output, context, value: renderedValue });
         result = execSync(
-          `{process.env.PROMPTFOO_PYTHON || 'python'} -c "${pythonScript.replace(/\n/g, ';')}"`,
+          `${process.env.PROMPTFOO_PYTHON || 'python'} -c "${pythonScript.replace(/\n/g, ';')}"`,
           {
             input: pythonProcessInput,
           },
