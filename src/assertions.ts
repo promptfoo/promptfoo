@@ -173,7 +173,9 @@ export async function runAssertion(
           .replace(/"/g, '\\"')
           .replace(/\n/g, '\\n');
         const pythonScriptOutput = execSync(
-          `python ${filePath} "${escapedOutput}" "${escapedContext}"`,
+          `${
+            process.env.PROMPTFOO_PYTHON || 'python'
+          } ${filePath} "${escapedOutput}" "${escapedContext}"`,
         ).toString();
         valueFromScript = pythonScriptOutput.trim();
       } else if (filePath.endsWith('.json')) {
@@ -511,9 +513,12 @@ ${renderedValue}`,
   value = data['value']
   ${isMultiline ? 'exec(value)' : 'print(json.dumps(eval(value)))'}`;
         const pythonProcessInput = JSON.stringify({ output, context, value: renderedValue });
-        result = execSync(`python -c "${pythonScript.replace(/\n/g, ';')}"`, {
-          input: pythonProcessInput,
-        })
+        result = execSync(
+          `{process.env.PROMPTFOO_PYTHON || 'python'} -c "${pythonScript.replace(/\n/g, ';')}"`,
+          {
+            input: pythonProcessInput,
+          },
+        )
           .toString()
           .trim() as string;
       }
