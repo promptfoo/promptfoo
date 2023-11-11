@@ -1285,6 +1285,7 @@ describe('runAssertion', () => {
         output,
       );
 
+      expect(mockFn).toHaveBeenCalledWith("Expected output", {"prompt": "Some prompt", "vars": {}})
       expect(result.pass).toBe(expectedPass);
       expect(result.reason).toContain(expectedReason);
     },
@@ -1335,9 +1336,10 @@ describe('runAssertion', () => {
     async (type, pythonOutput, expectedPass, expectedReason) => {
       const output = 'Expected output';
 
+      const execSyncMock = jest.fn(() => Buffer.from(pythonOutput));
       jest.doMock('child_process', () => {
         return {
-          execSync: jest.fn(() => Buffer.from(pythonOutput)),
+          execSync: execSyncMock,
         };
       });
 
@@ -1353,6 +1355,9 @@ describe('runAssertion', () => {
         output,
       );
 
+      expect(execSyncMock).toHaveBeenCalledWith(
+          `python /path/to/assert.py \"Expected output\" \"{\\\"prompt\\\":\\\"Some prompt\\\",\\\"vars\\\":{}}\"`
+      )
       expect(result.pass).toBe(expectedPass);
       expect(result.reason).toContain(expectedReason);
     },

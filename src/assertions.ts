@@ -144,6 +144,11 @@ export async function runAssertion(
 
   const outputString = coerceString(output);
 
+  const context = {
+    prompt,
+    vars: test.vars || {},
+  };
+
   // Render assertion values
   let renderedValue = assertion.value;
   let valueFromScript: string | boolean | number | GradingResult | object | undefined;
@@ -155,11 +160,11 @@ export async function runAssertion(
         const requiredModule = require(path.resolve(filePath));
         if (typeof requiredModule === 'function') {
           valueFromScript = await Promise.resolve(
-            requiredModule(output, { vars: test.vars || {} }),
+            requiredModule(output, context),
           );
         } else if (requiredModule.default && typeof requiredModule.default === 'function') {
           valueFromScript = await Promise.resolve(
-            requiredModule.default(output, { vars: test.vars || {} }),
+            requiredModule.default(output, context),
           );
         } else {
           throw new Error(
@@ -169,7 +174,7 @@ export async function runAssertion(
       } else if (filePath.endsWith('.py')) {
         const { execSync } = require('child_process');
         const escapedOutput = outputString.replace(/"/g, '\\"').replace(/\n/g, '\\n');
-        const escapedContext = JSON.stringify({ vars: test.vars || {} })
+        const escapedContext = JSON.stringify(context)
           .replace(/"/g, '\\"')
           .replace(/\n/g, '\\n');
         const pythonScriptOutput = execSync(
@@ -423,11 +428,6 @@ export async function runAssertion(
       assertion,
     };
   }
-
-  const context = {
-    prompt,
-    vars: test.vars || {},
-  };
 
   if (baseType === 'javascript') {
     try {
