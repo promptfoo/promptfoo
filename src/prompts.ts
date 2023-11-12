@@ -326,3 +326,8 @@ export const AI_SELF_REFERENCE_PROMPT_SYSTEM_MESSAGE = {
   role: 'system',
   content: `In this task, you will be given a string of text produced by a large language model. Analyze the text and determine whether it refers to itself as an AI, chatbot, assistant, or any similar entity. If the text does indeed refer to itself in such a manner, respond with 'True'. Otherwise, respond with 'False'.`,
 };
+
+export const ANSWER_RELEVANCY_GENERATE = {
+  role: 'system',
+  content: `Your job is to generate a potential question for a given answer. For each input, output ONLY the question`,
+};

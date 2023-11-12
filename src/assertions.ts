@@ -16,6 +16,7 @@ import {
   matchesFactuality,
   matchesClosedQa,
   matchesClassification,
+  matchesAnswerRelevance,
 } from './matchers';
 
 import type { Assertion, AssertionType, GradingResult, AtomicTestCase } from './types';
@@ -654,6 +655,25 @@ ${assertion.value}`,
     return {
       assertion,
       ...(await matchesClosedQa(prompt, renderedValue, outputString, test.options, test.vars)),
+    };
+  }
+
+  if (baseType === 'answer-relevance') {
+    // Assertion provider overrides test provider
+    test.options = test.options || {};
+    test.options.provider = assertion.provider || test.options.provider;
+    test.options.rubricPrompt = assertion.rubricPrompt || test.options.rubricPrompt;
+
+    if (test.options.rubricPrompt) {
+      // Substitute vars in prompt
+      test.options.rubricPrompt = nunjucks.renderString(test.options.rubricPrompt, test.vars || {});
+    }
+
+    invariant(typeof output === 'string', 'answer-relevance assertion type must evaluate a string output');
+    invariant(typeof test.threshold === 'number', 'answer-relevance assertion type must have a threshold value');
+    return {
+      assertion,
+      ...(await matchesAnswerRelevance(prompt, output, test.threshold, test.options)),
     };
   }
 

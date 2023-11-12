@@ -4,6 +4,7 @@ import { DefaultEmbeddingProvider, DefaultGradingProvider } from './providers/op
 import { getNunjucksEngine } from './util';
 import { loadApiProvider } from './providers';
 import {
+  ANSWER_RELEVANCY_GENERATE,
   DEFAULT_GRADING_PROMPT,
   OPENAI_CLOSED_QA_PROMPT,
   OPENAI_FACTUALITY_PROMPT,
@@ -412,4 +413,107 @@ export async function matchesClosedQa(
       },
     };
   }
+}
+
+export async function matchesAnswerRelevance(
+  input: string,
+  output: string,
+  threshold: number,
+  grading?: GradingConfig,
+): Promise<Omit<GradingResult, 'assertion'>> {
+  let provider = grading?.provider;
+  let finalProvider = await getGradingProvider(provider, DefaultEmbeddingProvider);
+
+  invariant(finalProvider, 'No provider found for answer relevancy check');
+  if (typeof finalProvider.callEmbeddingApi !== 'function') {
+    logger.warn(
+      `Provider ${finalProvider.id} does not implement callEmbeddingApi for similarity check, falling back to default`,
+    );
+    finalProvider = DefaultEmbeddingProvider;
+  }
+
+  const tokensUsed = {
+    total: 0,
+    prompt: 0,
+    completion: 0,
+  };
+
+  const candidateQuestions: string[] = [];
+  for (let i=0; i<3; i++) {
+    const resp = await finalProvider.callApi(JSON.stringify([
+      ANSWER_RELEVANCY_GENERATE,
+      {
+        role: 'user',
+        content: output,
+      },
+    ]));
+    if (resp.error || !resp.output) {
+      tokensUsed.total += resp.tokenUsage?.total || 0;
+      tokensUsed.prompt += resp.tokenUsage?.prompt || 0;
+      tokensUsed.completion += resp.tokenUsage?.completion || 0;
+      return {
+        pass: false,
+        score: 0,
+        reason: resp.error || 'No output',
+        tokensUsed,
+      };
+    }
+    invariant(typeof resp.output === 'string', 'llm-rubric produced malformed response');
+    candidateQuestions.push(resp.output);
+  }
+
+  invariant(
+    typeof finalProvider.callEmbeddingApi === 'function',
+    `Provider ${finalProvider.id} must implement callEmbeddingApi for similarity check`,
+  );
+
+  const inputEmbeddingResp = await finalProvider.callEmbeddingApi(input);
+  if (inputEmbeddingResp.error || !inputEmbeddingResp.embedding) {
+    tokensUsed.total += inputEmbeddingResp.tokenUsage?.total || 0;
+    tokensUsed.prompt += inputEmbeddingResp.tokenUsage?.prompt || 0;
+    tokensUsed.completion += inputEmbeddingResp.tokenUsage?.completion || 0;
+    return {
+      pass: false,
+      score: 0,
+      reason: inputEmbeddingResp.error || 'No embedding',
+      tokensUsed,
+    };
+  }
+  const inputEmbedding = inputEmbeddingResp.embedding;
+
+  const similarities: number[] = [];
+  for (const question of candidateQuestions) {
+    const resp = await finalProvider.callEmbeddingApi(question);
+    tokensUsed.total += resp.tokenUsage?.total || 0;
+    tokensUsed.prompt += resp.tokenUsage?.prompt || 0;
+    tokensUsed.completion += resp.tokenUsage?.completion || 0;
+    if (resp.error || !resp.embedding) {
+      return {
+        pass: false,
+        score: 0,
+        reason: resp.error || 'No embedding',
+        tokensUsed,
+      };
+    }
+    similarities.push(cosineSimilarity(inputEmbedding, resp.embedding));
+  }
+
+  const similarity = similarities.reduce((a, b) => a + b, 0) / similarities.length;
+  const pass = similarity >= threshold;
+  const greaterThanReason = `Similarity ${similarity} is greater than threshold ${threshold}`;
+  const lessThanReason = `Similarity ${similarity} is less than threshold ${threshold}`;
+  if (pass) {
+    return {
+      pass: true,
+      score: similarity,
+      reason: greaterThanReason,
+      tokensUsed,
+    };
+  }
+  return {
+    pass: false,
+    score: similarity,
+    reason: lessThanReason,
+    tokensUsed,
+  };
 }
