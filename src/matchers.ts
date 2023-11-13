@@ -4,11 +4,6 @@ import { DefaultEmbeddingProvider, DefaultGradingProvider } from './providers/op
 import { getNunjucksEngine } from './util';
 import { loadApiProvider } from './providers';
 import {
-  DEFAULT_GRADING_PROMPT,
-  OPENAI_CLOSED_QA_PROMPT,
-  OPENAI_FACTUALITY_PROMPT,
-} from './prompts';
-import {
   ANSWER_RELEVANCY_GENERATE,
   CONTEXT_FAITHFULNESS_LONGFORM,
   CONTEXT_FAITHFULNESS_NLI_STATEMENTS,
@@ -16,7 +11,10 @@ import {
   CONTEXT_RECALL_ATTRIBUTED_TOKEN,
   CONTEXT_RELEVANCE,
   CONTEXT_RELEVANCE_BAD,
-} from './external/ragas';
+  DEFAULT_GRADING_PROMPT,
+  OPENAI_CLOSED_QA_PROMPT,
+  OPENAI_FACTUALITY_PROMPT,
+} from './prompts';
 
 import type {
   ApiClassificationProvider,
