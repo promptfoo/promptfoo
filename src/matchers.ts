@@ -17,6 +17,7 @@ import type {
   GradingConfig,
   GradingResult,
   ProviderOptions,
+  TokenUsage,
 } from './types';
 
 const nunjucks = getNunjucksEngine();
@@ -110,6 +111,15 @@ async function getAndCheckProvider(
   );
 
   return finalProvider;
+}
+
+function fail(reason: string, tokensUsed?: TokenUsage): Omit<GradingResult, 'assertion'> {
+  return {
+    pass: false,
+    score: 0,
+    reason,
+    tokensUsed,
+  };
 }
 
 export async function matchesSimilarity(
