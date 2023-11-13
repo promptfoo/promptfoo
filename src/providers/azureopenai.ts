@@ -231,7 +231,7 @@ export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvide
     try {
       stop = process.env.OPENAI_STOP
         ? JSON.parse(process.env.OPENAI_STOP)
-        : this.config?.stop || [];
+        : this.config?.stop;
     } catch (err) {
       throw new Error(`OPENAI_STOP is not a valid JSON string: ${err}`);
     }
