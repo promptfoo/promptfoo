@@ -107,15 +107,7 @@ export async function matchesSimilarity(
       (outputEmbedding.tokenUsage?.completion || 0),
   };
 
-  if (expectedEmbedding.error || outputEmbedding.error) {
-    return {
-      pass: false,
-      score: 0,
-      reason:
-        expectedEmbedding.error || outputEmbedding.error || 'Unknown error fetching embeddings',
-      tokensUsed,
-    };
-  }
+  return handleErrorAndTokenUsage(expectedEmbedding, outputEmbedding, tokensUsed);
 
   if (!expectedEmbedding.embedding || !outputEmbedding.embedding) {
     return {
@@ -166,13 +158,7 @@ export async function matchesClassification(
   );
 
   const resp = await finalProvider.callClassificationApi(output);
-  if (resp.error || !resp.classification) {
-    return {
-      pass: false,
-      score: 0,
-      reason: resp.error || 'Unknown error fetching classification',
-    };
-  }
+  return handleErrorAndTokenUsage(resp, resp.classification);
 
   const score = resp.classification[expected] || 0;
   if (score >= threshold) {
@@ -211,18 +197,7 @@ export async function matchesLlmRubric(
   let finalProvider = await getGradingProvider('text', provider, DefaultGradingProvider);
   invariant(finalProvider, 'No provider found for llm-rubric check');
   const resp = await finalProvider.callApi(prompt);
-  if (resp.error || !resp.output) {
-    return {
-      pass: false,
-      score: 0,
-      reason: resp.error || 'No output',
-      tokensUsed: {
-        total: resp.tokenUsage?.total || 0,
-        prompt: resp.tokenUsage?.prompt || 0,
-        completion: resp.tokenUsage?.completion || 0,
-      },
-    };
-  }
+  return handleErrorAndTokenUsage(resp, resp.output, tokensUsed);
 
   invariant(typeof resp.output === 'string', 'llm-rubric produced malformed response');
   try {
@@ -276,18 +251,7 @@ export async function matchesFactuality(
   let finalProvider = await getGradingProvider('text', provider, DefaultGradingProvider);
   invariant(finalProvider, 'No provider found for model-graded-factuality check');
   const resp = await finalProvider.callApi(prompt);
-  if (resp.error || !resp.output) {
-    return {
-      pass: false,
-      score: 0,
-      reason: resp.error || 'No output',
-      tokensUsed: {
-        total: resp.tokenUsage?.total || 0,
-        prompt: resp.tokenUsage?.prompt || 0,
-        completion: resp.tokenUsage?.completion || 0,
-      },
-    };
-  }
+  return handleErrorAndTokenUsage(resp, resp.output, tokensUsed);
 
   invariant(typeof resp.output === 'string', 'model-graded-factuality produced malformed response');
   try {
@@ -374,18 +338,7 @@ export async function matchesClosedQa(
   let finalProvider = await getGradingProvider('text', provider, DefaultGradingProvider);
   invariant(finalProvider, 'No provider found for model-graded-closedqa check');
   const resp = await finalProvider.callApi(prompt);
-  if (resp.error || !resp.output) {
-    return {
-      pass: false,
-      score: 0,
-      reason: resp.error || 'No output',
-      tokensUsed: {
-        total: resp.tokenUsage?.total || 0,
-        prompt: resp.tokenUsage?.prompt || 0,
-        completion: resp.tokenUsage?.completion || 0,
-      },
-    };
-  }
+  return handleErrorAndTokenUsage(resp, resp.output, tokensUsed);
 
   invariant(typeof resp.output === 'string', 'model-graded-closedqa produced malformed response');
   try {
