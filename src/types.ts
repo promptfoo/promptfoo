@@ -68,6 +68,14 @@ export interface ApiProvider {
   callClassificationApi?: (prompt: string) => Promise<ProviderClassificationResponse>;
 }
 
+export interface ApiEmbeddingProvider extends ApiProvider {
+  callEmbeddingApi: (prompt: string) => Promise<ProviderEmbeddingResponse>;
+}
+
+export interface ApiClassificationProvider extends ApiProvider {
+  callClassificationApi: (prompt: string) => Promise<ProviderClassificationResponse>;
+}
+
 export interface TokenUsage {
   total: number;
   prompt: number;
