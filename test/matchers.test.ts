@@ -361,6 +361,7 @@ describe('matchesClosedQa', () => {
 describe('getGradingProvider', () => {
   it('should return the correct provider when provider is a string', async () => {
     const provider = await getGradingProvider(
+      'text',
       'openai:chat:gpt-3.5-turbo-foobar',
       DefaultGradingProvider,
     );
@@ -369,7 +370,11 @@ describe('getGradingProvider', () => {
   });
 
   it('should return the correct provider when provider is an ApiProvider', async () => {
-    const provider = await getGradingProvider(DefaultEmbeddingProvider, DefaultGradingProvider);
+    const provider = await getGradingProvider(
+      'embedding',
+      DefaultEmbeddingProvider,
+      DefaultGradingProvider,
+    );
     expect(provider).toBe(DefaultEmbeddingProvider);
   });
 
@@ -381,12 +386,12 @@ describe('getGradingProvider', () => {
         temperature: 3.1415926,
       },
     };
-    const provider = await getGradingProvider(providerOptions, DefaultGradingProvider);
+    const provider = await getGradingProvider('text', providerOptions, DefaultGradingProvider);
     expect(provider?.id()).toBe('openai:chat:gpt-3.5-turbo-foobar');
   });
 
   it('should return the default provider when provider is not provided', async () => {
-    const provider = await getGradingProvider(undefined, DefaultGradingProvider);
+    const provider = await getGradingProvider('text', undefined, DefaultGradingProvider);
     expect(provider).toBe(DefaultGradingProvider);
   });
 });

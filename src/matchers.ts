@@ -10,7 +10,14 @@ import {
   OPENAI_FACTUALITY_PROMPT,
 } from './prompts';
 
-import type { ApiClassificationProvider, ApiEmbeddingProvider, ApiProvider, GradingConfig, GradingResult, ProviderOptions } from './types';
+import type {
+  ApiClassificationProvider,
+  ApiEmbeddingProvider,
+  ApiProvider,
+  GradingConfig,
+  GradingResult,
+  ProviderOptions,
+} from './types';
 
 const nunjucks = getNunjucksEngine();
 
@@ -73,37 +80,37 @@ export async function getGradingProvider(
   return finalProvider;
 }
 
- async function getAndCheckProvider(
-   type: 'embedding' | 'classification' | 'text',
-   provider: GradingConfig['provider'],
-   defaultProvider: ApiProvider | null,
-   checkName: string
- ): Promise<ApiProvider> {
-   let finalProvider = await getGradingProvider(type, provider, defaultProvider);
+async function getAndCheckProvider(
+  type: 'embedding' | 'classification' | 'text',
+  provider: GradingConfig['provider'],
+  defaultProvider: ApiProvider | null,
+  checkName: string,
+): Promise<ApiProvider> {
+  let finalProvider = await getGradingProvider(type, provider, defaultProvider);
 
-   let requiredMethod = 'callApi';
-   if (type === 'embedding') {
-       requiredMethod = 'callEmbeddingApi';
-   } else if (type === 'classification') {
-     requiredMethod = 'callClassificationApi';
-   }
+  let requiredMethod = 'callApi';
+  if (type === 'embedding') {
+    requiredMethod = 'callEmbeddingApi';
+  } else if (type === 'classification') {
+    requiredMethod = 'callClassificationApi';
+  }
 
-   invariant(finalProvider, `No provider found for ${checkName}`);
-   if (typeof (finalProvider as any)[requiredMethod] !== 'function') {
-     logger.warn(
-       `Provider ${finalProvider.id} does not implement ${requiredMethod} for ${checkName}, falling back to default`,
-     );
-     finalProvider = defaultProvider;
-   }
+  invariant(finalProvider, `No provider found for ${checkName}`);
+  if (typeof (finalProvider as any)[requiredMethod] !== 'function') {
+    logger.warn(
+      `Provider ${finalProvider.id} does not implement ${requiredMethod} for ${checkName}, falling back to default`,
+    );
+    finalProvider = defaultProvider;
+  }
 
-   invariant(finalProvider, `No provider found for ${checkName}`);
-   invariant(
-     typeof (finalProvider as any)[requiredMethod] === 'function',
-     `Provider ${finalProvider.id} must implement ${requiredMethod} for ${checkName}`,
-   );
+  invariant(finalProvider, `No provider found for ${checkName}`);
+  invariant(
+    typeof (finalProvider as any)[requiredMethod] === 'function',
+    `Provider ${finalProvider.id} must implement ${requiredMethod} for ${checkName}`,
+  );
 
-   return finalProvider;
- }
+  return finalProvider;
+}
 
 export async function matchesSimilarity(
   expected: string,
@@ -112,7 +119,12 @@ export async function matchesSimilarity(
   inverse: boolean = false,
   grading?: GradingConfig,
 ): Promise<Omit<GradingResult, 'assertion'>> {
-  let finalProvider = await getAndCheckProvider('embedding', grading?.provider, DefaultEmbeddingProvider, 'similarity check') as ApiEmbeddingProvider;
+  let finalProvider = (await getAndCheckProvider(
+    'embedding',
+    grading?.provider,
+    DefaultEmbeddingProvider,
+    'similarity check',
+  )) as ApiEmbeddingProvider;
 
   const expectedEmbedding = await finalProvider.callEmbeddingApi(expected);
   const outputEmbedding = await finalProvider.callEmbeddingApi(output);
@@ -131,6 +143,15 @@ export async function matchesSimilarity(
       score: 0,
       reason:
         expectedEmbedding.error || outputEmbedding.error || 'Unknown error fetching embeddings',
+      tokensUsed,
+    };
+  }
+
+  if (!expectedEmbedding.embedding || !outputEmbedding.embedding) {
+    return {
+      pass: false,
+      score: 0,
+      reason: 'Embedding not found',
       tokensUsed,
     };
   }
@@ -161,7 +182,12 @@ export async function matchesClassification(
   threshold: number,
   grading?: GradingConfig,
 ): Promise<Omit<GradingResult, 'assertion'>> {
-  let finalProvider = await getAndCheckProvider('classification', grading?.provider, null, 'classification check') as ApiClassificationProvider;
+  let finalProvider = (await getAndCheckProvider(
+    'classification',
+    grading?.provider,
+    null,
+    'classification check',
+  )) as ApiClassificationProvider;
 
   const resp = await finalProvider.callClassificationApi(output);
 
@@ -206,7 +232,12 @@ export async function matchesLlmRubric(
     ...fromVars(vars),
   });
 
-  let finalProvider = await getAndCheckProvider('text', grading.provider, DefaultGradingProvider, 'llm-rubric check');
+  let finalProvider = await getAndCheckProvider(
+    'text',
+    grading.provider,
+    DefaultGradingProvider,
+    'llm-rubric check',
+  );
   const resp = await finalProvider.callApi(prompt);
   if (resp.error || !resp.output) {
     return {
@@ -269,7 +300,12 @@ export async function matchesFactuality(
     ...fromVars(vars),
   });
 
-  let finalProvider = await getAndCheckProvider('text', grading.provider, DefaultGradingProvider, 'model-graded-factuality check');
+  let finalProvider = await getAndCheckProvider(
+    'text',
+    grading.provider,
+    DefaultGradingProvider,
+    'model-graded-factuality check',
+  );
   const resp = await finalProvider.callApi(prompt);
   if (resp.error || !resp.output) {
     return {
@@ -365,7 +401,12 @@ export async function matchesClosedQa(
     ...fromVars(vars),
   });
 
-  let finalProvider = await getAndCheckProvider('text', grading.provider, DefaultGradingProvider, 'model-graded-closedqa check');
+  let finalProvider = await getAndCheckProvider(
+    'text',
+    grading.provider,
+    DefaultGradingProvider,
+    'model-graded-closedqa check',
+  );
   const resp = await finalProvider.callApi(prompt);
   if (resp.error || !resp.output) {
     return {
@@ -421,8 +462,18 @@ export async function matchesAnswerRelevance(
   threshold: number,
   grading?: GradingConfig,
 ): Promise<Omit<GradingResult, 'assertion'>> {
-  let embeddingProvider = await getAndCheckProvider('embedding', grading?.provider, DefaultEmbeddingProvider, 'answer relevancy check');
-  let textProvider = await getAndCheckProvider('text', grading?.provider, DefaultGradingProvider, 'answer relevancy check');
+  let embeddingProvider = await getAndCheckProvider(
+    'embedding',
+    grading?.provider,
+    DefaultEmbeddingProvider,
+    'answer relevancy check',
+  );
+  let textProvider = await getAndCheckProvider(
+    'text',
+    grading?.provider,
+    DefaultGradingProvider,
+    'answer relevancy check',
+  );
 
   const tokensUsed = {
     total: 0,
