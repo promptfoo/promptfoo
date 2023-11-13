@@ -454,7 +454,10 @@ export async function matchesAnswerRelevance(
       return fail(resp.error || 'No output', tokensUsed);
     }
 
-    invariant(typeof resp.output === 'string', 'answer relevancy check produced malformed response');
+    invariant(
+      typeof resp.output === 'string',
+      'answer relevancy check produced malformed response',
+    );
     candidateQuestions.push(resp.output);
   }
 
@@ -540,7 +543,9 @@ export async function matchesContextRecall(
   return {
     pass,
     score,
-    reason: pass ? `Recall ${score.toFixed(2)} is >= ${threshold}` : `Recall ${score.toFixed(2)} is < ${threshold}`,
+    reason: pass
+      ? `Recall ${score.toFixed(2)} is >= ${threshold}`
+      : `Recall ${score.toFixed(2)} is < ${threshold}`,
     tokensUsed: {
       total: resp.tokenUsage?.total || 0,
       prompt: resp.tokenUsage?.prompt || 0,
@@ -583,7 +588,9 @@ export async function matchesContextRelevance(
   return {
     pass,
     score,
-    reason: pass ? `Relevance ${score.toFixed(2)} is >= ${threshold}` : `Relevance ${score.toFixed(2)} is < ${threshold}`,
+    reason: pass
+      ? `Relevance ${score.toFixed(2)} is >= ${threshold}`
+      : `Relevance ${score.toFixed(2)} is < ${threshold}`,
     tokensUsed: {
       total: resp.tokenUsage?.total || 0,
       prompt: resp.tokenUsage?.prompt || 0,

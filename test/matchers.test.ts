@@ -422,7 +422,6 @@ describe('matchesAnswerRelevance', () => {
       });
     });
 
-
     const result = await matchesAnswerRelevance(input, output, threshold);
     expect(result.pass).toBeTruthy();
     expect(result.reason).toBe('Relevance 1 is greater than threshold 0.5');
@@ -605,17 +604,19 @@ describe('matchesContextFaithfulness', () => {
     const threshold = 0.5;
 
     const mockCallApi = jest.spyOn(DefaultGradingProvider, 'callApi');
-    mockCallApi.mockImplementationOnce(() => {
-      return Promise.resolve({
-        output: 'Statement 1\nStatement 2\nStatement 3',
-        tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    mockCallApi
+      .mockImplementationOnce(() => {
+        return Promise.resolve({
+          output: 'Statement 1\nStatement 2\nStatement 3',
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        });
+      })
+      .mockImplementationOnce(() => {
+        return Promise.resolve({
+          output: 'Final verdict for each statement in order: Yes. No. Yes.',
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        });
       });
-    }).mockImplementationOnce(() => {
-      return Promise.resolve({
-        output: 'Final verdict for each statement in order: Yes. No. Yes.',
-        tokenUsage: { total: 10, prompt: 5, completion: 5 },
-      });
-    });
 
     const result = await matchesContextFaithfulness(query, output, context, threshold);
     expect(result.pass).toBeTruthy();
@@ -632,17 +633,19 @@ describe('matchesContextFaithfulness', () => {
     const threshold = 0.7;
 
     const mockCallApi = jest.spyOn(DefaultGradingProvider, 'callApi');
-    mockCallApi.mockImplementationOnce(() => {
-      return Promise.resolve({
-        output: 'Statement 1\nStatement 2\nStatement 3',
-        tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    mockCallApi
+      .mockImplementationOnce(() => {
+        return Promise.resolve({
+          output: 'Statement 1\nStatement 2\nStatement 3',
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        });
+      })
+      .mockImplementationOnce(() => {
+        return Promise.resolve({
+          output: 'Final verdict for each statement in order: Yes. Yes. No.',
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        });
       });
-    }).mockImplementationOnce(() => {
-      return Promise.resolve({
-        output: 'Final verdict for each statement in order: Yes. Yes. No.',
-        tokenUsage: { total: 10, prompt: 5, completion: 5 },
-      });
-    });
 
     const result = await matchesContextFaithfulness(query, output, context, threshold);
     expect(result.pass).toBeFalsy();
