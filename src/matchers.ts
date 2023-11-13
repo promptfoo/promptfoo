@@ -113,12 +113,16 @@ async function getAndCheckProvider(
   return finalProvider;
 }
 
-function fail(reason: string, tokensUsed?: TokenUsage): Omit<GradingResult, 'assertion'> {
+function fail(reason: string, tokensUsed?: Partial<TokenUsage>): Omit<GradingResult, 'assertion'> {
   return {
     pass: false,
     score: 0,
     reason,
-    tokensUsed,
+    tokensUsed: {
+      total: tokensUsed?.total || 0,
+      prompt: tokensUsed?.prompt || 0,
+      completion: tokensUsed?.completion || 0,
+    },
   };
 }
 
@@ -148,22 +152,11 @@ export async function matchesSimilarity(
   };
 
   if (expectedEmbedding.error || outputEmbedding.error) {
-    return {
-      pass: false,
-      score: 0,
-      reason:
-        expectedEmbedding.error || outputEmbedding.error || 'Unknown error fetching embeddings',
-      tokensUsed,
-    };
+    return fail(expectedEmbedding.error || outputEmbedding.error || 'Unknown error fetching embeddings', tokensUsed);
   }
 
   if (!expectedEmbedding.embedding || !outputEmbedding.embedding) {
-    return {
-      pass: false,
-      score: 0,
-      reason: 'Embedding not found',
-      tokensUsed,
-    };
+    return fail('Embedding not found', tokensUsed);
   }
 
   const similarity = cosineSimilarity(expectedEmbedding.embedding, outputEmbedding.embedding);
@@ -202,11 +195,7 @@ export async function matchesClassification(
   const resp = await finalProvider.callClassificationApi(output);
 
   if (!resp.classification) {
-    return {
-      pass: false,
-      score: 0,
-      reason: resp.error || 'Unknown error fetching classification',
-    };
+    return fail(resp.error || 'Unknown error fetching classification');
   }
 
   const score = resp.classification[expected] || 0;
@@ -250,43 +239,25 @@ export async function matchesLlmRubric(
   );
   const resp = await finalProvider.callApi(prompt);
   if (resp.error || !resp.output) {
-    return {
-      pass: false,
-      score: 0,
-      reason: resp.error || 'No output',
-      tokensUsed: {
-        total: resp.tokenUsage?.total || 0,
-        prompt: resp.tokenUsage?.prompt || 0,
-        completion: resp.tokenUsage?.completion || 0,
-      },
-    };
+    return fail(resp.error || 'No output', resp.tokenUsage);
   }
 
   invariant(typeof resp.output === 'string', 'llm-rubric produced malformed response');
   try {
     const parsed = JSON.parse(resp.output) as Partial<GradingResult>;
-    parsed.tokensUsed = {
-      total: resp.tokenUsage?.total || 0,
-      prompt: resp.tokenUsage?.prompt || 0,
-      completion: resp.tokenUsage?.completion || 0,
-    };
     const pass = parsed.pass ?? (typeof parsed.score === 'undefined' ? true : parsed.score > 0);
     return {
       pass,
       score: parsed.score ?? (pass ? 1.0 : 0.0),
       reason: parsed.reason || (pass ? 'Grading passed' : 'Grading failed'),
-    };
-  } catch (err) {
-    return {
-      pass: false,
-      score: 0,
-      reason: `llm-rubric produced malformed response: ${resp.output}`,
       tokensUsed: {
         total: resp.tokenUsage?.total || 0,
         prompt: resp.tokenUsage?.prompt || 0,
         completion: resp.tokenUsage?.completion || 0,
       },
     };
+  } catch (err) {
+    return fail(`llm-rubric produced malformed response: ${resp.output}`, resp.tokenUsage);
   }
 }
 
@@ -318,16 +289,7 @@ export async function matchesFactuality(
   );
   const resp = await finalProvider.callApi(prompt);
   if (resp.error || !resp.output) {
-    return {
-      pass: false,
-      score: 0,
-      reason: resp.error || 'No output',
-      tokensUsed: {
-        total: resp.tokenUsage?.total || 0,
-        prompt: resp.tokenUsage?.prompt || 0,
-        completion: resp.tokenUsage?.completion || 0,
-      },
-    };
+    return fail(resp.error || 'No output', resp.tokenUsage);
   }
 
   invariant(typeof resp.output === 'string', 'model-graded-factuality produced malformed response');
@@ -378,16 +340,7 @@ export async function matchesFactuality(
       },
     };
   } catch (err) {
-    return {
-      pass: false,
-      score: 0,
-      reason: `Error parsing output: ${(err as Error).message}`,
-      tokensUsed: {
-        total: resp.tokenUsage?.total || 0,
-        prompt: resp.tokenUsage?.prompt || 0,
-        completion: resp.tokenUsage?.completion || 0,
-      },
-    };
+    return fail(`Error parsing output: ${(err as Error).message}`, resp.tokenUsage);
   }
 }
 
@@ -419,16 +372,7 @@ export async function matchesClosedQa(
   );
   const resp = await finalProvider.callApi(prompt);
   if (resp.error || !resp.output) {
-    return {
-      pass: false,
-      score: 0,
-      reason: resp.error || 'No output',
-      tokensUsed: {
-        total: resp.tokenUsage?.total || 0,
-        prompt: resp.tokenUsage?.prompt || 0,
-        completion: resp.tokenUsage?.completion || 0,
-      },
-    };
+    return fail(resp.error || 'No output', resp.tokenUsage);
   }
 
   invariant(typeof resp.output === 'string', 'model-graded-closedqa produced malformed response');
@@ -453,16 +397,7 @@ export async function matchesClosedQa(
       },
     };
   } catch (err) {
-    return {
-      pass: false,
-      score: 0,
-      reason: `Error parsing output: ${(err as Error).message}`,
-      tokensUsed: {
-        total: resp.tokenUsage?.total || 0,
-        prompt: resp.tokenUsage?.prompt || 0,
-        completion: resp.tokenUsage?.completion || 0,
-      },
-    };
+    return fail(`Error parsing output: ${(err as Error).message}`, resp.tokenUsage);
   }
 }
 
@@ -506,12 +441,7 @@ export async function matchesAnswerRelevance(
       tokensUsed.total += resp.tokenUsage?.total || 0;
       tokensUsed.prompt += resp.tokenUsage?.prompt || 0;
       tokensUsed.completion += resp.tokenUsage?.completion || 0;
-      return {
-        pass: false,
-        score: 0,
-        reason: resp.error || 'No output',
-        tokensUsed,
-      };
+      return fail(resp.error || 'No output', tokensUsed);
     }
   }
 
@@ -525,12 +455,7 @@ export async function matchesAnswerRelevance(
     tokensUsed.total += inputEmbeddingResp.tokenUsage?.total || 0;
     tokensUsed.prompt += inputEmbeddingResp.tokenUsage?.prompt || 0;
     tokensUsed.completion += inputEmbeddingResp.tokenUsage?.completion || 0;
-    return {
-      pass: false,
-      score: 0,
-      reason: inputEmbeddingResp.error || 'No embedding',
-      tokensUsed,
-    };
+    return fail(inputEmbeddingResp.error || 'No embedding', tokensUsed);
   }
   const inputEmbedding = inputEmbeddingResp.embedding;
 
@@ -541,12 +466,7 @@ export async function matchesAnswerRelevance(
     tokensUsed.prompt += resp.tokenUsage?.prompt || 0;
     tokensUsed.completion += resp.tokenUsage?.completion || 0;
     if (resp.error || !resp.embedding) {
-      return {
-        pass: false,
-        score: 0,
-        reason: resp.error || 'No embedding',
-        tokensUsed,
-      };
+      return fail(resp.error || 'No embedding', tokensUsed);
     }
     similarities.push(cosineSimilarity(inputEmbedding, resp.embedding));
   }
