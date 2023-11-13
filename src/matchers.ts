@@ -5,6 +5,12 @@ import { getNunjucksEngine } from './util';
 import { loadApiProvider } from './providers';
 import {
   ANSWER_RELEVANCY_GENERATE,
+  CONTEXT_FAITHFULNESS_LONGFORM,
+  CONTEXT_FAITHFULNESS_NLI_STATEMENTS,
+  CONTEXT_RECALL,
+  CONTEXT_RECALL_ATTRIBUTED_TOKEN,
+  CONTEXT_RELEVANCE,
+  CONTEXT_RELEVANCE_BAD,
   DEFAULT_GRADING_PROMPT,
   OPENAI_CLOSED_QA_PROMPT,
   OPENAI_FACTUALITY_PROMPT,
@@ -152,7 +158,10 @@ export async function matchesSimilarity(
   };
 
   if (expectedEmbedding.error || outputEmbedding.error) {
-    return fail(expectedEmbedding.error || outputEmbedding.error || 'Unknown error fetching embeddings', tokensUsed);
+    return fail(
+      expectedEmbedding.error || outputEmbedding.error || 'Unknown error fetching embeddings',
+      tokensUsed,
+    );
   }
 
   if (!expectedEmbedding.embedding || !outputEmbedding.embedding) {
@@ -488,5 +497,166 @@ export async function matchesAnswerRelevance(
     score: similarity,
     reason: lessThanReason,
     tokensUsed,
+  };
+}
+
+// Ported from RAGAS. https://github.com/explodinggradients/ragas. See APACHE_LICENSE for license.
+export async function matchesContextRecall(
+  context: string,
+  groundTruth: string,
+  threshold: number,
+  grading?: GradingConfig,
+  vars?: Record<string, string | object>,
+): Promise<Omit<GradingResult, 'assertion'>> {
+  let textProvider = await getAndCheckProvider(
+    'text',
+    grading?.provider,
+    DefaultGradingProvider,
+    'context recall check',
+  );
+
+  const promptText = nunjucks.renderString(CONTEXT_RECALL, {
+    context: JSON.stringify(context).slice(1, -1),
+    groundTruth: JSON.stringify(groundTruth).slice(1, -1),
+    ...fromVars(vars),
+  });
+
+  const resp = await textProvider.callApi(promptText);
+  if (resp.error || !resp.output) {
+    return fail(resp.error || 'No output', resp.tokenUsage);
+  }
+
+  invariant(typeof resp.output === 'string', 'context-recall produced malformed response');
+  const sentences = resp.output.split('\n');
+  const numerator = sentences.reduce(
+    (acc, sentence) => acc + (sentence.includes(CONTEXT_RECALL_ATTRIBUTED_TOKEN) ? 1 : 0),
+    0,
+  );
+  const score = numerator / sentences.length;
+  const pass = score >= threshold;
+  return {
+    pass,
+    score,
+    reason: pass ? `Recall ${score} is >= ${threshold}` : `Recall ${score} is < ${threshold}`,
+    tokensUsed: {
+      total: resp.tokenUsage?.total || 0,
+      prompt: resp.tokenUsage?.prompt || 0,
+      completion: resp.tokenUsage?.completion || 0,
+    },
+  };
+}
+
+// Ported from RAGAS. https://github.com/explodinggradients/ragas. See APACHE_LICENSE for license.
+export async function matchesContextRelevance(
+  question: string,
+  context: string,
+  threshold: number,
+  grading?: GradingConfig,
+): Promise<Omit<GradingResult, 'assertion'>> {
+  let textProvider = await getAndCheckProvider(
+    'text',
+    grading?.provider,
+    DefaultGradingProvider,
+    'context relevance check',
+  );
+
+  const promptText = nunjucks.renderString(CONTEXT_RELEVANCE, {
+    context: JSON.stringify(context).slice(1, -1),
+    question: JSON.stringify(question).slice(1, -1),
+  });
+
+  const resp = await textProvider.callApi(promptText);
+  if (resp.error || !resp.output) {
+    return fail(resp.error || 'No output', resp.tokenUsage);
+  }
+
+  invariant(typeof resp.output === 'string', 'context-relevance produced malformed response');
+  const sentences = resp.output.split('\n');
+  const numerator = sentences.reduce(
+    (acc, sentence) => acc + (sentence.includes(CONTEXT_RELEVANCE_BAD) ? 0 : 1),
+    0,
+  );
+  const score = numerator / sentences.length;
+  const pass = score >= threshold;
+  return {
+    pass,
+    score,
+    reason: pass ? `Relevance ${score} is >= ${threshold}` : `Relevance ${score} is < ${threshold}`,
+    tokensUsed: {
+      total: resp.tokenUsage?.total || 0,
+      prompt: resp.tokenUsage?.prompt || 0,
+      completion: resp.tokenUsage?.completion || 0,
+    },
+  };
+}
+
+// Ported from RAGAS. https://github.com/explodinggradients/ragas. See APACHE_LICENSE for license.
+export async function matchesContextFaithfulness(
+  query: string,
+  output: string,
+  context: string,
+  threshold: number,
+  grading?: GradingConfig,
+  vars?: Record<string, string | object>,
+): Promise<Omit<GradingResult, 'assertion'>> {
+  let textProvider = await getAndCheckProvider(
+    'text',
+    grading?.provider,
+    DefaultGradingProvider,
+    'faithfulness check',
+  );
+
+  let promptText = nunjucks.renderString(CONTEXT_FAITHFULNESS_LONGFORM, {
+    question: JSON.stringify(query).slice(1, -1),
+    answer: JSON.stringify(output).slice(1, -1),
+    ...fromVars(vars),
+  });
+
+  let resp = await textProvider.callApi(promptText);
+  if (resp.error || !resp.output) {
+    return fail(resp.error || 'No output', resp.tokenUsage);
+  }
+
+  invariant(typeof resp.output === 'string', 'context-faithfulness produced malformed response');
+
+  let statements = resp.output.split('\n');
+  promptText = nunjucks.renderString(CONTEXT_FAITHFULNESS_NLI_STATEMENTS, {
+    context: JSON.stringify(context).slice(1, -1),
+    statements: JSON.stringify(statements.join('\n')).slice(1, -1),
+    ...fromVars(vars),
+  });
+
+  resp = await textProvider.callApi(promptText);
+  if (resp.error || !resp.output) {
+    return fail(resp.error || 'No output', resp.tokenUsage);
+  }
+
+  invariant(typeof resp.output === 'string', 'context-faithfulness produced malformed response');
+
+  let finalAnswer = 'Final verdict for each statement in order:';
+  finalAnswer = finalAnswer.toLowerCase();
+  let verdicts = resp.output.toLowerCase().trim();
+  let score: number;
+  if (verdicts.includes(finalAnswer)) {
+    verdicts = verdicts.slice(verdicts.indexOf(finalAnswer) + finalAnswer.length);
+    score =
+      verdicts.split('.').filter((answer) => answer.trim() !== '' && !answer.includes('yes'))
+        .length / statements.length;
+  } else {
+    score = (verdicts.split('verdict: no').length - 1) / statements.length;
+  }
+  score = 1 - score;
+  let pass = score >= threshold;
+  return {
+    pass,
+    score,
+    reason: pass
+      ? `Faithfulness ${score} is >= ${threshold}`
+      : `Faithfulness ${score} is < ${threshold}`,
+    tokensUsed: {
+      total: resp.tokenUsage?.total || 0,
+      prompt: resp.tokenUsage?.prompt || 0,
+      completion: resp.tokenUsage?.completion || 0,
+    },
   };
 }

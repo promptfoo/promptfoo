@@ -17,6 +17,9 @@ import {
   matchesClosedQa,
   matchesClassification,
   matchesAnswerRelevance,
+  matchesContextRecall,
+  matchesContextRelevance,
+  matchesContextFaithfulness,
 } from './matchers';
 
 import type { Assertion, AssertionType, GradingResult, AtomicTestCase } from './types';
@@ -656,12 +659,6 @@ ${assertion.value}`,
     // Assertion provider overrides test provider
     test.options = test.options || {};
     test.options.provider = assertion.provider || test.options.provider;
-    test.options.rubricPrompt = assertion.rubricPrompt || test.options.rubricPrompt;
-
-    if (test.options.rubricPrompt) {
-      // Substitute vars in prompt
-      test.options.rubricPrompt = nunjucks.renderString(test.options.rubricPrompt, test.vars || {});
-    }
 
     invariant(
       typeof output === 'string',
@@ -670,6 +667,84 @@ ${assertion.value}`,
     return {
       assertion,
       ...(await matchesAnswerRelevance(prompt, output, test.threshold || 0, test.options)),
+    };
+  }
+
+  if (baseType === 'context-recall') {
+    // Assertion provider overrides test provider
+    test.options = test.options || {};
+    test.options.provider = assertion.provider || test.options.provider;
+
+    invariant(
+      typeof renderedValue === 'string',
+      'context-recall assertion type must have a string value',
+    );
+    return {
+      assertion,
+      ...(await matchesContextRecall(
+        typeof test.vars?.context === 'string' ? test.vars.context : prompt,
+        renderedValue,
+        test.threshold || 0,
+        test.options,
+        test.vars,
+      )),
+    };
+  }
+
+  if (baseType === 'context-relevance') {
+    // Assertion provider overrides test provider
+    test.options = test.options || {};
+    test.options.provider = assertion.provider || test.options.provider;
+
+    invariant(test.vars, 'context-relevance assertion type must have a vars object');
+    invariant(
+      typeof test.vars.query === 'string',
+      'context-relevance assertion type must have a question var',
+    );
+    invariant(
+      typeof test.vars.context === 'string',
+      'context-relevance assertion type must have a context var',
+    );
+
+    return {
+      assertion,
+      ...(await matchesContextRelevance(
+        test.vars.query,
+        test.vars.context,
+        test.threshold || 0,
+        test.options,
+      )),
+    };
+  }
+
+  if (baseType === 'context-faithfulness') {
+    // Assertion provider overrides test provider
+    test.options = test.options || {};
+    test.options.provider = assertion.provider || test.options.provider;
+
+    invariant(test.vars, 'context-faithfulness assertion type must have a vars object');
+    invariant(
+      typeof test.vars.query === 'string',
+      'context-faithfulness assertion type must have a question var',
+    );
+    invariant(
+      typeof test.vars.context === 'string',
+      'context-faithfulness assertion type must have a context var',
+    );
+    invariant(
+      typeof output === 'string',
+      'context-faithfulness assertion type must have a string output',
+    );
+
+    return {
+      assertion,
+      ...(await matchesContextFaithfulness(
+        test.vars.query,
+        output,
+        test.vars.context,
+        test.threshold || 0,
+        test.options,
+      )),
     };
   }
 
