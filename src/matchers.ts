@@ -437,6 +437,7 @@ export async function matchesAnswerRelevance(
 
   const candidateQuestions: string[] = [];
   for (let i = 0; i < 3; i++) {
+    // TODO(ian): Parallelize
     const resp = await textProvider.callApi(
       JSON.stringify([
         ANSWER_RELEVANCY_GENERATE,
@@ -452,6 +453,9 @@ export async function matchesAnswerRelevance(
       tokensUsed.completion += resp.tokenUsage?.completion || 0;
       return fail(resp.error || 'No output', tokensUsed);
     }
+
+    invariant(typeof resp.output === 'string', 'answer relevancy check produced malformed response');
+    candidateQuestions.push(resp.output);
   }
 
   invariant(
@@ -482,8 +486,8 @@ export async function matchesAnswerRelevance(
 
   const similarity = similarities.reduce((a, b) => a + b, 0) / similarities.length;
   const pass = similarity >= threshold;
-  const greaterThanReason = `Similarity ${similarity} is greater than threshold ${threshold}`;
-  const lessThanReason = `Similarity ${similarity} is less than threshold ${threshold}`;
+  const greaterThanReason = `Relevance ${similarity} is greater than threshold ${threshold}`;
+  const lessThanReason = `Relevance ${similarity} is less than threshold ${threshold}`;
   if (pass) {
     return {
       pass: true,
@@ -536,7 +540,7 @@ export async function matchesContextRecall(
   return {
     pass,
     score,
-    reason: pass ? `Recall ${score} is >= ${threshold}` : `Recall ${score} is < ${threshold}`,
+    reason: pass ? `Recall ${score.toFixed(2)} is >= ${threshold}` : `Recall ${score.toFixed(2)} is < ${threshold}`,
     tokensUsed: {
       total: resp.tokenUsage?.total || 0,
       prompt: resp.tokenUsage?.prompt || 0,
@@ -579,7 +583,7 @@ export async function matchesContextRelevance(
   return {
     pass,
     score,
-    reason: pass ? `Relevance ${score} is >= ${threshold}` : `Relevance ${score} is < ${threshold}`,
+    reason: pass ? `Relevance ${score.toFixed(2)} is >= ${threshold}` : `Relevance ${score.toFixed(2)} is < ${threshold}`,
     tokensUsed: {
       total: resp.tokenUsage?.total || 0,
       prompt: resp.tokenUsage?.prompt || 0,
@@ -648,8 +652,8 @@ export async function matchesContextFaithfulness(
     pass,
     score,
     reason: pass
-      ? `Faithfulness ${score} is >= ${threshold}`
-      : `Faithfulness ${score} is < ${threshold}`,
+      ? `Faithfulness ${score.toFixed(2)} is >= ${threshold}`
+      : `Faithfulness ${score.toFixed(2)} is < ${threshold}`,
     tokensUsed: {
       total: resp.tokenUsage?.total || 0,
       prompt: resp.tokenUsage?.prompt || 0,

@@ -982,4 +982,8 @@ export default {
   matchesLlmRubric,
   matchesFactuality,
   matchesClosedQa,
+  matchesAnswerRelevance,
+  matchesContextRecall,
+  matchesContextRelevance,
+  matchesContextFaithfulness,
 };
