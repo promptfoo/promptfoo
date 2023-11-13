@@ -41,25 +41,32 @@ function fromVars(vars?: Record<string, string | object>) {
   return ret;
 }
 
+async function loadFromProviderOptions(provider: ProviderOptions) {
+  invariant(provider.id, 'Provider supplied to assertion must have an id');
+  // TODO(ian): set basepath if invoked from filesystem config
+  return loadApiProvider(provider.id, { options: provider as ProviderOptions });
+}
+
 export async function getGradingProvider(
+  type: 'embedding' | 'classification' | 'text',
   provider: GradingConfig['provider'],
   defaultProvider: ApiProvider | null,
 ): Promise<ApiProvider | null> {
   let finalProvider: ApiProvider | null;
   if (typeof provider === 'string') {
     finalProvider = await loadApiProvider(provider);
-  } else if (
-    typeof provider === 'object' &&
-    typeof (provider as ApiProvider).callApi === 'function'
-  ) {
+  } else if (typeof provider === 'object' && typeof (provider as ApiProvider).id === 'function') {
     // Defined directly as an ApiProvider
     finalProvider = provider as ApiProvider;
   } else if (typeof provider === 'object') {
+    // Defined as embedding, classification, or text record
+    const typeValue = (provider as Record<string, string>)[type];
+    if (typeValue) {
+      finalProvider = await getGradingProvider(type, typeValue, defaultProvider);
+    }
+
     // Defined as ProviderOptions
-    const providerId = typeof provider.id === 'string' ? provider.id : provider.id?.();
-    invariant(providerId, 'Provider supplied to llm-rubric must have an id');
-    // TODO(ian): set basepath if invoked from filesystem config
-    finalProvider = await loadApiProvider(providerId, { options: provider as ProviderOptions });
+    finalProvider = await loadFromProviderOptions(provider as ProviderOptions);
   } else {
     finalProvider = defaultProvider;
   }
@@ -74,7 +81,7 @@ export async function matchesSimilarity(
   grading?: GradingConfig,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   let provider = grading?.provider;
-  let finalProvider = await getGradingProvider(provider, DefaultEmbeddingProvider);
+  let finalProvider = await getGradingProvider('embedding', provider, DefaultEmbeddingProvider);
 
   invariant(finalProvider, 'No provider found for similarity check');
   if (typeof finalProvider.callEmbeddingApi !== 'function') {
@@ -146,7 +153,7 @@ export async function matchesClassification(
   grading?: GradingConfig,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   let provider = grading?.provider;
-  let finalProvider = await getGradingProvider(provider, null);
+  let finalProvider = await getGradingProvider('classification', provider, null);
 
   invariant(finalProvider, 'No provider found for classification check');
   if (typeof finalProvider.callClassificationApi !== 'function') {
@@ -201,7 +208,7 @@ export async function matchesLlmRubric(
   });
 
   let provider = grading.provider;
-  let finalProvider = await getGradingProvider(provider, DefaultGradingProvider);
+  let finalProvider = await getGradingProvider('text', provider, DefaultGradingProvider);
   invariant(finalProvider, 'No provider found for llm-rubric check');
   const resp = await finalProvider.callApi(prompt);
   if (resp.error || !resp.output) {
@@ -266,7 +273,7 @@ export async function matchesFactuality(
   });
 
   let provider = grading.provider;
-  let finalProvider = await getGradingProvider(provider, DefaultGradingProvider);
+  let finalProvider = await getGradingProvider('text', provider, DefaultGradingProvider);
   invariant(finalProvider, 'No provider found for model-graded-factuality check');
   const resp = await finalProvider.callApi(prompt);
   if (resp.error || !resp.output) {
@@ -364,7 +371,7 @@ export async function matchesClosedQa(
   });
 
   let provider = grading.provider;
-  let finalProvider = await getGradingProvider(provider, DefaultGradingProvider);
+  let finalProvider = await getGradingProvider('text', provider, DefaultGradingProvider);
   invariant(finalProvider, 'No provider found for model-graded-closedqa check');
   const resp = await finalProvider.callApi(prompt);
   if (resp.error || !resp.output) {
@@ -422,14 +429,21 @@ export async function matchesAnswerRelevance(
   grading?: GradingConfig,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   let provider = grading?.provider;
-  let finalProvider = await getGradingProvider(provider, DefaultEmbeddingProvider);
 
-  invariant(finalProvider, 'No provider found for answer relevancy check');
-  if (typeof finalProvider.callEmbeddingApi !== 'function') {
+  let embeddingProvider = await getGradingProvider('embedding', provider, DefaultEmbeddingProvider);
+  invariant(embeddingProvider, 'No embedding provider found for answer relevancy check');
+  if (typeof embeddingProvider.callEmbeddingApi !== 'function') {
     logger.warn(
-      `Provider ${finalProvider.id} does not implement callEmbeddingApi for similarity check, falling back to default`,
+      `Provider ${embeddingProvider.id} does not implement callEmbeddingApi, falling back to default`,
     );
-    finalProvider = DefaultEmbeddingProvider;
+    embeddingProvider = DefaultEmbeddingProvider;
+  }
+
+  let textProvider = await getGradingProvider('text', provider, DefaultGradingProvider);
+  invariant(textProvider, 'No text provider found for answer relevancy check');
+  if (typeof textProvider.callApi !== 'function') {
+    logger.warn(`Provider ${textProvider.id} does not implement callApi, falling back to default`);
+    textProvider = DefaultGradingProvider;
   }
 
   const tokensUsed = {
@@ -439,14 +453,16 @@ export async function matchesAnswerRelevance(
   };
 
   const candidateQuestions: string[] = [];
-  for (let i=0; i<3; i++) {
-    const resp = await finalProvider.callApi(JSON.stringify([
-      ANSWER_RELEVANCY_GENERATE,
-      {
-        role: 'user',
-        content: output,
-      },
-    ]));
+  for (let i = 0; i < 3; i++) {
+    const resp = await textProvider.callApi(
+      JSON.stringify([
+        ANSWER_RELEVANCY_GENERATE,
+        {
+          role: 'user',
+          content: output,
+        },
+      ]),
+    );
     if (resp.error || !resp.output) {
       tokensUsed.total += resp.tokenUsage?.total || 0;
       tokensUsed.prompt += resp.tokenUsage?.prompt || 0;
@@ -458,16 +474,14 @@ export async function matchesAnswerRelevance(
         tokensUsed,
       };
     }
-    invariant(typeof resp.output === 'string', 'llm-rubric produced malformed response');
-    candidateQuestions.push(resp.output);
   }
 
   invariant(
-    typeof finalProvider.callEmbeddingApi === 'function',
-    `Provider ${finalProvider.id} must implement callEmbeddingApi for similarity check`,
+    typeof embeddingProvider.callEmbeddingApi === 'function',
+    `Provider ${embeddingProvider.id} must implement callEmbeddingApi for similarity check`,
   );
 
-  const inputEmbeddingResp = await finalProvider.callEmbeddingApi(input);
+  const inputEmbeddingResp = await embeddingProvider.callEmbeddingApi(input);
   if (inputEmbeddingResp.error || !inputEmbeddingResp.embedding) {
     tokensUsed.total += inputEmbeddingResp.tokenUsage?.total || 0;
     tokensUsed.prompt += inputEmbeddingResp.tokenUsage?.prompt || 0;
@@ -483,7 +497,7 @@ export async function matchesAnswerRelevance(
 
   const similarities: number[] = [];
   for (const question of candidateQuestions) {
-    const resp = await finalProvider.callEmbeddingApi(question);
+    const resp = await embeddingProvider.callEmbeddingApi(question);
     tokensUsed.total += resp.tokenUsage?.total || 0;
     tokensUsed.prompt += resp.tokenUsage?.prompt || 0;
     tokensUsed.completion += resp.tokenUsage?.completion || 0;

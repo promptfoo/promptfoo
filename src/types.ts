@@ -101,7 +101,11 @@ export type VarMapping = Record<string, string>;
 
 export interface GradingConfig {
   rubricPrompt?: string;
-  provider?: string | ProviderOptions | ApiProvider;
+  provider?:
+    | string
+    | ProviderOptions
+    | ApiProvider
+    | Record<'embedding' | 'classification' | 'text', string>;
   closedQa?: {
     subset?: number;
     superset?: number;

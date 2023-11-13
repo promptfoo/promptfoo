@@ -128,10 +128,10 @@ describe('matchesSimilarity', () => {
       },
     };
 
-    jest.spyOn(OpenAiEmbeddingProvider.prototype, 'callEmbeddingApi').mockRejectedValueOnce(
-      new Error('API call failed'),
-    );
-  
+    jest
+      .spyOn(OpenAiEmbeddingProvider.prototype, 'callEmbeddingApi')
+      .mockRejectedValueOnce(new Error('API call failed'));
+
     await expect(async () => {
       await matchesSimilarity(expected, output, threshold, false, grading);
     }).rejects.toThrow('API call failed');

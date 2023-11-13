@@ -160,13 +160,9 @@ export async function runAssertion(
       if (filePath.endsWith('.js') || filePath.endsWith('.cjs')) {
         const requiredModule = require(path.resolve(filePath));
         if (typeof requiredModule === 'function') {
-          valueFromScript = await Promise.resolve(
-            requiredModule(output, context),
-          );
+          valueFromScript = await Promise.resolve(requiredModule(output, context));
         } else if (requiredModule.default && typeof requiredModule.default === 'function') {
-          valueFromScript = await Promise.resolve(
-            requiredModule.default(output, context),
-          );
+          valueFromScript = await Promise.resolve(requiredModule.default(output, context));
         } else {
           throw new Error(
             `Assertion malformed: ${filePath} must export a function or have a default export as a function`,
@@ -175,9 +171,7 @@ export async function runAssertion(
       } else if (filePath.endsWith('.py')) {
         const { execSync } = require('child_process');
         const escapedOutput = outputString.replace(/"/g, '\\"').replace(/\n/g, '\\n');
-        const escapedContext = JSON.stringify(context)
-          .replace(/"/g, '\\"')
-          .replace(/\n/g, '\\n');
+        const escapedContext = JSON.stringify(context).replace(/"/g, '\\"').replace(/\n/g, '\\n');
         const pythonScriptOutput = execSync(
           `${
             process.env.PROMPTFOO_PYTHON || 'python'
@@ -669,11 +663,13 @@ ${assertion.value}`,
       test.options.rubricPrompt = nunjucks.renderString(test.options.rubricPrompt, test.vars || {});
     }
 
-    invariant(typeof output === 'string', 'answer-relevance assertion type must evaluate a string output');
-    invariant(typeof test.threshold === 'number', 'answer-relevance assertion type must have a threshold value');
+    invariant(
+      typeof output === 'string',
+      'answer-relevance assertion type must evaluate a string output',
+    );
     return {
       assertion,
-      ...(await matchesAnswerRelevance(prompt, output, test.threshold, test.options)),
+      ...(await matchesAnswerRelevance(prompt, output, test.threshold || 0, test.options)),
     };
   }
 
