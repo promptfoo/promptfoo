@@ -294,24 +294,24 @@ export async function matchesFactuality(
     'text',
     grading.provider,
     DefaultGradingProvider,
-    'model-graded-factuality check',
+    'factuality check',
   );
   const resp = await finalProvider.callApi(prompt);
   if (resp.error || !resp.output) {
     return fail(resp.error || 'No output', resp.tokenUsage);
   }
 
-  invariant(typeof resp.output === 'string', 'model-graded-factuality produced malformed response');
+  invariant(typeof resp.output === 'string', 'factuality produced malformed response');
   try {
     const option = resp.output.trim().charAt(1); // Extract the option character
     let reason = '';
 
     const scoreLookup: Record<string, number> = {
-      A: grading.closedQa?.subset ?? 1,
-      B: grading.closedQa?.superset ?? 1,
-      C: grading.closedQa?.agree ?? 1,
-      D: grading.closedQa?.disagree ?? 0,
-      E: grading.closedQa?.differButFactual ?? 1,
+      A: grading.factuality?.subset ?? 1,
+      B: grading.factuality?.superset ?? 1,
+      C: grading.factuality?.agree ?? 1,
+      D: grading.factuality?.disagree ?? 0,
+      E: grading.factuality?.differButFactual ?? 1,
     };
 
     // Passing is defined as scores with value >0, and failing as scores with value 0.

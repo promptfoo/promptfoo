@@ -114,7 +114,7 @@ export interface GradingConfig {
     | ProviderOptions
     | ApiProvider
     | Record<'embedding' | 'classification' | 'text', string>;
-  closedQa?: {
+  factuality?: {
     subset?: number;
     superset?: number;
     agree?: number;

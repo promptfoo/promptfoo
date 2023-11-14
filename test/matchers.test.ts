@@ -248,7 +248,7 @@ describe('matchesFactuality', () => {
     const expected = 'Expected output';
     const output = 'Sample output';
     const grading = {
-      closedQa: {
+      factuality: {
         subset: 0.8,
         superset: 0.9,
         agree: 1,

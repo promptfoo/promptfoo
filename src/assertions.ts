@@ -611,10 +611,10 @@ ${assertion.value}`,
     };
   }
 
-  if (baseType === 'model-graded-factuality') {
+  if (baseType === 'model-graded-factuality' || baseType === 'factuality') {
     invariant(
       typeof renderedValue === 'string',
-      'model-graded-factuality assertion type must have a string value',
+      'factuality assertion type must have a string value',
     );
 
     // Assertion provider overrides test provider
@@ -926,7 +926,7 @@ export function assertionFromString(expected: string): Assertion {
 
   // New options
   const assertionRegex =
-    /^(not-)?(equals|contains-any|contains-all|icontains-any|icontains-all|contains-json|is-json|regex|icontains|contains|webhook|rouge-n|similar|starts-with|levenshtein|classifier|model-graded-factuality|model-graded-closedqa)(?:\((\d+(?:\.\d+)?)\))?(?::(.*))?$/;
+    /^(not-)?(equals|contains-any|contains-all|icontains-any|icontains-all|contains-json|is-json|regex|icontains|contains|webhook|rouge-n|similar|starts-with|levenshtein|classifier|model-graded-factuality|factuality|model-graded-closedqa|answer-relevance|context-recall|context-relevance|context-faithfulness)(?:\((\d+(?:\.\d+)?)\))?(?::(.*))?$/;
   const regexMatch = expected.match(assertionRegex);
 
   if (regexMatch) {
@@ -953,7 +953,11 @@ export function assertionFromString(expected: string): Assertion {
       type === 'similar' ||
       type === 'starts-with' ||
       type === 'levenshtein' ||
-      type === 'classifier'
+      type === 'classifier' ||
+      type === 'answer-relevance' ||
+      type === 'context-recall' ||
+      type === 'context-relevance' ||
+      type === 'context-faithfulness'
     ) {
       return {
         type: fullType as AssertionType,
