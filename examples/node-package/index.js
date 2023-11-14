@@ -9,13 +9,16 @@ import promptfoo from '../../dist/src/index.js';
         'Rephrase this like a pirate: {{body}}',
 
         // Or OpenAI message objects...
-        [{
-          role: 'system',
-          content: 'Pretend you are an Italian person and echo back any inputs',
-        }, {
-          role: 'user',
-          content: '{{body}}',
-        }],
+        [
+          {
+            role: 'system',
+            content: 'Pretend you are an Italian person and echo back any inputs',
+          },
+          {
+            role: 'user',
+            content: '{{body}}',
+          },
+        ],
       ],
       providers: [
         // Call the OpenAI API GPT 3.5
