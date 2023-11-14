@@ -143,7 +143,6 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
   }
 }
 
-
 export class OpenAiCompletionProvider extends OpenAiGenericProvider {
   static OPENAI_COMPLETION_MODELS = [
     'gpt-3.5-turbo-instruct',

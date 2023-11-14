@@ -5,6 +5,10 @@ import {
   matchesLlmRubric,
   matchesFactuality,
   matchesClosedQa,
+  matchesAnswerRelevance,
+  matchesContextRelevance,
+  matchesContextRecall,
+  matchesContextFaithfulness,
 } from '../src/matchers';
 import { DefaultEmbeddingProvider, DefaultGradingProvider } from '../src/providers/openai';
 
@@ -128,10 +132,10 @@ describe('matchesSimilarity', () => {
       },
     };
 
-    jest.spyOn(OpenAiEmbeddingProvider.prototype, 'callEmbeddingApi').mockRejectedValueOnce(
-      new Error('API call failed'),
-    );
-  
+    jest
+      .spyOn(OpenAiEmbeddingProvider.prototype, 'callEmbeddingApi')
+      .mockRejectedValueOnce(new Error('API call failed'));
+
     await expect(async () => {
       await matchesSimilarity(expected, output, threshold, false, grading);
     }).rejects.toThrow('API call failed');
@@ -244,7 +248,7 @@ describe('matchesFactuality', () => {
     const expected = 'Expected output';
     const output = 'Sample output';
     const grading = {
-      closedQa: {
+      factuality: {
         subset: 0.8,
         superset: 0.9,
         agree: 1,
@@ -361,6 +365,7 @@ describe('matchesClosedQa', () => {
 describe('getGradingProvider', () => {
   it('should return the correct provider when provider is a string', async () => {
     const provider = await getGradingProvider(
+      'text',
       'openai:chat:gpt-3.5-turbo-foobar',
       DefaultGradingProvider,
     );
@@ -369,7 +374,11 @@ describe('getGradingProvider', () => {
   });
 
   it('should return the correct provider when provider is an ApiProvider', async () => {
-    const provider = await getGradingProvider(DefaultEmbeddingProvider, DefaultGradingProvider);
+    const provider = await getGradingProvider(
+      'embedding',
+      DefaultEmbeddingProvider,
+      DefaultGradingProvider,
+    );
     expect(provider).toBe(DefaultEmbeddingProvider);
   });
 
@@ -381,15 +390,88 @@ describe('getGradingProvider', () => {
         temperature: 3.1415926,
       },
     };
-    const provider = await getGradingProvider(providerOptions, DefaultGradingProvider);
+    const provider = await getGradingProvider('text', providerOptions, DefaultGradingProvider);
     expect(provider?.id()).toBe('openai:chat:gpt-3.5-turbo-foobar');
   });
 
   it('should return the default provider when provider is not provided', async () => {
-    const provider = await getGradingProvider(undefined, DefaultGradingProvider);
+    const provider = await getGradingProvider('text', undefined, DefaultGradingProvider);
     expect(provider).toBe(DefaultGradingProvider);
   });
 });
+
+describe('matchesAnswerRelevance', () => {
+  it('should pass when the relevance score is above the threshold', async () => {
+    const input = 'Input text';
+    const output = 'Sample output';
+    const threshold = 0.5;
+
+    const mockCallApi = jest.spyOn(DefaultGradingProvider, 'callApi');
+    mockCallApi.mockImplementation(() => {
+      return Promise.resolve({
+        output: 'foobar',
+        tokenUsage: { total: 10, prompt: 5, completion: 5 },
+      });
+    });
+
+    const mockCallEmbeddingApi = jest.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi');
+    mockCallEmbeddingApi.mockImplementation(function (this: OpenAiEmbeddingProvider) {
+      return Promise.resolve({
+        embedding: [1, 0, 0],
+        tokenUsage: { total: 5, prompt: 2, completion: 3 },
+      });
+    });
+
+    const result = await matchesAnswerRelevance(input, output, threshold);
+    expect(result.pass).toBeTruthy();
+    expect(result.reason).toBe('Relevance 1.00 is greater than threshold 0.5');
+    expect(mockCallApi).toHaveBeenCalled();
+    expect(mockCallEmbeddingApi).toHaveBeenCalled();
+
+    mockCallApi.mockRestore();
+    mockCallEmbeddingApi.mockRestore();
+  });
+
+  it('should fail when the relevance score is below the threshold', async () => {
+    const input = 'Input text';
+    const output = 'Different output';
+    const threshold = 0.5;
+
+    const mockCallApi = jest.spyOn(DefaultGradingProvider, 'callApi');
+    mockCallApi.mockImplementation((text) => {
+      return Promise.resolve({
+        output: text,
+        tokenUsage: { total: 10, prompt: 5, completion: 5 },
+      });
+    });
+
+    const mockCallEmbeddingApi = jest.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi');
+    mockCallEmbeddingApi.mockImplementation((text) => {
+      if (text.includes('Input text')) {
+        return Promise.resolve({
+          embedding: [1, 0, 0],
+          tokenUsage: { total: 5, prompt: 2, completion: 3 },
+        });
+      } else if (text.includes('Different output')) {
+        return Promise.resolve({
+          embedding: [0, 1, 0],
+          tokenUsage: { total: 5, prompt: 2, completion: 3 },
+        });
+      }
+      return Promise.reject(new Error('Unexpected input ' + text));
+    });
+
+    const result = await matchesAnswerRelevance(input, output, threshold);
+    expect(result.pass).toBeFalsy();
+    expect(result.reason).toBe('Relevance 0.00 is less than threshold 0.5');
+    expect(mockCallApi).toHaveBeenCalled();
+    expect(mockCallEmbeddingApi).toHaveBeenCalled();
+
+    mockCallApi.mockRestore();
+    mockCallEmbeddingApi.mockRestore();
+  });
+});
+
 describe('matchesClassification', () => {
   class TestGrader implements ApiProvider {
     async callApi(): Promise<ProviderResponse> {
@@ -464,6 +546,154 @@ describe('matchesClassification', () => {
     const result = await matchesClassification(expected, output, threshold, grading);
     expect(result.pass).toBeTruthy();
     expect(result.reason).toBe(`Classification ${expected} has score 0.6 >= ${threshold}`);
+    expect(mockCallApi).toHaveBeenCalled();
+
+    mockCallApi.mockRestore();
+  });
+});
+
+describe('matchesContextRelevance', () => {
+  it('should pass when the relevance score is above the threshold', async () => {
+    const input = 'Input text';
+    const context = 'Context text';
+    const threshold = 0.5;
+
+    const mockCallApi = jest.spyOn(DefaultGradingProvider, 'callApi');
+    mockCallApi.mockImplementation(() => {
+      return Promise.resolve({
+        output: 'foo\nbar\nbaz Insufficient Information',
+        tokenUsage: { total: 10, prompt: 5, completion: 5 },
+      });
+    });
+
+    const result = await matchesContextRelevance(input, context, threshold);
+    expect(result.pass).toBeTruthy();
+    expect(result.reason).toBe('Relevance 0.67 is >= 0.5');
+    expect(mockCallApi).toHaveBeenCalled();
+
+    mockCallApi.mockRestore();
+  });
+
+  it('should fail when the relevance score is below the threshold', async () => {
+    const input = 'Input text';
+    const context = 'Context text';
+    const threshold = 0.9;
+
+    const mockCallApi = jest.spyOn(DefaultGradingProvider, 'callApi');
+    mockCallApi.mockImplementation(() => {
+      return Promise.resolve({
+        output: 'foo\nbar\nbaz Insufficient Information',
+        tokenUsage: { total: 10, prompt: 5, completion: 5 },
+      });
+    });
+
+    const result = await matchesContextRelevance(input, context, threshold);
+    expect(result.pass).toBeFalsy();
+    expect(result.reason).toBe('Relevance 0.67 is < 0.9');
+    expect(mockCallApi).toHaveBeenCalled();
+
+    mockCallApi.mockRestore();
+  });
+});
+
+describe('matchesContextFaithfulness', () => {
+  it('should pass when the faithfulness score is above the threshold', async () => {
+    const query = 'Query text';
+    const output = 'Output text';
+    const context = 'Context text';
+    const threshold = 0.5;
+
+    const mockCallApi = jest.spyOn(DefaultGradingProvider, 'callApi');
+    mockCallApi
+      .mockImplementationOnce(() => {
+        return Promise.resolve({
+          output: 'Statement 1\nStatement 2\nStatement 3',
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        });
+      })
+      .mockImplementationOnce(() => {
+        return Promise.resolve({
+          output: 'Final verdict for each statement in order: Yes. No. Yes.',
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        });
+      });
+
+    const result = await matchesContextFaithfulness(query, output, context, threshold);
+    expect(result.pass).toBeTruthy();
+    expect(result.reason).toBe('Faithfulness 0.67 is >= 0.5');
+    expect(mockCallApi).toHaveBeenCalledTimes(2);
+
+    mockCallApi.mockRestore();
+  });
+
+  it('should fail when the faithfulness score is below the threshold', async () => {
+    const query = 'Query text';
+    const output = 'Output text';
+    const context = 'Context text';
+    const threshold = 0.7;
+
+    const mockCallApi = jest.spyOn(DefaultGradingProvider, 'callApi');
+    mockCallApi
+      .mockImplementationOnce(() => {
+        return Promise.resolve({
+          output: 'Statement 1\nStatement 2\nStatement 3',
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        });
+      })
+      .mockImplementationOnce(() => {
+        return Promise.resolve({
+          output: 'Final verdict for each statement in order: Yes. Yes. No.',
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        });
+      });
+
+    const result = await matchesContextFaithfulness(query, output, context, threshold);
+    expect(result.pass).toBeFalsy();
+    expect(result.reason).toBe('Faithfulness 0.67 is < 0.7');
+    expect(mockCallApi).toHaveBeenCalledTimes(2);
+
+    mockCallApi.mockRestore();
+  });
+});
+
+describe('matchesContextRecall', () => {
+  it('should pass when the recall score is above the threshold', async () => {
+    const context = 'Context text';
+    const groundTruth = 'Ground truth text';
+    const threshold = 0.5;
+
+    const mockCallApi = jest.spyOn(DefaultGradingProvider, 'callApi');
+    mockCallApi.mockImplementation(() => {
+      return Promise.resolve({
+        output: 'foo [Attributed]\nbar [Not attributed]\nbaz [Attributed]',
+        tokenUsage: { total: 10, prompt: 5, completion: 5 },
+      });
+    });
+
+    const result = await matchesContextRecall(context, groundTruth, threshold);
+    expect(result.pass).toBeTruthy();
+    expect(result.reason).toBe('Recall 0.67 is >= 0.5');
+    expect(mockCallApi).toHaveBeenCalled();
+
+    mockCallApi.mockRestore();
+  });
+
+  it('should fail when the recall score is below the threshold', async () => {
+    const context = 'Context text';
+    const groundTruth = 'Ground truth text';
+    const threshold = 0.9;
+
+    const mockCallApi = jest.spyOn(DefaultGradingProvider, 'callApi');
+    mockCallApi.mockImplementation(() => {
+      return Promise.resolve({
+        output: 'foo [Attributed]\nbar [Not attributed]\nbaz [Attributed]',
+        tokenUsage: { total: 10, prompt: 5, completion: 5 },
+      });
+    });
+
+    const result = await matchesContextRecall(context, groundTruth, threshold);
+    expect(result.pass).toBeFalsy();
+    expect(result.reason).toBe('Recall 0.67 is < 0.9');
     expect(mockCallApi).toHaveBeenCalled();
 
     mockCallApi.mockRestore();

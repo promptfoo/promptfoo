@@ -1285,7 +1285,7 @@ describe('runAssertion', () => {
         output,
       );
 
-      expect(mockFn).toHaveBeenCalledWith("Expected output", {"prompt": "Some prompt", "vars": {}})
+      expect(mockFn).toHaveBeenCalledWith('Expected output', { prompt: 'Some prompt', vars: {} });
       expect(result.pass).toBe(expectedPass);
       expect(result.reason).toContain(expectedReason);
     },
@@ -1356,8 +1356,8 @@ describe('runAssertion', () => {
       );
 
       expect(execSyncMock).toHaveBeenCalledWith(
-          `python /path/to/assert.py \"Expected output\" \"{\\\"prompt\\\":\\\"Some prompt\\\",\\\"vars\\\":{}}\"`
-      )
+        `python /path/to/assert.py \"Expected output\" \"{\\\"prompt\\\":\\\"Some prompt\\\",\\\"vars\\\":{}}\"`,
+      );
       expect(result.pass).toBe(expectedPass);
       expect(result.reason).toContain(expectedReason);
     },

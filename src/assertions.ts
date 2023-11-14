@@ -16,6 +16,10 @@ import {
   matchesFactuality,
   matchesClosedQa,
   matchesClassification,
+  matchesAnswerRelevance,
+  matchesContextRecall,
+  matchesContextRelevance,
+  matchesContextFaithfulness,
 } from './matchers';
 
 import type { Assertion, AssertionType, GradingResult, AtomicTestCase } from './types';
@@ -159,13 +163,9 @@ export async function runAssertion(
       if (filePath.endsWith('.js') || filePath.endsWith('.cjs')) {
         const requiredModule = require(path.resolve(filePath));
         if (typeof requiredModule === 'function') {
-          valueFromScript = await Promise.resolve(
-            requiredModule(output, context),
-          );
+          valueFromScript = await Promise.resolve(requiredModule(output, context));
         } else if (requiredModule.default && typeof requiredModule.default === 'function') {
-          valueFromScript = await Promise.resolve(
-            requiredModule.default(output, context),
-          );
+          valueFromScript = await Promise.resolve(requiredModule.default(output, context));
         } else {
           throw new Error(
             `Assertion malformed: ${filePath} must export a function or have a default export as a function`,
@@ -174,9 +174,7 @@ export async function runAssertion(
       } else if (filePath.endsWith('.py')) {
         const { execSync } = require('child_process');
         const escapedOutput = outputString.replace(/"/g, '\\"').replace(/\n/g, '\\n');
-        const escapedContext = JSON.stringify(context)
-          .replace(/"/g, '\\"')
-          .replace(/\n/g, '\\n');
+        const escapedContext = JSON.stringify(context).replace(/"/g, '\\"').replace(/\n/g, '\\n');
         const pythonScriptOutput = execSync(
           `${
             process.env.PROMPTFOO_PYTHON || 'python'
@@ -613,10 +611,10 @@ ${assertion.value}`,
     };
   }
 
-  if (baseType === 'model-graded-factuality') {
+  if (baseType === 'model-graded-factuality' || baseType === 'factuality') {
     invariant(
       typeof renderedValue === 'string',
-      'model-graded-factuality assertion type must have a string value',
+      'factuality assertion type must have a string value',
     );
 
     // Assertion provider overrides test provider
@@ -654,6 +652,99 @@ ${assertion.value}`,
     return {
       assertion,
       ...(await matchesClosedQa(prompt, renderedValue, outputString, test.options, test.vars)),
+    };
+  }
+
+  if (baseType === 'answer-relevance') {
+    // Assertion provider overrides test provider
+    test.options = test.options || {};
+    test.options.provider = assertion.provider || test.options.provider;
+
+    invariant(
+      typeof output === 'string',
+      'answer-relevance assertion type must evaluate a string output',
+    );
+    return {
+      assertion,
+      ...(await matchesAnswerRelevance(prompt, output, assertion.threshold || 0, test.options)),
+    };
+  }
+
+  if (baseType === 'context-recall') {
+    // Assertion provider overrides test provider
+    test.options = test.options || {};
+    test.options.provider = assertion.provider || test.options.provider;
+
+    invariant(
+      typeof renderedValue === 'string',
+      'context-recall assertion type must have a string value',
+    );
+    return {
+      assertion,
+      ...(await matchesContextRecall(
+        typeof test.vars?.context === 'string' ? test.vars.context : prompt,
+        renderedValue,
+        assertion.threshold || 0,
+        test.options,
+        test.vars,
+      )),
+    };
+  }
+
+  if (baseType === 'context-relevance') {
+    // Assertion provider overrides test provider
+    test.options = test.options || {};
+    test.options.provider = assertion.provider || test.options.provider;
+
+    invariant(test.vars, 'context-relevance assertion type must have a vars object');
+    invariant(
+      typeof test.vars.query === 'string',
+      'context-relevance assertion type must have a question var',
+    );
+    invariant(
+      typeof test.vars.context === 'string',
+      'context-relevance assertion type must have a context var',
+    );
+
+    return {
+      assertion,
+      ...(await matchesContextRelevance(
+        test.vars.query,
+        test.vars.context,
+        assertion.threshold || 0,
+        test.options,
+      )),
+    };
+  }
+
+  if (baseType === 'context-faithfulness') {
+    // Assertion provider overrides test provider
+    test.options = test.options || {};
+    test.options.provider = assertion.provider || test.options.provider;
+
+    invariant(test.vars, 'context-faithfulness assertion type must have a vars object');
+    invariant(
+      typeof test.vars.query === 'string',
+      'context-faithfulness assertion type must have a question var',
+    );
+    invariant(
+      typeof test.vars.context === 'string',
+      'context-faithfulness assertion type must have a context var',
+    );
+    invariant(
+      typeof output === 'string',
+      'context-faithfulness assertion type must have a string output',
+    );
+
+    return {
+      assertion,
+      ...(await matchesContextFaithfulness(
+        test.vars.query,
+        output,
+        test.vars.context,
+        assertion.threshold || 0,
+        test.options,
+      )),
     };
   }
 
@@ -835,7 +926,7 @@ export function assertionFromString(expected: string): Assertion {
 
   // New options
   const assertionRegex =
-    /^(not-)?(equals|contains-any|contains-all|icontains-any|icontains-all|contains-json|is-json|regex|icontains|contains|webhook|rouge-n|similar|starts-with|levenshtein|classifier|model-graded-factuality|model-graded-closedqa)(?:\((\d+(?:\.\d+)?)\))?(?::(.*))?$/;
+    /^(not-)?(equals|contains-any|contains-all|icontains-any|icontains-all|contains-json|is-json|regex|icontains|contains|webhook|rouge-n|similar|starts-with|levenshtein|classifier|model-graded-factuality|factuality|model-graded-closedqa|answer-relevance|context-recall|context-relevance|context-faithfulness)(?:\((\d+(?:\.\d+)?)\))?(?::(.*))?$/;
   const regexMatch = expected.match(assertionRegex);
 
   if (regexMatch) {
@@ -862,7 +953,11 @@ export function assertionFromString(expected: string): Assertion {
       type === 'similar' ||
       type === 'starts-with' ||
       type === 'levenshtein' ||
-      type === 'classifier'
+      type === 'classifier' ||
+      type === 'answer-relevance' ||
+      type === 'context-recall' ||
+      type === 'context-relevance' ||
+      type === 'context-faithfulness'
     ) {
       return {
         type: fullType as AssertionType,
@@ -891,4 +986,8 @@ export default {
   matchesLlmRubric,
   matchesFactuality,
   matchesClosedQa,
+  matchesAnswerRelevance,
+  matchesContextRecall,
+  matchesContextRelevance,
+  matchesContextFaithfulness,
 };

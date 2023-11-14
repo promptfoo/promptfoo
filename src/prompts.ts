@@ -15,6 +15,8 @@ import type {
   ProviderOptions,
 } from './types';
 
+export * from './external/ragas';
+
 const PROMPT_DELIMITER = '---';
 
 export function readProviderPromptMap(
