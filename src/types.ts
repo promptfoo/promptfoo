@@ -430,10 +430,10 @@ export interface EvalWithMetadata {
 }
 
 // node.js package interface
-export interface EvaluateTestSuite extends TestSuiteConfig {
-  prompts: string[];
+export type EvaluateTestSuite = {
+  prompts: (string | object)[];
   writeLatestResults?: boolean;
-}
+} & TestSuiteConfig;
 
 export interface SharedResults {
   data: ResultsFile;

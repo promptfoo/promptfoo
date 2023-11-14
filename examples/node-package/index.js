@@ -3,11 +3,27 @@ import promptfoo from '../../dist/src/index.js';
 (async () => {
   const results = await promptfoo.evaluate(
     {
-      prompts: ['Rephrase this in French: {{body}}', 'Rephrase this like a pirate: {{body}}'],
+      prompts: [
+        // Prompts can be raw text...
+        'Rephrase this in French: {{body}}',
+        'Rephrase this like a pirate: {{body}}',
+
+        // Or OpenAI message objects...
+        [{
+          role: 'system',
+          content: 'Pretend you are an Italian person and echo back any inputs',
+        }, {
+          role: 'user',
+          content: '{{body}}',
+        }],
+      ],
       providers: [
+        // Call the OpenAI API GPT 3.5
         'openai:gpt-3.5-turbo',
+
+        // This function is a custom provider.
+        // You can call an LLM API here, or do anything else you want.
         (prompt, context) => {
-          // Call LLM here...
           console.log(`Prompt: ${prompt}, vars: ${JSON.stringify(context.vars)}`);
           return {
             output: '<LLM output>',

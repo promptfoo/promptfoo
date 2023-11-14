@@ -355,7 +355,7 @@ class Evaluator {
           testSuite.providers.length > 1 ? `[${provider.id()}] ${prompt.display}` : prompt.display;
         prompts.push({
           ...prompt,
-          id: sha256(prompt.raw),
+          id: sha256(typeof prompt.raw === 'object' ? JSON.stringify(prompt.raw) : prompt.raw),
           display: updatedDisplay,
           metrics: {
             score: 0,
