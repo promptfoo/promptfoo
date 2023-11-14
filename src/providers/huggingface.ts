@@ -1,3 +1,4 @@
+import logger from '../logger';
 import { fetchWithCache } from '../cache';
 
 import type {
@@ -53,10 +54,13 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
       },
     };
 
+    const url = `https://api-inference.huggingface.co/models/${this.modelName}`;
+    logger.debug(`Huggingface API request: ${url} ${JSON.stringify(params)}`);
+
     let response;
     try {
       response = await fetchWithCache(
-        `https://api-inference.huggingface.co/models/${this.modelName}`,
+        url,
         {
           method: 'POST',
           headers: {
@@ -69,6 +73,8 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
         },
         REQUEST_TIMEOUT_MS,
       );
+
+      logger.debug(`Huggingface API response: ${JSON.stringify(response.data)}`);
 
       if (response.data.error) {
         return {
