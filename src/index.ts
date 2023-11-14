@@ -25,17 +25,22 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
     nunjucksFilters: readFilters(testSuite.nunjucksFilters || {}),
 
     // Full prompts expected (not filepaths)
-    prompts: testSuite.prompts.map((promptContent) =>
-      typeof promptContent === 'string'
-        ? {
-            raw: promptContent,
-            display: promptContent,
-          }
-        : {
-            raw: JSON.stringify(promptContent),
-            display: JSON.stringify(promptContent),
-          },
-    ),
+    prompts:
+      isOpenAIMessagesObjects(testSuite.prompts) ? [{
+        raw: JSON.stringify(testSuite.prompts),
+        display: JSON.stringify(testSuite.prompts),
+      }] :
+        testSuite.prompts.map((promptContent) =>
+          typeof promptContent === 'string'
+            ? {
+              raw: promptContent,
+              display: promptContent,
+            }
+            : {
+              raw: JSON.stringify(promptContent),
+              display: JSON.stringify(promptContent),
+            },
+        ),
   };
 
   // Resolve nested providers
@@ -83,6 +88,16 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
 
   await telemetry.send();
   return ret;
+}
+
+function isOpenAIMessagesObjects(arr: any) {
+  if (!Array.isArray(arr)) {
+    return false;
+  }
+
+  return arr.every((element) => {
+    return typeof element === 'object' && element !== null && !Array.isArray(element);
+  });
 }
 
 export { evaluate, assertions, providers };
