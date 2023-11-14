@@ -164,7 +164,8 @@ class Evaluator {
     // Set up the special _conversation variable
     const vars = test.vars || {};
     const conversationKey = `${provider.id()}:${prompt.id}`;
-    if (!process.env.PROMPTFOO_DISABLE_CONVERSATION_VAR) {
+    const usesConversation = prompt.raw.includes('_conversation');
+    if (!process.env.PROMPTFOO_DISABLE_CONVERSATION_VAR && usesConversation) {
       vars._conversation = this.conversations[conversationKey] || [];
     }
 
