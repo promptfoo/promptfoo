@@ -489,8 +489,10 @@ export async function matchesAnswerRelevance(
 
   const similarity = similarities.reduce((a, b) => a + b, 0) / similarities.length;
   const pass = similarity >= threshold;
-  const greaterThanReason = `Relevance ${similarity} is greater than threshold ${threshold}`;
-  const lessThanReason = `Relevance ${similarity} is less than threshold ${threshold}`;
+  const greaterThanReason = `Relevance ${similarity.toFixed(
+    2,
+  )} is greater than threshold ${threshold}`;
+  const lessThanReason = `Relevance ${similarity.toFixed(2)} is less than threshold ${threshold}`;
   if (pass) {
     return {
       pass: true,

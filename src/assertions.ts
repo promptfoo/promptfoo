@@ -666,7 +666,7 @@ ${assertion.value}`,
     );
     return {
       assertion,
-      ...(await matchesAnswerRelevance(prompt, output, test.threshold || 0, test.options)),
+      ...(await matchesAnswerRelevance(prompt, output, assertion.threshold || 0, test.options)),
     };
   }
 
@@ -684,7 +684,7 @@ ${assertion.value}`,
       ...(await matchesContextRecall(
         typeof test.vars?.context === 'string' ? test.vars.context : prompt,
         renderedValue,
-        test.threshold || 0,
+        assertion.threshold || 0,
         test.options,
         test.vars,
       )),
@@ -711,7 +711,7 @@ ${assertion.value}`,
       ...(await matchesContextRelevance(
         test.vars.query,
         test.vars.context,
-        test.threshold || 0,
+        assertion.threshold || 0,
         test.options,
       )),
     };
@@ -742,7 +742,7 @@ ${assertion.value}`,
         test.vars.query,
         output,
         test.vars.context,
-        test.threshold || 0,
+        assertion.threshold || 0,
         test.options,
       )),
     };

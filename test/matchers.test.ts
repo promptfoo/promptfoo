@@ -424,7 +424,7 @@ describe('matchesAnswerRelevance', () => {
 
     const result = await matchesAnswerRelevance(input, output, threshold);
     expect(result.pass).toBeTruthy();
-    expect(result.reason).toBe('Relevance 1 is greater than threshold 0.5');
+    expect(result.reason).toBe('Relevance 1.00 is greater than threshold 0.5');
     expect(mockCallApi).toHaveBeenCalled();
     expect(mockCallEmbeddingApi).toHaveBeenCalled();
 
@@ -463,7 +463,7 @@ describe('matchesAnswerRelevance', () => {
 
     const result = await matchesAnswerRelevance(input, output, threshold);
     expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe('Relevance 0 is less than threshold 0.5');
+    expect(result.reason).toBe('Relevance 0.00 is less than threshold 0.5');
     expect(mockCallApi).toHaveBeenCalled();
     expect(mockCallEmbeddingApi).toHaveBeenCalled();
 
