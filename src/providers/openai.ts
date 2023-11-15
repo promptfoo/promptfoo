@@ -354,8 +354,56 @@ export class OpenAIAssistantProvider extends OpenAiGenericProvider {
   }
 
   async callApi(prompt: string): Promise<ProviderResponse> {
-    // TODO: Implement the API calls to create a thread and run it, wait for the run to reach "status: completed", and list messages for the thread.
-    throw new Error('Not implemented');
+    if (!this.getApiKey()) {
+      throw new Error(
+        'OpenAI API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
+      );
+    }
+
+    const body = {
+      'assistant_id': this.assistantId,
+      'message': {
+        'role': 'system',
+        'content': prompt
+      }
+    };
+
+    let data;
+    try {
+      data = await fetch(
+        `${this.getApiUrl()}/v1/assistants/${this.assistantId}/conversations`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${this.getApiKey()}`,
+            ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
+          },
+          body: JSON.stringify(body),
+        }
+      );
+    } catch (err) {
+      return {
+        error: `API call error: ${String(err)}`,
+      };
+    }
+
+    try {
+      const message = data.choices[0].message;
+      const output = message.content === null ? message.function_call : message.content;
+      return {
+        output,
+        tokenUsage: {
+          total: data.usage.total_tokens,
+          prompt: data.usage.prompt_tokens,
+          completion: data.usage.completion_tokens,
+        },
+      };
+    } catch (err) {
+      return {
+        error: `API response error: ${String(err)}: ${JSON.stringify(data)}`,
+      };
+    }
   }
 }
 
