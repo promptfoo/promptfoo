@@ -388,22 +388,55 @@ export class OpenAIAssistantProvider extends OpenAiGenericProvider {
       };
     }
 
+    // Wait for the run to reach "status: completed"
+    while (data.status !== 'completed') {
+      try {
+        data = await fetch(
+          `${this.getApiUrl()}/v1/assistants/${this.assistantId}/conversations/${data.id}`,
+          {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${this.getApiKey()}`,
+              ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
+            },
+          }
+        );
+      } catch (err) {
+        return {
+          error: `API call error: ${String(err)}`,
+        };
+      }
+    }
+
+    // List messages for the thread
+    let messages;
     try {
-      const message = data.choices[0].message;
-      const output = message.content === null ? message.function_call : message.content;
-      return {
-        output,
-        tokenUsage: {
-          total: data.usage.total_tokens,
-          prompt: data.usage.prompt_tokens,
-          completion: data.usage.completion_tokens,
-        },
-      };
+      messages = await fetch(
+        `${this.getApiUrl()}/v1/assistants/${this.assistantId}/conversations/${data.id}/messages`,
+        {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${this.getApiKey()}`,
+            ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
+          },
+        }
+      );
     } catch (err) {
       return {
-        error: `API response error: ${String(err)}: ${JSON.stringify(data)}`,
+        error: `API call error: ${String(err)}`,
       };
     }
+
+    return {
+      output: messages,
+      tokenUsage: {
+        total: data.usage.total_tokens,
+        prompt: data.usage.prompt_tokens,
+        completion: data.usage.completion_tokens,
+      },
+    };
   }
 }
 
