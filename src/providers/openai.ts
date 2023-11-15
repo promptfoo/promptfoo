@@ -235,22 +235,21 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
   }
 }
 
-export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
-  static OPENAI_CHAT_MODELS = [
-    'gpt-4',
-    'gpt-4-0314',
-    'gpt-4-0613',
-    'gpt-4-1106-preview',
-    'gpt-4-1106-vision-preview',
-    'gpt-4-32k',
-    'gpt-4-32k-0314',
-    'gpt-3.5-turbo',
-    'gpt-3.5-turbo-0301',
-    'gpt-3.5-turbo-0613',
-    'gpt-3.5-turbo-1106',
-    'gpt-3.5-turbo-16k',
-    'gpt-3.5-turbo-16k-0613',
-  ];
+export class OpenAIAssistantProvider extends OpenAiGenericProvider {
+  assistantId: string;
+
+  constructor(
+    assistantId: string,
+    options: { config?: OpenAiCompletionOptions; id?: string; env?: EnvOverrides } = {},
+  ) {
+    super(assistantId, options);
+    this.assistantId = assistantId;
+  }
+
+  async callApi(prompt: string): Promise<ProviderResponse> {
+    // TODO: Implement the API calls to create a thread and run it, wait for the run to reach "status: completed", and list messages for the thread.
+    throw new Error('Not implemented');
+  }
 
   constructor(
     modelName: string,
