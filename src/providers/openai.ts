@@ -342,17 +342,17 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
   }
 }
 
-interface Content {
+interface AssistantMessagesResponseDataContent {
   type: string;
   text?: {
     value: string;
   };
 }
 
-interface AssistantMessagesResponseData { 
+interface AssistantMessagesResponseData {
   data: {
-    content?: Content[];
-  }[] 
+    content?: AssistantMessagesResponseDataContent[];
+  }[]
 }
 
 export class OpenAIAssistantProvider extends OpenAiGenericProvider {
@@ -458,7 +458,7 @@ export class OpenAIAssistantProvider extends OpenAiGenericProvider {
     const data = await messagesResp.json() as AssistantMessagesResponseData;
 
     return {
-      output: data.map(datum => datum.content?.map(content => content.type === 'text' ? content.text?.value : '').join('')).join('\n'),
+      output: data.map(datum => datum.content?.map((content: AssistantMessagesResponseDataContent) => content.type === 'text' ? content.text?.value : '').join('')).join('\n'),
       tokenUsage: {
         total: data.usage.total_tokens,
         prompt: data.usage.prompt_tokens,
