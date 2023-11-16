@@ -1,6 +1,7 @@
 import path from 'path';
 
 import {
+  OpenAiAssistantProvider,
   OpenAiCompletionProvider,
   OpenAiChatCompletionProvider,
   OpenAiEmbeddingProvider,
@@ -127,6 +128,8 @@ export async function loadApiProvider(
       return new OpenAiChatCompletionProvider(modelType, providerOptions);
     } else if (OpenAiCompletionProvider.OPENAI_COMPLETION_MODELS.includes(modelType)) {
       return new OpenAiCompletionProvider(modelType, providerOptions);
+    } else if (modelType === 'assistant') {
+      return new OpenAiAssistantProvider(modelName, providerOptions);
     } else {
       throw new Error(
         `Unknown OpenAI model type: ${modelType}. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>`,
@@ -237,6 +240,7 @@ export async function loadApiProvider(
 export default {
   OpenAiCompletionProvider,
   OpenAiChatCompletionProvider,
+  OpenAiAssistantProvider,
   AnthropicCompletionProvider,
   ReplicateProvider,
   LocalAiCompletionProvider,

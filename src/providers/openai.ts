@@ -235,22 +235,22 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
   }
 }
 
- export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
-   static OPENAI_CHAT_MODELS = [
-     'gpt-4',
-     'gpt-4-0314',
-     'gpt-4-0613',
-     'gpt-4-1106-preview',
-     'gpt-4-1106-vision-preview',
-     'gpt-4-32k',
-     'gpt-4-32k-0314',
-     'gpt-3.5-turbo',
-     'gpt-3.5-turbo-0301',
-     'gpt-3.5-turbo-0613',
-     'gpt-3.5-turbo-1106',
-     'gpt-3.5-turbo-16k',
-     'gpt-3.5-turbo-16k-0613',
-   ];
+export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
+  static OPENAI_CHAT_MODELS = [
+    'gpt-4',
+    'gpt-4-0314',
+    'gpt-4-0613',
+    'gpt-4-1106-preview',
+    'gpt-4-1106-vision-preview',
+    'gpt-4-32k',
+    'gpt-4-32k-0314',
+    'gpt-3.5-turbo',
+    'gpt-3.5-turbo-0301',
+    'gpt-3.5-turbo-0613',
+    'gpt-3.5-turbo-1106',
+    'gpt-3.5-turbo-16k',
+    'gpt-3.5-turbo-16k-0613',
+  ];
 
   constructor(
     modelName: string,
@@ -352,17 +352,26 @@ interface AssistantMessagesResponseDataContent {
 interface AssistantMessagesResponseData {
   data: {
     content?: AssistantMessagesResponseDataContent[];
-  }[]
+  }[];
 }
 
-export class OpenAIAssistantProvider extends OpenAiGenericProvider {
+interface OpenAiAssistantOptions {
+  modelName?: string;
+  instructions?: string;
+  tools?: object[];
+  metadata?: object[];
+};
+
+export class OpenAiAssistantProvider extends OpenAiGenericProvider {
   assistantId: string;
+  assistantConfig: OpenAiAssistantOptions;
 
   constructor(
     assistantId: string,
-    options: { config?: OpenAiCompletionOptions; id?: string; env?: EnvOverrides } = {},
+    options: { config?: OpenAiAssistantOptions; id?: string; env?: EnvOverrides } = {},
   ) {
-    super(assistantId, options);
+    super(assistantId, {});
+    this.assistantConfig = options.config || {};
     this.assistantId = assistantId;
   }
 
@@ -376,10 +385,10 @@ export class OpenAIAssistantProvider extends OpenAiGenericProvider {
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
     const body = {
       assistant_id: this.assistantId,
-      model: this.config.modelName || null,
-      instructions: this.config.instructions || null,
-      tools: this.config.tools || null,
-      metadata: this.config.metadata || null,
+      model: this.assistantConfig.modelName || null,
+      instructions: this.assistantConfig.instructions || null,
+      tools: this.assistantConfig.tools || null,
+      metadata: this.assistantConfig.metadata || null,
       thread: {
         messages,
       },
@@ -387,26 +396,23 @@ export class OpenAIAssistantProvider extends OpenAiGenericProvider {
 
     let runResp;
     try {
-      runResp = await fetch(
-        `${this.getApiUrl()}/v1/threads/runs`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${this.getApiKey()}`,
-            'OpenAI-Beta': 'assistants=v1',
-            ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
-          },
-          body: JSON.stringify(body),
-        }
-      );
+      runResp = await fetch(`${this.getApiUrl()}/v1/threads/runs`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.getApiKey()}`,
+          'OpenAI-Beta': 'assistants=v1',
+          ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
+        },
+        body: JSON.stringify(body),
+      });
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,
       };
     }
 
-    let runObject = await runResp.json() as { id: string; thread_id: string; status: string };
+    let runObject = (await runResp.json()) as { id: string; thread_id: string; status: string };
 
     while (runObject.status !== 'completed') {
       // Wait for the run to reach "status: completed"
@@ -420,10 +426,10 @@ export class OpenAIAssistantProvider extends OpenAiGenericProvider {
             headers: {
               'Content-Type': 'application/json',
               Authorization: `Bearer ${this.getApiKey()}`,
-            'OpenAI-Beta': 'assistants=v1',
+              'OpenAI-Beta': 'assistants=v1',
               ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
             },
-          }
+          },
         );
       } catch (err) {
         return {
@@ -431,39 +437,44 @@ export class OpenAIAssistantProvider extends OpenAiGenericProvider {
         };
       }
 
-      runObject = await runResp.json() as typeof runObject;
+      runObject = (await runResp.json()) as typeof runObject;
     }
 
     // List messages for the thread
     let messagesResp;
     try {
-      messagesResp = await fetch(
-        `${this.getApiUrl()}/v1/threads/${runObject.thread_id}/messages`,
-        {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${this.getApiKey()}`,
-            'OpenAI-Beta': 'assistants=v1',
-            ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
-          },
-        }
-      );
+      messagesResp = await fetch(`${this.getApiUrl()}/v1/threads/${runObject.thread_id}/messages`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.getApiKey()}`,
+          'OpenAI-Beta': 'assistants=v1',
+          ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
+        },
+      });
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,
       };
     }
 
-    const {data} = await messagesResp.json() as AssistantMessagesResponseData;
+    const json = (await messagesResp.json()) as AssistantMessagesResponseData;
 
     return {
-      output: data.map((datum: { content?: AssistantMessagesResponseDataContent[] }) => datum.content?.map((content: AssistantMessagesResponseDataContent) => content.type === 'text' ? content.text?.value : '').join('')).join('\n'),
+      output: json.data
+        .map((data: { content?: AssistantMessagesResponseDataContent[] }) =>
+          data.content
+            ?.map((content) => (content.type === 'text' ? content.text?.value : ''))
+            .join(''),
+        )
+        .join('\n'),
+      /*
       tokenUsage: {
         total: data.usage.total_tokens,
         prompt: data.usage.prompt_tokens,
         completion: data.usage.completion_tokens,
       },
+      */
     };
   }
 }
