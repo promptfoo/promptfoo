@@ -106,7 +106,6 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${this.getApiKey()}`,
-            'OpenAI-Beta': 'assistants=v1',
             ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
           },
           body: JSON.stringify(body),
@@ -343,6 +342,8 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
   }
 }
 
+interface AssistantMessagesResponseData { data: {content?: {type: string, text?: {value: string}}[]}[] }
+
 export class OpenAIAssistantProvider extends OpenAiGenericProvider {
   assistantId: string;
 
@@ -361,23 +362,28 @@ export class OpenAIAssistantProvider extends OpenAiGenericProvider {
       );
     }
 
+    const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
     const body = {
-      'assistant_id': this.assistantId,
-      'message': {
-        'role': 'system',
-        'content': prompt
-      }
+      assistant_id: this.assistantId,
+      model: this.config.modelName || null,
+      instructions: this.config.instructions || null,
+      tools: this.config.tools || null,
+      metadata: this.config.metadata || null,
+      thread: {
+        messages,
+      },
     };
 
-    let data;
+    let runResp;
     try {
-      data = await fetch(
-        `${this.getApiUrl()}/v1/assistants/${this.assistantId}/conversations`,
+      runResp = await fetch(
+        `${this.getApiUrl()}/v1/threads/runs`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${this.getApiKey()}`,
+            'OpenAI-Beta': 'assistants=v1',
             ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
           },
           body: JSON.stringify(body),
@@ -389,16 +395,21 @@ export class OpenAIAssistantProvider extends OpenAiGenericProvider {
       };
     }
 
-    // Wait for the run to reach "status: completed"
-    while (data.status !== 'completed') {
+    let runObject = await runResp.json() as { id: string; thread_id: string; status: string };
+
+    while (runObject.status !== 'completed') {
+      // Wait for the run to reach "status: completed"
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
       try {
-        data = await fetch(
-          `${this.getApiUrl()}/v1/assistants/${this.assistantId}/conversations/${data.id}`,
+        runResp = await fetch(
+          `${this.getApiUrl()}/v1/threads/${runObject.thread_id}/runs/${runObject.id}`,
           {
             method: 'GET',
             headers: {
               'Content-Type': 'application/json',
               Authorization: `Bearer ${this.getApiKey()}`,
+            'OpenAI-Beta': 'assistants=v1',
               ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
             },
           }
@@ -408,18 +419,21 @@ export class OpenAIAssistantProvider extends OpenAiGenericProvider {
           error: `API call error: ${String(err)}`,
         };
       }
+
+      runObject = await runResp.json() as typeof runObject;
     }
 
     // List messages for the thread
-    let messages;
+    let messagesResp;
     try {
-      messages = await fetch(
-        `${this.getApiUrl()}/v1/assistants/${this.assistantId}/conversations/${data.id}/messages`,
+      messagesResp = await fetch(
+        `${this.getApiUrl()}/v1/threads/${runObject.thread_id}/messages`,
         {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${this.getApiKey()}`,
+            'OpenAI-Beta': 'assistants=v1',
             ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
           },
         }
@@ -430,8 +444,10 @@ export class OpenAIAssistantProvider extends OpenAiGenericProvider {
       };
     }
 
+    const data = await messagesResp.json() as AssistantMessagesResponseData;
+
     return {
-      output: messages,
+      output: data.map(datum => datum.content?.map(content => content.type === 'text' ? content.text?.value : '').join('')).join('\n'),
       tokenUsage: {
         total: data.usage.total_tokens,
         prompt: data.usage.prompt_tokens,
