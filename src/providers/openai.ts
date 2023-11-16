@@ -342,7 +342,18 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
   }
 }
 
-interface AssistantMessagesResponseData { data: {content?: {type: string, text?: {value: string}}[]}[] }
+interface Content {
+  type: string;
+  text?: {
+    value: string;
+  };
+}
+
+interface AssistantMessagesResponseData { 
+  data: {
+    content?: Content[];
+  }[] 
+}
 
 export class OpenAIAssistantProvider extends OpenAiGenericProvider {
   assistantId: string;
