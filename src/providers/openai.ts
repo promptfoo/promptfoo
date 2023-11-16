@@ -455,10 +455,10 @@ export class OpenAIAssistantProvider extends OpenAiGenericProvider {
       };
     }
 
-    const data = await messagesResp.json() as AssistantMessagesResponseData;
+    const {data} = await messagesResp.json() as AssistantMessagesResponseData;
 
     return {
-      output: data.map(datum => datum.content?.map((content: AssistantMessagesResponseDataContent) => content.type === 'text' ? content.text?.value : '').join('')).join('\n'),
+      output: data.map((datum: { content?: AssistantMessagesResponseDataContent[] }) => datum.content?.map((content: AssistantMessagesResponseDataContent) => content.type === 'text' ? content.text?.value : '').join('')).join('\n'),
       tokenUsage: {
         total: data.usage.total_tokens,
         prompt: data.usage.prompt_tokens,
