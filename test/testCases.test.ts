@@ -167,6 +167,37 @@ describe('readTests', () => {
     ]);
   });
 
+  test('readTests with multiple __expected in CSV', async () => {
+    (fs.readFileSync as jest.Mock).mockReturnValue(
+      'var1,var2,__expected1,__expected2,__expected3\nvalue1,value2,value1,value1.2,value1.3\nvalue3,value4,fn:value5,fn:value5.2,fn:value5.3',
+    );
+    const testsPath = 'tests.csv';
+
+    const result = await readTests(testsPath);
+
+    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+    expect(result).toEqual([
+      {
+        description: 'Row #1',
+        vars: { var1: 'value1', var2: 'value2' },
+        assert: [
+          { type: 'equals', value: 'value1' },
+          { type: 'equals', value: 'value1.2' },
+          { type: 'equals', value: 'value1.3' },
+        ],
+      },
+      {
+        description: 'Row #2',
+        vars: { var1: 'value3', var2: 'value4' },
+        assert: [
+          { type: 'javascript', value: 'value5' },
+          { type: 'javascript', value: 'value5.2' },
+          { type: 'javascript', value: 'value5.3' },
+        ],
+      },
+    ]);
+  });
+
   test('readTests with array input (TestCase[])', async () => {
     const input: TestCase[] = [
       {

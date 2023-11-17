@@ -173,7 +173,7 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
   const vars: Record<string, string> = {};
   const asserts: Assertion[] = [];
   for (const [key, value] of Object.entries(row)) {
-    if (key === '__expected') {
+    if (key.startsWith('__expected')) {
       if (value.trim() !== '') {
         const { assertionFromString } = require('./assertions');
         asserts.push(assertionFromString(value));
