@@ -149,7 +149,7 @@ export async function loadApiProvider(
       return new AzureOpenAiCompletionProvider(deploymentName, providerOptions);
     } else {
       throw new Error(
-        `Unknown Azure OpenAI model type: ${modelType}. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>`,
+        `Unknown Azure OpenAI model type: ${modelType}. Use one of the following providers: azureopenai:chat:<model name>, azureopenai:completion:<model name>`,
       );
     }
   } else if (providerPath?.startsWith('anthropic:')) {
