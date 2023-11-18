@@ -360,7 +360,7 @@ interface OpenAiAssistantOptions {
   instructions?: string;
   tools?: object[];
   metadata?: object[];
-};
+}
 
 export class OpenAiAssistantProvider extends OpenAiGenericProvider {
   assistantId: string;
@@ -395,31 +395,54 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
     };
 
     let runResp;
+    let cached = false;
     try {
-      runResp = await fetch(`${this.getApiUrl()}/v1/threads/runs`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.getApiKey()}`,
-          'OpenAI-Beta': 'assistants=v1',
-          ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
+      logger.debug(`Calling OpenAI API, creating thread run: ${JSON.stringify(body)}`);
+      ({ data: runResp, cached } = (await fetchWithCache(
+        `${this.getApiUrl()}/v1/threads/runs`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${this.getApiKey()}`,
+            'OpenAI-Beta': 'assistants=v1',
+            ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
+          },
+          body: JSON.stringify(body),
         },
-        body: JSON.stringify(body),
-      });
+        REQUEST_TIMEOUT_MS,
+      )) as unknown as any);
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,
       };
     }
 
-    let runObject = (await runResp.json()) as { id: string; thread_id: string; status: string };
+    let runObject = runResp as {
+      id?: string;
+      thread_id?: string;
+      status?: string;
+      error?: { message: string; type: string };
+    };
+    logger.debug(`\tOpenAI thread run API response: ${JSON.stringify(runObject)}`);
+    if (runObject.error) {
+      return {
+        error: `API response error: ${runObject.error.message}`,
+      };
+    }
+    if (!runObject.id || !runObject.thread_id) {
+      return {
+        error: `API response error: ${JSON.stringify(runObject)}`,
+      };
+    }
 
     while (runObject.status !== 'completed') {
       // Wait for the run to reach "status: completed"
       await new Promise((resolve) => setTimeout(resolve, 1000));
 
       try {
-        runResp = await fetch(
+        logger.debug(`Calling OpenAI API, getting thread run ${runObject.id} status`);
+        ({ data: runResp, cached } = (await fetchWithCache(
           `${this.getApiUrl()}/v1/threads/${runObject.thread_id}/runs/${runObject.id}`,
           {
             method: 'GET',
@@ -430,19 +453,22 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
               ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
             },
           },
-        );
+          REQUEST_TIMEOUT_MS,
+        )) as unknown as any);
       } catch (err) {
         return {
           error: `API call error: ${String(err)}`,
         };
       }
 
-      runObject = (await runResp.json()) as typeof runObject;
+      runObject = runResp as typeof runObject;
+      logger.debug(`\tOpenAI thread run API response: ${JSON.stringify(runObject)}`);
     }
 
     // List messages for the thread
     let messagesResp;
     try {
+      logger.debug(`Calling OpenAI API, getting thread messages for ${runObject.thread_id}`);
       messagesResp = await fetch(`${this.getApiUrl()}/v1/threads/${runObject.thread_id}/messages`, {
         method: 'GET',
         headers: {
@@ -459,6 +485,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
     }
 
     const json = (await messagesResp.json()) as AssistantMessagesResponseData;
+    logger.debug(`\tOpenAI thread messages API response: ${JSON.stringify(json)}`);
 
     return {
       output: json.data
