@@ -12,6 +12,7 @@ import {
   maybeRecordFirstRun,
   resetGlobalConfig,
   readFilters,
+  readConfigs,
 } from '../src/util';
 
 import type { EvaluateResult, EvaluateTable } from '../src/types';
@@ -347,5 +348,87 @@ describe('util', () => {
     const filters = readFilters({ testFilter: 'filter.js' });
 
     expect(filters.testFilter).toBe(mockFilter);
+  });
+
+  describe('readConfigs', () => {
+    test('reads from existing configs', async () => {
+      const config1 = {
+        description: 'test1',
+        providers: ['provider1'],
+        prompts: ['prompt1'],
+        tests: ['test1'],
+        scenarios: ['scenario1'],
+        defaultTest: {
+          description: 'defaultTest1',
+          vars: { var1: 'value1' },
+          assert: [{ type: 'equals', value: 'expected1' }],
+        },
+        nunjucksFilters: { filter1: 'filter1' },
+        env: { envVar1: 'envValue1' },
+        evaluateOptions: { maxConcurrency: 1 },
+        commandLineOptions: { verbose: true },
+      };
+      const config2 = {
+        description: 'test2',
+        providers: ['provider2'],
+        prompts: ['prompt2'],
+        tests: ['test2'],
+        scenarios: ['scenario2'],
+        defaultTest: {
+          description: 'defaultTest2',
+          vars: { var2: 'value2' },
+          assert: [{ type: 'equals', value: 'expected2' }],
+        },
+        nunjucksFilters: { filter2: 'filter2' },
+        env: { envVar2: 'envValue2' },
+        evaluateOptions: { maxConcurrency: 2 },
+        commandLineOptions: { verbose: false },
+      };
+
+      (globSync as jest.Mock).mockImplementation((pathOrGlob) => [pathOrGlob]);
+      (fs.readFileSync as jest.Mock)
+        .mockReturnValueOnce(JSON.stringify(config1))
+        .mockReturnValueOnce(JSON.stringify(config2))
+        .mockReturnValue('you should not see this');
+
+      // Mocks for prompt loading
+      (fs.readdirSync as jest.Mock).mockReturnValue([]);
+      (fs.statSync as jest.Mock).mockImplementation(() => {
+        throw new Error('File does not exist');
+      });
+
+      const result = await readConfigs(['config1.json', 'config2.json']);
+
+      expect(fs.readFileSync).toHaveBeenCalledTimes(2);
+      expect(fs.statSync).toHaveBeenCalledTimes(2);
+      expect(result).toEqual({
+        description: 'test1, test2',
+        providers: ['provider1', 'provider2'],
+        prompts: ['prompt1', 'prompt2'],
+        tests: ['test1', 'test2'],
+        scenarios: ['scenario1', 'scenario2'],
+        defaultTest: {
+          description: 'defaultTest2',
+          options: {},
+          vars: { var1: 'value1', var2: 'value2' },
+          assert: [
+            { type: 'equals', value: 'expected1' },
+            { type: 'equals', value: 'expected2' },
+          ],
+        },
+        nunjucksFilters: { filter1: 'filter1', filter2: 'filter2' },
+        env: { envVar1: 'envValue1', envVar2: 'envValue2' },
+        evaluateOptions: { maxConcurrency: 2 },
+        commandLineOptions: { verbose: false },
+      });
+    });
+
+    test('throws error for unsupported configuration file format', async () => {
+      (fs.existsSync as jest.Mock).mockReturnValue(true);
+
+      await expect(readConfigs(['config1.unsupported'])).rejects.toThrow(
+        'Unsupported configuration file format: .unsupported',
+      );
+    });
   });
 });

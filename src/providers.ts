@@ -37,15 +37,11 @@ import type {
   ProviderFunction,
   ProviderId,
   ProviderOptionsMap,
+  TestSuiteConfig,
 } from './types';
 
 export async function loadApiProviders(
-  providerPaths:
-    | ProviderId
-    | ProviderId[]
-    | ProviderOptionsMap[]
-    | ProviderOptions[]
-    | ProviderFunction,
+  providerPaths: TestSuiteConfig['providers'],
   options: {
     basePath?: string;
     env?: EnvOverrides;
