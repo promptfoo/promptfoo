@@ -16,13 +16,13 @@ import {
   cleanupOldResults,
   maybeReadConfig,
   printBorder,
-  readConfig,
   readFilters,
   readLatestResults,
   writeLatestResults,
   writeOutput,
   writeMultipleOutputs,
   setConfigDirectoryPath,
+  readConfigs,
 } from './util';
 import { DEFAULT_README, DEFAULT_YAML_CONFIG, DEFAULT_PROMPTS } from './onboarding';
 import { disableCache, clearCache } from './cache';
@@ -218,7 +218,7 @@ async function main() {
       'One of: openai:chat, openai:completion, openai:<model name>, or path to custom API caller module',
     )
     .option(
-      '-c, --config <path>',
+      '-c, --config <paths...>',
       'Path to configuration file. Automatically loads promptfooconfig.js/json/yaml',
     )
     .option(
@@ -297,13 +297,13 @@ async function main() {
 
       // Config parsing
       let fileConfig: Partial<UnifiedConfig> = {};
-      const configPath = cmdObj.config;
-      if (configPath) {
-        fileConfig = await readConfig(configPath);
+      const configPaths = cmdObj.config;
+      if (configPaths) {
+        fileConfig = await readConfigs(configPaths);
       }
 
       // Use basepath in cases where path was supplied in the config file
-      const basePath = configPath ? dirname(configPath) : '';
+      const basePath = configPaths ? dirname(configPaths[0]) : '';
 
       const defaultTestRaw = fileConfig.defaultTest || defaultConfig.defaultTest;
       const config: Partial<UnifiedConfig> = {
@@ -335,7 +335,7 @@ async function main() {
       const parsedPrompts = readPrompts(config.prompts, cmdObj.prompts ? undefined : basePath);
       const parsedProviders = await loadApiProviders(config.providers, { basePath });
       const parsedTests: TestCase[] = await readTests(
-        config.tests,
+        config.tests || [],
         cmdObj.tests ? undefined : basePath,
       );
 

@@ -24,6 +24,8 @@ import type {
   TestCasesWithMetadataPrompt,
   UnifiedConfig,
 } from './types';
+import invariant from 'tiny-invariant';
+import { readPrompts } from './prompts';
 
 let globalConfigCache: any = null;
 
@@ -89,6 +91,84 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
     default:
       throw new Error(`Unsupported configuration file format: ${ext}`);
   }
+}
+
+export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig> {
+  const configs: UnifiedConfig[] = [];
+  for (const configPath of configPaths) {
+    const config = await readConfig(configPath);
+    configs.push(config);
+  }
+
+  const providers: UnifiedConfig['providers'] = [];
+  const seenProviders = new Set<string>();
+  configs.forEach((config) => {
+    invariant(
+      typeof config.providers !== 'function',
+      'Providers cannot be a function for multiple configs',
+    );
+    if (typeof config.providers === 'string') {
+      if (!seenProviders.has(config.providers)) {
+        providers.push(config.providers);
+        seenProviders.add(config.providers);
+      }
+    } else if (Array.isArray(config.providers)) {
+      config.providers.forEach((provider) => {
+        if (!seenProviders.has(JSON.stringify(provider))) {
+          providers.push(provider);
+          seenProviders.add(JSON.stringify(provider));
+        }
+      });
+    }
+  });
+
+  const tests: UnifiedConfig['tests'] = [];
+  configs.forEach((config) => {
+    if (typeof config.tests === 'string') {
+      tests.push(config.tests);
+    } else if (Array.isArray(config.tests)) {
+      tests.push(...config.tests);
+    }
+  });
+
+  const prompts: UnifiedConfig['prompts'] = [];
+  const seenPrompts = new Set<string>();
+  configs.forEach((config, idx) => {
+    const ps = readPrompts(config.prompts, path.dirname(configPaths[idx]));
+    ps.forEach((prompt) => {
+      if (!seenPrompts.has(prompt.raw)) {
+        prompts.push(prompt.raw);
+        seenPrompts.add(prompt.raw);
+      }
+    });
+  });
+
+  // Combine all configs into a single UnifiedConfig
+  const combinedConfig: UnifiedConfig = {
+    description: configs.map((config) => config.description).join(', '),
+    providers,
+    prompts,
+    tests,
+    scenarios: configs.flatMap((config) => config.scenarios || []),
+    defaultTest: configs.reduce((prev: Partial<TestCase> | undefined, curr) => {
+      return {
+        ...prev,
+        ...curr.defaultTest,
+        vars: { ...prev?.vars, ...curr.defaultTest?.vars },
+        assert: [...(prev?.assert || []), ...(curr.defaultTest?.assert || [])],
+        options: { ...prev?.options, ...curr.defaultTest?.options },
+      };
+    }, {}),
+    nunjucksFilters: configs.reduce((prev, curr) => ({ ...prev, ...curr.nunjucksFilters }), {}),
+    env: configs.reduce((prev, curr) => ({ ...prev, ...curr.env }), {}),
+    evaluateOptions: configs.reduce((prev, curr) => ({ ...prev, ...curr.evaluateOptions }), {}),
+    commandLineOptions: configs.reduce(
+      (prev, curr) => ({ ...prev, ...curr.commandLineOptions }),
+      {},
+    ),
+  };
+
+  return combinedConfig;
 }
 
 export function writeMultipleOutputs(

@@ -14,7 +14,7 @@ export interface CommandLineOptions {
   // Command line only
   vars?: FilePath;
   tests?: FilePath;
-  config?: FilePath;
+  config?: FilePath[];
   verbose?: boolean;
   grader?: string;
   view?: string;
@@ -297,7 +297,7 @@ export interface TestCasesWithMetadataPrompt {
 
 export interface TestCasesWithMetadata {
   id: string;
-  testCases: FilePath | FilePath[] | TestCase[];
+  testCases: FilePath | (FilePath | TestCase)[];
   recentEvalDate: Date;
   recentEvalId: string;
   recentEvalFilepath: FilePath;
@@ -305,7 +305,7 @@ export interface TestCasesWithMetadata {
   prompts: TestCasesWithMetadataPrompt[];
 }
 
-// Each test case is graded pass/fail.  A test case represents a unique input to the LLM after substituting `vars` in the prompt.
+// Each test case is graded pass/fail with a score.  A test case represents a unique input to the LLM after substituting `vars` in the prompt.
 export interface TestCase<Vars = Record<string, string | string[] | object>> {
   // Optional description of what you're testing
   description?: string;
@@ -384,18 +384,13 @@ export interface TestSuiteConfig {
   description?: string;
 
   // One or more LLM APIs to use, for example: openai:gpt-3.5-turbo, openai:gpt-4, localai:chat:vicuna
-  providers:
-    | ProviderId
-    | ProviderId[]
-    | ProviderOptionsMap[]
-    | ProviderOptions[]
-    | ProviderFunction;
+  providers: ProviderId | ProviderFunction | (ProviderId | ProviderOptionsMap | ProviderOptions)[];
 
   // One or more prompt files to load
   prompts: FilePath | FilePath[];
 
   // Path to a test file, OR list of LLM prompt variations (aka "test case")
-  tests: FilePath | FilePath[] | TestCase[];
+  tests: FilePath | (FilePath | TestCase)[];
 
   // Scenarios, groupings of data and tests to be evaluated
   scenarios?: Scenario[];

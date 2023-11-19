@@ -8,7 +8,7 @@ import { globSync } from 'glob';
 
 import { fetchCsvFromGoogleSheet } from './fetch';
 
-import type { Assertion, CsvRow, TestCase } from './types';
+import type { Assertion, CsvRow, TestCase, TestSuiteConfig } from './types';
 
 function parseJson(json: string): any | undefined {
   try {
@@ -123,7 +123,7 @@ export async function readTest(
 }
 
 export async function readTests(
-  tests: string | string[] | TestCase[] | undefined,
+  tests: TestSuiteConfig['tests'],
   basePath: string = '',
 ): Promise<TestCase[]> {
   const ret: TestCase[] = [];

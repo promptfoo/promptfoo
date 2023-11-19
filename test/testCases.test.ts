@@ -139,11 +139,6 @@ describe('readTests', () => {
     jest.resetAllMocks();
   });
 
-  test('readTests with no input', async () => {
-    const result = await readTests(undefined);
-    expect(result).toEqual([]);
-  });
-
   test('readTests with string input (CSV file path)', async () => {
     (fs.readFileSync as jest.Mock).mockReturnValue(
       'var1,var2,__expected\nvalue1,value2,value1\nvalue3,value4,fn:value5',
