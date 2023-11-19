@@ -34,11 +34,6 @@ interface OpenAiCompletionOptions {
   organization?: string;
 }
 
-const openai = new OpenAI({
-  maxRetries: 3,
-  timeout: REQUEST_TIMEOUT_MS,
-});
-
 function failApiCall(err: any) {
   if (err instanceof OpenAI.APIError) {
     return {
@@ -404,6 +399,11 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
         'OpenAI API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
       );
     }
+
+    const openai = new OpenAI({
+      maxRetries: 3,
+      timeout: REQUEST_TIMEOUT_MS,
+    });
 
     const messages = parseChatPrompt(prompt, [
       { role: 'user', content: prompt },
