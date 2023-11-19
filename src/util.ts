@@ -96,8 +96,11 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
 export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig> {
   const configs: UnifiedConfig[] = [];
   for (const configPath of configPaths) {
-    const config = await readConfig(configPath);
-    configs.push(config);
+    const globPaths = globSync(configPath);
+    for (const globPath of globPaths) {
+      const config = await readConfig(globPath);
+      configs.push(config);
+    }
   }
 
   const providers: UnifiedConfig['providers'] = [];
