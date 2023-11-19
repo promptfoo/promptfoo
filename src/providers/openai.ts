@@ -429,7 +429,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
 
     logger.debug(`\tOpenAI thread run API response: ${JSON.stringify(run)}`);
 
-    while (run.status === 'in_progress') {
+    while (run.status === 'in_progress' || run.status === 'queued') {
       await new Promise((resolve) => setTimeout(resolve, 1000));
 
       logger.debug(`Calling OpenAI API, getting thread run ${run.id} status`);
