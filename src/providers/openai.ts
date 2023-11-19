@@ -351,6 +351,7 @@ interface AssistantMessagesResponseDataContent {
 
 interface AssistantMessagesResponseData {
   data: {
+    role: string;
     content?: AssistantMessagesResponseDataContent[];
   }[];
 }
@@ -411,6 +412,8 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
           body: JSON.stringify(body),
         },
         REQUEST_TIMEOUT_MS,
+        'json' /* format */,
+        true /* bust */,
       )) as unknown as any);
     } catch (err) {
       return {
@@ -422,6 +425,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
       id?: string;
       thread_id?: string;
       status?: string;
+      tools?: { type: string }[];
       error?: { message: string; type: string };
     };
     logger.debug(`\tOpenAI thread run API response: ${JSON.stringify(runObject)}`);
@@ -454,6 +458,8 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
             },
           },
           REQUEST_TIMEOUT_MS,
+          'json' /* format */,
+          true /* bust */,
         )) as unknown as any);
       } catch (err) {
         return {
@@ -469,32 +475,44 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
     let messagesResp;
     try {
       logger.debug(`Calling OpenAI API, getting thread messages for ${runObject.thread_id}`);
-      messagesResp = await fetch(`${this.getApiUrl()}/v1/threads/${runObject.thread_id}/messages`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.getApiKey()}`,
-          'OpenAI-Beta': 'assistants=v1',
-          ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
+      ({ data: messagesResp, cached } = (await fetchWithCache(
+        `${this.getApiUrl()}/v1/threads/${runObject.thread_id}/messages?order=asc`,
+        {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${this.getApiKey()}`,
+            'OpenAI-Beta': 'assistants=v1',
+            ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
+          },
         },
-      });
+        REQUEST_TIMEOUT_MS,
+        'json' /* format */,
+        true /* bust */,
+      )) as unknown as any);
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,
       };
     }
 
-    const json = (await messagesResp.json()) as AssistantMessagesResponseData;
+    const json = messagesResp as AssistantMessagesResponseData;
     logger.debug(`\tOpenAI thread messages API response: ${JSON.stringify(json)}`);
 
+    const outputBlocks = [];
+    if (runObject.tools) {
+      outputBlocks.push(`Tools used: ${runObject.tools.map((tool) => tool.type).join(', ')}`);
+    }
+    for (const message of json.data) {
+      const content = message.content
+        ?.map((content) => (content.type === 'text' ? content.text?.value : ''))
+        .join('');
+      const line = message.role + ': ' + content;
+      outputBlocks.push(line);
+    }
+
     return {
-      output: json.data
-        .map((data: { content?: AssistantMessagesResponseDataContent[] }) =>
-          data.content
-            ?.map((content) => (content.type === 'text' ? content.text?.value : ''))
-            .join(''),
-        )
-        .join('\n'),
+      output: outputBlocks.join('\n\n').trim(),
       /*
       tokenUsage: {
         total: data.usage.total_tokens,

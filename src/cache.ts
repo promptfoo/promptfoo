@@ -50,8 +50,9 @@ export async function fetchWithCache(
   options: RequestInit = {},
   timeout: number,
   format: 'json' | 'text' = 'json',
+  bust: boolean = false,
 ): Promise<{ data: any; cached: boolean }> {
-  if (!enabled) {
+  if (!enabled || bust) {
     const resp = await fetchWithRetries(url, options, timeout);
     return {
       cached: false,
