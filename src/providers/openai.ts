@@ -1,3 +1,5 @@
+import OpenAI from 'openai';
+
 import logger from '../logger';
 import { fetchWithCache } from '../cache';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
@@ -30,6 +32,22 @@ interface OpenAiCompletionOptions {
   apiHost?: string;
   apiBaseUrl?: string;
   organization?: string;
+}
+
+const openai = new OpenAI({
+  maxRetries: 3,
+  timeout: REQUEST_TIMEOUT_MS,
+});
+
+function failApiCall(err: any) {
+  if (err instanceof OpenAI.APIError) {
+    return {
+      error: `API error: ${err.type} ${err.message}`,
+    };
+  }
+  return {
+    error: `API error: ${String(err)}`,
+  };
 }
 
 class OpenAiGenericProvider implements ApiProvider {
@@ -359,7 +377,7 @@ interface AssistantMessagesResponseData {
 interface OpenAiAssistantOptions {
   modelName?: string;
   instructions?: string;
-  tools?: object[];
+  tools?: OpenAI.Beta.Threads.ThreadCreateAndRunParams['tools'];
   metadata?: object[];
 }
 
@@ -387,132 +405,110 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
       );
     }
 
-    const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
-    const body = {
+    const messages = parseChatPrompt(prompt, [
+      { role: 'user', content: prompt },
+    ]) as OpenAI.Beta.Threads.ThreadCreateParams.Message[];
+    const body: OpenAI.Beta.Threads.ThreadCreateAndRunParams = {
       assistant_id: this.assistantId,
-      model: this.assistantConfig.modelName || null,
-      instructions: this.assistantConfig.instructions || null,
-      tools: this.assistantConfig.tools || null,
-      metadata: this.assistantConfig.metadata || null,
+      model: this.assistantConfig.modelName || undefined,
+      instructions: this.assistantConfig.instructions || undefined,
+      tools: this.assistantConfig.tools || undefined,
+      metadata: this.assistantConfig.metadata || undefined,
       thread: {
         messages,
       },
     };
 
-    let runResp;
-    let cached = false;
+    logger.debug(`Calling OpenAI API, creating thread run: ${JSON.stringify(body)}`);
+    let run;
     try {
-      logger.debug(`Calling OpenAI API, creating thread run: ${JSON.stringify(body)}`);
-      ({ data: runResp, cached } = (await fetchWithCache(
-        `${this.getApiUrl()}/v1/threads/runs`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${this.getApiKey()}`,
-            'OpenAI-Beta': 'assistants=v1',
-            ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
-          },
-          body: JSON.stringify(body),
-        },
-        REQUEST_TIMEOUT_MS,
-        'json' /* format */,
-        true /* bust */,
-      )) as unknown as any);
+      run = await openai.beta.threads.createAndRun(body);
     } catch (err) {
-      return {
-        error: `API call error: ${String(err)}`,
-      };
+      return failApiCall(err);
     }
 
-    let runObject = runResp as {
-      id?: string;
-      thread_id?: string;
-      status?: string;
-      tools?: { type: string }[];
-      error?: { message: string; type: string };
-    };
-    logger.debug(`\tOpenAI thread run API response: ${JSON.stringify(runObject)}`);
-    if (runObject.error) {
-      return {
-        error: `API response error: ${runObject.error.message}`,
-      };
-    }
-    if (!runObject.id || !runObject.thread_id) {
-      return {
-        error: `API response error: ${JSON.stringify(runObject)}`,
-      };
-    }
+    logger.debug(`\tOpenAI thread run API response: ${JSON.stringify(run)}`);
 
-    while (runObject.status !== 'completed') {
-      // Wait for the run to reach "status: completed"
+    while (run.status === 'in_progress') {
       await new Promise((resolve) => setTimeout(resolve, 1000));
 
+      logger.debug(`Calling OpenAI API, getting thread run ${run.id} status`);
       try {
-        logger.debug(`Calling OpenAI API, getting thread run ${runObject.id} status`);
-        ({ data: runResp, cached } = (await fetchWithCache(
-          `${this.getApiUrl()}/v1/threads/${runObject.thread_id}/runs/${runObject.id}`,
-          {
-            method: 'GET',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${this.getApiKey()}`,
-              'OpenAI-Beta': 'assistants=v1',
-              ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
-            },
-          },
-          REQUEST_TIMEOUT_MS,
-          'json' /* format */,
-          true /* bust */,
-        )) as unknown as any);
+        run = await openai.beta.threads.runs.retrieve(run.thread_id, run.id);
       } catch (err) {
-        return {
-          error: `API call error: ${String(err)}`,
-        };
+        return failApiCall(err);
       }
-
-      runObject = runResp as typeof runObject;
-      logger.debug(`\tOpenAI thread run API response: ${JSON.stringify(runObject)}`);
+      logger.debug(`\tOpenAI thread run API response: ${JSON.stringify(run)}`);
     }
 
-    // List messages for the thread
-    let messagesResp;
-    try {
-      logger.debug(`Calling OpenAI API, getting thread messages for ${runObject.thread_id}`);
-      ({ data: messagesResp, cached } = (await fetchWithCache(
-        `${this.getApiUrl()}/v1/threads/${runObject.thread_id}/messages?order=asc`,
-        {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${this.getApiKey()}`,
-            'OpenAI-Beta': 'assistants=v1',
-            ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
-          },
-        },
-        REQUEST_TIMEOUT_MS,
-        'json' /* format */,
-        true /* bust */,
-      )) as unknown as any);
-    } catch (err) {
+    if (run.status !== 'completed') {
+      if (run.last_error) {
+        return {
+          error: `Thread run failed: ${run.last_error.message}`,
+        };
+      }
       return {
-        error: `API call error: ${String(err)}`,
+        error: `Thread run failed: ${run.status}`,
       };
     }
 
-    const json = messagesResp as AssistantMessagesResponseData;
-    logger.debug(`\tOpenAI thread messages API response: ${JSON.stringify(json)}`);
+    // Get run steps
+    logger.debug(`Calling OpenAI API, getting thread run steps for ${run.thread_id}`);
+    let steps;
+    try {
+      steps = await openai.beta.threads.runs.steps.list(run.thread_id, run.id, {
+        order: 'asc',
+      });
+    } catch (err) {
+      return failApiCall(err);
+    }
+    logger.debug(`\tOpenAI thread run steps API response: ${JSON.stringify(steps)}`);
 
     const outputBlocks = [];
-    if (runObject.tools) {
-      outputBlocks.push(`[Tools used: ${runObject.tools.map((tool) => tool.type).join(', ')}]`);
-    }
-    for (const message of json.data) {
-      const content = message.content
-        ?.map((content) => (content.type === 'text' ? content.text?.value : ''))
-        .join('');
-      const line = `[${toTitleCase(message.role)}] ${content}`;
-      outputBlocks.push(line);
+    for (const step of steps.data) {
+      if (step.step_details.type === 'message_creation') {
+        logger.debug(`Calling OpenAI API, getting message ${step.id}`);
+        let message;
+        try {
+          message = await openai.beta.threads.messages.retrieve(
+            run.thread_id,
+            step.step_details.message_creation.message_id,
+          );
+        } catch (err) {
+          return failApiCall(err);
+        }
+        logger.debug(`\tOpenAI thread run step message API response: ${JSON.stringify(message)}`);
+
+        const content = message.content
+          .map((content) =>
+            content.type === 'text' ? content.text.value : `<${content.type} output>`,
+          )
+          .join('\n');
+        outputBlocks.push(`[${toTitleCase(message.role)}] ${content}`);
+      } else if (step.step_details.type === 'tool_calls') {
+        for (const toolCall of step.step_details.tool_calls) {
+          if (toolCall.type === 'function') {
+            outputBlocks.push(
+              `[Call function ${toolCall.function.name} with arguments ${toolCall.function.arguments}]`,
+            );
+            outputBlocks.push(`[Function output: ${toolCall.function.output}]`);
+          } else if (toolCall.type === 'retrieval') {
+            outputBlocks.push(`[Ran retrieval]`);
+          } else if (toolCall.type === 'code_interpreter') {
+            const output = toolCall.code_interpreter.outputs
+              .map((output) => (output.type === 'logs' ? output.logs : `<${output.type} output>`))
+              .join('\n');
+            outputBlocks.push(`[Code interpreter input]`);
+            outputBlocks.push(toolCall.code_interpreter.input);
+            outputBlocks.push(`[Code interpreter output]`);
+            outputBlocks.push(output);
+          } else {
+            outputBlocks.push(`[Unknown tool call type: ${(toolCall as any).type}]`);
+          }
+        }
+      } else {
+        outputBlocks.push(`[Unknown step type: ${(step.step_details as any).type}]`);
+      }
     }
 
     return {
