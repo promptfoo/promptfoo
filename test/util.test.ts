@@ -352,8 +352,30 @@ describe('util', () => {
 
   describe('readConfigs', () => {
     test('reads from existing configs', async () => {
-      const config1 = { description: 'test1' };
-      const config2 = { description: 'test2' };
+      const config1 = {
+        description: 'test1',
+        providers: ['provider1'],
+        prompts: ['prompt1'],
+        tests: ['test1'],
+        scenarios: ['scenario1'],
+        defaultTest: { description: 'defaultTest1' },
+        nunjucksFilters: { filter1: 'filter1' },
+        env: { envVar1: 'envValue1' },
+        evaluateOptions: { maxConcurrency: 1 },
+        commandLineOptions: { verbose: true },
+      };
+      const config2 = {
+        description: 'test2',
+        providers: ['provider2'],
+        prompts: ['prompt2'],
+        tests: ['test2'],
+        scenarios: ['scenario2'],
+        defaultTest: { description: 'defaultTest2' },
+        nunjucksFilters: { filter2: 'filter2' },
+        env: { envVar2: 'envValue2' },
+        evaluateOptions: { maxConcurrency: 2 },
+        commandLineOptions: { verbose: false },
+      };
       (fs.existsSync as jest.Mock).mockReturnValue(true);
       (fs.readFileSync as jest.Mock)
         .mockReturnValueOnce(JSON.stringify(config1))
@@ -365,15 +387,15 @@ describe('util', () => {
       expect(fs.readFileSync).toHaveBeenCalledTimes(2);
       expect(result).toEqual({
         description: 'test1, test2',
-        providers: [],
-        prompts: [],
-        tests: [],
-        scenarios: [],
-        defaultTest: {},
-        nunjucksFilters: {},
-        env: {},
-        evaluateOptions: {},
-        commandLineOptions: {},
+        providers: ['provider1', 'provider2'],
+        prompts: ['prompt1', 'prompt2'],
+        tests: ['test1', 'test2'],
+        scenarios: ['scenario1', 'scenario2'],
+        defaultTest: { description: 'defaultTest2' },
+        nunjucksFilters: { filter1: 'filter1', filter2: 'filter2' },
+        env: { envVar1: 'envValue1', envVar2: 'envValue2' },
+        evaluateOptions: { maxConcurrency: 2 },
+        commandLineOptions: { verbose: false },
       });
     });
 
