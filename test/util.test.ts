@@ -358,7 +358,11 @@ describe('util', () => {
         prompts: ['prompt1'],
         tests: ['test1'],
         scenarios: ['scenario1'],
-        defaultTest: { description: 'defaultTest1', vars: { var1: 'value1' }, assert: [{ type: 'equals', value: 'expected1' }] },
+        defaultTest: {
+          description: 'defaultTest1',
+          vars: { var1: 'value1' },
+          assert: [{ type: 'equals', value: 'expected1' }],
+        },
         nunjucksFilters: { filter1: 'filter1' },
         env: { envVar1: 'envValue1' },
         evaluateOptions: { maxConcurrency: 1 },
@@ -370,7 +374,11 @@ describe('util', () => {
         prompts: ['prompt2'],
         tests: ['test2'],
         scenarios: ['scenario2'],
-        defaultTest: { description: 'defaultTest2', vars: { var2: 'value2' }, assert: [{ type: 'equals', value: 'expected2' }] },
+        defaultTest: {
+          description: 'defaultTest2',
+          vars: { var2: 'value2' },
+          assert: [{ type: 'equals', value: 'expected2' }],
+        },
         nunjucksFilters: { filter2: 'filter2' },
         env: { envVar2: 'envValue2' },
         evaluateOptions: { maxConcurrency: 2 },
@@ -399,7 +407,15 @@ describe('util', () => {
         prompts: ['prompt1', 'prompt2'],
         tests: ['test1', 'test2'],
         scenarios: ['scenario1', 'scenario2'],
-        defaultTest: { description: 'defaultTest2', vars: { var2: 'value2' }, assert: [{ type: 'equals', value: 'expected2' }] },
+        defaultTest: {
+          description: 'defaultTest2',
+          options: {},
+          vars: { var1: 'value1', var2: 'value2' },
+          assert: [
+            { type: 'equals', value: 'expected1' },
+            { type: 'equals', value: 'expected2' },
+          ],
+        },
         nunjucksFilters: { filter1: 'filter1', filter2: 'filter2' },
         env: { envVar1: 'envValue1', envVar2: 'envValue2' },
         evaluateOptions: { maxConcurrency: 2 },
@@ -411,7 +427,7 @@ describe('util', () => {
       (fs.existsSync as jest.Mock).mockReturnValue(true);
 
       await expect(readConfigs(['config1.unsupported'])).rejects.toThrow(
-        'Unsupported configuration file format: .unsupported'
+        'Unsupported configuration file format: .unsupported',
       );
     });
   });
