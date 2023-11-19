@@ -376,15 +376,23 @@ describe('util', () => {
         evaluateOptions: { maxConcurrency: 2 },
         commandLineOptions: { verbose: false },
       };
-      (fs.existsSync as jest.Mock).mockReturnValue(true);
+
+      (globSync as jest.Mock).mockImplementation((pathOrGlob) => [pathOrGlob]);
       (fs.readFileSync as jest.Mock)
         .mockReturnValueOnce(JSON.stringify(config1))
-        .mockReturnValueOnce(JSON.stringify(config2));
+        .mockReturnValueOnce(JSON.stringify(config2))
+        .mockReturnValue('you should not see this');
+
+      // Mocks for prompt loading
+      (fs.readdirSync as jest.Mock).mockReturnValue([]);
+      (fs.statSync as jest.Mock).mockImplementation(() => {
+        throw new Error('File does not exist');
+      });
 
       const result = await readConfigs(['config1.json', 'config2.json']);
 
-      expect(fs.existsSync).toHaveBeenCalledTimes(2);
       expect(fs.readFileSync).toHaveBeenCalledTimes(2);
+      expect(fs.statSync).toHaveBeenCalledTimes(2);
       expect(result).toEqual({
         description: 'test1, test2',
         providers: ['provider1', 'provider2'],
