@@ -12,6 +12,7 @@ import {
   maybeRecordFirstRun,
   resetGlobalConfig,
   readFilters,
+  readConfigs,
 } from '../src/util';
 
 import type { EvaluateResult, EvaluateTable } from '../src/types';
@@ -347,5 +348,41 @@ describe('util', () => {
     const filters = readFilters({ testFilter: 'filter.js' });
 
     expect(filters.testFilter).toBe(mockFilter);
+  });
+
+  describe('readConfigs', () => {
+    test('reads from existing configs', async () => {
+      const config1 = { description: 'test1' };
+      const config2 = { description: 'test2' };
+      (fs.existsSync as jest.Mock).mockReturnValue(true);
+      (fs.readFileSync as jest.Mock)
+        .mockReturnValueOnce(JSON.stringify(config1))
+        .mockReturnValueOnce(JSON.stringify(config2));
+
+      const result = await readConfigs(['config1.json', 'config2.json']);
+
+      expect(fs.existsSync).toHaveBeenCalledTimes(2);
+      expect(fs.readFileSync).toHaveBeenCalledTimes(2);
+      expect(result).toEqual({
+        description: 'test1, test2',
+        providers: [],
+        prompts: [],
+        tests: [],
+        scenarios: [],
+        defaultTest: {},
+        nunjucksFilters: {},
+        env: {},
+        evaluateOptions: {},
+        commandLineOptions: {},
+      });
+    });
+
+    test('throws error for unsupported configuration file format', async () => {
+      (fs.existsSync as jest.Mock).mockReturnValue(true);
+
+      await expect(readConfigs(['config1.unsupported'])).rejects.toThrow(
+        'Unsupported configuration file format: .unsupported'
+      );
+    });
   });
 });
