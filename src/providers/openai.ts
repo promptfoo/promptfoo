@@ -363,6 +363,10 @@ interface OpenAiAssistantOptions {
   metadata?: object[];
 }
 
+function toTitleCase(str: string) {
+  return str.replace(/\w\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase());
+}
+
 export class OpenAiAssistantProvider extends OpenAiGenericProvider {
   assistantId: string;
   assistantConfig: OpenAiAssistantOptions;
@@ -501,13 +505,13 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
 
     const outputBlocks = [];
     if (runObject.tools) {
-      outputBlocks.push(`Tools used: ${runObject.tools.map((tool) => tool.type).join(', ')}`);
+      outputBlocks.push(`[Tools used: ${runObject.tools.map((tool) => tool.type).join(', ')}]`);
     }
     for (const message of json.data) {
       const content = message.content
         ?.map((content) => (content.type === 'text' ? content.text?.value : ''))
         .join('');
-      const line = message.role + ': ' + content;
+      const line = `[${toTitleCase(message.role)}] ${content}`;
       outputBlocks.push(line);
     }
 
