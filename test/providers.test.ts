@@ -1,6 +1,10 @@
 import fetch from 'node-fetch';
 
-import { OpenAiCompletionProvider, OpenAiChatCompletionProvider } from '../src/providers/openai';
+import {
+  OpenAiAssistantProvider,
+  OpenAiCompletionProvider,
+  OpenAiChatCompletionProvider,
+} from '../src/providers/openai';
 import { AnthropicCompletionProvider } from '../src/providers/anthropic';
 import { LlamaProvider } from '../src/providers/llama';
 
@@ -372,6 +376,11 @@ describe('providers', () => {
   test('loadApiProvider with openai:completion', async () => {
     const provider = await loadApiProvider('openai:completion');
     expect(provider).toBeInstanceOf(OpenAiCompletionProvider);
+  });
+
+  test('loadApiProvider with openai:assistant', async () => {
+    const provider = await loadApiProvider('openai:assistant:foobar');
+    expect(provider).toBeInstanceOf(OpenAiAssistantProvider);
   });
 
   test('loadApiProvider with openai:chat:modelName', async () => {
