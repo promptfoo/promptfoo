@@ -1,3 +1,5 @@
+import OpenAI from 'openai';
+
 import logger from '../logger';
 import { fetchWithCache } from '../cache';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
@@ -30,6 +32,17 @@ interface OpenAiCompletionOptions {
   apiHost?: string;
   apiBaseUrl?: string;
   organization?: string;
+}
+
+function failApiCall(err: any) {
+  if (err instanceof OpenAI.APIError) {
+    return {
+      error: `API error: ${err.type} ${err.message}`,
+    };
+  }
+  return {
+    error: `API error: ${String(err)}`,
+  };
 }
 
 class OpenAiGenericProvider implements ApiProvider {
@@ -339,6 +352,175 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         error: `API response error: ${String(err)}: ${JSON.stringify(data)}`,
       };
     }
+  }
+}
+
+interface AssistantMessagesResponseDataContent {
+  type: string;
+  text?: {
+    value: string;
+  };
+}
+
+interface AssistantMessagesResponseData {
+  data: {
+    role: string;
+    content?: AssistantMessagesResponseDataContent[];
+  }[];
+}
+
+interface OpenAiAssistantOptions {
+  modelName?: string;
+  instructions?: string;
+  tools?: OpenAI.Beta.Threads.ThreadCreateAndRunParams['tools'];
+  metadata?: object[];
+}
+
+function toTitleCase(str: string) {
+  return str.replace(/\w\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase());
+}
+
+export class OpenAiAssistantProvider extends OpenAiGenericProvider {
+  assistantId: string;
+  assistantConfig: OpenAiAssistantOptions;
+
+  constructor(
+    assistantId: string,
+    options: { config?: OpenAiAssistantOptions; id?: string; env?: EnvOverrides } = {},
+  ) {
+    super(assistantId, {});
+    this.assistantConfig = options.config || {};
+    this.assistantId = assistantId;
+  }
+
+  async callApi(prompt: string): Promise<ProviderResponse> {
+    if (!this.getApiKey()) {
+      throw new Error(
+        'OpenAI API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
+      );
+    }
+
+    const openai = new OpenAI({
+      maxRetries: 3,
+      timeout: REQUEST_TIMEOUT_MS,
+    });
+
+    const messages = parseChatPrompt(prompt, [
+      { role: 'user', content: prompt },
+    ]) as OpenAI.Beta.Threads.ThreadCreateParams.Message[];
+    const body: OpenAI.Beta.Threads.ThreadCreateAndRunParams = {
+      assistant_id: this.assistantId,
+      model: this.assistantConfig.modelName || undefined,
+      instructions: this.assistantConfig.instructions || undefined,
+      tools: this.assistantConfig.tools || undefined,
+      metadata: this.assistantConfig.metadata || undefined,
+      thread: {
+        messages,
+      },
+    };
+
+    logger.debug(`Calling OpenAI API, creating thread run: ${JSON.stringify(body)}`);
+    let run;
+    try {
+      run = await openai.beta.threads.createAndRun(body);
+    } catch (err) {
+      return failApiCall(err);
+    }
+
+    logger.debug(`\tOpenAI thread run API response: ${JSON.stringify(run)}`);
+
+    while (run.status === 'in_progress' || run.status === 'queued') {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      logger.debug(`Calling OpenAI API, getting thread run ${run.id} status`);
+      try {
+        run = await openai.beta.threads.runs.retrieve(run.thread_id, run.id);
+      } catch (err) {
+        return failApiCall(err);
+      }
+      logger.debug(`\tOpenAI thread run API response: ${JSON.stringify(run)}`);
+    }
+
+    if (run.status !== 'completed') {
+      if (run.last_error) {
+        return {
+          error: `Thread run failed: ${run.last_error.message}`,
+        };
+      }
+      return {
+        error: `Thread run failed: ${run.status}`,
+      };
+    }
+
+    // Get run steps
+    logger.debug(`Calling OpenAI API, getting thread run steps for ${run.thread_id}`);
+    let steps;
+    try {
+      steps = await openai.beta.threads.runs.steps.list(run.thread_id, run.id, {
+        order: 'asc',
+      });
+    } catch (err) {
+      return failApiCall(err);
+    }
+    logger.debug(`\tOpenAI thread run steps API response: ${JSON.stringify(steps)}`);
+
+    const outputBlocks = [];
+    for (const step of steps.data) {
+      if (step.step_details.type === 'message_creation') {
+        logger.debug(`Calling OpenAI API, getting message ${step.id}`);
+        let message;
+        try {
+          message = await openai.beta.threads.messages.retrieve(
+            run.thread_id,
+            step.step_details.message_creation.message_id,
+          );
+        } catch (err) {
+          return failApiCall(err);
+        }
+        logger.debug(`\tOpenAI thread run step message API response: ${JSON.stringify(message)}`);
+
+        const content = message.content
+          .map((content) =>
+            content.type === 'text' ? content.text.value : `<${content.type} output>`,
+          )
+          .join('\n');
+        outputBlocks.push(`[${toTitleCase(message.role)}] ${content}`);
+      } else if (step.step_details.type === 'tool_calls') {
+        for (const toolCall of step.step_details.tool_calls) {
+          if (toolCall.type === 'function') {
+            outputBlocks.push(
+              `[Call function ${toolCall.function.name} with arguments ${toolCall.function.arguments}]`,
+            );
+            outputBlocks.push(`[Function output: ${toolCall.function.output}]`);
+          } else if (toolCall.type === 'retrieval') {
+            outputBlocks.push(`[Ran retrieval]`);
+          } else if (toolCall.type === 'code_interpreter') {
+            const output = toolCall.code_interpreter.outputs
+              .map((output) => (output.type === 'logs' ? output.logs : `<${output.type} output>`))
+              .join('\n');
+            outputBlocks.push(`[Code interpreter input]`);
+            outputBlocks.push(toolCall.code_interpreter.input);
+            outputBlocks.push(`[Code interpreter output]`);
+            outputBlocks.push(output);
+          } else {
+            outputBlocks.push(`[Unknown tool call type: ${(toolCall as any).type}]`);
+          }
+        }
+      } else {
+        outputBlocks.push(`[Unknown step type: ${(step.step_details as any).type}]`);
+      }
+    }
+
+    return {
+      output: outputBlocks.join('\n\n').trim(),
+      /*
+      tokenUsage: {
+        total: data.usage.total_tokens,
+        prompt: data.usage.prompt_tokens,
+        completion: data.usage.completion_tokens,
+      },
+      */
+    };
   }
 }
 

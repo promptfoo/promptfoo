@@ -86,6 +86,7 @@
     "js-yaml": "^4.1.0",
     "node-fetch": "^2.6.7",
     "nunjucks": "^3.2.4",
+    "openai": "^4.19.0",
     "opener": "^1.5.2",
     "replicate": "^0.12.3",
     "rouge": "^1.0.3",
