@@ -399,7 +399,7 @@ describe('util', () => {
         prompts: ['prompt1', 'prompt2'],
         tests: ['test1', 'test2'],
         scenarios: ['scenario1', 'scenario2'],
-        defaultTest: { description: 'defaultTest2' },
+        defaultTest: { description: 'defaultTest2', vars: { var2: 'value2' }, assert: [{ type: 'equals', value: 'expected2' }] },
         nunjucksFilters: { filter1: 'filter1', filter2: 'filter2' },
         env: { envVar1: 'envValue1', envVar2: 'envValue2' },
         evaluateOptions: { maxConcurrency: 2 },
