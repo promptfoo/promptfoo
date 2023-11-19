@@ -16,13 +16,13 @@ import {
   cleanupOldResults,
   maybeReadConfig,
   printBorder,
+  readConfigs,
   readFilters,
   readLatestResults,
-  writeLatestResults,
-  writeOutput,
-  writeMultipleOutputs,
   setConfigDirectoryPath,
-  readConfigs,
+  writeLatestResults,
+  writeMultipleOutputs,
+  writeOutput,
 } from './util';
 import { DEFAULT_README, DEFAULT_YAML_CONFIG, DEFAULT_PROMPTS } from './onboarding';
 import { disableCache, clearCache } from './cache';
