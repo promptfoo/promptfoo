@@ -69,18 +69,18 @@ function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
 
   const renderTruncatedText = () => {
     if (text.length <= maxLength) {
-      return <span dangerouslySetInnerHTML={{ __html: text }} />;
+      return <div dangerouslySetInnerHTML={{ __html: text }} />;
     }
     if (isTruncated) {
       return (
         <span style={{ cursor: 'pointer' }} onClick={toggleTruncate}>
-          <span dangerouslySetInnerHTML={{ __html: text.substring(0, maxLength) }} /> ...
+          <div dangerouslySetInnerHTML={{ __html: text.substring(0, maxLength) }} /> ...
         </span>
       );
     } else {
       return (
         <span style={{ cursor: 'pointer' }} onClick={toggleTruncate}>
-          <span dangerouslySetInnerHTML={{ __html: text }} />
+          <div dangerouslySetInnerHTML={{ __html: text }} />
         </span>
       );
     }

@@ -131,7 +131,7 @@ table.results-table,
 }
 
 .results-table td .status {
-  margin-bottom: 0.5rem;
+  margin-bottom: -0.5rem;
   font-weight: bold;
 }
 
