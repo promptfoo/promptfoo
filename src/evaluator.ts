@@ -377,7 +377,7 @@ class Evaluator {
     }
 
     // Aggregate all vars across test cases
-    let tests = (
+    let tests =
       testSuite.tests && testSuite.tests.length > 0
         ? testSuite.tests
         : testSuite.scenarios
@@ -386,11 +386,7 @@ class Evaluator {
             {
               // Dummy test for cases when we're only comparing raw prompts.
             },
-          ]
-    ).map((test) => {
-      const finalTestCase: TestCase = Object.assign({}, testSuite.defaultTest);
-      return Object.assign(finalTestCase, test);
-    });
+          ];
 
     // Build scenarios and add to tests
     if (testSuite.scenarios && testSuite.scenarios.length > 0) {
@@ -443,17 +439,15 @@ class Evaluator {
     let rowIndex = 0;
     for (const testCase of tests) {
       // Handle default properties
-      testCase.vars = Object.assign({}, testSuite.defaultTest?.vars, testCase.vars);
+      testCase.vars = { ...testSuite.defaultTest?.vars, ...testCase.vars };
       testCase.assert = [...(testSuite.defaultTest?.assert || []), ...(testCase.assert || [])];
-      testCase.options = testCase.options || {};
-      testCase.options.provider =
-        testCase.options.provider || testSuite.defaultTest?.options?.provider;
+      testCase.threshold = testCase.threshold ?? testSuite.defaultTest?.threshold;
+      testCase.options = { ...testSuite.defaultTest?.options, ...testCase.options };
+
       const prependToPrompt =
         testCase.options?.prefix || testSuite.defaultTest?.options?.prefix || '';
       const appendToPrompt =
         testCase.options?.suffix || testSuite.defaultTest?.options?.suffix || '';
-      testCase.options.postprocess =
-        testCase.options.postprocess || testSuite.defaultTest?.options?.postprocess;
 
       // Finalize test case eval
       const varCombinations = generateVarCombinations(testCase.vars || {});
