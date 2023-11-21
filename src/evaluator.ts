@@ -444,6 +444,11 @@ class Evaluator {
       testCase.threshold = testCase.threshold ?? testSuite.defaultTest?.threshold;
       testCase.options = { ...testSuite.defaultTest?.options, ...testCase.options };
 
+      const prependToPrompt =
+        testCase.options?.prefix || testSuite.defaultTest?.options?.prefix || '';
+      const appendToPrompt =
+        testCase.options?.suffix || testSuite.defaultTest?.options?.suffix || '';
+
       // Finalize test case eval
       const varCombinations = generateVarCombinations(testCase.vars || {});
 
