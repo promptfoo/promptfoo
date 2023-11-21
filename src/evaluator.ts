@@ -441,15 +441,8 @@ class Evaluator {
       // Handle default properties
       testCase.vars = { ...testSuite.defaultTest?.vars, ...testCase.vars };
       testCase.assert = [...(testSuite.defaultTest?.assert || []), ...(testCase.assert || [])];
-      testCase.options = testCase.options || {};
-      testCase.options.provider =
-        testCase.options.provider || testSuite.defaultTest?.options?.provider;
-      const prependToPrompt =
-        testCase.options?.prefix || testSuite.defaultTest?.options?.prefix || '';
-      const appendToPrompt =
-        testCase.options?.suffix || testSuite.defaultTest?.options?.suffix || '';
-      testCase.options.postprocess =
-        testCase.options.postprocess || testSuite.defaultTest?.options?.postprocess;
+      testCase.threshold = testCase.threshold ?? testSuite.defaultTest?.threshold;
+      testCase.options = { ...testSuite.defaultTest?.options, ...testCase.options };
 
       // Finalize test case eval
       const varCombinations = generateVarCombinations(testCase.vars || {});
