@@ -26,6 +26,8 @@
   --insert-highlight-color: #d4fcbc;
   --delete-highlight-color: #fbb6c2;
   --prompt-highlight-color: linen;
+  --textarea-background-color: #ffffff;
+  --textarea-color: #404040;
 }
 
 /* Dark mode colors */
@@ -45,6 +47,8 @@
   --insert-highlight-color: #4f8a34;
   --delete-highlight-color: #8a3434;
   --prompt-highlight-color: #67605a;
+  --textarea-background-color: #2d2d2d;
+  --textarea-color: #fff;
 }
 
 html {
@@ -64,6 +68,15 @@ a {
 
 a:hover {
   text-decoration: underline;
+}
+
+textarea {
+  background-color: var(--textarea-background-color);
+  color: var(--textarea-color);
+  padding: 0.5em;
+  border: 1px solid var(--border-color);
+  border-radius: 0.25em;
+  resize: vertical;
 }
 
 * {
