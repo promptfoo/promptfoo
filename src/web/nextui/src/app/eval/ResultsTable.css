@@ -43,6 +43,13 @@ table.results-table,
   padding: 1.5rem;
 }
 
+.compact.results-table th,
+.compact .th,
+.compact.results-table td,
+.compact .td {
+  padding: 0.5rem;
+}
+
 .results-table th.variable,
 .th.variable,
 .results-table td.variable,
@@ -74,6 +81,10 @@ table.results-table,
 
 .results-table tr .cell {
   white-space: pre-wrap;
+}
+
+.compact.results-table tr .cell > * {
+  display: inline;
 }
 
 .results-table tr .cell-actions {

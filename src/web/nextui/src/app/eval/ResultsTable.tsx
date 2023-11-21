@@ -73,15 +73,14 @@ function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
     }
     if (isTruncated) {
       return (
-        <span style={{ cursor: 'pointer' }} onClick={toggleTruncate}>
-          <div dangerouslySetInnerHTML={{ __html: text.substring(0, maxLength) }} /> ...
-        </span>
+        <>
+          <div style={{ cursor: 'pointer' }} onClick={toggleTruncate} dangerouslySetInnerHTML={{ __html: text.substring(0, maxLength) }} />
+          {'...'}
+        </>
       );
     } else {
       return (
-        <span style={{ cursor: 'pointer' }} onClick={toggleTruncate}>
-          <div dangerouslySetInnerHTML={{ __html: text }} />
-        </span>
+        <div style={{ cursor: 'pointer' }} onClick={toggleTruncate} dangerouslySetInnerHTML={{ __html: text }} />
       );
     }
   };
@@ -485,7 +484,7 @@ export default function ResultsTable({
 
   return (
     <table
-      className="results-table"
+      className={`results-table ${maxTextLength <= 25 ? 'compact' : ''}`}
       style={{
         wordBreak,
       }}
