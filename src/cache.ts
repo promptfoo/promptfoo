@@ -79,10 +79,8 @@ export async function fetchWithCache(
 
   // Fetch the actual data and store it in the cache
   const response = await fetchWithRetries(url, options, timeout);
-  let text;
   try {
-    text = await response.text();
-    const data = format === 'json' ? JSON.parse(text) : text;
+    const data = format === 'json' ? await response.json() : await response.text();
     if (response.ok) {
       logger.debug(`Storing ${url} response in cache: ${JSON.stringify(data)}`);
       await cache.set(cacheKey, JSON.stringify(data));
@@ -92,7 +90,7 @@ export async function fetchWithCache(
       data,
     };
   } catch (err) {
-    throw new Error(`Bad response from ${url}: ${err}\nRaw output: ${text}`);
+    throw new Error(`Error parsing response from ${url}: ${err}`);
   }
 }
 
