@@ -10,6 +10,7 @@ import type {
 import { REQUEST_TIMEOUT_MS } from './shared';
 
 interface HuggingfaceTextGenerationOptions {
+  apiEndpoint?: string;
   top_k?: number;
   top_p?: number;
   temperature?: number;
@@ -54,7 +55,9 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
       },
     };
 
-    const url = `https://api-inference.huggingface.co/models/${this.modelName}`;
+    const url = this.config.apiEndpoint
+      ? this.config.apiEndpoint
+      : `https://api-inference.huggingface.co/models/${this.modelName}`;
     logger.debug(`Huggingface API request: ${url} ${JSON.stringify(params)}`);
 
     let response;
