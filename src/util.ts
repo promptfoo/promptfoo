@@ -139,14 +139,11 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
   const prompts: UnifiedConfig['prompts'] = [];
   const seenPrompts = new Set<string>();
   configs.forEach((config, idx) => {
+    // Need to read prompts from the config file just so we can dedupe them. They may reference external files.
     const ps = readPrompts(config.prompts, path.dirname(configPaths[idx]));
     ps.forEach((prompt, idx) => {
       if (!seenPrompts.has(prompt.raw)) {
-        if (prompt.function) {
-          prompts.push(typeof config.prompts === 'string' ? config.prompts : config.prompts[idx]);
-        } else {
-          prompts.push(prompt.raw);
-        }
+        prompts.push(typeof config.prompts === 'string' ? config.prompts : config.prompts[idx]);
         seenPrompts.add(prompt.raw);
       }
     });
