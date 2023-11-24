@@ -26,6 +26,7 @@ import type {
 } from './types';
 import invariant from 'tiny-invariant';
 import { readPrompts } from './prompts';
+import {readTests} from './testCases';
 
 let globalConfigCache: any = null;
 
@@ -126,9 +127,10 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
   });
 
   const tests: UnifiedConfig['tests'] = [];
-  configs.forEach((config) => {
+  configs.forEach(async (config) => {
     if (typeof config.tests === 'string') {
-      tests.push(config.tests);
+      const newTests = await readTests(config.tests, path.dirname(configPaths[0]));
+      tests.push(...newTests);
     } else if (Array.isArray(config.tests)) {
       tests.push(...config.tests);
     }
@@ -138,9 +140,13 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
   const seenPrompts = new Set<string>();
   configs.forEach((config, idx) => {
     const ps = readPrompts(config.prompts, path.dirname(configPaths[idx]));
-    ps.forEach((prompt) => {
+    ps.forEach((prompt, idx) => {
       if (!seenPrompts.has(prompt.raw)) {
-        prompts.push(prompt.raw);
+        if (prompt.function) {
+          prompts.push(typeof config.prompts === 'string' ? config.prompts : config.prompts[idx]);
+        } else {
+          prompts.push(prompt.raw);
+        }
         seenPrompts.add(prompt.raw);
       }
     });
