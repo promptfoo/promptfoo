@@ -26,7 +26,7 @@ import type {
 } from './types';
 import invariant from 'tiny-invariant';
 import { readPrompts } from './prompts';
-import {readTests} from './testCases';
+import { readTests } from './testCases';
 
 let globalConfigCache: any = null;
 
