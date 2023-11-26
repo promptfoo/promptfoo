@@ -420,7 +420,7 @@ export default function ResultsTable({
                   {(prompt.metrics?.totalLatencyMs || prompt.metrics?.tokenUsage?.total) && (
                     <span> avg</span>
                   )}
-                  {prompt.metrics?.totalLatencyMs && (
+                  {prompt.metrics?.totalLatencyMs ? (
                     <span>
                       {' '}
                       {Intl.NumberFormat(undefined, {
@@ -428,8 +428,8 @@ export default function ResultsTable({
                       }).format(prompt.metrics.totalLatencyMs / body.length)}
                       ms
                     </span>
-                  )}
-                  {prompt.metrics?.tokenUsage?.total && (
+                  ) : null}
+                  {prompt.metrics?.tokenUsage?.total ? (
                     <span>
                       {' '}
                       {Intl.NumberFormat(undefined, {
@@ -437,7 +437,7 @@ export default function ResultsTable({
                       }).format(prompt.metrics.tokenUsage.total / body.length)}{' '}
                       tokens
                     </span>
-                  )}
+                  ) : null}
                 </div>
               </>
             );
