@@ -22,7 +22,7 @@ import type { CellContext, VisibilityState } from '@tanstack/table-core';
 
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 
-import type { EvalRow, EvaluateTableOutput, FilterMode, GradingResult } from './types';
+import type { EvaluateTableRow, EvaluateTableOutput, FilterMode, GradingResult } from './types';
 
 import './ResultsTable.css';
 
@@ -338,14 +338,14 @@ export default function ResultsTable({
     0,
   );
   const highestPassingCount = numGoodTests[highestPassingIndex];
-  const columnHelper = createColumnHelper<EvalRow>();
+  const columnHelper = createColumnHelper<EvaluateTableRow>();
   const columns = [
     columnHelper.group({
       id: 'vars',
       header: () => <span>Variables</span>,
       columns: head.vars.map((varName, idx) =>
         columnHelper.accessor(
-          (row: EvalRow) => {
+          (row: EvaluateTableRow) => {
             return row.vars[idx];
           },
           {
@@ -357,7 +357,7 @@ export default function ResultsTable({
                 maxLength={maxTextLength}
               />
             ),
-            cell: (info: CellContext<EvalRow, string>) => (
+            cell: (info: CellContext<EvaluateTableRow, string>) => (
               <TruncatedText text={info.getValue()} maxLength={maxTextLength} />
             ),
             // Minimize the size of Variable columns.
@@ -370,7 +370,7 @@ export default function ResultsTable({
       id: 'prompts',
       header: () => <span>Outputs</span>,
       columns: head.prompts.map((prompt, idx) =>
-        columnHelper.accessor((row: EvalRow) => formatRowOutput(row.outputs[idx]), {
+        columnHelper.accessor((row: EvaluateTableRow) => formatRowOutput(row.outputs[idx]), {
           id: `Prompt ${idx + 1}`,
           header: () => {
             const pct =
@@ -442,7 +442,7 @@ export default function ResultsTable({
               </>
             );
           },
-          cell: (info: CellContext<EvalRow, EvaluateTableOutput>) => (
+          cell: (info: CellContext<EvaluateTableRow, EvaluateTableOutput>) => (
             <EvalOutputCell
               output={info.getValue() as unknown as EvaluateTableOutput}
               maxTextLength={maxTextLength}

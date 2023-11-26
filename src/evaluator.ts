@@ -584,6 +584,7 @@ class Evaluator {
         const { rowIndex, colIndex } = evalStep;
         if (!table.body[rowIndex]) {
           table.body[rowIndex] = {
+            description: evalStep.test.description,
             outputs: [],
             vars: table.head.vars
               .map((varName) => {

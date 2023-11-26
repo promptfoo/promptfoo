@@ -197,16 +197,18 @@ export interface EvaluateTableOutput {
   gradingResult?: GradingResult;
 }
 
+export interface EvaluateTableRow {
+  description?: string;
+  outputs: EvaluateTableOutput[];
+  vars: string[];
+}
+
 export interface EvaluateTable {
   head: {
     prompts: Prompt[];
     vars: string[];
   };
-
-  body: {
-    outputs: EvaluateTableOutput[];
-    vars: string[];
-  }[];
+  body: EvaluateTableRow[];
 }
 
 export interface EvaluateStats {
