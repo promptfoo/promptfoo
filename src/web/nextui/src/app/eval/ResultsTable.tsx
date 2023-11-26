@@ -469,7 +469,7 @@ export default function ResultsTable({
         header: () => <span>Description</span>,
         columns: [
           columnHelper.accessor((row: EvaluateTableRow) => row.description || '', {
-            id: 'description',
+            id: 'Description',
             cell: (info: CellContext<EvaluateTableRow, string>) => (
               <TruncatedText text={info.getValue()} maxLength={maxTextLength} />
             ),
@@ -555,12 +555,13 @@ export default function ResultsTable({
           return (
             <tr key={row.id}>
               {row.getVisibleCells().map((cell: any) => {
-                const isVariableCol = cell.column.id.startsWith('Variable');
-                const shouldDrawColBorder = !isVariableCol && !colBorderDrawn;
+                const isMetadataCol =
+                  cell.column.id.startsWith('Variable') || cell.column.id === 'Description';
+                const shouldDrawColBorder = !isMetadataCol && !colBorderDrawn;
                 if (shouldDrawColBorder) {
                   colBorderDrawn = true;
                 }
-                const shouldDrawRowBorder = rowIndex === 0 && !isVariableCol;
+                const shouldDrawRowBorder = rowIndex === 0 && !isMetadataCol;
                 return (
                   <td
                     key={cell.id}
@@ -568,7 +569,7 @@ export default function ResultsTable({
                       style: {
                         width: cell.column.getSize(),
                       },
-                      className: `${isVariableCol ? 'variable' : ''} ${
+                      className: `${isMetadataCol ? 'variable' : ''} ${
                         shouldDrawRowBorder ? 'first-prompt-row' : ''
                       } ${shouldDrawColBorder ? 'first-prompt-col' : ''}`,
                     }}
