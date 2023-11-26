@@ -27,14 +27,14 @@ import { ErrorBoundary } from 'react-error-boundary';
 import { useStore } from './store';
 
 import type { VisibilityState } from '@tanstack/table-core';
-import type { EvalTable } from './types';
+import type { EvaluateTable } from './types';
 
 interface ResultsChartsProps {
   columnVisibility: VisibilityState;
 }
 
 interface ChartProps {
-  table: EvalTable;
+  table: EvaluateTable;
 }
 
 const COLOR_PALETTE = [
