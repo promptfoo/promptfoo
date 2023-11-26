@@ -338,6 +338,7 @@ export default function ResultsTable({
     0,
   );
   const highestPassingCount = numGoodTests[highestPassingIndex];
+
   const columnHelper = createColumnHelper<EvaluateTableRow>();
   const columns = [
     columnHelper.group({
@@ -457,6 +458,27 @@ export default function ResultsTable({
       ),
     }),
   ];
+
+  const hasAnyDescriptions = body.some((row) => row.description);
+  if (hasAnyDescriptions) {
+    columns.splice(
+      0,
+      0,
+      columnHelper.group({
+        id: 'description',
+        header: () => <span>Description</span>,
+        columns: [
+          columnHelper.accessor((row: EvaluateTableRow) => row.description, {
+            id: 'description',
+            cell: (info: CellContext<EvaluateTableRow, string>) => (
+              <TruncatedText text={info.getValue()} maxLength={maxTextLength} />
+            ),
+            size: 50,
+          }),
+        ],
+      }),
+    );
+  }
 
   const filteredBody = React.useMemo(() => {
     if (filterMode === 'failures') {
