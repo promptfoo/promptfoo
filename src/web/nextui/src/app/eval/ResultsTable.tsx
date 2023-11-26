@@ -468,7 +468,7 @@ export default function ResultsTable({
         id: 'description',
         header: () => <span>Description</span>,
         columns: [
-          columnHelper.accessor((row: EvaluateTableRow) => row.description, {
+          columnHelper.accessor((row: EvaluateTableRow) => row.description || '', {
             id: 'description',
             cell: (info: CellContext<EvaluateTableRow, string>) => (
               <TruncatedText text={info.getValue()} maxLength={maxTextLength} />
