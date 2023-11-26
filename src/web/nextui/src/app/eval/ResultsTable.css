@@ -83,7 +83,9 @@ table.results-table,
   white-space: pre-wrap;
 }
 
-.compact.results-table tr .cell > * {
+.compact.results-table tr .cell > *,
+.compact.results-table tr .variable > *,
+.compact.results-table th div > * {
   display: inline;
 }
 

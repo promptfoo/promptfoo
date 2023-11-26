@@ -6,6 +6,7 @@ export type EvalHead = {
 };
 
 export type EvalRow = {
+  description?: string;
   outputs: EvaluateTableOutput[];
   vars: string[]; // model outputs
 };
