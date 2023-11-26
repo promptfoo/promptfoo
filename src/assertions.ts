@@ -24,7 +24,7 @@ import {
 
 import type { Assertion, AssertionType, GradingResult, AtomicTestCase } from './types';
 
-export const MODEL_GRADED_ASSERTION_TYPES: Set<AssertionType> = new Set([
+export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
   'answer-relevance',
   'context-faithfulness',
   'context-recall',
