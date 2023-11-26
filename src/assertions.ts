@@ -24,6 +24,17 @@ import {
 
 import type { Assertion, AssertionType, GradingResult, AtomicTestCase } from './types';
 
+export const MODEL_GRADED_ASSERTION_TYPES: Set<AssertionType> = new Set([
+  'answer-relevance',
+  'context-faithfulness',
+  'context-recall',
+  'context-relevance',
+  'llm-rubric',
+  'model-graded-closedqa',
+  'factuality',
+  'model-graded-factuality',
+]);
+
 const DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD = 0.8;
 
 const ajv = new Ajv();
