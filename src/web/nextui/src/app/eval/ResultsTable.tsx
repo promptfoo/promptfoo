@@ -101,7 +101,7 @@ interface PromptOutputProps {
   maxTextLength: number;
   rowIndex: number;
   promptIndex: number;
-  onRating: (rowIndex: number, promptIndex: number, isPass: boolean) => void;
+  onRating: (rowIndex: number, promptIndex: number, isPass: boolean, score?: number) => void;
 }
 
 function EvalOutputCell({
@@ -170,6 +170,18 @@ function EvalOutputCell({
     onRating(rowIndex, promptIndex, isPass);
   };
 
+  const handleSetScore = () => {
+    const score = prompt('Set test score (0.0 - 1.0):');
+    if (score !== null) {
+      const parsedScore = parseFloat(score);
+      if (!isNaN(parsedScore) && parsedScore >= 0.0 && parsedScore <= 1.0) {
+        onRating(rowIndex, promptIndex, true, parsedScore);
+      } else {
+        alert('Invalid score. Please enter a value between 0.0 and 1.0.');
+      }
+    }
+  };
+
   // TODO(ian): output.prompt check for backwards compatibility, remove after 0.17.0
   return (
     <>
@@ -223,6 +235,11 @@ function EvalOutputCell({
         <span className="action" onClick={() => handleClick(false)}>
           <Tooltip title="Mark test failed (score 0.0)">
             <span>👎</span>
+          </Tooltip>
+        </span>
+        <span className="action" onClick={handleSetScore}>
+          <Tooltip title="Set test score">
+            <span>✏️</span>
           </Tooltip>
         </span>
       </div>
@@ -315,12 +332,13 @@ export default function ResultsTable({
     }, 0),
   );
 
-  const handleRating = (rowIndex: number, promptIndex: number, isPass: boolean) => {
+  const handleRating = (rowIndex: number, promptIndex: number, isPass: boolean, score?: number) => {
     const updatedData = [...body];
     const updatedRow = { ...updatedData[rowIndex] };
     const updatedOutputs = [...updatedRow.outputs];
     updatedOutputs[promptIndex].pass = isPass;
-    updatedOutputs[promptIndex].score = isPass ? 1 : 0;
+    updatedOutputs[promptIndex].score =
+      typeof score === 'undefined' ? (isPass ? 1 : 0) : score || 0;
     updatedRow.outputs = updatedOutputs;
     updatedData[rowIndex] = updatedRow;
     setTable({
@@ -349,12 +367,7 @@ export default function ResultsTable({
           },
           {
             id: `Variable ${idx + 1}`,
-            header: () => (
-              <TableHeader
-                text={varName}
-                maxLength={maxTextLength}
-              />
-            ),
+            header: () => <TableHeader text={varName} maxLength={maxTextLength} />,
             cell: (info: CellContext<EvaluateTableRow, string>) => (
               <TruncatedText text={info.getValue()} maxLength={maxTextLength} />
             ),

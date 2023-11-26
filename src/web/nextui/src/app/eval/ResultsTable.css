@@ -96,9 +96,9 @@ table.results-table,
   visibility: hidden;
   position: absolute;
   bottom: 1.25rem;
-  right: 0;
+  right: 1rem;
   line-height: 0;
-  font-size: 1.75rem;
+  font-size: 1.25rem;
 }
 
 .results-table tr .cell-detail {
