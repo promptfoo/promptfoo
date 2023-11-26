@@ -13,7 +13,7 @@ import { useStore } from './store';
 
 import type { EvaluateSummary, UnifiedConfig, SharedResults } from '@/../../../types';
 import type { Database } from '@/types/supabase';
-import type { EvalTable } from './types';
+import type { EvaluateTable } from './types';
 
 import './Eval.css';
 
@@ -102,7 +102,7 @@ export default function Eval({
       };
       doIt();
     } else if (preloadedData) {
-      setTable(preloadedData.data.results?.table as EvalTable);
+      setTable(preloadedData.data.results?.table as EvaluateTable);
       setConfig(preloadedData.data.config);
       setLoaded(true);
     } else if (fetchId) {
@@ -113,7 +113,7 @@ export default function Eval({
           return;
         }
         const results = await response.json();
-        setTable(results.data.results?.table as EvalTable);
+        setTable(results.data.results?.table as EvaluateTable);
         setConfig(results.data.config);
         setLoaded(true);
       };
