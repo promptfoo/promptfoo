@@ -9,6 +9,7 @@ import telemetry from './telemetry';
 import { runAssertions } from './assertions';
 import { generatePrompts } from './suggestions';
 import { getNunjucksEngine, sha256 } from './util';
+import { maybeEmitAzureOpenAiWarning } from './providers/azureopenaiUtil';
 
 import type { SingleBar } from 'cli-progress';
 import type {
@@ -421,6 +422,9 @@ class Evaluator {
       }
     }
 
+    maybeEmitAzureOpenAiWarning(testSuite, tests);
+
+    // Prepare vars
     const varNames: Set<string> = new Set();
     const varsWithSpecialColsRemoved: Record<string, string | string[] | object>[] = [];
     for (const testCase of tests) {

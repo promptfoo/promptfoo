@@ -1,13 +1,13 @@
 import logger from '../logger';
-import { fetchWithCache } from '../cache';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
+import { fetchWithCache } from '../cache';
 
 import type {
   ApiProvider,
   EnvOverrides,
   ProviderEmbeddingResponse,
   ProviderResponse,
-} from '../types.js';
+} from '../types';
 
 interface AzureOpenAiCompletionOptions {
   apiHost?: string;

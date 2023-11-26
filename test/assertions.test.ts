@@ -359,6 +359,7 @@ describe('runAssertion', () => {
       {} as AtomicTestCase,
       output,
     );
+    expect(fs.readFileSync).toHaveBeenCalledWith('/schema.json', 'utf8');
     expect(result.pass).toBeTruthy();
     expect(result.reason).toBe('Assertion passed');
   });
@@ -396,6 +397,7 @@ describe('runAssertion', () => {
       {} as AtomicTestCase,
       output,
     );
+    expect(fs.readFileSync).toHaveBeenCalledWith('/schema.json', 'utf8');
     expect(result.pass).toBeFalsy();
     expect(result.reason).toBe(
       'JSON does not conform to the provided schema. Errors: data/latitude must be number',
@@ -502,11 +504,12 @@ describe('runAssertion', () => {
       {} as AtomicTestCase,
       output,
     );
+    expect(fs.readFileSync).toHaveBeenCalledWith('/schema.json', 'utf8');
     expect(result.pass).toBeTruthy();
     expect(result.reason).toBe('Assertion passed');
   });
 
-  it('should fail when the contains-json assertion fails with schema', async () => {
+  it('should fail when the contains-json assertion fails with external schema', async () => {
     const assertion: Assertion = {
       type: 'contains-json',
       value: 'file:///schema.json',
@@ -539,6 +542,7 @@ describe('runAssertion', () => {
       {} as AtomicTestCase,
       output,
     );
+    expect(fs.readFileSync).toHaveBeenCalledWith('/schema.json', 'utf8');
     expect(result.pass).toBeFalsy();
     expect(result.reason).toBe(
       'JSON does not conform to the provided schema. Errors: data/latitude must be number',

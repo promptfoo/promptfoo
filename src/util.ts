@@ -4,13 +4,16 @@ import * as os from 'os';
 import { createHash } from 'crypto';
 
 import $RefParser from '@apidevtools/json-schema-ref-parser';
-import yaml from 'js-yaml';
+import invariant from 'tiny-invariant';
 import nunjucks from 'nunjucks';
+import yaml from 'js-yaml';
 import { stringify } from 'csv-stringify/sync';
 import { globSync } from 'glob';
 
 import logger from './logger';
 import { getDirectory } from './esm';
+import { readPrompts } from './prompts';
+import { readTests } from './testCases';
 
 import type {
   EvalWithMetadata,
@@ -22,11 +25,9 @@ import type {
   TestCase,
   TestCasesWithMetadata,
   TestCasesWithMetadataPrompt,
+  TestSuite,
   UnifiedConfig,
 } from './types';
-import invariant from 'tiny-invariant';
-import { readPrompts } from './prompts';
-import { readTests } from './testCases';
 
 let globalConfigCache: any = null;
 
