@@ -30,7 +30,7 @@ export function maybeEmitAzureOpenAiWarning(testSuite: TestSuite, tests: TestCas
       ),
     );
     if (modelGradedAsserts.length > 0) {
-      const assertTypes = [...new Set(modelGradedAsserts.map((a) => a.type))].join(', ');
+      const assertTypes = Array.from(new Set(modelGradedAsserts.map((a) => a.type))).join(', ');
       logger.warn(
         chalk.yellow(
           `You are using model-graded assertions of types ${chalk.bold(
