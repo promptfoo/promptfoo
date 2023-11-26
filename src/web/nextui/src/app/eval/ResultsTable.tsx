@@ -74,13 +74,21 @@ function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
     if (isTruncated) {
       return (
         <>
-          <div style={{ cursor: 'pointer' }} onClick={toggleTruncate} dangerouslySetInnerHTML={{ __html: text.substring(0, maxLength) }} />
+          <div
+            style={{ cursor: 'pointer' }}
+            onClick={toggleTruncate}
+            dangerouslySetInnerHTML={{ __html: text.substring(0, maxLength) }}
+          />
           {'...'}
         </>
       );
     } else {
       return (
-        <div style={{ cursor: 'pointer' }} onClick={toggleTruncate} dangerouslySetInnerHTML={{ __html: text }} />
+        <div
+          style={{ cursor: 'pointer' }}
+          onClick={toggleTruncate}
+          dangerouslySetInnerHTML={{ __html: text }}
+        />
       );
     }
   };
