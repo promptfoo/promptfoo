@@ -1,6 +1,7 @@
 prompts:
   - file://prompt*.txt
-providers: openai:gpt-3.5-turbo
+providers:
+  - openai:gpt-3.5-turbo
 
 # The defaultTest configuration is applied to every test case in this config.
 defaultTest:

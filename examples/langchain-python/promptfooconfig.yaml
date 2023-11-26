@@ -1,4 +1,5 @@
-prompts: prompt.txt
+prompts:
+  - prompt.txt
 providers:
   - openai:chat:gpt-4-0613
   - exec:python langchain_example.py

@@ -1,5 +1,5 @@
-prompts: prompts.txt
-providers: customProvider.js
+prompts: [prompts.txt]
+providers: [customProvider.js]
 tests: vars.csv
 # To compare two of the same provider, you can do the following:
 #

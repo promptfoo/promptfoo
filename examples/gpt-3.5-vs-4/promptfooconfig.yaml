@@ -1,4 +1,5 @@
-prompts: prompts.txt
+prompts:
+  - prompts.txt
 providers:
   - openai:gpt-3.5-turbo
   - openai:gpt-4
