@@ -22,7 +22,7 @@ import type { CellContext, VisibilityState } from '@tanstack/table-core';
 
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 
-import type { EvalRow, EvaluateTableOutput, FilterMode, GradingResult } from './types';
+import type { EvaluateTableRow, EvaluateTableOutput, FilterMode, GradingResult } from './types';
 
 import './ResultsTable.css';
 
@@ -233,10 +233,9 @@ function EvalOutputCell({
 function TableHeader({
   text,
   maxLength,
-  smallText,
   expandedText,
   resourceId,
-}: TruncatedTextProps & { smallText: string; expandedText?: string; resourceId?: string }) {
+}: TruncatedTextProps & { expandedText?: string; resourceId?: string }) {
   const [promptOpen, setPromptOpen] = React.useState(false);
   const handlePromptOpen = () => {
     setPromptOpen(true);
@@ -270,7 +269,6 @@ function TableHeader({
           )}
         </>
       )}
-      <div className="smalltext">{smallText}</div>
     </div>
   );
 }
@@ -338,26 +336,26 @@ export default function ResultsTable({
     0,
   );
   const highestPassingCount = numGoodTests[highestPassingIndex];
-  const columnHelper = createColumnHelper<EvalRow>();
+
+  const columnHelper = createColumnHelper<EvaluateTableRow>();
   const columns = [
     columnHelper.group({
       id: 'vars',
       header: () => <span>Variables</span>,
       columns: head.vars.map((varName, idx) =>
         columnHelper.accessor(
-          (row: EvalRow) => {
+          (row: EvaluateTableRow) => {
             return row.vars[idx];
           },
           {
             id: `Variable ${idx + 1}`,
             header: () => (
               <TableHeader
-                smallText={`Variable ${idx + 1}`}
                 text={varName}
                 maxLength={maxTextLength}
               />
             ),
-            cell: (info: CellContext<EvalRow, string>) => (
+            cell: (info: CellContext<EvaluateTableRow, string>) => (
               <TruncatedText text={info.getValue()} maxLength={maxTextLength} />
             ),
             // Minimize the size of Variable columns.
@@ -370,7 +368,7 @@ export default function ResultsTable({
       id: 'prompts',
       header: () => <span>Outputs</span>,
       columns: head.prompts.map((prompt, idx) =>
-        columnHelper.accessor((row: EvalRow) => formatRowOutput(row.outputs[idx]), {
+        columnHelper.accessor((row: EvaluateTableRow) => formatRowOutput(row.outputs[idx]), {
           id: `Prompt ${idx + 1}`,
           header: () => {
             const pct =
@@ -385,7 +383,6 @@ export default function ResultsTable({
             return (
               <>
                 <TableHeader
-                  smallText={`Prompt ${idx + 1}`}
                   text={typeof prompt === 'string' ? prompt : prompt.display}
                   expandedText={typeof prompt === 'string' ? undefined : prompt.raw}
                   maxLength={maxTextLength}
@@ -442,7 +439,7 @@ export default function ResultsTable({
               </>
             );
           },
-          cell: (info: CellContext<EvalRow, EvaluateTableOutput>) => (
+          cell: (info: CellContext<EvaluateTableRow, EvaluateTableOutput>) => (
             <EvalOutputCell
               output={info.getValue() as unknown as EvaluateTableOutput}
               maxTextLength={maxTextLength}
@@ -457,6 +454,20 @@ export default function ResultsTable({
       ),
     }),
   ];
+
+  const hasAnyDescriptions = body.some((row) => row.description);
+  if (hasAnyDescriptions) {
+    const descriptionColumn = {
+      accessorFn: (row: EvaluateTableRow) => row.description || '',
+      id: 'description',
+      header: () => <span>Description</span>,
+      cell: (info: CellContext<EvaluateTableRow, unknown>) => (
+        <TruncatedText text={String(info.getValue())} maxLength={maxTextLength} />
+      ),
+      size: 50,
+    };
+    columns.splice(0, 0, descriptionColumn);
+  }
 
   const filteredBody = React.useMemo(() => {
     if (filterMode === 'failures') {
@@ -533,12 +544,13 @@ export default function ResultsTable({
           return (
             <tr key={row.id}>
               {row.getVisibleCells().map((cell: any) => {
-                const isVariableCol = cell.column.id.startsWith('Variable');
-                const shouldDrawColBorder = !isVariableCol && !colBorderDrawn;
+                const isMetadataCol =
+                  cell.column.id.startsWith('Variable') || cell.column.id === 'description';
+                const shouldDrawColBorder = !isMetadataCol && !colBorderDrawn;
                 if (shouldDrawColBorder) {
                   colBorderDrawn = true;
                 }
-                const shouldDrawRowBorder = rowIndex === 0 && !isVariableCol;
+                const shouldDrawRowBorder = rowIndex === 0 && !isMetadataCol;
                 return (
                   <td
                     key={cell.id}
@@ -546,7 +558,7 @@ export default function ResultsTable({
                       style: {
                         width: cell.column.getSize(),
                       },
-                      className: `${isVariableCol ? 'variable' : ''} ${
+                      className: `${isMetadataCol ? 'variable' : ''} ${
                         shouldDrawRowBorder ? 'first-prompt-row' : ''
                       } ${shouldDrawColBorder ? 'first-prompt-col' : ''}`,
                     }}

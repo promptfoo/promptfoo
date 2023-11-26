@@ -19,7 +19,6 @@
   --table-border-color: lightgray;
   --pass-color: green;
   --fail-color: #ad0000;
-  --smalltext-color: gray;
   --success-background-color: #d1ffd7;
   --variable-background-color: #f7f7f7;
   --header-background-color: #fffdf7;
@@ -40,7 +39,6 @@
   --table-border-color: #444444;
   --pass-color: #4caf50;
   --fail-color: #f44336;
-  --smalltext-color: #888888;
   --success-background-color: #216d2b;
   --variable-background-color: #333;
   --header-background-color: #333;
