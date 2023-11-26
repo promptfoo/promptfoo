@@ -23,7 +23,7 @@ export function maybeEmitAzureOpenAiWarning(testSuite: TestSuite, tests: TestCas
       p instanceof OpenAiAssistantProvider,
   );
 
-  if (hasAzure && !hasOpenAi) {
+  if (hasAzure && !hasOpenAi && !testSuite.defaultTest?.options?.provider) {
     const modelGradedAsserts = tests.flatMap((t) =>
       (t.assert || []).filter(
         (a) => MODEL_GRADED_ASSERTION_TYPES.has(a.type) && !a.provider && !t.options?.provider,
@@ -35,8 +35,8 @@ export function maybeEmitAzureOpenAiWarning(testSuite: TestSuite, tests: TestCas
         chalk.yellow(
           `You are using model-graded assertions of types ${chalk.bold(
             assertTypes,
-          )} while testing an Azure provider. You may need to override the provider for these assertions to use Azure. To learn more, see ${chalk.bold(
-            `https://promptfoo.dev/docs/providers/azure/`,
+          )} while testing an Azure provider. You may need to override these to use your Azure deployment. To learn more, see ${chalk.bold(
+            `https://promptfoo.dev/docs/providers/azure/#model-graded-tests`,
           )}`,
         ),
       );
