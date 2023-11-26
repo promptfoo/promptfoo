@@ -9,6 +9,7 @@ import { AnthropicCompletionProvider } from '../src/providers/anthropic';
 import { LlamaProvider } from '../src/providers/llama';
 
 import { clearCache, disableCache, enableCache } from '../src/cache';
+import { maybeEmitAzureOpenAiWarning } from '../src/providers/azureopenaiUtil';
 import { loadApiProvider, loadApiProviders } from '../src/providers';
 import {
   AzureOpenAiChatCompletionProvider,

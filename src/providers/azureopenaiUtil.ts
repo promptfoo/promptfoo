@@ -40,6 +40,8 @@ export function maybeEmitAzureOpenAiWarning(testSuite: TestSuite, tests: TestCas
           )}`,
         ),
       );
+      return true;
     }
   }
+  return false;
 }
