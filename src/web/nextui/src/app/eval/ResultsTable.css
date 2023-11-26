@@ -83,9 +83,10 @@ table.results-table,
   white-space: pre-wrap;
 }
 
-.compact.results-table tr .cell > *,
-.compact.results-table tr .variable > *,
-.compact.results-table th div > * {
+.results-table th div > *,
+.results-table tr .variable > *,
+.compact.results-table tr .cell > * {
+  /* Header and vars always inline, cells are inline in compact mode. */
   display: inline;
 }
 
