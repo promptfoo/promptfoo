@@ -40,7 +40,7 @@ table.results-table,
   box-shadow: inset 0 0 0 1px var(--border-color);
   vertical-align: top;
 
-  padding: 1.5rem;
+  padding: 1rem;
 }
 
 .compact.results-table th,
@@ -116,17 +116,6 @@ table.results-table,
 
 .results-table tr .cell-actions .action {
   cursor: pointer;
-}
-
-.results-table th .smalltext {
-  visibility: hidden;
-  font-weight: normal;
-  font-size: 0.75rem;
-  color: var(--smalltext-color);
-}
-
-.results-table th:hover .smalltext {
-  visibility: visible;
 }
 
 .results-table th .summary {

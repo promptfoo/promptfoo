@@ -233,10 +233,9 @@ function EvalOutputCell({
 function TableHeader({
   text,
   maxLength,
-  smallText,
   expandedText,
   resourceId,
-}: TruncatedTextProps & { smallText: string; expandedText?: string; resourceId?: string }) {
+}: TruncatedTextProps & { expandedText?: string; resourceId?: string }) {
   const [promptOpen, setPromptOpen] = React.useState(false);
   const handlePromptOpen = () => {
     setPromptOpen(true);
@@ -270,7 +269,6 @@ function TableHeader({
           )}
         </>
       )}
-      <div className="smalltext">{smallText}</div>
     </div>
   );
 }
@@ -353,7 +351,6 @@ export default function ResultsTable({
             id: `Variable ${idx + 1}`,
             header: () => (
               <TableHeader
-                smallText={`Variable ${idx + 1}`}
                 text={varName}
                 maxLength={maxTextLength}
               />
@@ -386,7 +383,6 @@ export default function ResultsTable({
             return (
               <>
                 <TableHeader
-                  smallText={`Prompt ${idx + 1}`}
                   text={typeof prompt === 'string' ? prompt : prompt.display}
                   expandedText={typeof prompt === 'string' ? undefined : prompt.raw}
                   maxLength={maxTextLength}
@@ -461,23 +457,16 @@ export default function ResultsTable({
 
   const hasAnyDescriptions = body.some((row) => row.description);
   if (hasAnyDescriptions) {
-    columns.splice(
-      0,
-      0,
-      columnHelper.group({
-        id: 'description',
-        header: () => <span>Description</span>,
-        columns: [
-          columnHelper.accessor((row: EvaluateTableRow) => row.description || '', {
-            id: 'Description',
-            cell: (info: CellContext<EvaluateTableRow, string>) => (
-              <TruncatedText text={info.getValue()} maxLength={maxTextLength} />
-            ),
-            size: 50,
-          }),
-        ],
-      }),
-    );
+    const descriptionColumn = {
+      accessorFn: (row: EvaluateTableRow) => row.description || '',
+      id: 'description',
+      header: () => <span>Description</span>,
+      cell: (info: CellContext<EvaluateTableRow, unknown>) => (
+        <TruncatedText text={String(info.getValue())} maxLength={maxTextLength} />
+      ),
+      size: 50,
+    };
+    columns.splice(0, 0, descriptionColumn);
   }
 
   const filteredBody = React.useMemo(() => {
@@ -556,7 +545,7 @@ export default function ResultsTable({
             <tr key={row.id}>
               {row.getVisibleCells().map((cell: any) => {
                 const isMetadataCol =
-                  cell.column.id.startsWith('Variable') || cell.column.id === 'Description';
+                  cell.column.id.startsWith('Variable') || cell.column.id === 'description';
                 const shouldDrawColBorder = !isMetadataCol && !colBorderDrawn;
                 if (shouldDrawColBorder) {
                   colBorderDrawn = true;
