@@ -88,6 +88,7 @@
     "nunjucks": "^3.2.4",
     "openai": "^4.19.0",
     "opener": "^1.5.2",
+    "proxy-agent": "^6.3.1",
     "replicate": "^0.12.3",
     "rouge": "^1.0.3",
     "semver": "^7.5.3",

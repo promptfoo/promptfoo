@@ -1,4 +1,4 @@
-import fetch from 'node-fetch';
+import { fetchWithProxy } from './fetch';
 
 import type { EvaluateSummary, SharedResults, UnifiedConfig } from './types';
 
@@ -16,7 +16,7 @@ export async function createShareableUrl(
     },
   };
 
-  const response = await fetch('https://api.promptfoo.dev/eval', {
+  const response = await fetchWithProxy('https://api.promptfoo.dev/eval', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

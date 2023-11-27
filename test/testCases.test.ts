@@ -8,6 +8,9 @@ import { readTestsFile, readTest, readTests } from '../src/testCases';
 import type { AssertionType, TestCase } from '../src/types';
 
 jest.mock('node-fetch', () => jest.fn());
+jest.mock('proxy-agent', () => ({
+  ProxyAgent: jest.fn().mockImplementation(() => ({})),
+}));
 jest.mock('glob', () => ({
   globSync: jest.fn(),
 }));

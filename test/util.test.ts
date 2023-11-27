@@ -17,6 +17,10 @@ import {
 
 import type { EvaluateResult, EvaluateTable } from '../src/types';
 
+jest.mock('proxy-agent', () => ({
+  ProxyAgent: jest.fn().mockImplementation(() => ({})),
+}));
+
 jest.mock('glob', () => ({
   globSync: jest.fn(),
 }));
