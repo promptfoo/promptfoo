@@ -1,5 +1,10 @@
+import fs from 'fs';
 import path from 'path';
 
+import invariant from 'tiny-invariant';
+import yaml from 'js-yaml';
+
+import logger from './logger';
 import {
   OpenAiAssistantProvider,
   OpenAiCompletionProvider,
@@ -101,7 +106,15 @@ export async function loadApiProvider(
     config: options.config,
     env,
   };
-  if (providerPath?.startsWith('exec:')) {
+  if (providerPath.startsWith('file://')) {
+    const filePath = providerPath.slice('file://'.length);
+    const yamlContent = yaml.load(fs.readFileSync(filePath, 'utf8')) as ProviderOptions;
+    console.log('got yaml content', yamlContent);
+    invariant(yamlContent, `Provider config ${filePath} is undefined`);
+    invariant(yamlContent.id, `Provider config ${filePath} must have an id`)
+    logger.info(`Loaded provider ${yamlContent.id} from ${filePath}`);
+    return loadApiProvider(yamlContent.id, { ...context, options: yamlContent });
+  } else if (providerPath?.startsWith('exec:')) {
     // Load script module
     const scriptPath = providerPath.split(':')[1];
     return new ScriptCompletionProvider(scriptPath, {

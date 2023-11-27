@@ -1,3 +1,4 @@
+import * as fs from 'fs';
 import fetch from 'node-fetch';
 
 import {
@@ -28,6 +29,16 @@ import type { ProviderOptionsMap, ProviderFunction } from '../src/types';
 jest.mock('node-fetch', () => jest.fn());
 
 jest.mock('../src/esm');
+
+jest.mock('fs', () => ({
+  readFileSync: jest.fn(),
+  existsSync: jest.fn(),
+  mkdirSync: jest.fn(),
+}));
+
+jest.mock('glob', () => ({
+  globSync: jest.fn(),
+}));
 
 describe('providers', () => {
   afterEach(async () => {
@@ -367,6 +378,18 @@ describe('providers', () => {
       nothate: 0.9,
       hate: 0.1,
     });
+  });
+
+  test('loadApiProvider with filepath', async () => {
+    const mockYamlContent = `id: 'openai:gpt-4'
+config:
+  key: 'value'`;
+    (fs.readFileSync as jest.Mock).mockReturnValueOnce(mockYamlContent);
+
+    const provider = await loadApiProvider('file://path/to/mock-provider-file.yaml');
+    expect(provider.id()).toBe('openai:gpt-4');
+    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+    expect(fs.readFileSync).toHaveBeenCalledWith('path/to/mock-provider-file.yaml', 'utf8');
   });
 
   test('loadApiProvider with openai:chat', async () => {
