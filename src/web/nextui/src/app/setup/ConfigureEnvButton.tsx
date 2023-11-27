@@ -77,6 +77,18 @@ const ConfigureEnvButton: React.FC = () => {
             </AccordionDetails>
           </Accordion>
           <Accordion>
+            <AccordionSummary>Amazon Bedrock</AccordionSummary>
+            <AccordionDetails>
+              <TextField
+                label="Bedrock Region"
+                fullWidth
+                margin="normal"
+                value={env.BEDROCK_REGION}
+                onChange={(e) => setEnv({ ...env, BEDROCK_REGION: e.target.value })}
+              />
+            </AccordionDetails>
+          </Accordion>
+          <Accordion>
             <AccordionSummary>Anthropic</AccordionSummary>
             <AccordionDetails>
               <TextField

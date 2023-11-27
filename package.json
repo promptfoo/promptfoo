@@ -67,6 +67,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.5.2",
     "@apidevtools/json-schema-ref-parser": "^10.1.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.454.0",
     "ajv": "^8.12.0",
     "async": "^3.2.4",
     "cache-manager": "^4.1.0",
