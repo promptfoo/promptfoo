@@ -1,15 +1,24 @@
 import fetch from 'node-fetch';
+import { ProxyAgent } from 'proxy-agent';
 
 import type { RequestInfo, RequestInit, Response } from 'node-fetch';
 
 export async function fetchCsvFromGoogleSheet(url: string): Promise<string> {
   const csvUrl = url.replace(/\/edit.*$/, '/export?format=csv');
-  const response = await fetch(csvUrl);
+  const response = await fetchWithProxy(csvUrl);
   if (response.status !== 200) {
     throw new Error(`Failed to fetch CSV from Google Sheets URL: ${url}`);
   }
   const csvData = await response.text();
   return csvData;
+}
+
+export async function fetchWithProxy(
+  url: RequestInfo,
+  options: RequestInit = {},
+): Promise<Response> {
+  options.agent = new ProxyAgent();
+  return fetch(url, options);
 }
 
 export function fetchWithTimeout(
@@ -27,7 +36,7 @@ export function fetchWithTimeout(
       reject(new Error(`Request timed out after ${timeout} ms`));
     }, timeout);
 
-    fetch(url, options)
+    fetchWithProxy(url, options)
       .then((response) => {
         clearTimeout(timeoutId);
         resolve(response);

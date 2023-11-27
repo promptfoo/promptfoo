@@ -1,8 +1,7 @@
 import readline from 'readline';
 
-import fetch from 'node-fetch';
-
 import logger from './logger';
+import { fetchWithProxy } from './fetch';
 
 export function gatherFeedback(message?: string) {
   if (message) {
@@ -30,7 +29,7 @@ export function gatherFeedback(message?: string) {
 }
 
 export async function sendFeedback(feedback: string) {
-  const resp = await fetch(`https://api.promptfoo.dev/feedback`, {
+  const resp = await fetchWithProxy(`https://api.promptfoo.dev/feedback`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

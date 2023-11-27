@@ -110,7 +110,7 @@ export async function loadApiProvider(
     const filePath = providerPath.slice('file://'.length);
     const yamlContent = yaml.load(fs.readFileSync(filePath, 'utf8')) as ProviderOptions;
     invariant(yamlContent, `Provider config ${filePath} is undefined`);
-    invariant(yamlContent.id, `Provider config ${filePath} must have an id`)
+    invariant(yamlContent.id, `Provider config ${filePath} must have an id`);
     logger.info(`Loaded provider ${yamlContent.id} from ${filePath}`);
     return loadApiProvider(yamlContent.id, { ...context, options: yamlContent });
   } else if (providerPath?.startsWith('exec:')) {
