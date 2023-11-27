@@ -77,9 +77,8 @@ function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
           <div
             style={{ cursor: 'pointer' }}
             onClick={toggleTruncate}
-            dangerouslySetInnerHTML={{ __html: text.substring(0, maxLength) }}
+            dangerouslySetInnerHTML={{ __html: text.substring(0, maxLength) + ' ...' }}
           />
-          {'...'}
         </>
       );
     } else {
