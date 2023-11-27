@@ -4,7 +4,6 @@ import logger from '../logger';
 import type { ApiProvider, EnvOverrides, ProviderResponse } from '../types.js';
 import { BedrockRuntime } from '@aws-sdk/client-bedrock-runtime';
 
-
 interface BedrockCompletionOptions {
   region?: string;
   max_tokens_to_sample?: number;
@@ -15,8 +14,8 @@ interface BedrockCompletionOptions {
 
 export class BedrockCompletionProvider implements ApiProvider {
   static AMAZON_BEDROCK_COMPLETION_MODELS = [
-    'anthropic.claude-instant-v1', 
-    'anthropic.claude-v1', 
+    'anthropic.claude-instant-v1',
+    'anthropic.claude-v1',
     'anthropic.claude-v2',
   ];
 
@@ -32,7 +31,7 @@ export class BedrockCompletionProvider implements ApiProvider {
     const { config, id, env } = options;
     this.env = env;
     this.modelName = modelName;
-    this.bedrock = new BedrockRuntime({region: this.getRegion()});
+    this.bedrock = new BedrockRuntime({ region: this.getRegion() });
     this.config = config || {};
     this.id = id ? () => id : this.id;
   }
