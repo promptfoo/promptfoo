@@ -153,7 +153,6 @@ export async function loadApiProvider(
       );
     }
   } else if (providerPath?.startsWith('anthropic:')) {
-    // Load Anthropic module
     const splits = providerPath.split(':');
     const modelType = splits[1];
     const modelName = splits[2];
@@ -168,7 +167,6 @@ export async function loadApiProvider(
       );
     }
   } else if (providerPath?.startsWith('bedrock:')) {
-    // Load Anthropic module
     const splits = providerPath.split(':');
     const modelType = splits[1];
     const modelName = splits[2];
