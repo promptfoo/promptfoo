@@ -27,6 +27,9 @@ import {
 import type { ProviderOptionsMap, ProviderFunction } from '../src/types';
 
 jest.mock('node-fetch', () => jest.fn());
+jest.mock('proxy-agent', () => ({
+  ProxyAgent: jest.fn().mockImplementation(() => ({})),
+}));
 
 jest.mock('../src/esm');
 
