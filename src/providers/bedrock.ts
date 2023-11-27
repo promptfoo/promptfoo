@@ -1,8 +1,10 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { BedrockRuntime } from '@aws-sdk/client-bedrock-runtime';
+
 import logger from '../logger';
+import { getCache, isCacheEnabled } from '../cache';
 
 import type { ApiProvider, EnvOverrides, ProviderResponse } from '../types.js';
-import { BedrockRuntime } from '@aws-sdk/client-bedrock-runtime';
 
 interface BedrockCompletionOptions {
   region?: string;
@@ -70,6 +72,21 @@ export class BedrockCompletionProvider implements ApiProvider {
 
     logger.debug(`Calling Amazon Bedrock API: ${JSON.stringify(params)}`);
 
+    const cache = await getCache();
+    const cacheKey = `bedrock:${JSON.stringify(params)}`;
+
+    if (isCacheEnabled()) {
+      // Try to get the cached response
+      const cachedResponse = await cache.get(cacheKey);
+      if (cachedResponse) {
+        logger.debug(`Returning cached response for ${prompt}: ${cachedResponse}`);
+        return {
+          output: JSON.parse(cachedResponse as string),
+          tokenUsage: {},
+        };
+      }
+    }
+
     let response;
     try {
       response = await this.bedrock.invokeModel({
@@ -84,6 +101,13 @@ export class BedrockCompletionProvider implements ApiProvider {
       };
     }
     logger.debug(`\tAmazon Bedrock API response: ${JSON.parse(response.body.transformToString())}`);
+    if (isCacheEnabled()) {
+      try {
+        await cache.set(cacheKey, response.body.transformToString());
+      } catch (err) {
+        logger.error(`Failed to cache response: ${String(err)}`);
+      }
+    }
     try {
       return {
         output: JSON.parse(response.body.transformToString()).completion,
