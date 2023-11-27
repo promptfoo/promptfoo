@@ -194,6 +194,7 @@ async function main() {
     .description('Clear cache')
     .action(async () => {
       telemetry.maybeShowNotice();
+      logger.info('Clearing cache...');
       await clearCache();
       cleanupOldResults(0);
       telemetry.record('command_used', {
@@ -292,6 +293,7 @@ async function main() {
         setLogLevel('debug');
       }
       if (!cmdObj.cache) {
+        logger.info('Cache is disabled.');
         disableCache();
       }
 
