@@ -147,22 +147,25 @@ export default function ResultsView({
   const columnData = [
     ...head.vars.map((_, idx) => ({
       value: `Variable ${idx + 1}`,
-      label: `Variable ${idx + 1}`,
+      label: `Var ${idx + 1}: ${
+        head.vars[idx].length > 100 ? head.vars[idx].slice(0, 97) + '...' : head.vars[idx]
+      }`,
       group: 'Variables',
     })),
     ...head.prompts.map((_, idx) => ({
       value: `Prompt ${idx + 1}`,
-      label: `Prompt ${idx + 1}`,
+      label: `Prompt ${idx + 1}: ${
+        head.prompts[idx].display.length > 100
+          ? head.prompts[idx].display.slice(0, 97) + '...'
+          : head.prompts[idx].display
+      }`,
       group: 'Prompts',
     })),
   ];
 
   // Set all columns as selected by default
   React.useEffect(() => {
-    setSelectedColumns([
-      ...head.vars.map((_, idx) => `Variable ${idx + 1}`),
-      ...head.prompts.map((_, idx) => `Prompt ${idx + 1}`),
-    ]);
+    setSelectedColumns(columnData.map((col) => col.value));
   }, [head]);
 
   return (
