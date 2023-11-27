@@ -65,8 +65,8 @@ export class AnthropicCompletionProvider implements ApiProvider {
       model: this.modelName,
       prompt: `${Anthropic.HUMAN_PROMPT} ${prompt} ${Anthropic.AI_PROMPT}`,
       max_tokens_to_sample:
-        this.config?.max_tokens_to_sample || parseInt(process.env.AMAZON_BEDROCK_MAX_TOKENS || '1024'),
-      temperature: this.config.temperature ?? parseFloat(process.env.AMAZON_BEDROCK_TEMPERATURE || '0'),
+        this.config?.max_tokens_to_sample || parseInt(process.env.ANTHROPIC_MAX_TOKENS || '1024'),
+      temperature: this.config.temperature ?? parseFloat(process.env.ANTHROPIC_TEMPERATURE || '0'),
       stop_sequences: stop,
     };
 
