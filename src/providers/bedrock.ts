@@ -15,7 +15,7 @@ interface BedrockCompletionOptions {
 }
 
 export class BedrockCompletionProvider implements ApiProvider {
-  static AMAZON_BEDROCK_COMPLETION_MODELS = [
+  static AWS_BEDROCK_COMPLETION_MODELS = [
     'anthropic.claude-instant-v1',
     'anthropic.claude-v1',
     'anthropic.claude-v2',
@@ -48,15 +48,18 @@ export class BedrockCompletionProvider implements ApiProvider {
 
   getRegion(): string {
     return (
-      this.config?.region || this.env?.BEDROCK_REGION || process.env.BEDROCK_REGION || 'us-west-2'
+      this.config?.region ||
+      this.env?.AWS_BEDROCK_REGION ||
+      process.env.AWS_BEDROCK_REGION ||
+      'us-west-2'
     );
   }
 
   async callApi(prompt: string): Promise<ProviderResponse> {
     let stop: string[];
     try {
-      stop = process.env.BEDROCK_STOP
-        ? JSON.parse(process.env.BEDROCK_STOP)
+      stop = process.env.AWS_BEDROCK_STOP
+        ? JSON.parse(process.env.AWS_BEDROCK_STOP)
         : ['<|im_end|>', '<|endoftext|>'];
     } catch (err) {
       throw new Error(`BEDROCK_STOP is not a valid JSON string: ${err}`);
@@ -65,8 +68,9 @@ export class BedrockCompletionProvider implements ApiProvider {
     const params = {
       prompt: `${Anthropic.HUMAN_PROMPT} ${prompt} ${Anthropic.AI_PROMPT}`,
       max_tokens_to_sample:
-        this.config?.max_tokens_to_sample || parseInt(process.env.BEDROCK_MAX_TOKENS || '1024'),
-      temperature: this.config.temperature ?? parseFloat(process.env.BEDROCK_TEMPERATURE || '0'),
+        this.config?.max_tokens_to_sample || parseInt(process.env.AWS_BEDROCK_MAX_TOKENS || '1024'),
+      temperature:
+        this.config.temperature ?? parseFloat(process.env.AWS_BEDROCK_TEMPERATURE || '0'),
       stop_sequences: stop,
     };
 
