@@ -139,7 +139,7 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
 
   const prompts: UnifiedConfig['prompts'] = [];
   const seenPrompts = new Set<string>();
-  for (const [configIdx, config] of configs.entries()) {
+  configs.forEach((config, configIdx) => {
     // Need to read prompts from the config file just so we can dedupe them. They may reference external files.
     for (const configPrompt of config.prompts) {
       const expandedPrompts = readPrompts([configPrompt], path.dirname(configPaths[configIdx]));
@@ -150,7 +150,7 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
         }
       }
     }
-  }
+  });
 
   // Combine all configs into a single UnifiedConfig
   const combinedConfig: UnifiedConfig = {
