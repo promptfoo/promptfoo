@@ -75,6 +75,13 @@ const defaultProviders: ProviderOptions[] = ([] as (ProviderOptions & { id: stri
   )
   .concat(
     [
+      'bedrock:anthropic.claude-instant-v1',
+      'bedrock:anthropic.claude-v1',
+      'bedrock:anthropic.claude-v2',
+    ].map((id) => ({ id, config: { max_tokens_to_sample: 256, temperature: 0.5 } })),
+  )
+  .concat(
+    [
       'openai:gpt-3.5-turbo',
       'openai:gpt-3.5-turbo-0301',
       'openai:gpt-3.5-turbo-0613',
@@ -150,6 +157,7 @@ const defaultProviders: ProviderOptions[] = ([] as (ProviderOptions & { id: stri
 
 const PREFIX_TO_PROVIDER: Record<string, string> = {
   anthropic: 'Anthropic',
+  bedrock: 'Amazon Web Services',
   azureopenai: 'Azure',
   openai: 'OpenAI',
   replicate: 'Replicate',
