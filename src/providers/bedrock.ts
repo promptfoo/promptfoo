@@ -1,5 +1,4 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { BedrockRuntime } from '@aws-sdk/client-bedrock-runtime';
 
 import logger from '../logger';
 import { getCache, isCacheEnabled } from '../cache';
@@ -22,9 +21,9 @@ export class AwsBedrockCompletionProvider implements ApiProvider {
   ];
 
   modelName: string;
-  bedrock: BedrockRuntime;
   config: BedrockCompletionOptions;
   env?: EnvOverrides;
+  bedrock?: any;
 
   constructor(
     modelName: string,
@@ -33,13 +32,26 @@ export class AwsBedrockCompletionProvider implements ApiProvider {
     const { config, id, env } = options;
     this.env = env;
     this.modelName = modelName;
-    this.bedrock = new BedrockRuntime({ region: this.getRegion() });
     this.config = config || {};
     this.id = id ? () => id : this.id;
   }
 
   id(): string {
     return `bedrock:${this.modelName}`;
+  }
+
+  async getBedrockInstance() {
+    if (!this.bedrock) {
+      try {
+        const { BedrockRuntime } = await import('@aws-sdk/client-bedrock-runtime');
+        this.bedrock = new BedrockRuntime({ region: this.getRegion() });
+      } catch (err) {
+        throw new Error(
+          'The @aws-sdk/client-bedrock-runtime package is required as a peer dependency. Please install it in your project or globally.',
+        );
+      }
+    }
+    return this.bedrock;
   }
 
   toString(): string {
@@ -91,9 +103,10 @@ export class AwsBedrockCompletionProvider implements ApiProvider {
       }
     }
 
+    const bedrockInstance = await this.getBedrockInstance();
     let response;
     try {
-      response = await this.bedrock.invokeModel({
+      response = await bedrockInstance.invokeModel({
         body: JSON.stringify(params),
         modelId: this.modelName,
         accept: 'application/json',
