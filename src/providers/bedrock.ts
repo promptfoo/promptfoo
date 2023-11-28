@@ -3,6 +3,8 @@ import Anthropic from '@anthropic-ai/sdk';
 import logger from '../logger';
 import { getCache, isCacheEnabled } from '../cache';
 
+import type { BedrockRuntime } from '@aws-sdk/client-bedrock-runtime';
+
 import type { ApiProvider, EnvOverrides, ProviderResponse } from '../types.js';
 
 interface BedrockCompletionOptions {
@@ -23,7 +25,7 @@ export class AwsBedrockCompletionProvider implements ApiProvider {
   modelName: string;
   config: BedrockCompletionOptions;
   env?: EnvOverrides;
-  bedrock?: any;
+  bedrock?: BedrockRuntime;
 
   constructor(
     modelName: string,

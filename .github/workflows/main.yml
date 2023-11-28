@@ -31,8 +31,6 @@ jobs:
 
       - name: Install deps and build (with cache)
         uses: bahmutov/npm-install@v1
-        with:
-          install-command: 'npm install --legacy-peer-deps'
 
       - name: Test
         run: npm run test --ci --coverage --maxWorkers=2
