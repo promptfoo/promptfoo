@@ -637,7 +637,12 @@ class Evaluator {
       options.progressCallback(runEvalOptions.length, runEvalOptions.length);
     }
 
-    telemetry.record('eval_ran', {});
+    telemetry.record('eval_ran', {
+      numPrompts: prompts.length,
+      numTests: tests.length,
+      numVars: varNames.size,
+      numProviders: testSuite.providers.length,
+    });
 
     return { version: 2, results, stats: this.stats, table };
   }
