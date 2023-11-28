@@ -24,6 +24,22 @@ import {
 
 import type { ProviderOptionsMap, ProviderFunction } from '../src/types';
 
+jest.mock('fs', () => ({
+  readFileSync: jest.fn(),
+  writeFileSync: jest.fn(),
+  statSync: jest.fn(),
+  readdirSync: jest.fn(),
+  existsSync: jest.fn(),
+  mkdirSync: jest.fn(),
+  promises: {
+    readFile: jest.fn(),
+  },
+}));
+
+jest.mock('glob', () => ({
+  globSync: jest.fn(),
+}));
+
 jest.mock('node-fetch', () => jest.fn());
 
 jest.mock('../src/esm');
