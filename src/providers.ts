@@ -29,7 +29,7 @@ import {
   HuggingfaceTextClassificationProvider,
   HuggingfaceTextGenerationProvider,
 } from './providers/huggingface';
-import { BedrockCompletionProvider } from './providers/bedrock';
+import { AwsBedrockCompletionProvider } from './providers/bedrock';
 
 import type {
   ApiProvider,
@@ -172,9 +172,9 @@ export async function loadApiProvider(
     const modelName = splits[2];
 
     if (modelType === 'completion') {
-      return new BedrockCompletionProvider(modelName || 'anthropic.claude-v2', providerOptions);
-    } else if (BedrockCompletionProvider.AMAZON_BEDROCK_COMPLETION_MODELS.includes(modelType)) {
-      return new BedrockCompletionProvider(modelType, providerOptions);
+      return new AwsBedrockCompletionProvider(modelName || 'anthropic.claude-v2', providerOptions);
+    } else if (AwsBedrockCompletionProvider.AWS_BEDROCK_COMPLETION_MODELS.includes(modelType)) {
+      return new AwsBedrockCompletionProvider(modelType, providerOptions);
     } else {
       throw new Error(
         `Unknown Amazon Bedrock model type: ${modelType}. Use one of the following providers: bedrock:completion:<model name>`,

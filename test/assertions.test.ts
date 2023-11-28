@@ -19,6 +19,9 @@ jest.mock('glob', () => ({
 
 jest.mock('fs', () => ({
   readFileSync: jest.fn(),
+  promises: {
+    readFile: jest.fn(),
+  },
 }));
 
 export class TestGrader implements ApiProvider {

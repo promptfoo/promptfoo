@@ -14,7 +14,7 @@ interface BedrockCompletionOptions {
   top_k?: number;
 }
 
-export class BedrockCompletionProvider implements ApiProvider {
+export class AwsBedrockCompletionProvider implements ApiProvider {
   static AWS_BEDROCK_COMPLETION_MODELS = [
     'anthropic.claude-instant-v1',
     'anthropic.claude-v1',
