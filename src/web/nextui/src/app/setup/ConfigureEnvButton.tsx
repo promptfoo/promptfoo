@@ -84,7 +84,7 @@ const ConfigureEnvButton: React.FC = () => {
                 fullWidth
                 margin="normal"
                 value={env.BEDROCK_REGION}
-                onChange={(e) => setEnv({ ...env, BEDROCK_REGION: e.target.value })}
+                onChange={(e) => setEnv({ ...env, AWS_BEDROCK_REGION: e.target.value })}
               />
             </AccordionDetails>
           </Accordion>
