@@ -83,7 +83,7 @@ const ConfigureEnvButton: React.FC = () => {
                 label="Bedrock Region"
                 fullWidth
                 margin="normal"
-                value={env.BEDROCK_REGION}
+                value={env.AWS_BEDROCK_REGION}
                 onChange={(e) => setEnv({ ...env, AWS_BEDROCK_REGION: e.target.value })}
               />
             </AccordionDetails>
