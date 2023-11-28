@@ -34,6 +34,7 @@ import {
   HuggingfaceTextClassificationProvider,
   HuggingfaceTextGenerationProvider,
 } from './providers/huggingface';
+import { AwsBedrockCompletionProvider } from './providers/bedrock';
 
 import type {
   ApiProvider,
@@ -164,7 +165,6 @@ export async function loadApiProvider(
       );
     }
   } else if (providerPath?.startsWith('anthropic:')) {
-    // Load Anthropic module
     const splits = providerPath.split(':');
     const modelType = splits[1];
     const modelName = splits[2];
@@ -176,6 +176,20 @@ export async function loadApiProvider(
     } else {
       throw new Error(
         `Unknown Anthropic model type: ${modelType}. Use one of the following providers: anthropic:completion:<model name>`,
+      );
+    }
+  } else if (providerPath?.startsWith('bedrock:')) {
+    const splits = providerPath.split(':');
+    const modelType = splits[1];
+    const modelName = splits[2];
+
+    if (modelType === 'completion') {
+      return new AwsBedrockCompletionProvider(modelName || 'anthropic.claude-v2', providerOptions);
+    } else if (AwsBedrockCompletionProvider.AWS_BEDROCK_COMPLETION_MODELS.includes(modelType)) {
+      return new AwsBedrockCompletionProvider(modelType, providerOptions);
+    } else {
+      throw new Error(
+        `Unknown Amazon Bedrock model type: ${modelType}. Use one of the following providers: bedrock:completion:<model name>`,
       );
     }
   } else if (providerPath?.startsWith('huggingface:') || providerPath?.startsWith('hf:')) {

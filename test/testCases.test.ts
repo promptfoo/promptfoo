@@ -22,6 +22,9 @@ jest.mock('fs', () => ({
   readdirSync: jest.fn(),
   existsSync: jest.fn(),
   mkdirSync: jest.fn(),
+  promises: {
+    readFile: jest.fn(),
+  },
 }));
 
 beforeEach(() => {
