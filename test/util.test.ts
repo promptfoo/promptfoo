@@ -47,6 +47,7 @@ describe('util', () => {
       {
         success: true,
         score: 1.0,
+        custom: {},
         latencyMs: 1000,
         provider: {
           id: 'foo',
@@ -72,7 +73,14 @@ describe('util', () => {
       body: [
         {
           outputs: [
-            { pass: true, score: 1.0, text: 'Test output', prompt: 'Test prompt', latencyMs: 1000 },
+            {
+              pass: true,
+              score: 1.0,
+              custom: {},
+              text: 'Test output',
+              prompt: 'Test prompt',
+              latencyMs: 1000,
+            },
           ],
           vars: ['value1', 'value2'],
         },
@@ -108,6 +116,7 @@ describe('util', () => {
       {
         success: true,
         score: 1.0,
+        custom: {},
         latencyMs: 1000,
         provider: {
           id: 'foo',
@@ -133,7 +142,14 @@ describe('util', () => {
       body: [
         {
           outputs: [
-            { pass: true, score: 1.0, text: 'Test output', prompt: 'Test prompt', latencyMs: 1000 },
+            {
+              pass: true,
+              score: 1.0,
+              custom: {},
+              text: 'Test output',
+              prompt: 'Test prompt',
+              latencyMs: 1000,
+            },
           ],
           vars: ['value1', 'value2'],
         },
@@ -169,6 +185,7 @@ describe('util', () => {
       {
         success: true,
         score: 1.0,
+        custom: {},
         latencyMs: 1000,
         provider: {
           id: 'foo',
@@ -194,7 +211,14 @@ describe('util', () => {
       body: [
         {
           outputs: [
-            { pass: true, score: 1.0, text: 'Test output', prompt: 'Test prompt', latencyMs: 1000 },
+            {
+              pass: true,
+              score: 1.0,
+              custom: {},
+              text: 'Test output',
+              prompt: 'Test prompt',
+              latencyMs: 1000,
+            },
           ],
           vars: ['value1', 'value2'],
         },
@@ -230,6 +254,7 @@ describe('util', () => {
       {
         success: true,
         score: 1.0,
+        custom: {},
         latencyMs: 1000,
         provider: {
           id: 'foo',
@@ -255,7 +280,14 @@ describe('util', () => {
       body: [
         {
           outputs: [
-            { pass: true, score: 1.0, text: 'Test output', prompt: 'Test prompt', latencyMs: 1000 },
+            {
+              pass: true,
+              score: 1.0,
+              custom: {},
+              text: 'Test output',
+              prompt: 'Test prompt',
+              latencyMs: 1000,
+            },
           ],
           vars: ['value1', 'value2'],
         },

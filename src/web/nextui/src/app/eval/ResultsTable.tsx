@@ -16,11 +16,11 @@ import FormControlLabel from '@mui/material/FormControlLabel';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import Link from 'next/link';
 
+import CustomMetrics from './CustomMetrics';
+import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import { useStore } from './store';
 
 import type { CellContext, VisibilityState } from '@tanstack/table-core';
-
-import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 
 import type { EvaluateTableRow, EvaluateTableOutput, FilterMode, GradingResult } from './types';
 
@@ -188,12 +188,14 @@ function EvalOutputCell({
         {output.pass && (
           <div className="status pass">
             PASS <span className="score">{scoreToString(output.score)}</span>
+            {output.custom ? <CustomMetrics lookup={output.custom} /> : null}
           </div>
         )}
         {!output.pass && (
           <div className="status fail">
-            [FAIL<span className="score">{scoreToString(output.score)}</span>]{' '}
+            [FAIL <span className="score">{scoreToString(output.score)}</span>]{' '}
             <span dangerouslySetInnerHTML={{ __html: chunks[0].replace(/\n/g, '<br>') }} />
+            {output.custom ? <CustomMetrics lookup={output.custom} /> : null}
           </div>
         )}{' '}
         <TruncatedText text={text} maxLength={maxTextLength} />

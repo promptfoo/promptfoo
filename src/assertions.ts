@@ -93,7 +93,7 @@ export async function runAssertions(
   let allPass = true;
   let failedReason = '';
   const componentResults: GradingResult[] = [];
-
+  const customScores: Record<string, number> = {};
   for (const assertion of test.assert) {
     const weight = assertion.weight || 1;
     totalWeight += weight;
@@ -101,6 +101,10 @@ export async function runAssertions(
     const result = await runAssertion(prompt, assertion, test, output);
     totalScore += result.score * weight;
     componentResults.push(result);
+
+    if (assertion.metric) {
+      customScores[assertion.metric] = (customScores[assertion.metric] || 0) + result.score;
+    }
 
     if (result.tokensUsed) {
       tokensUsed.total += result.tokensUsed.total;
@@ -132,6 +136,7 @@ export async function runAssertions(
   return {
     pass: allPass,
     score: finalScore,
+    custom: customScores,
     reason: finalReason,
     tokensUsed,
     componentResults,
