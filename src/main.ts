@@ -421,7 +421,7 @@ async function main() {
         cmdObj.share && config.sharing ? await createShareableUrl(summary, config) : null;
 
       if (cmdObj.table && getLogLevel() !== 'debug') {
-        // Output table by default
+        // Output CLI table
         const table = generateTable(summary, parseInt(cmdObj.tableCellMaxLength || '', 10));
 
         logger.info('\n' + table.toString());
@@ -430,8 +430,10 @@ async function main() {
           logger.info(`... ${rowsLeft} more row${rowsLeft === 1 ? '' : 's'} not shown ...\n`);
         }
       }
+
       const outputPath = cmdObj.output || fileConfig.outputPath || defaultConfig.outputPath;
       if (outputPath) {
+        // Write output to file
         if (typeof outputPath === 'string') {
           writeOutput(outputPath, summary, config, shareableUrl);
         } else if (Array.isArray(outputPath)) {
