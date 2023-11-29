@@ -11,7 +11,14 @@ import type {
   ProviderResponse,
 } from '../types.js';
 
-interface OpenAiCompletionOptions {
+interface OpenAiSharedOptions {
+  apiKey?: string;
+  apiHost?: string;
+  apiBaseUrl?: string;
+  organization?: string;
+}
+
+type OpenAiCompletionOptions = OpenAiSharedOptions & {
   temperature?: number;
   max_tokens?: number;
   top_p?: number;
@@ -27,12 +34,7 @@ interface OpenAiCompletionOptions {
   response_format?: { type: 'json_object' };
   stop?: string[];
   seed?: number;
-
-  apiKey?: string;
-  apiHost?: string;
-  apiBaseUrl?: string;
-  organization?: string;
-}
+};
 
 function failApiCall(err: any) {
   if (err instanceof OpenAI.APIError) {
@@ -48,12 +50,12 @@ function failApiCall(err: any) {
 class OpenAiGenericProvider implements ApiProvider {
   modelName: string;
 
-  config: OpenAiCompletionOptions;
+  config: OpenAiSharedOptions;
   env?: EnvOverrides;
 
   constructor(
     modelName: string,
-    options: { config?: OpenAiCompletionOptions; id?: string; env?: EnvOverrides } = {},
+    options: { config?: OpenAiSharedOptions; id?: string; env?: EnvOverrides } = {},
   ) {
     const { config, id, env } = options;
     this.env = env;
@@ -167,6 +169,8 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
     'text-ada-001',
   ];
 
+  config: OpenAiCompletionOptions;
+
   constructor(
     modelName: string,
     options: { config?: OpenAiCompletionOptions; id?: string; env?: EnvOverrides } = {},
@@ -175,6 +179,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       logger.warn(`Using unknown OpenAI completion model: ${modelName}`);
     }
     super(modelName, options);
+    this.config = options.config || {};
   }
 
   async callApi(prompt: string): Promise<ProviderResponse> {
@@ -265,6 +270,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     'gpt-3.5-turbo-16k-0613',
   ];
 
+  config: OpenAiCompletionOptions;
+
   constructor(
     modelName: string,
     options: { config?: OpenAiCompletionOptions; id?: string; env?: EnvOverrides } = {},
@@ -273,6 +280,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       logger.warn(`Using unknown OpenAI chat model: ${modelName}`);
     }
     super(modelName, options);
+    this.config = options.config || {};
   }
 
   async callApi(prompt: string): Promise<ProviderResponse> {
@@ -369,12 +377,12 @@ interface AssistantMessagesResponseData {
   }[];
 }
 
-interface OpenAiAssistantOptions {
+type OpenAiAssistantOptions = OpenAiSharedOptions & {
   modelName?: string;
   instructions?: string;
   tools?: OpenAI.Beta.Threads.ThreadCreateAndRunParams['tools'];
   metadata?: object[];
-}
+};
 
 function toTitleCase(str: string) {
   return str.replace(/\w\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase());
@@ -388,7 +396,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
     assistantId: string,
     options: { config?: OpenAiAssistantOptions; id?: string; env?: EnvOverrides } = {},
   ) {
-    super(assistantId, {});
+    super(assistantId, options);
     this.assistantConfig = options.config || {};
     this.assistantId = assistantId;
   }
@@ -402,6 +410,9 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
 
     const openai = new OpenAI({
       apiKey: this.getApiKey(),
+      organization: this.getOrganization(),
+      // Unfortunate, but the OpenAI SDK's implementation of base URL is different from how we treat base URL elsewhere.
+      baseURL: this.getApiUrl() + '/v1',
       maxRetries: 3,
       timeout: REQUEST_TIMEOUT_MS,
     });
