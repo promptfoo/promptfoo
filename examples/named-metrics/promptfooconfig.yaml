@@ -1,0 +1,53 @@
+prompts:
+  - 'Say this as though you are a pirate: {{body}}'
+  - 'Say this as though you are a seafarer from the 17th century: {{body}}'
+providers:
+  - openai:gpt-3.5-turbo
+tests:
+  - description: Check for exact match
+    vars:
+      body: Yes
+    assert:
+      - type: equals
+        value: Yarr
+        metric: Pirateness
+
+  - description: Another basic substring check
+    vars:
+      body: I'm hungry
+    assert:
+      - type: icontains
+        value: grub
+        metric: Pirateness
+
+  - description: Check if output is JSON
+    vars:
+      body: Output the story of your life in JSON
+    assert:
+      - type: is-json
+        metric: Consistency
+
+  - description: Check for semantic similarity
+    vars:
+      body: Hello world
+    assert:
+      # Look for substring
+      - type: javascript
+        value: output.startsWith('Ahoy')
+      - type: python
+        value: max(0, len(output) - 300)
+        metric: Consistency
+
+      # Check for semantic similarity
+      - type: similar
+        value: Ahoy, world
+        metric: Pirateness
+
+  - description: Use LLM to evaluate output
+    vars:
+      body: The quick brown fox jumps over the lazy dog
+    assert:
+      # Ask the LLM to check if it spoke like a pirate
+      - type: llm-rubric
+        value: Is spoken like a pirate
+        metric: Pirateness
