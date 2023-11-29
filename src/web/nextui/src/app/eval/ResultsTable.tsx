@@ -69,25 +69,20 @@ function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
 
   const renderTruncatedText = () => {
     if (text.length <= maxLength) {
-      return <div dangerouslySetInnerHTML={{ __html: text }} />;
+      return <div>{text}</div>;
     }
     if (isTruncated) {
       return (
-        <>
-          <div
-            style={{ cursor: 'pointer' }}
-            onClick={toggleTruncate}
-            dangerouslySetInnerHTML={{ __html: text.substring(0, maxLength) + ' ...' }}
-          />
-        </>
+        <div style={{ cursor: 'pointer' }} onClick={toggleTruncate}>
+          {text.substring(0, maxLength)}
+          <span> ...</span>
+        </div>
       );
     } else {
       return (
-        <div
-          style={{ cursor: 'pointer' }}
-          onClick={toggleTruncate}
-          dangerouslySetInnerHTML={{ __html: text }}
-        />
+        <div style={{ cursor: 'pointer' }} onClick={toggleTruncate}>
+          {text}
+        </div>
       );
     }
   };
@@ -194,7 +189,14 @@ function EvalOutputCell({
         {!output.pass && (
           <div className="status fail">
             [FAIL <span className="score">{scoreToString(output.score)}</span>]{' '}
-            <span dangerouslySetInnerHTML={{ __html: chunks[0].replace(/\n/g, '<br>') }} />
+            <span>
+              {chunks[0].split('\n').map((line, index) => (
+                <React.Fragment key={index}>
+                  {line}
+                  <br />
+                </React.Fragment>
+              ))}
+            </span>
             {output.namedScores ? <CustomMetrics lookup={output.namedScores} /> : null}
           </div>
         )}{' '}
