@@ -401,6 +401,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
     }
 
     const openai = new OpenAI({
+      apiKey: this.getApiKey(),
       maxRetries: 3,
       timeout: REQUEST_TIMEOUT_MS,
     });
