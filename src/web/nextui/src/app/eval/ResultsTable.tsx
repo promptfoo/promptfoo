@@ -60,8 +60,7 @@ interface TruncatedTextProps {
 
 function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
   const [isTruncated, setIsTruncated] = React.useState<boolean>(true);
-  let text = typeof rawText === 'string' ? rawText : JSON.stringify(rawText);
-  text = text.replace(/\n/g, '<br>');
+  const text = typeof rawText === 'string' ? rawText : JSON.stringify(rawText);
 
   const toggleTruncate = () => {
     setIsTruncated(!isTruncated);
@@ -190,7 +189,7 @@ function EvalOutputCell({
           <div className="status fail">
             [FAIL <span className="score">{scoreToString(output.score)}</span>]{' '}
             <span>
-              {chunks[0].split('\n').map((line, index) => (
+              {chunks[0].trim().split('\n').map((line, index) => (
                 <React.Fragment key={index}>
                   {line}
                   <br />
