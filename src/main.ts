@@ -278,6 +278,7 @@ async function main() {
       defaultConfig?.commandLineOptions?.cache ?? defaultConfig?.evaluateOptions?.cache,
     )
     .option('--no-progress-bar', 'Do not show progress bar')
+    .option('--table', 'Output table in CLI', defaultConfig?.commandLineOptions?.table ?? true)
     .option('--no-table', 'Do not output table in CLI', defaultConfig?.commandLineOptions?.table)
     .option('--share', 'Create a shareable URL', defaultConfig?.commandLineOptions?.share)
     .option(
@@ -419,16 +420,8 @@ async function main() {
       const shareableUrl =
         cmdObj.share && config.sharing ? await createShareableUrl(summary, config) : null;
 
-      const outputPath = cmdObj.output || fileConfig.outputPath || defaultConfig.outputPath;
-      if (outputPath) {
-        if (typeof outputPath === 'string') {
-          writeOutput(outputPath, summary, config, shareableUrl);
-        } else if (Array.isArray(outputPath)) {
-          writeMultipleOutputs(outputPath, summary, config, shareableUrl);
-        }
-        logger.info(chalk.yellow(`Writing output to ${outputPath}`));
-      } else if (cmdObj.table && getLogLevel() !== 'debug') {
-        // Output table by default
+      if (cmdObj.table && getLogLevel() !== 'debug') {
+        // Output CLI table
         const table = generateTable(summary, parseInt(cmdObj.tableCellMaxLength || '', 10));
 
         logger.info('\n' + table.toString());
@@ -437,6 +430,17 @@ async function main() {
           logger.info(`... ${rowsLeft} more row${rowsLeft === 1 ? '' : 's'} not shown ...\n`);
         }
       }
+
+      const outputPath = cmdObj.output || fileConfig.outputPath || defaultConfig.outputPath;
+      if (outputPath) {
+        // Write output to file
+        if (typeof outputPath === 'string') {
+          writeOutput(outputPath, summary, config, shareableUrl);
+        } else if (Array.isArray(outputPath)) {
+          writeMultipleOutputs(outputPath, summary, config, shareableUrl);
+        }
+        logger.info(chalk.yellow(`Writing output to ${outputPath}`));
+      } 
 
       telemetry.maybeShowNotice();
 
