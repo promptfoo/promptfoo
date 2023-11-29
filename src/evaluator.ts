@@ -228,7 +228,7 @@ class Evaluator {
         response,
         success: false,
         score: 0,
-        custom: {},
+        namedScores: {},
         latencyMs,
       };
       if (response.error) {
@@ -258,7 +258,7 @@ class Evaluator {
         }
         ret.success = checkResult.pass;
         ret.score = checkResult.score;
-        ret.custom = checkResult.custom || {};
+        ret.namedScores = checkResult.namedScores || {};
         if (checkResult.tokensUsed) {
           this.stats.tokenUsage.total += checkResult.tokensUsed.total;
           this.stats.tokenUsage.prompt += checkResult.tokensUsed.prompt;
@@ -293,7 +293,7 @@ class Evaluator {
         error: String(err) + '\n\n' + (err as Error).stack,
         success: false,
         score: 0,
-        custom: {},
+        namedScores: {},
         latencyMs,
       };
     }
@@ -375,7 +375,7 @@ class Evaluator {
               completion: 0,
               cached: 0,
             },
-            custom: {},
+            namedScores: {},
           },
         });
       }
@@ -608,7 +608,7 @@ class Evaluator {
         table.body[rowIndex].outputs[colIndex] = {
           pass: row.success,
           score: row.score,
-          custom: row.custom,
+          namedScores: row.namedScores,
           text: resultText,
           prompt: row.prompt.raw,
           provider: row.provider.id,
@@ -620,8 +620,8 @@ class Evaluator {
         const metrics = table.head.prompts[colIndex].metrics;
         invariant(metrics, 'Expected prompt.metrics to be set');
         metrics.score += row.score;
-        for (const [key, value] of Object.entries(row.custom)) {
-          metrics.custom[key] = (metrics.custom[key] || 0) + value;
+        for (const [key, value] of Object.entries(row.namedScores)) {
+          metrics.namedScores[key] = (metrics.namedScores[key] || 0) + value;
         }
         metrics.testPassCount += row.success ? 1 : 0;
         metrics.testFailCount += row.success ? 0 : 1;

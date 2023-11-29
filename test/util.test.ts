@@ -47,7 +47,7 @@ describe('util', () => {
       {
         success: true,
         score: 1.0,
-        custom: {},
+        namedScores: {},
         latencyMs: 1000,
         provider: {
           id: 'foo',
@@ -76,7 +76,7 @@ describe('util', () => {
             {
               pass: true,
               score: 1.0,
-              custom: {},
+              namedScores: {},
               text: 'Test output',
               prompt: 'Test prompt',
               latencyMs: 1000,
@@ -116,7 +116,7 @@ describe('util', () => {
       {
         success: true,
         score: 1.0,
-        custom: {},
+        namedScores: {},
         latencyMs: 1000,
         provider: {
           id: 'foo',
@@ -145,7 +145,7 @@ describe('util', () => {
             {
               pass: true,
               score: 1.0,
-              custom: {},
+              namedScores: {},
               text: 'Test output',
               prompt: 'Test prompt',
               latencyMs: 1000,
@@ -185,7 +185,7 @@ describe('util', () => {
       {
         success: true,
         score: 1.0,
-        custom: {},
+        namedScores: {},
         latencyMs: 1000,
         provider: {
           id: 'foo',
@@ -214,7 +214,7 @@ describe('util', () => {
             {
               pass: true,
               score: 1.0,
-              custom: {},
+              namedScores: {},
               text: 'Test output',
               prompt: 'Test prompt',
               latencyMs: 1000,
@@ -254,7 +254,7 @@ describe('util', () => {
       {
         success: true,
         score: 1.0,
-        custom: {},
+        namedScores: {},
         latencyMs: 1000,
         provider: {
           id: 'foo',
@@ -283,7 +283,7 @@ describe('util', () => {
             {
               pass: true,
               score: 1.0,
-              custom: {},
+              namedScores: {},
               text: 'Test output',
               prompt: 'Test prompt',
               latencyMs: 1000,

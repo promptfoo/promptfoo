@@ -188,14 +188,14 @@ function EvalOutputCell({
         {output.pass && (
           <div className="status pass">
             PASS <span className="score">{scoreToString(output.score)}</span>
-            {output.custom ? <CustomMetrics lookup={output.custom} /> : null}
+            {output.namedScores ? <CustomMetrics lookup={output.namedScores} /> : null}
           </div>
         )}
         {!output.pass && (
           <div className="status fail">
             [FAIL <span className="score">{scoreToString(output.score)}</span>]{' '}
             <span dangerouslySetInnerHTML={{ __html: chunks[0].replace(/\n/g, '<br>') }} />
-            {output.custom ? <CustomMetrics lookup={output.custom} /> : null}
+            {output.namedScores ? <CustomMetrics lookup={output.namedScores} /> : null}
           </div>
         )}{' '}
         <TruncatedText text={text} maxLength={maxTextLength} />

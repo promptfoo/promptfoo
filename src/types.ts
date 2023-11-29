@@ -156,7 +156,7 @@ export interface Prompt {
     assertFailCount: number;
     totalLatencyMs: number;
     tokenUsage: TokenUsage;
-    custom: Record<string, number>;
+    namedScores: Record<string, number>;
   };
 }
 
@@ -186,13 +186,13 @@ export interface EvaluateResult {
   score: number;
   latencyMs: number;
   gradingResult?: GradingResult;
-  custom: Record<string, number>;
+  namedScores: Record<string, number>;
 }
 
 export interface EvaluateTableOutput {
   pass: boolean;
   score: number;
-  custom: Record<string, number>;
+  namedScores: Record<string, number>;
   text: string;
   prompt: string;
   latencyMs: number;
@@ -231,7 +231,7 @@ export interface EvaluateSummary {
 export interface GradingResult {
   pass: boolean;
   score: number;
-  custom?: Record<string, number>;
+  namedScores?: Record<string, number>;
   reason: string;
   tokensUsed?: TokenUsage;
   componentResults?: GradingResult[];
@@ -299,7 +299,7 @@ export interface Assertion {
   // Override the grading rubric
   rubricPrompt?: GradingConfig['rubricPrompt'];
 
-  // Tag this as a custom metric
+  // Tag this as a named metric
   metric?: string;
 }
 
