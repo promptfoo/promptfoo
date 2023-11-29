@@ -1,0 +1,14 @@
+.custom-metric-container {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: normal;
+}
+
+.custom-metric-container div {
+  padding: 0.25rem;
+  border-radius: 4px;
+  color: var(--text-color);
+  border: 1px solid var(--text-color);
+}

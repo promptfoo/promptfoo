@@ -156,6 +156,7 @@ export interface Prompt {
     assertFailCount: number;
     totalLatencyMs: number;
     tokenUsage: TokenUsage;
+    namedScores: Record<string, number>;
   };
 }
 
@@ -185,11 +186,13 @@ export interface EvaluateResult {
   score: number;
   latencyMs: number;
   gradingResult?: GradingResult;
+  namedScores: Record<string, number>;
 }
 
 export interface EvaluateTableOutput {
   pass: boolean;
   score: number;
+  namedScores: Record<string, number>;
   text: string;
   prompt: string;
   latencyMs: number;
@@ -228,6 +231,7 @@ export interface EvaluateSummary {
 export interface GradingResult {
   pass: boolean;
   score: number;
+  namedScores?: Record<string, number>;
   reason: string;
   tokensUsed?: TokenUsage;
   componentResults?: GradingResult[];
@@ -292,7 +296,11 @@ export interface Assertion {
   // Some assertions (similarity, llm-rubric) require an LLM provider
   provider?: GradingConfig['provider'];
 
+  // Override the grading rubric
   rubricPrompt?: GradingConfig['rubricPrompt'];
+
+  // Tag this as a named metric
+  metric?: string;
 }
 
 // Used when building prompts index from files.
