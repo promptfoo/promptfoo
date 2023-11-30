@@ -4,4 +4,4 @@ Run the test suite with:
 
 ```
 promptfoo eval
-``````
+```

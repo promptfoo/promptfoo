@@ -1,0 +1,23 @@
+.section {
+  padding: 4rem 0 0 0;
+  text-align: center;
+}
+
+.logoContainer {
+  display: flex;
+  flex-wrap: nowrap;
+  column-gap: 4rem;
+  align-items: center;
+  justify-content: center;
+  overflow-x: auto;
+}
+
+@media (max-width: 723px) {
+  .logoContainer {
+    margin-top: 4rem;
+  }
+}
+
+.logoContainer img {
+  max-width: 150px;
+}
