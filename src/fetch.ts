@@ -60,7 +60,12 @@ export async function fetchWithRetries(
     : 5000;
   for (let i = 0; i < retries; i++) {
     try {
-      return await fetchWithTimeout(url, options, timeout);
+        const response = await fetchWithTimeout(url, options, timeout);
+        // Retry 5xx error
+        if (response.status/100 === 5) {
+            throw new Error(`Get Internal Server Error: ${response.status}`);        
+        }
+        return response
     } catch (error) {
       lastError = error;
       const waitTime = Math.pow(2, i) * (backoff + 1000 * Math.random());
