@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+
 import promptfoo from '../../dist/src/index.js';
 
 (async () => {
@@ -17,6 +19,18 @@ import promptfoo from '../../dist/src/index.js';
           {
             role: 'user',
             content: '{{body}}',
+          },
+        ],
+
+        // Or functions
+        (vars) => [
+          {
+            role: 'system',
+            content: `You're an angry pirate. Be concise and stay in character.`,
+          },
+          {
+            role: 'user',
+            content: '{{body}}'
           },
         ],
       ],
@@ -68,5 +82,9 @@ import promptfoo from '../../dist/src/index.js';
     },
   );
   console.log('RESULTS:');
-  console.log(JSON.stringify(results, null, 2));
+  const resultsString = JSON.stringify(results, null, 2);
+  console.log(resultsString);
+
+  fs.writeFileSync('output.json', resultsString);
+  console.log('Wrote output.json');
 })();

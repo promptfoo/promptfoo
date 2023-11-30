@@ -45,7 +45,6 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
       }
     }),
   };
-  console.log('prompts', constructedTestSuite.prompts);
 
   // Resolve nested providers
   for (const test of constructedTestSuite.tests || []) {
