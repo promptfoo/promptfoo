@@ -5,6 +5,7 @@ import rouge from 'rouge';
 import invariant from 'tiny-invariant';
 import yaml from 'js-yaml';
 import Ajv, { ValidateFunction } from 'ajv';
+import addFormats from 'ajv-formats';
 import { distance as levenshtein } from 'fastest-levenshtein';
 
 import telemetry from './telemetry';
@@ -38,6 +39,8 @@ export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
 const DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD = 0.8;
 
 const ajv = new Ajv();
+addFormats(ajv);
+
 const nunjucks = getNunjucksEngine();
 
 function coerceString(value: string | object): string {
