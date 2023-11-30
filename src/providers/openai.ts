@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import Ajv from 'ajv';
 
 import logger from '../logger';
 import { fetchWithCache } from '../cache';
@@ -16,6 +17,14 @@ interface OpenAiSharedOptions {
   apiHost?: string;
   apiBaseUrl?: string;
   organization?: string;
+
+  validateFunctionCalls?: boolean;
+}
+
+interface OpenAiFunction {
+  name: string;
+  description?: string;
+  parameters: any;
 }
 
 type OpenAiCompletionOptions = OpenAiSharedOptions & {
@@ -25,16 +34,14 @@ type OpenAiCompletionOptions = OpenAiSharedOptions & {
   frequency_penalty?: number;
   presence_penalty?: number;
   best_of?: number;
-  functions?: {
-    name: string;
-    description?: string;
-    parameters: any;
-  }[];
+  functions?: OpenAiFunction[];
   function_call?: 'none' | 'auto' | { name: string };
   response_format?: { type: 'json_object' };
   stop?: string[];
   seed?: number;
 };
+
+const ajv = new Ajv();
 
 function failApiCall(err: any) {
   if (err instanceof OpenAI.APIError) {
@@ -253,6 +260,25 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
   }
 }
 
+function validateFunctionCall(
+  functionCall: { arguments: string; name: string },
+  functions?: OpenAiFunction[],
+) {
+  // Parse function call and validate it against schema
+  const functionArgs = JSON.parse(functionCall.arguments);
+  const functionName = functionCall.name;
+  const functionSchema = functions?.find((f) => f.name === functionName)?.parameters;
+  if (!functionSchema) {
+    throw new Error(`Called "${functionName}", but there is no function with that name`);
+  }
+  const validate = ajv.compile(functionSchema);
+  if (!validate(functionArgs)) {
+    throw new Error(
+      `Call to "${functionName}" does not match schema: ${JSON.stringify(validate.errors)}`,
+    );
+  }
+}
+
 export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   static OPENAI_CHAT_MODELS = [
     'gpt-4',
@@ -344,6 +370,17 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     try {
       const message = data.choices[0].message;
       const output = message.content === null ? message.function_call : message.content;
+
+      if (message.function_call && this.config.validateFunctionCalls) {
+        try {
+          validateFunctionCall(message.function_call, this.config.functions);
+        } catch (err) {
+          return {
+            error: `Function call validation error: ${String(err)}`,
+          };
+        }
+      }
+
       return {
         output,
         tokenUsage: cached
