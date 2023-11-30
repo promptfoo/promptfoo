@@ -1,9 +1,43 @@
 {
+  "version": 2,
   "results": [
     {
+      "provider": {
+        "id": "custom-function-1"
+      },
       "prompt": {
         "raw": "Rephrase this in French: Hello world",
-        "display": "Rephrase this in French: {{body}}"
+        "display": "[custom-function-1] Rephrase this in French: {{body}}"
+      },
+      "vars": {
+        "body": "Hello world"
+      },
+      "response": {
+        "output": "<LLM output>"
+      },
+      "success": true,
+      "score": 1,
+      "namedScores": {},
+      "latencyMs": 0,
+      "gradingResult": {
+        "pass": true,
+        "score": 1,
+        "reason": "No assertions",
+        "tokensUsed": {
+          "total": 0,
+          "prompt": 0,
+          "completion": 0
+        },
+        "assertion": null
+      }
+    },
+    {
+      "provider": {
+        "id": "openai:gpt-3.5-turbo"
+      },
+      "prompt": {
+        "raw": "Rephrase this in French: Hello world",
+        "display": "[openai:gpt-3.5-turbo] Rephrase this in French: {{body}}"
       },
       "vars": {
         "body": "Hello world"
@@ -11,16 +45,194 @@
       "response": {
         "output": "Bonjour le monde",
         "tokenUsage": {
-          "total": 19,
-          "prompt": 16,
-          "completion": 3
-        }
+          "cached": 18,
+          "total": 18
+        },
+        "cached": true
+      },
+      "success": true,
+      "score": 1,
+      "namedScores": {},
+      "latencyMs": 4,
+      "gradingResult": {
+        "pass": true,
+        "score": 1,
+        "reason": "No assertions",
+        "tokensUsed": {
+          "total": 0,
+          "prompt": 0,
+          "completion": 0
+        },
+        "assertion": null
       }
     },
     {
+      "provider": {
+        "id": "custom-function-1"
+      },
       "prompt": {
-        "raw": "Rephrase this in French: I&#39;m hungry",
-        "display": "Rephrase this in French: {{body}}"
+        "raw": "Rephrase this like a pirate: Hello world",
+        "display": "[custom-function-1] Rephrase this like a pirate: {{body}}"
+      },
+      "vars": {
+        "body": "Hello world"
+      },
+      "response": {
+        "output": "<LLM output>"
+      },
+      "success": true,
+      "score": 1,
+      "namedScores": {},
+      "latencyMs": 0,
+      "gradingResult": {
+        "pass": true,
+        "score": 1,
+        "reason": "No assertions",
+        "tokensUsed": {
+          "total": 0,
+          "prompt": 0,
+          "completion": 0
+        },
+        "assertion": null
+      }
+    },
+    {
+      "provider": {
+        "id": "openai:gpt-3.5-turbo"
+      },
+      "prompt": {
+        "raw": "Rephrase this like a pirate: Hello world",
+        "display": "[openai:gpt-3.5-turbo] Rephrase this like a pirate: {{body}}"
+      },
+      "vars": {
+        "body": "Hello world"
+      },
+      "response": {
+        "output": "Ahoy, me hearties! Avast ye, world!",
+        "tokenUsage": {
+          "cached": 29,
+          "total": 29
+        },
+        "cached": true
+      },
+      "success": true,
+      "score": 1,
+      "namedScores": {},
+      "latencyMs": 2,
+      "gradingResult": {
+        "pass": true,
+        "score": 1,
+        "reason": "No assertions",
+        "tokensUsed": {
+          "total": 0,
+          "prompt": 0,
+          "completion": 0
+        },
+        "assertion": null
+      }
+    },
+    {
+      "provider": {
+        "id": "custom-function-1"
+      },
+      "prompt": {
+        "raw": "[{\"role\":\"system\",\"content\":\"Pretend you are an Italian person and echo back any inputs\"},{\"role\":\"user\",\"content\":\"Hello world\"}]",
+        "display": "[custom-function-1] [{\"role\":\"system\",\"content\":\"Pretend you are an Italian person and echo back any inputs\"},{\"role\":\"user\",\"content\":\"{{body}}\"}]"
+      },
+      "vars": {
+        "body": "Hello world"
+      },
+      "response": {
+        "output": "<LLM output>"
+      },
+      "success": true,
+      "score": 1,
+      "namedScores": {},
+      "latencyMs": 0,
+      "gradingResult": {
+        "pass": true,
+        "score": 1,
+        "reason": "No assertions",
+        "tokensUsed": {
+          "total": 0,
+          "prompt": 0,
+          "completion": 0
+        },
+        "assertion": null
+      }
+    },
+    {
+      "provider": {
+        "id": "openai:gpt-3.5-turbo"
+      },
+      "prompt": {
+        "raw": "[{\"role\":\"system\",\"content\":\"Pretend you are an Italian person and echo back any inputs\"},{\"role\":\"user\",\"content\":\"Hello world\"}]",
+        "display": "[openai:gpt-3.5-turbo] [{\"role\":\"system\",\"content\":\"Pretend you are an Italian person and echo back any inputs\"},{\"role\":\"user\",\"content\":\"{{body}}\"}]"
+      },
+      "vars": {
+        "body": "Hello world"
+      },
+      "response": {
+        "output": "Ciao mondo",
+        "tokenUsage": {
+          "cached": 29,
+          "total": 29
+        },
+        "cached": true
+      },
+      "success": true,
+      "score": 1,
+      "namedScores": {},
+      "latencyMs": 14,
+      "gradingResult": {
+        "pass": true,
+        "score": 1,
+        "reason": "No assertions",
+        "tokensUsed": {
+          "total": 0,
+          "prompt": 0,
+          "completion": 0
+        },
+        "assertion": null
+      }
+    },
+    {
+      "provider": {
+        "id": "custom-function-1"
+      },
+      "prompt": {
+        "raw": "(vars) => [\n          {\n            role: 'system',\n            content: `You're an angry pirate. Be concise and stay in character.`,\n          },\n          {\n            role: 'user',\n            content: 'Hello world'\n          },\n        ]",
+        "display": "[custom-function-1] (vars) => [\n          {\n            role: 'system',\n            content: `You're an angry pirate. Be concise and stay in character.`,\n          },\n          {\n            role: 'user',\n            content: '{{body}}'\n          },\n        ]"
+      },
+      "vars": {
+        "body": "Hello world"
+      },
+      "response": {
+        "output": "<LLM output>"
+      },
+      "success": true,
+      "score": 1,
+      "namedScores": {},
+      "latencyMs": 0,
+      "gradingResult": {
+        "pass": true,
+        "score": 1,
+        "reason": "No assertions",
+        "tokensUsed": {
+          "total": 0,
+          "prompt": 0,
+          "completion": 0
+        },
+        "assertion": null
+      }
+    },
+    {
+      "provider": {
+        "id": "openai:gpt-3.5-turbo"
+      },
+      "prompt": {
+        "raw": "Rephrase this in French: I'm hungry",
+        "display": "[openai:gpt-3.5-turbo] Rephrase this in French: {{body}}"
       },
       "vars": {
         "body": "I'm hungry"
@@ -28,63 +240,1036 @@
       "response": {
         "output": "J'ai faim.",
         "tokenUsage": {
-          "total": 24,
-          "prompt": 19,
-          "completion": 5
-        }
+          "cached": 21,
+          "total": 21
+        },
+        "cached": true
+      },
+      "success": true,
+      "score": 1,
+      "namedScores": {},
+      "latencyMs": 0,
+      "gradingResult": {
+        "pass": true,
+        "score": 1,
+        "namedScores": {},
+        "reason": "All assertions passed",
+        "tokensUsed": {
+          "total": 0,
+          "prompt": 0,
+          "completion": 0
+        },
+        "componentResults": [
+          {
+            "pass": true,
+            "score": 1,
+            "reason": "Output contained substring",
+            "assertion": {
+              "type": "javascript",
+              "value": "(output) => {\n                const pass = output...."
+            }
+          }
+        ],
+        "assertion": null
       }
     },
     {
-      "prompt": {
-        "raw": "Rephrase this like a pirate: Hello world",
-        "display": "Rephrase this like a pirate: {{body}}"
+      "provider": {
+        "id": "custom-function-1"
       },
-      "vars": {
-        "body": "Hello world"
-      },
-      "response": {
-        "output": "Ahoy thar, me hearties! Avast ye, world!",
-        "tokenUsage": {
-          "total": 32,
-          "prompt": 17,
-          "completion": 15
-        }
-      }
-    },
-    {
       "prompt": {
-        "raw": "Rephrase this like a pirate: I&#39;m hungry",
-        "display": "Rephrase this like a pirate: {{body}}"
+        "raw": "Rephrase this in French: I'm hungry",
+        "display": "[custom-function-1] Rephrase this in French: {{body}}"
       },
       "vars": {
         "body": "I'm hungry"
       },
       "response": {
-        "output": "Arrr, me belly be empty and me throat be parched! I be needin' some grub, matey!",
+        "output": "<LLM output>"
+      },
+      "success": false,
+      "score": 0,
+      "namedScores": {},
+      "latencyMs": 0,
+      "error": "Output did not contain substring",
+      "gradingResult": {
+        "pass": false,
+        "score": 0,
+        "namedScores": {},
+        "reason": "Output did not contain substring",
+        "tokensUsed": {
+          "total": 0,
+          "prompt": 0,
+          "completion": 0
+        },
+        "componentResults": [
+          {
+            "pass": false,
+            "score": 0,
+            "reason": "Output did not contain substring",
+            "assertion": {
+              "type": "javascript",
+              "value": "(output) => {\n                const pass = output...."
+            }
+          }
+        ],
+        "assertion": null
+      }
+    },
+    {
+      "provider": {
+        "id": "openai:gpt-3.5-turbo"
+      },
+      "prompt": {
+        "raw": "Rephrase this like a pirate: I'm hungry",
+        "display": "[openai:gpt-3.5-turbo] Rephrase this like a pirate: {{body}}"
+      },
+      "vars": {
+        "body": "I'm hungry"
+      },
+      "response": {
+        "output": "Arr, me belly be rumblin'!",
         "tokenUsage": {
-          "total": 45,
-          "prompt": 20,
-          "completion": 25
-        }
+          "cached": 27,
+          "total": 27
+        },
+        "cached": true
+      },
+      "success": false,
+      "score": 0,
+      "namedScores": {},
+      "latencyMs": 1,
+      "error": "Output did not contain substring",
+      "gradingResult": {
+        "pass": false,
+        "score": 0,
+        "namedScores": {},
+        "reason": "Output did not contain substring",
+        "tokensUsed": {
+          "total": 0,
+          "prompt": 0,
+          "completion": 0
+        },
+        "componentResults": [
+          {
+            "pass": false,
+            "score": 0,
+            "reason": "Output did not contain substring",
+            "assertion": {
+              "type": "javascript",
+              "value": "(output) => {\n                const pass = output...."
+            }
+          }
+        ],
+        "assertion": null
+      }
+    },
+    {
+      "provider": {
+        "id": "custom-function-1"
+      },
+      "prompt": {
+        "raw": "Rephrase this like a pirate: I'm hungry",
+        "display": "[custom-function-1] Rephrase this like a pirate: {{body}}"
+      },
+      "vars": {
+        "body": "I'm hungry"
+      },
+      "response": {
+        "output": "<LLM output>"
+      },
+      "success": false,
+      "score": 0,
+      "namedScores": {},
+      "latencyMs": 0,
+      "error": "Output did not contain substring",
+      "gradingResult": {
+        "pass": false,
+        "score": 0,
+        "namedScores": {},
+        "reason": "Output did not contain substring",
+        "tokensUsed": {
+          "total": 0,
+          "prompt": 0,
+          "completion": 0
+        },
+        "componentResults": [
+          {
+            "pass": false,
+            "score": 0,
+            "reason": "Output did not contain substring",
+            "assertion": {
+              "type": "javascript",
+              "value": "(output) => {\n                const pass = output...."
+            }
+          }
+        ],
+        "assertion": null
+      }
+    },
+    {
+      "provider": {
+        "id": "openai:gpt-3.5-turbo"
+      },
+      "prompt": {
+        "raw": "[{\"role\":\"system\",\"content\":\"Pretend you are an Italian person and echo back any inputs\"},{\"role\":\"user\",\"content\":\"I'm hungry\"}]",
+        "display": "[openai:gpt-3.5-turbo] [{\"role\":\"system\",\"content\":\"Pretend you are an Italian person and echo back any inputs\"},{\"role\":\"user\",\"content\":\"{{body}}\"}]"
+      },
+      "vars": {
+        "body": "I'm hungry"
+      },
+      "response": {
+        "output": "Sono affamato.",
+        "tokenUsage": {
+          "cached": 33,
+          "total": 33
+        },
+        "cached": true
+      },
+      "success": false,
+      "score": 0,
+      "namedScores": {},
+      "latencyMs": 1,
+      "error": "Output did not contain substring",
+      "gradingResult": {
+        "pass": false,
+        "score": 0,
+        "namedScores": {},
+        "reason": "Output did not contain substring",
+        "tokensUsed": {
+          "total": 0,
+          "prompt": 0,
+          "completion": 0
+        },
+        "componentResults": [
+          {
+            "pass": false,
+            "score": 0,
+            "reason": "Output did not contain substring",
+            "assertion": {
+              "type": "javascript",
+              "value": "(output) => {\n                const pass = output...."
+            }
+          }
+        ],
+        "assertion": null
+      }
+    },
+    {
+      "provider": {
+        "id": "custom-function-1"
+      },
+      "prompt": {
+        "raw": "[{\"role\":\"system\",\"content\":\"Pretend you are an Italian person and echo back any inputs\"},{\"role\":\"user\",\"content\":\"I'm hungry\"}]",
+        "display": "[custom-function-1] [{\"role\":\"system\",\"content\":\"Pretend you are an Italian person and echo back any inputs\"},{\"role\":\"user\",\"content\":\"{{body}}\"}]"
+      },
+      "vars": {
+        "body": "I'm hungry"
+      },
+      "response": {
+        "output": "<LLM output>"
+      },
+      "success": false,
+      "score": 0,
+      "namedScores": {},
+      "latencyMs": 0,
+      "error": "Output did not contain substring",
+      "gradingResult": {
+        "pass": false,
+        "score": 0,
+        "namedScores": {},
+        "reason": "Output did not contain substring",
+        "tokensUsed": {
+          "total": 0,
+          "prompt": 0,
+          "completion": 0
+        },
+        "componentResults": [
+          {
+            "pass": false,
+            "score": 0,
+            "reason": "Output did not contain substring",
+            "assertion": {
+              "type": "javascript",
+              "value": "(output) => {\n                const pass = output...."
+            }
+          }
+        ],
+        "assertion": null
+      }
+    },
+    {
+      "provider": {
+        "id": "openai:gpt-3.5-turbo"
+      },
+      "prompt": {
+        "raw": "(vars) => [\n          {\n            role: 'system',\n            content: `You're an angry pirate. Be concise and stay in character.`,\n          },\n          {\n            role: 'user',\n            content: 'Hello world'\n          },\n        ]",
+        "display": "[openai:gpt-3.5-turbo] (vars) => [\n          {\n            role: 'system',\n            content: `You're an angry pirate. Be concise and stay in character.`,\n          },\n          {\n            role: 'user',\n            content: '{{body}}'\n          },\n        ]"
+      },
+      "vars": {
+        "body": "Hello world"
+      },
+      "response": {
+        "output": "[\n  {\n    role: 'system',\n    content: `You're an angry pirate. Be concise and stay in character.`,\n  },\n  {\n    role: 'user',\n    content: 'Hello world'\n  },\n]",
+        "tokenUsage": {
+          "total": 103,
+          "prompt": 57,
+          "completion": 46
+        },
+        "cached": false
+      },
+      "success": true,
+      "score": 1,
+      "namedScores": {},
+      "latencyMs": 978,
+      "gradingResult": {
+        "pass": true,
+        "score": 1,
+        "reason": "No assertions",
+        "tokensUsed": {
+          "total": 0,
+          "prompt": 0,
+          "completion": 0
+        },
+        "assertion": null
+      }
+    },
+    {
+      "provider": {
+        "id": "custom-function-1"
+      },
+      "prompt": {
+        "raw": "(vars) => [\n          {\n            role: 'system',\n            content: `You're an angry pirate. Be concise and stay in character.`,\n          },\n          {\n            role: 'user',\n            content: 'I'm hungry'\n          },\n        ]",
+        "display": "[custom-function-1] (vars) => [\n          {\n            role: 'system',\n            content: `You're an angry pirate. Be concise and stay in character.`,\n          },\n          {\n            role: 'user',\n            content: '{{body}}'\n          },\n        ]"
+      },
+      "vars": {
+        "body": "I'm hungry"
+      },
+      "response": {
+        "output": "<LLM output>"
+      },
+      "success": false,
+      "score": 0,
+      "namedScores": {},
+      "latencyMs": 0,
+      "error": "Output did not contain substring",
+      "gradingResult": {
+        "pass": false,
+        "score": 0,
+        "namedScores": {},
+        "reason": "Output did not contain substring",
+        "tokensUsed": {
+          "total": 0,
+          "prompt": 0,
+          "completion": 0
+        },
+        "componentResults": [
+          {
+            "pass": false,
+            "score": 0,
+            "reason": "Output did not contain substring",
+            "assertion": {
+              "type": "javascript",
+              "value": "(output) => {\n                const pass = output...."
+            }
+          }
+        ],
+        "assertion": null
+      }
+    },
+    {
+      "provider": {
+        "id": "openai:gpt-3.5-turbo"
+      },
+      "prompt": {
+        "raw": "(vars) => [\n          {\n            role: 'system',\n            content: `You're an angry pirate. Be concise and stay in character.`,\n          },\n          {\n            role: 'user',\n            content: 'I'm hungry'\n          },\n        ]",
+        "display": "[openai:gpt-3.5-turbo] (vars) => [\n          {\n            role: 'system',\n            content: `You're an angry pirate. Be concise and stay in character.`,\n          },\n          {\n            role: 'user',\n            content: '{{body}}'\n          },\n        ]"
+      },
+      "vars": {
+        "body": "I'm hungry"
+      },
+      "response": {
+        "output": "[\n  {\n    role: 'system',\n    content: `Arrr! Ye be hungry, ye scurvy dog!`\n  },\n  {\n    role: 'user',\n    content: 'Aye, I be needin\\' some grub!'\n  }\n]",
+        "tokenUsage": {
+          "total": 113,
+          "prompt": 58,
+          "completion": 55
+        },
+        "cached": false
+      },
+      "success": false,
+      "score": 0,
+      "namedScores": {},
+      "latencyMs": 975,
+      "error": "Output did not contain substring",
+      "gradingResult": {
+        "pass": false,
+        "score": 0,
+        "namedScores": {},
+        "reason": "Output did not contain substring",
+        "tokensUsed": {
+          "total": 0,
+          "prompt": 0,
+          "completion": 0
+        },
+        "componentResults": [
+          {
+            "pass": false,
+            "score": 0,
+            "reason": "Output did not contain substring",
+            "assertion": {
+              "type": "javascript",
+              "value": "(output) => {\n                const pass = output...."
+            }
+          }
+        ],
+        "assertion": null
       }
     }
   ],
   "stats": {
-    "successes": 4,
-    "failures": 0,
+    "successes": 9,
+    "failures": 7,
     "tokenUsage": {
-      "total": 120,
-      "prompt": 72,
-      "completion": 48
+      "total": 373,
+      "prompt": 115,
+      "completion": 101,
+      "cached": 157
     }
   },
-  "table": [
-    ["Rephrase this in French: {{body}}", "Rephrase this like a pirate: {{body}}", "body"],
-    ["Bonjour le monde", "Ahoy thar, me hearties! Avast ye, world!", "Hello world"],
-    [
-      "J'ai faim.",
-      "Arrr, me belly be empty and me throat be parched! I be needin' some grub, matey!",
-      "I'm hungry"
+  "table": {
+    "head": {
+      "prompts": [
+        {
+          "raw": "Rephrase this in French: {{body}}",
+          "display": "[openai:gpt-3.5-turbo] Rephrase this in French: {{body}}",
+          "id": "a67a87b900d7de9c3dd19633b800ebe86b568db68f28d879d0b8a4e41a05e3cc",
+          "metrics": {
+            "score": 2,
+            "testPassCount": 2,
+            "testFailCount": 0,
+            "assertPassCount": 1,
+            "assertFailCount": 0,
+            "totalLatencyMs": 4,
+            "tokenUsage": {
+              "total": 39,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 39
+            },
+            "namedScores": {}
+          }
+        },
+        {
+          "raw": "Rephrase this in French: {{body}}",
+          "display": "[custom-function-1] Rephrase this in French: {{body}}",
+          "id": "a67a87b900d7de9c3dd19633b800ebe86b568db68f28d879d0b8a4e41a05e3cc",
+          "metrics": {
+            "score": 1,
+            "testPassCount": 1,
+            "testFailCount": 1,
+            "assertPassCount": 0,
+            "assertFailCount": 1,
+            "totalLatencyMs": 0,
+            "tokenUsage": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0
+            },
+            "namedScores": {}
+          }
+        },
+        {
+          "raw": "Rephrase this like a pirate: {{body}}",
+          "display": "[openai:gpt-3.5-turbo] Rephrase this like a pirate: {{body}}",
+          "id": "80aaed6946eaa32040a7fb382921bfc6d2eb5abffbaea8395c194ad2bbad6094",
+          "metrics": {
+            "score": 1,
+            "testPassCount": 1,
+            "testFailCount": 1,
+            "assertPassCount": 0,
+            "assertFailCount": 1,
+            "totalLatencyMs": 3,
+            "tokenUsage": {
+              "total": 56,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 56
+            },
+            "namedScores": {}
+          }
+        },
+        {
+          "raw": "Rephrase this like a pirate: {{body}}",
+          "display": "[custom-function-1] Rephrase this like a pirate: {{body}}",
+          "id": "80aaed6946eaa32040a7fb382921bfc6d2eb5abffbaea8395c194ad2bbad6094",
+          "metrics": {
+            "score": 1,
+            "testPassCount": 1,
+            "testFailCount": 1,
+            "assertPassCount": 0,
+            "assertFailCount": 1,
+            "totalLatencyMs": 0,
+            "tokenUsage": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0
+            },
+            "namedScores": {}
+          }
+        },
+        {
+          "raw": "[{\"role\":\"system\",\"content\":\"Pretend you are an Italian person and echo back any inputs\"},{\"role\":\"user\",\"content\":\"{{body}}\"}]",
+          "display": "[openai:gpt-3.5-turbo] [{\"role\":\"system\",\"content\":\"Pretend you are an Italian person and echo back any inputs\"},{\"role\":\"user\",\"content\":\"{{body}}\"}]",
+          "id": "c4d8a663e6a9060375147525423b6004cd1df71850472f97e435ab016368afa8",
+          "metrics": {
+            "score": 1,
+            "testPassCount": 1,
+            "testFailCount": 1,
+            "assertPassCount": 0,
+            "assertFailCount": 1,
+            "totalLatencyMs": 15,
+            "tokenUsage": {
+              "total": 62,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 62
+            },
+            "namedScores": {}
+          }
+        },
+        {
+          "raw": "[{\"role\":\"system\",\"content\":\"Pretend you are an Italian person and echo back any inputs\"},{\"role\":\"user\",\"content\":\"{{body}}\"}]",
+          "display": "[custom-function-1] [{\"role\":\"system\",\"content\":\"Pretend you are an Italian person and echo back any inputs\"},{\"role\":\"user\",\"content\":\"{{body}}\"}]",
+          "id": "c4d8a663e6a9060375147525423b6004cd1df71850472f97e435ab016368afa8",
+          "metrics": {
+            "score": 1,
+            "testPassCount": 1,
+            "testFailCount": 1,
+            "assertPassCount": 0,
+            "assertFailCount": 1,
+            "totalLatencyMs": 0,
+            "tokenUsage": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0
+            },
+            "namedScores": {}
+          }
+        },
+        {
+          "raw": "(vars) => [\n          {\n            role: 'system',\n            content: `You're an angry pirate. Be concise and stay in character.`,\n          },\n          {\n            role: 'user',\n            content: '{{body}}'\n          },\n        ]",
+          "display": "[openai:gpt-3.5-turbo] (vars) => [\n          {\n            role: 'system',\n            content: `You're an angry pirate. Be concise and stay in character.`,\n          },\n          {\n            role: 'user',\n            content: '{{body}}'\n          },\n        ]",
+          "id": "2bf405ebc0a0a4753f072b8c7a4b9da0c2331f6b87d09e771c4af4abc0b645ab",
+          "metrics": {
+            "score": 1,
+            "testPassCount": 1,
+            "testFailCount": 1,
+            "assertPassCount": 0,
+            "assertFailCount": 1,
+            "totalLatencyMs": 1953,
+            "tokenUsage": {
+              "total": 216,
+              "prompt": 115,
+              "completion": 101,
+              "cached": 0
+            },
+            "namedScores": {}
+          }
+        },
+        {
+          "raw": "(vars) => [\n          {\n            role: 'system',\n            content: `You're an angry pirate. Be concise and stay in character.`,\n          },\n          {\n            role: 'user',\n            content: '{{body}}'\n          },\n        ]",
+          "display": "[custom-function-1] (vars) => [\n          {\n            role: 'system',\n            content: `You're an angry pirate. Be concise and stay in character.`,\n          },\n          {\n            role: 'user',\n            content: '{{body}}'\n          },\n        ]",
+          "id": "2bf405ebc0a0a4753f072b8c7a4b9da0c2331f6b87d09e771c4af4abc0b645ab",
+          "metrics": {
+            "score": 1,
+            "testPassCount": 1,
+            "testFailCount": 1,
+            "assertPassCount": 0,
+            "assertFailCount": 1,
+            "totalLatencyMs": 0,
+            "tokenUsage": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0
+            },
+            "namedScores": {}
+          }
+        }
+      ],
+      "vars": [
+        "body"
+      ]
+    },
+    "body": [
+      {
+        "outputs": [
+          {
+            "pass": true,
+            "score": 1,
+            "namedScores": {},
+            "text": "Bonjour le monde",
+            "prompt": "Rephrase this in French: Hello world",
+            "provider": "openai:gpt-3.5-turbo",
+            "latencyMs": 4,
+            "tokenUsage": {
+              "cached": 18,
+              "total": 18
+            },
+            "gradingResult": {
+              "pass": true,
+              "score": 1,
+              "reason": "No assertions",
+              "tokensUsed": {
+                "total": 0,
+                "prompt": 0,
+                "completion": 0
+              },
+              "assertion": null
+            }
+          },
+          {
+            "pass": true,
+            "score": 1,
+            "namedScores": {},
+            "text": "<LLM output>",
+            "prompt": "Rephrase this in French: Hello world",
+            "provider": "custom-function-1",
+            "latencyMs": 0,
+            "gradingResult": {
+              "pass": true,
+              "score": 1,
+              "reason": "No assertions",
+              "tokensUsed": {
+                "total": 0,
+                "prompt": 0,
+                "completion": 0
+              },
+              "assertion": null
+            }
+          },
+          {
+            "pass": true,
+            "score": 1,
+            "namedScores": {},
+            "text": "Ahoy, me hearties! Avast ye, world!",
+            "prompt": "Rephrase this like a pirate: Hello world",
+            "provider": "openai:gpt-3.5-turbo",
+            "latencyMs": 2,
+            "tokenUsage": {
+              "cached": 29,
+              "total": 29
+            },
+            "gradingResult": {
+              "pass": true,
+              "score": 1,
+              "reason": "No assertions",
+              "tokensUsed": {
+                "total": 0,
+                "prompt": 0,
+                "completion": 0
+              },
+              "assertion": null
+            }
+          },
+          {
+            "pass": true,
+            "score": 1,
+            "namedScores": {},
+            "text": "<LLM output>",
+            "prompt": "Rephrase this like a pirate: Hello world",
+            "provider": "custom-function-1",
+            "latencyMs": 0,
+            "gradingResult": {
+              "pass": true,
+              "score": 1,
+              "reason": "No assertions",
+              "tokensUsed": {
+                "total": 0,
+                "prompt": 0,
+                "completion": 0
+              },
+              "assertion": null
+            }
+          },
+          {
+            "pass": true,
+            "score": 1,
+            "namedScores": {},
+            "text": "Ciao mondo",
+            "prompt": "[{\"role\":\"system\",\"content\":\"Pretend you are an Italian person and echo back any inputs\"},{\"role\":\"user\",\"content\":\"Hello world\"}]",
+            "provider": "openai:gpt-3.5-turbo",
+            "latencyMs": 14,
+            "tokenUsage": {
+              "cached": 29,
+              "total": 29
+            },
+            "gradingResult": {
+              "pass": true,
+              "score": 1,
+              "reason": "No assertions",
+              "tokensUsed": {
+                "total": 0,
+                "prompt": 0,
+                "completion": 0
+              },
+              "assertion": null
+            }
+          },
+          {
+            "pass": true,
+            "score": 1,
+            "namedScores": {},
+            "text": "<LLM output>",
+            "prompt": "[{\"role\":\"system\",\"content\":\"Pretend you are an Italian person and echo back any inputs\"},{\"role\":\"user\",\"content\":\"Hello world\"}]",
+            "provider": "custom-function-1",
+            "latencyMs": 0,
+            "gradingResult": {
+              "pass": true,
+              "score": 1,
+              "reason": "No assertions",
+              "tokensUsed": {
+                "total": 0,
+                "prompt": 0,
+                "completion": 0
+              },
+              "assertion": null
+            }
+          },
+          {
+            "pass": true,
+            "score": 1,
+            "namedScores": {},
+            "text": "[\n  {\n    role: 'system',\n    content: `You're an angry pirate. Be concise and stay in character.`,\n  },\n  {\n    role: 'user',\n    content: 'Hello world'\n  },\n]",
+            "prompt": "(vars) => [\n          {\n            role: 'system',\n            content: `You're an angry pirate. Be concise and stay in character.`,\n          },\n          {\n            role: 'user',\n            content: 'Hello world'\n          },\n        ]",
+            "provider": "openai:gpt-3.5-turbo",
+            "latencyMs": 978,
+            "tokenUsage": {
+              "total": 103,
+              "prompt": 57,
+              "completion": 46
+            },
+            "gradingResult": {
+              "pass": true,
+              "score": 1,
+              "reason": "No assertions",
+              "tokensUsed": {
+                "total": 0,
+                "prompt": 0,
+                "completion": 0
+              },
+              "assertion": null
+            }
+          },
+          {
+            "pass": true,
+            "score": 1,
+            "namedScores": {},
+            "text": "<LLM output>",
+            "prompt": "(vars) => [\n          {\n            role: 'system',\n            content: `You're an angry pirate. Be concise and stay in character.`,\n          },\n          {\n            role: 'user',\n            content: 'Hello world'\n          },\n        ]",
+            "provider": "custom-function-1",
+            "latencyMs": 0,
+            "gradingResult": {
+              "pass": true,
+              "score": 1,
+              "reason": "No assertions",
+              "tokensUsed": {
+                "total": 0,
+                "prompt": 0,
+                "completion": 0
+              },
+              "assertion": null
+            }
+          }
+        ],
+        "vars": [
+          "Hello world"
+        ]
+      },
+      {
+        "outputs": [
+          {
+            "pass": true,
+            "score": 1,
+            "namedScores": {},
+            "text": "J'ai faim.",
+            "prompt": "Rephrase this in French: I'm hungry",
+            "provider": "openai:gpt-3.5-turbo",
+            "latencyMs": 0,
+            "tokenUsage": {
+              "cached": 21,
+              "total": 21
+            },
+            "gradingResult": {
+              "pass": true,
+              "score": 1,
+              "namedScores": {},
+              "reason": "All assertions passed",
+              "tokensUsed": {
+                "total": 0,
+                "prompt": 0,
+                "completion": 0
+              },
+              "componentResults": [
+                {
+                  "pass": true,
+                  "score": 1,
+                  "reason": "Output contained substring",
+                  "assertion": {
+                    "type": "javascript",
+                    "value": "(output) => {\n                const pass = output...."
+                  }
+                }
+              ],
+              "assertion": null
+            }
+          },
+          {
+            "pass": false,
+            "score": 0,
+            "namedScores": {},
+            "text": "Output did not contain substring\n---\n<LLM output>",
+            "prompt": "Rephrase this in French: I'm hungry",
+            "provider": "custom-function-1",
+            "latencyMs": 0,
+            "gradingResult": {
+              "pass": false,
+              "score": 0,
+              "namedScores": {},
+              "reason": "Output did not contain substring",
+              "tokensUsed": {
+                "total": 0,
+                "prompt": 0,
+                "completion": 0
+              },
+              "componentResults": [
+                {
+                  "pass": false,
+                  "score": 0,
+                  "reason": "Output did not contain substring",
+                  "assertion": {
+                    "type": "javascript",
+                    "value": "(output) => {\n                const pass = output...."
+                  }
+                }
+              ],
+              "assertion": null
+            }
+          },
+          {
+            "pass": false,
+            "score": 0,
+            "namedScores": {},
+            "text": "Output did not contain substring\n---\nArr, me belly be rumblin'!",
+            "prompt": "Rephrase this like a pirate: I'm hungry",
+            "provider": "openai:gpt-3.5-turbo",
+            "latencyMs": 1,
+            "tokenUsage": {
+              "cached": 27,
+              "total": 27
+            },
+            "gradingResult": {
+              "pass": false,
+              "score": 0,
+              "namedScores": {},
+              "reason": "Output did not contain substring",
+              "tokensUsed": {
+                "total": 0,
+                "prompt": 0,
+                "completion": 0
+              },
+              "componentResults": [
+                {
+                  "pass": false,
+                  "score": 0,
+                  "reason": "Output did not contain substring",
+                  "assertion": {
+                    "type": "javascript",
+                    "value": "(output) => {\n                const pass = output...."
+                  }
+                }
+              ],
+              "assertion": null
+            }
+          },
+          {
+            "pass": false,
+            "score": 0,
+            "namedScores": {},
+            "text": "Output did not contain substring\n---\n<LLM output>",
+            "prompt": "Rephrase this like a pirate: I'm hungry",
+            "provider": "custom-function-1",
+            "latencyMs": 0,
+            "gradingResult": {
+              "pass": false,
+              "score": 0,
+              "namedScores": {},
+              "reason": "Output did not contain substring",
+              "tokensUsed": {
+                "total": 0,
+                "prompt": 0,
+                "completion": 0
+              },
+              "componentResults": [
+                {
+                  "pass": false,
+                  "score": 0,
+                  "reason": "Output did not contain substring",
+                  "assertion": {
+                    "type": "javascript",
+                    "value": "(output) => {\n                const pass = output...."
+                  }
+                }
+              ],
+              "assertion": null
+            }
+          },
+          {
+            "pass": false,
+            "score": 0,
+            "namedScores": {},
+            "text": "Output did not contain substring\n---\nSono affamato.",
+            "prompt": "[{\"role\":\"system\",\"content\":\"Pretend you are an Italian person and echo back any inputs\"},{\"role\":\"user\",\"content\":\"I'm hungry\"}]",
+            "provider": "openai:gpt-3.5-turbo",
+            "latencyMs": 1,
+            "tokenUsage": {
+              "cached": 33,
+              "total": 33
+            },
+            "gradingResult": {
+              "pass": false,
+              "score": 0,
+              "namedScores": {},
+              "reason": "Output did not contain substring",
+              "tokensUsed": {
+                "total": 0,
+                "prompt": 0,
+                "completion": 0
+              },
+              "componentResults": [
+                {
+                  "pass": false,
+                  "score": 0,
+                  "reason": "Output did not contain substring",
+                  "assertion": {
+                    "type": "javascript",
+                    "value": "(output) => {\n                const pass = output...."
+                  }
+                }
+              ],
+              "assertion": null
+            }
+          },
+          {
+            "pass": false,
+            "score": 0,
+            "namedScores": {},
+            "text": "Output did not contain substring\n---\n<LLM output>",
+            "prompt": "[{\"role\":\"system\",\"content\":\"Pretend you are an Italian person and echo back any inputs\"},{\"role\":\"user\",\"content\":\"I'm hungry\"}]",
+            "provider": "custom-function-1",
+            "latencyMs": 0,
+            "gradingResult": {
+              "pass": false,
+              "score": 0,
+              "namedScores": {},
+              "reason": "Output did not contain substring",
+              "tokensUsed": {
+                "total": 0,
+                "prompt": 0,
+                "completion": 0
+              },
+              "componentResults": [
+                {
+                  "pass": false,
+                  "score": 0,
+                  "reason": "Output did not contain substring",
+                  "assertion": {
+                    "type": "javascript",
+                    "value": "(output) => {\n                const pass = output...."
+                  }
+                }
+              ],
+              "assertion": null
+            }
+          },
+          {
+            "pass": false,
+            "score": 0,
+            "namedScores": {},
+            "text": "Output did not contain substring\n---\n[\n  {\n    role: 'system',\n    content: `Arrr! Ye be hungry, ye scurvy dog!`\n  },\n  {\n    role: 'user',\n    content: 'Aye, I be needin\\' some grub!'\n  }\n]",
+            "prompt": "(vars) => [\n          {\n            role: 'system',\n            content: `You're an angry pirate. Be concise and stay in character.`,\n          },\n          {\n            role: 'user',\n            content: 'I'm hungry'\n          },\n        ]",
+            "provider": "openai:gpt-3.5-turbo",
+            "latencyMs": 975,
+            "tokenUsage": {
+              "total": 113,
+              "prompt": 58,
+              "completion": 55
+            },
+            "gradingResult": {
+              "pass": false,
+              "score": 0,
+              "namedScores": {},
+              "reason": "Output did not contain substring",
+              "tokensUsed": {
+                "total": 0,
+                "prompt": 0,
+                "completion": 0
+              },
+              "componentResults": [
+                {
+                  "pass": false,
+                  "score": 0,
+                  "reason": "Output did not contain substring",
+                  "assertion": {
+                    "type": "javascript",
+                    "value": "(output) => {\n                const pass = output...."
+                  }
+                }
+              ],
+              "assertion": null
+            }
+          },
+          {
+            "pass": false,
+            "score": 0,
+            "namedScores": {},
+            "text": "Output did not contain substring\n---\n<LLM output>",
+            "prompt": "(vars) => [\n          {\n            role: 'system',\n            content: `You're an angry pirate. Be concise and stay in character.`,\n          },\n          {\n            role: 'user',\n            content: 'I'm hungry'\n          },\n        ]",
+            "provider": "custom-function-1",
+            "latencyMs": 0,
+            "gradingResult": {
+              "pass": false,
+              "score": 0,
+              "namedScores": {},
+              "reason": "Output did not contain substring",
+              "tokensUsed": {
+                "total": 0,
+                "prompt": 0,
+                "completion": 0
+              },
+              "componentResults": [
+                {
+                  "pass": false,
+                  "score": 0,
+                  "reason": "Output did not contain substring",
+                  "assertion": {
+                    "type": "javascript",
+                    "value": "(output) => {\n                const pass = output...."
+                  }
+                }
+              ],
+              "assertion": null
+            }
+          }
+        ],
+        "vars": [
+          "I'm hungry"
+        ]
+      }
     ]
-  ]
+  }
 }

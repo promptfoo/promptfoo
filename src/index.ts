@@ -25,17 +25,25 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
     nunjucksFilters: readFilters(testSuite.nunjucksFilters || {}),
 
     // Full prompts expected (not filepaths)
-    prompts: testSuite.prompts.map((promptContent) =>
-      typeof promptContent === 'string'
-        ? {
-            raw: promptContent,
-            display: promptContent,
-          }
-        : {
-            raw: JSON.stringify(promptContent),
-            display: JSON.stringify(promptContent),
-          },
-    ),
+    prompts: testSuite.prompts.map((promptInput) => {
+      if (typeof promptInput === 'function') {
+        return {
+          raw: promptInput.toString(),
+          display: promptInput.toString(),
+          func: promptInput,
+        };
+      } else if (typeof promptInput === 'string') {
+        return {
+          raw: promptInput,
+          display: promptInput,
+        };
+      } else {
+        return {
+          raw: JSON.stringify(promptInput),
+          display: JSON.stringify(promptInput),
+        };
+      }
+    }),
   };
 
   // Resolve nested providers

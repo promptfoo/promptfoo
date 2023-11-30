@@ -442,7 +442,7 @@ export interface EvalWithMetadata {
 
 // node.js package interface
 export type EvaluateTestSuite = {
-  prompts: (string | object)[];
+  prompts: (string | object | Function)[];
   writeLatestResults?: boolean;
 } & TestSuiteConfig;
 
