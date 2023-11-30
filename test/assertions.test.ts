@@ -333,6 +333,56 @@ describe('runAssertion', () => {
     );
   });
 
+  it('should validate JSON with formats using ajv-formats', async () => {
+    const output = '{"date": "2021-08-29"}';
+    const schemaWithFormat = {
+      type: 'object',
+      properties: {
+        date: {
+          type: 'string',
+          format: 'date',
+        },
+      },
+      required: ['date'],
+    };
+
+    const result: GradingResult = await runAssertion(
+      'Some prompt',
+      { type: 'is-json', value: schemaWithFormat },
+      {} as AtomicTestCase,
+      output,
+    );
+
+    expect(result.pass).toBeTruthy();
+    expect(result.reason).toBe('Assertion passed');
+  });
+
+  it('should validate JSON with formats using ajv-formats - failure', async () => {
+    const output = '{"date": "not a date"}';
+    const schemaWithFormat = {
+      type: 'object',
+      properties: {
+        date: {
+          type: 'string',
+          format: 'date',
+        },
+      },
+      required: ['date'],
+    };
+
+    const result: GradingResult = await runAssertion(
+      'Some prompt',
+      { type: 'is-json', value: schemaWithFormat },
+      {} as AtomicTestCase,
+      output,
+    );
+
+    expect(result.pass).toBeFalsy();
+    expect(result.reason).toBe(
+      'JSON does not conform to the provided schema. Errors: data/date must match format "date"',
+    );
+  });
+
   it('should pass when the is-json assertion passes with external schema', async () => {
     const assertion: Assertion = {
       type: 'is-json',
