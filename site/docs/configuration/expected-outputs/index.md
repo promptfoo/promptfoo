@@ -57,7 +57,7 @@ Deterministic eval metrics
 | [contains-json](#contains-json)                               | output contains valid json (optional json schema validation)   |
 | [javascript](/docs/configuration/expected-outputs/javascript) | provided Javascript function validates the output              |
 | [python](/docs/configuration/expected-outputs/python)         | provided Python function validates the output                  |
-| [webhook](#webhook)                                           | provided webhook returns {pass: true}                          |
+| [webhook](#webhook)                                           | provided webhook returns \{pass: true\}                          |
 | rouge-n                                                       | Rouge-N score is above a given threshold                       |
 | [levenshtein](#levenshtein-distance)                          | Levenshtein distance is below a threshold                      |
 
