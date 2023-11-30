@@ -1,5 +1,5 @@
 prompts: [prompts.txt]
-providers: [bedrock:anthropic.claude-v2] 
+providers: [bedrock:anthropic.claude-v2]
 tests:
   - vars:
       question: What's the weather in New York?

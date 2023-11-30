@@ -801,9 +801,7 @@
           }
         }
       ],
-      "vars": [
-        "body"
-      ]
+      "vars": ["body"]
     },
     "body": [
       {
@@ -986,9 +984,7 @@
             }
           }
         ],
-        "vars": [
-          "Hello world"
-        ]
+        "vars": ["Hello world"]
       },
       {
         "outputs": [
@@ -1266,9 +1262,7 @@
             }
           }
         ],
-        "vars": [
-          "I'm hungry"
-        ]
+        "vars": ["I'm hungry"]
       }
     ]
   }

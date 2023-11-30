@@ -30,7 +30,7 @@ import promptfoo from '../../dist/src/index.js';
           },
           {
             role: 'user',
-            content: '{{body}}'
+            content: '{{body}}',
           },
         ],
       ],
