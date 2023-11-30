@@ -24,7 +24,7 @@ import {
   writeMultipleOutputs,
   writeOutput,
 } from './util';
-import { DEFAULT_README, DEFAULT_YAML_CONFIG, DEFAULT_PROMPTS } from './onboarding';
+import { DEFAULT_README, DEFAULT_YAML_CONFIG } from './onboarding';
 import { disableCache, clearCache } from './cache';
 import { getDirectory } from './esm';
 import { startServer } from './web/server';
@@ -60,19 +60,22 @@ function createDummyFiles(directory: string | null) {
     directory = '.';
   }
 
-  writeFileSync(pathJoin(process.cwd(), directory, 'prompts.txt'), DEFAULT_PROMPTS);
   writeFileSync(pathJoin(process.cwd(), directory, 'promptfooconfig.yaml'), DEFAULT_YAML_CONFIG);
   writeFileSync(pathJoin(process.cwd(), directory, 'README.md'), DEFAULT_README);
 
+  const isNpx = process.env.npm_execpath?.includes('npx');
+  const runCommand = isNpx ? 'npx promptfoo@latest eval' : 'promptfoo eval';
   if (directory === '.') {
     logger.info(
-      chalk.green.bold(
-        'Wrote prompts.txt and promptfooconfig.yaml. Open README.md to get started!',
-      ),
+      chalk.green(`✅ Wrote promptfooconfig.yaml. Run ${chalk.bold(runCommand)} to get started!`),
     );
   } else {
-    logger.info(chalk.green.bold(`Wrote prompts.txt and promptfooconfig.yaml to ./${directory}`));
-    logger.info(chalk.green(`\`cd ${directory}\` and open README.md to get started!`));
+    logger.info(`✅ Wrote promptfooconfig.yaml to ./${directory}`);
+    logger.info(
+      chalk.green(
+        `Run ${chalk.bold(`cd ${directory}`)} and then ${chalk.bold(runCommand)} to get started!`,
+      ),
+    );
   }
 }
 
@@ -440,7 +443,7 @@ async function main() {
           writeMultipleOutputs(outputPath, summary, config, shareableUrl);
         }
         logger.info(chalk.yellow(`Writing output to ${outputPath}`));
-      } 
+      }
 
       telemetry.maybeShowNotice();
 

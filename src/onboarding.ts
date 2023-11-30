@@ -18,52 +18,34 @@ These prompts are nunjucks templates, so you can use logic like this:
 If you prefer, you can break prompts into multiple files (make sure to edit promptfooconfig.yaml accordingly)
 `;
 
-export const DEFAULT_YAML_CONFIG = `# This configuration runs each prompt through a series of example inputs and checks if they meet requirements.
+export const DEFAULT_YAML_CONFIG = `# This configuration compares LLM output of 2 prompts x 2 GPT models across 3 test cases.
 # Learn more: https://promptfoo.dev/docs/configuration/guide
 
 prompts:
-  - "Example prompt 1"
-  - "Example prompt 2"
-  - |-
-    Example prompt 3
-    This is a multi-line prompt
-  # You may also import prompts from file. This path is relative to the config file.
-  # For more information on prompts, see https://promptfoo.dev/docs/configuration/parameters.
-  - file://prompts.txt
-providers: [openai:gpt-3.5-turbo-0613]
+  - "Write a tweet about {{topic}}"
+  - "Write a very concise, funny tweet about {{topic}}"
+
+providers: [openai:gpt-3.5-turbo-0613, openai:gpt-4]
+
 tests:
-  - description: First test case - automatic review
-    vars:
-      var1: first variable's value
-      var2: another value
-      var3: some other value
-    # For more information on assertions, see https://promptfoo.dev/docs/configuration/expected-outputs
+  - vars:
+      topic: bananas
+
+  - vars:
+      topic: avocado toast
     assert:
-      - type: equals
-        value: expected LLM output goes here
-      - type: contains
-        value: some text
+      # For more information on assertions, see https://promptfoo.dev/docs/configuration/expected-outputs
+      - type: icontains
+        value: avocado
       - type: javascript
         value: 1 / (output.length + 1)  # prefer shorter outputs
 
-  - description: Second test case - manual review
-    # Test cases don't need assertions if you prefer to manually review the output
-    vars:
-      var1: new value
-      var2: another value
-      var3: third value
-
-  - description: Third test case - other types of automatic review
-    vars:
-      var1: yet another value
-      var2: and another
-      var3: dear llm, please output your response in json format
+  - vars:
+      topic: new york city
     assert:
-      - type: contains-json
-      - type: similar
-        value: ensures that output is semantically similar to this text
+      # For more information on model-graded evals, see https://promptfoo.dev/docs/configuration/expected-outputs/model-graded
       - type: model-graded-closedqa
-        value: ensure that output contains a reference to X
+        value: ensure that the output is funny
 `;
 
 export const DEFAULT_README = `To get started, set your OPENAI_API_KEY environment variable.
