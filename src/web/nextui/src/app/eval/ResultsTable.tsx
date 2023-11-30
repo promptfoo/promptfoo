@@ -20,7 +20,7 @@ import CustomMetrics from './CustomMetrics';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import { useStore } from './store';
 
-import type { CellContext, VisibilityState } from '@tanstack/table-core';
+import type { CellContext, ColumnDef, VisibilityState } from '@tanstack/table-core';
 
 import type { EvaluateTableRow, EvaluateTableOutput, FilterMode, GradingResult } from './types';
 
@@ -189,12 +189,15 @@ function EvalOutputCell({
           <div className="status fail">
             [FAIL <span className="score">{scoreToString(output.score)}</span>]{' '}
             <span>
-              {chunks[0].trim().split('\n').map((line, index) => (
-                <React.Fragment key={index}>
-                  {line}
-                  <br />
-                </React.Fragment>
-              ))}
+              {chunks[0]
+                .trim()
+                .split('\n')
+                .map((line, index) => (
+                  <React.Fragment key={index}>
+                    {line}
+                    <br />
+                  </React.Fragment>
+                ))}
             </span>
             {output.namedScores ? <CustomMetrics lookup={output.namedScores} /> : null}
           </div>
@@ -358,27 +361,34 @@ export default function ResultsTable({
   const highestPassingCount = numGoodTests[highestPassingIndex];
 
   const columnHelper = createColumnHelper<EvaluateTableRow>();
-  const columns = [
-    columnHelper.group({
-      id: 'vars',
-      header: () => <span>Variables</span>,
-      columns: head.vars.map((varName, idx) =>
-        columnHelper.accessor(
-          (row: EvaluateTableRow) => {
-            return row.vars[idx];
-          },
-          {
-            id: `Variable ${idx + 1}`,
-            header: () => <TableHeader text={varName} maxLength={maxTextLength} />,
-            cell: (info: CellContext<EvaluateTableRow, string>) => (
-              <TruncatedText text={info.getValue()} maxLength={maxTextLength} />
-            ),
-            // Minimize the size of Variable columns.
-            size: 50,
-          },
+  const columns: ColumnDef<EvaluateTableRow, unknown>[] = [];
+
+  if (head.vars.length > 0) {
+    columns.push(
+      columnHelper.group({
+        id: 'vars',
+        header: () => <span>Variables</span>,
+        columns: head.vars.map((varName, idx) =>
+          columnHelper.accessor(
+            (row: EvaluateTableRow) => {
+              return row.vars[idx];
+            },
+            {
+              id: `Variable ${idx + 1}`,
+              header: () => <TableHeader text={varName} maxLength={maxTextLength} />,
+              cell: (info: CellContext<EvaluateTableRow, string>) => (
+                <TruncatedText text={info.getValue()} maxLength={maxTextLength} />
+              ),
+              // Minimize the size of Variable columns.
+              size: 50,
+            },
+          ),
         ),
-      ),
-    }),
+      }),
+    );
+  }
+
+  columns.push(
     columnHelper.group({
       id: 'prompts',
       header: () => <span>Outputs</span>,
@@ -468,7 +478,7 @@ export default function ResultsTable({
         }),
       ),
     }),
-  ];
+  );
 
   const hasAnyDescriptions = body.some((row) => row.description);
   if (hasAnyDescriptions) {
