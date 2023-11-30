@@ -72,6 +72,7 @@
     "@anthropic-ai/sdk": "^0.5.2",
     "@apidevtools/json-schema-ref-parser": "^10.1.0",
     "ajv": "^8.12.0",
+    "ajv-formats": "^2.1.1",
     "async": "^3.2.4",
     "cache-manager": "^4.1.0",
     "cache-manager-fs-hash": "^1.0.0",
