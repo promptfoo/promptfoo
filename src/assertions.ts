@@ -23,7 +23,9 @@ import {
   matchesContextFaithfulness,
 } from './matchers';
 
-import type { Assertion, AssertionType, GradingResult, AtomicTestCase } from './types';
+import type { Assertion, AssertionType, GradingResult, AtomicTestCase, ApiProvider } from './types';
+import { validateFunctionCall } from './providers/openaiUtil';
+import { OpenAiChatCompletionProvider } from './providers/openai';
 
 export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
   'answer-relevance',
@@ -76,11 +78,17 @@ function handleRougeScore(
   };
 }
 
-export async function runAssertions(
-  prompt: string,
-  test: AtomicTestCase,
-  output: string | object,
-): Promise<GradingResult> {
+export async function runAssertions({
+  prompt,
+  provider,
+  test,
+  output,
+}: {
+  prompt: string;
+  provider: ApiProvider;
+  test: AtomicTestCase;
+  output: string | object;
+}): Promise<GradingResult> {
   const tokensUsed = {
     total: 0,
     prompt: 0,
@@ -101,7 +109,7 @@ export async function runAssertions(
     const weight = assertion.weight || 1;
     totalWeight += weight;
 
-    const result = await runAssertion(prompt, assertion, test, output);
+    const result = await runAssertion({ prompt, provider, assertion, test, output });
     totalScore += result.score * weight;
     componentResults.push(result);
 
@@ -147,12 +155,19 @@ export async function runAssertions(
   };
 }
 
-export async function runAssertion(
-  prompt: string,
-  assertion: Assertion,
-  test: AtomicTestCase,
-  output: string | object,
-): Promise<GradingResult> {
+export async function runAssertion({
+  prompt,
+  provider,
+  assertion,
+  test,
+  output,
+}: {
+  prompt: string;
+  provider: ApiProvider;
+  assertion: Assertion;
+  test: AtomicTestCase;
+  output: string | object;
+}): Promise<GradingResult> {
   let pass: boolean = false;
   let score: number = 0.0;
 
@@ -444,6 +459,35 @@ export async function runAssertion(
       reason: pass ? 'Assertion passed' : errorMessage,
       assertion,
     };
+  }
+
+  if (baseType === 'is-valid-openai-function-call') {
+    const functionOutput = output as { arguments: string; name: string };
+    invariant(
+      typeof functionOutput === 'object' &&
+        typeof functionOutput.name === 'string' &&
+        typeof functionOutput.arguments === 'string',
+      'is-valid-function assertion must evaluate an object with string name and arguments properties',
+    );
+    try {
+      validateFunctionCall(
+        functionOutput,
+        (provider as OpenAiChatCompletionProvider).config.functions,
+      );
+      return {
+        pass: true,
+        score: 1,
+        reason: 'Assertion passed',
+        assertion,
+      };
+    } catch (err) {
+      return {
+        pass: false,
+        score: 0,
+        reason: (err as Error).message,
+        assertion,
+      };
+    }
   }
 
   if (baseType === 'javascript') {
@@ -945,7 +989,7 @@ export function assertionFromString(expected: string): Assertion {
 
   // New options
   const assertionRegex =
-    /^(not-)?(equals|contains-any|contains-all|icontains-any|icontains-all|contains-json|is-json|regex|icontains|contains|webhook|rouge-n|similar|starts-with|levenshtein|classifier|model-graded-factuality|factuality|model-graded-closedqa|answer-relevance|context-recall|context-relevance|context-faithfulness)(?:\((\d+(?:\.\d+)?)\))?(?::(.*))?$/;
+    /^(not-)?(equals|contains-any|contains-all|icontains-any|icontains-all|contains-json|is-json|regex|icontains|contains|webhook|rouge-n|similar|starts-with|levenshtein|classifier|model-graded-factuality|factuality|model-graded-closedqa|answer-relevance|context-recall|context-relevance|context-faithfulness|is-valid-openai-function-call)(?:\((\d+(?:\.\d+)?)\))?(?::(.*))?$/;
   const regexMatch = expected.match(assertionRegex);
 
   if (regexMatch) {

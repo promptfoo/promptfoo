@@ -1,9 +1,9 @@
 import OpenAI from 'openai';
-import Ajv from 'ajv';
 
 import logger from '../logger';
 import { fetchWithCache } from '../cache';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
+import { OpenAiFunction } from './openaiUtil';
 
 import type {
   ApiProvider,
@@ -21,12 +21,6 @@ interface OpenAiSharedOptions {
   validateFunctionCalls?: boolean;
 }
 
-interface OpenAiFunction {
-  name: string;
-  description?: string;
-  parameters: any;
-}
-
 type OpenAiCompletionOptions = OpenAiSharedOptions & {
   temperature?: number;
   max_tokens?: number;
@@ -41,8 +35,6 @@ type OpenAiCompletionOptions = OpenAiSharedOptions & {
   seed?: number;
 };
 
-const ajv = new Ajv();
-
 function failApiCall(err: any) {
   if (err instanceof OpenAI.APIError) {
     return {
@@ -54,7 +46,7 @@ function failApiCall(err: any) {
   };
 }
 
-class OpenAiGenericProvider implements ApiProvider {
+export class OpenAiGenericProvider implements ApiProvider {
   modelName: string;
 
   config: OpenAiSharedOptions;
@@ -260,25 +252,6 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
   }
 }
 
-function validateFunctionCall(
-  functionCall: { arguments: string; name: string },
-  functions?: OpenAiFunction[],
-) {
-  // Parse function call and validate it against schema
-  const functionArgs = JSON.parse(functionCall.arguments);
-  const functionName = functionCall.name;
-  const functionSchema = functions?.find((f) => f.name === functionName)?.parameters;
-  if (!functionSchema) {
-    throw new Error(`Called "${functionName}", but there is no function with that name`);
-  }
-  const validate = ajv.compile(functionSchema);
-  if (!validate(functionArgs)) {
-    throw new Error(
-      `Call to "${functionName}" does not match schema: ${JSON.stringify(validate.errors)}`,
-    );
-  }
-}
-
 export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   static OPENAI_CHAT_MODELS = [
     'gpt-4',
@@ -370,16 +343,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     try {
       const message = data.choices[0].message;
       const output = message.content === null ? message.function_call : message.content;
-
-      if (message.function_call && this.config.validateFunctionCalls) {
-        try {
-          validateFunctionCall(message.function_call, this.config.functions);
-        } catch (err) {
-          return {
-            error: `Function call validation error: ${String(err)}`,
-          };
-        }
-      }
 
       return {
         output,

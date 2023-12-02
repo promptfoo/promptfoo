@@ -252,7 +252,12 @@ class Evaluator {
         }
 
         invariant(processedResponse.output != null, 'Response output should not be null');
-        const checkResult = await runAssertions(renderedPrompt, test, processedResponse.output);
+        const checkResult = await runAssertions({
+          prompt: renderedPrompt,
+          provider,
+          test,
+          output: processedResponse.output,
+        });
         if (!checkResult.pass) {
           ret.error = checkResult.reason;
         }

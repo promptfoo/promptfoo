@@ -2,34 +2,34 @@
 prompts: [prompt.txt]
 providers:
   - 'openai:chat:gpt-3.5-turbo-0613':
-      config:
-        validateFunctionCalls: true
-        functions: [
-          {
-            "name": "get_current_weather",
-            "description": "Get the current weather in a given location",
-            "parameters": {
-              "type": "object",
-              "properties": {
-                "location": {
-                  "type": "string",
-                  "description": "The city and state, e.g. San Francisco, CA"
-                },
-                "unit": {
-                  "type": "string",
-                  "enum": ["celsius", "fahrenheit"]
-                }
-              },
-              "required": ["location"]
-            }
-          }
-        ]
+     config:
+       functions: [
+         {
+           "name": "get_current_weather",
+           "description": "Get the current weather in a given location",
+           "parameters": {
+             "type": "object",
+             "properties": {
+               "location": {
+                 "type": "string",
+                 "description": "The city and state, e.g. San Francisco, CA"
+               },
+               "unit": {
+                 "type": "string",
+                 "enum": ["celsius", "fahrenheit"]
+               }
+             },
+             "required": ["location"]
+           }
+         }
+       ]
 
 tests:
   - vars:
       city: Boston
     assert:
       - type: is-json
+      - type: is-valid-openai-function-call
       - type: javascript
         value: output.name === 'get_current_weather'
       - type: javascript
@@ -37,7 +37,7 @@ tests:
 
   - vars:
       city: New York
-    # postprocess modifies the final output to be <LLM JSON output>.name
+    # postprocess returns only the 'name' property
     postprocess: output.name
     assert:
       - type: is-json
