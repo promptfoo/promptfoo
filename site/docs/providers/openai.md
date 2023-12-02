@@ -363,8 +363,8 @@ To set functions on an OpenAI provider, use the provider's `config` key. Add you
 prompts: [prompt.txt]
 providers:
   - id: openai:chat:gpt-3.5-turbo-0613
+    // highlight-start
     config:
-      validateFunctionCalls:
       functions:
         [
           {
@@ -386,15 +386,19 @@ providers:
               },
           },
         ]
+    // highlight-end
 tests:
   - vars:
       city: Boston
+    assert:
+      // highlight-next-line
+      - type: is-valid-openai-function-call
   - vars:
       city: New York
   # ...
 ```
 
-Setting `validateFunctionCalls` to `true` in the provider config will ensure that any `function_call` returned adheres to the JSON schema in `functions`. If it does not match, the provider will throw an error.
+Sometimes OpenAI function calls don't match the the `functions` schema. Use the [`is-valid-openai-function-call`](/docs/configuration/expected-outputs/#is-valid-openai-function-call) assertion to enforce an exact schema match between function calls and the function definition.
 
 ## Supported environment variables
 

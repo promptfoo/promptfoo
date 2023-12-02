@@ -42,24 +42,25 @@ tests:
 
 Deterministic eval metrics
 
-| Assertion Type                                                | Returns true if...                                             |
-| ------------------------------------------------------------- | -------------------------------------------------------------- |
-| [equals](#equality)                                           | output matches exactly                                         |
-| [contains](#contains)                                         | output contains substring                                      |
-| [icontains](#contains)                                        | output contains substring, case insensitive                    |
-| [regex](#regex)                                               | output matches regex                                           |
-| [starts-with](#starts-with)                                   | output starts with string                                      |
-| [contains-any](#contains-any)                                 | output contains any of the listed substrings                   |
-| [contains-all](#contains-all)                                 | output contains all list of substrings                         |
-| [icontains-any](#contains-any)                                | output contains any of the listed substrings, case insensitive |
-| [icontains-all](#contains-all)                                | output contains all list of substrings, case insensitive       |
-| [is-json](#is-json)                                           | output is valid json (optional json schema validation)         |
-| [contains-json](#contains-json)                               | output contains valid json (optional json schema validation)   |
-| [javascript](/docs/configuration/expected-outputs/javascript) | provided Javascript function validates the output              |
-| [python](/docs/configuration/expected-outputs/python)         | provided Python function validates the output                  |
-| [webhook](#webhook)                                           | provided webhook returns \{pass: true\}                          |
-| rouge-n                                                       | Rouge-N score is above a given threshold                       |
-| [levenshtein](#levenshtein-distance)                          | Levenshtein distance is below a threshold                      |
+| Assertion Type                                                  | Returns true if...                                               |
+| --------------------------------------------------------------- | ---------------------------------------------------------------- |
+| [equals](#equality)                                             | output matches exactly                                           |
+| [contains](#contains)                                           | output contains substring                                        |
+| [icontains](#contains)                                          | output contains substring, case insensitive                      |
+| [regex](#regex)                                                 | output matches regex                                             |
+| [starts-with](#starts-with)                                     | output starts with string                                        |
+| [contains-any](#contains-any)                                   | output contains any of the listed substrings                     |
+| [contains-all](#contains-all)                                   | output contains all list of substrings                           |
+| [icontains-any](#contains-any)                                  | output contains any of the listed substrings, case insensitive   |
+| [icontains-all](#contains-all)                                  | output contains all list of substrings, case insensitive         |
+| [is-json](#is-json)                                             | output is valid json (optional json schema validation)           |
+| [contains-json](#contains-json)                                 | output contains valid json (optional json schema validation)     |
+| [javascript](/docs/configuration/expected-outputs/javascript)   | provided Javascript function validates the output                |
+| [python](/docs/configuration/expected-outputs/python)           | provided Python function validates the output                    |
+| [webhook](#webhook)                                             | provided webhook returns \{pass: true\}                          |
+| rouge-n                                                         | Rouge-N score is above a given threshold                         |
+| [levenshtein](#levenshtein-distance)                            | Levenshtein distance is below a threshold                        |
+| [is-valid-openai-function-call](#is-valid-openai-function-call) | Ensure that the function call matches the function's JSON schema |
 
 Model-assisted eval metrics
 
@@ -313,6 +314,10 @@ assert:
     threshold: 5
     value: hello world
 ```
+
+### is-valid-openai-function-call
+
+This ensures that any JSON LLM output adheres to the schema specified in the `functions` configuration of the provider.  Learn more about the [OpenAI provider](/docs/providers/openai/#Using-functions).
 
 ### Model-graded evals
 
