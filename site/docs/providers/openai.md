@@ -400,6 +400,29 @@ tests:
 
 Sometimes OpenAI function calls don't match the the `functions` schema. Use the [`is-valid-openai-function-call`](/docs/configuration/expected-outputs/#is-valid-openai-function-call) assertion to enforce an exact schema match between function calls and the function definition.
 
+To further test function call definitions, you can use the `javascript` assertion and/or `postprocess` directives.  For example:
+
+```yaml
+tests:
+  - vars:
+      city: Boston
+    assert:
+      - type: is-valid-openai-function-call
+      - type: javascript
+        value: output.name === 'get_current_weather'
+      - type: javascript
+        value: JSON.parse(output.arguments).location === 'Boston, MA'
+
+  - vars:
+      city: New York
+    # postprocess returns only the 'name' property for this testcase
+    postprocess: output.name
+    assert:
+      - type: is-json
+      - type: similar
+        value: NYC
+```
+
 ## Supported environment variables
 
 These OpenAI-related environment variables are supported:
