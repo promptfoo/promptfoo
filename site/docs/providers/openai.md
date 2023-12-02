@@ -75,50 +75,56 @@ providers:
 
 Supported parameters include:
 
-| Parameter           | Description                                                                                                                                                     |
-| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `temperature`       | Controls the randomness of the AI's output. Higher values (close to 1) make the output more random, while lower values (close to 0) make it more deterministic. |
-| `max_tokens`        | Controls the maximum length of the output in tokens.                                                                                                            |
-| `top_p`             | Controls the nucleus sampling, a method that helps control the randomness of the AI's output.                                                                   |
-| `frequency_penalty` | Applies a penalty to frequent tokens, making them less likely to appear in the output.                                                                          |
-| `presence_penalty`  | Applies a penalty to new tokens (tokens that haven't appeared in the input), making them less likely to appear in the output.                                   |
-| `best_of`           | Controls the number of alternative outputs to generate and select from.                                                                                         |
-| `functions`         | Allows you to define custom functions. Each function should be an object with a `name`, optional `description`, and `parameters`.                               |
-| `function_call`     | Controls whether the AI should call functions. Can be either 'none', 'auto', or an object with a `name` that specifies the function to call.                    |
-| `stop`              | Defines a list of tokens that signal the end of the output.                                                                                                     |
-| `stop`              | Defines a list of tokens that signal the end of the output.                                                                                                     |
-| `response_format`   | Response format restrictions.                                                                                                                                   |
-| `seed`              | Seed used for deterministic output. Defaults to 0                                                                                                               |
-| `apiKey`            | Your OpenAI API key.                                                                                                                                            |
-| `apiHost`           | The hostname of the OpenAI API, please also read `OPENAI_API_HOST` below.                                                                                       |
-| `apiBaseUrl`        | The base URL of the OpenAI API, please also read `OPENAI_API_BASE_URL` below.                                                                                   |
-| `organization`      | Your OpenAI organization key.                                                                                                                                   |
+| Parameter               | Description                                                                                                                                                     |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `temperature`           | Controls the randomness of the AI's output. Higher values (close to 1) make the output more random, while lower values (close to 0) make it more deterministic. |
+| `max_tokens`            | Controls the maximum length of the output in tokens.                                                                                                            |
+| `top_p`                 | Controls the nucleus sampling, a method that helps control the randomness of the AI's output.                                                                   |
+| `frequency_penalty`     | Applies a penalty to frequent tokens, making them less likely to appear in the output.                                                                          |
+| `presence_penalty`      | Applies a penalty to new tokens (tokens that haven't appeared in the input), making them less likely to appear in the output.                                   |
+| `best_of`               | Controls the number of alternative outputs to generate and select from.                                                                                         |
+| `functions`             | Allows you to define custom functions. Each function should be an object with a `name`, optional `description`, and `parameters`.                               |
+| `function_call`         | Controls whether the AI should call functions. Can be either 'none', 'auto', or an object with a `name` that specifies the function to call.                    |
+| `stop`                  | Defines a list of tokens that signal the end of the output.                                                                                                     |
+| `stop`                  | Defines a list of tokens that signal the end of the output.                                                                                                     |
+| `response_format`       | Response format restrictions.                                                                                                                                   |
+| `seed`                  | Seed used for deterministic output. Defaults to 0                                                                                                               |
+| `apiKey`                | Your OpenAI API key.                                                                                                                                            |
+| `apiHost`               | The hostname of the OpenAI API, please also read `OPENAI_API_HOST` below.                                                                                       |
+| `apiBaseUrl`            | The base URL of the OpenAI API, please also read `OPENAI_API_BASE_URL` below.                                                                                   |
+| `organization`          | Your OpenAI organization key.                                                                                                                                   |
+| `validateFunctionCalls` | If true, automatically validates function calls against their `functions` JSON schema                                                                           |
 
 Here are the type declarations of `config` parameters:
 
 ```typescript
-// Completion parameters
-temperature?: number;
-max_tokens?: number;
-top_p?: number;
-frequency_penalty?: number;
-presence_penalty?: number;
-best_of?: number;
-functions?: {
-  name: string;
-  description?: string;
-  parameters: any;
-}[];
-function_call?: 'none' | 'auto' | { name: string; };
-stop?: string[];
-response_format?: { type: string; };
-seed?: number;
+interface OpenAiConfig {
+  // Completion parameters
+  temperature?: number;
+  max_tokens?: number;
+  top_p?: number;
+  frequency_penalty?: number;
+  presence_penalty?: number;
+  best_of?: number;
+  functions?: {
+    name: string;
+    description?: string;
+    parameters: any;
+  }[];
+  function_call?: 'none' | 'auto' | { name: string };
+  stop?: string[];
+  response_format?: { type: string };
+  seed?: number;
 
-// General OpenAI parameters
-apiKey?: string;
-apiHost?: string;
-apiBaseUrl?: string;
-organization?: string;
+  // General OpenAI parameters
+  apiKey?: string;
+  apiHost?: string;
+  apiBaseUrl?: string;
+  organization?: string;
+
+  // Helpers
+  validateFunctionCalls?: boolean;
+}
 ```
 
 ## Chat conversations
@@ -356,29 +362,30 @@ To set functions on an OpenAI provider, use the provider's `config` key. Add you
 ```yaml
 prompts: [prompt.txt]
 providers:
-  - openai:chat:gpt-3.5-turbo-0613:
-      config:
-        'functions':
-          [
-            {
-              'name': 'get_current_weather',
-              'description': 'Get the current weather in a given location',
-              'parameters':
-                {
-                  'type': 'object',
-                  'properties':
-                    {
-                      'location':
-                        {
-                          'type': 'string',
-                          'description': 'The city and state, e.g. San Francisco, CA',
-                        },
-                      'unit': { 'type': 'string', 'enum': ['celsius', 'fahrenheit'] },
-                    },
-                  'required': ['location'],
-                },
-            },
-          ]
+  - id: openai:chat:gpt-3.5-turbo-0613
+    config:
+      validateFunctionCalls:
+      functions:
+        [
+          {
+            'name': 'get_current_weather',
+            'description': 'Get the current weather in a given location',
+            'parameters':
+              {
+                'type': 'object',
+                'properties':
+                  {
+                    'location':
+                      {
+                        'type': 'string',
+                        'description': 'The city and state, e.g. San Francisco, CA',
+                      },
+                    'unit': { 'type': 'string', 'enum': ['celsius', 'fahrenheit'] },
+                  },
+                'required': ['location'],
+              },
+          },
+        ]
 tests:
   - vars:
       city: Boston
@@ -386,6 +393,8 @@ tests:
       city: New York
   # ...
 ```
+
+Setting `validateFunctionCalls` to `true` in the provider config will ensure that any `function_call` returned adheres to the JSON schema in `functions`. If it does not match, the provider will throw an error.
 
 ## Supported environment variables
 
