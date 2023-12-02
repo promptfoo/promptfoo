@@ -28,9 +28,24 @@ providers:
 tests:
   - vars:
       city: Boston
+    assert:
+      - type: is-json
+      - type: javascript
+        value: output.name === 'get_current_weather'
+      - type: javascript
+        value: JSON.parse(output.arguments).location === 'Boston, MA'
+
   - vars:
       city: New York
+    # postprocess modifies the final output to be <LLM JSON output>.name
+    postprocess: output.name
+    assert:
+      - type: is-json
+      - type: similar
+        value: NYC
+
   - vars:
       city: Paris
+
   - vars:
       city: Mars
