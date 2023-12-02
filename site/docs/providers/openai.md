@@ -75,25 +75,24 @@ providers:
 
 Supported parameters include:
 
-| Parameter               | Description                                                                                                                                                     |
-| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `temperature`           | Controls the randomness of the AI's output. Higher values (close to 1) make the output more random, while lower values (close to 0) make it more deterministic. |
-| `max_tokens`            | Controls the maximum length of the output in tokens.                                                                                                            |
-| `top_p`                 | Controls the nucleus sampling, a method that helps control the randomness of the AI's output.                                                                   |
-| `frequency_penalty`     | Applies a penalty to frequent tokens, making them less likely to appear in the output.                                                                          |
-| `presence_penalty`      | Applies a penalty to new tokens (tokens that haven't appeared in the input), making them less likely to appear in the output.                                   |
-| `best_of`               | Controls the number of alternative outputs to generate and select from.                                                                                         |
-| `functions`             | Allows you to define custom functions. Each function should be an object with a `name`, optional `description`, and `parameters`.                               |
-| `function_call`         | Controls whether the AI should call functions. Can be either 'none', 'auto', or an object with a `name` that specifies the function to call.                    |
-| `stop`                  | Defines a list of tokens that signal the end of the output.                                                                                                     |
-| `stop`                  | Defines a list of tokens that signal the end of the output.                                                                                                     |
-| `response_format`       | Response format restrictions.                                                                                                                                   |
-| `seed`                  | Seed used for deterministic output. Defaults to 0                                                                                                               |
-| `apiKey`                | Your OpenAI API key.                                                                                                                                            |
-| `apiHost`               | The hostname of the OpenAI API, please also read `OPENAI_API_HOST` below.                                                                                       |
-| `apiBaseUrl`            | The base URL of the OpenAI API, please also read `OPENAI_API_BASE_URL` below.                                                                                   |
-| `organization`          | Your OpenAI organization key.                                                                                                                                   |
-| `validateFunctionCalls` | If true, automatically validates function calls against their `functions` JSON schema                                                                           |
+| Parameter           | Description                                                                                                                                                     |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `temperature`       | Controls the randomness of the AI's output. Higher values (close to 1) make the output more random, while lower values (close to 0) make it more deterministic. |
+| `max_tokens`        | Controls the maximum length of the output in tokens.                                                                                                            |
+| `top_p`             | Controls the nucleus sampling, a method that helps control the randomness of the AI's output.                                                                   |
+| `frequency_penalty` | Applies a penalty to frequent tokens, making them less likely to appear in the output.                                                                          |
+| `presence_penalty`  | Applies a penalty to new tokens (tokens that haven't appeared in the input), making them less likely to appear in the output.                                   |
+| `best_of`           | Controls the number of alternative outputs to generate and select from.                                                                                         |
+| `functions`         | Allows you to define custom functions. Each function should be an object with a `name`, optional `description`, and `parameters`.                               |
+| `function_call`     | Controls whether the AI should call functions. Can be either 'none', 'auto', or an object with a `name` that specifies the function to call.                    |
+| `stop`              | Defines a list of tokens that signal the end of the output.                                                                                                     |
+| `stop`              | Defines a list of tokens that signal the end of the output.                                                                                                     |
+| `response_format`   | Response format restrictions.                                                                                                                                   |
+| `seed`              | Seed used for deterministic output. Defaults to 0                                                                                                               |
+| `apiKey`            | Your OpenAI API key.                                                                                                                                            |
+| `apiHost`           | The hostname of the OpenAI API, please also read `OPENAI_API_HOST` below.                                                                                       |
+| `apiBaseUrl`        | The base URL of the OpenAI API, please also read `OPENAI_API_BASE_URL` below.                                                                                   |
+| `organization`      | Your OpenAI organization key.                                                                                                                                   |
 
 Here are the type declarations of `config` parameters:
 
@@ -121,9 +120,6 @@ interface OpenAiConfig {
   apiHost?: string;
   apiBaseUrl?: string;
   organization?: string;
-
-  // Helpers
-  validateFunctionCalls?: boolean;
 }
 ```
 
@@ -400,7 +396,7 @@ tests:
 
 Sometimes OpenAI function calls don't match the the `functions` schema. Use the [`is-valid-openai-function-call`](/docs/configuration/expected-outputs/#is-valid-openai-function-call) assertion to enforce an exact schema match between function calls and the function definition.
 
-To further test function call definitions, you can use the `javascript` assertion and/or `postprocess` directives.  For example:
+To further test function call definitions, you can use the `javascript` assertion and/or `postprocess` directives. For example:
 
 ```yaml
 tests:

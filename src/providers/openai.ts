@@ -17,8 +17,6 @@ interface OpenAiSharedOptions {
   apiHost?: string;
   apiBaseUrl?: string;
   organization?: string;
-
-  validateFunctionCalls?: boolean;
 }
 
 type OpenAiCompletionOptions = OpenAiSharedOptions & {
