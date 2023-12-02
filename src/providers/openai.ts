@@ -3,6 +3,7 @@ import OpenAI from 'openai';
 import logger from '../logger';
 import { fetchWithCache } from '../cache';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
+import { OpenAiFunction } from './openaiUtil';
 
 import type {
   ApiProvider,
@@ -25,11 +26,7 @@ type OpenAiCompletionOptions = OpenAiSharedOptions & {
   frequency_penalty?: number;
   presence_penalty?: number;
   best_of?: number;
-  functions?: {
-    name: string;
-    description?: string;
-    parameters: any;
-  }[];
+  functions?: OpenAiFunction[];
   function_call?: 'none' | 'auto' | { name: string };
   response_format?: { type: 'json_object' };
   stop?: string[];
@@ -47,7 +44,7 @@ function failApiCall(err: any) {
   };
 }
 
-class OpenAiGenericProvider implements ApiProvider {
+export class OpenAiGenericProvider implements ApiProvider {
   modelName: string;
 
   config: OpenAiSharedOptions;
@@ -344,6 +341,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     try {
       const message = data.choices[0].message;
       const output = message.content === null ? message.function_call : message.content;
+
       return {
         output,
         tokenUsage: cached

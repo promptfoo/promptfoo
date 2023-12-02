@@ -265,7 +265,8 @@ type BaseAssertionTypes =
   | 'rouge-n'
   | 'rouge-s'
   | 'rouge-l'
-  | 'levenshtein';
+  | 'levenshtein'
+  | 'is-valid-openai-function-call';
 
 type NotPrefixed<T extends string> = `not-${T}`;
 

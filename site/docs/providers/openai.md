@@ -97,28 +97,30 @@ Supported parameters include:
 Here are the type declarations of `config` parameters:
 
 ```typescript
-// Completion parameters
-temperature?: number;
-max_tokens?: number;
-top_p?: number;
-frequency_penalty?: number;
-presence_penalty?: number;
-best_of?: number;
-functions?: {
-  name: string;
-  description?: string;
-  parameters: any;
-}[];
-function_call?: 'none' | 'auto' | { name: string; };
-stop?: string[];
-response_format?: { type: string; };
-seed?: number;
+interface OpenAiConfig {
+  // Completion parameters
+  temperature?: number;
+  max_tokens?: number;
+  top_p?: number;
+  frequency_penalty?: number;
+  presence_penalty?: number;
+  best_of?: number;
+  functions?: {
+    name: string;
+    description?: string;
+    parameters: any;
+  }[];
+  function_call?: 'none' | 'auto' | { name: string };
+  stop?: string[];
+  response_format?: { type: string };
+  seed?: number;
 
-// General OpenAI parameters
-apiKey?: string;
-apiHost?: string;
-apiBaseUrl?: string;
-organization?: string;
+  // General OpenAI parameters
+  apiKey?: string;
+  apiHost?: string;
+  apiBaseUrl?: string;
+  organization?: string;
+}
 ```
 
 ## Chat conversations
@@ -356,35 +358,65 @@ To set functions on an OpenAI provider, use the provider's `config` key. Add you
 ```yaml
 prompts: [prompt.txt]
 providers:
-  - openai:chat:gpt-3.5-turbo-0613:
-      config:
-        'functions':
-          [
-            {
-              'name': 'get_current_weather',
-              'description': 'Get the current weather in a given location',
-              'parameters':
-                {
-                  'type': 'object',
-                  'properties':
-                    {
-                      'location':
-                        {
-                          'type': 'string',
-                          'description': 'The city and state, e.g. San Francisco, CA',
-                        },
-                      'unit': { 'type': 'string', 'enum': ['celsius', 'fahrenheit'] },
-                    },
-                  'required': ['location'],
-                },
-            },
-          ]
+  - id: openai:chat:gpt-3.5-turbo-0613
+    // highlight-start
+    config:
+      functions:
+        [
+          {
+            'name': 'get_current_weather',
+            'description': 'Get the current weather in a given location',
+            'parameters':
+              {
+                'type': 'object',
+                'properties':
+                  {
+                    'location':
+                      {
+                        'type': 'string',
+                        'description': 'The city and state, e.g. San Francisco, CA',
+                      },
+                    'unit': { 'type': 'string', 'enum': ['celsius', 'fahrenheit'] },
+                  },
+                'required': ['location'],
+              },
+          },
+        ]
+    // highlight-end
 tests:
   - vars:
       city: Boston
+    assert:
+      // highlight-next-line
+      - type: is-valid-openai-function-call
   - vars:
       city: New York
   # ...
+```
+
+Sometimes OpenAI function calls don't match the the `functions` schema. Use the [`is-valid-openai-function-call`](/docs/configuration/expected-outputs/#is-valid-openai-function-call) assertion to enforce an exact schema match between function calls and the function definition.
+
+To further test function call definitions, you can use the `javascript` assertion and/or `postprocess` directives. For example:
+
+```yaml
+tests:
+  - vars:
+      city: Boston
+    assert:
+      - type: is-valid-openai-function-call
+      - type: javascript
+        value: output.name === 'get_current_weather'
+      - type: javascript
+        value: JSON.parse(output.arguments).location === 'Boston, MA'
+
+  - vars:
+      city: New York
+    # postprocess returns only the 'name' property for this testcase
+    postprocess: output.name
+    assert:
+      - type: is-json
+      - type: similar
+        value: NYC
 ```
 
 ## Supported environment variables
