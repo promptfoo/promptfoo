@@ -53,40 +53,80 @@ function scoreToString(score: number | null) {
   return `(${score.toFixed(2)})`;
 }
 
+function textLength(node: React.ReactNode): number {
+  if (typeof node === 'string' || typeof node === 'number') {
+    return node.toString().length;
+  }
+  if (Array.isArray(node)) {
+    return node.reduce((acc, child) => acc + textLength(child), 0);
+  }
+  if (React.isValidElement(node) && node.props.children) {
+    return React.Children.toArray(node.props.children).reduce(
+      (acc: number, child) => acc + textLength(child),
+      0,
+    );
+  }
+  return 0;
+}
+
 interface TruncatedTextProps {
-  text: string | number;
+  text: string | number | React.ReactNode;
   maxLength: number;
 }
 
 function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
   const [isTruncated, setIsTruncated] = React.useState<boolean>(true);
-  const text = typeof rawText === 'string' ? rawText : JSON.stringify(rawText);
-
   const toggleTruncate = () => {
     setIsTruncated(!isTruncated);
   };
 
-  const renderTruncatedText = () => {
-    if (text.length <= maxLength) {
-      return <div>{text}</div>;
+  const truncateText = (node: React.ReactNode, length: number = 0): React.ReactNode => {
+    if (typeof node === 'string' || typeof node === 'number') {
+      const nodeAsString = node.toString();
+      return nodeAsString.slice(0, maxLength - length);
     }
-    if (isTruncated) {
-      return (
-        <div style={{ cursor: 'pointer' }} onClick={toggleTruncate}>
-          {text.substring(0, maxLength)}
-          <span> ...</span>
-        </div>
-      );
-    } else {
-      return (
-        <div style={{ cursor: 'pointer' }} onClick={toggleTruncate}>
-          {text}
-        </div>
-      );
+    if (Array.isArray(node)) {
+      const nodes: React.ReactNode[] = [];
+      let currentLength = length;
+      for (const child of node) {
+        const childLength = textLength(child);
+        if (currentLength + childLength > maxLength) {
+          nodes.push(truncateText(child, currentLength));
+          break;
+        } else {
+          nodes.push(child);
+          currentLength += childLength;
+        }
+      }
+      return nodes;
     }
+    if (React.isValidElement(node) && node.props.children) {
+      const childLength = textLength(node.props.children);
+      if (childLength > maxLength - length) {
+        return React.cloneElement(node, {
+          ...node.props,
+          children: truncateText(node.props.children, length),
+        });
+      }
+    }
+    return node;
   };
 
-  return renderTruncatedText();
+  let text;
+  if (React.isValidElement(rawText) || typeof rawText === 'string') {
+    text = rawText;
+  } else {
+    text = JSON.stringify(rawText);
+  }
+  const truncatedText = isTruncated ? truncateText(text) : text;
+
+  const isOverLength = textLength(text) > maxLength;
+  return (
+    <div style={{ cursor: isOverLength ? 'pointer' : 'normal' }} onClick={toggleTruncate}>
+      {truncatedText}
+      {isTruncated && textLength(text) > maxLength && <span>...</span>}
+    </div>
+  );
 }
 
 interface PromptOutputProps {
@@ -114,6 +154,7 @@ function EvalOutputCell({
     setOpen(false);
   };
   let text = typeof output.text === 'string' ? output.text : JSON.stringify(output.text);
+  let node: React.ReactNode | undefined;
   let chunks: string[] = [];
   if (!output.pass && text.includes('---')) {
     // TODO(ian): Plumb through failure message instead of parsing it out.
@@ -148,15 +189,20 @@ function EvalOutputCell({
         diffResult = diffWords(firstOutputText, text);
       }
     }
-    text = diffResult
-      .map((part: { added?: boolean; removed?: boolean; value: string }) =>
-        part.added
-          ? `<ins>${part.value}</ins>`
-          : part.removed
-          ? `<del>${part.value}</del>`
-          : part.value,
-      )
-      .join('');
+    node = (
+      <>
+        {diffResult.map(
+          (part: { added?: boolean; removed?: boolean; value: string }, index: number) =>
+            part.added ? (
+              <ins key={index}>{part.value}</ins>
+            ) : part.removed ? (
+              <del key={index}>{part.value}</del>
+            ) : (
+              <span key={index}>{part.value}</span>
+            ),
+        )}
+      </>
+    );
   }
 
   const handleClick = (isPass: boolean) => {
@@ -202,7 +248,7 @@ function EvalOutputCell({
             {output.namedScores ? <CustomMetrics lookup={output.namedScores} /> : null}
           </div>
         )}{' '}
-        <TruncatedText text={text} maxLength={maxTextLength} />
+        <TruncatedText text={node || text} maxLength={maxTextLength} />
       </div>
       <div className="cell-detail">
         {output.tokenUsage?.cached ? (
