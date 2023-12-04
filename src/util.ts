@@ -140,7 +140,11 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
   const prompts: UnifiedConfig['prompts'] = [];
   const seenPrompts = new Set<string>();
   configs.forEach((config) => {
-    prompts.push(...config.prompts);
+    if (typeof config.prompts === 'string') {
+      prompts.push(config.prompts);
+    } else {
+      prompts.push(...config.prompts);
+    }
   });
 
   // Combine all configs into a single UnifiedConfig
