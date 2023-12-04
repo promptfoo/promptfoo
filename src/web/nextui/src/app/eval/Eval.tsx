@@ -8,7 +8,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 
 import ResultsView from './ResultsView';
-import { API_BASE_URL, IS_RUNNING_LOCALLY } from '@/constants';
+import { getApiBaseUrl } from '@/api';
+import { IS_RUNNING_LOCALLY } from '@/constants';
 import { useStore } from './store';
 
 import type { EvaluateSummary, UnifiedConfig, SharedResults } from '@/../../../types';
@@ -63,14 +64,14 @@ export default function Eval({
 
   const fetchRecentFileEvals = async () => {
     invariant(IS_RUNNING_LOCALLY, 'Cannot fetch recent files when not running locally');
-    const resp = await fetch(`${API_BASE_URL}/results`, { cache: 'no-store' });
+    const resp = await fetch(`${await getApiBaseUrl()}/results`, { cache: 'no-store' });
     const body = await resp.json();
     setRecentEvals(body.data);
     return body.data;
   };
 
   const fetchEvalById = async (id: string) => {
-    const resp = await fetch(`${API_BASE_URL}/results/${id}`, { cache: 'no-store' });
+    const resp = await fetch(`${await getApiBaseUrl()}/results/${id}`, { cache: 'no-store' });
     const body = await resp.json();
     setTable(body.data.results.table);
     setConfig(body.data.config);
@@ -119,30 +120,32 @@ export default function Eval({
       };
       doIt();
     } else if (IS_RUNNING_LOCALLY) {
-      const socket = SocketIOClient(API_BASE_URL);
+      getApiBaseUrl().then((apiBaseUrl) => {
+        const socket = SocketIOClient(apiBaseUrl);
 
-      socket.on('init', (data) => {
-        console.log('Initialized socket connection', data);
-        setLoaded(true);
-        setTable(data.results.table);
-        setConfig(data.config);
-        fetchRecentFileEvals().then((newRecentEvals) => {
-          setDefaultEvalId(newRecentEvals[0]?.id);
+        socket.on('init', (data) => {
+          console.log('Initialized socket connection', data);
+          setLoaded(true);
+          setTable(data.results.table);
+          setConfig(data.config);
+          fetchRecentFileEvals().then((newRecentEvals) => {
+            setDefaultEvalId(newRecentEvals[0]?.id);
+          });
         });
-      });
 
-      socket.on('update', (data) => {
-        console.log('Received data update', data);
-        setTable(data.results.table);
-        setConfig(data.config);
-        fetchRecentFileEvals().then((newRecentEvals) => {
-          setDefaultEvalId(newRecentEvals[0]?.id);
+        socket.on('update', (data) => {
+          console.log('Received data update', data);
+          setTable(data.results.table);
+          setConfig(data.config);
+          fetchRecentFileEvals().then((newRecentEvals) => {
+            setDefaultEvalId(newRecentEvals[0]?.id);
+          });
         });
-      });
 
-      return () => {
-        socket.disconnect();
-      };
+        return () => {
+          socket.disconnect();
+        };
+      });
     } else {
       // TODO(ian): Move this to server
       fetchEvalsFromSupabase().then((records) => {

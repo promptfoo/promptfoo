@@ -38,7 +38,7 @@ const evalJobs = new Map<string, Job>();
 // Prompts cache
 let allPrompts: PromptWithMetadata[] | null = null;
 
-export function startServer(port = 15500, skipConfirmation = false) {
+export function startServer(port = 15500, apiBaseUrl = '', skipConfirmation = false) {
   const app = express();
 
   const staticDir = path.join(getDirectory(), 'web', 'nextui');
@@ -164,6 +164,12 @@ export function startServer(port = 15500, skipConfirmation = false) {
 
   app.get('/api/datasets', (req, res) => {
     res.json({ data: getTestCases() });
+  });
+
+  app.get('/api/config', (req, res) => {
+    res.json({
+      apiBaseUrl: apiBaseUrl || '',
+    });
   });
 
   httpServer.listen(port, () => {

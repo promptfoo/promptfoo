@@ -14,7 +14,7 @@ import Tooltip from '@mui/material/Tooltip';
 import { useSearchParams } from 'next/navigation';
 
 import DatasetDialog from './DatasetDialog';
-import { API_BASE_URL } from '@/constants';
+import { getApiBaseUrl } from '@/api';
 
 import type { TestCase, TestCasesWithMetadata } from '@/../../../types';
 
@@ -38,18 +38,19 @@ export default function Datasets() {
   };
 
   useEffect(() => {
-    //fetch(`${API_BASE_URL}/api/datasets?page=${page}&limit=${rowsPerPage}`)
-    fetch(`${API_BASE_URL}/api/datasets`)
-      .then((response) => response.json())
-      .then((data) => {
-        const sortedData = [...data.data].sort((a, b) => {
-          if (sortField === null) return 0;
-          if (sortOrder === 'asc') return a[sortField] > b[sortField] ? 1 : -1;
-          return a[sortField] < b[sortField] ? 1 : -1;
+    (async () => {
+      fetch(`${await getApiBaseUrl()}/api/datasets`)
+        .then((response) => response.json())
+        .then((data) => {
+          const sortedData = [...data.data].sort((a, b) => {
+            if (sortField === null) return 0;
+            if (sortOrder === 'asc') return a[sortField] > b[sortField] ? 1 : -1;
+            return a[sortField] < b[sortField] ? 1 : -1;
+          });
+          setTestCases(sortedData);
         });
-        setTestCases(sortedData);
-      });
-  }, [sortField, sortOrder]);
+    })();
+  }, [sortField, sortOrder, page, rowsPerPage]);
 
   useEffect(() => {
     const testCaseId = searchParams?.get('id');

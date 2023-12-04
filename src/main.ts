@@ -131,8 +131,12 @@ async function main() {
     .description('Start browser ui')
     .option('-p, --port <number>', 'Port number', '15500')
     .option('-y, --yes', 'Skip confirmation and auto-open the URL')
+    .option('--api-base-url <url>', 'Base URL for viewer API calls')
     .action(
-      async (directory: string | undefined, cmdObj: { port: number; yes: boolean } & Command) => {
+      async (
+        directory: string | undefined,
+        cmdObj: { port: number; yes: boolean; apiBaseUrl?: string } & Command,
+      ) => {
         telemetry.maybeShowNotice();
         telemetry.record('command_used', {
           name: 'view',
@@ -142,7 +146,7 @@ async function main() {
         if (directory) {
           setConfigDirectoryPath(directory);
         }
-        startServer(cmdObj.port, cmdObj.yes);
+        startServer(cmdObj.port, cmdObj.apiBaseUrl, cmdObj.yes);
       },
     );
 
