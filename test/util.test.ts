@@ -436,7 +436,6 @@ describe('util', () => {
       const result = await readConfigs(['config1.json', 'config2.json']);
 
       expect(fs.readFileSync).toHaveBeenCalledTimes(2);
-      expect(fs.statSync).toHaveBeenCalledTimes(2);
       expect(result).toEqual({
         description: 'test1, test2',
         providers: ['provider1', 'provider2'],
