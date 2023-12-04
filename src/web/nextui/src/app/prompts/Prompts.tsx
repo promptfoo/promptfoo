@@ -13,7 +13,7 @@ import TableSortLabel from '@mui/material/TableSortLabel';
 import Tooltip from '@mui/material/Tooltip';
 import { useSearchParams } from 'next/navigation';
 
-import { API_BASE_URL } from '@/constants';
+import { getApiBaseUrl } from '@/api';
 import PromptDialog from './PromptDialog';
 
 import type { PromptWithMetadata } from '@/../../../types';
@@ -38,16 +38,18 @@ export default function Prompts() {
   };
 
   useEffect(() => {
-    fetch(`${API_BASE_URL}/api/prompts`)
-      .then((response) => response.json())
-      .then((data) => {
-        const sortedData = [...data.data].sort((a, b) => {
-          if (sortField === null) return 0;
-          if (sortOrder === 'asc') return a[sortField] > b[sortField] ? 1 : -1;
-          return a[sortField] < b[sortField] ? 1 : -1;
+    (async () => {
+      fetch(`${await getApiBaseUrl()}/api/prompts`)
+        .then((response) => response.json())
+        .then((data) => {
+          const sortedData = [...data.data].sort((a, b) => {
+            if (sortField === null) return 0;
+            if (sortOrder === 'asc') return a[sortField] > b[sortField] ? 1 : -1;
+            return a[sortField] < b[sortField] ? 1 : -1;
+          });
+          setPrompts(sortedData);
         });
-        setPrompts(sortedData);
-      });
+    })();
   }, [sortField, sortOrder]);
 
   useEffect(() => {

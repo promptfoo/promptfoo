@@ -4,7 +4,8 @@ import { notFound } from 'next/navigation';
 import { cookies } from 'next/headers';
 import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
 
-import { API_BASE_URL, IS_RUNNING_LOCALLY } from '@/constants';
+import { getApiBaseUrl } from '@/api';
+import { IS_RUNNING_LOCALLY } from '@/constants';
 import { getResult } from '@/database';
 import { EvaluateSummary, EvaluateTestSuite, SharedResults } from '@/../../../types';
 import Eval from '../Eval';
@@ -31,9 +32,10 @@ export default async function Page({ params }: { params: { id: string } }) {
   const decodedId = decodeURIComponent(params.id);
   if (decodedId.startsWith('local:')) {
     // Load local file and list of recent files in parallel
+    const apiBaseUrl = await getApiBaseUrl();
     const [response, response2] = await Promise.all([
-      fetch(`${API_BASE_URL}/results/${decodedId.slice(6)}`),
-      fetch(`${API_BASE_URL}/results`),
+      fetch(`${apiBaseUrl}/results/${decodedId.slice(6)}`),
+      fetch(`${apiBaseUrl}/results`),
     ]);
 
     if (!response.ok) {
