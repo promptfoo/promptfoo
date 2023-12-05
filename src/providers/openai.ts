@@ -451,7 +451,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
       logger.debug(`\tOpenAI thread run API response: ${JSON.stringify(run)}`);
     }
 
-    if (run.status !== 'completed') {
+    if (run.status !== 'completed' && run.status !== 'requires_action') {
       if (run.last_error) {
         return {
           error: `Thread run failed: ${run.last_error.message}`,
