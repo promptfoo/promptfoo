@@ -46,7 +46,6 @@ export function startServer(port = 15500, apiBaseUrl = '', skipConfirmation = fa
   app.use(cors());
   app.use(compression());
   app.use(express.json());
-  app.use(express.static(staticDir));
 
   const httpServer = http.createServer(app);
   const io = new SocketIOServer(httpServer, {
@@ -171,6 +170,10 @@ export function startServer(port = 15500, apiBaseUrl = '', skipConfirmation = fa
       apiBaseUrl: apiBaseUrl || '',
     });
   });
+
+  // Must come after the above routes (particularly /api/config) so it doesn't
+  // overwrite dynamic routes.
+  app.use(express.static(staticDir));
 
   httpServer.listen(port, () => {
     const url = `http://localhost:${port}`;
