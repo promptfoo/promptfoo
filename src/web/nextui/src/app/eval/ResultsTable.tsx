@@ -303,7 +303,8 @@ function TableHeader({
   maxLength,
   expandedText,
   resourceId,
-}: TruncatedTextProps & { expandedText?: string; resourceId?: string }) {
+  className,
+}: TruncatedTextProps & { expandedText?: string; resourceId?: string; className?: string }) {
   const [promptOpen, setPromptOpen] = React.useState(false);
   const handlePromptOpen = () => {
     setPromptOpen(true);
@@ -312,7 +313,7 @@ function TableHeader({
     setPromptOpen(false);
   };
   return (
-    <div>
+    <div className={`${className || ''}`}>
       <TruncatedText text={text} maxLength={maxLength} />
       {expandedText && (
         <>
@@ -454,6 +455,7 @@ export default function ResultsTable({
             return (
               <>
                 <TableHeader
+                  className="prompt-container"
                   text={typeof prompt === 'string' ? prompt : prompt.display}
                   expandedText={typeof prompt === 'string' ? undefined : prompt.raw}
                   maxLength={maxTextLength}
@@ -507,6 +509,11 @@ export default function ResultsTable({
                     </span>
                   ) : null}
                 </div>
+                {prompt.metrics?.namedScores && Object.keys(prompt.metrics.namedScores).length > 0 ? (
+                  <div>
+                    <CustomMetrics lookup={prompt.metrics.namedScores} />
+                  </div>
+                ) : null}
               </>
             );
           },

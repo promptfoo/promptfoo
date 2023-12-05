@@ -83,7 +83,6 @@ table.results-table,
   white-space: pre-wrap;
 }
 
-.results-table th div > *,
 .results-table tr .variable > *,
 .compact.results-table tr .cell > * {
   /* Header and vars always inline, cells are inline in compact mode. */
@@ -119,6 +118,10 @@ table.results-table,
   cursor: pointer;
 }
 
+.results-table th .prompt-container > * {
+  display: inline;
+}
+
 .results-table th .summary {
   font-weight: normal;
   font-size: 0.8rem;
@@ -127,10 +130,6 @@ table.results-table,
 
 .results-table th .summary .highlight {
   background-color: var(--success-background-color);
-}
-
-.results-table td,
-.td {
 }
 
 .results-table td .status {
