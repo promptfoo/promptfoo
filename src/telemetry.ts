@@ -35,7 +35,7 @@ export class Telemetry {
   }
 
   maybeShowNotice(): void {
-    if (maybeRecordFirstRun()) {
+    if (maybeRecordFirstRun() && !this.disabled) {
       logger.info(
         chalk.gray(
           'Anonymous telemetry is enabled. For more info, see https://www.promptfoo.dev/docs/configuration/telemetry',
