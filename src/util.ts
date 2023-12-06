@@ -170,6 +170,7 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
       (prev, curr) => ({ ...prev, ...curr.commandLineOptions }),
       {},
     ),
+    sharing: !configs.some(config => config.sharing === false),
   };
 
   return combinedConfig;

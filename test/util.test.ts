@@ -403,6 +403,7 @@ describe('util', () => {
         env: { envVar1: 'envValue1' },
         evaluateOptions: { maxConcurrency: 1 },
         commandLineOptions: { verbose: true },
+        sharing: false,
       };
       const config2 = {
         description: 'test2',
@@ -419,10 +420,13 @@ describe('util', () => {
         env: { envVar2: 'envValue2' },
         evaluateOptions: { maxConcurrency: 2 },
         commandLineOptions: { verbose: false },
+        sharing: true,
       };
 
       (globSync as jest.Mock).mockImplementation((pathOrGlob) => [pathOrGlob]);
       (fs.readFileSync as jest.Mock)
+        .mockReturnValueOnce(JSON.stringify(config1))
+        .mockReturnValueOnce(JSON.stringify(config2))
         .mockReturnValueOnce(JSON.stringify(config1))
         .mockReturnValueOnce(JSON.stringify(config2))
         .mockReturnValue('you should not see this');
@@ -433,9 +437,53 @@ describe('util', () => {
         throw new Error('File does not exist');
       });
 
+      const config1Result = await readConfigs(['config1.json']);
+      expect(config1Result).toEqual({
+        description: 'test1',
+        providers: ['provider1'],
+        prompts: ['prompt1'],
+        tests: ['test1'],
+        scenarios: ['scenario1'],
+        defaultTest: {
+          description: 'defaultTest1',
+          options: {},
+          vars: { var1: 'value1' },
+          assert: [
+            { type: 'equals', value: 'expected1' },
+          ],
+        },
+        nunjucksFilters: { filter1: 'filter1' },
+        env: { envVar1: 'envValue1' },
+        evaluateOptions: { maxConcurrency: 1 },
+        commandLineOptions: { verbose: true },
+        sharing: false,
+      });
+
+      const config2Result = await readConfigs(['config2.json']);
+      expect(config2Result).toEqual({
+        description: 'test2',
+        providers: ['provider2'],
+        prompts: ['prompt2'],
+        tests: ['test2'],
+        scenarios: ['scenario2'],
+        defaultTest: {
+          description: 'defaultTest2',
+          options: {},
+          vars: { var2: 'value2' },
+          assert: [
+            { type: 'equals', value: 'expected2' },
+          ],
+        },
+        nunjucksFilters: { filter2: 'filter2' },
+        env: { envVar2: 'envValue2' },
+        evaluateOptions: { maxConcurrency: 2 },
+        commandLineOptions: { verbose: false },
+        sharing: true,
+      });
+
       const result = await readConfigs(['config1.json', 'config2.json']);
 
-      expect(fs.readFileSync).toHaveBeenCalledTimes(2);
+      expect(fs.readFileSync).toHaveBeenCalledTimes(4);
       expect(result).toEqual({
         description: 'test1, test2',
         providers: ['provider1', 'provider2'],
@@ -455,6 +503,7 @@ describe('util', () => {
         env: { envVar1: 'envValue1', envVar2: 'envValue2' },
         evaluateOptions: { maxConcurrency: 2 },
         commandLineOptions: { verbose: false },
+        sharing: false,
       });
     });
 
