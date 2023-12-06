@@ -403,7 +403,7 @@ describe('util', () => {
         env: { envVar1: 'envValue1' },
         evaluateOptions: { maxConcurrency: 1 },
         commandLineOptions: { verbose: true },
-        sharing: true,
+        sharing: false,
       };
       const config2 = {
         description: 'test2',
@@ -420,7 +420,7 @@ describe('util', () => {
         env: { envVar2: 'envValue2' },
         evaluateOptions: { maxConcurrency: 2 },
         commandLineOptions: { verbose: false },
-        sharing: false,
+        sharing: true,
       };
 
       (globSync as jest.Mock).mockImplementation((pathOrGlob) => [pathOrGlob]);
@@ -456,7 +456,7 @@ describe('util', () => {
         env: { envVar1: 'envValue1' },
         evaluateOptions: { maxConcurrency: 1 },
         commandLineOptions: { verbose: true },
-        sharing: true,
+        sharing: false,
       });
 
       const config2Result = await readConfigs(['config2.json']);
@@ -478,7 +478,7 @@ describe('util', () => {
         env: { envVar2: 'envValue2' },
         evaluateOptions: { maxConcurrency: 2 },
         commandLineOptions: { verbose: false },
-        sharing: false,
+        sharing: true,
       });
 
       const result = await readConfigs(['config1.json', 'config2.json']);
