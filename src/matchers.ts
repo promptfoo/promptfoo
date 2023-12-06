@@ -112,16 +112,15 @@ async function getAndCheckProvider(
 
   invariant(finalProvider, `No provider found for ${checkName}`);
   if (typeof (finalProvider as any)[requiredMethod] !== 'function') {
-    logger.warn(
-      `Provider ${finalProvider.id} does not implement ${requiredMethod} for ${checkName}, falling back to default`,
+    throw new Error(
+      `Provider ${finalProvider.id()} does not implement ${requiredMethod} for ${checkName}, falling back to default`,
     );
-    finalProvider = defaultProvider;
   }
 
   invariant(finalProvider, `No provider found for ${checkName}`);
   invariant(
     typeof (finalProvider as any)[requiredMethod] === 'function',
-    `Provider ${finalProvider.id} must implement ${requiredMethod} for ${checkName}`,
+    `Provider ${finalProvider.id()} must implement ${requiredMethod} for ${checkName}`,
   );
 
   return finalProvider;
