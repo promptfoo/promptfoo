@@ -86,6 +86,10 @@ tests:
         value: Do not mention that you are an AI or chat assistant
 ```
 
+### Similarity
+
+The `similar` assertion type requires an embedding model such as `text-embedding-ada-002`.  Be sure to specify a deployment with an embedding model, not a chat model, when overriding the grader.
+
 ## AI Services
 
 You may also specify `deployment_id` and `dataSources`, used to integrate with the [Azure AI Search API](https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/use-your-data#conversation-history-for-better-results).
