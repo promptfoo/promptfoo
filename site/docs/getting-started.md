@@ -54,22 +54,23 @@ This will create a `promptfooconfig.yaml` file in your current directory.
 
    [&raquo; More information on setting up tests](/docs/configuration/guide)
 
-1. Edit the `providers` field to specify the models (["providers"](/docs/providers)) you wish to test:
+1. Edit the `providers` field to specify the [providers](/docs/providers) and model you want to test.
 
-   ```yaml
-   providers:
-     - openai:gpt-3.5-turbo
-     - openai:gpt-4
-   ```
+     - **OpenAI**: if testing GPT with OpenAI's chat endpoint, you'll need to set the `OPENAI_API_KEY` environment variable (see [OpenAI provider docs](/docs/providers/openai) for more info):
 
-   Your preferred model may have configuration requirements.
-   For example, if testing GPT with OpenAI's chat endpoint,
-   you'll need to set the `OPENAI_API_KEY` environment variable
-   (see [OpenAI provider docs](/docs/providers/openai) for more info):
+        ```bash
+        export OPENAI_API_KEY=sk-abc123
+        ```
 
-   ```bash
-   export OPENAI_API_KEY=sk-abc123
-   ```
+        Then set providers in the config:
+
+        ```yaml
+        providers:
+          - openai:gpt-3.5-turbo
+          - openai:gpt-4
+        ```
+
+    - We support many providers besides OpenAI. See setup instructions for [Azure](/docs/providers/azure), [Replicate](/docs/providers/replicate), [HuggingFace](/docs/providers/huggingface), [AWS Bedrock](/docs/providers/aws-bedrock), and [others](/docs/providers).
 
 1. **Run the evaluation**: This tests every prompt for each test case:
 
