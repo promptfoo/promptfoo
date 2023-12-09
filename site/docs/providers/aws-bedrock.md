@@ -34,7 +34,9 @@ providers:
 
 ## Model-graded tests
 
-If you are using AWS Bedrock, you must override the grader to point to your AWS Bedrock deployment for [model-graded assertions](/docs/configuration/expected-outputs/model-graded/).
+By default, model-graded tests use OpenAI and require the `OPENAI_API_KEY` environment variable to be set.  When using AWS Bedrock, you have the option of overriding the grader for [model-graded assertions](/docs/configuration/expected-outputs/model-graded/) to point to AWS Bedrock, or other providers.
+
+Note that because of how model-graded evals are implemented, **the LLM grading models must support chat-formatted prompts** (except for embedding or classification models).
 
 The easiest way to do this for _all_ your test cases is to add the [`defaultTest`](/docs/configuration/guide/#default-test-cases) property to your config:
 
@@ -42,9 +44,9 @@ The easiest way to do this for _all_ your test cases is to add the [`defaultTest
 defaultTest:
   options:
     provider:
-      id: bedrock:completion:anthropic.claude-v1
+      id: provider:chat:modelname
       config:
-        region: 'us-west-2'
+        # Provider config options
 ```
 
 But you can also do this for individual assertions:
@@ -55,9 +57,9 @@ assert:
   - type: llm-rubric
     value: Do not mention that you are an AI or chat assistant
     provider:
-      id: bedrock:completion:anthropic.claude-v1
+      id: provider:chat:modelname
       config:
-        region: 'us-west-2'
+        # Provider config options
 ```
 
 Or individual tests:
@@ -69,9 +71,9 @@ tests:
       # ...
     options:
       provider:
-        id: bedrock:completion:anthropic.claude-v1
+        id: provider:chat:modelname
         config:
-          region: 'us-west-2'
+          # Provider config options
     assert:
       - type: llm-rubric
         value: Do not mention that you are an AI or chat assistant
