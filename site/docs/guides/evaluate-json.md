@@ -56,9 +56,9 @@ tests:
           required: ["color", "location"]
           type: object
           properties:
-            "color":
+            color:
               type: string
-            "location":
+            location:
               type: string
       // highlight-end
 ```
