@@ -500,3 +500,44 @@ tests:
 ```
 
 In this example, the `containsMentalHealth` assertion template is defined at the top of the configuration file and then reused in two test cases. This approach helps maintain consistency and reduces duplication in your configuration.
+
+## Labeling assertions
+
+Each assertion supports a `metrics` field that allows you to tag the result however you like.  Use this feature to combine related assertions into aggregate metrics. 
+
+For example, these asserts will aggregate results into two metrics, `Tone` and `Consistency`.
+
+```yaml
+tests:
+  - assert:
+      - type: equals
+        value: Yarr
+        metric: Tone
+
+  - assert:
+      - type: icontains
+        value: grub
+        metric: Tone
+
+  - assert:
+      - type: is-json
+        metric: Consistency
+
+  - assert:
+      - type: python
+        value: max(0, len(output) - 300)
+        metric: Consistency
+
+      - type: similar
+        value: Ahoy, world
+        metric: Tone
+
+  - assert:
+      - type: llm-rubric
+        value: Is spoken like a pirate
+        metric: Tone
+```
+
+These metrics will be shown in the UI:
+
+![llm eval metrics](/img/docs/named-metrics.png)

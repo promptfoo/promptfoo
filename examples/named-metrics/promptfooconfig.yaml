@@ -10,7 +10,7 @@ tests:
     assert:
       - type: equals
         value: Yarr
-        metric: Pirateness
+        metric: Tone
 
   - description: Another basic substring check
     vars:
@@ -18,7 +18,7 @@ tests:
     assert:
       - type: icontains
         value: grub
-        metric: Pirateness
+        metric: Tone
 
   - description: Check if output is JSON
     vars:
@@ -41,7 +41,7 @@ tests:
       # Check for semantic similarity
       - type: similar
         value: Ahoy, world
-        metric: Pirateness
+        metric: Tone
 
   - description: Use LLM to evaluate output
     vars:
@@ -50,4 +50,4 @@ tests:
       # Ask the LLM to check if it spoke like a pirate
       - type: llm-rubric
         value: Is spoken like a pirate
-        metric: Pirateness
+        metric: Tone
