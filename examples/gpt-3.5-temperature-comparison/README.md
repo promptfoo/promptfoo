@@ -1,6 +1,6 @@
 To get started, set the OPENAI_API_KEY environment variable.
 
-Next, change `prompts/chat_prompt.json` and edit promptfooconfig.yaml.
+Next, edit promptfooconfig.yaml.
 
 Then run:
 
