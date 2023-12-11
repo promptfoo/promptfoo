@@ -12,7 +12,6 @@ import { globSync } from 'glob';
 
 import logger from './logger';
 import { getDirectory } from './esm';
-import { readPrompts } from './prompts';
 import { readTests } from './testCases';
 
 import type {
@@ -25,8 +24,8 @@ import type {
   TestCase,
   TestCasesWithMetadata,
   TestCasesWithMetadataPrompt,
-  TestSuite,
   UnifiedConfig,
+  OutputFile,
 } from './types';
 
 let globalConfigCache: any = null;
@@ -211,9 +210,9 @@ export function writeOutput(
     ]);
     fs.writeFileSync(outputPath, csvOutput);
   } else if (outputExtension === 'json') {
-    fs.writeFileSync(outputPath, JSON.stringify({ results, config, shareableUrl }, null, 2));
+    fs.writeFileSync(outputPath, JSON.stringify({ results, config, shareableUrl } as OutputFile, null, 2));
   } else if (outputExtension === 'yaml' || outputExtension === 'yml' || outputExtension === 'txt') {
-    fs.writeFileSync(outputPath, yaml.dump({ results, config, shareableUrl }));
+    fs.writeFileSync(outputPath, yaml.dump({ results, config, shareableUrl } as OutputFile));
   } else if (outputExtension === 'html') {
     const template = fs.readFileSync(`${getDirectory()}/tableOutput.html`, 'utf-8');
     const table = [

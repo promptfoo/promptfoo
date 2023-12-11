@@ -451,9 +451,17 @@ export interface SharedResults {
   data: ResultsFile;
 }
 
+// promptfoo's internal results format
 export interface ResultsFile {
   version: number;
   createdAt: string;
   results: EvaluateSummary;
   config: Partial<UnifiedConfig>;
+}
+
+// File exported as --output option
+export interface OutputFile {
+  results: EvaluateSummary;
+  config: Partial<UnifiedConfig>;
+  shareableUrl: string | null;
 }
