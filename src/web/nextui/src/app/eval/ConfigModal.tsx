@@ -6,11 +6,13 @@ import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
+import Download from '@mui/icons-material/Download';
 import FileCopy from '@mui/icons-material/FileCopy';
 import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
 
 import { useStore } from './store';
+import Tooltip from '@mui/material/Tooltip';
 
 interface ConfigModalProps {
   open: boolean;
@@ -40,6 +42,18 @@ export default function ConfigModal({ open, onClose }: ConfigModalProps) {
     }
   };
 
+  const handleDownloadClick = () => {
+    const blob = new Blob([yamlConfig], { type: 'text/yaml;charset=utf-8' });
+    const href = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = href;
+    link.download = 'config.yaml';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(href);
+  };
+
   const handleClose = () => {
     setCopied(false);
     onClose();
@@ -55,8 +69,19 @@ export default function ConfigModal({ open, onClose }: ConfigModalProps) {
     >
       <DialogTitle id="config-dialog-title">
         <Box display="flex" justifyContent="space-between" alignItems="center">
-          <Typography variant="h6">Config</Typography>
-          <IconButton onClick={handleCopyClick}>{copied ? <Check /> : <FileCopy />}</IconButton>
+          <Typography variant="h6" style={{ flexGrow: 1 }}>
+            Config
+          </Typography>
+          <Box>
+            <Tooltip title="Copy to clipboard">
+              <IconButton onClick={handleCopyClick}>{copied ? <Check /> : <FileCopy />}</IconButton>
+            </Tooltip>
+            <Tooltip title="Download .yaml">
+              <IconButton onClick={handleDownloadClick}>
+                <Download />
+              </IconButton>
+            </Tooltip>
+          </Box>
         </Box>
       </DialogTitle>
       <DialogContent>
