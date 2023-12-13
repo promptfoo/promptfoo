@@ -7,14 +7,17 @@ interface CustomMetricsProps {
 }
 
 const CustomMetrics: React.FC<CustomMetricsProps> = ({ lookup }) => {
+  if (!lookup || !Object.keys(lookup).length) {
+    return null;
+  }
   return (
-    <div className="custom-metric-container">
+    <span className="custom-metric-container">
       {Object.entries(lookup).map(([metric, score]) => (
-        <div key={metric}>
+        <span key={metric}>
           {metric}: {score.toFixed(2)}
-        </div>
+        </span>
       ))}
-    </div>
+    </span>
   );
 };
 

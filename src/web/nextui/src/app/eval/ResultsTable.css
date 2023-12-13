@@ -29,7 +29,7 @@ table.results-table,
 
 .results-table tr:hover,
 .tr:hover {
-  background-color: rgba(0, 0, 0, 0.05);
+  background-color: rgba(0, 0, 0, 0.02);
 }
 
 .results-table th,
@@ -94,17 +94,15 @@ table.results-table,
   gap: 0.5rem;
   visibility: hidden;
   position: absolute;
-  bottom: 1.25rem;
-  right: 1rem;
+  top: 1.25rem;
+  right: 0.75rem;
   line-height: 0;
   font-size: 1.25rem;
 }
 
 .results-table tr .cell-detail {
-  visibility: hidden;
-  position: absolute;
-  bottom: 0.25rem;
-  margin-top: 1rem;
+  /*visibility: hidden;*/
+  font-weight: normal;
   font-size: 0.75rem;
   color: #888;
 }
@@ -124,29 +122,65 @@ table.results-table,
 
 .results-table th .summary {
   font-weight: normal;
-  font-size: 0.8rem;
+  font-size: 1rem;
   line-height: 1.5;
+  margin-top: 0.75rem;
 }
 
 .results-table th .summary .highlight {
-  background-color: var(--success-background-color);
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  background-color: var(--neutral-background-color);
+  border: 1px solid var(--border-color);
 }
 
-.results-table td .status {
-  margin-bottom: -0.5rem;
+.results-table th .summary .highlight.success {
+  background-color: var(--success-background-color);
+  border: 1px solid var(--pass-color);
+}
+
+.results-table .status {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
   font-weight: bold;
+  margin-bottom: 0.5rem;
+}
+
+.results-table .status .pill {
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+}
+
+.results-table .pass .pill {
+  background-color: var(--success-background-color);
+  color: var(--pass-color);
+  border: 1px solid var(--pass-color);
+}
+
+.results-table .fail .pill {
+  border: 1px solid var(--fail-color);
+}
+
+.results-table .fail {
+  color: var(--fail-color);
+}
+
+.fail-reason {
+  color: var(--fail-color);
+  font-weight: bold;
+}
+
+.compact .fail-reason {
+  display: inline;
+}
+
+.results-table .fail .pill {
+  background-color: var(--fail-background-color);
 }
 
 .results-table td .score {
   font-weight: normal;
-}
-
-.results-table td .pass {
-  color: var(--pass-color);
-}
-
-.results-table td .fail {
-  color: var(--fail-color);
 }
 
 .first-prompt-col {
