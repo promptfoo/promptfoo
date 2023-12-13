@@ -9,6 +9,7 @@ import { loadApiProviders } from './providers';
 import { readTests } from './testCases';
 import { readFilters, writeLatestResults, writeMultipleOutputs, writeOutput } from './util';
 import type { EvaluateOptions, TestSuite, EvaluateTestSuite, ProviderOptions } from './types';
+import { addTestsFromScenarios } from './scenarios';
 
 export * from './types';
 
@@ -67,6 +68,8 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
       }
     }
   }
+
+  addTestsFromScenarios(constructedTestSuite);
 
   // Other settings
   if (options.cache === false) {
