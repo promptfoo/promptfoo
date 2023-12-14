@@ -64,16 +64,17 @@ Assistant:
 Now, let's go back to `promptfooconfig.yaml` and add our prompts. We'll name them `chat_prompt` and `completion_prompt` respectively:
 
 ```yaml title=promptfooconfig.yaml
-// highlight-start
 prompts:
   prompts/chat_prompt.json: chat_prompt
   prompts/completion_prompt.txt: completion_prompt
-// highlight-end
 
 providers:
-  - openai:gpt-3.5-turbo-0613
-  - openai:gpt-4-turbo-0613
-  - replicate:replicate/llama70b-v2-chat:e951f18578850b652510200860fc4ea62b3b16fac280f83ff32282f87bbd2e48
+  - openai:gpt-3.5-turbo-0613:
+      prompts: chat_prompt
+  - openai:gpt-4-0613:
+      prompts: chat_prompt
+  - replicate:replicate/llama70b-v2-chat:e951f18578850b652510200860fc4ea62b3b16fac280f83ff32282f87bbd2e48:
+      prompts: completion_prompt
 ```
 
 :::info
