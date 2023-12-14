@@ -177,7 +177,7 @@ export function startServer(port = 15500, apiBaseUrl = '', skipConfirmation = fa
 
   httpServer.listen(port, () => {
     const url = `http://localhost:${port}`;
-    logger.info(`Server listening at ${url}`);
+    logger.info(`Server running at ${url} and monitoring for new evals.`);
 
     const openUrl = async () => {
       try {
