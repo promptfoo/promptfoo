@@ -3,6 +3,7 @@ import { fetchWithCache } from '../cache';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 
 import type { ApiProvider, EnvOverrides, ProviderResponse } from '../types.js';
+import type { GeminiApiResponse, ResponseData } from './vertexUtil';
 
 interface VertexCompletionOptions {
   apiKey?: string;
@@ -94,6 +95,8 @@ export class VertexChatProvider extends VertexGenericProvider {
     'codechat-bison@001',
     'codechat-bison-32k',
     'codechat-bison-32k@001',
+    'gemini-pro',
+    'gemini-ultra',
   ];
 
   constructor(
@@ -118,6 +121,101 @@ export class VertexChatProvider extends VertexGenericProvider {
       );
     }
 
+    if (this.modelName.includes('gemini')) {
+      return this.callGeminiApi(prompt);
+    }
+    return this.callPalm2Api(prompt);
+  }
+
+  async callGeminiApi(prompt: string): Promise<ProviderResponse> {
+    // https://cloud.google.com/vertex-ai/docs/generative-ai/model-reference/gemini#gemini-pro
+    let contents: string | object | undefined;
+    try {
+      // Chat or multimodal
+      contents = JSON.parse(prompt);
+    } catch (err) {
+      contents = {
+        role: 'user',
+        parts: {
+          text: prompt,
+        },
+      };
+    }
+
+    const body = {
+      contents,
+      generation_config: {
+        context: this.config.context,
+        examples: this.config.examples,
+        safetySettings: this.config.safetySettings,
+        stopSequence: this.config.stopSequence,
+        temperature: this.config.temperature,
+        maxOutputTokens: this.config.maxOutputTokens,
+        topP: this.config.topP,
+        topK: this.config.topK,
+      },
+    };
+    logger.debug(`Calling Google Vertex API (Gemini): ${JSON.stringify(body)}`);
+
+    let data, cached;
+    try {
+      ({ cached, data } = await fetchWithCache(
+        // POST https://us-central1-aiplatform.googleapis.com/
+        `https://${this.getApiHost()}/v1/projects/${this.getProjectId()}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${
+          this.modelName
+        }:streamGenerateContent`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${this.getApiKey()}`,
+          },
+          body: JSON.stringify(body),
+        },
+        REQUEST_TIMEOUT_MS,
+      )) as unknown as { cached: boolean; data: GeminiApiResponse };
+    } catch (err) {
+      return {
+        error: `API call error: ${String(err)}`,
+      };
+    }
+
+    logger.debug(`\tGemini API response: ${JSON.stringify(data)}`);
+    try {
+      if (data.error) {
+        return {
+          error: `Error ${data.error.code}: ${data.error.message}`,
+        };
+      }
+      const output = data
+        .map((datum: ResponseData) => {
+          const part = datum.candidates[0].content.parts[0];
+          if ('text' in part) {
+            return part.text;
+          }
+          return JSON.stringify(part);
+        })
+        .join('');
+      const lastData = data[data.length - 1];
+      const tokenUsage = cached
+        ? lastData.usageMetadata.totalTokenCount
+        : {
+            total: lastData.usageMetadata.totalTokenCount,
+            prompt: lastData.usageMetadata.promptTokenCount,
+            completion: lastData.usageMetadata.completionTokenCount,
+          };
+      return {
+        output,
+        tokenUsage,
+      };
+    } catch (err) {
+      return {
+        error: `Gemini API response error: ${String(err)}: ${JSON.stringify(data)}`,
+      };
+    }
+  }
+
+  async callPalm2Api(prompt: string): Promise<ProviderResponse> {
     // https://cloud.google.com/vertex-ai/docs/generative-ai/model-reference/text-chat#generative-ai-text-chat-drest
     const instances = parseChatPrompt(prompt, [
       {
@@ -170,6 +268,11 @@ export class VertexChatProvider extends VertexGenericProvider {
 
     logger.debug(`\tVertex API response: ${JSON.stringify(data)}`);
     try {
+      if (data.error) {
+        return {
+          error: `Error ${data.error.code}: ${data.error.message}`,
+        };
+      }
       const output = data.predictions[0].candidates[0].content;
       return {
         output,
