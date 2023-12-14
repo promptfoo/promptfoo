@@ -141,6 +141,7 @@ table.results-table,
 
 .results-table .status {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
   align-items: center;
   font-weight: bold;

@@ -1,5 +1,6 @@
 .custom-metric-container {
   display: inline-flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
   font-weight: normal;
 }
@@ -8,5 +9,7 @@
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
   color: var(--text-color);
-  background-color: var(--neutral-background-color);
+  border: 1px solid var(--border-color);
+  font-size: smaller;
+  line-height: 1.5;
 }
