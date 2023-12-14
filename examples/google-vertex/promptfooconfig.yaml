@@ -1,7 +1,10 @@
 # This configuration runs each prompt through a series of example inputs and checks if they meet requirements.
 
-prompts: [prompts.txt]
-providers: [vertex:chat-bison] # or use the PaLM API: [palm:chat-bison-001]
+prompts:
+  - "You are a helpful assistant. Reply with a concise answer to this inquiry: '{{question}}'"
+
+providers: [vertex:gemini-pro, vertex:chat-bison] # or use the PaLM API: [palm:chat-bison-001]
+
 tests:
   - vars:
       question: What's the weather in New York?

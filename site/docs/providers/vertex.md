@@ -4,10 +4,12 @@ sidebar_position: 42
 
 # Google Vertex
 
-The `vertex` provider is compatible with Google's [Vertex AI](https://cloud.google.com/vertex-ai) offering, which offers access to models such as `bison`.
+The `vertex` provider is compatible with Google's [Vertex AI](https://cloud.google.com/vertex-ai) offering, which offers access to models such as Gemini and Bison.
 
 You can use it by specifying any of the available stable or latest [model versions](https://cloud.google.com/vertex-ai/docs/generative-ai/learn/model-versioning) offered by Vertex AI. These include:
 
+- `vertex:gemini-pro`
+- `vertex:gemini-ultra`
 - `vertex:chat-bison`
 - `vertex:chat-bison@001`
 - `vertex:chat-bison-32k`
@@ -19,7 +21,7 @@ You can use it by specifying any of the available stable or latest [model versio
 
 Supported environment variables:
 
-- `VERTEX_API_KEY` (required) - gcloud API token
+- `VERTEX_API_KEY` (required) - gcloud API token. The easiest way to get an API key is to run `gcloud auth print-access-token`.
 - `VERTEX_PROJECT_ID` (required) - gcloud project ID
 - `VERTEX_REGION` - gcloud region, defaults to `us-central1`
 - `VERTEX_PUBLISHER` - model publisher, defaults to `google`
