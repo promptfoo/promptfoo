@@ -198,13 +198,16 @@ export class VertexChatProvider extends VertexGenericProvider {
         .join('');
       const lastData = data[data.length - 1];
       const tokenUsage = cached
-        ? lastData.usageMetadata.totalTokenCount
+        ? {
+            cached: lastData.usageMetadata.totalTokenCount,
+          }
         : {
             total: lastData.usageMetadata.totalTokenCount,
             prompt: lastData.usageMetadata.promptTokenCount,
             completion: lastData.usageMetadata.completionTokenCount,
           };
       return {
+        cached,
         output,
         tokenUsage,
       };
