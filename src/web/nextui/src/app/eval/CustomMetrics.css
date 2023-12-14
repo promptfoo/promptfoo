@@ -1,14 +1,15 @@
 .custom-metric-container {
-  display: flex;
+  display: inline-flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
-  margin: 0.5rem 0;
-  font-size: 0.75rem;
   font-weight: normal;
 }
 
-.custom-metric-container div {
-  padding: 0.25rem;
+.custom-metric-container > span {
+  padding: 0.25rem 0.5rem;
   border-radius: 4px;
   color: var(--text-color);
-  border: 1px solid var(--text-color);
+  border: 1px solid var(--border-color);
+  font-size: smaller;
+  line-height: 1.5;
 }

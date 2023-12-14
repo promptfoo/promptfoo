@@ -221,80 +221,92 @@ function EvalOutputCell({
     }
   };
 
+  const detail = (
+    <span className="cell-detail">
+      {output.tokenUsage?.cached ? (
+        <span>{output.tokenUsage.cached} tokens (cached)</span>
+      ) : (
+        <>
+          {output.tokenUsage?.total && <span>{output.tokenUsage.total} tokens</span>} |{' '}
+          <span>{output.latencyMs} ms</span>
+        </>
+      )}
+    </span>
+  );
+
+  const actions = (
+    <div className="cell-actions">
+      {output.prompt && (
+        <>
+          <span className="action" onClick={handlePromptOpen}>
+            <Tooltip title="View ouput and test details">
+              <span>🔎</span>
+            </Tooltip>
+          </span>
+          <EvalOutputPromptDialog
+            open={openPrompt}
+            onClose={handlePromptClose}
+            prompt={output.prompt}
+            provider={output.provider}
+            gradingResults={output.gradingResult?.componentResults}
+            output={text}
+          />
+        </>
+      )}
+      <span className="action" onClick={() => handleClick(true)}>
+        <Tooltip title="Mark test passed (score 1.0)">
+          <span>👍</span>
+        </Tooltip>
+      </span>
+      <span className="action" onClick={() => handleClick(false)}>
+        <Tooltip title="Mark test failed (score 0.0)">
+          <span>👎</span>
+        </Tooltip>
+      </span>
+      <span className="action" onClick={handleSetScore}>
+        <Tooltip title="Set test score">
+          <span>✏️</span>
+        </Tooltip>
+      </span>
+    </div>
+  );
+
   // TODO(ian): output.prompt check for backwards compatibility, remove after 0.17.0
   return (
-    <>
-      <div className="cell">
-        {output.pass && (
-          <div className="status pass">
-            PASS <span className="score">{scoreToString(output.score)}</span>
-            {output.namedScores ? <CustomMetrics lookup={output.namedScores} /> : null}
-          </div>
-        )}
-        {!output.pass && (
+    <div className="cell">
+      {output.pass && (
+        <div className="status pass">
+          <span className="pill">
+            PASS<span className="score">{scoreToString(output.score)}</span>
+          </span>
+          <CustomMetrics lookup={output.namedScores} /> {detail}
+        </div>
+      )}
+      {!output.pass && (
+        <>
           <div className="status fail">
-            [FAIL <span className="score">{scoreToString(output.score)}</span>]{' '}
-            <span>
-              {chunks[0]
-                .trim()
-                .split('\n')
-                .map((line, index) => (
-                  <React.Fragment key={index}>
-                    {line}
-                    <br />
-                  </React.Fragment>
-                ))}
+            <span className="pill">
+              FAIL{output.score > 0 ? ' ' : ''}
+              <span className="score">{scoreToString(output.score)}</span>
             </span>
-            {output.namedScores ? <CustomMetrics lookup={output.namedScores} /> : null}
+            <CustomMetrics lookup={output.namedScores} /> {detail}
           </div>
-        )}{' '}
-        <TruncatedText text={node || text} maxLength={maxTextLength} />
-      </div>
-      <div className="cell-detail">
-        {output.tokenUsage?.cached ? (
-          <span>{output.tokenUsage.cached} tokens (cached)</span>
-        ) : (
-          <>
-            {output.tokenUsage?.total && <span>{output.tokenUsage.total} tokens</span>} |{' '}
-            <span>{output.latencyMs} ms</span>
-          </>
-        )}
-      </div>
-      <div className="cell-actions">
-        {output.prompt && (
-          <>
-            <span className="action" onClick={handlePromptOpen}>
-              <Tooltip title="View ouput and test details">
-                <span>🔎</span>
-              </Tooltip>
-            </span>
-            <EvalOutputPromptDialog
-              open={openPrompt}
-              onClose={handlePromptClose}
-              prompt={output.prompt}
-              provider={output.provider}
-              gradingResults={output.gradingResult?.componentResults}
-              output={text}
-            />
-          </>
-        )}
-        <span className="action" onClick={() => handleClick(true)}>
-          <Tooltip title="Mark test passed (score 1.0)">
-            <span>👍</span>
-          </Tooltip>
-        </span>
-        <span className="action" onClick={() => handleClick(false)}>
-          <Tooltip title="Mark test failed (score 0.0)">
-            <span>👎</span>
-          </Tooltip>
-        </span>
-        <span className="action" onClick={handleSetScore}>
-          <Tooltip title="Set test score">
-            <span>✏️</span>
-          </Tooltip>
-        </span>
-      </div>
-    </>
+          <div className="fail-reason">
+            {chunks[0]
+              .trim()
+              .split('\n')
+              .map((line, index) => (
+                <React.Fragment key={index}>
+                  {line}
+                  <br />
+                </React.Fragment>
+              ))}
+          </div>
+        </>
+      )}
+      <TruncatedText text={node || text} maxLength={maxTextLength} />
+      {actions}
+    </div>
   );
 }
 
@@ -461,25 +473,9 @@ export default function ResultsTable({
                   maxLength={maxTextLength}
                   resourceId={typeof prompt === 'string' ? undefined : prompt.id}
                 />
-                {filterMode === 'failures' && (
-                  <FormControlLabel
-                    sx={{
-                      '& .MuiFormControlLabel-label': {
-                        fontSize: '0.75rem',
-                      },
-                    }}
-                    control={
-                      <Checkbox
-                        checked={isChecked}
-                        onChange={(event) => onFailureFilterToggle(columnId, event.target.checked)}
-                      />
-                    }
-                    label="Show failures"
-                  />
-                )}
                 <div className="summary">
-                  <span className={isHighestPassing ? 'highlight' : ''}>
-                    Passing: <strong>{pct}%</strong> ({numGoodTests[idx]}/{body.length} cases
+                  <span className={`highlight ${isHighestPassing ? 'success' : ''}`}>
+                    Pass rate: <strong>{pct}%</strong> ({numGoodTests[idx]}/{body.length} cases
                     {numAsserts[idx] ? (
                       <span>
                         , {numGoodAsserts[idx]}/{numAsserts[idx]} asserts
@@ -509,11 +505,28 @@ export default function ResultsTable({
                     </span>
                   ) : null}
                 </div>
-                {prompt.metrics?.namedScores && Object.keys(prompt.metrics.namedScores).length > 0 ? (
-                  <div>
+                {prompt.metrics?.namedScores &&
+                Object.keys(prompt.metrics.namedScores).length > 0 ? (
+                  <div style={{ marginTop: '0.5rem' }}>
                     <CustomMetrics lookup={prompt.metrics.namedScores} />
                   </div>
                 ) : null}
+                {filterMode === 'failures' && (
+                  <FormControlLabel
+                    sx={{
+                      '& .MuiFormControlLabel-label': {
+                        fontSize: '0.75rem',
+                      },
+                    }}
+                    control={
+                      <Checkbox
+                        checked={isChecked}
+                        onChange={(event) => onFailureFilterToggle(columnId, event.target.checked)}
+                      />
+                    }
+                    label="Show failures"
+                  />
+                )}
               </>
             );
           },
