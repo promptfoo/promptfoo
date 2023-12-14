@@ -111,7 +111,6 @@ async function main() {
       readFileSync(pathJoin(getDirectory(), '../package.json'), 'utf8'),
     );
     logger.info(packageJson.version);
-    process.exit(0);
   });
 
   program
@@ -184,7 +183,7 @@ async function main() {
           async function (answer: string) {
             if (answer.toLowerCase() !== 'yes' && answer.toLowerCase() !== 'y' && answer !== '') {
               reader.close();
-              return;
+              process.exit(1);
             }
             reader.close();
 
@@ -488,6 +487,8 @@ async function main() {
 
       if (cmdObj.view) {
         startServer(parseInt(cmdObj.view, 10) || 15500);
+      } else if (summary.stats.failures > 0) {
+        process.exit(1);
       }
     });
 
