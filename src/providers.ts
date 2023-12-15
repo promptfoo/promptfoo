@@ -20,7 +20,7 @@ import {
 } from './providers/localai';
 import { PalmChatProvider } from './providers/palm';
 import { LlamaProvider } from './providers/llama';
-import { OllamaEmbeddingProvider, OllamaProvider } from './providers/ollama';
+import { OllamaEmbeddingProvider, OllamaCompletionProvider, OllamaChatProvider } from './providers/ollama';
 import { VertexChatProvider } from './providers/vertex';
 import { WebhookProvider } from './providers/webhook';
 import { ScriptCompletionProvider } from './providers/scriptCompletion';
@@ -40,8 +40,6 @@ import type {
   ApiProvider,
   EnvOverrides,
   ProviderOptions,
-  ProviderFunction,
-  ProviderId,
   ProviderOptionsMap,
   TestSuiteConfig,
 } from './types';
@@ -230,8 +228,19 @@ export async function loadApiProvider(
     const modelName = providerPath.split(':')[2];
     return new OllamaEmbeddingProvider(modelName, providerOptions);
   } else if (providerPath.startsWith('ollama:')) {
-    const modelName = providerPath.split(':').slice(1).join(':');
-    return new OllamaProvider(modelName, providerOptions);
+    const splits = providerPath.split(':');
+    const firstPart = splits[1];
+    if (firstPart === 'chat') {
+      const modelName = splits.slice(2).join(':');
+      return new OllamaChatProvider(modelName, providerOptions);
+    } else if (firstPart === 'completion') {
+      const modelName = splits.slice(2).join(':');
+      return new OllamaCompletionProvider(modelName, providerOptions);
+    } else {
+      // Default to completion provider
+      const modelName = splits.slice(1).join(':');
+      return new OllamaCompletionProvider(modelName, providerOptions);
+    }
   } else if (providerPath.startsWith('palm:')) {
     const modelName = providerPath.split(':')[1];
     return new PalmChatProvider(modelName, providerOptions);

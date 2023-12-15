@@ -1,6 +1,6 @@
 import logger from '../logger';
 import { fetchWithCache } from '../cache';
-import { REQUEST_TIMEOUT_MS } from './shared';
+import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
 
 import type { ApiProvider, ProviderEmbeddingResponse, ProviderResponse } from '../types.js';
 
@@ -57,7 +57,7 @@ interface OllamaJsonL {
   eval_duration?: number;
 }
 
-export class OllamaProvider implements ApiProvider {
+export class OllamaCompletionProvider implements ApiProvider {
   modelName: string;
   config: OllamaCompletionOptions;
 
@@ -69,11 +69,11 @@ export class OllamaProvider implements ApiProvider {
   }
 
   id(): string {
-    return `ollama:${this.modelName}`;
+    return `ollama:completion:${this.modelName}`;
   }
 
   toString(): string {
-    return `[Ollama Provider ${this.modelName}]`;
+    return `[Ollama Completion Provider ${this.modelName}]`;
   }
 
   async callApi(prompt: string): Promise<ProviderResponse> {
@@ -135,7 +135,87 @@ export class OllamaProvider implements ApiProvider {
   }
 }
 
-export class OllamaEmbeddingProvider extends OllamaProvider {
+export class OllamaChatProvider implements ApiProvider {
+  modelName: string;
+  config: OllamaCompletionOptions;
+
+  constructor(modelName: string, options: { id?: string; config?: OllamaCompletionOptions } = {}) {
+    const { id, config } = options;
+    this.modelName = modelName;
+    this.id = id ? () => id : this.id;
+    this.config = config || {};
+  }
+
+  id(): string {
+    return `ollama:chat:${this.modelName}`;
+  }
+
+  toString(): string {
+    return `[Ollama Chat Provider ${this.modelName}]`;
+  }
+
+  async callApi(prompt: string): Promise<ProviderResponse> {
+    const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
+
+    const params = {
+      model: this.modelName,
+      messages,
+      options: this.config,
+    };
+
+    logger.debug(`Calling Ollama API: ${JSON.stringify(params)}`);
+    let response;
+    try {
+      response = await fetchWithCache(
+        `${process.env.OLLAMA_BASE_URL || 'http://localhost:11434'}/api/chat`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(params),
+        },
+        REQUEST_TIMEOUT_MS,
+        'text',
+      );
+    } catch (err) {
+      return {
+        error: `API call error: ${String(err)}. Output:\n${response?.data}`,
+      };
+    }
+    logger.debug(`\tOllama generate API response: ${response.data}`);
+    if (response.data.error) {
+      return {
+        error: `Ollama error: ${response.data.error}`,
+      };
+    }
+
+    try {
+      const output = response.data
+        .split('\n')
+        .filter((line: string) => line.trim() !== '')
+        .map((line: string) => {
+          const parsed = JSON.parse(line) as OllamaJsonL;
+          if (parsed.response) {
+            return parsed.response;
+          }
+          return null;
+        })
+        .filter((s: string | null) => s !== null)
+        .join('');
+
+      return {
+        output,
+      };
+    } catch (err) {
+      return {
+        error: `Ollama API response error: ${String(err)}: ${JSON.stringify(response.data)}`,
+      };
+    }
+  }
+}
+
+export class OllamaEmbeddingProvider extends OllamaCompletionProvider {
   async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
     const params = {
       model: this.modelName,
