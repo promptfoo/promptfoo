@@ -1494,7 +1494,7 @@ describe('runAssertion', () => {
       };
 
       const result: GradingResult = await runAssertion({
-        prompt: 'Some prompt',
+        prompt: 'Some prompt that includes "double quotes" and \'single quotes\'',
         provider: new OpenAiChatCompletionProvider('foo'),
         assertion: fileAssertion,
         test: {} as AtomicTestCase,
@@ -1502,7 +1502,7 @@ describe('runAssertion', () => {
       });
 
       expect(execSyncMock).toHaveBeenCalledWith(
-        `python /path/to/assert.py \"Expected output\" \"{\\\"prompt\\\":\\\"Some prompt\\\",\\\"vars\\\":{}}\"`,
+        `python /path/to/assert.py "Expected output" "{\\"prompt\\":\\"Some prompt that includes \\\\\\"double quotes\\\\\\" and 'single quotes'\\",\\"vars\\":{}}"`,
       );
       expect(result.pass).toBe(expectedPass);
       expect(result.reason).toContain(expectedReason);
