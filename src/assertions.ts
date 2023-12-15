@@ -207,13 +207,14 @@ export async function runAssertion({
         }
       } else if (filePath.endsWith('.py')) {
         const { execSync } = require('child_process');
-        const escapedOutput = outputString.replace(/"/g, '\\"').replace(/\n/g, '\\n');
-        const escapedContext = JSON.stringify(context).replace(/"/g, '\\"').replace(/\n/g, '\\n');
-        const pythonScriptOutput = execSync(
-          `${
-            process.env.PROMPTFOO_PYTHON || 'python'
-          } ${filePath} "${escapedOutput}" "${escapedContext}"`,
-        ).toString();
+        const outputEscaped =
+          typeof output === 'string' ? JSON.stringify(output) : `"${JSON.stringify(output)}"`;
+        // Two levels of JSON.stringify because we need to convert context to a string, and then escape the string for the shell.
+        const contextEscaped = JSON.stringify(JSON.stringify(context));
+        const command = `${
+          process.env.PROMPTFOO_PYTHON || 'python'
+        } ${filePath} ${outputEscaped} ${contextEscaped}`;
+        const pythonScriptOutput = execSync(command).toString();
         valueFromScript = pythonScriptOutput.trim();
       } else if (filePath.endsWith('.json')) {
         valueFromScript = JSON.parse(fs.readFileSync(filePath, 'utf8'));
@@ -574,12 +575,13 @@ ${renderedValue}`,
   value = data['value']
   ${isMultiline ? 'exec(value)' : 'print(json.dumps(eval(value)))'}`;
         const pythonProcessInput = JSON.stringify({ output, context, value: renderedValue });
-        result = execSync(
-          `${process.env.PROMPTFOO_PYTHON || 'python'} -c "${pythonScript.replace(/\n/g, ';')}"`,
-          {
-            input: pythonProcessInput,
-          },
-        )
+        const command = `${process.env.PROMPTFOO_PYTHON || 'python'} -c "${pythonScript.replace(
+          /\n/g,
+          ';',
+        )}"`;
+        result = execSync(command, {
+          input: pythonProcessInput,
+        })
           .toString()
           .trim() as string;
       }
