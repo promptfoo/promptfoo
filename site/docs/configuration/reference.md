@@ -26,14 +26,14 @@ Here is the main structure of the promptfoo configuration file:
 A test case represents a single example input that is fed into all prompts and providers.
 
 | Property             | Type                                        | Required | Description                                                                 |
-| -------------------- | ------------------------------------------- | -------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| -------------------- | ------------------------------------------- | -------- | --------------------------------------------------------------------------- |
 | description          | string                                      | No       | Description of what you're testing                                          |
-| vars                 | Record\<string, string \| string[] \| any\> | string   | No                                                                          | Key-value pairs to substitute in the prompt. If `vars` is a plain string, it will be treated as a YAML filepath to load a var mapping from. |
+| vars                 | Record\<string, string \| string[] \| any\>   | No       | Key-value pairs to substitute in the prompt. If `vars` is a plain string, it will be treated as a YAML filepath to load a var mapping from. |
 | assert               | [Assertion](#assertion)[]                   | No       | List of automatic checks to run on the LLM output                           |
 | threshold            | number                                      | No       | Test will fail if the combined score of assertions is less than this number |
 | options              | Object                                      | No       | Additional configuration settings                                           |
 | options.prefix       | string                                      | No       | This is prepended to the prompt                                             |
-| options.suffix       | string                                      | No       | This is append to the prompt                                                |
+| options.suffix       | string                                      | No       | This is appended to the prompt                                              |
 | options.postprocess  | string                                      | No       | A JavaScript snippet that runs on LLM output before any assertions          |
 | options.provider     | string                                      | No       | The API provider to use for LLM rubric grading                              |
 | options.rubricPrompt | string                                      | No       | The prompt to use for LLM rubric grading                                    |
@@ -233,11 +233,12 @@ GradingResult is an object that represents the result of grading a test case. It
 
 ```typescript
 interface GradingResult {
-  pass: boolean;
-  score: number;
-  reason: string;
-  tokensUsed?: TokenUsage;
-  componentResults?: GradingResult[];
-  assertion: Assertion | null;
+  pass: boolean;                        # did test pass?
+  score: number;                        # score between 0 and 1
+  reason: string;                       # plaintext reason for outcome
+  tokensUsed?: TokenUsage;              # tokens consumed by the test
+  componentResults?: GradingResult[];   # if this is a composite score, it can have nested results
+  assertion: Assertion | null;          # source of assertion
+  latencyMs?: number;                   # latency of LLM call
 }
 ```

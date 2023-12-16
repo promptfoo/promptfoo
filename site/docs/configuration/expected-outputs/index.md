@@ -329,6 +329,8 @@ assert:
     threshold: 5000
 ```
 
+Note that `latency` requires that the [cache is disabled](/docs/configuration/caching) with `promptfoo eval --no-cache` or an equivalent option.
+
 ### is-valid-openai-function-call
 
 This ensures that any JSON LLM output adheres to the schema specified in the `functions` configuration of the provider. Learn more about the [OpenAI provider](/docs/providers/openai/#Using-functions).
