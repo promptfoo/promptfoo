@@ -122,7 +122,8 @@ Deterministic eval metrics
 | `webhook`                       | provided webhook returns `{pass: true}`                          |
 | `rouge-n`                       | Rouge-N score is above a given threshold                         |
 | `levenshtein`                   | Levenshtein distance is below a threshold                        |
-| `latency``                      | Latency is below a threshold (milliseconds)                      |
+| `latency`                      | Latency is below a threshold (milliseconds)                      |
+| `perplexity`                   | Perplexity is below a threshold                                  |
 | `is-valid-openai-function-call` | Ensure that the function call matches the function's JSON schema |
 
 Model-assisted eval metrics

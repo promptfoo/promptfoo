@@ -7,3 +7,5 @@ defaultTest:
   assert:
     - type: latency
       threshold: 3000
+    - type: perplexity
+      threshold: 5

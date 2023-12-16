@@ -456,7 +456,7 @@ describe('call provider apis', () => {
                   inputArgs.concat([
                     'Test prompt',
                     '{"config":{"some_config_val":42}}',
-                    '{"var1":"value 1","var2":"value 2 \\"with some double \\"quotes\\"\\""}',
+                    '{"vars":{"var1":"value 1","var2":"value 2 \\"with some double \\"quotes\\"\\""}}',
                   ]),
                 ),
               );
@@ -472,8 +472,10 @@ describe('call provider apis', () => {
         },
       });
       const result = await provider.callApi('Test prompt', {
-        var1: 'value 1',
-        var2: 'value 2 "with some double "quotes""',
+        vars: {
+          var1: 'value 1',
+          var2: 'value 2 "with some double "quotes""',
+        },
       });
 
       expect(result.output).toBe(mockResponse);

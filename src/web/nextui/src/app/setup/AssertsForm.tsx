@@ -54,6 +54,7 @@ const assertTypes: AssertionType[] = [
   'not-rouge-l',
   'is-valid-openai-function-call',
   'latency',
+  'perplexity',
   'answer-relevance',
   'context-faithfulness',
   'context-recall',

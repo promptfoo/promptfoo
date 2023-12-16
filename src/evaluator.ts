@@ -193,9 +193,15 @@ class Evaluator {
     let latencyMs = 0;
     try {
       const startTime = Date.now();
-      const response = await provider.callApi(renderedPrompt, {
-        vars,
-      });
+      const response = await provider.callApi(
+        renderedPrompt,
+        {
+          vars,
+        },
+        {
+          includeLogProbs: test.assert?.some((a) => a.type === 'perplexity'),
+        },
+      );
       const endTime = Date.now();
       latencyMs = endTime - startTime;
 
@@ -258,6 +264,7 @@ class Evaluator {
           test,
           output: processedResponse.output,
           latencyMs: response.cached ? undefined : latencyMs,
+          logProbs: response.logProbs,
         });
         if (!checkResult.pass) {
           ret.error = checkResult.reason;
@@ -664,7 +671,7 @@ class Evaluator {
           process.env.TRAVIS ||
           process.env.CIRCLECI ||
           process.env.JENKINS ||
-          process.env.GITLAB_CI
+          process.env.GITLAB_CI,
       ),
     });
 

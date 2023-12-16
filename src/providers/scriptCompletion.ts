@@ -3,7 +3,12 @@ import { execFile } from 'child_process';
 import invariant from 'tiny-invariant';
 
 import logger from '../logger';
-import type { ApiProvider, ProviderOptions, ProviderResponse } from '../types';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  ProviderOptions,
+  ProviderResponse,
+} from '../types';
 
 const ANSI_ESCAPE = /\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;
 
@@ -18,7 +23,7 @@ export class ScriptCompletionProvider implements ApiProvider {
     return `exec:${this.scriptPath}`;
   }
 
-  async callApi(prompt: string, vars?: Record<string, string | object>) {
+  async callApi(prompt: string, context?: CallApiContextParams) {
     return new Promise<ProviderResponse>((resolve, reject) => {
       // This regex handles quoted arguments, which are passed to the execFile call as a single argument
       const scriptPartsRegex = /[^\s"']+|"([^"]*)"|'([^']*)'/g;
@@ -43,7 +48,7 @@ export class ScriptCompletionProvider implements ApiProvider {
       const scriptArgs = scriptParts.concat([
         prompt,
         JSON.stringify(this.options || {}),
-        JSON.stringify(vars || {}),
+        JSON.stringify(context || {}),
       ]);
       const options = this.options?.config.basePath ? { cwd: this.options.config.basePath } : {};
 

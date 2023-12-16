@@ -57,6 +57,7 @@ Deterministic eval metrics
 | [javascript](/docs/configuration/expected-outputs/javascript)   | provided Javascript function validates the output                |
 | [latency](#latency)                                             | Latency is below a threshold (milliseconds)                      |
 | [levenshtein](#levenshtein-distance)                            | Levenshtein distance is below a threshold                        |
+| [perplexity](#perplexity)                                       | Perplexity is below a threshold                                  |
 | [python](/docs/configuration/expected-outputs/python)           | provided Python function validates the output                    |
 | [regex](#regex)                                                 | output matches regex                                             |
 | [starts-with](#starts-with)                                     | output starts with string                                        |
@@ -330,6 +331,35 @@ assert:
 ```
 
 Note that `latency` requires that the [cache is disabled](/docs/configuration/caching) with `promptfoo eval --no-cache` or an equivalent option.
+
+### Perplexity
+
+Perplexity is a measurement used in natural language processing to quantify how well a language model predicts a sample of text. It's essentially a measure of the model's uncertainty.
+
+**High perplexity** suggests it is less certain about its predictions, often because the text is very diverse or the model is not well-tuned to the task at hand.
+
+**Low perplexity** means the model predicts the text with greater confidence, implying it's better at understanding and generating text similar to its training data.
+
+To specify a perplexity threshold, use the `perplexity` assertion type:
+
+```yaml
+assert:
+  # Fail if the LLM is below perplexity threshold
+  - type: perplexity
+    threshold: 1.5
+```
+
+:::warning
+Perplexity requires the LLM API to output `logprobs`. Currently only more recent versions of OpenAI GPT support this.
+:::
+
+#### Comparing different outputs from the same LLM
+
+You can compare perplexity scores across different outputs from the same model to get a sense of which output the model finds more likely (or less surprising). This is a good way to tune your prompts and hyperparameters (like temperature) to be more accurate.
+
+#### Comparing outputs from different LLMs
+
+Comparing scores across models may not be meaningful, unless the models have been trained on similar datasets, the tokenization process is consistent between models, and the vocabulary of the models is roughly the same.
 
 ### is-valid-openai-function-call
 
