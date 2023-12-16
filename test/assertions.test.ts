@@ -1655,6 +1655,50 @@ describe('runAssertion', () => {
     });
   });
 
+  describe('perplexity assertion', () => {
+    it('should pass when the perplexity assertion passes', async () => {
+      const logProbs = [-0.2, -0.4, -0.1, -0.3]; // Dummy logProbs for testing
+      const provider = {
+        callApi: jest.fn().mockResolvedValue({ logProbs }),
+      } as unknown as ApiProvider;
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider,
+        assertion: {
+          type: 'perplexity',
+          threshold: 2,
+        },
+        test: {} as AtomicTestCase,
+        output: 'Some output',
+        logProbs,
+      });
+      expect(result.pass).toBeTruthy();
+      expect(result.reason).toBe('Assertion passed');
+    });
+
+    it('should fail when the perplexity assertion fails', async () => {
+      const logProbs = [-0.2, -0.4, -0.1, -0.3]; // Dummy logProbs for testing
+      const provider = {
+        callApi: jest.fn().mockResolvedValue({ logProbs }),
+      } as unknown as ApiProvider;
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider,
+        assertion: {
+          type: 'perplexity',
+          threshold: 0.2,
+        },
+        test: {} as AtomicTestCase,
+        output: 'Some output',
+        logProbs,
+      });
+      expect(result.pass).toBeFalsy();
+      expect(result.reason).toBe('Perplexity 1.28 is greater than threshold 0.2');
+    });
+  });
+
   describe('is-valid-openai-function-call assertion', () => {
     it('should pass for a valid function call with correct arguments', async () => {
       const output = { arguments: '{"x": 10, "y": 20}', name: 'add' };
