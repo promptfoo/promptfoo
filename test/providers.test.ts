@@ -1,5 +1,7 @@
 import * as fs from 'fs';
 import fetch from 'node-fetch';
+import child_process from 'child_process';
+import Stream from 'stream';
 
 import {
   OpenAiAssistantProvider,
@@ -10,7 +12,6 @@ import { AnthropicCompletionProvider } from '../src/providers/anthropic';
 import { LlamaProvider } from '../src/providers/llama';
 
 import { clearCache, disableCache, enableCache } from '../src/cache';
-import { maybeEmitAzureOpenAiWarning } from '../src/providers/azureopenaiUtil';
 import { loadApiProvider, loadApiProviders } from '../src/providers';
 import {
   AzureOpenAiChatCompletionProvider,
@@ -23,6 +24,7 @@ import {
   HuggingfaceFeatureExtractionProvider,
   HuggingfaceTextClassificationProvider,
 } from '../src/providers/huggingface';
+import { ScriptCompletionProvider } from '../src/providers/scriptCompletion';
 
 import type { ProviderOptionsMap, ProviderFunction } from '../src/types';
 
@@ -59,7 +61,7 @@ jest.mock('glob', () => ({
   globSync: jest.fn(),
 }));
 
-describe('providers', () => {
+describe('call provider apis', () => {
   afterEach(async () => {
     jest.clearAllMocks();
     await clearCache();
@@ -399,6 +401,62 @@ describe('providers', () => {
     });
   });
 
+  test('ScriptCompletionProvider callApi', async () => {
+    const mockResponse = 'Test script output';
+    const mockChildProcess = {
+      stdout: new Stream.Readable(),
+      stderr: new Stream.Readable(),
+    } as child_process.ChildProcess;
+    jest
+      .spyOn(child_process, 'execFile')
+      .mockImplementation(
+        (
+          file: string,
+          args: readonly string[] | null | undefined,
+          options: child_process.ExecFileOptions | null | undefined,
+          callback?:
+            | null
+            | ((
+                error: child_process.ExecFileException | null,
+                stdout: string | Buffer,
+                stderr: string | Buffer,
+              ) => void),
+        ) => {
+          expect(callback).toBeTruthy();
+          if (callback) {
+            expect(file).toBe('python');
+            expect(args).toEqual(
+              expect.arrayContaining([
+                'rag.py',
+                'Test prompt',
+                '{"config":{"some_config_val":42}}',
+                '{"var1":"value 1","var2":"value 2 \\"with some double \\"quotes\\"\\""}',
+              ]),
+            );
+            process.nextTick(() => callback(null, Buffer.from(mockResponse), Buffer.from('')));
+          }
+          return mockChildProcess;
+        },
+      );
+
+    const provider = new ScriptCompletionProvider('python rag.py', {
+      config: {
+        some_config_val: 42,
+      },
+    });
+    const result = await provider.callApi('Test prompt', {
+      var1: 'value 1',
+      var2: 'value 2 "with some double "quotes""',
+    });
+
+    expect(result.output).toBe(mockResponse);
+    expect(child_process.execFile).toHaveBeenCalledTimes(1);
+
+    jest.restoreAllMocks();
+  });
+});
+
+describe('loadApiProvider', () => {
   test('loadApiProvider with filepath', async () => {
     const mockYamlContent = `id: 'openai:gpt-4'
 config:

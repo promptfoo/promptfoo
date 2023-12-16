@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { execFile, spawn } from 'child_process';
 
 import rouge from 'rouge';
 import invariant from 'tiny-invariant';
@@ -206,15 +207,25 @@ export async function runAssertion({
           );
         }
       } else if (filePath.endsWith('.py')) {
-        const { execSync } = require('child_process');
-        const outputEscaped =
-          typeof output === 'string' ? JSON.stringify(output) : `"${JSON.stringify(output)}"`;
-        // Two levels of JSON.stringify because we need to convert context to a string, and then escape the string for the shell.
-        const contextEscaped = JSON.stringify(JSON.stringify(context));
-        const command = `${
-          process.env.PROMPTFOO_PYTHON || 'python'
-        } ${filePath} ${outputEscaped} ${contextEscaped}`;
-        const pythonScriptOutput = execSync(command).toString();
+        const args = [
+          filePath,
+          typeof output === 'string' ? output : JSON.stringify(output),
+          JSON.stringify(context)
+        ];
+        const pythonScriptOutput = await new Promise<string>((resolve, reject) => {
+          execFile(process.env.PROMPTFOO_PYTHON || 'python', args, null, (error, stdout, stderr) => {
+            if (error) {
+              reject(error);
+              return;
+            } 
+            const stringErr = String(stderr);
+            if (stringErr) {
+              reject(new Error(stringErr));
+            } else {
+              resolve(String(stdout));
+            }
+          });
+        });
         valueFromScript = pythonScriptOutput.trim();
       } else if (filePath.endsWith('.json')) {
         valueFromScript = JSON.parse(fs.readFileSync(filePath, 'utf8'));
@@ -565,7 +576,6 @@ ${renderedValue}`,
         );
         result = valueFromScript;
       } else {
-        const { execSync } = require('child_process');
         const isMultiline = renderedValue.includes('\n');
         let pythonScript = `import json
   import sys
@@ -575,15 +585,18 @@ ${renderedValue}`,
   value = data['value']
   ${isMultiline ? 'exec(value)' : 'print(json.dumps(eval(value)))'}`;
         const pythonProcessInput = JSON.stringify({ output, context, value: renderedValue });
-        const command = `${process.env.PROMPTFOO_PYTHON || 'python'} -c "${pythonScript.replace(
-          /\n/g,
-          ';',
-        )}"`;
-        result = execSync(command, {
-          input: pythonProcessInput,
-        })
-          .toString()
-          .trim() as string;
+        const child = spawn(process.env.PROMPTFOO_PYTHON || 'python', ['-c', pythonScript]);
+        child.stdin.write(pythonProcessInput);
+        child.stdin.end();
+        let childOutput = '';
+        await new Promise((resolve) => {
+          // Collect output and wait for process to exit
+          child.stdout.on('data', (data) => {
+            childOutput += data;
+          });
+          child.on('close', resolve);
+        });
+        result = childOutput;
       }
 
       if (result.toLowerCase() === 'true') {
