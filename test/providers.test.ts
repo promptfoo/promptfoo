@@ -401,58 +401,66 @@ describe('call provider apis', () => {
     });
   });
 
-  test('ScriptCompletionProvider callApi', async () => {
-    const mockResponse = 'Test script output';
-    const mockChildProcess = {
-      stdout: new Stream.Readable(),
-      stderr: new Stream.Readable(),
-    } as child_process.ChildProcess;
-    jest
-      .spyOn(child_process, 'execFile')
-      .mockImplementation(
-        (
-          file: string,
-          args: readonly string[] | null | undefined,
-          options: child_process.ExecFileOptions | null | undefined,
-          callback?:
-            | null
-            | ((
-                error: child_process.ExecFileException | null,
-                stdout: string | Buffer,
-                stderr: string | Buffer,
-              ) => void),
-        ) => {
-          expect(callback).toBeTruthy();
-          if (callback) {
-            expect(file).toBe('python');
-            expect(args).toEqual(
-              expect.arrayContaining([
-                'rag.py',
-                'Test prompt',
-                '{"config":{"some_config_val":42}}',
-                '{"var1":"value 1","var2":"value 2 \\"with some double \\"quotes\\"\\""}',
-              ]),
-            );
-            process.nextTick(() => callback(null, Buffer.from(mockResponse), Buffer.from('')));
-          }
-          return mockChildProcess;
+  describe.each([
+    ['python rag.py', 'python', ['rag.py']],
+    ['echo "hello world"', 'echo', ['hello world']],
+    ['./path/to/file.py run', './path/to/file.py', ['run']],
+    ['"/Path/To/My File.py"', '/Path/To/My File.py', []],
+  ])('ScriptCompletionProvider callApi with script %s', (script, inputFile, inputArgs) => {
+    test('returns expected output', async () => {
+      const mockResponse = 'Test script output';
+      const mockChildProcess = {
+        stdout: new Stream.Readable(),
+        stderr: new Stream.Readable(),
+      } as child_process.ChildProcess;
+      jest
+        .spyOn(child_process, 'execFile')
+        .mockImplementation(
+          (
+            file: string,
+            args: readonly string[] | null | undefined,
+            options: child_process.ExecFileOptions | null | undefined,
+            callback?:
+              | null
+              | ((
+                  error: child_process.ExecFileException | null,
+                  stdout: string | Buffer,
+                  stderr: string | Buffer,
+                ) => void),
+          ) => {
+            expect(callback).toBeTruthy();
+            if (callback) {
+              expect(file).toContain(inputFile);
+              expect(args).toEqual(
+                expect.arrayContaining(
+                  inputArgs.concat([
+                    'Test prompt',
+                    '{"config":{"some_config_val":42}}',
+                    '{"var1":"value 1","var2":"value 2 \\"with some double \\"quotes\\"\\""}',
+                  ]),
+                ),
+              );
+              process.nextTick(() => callback(null, Buffer.from(mockResponse), Buffer.from('')));
+            }
+            return mockChildProcess;
+          },
+        );
+
+      const provider = new ScriptCompletionProvider(script, {
+        config: {
+          some_config_val: 42,
         },
-      );
+      });
+      const result = await provider.callApi('Test prompt', {
+        var1: 'value 1',
+        var2: 'value 2 "with some double "quotes""',
+      });
 
-    const provider = new ScriptCompletionProvider('python rag.py', {
-      config: {
-        some_config_val: 42,
-      },
+      expect(result.output).toBe(mockResponse);
+      expect(child_process.execFile).toHaveBeenCalledTimes(1);
+
+      jest.restoreAllMocks();
     });
-    const result = await provider.callApi('Test prompt', {
-      var1: 'value 1',
-      var2: 'value 2 "with some double "quotes""',
-    });
-
-    expect(result.output).toBe(mockResponse);
-    expect(child_process.execFile).toHaveBeenCalledTimes(1);
-
-    jest.restoreAllMocks();
   });
 });
 

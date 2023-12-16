@@ -20,7 +20,24 @@ export class ScriptCompletionProvider implements ApiProvider {
 
   async callApi(prompt: string, vars?: Record<string, string | object>) {
     return new Promise<ProviderResponse>((resolve, reject) => {
-      const scriptParts = this.scriptPath.split(' ');
+      // This regex handles quoted arguments, which are passed to the execFile call as a single argument
+      const scriptPartsRegex = /[^\s"']+|"([^"]*)"|'([^']*)'/g;
+      let match;
+      const scriptParts = [];
+
+      // Collect all parts based on the regular expression
+      while ((match = scriptPartsRegex.exec(this.scriptPath)) !== null) {
+        // If it's a quoted match, push the first group (ignoring the quotes)
+        if (match[1]) {
+          scriptParts.push(match[1]);
+        } else if (match[2]) {
+          // If it's a single-quoted match, push the second group (ignoring the quotes)
+          scriptParts.push(match[2]);
+        } else {
+          // Otherwise, push the whole match
+          scriptParts.push(match[0]);
+        }
+      }
       const command = scriptParts.shift();
       invariant(command, 'No command found in script path');
       const scriptArgs = scriptParts.concat([
@@ -37,15 +54,17 @@ export class ScriptCompletionProvider implements ApiProvider {
           reject(error);
           return;
         }
+        const standardOutput = stripText(String(stdout).trim());
         const errorOutput = stripText(String(stderr).trim());
         if (errorOutput) {
           logger.debug(`Error output from script ${this.scriptPath}: ${errorOutput}`);
-          reject(new Error(errorOutput));
-          return;
+          if (!standardOutput) {
+            reject(new Error(errorOutput));
+            return;
+          }
         }
-        const output = stripText(String(stdout).trim());
-        logger.debug(`Output from script ${this.scriptPath}: ${output}`);
-        resolve({ output });
+        logger.debug(`Output from script ${this.scriptPath}: ${standardOutput}`);
+        resolve({ output: standardOutput });
       });
     });
   }
