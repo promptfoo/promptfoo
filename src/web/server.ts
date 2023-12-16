@@ -99,6 +99,7 @@ export function startServer(port = 15500, apiBaseUrl = '', skipConfirmation = fa
           sharing: testSuite.sharing ?? true,
         }),
         {
+          eventSource: 'web',
           progressCallback: (progress, total) => {
             const job = evalJobs.get(id);
             invariant(job, 'Job not found');

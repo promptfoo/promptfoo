@@ -75,7 +75,10 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
   telemetry.maybeShowNotice();
 
   // Run the eval!
-  const ret = await doEvaluate(constructedTestSuite, options);
+  const ret = await doEvaluate(constructedTestSuite, {
+    ...options,
+    eventSource: 'library',
+  });
 
   if (testSuite.outputPath) {
     if (typeof testSuite.outputPath === 'string') {

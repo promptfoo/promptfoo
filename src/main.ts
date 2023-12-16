@@ -421,7 +421,10 @@ async function main() {
         options.generateSuggestions = true;
       }
 
-      const summary = await evaluate(testSuite, options);
+      const summary = await evaluate(testSuite, {
+        ...options,
+        eventSource: 'cli',
+      });
 
       const shareableUrl =
         cmdObj.share && config.sharing ? await createShareableUrl(summary, config) : null;

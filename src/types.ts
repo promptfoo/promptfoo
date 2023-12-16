@@ -141,6 +141,7 @@ export interface EvaluateOptions {
   repeat?: number;
   delay?: number;
   cache?: boolean;
+  eventSource?: string;
 }
 
 export interface Prompt {

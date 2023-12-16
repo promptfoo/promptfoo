@@ -5,10 +5,11 @@ import logger from './logger';
 import { fetchWithTimeout } from './fetch';
 import { maybeRecordFirstRun } from './util';
 
+type EventValue = string | number | boolean;
 type TelemetryEvent = {
   event: string;
   packageVersion: string;
-  properties: Record<string, string | number>;
+  properties: Record<string, EventValue>;
 };
 
 type TelemetryEventTypes = 'eval_ran' | 'assertion_used' | 'command_used';
@@ -24,7 +25,7 @@ export class Telemetry {
     return process.env.PROMPTFOO_DISABLE_TELEMETRY === '1';
   }
 
-  record(eventName: TelemetryEventTypes, properties: Record<string, string | number>): void {
+  record(eventName: TelemetryEventTypes, properties: Record<string, EventValue>): void {
     if (!this.disabled) {
       this.events.push({
         event: eventName,

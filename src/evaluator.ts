@@ -655,6 +655,15 @@ class Evaluator {
       numTests: tests.length,
       numVars: varNames.size,
       numProviders: testSuite.providers.length,
+      eventSource: options.eventSource || 'default',
+      ci: Boolean(
+        process.env.CI ||
+          process.env.GITHUB_ACTIONS ||
+          process.env.TRAVIS ||
+          process.env.CIRCLECI ||
+          process.env.JENKINS ||
+          process.env.GITLAB_CI
+      ),
     });
 
     return { version: 2, results, stats: this.stats, table };
