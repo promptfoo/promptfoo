@@ -221,16 +221,18 @@ function EvalOutputCell({
     }
   };
 
+  let tokenUsageDisplay;
+  let latencyDisplay = <span>{output.latencyMs} ms</span>;
+  if (output.tokenUsage?.cached) {
+    tokenUsageDisplay = <span>{output.tokenUsage.cached} tokens (cached)</span>;
+  } else if (output.tokenUsage?.total) {
+    tokenUsageDisplay = <span>{output.tokenUsage.total} tokens</span>;
+  }
   const detail = (
     <span className="cell-detail">
-      {output.tokenUsage?.cached ? (
-        <span>{output.tokenUsage.cached} tokens (cached)</span>
-      ) : (
-        <>
-          {output.tokenUsage?.total && <span>{output.tokenUsage.total} tokens</span>} |{' '}
-          <span>{output.latencyMs} ms</span>
-        </>
-      )}
+      {tokenUsageDisplay}
+      {tokenUsageDisplay && latencyDisplay ? ' | ' : ''}
+      {latencyDisplay}
     </span>
   );
 
