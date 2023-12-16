@@ -44,37 +44,38 @@ Deterministic eval metrics
 
 | Assertion Type                                                  | Returns true if...                                               |
 | --------------------------------------------------------------- | ---------------------------------------------------------------- |
-| [equals](#equality)                                             | output matches exactly                                           |
+| [contains-all](#contains-all)                                   | output contains all list of substrings                           |
+| [contains-any](#contains-any)                                   | output contains any of the listed substrings                     |
+| [contains-json](#contains-json)                                 | output contains valid json (optional json schema validation)     |
 | [contains](#contains)                                           | output contains substring                                        |
+| [equals](#equality)                                             | output matches exactly                                           |
+| [icontains-all](#contains-all)                                  | output contains all list of substrings, case insensitive         |
+| [icontains-any](#contains-any)                                  | output contains any of the listed substrings, case insensitive   |
 | [icontains](#contains)                                          | output contains substring, case insensitive                      |
+| [is-json](#is-json)                                             | output is valid json (optional json schema validation)           |
+| [is-valid-openai-function-call](#is-valid-openai-function-call) | Ensure that the function call matches the function's JSON schema |
+| [javascript](/docs/configuration/expected-outputs/javascript)   | provided Javascript function validates the output                |
+| [latency](#latency)                                             | Latency is below a threshold (milliseconds)                      |
+| [levenshtein](#levenshtein-distance)                            | Levenshtein distance is below a threshold                        |
+| [python](/docs/configuration/expected-outputs/python)           | provided Python function validates the output                    |
 | [regex](#regex)                                                 | output matches regex                                             |
 | [starts-with](#starts-with)                                     | output starts with string                                        |
-| [contains-any](#contains-any)                                   | output contains any of the listed substrings                     |
-| [contains-all](#contains-all)                                   | output contains all list of substrings                           |
-| [icontains-any](#contains-any)                                  | output contains any of the listed substrings, case insensitive   |
-| [icontains-all](#contains-all)                                  | output contains all list of substrings, case insensitive         |
-| [is-json](#is-json)                                             | output is valid json (optional json schema validation)           |
-| [contains-json](#contains-json)                                 | output contains valid json (optional json schema validation)     |
-| [javascript](/docs/configuration/expected-outputs/javascript)   | provided Javascript function validates the output                |
-| [python](/docs/configuration/expected-outputs/python)           | provided Python function validates the output                    |
 | [webhook](#webhook)                                             | provided webhook returns \{pass: true\}                          |
 | rouge-n                                                         | Rouge-N score is above a given threshold                         |
-| [levenshtein](#levenshtein-distance)                            | Levenshtein distance is below a threshold                        |
-| [is-valid-openai-function-call](#is-valid-openai-function-call) | Ensure that the function call matches the function's JSON schema |
 
 Model-assisted eval metrics
 
 | Assertion Type                                                             | Method                                                                          |
 | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| [similar](/docs/configuration/expected-outputs/similar)                    | embeddings and cosine similarity are above a threshold                          |
-| [classifier](/docs/configuration/expected-outputs/classifier)              | Run LLM output through a classifier                                             |
-| [llm-rubric](/docs/configuration/expected-outputs/model-graded)            | LLM output matches a given rubric, using a Language Model to grade output       |
-| [factuality](/docs/configuration/expected-outputs/model-graded)            | LLM output adheres to the given facts, using Factuality method from OpenAI eval |
-| [model-graded-closedqa](/docs/configuration/expected-outputs/model-graded) | LLM output adheres to given criteria, using Closed QA method from OpenAI eval   |
 | [answer-relevance](/docs/configuration/expected-outputs/model-graded)      | Ensure that LLM output is related to original query                             |
+| [classifier](/docs/configuration/expected-outputs/classifier)              | Run LLM output through a classifier                                             |
+| [context-faithfulness](/docs/configuration/expected-outputs/model-graded)  | Ensure that LLM output uses the context                                         |
 | [context-recall](/docs/configuration/expected-outputs/model-graded)        | Ensure that ground truth appears in context                                     |
 | [context-relevance](/docs/configuration/expected-outputs/model-graded)     | Ensure that context is relevant to original query                               |
-| [context-faithfulness](/docs/configuration/expected-outputs/model-graded)  | Ensure that LLM output uses the context                                         |
+| [factuality](/docs/configuration/expected-outputs/model-graded)            | LLM output adheres to the given facts, using Factuality method from OpenAI eval |
+| [llm-rubric](/docs/configuration/expected-outputs/model-graded)            | LLM output matches a given rubric, using a Language Model to grade output       |
+| [model-graded-closedqa](/docs/configuration/expected-outputs/model-graded) | LLM output adheres to given criteria, using Closed QA method from OpenAI eval   |
+| [similar](/docs/configuration/expected-outputs/similar)                    | embeddings and cosine similarity are above a threshold                          |
 
 :::tip
 Every test type can be negated by prepending `not-`. For example, `not-equals` or `not-regex`.
@@ -315,9 +316,22 @@ assert:
     value: hello world
 ```
 
+### Latency
+
+The `latency` assertion passes if the LLM call takes longer than the specified threshold. Duration is specified in milliseconds.
+
+Example:
+
+```yaml
+assert:
+  # Fail if the LLM call takes longer than 5 seconds
+  - type: latency
+    threshold: 5000
+```
+
 ### is-valid-openai-function-call
 
-This ensures that any JSON LLM output adheres to the schema specified in the `functions` configuration of the provider.  Learn more about the [OpenAI provider](/docs/providers/openai/#Using-functions).
+This ensures that any JSON LLM output adheres to the schema specified in the `functions` configuration of the provider. Learn more about the [OpenAI provider](/docs/providers/openai/#Using-functions).
 
 ### Model-graded evals
 
@@ -503,7 +517,7 @@ In this example, the `containsMentalHealth` assertion template is defined at the
 
 ## Labeling assertions
 
-Each assertion supports a `metrics` field that allows you to tag the result however you like.  Use this feature to combine related assertions into aggregate metrics. 
+Each assertion supports a `metrics` field that allows you to tag the result however you like. Use this feature to combine related assertions into aggregate metrics.
 
 For example, these asserts will aggregate results into two metrics, `Tone` and `Consistency`.
 

@@ -257,6 +257,7 @@ class Evaluator {
           provider,
           test,
           output: processedResponse.output,
+          latencyMs: response.cached ? undefined : latencyMs,
         });
         if (!checkResult.pass) {
           ret.error = checkResult.reason;
