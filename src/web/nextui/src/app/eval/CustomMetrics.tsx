@@ -12,11 +12,13 @@ const CustomMetrics: React.FC<CustomMetricsProps> = ({ lookup }) => {
   }
   return (
     <div className="custom-metric-container">
-      {Object.entries(lookup).map(([metric, score]) => (
-        <span key={metric}>
-          {metric}: {score.toFixed(2)}
-        </span>
-      ))}
+      {Object.entries(lookup).map(([metric, score]) =>
+        metric && score ? (
+          <span key={metric}>
+            {metric}: {score.toFixed(2)}
+          </span>
+        ) : null,
+      )}
     </div>
   );
 };
