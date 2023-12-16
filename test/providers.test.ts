@@ -453,7 +453,11 @@ describe('call provider apis', () => {
               expect(file).toContain(inputFile);
               expect(args).toEqual(
                 expect.arrayContaining(
-                  inputArgs.concat(["Test prompt", "{\"config\":{\"some_config_val\":42}}", "{\"vars\":{\"var1\":\"value 1\",\"var2\":\"value 2 \\\"with some double \\\"quotes\\\"\\\"\"}}"]),
+                  inputArgs.concat([
+                    'Test prompt',
+                    '{"config":{"some_config_val":42}}',
+                    '{"vars":{"var1":"value 1","var2":"value 2 \\"with some double \\"quotes\\"\\""}}',
+                  ]),
                 ),
               );
               process.nextTick(() => callback(null, Buffer.from(mockResponse), Buffer.from('')));

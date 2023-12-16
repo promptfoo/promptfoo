@@ -3,7 +3,12 @@ import { execFile } from 'child_process';
 import invariant from 'tiny-invariant';
 
 import logger from '../logger';
-import type { ApiProvider, CallApiContextParams, ProviderOptions, ProviderResponse } from '../types';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  ProviderOptions,
+  ProviderResponse,
+} from '../types';
 
 const ANSI_ESCAPE = /\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;
 
