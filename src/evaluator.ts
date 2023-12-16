@@ -294,6 +294,7 @@ class Evaluator {
 
       return ret;
     } catch (err) {
+      this.stats.failures++;
       return {
         ...setup,
         error: String(err) + '\n\n' + (err as Error).stack,
