@@ -1940,6 +1940,14 @@ describe('assertionFromString', () => {
     expect(result.threshold).toBe(1000);
   });
 
+  it('should create a latency assertion', () => {
+    const expected = 'perplexity(1.5)';
+
+    const result: Assertion = assertionFromString(expected);
+    expect(result.type).toBe('perplexity');
+    expect(result.threshold).toBe(1.5);
+  });
+
   it('should create an openai function call assertion', () => {
     const expected = 'is-valid-openai-function-call';
 
