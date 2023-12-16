@@ -41,12 +41,33 @@ interface OllamaCompletionOptions {
   num_thread?: number;
 }
 
-interface OllamaJsonL {
+interface OllamaCompletionJsonL {
   model: string;
   created_at: string;
   response?: string;
   done: boolean;
   context?: number[];
+
+  total_duration?: number;
+  load_duration?: number;
+  sample_count?: number;
+  sample_duration?: number;
+  prompt_eval_count?: number;
+  prompt_eval_duration?: number;
+  eval_count?: number;
+  eval_duration?: number;
+}
+
+interface OllamaChatJsonL {
+  model: string;
+  created_at: string;
+  message?: {
+    role: string;
+    content: string;
+    images: null;
+  };
+  done: boolean;
+
   total_duration?: number;
   load_duration?: number;
   sample_count?: number;
@@ -115,7 +136,7 @@ export class OllamaCompletionProvider implements ApiProvider {
         .split('\n')
         .filter((line: string) => line.trim() !== '')
         .map((line: string) => {
-          const parsed = JSON.parse(line) as OllamaJsonL;
+          const parsed = JSON.parse(line) as OllamaCompletionJsonL;
           if (parsed.response) {
             return parsed.response;
           }
@@ -195,9 +216,9 @@ export class OllamaChatProvider implements ApiProvider {
         .split('\n')
         .filter((line: string) => line.trim() !== '')
         .map((line: string) => {
-          const parsed = JSON.parse(line) as OllamaJsonL;
-          if (parsed.response) {
-            return parsed.response;
+          const parsed = JSON.parse(line) as OllamaChatJsonL;
+          if (parsed.message?.content) {
+            return parsed.message.content;
           }
           return null;
         })

@@ -5,18 +5,25 @@ sidebar_position: 41
 # Ollama
 
 The `ollama` provider is compatible with [Ollama](https://github.com/jmorganca/ollama),
-which enables access to Llama2, Codellama, Orca, Vicuna, Nous-Hermes, Wizard Vicuna, and more.
+which enables access to Mixtral, Mistal, Llama2, Codellama, Orca, Vicuna, and more.
 
 You can use its `/api/generate` endpoint
 by specifying any of the following providers from the [Ollama library](https://ollama.ai/library):
 
-- `ollama:llama2`
-- `ollama:llama2:13b`
-- `ollama:llama2:70b`
-- `ollama:llama2-uncensored`
-- `ollama:codellama`
-- `ollama:orca-mini`
-- and so on...
+- `ollama:completion:llama2`
+- `ollama:completion:llama2:13b`
+- `ollama:completion:llama2:70b`
+- `ollama:completion:llama2-uncensored`
+- `ollama:completion:codellama`
+- `ollama:completion:orca-mini`
+- `ollama:completion:mixtral:8x7b`
+- ...
+
+Or, use the `/api/chat` endpoint for chat-formatted prompts:
+
+- `ollama:chat:llama2:7b-chat`
+- `ollama:chat:llama2:70b-chat`
+- ...
 
 Also supported is the `/api/embeddings` endpoint via `ollama:embeddings:<model name>`.
 
