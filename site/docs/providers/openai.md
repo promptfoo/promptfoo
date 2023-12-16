@@ -501,3 +501,7 @@ There are a few things you can do if you encounter OpenAI rate limits (most comm
    or by setting `evaluateOptions.delay` in the config,
    or with the environment variable `PROMPTFOO_DELAY_MS` (all values are in milliseconds).
 3. **Adjust the exponential backoff for failed requests** by setting the environment variable `PROMPTFOO_REQUEST_BACKOFF_MS`. This defaults to 5000 milliseconds and retries exponential up to 4 times. You can increase this value if requests are still failing, but note that this can significantly increase end-to-end test time.
+
+### OpenAI flakiness
+
+To retry HTTP requests than are Internal Server errors, set the `PROMPTFOO_RETRY_5XX` environment variable to `1`.
