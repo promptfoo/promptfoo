@@ -16,7 +16,7 @@ import {
   AzureOpenAiChatCompletionProvider,
   AzureOpenAiCompletionProvider,
 } from '../src/providers/azureopenai';
-import { OllamaProvider } from '../src/providers/ollama';
+import { OllamaChatProvider, OllamaCompletionProvider } from '../src/providers/ollama';
 import { WebhookProvider } from '../src/providers/webhook';
 import {
   HuggingfaceTextGenerationProvider,
@@ -308,7 +308,7 @@ describe('providers', () => {
     expect(result.output).toBe('Test output');
   });
 
-  test('OllamaProvider callApi', async () => {
+  test('OllamaCompletionProvider callApi', async () => {
     const mockResponse = {
       text: jest.fn()
         .mockResolvedValue(`{"model":"llama2:13b","created_at":"2023-08-08T21:50:34.898068Z","response":"Gre","done":false}
@@ -323,11 +323,31 @@ describe('providers', () => {
     };
     (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
 
-    const provider = new OllamaProvider('llama');
+    const provider = new OllamaCompletionProvider('llama');
     const result = await provider.callApi('Test prompt');
 
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(result.output).toBe('Great question! The sky appears blue');
+  });
+
+  test('OllamaChatProvider callApi', async () => {
+    const mockResponse = {
+      text: jest.fn()
+        .mockResolvedValue(`{"model":"orca-mini","created_at":"2023-12-16T01:46:19.263682972Z","message":{"role":"assistant","content":" Because","images":null},"done":false}
+{"model":"orca-mini","created_at":"2023-12-16T01:46:19.275143974Z","message":{"role":"assistant","content":" of","images":null},"done":false}
+{"model":"orca-mini","created_at":"2023-12-16T01:46:19.288137727Z","message":{"role":"assistant","content":" Ray","images":null},"done":false}
+{"model":"orca-mini","created_at":"2023-12-16T01:46:19.301139709Z","message":{"role":"assistant","content":"leigh","images":null},"done":false}
+{"model":"orca-mini","created_at":"2023-12-16T01:46:19.311364699Z","message":{"role":"assistant","content":" scattering","images":null},"done":false}
+{"model":"orca-mini","created_at":"2023-12-16T01:46:19.324309782Z","message":{"role":"assistant","content":".","images":null},"done":false}
+{"model":"orca-mini","created_at":"2023-12-16T01:46:19.337165395Z","done":true,"total_duration":1486443841,"load_duration":1280794143,"prompt_eval_count":35,"prompt_eval_duration":142384000,"eval_count":6,"eval_duration":61912000}`),
+    };
+    (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
+
+    const provider = new OllamaChatProvider('llama');
+    const result = await provider.callApi('Test prompt');
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(result.output).toBe(' Because of Rayleigh scattering.');
   });
 
   test('WebhookProvider callApi', async () => {
@@ -464,8 +484,20 @@ config:
 
   test('loadApiProvider with ollama:modelName', async () => {
     const provider = await loadApiProvider('ollama:llama2:13b');
-    expect(provider).toBeInstanceOf(OllamaProvider);
-    expect(provider.id()).toBe('ollama:llama2:13b');
+    expect(provider).toBeInstanceOf(OllamaCompletionProvider);
+    expect(provider.id()).toBe('ollama:completion:llama2:13b');
+  });
+
+  test('loadApiProvider with ollama:completion:modelName', async () => {
+    const provider = await loadApiProvider('ollama:completion:llama2:13b');
+    expect(provider).toBeInstanceOf(OllamaCompletionProvider);
+    expect(provider.id()).toBe('ollama:completion:llama2:13b');
+  });
+
+  test('loadApiProvider with ollama:chat:modelName', async () => {
+    const provider = await loadApiProvider('ollama:chat:llama2:13b');
+    expect(provider).toBeInstanceOf(OllamaChatProvider);
+    expect(provider.id()).toBe('ollama:chat:llama2:13b');
   });
 
   test('loadApiProvider with llama:modelName', async () => {
