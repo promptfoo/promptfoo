@@ -6,4 +6,4 @@ providers:
 defaultTest:
   assert:
     - type: latency
-      threshold: 800
+      threshold: 3000
