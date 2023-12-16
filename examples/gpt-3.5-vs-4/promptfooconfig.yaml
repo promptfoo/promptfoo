@@ -1,9 +1,9 @@
 prompts:
   - prompts.txt
 providers:
-  - openai:gpt-3.5-turbo
-  - openai:gpt-4
+  #- openai:gpt-3.5-turbo
+  - openai:gpt-4-1106-preview
 defaultTest:
   assert:
-    - type: latency
-      threshold: 3000
+    - type: perplexity
+      threshold: 0.5

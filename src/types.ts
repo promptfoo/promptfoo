@@ -57,13 +57,20 @@ export interface ProviderOptions {
   prompts?: string[]; // List of prompt display strings
 }
 
+export interface CallApiContextParams {
+  vars: Record<string, string | object>;
+}
+
+export interface CallApiOptionsParams {
+  includeLogProbs?: boolean;
+}
+
 export interface ApiProvider {
   id: () => string;
   callApi: (
     prompt: string,
-    context?: {
-      vars: Record<string, string | object>;
-    },
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
   ) => Promise<ProviderResponse>;
   callEmbeddingApi?: (prompt: string) => Promise<ProviderEmbeddingResponse>;
   callClassificationApi?: (prompt: string) => Promise<ProviderClassificationResponse>;
@@ -89,6 +96,7 @@ export interface ProviderResponse {
   output?: string | object;
   tokenUsage?: Partial<TokenUsage>;
   cached?: boolean;
+  logProbs?: number[];
 }
 
 export interface ProviderEmbeddingResponse {
@@ -268,7 +276,8 @@ type BaseAssertionTypes =
   | 'rouge-l'
   | 'levenshtein'
   | 'is-valid-openai-function-call'
-  | 'latency';
+  | 'latency'
+  | 'perplexity';
 
 type NotPrefixed<T extends string> = `not-${T}`;
 

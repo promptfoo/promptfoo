@@ -85,12 +85,14 @@ export async function runAssertions({
   test,
   output,
   latencyMs,
+  logProbs,
 }: {
   prompt: string;
   provider: ApiProvider;
   test: AtomicTestCase;
   output: string | object;
   latencyMs?: number;
+  logProbs?: number[];
 }): Promise<GradingResult> {
   const tokensUsed = {
     total: 0,
@@ -112,7 +114,7 @@ export async function runAssertions({
     const weight = assertion.weight || 1;
     totalWeight += weight;
 
-    const result = await runAssertion({ prompt, provider, assertion, test, output, latencyMs });
+    const result = await runAssertion({ prompt, provider, assertion, test, output, latencyMs, logProbs });
     totalScore += result.score * weight;
     componentResults.push(result);
 
@@ -165,6 +167,7 @@ export async function runAssertion({
   test,
   output,
   latencyMs,
+  logProbs,
 }: {
   prompt: string;
   provider: ApiProvider;
@@ -172,6 +175,7 @@ export async function runAssertion({
   test: AtomicTestCase;
   output: string | object;
   latencyMs?: number;
+  logProbs?: number[];
 }): Promise<GradingResult> {
   let pass: boolean = false;
   let score: number = 0.0;
@@ -951,6 +955,28 @@ ${assertion.value}`,
     };
   }
 
+  if (baseType === 'perplexity') {
+    if (!assertion.threshold) {
+      throw new Error('Perplexity assertion must have a threshold');
+    }
+    if (!logProbs || logProbs.length === 0) {
+      throw new Error('Perplexity assertion does not support providers that do not return logProbs');
+    }
+    const sumLogProbs = logProbs.reduce((acc, logProb) => acc + logProb, 0);
+    const avgLogProb = sumLogProbs / logProbs.length;
+    const perplexity = Math.exp(-avgLogProb);
+    
+    pass = perplexity <= assertion.threshold;
+    return {
+      pass,
+      score: pass ? 1 : 0,
+      reason: pass
+        ? 'Assertion passed'
+        : `Perplexity ${perplexity.toFixed(2)} is greater than threshold ${assertion.threshold}`,
+      assertion,
+    };
+  }
+
   throw new Error('Unknown assertion type: ' + assertion.type);
 }
 
@@ -1026,7 +1052,7 @@ export function assertionFromString(expected: string): Assertion {
 
   // New options
   const assertionRegex =
-    /^(not-)?(equals|contains-any|contains-all|icontains-any|icontains-all|contains-json|is-json|regex|icontains|contains|webhook|rouge-n|similar|starts-with|levenshtein|classifier|model-graded-factuality|factuality|model-graded-closedqa|answer-relevance|context-recall|context-relevance|context-faithfulness|is-valid-openai-function-call|latency)(?:\((\d+(?:\.\d+)?)\))?(?::(.*))?$/;
+    /^(not-)?(equals|contains-any|contains-all|icontains-any|icontains-all|contains-json|is-json|regex|icontains|contains|webhook|rouge-n|similar|starts-with|levenshtein|classifier|model-graded-factuality|factuality|model-graded-closedqa|answer-relevance|context-recall|context-relevance|context-faithfulness|is-valid-openai-function-call|latency|perplexity)(?:\((\d+(?:\.\d+)?)\))?(?::(.*))?$/;
   const regexMatch = expected.match(assertionRegex);
 
   if (regexMatch) {
@@ -1058,7 +1084,8 @@ export function assertionFromString(expected: string): Assertion {
       type === 'context-recall' ||
       type === 'context-relevance' ||
       type === 'context-faithfulness' ||
-      type === 'latency'
+      type === 'latency' ||
+      type === 'perplexity'
     ) {
       return {
         type: fullType as AssertionType,

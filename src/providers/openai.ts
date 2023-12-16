@@ -7,6 +7,8 @@ import { OpenAiFunction } from './openaiUtil';
 
 import type {
   ApiProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
   EnvOverrides,
   ProviderEmbeddingResponse,
   ProviderResponse,
@@ -93,7 +95,11 @@ export class OpenAiGenericProvider implements ApiProvider {
   }
 
   // @ts-ignore: Prompt is not used in this implementation
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    callApiOptions?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
     throw new Error('Not implemented');
   }
 }
@@ -179,7 +185,11 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
     this.config = options.config || {};
   }
 
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    callApiOptions?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
     if (!this.getApiKey()) {
       throw new Error(
         'OpenAI API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
@@ -206,6 +216,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       frequency_penalty:
         this.config.frequency_penalty ?? parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0'),
       best_of: this.config.best_of ?? parseInt(process.env.OPENAI_BEST_OF || '1'),
+      logprobs: callApiOptions?.includeLogProbs || undefined,
       stop,
     };
     logger.debug(`Calling OpenAI API: ${JSON.stringify(body)}`);
@@ -280,7 +291,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     this.config = options.config || {};
   }
 
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    callApiOptions?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
     if (!this.getApiKey()) {
       throw new Error(
         'OpenAI API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
@@ -311,6 +326,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       functions: this.config.functions || undefined,
       function_call: this.config.function_call || undefined,
       response_format: this.config.response_format || undefined,
+      logprobs: callApiOptions?.includeLogProbs || undefined,
       stop,
     };
     logger.debug(`Calling OpenAI API: ${JSON.stringify(body)}`);
@@ -330,7 +346,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           body: JSON.stringify(body),
         },
         REQUEST_TIMEOUT_MS,
-      )) as unknown as any);
+      )) as unknown as { data: any; cached: boolean });
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,
@@ -341,6 +357,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     try {
       const message = data.choices[0].message;
       const output = message.content === null ? message.function_call : message.content;
+      const logProbs = data.choices[0].logprobs?.content?.map(
+        (logProbObj: { token: string; logprob: number }) => logProbObj.logprob,
+      );
 
       return {
         output,
@@ -352,6 +371,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
               completion: data.usage.completion_tokens,
             },
         cached,
+        logProbs,
       };
     } catch (err) {
       return {
