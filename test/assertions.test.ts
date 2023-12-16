@@ -1509,6 +1509,61 @@ describe('runAssertion', () => {
     },
   );
 
+  describe('latency assertion', () => {
+    it('should pass when the latency assertion passes', async () => {
+      const output = 'Expected output';
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4'),
+        assertion: {
+          type: 'latency',
+          threshold: 100,
+        },
+        latencyMs: 50,
+        test: {} as AtomicTestCase,
+        output,
+      });
+      expect(result.pass).toBeTruthy();
+      expect(result.reason).toBe('Assertion passed');
+    });
+
+    it('should fail when the latency assertion fails', async () => {
+      const output = 'Expected output';
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4'),
+        assertion: {
+          type: 'latency',
+          threshold: 100,
+        },
+        latencyMs: 1000,
+        test: {} as AtomicTestCase,
+        output,
+      });
+      expect(result.pass).toBeFalsy();
+      expect(result.reason).toBe('Latency 1000ms is greater than threshold 100ms');
+    });
+
+    it('should throw an error when grading result is missing latencyMs', async () => {
+      const output = 'Expected output';
+
+      await expect(
+        runAssertion({
+          prompt: 'Some prompt',
+          provider: new OpenAiChatCompletionProvider('gpt-4'),
+          assertion: {
+            type: 'latency',
+            threshold: 100,
+          },
+          test: {} as AtomicTestCase,
+          output,
+        }),
+      ).rejects.toThrow('Latency assertion does not support cached results. Rerun the eval with --no-cache');
+    });
+  });
+
   describe('is-valid-openai-function-call assertion', () => {
     it('should pass for a valid function call with correct arguments', async () => {
       const output = { arguments: '{"x": 10, "y": 20}', name: 'add' };
@@ -1740,6 +1795,14 @@ describe('assertionFromString', () => {
     expect(result.type).toBe('classifier');
     expect(result.value).toBe('classA');
     expect(result.threshold).toBe(0.5);
+  });
+
+  it('should create a latency assertion', () => {
+    const expected = 'latency(1000)';
+
+    const result: Assertion = assertionFromString(expected);
+    expect(result.type).toBe('latency');
+    expect(result.threshold).toBe(1000);
   });
 
   it('should create an openai function call assertion', () => {

@@ -83,11 +83,13 @@ export async function runAssertions({
   provider,
   test,
   output,
+  latencyMs,
 }: {
   prompt: string;
   provider: ApiProvider;
   test: AtomicTestCase;
   output: string | object;
+  latencyMs?: number;
 }): Promise<GradingResult> {
   const tokensUsed = {
     total: 0,
@@ -109,7 +111,7 @@ export async function runAssertions({
     const weight = assertion.weight || 1;
     totalWeight += weight;
 
-    const result = await runAssertion({ prompt, provider, assertion, test, output });
+    const result = await runAssertion({ prompt, provider, assertion, test, output, latencyMs });
     totalScore += result.score * weight;
     componentResults.push(result);
 
@@ -161,12 +163,14 @@ export async function runAssertion({
   assertion,
   test,
   output,
+  latencyMs,
 }: {
   prompt: string;
   provider: ApiProvider;
   assertion: Assertion;
   test: AtomicTestCase;
   output: string | object;
+  latencyMs?: number;
 }): Promise<GradingResult> {
   let pass: boolean = false;
   let score: number = 0.0;
@@ -916,6 +920,24 @@ ${assertion.value}`,
     };
   }
 
+  if (baseType === 'latency') {
+    if (!assertion.threshold) {
+      throw new Error('Latency assertion must have a threshold in milliseconds');
+    }
+    if (!latencyMs) {
+      throw new Error('Latency assertion does not support cached results. Rerun the eval with --no-cache');
+    }
+    pass = latencyMs <= assertion.threshold;
+    return {
+      pass,
+      score: pass ? 1 : 0,
+      reason: pass
+        ? 'Assertion passed'
+        : `Latency ${latencyMs}ms is greater than threshold ${assertion.threshold}ms`,
+      assertion,
+    };
+  }
+
   throw new Error('Unknown assertion type: ' + assertion.type);
 }
 
@@ -991,7 +1013,7 @@ export function assertionFromString(expected: string): Assertion {
 
   // New options
   const assertionRegex =
-    /^(not-)?(equals|contains-any|contains-all|icontains-any|icontains-all|contains-json|is-json|regex|icontains|contains|webhook|rouge-n|similar|starts-with|levenshtein|classifier|model-graded-factuality|factuality|model-graded-closedqa|answer-relevance|context-recall|context-relevance|context-faithfulness|is-valid-openai-function-call)(?:\((\d+(?:\.\d+)?)\))?(?::(.*))?$/;
+    /^(not-)?(equals|contains-any|contains-all|icontains-any|icontains-all|contains-json|is-json|regex|icontains|contains|webhook|rouge-n|similar|starts-with|levenshtein|classifier|model-graded-factuality|factuality|model-graded-closedqa|answer-relevance|context-recall|context-relevance|context-faithfulness|is-valid-openai-function-call|latency)(?:\((\d+(?:\.\d+)?)\))?(?::(.*))?$/;
   const regexMatch = expected.match(assertionRegex);
 
   if (regexMatch) {
@@ -1022,7 +1044,8 @@ export function assertionFromString(expected: string): Assertion {
       type === 'answer-relevance' ||
       type === 'context-recall' ||
       type === 'context-relevance' ||
-      type === 'context-faithfulness'
+      type === 'context-faithfulness' ||
+      type === 'latency'
     ) {
       return {
         type: fullType as AssertionType,
