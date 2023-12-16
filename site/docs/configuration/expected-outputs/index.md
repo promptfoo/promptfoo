@@ -349,6 +349,10 @@ assert:
     threshold: 1.5
 ```
 
+:::warning
+Perplexity requires the LLM API to output `logprobs`. Currently only more recent versions of OpenAI GPT support this.
+:::
+
 #### Comparing different outputs from the same LLM
 
 You can compare perplexity scores across different outputs from the same model to get a sense of which output the model finds more likely (or less surprising). This is a good way to tune your prompts and hyperparameters (like temperature) to be more accurate.
