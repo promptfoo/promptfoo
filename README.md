@@ -104,38 +104,40 @@ See [Test assertions](https://promptfoo.dev/docs/configuration/expected-outputs)
 
 Deterministic eval metrics
 
-| Assertion Type  | Returns true if...                                             |
-| --------------- | -------------------------------------------------------------- |
-| `equals`        | output matches exactly                                         |
-| `contains`      | output contains substring                                      |
-| `icontains`     | output contains substring, case insensitive                    |
-| `regex`         | output matches regex                                           |
-| `starts-with`   | output starts with string                                      |
-| `contains-any`  | output contains any of the listed substrings                   |
-| `contains-all`  | output contains all list of substrings                         |
-| `icontains-any` | output contains any of the listed substrings, case insensitive |
-| `icontains-all` | output contains all list of substrings, case insensitive       |
-| `is-json`       | output is valid json (optional json schema validation)         |
-| `contains-json` | output contains valid json (optional json schema validation)   |
-| `javascript`    | provided Javascript function validates the output              |
-| `python`        | provided Python function validates the output                  |
-| `webhook`       | provided webhook returns `{pass: true}`                        |
-| `rouge-n`       | Rouge-N score is above a given threshold                       |
-| `levenshtein`   | Levenshtein distance is below a threshold                      |
+| Assertion Type                  | Returns true if...                                               |
+| ------------------------------- | ---------------------------------------------------------------- |
+| `equals`                        | output matches exactly                                           |
+| `contains`                      | output contains substring                                        |
+| `icontains`                     | output contains substring, case insensitive                      |
+| `regex`                         | output matches regex                                             |
+| `starts-with`                   | output starts with string                                        |
+| `contains-any`                  | output contains any of the listed substrings                     |
+| `contains-all`                  | output contains all list of substrings                           |
+| `icontains-any`                 | output contains any of the listed substrings, case insensitive   |
+| `icontains-all`                 | output contains all list of substrings, case insensitive         |
+| `is-json`                       | output is valid json (optional json schema validation)           |
+| `contains-json`                 | output contains valid json (optional json schema validation)     |
+| `javascript`                    | provided Javascript function validates the output                |
+| `python`                        | provided Python function validates the output                    |
+| `webhook`                       | provided webhook returns `{pass: true}`                          |
+| `rouge-n`                       | Rouge-N score is above a given threshold                         |
+| `levenshtein`                   | Levenshtein distance is below a threshold                        |
+| `latency``                      | Latency is below a threshold (milliseconds)                      |
+| `is-valid-openai-function-call` | Ensure that the function call matches the function's JSON schema |
 
 Model-assisted eval metrics
 
-| Assertion Type          | Method                                                                                           |
-| ----------------------- | ------------------------------------------------------------------------------------------------ |
-| `similar`               | embeddings and cosine similarity are above a threshold                                           |
-| `classifer`             | Grade using a [classifer](https://promptfoo.dev/docs/configuration/expected-outputs/classifier/) |
-| `llm-rubric`            | LLM output matches a given rubric, using a Language Model to grade output                        |
-| `factuality`            | LLM output adheres to the given facts, using Factuality method from OpenAI eval                  |
-| `answer-relevance`      | Ensure that LLM output is related to original query                                              |
-| `context-recall`        | Ensure that ground truth appears in context                                                      |
-| `context-relevance`     | Ensure that context is relevant to original query                                                |
-| `context-faithfulness`  | Ensure that LLM output uses the context                                                          |
-| `model-graded-closedqa` | LLM output adheres to given criteria, using Closed QA method from OpenAI eval                    |
+| Assertion Type                                                                                  | Method                                                                          |
+| ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| [similar](https://promptfoo.dev/docs/configuration/expected-outputs/similar)                    | Embeddings and cosine similarity are above a threshold                          |
+| [classifier](https://promptfoo.dev/docs/configuration/expected-outputs/classifier)              | Run LLM output through a classifier                                             |
+| [llm-rubric](https://promptfoo.dev/docs/configuration/expected-outputs/model-graded)            | LLM output matches a given rubric, using a Language Model to grade output       |
+| [answer-relevance](https://promptfoo.dev/docs/configuration/expected-outputs/model-graded)      | Ensure that LLM output is related to original query                             |
+| [context-faithfulness](https://promptfoo.dev/docs/configuration/expected-outputs/model-graded)  | Ensure that LLM output uses the context                                         |
+| [context-recall](https://promptfoo.dev/docs/configuration/expected-outputs/model-graded)        | Ensure that ground truth appears in context                                     |
+| [context-relevance](https://promptfoo.dev/docs/configuration/expected-outputs/model-graded)     | Ensure that context is relevant to original query                               |
+| [factuality](https://promptfoo.dev/docs/configuration/expected-outputs/model-graded)            | LLM output adheres to the given facts, using Factuality method from OpenAI eval |
+| [model-graded-closedqa](https://promptfoo.dev/docs/configuration/expected-outputs/model-graded) | LLM output adheres to given criteria, using Closed QA method from OpenAI eval   |
 
 Every test type can be negated by prepending `not-`. For example, `not-equals` or `not-regex`.
 
