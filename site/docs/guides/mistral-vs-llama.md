@@ -4,9 +4,9 @@ sidebar_label: Mistral vs Llama2
 
 # Mistral vs Llama 2: benchmark on your own data
 
-Mistral was recently launched as the "best 7B model to date". This claim is made on the basis of a [number of evals](https://mistral.ai/news/announcing-mistral-7b/) performed by the researchers.
+Mistral was announced as the "best 7B model to date" on the basis of a [number of evals](https://mistral.ai/news/announcing-mistral-7b/) performed by the researchers.  Mixtral, a mixture-of-experts model, was recently [announced](https://mistral.ai/news/mixtral-of-experts/) with impressive eval performance.
 
-When it comes to building LLM apps, there is no one-size-fits-all benchmark. To maximize the quality of your LLM application, consider building your own benchmark to supplement public benchmarks. This guide describes how to compare Mistral-7B-v0.1 vs Llama 7B using the `promptfoo` CLI.
+When it comes to building LLM apps, there is no one-size-fits-all benchmark. To maximize the quality of your LLM application, consider building your own benchmark to supplement public benchmarks. This guide describes how to compare Mixtral 8x7b vs Mistral 7B vs Llama 7B using the `promptfoo` CLI.
 
 The end result is a view that compares the performance of Mistral and Llama side-by-side:
 
@@ -31,13 +31,14 @@ Now let's start editing `promptfooconfig.yaml`. Create a list of models we'd lik
 ```yaml title=promptfooconfig.yaml
 providers:
   - huggingface:text-generation:mistralai/Mistral-7B-Instruct-v0.1
+  - mistralai/mixtral-8x7b-instruct-v0.1:2b56576fcfbe32fa0526897d8385dd3fb3d36ba6fd0dbe033c72886b81ade93e
   - replicate:replicate/llama70b-v2-chat:e951f18578850b652510200860fc4ea62b3b16fac280f83ff32282f87bbd2e48
 ```
 
-The first [provider](/docs/providers) references the model [Mistral-7B-Instruct-v0.1 on HuggingFace](https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.1). The second provider references the hosted [Replicate](https://replicate.com/replicate/llama7b-v2-chat) version of chat-tuned Llama v2, which isn't available on the HuggingFace Inference API.
+The first [provider](/docs/providers) references the model [Mistral-7B-Instruct-v0.1 on HuggingFace](https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.1). The second references [Mixtral 8x7b Instruct on Replicate](https://replicate.com/mistralai/mixtral-8x7b-instruct-v0.1), and the third references [Replicate's](https://replicate.com/replicate/llama7b-v2-chat) chat-tuned Llama v2, which aren't available through HuggingFace's free Inference API.
 
 :::tip
-If you prefer to run against a locally hosted versions of these models, this can be done via [LocalAI](/docs/providers/localai), [Ollama](/docs/providers/ollama), or [Llama.cpp](/docs/providers/llama.cpp) (using the [quantized Mistral](https://huggingface.co/TheBloke/Mistral-7B-v0.1-GGUF)).
+If you prefer to run against a locally hosted versions of these models, this can be done via [LocalAI](/docs/providers/localai), [Ollama](/docs/providers/ollama), or [Llama.cpp](/docs/providers/llama.cpp) (using [quantized Mistral](https://huggingface.co/TheBloke/Mistral-7B-v0.1-GGUF)).
 :::
 
 ## Set up the prompts
@@ -67,6 +68,8 @@ prompts:
 providers:
   - huggingface:text-generation:mistralai/Mistral-7B-Instruct-v0.1:
       prompts: mistral_prompt
+  - mistralai/mixtral-8x7b-instruct-v0.1:2b56576fcfbe32fa0526897d8385dd3fb3d36ba6fd0dbe033c72886b81ade93e:
+      prompts: mistral prompt
   - replicate:meta/llama-2-7b-chat:8e6975e5ed6174911a6ff3d60540dfd4844201974602551e10e9e87ab143d81e:
       prompts: llama_prompt
 ```
@@ -88,6 +91,13 @@ providers:
         temperature: 0.01
         max_new_tokens: 128
       // highlight-end
+  - mistralai/mixtral-8x7b-instruct-v0.1:2b56576fcfbe32fa0526897d8385dd3fb3d36ba6fd0dbe033c72886b81ade93e
+      prompts: mistral_prompt
+      // highlight-start
+      config:
+        temperature: 0.01
+        max_new_tokens: 128
+      // highlight-end
   - replicate:meta/llama-2-7b-chat:8e6975e5ed6174911a6ff3d60540dfd4844201974602551e10e9e87ab143d81e:
       prompts: llama_prompt
       // highlight-start
@@ -103,7 +113,7 @@ Here's what each parameter means:
 
 - `temperature`: This parameter controls the randomness of the model's output. Lower values make the output more deterministic.
 
-- `max_length`: This parameter controls the maximum length of the model's output.
+- `max_new_tokens`: This parameter controls the maximum length of the model's output.
 
 These settings will apply to all test cases run against these models.
 
@@ -194,7 +204,7 @@ npx promptfoo@latest eval
 
 This will run each of the test cases against each of the models and output the results.
 
-Then, to open the web viewer, run `npx promptfoo@latest view`. Here's what we see:
+Then, to open the web viewer, run `npx promptfoo@latest view`. We'll see something like this:
 
 ![mistral and llama comparison](/img/docs/mistral-llama2-comparison.png)
 
