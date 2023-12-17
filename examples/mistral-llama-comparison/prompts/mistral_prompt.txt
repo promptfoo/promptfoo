@@ -1,1 +1,1 @@
-<s>[INST]{{message}}[/INST]
+<s>[INST] {{message}} [/INST]
