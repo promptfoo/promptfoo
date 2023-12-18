@@ -320,6 +320,7 @@ async function main() {
         providers: cmdObj.providers || fileConfig.providers || defaultConfig.providers,
         tests: cmdObj.tests || cmdObj.vars || fileConfig.tests || defaultConfig.tests,
         scenarios: fileConfig.scenarios || defaultConfig.scenarios,
+        env: fileConfig.env || defaultConfig.env,
         sharing:
           process.env.PROMPTFOO_DISABLE_SHARING === '1'
             ? false
@@ -342,7 +343,10 @@ async function main() {
       // Parse prompts, providers, and tests
 
       const parsedPrompts = readPrompts(config.prompts, cmdObj.prompts ? undefined : basePath);
-      const parsedProviders = await loadApiProviders(config.providers, { basePath });
+      const parsedProviders = await loadApiProviders(config.providers, { 
+        env: config.env,
+        basePath,
+      });
       const parsedTests: TestCase[] = await readTests(
         config.tests || [],
         cmdObj.tests ? undefined : basePath,
