@@ -179,7 +179,7 @@ export async function loadApiProvider(
   } else if (providerPath?.startsWith('bedrock:')) {
     const splits = providerPath.split(':');
     const modelType = splits[1];
-    const modelName = splits[2];
+    const modelName = splits.slice(2).join(':');
 
     if (modelType === 'completion') {
       return new AwsBedrockCompletionProvider(modelName || 'anthropic.claude-v2', providerOptions);

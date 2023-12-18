@@ -3,6 +3,7 @@ import fetch from 'node-fetch';
 import child_process from 'child_process';
 import Stream from 'stream';
 
+import { AwsBedrockCompletionProvider } from '../src/providers/bedrock';
 import {
   OpenAiAssistantProvider,
   OpenAiCompletionProvider,
@@ -596,6 +597,11 @@ config:
   test('loadApiProvider with hf:text-classification', async () => {
     const provider = await loadApiProvider('hf:text-classification:foobar/baz');
     expect(provider).toBeInstanceOf(HuggingfaceTextClassificationProvider);
+  });
+
+  test('loadApiProvider with bedrock:completion', async () => {
+    const provider = await loadApiProvider('bedrock:completion:anthropic.claude-v2:1');
+    expect(provider).toBeInstanceOf(AwsBedrockCompletionProvider);
   });
 
   test('loadApiProvider with RawProviderConfig', async () => {
