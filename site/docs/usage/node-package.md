@@ -75,20 +75,34 @@ The evaluate function takes the following parameters:
       | 'icontains'
       | 'contains-all'
       | 'contains-any'
+      | 'icontains-all'
+      | 'icontains-any'
       | 'starts-with'
       | 'regex'
       | 'is-json'
       | 'contains-json'
       | 'javascript'
+      | 'python'
       | 'similar'
+      | 'answer-relevance'
+      | 'context-faithfulness'
+      | 'context-recall'
+      | 'context-relevance'
       | 'llm-rubric'
+      | 'model-graded-closedqa'
+      | 'factuality'
+      | 'model-graded-factuality'
       | 'webhook'
       | 'rouge-n'
       | 'rouge-s'
-      | 'rouge-l';
+      | 'rouge-l'
+      | 'levenshtein'
+      | 'is-valid-openai-function-call'
+      | 'latency'
+      | 'perplexity';
 
     // The expected value, if applicable
-    value?: string | string[] | AssertionFunction;
+    value?: string | string[] | object | AssertionFunction;
 
     // The threshold value, only applicable for similarity (cosine distance)
     threshold?: number;
@@ -98,6 +112,9 @@ The evaluate function takes the following parameters:
 
     // Some assertions (similarity, llm-rubric) require an LLM provider
     provider?: ApiProvider;
+
+    // Tag this assertion result as a named metric
+    metric?: string;
   }
   ```
 
@@ -123,7 +140,13 @@ type ProviderFunction = (
 
 interface ProviderResponse {
   error?: string;
-  output?: string;
+  output?: string | object;
+  tokenUsage?: Partial<{
+    total: number;
+    prompt: number;
+    completion: number;
+    cached?: number;
+  }>;
 }
 ```
 
@@ -139,9 +162,32 @@ type AssertionFunction = (
 ) => Promise<GradingResult>;
 
 interface GradingResult {
+  // Whether the test passed or failed
   pass: boolean;
+
+  // Test score, typically between 0 and 1
   score: number;
+
+  // Plain text reason for the result
   reason: string;
+
+  // Map of labeled metrics to values
+  namedScores?: Record<string, number>;
+
+  // Record of tokens usage for this assertion
+  tokensUsed?: Partial<{
+    total: number;
+    prompt: number;
+    completion: number;
+    cached?: number;
+  }>;
+
+  // List of results for each component of the assertion
+  componentResults?: GradingResult[];
+
+  // The assertion that was evaluated
+  assertion: Assertion | null;
+  assertion: Assertion | null;
 }
 ```
 
@@ -185,14 +231,19 @@ console.log(results);
 
 This code imports the `promptfoo` library, defines the evaluation options, and then calls the `evaluate` function with these options.
 
-You can also supply functions as `providers` or `asserts`:
+You can also supply functions as `prompts`, `providers`, or `asserts`:
 
 ```js
 import promptfoo from '../../dist/src/index.js';
 
 (async () => {
   const results = await promptfoo.evaluate({
-    prompts: ['Rephrase this in French: {{body}}', 'Rephrase this like a pirate: {{body}}'],
+    prompts: [
+      'Rephrase this in French: {{body}}',
+      (vars) => {
+        return `Rephrase this like a pirate: ${vars.body}`;
+      },
+    ],
     providers: [
       'openai:gpt-3.5-turbo',
       (prompt, context) => {

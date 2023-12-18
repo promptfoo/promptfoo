@@ -238,12 +238,25 @@ export interface EvaluateSummary {
 }
 
 export interface GradingResult {
+  // Whether the test passed or failed
   pass: boolean;
+
+  // Test score, typically between 0 and 1
   score: number;
-  namedScores?: Record<string, number>;
+
+  // Plain text reason for the result
   reason: string;
+
+  // Map of labeled metrics to values
+  namedScores?: Record<string, number>;
+
+  // Record of tokens usage for this assertion
   tokensUsed?: TokenUsage;
+
+  // List of results for each component of the assertion
   componentResults?: GradingResult[];
+
+  // The assertion that was evaluated
   assertion: Assertion | null;
 }
 
@@ -311,7 +324,7 @@ export interface Assertion {
   // Override the grading rubric
   rubricPrompt?: GradingConfig['rubricPrompt'];
 
-  // Tag this as a named metric
+  // Tag this assertion result as a named metric
   metric?: string;
 }
 
