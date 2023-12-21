@@ -3,7 +3,7 @@ import OpenAI from 'openai';
 import logger from '../logger';
 import { fetchWithCache } from '../cache';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
-import { OpenAiFunction } from './openaiUtil';
+import { OpenAiFunction, OpenAiTool } from './openaiUtil';
 
 import type {
   ApiProvider,
@@ -30,6 +30,8 @@ type OpenAiCompletionOptions = OpenAiSharedOptions & {
   best_of?: number;
   functions?: OpenAiFunction[];
   function_call?: 'none' | 'auto' | { name: string };
+  tools?: OpenAiTool[];
+  tool_choice?: 'none' | 'auto' | { name: string };
   response_format?: { type: 'json_object' };
   stop?: string[];
   seed?: number;

@@ -8,6 +8,11 @@ export interface OpenAiFunction {
   parameters: any;
 }
 
+export interface OpenAiTool {
+  type: string;
+  function: any;
+}
+
 export function validateFunctionCall(
   functionCall: { arguments: string; name: string },
   functions?: OpenAiFunction[],
