@@ -216,6 +216,8 @@ npx promptfoo@latest eval -o output.csv
 
 ## Conclusion
 
-On this limited dataset, Mistral and Mixtral scores 75% and Llama2 scores 50%. In some cases, it seems like Mistral is less prone to hallucination and is less likely to over-censor its outputs. But these are just a handful of use cases - far from conclusive.
+On this limited dataset, Mistral and Mixtral both score 75% and Llama2 scores 50%. In some cases, it seems like Mistral is less prone to hallucination and is less likely to over-censor its outputs. But these are just a handful of use cases - far from conclusive.
 
-Ultimately, if you are considering these LLMs for a specific use case, you should eval them for exactly that use case. Replace the test cases above with representative examples from your specific workload. This will create a much for specific and useful benchmark.
+Ultimately, if you are considering these LLMs for a specific use case, you should eval them for exactly that use case. Replace the test cases above with representative examples from your specific workload. This will create a much more specific and useful benchmark.
+
+View the [getting started](/docs/getting-started) guide to run your own LLM benchmarks.
