@@ -10,7 +10,7 @@ export interface OpenAiFunction {
 
 export interface OpenAiTool {
   type: string;
-  function: any;
+  function: OpenAiFunction;
 }
 
 export function validateFunctionCall(
