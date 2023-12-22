@@ -327,6 +327,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         this.config.frequency_penalty ?? parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0'),
       functions: this.config.functions || undefined,
       function_call: this.config.function_call || undefined,
+      tools: this.config.tools || undefined,
+      tool_choice: this.config.tool_choice || undefined,
       response_format: this.config.response_format || undefined,
       logprobs: callApiOptions?.includeLogProbs || undefined,
       stop,
