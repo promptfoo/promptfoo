@@ -30,7 +30,7 @@ or if you have a custom model.
 For example, if OpenAI releases `gpt-5` chat completion,
 you could begin using it immediately with `openai:chat:gpt-5`.
 
-The OpenAI provider supports a handful of [configuration options](https://github.com/promptfoo/promptfoo/blob/main/src/providers/openai.ts#L14-L32), such as `temperature` and `functions`, which can be used to customize the behavior of the model like so:
+The OpenAI provider supports a handful of [configuration options](https://github.com/promptfoo/promptfoo/blob/main/src/providers/openai.ts#L14-L32), such as `temperature`, `functions`, and `tools`, which can be used to customize the behavior of the model like so:
 
 ```yaml title=promptfooconfig.yaml
 providers:
@@ -85,6 +85,8 @@ Supported parameters include:
 | `best_of`           | Controls the number of alternative outputs to generate and select from.                                                                                         |
 | `functions`         | Allows you to define custom functions. Each function should be an object with a `name`, optional `description`, and `parameters`.                               |
 | `function_call`     | Controls whether the AI should call functions. Can be either 'none', 'auto', or an object with a `name` that specifies the function to call.                    |
+| `tools`             | Allows you to define custom tools. See [OpenAI Tools documentation](https://platform.openai.com/docs/api-reference/chat/create#chat-create-tools)               |
+| `tool_choice`       | Controls whether the AI should use a tool. See [OpenAI Tools documentation](https://platform.openai.com/docs/api-reference/chat/create#chat-create-tools)       |
 | `stop`              | Defines a list of tokens that signal the end of the output.                                                                                                     |
 | `stop`              | Defines a list of tokens that signal the end of the output.                                                                                                     |
 | `response_format`   | Response format restrictions.                                                                                                                                   |
@@ -111,6 +113,15 @@ interface OpenAiConfig {
     parameters: any;
   }[];
   function_call?: 'none' | 'auto' | { name: string };
+  tools?: {
+    type: string;
+    function: {
+      name: string;
+      description?: string;
+      parameters: any;
+    };
+  }[];
+  tool_choice?: 'none' | 'auto' | { type: 'function'; function?: { name: string } };
   stop?: string[];
   response_format?: { type: string };
   seed?: number;
@@ -349,9 +360,9 @@ This has the effect of including the conversation history _within_ the prompt co
 ]
 ```
 
-## Using functions
+## Using tools and functions
 
-OpenAI functions are supported. See [full example](https://github.com/typpo/promptfoo/tree/main/examples/openai-function-call).
+OpenAI tools and functions are supported. See [full example](https://github.com/typpo/promptfoo/tree/main/examples/openai-function-call).
 
 To set functions on an OpenAI provider, use the provider's `config` key. Add your function definitions under this key.
 

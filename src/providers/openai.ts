@@ -3,7 +3,7 @@ import OpenAI from 'openai';
 import logger from '../logger';
 import { fetchWithCache } from '../cache';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
-import { OpenAiFunction } from './openaiUtil';
+import { OpenAiFunction, OpenAiTool } from './openaiUtil';
 
 import type {
   ApiProvider,
@@ -30,6 +30,8 @@ type OpenAiCompletionOptions = OpenAiSharedOptions & {
   best_of?: number;
   functions?: OpenAiFunction[];
   function_call?: 'none' | 'auto' | { name: string };
+  tools?: OpenAiTool[];
+  tool_choice?: 'none' | 'auto' | { type: 'function'; function?: { name: string } };
   response_format?: { type: 'json_object' };
   stop?: string[];
   seed?: number;
@@ -325,6 +327,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         this.config.frequency_penalty ?? parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0'),
       functions: this.config.functions || undefined,
       function_call: this.config.function_call || undefined,
+      tools: this.config.tools || undefined,
+      tool_choice: this.config.tool_choice || undefined,
       response_format: this.config.response_format || undefined,
       logprobs: callApiOptions?.includeLogProbs || undefined,
       stop,
