@@ -360,7 +360,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     logger.debug(`\tOpenAI chat completions API response: ${JSON.stringify(data)}`);
     try {
       const message = data.choices[0].message;
-      const output = message.content === null ? message.function_call : message.content;
+      const output = message.content === null ? message.function_call || message.tool_calls : message.content;
       const logProbs = data.choices[0].logprobs?.content?.map(
         (logProbObj: { token: string; logprob: number }) => logProbObj.logprob,
       );

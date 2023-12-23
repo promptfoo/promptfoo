@@ -114,7 +114,15 @@ export async function runAssertions({
     const weight = assertion.weight || 1;
     totalWeight += weight;
 
-    const result = await runAssertion({ prompt, provider, assertion, test, output, latencyMs, logProbs });
+    const result = await runAssertion({
+      prompt,
+      provider,
+      assertion,
+      test,
+      output,
+      latencyMs,
+      logProbs,
+    });
     totalScore += result.score * weight;
     componentResults.push(result);
 
@@ -218,21 +226,26 @@ export async function runAssertion({
         const args = [
           filePath,
           typeof output === 'string' ? output : JSON.stringify(output),
-          JSON.stringify(context)
+          JSON.stringify(context),
         ];
         const pythonScriptOutput = await new Promise<string>((resolve, reject) => {
-          execFile(process.env.PROMPTFOO_PYTHON || 'python', args, null, (error, stdout, stderr) => {
-            if (error) {
-              reject(error);
-              return;
-            } 
-            const stringErr = String(stderr);
-            if (stringErr) {
-              reject(new Error(stringErr));
-            } else {
-              resolve(String(stdout));
-            }
-          });
+          execFile(
+            process.env.PROMPTFOO_PYTHON || 'python',
+            args,
+            null,
+            (error, stdout, stderr) => {
+              if (error) {
+                reject(error);
+                return;
+              }
+              const stringErr = String(stderr);
+              if (stringErr) {
+                reject(new Error(stringErr));
+              } else {
+                resolve(String(stdout));
+              }
+            },
+          );
         });
         valueFromScript = pythonScriptOutput.trim();
       } else if (filePath.endsWith('.json')) {
@@ -479,6 +492,46 @@ export async function runAssertion({
       reason: pass ? 'Assertion passed' : errorMessage,
       assertion,
     };
+  }
+
+  if (baseType === 'is-valid-openai-tools-call') {
+    const toolsOutput = output as {
+      type: 'function';
+      function: { arguments: string; name: string };
+    }[];
+    invariant(Array.isArray(toolsOutput), 'is-valid-tools assertion must evaluate an array');
+    invariant(toolsOutput.length > 0, 'is-valid-tools assertion must evaluate a non-empty array');
+    console.log('toolzoutput', toolsOutput[0]);
+    invariant(
+      typeof toolsOutput[0].function.name === 'string',
+      'is-valid-tools assertion must evaluate an array of objects with string name properties',
+    );
+    invariant(
+      typeof toolsOutput[0].function.arguments === 'string',
+      'is-valid-tools assertion must evaluate an array of objects with string arguments properties',
+    );
+
+    try {
+      toolsOutput.forEach((toolOutput) =>
+        validateFunctionCall(
+          toolOutput.function,
+          (provider as OpenAiChatCompletionProvider).config.tools?.map((tool) => tool.function),
+        ),
+      );
+      return {
+        pass: true,
+        score: 1,
+        reason: 'Assertion passed',
+        assertion,
+      };
+    } catch (err) {
+      return {
+        pass: false,
+        score: 0,
+        reason: (err as Error).message,
+        assertion,
+      };
+    }
   }
 
   if (baseType === 'is-valid-openai-function-call') {
@@ -942,7 +995,9 @@ ${assertion.value}`,
       throw new Error('Latency assertion must have a threshold in milliseconds');
     }
     if (!latencyMs) {
-      throw new Error('Latency assertion does not support cached results. Rerun the eval with --no-cache');
+      throw new Error(
+        'Latency assertion does not support cached results. Rerun the eval with --no-cache',
+      );
     }
     pass = latencyMs <= assertion.threshold;
     return {
@@ -960,12 +1015,14 @@ ${assertion.value}`,
       throw new Error('Perplexity assertion must have a threshold');
     }
     if (!logProbs || logProbs.length === 0) {
-      throw new Error('Perplexity assertion does not support providers that do not return logProbs');
+      throw new Error(
+        'Perplexity assertion does not support providers that do not return logProbs',
+      );
     }
     const sumLogProbs = logProbs.reduce((acc, logProb) => acc + logProb, 0);
     const avgLogProb = sumLogProbs / logProbs.length;
     const perplexity = Math.exp(-avgLogProb);
-    
+
     pass = perplexity <= assertion.threshold;
     return {
       pass,
@@ -1052,7 +1109,7 @@ export function assertionFromString(expected: string): Assertion {
 
   // New options
   const assertionRegex =
-    /^(not-)?(equals|contains-any|contains-all|icontains-any|icontains-all|contains-json|is-json|regex|icontains|contains|webhook|rouge-n|similar|starts-with|levenshtein|classifier|model-graded-factuality|factuality|model-graded-closedqa|answer-relevance|context-recall|context-relevance|context-faithfulness|is-valid-openai-function-call|latency|perplexity)(?:\((\d+(?:\.\d+)?)\))?(?::(.*))?$/;
+    /^(not-)?(equals|contains-any|contains-all|icontains-any|icontains-all|contains-json|is-json|regex|icontains|contains|webhook|rouge-n|similar|starts-with|levenshtein|classifier|model-graded-factuality|factuality|model-graded-closedqa|answer-relevance|context-recall|context-relevance|context-faithfulness|is-valid-openai-function-call|is-valid-openai-tools-call|latency|perplexity)(?:\((\d+(?:\.\d+)?)\))?(?::(.*))?$/;
   const regexMatch = expected.match(assertionRegex);
 
   if (regexMatch) {

@@ -1651,7 +1651,9 @@ describe('runAssertion', () => {
           test: {} as AtomicTestCase,
           output,
         }),
-      ).rejects.toThrow('Latency assertion does not support cached results. Rerun the eval with --no-cache');
+      ).rejects.toThrow(
+        'Latency assertion does not support cached results. Rerun the eval with --no-cache',
+      );
     });
   });
 
@@ -1757,6 +1759,84 @@ describe('runAssertion', () => {
         }),
         assertion: {
           type: 'is-valid-openai-function-call',
+        },
+        test: {} as AtomicTestCase,
+        output,
+      });
+
+      expect(result.pass).toBeFalsy();
+      expect(result.reason).toContain('Call to "add" does not match schema');
+    });
+  });
+
+  describe('is-valid-openai-tools-call assertion', () => {
+    it('should pass for a valid tools call with correct arguments', async () => {
+      const output = [
+        { type: 'function', function: { arguments: '{"x": 10, "y": 20}', name: 'add' } },
+      ];
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('foo', {
+          config: {
+            tools: [
+              {
+                type: 'function',
+                function: {
+                  name: 'add',
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      x: { type: 'number' },
+                      y: { type: 'number' },
+                    },
+                    required: ['x', 'y'],
+                  },
+                },
+              },
+            ],
+          },
+        }),
+        assertion: {
+          type: 'is-valid-openai-tools-call',
+        },
+        test: {} as AtomicTestCase,
+        output,
+      });
+
+      expect(result.pass).toBeTruthy();
+      expect(result.reason).toBe('Assertion passed');
+    });
+
+    it('should fail for an invalid tools call with incorrect arguments', async () => {
+      const output = [
+        { type: 'function', function: { arguments: '{"x": "foobar", "y": 20}', name: 'add' } },
+      ];
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('foo', {
+          config: {
+            tools: [
+              {
+                type: 'function',
+                function: {
+                  name: 'add',
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      x: { type: 'number' },
+                      y: { type: 'number' },
+                    },
+                    required: ['x', 'y'],
+                  },
+                },
+              },
+            ],
+          },
+        }),
+        assertion: {
+          type: 'is-valid-openai-tools-call',
         },
         test: {} as AtomicTestCase,
         output,

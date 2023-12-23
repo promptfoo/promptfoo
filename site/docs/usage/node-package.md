@@ -98,6 +98,7 @@ The evaluate function takes the following parameters:
       | 'rouge-l'
       | 'levenshtein'
       | 'is-valid-openai-function-call'
+      | 'is-valid-openai-tools-call'
       | 'latency'
       | 'perplexity';
 
