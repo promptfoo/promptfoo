@@ -405,7 +405,7 @@ tests:
   # ...
 ```
 
-Sometimes OpenAI function calls don't match the the `functions` schema. Use the [`is-valid-openai-function-call`](/docs/configuration/expected-outputs/#is-valid-openai-function-call) assertion to enforce an exact schema match between function calls and the function definition.
+Sometimes OpenAI function calls don't match `tools` or `functions` schemas. Use [`is-valid-openai-function-call`](/docs/configuration/expected-outputs/#is-valid-openai-function-call) or [`is-valid-openai-tools-call`](/docs/configuration/expected-outputs/#is-valid-openai-tools-call) assertions to enforce an exact schema match between function calls and the function definition.
 
 To further test function call definitions, you can use the `javascript` assertion and/or `postprocess` directives. For example:
 

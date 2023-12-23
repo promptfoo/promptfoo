@@ -494,6 +494,46 @@ export async function runAssertion({
     };
   }
 
+  if (baseType === 'is-valid-openai-tools-call') {
+    const toolsOutput = output as {
+      type: 'function';
+      function: { arguments: string; name: string };
+    }[];
+    invariant(Array.isArray(toolsOutput), 'is-valid-tools assertion must evaluate an array');
+    invariant(toolsOutput.length > 0, 'is-valid-tools assertion must evaluate a non-empty array');
+    console.log('toolzoutput', toolsOutput[0]);
+    invariant(
+      typeof toolsOutput[0].function.name === 'string',
+      'is-valid-tools assertion must evaluate an array of objects with string name properties',
+    );
+    invariant(
+      typeof toolsOutput[0].function.arguments === 'string',
+      'is-valid-tools assertion must evaluate an array of objects with string arguments properties',
+    );
+
+    try {
+      toolsOutput.forEach((toolOutput) =>
+        validateFunctionCall(
+          toolOutput.function,
+          (provider as OpenAiChatCompletionProvider).config.tools?.map((tool) => tool.function),
+        ),
+      );
+      return {
+        pass: true,
+        score: 1,
+        reason: 'Assertion passed',
+        assertion,
+      };
+    } catch (err) {
+      return {
+        pass: false,
+        score: 0,
+        reason: (err as Error).message,
+        assertion,
+      };
+    }
+  }
+
   if (baseType === 'is-valid-openai-function-call') {
     const functionOutput = output as { arguments: string; name: string };
     invariant(
@@ -1090,7 +1130,7 @@ export function assertionFromString(expected: string): Assertion {
 
   // New options
   const assertionRegex =
-    /^(not-)?(equals|contains-any|contains-all|icontains-any|icontains-all|contains-json|is-json|regex|icontains|contains|webhook|rouge-n|similar|starts-with|levenshtein|classifier|model-graded-factuality|factuality|model-graded-closedqa|answer-relevance|context-recall|context-relevance|context-faithfulness|is-valid-openai-function-call|latency|perplexity)(?:\((\d+(?:\.\d+)?)\))?(?::(.*))?$/;
+    /^(not-)?(equals|contains-any|contains-all|icontains-any|icontains-all|contains-json|is-json|regex|icontains|contains|webhook|rouge-n|similar|starts-with|levenshtein|classifier|model-graded-factuality|factuality|model-graded-closedqa|answer-relevance|context-recall|context-relevance|context-faithfulness|is-valid-openai-function-call|is-valid-openai-tools-call|latency|perplexity)(?:\((\d+(?:\.\d+)?)\))?(?::(.*))?$/;
   const regexMatch = expected.match(assertionRegex);
 
   if (regexMatch) {

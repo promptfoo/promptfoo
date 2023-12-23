@@ -54,6 +54,7 @@ Deterministic eval metrics
 | [icontains](#contains)                                          | output contains substring, case insensitive                      |
 | [is-json](#is-json)                                             | output is valid json (optional json schema validation)           |
 | [is-valid-openai-function-call](#is-valid-openai-function-call) | Ensure that the function call matches the function's JSON schema |
+| [is-valid-openai-tools-call](#is-valid-openai-tools-call) | Ensure all tool calls match the tools JSON schema |
 | [javascript](/docs/configuration/expected-outputs/javascript)   | provided Javascript function validates the output                |
 | [latency](#latency)                                             | Latency is below a threshold (milliseconds)                      |
 | [levenshtein](#levenshtein-distance)                            | Levenshtein distance is below a threshold                        |
@@ -363,7 +364,11 @@ Comparing scores across models may not be meaningful, unless the models have bee
 
 ### is-valid-openai-function-call
 
-This ensures that any JSON LLM output adheres to the schema specified in the `functions` configuration of the provider. Learn more about the [OpenAI provider](/docs/providers/openai/#Using-functions).
+This ensures that any JSON LLM output adheres to the schema specified in the `functions` configuration of the provider. Learn more about the [OpenAI provider](/docs/providers/openai/#using-tools-and-functions).
+
+### is-valid-openai-tools-call
+
+This ensures that any JSON LLM output adheres to the schema specified in the `tools` configuration of the provider. Learn more about the [OpenAI provider](/docs/providers/openai/#using-tools-and-functions).
 
 ### Model-graded evals
 

@@ -1,0 +1,54 @@
+# prettier-ignore
+prompts: [prompt.txt]
+providers:
+  - 'openai:chat:gpt-3.5-turbo-0613':
+     config:
+       tools: [
+         {
+           "type": "function",
+           "function": {
+             "name": "get_current_weather",
+             "description": "Get the current weather in a given location",
+             "parameters": {
+               "type": "object",
+               "properties": {
+                 "location": {
+                   "type": "string",
+                   "description": "The city and state, e.g. San Francisco, CA"
+                 },
+                 "unit": {
+                   "type": "string",
+                   "enum": ["celsius", "fahrenheit"]
+                 }
+               },
+               "required": ["location"]
+             }
+           }
+         }
+       ]
+
+tests:
+  - vars:
+      city: Boston
+    assert:
+      - type: is-json
+      - type: is-valid-openai-tools-call
+      - type: javascript
+        value: output[0].function.name === 'get_current_weather'
+      - type: javascript
+        value: JSON.parse(output[0].function.arguments).location === 'Boston, MA'
+
+  - vars:
+      city: New York
+    # postprocess returns only the 'name' property
+    postprocess: output[0].function.name
+    assert:
+      - type: is-json
+      - type: similar
+        value: NYC
+
+  - vars:
+      city: Paris
+
+  - vars:
+      city: Mars
