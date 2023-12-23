@@ -114,7 +114,15 @@ export async function runAssertions({
     const weight = assertion.weight || 1;
     totalWeight += weight;
 
-    const result = await runAssertion({ prompt, provider, assertion, test, output, latencyMs, logProbs });
+    const result = await runAssertion({
+      prompt,
+      provider,
+      assertion,
+      test,
+      output,
+      latencyMs,
+      logProbs,
+    });
     totalScore += result.score * weight;
     componentResults.push(result);
 
@@ -218,21 +226,26 @@ export async function runAssertion({
         const args = [
           filePath,
           typeof output === 'string' ? output : JSON.stringify(output),
-          JSON.stringify(context)
+          JSON.stringify(context),
         ];
         const pythonScriptOutput = await new Promise<string>((resolve, reject) => {
-          execFile(process.env.PROMPTFOO_PYTHON || 'python', args, null, (error, stdout, stderr) => {
-            if (error) {
-              reject(error);
-              return;
-            } 
-            const stringErr = String(stderr);
-            if (stringErr) {
-              reject(new Error(stringErr));
-            } else {
-              resolve(String(stdout));
-            }
-          });
+          execFile(
+            process.env.PROMPTFOO_PYTHON || 'python',
+            args,
+            null,
+            (error, stdout, stderr) => {
+              if (error) {
+                reject(error);
+                return;
+              }
+              const stringErr = String(stderr);
+              if (stringErr) {
+                reject(new Error(stringErr));
+              } else {
+                resolve(String(stdout));
+              }
+            },
+          );
         });
         valueFromScript = pythonScriptOutput.trim();
       } else if (filePath.endsWith('.json')) {
@@ -586,25 +599,46 @@ ${renderedValue}`,
       } else {
         const isMultiline = renderedValue.includes('\n');
         let pythonScript = `import json
-  import sys
-  data = json.load(sys.stdin)
-  output = data['output']
-  context = data['context']
-  value = data['value']
-  ${isMultiline ? 'exec(value)' : 'print(json.dumps(eval(value)))'}`;
+import sys
+data = json.load(sys.stdin)
+output = data['output']
+context = data['context']
+value = data['value']
+${isMultiline ? 'exec(value)' : 'print(json.dumps(eval(value)))'}`;
         const pythonProcessInput = JSON.stringify({ output, context, value: renderedValue });
-        const child = spawn(process.env.PROMPTFOO_PYTHON || 'python', ['-c', pythonScript]);
+        const child = spawn(process.env.PROMPTFOO_PYTHON || 'python', ['-u', '-c', pythonScript]);
         child.stdin.write(pythonProcessInput);
         child.stdin.end();
-        let childOutput = '';
-        await new Promise((resolve) => {
+        let childStdout = '';
+        let childStderr = '';
+        await new Promise<void>((resolve, reject) => {
           // Collect output and wait for process to exit
           child.stdout.on('data', (data) => {
-            childOutput += data;
+            childStdout += data;
           });
-          child.on('close', resolve);
+
+          // Listen for errors on the child process
+          child.on('error', (error) => {
+            reject(error);
+          });
+
+          child.stderr.on('data', (data) => {
+            childStderr += data;
+          });
+
+          // Listen for the process to close, which may happen after 'end'
+          child.on('close', (code) => {
+            if (code !== 0) {
+              reject(new Error(`Child process exited with code ${code}`));
+            } else {
+              resolve();
+            }
+          });
         });
-        result = childOutput;
+        if (childStderr) {
+          throw new Error(childStderr);
+        }
+        result = childStdout.trim();
       }
 
       if (result.toLowerCase() === 'true') {
@@ -942,7 +976,9 @@ ${assertion.value}`,
       throw new Error('Latency assertion must have a threshold in milliseconds');
     }
     if (!latencyMs) {
-      throw new Error('Latency assertion does not support cached results. Rerun the eval with --no-cache');
+      throw new Error(
+        'Latency assertion does not support cached results. Rerun the eval with --no-cache',
+      );
     }
     pass = latencyMs <= assertion.threshold;
     return {
@@ -960,12 +996,14 @@ ${assertion.value}`,
       throw new Error('Perplexity assertion must have a threshold');
     }
     if (!logProbs || logProbs.length === 0) {
-      throw new Error('Perplexity assertion does not support providers that do not return logProbs');
+      throw new Error(
+        'Perplexity assertion does not support providers that do not return logProbs',
+      );
     }
     const sumLogProbs = logProbs.reduce((acc, logProb) => acc + logProb, 0);
     const avgLogProb = sumLogProbs / logProbs.length;
     const perplexity = Math.exp(-avgLogProb);
-    
+
     pass = perplexity <= assertion.threshold;
     return {
       pass,
