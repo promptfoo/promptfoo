@@ -362,9 +362,91 @@ This has the effect of including the conversation history _within_ the prompt co
 
 ## Using tools and functions
 
-OpenAI tools and functions are supported. See [full example](https://github.com/typpo/promptfoo/tree/main/examples/openai-function-call).
+OpenAI tools and functions are supported. See [OpenAI tools example](https://github.com/typpo/promptfoo/tree/main/examples/openai-tools-call) and [OpenAI functions example](https://github.com/typpo/promptfoo/tree/main/examples/openai-function-call).
 
-To set functions on an OpenAI provider, use the provider's `config` key. Add your function definitions under this key.
+### Using tools
+
+To set `tools` on an OpenAI provider, use the provider's `config` key. Add your function definitions under this key.
+
+```yaml
+prompts: [prompt.txt]
+providers:
+  - 'openai:chat:gpt-3.5-turbo-0613':
+    // highlight-start
+    config:
+      tools: [
+        {
+        "type": "function",
+          "function": {
+            "name": "get_current_weather",
+            "description": "Get the current weather in a given location",
+            "parameters": {
+              "type": "object",
+                "properties": {
+                  "location": {
+                    "type": "string",
+                      "description": "The city and state, e.g. San Francisco, CA"
+                    },
+                    "unit": {
+                      "type": "string",
+                      "enum": ["celsius", "fahrenheit"]
+                    }
+                  },
+              "required": ["location"]
+            }
+          }
+        }
+      ]
+      tool_choice: 'auto'
+    // highlight-end
+
+tests:
+   - vars:
+        city: Boston
+     assert:
+        - type: is-json
+        - type: is-valid-openai-tools-call
+        - type: javascript
+          value: output[0].function.name === 'get_current_weather'
+        - type: javascript
+          value: JSON.parse(output[0].function.arguments).location === 'Boston, MA'
+
+   - vars:
+        city: New York
+# ...
+```
+
+Sometimes OpenAI function calls don't match `tools` schemas. Use [`is-valid-openai-tools-call`](/docs/configuration/expected-outputs/#is-valid-openai-function-call) or [`is-valid-openai-tools-call`](/docs/configuration/expected-outputs/#is-valid-openai-tools-call) assertions to enforce an exact schema match between tools and the function definition.
+
+To further test `tools` definitions, you can use the `javascript` assertion and/or `postprocess` directives. For example:
+
+```yaml
+tests:
+  - vars:
+      city: Boston
+    assert:
+      - type: is-json
+      - type: is-valid-openai-tools-call
+      - type: javascript
+        value: output[0].function.name === 'get_current_weather'
+      - type: javascript
+        value: JSON.parse(output[0].function.arguments).location === 'Boston, MA'
+
+  - vars:
+      city: New York
+      # postprocess returns only the 'name' property
+    postprocess: output[0].function.name
+    assert:
+      - type: is-json
+      - type: similar
+        value: NYC
+```
+
+### Using functions
+
+> `functions` and `function_call` is deprecated in favor of `tools` and `tool_choice`, see detail in [OpenAI API reference](https://platform.openai.com/docs/api-reference/chat/create#chat-create-function_call).
+
+In addition, you can use `functions` to define custom functions. Each function should be an object with a `name`, optional `description`, and `parameters`. For example:
 
 ```yaml
 prompts: [prompt.txt]
@@ -405,7 +487,7 @@ tests:
   # ...
 ```
 
-Sometimes OpenAI function calls don't match `tools` or `functions` schemas. Use [`is-valid-openai-function-call`](/docs/configuration/expected-outputs/#is-valid-openai-function-call) or [`is-valid-openai-tools-call`](/docs/configuration/expected-outputs/#is-valid-openai-tools-call) assertions to enforce an exact schema match between function calls and the function definition.
+Sometimes OpenAI function calls don't match `functions` schemas. Use [`is-valid-openai-function-call`](/docs/configuration/expected-outputs/#is-valid-openai-function-call) assertions to enforce an exact schema match between function calls and the function definition.
 
 To further test function call definitions, you can use the `javascript` assertion and/or `postprocess` directives. For example:
 
