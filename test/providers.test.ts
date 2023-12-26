@@ -368,17 +368,22 @@ describe('call provider apis', () => {
     expect(result.output).toBe('Test output');
   });
 
-  test('HuggingfaceTextGenerationProvider callApi', async () => {
-    const mockResponse = {
-      json: jest.fn().mockResolvedValue([{ generated_text: 'Test output' }]),
-    };
-    (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
+  describe.each([
+    ['Array format', [{ generated_text: 'Test output' }]], // Array format
+    ['Object format', { generated_text: 'Test output' }], // Object format
+  ])('HuggingfaceTextGenerationProvider callApi with %s', (format, mockedData) => {
+    test('returns expected output', async () => {
+      const mockResponse = {
+        json: jest.fn().mockResolvedValue(mockedData),
+      };
+      (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
 
-    const provider = new HuggingfaceTextGenerationProvider('gpt2');
-    const result = await provider.callApi('Test prompt');
+      const provider = new HuggingfaceTextGenerationProvider('gpt2');
+      const result = await provider.callApi('Test prompt');
 
-    expect(fetch).toHaveBeenCalledTimes(1);
-    expect(result.output).toBe('Test output');
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(result.output).toBe('Test output');
+    });
   });
 
   test('HuggingfaceFeatureExtractionProvider callEmbeddingApi', async () => {
