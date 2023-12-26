@@ -84,6 +84,11 @@ export default function ResultsView({
   const handleWordBreakChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setWordBreak(event.target.checked ? 'break-all' : 'break-word');
   };
+  
+  const [showStats, setShowStats] = React.useState(true);
+  const handleShowStatsChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setShowStats(event.target.checked);
+  };
 
   const [shareModalOpen, setShareModalOpen] = React.useState(false);
   const [shareUrl, setShareUrl] = React.useState('');
@@ -248,6 +253,16 @@ export default function ResultsView({
               />
             </Tooltip>
           </Box>
+          <Box>
+            <Tooltip title="Show detailed inference statistics such as latency, tokens used, cost, etc.">
+              <FormControlLabel
+                control={
+                  <Checkbox checked={showStats} onChange={handleShowStatsChange} />
+                }
+                label="Show inference details"
+              />
+            </Tooltip>
+          </Box>
           <Box flexGrow={1} />
           <Box display="flex" justifyContent="flex-end">
             <ResponsiveStack direction="row" spacing={2}>
@@ -297,6 +312,7 @@ export default function ResultsView({
         maxTextLength={maxTextLength}
         columnVisibility={columnVisibility}
         wordBreak={wordBreak}
+        showStats={showStats}
         filterMode={filterMode}
         failureFilter={failureFilter}
         onFailureFilterToggle={handleFailureFilterToggle}

@@ -134,6 +134,7 @@ interface PromptOutputProps {
   maxTextLength: number;
   rowIndex: number;
   promptIndex: number;
+  showStats: boolean;
   onRating: (rowIndex: number, promptIndex: number, isPass: boolean, score?: number) => void;
 }
 
@@ -145,6 +146,7 @@ function EvalOutputCell({
   onRating,
   firstOutput,
   filterMode,
+  showStats,
 }: PromptOutputProps & { firstOutput: EvaluateTableOutput; filterMode: FilterMode }) {
   const [openPrompt, setOpen] = React.useState(false);
   const handlePromptOpen = () => {
@@ -222,14 +224,18 @@ function EvalOutputCell({
   };
 
   let tokenUsageDisplay;
-  let latencyDisplay = <span>{output.latencyMs} ms</span>;
+  let latencyDisplay = (
+    <span>
+      {Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(output.latencyMs)} ms
+    </span>
+  );
   let tokPerSecDisplay;
   let costDisplay;
 
   if (output.tokenUsage?.completion) {
     const tokPerSec = output.tokenUsage.completion / (output.latencyMs / 1000);
     tokPerSecDisplay = (
-      <span>{Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(tokPerSec)}</span>
+      <span>{Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(tokPerSec)}</span>
     );
   }
 
@@ -238,12 +244,23 @@ function EvalOutputCell({
   }
 
   if (output.tokenUsage?.cached) {
-    tokenUsageDisplay = <span>{output.tokenUsage.cached} (cached)</span>;
+    tokenUsageDisplay = (
+      <span>
+        {Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
+          output.tokenUsage.cached,
+        )}{' '}
+        (cached)
+      </span>
+    );
   } else if (output.tokenUsage?.total) {
-    tokenUsageDisplay = <span>{output.tokenUsage.total}</span>;
+    tokenUsageDisplay = (
+      <span>
+        {Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(output.tokenUsage.total)}
+      </span>
+    );
   }
 
-  const detail = (
+  const detail = showStats ? (
     <div className="cell-detail">
       {tokenUsageDisplay && (
         <div className="stat-item">
@@ -266,7 +283,7 @@ function EvalOutputCell({
         </div>
       )}
     </div>
-  );
+  ) : null;
 
   const actions = (
     <div className="cell-actions">
@@ -334,7 +351,7 @@ function EvalOutputCell({
                     <br />
                   </React.Fragment>
                 ))}
-            </span> 
+            </span>
           </div>
           {detail}
         </>
@@ -395,6 +412,7 @@ interface ResultsTableProps {
   wordBreak: 'break-word' | 'break-all';
   filterMode: FilterMode;
   failureFilter: { [key: string]: boolean };
+  showStats: boolean;
   onFailureFilterToggle: (columnId: string, checked: boolean) => void;
 }
 
@@ -404,6 +422,7 @@ export default function ResultsTable({
   wordBreak,
   filterMode,
   failureFilter,
+  showStats,
   onFailureFilterToggle,
 }: ResultsTableProps) {
   const { table, setTable } = useStore();
@@ -498,60 +517,63 @@ export default function ResultsTable({
               numGoodTests[idx] === highestPassingCount && highestPassingCount !== 0;
             const columnId = `Prompt ${idx + 1}`;
             const isChecked = failureFilter[columnId] || false;
-            // TODO(ian): prompt string support for backwards compatibility, remove after 0.17.0
+
+            const details = showStats ? (
+              <div className="detail">
+                {numAsserts[idx] ? (
+                  <div>
+                    <strong>Asserts:</strong> {numGoodAsserts[idx]}/{numAsserts[idx]} passed
+                  </div>
+                ) : null}
+                {prompt.metrics?.totalLatencyMs ? (
+                  <div>
+                    <strong>Average Latency:</strong>{' '}
+                    {Intl.NumberFormat(undefined, {
+                      maximumFractionDigits: 0,
+                    }).format(prompt.metrics.totalLatencyMs / body.length)}{' '}
+                    ms
+                  </div>
+                ) : null}
+                {prompt.metrics?.tokenUsage?.total ? (
+                  <div>
+                    <strong>Average Tokens:</strong>{' '}
+                    {Intl.NumberFormat(undefined, {
+                      maximumFractionDigits: 0,
+                    }).format(prompt.metrics.tokenUsage.total / body.length)}
+                  </div>
+                ) : null}
+                {prompt.metrics?.totalLatencyMs && prompt.metrics?.tokenUsage?.completion ? (
+                  <div>
+                    <strong>Tokens/Sec:</strong>{' '}
+                    {Intl.NumberFormat(undefined, {
+                      maximumFractionDigits: 0,
+                    }).format(
+                      prompt.metrics.tokenUsage.completion / (prompt.metrics.totalLatencyMs / 1000),
+                    )}
+                  </div>
+                ) : null}
+                {prompt.metrics?.cost ? (
+                  <div>
+                    <strong>Cost:</strong> ${prompt.metrics.cost.toPrecision(2)}
+                  </div>
+                ) : null}
+              </div>
+            ) : null;
+
             return (
               <>
                 <TableHeader
                   className="prompt-container"
-                  text={typeof prompt === 'string' ? prompt : prompt.display}
-                  expandedText={typeof prompt === 'string' ? undefined : prompt.raw}
+                  text={prompt.display}
+                  expandedText={prompt.raw}
                   maxLength={maxTextLength}
-                  resourceId={typeof prompt === 'string' ? undefined : prompt.id}
+                  resourceId={prompt.id}
                 />
                 <div className="summary">
                   <div className={`highlight ${isHighestPassing ? 'success' : ''}`}>
                     <strong>Pass rate:</strong> {pct}% ({numGoodTests[idx]}/{body.length} cases)
                   </div>
-                  <div className="detail">
-                    {numAsserts[idx] ? (
-                      <div>
-                        <strong>Asserts:</strong> {numGoodAsserts[idx]}/{numAsserts[idx]}
-                      </div>
-                    ) : null}
-                    {prompt.metrics?.totalLatencyMs ? (
-                      <div>
-                        <strong>Average Latency:</strong>{' '}
-                        {Intl.NumberFormat(undefined, {
-                          maximumFractionDigits: 0,
-                        }).format(prompt.metrics.totalLatencyMs / body.length)}{' '}
-                        ms
-                      </div>
-                    ) : null}
-                    {prompt.metrics?.tokenUsage?.total ? (
-                      <div>
-                        <strong>Average Tokens:</strong>{' '}
-                        {Intl.NumberFormat(undefined, {
-                          maximumFractionDigits: 0,
-                        }).format(prompt.metrics.tokenUsage.total / body.length)}
-                      </div>
-                    ) : null}
-                    {prompt.metrics?.totalLatencyMs && prompt.metrics?.tokenUsage?.completion ? (
-                      <div>
-                        <strong>Tokens/Sec:</strong>{' '}
-                        {Intl.NumberFormat(undefined, {
-                          maximumFractionDigits: 2,
-                        }).format(
-                          prompt.metrics.tokenUsage.completion /
-                            (prompt.metrics.totalLatencyMs / 1000),
-                        )}
-                      </div>
-                    ) : null}
-                    {prompt.metrics?.cost ? (
-                      <div>
-                        <strong>Cost:</strong> ${prompt.metrics.cost.toPrecision(2)}
-                      </div>
-                    ) : null}
-                  </div>
+                  {details}
                 </div>
                 {prompt.metrics?.namedScores &&
                 Object.keys(prompt.metrics.namedScores).length > 0 ? (
@@ -587,6 +609,7 @@ export default function ResultsTable({
               onRating={handleRating}
               firstOutput={filteredBody[info.row.index].outputs[0]}
               filterMode={filterMode}
+              showStats={showStats}
             />
           ),
         }),
