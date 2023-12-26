@@ -105,7 +105,9 @@ table.results-table,
   flex-wrap: wrap;
   column-gap: 0.5rem;
   row-gap: 0.25rem;
+}
 
+.results-table tr .stat-item {
   font-weight: normal;
   font-size: 0.75rem;
   color: #888;

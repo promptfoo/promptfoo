@@ -245,34 +245,26 @@ function EvalOutputCell({
 
   const detail = (
     <div className="cell-detail">
-      <div className="stat-item">
-        {tokenUsageDisplay && (
-          <>
-            <strong>Tokens:</strong> {tokenUsageDisplay}
-          </>
-        )}
-      </div>
-      <div className="stat-item">
-        {latencyDisplay && (
-          <>
-            <strong>Latency:</strong> {latencyDisplay}
-          </>
-        )}
-      </div>
-      <div className="stat-item">
-        {tokPerSecDisplay && (
-          <>
-            <strong>Tokens/Sec:</strong> {tokPerSecDisplay}
-          </>
-        )}
-      </div>
-      <div className="stat-item">
-        {costDisplay && (
-          <>
-            <strong>Cost:</strong> {costDisplay}
-          </>
-        )}
-      </div>
+      {tokenUsageDisplay && (
+        <div className="stat-item">
+          <strong>Tokens:</strong> {tokenUsageDisplay}
+        </div>
+      )}
+      {latencyDisplay && (
+        <div className="stat-item">
+          <strong>Latency:</strong> {latencyDisplay}
+        </div>
+      )}
+      {tokPerSecDisplay && (
+        <div className="stat-item">
+          <strong>Tokens/Sec:</strong> {tokPerSecDisplay}
+        </div>
+      )}
+      {costDisplay && (
+        <div className="stat-item">
+          <strong>Cost:</strong> {costDisplay}
+        </div>
+      )}
     </div>
   );
 
@@ -331,19 +323,20 @@ function EvalOutputCell({
               FAIL{output.score > 0 ? ' ' : ''}
               <span className="score">{scoreToString(output.score)}</span>
             </span>
-            <CustomMetrics lookup={output.namedScores} /> {detail}
+            <CustomMetrics lookup={output.namedScores} />
+            <span className="fail-reason">
+              {chunks[0]
+                .trim()
+                .split('\n')
+                .map((line, index) => (
+                  <React.Fragment key={index}>
+                    {line}
+                    <br />
+                  </React.Fragment>
+                ))}
+            </span> 
           </div>
-          <div className="fail-reason">
-            {chunks[0]
-              .trim()
-              .split('\n')
-              .map((line, index) => (
-                <React.Fragment key={index}>
-                  {line}
-                  <br />
-                </React.Fragment>
-              ))}
-          </div>
+          {detail}
         </>
       )}
       <TruncatedText text={node || text} maxLength={maxTextLength} />
