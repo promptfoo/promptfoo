@@ -107,6 +107,11 @@ table.results-table,
   row-gap: 0.25rem;
 }
 
+.results-table tr .pass .cell-detail {
+  /* Details are shown inline for passing tests */
+  display: inline-flex;
+}
+
 .results-table tr .stat-item {
   font-weight: normal;
   font-size: 0.75rem;
@@ -119,6 +124,16 @@ table.results-table,
 
 .results-table th .prompt-container > * {
   display: inline;
+}
+
+.results-table th .prompt-container .provider {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  background-color: var(--neutral-background-color);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  margin-right: 0.25rem;
+  font-size: 0.75rem;
 }
 
 .results-table th .summary {
@@ -140,7 +155,7 @@ table.results-table,
 .results-table th .summary .highlight {
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
-  background-color: var(--neutral-background-color);
+  background-color: var(--fail-background-color);
   border: 1px solid var(--border-color);
   margin-bottom: 0.5rem;
 }
@@ -151,8 +166,7 @@ table.results-table,
 }
 
 .results-table .status {
-  display: grid;
-  grid-template-columns: auto 1fr;
+  display: inline-block;
   gap: 0.5rem;
   align-items: center;
   font-weight: bold;
@@ -160,9 +174,10 @@ table.results-table,
 }
 
 .results-table .status .pill {
-  align-self: start;
+  display: inline-block;
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
+  margin-right: 0.25rem;
 }
 
 .results-table .pass .pill {

@@ -158,6 +158,11 @@ export interface Prompt {
   raw: string;
   display: string;
   function?: (context: { vars: Record<string, string | object> }) => Promise<string | object>;
+}
+
+// Used for final prompt display
+export type CompletedPrompt = Prompt & {
+  provider: string;
   metrics?: {
     score: number;
     testPassCount: number;
@@ -169,7 +174,7 @@ export interface Prompt {
     namedScores: Record<string, number>;
     cost: number;
   };
-}
+};
 
 // Used when building prompts index from files.
 export interface PromptWithMetadata {
@@ -182,7 +187,7 @@ export interface PromptWithMetadata {
     id: string;
     filePath: FilePath;
     datasetId: string;
-    metrics: Prompt['metrics'];
+    metrics: CompletedPrompt['metrics'];
   }[];
   count: number;
 }
@@ -222,7 +227,7 @@ export interface EvaluateTableRow {
 
 export interface EvaluateTable {
   head: {
-    prompts: Prompt[];
+    prompts: CompletedPrompt[];
     vars: string[];
   };
   body: EvaluateTableRow[];
@@ -335,7 +340,7 @@ export interface Assertion {
 
 // Used when building prompts index from files.
 export interface TestCasesWithMetadataPrompt {
-  prompt: Prompt;
+  prompt: CompletedPrompt;
   id: string;
   evalId: string;
   evalFilepath: FilePath;

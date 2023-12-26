@@ -15,6 +15,7 @@ import type { SingleBar } from 'cli-progress';
 import type {
   ApiProvider,
   AtomicTestCase,
+  CompletedPrompt,
   EvaluateOptions,
   EvaluateResult,
   EvaluateStats,
@@ -22,7 +23,6 @@ import type {
   EvaluateTable,
   NunjucksFilterMap,
   Prompt,
-  TestCase,
   TestSuite,
 } from './types';
 
@@ -316,7 +316,7 @@ class Evaluator {
 
   async evaluate(): Promise<EvaluateSummary> {
     const { testSuite, options } = this;
-    const prompts: Prompt[] = [];
+    const prompts: CompletedPrompt[] = [];
 
     if (options.generateSuggestions) {
       // TODO(ian): Move this into its own command/file
@@ -376,6 +376,7 @@ class Evaluator {
         prompts.push({
           ...prompt,
           id: sha256(typeof prompt.raw === 'object' ? JSON.stringify(prompt.raw) : prompt.raw),
+          provider: provider.id(),
           display: updatedDisplay,
           metrics: {
             score: 0,

@@ -224,15 +224,16 @@ function EvalOutputCell({
   };
 
   let tokenUsageDisplay;
-  let latencyDisplay = (
-    <span>
-      {Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(output.latencyMs)} ms
-    </span>
-  );
+  let latencyDisplay;
   let tokPerSecDisplay;
   let costDisplay;
 
   if (output.tokenUsage?.completion) {
+    latencyDisplay = (
+      <span>
+        {Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(output.latencyMs)} ms
+      </span>
+    );
     const tokPerSec = output.tokenUsage.completion / (output.latencyMs / 1000);
     tokPerSecDisplay = (
       <span>{Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(tokPerSec)}</span>
@@ -325,21 +326,22 @@ function EvalOutputCell({
   // TODO(ian): output.prompt check for backwards compatibility, remove after 0.17.0
   return (
     <div className="cell">
-      {output.pass && (
-        <div className="status pass">
-          <span className="pill">
-            PASS<span className="score">{scoreToString(output.score)}</span>
-          </span>
-          <CustomMetrics lookup={output.namedScores} /> {detail}
-        </div>
-      )}
-      {!output.pass && (
+      {output.pass ? (
+        <>
+          <div className="status pass">
+            <div className="pill">
+              PASS<span className="score">{scoreToString(output.score)}</span>
+            </div>
+            <CustomMetrics lookup={output.namedScores} /> {detail}
+          </div>
+        </>
+      ) : (
         <>
           <div className="status fail">
-            <span className="pill">
+            <div className="pill">
               FAIL{output.score > 0 ? ' ' : ''}
               <span className="score">{scoreToString(output.score)}</span>
-            </span>
+            </div>
             <CustomMetrics lookup={output.namedScores} />
             <span className="fail-reason">
               {chunks[0]
@@ -564,7 +566,13 @@ export default function ResultsTable({
               <>
                 <TableHeader
                   className="prompt-container"
-                  text={prompt.display}
+                  text={
+                    <>
+                      {/* TODO(ian): Remove backwards compatibility for prompt.provider added 12/26/23 */}
+                      {prompt.provider ? <div className="provider">{prompt.provider}</div> : null}
+                      <span>{prompt.display}</span>
+                    </>
+                  }
                   expandedText={prompt.raw}
                   maxLength={maxTextLength}
                   resourceId={prompt.id}
