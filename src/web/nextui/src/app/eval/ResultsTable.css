@@ -151,8 +151,8 @@ table.results-table,
 }
 
 .results-table .status {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: auto 1fr;
   gap: 0.5rem;
   align-items: center;
   font-weight: bold;
@@ -160,6 +160,7 @@ table.results-table,
 }
 
 .results-table .status .pill {
+  align-self: start;
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
 }
