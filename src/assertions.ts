@@ -501,7 +501,6 @@ export async function runAssertion({
     }[];
     invariant(Array.isArray(toolsOutput), 'is-valid-tools assertion must evaluate an array');
     invariant(toolsOutput.length > 0, 'is-valid-tools assertion must evaluate a non-empty array');
-    console.log('toolzoutput', toolsOutput[0]);
     invariant(
       typeof toolsOutput[0].function.name === 'string',
       'is-valid-tools assertion must evaluate an array of objects with string name properties',
