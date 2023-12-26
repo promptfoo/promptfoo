@@ -236,6 +236,7 @@ class Evaluator {
         score: 0,
         namedScores: {},
         latencyMs,
+        cost: response.cost,
       };
       if (response.error) {
         ret.error = response.error;
@@ -390,6 +391,7 @@ class Evaluator {
               cached: 0,
             },
             namedScores: {},
+            cost: 0,
           },
         });
       }
@@ -629,6 +631,7 @@ class Evaluator {
           latencyMs: row.latencyMs,
           tokenUsage: row.response?.tokenUsage,
           gradingResult: row.gradingResult,
+          cost: row.cost || 0,
         };
 
         const metrics = table.head.prompts[colIndex].metrics;
@@ -649,6 +652,7 @@ class Evaluator {
         metrics.tokenUsage.completion += row.response?.tokenUsage?.completion || 0;
         metrics.tokenUsage.prompt += row.response?.tokenUsage?.prompt || 0;
         metrics.tokenUsage.total += row.response?.tokenUsage?.total || 0;
+        metrics.cost += row.cost || 0;
       },
     );
 

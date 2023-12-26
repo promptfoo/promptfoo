@@ -165,14 +165,40 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
 
 export class OpenAiCompletionProvider extends OpenAiGenericProvider {
   static OPENAI_COMPLETION_MODELS = [
-    'gpt-3.5-turbo-instruct',
-    'gpt-3.5-turbo-instruct-0914',
-    'text-davinci-003',
-    'text-davinci-002',
-    'text-curie-001',
-    'text-babbage-001',
-    'text-ada-001',
+    {
+      id: 'gpt-3.5-turbo-instruct',
+      cost: {
+        input: 0.0015 / 1000,
+        output: 0.002 / 1000,
+      },
+    },
+    {
+      id: 'gpt-3.5-turbo-instruct-0914',
+      cost: {
+        input: 0.0015 / 1000,
+        output: 0.002 / 1000,
+      },
+    },
+    {
+      id: 'text-davinci-003',
+    },
+    {
+      id: 'text-davinci-002',
+    },
+    {
+      id: 'text-curie-001',
+    },
+    {
+      id: 'text-babbage-001',
+    },
+    {
+      id: 'text-ada-001',
+    },
   ];
+
+  static OPENAI_COMPLETION_MODEL_NAMES = OpenAiCompletionProvider.OPENAI_COMPLETION_MODELS.map(
+    (model) => model.id,
+  );
 
   config: OpenAiCompletionOptions;
 
@@ -180,7 +206,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
     modelName: string,
     options: { config?: OpenAiCompletionOptions; id?: string; env?: EnvOverrides } = {},
   ) {
-    if (!OpenAiCompletionProvider.OPENAI_COMPLETION_MODELS.includes(modelName)) {
+    if (!OpenAiCompletionProvider.OPENAI_COMPLETION_MODEL_NAMES.includes(modelName)) {
       logger.warn(`Using unknown OpenAI completion model: ${modelName}`);
     }
     super(modelName, options);
@@ -254,6 +280,8 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
               prompt: data.usage.prompt_tokens,
               completion: data.usage.completion_tokens,
             },
+        cached,
+        cost: calculateCost(this.modelName, data.usage.prompt_tokens, data.usage.completion_tokens),
       };
     } catch (err) {
       return {
@@ -265,20 +293,46 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
 
 export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   static OPENAI_CHAT_MODELS = [
-    'gpt-4',
-    'gpt-4-0314',
-    'gpt-4-0613',
-    'gpt-4-1106-preview',
-    'gpt-4-1106-vision-preview',
-    'gpt-4-32k',
-    'gpt-4-32k-0314',
-    'gpt-3.5-turbo',
-    'gpt-3.5-turbo-0301',
-    'gpt-3.5-turbo-0613',
-    'gpt-3.5-turbo-1106',
-    'gpt-3.5-turbo-16k',
-    'gpt-3.5-turbo-16k-0613',
+    ...['gpt-4', 'gpt-4-0314', 'gpt-4-0613'].map((model) => ({
+      id: model,
+      cost: {
+        input: 0.03 / 1000,
+        output: 0.06 / 1000,
+      },
+    })),
+    ...['gpt-4-1106-preview', 'gpt-4-1106-vision-preview'].map((model) => ({
+      id: model,
+      cost: {
+        input: 0.01 / 1000,
+        output: 0.03 / 1000,
+      },
+    })),
+    ...['gpt-4-32k', 'gpt-4-32k-0314'].map((model) => ({
+      id: model,
+      cost: {
+        input: 0.06 / 1000,
+        output: 0.12 / 1000,
+      },
+    })),
+    ...[
+      'gpt-3.5-turbo',
+      'gpt-3.5-turbo-0301',
+      'gpt-3.5-turbo-0613',
+      'gpt-3.5-turbo-1106',
+      'gpt-3.5-turbo-16k',
+      'gpt-3.5-turbo-16k-0613',
+    ].map((model) => ({
+      id: model,
+      cost: {
+        input: 0.001 / 1000,
+        output: 0.002 / 1000,
+      },
+    })),
   ];
+
+  static OPENAI_CHAT_MODEL_NAMES = OpenAiChatCompletionProvider.OPENAI_CHAT_MODELS.map(
+    (model) => model.id,
+  );
 
   config: OpenAiCompletionOptions;
 
@@ -286,7 +340,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     modelName: string,
     options: { config?: OpenAiCompletionOptions; id?: string; env?: EnvOverrides } = {},
   ) {
-    if (!OpenAiChatCompletionProvider.OPENAI_CHAT_MODELS.includes(modelName)) {
+    if (!OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES.includes(modelName)) {
       logger.warn(`Using unknown OpenAI chat model: ${modelName}`);
     }
     super(modelName, options);
@@ -360,7 +414,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     logger.debug(`\tOpenAI chat completions API response: ${JSON.stringify(data)}`);
     try {
       const message = data.choices[0].message;
-      const output = message.content === null ? message.function_call || message.tool_calls : message.content;
+      const output =
+        message.content === null ? message.function_call || message.tool_calls : message.content;
       const logProbs = data.choices[0].logprobs?.content?.map(
         (logProbObj: { token: string; logprob: number }) => logProbObj.logprob,
       );
@@ -376,6 +431,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             },
         cached,
         logProbs,
+        cost: calculateCost(this.modelName, data.usage.prompt_tokens, data.usage.completion_tokens),
       };
     } catch (err) {
       return {
@@ -383,6 +439,21 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       };
     }
   }
+}
+
+function calculateCost(
+  modelName: string,
+  promptTokens: number,
+  completionTokens: number,
+): number | undefined {
+  const model = [
+    ...OpenAiChatCompletionProvider.OPENAI_CHAT_MODELS,
+    ...OpenAiCompletionProvider.OPENAI_COMPLETION_MODELS,
+  ].find((m) => m.id === modelName);
+  if (!model || !model.cost) {
+    return undefined;
+  }
+  return model.cost.input * promptTokens + model.cost.output * completionTokens || undefined;
 }
 
 interface AssistantMessagesResponseDataContent {

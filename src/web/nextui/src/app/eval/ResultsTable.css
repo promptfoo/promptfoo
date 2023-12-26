@@ -101,15 +101,14 @@ table.results-table,
 }
 
 .results-table tr .cell-detail {
-  /*visibility: hidden;*/
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 0.5rem;
+  row-gap: 0.25rem;
+
   font-weight: normal;
   font-size: 0.75rem;
   color: #888;
-}
-
-.results-table tr:hover .cell-actions,
-.results-table tr:hover .cell-detail {
-  visibility: visible;
 }
 
 .results-table tr .cell-actions .action {
@@ -122,9 +121,18 @@ table.results-table,
 
 .results-table th .summary {
   font-weight: normal;
-  font-size: 1rem;
   line-height: 1.5;
   margin-top: 0.75rem;
+}
+
+.results-table th .summary .detail {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 0.5rem;
+  row-gap: 0.25rem;
+
+  font-size: 0.75rem;
+  color: #888;
 }
 
 .results-table th .summary .highlight {
@@ -132,6 +140,7 @@ table.results-table,
   border-radius: 4px;
   background-color: var(--neutral-background-color);
   border: 1px solid var(--border-color);
+  margin-bottom: 0.5rem;
 }
 
 .results-table th .summary .highlight.success {

@@ -95,6 +95,7 @@ export interface ProviderResponse {
   error?: string;
   output?: string | object;
   tokenUsage?: Partial<TokenUsage>;
+  cost?: number;
   cached?: boolean;
   logProbs?: number[];
 }
@@ -166,6 +167,7 @@ export interface Prompt {
     totalLatencyMs: number;
     tokenUsage: TokenUsage;
     namedScores: Record<string, number>;
+    cost: number;
   };
 }
 
@@ -196,6 +198,7 @@ export interface EvaluateResult {
   latencyMs: number;
   gradingResult?: GradingResult;
   namedScores: Record<string, number>;
+  cost?: number;
 }
 
 export interface EvaluateTableOutput {
@@ -208,6 +211,7 @@ export interface EvaluateTableOutput {
   provider?: string;
   tokenUsage?: Partial<TokenUsage>;
   gradingResult?: GradingResult;
+  cost: number;
 }
 
 export interface EvaluateTableRow {

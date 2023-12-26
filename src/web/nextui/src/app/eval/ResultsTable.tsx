@@ -223,17 +223,57 @@ function EvalOutputCell({
 
   let tokenUsageDisplay;
   let latencyDisplay = <span>{output.latencyMs} ms</span>;
-  if (output.tokenUsage?.cached) {
-    tokenUsageDisplay = <span>{output.tokenUsage.cached} tokens (cached)</span>;
-  } else if (output.tokenUsage?.total) {
-    tokenUsageDisplay = <span>{output.tokenUsage.total} tokens</span>;
+  let tokPerSecDisplay;
+  let costDisplay;
+
+  if (output.tokenUsage?.completion) {
+    const tokPerSec = output.tokenUsage.completion / (output.latencyMs / 1000);
+    tokPerSecDisplay = (
+      <span>{Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(tokPerSec)}</span>
+    );
   }
+
+  if (output.cost) {
+    costDisplay = <span>${output.cost.toPrecision(2)}</span>;
+  }
+
+  if (output.tokenUsage?.cached) {
+    tokenUsageDisplay = <span>{output.tokenUsage.cached} (cached)</span>;
+  } else if (output.tokenUsage?.total) {
+    tokenUsageDisplay = <span>{output.tokenUsage.total}</span>;
+  }
+
   const detail = (
-    <span className="cell-detail">
-      {tokenUsageDisplay}
-      {tokenUsageDisplay && latencyDisplay ? ' | ' : ''}
-      {latencyDisplay}
-    </span>
+    <div className="cell-detail">
+      <div className="stat-item">
+        {tokenUsageDisplay && (
+          <>
+            <strong>Tokens:</strong> {tokenUsageDisplay}
+          </>
+        )}
+      </div>
+      <div className="stat-item">
+        {latencyDisplay && (
+          <>
+            <strong>Latency:</strong> {latencyDisplay}
+          </>
+        )}
+      </div>
+      <div className="stat-item">
+        {tokPerSecDisplay && (
+          <>
+            <strong>Tokens/Sec:</strong> {tokPerSecDisplay}
+          </>
+        )}
+      </div>
+      <div className="stat-item">
+        {costDisplay && (
+          <>
+            <strong>Cost:</strong> {costDisplay}
+          </>
+        )}
+      </div>
+    </div>
   );
 
   const actions = (
@@ -476,36 +516,49 @@ export default function ResultsTable({
                   resourceId={typeof prompt === 'string' ? undefined : prompt.id}
                 />
                 <div className="summary">
-                  <span className={`highlight ${isHighestPassing ? 'success' : ''}`}>
-                    Pass rate: <strong>{pct}%</strong> ({numGoodTests[idx]}/{body.length} cases
+                  <div className={`highlight ${isHighestPassing ? 'success' : ''}`}>
+                    <strong>Pass rate:</strong> {pct}% ({numGoodTests[idx]}/{body.length} cases)
+                  </div>
+                  <div className="detail">
                     {numAsserts[idx] ? (
-                      <span>
-                        , {numGoodAsserts[idx]}/{numAsserts[idx]} asserts
-                      </span>
+                      <div>
+                        <strong>Asserts:</strong> {numGoodAsserts[idx]}/{numAsserts[idx]}
+                      </div>
                     ) : null}
-                    )
-                  </span>
-                  {(prompt.metrics?.totalLatencyMs || prompt.metrics?.tokenUsage?.total) && (
-                    <span> avg</span>
-                  )}
-                  {prompt.metrics?.totalLatencyMs ? (
-                    <span>
-                      {' '}
-                      {Intl.NumberFormat(undefined, {
-                        maximumFractionDigits: 0,
-                      }).format(prompt.metrics.totalLatencyMs / body.length)}
-                      ms
-                    </span>
-                  ) : null}
-                  {prompt.metrics?.tokenUsage?.total ? (
-                    <span>
-                      {' '}
-                      {Intl.NumberFormat(undefined, {
-                        maximumFractionDigits: 0,
-                      }).format(prompt.metrics.tokenUsage.total / body.length)}{' '}
-                      tokens
-                    </span>
-                  ) : null}
+                    {prompt.metrics?.totalLatencyMs ? (
+                      <div>
+                        <strong>Average Latency:</strong>{' '}
+                        {Intl.NumberFormat(undefined, {
+                          maximumFractionDigits: 0,
+                        }).format(prompt.metrics.totalLatencyMs / body.length)}{' '}
+                        ms
+                      </div>
+                    ) : null}
+                    {prompt.metrics?.tokenUsage?.total ? (
+                      <div>
+                        <strong>Average Tokens:</strong>{' '}
+                        {Intl.NumberFormat(undefined, {
+                          maximumFractionDigits: 0,
+                        }).format(prompt.metrics.tokenUsage.total / body.length)}
+                      </div>
+                    ) : null}
+                    {prompt.metrics?.totalLatencyMs && prompt.metrics?.tokenUsage?.completion ? (
+                      <div>
+                        <strong>Tokens/Sec:</strong>{' '}
+                        {Intl.NumberFormat(undefined, {
+                          maximumFractionDigits: 2,
+                        }).format(
+                          prompt.metrics.tokenUsage.completion /
+                            (prompt.metrics.totalLatencyMs / 1000),
+                        )}
+                      </div>
+                    ) : null}
+                    {prompt.metrics?.cost ? (
+                      <div>
+                        <strong>Cost:</strong> ${prompt.metrics.cost.toPrecision(2)}
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
                 {prompt.metrics?.namedScores &&
                 Object.keys(prompt.metrics.namedScores).length > 0 ? (
