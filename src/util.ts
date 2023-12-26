@@ -288,7 +288,7 @@ export function listPreviousResults(): string[] {
   return sortedFiles;
 }
 
-const RESULT_HISTORY_LENGTH = parseInt(process.env.RESULT_HISTORY_LENGTH || '', 10) || 50;
+const RESULT_HISTORY_LENGTH = parseInt(process.env.RESULT_HISTORY_LENGTH || '', 10) || 100;
 
 export function cleanupOldResults(remaining = RESULT_HISTORY_LENGTH) {
   const sortedFiles = listPreviousResults();
