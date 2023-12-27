@@ -567,11 +567,19 @@ export default function ResultsTable({
             const allProvidersSame = head.prompts.every(
               (p) => p.provider === head.prompts[0].provider,
             );
+            const providerParts = prompt.provider ? prompt.provider.split(':') : [];
+            const providerDisplay = providerParts.length > 1
+              ? (
+                  <>
+                    {providerParts[0]}:<strong>{providerParts.slice(1).join(':')}</strong>
+                  </>
+                )
+              : <strong>{prompt.provider}</strong>;
             return (
               <div className="output-header">
                 <div className="pills">
                   {!allProvidersSame && prompt.provider ? (
-                    <div className="provider">{prompt.provider}</div>
+                    <div className="provider">{providerDisplay}</div>
                   ) : null}
                   <div className="summary">
                     <div className={`highlight ${isHighestPassing ? 'success' : ''}`}>
