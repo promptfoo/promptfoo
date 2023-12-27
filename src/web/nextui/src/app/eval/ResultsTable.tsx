@@ -563,7 +563,7 @@ export default function ResultsTable({
             ) : null;
 
             return (
-              <>
+              <div className="output-header">
                 <TableHeader
                   className="prompt-container"
                   text={
@@ -605,7 +605,7 @@ export default function ResultsTable({
                     label="Show failures"
                   />
                 )}
-              </>
+              </div>
             );
           },
           cell: (info: CellContext<EvaluateTableRow, EvaluateTableOutput>) => (

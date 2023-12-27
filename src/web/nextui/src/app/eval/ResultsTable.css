@@ -79,7 +79,8 @@ table.results-table,
   vertical-align: middle;
 }
 
-.results-table td {
+.results-table td, .results-table th {
+  /* https://stackoverflow.com/questions/37745051/fill-the-remaining-height-or-width-in-a-flex-container */
   height: 1px;
 }
 
@@ -133,6 +134,16 @@ table.results-table,
   cursor: pointer;
 }
 
+.results-table th .output-header {
+  display: flex;
+  flex-direction: column;  
+  height: 100%;
+}
+
+.results-table th .prompt-container {
+  margin-bottom: 0.5rem;
+}
+
 .results-table th .prompt-container > * {
   display: inline;
 }
@@ -144,13 +155,12 @@ table.results-table,
   border: 1px solid var(--border-color);
   border-radius: 4px;
   margin-right: 0.25rem;
-  font-size: 0.75rem;
 }
 
 .results-table th .summary {
   font-weight: normal;
   line-height: 1.5;
-  margin-top: 0.75rem;
+  margin-top: auto; /* Ensures the element floats to the bottom of the container */
 }
 
 .results-table th .summary .detail {
