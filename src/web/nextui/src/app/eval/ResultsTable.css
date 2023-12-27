@@ -84,9 +84,24 @@ table.results-table,
   vertical-align: middle;
 }
 
-.results-table td, .results-table th {
-  /* https://stackoverflow.com/questions/37745051/fill-the-remaining-height-or-width-in-a-flex-container */
+/* https://stackoverflow.com/questions/36575846/how-to-make-div-fill-td-height-in-firefox/36576083#36576083 */
+.results-table td,
+.results-table th {
   height: 1px;
+}
+
+@-moz-document url-prefix() {
+  /* Firefox fix */
+  .results-table td,
+  .results-table th {
+    height: 100%;
+  }
+}
+
+.firefox-fix {
+  /* Seems to be needed on the entire table for Firefox to render the table correctly. When applied to a div within a specific td or th, it breaks the element but fixes the other rows */
+  display: table;
+  height: 100%;
 }
 
 .results-table tr .cell {
@@ -122,12 +137,9 @@ table.results-table,
   flex-wrap: wrap;
   column-gap: 0.5rem;
   row-gap: 0.25rem;
-  margin-top: 1rem;
 
-  /* Appear at bottom of parent cell. */
-  flex-grow: 1;
-  align-items: flex-end;
-  align-content: flex-end;
+  padding-top: 1rem;
+  margin-top: auto; /* Floats element to the bottom of the container */
 }
 
 .results-table tr .stat-item {
@@ -142,7 +154,7 @@ table.results-table,
 
 .results-table th .output-header {
   display: flex;
-  flex-direction: column;  
+  flex-direction: column;
   height: 100%;
   align-items: flex-start;
 }
@@ -177,7 +189,7 @@ table.results-table,
   font-weight: normal;
 }
 
-.results-table th .detail {
+.results-table th .prompt-detail {
   display: flex;
   flex-wrap: wrap;
   column-gap: 0.5rem;

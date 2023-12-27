@@ -523,7 +523,7 @@ export default function ResultsTable({
             const isChecked = failureFilter[columnId] || false;
 
             const details = showStats ? (
-              <div className="detail">
+              <div className="prompt-detail">
                 {numAsserts[idx] ? (
                   <div>
                     <strong>Asserts:</strong> {numGoodAsserts[idx]}/{numAsserts[idx]} passed
@@ -531,7 +531,7 @@ export default function ResultsTable({
                 ) : null}
                 {prompt.metrics?.totalLatencyMs ? (
                   <div>
-                    <strong>Average Latency:</strong>{' '}
+                    <strong>Avg Latency:</strong>{' '}
                     {Intl.NumberFormat(undefined, {
                       maximumFractionDigits: 0,
                     }).format(prompt.metrics.totalLatencyMs / body.length)}{' '}
@@ -540,7 +540,7 @@ export default function ResultsTable({
                 ) : null}
                 {prompt.metrics?.tokenUsage?.total ? (
                   <div>
-                    <strong>Average Tokens:</strong>{' '}
+                    <strong>Avg Tokens:</strong>{' '}
                     {Intl.NumberFormat(undefined, {
                       maximumFractionDigits: 0,
                     }).format(prompt.metrics.tokenUsage.total / body.length)}
@@ -568,13 +568,14 @@ export default function ResultsTable({
               (p) => p.provider === head.prompts[0].provider,
             );
             const providerParts = prompt.provider ? prompt.provider.split(':') : [];
-            const providerDisplay = providerParts.length > 1
-              ? (
-                  <>
-                    {providerParts[0]}:<strong>{providerParts.slice(1).join(':')}</strong>
-                  </>
-                )
-              : <strong>{prompt.provider}</strong>;
+            const providerDisplay =
+              providerParts.length > 1 ? (
+                <>
+                  {providerParts[0]}:<strong>{providerParts.slice(1).join(':')}</strong>
+                </>
+              ) : (
+                <strong>{prompt.provider}</strong>
+              );
             return (
               <div className="output-header">
                 <div className="pills">
@@ -684,7 +685,7 @@ export default function ResultsTable({
 
   return (
     <table
-      className={`results-table ${maxTextLength <= 25 ? 'compact' : ''}`}
+      className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''}`}
       style={{
         wordBreak,
       }}
