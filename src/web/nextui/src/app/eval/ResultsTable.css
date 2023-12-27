@@ -79,8 +79,15 @@ table.results-table,
   vertical-align: middle;
 }
 
+.results-table td {
+  height: 1px;
+}
+
 .results-table tr .cell {
+  display: flex;
+  flex-direction: column;
   white-space: pre-wrap;
+  height: 100%;
 }
 
 .results-table tr .variable > *,
@@ -100,16 +107,20 @@ table.results-table,
   font-size: 1.25rem;
 }
 
+.results-table tr:hover .cell-actions {
+  visibility: visible;
+}
+
 .results-table tr .cell-detail {
   display: flex;
   flex-wrap: wrap;
   column-gap: 0.5rem;
   row-gap: 0.25rem;
-}
+  margin-top: 1rem;
 
-.results-table tr .pass .cell-detail {
-  /* Details are shown inline for passing tests */
-  display: inline-flex;
+  /* Appear at bottom of parent cell. */
+  flex-grow: 1;
+  align-items: flex-end;
 }
 
 .results-table tr .stat-item {
@@ -166,11 +177,7 @@ table.results-table,
 }
 
 .results-table .status {
-  display: inline-block;
-  gap: 0.5rem;
-  align-items: center;
   font-weight: bold;
-  margin-bottom: 0.5rem;
 }
 
 .results-table .status .pill {
@@ -188,6 +195,10 @@ table.results-table,
 
 .results-table .fail .pill {
   border: 1px solid var(--fail-color);
+}
+
+.results-table .pass {
+  margin-bottom: 0.5rem;
 }
 
 .results-table .fail {

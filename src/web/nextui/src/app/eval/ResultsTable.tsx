@@ -332,7 +332,7 @@ function EvalOutputCell({
             <div className="pill">
               PASS<span className="score">{scoreToString(output.score)}</span>
             </div>
-            <CustomMetrics lookup={output.namedScores} /> {detail}
+            <CustomMetrics lookup={output.namedScores} />
           </div>
         </>
       ) : (
@@ -355,10 +355,10 @@ function EvalOutputCell({
                 ))}
             </span>
           </div>
-          {detail}
         </>
       )}
       <TruncatedText text={node || text} maxLength={maxTextLength} />
+      {detail}
       {actions}
     </div>
   );
