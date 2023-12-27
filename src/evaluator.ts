@@ -34,8 +34,6 @@ interface RunEvalOptions {
   test: AtomicTestCase;
   nunjucksFilters?: NunjucksFilterMap;
 
-  includeProviderId?: boolean;
-
   rowIndex: number;
   colIndex: number;
   repeatIndex: number;
@@ -152,15 +150,11 @@ class Evaluator {
     provider,
     prompt,
     test,
-    includeProviderId,
     delay,
     nunjucksFilters: filters,
   }: RunEvalOptions): Promise<EvaluateResult> {
     // Use the original prompt to set the display, not renderedPrompt
     let promptDisplay = prompt.display;
-    if (includeProviderId) {
-      promptDisplay = `[${provider.id()}] ${promptDisplay}`;
-    }
 
     // Set up the special _conversation variable
     const vars = test.vars || {};
@@ -371,13 +365,11 @@ class Evaluator {
             continue;
           }
         }
-        const updatedDisplay =
-          testSuite.providers.length > 1 ? `[${provider.id()}] ${prompt.display}` : prompt.display;
         prompts.push({
           ...prompt,
           id: sha256(typeof prompt.raw === 'object' ? JSON.stringify(prompt.raw) : prompt.raw),
           provider: provider.id(),
-          display: updatedDisplay,
+          display: prompt.display,
           metrics: {
             score: 0,
             testPassCount: 0,
@@ -499,7 +491,6 @@ class Evaluator {
                 },
                 test: { ...testCase, vars, options: testCase.options },
                 nunjucksFilters: testSuite.nunjucksFilters,
-                includeProviderId: testSuite.providers.length > 1,
                 rowIndex,
                 colIndex,
                 repeatIndex,

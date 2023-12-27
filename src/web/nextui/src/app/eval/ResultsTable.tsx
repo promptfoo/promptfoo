@@ -482,7 +482,7 @@ export default function ResultsTable({
     columns.push(
       columnHelper.group({
         id: 'vars',
-        header: () => <span>Variables</span>,
+        header: () => <span className="font-bold">Variables</span>,
         columns: head.vars.map((varName, idx) =>
           columnHelper.accessor(
             (row: EvaluateTableRow) => {
@@ -490,7 +490,9 @@ export default function ResultsTable({
             },
             {
               id: `Variable ${idx + 1}`,
-              header: () => <TableHeader text={varName} maxLength={maxTextLength} />,
+              header: () => (
+                <TableHeader text={varName} maxLength={maxTextLength} className="font-bold" />
+              ),
               cell: (info: CellContext<EvaluateTableRow, string>) => (
                 <TruncatedText text={info.getValue()} maxLength={maxTextLength} />
               ),
@@ -506,7 +508,7 @@ export default function ResultsTable({
   columns.push(
     columnHelper.group({
       id: 'prompts',
-      header: () => <span>Outputs</span>,
+      header: () => <span className="font-bold">Outputs</span>,
       columns: head.prompts.map((prompt, idx) =>
         columnHelper.accessor((row: EvaluateTableRow) => formatRowOutput(row.outputs[idx]), {
           id: `Prompt ${idx + 1}`,
@@ -562,33 +564,34 @@ export default function ResultsTable({
               </div>
             ) : null;
 
+            const allProvidersSame = head.prompts.every(
+              (p) => p.provider === head.prompts[0].provider,
+            );
             return (
               <div className="output-header">
+                <div className="pills">
+                  {!allProvidersSame && prompt.provider ? (
+                    <div className="provider">{prompt.provider}</div>
+                  ) : null}
+                  <div className="summary">
+                    <div className={`highlight ${isHighestPassing ? 'success' : ''}`}>
+                      <strong>{pct}% passing</strong> ({numGoodTests[idx]}/{body.length} cases)
+                    </div>
+                  </div>
+                  {prompt.metrics?.namedScores &&
+                  Object.keys(prompt.metrics.namedScores).length > 0 ? (
+                    <CustomMetrics lookup={prompt.metrics.namedScores} />
+                  ) : null}
+                  {/* TODO(ian): Remove backwards compatibility for prompt.provider added 12/26/23 */}
+                </div>
                 <TableHeader
                   className="prompt-container"
-                  text={
-                    <>
-                      {/* TODO(ian): Remove backwards compatibility for prompt.provider added 12/26/23 */}
-                      {prompt.provider ? <div className="provider">{prompt.provider}</div> : null}
-                      <span>{prompt.display}</span>
-                    </>
-                  }
+                  text={prompt.display}
                   expandedText={prompt.raw}
                   maxLength={maxTextLength}
                   resourceId={prompt.id}
                 />
-                <div className="summary">
-                  <div className={`highlight ${isHighestPassing ? 'success' : ''}`}>
-                    <strong>Pass rate:</strong> {pct}% ({numGoodTests[idx]}/{body.length} cases)
-                  </div>
-                  {details}
-                </div>
-                {prompt.metrics?.namedScores &&
-                Object.keys(prompt.metrics.namedScores).length > 0 ? (
-                  <div style={{ marginTop: '0.5rem' }}>
-                    <CustomMetrics lookup={prompt.metrics.namedScores} />
-                  </div>
-                ) : null}
+                {details}
                 {filterMode === 'failures' && (
                   <FormControlLabel
                     sx={{
@@ -630,7 +633,7 @@ export default function ResultsTable({
     const descriptionColumn = {
       accessorFn: (row: EvaluateTableRow) => row.description || '',
       id: 'description',
-      header: () => <span>Description</span>,
+      header: () => <span className="font-bold">Description</span>,
       cell: (info: CellContext<EvaluateTableRow, unknown>) => (
         <TruncatedText text={String(info.getValue())} maxLength={maxTextLength} />
       ),

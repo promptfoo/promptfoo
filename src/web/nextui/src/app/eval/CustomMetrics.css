@@ -1,7 +1,7 @@
 .custom-metric-container {
   display: inline-flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: 0.25rem;
   font-weight: normal;
 }
 
@@ -10,6 +10,5 @@
   border-radius: 4px;
   color: var(--text-color);
   border: 1px solid var(--border-color);
-  font-size: smaller;
-  line-height: 1.5;
+  margin-right: 0.25rem; /* spacing for failure reason text in output cell */
 }

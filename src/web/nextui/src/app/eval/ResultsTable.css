@@ -1,3 +1,7 @@
+.font-bold {
+  font-weight: bold;
+}
+
 table.results-table,
 .divTable {
   border: 1px solid var(--table-border-color);
@@ -68,6 +72,7 @@ table.results-table,
   vertical-align: bottom;
   text-align: left;
   white-space: pre-wrap;
+  font-weight: normal;
 }
 
 .results-table th .action {
@@ -138,9 +143,19 @@ table.results-table,
   display: flex;
   flex-direction: column;  
   height: 100%;
+  align-items: flex-start;
+}
+
+.results-table th .output-header .pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  align-items: center;
+  margin-bottom: 0.5rem;
 }
 
 .results-table th .prompt-container {
+  font-weight: bold;
   margin-bottom: 0.5rem;
 }
 
@@ -148,7 +163,7 @@ table.results-table,
   display: inline;
 }
 
-.results-table th .prompt-container .provider {
+.results-table th .provider {
   display: inline-block;
   padding: 0.25rem 0.5rem;
   background-color: var(--neutral-background-color);
@@ -159,11 +174,9 @@ table.results-table,
 
 .results-table th .summary {
   font-weight: normal;
-  line-height: 1.5;
-  margin-top: auto; /* Ensures the element floats to the bottom of the container */
 }
 
-.results-table th .summary .detail {
+.results-table th .detail {
   display: flex;
   flex-wrap: wrap;
   column-gap: 0.5rem;
@@ -171,6 +184,7 @@ table.results-table,
 
   font-size: 0.75rem;
   color: #888;
+  margin-top: auto; /* Floats element to the bottom of the container */
 }
 
 .results-table th .summary .highlight {
@@ -178,7 +192,6 @@ table.results-table,
   border-radius: 4px;
   background-color: var(--fail-background-color);
   border: 1px solid var(--border-color);
-  margin-bottom: 0.5rem;
 }
 
 .results-table th .summary .highlight.success {
