@@ -127,6 +127,7 @@ table.results-table,
   /* Appear at bottom of parent cell. */
   flex-grow: 1;
   align-items: flex-end;
+  align-content: flex-end;
 }
 
 .results-table tr .stat-item {
