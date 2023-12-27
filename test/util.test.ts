@@ -67,7 +67,7 @@ describe('util', () => {
     ];
     const table: EvaluateTable = {
       head: {
-        prompts: [{ raw: 'Test prompt', display: '[display] Test prompt' }],
+        prompts: [{ raw: 'Test prompt', display: '[display] Test prompt', provider: 'foo' }],
         vars: ['var1', 'var2'],
       },
       body: [
@@ -80,6 +80,7 @@ describe('util', () => {
               text: 'Test output',
               prompt: 'Test prompt',
               latencyMs: 1000,
+              cost: 0,
             },
           ],
           vars: ['value1', 'value2'],
@@ -136,7 +137,7 @@ describe('util', () => {
     ];
     const table: EvaluateTable = {
       head: {
-        prompts: [{ raw: 'Test prompt', display: '[display] Test prompt' }],
+        prompts: [{ raw: 'Test prompt', display: '[display] Test prompt', provider: 'foo' }],
         vars: ['var1', 'var2'],
       },
       body: [
@@ -149,6 +150,7 @@ describe('util', () => {
               text: 'Test output',
               prompt: 'Test prompt',
               latencyMs: 1000,
+              cost: 0,
             },
           ],
           vars: ['value1', 'value2'],
@@ -205,7 +207,7 @@ describe('util', () => {
     ];
     const table: EvaluateTable = {
       head: {
-        prompts: [{ raw: 'Test prompt', display: '[display] Test prompt' }],
+        prompts: [{ raw: 'Test prompt', display: '[display] Test prompt', provider: 'foo' }],
         vars: ['var1', 'var2'],
       },
       body: [
@@ -218,6 +220,7 @@ describe('util', () => {
               text: 'Test output',
               prompt: 'Test prompt',
               latencyMs: 1000,
+              cost: 0,
             },
           ],
           vars: ['value1', 'value2'],
@@ -274,7 +277,7 @@ describe('util', () => {
     ];
     const table: EvaluateTable = {
       head: {
-        prompts: [{ raw: 'Test prompt', display: '[display] Test prompt' }],
+        prompts: [{ raw: 'Test prompt', display: '[display] Test prompt', provider: 'foo' }],
         vars: ['var1', 'var2'],
       },
       body: [
@@ -287,6 +290,7 @@ describe('util', () => {
               text: 'Test output',
               prompt: 'Test prompt',
               latencyMs: 1000,
+              cost: 0,
             },
           ],
           vars: ['value1', 'value2'],

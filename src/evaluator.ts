@@ -15,6 +15,7 @@ import type { SingleBar } from 'cli-progress';
 import type {
   ApiProvider,
   AtomicTestCase,
+  CompletedPrompt,
   EvaluateOptions,
   EvaluateResult,
   EvaluateStats,
@@ -22,7 +23,6 @@ import type {
   EvaluateTable,
   NunjucksFilterMap,
   Prompt,
-  TestCase,
   TestSuite,
 } from './types';
 
@@ -33,8 +33,6 @@ interface RunEvalOptions {
 
   test: AtomicTestCase;
   nunjucksFilters?: NunjucksFilterMap;
-
-  includeProviderId?: boolean;
 
   rowIndex: number;
   colIndex: number;
@@ -152,15 +150,11 @@ class Evaluator {
     provider,
     prompt,
     test,
-    includeProviderId,
     delay,
     nunjucksFilters: filters,
   }: RunEvalOptions): Promise<EvaluateResult> {
     // Use the original prompt to set the display, not renderedPrompt
     let promptDisplay = prompt.display;
-    if (includeProviderId) {
-      promptDisplay = `[${provider.id()}] ${promptDisplay}`;
-    }
 
     // Set up the special _conversation variable
     const vars = test.vars || {};
@@ -236,6 +230,7 @@ class Evaluator {
         score: 0,
         namedScores: {},
         latencyMs,
+        cost: response.cost,
       };
       if (response.error) {
         ret.error = response.error;
@@ -315,7 +310,7 @@ class Evaluator {
 
   async evaluate(): Promise<EvaluateSummary> {
     const { testSuite, options } = this;
-    const prompts: Prompt[] = [];
+    const prompts: CompletedPrompt[] = [];
 
     if (options.generateSuggestions) {
       // TODO(ian): Move this into its own command/file
@@ -370,12 +365,11 @@ class Evaluator {
             continue;
           }
         }
-        const updatedDisplay =
-          testSuite.providers.length > 1 ? `[${provider.id()}] ${prompt.display}` : prompt.display;
         prompts.push({
           ...prompt,
           id: sha256(typeof prompt.raw === 'object' ? JSON.stringify(prompt.raw) : prompt.raw),
-          display: updatedDisplay,
+          provider: provider.id(),
+          display: prompt.display,
           metrics: {
             score: 0,
             testPassCount: 0,
@@ -390,6 +384,7 @@ class Evaluator {
               cached: 0,
             },
             namedScores: {},
+            cost: 0,
           },
         });
       }
@@ -496,7 +491,6 @@ class Evaluator {
                 },
                 test: { ...testCase, vars, options: testCase.options },
                 nunjucksFilters: testSuite.nunjucksFilters,
-                includeProviderId: testSuite.providers.length > 1,
                 rowIndex,
                 colIndex,
                 repeatIndex,
@@ -629,6 +623,7 @@ class Evaluator {
           latencyMs: row.latencyMs,
           tokenUsage: row.response?.tokenUsage,
           gradingResult: row.gradingResult,
+          cost: row.cost || 0,
         };
 
         const metrics = table.head.prompts[colIndex].metrics;
@@ -649,6 +644,7 @@ class Evaluator {
         metrics.tokenUsage.completion += row.response?.tokenUsage?.completion || 0;
         metrics.tokenUsage.prompt += row.response?.tokenUsage?.prompt || 0;
         metrics.tokenUsage.total += row.response?.tokenUsage?.total || 0;
+        metrics.cost += row.cost || 0;
       },
     );
 

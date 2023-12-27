@@ -10,9 +10,11 @@ To create a custom API provider, implement the `ApiProvider` interface in a sepa
 class ApiProvider {
   constructor(options: { id?: string; config: Record<string, any>});
   id: () => string;
-  callApi: (prompt: string, context: { vars: Record<string, any> }) => Promise<ProviderResult>;
+  callApi: (prompt: string, context: { vars: Record<string, any> }) => Promise<ProviderResponse>;
 }
 ```
+
+See also: [ProviderResponse](/docs/configuration/reference/#providerresponse)
 
 ## Example
 

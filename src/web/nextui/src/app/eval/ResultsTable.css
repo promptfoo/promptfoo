@@ -1,3 +1,7 @@
+.font-bold {
+  font-weight: bold;
+}
+
 table.results-table,
 .divTable {
   border: 1px solid var(--table-border-color);
@@ -68,6 +72,7 @@ table.results-table,
   vertical-align: bottom;
   text-align: left;
   white-space: pre-wrap;
+  font-weight: normal;
 }
 
 .results-table th .action {
@@ -79,8 +84,31 @@ table.results-table,
   vertical-align: middle;
 }
 
+/* https://stackoverflow.com/questions/36575846/how-to-make-div-fill-td-height-in-firefox/36576083#36576083 */
+.results-table td,
+.results-table th {
+  height: 1px;
+}
+
+@-moz-document url-prefix() {
+  /* Firefox fix */
+  .results-table td,
+  .results-table th {
+    height: 100%;
+  }
+}
+
+.firefox-fix {
+  /* Seems to be needed on the entire table for Firefox to render the table correctly. When applied to a div within a specific td or th, it breaks the element but fixes the other rows */
+  display: table;
+  height: 100%;
+}
+
 .results-table tr .cell {
+  display: flex;
+  flex-direction: column;
   white-space: pre-wrap;
+  height: 100%;
 }
 
 .results-table tr .variable > *,
@@ -100,37 +128,82 @@ table.results-table,
   font-size: 1.25rem;
 }
 
+.results-table tr:hover .cell-actions {
+  visibility: visible;
+}
+
 .results-table tr .cell-detail {
-  /*visibility: hidden;*/
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 0.5rem;
+  row-gap: 0.25rem;
+
+  padding-top: 1rem;
+  margin-top: auto; /* Floats element to the bottom of the container */
+}
+
+.results-table tr .stat-item {
   font-weight: normal;
   font-size: 0.75rem;
   color: #888;
-}
-
-.results-table tr:hover .cell-actions,
-.results-table tr:hover .cell-detail {
-  visibility: visible;
 }
 
 .results-table tr .cell-actions .action {
   cursor: pointer;
 }
 
+.results-table th .output-header {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  align-items: flex-start;
+}
+
+.results-table th .output-header .pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.results-table th .prompt-container {
+  font-weight: bold;
+  margin-bottom: 0.5rem;
+}
+
 .results-table th .prompt-container > * {
   display: inline;
 }
 
+.results-table th .provider {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  background-color: var(--neutral-background-color);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  margin-right: 0.25rem;
+}
+
 .results-table th .summary {
   font-weight: normal;
-  font-size: 1rem;
-  line-height: 1.5;
-  margin-top: 0.75rem;
+}
+
+.results-table th .prompt-detail {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 0.5rem;
+  row-gap: 0.25rem;
+
+  font-size: 0.75rem;
+  color: #888;
+  margin-top: auto; /* Floats element to the bottom of the container */
 }
 
 .results-table th .summary .highlight {
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
-  background-color: var(--neutral-background-color);
+  background-color: var(--fail-background-color);
   border: 1px solid var(--border-color);
 }
 
@@ -140,17 +213,14 @@ table.results-table,
 }
 
 .results-table .status {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  align-items: center;
   font-weight: bold;
-  margin-bottom: 0.5rem;
 }
 
 .results-table .status .pill {
+  display: inline-block;
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
+  margin-right: 0.25rem;
 }
 
 .results-table .pass .pill {
@@ -161,6 +231,10 @@ table.results-table,
 
 .results-table .fail .pill {
   border: 1px solid var(--fail-color);
+}
+
+.results-table .pass {
+  margin-bottom: 0.5rem;
 }
 
 .results-table .fail {

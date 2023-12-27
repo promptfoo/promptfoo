@@ -20,7 +20,11 @@ import {
 } from './providers/localai';
 import { PalmChatProvider } from './providers/palm';
 import { LlamaProvider } from './providers/llama';
-import { OllamaEmbeddingProvider, OllamaCompletionProvider, OllamaChatProvider } from './providers/ollama';
+import {
+  OllamaEmbeddingProvider,
+  OllamaCompletionProvider,
+  OllamaChatProvider,
+} from './providers/ollama';
 import { VertexChatProvider } from './providers/vertex';
 import { WebhookProvider } from './providers/webhook';
 import { ScriptCompletionProvider } from './providers/scriptCompletion';
@@ -131,9 +135,9 @@ export async function loadApiProvider(
       return new OpenAiEmbeddingProvider(modelName || 'text-embedding-ada-002', providerOptions);
     } else if (modelType === 'completion') {
       return new OpenAiCompletionProvider(modelName || 'text-davinci-003', providerOptions);
-    } else if (OpenAiChatCompletionProvider.OPENAI_CHAT_MODELS.includes(modelType)) {
+    } else if (OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES.includes(modelType)) {
       return new OpenAiChatCompletionProvider(modelType, providerOptions);
-    } else if (OpenAiCompletionProvider.OPENAI_COMPLETION_MODELS.includes(modelType)) {
+    } else if (OpenAiCompletionProvider.OPENAI_COMPLETION_MODEL_NAMES.includes(modelType)) {
       return new OpenAiCompletionProvider(modelType, providerOptions);
     } else if (modelType === 'assistant') {
       return new OpenAiAssistantProvider(modelName, providerOptions);

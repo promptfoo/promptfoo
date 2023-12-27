@@ -6,17 +6,15 @@ import Box from '@mui/material/Box';
 import Checkbox from '@mui/material/Checkbox';
 import CircularProgress from '@mui/material/CircularProgress';
 import FormControl from '@mui/material/FormControl';
-import FormControlLabel from '@mui/material/FormControlLabel';
 import InputLabel from '@mui/material/InputLabel';
 import ListItemText from '@mui/material/ListItemText';
 import MenuItem from '@mui/material/MenuItem';
 import OutlinedInput from '@mui/material/OutlinedInput';
 import Paper from '@mui/material/Box';
 import Select, { SelectChangeEvent } from '@mui/material/Select';
-import Slider from '@mui/material/Slider';
 import Stack from '@mui/material/Stack';
 import Tooltip from '@mui/material/Tooltip';
-import Typography from '@mui/material/Typography';
+import SettingsIcon from '@mui/icons-material/Settings';
 import ShareIcon from '@mui/icons-material/Share';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import EditIcon from '@mui/icons-material/Edit';
@@ -27,6 +25,7 @@ import ResultsCharts from './ResultsCharts';
 import ResultsTable from './ResultsTable';
 import ConfigModal from './ConfigModal';
 import ShareModal from './ShareModal';
+import SettingsModal from './ResultsViewSettingsModal';
 import { useStore as useResultsViewStore } from './store';
 import { useStore as useMainStore } from '@/state/evalConfig';
 
@@ -56,9 +55,8 @@ export default function ResultsView({
   defaultEvalId,
 }: ResultsViewProps) {
   const router = useRouter();
-  const { table, config } = useResultsViewStore();
+  const { table, config, maxTextLength, wordBreak, showInferenceDetails } = useResultsViewStore();
   const { setStateFromConfig } = useMainStore();
-  const [maxTextLength, setMaxTextLength] = React.useState(250);
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
   const [selectedColumns, setSelectedColumns] = React.useState<string[]>([]);
 
@@ -78,11 +76,6 @@ export default function ResultsView({
       newFailureFilter[columnId] = mode === 'failures';
     });
     setFailureFilter(newFailureFilter);
-  };
-
-  const [wordBreak, setWordBreak] = React.useState<'break-word' | 'break-all'>('break-word');
-  const handleWordBreakChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setWordBreak(event.target.checked ? 'break-all' : 'break-word');
   };
 
   const [shareModalOpen, setShareModalOpen] = React.useState(false);
@@ -121,6 +114,7 @@ export default function ResultsView({
   };
 
   const [configModalOpen, setConfigModalOpen] = React.useState(false);
+  const [viewSettingsModalOpen, setViewSettingsModalOpen] = React.useState(false);
 
   invariant(table, 'Table data must be loaded before rendering ResultsView');
   const { head } = table;
@@ -193,7 +187,7 @@ export default function ResultsView({
             )}
           </Box>
           <Box>
-            <FormControl sx={{ m: 1, minWidth: 200 }} size="small">
+            <FormControl sx={{ m: 1, minWidth: 200, maxWidth: 350 }} size="small">
               <InputLabel id="visible-columns-label">Show columns</InputLabel>
               <Select
                 labelId="visible-columns-label"
@@ -229,36 +223,26 @@ export default function ResultsView({
               </Select>
             </FormControl>
           </Box>
-          <Box>
-            <Typography mt={2}>Max text length: {maxTextLength}</Typography>
-            <Slider
-              min={25}
-              max={1000}
-              value={maxTextLength}
-              onChange={(_, val: number | number[]) => setMaxTextLength(val as number)}
-            />
-          </Box>
-          <Box>
-            <Tooltip title="Forcing line breaks makes it easier to adjust column widths to your liking">
-              <FormControlLabel
-                control={
-                  <Checkbox checked={wordBreak === 'break-all'} onChange={handleWordBreakChange} />
-                }
-                label="Force line breaks"
-              />
-            </Tooltip>
-          </Box>
           <Box flexGrow={1} />
           <Box display="flex" justifyContent="flex-end">
             <ResponsiveStack direction="row" spacing={2}>
+              <Tooltip title="Edit table view settings">
+                <Button
+                  color="primary"
+                  onClick={() => setViewSettingsModalOpen(true)}
+                  startIcon={<SettingsIcon />}
+                >
+                  Table Settings
+                </Button>
+              </Tooltip>
               {config && (
-                <Tooltip title="View config">
+                <Tooltip title="View the configuration that defines this eval">
                   <Button
                     color="primary"
                     onClick={() => setConfigModalOpen(true)}
                     startIcon={<VisibilityIcon />}
                   >
-                    View Config
+                    View YAML
                   </Button>
                 </Tooltip>
               )}
@@ -297,6 +281,7 @@ export default function ResultsView({
         maxTextLength={maxTextLength}
         columnVisibility={columnVisibility}
         wordBreak={wordBreak}
+        showStats={showInferenceDetails}
         filterMode={filterMode}
         failureFilter={failureFilter}
         onFailureFilterToggle={handleFailureFilterToggle}
@@ -307,6 +292,7 @@ export default function ResultsView({
         onClose={() => setShareModalOpen(false)}
         shareUrl={shareUrl}
       />
+      <SettingsModal open={viewSettingsModalOpen} onClose={() => setViewSettingsModalOpen(false)} />
     </div>
   );
 }
