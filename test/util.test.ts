@@ -67,7 +67,7 @@ describe('util', () => {
     ];
     const table: EvaluateTable = {
       head: {
-        prompts: [{ raw: 'Test prompt', display: '[display] Test prompt' }],
+        prompts: [{ raw: 'Test prompt', display: '[display] Test prompt', provider: 'foo' }],
         vars: ['var1', 'var2'],
       },
       body: [
@@ -137,7 +137,7 @@ describe('util', () => {
     ];
     const table: EvaluateTable = {
       head: {
-        prompts: [{ raw: 'Test prompt', display: '[display] Test prompt' }],
+        prompts: [{ raw: 'Test prompt', display: '[display] Test prompt', provider: 'foo' }],
         vars: ['var1', 'var2'],
       },
       body: [
@@ -207,7 +207,7 @@ describe('util', () => {
     ];
     const table: EvaluateTable = {
       head: {
-        prompts: [{ raw: 'Test prompt', display: '[display] Test prompt' }],
+        prompts: [{ raw: 'Test prompt', display: '[display] Test prompt', provider: 'foo' }],
         vars: ['var1', 'var2'],
       },
       body: [
@@ -277,7 +277,7 @@ describe('util', () => {
     ];
     const table: EvaluateTable = {
       head: {
-        prompts: [{ raw: 'Test prompt', display: '[display] Test prompt' }],
+        prompts: [{ raw: 'Test prompt', display: '[display] Test prompt', provider: 'foo' }],
         vars: ['var1', 'var2'],
       },
       body: [
