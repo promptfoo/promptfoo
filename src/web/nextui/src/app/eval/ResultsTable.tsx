@@ -16,9 +16,10 @@ import FormControlLabel from '@mui/material/FormControlLabel';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import Link from 'next/link';
 
-import CustomMetrics from './CustomMetrics';
-import EvalOutputPromptDialog from './EvalOutputPromptDialog';
-import { useStore } from './store';
+import CustomMetrics from '@/app/eval/CustomMetrics';
+import EvalOutputPromptDialog from '@/app/eval/EvalOutputPromptDialog';
+import { getApiBaseUrl } from '@/api';
+import { useStore } from '@/app/eval/store';
 
 import type { CellContext, ColumnDef, VisibilityState } from '@tanstack/table-core';
 
@@ -135,7 +136,7 @@ interface PromptOutputProps {
   rowIndex: number;
   promptIndex: number;
   showStats: boolean;
-  onRating: (rowIndex: number, promptIndex: number, isPass: boolean, score?: number) => void;
+  onRating: (rowIndex: number, promptIndex: number, isPass?: boolean, score?: number) => void;
 }
 
 function EvalOutputCell({
@@ -207,7 +208,7 @@ function EvalOutputCell({
     );
   }
 
-  const handleClick = (isPass: boolean) => {
+  const handleRating = (isPass: boolean) => {
     onRating(rowIndex, promptIndex, isPass);
   };
 
@@ -216,7 +217,7 @@ function EvalOutputCell({
     if (score !== null) {
       const parsedScore = parseFloat(score);
       if (!isNaN(parsedScore) && parsedScore >= 0.0 && parsedScore <= 1.0) {
-        onRating(rowIndex, promptIndex, true, parsedScore);
+        onRating(rowIndex, promptIndex, undefined, parsedScore);
       } else {
         alert('Invalid score. Please enter a value between 0.0 and 1.0.');
       }
@@ -305,12 +306,12 @@ function EvalOutputCell({
           />
         </>
       )}
-      <span className="action" onClick={() => handleClick(true)}>
+      <span className="action" onClick={() => handleRating(true)}>
         <Tooltip title="Mark test passed (score 1.0)">
           <span>👍</span>
         </Tooltip>
       </span>
-      <span className="action" onClick={() => handleClick(false)}>
+      <span className="action" onClick={() => handleRating(false)}>
         <Tooltip title="Mark test failed (score 0.0)">
           <span>👎</span>
         </Tooltip>
@@ -427,7 +428,7 @@ export default function ResultsTable({
   showStats,
   onFailureFilterToggle,
 }: ResultsTableProps) {
-  const { table, setTable } = useStore();
+  const { filePath, table, setTable } = useStore();
   invariant(table, 'Table should be defined');
   const { head, body } = table;
   // TODO(ian): Switch this to use prompt.metrics field once most clients have updated.
@@ -452,19 +453,51 @@ export default function ResultsTable({
     }, 0),
   );
 
-  const handleRating = (rowIndex: number, promptIndex: number, isPass: boolean, score?: number) => {
+  const handleRating = async (
+    rowIndex: number,
+    promptIndex: number,
+    isPass?: boolean,
+    score?: number,
+  ) => {
     const updatedData = [...body];
     const updatedRow = { ...updatedData[rowIndex] };
     const updatedOutputs = [...updatedRow.outputs];
-    updatedOutputs[promptIndex].pass = isPass;
-    updatedOutputs[promptIndex].score =
-      typeof score === 'undefined' ? (isPass ? 1 : 0) : score || 0;
+    // TODO(ian): Remove output.pass and output.score, and just use output.gradingResult.
+    const finalPass = isPass ?? updatedOutputs[promptIndex].pass;
+    const finalScore = typeof score === 'undefined' ? (isPass ? 1 : 0) : score || 0;
+    updatedOutputs[promptIndex].pass = finalPass;
+    updatedOutputs[promptIndex].score = finalScore;
+
+    // Override the gradingResult
+    const gradingResult = {
+      ...(updatedOutputs[promptIndex].gradingResult || {}),
+      pass: finalPass,
+      score: finalScore,
+      reason: 'Manual result (overrides all other grading results)',
+      assertion: null,
+    };
+    updatedOutputs[promptIndex].gradingResult = gradingResult;
     updatedRow.outputs = updatedOutputs;
     updatedData[rowIndex] = updatedRow;
-    setTable({
+    const newTable = {
       head,
       body: updatedData,
-    });
+    };
+    setTable(newTable);
+    try {
+      const response = await fetch(`${await getApiBaseUrl()}/api/eval/${filePath}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ table: newTable }),
+      });
+      if (!response.ok) {
+        throw new Error('Network response was not ok');
+      }
+    } catch (error) {
+      console.error('Failed to update table:', error);
+    }
   };
 
   const highestPassingIndex = numGoodTests.reduce(
