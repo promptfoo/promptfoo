@@ -55,7 +55,7 @@ export default function Eval({
   defaultEvalId: defaultEvalIdProp,
 }: EvalOptions) {
   const router = useRouter();
-  const { table, setTable, setConfig } = useStore();
+  const { table, setTable, setConfig, setFilePath } = useStore();
   const [loaded, setLoaded] = React.useState<boolean>(false);
   const [failed, setFailed] = React.useState<boolean>(false);
   const [recentEvals, setRecentEvals] = React.useState<{ id: string; label: string }[]>(
@@ -75,6 +75,7 @@ export default function Eval({
     const body = await resp.json();
     setTable(body.data.results.table);
     setConfig(body.data.config);
+    setFilePath(id);
   };
 
   const handleRecentEvalSelection = async (id: string) => {
@@ -97,17 +98,17 @@ export default function Eval({
 
   React.useEffect(() => {
     if (file) {
-      const doIt = async () => {
+      const run = async () => {
         await fetchEvalById(file);
         setLoaded(true);
       };
-      doIt();
+      run();
     } else if (preloadedData) {
       setTable(preloadedData.data.results?.table as EvaluateTable);
       setConfig(preloadedData.data.config);
       setLoaded(true);
     } else if (fetchId) {
-      const doIt = async () => {
+      const run = async () => {
         const response = await fetch(`https://api.promptfoo.dev/eval/${fetchId}`);
         if (!response.ok) {
           setFailed(true);
@@ -118,7 +119,7 @@ export default function Eval({
         setConfig(results.data.config);
         setLoaded(true);
       };
-      doIt();
+      run();
     } else if (IS_RUNNING_LOCALLY) {
       getApiBaseUrl().then((apiBaseUrl) => {
         const socket = SocketIOClient(apiBaseUrl);
@@ -130,6 +131,7 @@ export default function Eval({
           setConfig(data.config);
           fetchRecentFileEvals().then((newRecentEvals) => {
             setDefaultEvalId(newRecentEvals[0]?.id);
+            setFilePath(newRecentEvals[0]?.id);
           });
         });
 
