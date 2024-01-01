@@ -76,7 +76,7 @@ export async function maybeReadConfig(configPath: string): Promise<UnifiedConfig
   return readConfig(configPath);
 }
 
-async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<UnifiedConfig> {
+export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<UnifiedConfig> {
   if (process.env.PROMPTFOO_DISABLE_REF_PARSER) {
     return rawConfig;
   }
@@ -138,20 +138,20 @@ async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<UnifiedConfi
         provider = Object.values(provider)[0] as ProviderOptions;
       }
 
-      if (provider.config.functions) {
+      if (provider.config?.functions) {
         functionsParametersList[providerIndex] = extractFunctionParameters(
           provider.config.functions,
         );
       }
 
-      if (provider.config.tools) {
+      if (provider.config?.tools) {
         toolsParametersList[providerIndex] = extractToolParameters(provider.config.tools);
       }
     });
   }
 
   // Dereference JSON
-  const config = (await $RefParser.dereference(rawConfig)) as UnifiedConfig;
+  const config = (await $RefParser.dereference(rawConfig)) as unknown as UnifiedConfig;
 
   // Restore functions and tools parameters
   if (Array.isArray(config.providers)) {
