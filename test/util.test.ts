@@ -6,16 +6,17 @@ import { globSync } from 'glob';
 import yaml from 'js-yaml';
 
 import {
-  writeOutput,
-  writeMultipleOutputs,
-  readGlobalConfig,
+  dereferenceConfig,
   maybeRecordFirstRun,
-  resetGlobalConfig,
-  readFilters,
   readConfigs,
+  readFilters,
+  readGlobalConfig,
+  resetGlobalConfig,
+  writeMultipleOutputs,
+  writeOutput,
 } from '../src/util';
 
-import type { EvaluateResult, EvaluateTable } from '../src/types';
+import type { EvaluateResult, EvaluateTable, UnifiedConfig } from '../src/types';
 
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
@@ -452,9 +453,7 @@ describe('util', () => {
           description: 'defaultTest1',
           options: {},
           vars: { var1: 'value1' },
-          assert: [
-            { type: 'equals', value: 'expected1' },
-          ],
+          assert: [{ type: 'equals', value: 'expected1' }],
         },
         nunjucksFilters: { filter1: 'filter1' },
         env: { envVar1: 'envValue1' },
@@ -474,9 +473,7 @@ describe('util', () => {
           description: 'defaultTest2',
           options: {},
           vars: { var2: 'value2' },
-          assert: [
-            { type: 'equals', value: 'expected2' },
-          ],
+          assert: [{ type: 'equals', value: 'expected2' }],
         },
         nunjucksFilters: { filter2: 'filter2' },
         env: { envVar2: 'envValue2' },
@@ -517,6 +514,180 @@ describe('util', () => {
       await expect(readConfigs(['config1.unsupported'])).rejects.toThrow(
         'Unsupported configuration file format: .unsupported',
       );
+    });
+  });
+
+  describe('dereferenceConfig', () => {
+    test('should dereference a config with no $refs', async () => {
+      const rawConfig = {
+        prompts: ['Hello world'],
+        description: 'Test config',
+        providers: ['provider1'],
+        tests: ['test1'],
+        evaluateOptions: {},
+        commandLineOptions: {},
+      };
+      const dereferencedConfig = await dereferenceConfig(rawConfig);
+      expect(dereferencedConfig).toEqual(rawConfig);
+    });
+
+    test('should dereference a config with $refs', async () => {
+      const rawConfig = {
+        prompts: [],
+        tests: [],
+        evaluateOptions: {},
+        commandLineOptions: {},
+        providers: [{ $ref: '#/definitions/provider' }],
+        definitions: {
+          provider: {
+            name: 'provider1',
+            config: { setting: 'value' },
+          },
+        },
+      };
+      const expectedConfig = {
+        prompts: [],
+        tests: [],
+        evaluateOptions: {},
+        commandLineOptions: {},
+        providers: [{ name: 'provider1', config: { setting: 'value' } }],
+        definitions: {
+          provider: {
+            name: 'provider1',
+            config: { setting: 'value' },
+          },
+        },
+      };
+      const dereferencedConfig = await dereferenceConfig(rawConfig as UnifiedConfig);
+      expect(dereferencedConfig).toEqual(expectedConfig);
+    });
+
+    test('should preserve regular functions when dereferencing', async () => {
+      const rawConfig = {
+        description: 'Test config with function parameters',
+        prompts: [],
+        tests: [],
+        evaluateOptions: {},
+        commandLineOptions: {},
+        providers: [
+          {
+            name: 'provider1',
+            config: {
+              functions: [
+                {
+                  name: 'function1',
+                  parameters: { param1: 'value1' },
+                },
+              ],
+              tools: [
+                {
+                  function: {
+                    name: 'toolFunction1',
+                    parameters: { param2: 'value2' },
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      };
+      const dereferencedConfig = await dereferenceConfig(rawConfig as UnifiedConfig);
+      expect(dereferencedConfig).toEqual(rawConfig);
+    });
+
+    test('should preserve tools with references and definitions when dereferencing', async () => {
+      const rawConfig = {
+        prompts: [{ $ref: '#/definitions/prompt' }],
+        tests: [],
+        evaluateOptions: {},
+        commandLineOptions: {},
+        providers: [
+          {
+            name: 'openai:gpt-4',
+            config: {
+              tools: [
+                {
+                  type: 'function',
+                  function: {
+                    name: 'kubectl_describe',
+                    parameters: {
+                      $defs: {
+                        KubernetesResourceKind: {
+                          enum: ['deployment', 'node'],
+                          title: 'KubernetesResourceKind',
+                          type: 'string',
+                        },
+                      },
+                      properties: {
+                        kind: { $ref: '#/$defs/KubernetesResourceKind' },
+                        namespace: {
+                          anyOf: [{ type: 'string' }, { type: 'null' }],
+                          default: null,
+                          title: 'Namespace',
+                        },
+                        name: { title: 'Name', type: 'string' },
+                      },
+                      required: ['kind', 'name'],
+                      title: 'KubectlDescribe',
+                      type: 'object',
+                    },
+                  },
+                },
+              ],
+            },
+          },
+        ],
+        definitions: {
+          prompt: 'hello world',
+        },
+      };
+      const dereferencedConfig = await dereferenceConfig(rawConfig as unknown as UnifiedConfig);
+      const expectedOutput = {
+        prompts: ['hello world'],
+        tests: [],
+        evaluateOptions: {},
+        commandLineOptions: {},
+        providers: [
+          {
+            name: 'openai:gpt-4',
+            config: {
+              tools: [
+                {
+                  type: 'function',
+                  function: {
+                    name: 'kubectl_describe',
+                    parameters: {
+                      $defs: {
+                        KubernetesResourceKind: {
+                          enum: ['deployment', 'node'],
+                          title: 'KubernetesResourceKind',
+                          type: 'string',
+                        },
+                      },
+                      properties: {
+                        kind: { $ref: '#/$defs/KubernetesResourceKind' },
+                        namespace: {
+                          anyOf: [{ type: 'string' }, { type: 'null' }],
+                          default: null,
+                          title: 'Namespace',
+                        },
+                        name: { title: 'Name', type: 'string' },
+                      },
+                      required: ['kind', 'name'],
+                      title: 'KubectlDescribe',
+                      type: 'object',
+                    },
+                  },
+                },
+              ],
+            },
+          },
+        ],
+        definitions: {
+          prompt: 'hello world',
+        },
+      };
+      expect(dereferencedConfig).toEqual(expectedOutput);
     });
   });
 });

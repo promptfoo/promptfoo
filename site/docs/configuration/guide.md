@@ -162,6 +162,10 @@ assertionTemplates:
 // highlight-end
 ```
 
+:::info
+`tools` and `functions` values in providers config are _not_ dereferenced.  This is because they are standalone JSON schemas that may  contain their own internal references.
+:::
+
 #### Import tests from separate files
 
 The `tests` config attribute takes a list of paths to files or directories. For example:

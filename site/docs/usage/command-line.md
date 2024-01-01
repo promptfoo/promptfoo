@@ -121,3 +121,4 @@ These general-purpose environment variables are supported:
 | `PROMPTFOO_CONFIG_DIR`               | Directory that stores eval history                               | `~/.promptfoo` |
 | `PROMPTFOO_DISABLE_JSON_AUTOESCAPE`  | If set, disables smart variable substitution within JSON prompts |                |
 | `PROMPTFOO_DISABLE_CONVERSATION_VAR` | Prevents the `_conversation` variable from being set             |                |
+| `PROMPTFOO_DISABLE_REF_PARSER`       | Prevents JSON schema dereferencing                               |                |

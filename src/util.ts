@@ -17,6 +17,7 @@ import { readTests } from './testCases';
 import type {
   EvalWithMetadata,
   EvaluateSummary,
+  EvaluateTable,
   EvaluateTableOutput,
   NunjucksFilterMap,
   PromptWithMetadata,
@@ -26,7 +27,7 @@ import type {
   TestCasesWithMetadataPrompt,
   UnifiedConfig,
   OutputFile,
-  EvaluateTable,
+  ProviderOptions,
 } from './types';
 
 let globalConfigCache: any = null;
@@ -76,20 +77,116 @@ export async function maybeReadConfig(configPath: string): Promise<UnifiedConfig
   return readConfig(configPath);
 }
 
+export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<UnifiedConfig> {
+  if (process.env.PROMPTFOO_DISABLE_REF_PARSER) {
+    return rawConfig;
+  }
+
+  // Track and delete tools[i].function for each tool, preserving the rest of the properties
+  // https://github.com/promptfoo/promptfoo/issues/364
+
+  // Remove parameters from functions and tools to prevent dereferencing
+  const extractFunctionParameters = (functions: { parameters?: object }[]) => {
+    return functions.map((func) => {
+      const { parameters } = func;
+      delete func.parameters;
+      return { parameters };
+    });
+  };
+
+  const extractToolParameters = (tools: { function?: { parameters?: object } }[]) => {
+    return tools.map((tool) => {
+      const { parameters } = tool.function || {};
+      if (tool.function?.parameters) {
+        delete tool.function.parameters;
+      }
+      return { parameters };
+    });
+  };
+
+  // Restore parameters to functions and tools after dereferencing
+  const restoreFunctionParameters = (
+    functions: { parameters?: object }[],
+    parametersList: { parameters?: object }[],
+  ) => {
+    functions.forEach((func, index) => {
+      if (parametersList[index]?.parameters) {
+        func.parameters = parametersList[index].parameters;
+      }
+    });
+  };
+
+  const restoreToolParameters = (
+    tools: { function?: { parameters?: object } }[],
+    parametersList: { parameters?: object }[],
+  ) => {
+    tools.forEach((tool, index) => {
+      if (parametersList[index]?.parameters) {
+        tool.function = tool.function || {};
+        tool.function.parameters = parametersList[index].parameters;
+      }
+    });
+  };
+
+  let functionsParametersList: { parameters?: object }[][] = [];
+  let toolsParametersList: { parameters?: object }[][] = [];
+
+  if (Array.isArray(rawConfig.providers)) {
+    rawConfig.providers.forEach((provider, providerIndex) => {
+      if (typeof provider === 'string') return;
+      if (!provider.config) {
+        // Handle when provider is a map
+        provider = Object.values(provider)[0] as ProviderOptions;
+      }
+
+      if (provider.config?.functions) {
+        functionsParametersList[providerIndex] = extractFunctionParameters(
+          provider.config.functions,
+        );
+      }
+
+      if (provider.config?.tools) {
+        toolsParametersList[providerIndex] = extractToolParameters(provider.config.tools);
+      }
+    });
+  }
+
+  // Dereference JSON
+  const config = (await $RefParser.dereference(rawConfig)) as unknown as UnifiedConfig;
+
+  // Restore functions and tools parameters
+  if (Array.isArray(config.providers)) {
+    config.providers.forEach((provider, index) => {
+      if (typeof provider === 'string') return;
+      if (!provider.config) {
+        // Handle when provider is a map
+        provider = Object.values(provider)[0] as ProviderOptions;
+      }
+
+      if (functionsParametersList[index]) {
+        provider.config.functions = provider.config.functions || [];
+        restoreFunctionParameters(provider.config.functions, functionsParametersList[index]);
+      }
+
+      if (toolsParametersList[index]) {
+        provider.config.tools = provider.config.tools || [];
+        restoreToolParameters(provider.config.tools, toolsParametersList[index]);
+      }
+    });
+  }
+  return config;
+}
+
 export async function readConfig(configPath: string): Promise<UnifiedConfig> {
   const ext = path.parse(configPath).ext;
   switch (ext) {
     case '.json':
-      let json = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-      json = (await $RefParser.dereference(json)) as UnifiedConfig;
-      return json;
-    case '.js':
-      return require(configPath) as UnifiedConfig;
     case '.yaml':
     case '.yml':
-      let ret = yaml.load(fs.readFileSync(configPath, 'utf-8')) as UnifiedConfig;
-      ret = (await $RefParser.dereference(ret)) as UnifiedConfig;
-      return ret;
+      let rawConfig = yaml.load(fs.readFileSync(configPath, 'utf-8')) as UnifiedConfig;
+      return dereferenceConfig(rawConfig);
+    case '.js':
+      return require(configPath) as UnifiedConfig;
     default:
       throw new Error(`Unsupported configuration file format: ${ext}`);
   }
@@ -170,7 +267,7 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
       (prev, curr) => ({ ...prev, ...curr.commandLineOptions }),
       {},
     ),
-    sharing: !configs.some(config => config.sharing === false),
+    sharing: !configs.some((config) => config.sharing === false),
   };
 
   return combinedConfig;
@@ -211,7 +308,10 @@ export function writeOutput(
     ]);
     fs.writeFileSync(outputPath, csvOutput);
   } else if (outputExtension === 'json') {
-    fs.writeFileSync(outputPath, JSON.stringify({ results, config, shareableUrl } as OutputFile, null, 2));
+    fs.writeFileSync(
+      outputPath,
+      JSON.stringify({ results, config, shareableUrl } as OutputFile, null, 2),
+    );
   } else if (outputExtension === 'yaml' || outputExtension === 'yml' || outputExtension === 'txt') {
     fs.writeFileSync(outputPath, yaml.dump({ results, config, shareableUrl } as OutputFile));
   } else if (outputExtension === 'html') {
