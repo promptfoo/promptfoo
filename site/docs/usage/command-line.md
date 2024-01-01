@@ -66,6 +66,8 @@ Start a browser UI for visualization of results.
 | `-p, --port <number>` | Port number for the local server        |
 | `-y, --yes`           | Skip confirmation and auto-open the URL |
 
+If you've used `PROMPTFOO_CONFIG_DIR` to override the promptfoo output directory, run `promptfoo view [directory]`.
+
 ## `promptfoo share`
 
 Create a URL that can be shared online.
@@ -109,3 +111,13 @@ Show details of a specific resource.
 | `eval <id>`    | Show details of a specific evaluation |
 | `prompt <id>`  | Show details of a specific prompt     |
 | `dataset <id>` | Show details of a specific dataset    |
+
+# Environment variables
+
+These general-purpose environment variables are supported:
+
+| Name                                 | Description                                                      | Default        |
+| ------------------------------------ | ---------------------------------------------------------------- | -------------- |
+| `PROMPTFOO_CONFIG_DIR`               | Directory that stores eval history                               | `~/.promptfoo` |
+| `PROMPTFOO_DISABLE_JSON_AUTOESCAPE`  | If set, disables smart variable substitution within JSON prompts |                |
+| `PROMPTFOO_DISABLE_CONVERSATION_VAR` | Prevents the `_conversation` variable from being set             |                |

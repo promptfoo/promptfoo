@@ -289,7 +289,7 @@ Use Nunjucks templates to exert additional control over your prompt templates, i
 
 #### Functions
 
-promptfoo supports OpenAI functions and other provider-specific configurations like temperature, number of tokens, and so on.
+promptfoo supports OpenAI tools, functions, and other provider-specific configurations like temperature, number of tokens, and so on.
 
 To use, override the `config` key of the provider. See example [here](/docs/providers/openai#using-functions).
 
@@ -342,9 +342,33 @@ tests:
 
 Tip: use `defaultTest` apply a postprocessing option to every test case in your test suite.
 
-## Configuration structure
+## Config structure
 
 For detailed information on the config structure, see [Configuration Reference](/docs/configuration/reference).
+
+## Organizing configs
+
+If you have multiple sets of tests, it helps to split them into multiple config files.  Use the `--config` or `-c` parameter to run each individual config:
+
+```
+promptfoo eval -c usecase1.yaml
+```
+and
+```
+promptfoo eval -c usecase2.yaml
+```
+
+You can run multiple configs at the same time, which will combine them into a single eval.  For example:
+
+```
+promptfoo eval -c my_configs/*
+```
+
+or
+
+```
+promptfoo eval -c config1.yaml -c config2.yaml -c config3.yaml
+```
 
 ## Loading tests from CSV
 
