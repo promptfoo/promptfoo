@@ -1,8 +1,11 @@
 import { create } from 'zustand';
 
-import type { EvaluateTable, UnifiedConfig } from './types';
+import type { EvaluateTable, FilePath, UnifiedConfig } from './types';
 
 interface TableState {
+  filePath: FilePath | null,
+  setFilePath: (filename: FilePath) => void;
+
   table: EvaluateTable | null;
   setTable: (table: EvaluateTable | null) => void;
 
@@ -18,6 +21,9 @@ interface TableState {
 }
 
 export const useStore = create<TableState>((set) => ({
+  filePath: null,
+  setFilePath: (filePath: FilePath) => set(() => ({ filePath })),
+
   table: null,
   setTable: (table: EvaluateTable | null) => set(() => ({ table })),
   config: null,

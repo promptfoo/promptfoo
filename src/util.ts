@@ -26,6 +26,7 @@ import type {
   TestCasesWithMetadataPrompt,
   UnifiedConfig,
   OutputFile,
+  EvaluateTable,
 } from './types';
 
 let globalConfigCache: any = null;
@@ -338,6 +339,26 @@ export function readResult(
     };
   } catch (err) {
     logger.error(`Failed to read results from ${resultsPath}:\n${err}`);
+  }
+}
+
+export function updateResult(filename: string, newTable: EvaluateTable): void {
+  const resultsDirectory = path.join(getConfigDirectoryPath(), 'output');
+  const safeFilename = path.basename(filename);
+  const resultsPath = path.join(resultsDirectory, safeFilename);
+  try {
+    const evalData = JSON.parse(fs.readFileSync(resultsPath, 'utf-8')) as ResultsFile;
+    evalData.results.table = newTable;
+    fs.writeFileSync(resultsPath, JSON.stringify(evalData, null, 2));
+    logger.info(`Updated results in ${resultsPath}`)
+
+    const results = listPreviousResults();
+    if (filename === results[results.length - 1]) {
+      // Overwite latest.json too
+      fs.copyFileSync(resultsPath, getLatestResultsPath());
+    }
+  } catch (err) {
+    logger.error(`Failed to update results in ${resultsPath}:\n${err}`);
   }
 }
 
