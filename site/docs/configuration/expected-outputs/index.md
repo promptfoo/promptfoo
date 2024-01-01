@@ -521,6 +521,8 @@ All assertion types can be used in `__expected`. The column supports exactly one
 
 When the `__expected` field is provided, the success and failure statistics in the evaluation summary will be based on whether the expected criteria are met.
 
+To run multiple assertions, use column names `__expected1`, `__expected2`, `__expected3`, etc.
+
 For more advanced test cases, we recommend using a testing framework like [Jest](/docs/integrations/jest) or [Mocha](/docs/integrations/mocha-chai) and using promptfoo [as a library](/docs/usage/node-package).
 
 ## Reusing assertions with templates

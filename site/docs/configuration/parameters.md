@@ -222,6 +222,7 @@ Spanish,Where is the library?
 The tests file optionally supports several special columns:
 
 - `__expected`: A column that includes [test assertions](/docs/configuration/expected-outputs). This column lets you automatically mark output according to quality expectations.
+  - For multiple assertions, use `__expected1`, `__expected2`, `__expected3`, etc.
 - `__prefix`: This string is prepended to each prompt before it's sent to the API
 - `__suffix`: This string is appended to each prompt before it's sent to the API
 
