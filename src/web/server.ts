@@ -46,7 +46,8 @@ export function startServer(port = 15500, apiBaseUrl = '', skipConfirmation = fa
 
   app.use(cors());
   app.use(compression());
-  app.use(express.json());
+  app.use(express.json({ limit: '100mb' }));
+  app.use(express.urlencoded({ limit: '100mb' }));
 
   const httpServer = http.createServer(app);
   const io = new SocketIOServer(httpServer, {
@@ -138,12 +139,12 @@ export function startServer(port = 15500, apiBaseUrl = '', skipConfirmation = fa
   app.post('/api/eval/:id', (req, res) => {
     const id = req.params.id;
     const evalTable = req.body.table;
-    
+
     if (!id) {
       res.status(400).json({ error: 'Missing id' });
       return;
     }
-    
+
     try {
       updateResult(id, evalTable);
       res.json({ message: 'Eval table updated successfully' });
