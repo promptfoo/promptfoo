@@ -300,7 +300,8 @@ type BaseAssertionTypes =
   | 'is-valid-openai-function-call'
   | 'is-valid-openai-tools-call'
   | 'latency'
-  | 'perplexity';
+  | 'perplexity'
+  | 'cost';
 
 type NotPrefixed<T extends string> = `not-${T}`;
 

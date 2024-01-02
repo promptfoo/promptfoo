@@ -260,6 +260,7 @@ class Evaluator {
           output: processedResponse.output,
           latencyMs: response.cached ? undefined : latencyMs,
           logProbs: response.logProbs,
+          cost: processedResponse.cost,
         });
         if (!checkResult.pass) {
           ret.error = checkResult.reason;

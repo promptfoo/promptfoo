@@ -86,6 +86,7 @@ export async function runAssertions({
   output,
   latencyMs,
   logProbs,
+  cost,
 }: {
   prompt: string;
   provider: ApiProvider;
@@ -93,6 +94,7 @@ export async function runAssertions({
   output: string | object;
   latencyMs?: number;
   logProbs?: number[];
+  cost?: number;
 }): Promise<GradingResult> {
   const tokensUsed = {
     total: 0,
@@ -176,6 +178,7 @@ export async function runAssertion({
   output,
   latencyMs,
   logProbs,
+  cost,
 }: {
   prompt: string;
   provider: ApiProvider;
@@ -184,6 +187,7 @@ export async function runAssertion({
   output: string | object;
   latencyMs?: number;
   logProbs?: number[];
+  cost?: number;
 }): Promise<GradingResult> {
   let pass: boolean = false;
   let score: number = 0.0;
@@ -1054,6 +1058,25 @@ ${assertion.value}`,
     };
   }
 
+  if (baseType === 'cost') {
+    if (!assertion.threshold) {
+      throw new Error('Cost assertion must have a threshold');
+    }
+    if (typeof cost === 'undefined') {
+      throw new Error('Cost assertion does not support providers that do not return cost');
+    }
+
+    pass = cost <= assertion.threshold;
+    return {
+      pass,
+      score: pass ? 1 : 0,
+      reason: pass
+        ? 'Assertion passed'
+        : `Cost ${cost.toPrecision(2)} is greater than threshold ${assertion.threshold}`,
+      assertion,
+    };
+  }
+
   throw new Error('Unknown assertion type: ' + assertion.type);
 }
 
@@ -1129,7 +1152,7 @@ export function assertionFromString(expected: string): Assertion {
 
   // New options
   const assertionRegex =
-    /^(not-)?(equals|contains-any|contains-all|icontains-any|icontains-all|contains-json|is-json|regex|icontains|contains|webhook|rouge-n|similar|starts-with|levenshtein|classifier|model-graded-factuality|factuality|model-graded-closedqa|answer-relevance|context-recall|context-relevance|context-faithfulness|is-valid-openai-function-call|is-valid-openai-tools-call|latency|perplexity)(?:\((\d+(?:\.\d+)?)\))?(?::(.*))?$/;
+    /^(not-)?(equals|contains-any|contains-all|icontains-any|icontains-all|contains-json|is-json|regex|icontains|contains|webhook|rouge-n|similar|starts-with|levenshtein|classifier|model-graded-factuality|factuality|model-graded-closedqa|answer-relevance|context-recall|context-relevance|context-faithfulness|is-valid-openai-function-call|is-valid-openai-tools-call|latency|perplexity|cost)(?:\((\d+(?:\.\d+)?)\))?(?::(.*))?$/;
   const regexMatch = expected.match(assertionRegex);
 
   if (regexMatch) {
@@ -1162,7 +1185,8 @@ export function assertionFromString(expected: string): Assertion {
       type === 'context-relevance' ||
       type === 'context-faithfulness' ||
       type === 'latency' ||
-      type === 'perplexity'
+      type === 'perplexity' ||
+      type === 'cost'
     ) {
       return {
         type: fullType as AssertionType,

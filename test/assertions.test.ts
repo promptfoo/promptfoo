@@ -1748,6 +1748,50 @@ print(json.dumps(eval(value)))`,
     });
   });
 
+  describe('cost assertion', () => {
+    it('should pass when the cost is below the threshold', async () => {
+      const cost = 0.0005;
+      const provider = {
+        callApi: jest.fn().mockResolvedValue({ cost }),
+      } as unknown as ApiProvider;
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider,
+        assertion: {
+          type: 'cost',
+          threshold: 0.001,
+        },
+        test: {} as AtomicTestCase,
+        output: 'Some output',
+        cost,
+      });
+      expect(result.pass).toBeTruthy();
+      expect(result.reason).toBe('Assertion passed');
+    });
+
+    it('should fail when the cost exceeds the threshold', async () => {
+      const cost = 0.002;
+      const provider = {
+        callApi: jest.fn().mockResolvedValue({ cost }),
+      } as unknown as ApiProvider;
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider,
+        assertion: {
+          type: 'cost',
+          threshold: 0.001,
+        },
+        test: {} as AtomicTestCase,
+        output: 'Some output',
+        cost,
+      });
+      expect(result.pass).toBeFalsy();
+      expect(result.reason).toBe('Cost 0.0020 is greater than threshold 0.001');
+    });
+  });
+
   describe('is-valid-openai-function-call assertion', () => {
     it('should pass for a valid function call with correct arguments', async () => {
       const output = { arguments: '{"x": 10, "y": 20}', name: 'add' };
@@ -2067,12 +2111,20 @@ describe('assertionFromString', () => {
     expect(result.threshold).toBe(1000);
   });
 
-  it('should create a latency assertion', () => {
+  it('should create a perplexity assertion', () => {
     const expected = 'perplexity(1.5)';
 
     const result: Assertion = assertionFromString(expected);
     expect(result.type).toBe('perplexity');
     expect(result.threshold).toBe(1.5);
+  });
+
+  it('should create a cost assertion', () => {
+    const expected = 'cost(0.001)';
+
+    const result: Assertion = assertionFromString(expected);
+    expect(result.type).toBe('cost');
+    expect(result.threshold).toBe(0.001);
   });
 
   it('should create an openai function call assertion', () => {
