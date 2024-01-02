@@ -104,28 +104,29 @@ See [Test assertions](https://promptfoo.dev/docs/configuration/expected-outputs)
 
 Deterministic eval metrics
 
-| Assertion Type                  | Returns true if...                                               |
-| ------------------------------- | ---------------------------------------------------------------- |
-| `equals`                        | output matches exactly                                           |
-| `contains`                      | output contains substring                                        |
-| `icontains`                     | output contains substring, case insensitive                      |
-| `regex`                         | output matches regex                                             |
-| `starts-with`                   | output starts with string                                        |
-| `contains-any`                  | output contains any of the listed substrings                     |
-| `contains-all`                  | output contains all list of substrings                           |
-| `icontains-any`                 | output contains any of the listed substrings, case insensitive   |
-| `icontains-all`                 | output contains all list of substrings, case insensitive         |
-| `is-json`                       | output is valid json (optional json schema validation)           |
-| `contains-json`                 | output contains valid json (optional json schema validation)     |
-| `javascript`                    | provided Javascript function validates the output                |
-| `python`                        | provided Python function validates the output                    |
-| `webhook`                       | provided webhook returns `{pass: true}`                          |
-| `rouge-n`                       | Rouge-N score is above a given threshold                         |
-| `levenshtein`                   | Levenshtein distance is below a threshold                        |
-| `latency`                       | Latency is below a threshold (milliseconds)                      |
-| `perplexity`                    | Perplexity is below a threshold                                  |
-| `is-valid-openai-function-call` | Ensure that the function call matches the function's JSON schema |
-| `is-valid-openai-tools-call`    | Ensure that all tool calls match the tools JSON schema           |
+| Assertion Type                  | Returns true if...                                                |
+| ------------------------------- | ----------------------------------------------------------------- |
+| `equals`                        | output matches exactly                                            |
+| `contains`                      | output contains substring                                         |
+| `icontains`                     | output contains substring, case insensitive                       |
+| `regex`                         | output matches regex                                              |
+| `starts-with`                   | output starts with string                                         |
+| `contains-any`                  | output contains any of the listed substrings                      |
+| `contains-all`                  | output contains all list of substrings                            |
+| `icontains-any`                 | output contains any of the listed substrings, case insensitive    |
+| `icontains-all`                 | output contains all list of substrings, case insensitive          |
+| `is-json`                       | output is valid json (optional json schema validation)            |
+| `contains-json`                 | output contains valid json (optional json schema validation)      |
+| `javascript`                    | provided Javascript function validates the output                 |
+| `python`                        | provided Python function validates the output                     |
+| `webhook`                       | provided webhook returns `{pass: true}`                           |
+| `rouge-n`                       | Rouge-N score is above a given threshold                          |
+| `levenshtein`                   | Levenshtein distance is below a threshold                         |
+| `latency`                       | Latency is below a threshold (milliseconds)                       |
+| `perplexity`                    | Perplexity is below a threshold                                   |
+| `cost`                          | Cost is below a threshold (for models with cost info such as GPT) |
+| `is-valid-openai-function-call` | Ensure that the function call matches the function's JSON schema  |
+| `is-valid-openai-tools-call`    | Ensure that all tool calls match the tools JSON schema            |
 
 Model-assisted eval metrics
 

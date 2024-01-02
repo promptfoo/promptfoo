@@ -48,13 +48,14 @@ Deterministic eval metrics
 | [contains-any](#contains-any)                                   | output contains any of the listed substrings                     |
 | [contains-json](#contains-json)                                 | output contains valid json (optional json schema validation)     |
 | [contains](#contains)                                           | output contains substring                                        |
+| [cost](#cost)                                                   | Inference cost is below a threshold                              |
 | [equals](#equality)                                             | output matches exactly                                           |
 | [icontains-all](#contains-all)                                  | output contains all list of substrings, case insensitive         |
 | [icontains-any](#contains-any)                                  | output contains any of the listed substrings, case insensitive   |
 | [icontains](#contains)                                          | output contains substring, case insensitive                      |
 | [is-json](#is-json)                                             | output is valid json (optional json schema validation)           |
 | [is-valid-openai-function-call](#is-valid-openai-function-call) | Ensure that the function call matches the function's JSON schema |
-| [is-valid-openai-tools-call](#is-valid-openai-tools-call) | Ensure all tool calls match the tools JSON schema |
+| [is-valid-openai-tools-call](#is-valid-openai-tools-call)       | Ensure all tool calls match the tools JSON schema                |
 | [javascript](/docs/configuration/expected-outputs/javascript)   | provided Javascript function validates the output                |
 | [latency](#latency)                                             | Latency is below a threshold (milliseconds)                      |
 | [levenshtein](#levenshtein-distance)                            | Levenshtein distance is below a threshold                        |
@@ -353,6 +354,24 @@ assert:
 :::warning
 Perplexity requires the LLM API to output `logprobs`. Currently only more recent versions of OpenAI GPT support this.
 :::
+
+### Cost
+
+The `cost` assertion checks if the cost of the LLM call is below a specified threshold. 
+
+This requires LLM providers to return cost information. Currently this is only supported by OpenAI GPT models and custom providers.
+
+Example:
+
+```yaml
+providers:
+  - openai:gpt-3.5-turbo
+  - openai:gpt-4
+assert:
+  # Pass if the LLM call costs less than $0.001
+  - type: cost
+    threshold: 0.001
+```
 
 #### Comparing different outputs from the same LLM
 
