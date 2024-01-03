@@ -41,7 +41,7 @@ const config = {
         docs: {
           sidebarPath: require.resolve('./sidebars.js'),
           // Remove this to remove the "edit this page" links.
-          editUrl: 'https://github.com/typpo/promptfoo-docs/tree/main',
+          editUrl: 'https://github.com/promptfoo/promptfoo/tree/main/site',
           sidebarCollapsed: false,
         },
         /*
