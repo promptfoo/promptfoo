@@ -18,7 +18,7 @@ The `promptfoo` command line utility supports the following subcommands:
   - `list prompts`
   - `list datasets`
 - `show <id>` - Show details of a specific resource (evaluation, prompt, dataset).
-- `feedback [message]` - Send feedback to the Promptfoo developers.
+- `feedback <message>` - Send feedback to the Promptfoo developers.
 
 ## `promptfoo eval`
 
@@ -84,9 +84,9 @@ Manage cache.
 | ------- | --------------- |
 | `clear` | Clear the cache |
 
-## `promptfoo feedback [message]`
+## `promptfoo feedback <message>`
 
-Send feedback to the Promptfoo developers.
+Send feedback to the promptfoo developers.
 
 | Option    | Description      |
 | --------- | ---------------- |

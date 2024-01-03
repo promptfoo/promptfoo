@@ -109,12 +109,48 @@ interface ProviderEmbeddingResponse {
 
 ## Evaluation inputs
 
+### TestSuiteConfiguration
+
+```typescript
+interface TestSuiteConfig {
+  // Optional description of what your LLM is trying to do
+  description?: string;
+
+  // One or more LLM APIs to use, for example: openai:gpt-3.5-turbo, openai:gpt-4, localai:chat:vicuna
+  providers: ProviderId | ProviderFunction | (ProviderId | ProviderOptionsMap | ProviderOptions)[];
+
+  // One or more prompt files to load
+  prompts: FilePath | FilePath[];
+
+  // Path to a test file, OR list of LLM prompt variations (aka "test case")
+  tests: FilePath | (FilePath | TestCase)[];
+
+  // Scenarios, groupings of data and tests to be evaluated
+  scenarios?: Scenario[];
+
+  // Sets the default properties for each test case. Useful for setting an assertion, on all test cases, for example.
+  defaultTest?: Omit<TestCase, 'description'>;
+
+  // Path to write output. Writes to console/web viewer if not set.
+  outputPath?: FilePath | FilePath[];
+
+  // Determines whether or not sharing is enabled.
+  sharing?: boolean;
+
+  // Nunjucks filters
+  nunjucksFilters?: Record<string, FilePath>;
+
+  // Envar overrides
+  env?: EnvOverrides;
+}
+```
+
 ### UnifiedConfig
 
 UnifiedConfig is an object that includes the test suite configuration, evaluation options, and command line options. It is used to hold the complete configuration for the evaluation.
 
 ```typescript
-interface UnifiedConfig {
+interface UnifiedConfig extends TestSuiteConfiguration {
   evaluateOptions: EvaluateOptions;
   commandLineOptions: Partial<CommandLineOptions>;
 }

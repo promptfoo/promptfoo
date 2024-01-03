@@ -26,7 +26,7 @@ promptfoo init`}
 
 This will create a `promptfooconfig.yaml` file in your current directory.
 
-1. **Set up your prompts**: Open `promptfooconfig.yaml` and add 2 prompts that you want to compare. Use double curly braces as placeholders for variables: `{{variable_name}}`. For example:
+1. **Set up your prompts**: Open `promptfooconfig.yaml` and prompts that you want to test. Use double curly braces as placeholders for variables: `{{variable_name}}`. For example:
 
    ```yaml
    prompts:
@@ -36,7 +36,23 @@ This will create a `promptfooconfig.yaml` file in your current directory.
 
    [&raquo; More information on setting up prompts](/docs/configuration/parameters)
 
-1. **Add test inputs**: Add some example inputs for your prompts. Optionally, add [assertions](/docs/configuration/expected-outputs) to automatically ensure that outputs meet your requirements.
+1. Add `providers` and specify the models you want to test:
+
+      ```yaml
+      providers:
+        - openai:gpt-3.5-turbo
+        - openai:gpt-4
+      ```
+
+    - **OpenAI**: if testing with an OpenAI model, you'll need to set the `OPENAI_API_KEY` environment variable (see [OpenAI provider docs](/docs/providers/openai) for more info):
+
+      ```bash
+      export OPENAI_API_KEY=sk-abc123
+      ```
+
+    - We support many providers besides OpenAI. See setup instructions for [Azure](/docs/providers/azure), [Replicate](/docs/providers/replicate), [HuggingFace](/docs/providers/huggingface), [AWS Bedrock](/docs/providers/aws-bedrock), and [others](/docs/providers).
+
+1. **Add test inputs**: Add some example inputs for your prompts. Optionally, add [assertions](/docs/configuration/expected-outputs) to set output requirements that are checked automatically.
 
    For example:
 
@@ -54,25 +70,8 @@ This will create a `promptfooconfig.yaml` file in your current directory.
 
    [&raquo; More information on setting up tests](/docs/configuration/guide)
 
-1. Edit the `providers` field to specify the [providers](/docs/providers) and model you want to test.
 
-     - **OpenAI**: if testing GPT with OpenAI's chat endpoint, you'll need to set the `OPENAI_API_KEY` environment variable (see [OpenAI provider docs](/docs/providers/openai) for more info):
-
-        ```bash
-        export OPENAI_API_KEY=sk-abc123
-        ```
-
-        Then set providers in the config:
-
-        ```yaml
-        providers:
-          - openai:gpt-3.5-turbo
-          - openai:gpt-4
-        ```
-
-    - We support many providers besides OpenAI. See setup instructions for [Azure](/docs/providers/azure), [Replicate](/docs/providers/replicate), [HuggingFace](/docs/providers/huggingface), [AWS Bedrock](/docs/providers/aws-bedrock), and [others](/docs/providers).
-
-1. **Run the evaluation**: This tests every prompt for each test case:
+1. **Run the evaluation**: This tests every prompt, model, and test case:
 
    ```
    npx promptfoo@latest eval
@@ -190,13 +189,7 @@ A simple `npx promptfoo@latest eval` will run this example from the command line
 
 ![promptfoo command line](https://user-images.githubusercontent.com/310310/244891726-480e1114-d049-40b9-bd5f-f81c15060284.gif)
 
-<!--
-<img width="1362" alt="Side-by-side evaluation of LLM prompt quality, terminal output" src="https://user-images.githubusercontent.com/310310/235329207-e8c22459-5f51-4fee-9714-1b602ac3d7ca.png">
-
-![Side-by-side evaluation of LLM prompt quality, html output](https://user-images.githubusercontent.com/310310/235483444-4ddb832d-e103-4b9c-a862-b0d6cc11cdc0.png)
--->
-
-This command will evaluate the prompts in `prompts.txt`, substituing variable values, and output the results in your terminal.
+This command will evaluate the prompts, substituing variable values, and output the results in your terminal.
 
 Have a look at the setup and full output [here](https://github.com/promptfoo/promptfoo/tree/main/examples/self-grading).
 
@@ -245,6 +238,6 @@ There are many examples available in the [`examples/` directory](https://github.
 
 ## Automatically assess outputs
 
-The above examples create a table of outputs that can be manually reviewed. By setting up "Expected Outputs", you can automatically grade outputs on a pass/fail basis.
+The above examples create a table of outputs that can be manually reviewed. By setting up assertions, you can automatically grade outputs on a pass/fail basis.
 
 For more information on automatically assessing outputs, see [Expected Outputs](/docs/configuration/expected-outputs).
