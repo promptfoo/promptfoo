@@ -14,9 +14,9 @@ function HomepageHeader() {
     <header className={clsx('hero hero--primary', styles.heroBanner)}>
       <div className="container">
         <h1 className="hero__title">Iterate on LLMs faster</h1>
-        <p className="hero__subtitle">Measure LLM quality improvements and catch regressions</p>
+        <p className="hero__subtitle">Measure LLM quality and catch regressions</p>
         <div className={styles.buttons}>
-          <Link className="button button--secondary button--lg" to="/docs/intro">
+          <Link className="button button--primary button--lg" to="/docs/intro">
             Get Started
           </Link>
         </div>
