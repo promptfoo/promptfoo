@@ -661,6 +661,9 @@ class Evaluator {
       numTests: tests.length,
       numVars: varNames.size,
       numProviders: testSuite.providers.length,
+      assertionTypes: Array.from(
+        new Set(tests.flatMap((t) => t.assert || []).map((a) => a.type)),
+      ).sort(),
       eventSource: options.eventSource || 'default',
       ci: Boolean(
         process.env.CI ||

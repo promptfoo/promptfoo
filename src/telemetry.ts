@@ -5,7 +5,7 @@ import logger from './logger';
 import { fetchWithTimeout } from './fetch';
 import { maybeRecordFirstRun } from './util';
 
-type EventValue = string | number | boolean;
+type EventValue = string | number | boolean | string[];
 type TelemetryEvent = {
   event: string;
   packageVersion: string;
