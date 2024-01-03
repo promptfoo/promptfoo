@@ -19,6 +19,7 @@ interface OpenAiSharedOptions {
   apiHost?: string;
   apiBaseUrl?: string;
   organization?: string;
+  cost?: number;
 }
 
 type OpenAiCompletionOptions = OpenAiSharedOptions & {
@@ -281,7 +282,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
               completion: data.usage.completion_tokens,
             },
         cached,
-        cost: calculateCost(this.modelName, data.usage.prompt_tokens, data.usage.completion_tokens),
+        cost: calculateCost(this.modelName, this.config, data.usage.prompt_tokens, data.usage.completion_tokens),
       };
     } catch (err) {
       return {
@@ -431,7 +432,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             },
         cached,
         logProbs,
-        cost: calculateCost(this.modelName, data.usage.prompt_tokens, data.usage.completion_tokens),
+        cost: calculateCost(this.modelName, this.config, data.usage.prompt_tokens, data.usage.completion_tokens),
       };
     } catch (err) {
       return {
@@ -443,6 +444,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
 function calculateCost(
   modelName: string,
+  config: OpenAiSharedOptions,
   promptTokens: number,
   completionTokens: number,
 ): number | undefined {
@@ -453,7 +455,9 @@ function calculateCost(
   if (!model || !model.cost) {
     return undefined;
   }
-  return model.cost.input * promptTokens + model.cost.output * completionTokens || undefined;
+  const inputCost = config.cost ?? model.cost.input;
+  const outputCost = config.cost ?? model.cost.output;
+  return (inputCost * promptTokens + outputCost * completionTokens) || undefined;
 }
 
 interface AssistantMessagesResponseDataContent {
