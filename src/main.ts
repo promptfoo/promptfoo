@@ -8,6 +8,7 @@ import { Command } from 'commander';
 
 import telemetry from './telemetry';
 import logger, { getLogLevel, setLogLevel } from './logger';
+import { readAssertions } from './assertions';
 import { loadApiProvider, loadApiProviders } from './providers';
 import { evaluate, DEFAULT_MAX_CONCURRENCY } from './evaluator';
 import { readPrompts, readProviderPromptMap } from './prompts';
@@ -234,6 +235,7 @@ async function main() {
       'Path to CSV with test cases',
       defaultConfig?.commandLineOptions?.vars,
     )
+    .option('-a', '--assertions <path>', 'Path to assertions file')
     .option('-t, --tests <path>', 'Path to CSV with test cases')
     .option('-o, --output <paths...>', 'Path to output file (csv, txt, json, yaml, yml, html)')
     .option(
@@ -311,6 +313,20 @@ async function main() {
       const configPaths = cmdObj.config;
       if (configPaths) {
         fileConfig = await readConfigs(configPaths);
+      }
+
+      // Standalone assertion mode
+      if (cmdObj.assertions) {
+        const llmOutputs: string[] = ['hello world', 'salutations, earth', 'greetings, planet'];
+        const assertions = await readAssertions(cmdObj.assertions);
+        fileConfig.prompts = ['{{output}}'];
+        fileConfig.providers = ['echo'];
+        fileConfig.tests = llmOutputs.map((output) => ({
+          vars: {
+            output,
+          },
+          assert: assertions,
+        }));
       }
 
       // Use basepath in cases where path was supplied in the config file

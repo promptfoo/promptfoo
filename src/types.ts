@@ -15,6 +15,7 @@ export interface CommandLineOptions {
   vars?: FilePath;
   tests?: FilePath;
   config?: FilePath[];
+  assertions?: FilePath;
   verbose?: boolean;
   grader?: string;
   view?: string;
