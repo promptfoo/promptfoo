@@ -172,12 +172,17 @@ export async function readTests(
 export function testCaseFromCsvRow(row: CsvRow): TestCase {
   const vars: Record<string, string> = {};
   const asserts: Assertion[] = [];
+  const options: TestCase['options'] = {};
   for (const [key, value] of Object.entries(row)) {
     if (key.startsWith('__expected')) {
       if (value.trim() !== '') {
         const { assertionFromString } = require('./assertions');
         asserts.push(assertionFromString(value));
       }
+    } else if (key === '__prefix') {
+      options.prefix = value;
+    } else if (key === '__suffix') {
+      options.suffix = value;
     } else {
       vars[key] = value;
     }
@@ -186,5 +191,6 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
   return {
     vars,
     assert: asserts,
+    options,
   };
 }

@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import yaml from 'js-yaml';
 import { globSync } from 'glob';
 
-import { readTestsFile, readTest, readTests } from '../src/testCases';
+import { readTestsFile, readTest, readTests, testCaseFromCsvRow } from '../src/testCases';
 
 import type { AssertionType, TestCase } from '../src/types';
 
@@ -159,11 +159,13 @@ describe('readTests', () => {
         description: 'Row #1',
         vars: { var1: 'value1', var2: 'value2' },
         assert: [{ type: 'equals', value: 'value1' }],
+        options: {},
       },
       {
         description: 'Row #2',
         vars: { var1: 'value3', var2: 'value4' },
         assert: [{ type: 'javascript', value: 'value5' }],
+        options: {},
       },
     ]);
   });
@@ -186,6 +188,7 @@ describe('readTests', () => {
           { type: 'equals', value: 'value1.2' },
           { type: 'equals', value: 'value1.3' },
         ],
+        options: {},
       },
       {
         description: 'Row #2',
@@ -195,6 +198,7 @@ describe('readTests', () => {
           { type: 'javascript', value: 'value5.2' },
           { type: 'javascript', value: 'value5.3' },
         ],
+        options: {},
       },
     ]);
   });
@@ -267,5 +271,38 @@ describe('readTests', () => {
 
     expect(fs.readFileSync).toHaveBeenCalledTimes(2);
     expect(result).toEqual([Object.assign({}, test1Content[0], { vars: vars1Content })]);
+  });
+});
+
+describe('testCaseFromCsvRow', () => {
+  test('should convert a CSV row to a TestCase object', () => {
+    const csvRow = {
+      var1: 'value1',
+      var2: 'value2',
+      __expected: 'foobar',
+      __expected1: 'is-json',
+      __prefix: 'test-prefix',
+      __suffix: 'test-suffix',
+    };
+    const testCase = testCaseFromCsvRow(csvRow);
+    expect(testCase).toEqual({
+      vars: {
+        var1: 'value1',
+        var2: 'value2',
+      },
+      assert: [
+        {
+          type: 'equals',
+          value: 'foobar',
+        },
+        {
+          type: 'is-json',
+        },
+      ],
+      options: {
+        prefix: 'test-prefix',
+        suffix: 'test-suffix',
+      },
+    });
   });
 });
