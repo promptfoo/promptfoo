@@ -235,7 +235,8 @@ async function main() {
       'Path to CSV with test cases',
       defaultConfig?.commandLineOptions?.vars,
     )
-    .option('-a', '--assertions <path>', 'Path to assertions file')
+    .option('-a, --assertions <path>', 'Path to assertions file')
+    .option('--llm-outputs <path>', 'Path to JSON with LLM outputs')
     .option('-t, --tests <path>', 'Path to CSV with test cases')
     .option('-o, --output <paths...>', 'Path to output file (csv, txt, json, yaml, yml, html)')
     .option(
@@ -317,7 +318,13 @@ async function main() {
 
       // Standalone assertion mode
       if (cmdObj.assertions) {
-        const llmOutputs: string[] = ['hello world', 'salutations, earth', 'greetings, planet'];
+        if (!cmdObj.llmOutputs) {
+          logger.error(chalk.red('You must provide --llm-outputs when using --assertions'));
+          process.exit(1);
+        }
+        const llmOutputs = JSON.parse(
+          readFileSync(pathJoin(process.cwd(), cmdObj.llmOutputs), 'utf8'),
+        ) as string[];
         const assertions = await readAssertions(cmdObj.assertions);
         fileConfig.prompts = ['{{output}}'];
         fileConfig.providers = ['echo'];

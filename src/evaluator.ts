@@ -463,9 +463,9 @@ class Evaluator {
       testCase.options = { ...testSuite.defaultTest?.options, ...testCase.options };
 
       const prependToPrompt =
-        row.__prefix || testCase.options?.prefix || testSuite.defaultTest?.options?.prefix || '';
+        testCase.options?.prefix || testSuite.defaultTest?.options?.prefix || '';
       const appendToPrompt =
-        row.__suffix || testCase.options?.suffix || testSuite.defaultTest?.options?.suffix || '';
+        testCase.options?.suffix || testSuite.defaultTest?.options?.suffix || '';
 
       // Finalize test case eval
       const varCombinations = generateVarCombinations(testCase.vars || {});
