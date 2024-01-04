@@ -46,7 +46,7 @@ More details on using assertions, including examples [here](/docs/configuration/
 | --------- | ------ | -------- | -------------------------------------------------------------------------------------------------------- |
 | type      | string | Yes      | Type of assertion                                                                                        |
 | value     | string | No       | The expected value, if applicable                                                                        |
-| threshold | number | No       | The threshold value, only applicable for `type=similar` (cosine distance)                                |
+| threshold | number | No       | The threshold value, applicable only to certain types such as `similar`, `cost`, `javascript`, `python`  |
 | provider  | string | No       | Some assertions (type = similar, llm-rubric, model-graded-\*) require an [LLM provider](/docs/providers) |
 | metric    | string | No       | The label for this result. Assertions with the same `metric` will be aggregated together                 |
 

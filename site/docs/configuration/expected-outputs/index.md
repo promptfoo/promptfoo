@@ -29,18 +29,18 @@ tests:
 
 ## Assertion properties
 
-| Property     | Type   | Required | Description                                                                                          |
-| ------------ | ------ | -------- | ---------------------------------------------------------------------------------------------------- |
-| type         | string | Yes      | Type of assertion                                                                                    |
-| value        | string | No       | The expected value, if applicable                                                                    |
-| threshold    | number | No       | The threshold value, only applicable for similarity                                                  |
-| weight       | string | No       | How heavily to weigh the assertion. Defaults to 1.0                                                  |
-| provider     | string | No       | Some assertions (similarity, llm-rubric, model-graded-\*) require an [LLM provider](/docs/providers) |
-| rubricPrompt | string | No       | LLM rubric grading prompt                                                                            |
+| Property     | Type   | Required | Description                                                                                             |
+| ------------ | ------ | -------- | ------------------------------------------------------------------------------------------------------- |
+| type         | string | Yes      | Type of assertion                                                                                       |
+| value        | string | No       | The expected value, if applicable                                                                       |
+| threshold    | number | No       | The threshold value, applicable only to certain types such as `similar`, `cost`, `javascript`, `python` |
+| weight       | string | No       | How heavily to weigh the assertion. Defaults to 1.0                                                     |
+| provider     | string | No       | Some assertions (similarity, llm-rubric, model-graded-\*) require an [LLM provider](/docs/providers)    |
+| rubricPrompt | string | No       | LLM rubric grading prompt                                                                               |
 
 ## Assertion types
 
-Deterministic eval metrics
+### Deterministic eval metrics
 
 | Assertion Type                                                  | Returns true if...                                               |
 | --------------------------------------------------------------- | ---------------------------------------------------------------- |
@@ -66,7 +66,7 @@ Deterministic eval metrics
 | [webhook](#webhook)                                             | provided webhook returns \{pass: true\}                          |
 | rouge-n                                                         | Rouge-N score is above a given threshold                         |
 
-Model-assisted eval metrics
+### Model-assisted eval metrics
 
 | Assertion Type                                                             | Method                                                                          |
 | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
@@ -83,6 +83,8 @@ Model-assisted eval metrics
 :::tip
 Every test type can be negated by prepending `not-`. For example, `not-equals` or `not-regex`.
 :::
+
+## Assertion details
 
 ### Equality
 
@@ -357,7 +359,7 @@ Perplexity requires the LLM API to output `logprobs`. Currently only more recent
 
 ### Cost
 
-The `cost` assertion checks if the cost of the LLM call is below a specified threshold. 
+The `cost` assertion checks if the cost of the LLM call is below a specified threshold.
 
 This requires LLM providers to return cost information. Currently this is only supported by OpenAI GPT models and custom providers.
 
@@ -573,7 +575,7 @@ tests:
 
 In this example, the `containsMentalHealth` assertion template is defined at the top of the configuration file and then reused in two test cases. This approach helps maintain consistency and reduces duplication in your configuration.
 
-## Labeling assertions
+## Defining metrics from assertions
 
 Each assertion supports a `metrics` field that allows you to tag the result however you like. Use this feature to combine related assertions into aggregate metrics.
 
@@ -613,3 +615,5 @@ tests:
 These metrics will be shown in the UI:
 
 ![llm eval metrics](/img/docs/named-metrics.png)
+
+See [named metrics example](https://github.com/promptfoo/promptfoo/tree/main/examples/named-metrics).

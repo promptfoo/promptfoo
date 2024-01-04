@@ -1,11 +1,12 @@
 ---
-sidebar_position: 25
-sidebar_label: LLM chains
+sidebar_position: 0
+sidebar_label: Testing LLM chains
+slug: /configuration/testing-llm-chains
 ---
 
 # Testing LLM chains
 
-Prompt chaining is a common pattern used to perform more complex reasoning with LLMs. It's used by libraries like [LangChain](https://langchain.readthedocs.io/), and OpenAI has released baked-in support via [OpenAI functions](https://openai.com/blog/function-calling-and-other-api-updates).
+Prompt chaining is a common pattern used to perform more complex reasoning with LLMs. It's used by libraries like [LangChain](https://langchain.readthedocs.io/), and OpenAI has released built-in support via [OpenAI functions](https://openai.com/blog/function-calling-and-other-api-updates).
 
 A "chain" is defined by a list of LLM prompts that are executed sequentially (and sometimes conditionally). The output of each LLM call is parsed/manipulated/executed, and then the result is fed into the next prompt.
 

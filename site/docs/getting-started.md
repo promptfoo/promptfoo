@@ -38,19 +38,19 @@ This will create a `promptfooconfig.yaml` file in your current directory.
 
 1. Add `providers` and specify the models you want to test:
 
-      ```yaml
-      providers:
-        - openai:gpt-3.5-turbo
-        - openai:gpt-4
-      ```
+   ```yaml
+   providers:
+     - openai:gpt-3.5-turbo
+     - openai:gpt-4
+   ```
 
-    - **OpenAI**: if testing with an OpenAI model, you'll need to set the `OPENAI_API_KEY` environment variable (see [OpenAI provider docs](/docs/providers/openai) for more info):
+   - **OpenAI**: if testing with an OpenAI model, you'll need to set the `OPENAI_API_KEY` environment variable (see [OpenAI provider docs](/docs/providers/openai) for more info):
 
-      ```bash
-      export OPENAI_API_KEY=sk-abc123
-      ```
+     ```bash
+     export OPENAI_API_KEY=sk-abc123
+     ```
 
-    - We support many providers besides OpenAI. See setup instructions for [Azure](/docs/providers/azure), [Replicate](/docs/providers/replicate), [HuggingFace](/docs/providers/huggingface), [AWS Bedrock](/docs/providers/aws-bedrock), and [others](/docs/providers).
+   - **Others**: See setup instructions for [Azure](/docs/providers/azure), [Replicate](/docs/providers/replicate), [HuggingFace](/docs/providers/huggingface), [AWS Bedrock](/docs/providers/aws-bedrock), and [more](/docs/providers).
 
 1. **Add test inputs**: Add some example inputs for your prompts. Optionally, add [assertions](/docs/configuration/expected-outputs) to set output requirements that are checked automatically.
 
@@ -69,7 +69,6 @@ This will create a `promptfooconfig.yaml` file in your current directory.
    When writing test cases, think of core use cases and potential failures that you want to make sure your prompts handle correctly.
 
    [&raquo; More information on setting up tests](/docs/configuration/guide)
-
 
 1. **Run the evaluation**: This tests every prompt, model, and test case:
 

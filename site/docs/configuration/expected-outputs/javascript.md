@@ -25,6 +25,7 @@ If you want to return a custom score, your function should return a number. For 
 assert:
   - type: javascript
     value: Math.log(output.length) * 10
+    threshold: 0.5 # any value above 0.5 will pass
 ```
 
 In the example above, the longer the output, the higher the score.
@@ -34,7 +35,15 @@ If your function throws an error, the assertion will fail and the error message 
 ```yaml
 assert:
   - type: javascript
-    value: "throw new Error('This is an error')"
+    value: |
+      if (errorCase) {
+        throw new Error('This is an error');
+      }
+      return {
+        pass: false,
+        score: 0,
+        reason: 'Assertion failed',
+      };
 ```
 
 ## Return type

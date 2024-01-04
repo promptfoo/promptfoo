@@ -41,7 +41,7 @@ Note that [model-graded evals](/docs/configuration/expected-outputs/model-graded
 
 This assertion uses [Roberta hate speech detection](https://huggingface.co/facebook/roberta-hate-speech-dynabench-r4-target) to determine whether an LLM output is potentially problematic:
 
-```
+```yaml
 assert:
   - type: classifier
     provider: huggingface:text-classification:facebook/roberta-hate-speech-dynabench-r4-target
