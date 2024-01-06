@@ -2,7 +2,7 @@
 sidebar_label: OpenAI vs Azure benchmark
 ---
 
-# How to benchmark OpenAI vs Azure
+# OpenAI vs Azure: How to benchmark
 
 Whether you use GPT through the OpenAI or Azure APIs, the results are pretty similar. But there are some key differences:
 

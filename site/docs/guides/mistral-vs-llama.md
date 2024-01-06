@@ -4,7 +4,7 @@ sidebar_label: Mistral vs Llama2
 
 # Mistral vs Llama 2: benchmark on your own data
 
-Mistral was announced as the "best 7B model to date" on the basis of a [number of evals](https://mistral.ai/news/announcing-mistral-7b/) performed by the researchers.  Mixtral, a mixture-of-experts model, was recently [announced](https://mistral.ai/news/mixtral-of-experts/) with impressive eval performance.
+When Mistral was was released, it was the "best 7B model to date" based on a [number of evals](https://mistral.ai/news/announcing-mistral-7b/). Mixtral, a mixture-of-experts model based on Mistral, was recently [announced](https://mistral.ai/news/mixtral-of-experts/) with even more impressive eval performance.
 
 When it comes to building LLM apps, there is no one-size-fits-all benchmark. To maximize the quality of your LLM application, consider building your own benchmark to supplement public benchmarks. This guide describes how to compare Mixtral 8x7b vs Mistral 7B vs Llama 7B using the `promptfoo` CLI.
 
@@ -216,8 +216,17 @@ npx promptfoo@latest eval -o output.csv
 
 ## Conclusion
 
-On this limited dataset, Mistral and Mixtral both score 75% and Llama2 scores 50%. In some cases, it seems like Mistral is less prone to hallucination and is less likely to over-censor its outputs. But these are just a handful of use cases - far from conclusive.
+On this limited dataset, Mistral and Mixtral score 75%, but Llama2 scores 50%. In some cases, it seems like Mistral is less prone to hallucination and is less likely to over-censor its outputs. But these are just a handful of use cases - far from conclusive.
 
-Ultimately, if you are considering these LLMs for a specific use case, you should eval them for exactly that use case. Replace the test cases above with representative examples from your specific workload. This will create a much more specific and useful benchmark.
+Contrast this with generic public benchmarks, which show that Mixtral 8x7B >> Llama2 70B > Mistral 7B >> Llama2 7B.
+
+| Model                                                                                     | Average | ARC   | HellaSwag | MMLU  | TruthfulQA | Winogrande | GSM8k |
+| ----------------------------------------------------------------------------------------- | ------- | ----- | --------- | ----- | ---------- | ---------- | ----- |
+| [Mixtral-8x7B-Instruct-v0.1](https://huggingface.co/mistralai/Mixtral-8x7B-Instruct-v0.1) | 72.70   | 70.14 | 87.55     | 71.40 | 64.98      | 81.06      | 61.11 |
+| [llama2_70b_mmlu](https://huggingface.co/itsliupeng/llama2_70b_mmlu)                      | 68.24   | 65.61 | 87.37     | 71.89 | 49.15      | 82.40      | 52.99 |
+| [Mistral-7B-Instruct-v0.2](https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.2)     | 65.71   | 63.14 | 84.88     | 60.78 | 68.26      | 77.19      | 40.03 |
+| [llama2_7b_mmlu](https://huggingface.co/itsliupeng/llama2_7b_mmlu)                        | 53.10   | 56.14 | 79.13     | 60.04 | 40.95      | 74.43      | 7.88  |
+
+Ultimately, if you are considering these LLMs for a specific use case, you should eval them specifically for your use case. Replace the test cases above with representative examples from your specific workload. This will create a much more specific and useful benchmark.
 
 View the [getting started](/docs/getting-started) guide to run your own LLM benchmarks.

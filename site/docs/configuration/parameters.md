@@ -74,7 +74,7 @@ Prompts can be JSON too. Use this to configure multi-shot prompt formats:
 ]
 ```
 
-#### Multiple prompts in a single file
+### Multiple prompts in a single file
 
 If you have only one file, you can include multiple prompts in the file, separated by the delimiter `---`. If you have multiple files, each prompt should be in a separate file.
 
@@ -85,6 +85,31 @@ Translate the following text to French: "{{name}}: {{text}}"
 ---
 Translate the following text to German: "{{name}}: {{text}}"
 ```
+
+### Different prompts per model
+
+To set separate prompts for different providers, you can specify the prompt files within the `providers` section of your `promptfooconfig.yaml`. Each provider can have its own set of prompts that are tailored to its specific requirements or input format.
+
+Here's an example of how to set separate prompts for Llama v2 and GPT models:
+
+```yaml title=promptfooconfig.yaml
+prompts:
+  prompts/gpt_chat_prompt.json: gpt_chat_prompt
+  prompts/llama_completion_prompt.txt: llama_completion_prompt
+
+providers:
+  - openai:gpt-3.5-turbo-0613:
+      prompts: gpt_chat_prompt
+  - openai:gpt-4-turbo-0613:
+      prompts: gpt_chat_prompt
+  - replicate:replicate/llama70b-v2-chat:e951f18578850b652510200860fc4ea62b3b16fac280f83ff32282f87bbd2e48:
+      prompts: llama_completion_prompt
+```
+
+In this configuration, the `gpt_chat_prompt` is used for both GPT-3.5 and GPT-4 models, while the `llama_completion_prompt` is used for the Llama v2 model. The prompts are defined in separate files within the `prompts` directory.
+
+Make sure to create the corresponding prompt files with the content formatted as expected by each model. For example, GPT models might expect a JSON array of messages, while Llama might expect a plain text format with a specific prefix.
+
 
 ### Prompt functions
 
