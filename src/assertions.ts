@@ -88,8 +88,8 @@ export async function runAssertions({
   logProbs,
   cost,
 }: {
-  prompt: string;
-  provider: ApiProvider;
+  prompt?: string;
+  provider?: ApiProvider;
   test: AtomicTestCase;
   output: string | object;
   latencyMs?: number;
@@ -180,8 +180,8 @@ export async function runAssertion({
   logProbs,
   cost,
 }: {
-  prompt: string;
-  provider: ApiProvider;
+  prompt?: string;
+  provider?: ApiProvider;
   assertion: Assertion;
   test: AtomicTestCase;
   output: string | object;
@@ -779,6 +779,7 @@ ${assertion.value}`,
       typeof renderedValue === 'string',
       'factuality assertion type must have a string value',
     );
+    invariant(prompt, 'factuality assertion type must have a prompt');
 
     // Assertion provider overrides test provider
     test.options = test.options || {};
@@ -801,6 +802,7 @@ ${assertion.value}`,
       typeof renderedValue === 'string',
       'model-graded-closedqa assertion type must have a string value',
     );
+    invariant(prompt, 'model-graded-closedqa assertion type must have a prompt');
 
     // Assertion provider overrides test provider
     test.options = test.options || {};
@@ -819,14 +821,16 @@ ${assertion.value}`,
   }
 
   if (baseType === 'answer-relevance') {
-    // Assertion provider overrides test provider
-    test.options = test.options || {};
-    test.options.provider = assertion.provider || test.options.provider;
-
     invariant(
       typeof output === 'string',
       'answer-relevance assertion type must evaluate a string output',
     );
+    invariant(prompt, 'answer-relevance assertion type must have a prompt');
+
+    // Assertion provider overrides test provider
+    test.options = test.options || {};
+    test.options.provider = assertion.provider || test.options.provider;
+
     return {
       assertion,
       ...(await matchesAnswerRelevance(prompt, output, assertion.threshold || 0, test.options)),
@@ -834,14 +838,16 @@ ${assertion.value}`,
   }
 
   if (baseType === 'context-recall') {
-    // Assertion provider overrides test provider
-    test.options = test.options || {};
-    test.options.provider = assertion.provider || test.options.provider;
-
     invariant(
       typeof renderedValue === 'string',
       'context-recall assertion type must have a string value',
     );
+    invariant(prompt, 'context-recall assertion type must have a prompt')
+
+    // Assertion provider overrides test provider
+    test.options = test.options || {};
+    test.options.provider = assertion.provider || test.options.provider;
+
     return {
       assertion,
       ...(await matchesContextRecall(
@@ -1206,6 +1212,18 @@ export function assertionFromString(expected: string): Assertion {
     type: 'equals',
     value: expected,
   };
+}
+
+export async function readAssertions(filePath: string): Promise<Assertion[]> {
+  try {
+    const assertions = yaml.load(fs.readFileSync(filePath, 'utf-8')) as Assertion[];
+    if (!Array.isArray(assertions) || assertions[0]?.type === undefined) {
+      throw new Error('Assertions file must be an array of assertion objects');
+    }
+    return assertions;
+  } catch (err) {
+    throw new Error(`Failed to read assertions from ${filePath}:\n${err}`);
+  }
 }
 
 // These exports are used by the node.js package (index.ts)

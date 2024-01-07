@@ -8,6 +8,7 @@ import { Command } from 'commander';
 
 import telemetry from './telemetry';
 import logger, { getLogLevel, setLogLevel } from './logger';
+import { readAssertions } from './assertions';
 import { loadApiProvider, loadApiProviders } from './providers';
 import { evaluate, DEFAULT_MAX_CONCURRENCY } from './evaluator';
 import { readPrompts, readProviderPromptMap } from './prompts';
@@ -234,6 +235,8 @@ async function main() {
       'Path to CSV with test cases',
       defaultConfig?.commandLineOptions?.vars,
     )
+    .option('-a, --assertions <path>', 'Path to assertions file')
+    .option('--model-outputs <path>', 'Path to JSON containing list of LLM output strings')
     .option('-t, --tests <path>', 'Path to CSV with test cases')
     .option('-o, --output <paths...>', 'Path to output file (csv, txt, json, yaml, yml, html)')
     .option(
@@ -311,6 +314,26 @@ async function main() {
       const configPaths = cmdObj.config;
       if (configPaths) {
         fileConfig = await readConfigs(configPaths);
+      }
+
+      // Standalone assertion mode
+      if (cmdObj.assertions) {
+        if (!cmdObj.modelOutputs) {
+          logger.error(chalk.red('You must provide --model-outputs when using --assertions'));
+          process.exit(1);
+        }
+        const modelOutputs = JSON.parse(
+          readFileSync(pathJoin(process.cwd(), cmdObj.modelOutputs), 'utf8'),
+        ) as string[];
+        const assertions = await readAssertions(cmdObj.assertions);
+        fileConfig.prompts = ['{{output}}'];
+        fileConfig.providers = ['echo'];
+        fileConfig.tests = modelOutputs.map((output) => ({
+          vars: {
+            output,
+          },
+          assert: assertions,
+        }));
       }
 
       // Use basepath in cases where path was supplied in the config file
