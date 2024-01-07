@@ -4,7 +4,7 @@ If you use a model-graded eval, you must set your OPENAI_API_KEY environment var
 
 Then run:
 ```
-promptfoo eval --assertions asserts.yaml --llm-outputs outputs.json
+promptfoo eval --assertions asserts.yaml --model-outputs outputs.json
 ```
 
 Afterwards, you can view the results by running `promptfoo view`

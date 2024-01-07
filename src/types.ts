@@ -16,7 +16,7 @@ export interface CommandLineOptions {
   tests?: FilePath;
   config?: FilePath[];
   assertions?: FilePath;
-  llmOutputs?: FilePath;
+  modelOutputs?: FilePath;
   verbose?: boolean;
   grader?: string;
   view?: string;

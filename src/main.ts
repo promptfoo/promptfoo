@@ -236,7 +236,7 @@ async function main() {
       defaultConfig?.commandLineOptions?.vars,
     )
     .option('-a, --assertions <path>', 'Path to assertions file')
-    .option('--llm-outputs <path>', 'Path to JSON with LLM outputs')
+    .option('--model-outputs <path>', 'Path to JSON containing list of LLM output strings')
     .option('-t, --tests <path>', 'Path to CSV with test cases')
     .option('-o, --output <paths...>', 'Path to output file (csv, txt, json, yaml, yml, html)')
     .option(
@@ -318,17 +318,17 @@ async function main() {
 
       // Standalone assertion mode
       if (cmdObj.assertions) {
-        if (!cmdObj.llmOutputs) {
-          logger.error(chalk.red('You must provide --llm-outputs when using --assertions'));
+        if (!cmdObj.modelOutputs) {
+          logger.error(chalk.red('You must provide --model-outputs when using --assertions'));
           process.exit(1);
         }
-        const llmOutputs = JSON.parse(
-          readFileSync(pathJoin(process.cwd(), cmdObj.llmOutputs), 'utf8'),
+        const modelOutputs = JSON.parse(
+          readFileSync(pathJoin(process.cwd(), cmdObj.modelOutputs), 'utf8'),
         ) as string[];
         const assertions = await readAssertions(cmdObj.assertions);
         fileConfig.prompts = ['{{output}}'];
         fileConfig.providers = ['echo'];
-        fileConfig.tests = llmOutputs.map((output) => ({
+        fileConfig.tests = modelOutputs.map((output) => ({
           vars: {
             output,
           },
