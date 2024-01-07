@@ -1035,9 +1035,6 @@ ${assertion.value}`,
   }
 
   if (baseType === 'perplexity') {
-    if (!assertion.threshold) {
-      throw new Error('Perplexity assertion must have a threshold');
-    }
     if (!logProbs || logProbs.length === 0) {
       throw new Error(
         'Perplexity assertion does not support providers that do not return logProbs',
@@ -1047,13 +1044,37 @@ ${assertion.value}`,
     const avgLogProb = sumLogProbs / logProbs.length;
     const perplexity = Math.exp(-avgLogProb);
 
-    pass = perplexity <= assertion.threshold;
+    pass = assertion.threshold ? perplexity <= assertion.threshold : true;
     return {
       pass,
       score: pass ? 1 : 0,
       reason: pass
         ? 'Assertion passed'
         : `Perplexity ${perplexity.toFixed(2)} is greater than threshold ${assertion.threshold}`,
+      assertion,
+    };
+  }
+
+  if (baseType === 'perplexity-score') {
+    if (!logProbs || logProbs.length === 0) {
+      throw new Error(
+        'perplexity-score assertion does not support providers that do not return logProbs',
+      );
+    }
+    const sumLogProbs = logProbs.reduce((acc, logProb) => acc + logProb, 0);
+    const avgLogProb = sumLogProbs / logProbs.length;
+    const perplexity = Math.exp(-avgLogProb);
+    const perplexityNorm = 1 / (1 + perplexity);
+
+    pass = assertion.threshold ? perplexityNorm >= assertion.threshold : true;
+    return {
+      pass,
+      score: perplexityNorm,
+      reason: pass
+        ? 'Assertion passed'
+        : `Perplexity score ${perplexityNorm.toFixed(2)} is less than threshold ${
+            assertion.threshold
+          }`,
       assertion,
     };
   }
@@ -1152,7 +1173,7 @@ export function assertionFromString(expected: string): Assertion {
 
   // New options
   const assertionRegex =
-    /^(not-)?(equals|contains-any|contains-all|icontains-any|icontains-all|contains-json|is-json|regex|icontains|contains|webhook|rouge-n|similar|starts-with|levenshtein|classifier|model-graded-factuality|factuality|model-graded-closedqa|answer-relevance|context-recall|context-relevance|context-faithfulness|is-valid-openai-function-call|is-valid-openai-tools-call|latency|perplexity|cost)(?:\((\d+(?:\.\d+)?)\))?(?::(.*))?$/;
+    /^(not-)?(equals|contains-any|contains-all|icontains-any|icontains-all|contains-json|is-json|regex|icontains|contains|webhook|rouge-n|similar|starts-with|levenshtein|classifier|model-graded-factuality|factuality|model-graded-closedqa|answer-relevance|context-recall|context-relevance|context-faithfulness|is-valid-openai-function-call|is-valid-openai-tools-call|latency|perplexity|perplexity-score|cost)(?:\((\d+(?:\.\d+)?)\))?(?::(.*))?$/;
   const regexMatch = expected.match(assertionRegex);
 
   if (regexMatch) {
@@ -1186,6 +1207,7 @@ export function assertionFromString(expected: string): Assertion {
       type === 'context-faithfulness' ||
       type === 'latency' ||
       type === 'perplexity' ||
+      type === 'perplexity-score' ||
       type === 'cost'
     ) {
       return {

@@ -60,6 +60,7 @@ tests:
 | [latency](#latency)                                             | Latency is below a threshold (milliseconds)                      |
 | [levenshtein](#levenshtein-distance)                            | Levenshtein distance is below a threshold                        |
 | [perplexity](#perplexity)                                       | Perplexity is below a threshold                                  |
+| [perplexity-score](#perplexity-score)                           | Normalized perplexity                                            |
 | [python](/docs/configuration/expected-outputs/python)           | provided Python function validates the output                    |
 | [regex](#regex)                                                 | output matches regex                                             |
 | [starts-with](#starts-with)                                     | output starts with string                                        |
@@ -356,6 +357,21 @@ assert:
 :::warning
 Perplexity requires the LLM API to output `logprobs`. Currently only more recent versions of OpenAI GPT support this.
 :::
+
+#### perplexity-score
+
+`perplexity-score` is a supported metric similar to `perplexity`, except it is normalized between 0 and 1 and inverted, meaning larger numbers are better.
+
+This makes it easier to include in an aggregate promptfoo score, as higher scores are usually better. In this example, we compare perplexity across multiple GPTs:
+
+```yaml
+providers: [gpt-4-1106-preview, gpt-3.5-turbo-1106]
+tests:
+  - assert:
+      - type: perplexity-score
+        threshold: 0.5 # optional
+  # ...
+```
 
 ### Cost
 
