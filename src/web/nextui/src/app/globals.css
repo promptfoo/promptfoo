@@ -29,6 +29,8 @@
   --prompt-highlight-color: linen;
   --textarea-background-color: #ffffff;
   --textarea-color: #404040;
+  --search-highlight-color: #ffff00;
+  --search-text-color: inherit;
 }
 
 /* Dark mode colors */
@@ -51,6 +53,8 @@
   --prompt-highlight-color: #67605a;
   --textarea-background-color: #2d2d2d;
   --textarea-color: #fff;
+  --search-highlight-color: #ffff00;
+  --search-text-color: #404040;
 }
 
 html {
