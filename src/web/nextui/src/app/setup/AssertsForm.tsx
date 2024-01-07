@@ -56,6 +56,7 @@ const assertTypes: AssertionType[] = [
   'is-valid-openai-tools-call',
   'latency',
   'perplexity',
+  'perplexity-score',
   'cost',
   'answer-relevance',
   'context-faithfulness',

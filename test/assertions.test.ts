@@ -1748,6 +1748,51 @@ print(json.dumps(eval(value)))`,
     });
   });
 
+  describe('perplexity-score assertion', () => {
+    it('should pass when the perplexity-score assertion passes', async () => {
+      const logProbs = [-0.2, -0.4, -0.1, -0.3]; 
+      const provider = {
+        callApi: jest.fn().mockResolvedValue({ logProbs }),
+      } as unknown as ApiProvider;
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider,
+        assertion: {
+          type: 'perplexity-score',
+          threshold: 0.25,
+        },
+        test: {} as AtomicTestCase,
+        output: 'Some output',
+        logProbs,
+      });
+      expect(result.pass).toBeTruthy();
+      expect(result.reason).toBe('Assertion passed');
+    });
+
+    it('should fail when the perplexity-score assertion fails', async () => {
+      const logProbs = [-0.2, -0.4, -0.1, -0.3];
+      const provider = {
+        callApi: jest.fn().mockResolvedValue({ logProbs }),
+      } as unknown as ApiProvider;
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider,
+        assertion: {
+          type: 'perplexity-score',
+          threshold: 0.5,
+        },
+        test: {} as AtomicTestCase,
+        output: 'Some output',
+        logProbs,
+      });
+      console.log(result)
+      expect(result.pass).toBeFalsy();
+      expect(result.reason).toBe('Perplexity score 0.44 is less than threshold 0.5');
+    });
+  });
+
   describe('cost assertion', () => {
     it('should pass when the cost is below the threshold', async () => {
       const cost = 0.0005;
@@ -2117,6 +2162,14 @@ describe('assertionFromString', () => {
     const result: Assertion = assertionFromString(expected);
     expect(result.type).toBe('perplexity');
     expect(result.threshold).toBe(1.5);
+  });
+
+  it('should create a perplexity-score assertion', () => {
+    const expected = 'perplexity-score(0.5)';
+
+    const result: Assertion = assertionFromString(expected);
+    expect(result.type).toBe('perplexity-score');
+    expect(result.threshold).toBe(0.5);
   });
 
   it('should create a cost assertion', () => {
