@@ -354,7 +354,7 @@ assert:
 ```
 
 :::warning
-Perplexity requires the LLM API to output `logprobs`. Currently only more recent versions of OpenAI GPT support this.
+Perplexity requires the LLM API to output `logprobs`. Currently only more recent versions of OpenAI GPT and Azure OpenAI GPT APIs support this.
 :::
 
 ### Cost

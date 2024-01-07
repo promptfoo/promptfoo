@@ -9,6 +9,7 @@ LLMs have great potential, but they are prone to generating incorrect or mislead
 LLM app developers have several tools at their disposal:
 
 - **Prompt and LLM parameter tuning** to decrease the likelihood of hallucinations.
+- **Measure perplexity** to quantify the model's confidence level of completions
 - **Retrieval-augmented generation** (RAG) with embeddings and vector search to supply additional grounding context.
 - **Fine-tuning** to improve accuracy.
 - **Controlled decoding** to force certain outputs.
@@ -131,6 +132,41 @@ tests:
 The default prompt shown on the left side has a pass rate of **55%**. On the right side, the tuned prompt has a pass rate of **94%**.
 
 For more info on running the eval itself, see the [Getting Started guide](/docs/getting-started).
+
+### Measuring perplexity
+
+
+Perplexity is a measure of how well a language model predicts a sample of text. In the context of LLMs, a lower perplexity score indicates greater confidence in the model's completion, and therefore lower chance of hallucation. 
+
+By using the `perplexity` assertion type, we can set a threshold to ensure that the model's predictions meet our confidence requirements.
+
+Here's how to set up a perplexity assertion in your test configuration:
+
+```yaml
+assert:
+  - type: perplexity
+    threshold: 5 # Replace with your desired perplexity threshold
+```
+
+In this example, we've decided that a perplexity score greater than 5 signals that the model is not certain enough about its prediction, and hallucination risk is too highi.
+
+Determining the perplexity threshold is a bit of trial and error.  You can also remove the threshold and simply compare multiple models:
+
+```yaml
+providers:
+  - openai:gpt-4
+  - openai:gpt-3.5-turbo
+
+tests:
+  # ...
+  assert:
+    - type: perplexity
+```
+
+The evaluation will output the perplexity scores of each model, and you can get a feel for what scores you're comfortable with.  Keep in mind that different models and domains may require different thresholds for optimal performance.
+
+For more detailed information on perplexity and other useful metrics, refer to the [perplexity assertion](/docs/configuration/expected-outputs/#perplexity).
+
 
 ### Retrieval-augmented generation
 
