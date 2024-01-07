@@ -97,7 +97,7 @@ export class OpenAiGenericProvider implements ApiProvider {
     return this.config.apiKey || this.env?.OPENAI_API_KEY || process.env.OPENAI_API_KEY;
   }
 
-  // @ts-ignore: Prompt is not used in this implementation
+  // @ts-ignore: Params are not used in this implementation
   async callApi(
     prompt: string,
     context?: CallApiContextParams,

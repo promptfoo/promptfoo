@@ -1,0 +1,25 @@
+prompts:
+  - 'Generate one very interesting fact about {{topic}}'
+
+providers:
+  - id: azureopenai:chat:gpt-35-turbo-deployment1
+    config:
+      apiHost: 'your-org.openai.azure.com'
+
+defaultTest:
+  assert:
+    - type: latency
+      threshold: 3000
+
+tests:
+  - vars:
+      topic: monkeys
+  - vars:
+      topic: bananas
+    assert:
+      - type: similar
+        value: Bananas are naturally radioactive.
+        provider:
+          id: azureopenai:embeddings:ada-deployment1
+          config:
+            apiHost: 'your-org.openai.azure.com'
