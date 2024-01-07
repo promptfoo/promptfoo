@@ -4,6 +4,8 @@ import { fetchWithCache } from '../cache';
 
 import type {
   ApiProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
   EnvOverrides,
   ProviderEmbeddingResponse,
   ProviderResponse,
@@ -59,8 +61,12 @@ class AzureOpenAiGenericProvider implements ApiProvider {
     return `[Azure OpenAI Provider ${this.deploymentName}]`;
   }
 
-  // @ts-ignore: Prompt is not used in this implementation
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  // @ts-ignore: Params are not used in this implementation
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    callApiOptions?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
     throw new Error('Not implemented');
   }
 }
@@ -140,7 +146,11 @@ export class AzureOpenAiEmbeddingProvider extends AzureOpenAiGenericProvider {
 }
 
 export class AzureOpenAiCompletionProvider extends AzureOpenAiGenericProvider {
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    callApiOptions?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
     if (!this.apiKey) {
       throw new Error(
         'Azure OpenAI API key is not set. Set AZURE_OPENAI_API_KEY environment variable or pass it as an argument to the constructor.',
@@ -169,9 +179,10 @@ export class AzureOpenAiCompletionProvider extends AzureOpenAiGenericProvider {
       frequency_penalty:
         this.config.frequency_penalty ?? parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0'),
       best_of: this.config.best_of ?? parseInt(process.env.OPENAI_BEST_OF || '1'),
-      stop,
       ...(this.config.deployment_id ? { deployment_id: this.config.deployment_id } : {}),
       ...(this.config.dataSources ? { dataSources: this.config.dataSources } : {}),
+      ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
+      ...(stop ? { stop } : {}),
     };
     logger.debug(`Calling Azure OpenAI API: ${JSON.stringify(body)}`);
     let data,
@@ -215,7 +226,11 @@ export class AzureOpenAiCompletionProvider extends AzureOpenAiGenericProvider {
 }
 
 export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvider {
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    callApiOptions?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
     if (!this.apiKey) {
       throw new Error(
         'Azure OpenAI API key is not set. Set the AZURE_OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
@@ -245,9 +260,10 @@ export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvide
         this.config.frequency_penalty ?? parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0'),
       functions: this.config.functions || undefined,
       function_call: this.config.function_call || undefined,
-      stop,
       ...(this.config.deployment_id ? { deployment_id: this.config.deployment_id } : {}),
       ...(this.config.dataSources ? { dataSources: this.config.dataSources } : {}),
+      ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
+      ...(this.config.stop ? { stop: this.config.stop } : {}),
     };
     logger.debug(`Calling Azure OpenAI API: ${JSON.stringify(body)}`);
 
@@ -287,6 +303,9 @@ export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvide
         ? data.choices[0].messages.find((msg: { role: string }) => msg.role === 'assistant')
         : data.choices[0].message;
       const output = message.content == null ? message.function_call : message.content;
+      const logProbs = data.choices[0].logprobs?.content?.map(
+        (logProbObj: { token: string; logprob: number }) => logProbObj.logprob,
+      );
       return {
         output,
         tokenUsage: cached
@@ -296,6 +315,8 @@ export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvide
               prompt: data.usage?.prompt_tokens,
               completion: data.usage?.completion_tokens,
             },
+        cached,
+        logProbs,
       };
     } catch (err) {
       return {
