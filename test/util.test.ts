@@ -515,6 +515,35 @@ describe('util', () => {
         'Unsupported configuration file format: .unsupported',
       );
     });
+
+    test('makeAbsolute should resolve file:// syntax and plaintext prompts', async () => {
+      (fs.existsSync as jest.Mock).mockReturnValue(true);
+      (fs.readFileSync as jest.Mock).mockImplementation((path: string) => {
+        if (path === 'config1.json') {
+          return JSON.stringify({
+            description: 'test1',
+            prompts: ['file://prompt1.txt', 'prompt2'],
+          });
+        } else if (path === 'config2.json') {
+          return JSON.stringify({
+            description: 'test2',
+            prompts: ['file://prompt3.txt', 'prompt4'],
+          });
+        }
+        return null;
+      });
+
+      const configPaths = ['config1.json', 'config2.json'];
+      const result = await readConfigs(configPaths);
+
+      expect(result.prompts).toEqual([
+        'file://' + path.resolve(path.dirname(configPaths[0]), 'prompt1.txt'),
+        'prompt2',
+        'file://' + path.resolve(path.dirname(configPaths[1]), 'prompt3.txt'),
+        'prompt4',
+      ]);
+    });
+
   });
 
   describe('dereferenceConfig', () => {
