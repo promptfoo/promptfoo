@@ -239,13 +239,22 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
   );
   const configsAreObjects = configs.every((config) => typeof config.prompts === 'object');
   let prompts: UnifiedConfig['prompts'] = configsAreStringOrArray ? [] : {};
+  
+  const makeAbsolute = (configPath: string, relativePath: string) => {
+    if (relativePath.startsWith('file://')) {
+      relativePath = 'file://' + path.resolve(path.dirname(configPath), relativePath.slice('file://'.length));
+    }
+    return relativePath;
+  };
 
-  configs.forEach((config) => {
+  configs.forEach((config, idx) => {
     if (typeof config.prompts === 'string') {
       invariant(Array.isArray(prompts), 'Cannot mix string and map-type prompts');
+      config.prompts = makeAbsolute(configPaths[idx], config.prompts);
       prompts.push(config.prompts);
     } else if (Array.isArray(config.prompts)) {
       invariant(Array.isArray(prompts), 'Cannot mix configs with map and array-type prompts');
+      config.prompts = config.prompts.map((prompt) => makeAbsolute(configPaths[idx], prompt));
       prompts.push(...config.prompts);
     } else {
       // Object format such as { 'prompts/prompt1.txt': 'foo', 'prompts/prompt2.txt': 'bar' }
