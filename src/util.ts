@@ -234,13 +234,32 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
     }
   });
 
-  const prompts: UnifiedConfig['prompts'] = [];
-  const seenPrompts = new Set<string>();
-  configs.forEach((config) => {
+  const configsAreStringOrArray = configs.every(
+    (config) => typeof config.prompts === 'string' || Array.isArray(config.prompts),
+  );
+  const configsAreObjects = configs.every((config) => typeof config.prompts === 'object');
+  let prompts: UnifiedConfig['prompts'] = configsAreStringOrArray ? [] : {};
+  
+  const makeAbsolute = (configPath: string, relativePath: string) => {
+    if (relativePath.startsWith('file://')) {
+      relativePath = 'file://' + path.resolve(path.dirname(configPath), relativePath.slice('file://'.length));
+    }
+    return relativePath;
+  };
+
+  configs.forEach((config, idx) => {
     if (typeof config.prompts === 'string') {
+      invariant(Array.isArray(prompts), 'Cannot mix string and map-type prompts');
+      config.prompts = makeAbsolute(configPaths[idx], config.prompts);
       prompts.push(config.prompts);
-    } else {
+    } else if (Array.isArray(config.prompts)) {
+      invariant(Array.isArray(prompts), 'Cannot mix configs with map and array-type prompts');
+      config.prompts = config.prompts.map((prompt) => makeAbsolute(configPaths[idx], prompt));
       prompts.push(...config.prompts);
+    } else {
+      // Object format such as { 'prompts/prompt1.txt': 'foo', 'prompts/prompt2.txt': 'bar' }
+      invariant(typeof prompts === 'object', 'Cannot mix configs with map and array-type prompts');
+      prompts = { ...prompts, ...config.prompts };
     }
   });
 
