@@ -1,10 +1,12 @@
 import * as React from 'react';
 
 import invariant from 'tiny-invariant';
-import Button from '@mui/material/Button';
+
 import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
 import CircularProgress from '@mui/material/CircularProgress';
+import EditIcon from '@mui/icons-material/Edit';
 import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
 import ListItemText from '@mui/material/ListItemText';
@@ -12,14 +14,15 @@ import MenuItem from '@mui/material/MenuItem';
 import OutlinedInput from '@mui/material/OutlinedInput';
 import Paper from '@mui/material/Box';
 import Select, { SelectChangeEvent } from '@mui/material/Select';
-import Stack from '@mui/material/Stack';
-import Tooltip from '@mui/material/Tooltip';
 import SettingsIcon from '@mui/icons-material/Settings';
 import ShareIcon from '@mui/icons-material/Share';
+import Stack from '@mui/material/Stack';
+import TextField from '@mui/material/TextField';
+import Tooltip from '@mui/material/Tooltip';
 import VisibilityIcon from '@mui/icons-material/Visibility';
-import EditIcon from '@mui/icons-material/Edit';
 import { styled } from '@mui/system';
 import { useRouter } from 'next/navigation';
+import { useDebounce } from 'use-debounce';
 
 import ResultsCharts from './ResultsCharts';
 import ResultsTable from './ResultsTable';
@@ -59,6 +62,12 @@ export default function ResultsView({
   const { setStateFromConfig } = useMainStore();
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
   const [selectedColumns, setSelectedColumns] = React.useState<string[]>([]);
+
+  const [searchText, setSearchText] = React.useState('');
+  const [debouncedSearchText] = useDebounce(searchText, 1000);
+  const handleSearchTextChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchText(event.target.value);
+  };
 
   const [failureFilter, setFailureFilter] = React.useState<{ [key: string]: boolean }>({});
   const handleFailureFilterToggle = (columnId: string, checked: boolean) => {
@@ -169,7 +178,7 @@ export default function ResultsView({
           <Box>
             {recentEvals && recentEvals.length > 0 && (
               <FormControl sx={{ m: 1, minWidth: 200 }} size="small">
-                <InputLabel>View run</InputLabel>
+                <InputLabel>Eval run</InputLabel>
                 <Select
                   key={recentEvals.map((e) => e.id).join(',')}
                   className="recent-files"
@@ -188,7 +197,7 @@ export default function ResultsView({
           </Box>
           <Box>
             <FormControl sx={{ m: 1, minWidth: 200, maxWidth: 350 }} size="small">
-              <InputLabel id="visible-columns-label">Show columns</InputLabel>
+              <InputLabel id="visible-columns-label">Columns</InputLabel>
               <Select
                 labelId="visible-columns-label"
                 id="visible-columns"
@@ -209,7 +218,7 @@ export default function ResultsView({
           </Box>
           <Box>
             <FormControl sx={{ minWidth: 180 }} size="small">
-              <InputLabel id="failure-filter-mode-label">Filter</InputLabel>
+              <InputLabel id="failure-filter-mode-label">Display</InputLabel>
               <Select
                 labelId="filter-mode-label"
                 id="filter-mode"
@@ -222,6 +231,16 @@ export default function ResultsView({
                 <MenuItem value="different">Show different only</MenuItem>
               </Select>
             </FormControl>
+          </Box>
+          <Box>
+            <TextField
+              sx={{ minWidth: 180 }}
+              size="small"
+              label="Search"
+              placeholder="Text or regex"
+              value={searchText}
+              onChange={handleSearchTextChange}
+            />
           </Box>
           <Box flexGrow={1} />
           <Box display="flex" justifyContent="flex-end">
@@ -284,6 +303,7 @@ export default function ResultsView({
         showStats={showInferenceDetails}
         filterMode={filterMode}
         failureFilter={failureFilter}
+        searchText={debouncedSearchText}
         onFailureFilterToggle={handleFailureFilterToggle}
       />
       <ConfigModal open={configModalOpen} onClose={() => setConfigModalOpen(false)} />

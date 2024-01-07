@@ -266,6 +266,11 @@ table.results-table,
   border-top: 2px solid #888;
 }
 
+.search-highlight {
+  color: var(--search-text-color);
+  background-color: var(--search-highlight-color);
+}
+
 .resizer {
   position: absolute;
   right: 0;

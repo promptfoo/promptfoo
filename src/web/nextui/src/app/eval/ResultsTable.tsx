@@ -147,8 +147,13 @@ function EvalOutputCell({
   onRating,
   firstOutput,
   filterMode,
+  searchText,
   showStats,
-}: PromptOutputProps & { firstOutput: EvaluateTableOutput; filterMode: FilterMode }) {
+}: PromptOutputProps & {
+  firstOutput: EvaluateTableOutput;
+  filterMode: FilterMode;
+  searchText: string;
+}) {
   const [openPrompt, setOpen] = React.useState(false);
   const handlePromptOpen = () => {
     setOpen(true);
@@ -203,6 +208,45 @@ function EvalOutputCell({
             ) : (
               <span key={index}>{part.value}</span>
             ),
+        )}
+      </>
+    );
+  }
+
+  if (searchText) {
+    // Highlight search matches
+    const regex = new RegExp(searchText, 'gi');
+    const matches: { start: number; end: number }[] = [];
+    let match;
+    let lastIndex = 0;
+    while ((match = regex.exec(text)) !== null) {
+      matches.push({
+        start: match.index,
+        end: regex.lastIndex,
+      });
+      lastIndex = regex.lastIndex;
+    }
+    node = (
+      <>
+        {matches.length > 0 ? (
+          <>
+            <span key="text-before">{text.substring(0, matches[0].start)}</span>
+            {matches.map((range, index) => (
+              <>
+                <span className="search-highlight" key={'match-' + index}>
+                  {text.substring(range.start, range.end)}
+                </span>
+                <span key={'text-after-' + index}>
+                  {text.substring(
+                    range.end,
+                    matches[index + 1] ? matches[index + 1].start : text.length,
+                  )}
+                </span>
+              </>
+            ))}
+          </>
+        ) : (
+          <span key="no-match">{text}</span>
         )}
       </>
     );
@@ -415,6 +459,7 @@ interface ResultsTableProps {
   wordBreak: 'break-word' | 'break-all';
   filterMode: FilterMode;
   failureFilter: { [key: string]: boolean };
+  searchText: string;
   showStats: boolean;
   onFailureFilterToggle: (columnId: string, checked: boolean) => void;
 }
@@ -425,6 +470,7 @@ export default function ResultsTable({
   wordBreak,
   filterMode,
   failureFilter,
+  searchText,
   showStats,
   onFailureFilterToggle,
 }: ResultsTableProps) {
@@ -662,6 +708,7 @@ export default function ResultsTable({
               onRating={handleRating}
               firstOutput={filteredBody[info.row.index].outputs[0]}
               filterMode={filterMode}
+              searchText={searchText}
               showStats={showStats}
             />
           ),
@@ -685,25 +732,30 @@ export default function ResultsTable({
   }
 
   const filteredBody = React.useMemo(() => {
-    if (filterMode === 'failures') {
-      if (Object.values(failureFilter).every((v) => !v)) {
-        return body;
-      }
-      return body.filter((row) => {
-        return row.outputs.some((output, idx) => {
-          const columnId = `Prompt ${idx + 1}`;
-          const isFail = !output.pass;
-          return failureFilter[columnId] && isFail;
-        });
-      });
-    } else if (filterMode === 'different') {
-      return body.filter((row) => {
-        // TODO(ian): This works for strings, but not objects.
-        return !row.outputs.every((output) => output.text === row.outputs[0].text);
-      });
-    }
-    return body;
-  }, [body, failureFilter, filterMode]);
+    const searchRegex = new RegExp(searchText, 'i');
+    return body.filter((row) => {
+      const outputsPassFilter =
+        filterMode === 'failures'
+          ? row.outputs.some((output, idx) => {
+              const columnId = `Prompt ${idx + 1}`;
+              return failureFilter[columnId] && !output.pass;
+            })
+          : filterMode === 'different'
+          ? !row.outputs.every((output) => output.text === row.outputs[0].text)
+          : true;
+
+      const outputsMatchSearch = searchText
+        ? row.outputs.some((output) => {
+            const stringifiedOutput = `${output.text} ${Object.keys(output.namedScores)} ${
+              output.gradingResult?.reason
+            }`;
+            return searchRegex.test(stringifiedOutput);
+          })
+        : true;
+
+      return outputsPassFilter && outputsMatchSearch;
+    });
+  }, [body, failureFilter, filterMode, searchText]);
 
   const reactTable = useReactTable({
     data: filteredBody,
