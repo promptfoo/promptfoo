@@ -30,13 +30,13 @@ interface BedrockClaudeCompletionOptions extends BedrockOptions {
 }
 
 interface IBedrockModel {
-  params: (config: BedrockOptions, prompt: string) => any,
+  params: (config: BedrockOptions, prompt: string, stop: string[]) => any,
   output: (responseJson: any) => any,
 }
 
 const BEDROCK_MODEL = {
   CLAUDE: {
-    params: (config: BedrockClaudeCompletionOptions, prompt: string) => ({
+    params: (config: BedrockClaudeCompletionOptions, prompt: string, stop: string[]) => ({
       prompt: `${Anthropic.HUMAN_PROMPT} ${prompt} ${Anthropic.AI_PROMPT}`,
       max_tokens_to_sample:
         config?.max_tokens_to_sample || parseInt(process.env.AWS_BEDROCK_MAX_TOKENS || '1024'),
@@ -49,7 +49,7 @@ const BEDROCK_MODEL = {
     },
   },
   TITAN_TEXT: {
-    params: (config: BedrockTextGenerationOptions, prompt: string) => ({
+    params: (config: BedrockTextGenerationOptions, prompt: string, stop: string[]) => ({
       inputText: prompt,
       textGenerationConfig: {
         maxTokenCount: config?.textGenerationConfig?.maxTokenCount || parseInt(process.env.AWS_BEDROCK_MAX_TOKENS || '1024'),
@@ -133,7 +133,7 @@ export class AwsBedrockCompletionProvider implements ApiProvider {
     }
 
     const model = AWS_BEDROCK_MODELS[this.modelName];
-    const params = model.params(this.config, prompt);
+    const params = model.params(this.config, prompt, stop);
 
     logger.debug(`Calling Amazon Bedrock API: ${JSON.stringify(params)}`);
 
