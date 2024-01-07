@@ -7,29 +7,82 @@ import type { BedrockRuntime } from '@aws-sdk/client-bedrock-runtime';
 
 import type { ApiProvider, EnvOverrides, ProviderResponse } from '../types.js';
 
-interface BedrockCompletionOptions {
+interface BedrockOptions {
   region?: string;
+}
+
+interface TextGenerationOptions {
+  maxTokenCount?: number;
+  stopSequences?: Array<string>;
+  temperature?: number;
+  topP?: number;
+}
+
+interface BedrockTextGenerationOptions extends BedrockOptions {
+  textGenerationConfig?: TextGenerationOptions
+}
+
+interface BedrockClaudeCompletionOptions extends BedrockOptions {
   max_tokens_to_sample?: number;
   temperature?: number;
   top_p?: number;
   top_k?: number;
 }
 
+interface IBedrockModel {
+  params: (config: BedrockOptions, prompt: string) => any,
+  output: (responseJson: any) => any,
+}
+
+const BEDROCK_MODEL = {
+  CLAUDE: {
+    params: (config: BedrockClaudeCompletionOptions, prompt: string) => ({
+      prompt: `${Anthropic.HUMAN_PROMPT} ${prompt} ${Anthropic.AI_PROMPT}`,
+      max_tokens_to_sample:
+        config?.max_tokens_to_sample || parseInt(process.env.AWS_BEDROCK_MAX_TOKENS || '1024'),
+      temperature:
+        config.temperature ?? parseFloat(process.env.AWS_BEDROCK_TEMPERATURE || '0'),
+      stop_sequences: stop,
+    }),
+    output: (responseJson: any) => {
+      return responseJson?.completion;
+    },
+  },
+  TITAN_TEXT: {
+    params: (config: BedrockTextGenerationOptions, prompt: string) => ({
+      inputText: prompt,
+      textGenerationConfig: {
+        maxTokenCount: config?.textGenerationConfig?.maxTokenCount || parseInt(process.env.AWS_BEDROCK_MAX_TOKENS || '1024'),
+        temperature: config?.textGenerationConfig?.temperature || parseFloat(process.env.AWS_BEDROCK_TEMPERATURE || '0'),
+        topP: config?.textGenerationConfig?.topP || parseFloat(process.env.AWS_BEDROCK_TOP_P || '1'),
+        stopSequences: config?.textGenerationConfig?.stopSequences || stop,
+      }
+    }),
+    output: (responseJson: any) => {
+      return responseJson?.results[0]?.outputText;
+    },
+  }
+}
+
+const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
+  'anthropic.claude-instant-v1': BEDROCK_MODEL.CLAUDE,
+  'anthropic.claude-v1': BEDROCK_MODEL.CLAUDE,
+  'anthropic.claude-v2': BEDROCK_MODEL.CLAUDE,
+  'amazon.titan-text-lite-v1': BEDROCK_MODEL.TITAN_TEXT,
+  'amazon.titan-text-express-v1': BEDROCK_MODEL.TITAN_TEXT,
+};
+
 export class AwsBedrockCompletionProvider implements ApiProvider {
-  static AWS_BEDROCK_COMPLETION_MODELS = [
-    'anthropic.claude-instant-v1',
-    'anthropic.claude-v1',
-    'anthropic.claude-v2',
-  ];
+  static AWS_BEDROCK_COMPLETION_MODELS = Object.keys(AWS_BEDROCK_MODELS);
 
   modelName: string;
-  config: BedrockCompletionOptions;
+  config: BedrockOptions;
   env?: EnvOverrides;
   bedrock?: BedrockRuntime;
 
   constructor(
     modelName: string,
-    options: { config?: BedrockCompletionOptions; id?: string; env?: EnvOverrides } = {},
+    options: { config?: BedrockOptions; id?: string; env?: EnvOverrides } = {},
   ) {
     const { config, id, env } = options;
     this.env = env;
@@ -79,14 +132,8 @@ export class AwsBedrockCompletionProvider implements ApiProvider {
       throw new Error(`BEDROCK_STOP is not a valid JSON string: ${err}`);
     }
 
-    const params = {
-      prompt: `${Anthropic.HUMAN_PROMPT} ${prompt} ${Anthropic.AI_PROMPT}`,
-      max_tokens_to_sample:
-        this.config?.max_tokens_to_sample || parseInt(process.env.AWS_BEDROCK_MAX_TOKENS || '1024'),
-      temperature:
-        this.config.temperature ?? parseFloat(process.env.AWS_BEDROCK_TEMPERATURE || '0'),
-      stop_sequences: stop,
-    };
+    const model = AWS_BEDROCK_MODELS[this.modelName];
+    const params = model.params(this.config, prompt);
 
     logger.debug(`Calling Amazon Bedrock API: ${JSON.stringify(params)}`);
 
@@ -129,7 +176,7 @@ export class AwsBedrockCompletionProvider implements ApiProvider {
     }
     try {
       return {
-        output: JSON.parse(response.body.transformToString()).completion,
+        output: model.output(JSON.parse(response.body.transformToString())),
         tokenUsage: {}, // TODO: add token usage once Amazon Bedrock API supports it
       };
     } catch (err) {
