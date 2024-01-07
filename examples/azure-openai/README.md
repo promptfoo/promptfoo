@@ -2,7 +2,9 @@ This example shows how you can use promptfoo to generate a side-by-side eval of 
 
 Set the `AZURE_OPENAI_API_KEY` environment variable before running.
 
-Configure in `promptfooconfig.yaml`. Run with:
+See https://promptfoo.dev/docs/providers/azure/ for more Azure setup information.
+
+Edit configuration in `promptfooconfig.yaml`. Run with:
 
 ```
 promptfoo eval
