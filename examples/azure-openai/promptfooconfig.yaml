@@ -20,6 +20,6 @@ tests:
       - type: similar
         value: Bananas are naturally radioactive.
         provider:
-          id: azureopenai:chat:gpt-35-turbo-deployment1
+          id: azureopenai:embeddings:ada-deployment1
           config:
             apiHost: 'your-org.openai.azure.com'
