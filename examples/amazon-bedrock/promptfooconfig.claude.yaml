@@ -1,0 +1,16 @@
+prompts:
+  - 'Convert this English to {{language}}: {{input}}'
+  - 'Translate to {{language}}: {{input}}'
+providers:
+  - id: bedrock:completion:anthropic.claude-instant-v1
+    config:
+      region: 'us-west-2'
+      temperature: 0.7
+      max_tokens_to_sample: 256
+tests:
+  - vars:
+      language: French
+      input: Hello world
+  - vars:
+      language: Spanish
+      input: Where is the library?

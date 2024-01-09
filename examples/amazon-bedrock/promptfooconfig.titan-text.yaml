@@ -1,0 +1,19 @@
+prompts:
+  - 'Convert this English to {{language}}: {{input}}'
+  - 'Translate to {{language}}: {{input}}'
+providers:
+  - id: bedrock:completion:amazon.titan-text-lite-v1
+    config:
+      region: 'us-west-2'
+      textGenerationConfig:
+        maxTokenCount: 400
+        temperature: 0.3
+        stopSequences: []
+        topP: 0.9
+tests:
+  - vars:
+      language: French
+      input: Hello world
+  - vars:
+      language: Spanish
+      input: Where is the library?
