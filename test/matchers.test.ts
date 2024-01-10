@@ -53,7 +53,7 @@ describe('matchesSimilarity', () => {
 
     const result = await matchesSimilarity(expected, output, threshold);
     expect(result.pass).toBeTruthy();
-    expect(result.reason).toBe('Similarity 1 is greater than threshold 0.5');
+    expect(result.reason).toBe('Similarity 1.00 is greater than threshold 0.5');
   });
 
   it('should fail when similarity is below the threshold', async () => {
@@ -63,7 +63,7 @@ describe('matchesSimilarity', () => {
 
     const result = await matchesSimilarity(expected, output, threshold);
     expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe('Similarity 0 is less than threshold 0.9');
+    expect(result.reason).toBe('Similarity 0.00 is less than threshold 0.9');
   });
 
   it('should fail when inverted similarity is above the threshold', async () => {
@@ -73,7 +73,7 @@ describe('matchesSimilarity', () => {
 
     const result = await matchesSimilarity(expected, output, threshold, true /* invert */);
     expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe('Similarity 1 is greater than threshold 0.5');
+    expect(result.reason).toBe('Similarity 1.00 is greater than threshold 0.5');
   });
 
   it('should pass when inverted similarity is below the threshold', async () => {
@@ -83,7 +83,7 @@ describe('matchesSimilarity', () => {
 
     const result = await matchesSimilarity(expected, output, threshold, true /* invert */);
     expect(result.pass).toBeTruthy();
-    expect(result.reason).toBe('Similarity 0 is less than threshold 0.9');
+    expect(result.reason).toBe('Similarity 0.00 is less than threshold 0.9');
   });
 
   it('should use the overridden simmilarity grading config', async () => {
@@ -112,7 +112,7 @@ describe('matchesSimilarity', () => {
 
     const result = await matchesSimilarity(expected, output, threshold, false, grading);
     expect(result.pass).toBeTruthy();
-    expect(result.reason).toBe('Similarity 1 is greater than threshold 0.5');
+    expect(result.reason).toBe('Similarity 1.00 is greater than threshold 0.5');
     expect(mockCallApi).toHaveBeenCalled();
 
     mockCallApi.mockRestore();

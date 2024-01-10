@@ -177,8 +177,10 @@ export async function matchesSimilarity(
 
   const similarity = cosineSimilarity(expectedEmbedding.embedding, outputEmbedding.embedding);
   const pass = inverse ? similarity <= threshold : similarity >= threshold;
-  const greaterThanReason = `Similarity ${similarity} is greater than threshold ${threshold}`;
-  const lessThanReason = `Similarity ${similarity} is less than threshold ${threshold}`;
+  const greaterThanReason = `Similarity ${similarity.toFixed(
+    2,
+  )} is greater than threshold ${threshold}`;
+  const lessThanReason = `Similarity ${similarity.toFixed(2)} is less than threshold ${threshold}`;
   if (pass) {
     return {
       pass: true,
