@@ -83,14 +83,17 @@ export async function getGradingProvider(
     // Defined as an ApiProvider interface
     finalProvider = provider as ApiProvider;
   } else if (typeof provider === 'object') {
-    // Defined as embedding, classification, or text record?
     const typeValue = (provider as ProviderTypeMap)[type];
-    invariant(typeof typeValue === 'object', `Provider of type ${type} must be an object`);
     if (typeValue) {
-      finalProvider = await loadFromProviderOptions(typeValue as ProviderOptions);
-    } else {
+      // Defined as embedding, classification, or text record
+      finalProvider = await getGradingProvider(type, typeValue, defaultProvider);
+    } else if ((provider as ProviderOptions).id) {
       // Defined as ProviderOptions
       finalProvider = await loadFromProviderOptions(provider as ProviderOptions);
+    } else {
+      throw new Error(
+        `Invalid provider definition for output type '${type}': ${JSON.stringify(provider, null, 2)}`,
+      );
     }
   } else {
     finalProvider = defaultProvider;
@@ -98,7 +101,7 @@ export async function getGradingProvider(
   return finalProvider;
 }
 
-async function getAndCheckProvider(
+export async function getAndCheckProvider(
   type: 'embedding' | 'classification' | 'text',
   provider: GradingConfig['provider'],
   defaultProvider: ApiProvider | null,
@@ -113,17 +116,24 @@ async function getAndCheckProvider(
     requiredMethod = 'callClassificationApi';
   }
 
-  invariant(finalProvider, `No provider found for ${checkName}`);
+  invariant(finalProvider, `No provider found for '${checkName}'`);
   if (typeof (finalProvider as any)[requiredMethod] !== 'function') {
-    throw new Error(
-      `Provider ${finalProvider.id()} does not implement ${requiredMethod} for ${checkName}, falling back to default`,
-    );
+    if (defaultProvider) {
+      console.warn(
+        `Provider ${finalProvider.id()} does not implement ${requiredMethod} for '${checkName}', falling back to default`,
+      );
+      return defaultProvider;
+    } else {
+      throw new Error(
+        `Provider ${finalProvider.id()} must implement ${requiredMethod} for '${checkName}'`,
+      );
+    }
   }
 
   invariant(finalProvider, `No provider found for ${checkName}`);
   invariant(
     typeof (finalProvider as any)[requiredMethod] === 'function',
-    `Provider ${finalProvider.id()} must implement ${requiredMethod} for ${checkName}`,
+    `Provider ${finalProvider.id()} must implement ${requiredMethod} for '${checkName}'`,
   );
 
   return finalProvider;

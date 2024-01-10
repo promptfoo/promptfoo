@@ -119,13 +119,14 @@ export interface CsvRow {
 
 export type VarMapping = Record<string, string>;
 
+export type ProviderTypeMap = Partial<Record<
+  'embedding' | 'classification' | 'text',
+  string | ProviderOptions | ApiProvider
+>>;
+
 export interface GradingConfig {
   rubricPrompt?: string;
-  provider?:
-    | string
-    | ProviderOptions
-    | ApiProvider
-    | Record<'embedding' | 'classification' | 'text', string>;
+  provider?: string | ProviderOptions | ApiProvider | ProviderTypeMap;
   factuality?: {
     subset?: number;
     superset?: number;
