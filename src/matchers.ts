@@ -23,6 +23,7 @@ import type {
   GradingConfig,
   GradingResult,
   ProviderOptions,
+  ProviderTypeMap,
   TokenUsage,
 } from './types';
 
@@ -76,19 +77,21 @@ export async function getGradingProvider(
 ): Promise<ApiProvider | null> {
   let finalProvider: ApiProvider | null;
   if (typeof provider === 'string') {
+    // Defined as a string
     finalProvider = await loadApiProvider(provider);
   } else if (typeof provider === 'object' && typeof (provider as ApiProvider).id === 'function') {
-    // Defined directly as an ApiProvider
+    // Defined as an ApiProvider interface
     finalProvider = provider as ApiProvider;
   } else if (typeof provider === 'object') {
-    // Defined as embedding, classification, or text record
-    const typeValue = (provider as Record<string, string>)[type];
+    // Defined as embedding, classification, or text record?
+    const typeValue = (provider as ProviderTypeMap)[type];
+    invariant(typeof typeValue === 'object', `Provider of type ${type} must be an object`);
     if (typeValue) {
-      finalProvider = await getGradingProvider(type, typeValue, defaultProvider);
+      finalProvider = await loadFromProviderOptions(typeValue as ProviderOptions);
+    } else {
+      // Defined as ProviderOptions
+      finalProvider = await loadFromProviderOptions(provider as ProviderOptions);
     }
-
-    // Defined as ProviderOptions
-    finalProvider = await loadFromProviderOptions(provider as ProviderOptions);
   } else {
     finalProvider = defaultProvider;
   }
