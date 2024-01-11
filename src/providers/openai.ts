@@ -36,6 +36,7 @@ type OpenAiCompletionOptions = OpenAiSharedOptions & {
   response_format?: { type: 'json_object' };
   stop?: string[];
   seed?: number;
+  passthrough?: object;
 };
 
 function failApiCall(err: any) {
@@ -247,6 +248,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       best_of: this.config.best_of ?? parseInt(process.env.OPENAI_BEST_OF || '1'),
       ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
       ...(stop ? { stop } : {}),
+      ...(this.config.passthrough || {}),
     };
     logger.debug(`Calling OpenAI API: ${JSON.stringify(body)}`);
     let data,
@@ -387,6 +389,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       ...(this.config.response_format ? { response_format: this.config.response_format } : {}),
       ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
       ...(this.config.stop ? { stop: this.config.stop } : {}),
+      ...(this.config.passthrough || {}),
     };
     logger.debug(`Calling OpenAI API: ${JSON.stringify(body)}`);
 
