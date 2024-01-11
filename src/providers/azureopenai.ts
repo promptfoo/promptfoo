@@ -1,5 +1,3 @@
-import { ClientSecretCredential } from '@azure/identity';
-
 import logger from '../logger';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
 import { fetchWithCache } from '../cache';
@@ -73,6 +71,7 @@ class AzureOpenAiGenericProvider implements ApiProvider {
         this.config?.azureClientId &&
         this.config?.azureTenantId
       ) {
+        const { ClientSecretCredential } = await import('@azure/identity');
         const credential = new ClientSecretCredential(
           this.config.azureTenantId,
           this.config.azureClientId,
