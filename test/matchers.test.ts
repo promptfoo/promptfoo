@@ -1,4 +1,4 @@
-import { getGradingProvider, matchesClassification } from '../src/matchers';
+import { getAndCheckProvider, getGradingProvider, matchesClassification } from '../src/matchers';
 import { OpenAiChatCompletionProvider, OpenAiEmbeddingProvider } from '../src/providers/openai';
 import {
   matchesSimilarity,
@@ -19,6 +19,8 @@ import type {
   ProviderResponse,
   ProviderClassificationResponse,
   ApiProvider,
+  ProviderOptions,
+  ProviderTypeMap,
 } from '../src/types';
 import { HuggingfaceTextClassificationProvider } from '../src/providers/huggingface';
 
@@ -397,6 +399,98 @@ describe('getGradingProvider', () => {
   it('should return the default provider when provider is not provided', async () => {
     const provider = await getGradingProvider('text', undefined, DefaultGradingProvider);
     expect(provider).toBe(DefaultGradingProvider);
+  });
+});
+
+describe('getAndCheckProvider', () => {
+  it('should return the default provider when provider is not defined', async () => {
+    expect(await getAndCheckProvider('text', undefined, DefaultGradingProvider, 'test check')).toBe(
+      DefaultGradingProvider,
+    );
+  });
+
+  it('should return the default provider when provider does not support type', async () => {
+    const provider = {
+      id: () => 'test-provider',
+      callApi: () => Promise.resolve({ output: 'test' }),
+    };
+    expect(
+      await getAndCheckProvider('embedding', provider, DefaultEmbeddingProvider, 'test check'),
+    ).toBe(DefaultEmbeddingProvider);
+  });
+
+  it('should return the provider if it implements the required method', async () => {
+    const provider = {
+      id: () => 'test-provider',
+      callApi: () => Promise.resolve({ output: 'test' }),
+      callEmbeddingApi: () => Promise.resolve({ embedding: [] }),
+    };
+    const result = await getAndCheckProvider(
+      'embedding',
+      provider,
+      DefaultEmbeddingProvider,
+      'test check',
+    );
+    expect(result).toBe(provider);
+  });
+});
+
+describe('getGradingProvider', () => {
+  it('should return the default provider when no provider is specified', async () => {
+    const provider = await getGradingProvider('text', undefined, DefaultGradingProvider);
+    expect(provider).toBe(DefaultGradingProvider);
+  });
+
+  it('should return a specific provider when a provider id is specified', async () => {
+    const provider = await getGradingProvider('text', 'openai:chat:foo', DefaultGradingProvider);
+    // loadApiProvider removes `chat` from the id
+    expect(provider?.id()).toBe('openai:foo');
+  });
+
+  it('should return a provider from ApiProvider when specified', async () => {
+    const providerOptions: ApiProvider = {
+      id: () => 'custom-provider',
+      callApi: async () => ({}),
+    };
+    const provider = await getGradingProvider('text', providerOptions, DefaultGradingProvider);
+    expect(provider?.id()).toBe('custom-provider');
+  });
+
+  it('should return a provider from ProviderTypeMap when specified', async () => {
+    const providerTypeMap: ProviderTypeMap = {
+      text: {
+        id: 'openai:chat:foo',
+      },
+      embedding: {
+        id: 'openai:embedding:bar',
+      },
+    };
+    const provider = await getGradingProvider('text', providerTypeMap, DefaultGradingProvider);
+    expect(provider?.id()).toBe('openai:chat:foo');
+  });
+
+  it('should return a provider from ProviderTypeMap with basic strings', async () => {
+    const providerTypeMap: ProviderTypeMap= {
+      text: 'openai:chat:foo',
+      embedding: 'openai:embedding:bar',
+    };
+    const provider = await getGradingProvider('text', providerTypeMap, DefaultGradingProvider);
+    expect(provider?.id()).toBe('openai:foo');
+  });
+
+  it('should throw an error when the provider does not match the type', async () => {
+    const providerTypeMap: ProviderTypeMap = {
+      embedding: {
+        id: 'openai:embedding:foo',
+      },
+    };
+    await expect(
+      getGradingProvider('text', providerTypeMap, DefaultGradingProvider),
+    ).rejects.toThrow(
+      new Error(
+        `Invalid provider definition for output type 'text': ${JSON.stringify(providerTypeMap, null, 2)}`,
+      ),
+    );
   });
 });
 
