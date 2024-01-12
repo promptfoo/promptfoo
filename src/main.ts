@@ -341,6 +341,7 @@ async function main() {
 
       const defaultTestRaw = fileConfig.defaultTest || defaultConfig.defaultTest;
       const config: Partial<UnifiedConfig> = {
+        description: fileConfig.description || defaultConfig.description,
         prompts: cmdObj.prompts || fileConfig.prompts || defaultConfig.prompts,
         providers: cmdObj.providers || fileConfig.providers || defaultConfig.providers,
         tests: cmdObj.tests || cmdObj.vars || fileConfig.tests || defaultConfig.tests,
