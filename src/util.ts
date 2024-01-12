@@ -312,8 +312,21 @@ export function writeOutput(
 ): void {
   const outputExtension = outputPath.split('.').pop()?.toLowerCase();
 
-  const outputToSimpleString = (output: EvaluateTableOutput) =>
-    `${output.pass ? '[PASS]' : '[FAIL]'} (${output.score.toFixed(2)}) ${output.text}`;
+  const outputToSimpleString = (output: EvaluateTableOutput) => {
+    const passFailText = output.pass ? '[PASS]' : '[FAIL]';
+    const namedScoresText = Object.entries(output.namedScores)
+      .map(([name, value]) => `${name}: ${value.toFixed(2)}`)
+      .join(', ');
+    const scoreText = namedScoresText.length > 0
+      ? `(${output.score.toFixed(2)}, ${namedScoresText})`
+      : `(${output.score.toFixed(2)})`;
+    const gradingResultText = output.gradingResult ? `Reason: ${output.gradingResult.reason}` : '';
+    return `${passFailText} ${scoreText}
+
+${output.text}
+
+${gradingResultText}`.trim();
+  };
 
   // Ensure the directory exists
   const outputDir = path.dirname(outputPath);
@@ -337,10 +350,11 @@ export function writeOutput(
   } else if (outputExtension === 'html') {
     const template = fs.readFileSync(`${getDirectory()}/tableOutput.html`, 'utf-8');
     const table = [
-      [...results.table.head.prompts, ...results.table.head.vars],
-      ...results.table.body.map((row) => [...row.outputs.map(outputToSimpleString), ...row.vars]),
+      [...results.table.head.vars, ...results.table.head.prompts.map((prompt) => prompt.display)],
+      ...results.table.body.map((row) => [...row.vars, ...row.outputs.map(outputToSimpleString)]),
     ];
     const htmlOutput = getNunjucksEngine().renderString(template, {
+      config,
       table,
       results: results.results,
     });

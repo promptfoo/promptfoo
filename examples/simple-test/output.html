@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width" />
-    <title>Table Output</title>
+    <title>Eval Output</title>
     <style>
       body {
         font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial,
@@ -34,40 +34,318 @@
   <body>
     <table>
       <thead>
-        <th>Rephrase this from English to Pirate: {{body}}</th>
-
-        <th>Pretend you&#39;re a pirate and speak these words: {{body}}</th>
-
+        
         <th>body</th>
+        
+        <th>Rephrase this from English to Pirate: {{body}}</th>
+        
+        <th>Pretend you're a pirate and speak these words: {{body}}</th>
+        
       </thead>
       <tbody>
+        
         <tr>
-          <td data-content="Ahoy thar, world!">Ahoy thar, world!</td>
+          
+          <td data-content="Yes">Yes</td>
+          
+          <td data-content="[FAIL] (0.00)
 
-          <td
-            data-content="Ahoy there, me hearties! Avast ye landlubbers! &#39;Tis I, a fearsome pirate, comin&#39; to ye from the seven seas. Ahoy, hello world!"
-          >
-            Ahoy there, me hearties! Avast ye landlubbers! &#39;Tis I, a fearsome pirate, comin&#39;
-            to ye from the seven seas. Ahoy, hello world!
-          </td>
+Expected output "Yarr" but got "Aye"
+---
+Aye
 
+Reason: Expected output "Yarr" but got "Aye"">[FAIL] (0.00)
+
+Expected output "Yarr" but got "Aye"
+---
+Aye
+
+Reason: Expected output "Yarr" but got "Aye"</td>
+          
+          <td data-content="[FAIL] (0.00)
+
+Expected output "Yarr" but got "Arr, me hearties! Yes, be the word ye be seekin'."
+---
+Arr, me hearties! Yes, be the word ye be seekin'.
+
+Reason: Expected output "Yarr" but got "Arr, me hearties! Yes, be the word ye be seekin'."">[FAIL] (0.00)
+
+Expected output "Yarr" but got "Arr, me hearties! Yes, be the word ye be seekin'."
+---
+Arr, me hearties! Yes, be the word ye be seekin'.
+
+Reason: Expected output "Yarr" but got "Arr, me hearties! Yes, be the word ye be seekin'."</td>
+          
+        </tr>
+        
+        <tr>
+          
+          <td data-content="I'm hungry">I'm hungry</td>
+          
+          <td data-content="[FAIL] (0.00)
+
+Expected output to contain "grub"
+---
+I be feelin' a mighty hunger.
+
+Reason: Expected output to contain "grub"">[FAIL] (0.00)
+
+Expected output to contain "grub"
+---
+I be feelin' a mighty hunger.
+
+Reason: Expected output to contain "grub"</td>
+          
+          <td data-content="[FAIL] (0.00)
+
+Expected output to contain "grub"
+---
+Arr, me hearties! I be feelin' a mighty rumblin' in me belly, for I be famished like a scurvy dog! Me stomach be cryin' out for sustenance, ye see. I be yearnin' for a feast fit for a pirate, with a bounty of savory delights to quell this hunger within me. Aye, I be hungry, me mateys!
+
+Reason: Expected output to contain "grub"">[FAIL] (0.00)
+
+Expected output to contain "grub"
+---
+Arr, me hearties! I be feelin' a mighty rumblin' in me belly, for I be famished like a scurvy dog! Me stomach be cryin' out for sustenance, ye see. I be yearnin' for a feast fit for a pirate, with a bounty of savory delights to quell this hunger within me. Aye, I be hungry, me mateys!
+
+Reason: Expected output to contain "grub"</td>
+          
+        </tr>
+        
+        <tr>
+          
+          <td data-content="Output the story of your life in JSON">Output the story of your life in JSON</td>
+          
+          <td data-content="[PASS] (1.00)
+
+"Splice out the tale of yer life in JSON, matey!"
+
+Reason: All assertions passed">[PASS] (1.00)
+
+"Splice out the tale of yer life in JSON, matey!"
+
+Reason: All assertions passed</td>
+          
+          <td data-content="[PASS] (1.00)
+
+{
+  "name": "Captain Blackbeard",
+  "alias": "The Dread Pirate",
+  "occupation": "Pirate",
+  "birthplace": "Port Royal",
+  "birthyear": 1680,
+  "nationality": "English",
+  "crew": [
+    "Redbeard",
+    "One-Eyed Jack",
+    "Mad Anne",
+    "Salty Sam"
+  ],
+  "ships": [
+    {
+      "name": "The Black Pearl",
+      "type": "Sloop",
+      "year": 1700
+    },
+    {
+      "name": "The Revenge",
+      "type": "Frigate",
+      "year": 1715
+    }
+  ],
+  "treasures": [
+    {
+      "name": "Cursed Aztec Gold",
+      "value": "Priceless"
+    },
+    {
+      "name": "Emerald of the Sea",
+      "value": "500,000 gold coins"
+    },
+    {
+      "name": "Golden Chalice",
+      "value": "200,000 gold coins"
+    }
+  ],
+  "adventures": [
+    {
+      "year": 1698,
+      "location": "Tortuga",
+      "description": "First encounter with pirates, joined crew of Captain Redbeard."
+    },
+    {
+      "year": 1702,
+      "location": "Isla de Muerta",
+      "description": "Discovered cursed Aztec gold, narrowly escaped the wrath of cursed pirates."
+    },
+    {
+      "year": 1705,
+      "location": "Port Royal",
+      "description": "Led a successful raid on the governor's mansion, acquired valuable treasures."
+    },
+    {
+      "year": 1710,
+      "location": "Treasure Island",
+      "description": "Unearthed the hidden treasure of Captain Flint, became legendary among pirates."
+    },
+    {
+      "year": 1718,
+      "location": "Nassau",
+      "description": "Declared war against the British Empire, led a fleet of pirate ships."
+    }
+  ]
+}
+
+Reason: All assertions passed">[PASS] (1.00)
+
+{
+  "name": "Captain Blackbeard",
+  "alias": "The Dread Pirate",
+  "occupation": "Pirate",
+  "birthplace": "Port Royal",
+  "birthyear": 1680,
+  "nationality": "English",
+  "crew": [
+    "Redbeard",
+    "One-Eyed Jack",
+    "Mad Anne",
+    "Salty Sam"
+  ],
+  "ships": [
+    {
+      "name": "The Black Pearl",
+      "type": "Sloop",
+      "year": 1700
+    },
+    {
+      "name": "The Revenge",
+      "type": "Frigate",
+      "year": 1715
+    }
+  ],
+  "treasures": [
+    {
+      "name": "Cursed Aztec Gold",
+      "value": "Priceless"
+    },
+    {
+      "name": "Emerald of the Sea",
+      "value": "500,000 gold coins"
+    },
+    {
+      "name": "Golden Chalice",
+      "value": "200,000 gold coins"
+    }
+  ],
+  "adventures": [
+    {
+      "year": 1698,
+      "location": "Tortuga",
+      "description": "First encounter with pirates, joined crew of Captain Redbeard."
+    },
+    {
+      "year": 1702,
+      "location": "Isla de Muerta",
+      "description": "Discovered cursed Aztec gold, narrowly escaped the wrath of cursed pirates."
+    },
+    {
+      "year": 1705,
+      "location": "Port Royal",
+      "description": "Led a successful raid on the governor's mansion, acquired valuable treasures."
+    },
+    {
+      "year": 1710,
+      "location": "Treasure Island",
+      "description": "Unearthed the hidden treasure of Captain Flint, became legendary among pirates."
+    },
+    {
+      "year": 1718,
+      "location": "Nassau",
+      "description": "Declared war against the British Empire, led a fleet of pirate ships."
+    }
+  ]
+}
+
+Reason: All assertions passed</td>
+          
+        </tr>
+        
+        <tr>
+          
           <td data-content="Hello world">Hello world</td>
-        </tr>
+          
+          <td data-content="[FAIL] (0.64)
 
+Python code returned false
+max(0, len(output) - 300)
+---
+Ahoy thar, mateys!
+
+Reason: Python code returned false
+max(0, len(output) - 300)">[FAIL] (0.64)
+
+Python code returned false
+max(0, len(output) - 300)
+---
+Ahoy thar, mateys!
+
+Reason: Python code returned false
+max(0, len(output) - 300)</td>
+          
+          <td data-content="[FAIL] (0.64)
+
+Python code returned false
+max(0, len(output) - 300)
+---
+Ahoy, me hearties! Avast ye, landlubbers! 'Tis I, a fearsome pirate, settin' sail on the vast seas. Hear me words, ye scurvy dogs: "Hello world!"
+
+Reason: Python code returned false
+max(0, len(output) - 300)">[FAIL] (0.64)
+
+Python code returned false
+max(0, len(output) - 300)
+---
+Ahoy, me hearties! Avast ye, landlubbers! 'Tis I, a fearsome pirate, settin' sail on the vast seas. Hear me words, ye scurvy dogs: "Hello world!"
+
+Reason: Python code returned false
+max(0, len(output) - 300)</td>
+          
+        </tr>
+        
         <tr>
-          <td data-content="I be feelin&#39; a mighty need for grub, matey.">
-            I be feelin&#39; a mighty need for grub, matey.
-          </td>
+          
+          <td data-content="The quick brown fox jumps over the lazy dog">The quick brown fox jumps over the lazy dog</td>
+          
+          <td data-content="[FAIL] (0.50)
 
-          <td
-            data-content="Arrr, me belly be rumblin&#39;! I be needin&#39; some grub, mateys! Bring me some vittles or ye&#39;ll be walkin&#39; the plank!"
-          >
-            Arrr, me belly be rumblin&#39;! I be needin&#39; some grub, mateys! Bring me some
-            vittles or ye&#39;ll be walkin&#39; the plank!
-          </td>
+Expected output to contain "arrr"
+---
+Thar swift brown fox be jumpin' o'er thar lazy dog.
 
-          <td data-content="I&#39;m hungry">I&#39;m hungry</td>
+Reason: Expected output to contain "arrr"">[FAIL] (0.50)
+
+Expected output to contain "arrr"
+---
+Thar swift brown fox be jumpin' o'er thar lazy dog.
+
+Reason: Expected output to contain "arrr"</td>
+          
+          <td data-content="[FAIL] (0.50)
+
+Expected output to contain "arrr"
+---
+Arr, me hearties! Listen up, ye scurvy dogs! The quick brown fox be jumpin' o'er the lazy dog, aye!
+
+Reason: Expected output to contain "arrr"">[FAIL] (0.50)
+
+Expected output to contain "arrr"
+---
+Arr, me hearties! Listen up, ye scurvy dogs! The quick brown fox be jumpin' o'er the lazy dog, aye!
+
+Reason: Expected output to contain "arrr"</td>
+          
         </tr>
+        
       </tbody>
     </table>
   </body>
