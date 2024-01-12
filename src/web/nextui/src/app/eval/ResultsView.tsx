@@ -180,18 +180,24 @@ export default function ResultsView({
             {recentEvals && recentEvals.length > 0 && (
               <FormControl sx={{ m: 1, minWidth: 200 }} size="small">
                 <Autocomplete
+                  size="small"
                   options={recentEvals}
-                  getOptionLabel={(option: { label: string }) => option.label}
-                  style={{ width: 300 }}
-                  renderInput={(params: AutocompleteRenderInputParams) => (
-                    <TextField {...params} label="Eval run" variant="outlined" key={params.id} />
+                  renderOption={(props, option) => (
+                    <li {...props} key={option.id}>
+                      {option.label}
+                    </li>
                   )}
-                  defaultValue={{ label: defaultEvalId || 'unknown' }}
+                  style={{ width: 350 }}
+                  renderInput={(params: AutocompleteRenderInputParams) => (
+                    <TextField {...params} label="Eval run" variant="outlined" />
+                  )}
+                  defaultValue={recentEvals[0]}
                   onChange={(event, newValue: { label: string; id?: string } | null) => {
                     if (newValue && newValue.id) {
                       onRecentEvalSelected(newValue.id);
                     }
                   }}
+                  disableClearable
                 />
               </FormControl>
             )}
