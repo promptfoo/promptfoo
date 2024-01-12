@@ -15,12 +15,15 @@ class CustomApiProvider {
 
   async callApi(prompt) {
     const body = {
-      model: 'text-davinci-002',
-      prompt,
+      model: 'gpt-3.5-turbo',
+      messages: [{
+        role: 'user',
+        content: prompt,
+      }],
       max_tokens: parseInt(this.config?.max_tokens, 10) || 1024,
       temperature: parseFloat(this.config?.temperature) || 0,
     };
-    const response = await fetch('https://api.openai.com/v1/completions', {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -31,7 +34,7 @@ class CustomApiProvider {
 
     const data = await response.json();
     const ret = {
-      output: data.choices[0].text,
+      output: data.choices[0].message.content,
       tokenUsage: {
         total: data.usage.total_tokens,
         prompt: data.usage.prompt_tokens,
