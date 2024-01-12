@@ -2,6 +2,7 @@ import * as React from 'react';
 
 import invariant from 'tiny-invariant';
 
+import Autocomplete, { AutocompleteRenderInputParams } from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
@@ -178,20 +179,20 @@ export default function ResultsView({
           <Box>
             {recentEvals && recentEvals.length > 0 && (
               <FormControl sx={{ m: 1, minWidth: 200 }} size="small">
-                <InputLabel>Eval run</InputLabel>
-                <Select
-                  key={recentEvals.map((e) => e.id).join(',')}
-                  className="recent-files"
-                  label="Previous runs"
-                  defaultValue={defaultEvalId}
-                  onChange={(e: SelectChangeEvent) => onRecentEvalSelected(e.target.value)}
-                >
-                  {recentEvals.map((file) => (
-                    <MenuItem key={file.id} value={file.id}>
-                      {file.label}
-                    </MenuItem>
-                  ))}
-                </Select>
+                <Autocomplete
+                  options={recentEvals}
+                  getOptionLabel={(option: { label: string }) => option.label}
+                  style={{ width: 300 }}
+                  renderInput={(params: AutocompleteRenderInputParams) => (
+                    <TextField {...params} label="Eval run" variant="outlined" key={params.id} />
+                  )}
+                  defaultValue={{ label: defaultEvalId || 'unknown' }}
+                  onChange={(event, newValue: { label: string; id?: string } | null) => {
+                    if (newValue && newValue.id) {
+                      onRecentEvalSelected(newValue.id);
+                    }
+                  }}
+                />
               </FormControl>
             )}
           </Box>
