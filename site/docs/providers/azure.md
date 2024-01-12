@@ -61,6 +61,8 @@ These credentials will be used to obtain an access token for the Azure OpenAI AP
 
 The `azureAuthorityHost` defaults to 'https://login.microsoftonline.com' if not specified. The `azureTokenScope` defaults to 'https://cognitiveservices.azure.com/.default', the scope required to authenticate with Azure Cognitive Services.
 
+You must also install a peer dependency from Azure: `npm i @azure/identity`
+
 ## Model-graded tests
 
 [Model-graded assertions](/docs/configuration/expected-outputs/model-graded/) such as `factuality` or `llm-rubric` use OpenAI by default. If you are using Azure, you must override the grader to point to your Azure deployment.
