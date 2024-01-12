@@ -239,10 +239,11 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
   );
   const configsAreObjects = configs.every((config) => typeof config.prompts === 'object');
   let prompts: UnifiedConfig['prompts'] = configsAreStringOrArray ? [] : {};
-  
+
   const makeAbsolute = (configPath: string, relativePath: string) => {
     if (relativePath.startsWith('file://')) {
-      relativePath = 'file://' + path.resolve(path.dirname(configPath), relativePath.slice('file://'.length));
+      relativePath =
+        'file://' + path.resolve(path.dirname(configPath), relativePath.slice('file://'.length));
     }
     return relativePath;
   };
@@ -396,7 +397,9 @@ export function writeLatestResults(results: EvaluateSummary, config: Partial<Uni
   }
 }
 
-export function listPreviousResults(): string[] {
+const resultsCache: { [fileName: string]: ResultsFile | undefined } = {};
+
+export function listPreviousResults(): { fileName: string; description?: string }[] {
   const directory = path.join(getConfigDirectoryPath(), 'output');
   const files = fs.readdirSync(directory);
   const resultsFiles = files.filter((file) => file.startsWith('eval-') && file.endsWith('.json'));
@@ -405,7 +408,21 @@ export function listPreviousResults(): string[] {
     const statB = fs.statSync(path.join(directory, b));
     return statA.birthtime.getTime() - statB.birthtime.getTime(); // sort in ascending order
   });
-  return sortedFiles;
+  return sortedFiles.map((fileName) => {
+    if (!resultsCache[fileName]) {
+      try {
+        const fileContents = fs.readFileSync(path.join(directory, fileName), 'utf8');
+        const data = yaml.load(fileContents) as ResultsFile;
+        resultsCache[fileName] = data;
+      } catch (error) {
+        logger.warn(`Failed to read results from ${fileName}:\n${error}`);
+      }
+    }
+    return {
+      fileName,
+      description: resultsCache[fileName]?.config.description,
+    };
+  });
 }
 
 const RESULT_HISTORY_LENGTH = parseInt(process.env.RESULT_HISTORY_LENGTH || '', 10) || 100;
@@ -413,7 +430,7 @@ const RESULT_HISTORY_LENGTH = parseInt(process.env.RESULT_HISTORY_LENGTH || '', 
 export function cleanupOldResults(remaining = RESULT_HISTORY_LENGTH) {
   const sortedFiles = listPreviousResults();
   for (let i = 0; i < sortedFiles.length - remaining; i++) {
-    fs.unlinkSync(path.join(getConfigDirectoryPath(), 'output', sortedFiles[i]));
+    fs.unlinkSync(path.join(getConfigDirectoryPath(), 'output', sortedFiles[i].fileName));
   }
 }
 
@@ -469,10 +486,10 @@ export function updateResult(filename: string, newTable: EvaluateTable): void {
     const evalData = JSON.parse(fs.readFileSync(resultsPath, 'utf-8')) as ResultsFile;
     evalData.results.table = newTable;
     fs.writeFileSync(resultsPath, JSON.stringify(evalData, null, 2));
-    logger.info(`Updated results in ${resultsPath}`)
+    logger.info(`Updated results in ${resultsPath}`);
 
     const results = listPreviousResults();
-    if (filename === results[results.length - 1]) {
+    if (filename === results[results.length - 1].fileName) {
       // Overwite latest.json too
       fs.copyFileSync(resultsPath, getLatestResultsPath());
     }
@@ -513,8 +530,9 @@ export function getPromptsWithPredicate(
   const resultsFiles = listPreviousResults();
   const groupedPrompts: { [hash: string]: PromptWithMetadata } = {};
 
-  for (const filePath of resultsFiles) {
-    const file = readResult(filePath);
+  for (const fileMeta of resultsFiles) {
+    const { fileName } = fileMeta;
+    const file = readResult(fileName);
     if (!file) {
       continue;
     }
@@ -534,7 +552,7 @@ export function getPromptsWithPredicate(
           groupedPrompts[promptId].count += 1;
           groupedPrompts[promptId].evals.push({
             id: evalId,
-            filePath,
+            filePath: fileName,
             datasetId,
             metrics: prompt.metrics,
           });
@@ -545,11 +563,11 @@ export function getPromptsWithPredicate(
             prompt,
             recentEvalDate: new Date(createdAt),
             recentEvalId: evalId,
-            recentEvalFilepath: filePath,
+            recentEvalFilepath: fileName,
             evals: [
               {
                 id: evalId,
-                filePath,
+                filePath: fileName,
                 datasetId,
                 metrics: prompt.metrics,
               },
@@ -573,8 +591,9 @@ export function getTestCasesWithPredicate(
   const resultsFiles = listPreviousResults();
   const groupedTestCases: { [hash: string]: TestCasesWithMetadata } = {};
 
-  for (const filePath of resultsFiles) {
-    const file = readResult(filePath);
+  for (const fileMeta of resultsFiles) {
+    const { fileName } = fileMeta;
+    const file = readResult(fileName);
     if (!file) {
       continue;
     }
@@ -595,7 +614,7 @@ export function getTestCasesWithPredicate(
           id: sha256(prompt.raw),
           prompt,
           evalId,
-          evalFilepath: filePath,
+          evalFilepath: fileName,
         }));
         const promptsById: Record<string, TestCasesWithMetadataPrompt> = {};
         for (const prompt of groupedTestCases[datasetId].prompts.concat(newPrompts)) {
@@ -609,7 +628,7 @@ export function getTestCasesWithPredicate(
           id: createHash('sha256').update(prompt.raw).digest('hex'),
           prompt,
           evalId,
-          evalFilepath: filePath,
+          evalFilepath: fileName,
         }));
         const promptsById: Record<string, TestCasesWithMetadataPrompt> = {};
         for (const prompt of newPrompts) {
@@ -623,7 +642,7 @@ export function getTestCasesWithPredicate(
           testCases,
           recentEvalDate: new Date(createdAt),
           recentEvalId: evalId,
-          recentEvalFilepath: filePath,
+          recentEvalFilepath: fileName,
           prompts: Object.values(promptsById),
         };
       }
@@ -672,8 +691,9 @@ export function getEvalsWithPredicate(
 ): EvalWithMetadata[] {
   const ret: EvalWithMetadata[] = [];
   const resultsFiles = listPreviousResults();
-  for (const filePath of resultsFiles) {
-    const file = readResult(filePath);
+  for (const fileMeta of resultsFiles) {
+    const { fileName } = fileMeta;
+    const file = readResult(fileName);
     if (!file) {
       continue;
     }
@@ -682,7 +702,7 @@ export function getEvalsWithPredicate(
       const evalId = sha256(JSON.stringify(result.config));
       ret.push({
         id: evalId,
-        filePath,
+        filePath: fileName,
         date: createdAt,
         config: result.config,
         results: result.results,

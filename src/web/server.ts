@@ -85,7 +85,10 @@ export function startServer(port = 15500, apiBaseUrl = '', skipConfirmation = fa
     const previousResults = listPreviousResults();
     previousResults.reverse();
     res.json({
-      data: previousResults.map((filename) => ({ id: filename, label: filenameToDate(filename) })),
+      data: previousResults.map((fileMeta) => ({
+        id: fileMeta.fileName,
+        label: fileMeta.description || filenameToDate(fileMeta.fileName),
+      })),
     });
   });
 
@@ -156,7 +159,12 @@ export function startServer(port = 15500, apiBaseUrl = '', skipConfirmation = fa
   app.get('/results/:filename', (req, res) => {
     const filename = req.params.filename;
     const safeFilename = path.basename(filename);
-    if (safeFilename !== filename || !listPreviousResults().includes(safeFilename)) {
+    if (
+      safeFilename !== filename ||
+      !listPreviousResults()
+        .map((fileMeta) => fileMeta.fileName)
+        .includes(safeFilename)
+    ) {
       res.status(400).send('Invalid filename');
       return;
     }
