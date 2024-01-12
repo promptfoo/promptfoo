@@ -70,13 +70,13 @@ export default function Eval({
     return body.data;
   };
 
-  const fetchEvalById = async (id: string) => {
+  const fetchEvalById = React.useCallback(async (id: string) => {
     const resp = await fetch(`${await getApiBaseUrl()}/results/${id}`, { cache: 'no-store' });
     const body = await resp.json();
     setTable(body.data.results.table);
     setConfig(body.data.config);
     setFilePath(id);
-  };
+  }, [setTable, setConfig, setFilePath]);
 
   const handleRecentEvalSelection = async (id: string) => {
     if (IS_RUNNING_LOCALLY) {
@@ -170,7 +170,7 @@ export default function Eval({
         }
       });
     }
-  }, [fetchId, setTable, setConfig, preloadedData, setDefaultEvalId, file]);
+  }, [fetchId, setTable, setConfig, setFilePath, fetchEvalById, preloadedData, setDefaultEvalId, file]);
 
   if (failed) {
     return <div className="loading">404 Eval not found</div>;
