@@ -1,8 +1,8 @@
 ---
-sidebar_position: 100
+sidebar_position: 7
 ---
 
-# Model-graded evals
+# Model-graded metrics
 
 promptfoo supports several types of model-graded assertions:
 
