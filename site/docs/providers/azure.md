@@ -41,6 +41,32 @@ providers:
 All other [OpenAI provider](/docs/providers/openai) environment variables and configuration properties are supported.
 :::
 
+## Using client credentials
+
+To use client credentials for authentication with Azure, you need to set the following configuration variables:
+
+```yaml
+providers:
+  - id: azureopenai:chat:deploymentNameHere
+    config:
+      apiHost: 'xxxxxxxx.openai.azure.com'
+      azureClientId: 'your-azure-client-id'
+      azureClientSecret: 'your-azure-client-secret'
+      azureTenantId: 'your-azure-tenant-id'
+      azureAuthorityHost: 'https://login.microsoftonline.com' # Optional
+      azureTokenScope: 'https://cognitiveservices.azure.com/.default' # Optional
+```
+
+These credentials will be used to obtain an access token for the Azure OpenAI API.
+
+The `azureAuthorityHost` defaults to 'https://login.microsoftonline.com' if not specified. The `azureTokenScope` defaults to 'https://cognitiveservices.azure.com/.default', the scope required to authenticate with Azure Cognitive Services.
+
+You must also install a peer dependency from Azure:
+
+```
+npm i @azure/identity
+```
+
 ## Model-graded tests
 
 [Model-graded assertions](/docs/configuration/expected-outputs/model-graded/) such as `factuality` or `llm-rubric` use OpenAI by default. If you are using Azure, you must override the grader to point to your Azure deployment.
@@ -88,7 +114,7 @@ tests:
 
 ### Similarity
 
-The `similar` assertion type requires an embedding model such as `text-embedding-ada-002`.  Be sure to specify a deployment with an embedding model, not a chat model, when overriding the grader.
+The `similar` assertion type requires an embedding model such as `text-embedding-ada-002`. Be sure to specify a deployment with an embedding model, not a chat model, when overriding the grader.
 
 ## AI Services
 

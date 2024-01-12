@@ -39,10 +39,12 @@
     "format": "prettier -w ."
   },
   "peerDependencies": {
-    "@aws-sdk/client-bedrock-runtime": "^3.458.0"
+    "@aws-sdk/client-bedrock-runtime": "^3.458.0",
+    "@azure/identity": "^4.0.0"
   },
   "devDependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.458.0",
+    "@azure/identity": "^4.0.0",
     "@types/async": "^3.2.20",
     "@types/cache-manager": "^4.0.2",
     "@types/cache-manager-fs-hash": "^0.0.1",
