@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width" />
-    <title>Table Output</title>
+    <title>{{ config.description | default('Eval Output') }}</title>
     <style>
       body {
         font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial,
@@ -21,7 +21,9 @@
       td {
         padding: 5px;
         min-width: 200px;
-      }
+        white-space: pre-line;
+        vertical-align: top;
+      t
 
       tr > td[data-content^='[PASS]'] {
         color: green;
@@ -42,7 +44,7 @@
         {% for row in table.slice(1) %}
         <tr>
           {% for cell in row %}
-          <td data-content="{{cell}}">{{ cell }}</td>
+          <td data-content="{{ cell | escape }}">{{ cell }}</td>
           {% endfor %}
         </tr>
         {% endfor %}

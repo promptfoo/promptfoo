@@ -20,6 +20,7 @@ If you prefer, you can break prompts into multiple files (make sure to edit prom
 
 export const DEFAULT_YAML_CONFIG = `# This configuration compares LLM output of 2 prompts x 2 GPT models across 3 test cases.
 # Learn more: https://promptfoo.dev/docs/configuration/guide
+description: 'My first eval'
 
 prompts:
   - "Write a tweet about {{topic}}"
