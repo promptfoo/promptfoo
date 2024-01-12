@@ -317,9 +317,10 @@ export function writeOutput(
     const namedScoresText = Object.entries(output.namedScores)
       .map(([name, value]) => `${name}: ${value.toFixed(2)}`)
       .join(', ');
-    const scoreText = namedScoresText.length > 0
-      ? `(${output.score.toFixed(2)}, ${namedScoresText})`
-      : `(${output.score.toFixed(2)})`;
+    const scoreText =
+      namedScoresText.length > 0
+        ? `(${output.score.toFixed(2)}, ${namedScoresText})`
+        : `(${output.score.toFixed(2)})`;
     const gradingResultText = output.gradingResult ? `Reason: ${output.gradingResult.reason}` : '';
     return `${passFailText} ${scoreText}
 
@@ -336,8 +337,8 @@ ${gradingResultText}`.trim();
 
   if (outputExtension === 'csv') {
     const csvOutput = stringify([
-      [...results.table.head.prompts, ...results.table.head.vars],
-      ...results.table.body.map((row) => [...row.outputs.map(outputToSimpleString), ...row.vars]),
+      [...results.table.head.vars, ...results.table.head.prompts.map((prompt) => prompt.display)],
+      ...results.table.body.map((row) => [...row.vars, ...row.outputs.map(outputToSimpleString)]),
     ]);
     fs.writeFileSync(outputPath, csvOutput);
   } else if (outputExtension === 'json') {
