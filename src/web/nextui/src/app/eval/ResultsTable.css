@@ -214,6 +214,7 @@ table.results-table,
 
 .results-table .status {
   font-weight: bold;
+  margin-bottom: 0.5rem;
 }
 
 .results-table .status .pill {
@@ -231,10 +232,6 @@ table.results-table,
 
 .results-table .fail .pill {
   border: 1px solid var(--fail-color);
-}
-
-.results-table .pass {
-  margin-bottom: 0.5rem;
 }
 
 .results-table .fail {
