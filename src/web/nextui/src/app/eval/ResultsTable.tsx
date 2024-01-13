@@ -136,7 +136,13 @@ interface PromptOutputProps {
   rowIndex: number;
   promptIndex: number;
   showStats: boolean;
-  onRating: (rowIndex: number, promptIndex: number, isPass?: boolean, score?: number) => void;
+  onRating: (
+    rowIndex: number,
+    promptIndex: number,
+    isPass?: boolean,
+    score?: number,
+    comment?: string,
+  ) => void;
 }
 
 function EvalOutputCell({
@@ -253,18 +259,25 @@ function EvalOutputCell({
   }
 
   const handleRating = (isPass: boolean) => {
-    onRating(rowIndex, promptIndex, isPass);
+    onRating(rowIndex, promptIndex, isPass, undefined, output.gradingResult?.comment);
   };
 
   const handleSetScore = () => {
-    const score = prompt('Set test score (0.0 - 1.0):');
+    const score = prompt('Set test score (0.0 - 1.0):', String(output.score));
     if (score !== null) {
       const parsedScore = parseFloat(score);
       if (!isNaN(parsedScore) && parsedScore >= 0.0 && parsedScore <= 1.0) {
-        onRating(rowIndex, promptIndex, undefined, parsedScore);
+        onRating(rowIndex, promptIndex, undefined, parsedScore, output.gradingResult?.comment);
       } else {
         alert('Invalid score. Please enter a value between 0.0 and 1.0.');
       }
+    }
+  };
+
+  const handleComment = () => {
+    const comment = prompt('Comment:', output.gradingResult?.comment || '');
+    if (comment != null) {
+      onRating(rowIndex, promptIndex, undefined, undefined, comment);
     }
   };
 
@@ -305,6 +318,12 @@ function EvalOutputCell({
       </span>
     );
   }
+
+  const comment = output.gradingResult?.comment ? (
+    <div className="comment" onClick={handleComment}>
+      {output.gradingResult.comment}
+    </div>
+  ) : null;
 
   const detail = showStats ? (
     <div className="cell-detail">
@@ -362,6 +381,11 @@ function EvalOutputCell({
       </span>
       <span className="action" onClick={handleSetScore}>
         <Tooltip title="Set test score">
+          <span>🔢</span>
+        </Tooltip>
+      </span>
+      <span className="action" onClick={handleComment}>
+        <Tooltip title="Edit comment">
           <span>✏️</span>
         </Tooltip>
       </span>
@@ -403,6 +427,7 @@ function EvalOutputCell({
         </>
       )}
       <TruncatedText text={node || text} maxLength={maxTextLength} />
+      {comment}
       {detail}
       {actions}
     </div>
@@ -504,6 +529,7 @@ export default function ResultsTable({
     promptIndex: number,
     isPass?: boolean,
     score?: number,
+    comment?: string,
   ) => {
     const updatedData = [...body];
     const updatedRow = { ...updatedData[rowIndex] };
@@ -520,6 +546,7 @@ export default function ResultsTable({
       pass: finalPass,
       score: finalScore,
       reason: 'Manual result (overrides all other grading results)',
+      comment,
       assertion: null,
     };
     updatedOutputs[promptIndex].gradingResult = gradingResult;

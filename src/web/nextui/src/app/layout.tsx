@@ -5,7 +5,7 @@ import { PageShell } from './components/PageShell';
 
 const roboto = Roboto({
   weight: ['400', '500', '700'],
-  style: ['normal'],
+  style: ['normal', 'italic'],
   subsets: ['latin'],
 });
 

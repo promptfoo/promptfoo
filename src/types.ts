@@ -270,6 +270,9 @@ export interface GradingResult {
 
   // The assertion that was evaluated
   assertion: Assertion | null;
+
+  // User comment
+  comment?: string;
 }
 
 type BaseAssertionTypes =
