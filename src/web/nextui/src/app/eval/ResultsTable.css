@@ -255,6 +255,15 @@ table.results-table,
   font-weight: normal;
 }
 
+.results-table .comment {
+  margin-top: 0.5rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  background-color: var(--neutral-background-color);
+  font-style: italic;
+  cursor: pointer;
+}
+
 .first-prompt-col {
   border-left: 2px solid #888;
 }
