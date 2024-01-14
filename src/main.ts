@@ -302,9 +302,7 @@ async function main() {
       if (cmdObj.verbose) {
         setLogLevel('debug');
       }
-      const iterations = parseInt(cmdObj.repeat || '', 10);
-      const repeat = !isNaN(iterations) && iterations > 0 ? iterations : 1;
-      if (!cmdObj.cache || repeat > 1) {
+      if (!cmdObj.cache) {
         logger.info('Cache is disabled.');
         disableCache();
       }
@@ -422,6 +420,7 @@ async function main() {
       };
 
       let maxConcurrency = parseInt(cmdObj.maxConcurrency || '', 10);
+      const iterations = parseInt(cmdObj.repeat || '', 10);
       const delay = parseInt(cmdObj.delay || '', 0);
 
       if (delay > 0) {
@@ -437,7 +436,7 @@ async function main() {
             ? getLogLevel() !== 'debug'
             : cmdObj.progressBar,
         maxConcurrency: !isNaN(maxConcurrency) && maxConcurrency > 0 ? maxConcurrency : undefined,
-        repeat,
+        repeat: !isNaN(iterations) && iterations > 0 ? iterations : 1,
         delay: !isNaN(delay) && delay > 0 ? delay : undefined,
         ...evaluateOptions,
       };

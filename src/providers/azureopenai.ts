@@ -40,6 +40,7 @@ interface AzureOpenAiCompletionOptions {
   }[];
   function_call?: 'none' | 'auto' | { name: string };
   stop?: string[];
+  seed?: number;
 }
 
 class AzureOpenAiGenericProvider implements ApiProvider {
@@ -296,6 +297,7 @@ export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvide
     const body = {
       model: this.deploymentName,
       messages: messages,
+      seed: this.config.seed || 0 + (callApiOptions?.repeatIndex || 0),
       max_tokens: parseInt(process.env.OPENAI_MAX_TOKENS || '1024'),
       temperature: this.config.temperature ?? parseFloat(process.env.OPENAI_TEMPERATURE || '0'),
       top_p: this.config.top_p ?? parseFloat(process.env.OPENAI_TOP_P || '1'),
@@ -316,8 +318,8 @@ export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvide
       cached = false;
     try {
       const url = this.config.dataSources
-        ? `https://${this.apiHost}/openai/deployments/${this.deploymentName}/extensions/chat/completions?api-version=2023-07-01-preview`
-        : `https://${this.apiHost}/openai/deployments/${this.deploymentName}/chat/completions?api-version=2023-07-01-preview`;
+        ? `https://${this.apiHost}/openai/deployments/${this.deploymentName}/extensions/chat/completions?api-version=2023-07-01-preview&r=${callApiOptions?.repeatIndex}`
+        : `https://${this.apiHost}/openai/deployments/${this.deploymentName}/chat/completions?api-version=2023-07-01-preview&r=${callApiOptions?.repeatIndex}`;
 
       ({ data, cached } = (await fetchWithCache(
         url,
