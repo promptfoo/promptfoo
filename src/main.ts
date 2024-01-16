@@ -68,13 +68,17 @@ function createDummyFiles(directory: string | null) {
   const runCommand = isNpx ? 'npx promptfoo@latest eval' : 'promptfoo eval';
   if (directory === '.') {
     logger.info(
-      chalk.green(`✅ Wrote promptfooconfig.yaml. Run ${chalk.bold(runCommand)} to get started!`),
+      chalk.green(
+        `✅ Wrote promptfooconfig.yaml. Run \`${chalk.bold(runCommand)}\` to get started!`,
+      ),
     );
   } else {
     logger.info(`✅ Wrote promptfooconfig.yaml to ./${directory}`);
     logger.info(
       chalk.green(
-        `Run ${chalk.bold(`cd ${directory}`)} and then ${chalk.bold(runCommand)} to get started!`,
+        `Run \`${chalk.bold(`cd ${directory}`)}\` and then \`${chalk.bold(
+          runCommand,
+        )}\` to get started!`,
       ),
     );
   }
