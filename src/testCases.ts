@@ -6,9 +6,11 @@ import { parse as parsePath } from 'path';
 import { parse as parseCsv } from 'csv-parse/sync';
 import { globSync } from 'glob';
 
+import logger from './logger';
 import { fetchCsvFromGoogleSheet } from './fetch';
+import { OpenAiChatCompletionProvider } from './providers/openai';
 
-import type { Assertion, CsvRow, TestCase, TestSuiteConfig } from './types';
+import type { Assertion, CsvRow, TestCase, TestSuiteConfig, VarMapping } from './types';
 
 function parseJson(json: string): any | undefined {
   try {
@@ -192,4 +194,102 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
     assert: asserts,
     options,
   };
+}
+
+interface SynthesizeOptions {
+  prompt: string;
+  instructions?: string;
+  tests: TestCase[];
+}
+
+export async function synthesize({prompt, instructions, tests}: SynthesizeOptions) {
+  // Consider the following prompt for an LLM application: {{prompt}}. List up to 5 user personas that would send this prompt.
+  logger.info(`Synthesizing user personas for prompt:\n${prompt}`);
+  const provider = new OpenAiChatCompletionProvider('gpt-4-1106-preview', {
+    config: {
+      temperature: 1.0,
+      response_format: {
+        type: 'json_object',
+      },
+    },
+  });
+  const resp = await provider.callApi(
+    `Consider the following prompt for an LLM application:
+<Prompt>
+${prompt}
+</Prompt>
+
+List up to 5 user personas that would send this prompt. Your response should be JSON of the form {personas: string[]}`,
+  );
+
+  console.log(resp.output);
+  const personas = (JSON.parse(resp.output as string) as { personas: string[] }).personas;
+
+  // Extract variable names from the nunjucks template in the prompt
+  const variableRegex = /{{\s*(\w+)\s*}}/g;
+  let match;
+  const variables = new Set();
+  while ((match = variableRegex.exec(prompt)) !== null) {
+    variables.add(match[1]);
+  }
+  
+  const existingTests = `Here are some existing tests:` + tests.map((test) => {
+    if (!test.vars) {
+      return;
+    }
+    return `<Test>
+${JSON.stringify(test.vars, null, 2)}
+</Test>
+    `;
+  }).filter(Boolean).slice(0, 100).join('\n');
+
+  // For each user persona, we will generate a map of variable names to values
+  const testCaseVars: VarMapping[] = [];
+  for (const persona of personas) {
+    console.log(`Processing persona: ${persona}`);
+    // Construct the prompt for the LLM to generate variable values
+    const personaPrompt = `Consider this prompt, which contains some {{variables}}: 
+<Prompt>
+${prompt}
+</Prompt>
+
+This is your persona:
+<Persona>
+${persona}
+</Persona>
+
+${existingTests}
+
+Fully embody this persona and determine a value for each variable, such that the prompt would be sent by this persona.
+
+You are a tester, so try to think of 3 sets of values that would be interesting or unusual to test. ${instructions || ''}
+
+Your response should contain a JSON map of variable names to values, of the form {vars: {${Array.from(
+      variables,
+    )
+      .map((varName) => `${varName}: string`)
+      .join(', ')}}[]}`;
+    // Call the LLM API with the constructed prompt
+    const personaResponse = await provider.callApi(personaPrompt);
+    const parsed = JSON.parse(personaResponse.output as string) as {
+      vars: VarMapping[];
+    };
+    console.log('********************************************************');
+    console.log('Persona: ', persona);
+    for (const vars of parsed.vars) {
+      console.log(vars);
+      testCaseVars.push(vars);
+    }
+  }
+
+  // Dedup testCaseVars
+  const uniqueTestCaseStrings = new Set(testCaseVars.map((testCase) => JSON.stringify(testCase)));
+  const dedupedTestCaseVars = Array.from(uniqueTestCaseStrings).map((testCase) =>
+    JSON.parse(testCase),
+  );
+  console.log('********************************************************');
+  console.log('Test cases:');
+  console.log(dedupedTestCaseVars);
+
+  return dedupedTestCaseVars;
 }

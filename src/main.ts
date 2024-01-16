@@ -12,7 +12,7 @@ import { readAssertions } from './assertions';
 import { loadApiProvider, loadApiProviders } from './providers';
 import { evaluate, DEFAULT_MAX_CONCURRENCY } from './evaluator';
 import { readPrompts, readProviderPromptMap } from './prompts';
-import { readTest, readTests } from './testCases';
+import { readTest, readTests, synthesize } from './testCases';
 import {
   cleanupOldResults,
   maybeReadConfig,
@@ -219,6 +219,25 @@ async function main() {
     .description('Send feedback to the promptfoo developers')
     .action((message?: string) => {
       gatherFeedback(message);
+    });
+
+  program
+    .command('generate dataset')
+    .description('Generate test cases for a given prompt')
+    .option('-p, --prompt <path>', 'Prompt to generate test dataset for')
+    .option(
+      '-i, --instructions [instructions]',
+      'Any additional instructions for generating test cases',
+    )
+    .option('-t, --tests [path]', 'Path to any existing tests')
+    .action(async (_, options: { prompt: string; instructions: string; tests: string }) => {
+      const prompts = readPrompts([options.prompt]);
+      const tests = options.tests ? readTests([options.tests]) : [];
+      const results = await synthesize({
+        prompt: prompts[0].raw,
+        instructions: options.instructions,
+        tests,
+      });
     });
 
   program
