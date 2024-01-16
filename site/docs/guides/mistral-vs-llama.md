@@ -38,7 +38,7 @@ providers:
 The first [provider](/docs/providers) references the model [Mistral-7B-Instruct-v0.1 on HuggingFace](https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.1). The second references [Mixtral 8x7b Instruct on Replicate](https://replicate.com/mistralai/mixtral-8x7b-instruct-v0.1), and the third references [Replicate's](https://replicate.com/meta/llama-2-70b-chat) chat-tuned Llama v2, which aren't available through HuggingFace's free Inference API.
 
 :::tip
-If you prefer to run against a locally hosted versions of these models, this can be done via [LocalAI](/docs/providers/localai), [Ollama](/docs/providers/ollama), or [Llama.cpp](/docs/providers/llama.cpp) (using [quantized Mistral](https://huggingface.co/TheBloke/Mistral-7B-v0.1-GGUF)).
+If you prefer to run against locally hosted versions of these models, this can be done via [LocalAI](/docs/providers/localai), [Ollama](/docs/providers/ollama), or [Llama.cpp](/docs/providers/llama.cpp) (using [quantized Mistral](https://huggingface.co/TheBloke/Mistral-7B-v0.1-GGUF)).
 :::
 
 ## Set up the prompts
