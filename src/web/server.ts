@@ -47,7 +47,7 @@ export function startServer(port = 15500, apiBaseUrl = '', skipConfirmation = fa
   app.use(cors());
   app.use(compression());
   app.use(express.json({ limit: '100mb' }));
-  app.use(express.urlencoded({ limit: '100mb' }));
+  app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
   const httpServer = http.createServer(app);
   const io = new SocketIOServer(httpServer, {

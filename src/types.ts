@@ -65,6 +65,7 @@ export interface CallApiContextParams {
 
 export interface CallApiOptionsParams {
   includeLogProbs?: boolean;
+  repeatIndex?: number;
 }
 
 export interface ApiProvider {

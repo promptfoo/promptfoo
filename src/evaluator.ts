@@ -152,6 +152,7 @@ class Evaluator {
     test,
     delay,
     nunjucksFilters: filters,
+    repeatIndex,
   }: RunEvalOptions): Promise<EvaluateResult> {
     // Use the original prompt to set the display, not renderedPrompt
     let promptDisplay = prompt.display;
@@ -194,6 +195,7 @@ class Evaluator {
         },
         {
           includeLogProbs: test.assert?.some((a) => a.type === 'perplexity'),
+          repeatIndex,
         },
       );
       const endTime = Date.now();
