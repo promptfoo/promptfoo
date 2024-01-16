@@ -40,6 +40,8 @@ interface AzureOpenAiCompletionOptions {
   }[];
   function_call?: 'none' | 'auto' | { name: string };
   stop?: string[];
+
+  passthrough?: object;
 }
 
 class AzureOpenAiGenericProvider implements ApiProvider {
@@ -227,6 +229,7 @@ export class AzureOpenAiCompletionProvider extends AzureOpenAiGenericProvider {
       ...(this.config.dataSources ? { dataSources: this.config.dataSources } : {}),
       ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
       ...(stop ? { stop } : {}),
+      ...(this.config.passthrough || {}),
     };
     logger.debug(`Calling Azure OpenAI API: ${JSON.stringify(body)}`);
     let data,
@@ -309,6 +312,7 @@ export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvide
       ...(this.config.dataSources ? { dataSources: this.config.dataSources } : {}),
       ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
       ...(this.config.stop ? { stop: this.config.stop } : {}),
+      ...(this.config.passthrough || {}),
     };
     logger.debug(`Calling Azure OpenAI API: ${JSON.stringify(body)}`);
 
