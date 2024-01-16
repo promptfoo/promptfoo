@@ -337,7 +337,10 @@ ${gradingResultText}`.trim();
 
   if (outputExtension === 'csv') {
     const csvOutput = stringify([
-      [...results.table.head.vars, ...results.table.head.prompts.map((prompt) => prompt.display)],
+      [
+        ...results.table.head.vars,
+        ...results.table.head.prompts.map((prompt) => JSON.stringify(prompt)),
+      ],
       ...results.table.body.map((row) => [...row.vars, ...row.outputs.map(outputToSimpleString)]),
     ]);
     fs.writeFileSync(outputPath, csvOutput);
