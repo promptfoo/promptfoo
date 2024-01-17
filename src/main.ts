@@ -392,9 +392,17 @@ async function main() {
         const yamlString = yaml.dump(configAddition);
         if (options.output) {
           writeFileSync(options.output, yamlString);
+          printBorder();
+          logger.info(`Wrote ${results.length} new test cases to ${options.output}`);
+          printBorder();
         } else {
+          printBorder();
+          logger.info('New test Cases');
+          printBorder();
           logger.info(yamlString);
         }
+
+        printBorder();
         const configPath = options.config;
         if (options.write && configPath) {
           const existingConfig = yaml.load(
@@ -403,6 +411,12 @@ async function main() {
           existingConfig.tests = [...(existingConfig.tests || []), ...configAddition.tests];
           writeFileSync(configPath, yaml.dump(existingConfig));
           logger.info(`Wrote ${results.length} new test cases to ${configPath}`);
+        } else {
+          logger.info(
+            `Copy the above test cases or run ${chalk.greenBright(
+              'promptfoo generate dataset --write',
+            )} to write directly to the config`,
+          );
         }
       },
     );

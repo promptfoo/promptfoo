@@ -212,7 +212,10 @@ interface SynthesizeOptions {
   numTestCasesPerPersona?: number;
 }
 
-export async function synthesizeFromTestSuite(testSuite: TestSuite, options: Partial<SynthesizeOptions>) {
+export async function synthesizeFromTestSuite(
+  testSuite: TestSuite,
+  options: Partial<SynthesizeOptions>,
+) {
   return synthesize({
     ...options,
     prompts: testSuite.prompts.map((prompt) => prompt.raw),
@@ -231,8 +234,15 @@ export async function synthesize({
     throw new Error('Dataset synthesis requires at least one prompt.');
   }
 
+  numPersonas = numPersonas || 5;
+  numTestCasesPerPersona = numTestCasesPerPersona || 3;
+
+  logger.info(
+    `Starting dataset synthesis. We'll begin by generating up to ${numPersonas} personas. Each persona will be used to generate ${numTestCasesPerPersona} test cases.`,
+  );
+
   // Consider the following prompt for an LLM application: {{prompt}}. List up to 5 user personas that would send this prompt.
-  logger.info(`Synthesizing user personas for prompts:\n${prompts.join('\n')}`);
+  logger.info(`\nGenerating user personas from ${prompts.length} prompts...`);
   const provider = new OpenAiChatCompletionProvider('gpt-4-1106-preview', {
     config: {
       temperature: 1.0,
@@ -248,13 +258,15 @@ ${prompts.map((prompt) => `<Prompt>\n${prompt}\n</Prompt>`).join('\n')}
     `Consider the following prompt${prompts.length > 1 ? 's' : ''} for an LLM application:
 ${promptsString}
 
-List up to ${numPersonas || 5} user personas that would send ${
+List up to ${numPersonas} user personas that would send ${
       prompts.length > 1 ? 'these prompts' : 'this prompt'
     }. Your response should be JSON of the form {personas: string[]}`,
   );
 
-  console.log(resp.output);
   const personas = (JSON.parse(resp.output as string) as { personas: string[] }).personas;
+  logger.info(
+    `\nGenerated ${personas.length} personas:\n${personas.map((p) => `  - ${p}`).join('\n')}`,
+  );
 
   // Extract variable names from the nunjucks template in the prompts
   const variableRegex = /{{\s*(\w+)\s*}}/g;
@@ -265,6 +277,11 @@ List up to ${numPersonas || 5} user personas that would send ${
       variables.add(match[1]);
     }
   }
+  logger.info(
+    `\nExtracted ${variables.size} variables from prompts:\n${Array.from(variables)
+      .map((v) => `  - ${v}`)
+      .join('\n')}`,
+  );
 
   const existingTests =
     `Here are some existing tests:` +
@@ -284,8 +301,9 @@ ${JSON.stringify(test.vars, null, 2)}
 
   // For each user persona, we will generate a map of variable names to values
   const testCaseVars: VarMapping[] = [];
-  for (const persona of personas) {
-    console.log(`Processing persona: ${persona}`);
+  for (let i = 0; i < personas.length; i++) {
+    const persona = personas[i];
+    logger.info(`\nGenerating test cases for persona ${i + 1}...`);
     // Construct the prompt for the LLM to generate variable values
     const personaPrompt = `Consider ${
       prompts.length > 1 ? 'these prompts' : 'this prompt'
@@ -301,9 +319,9 @@ ${existingTests}
 
 Fully embody this persona and determine a value for each variable, such that the prompt would be sent by this persona.
 
-You are a tester, so try to think of ${
-      numTestCasesPerPersona || 3
-    } sets of values that would be interesting or unusual to test. ${instructions || ''}
+You are a tester, so try to think of ${numTestCasesPerPersona} sets of values that would be interesting or unusual to test. ${
+      instructions || ''
+    }
 
 Your response should contain a JSON map of variable names to values, of the form {vars: {${Array.from(
       variables,
@@ -315,10 +333,8 @@ Your response should contain a JSON map of variable names to values, of the form
     const parsed = JSON.parse(personaResponse.output as string) as {
       vars: VarMapping[];
     };
-    console.log('********************************************************');
-    console.log('Persona: ', persona);
     for (const vars of parsed.vars) {
-      console.log(vars);
+      logger.info(`${JSON.stringify(vars, null, 2)}`);
       testCaseVars.push(vars);
     }
   }
@@ -328,9 +344,5 @@ Your response should contain a JSON map of variable names to values, of the form
   const dedupedTestCaseVars: VarMapping[] = Array.from(uniqueTestCaseStrings).map((testCase) =>
     JSON.parse(testCase),
   );
-  console.log('********************************************************');
-  console.log('Test cases:');
-  console.log(dedupedTestCaseVars);
-
   return dedupedTestCaseVars;
 }
