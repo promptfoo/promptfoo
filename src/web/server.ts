@@ -11,7 +11,14 @@ import cors from 'cors';
 import compression from 'compression';
 import opener from 'opener';
 import { Server as SocketIOServer } from 'socket.io';
-import promptfoo, { EvaluateSummary, EvaluateTestSuite, PromptWithMetadata } from '../index';
+import promptfoo, {
+  EvaluateSummary,
+  EvaluateTestSuite,
+  Prompt,
+  PromptWithMetadata,
+  TestCase,
+  TestSuite,
+} from '../index';
 
 import logger from '../logger';
 import { getDirectory } from '../esm';
@@ -25,6 +32,7 @@ import {
   getTestCases,
   updateResult,
 } from '../util';
+import { synthesizeFromTestSuite } from '../testCases';
 
 interface Job {
   status: 'in-progress' | 'complete';
@@ -200,6 +208,19 @@ export function startServer(port = 15500, apiBaseUrl = '', skipConfirmation = fa
     res.json({
       apiBaseUrl: apiBaseUrl || '',
     });
+  });
+
+  app.post('/api/dataset/generate', async (req, res) => {
+    const testSuite: TestSuite = {
+      prompts: req.body.prompts as Prompt[],
+      tests: req.body.tests as TestCase[],
+      providers: [],
+    };
+
+    const results = await synthesizeFromTestSuite(testSuite, {});
+    return {
+      results,
+    };
   });
 
   // Must come after the above routes (particularly /api/config) so it doesn't

@@ -418,6 +418,11 @@ async function main() {
             )} to write directly to the config`,
           );
         }
+
+        telemetry.record('command_used', {
+          name: 'generate_dataset',
+        });
+        await telemetry.send();
       },
     );
 
