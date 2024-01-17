@@ -10,10 +10,12 @@ import {
   getCoreRowModel,
   useReactTable,
 } from '@tanstack/react-table';
+import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
 import Tooltip from '@mui/material/Tooltip';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import AddIcon from '@mui/icons-material/Add';
 import Link from 'next/link';
 
 import CustomMetrics from '@/app/eval/CustomMetrics';
@@ -864,6 +866,18 @@ export default function ResultsTable({
             </tr>
           );
         })}
+        <tr>
+          <td colSpan={100} style={{ textAlign: 'center' }}>
+            <Button
+              variant="text"
+              color="primary"
+              startIcon={<AddIcon />}
+              onClick={() => {}}
+            >
+              Generate more test cases
+            </Button>
+          </td>
+        </tr>
       </tbody>
     </table>
   );
