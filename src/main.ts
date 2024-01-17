@@ -12,7 +12,7 @@ import { readAssertions } from './assertions';
 import { loadApiProvider, loadApiProviders } from './providers';
 import { evaluate, DEFAULT_MAX_CONCURRENCY } from './evaluator';
 import { readPrompts, readProviderPromptMap } from './prompts';
-import { readTest, readTests, synthesize } from './testCases';
+import { readTest, readTests, synthesize, synthesizeFromTestSuite } from './testCases';
 import {
   cleanupOldResults,
   maybeReadConfig,
@@ -85,9 +85,9 @@ function createDummyFiles(directory: string | null) {
 }
 
 async function resolveConfigs(
-  cmdObj: CommandLineOptions,
+  cmdObj: Partial<CommandLineOptions>,
   defaultConfig: Partial<UnifiedConfig>,
-): { testSuite: TestSuite; config: Partial<UnifiedConfig> } {
+): Promise<{ testSuite: TestSuite; config: Partial<UnifiedConfig> }> {
   // Config parsing
   let fileConfig: Partial<UnifiedConfig> = {};
   const configPaths = cmdObj.config;
@@ -121,8 +121,8 @@ async function resolveConfigs(
   const defaultTestRaw = fileConfig.defaultTest || defaultConfig.defaultTest;
   const config: Omit<UnifiedConfig, 'evaluateOptions' | 'commandLineOptions'> = {
     description: fileConfig.description || defaultConfig.description,
-    prompts: cmdObj.prompts || fileConfig.prompts || defaultConfig.prompts,
-    providers: cmdObj.providers || fileConfig.providers || defaultConfig.providers,
+    prompts: cmdObj.prompts || fileConfig.prompts || defaultConfig.prompts || [],
+    providers: cmdObj.providers || fileConfig.providers || defaultConfig.providers || [],
     tests: cmdObj.tests || cmdObj.vars || fileConfig.tests || defaultConfig.tests || [],
     scenarios: fileConfig.scenarios || defaultConfig.scenarios,
     env: fileConfig.env || defaultConfig.env,
@@ -342,20 +342,19 @@ async function main() {
   program
     .command('generate dataset')
     .description('Generate test cases for a given prompt')
-    .option('-p, --prompt <path>', 'Prompt to generate test dataset for')
     .option(
       '-i, --instructions [instructions]',
       'Any additional instructions for generating test cases',
     )
-    .option('-t, --tests [path]', 'Path to any existing tests')
-    .action(async (_, options: { prompt: string; instructions: string; tests: string }) => {
-      const prompts = readPrompts([options.prompt]);
-      const tests = options.tests ? readTests([options.tests]) : [];
-      const results = await synthesize({
-        prompt: prompts[0].raw,
-        instructions: options.instructions,
-        tests,
-      });
+    .option('-c, --config [path]', 'Path to configuration file')
+    .action(async (_, options: { config: string; instructions: string }) => {
+      const { testSuite } = await resolveConfigs(
+        {
+          config: [options.config],
+        },
+        defaultConfig,
+      );
+      const results = await synthesizeFromTestSuite(testSuite, options.instructions);
     });
 
   program
