@@ -10,7 +10,7 @@ import logger from './logger';
 import { fetchCsvFromGoogleSheet } from './fetch';
 import { OpenAiChatCompletionProvider } from './providers/openai';
 
-import type { Assertion, CsvRow, TestCase, TestSuiteConfig, VarMapping } from './types';
+import type { Assertion, CsvRow, TestCase, TestSuite, TestSuiteConfig, UnifiedConfig, VarMapping } from './types';
 
 function parseJson(json: string): any | undefined {
   try {
@@ -196,15 +196,27 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
   };
 }
 
+export async function synthesizeFromTestSuite(testSuite: TestSuite, instructions: string) {
+  return synthesize({
+    prompts: testSuite.prompts.map((prompt) => prompt.raw),
+    tests: testSuite.tests || [],
+    instructions,
+  });  
+}
+
 interface SynthesizeOptions {
-  prompt: string;
+  prompts: string[];
   instructions?: string;
   tests: TestCase[];
 }
 
-export async function synthesize({prompt, instructions, tests}: SynthesizeOptions) {
+export async function synthesize({ prompts, instructions, tests }: SynthesizeOptions) {
+  if (prompts.length < 1) {
+    throw new Error('Dataset synthesis requires at least one prompt.');
+  }
+
   // Consider the following prompt for an LLM application: {{prompt}}. List up to 5 user personas that would send this prompt.
-  logger.info(`Synthesizing user personas for prompt:\n${prompt}`);
+  logger.info(`Synthesizing user personas for prompts:\n${prompts.join('\n')}`);
   const provider = new OpenAiChatCompletionProvider('gpt-4-1106-preview', {
     config: {
       temperature: 1.0,
@@ -213,45 +225,56 @@ export async function synthesize({prompt, instructions, tests}: SynthesizeOption
       },
     },
   });
+  const promptsString = `<Prompts>
+${prompts.map((prompt) => `<Prompt>\n${prompt}\n</Prompt>`).join('\n')}
+</Prompts>`;
   const resp = await provider.callApi(
-    `Consider the following prompt for an LLM application:
-<Prompt>
-${prompt}
-</Prompt>
+    `Consider the following prompt${prompts.length > 1 ? 's' : ''} for an LLM application:
+${promptsString}
 
-List up to 5 user personas that would send this prompt. Your response should be JSON of the form {personas: string[]}`,
+List up to 5 user personas that would send ${
+      prompts.length > 1 ? 'these prompts' : 'this prompt'
+    }. Your response should be JSON of the form {personas: string[]}`,
   );
 
   console.log(resp.output);
   const personas = (JSON.parse(resp.output as string) as { personas: string[] }).personas;
 
-  // Extract variable names from the nunjucks template in the prompt
+  // Extract variable names from the nunjucks template in the prompts
   const variableRegex = /{{\s*(\w+)\s*}}/g;
-  let match;
   const variables = new Set();
-  while ((match = variableRegex.exec(prompt)) !== null) {
-    variables.add(match[1]);
-  }
-  
-  const existingTests = `Here are some existing tests:` + tests.map((test) => {
-    if (!test.vars) {
-      return;
+  for (const prompt of prompts) {
+    let match;
+    while ((match = variableRegex.exec(prompt)) !== null) {
+      variables.add(match[1]);
     }
-    return `<Test>
+  }
+
+  const existingTests =
+    `Here are some existing tests:` +
+    tests
+      .map((test) => {
+        if (!test.vars) {
+          return;
+        }
+        return `<Test>
 ${JSON.stringify(test.vars, null, 2)}
 </Test>
     `;
-  }).filter(Boolean).slice(0, 100).join('\n');
+      })
+      .filter(Boolean)
+      .slice(0, 100)
+      .join('\n');
 
   // For each user persona, we will generate a map of variable names to values
   const testCaseVars: VarMapping[] = [];
   for (const persona of personas) {
     console.log(`Processing persona: ${persona}`);
     // Construct the prompt for the LLM to generate variable values
-    const personaPrompt = `Consider this prompt, which contains some {{variables}}: 
-<Prompt>
-${prompt}
-</Prompt>
+    const personaPrompt = `Consider ${
+      prompts.length > 1 ? 'these prompts' : 'this prompt'
+    }, which contains some {{variables}}: 
+${promptsString}
 
 This is your persona:
 <Persona>
@@ -262,7 +285,9 @@ ${existingTests}
 
 Fully embody this persona and determine a value for each variable, such that the prompt would be sent by this persona.
 
-You are a tester, so try to think of 3 sets of values that would be interesting or unusual to test. ${instructions || ''}
+You are a tester, so try to think of 3 sets of values that would be interesting or unusual to test. ${
+      instructions || ''
+    }
 
 Your response should contain a JSON map of variable names to values, of the form {vars: {${Array.from(
       variables,
