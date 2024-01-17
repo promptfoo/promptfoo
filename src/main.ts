@@ -4,6 +4,7 @@ import { join as pathJoin, dirname } from 'path';
 import readline from 'readline';
 
 import chalk from 'chalk';
+import yaml from 'js-yaml';
 import { Command } from 'commander';
 
 import telemetry from './telemetry';
@@ -212,10 +213,12 @@ async function main() {
     pathJoin(pwd, 'promptfooconfig.yaml'),
   ];
   let defaultConfig: Partial<UnifiedConfig> = {};
+  let defaultConfigPath: string | undefined;
   for (const path of potentialPaths) {
     const maybeConfig = await maybeReadConfig(path);
     if (maybeConfig) {
       defaultConfig = maybeConfig;
+      defaultConfigPath = path;
       break;
     }
   }
@@ -344,18 +347,65 @@ async function main() {
     .description('Generate test cases for a given prompt')
     .option(
       '-i, --instructions [instructions]',
-      'Any additional instructions for generating test cases',
+      'Additional instructions to follow while generating test cases',
     )
-    .option('-c, --config [path]', 'Path to configuration file')
-    .action(async (_, options: { config: string; instructions: string }) => {
-      const { testSuite } = await resolveConfigs(
-        {
-          config: [options.config],
+    .option(
+      '-c, --config [path]',
+      'Path to configuration file. Defaults to promptfooconfig.yaml',
+      defaultConfigPath,
+    )
+    .option('-o, --output [path]', 'Path to output file')
+    .option('-w, --write', 'Write results to promptfoo configuration file')
+    .option('--numPersonas <number>', 'Number of personas to generate', '5')
+    .option('--numTestCasesPerPersona <number>', 'Number of test cases per persona', '3')
+    .action(
+      async (
+        _,
+        options: {
+          config?: string;
+          instructions?: string;
+          output?: string;
+          numPersonas: string;
+          numTestCasesPerPersona: string;
+          write: boolean;
         },
-        defaultConfig,
-      );
-      const results = await synthesizeFromTestSuite(testSuite, options.instructions);
-    });
+      ) => {
+        let testSuite: TestSuite;
+        if (options.config) {
+          const resolved = await resolveConfigs(
+            {
+              config: [options.config],
+            },
+            defaultConfig,
+          );
+          testSuite = resolved.testSuite;
+        } else {
+          throw new Error('Could not find config file. Please use `--config`');
+        }
+
+        const results = await synthesizeFromTestSuite(testSuite, {
+          instructions: options.instructions,
+          numPersonas: parseInt(options.numPersonas, 10),
+          numTestCasesPerPersona: parseInt(options.numTestCasesPerPersona, 10),
+        });
+        const configAddition = { tests: results.map((result) => ({ vars: result })) };
+        const yamlString = yaml.dump(configAddition);
+        if (options.output) {
+          writeFileSync(options.output, yamlString);
+        } else {
+          logger.info(yamlString);
+        }
+        const configPath = options.config;
+        if (options.write && configPath) {
+          const existingConfig = yaml.load(
+            readFileSync(configPath, 'utf8'),
+          ) as Partial<UnifiedConfig>;
+          existingConfig.tests = [...(existingConfig.tests || []), ...configAddition.tests];
+          writeFileSync(configPath, yaml.dump(existingConfig));
+          logger.info(`Wrote ${results.length} new test cases to ${configPath}`);
+        }
+      },
+    );
 
   program
     .command('eval')

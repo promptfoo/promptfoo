@@ -10,7 +10,15 @@ import logger from './logger';
 import { fetchCsvFromGoogleSheet } from './fetch';
 import { OpenAiChatCompletionProvider } from './providers/openai';
 
-import type { Assertion, CsvRow, TestCase, TestSuite, TestSuiteConfig, UnifiedConfig, VarMapping } from './types';
+import type {
+  Assertion,
+  CsvRow,
+  TestCase,
+  TestSuite,
+  TestSuiteConfig,
+  UnifiedConfig,
+  VarMapping,
+} from './types';
 
 function parseJson(json: string): any | undefined {
   try {
@@ -196,21 +204,29 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
   };
 }
 
-export async function synthesizeFromTestSuite(testSuite: TestSuite, instructions: string) {
-  return synthesize({
-    prompts: testSuite.prompts.map((prompt) => prompt.raw),
-    tests: testSuite.tests || [],
-    instructions,
-  });  
-}
-
 interface SynthesizeOptions {
   prompts: string[];
   instructions?: string;
   tests: TestCase[];
+  numPersonas?: number;
+  numTestCasesPerPersona?: number;
 }
 
-export async function synthesize({ prompts, instructions, tests }: SynthesizeOptions) {
+export async function synthesizeFromTestSuite(testSuite: TestSuite, options: Partial<SynthesizeOptions>) {
+  return synthesize({
+    ...options,
+    prompts: testSuite.prompts.map((prompt) => prompt.raw),
+    tests: testSuite.tests || [],
+  });
+}
+
+export async function synthesize({
+  prompts,
+  instructions,
+  tests,
+  numPersonas,
+  numTestCasesPerPersona,
+}: SynthesizeOptions) {
   if (prompts.length < 1) {
     throw new Error('Dataset synthesis requires at least one prompt.');
   }
@@ -232,7 +248,7 @@ ${prompts.map((prompt) => `<Prompt>\n${prompt}\n</Prompt>`).join('\n')}
     `Consider the following prompt${prompts.length > 1 ? 's' : ''} for an LLM application:
 ${promptsString}
 
-List up to 5 user personas that would send ${
+List up to ${numPersonas || 5} user personas that would send ${
       prompts.length > 1 ? 'these prompts' : 'this prompt'
     }. Your response should be JSON of the form {personas: string[]}`,
   );
@@ -285,9 +301,9 @@ ${existingTests}
 
 Fully embody this persona and determine a value for each variable, such that the prompt would be sent by this persona.
 
-You are a tester, so try to think of 3 sets of values that would be interesting or unusual to test. ${
-      instructions || ''
-    }
+You are a tester, so try to think of ${
+      numTestCasesPerPersona || 3
+    } sets of values that would be interesting or unusual to test. ${instructions || ''}
 
 Your response should contain a JSON map of variable names to values, of the form {vars: {${Array.from(
       variables,
@@ -309,7 +325,7 @@ Your response should contain a JSON map of variable names to values, of the form
 
   // Dedup testCaseVars
   const uniqueTestCaseStrings = new Set(testCaseVars.map((testCase) => JSON.stringify(testCase)));
-  const dedupedTestCaseVars = Array.from(uniqueTestCaseStrings).map((testCase) =>
+  const dedupedTestCaseVars: VarMapping[] = Array.from(uniqueTestCaseStrings).map((testCase) =>
     JSON.parse(testCase),
   );
   console.log('********************************************************');
