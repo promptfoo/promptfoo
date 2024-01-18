@@ -10,16 +10,15 @@ import {
   getCoreRowModel,
   useReactTable,
 } from '@tanstack/react-table';
-import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
 import Tooltip from '@mui/material/Tooltip';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
-import AddIcon from '@mui/icons-material/Add';
 import Link from 'next/link';
 
 import CustomMetrics from '@/app/eval/CustomMetrics';
 import EvalOutputPromptDialog from '@/app/eval/EvalOutputPromptDialog';
+import GenerateTestCases from '@/app/eval/GenerateTestCases';
 import { getApiBaseUrl } from '@/api';
 import { useStore } from '@/app/eval/store';
 
@@ -798,87 +797,78 @@ export default function ResultsTable({
   });
 
   return (
-    <table
-      className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''}`}
-      style={{
-        wordBreak,
-      }}
-    >
-      <thead>
-        {reactTable.getHeaderGroups().map((headerGroup: any) => (
-          <tr key={headerGroup.id} className="header">
-            {headerGroup.headers.map((header: any) => {
-              return (
-                <th
-                  key={header.id}
-                  {...{
-                    colSpan: header.colSpan,
-                    style: {
-                      width: header.getSize(),
-                    },
-                  }}
-                >
-                  {header.isPlaceholder
-                    ? null
-                    : flexRender(header.column.columnDef.header, header.getContext())}
-                  <div
-                    {...{
-                      onMouseDown: header.getResizeHandler(),
-                      onTouchStart: header.getResizeHandler(),
-                      className: `resizer ${header.column.getIsResizing() ? 'isResizing' : ''}`,
-                    }}
-                  />
-                </th>
-              );
-            })}
-          </tr>
-        ))}
-      </thead>
-      <tbody>
-        {reactTable.getRowModel().rows.map((row: any, rowIndex: any) => {
-          let colBorderDrawn = false;
-          return (
-            <tr key={row.id}>
-              {row.getVisibleCells().map((cell: any) => {
-                const isMetadataCol =
-                  cell.column.id.startsWith('Variable') || cell.column.id === 'description';
-                const shouldDrawColBorder = !isMetadataCol && !colBorderDrawn;
-                if (shouldDrawColBorder) {
-                  colBorderDrawn = true;
-                }
-                const shouldDrawRowBorder = rowIndex === 0 && !isMetadataCol;
+    <div>
+      <table
+        className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''}`}
+        style={{
+          wordBreak,
+        }}
+      >
+        <thead>
+          {reactTable.getHeaderGroups().map((headerGroup: any) => (
+            <tr key={headerGroup.id} className="header">
+              {headerGroup.headers.map((header: any) => {
                 return (
-                  <td
-                    key={cell.id}
+                  <th
+                    key={header.id}
                     {...{
+                      colSpan: header.colSpan,
                       style: {
-                        width: cell.column.getSize(),
+                        width: header.getSize(),
                       },
-                      className: `${isMetadataCol ? 'variable' : ''} ${
-                        shouldDrawRowBorder ? 'first-prompt-row' : ''
-                      } ${shouldDrawColBorder ? 'first-prompt-col' : ''}`,
                     }}
                   >
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </td>
+                    {header.isPlaceholder
+                      ? null
+                      : flexRender(header.column.columnDef.header, header.getContext())}
+                    <div
+                      {...{
+                        onMouseDown: header.getResizeHandler(),
+                        onTouchStart: header.getResizeHandler(),
+                        className: `resizer ${header.column.getIsResizing() ? 'isResizing' : ''}`,
+                      }}
+                    />
+                  </th>
                 );
               })}
             </tr>
-          );
-        })}
-        <tr>
-          <td colSpan={100} style={{ textAlign: 'center' }}>
-            <Button
-              variant="text"
-              color="primary"
-              startIcon={<AddIcon />}
-              onClick={() => {}}
-            >
-              Generate more test cases
-            </Button>
-          </td>
-        </tr>
-      </tbody>
-    </table>
+          ))}
+        </thead>
+        <tbody>
+          {reactTable.getRowModel().rows.map((row: any, rowIndex: any) => {
+            let colBorderDrawn = false;
+            return (
+              <tr key={row.id}>
+                {row.getVisibleCells().map((cell: any) => {
+                  const isMetadataCol =
+                    cell.column.id.startsWith('Variable') || cell.column.id === 'description';
+                  const shouldDrawColBorder = !isMetadataCol && !colBorderDrawn;
+                  if (shouldDrawColBorder) {
+                    colBorderDrawn = true;
+                  }
+                  const shouldDrawRowBorder = rowIndex === 0 && !isMetadataCol;
+                  return (
+                    <td
+                      key={cell.id}
+                      {...{
+                        style: {
+                          width: cell.column.getSize(),
+                        },
+                        className: `${isMetadataCol ? 'variable' : ''} ${
+                          shouldDrawRowBorder ? 'first-prompt-row' : ''
+                        } ${shouldDrawColBorder ? 'first-prompt-col' : ''}`,
+                      }}
+                    >
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </td>
+                  );
+                })}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <GenerateTestCases />
+    </div>
   );
 }
