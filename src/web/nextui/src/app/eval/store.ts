@@ -18,6 +18,8 @@ interface TableState {
   setWordBreak: (wordBreak: 'break-word' | 'break-all') => void;
   showInferenceDetails: boolean;
   setShowInferenceDetails: (showInferenceDetails: boolean) => void;
+  renderMarkdown: boolean;
+  setRenderMarkdown: (renderMarkdown: boolean) => void;
 }
 
 export const useStore = create<TableState>((set) => ({
@@ -35,4 +37,6 @@ export const useStore = create<TableState>((set) => ({
   setWordBreak: (wordBreak: 'break-word' | 'break-all') => set(() => ({ wordBreak })),
   showInferenceDetails: true,
   setShowInferenceDetails: (showInferenceDetails: boolean) => set(() => ({ showInferenceDetails })),
+  renderMarkdown: false,
+  setRenderMarkdown: (renderMarkdown: boolean) => set(() => ({ renderMarkdown })),
 }));

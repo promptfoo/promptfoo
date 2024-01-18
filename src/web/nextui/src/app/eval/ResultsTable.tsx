@@ -3,6 +3,7 @@ import { diffSentences, diffJson, diffWords } from 'diff';
 
 import './index.css';
 
+import ReactMarkdown from 'react-markdown';
 import invariant from 'tiny-invariant';
 import {
   createColumnHelper,
@@ -20,7 +21,8 @@ import CustomMetrics from '@/app/eval/CustomMetrics';
 import EvalOutputPromptDialog from '@/app/eval/EvalOutputPromptDialog';
 import GenerateTestCases from '@/app/eval/GenerateTestCases';
 import { getApiBaseUrl } from '@/api';
-import { useStore } from '@/app/eval/store';
+import { useStore as useResultsViewStore } from './store';
+import { useStore as useMainStore } from '@/app/eval/store';
 
 import type { CellContext, ColumnDef, VisibilityState } from '@tanstack/table-core';
 
@@ -161,6 +163,7 @@ function EvalOutputCell({
   filterMode: FilterMode;
   searchText: string;
 }) {
+  const {renderMarkdown} = useResultsViewStore();
   const [openPrompt, setOpen] = React.useState(false);
   const handlePromptOpen = () => {
     setOpen(true);
@@ -219,7 +222,7 @@ function EvalOutputCell({
       </>
     );
   }
-
+  
   if (searchText) {
     // Highlight search matches
     const regex = new RegExp(searchText, 'gi');
@@ -257,6 +260,8 @@ function EvalOutputCell({
         )}
       </>
     );
+  } else if (renderMarkdown) {
+    node = <ReactMarkdown>{text}</ReactMarkdown>;
   }
 
   const handleRating = (isPass: boolean) => {
@@ -500,7 +505,7 @@ export default function ResultsTable({
   showStats,
   onFailureFilterToggle,
 }: ResultsTableProps) {
-  const { filePath, table, setTable } = useStore();
+  const { filePath, table, setTable } = useMainStore();
   invariant(table, 'Table should be defined');
   const { head, body } = table;
   // TODO(ian): Switch this to use prompt.metrics field once most clients have updated.

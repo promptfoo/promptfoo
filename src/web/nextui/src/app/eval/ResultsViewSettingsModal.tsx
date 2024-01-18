@@ -25,6 +25,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ open, onClose }) => {
     setWordBreak,
     showInferenceDetails,
     setShowInferenceDetails,
+    renderMarkdown,
+    setRenderMarkdown,
   } = useResultsViewStore();
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
@@ -42,6 +44,17 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ open, onClose }) => {
               label="Force line breaks"
             />
           </Tooltip>
+        </Box>
+        <Box>
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={renderMarkdown}
+                onChange={(e) => setRenderMarkdown(e.target.checked)}
+              />
+            }
+            label="Render model outputs as Markdown"
+          />
         </Box>
         <Box>
           <Tooltip title="Show detailed inference statistics such as latency, tokens used, cost, etc.">
