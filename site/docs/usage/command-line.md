@@ -122,3 +122,28 @@ These general-purpose environment variables are supported:
 | `PROMPTFOO_DISABLE_JSON_AUTOESCAPE`  | If set, disables smart variable substitution within JSON prompts |                |
 | `PROMPTFOO_DISABLE_CONVERSATION_VAR` | Prevents the `_conversation` variable from being set             |                |
 | `PROMPTFOO_DISABLE_REF_PARSER`       | Prevents JSON schema dereferencing                               |                |
+
+## `promptfoo generate dataset`
+
+BETA: Generate synthetic test cases based on existing prompts and variables.
+
+| Option                              | Description                                                | Default              |
+| ----------------------------------- | ---------------------------------------------------------- | -------------------- |
+| `-c, --config <path>`               | Path to the configuration file                             | promptfooconfig.yaml |
+| `-w, --write`                       | Write the generated test cases directly to the config file | false                |
+| `-i, --instructions <text>`         | Custom instructions for test case generation               |                      |
+| `-o, --output <path>`               | Path to write the generated test cases                     | stdout               |
+| `--numPersonas <number>`            | Number of personas to generate                             | 5                    |
+| `--numTestCasesPerPersona <number>` | Number of test cases per persona                           | 3                    |
+
+For example, this command will modify your default config file (usually `promptfooconfig.yaml`) with new test cases:
+
+```
+promptfoo generate dataset -w
+```
+
+This command will generate test cases for a specific config and write them to a file, while following special instructions:
+
+```
+promptfoo generate dataset -c my_config.yaml -o new_tests.yaml -i 'All test cases for {{location}} must be European cities'
+```

@@ -60,7 +60,7 @@ function GenerateTestCases() {
         <DialogTitle>Run on Command Line</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            UI coming soon. Run{' '}
+            This feature is in beta.  UI coming soon.  Run{' '}
             <Box
               component="code"
               sx={{
