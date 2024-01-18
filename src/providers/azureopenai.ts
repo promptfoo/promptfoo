@@ -39,6 +39,7 @@ interface AzureOpenAiCompletionOptions {
     parameters: any;
   }[];
   function_call?: 'none' | 'auto' | { name: string };
+  response_format?: { type: 'json_object' };
   stop?: string[];
 }
 
@@ -225,6 +226,7 @@ export class AzureOpenAiCompletionProvider extends AzureOpenAiGenericProvider {
       best_of: this.config.best_of ?? parseInt(process.env.OPENAI_BEST_OF || '1'),
       ...(this.config.deployment_id ? { deployment_id: this.config.deployment_id } : {}),
       ...(this.config.dataSources ? { dataSources: this.config.dataSources } : {}),
+      ...(this.config.response_format ? { response_format: this.config.response_format } : {}),
       ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
       ...(stop ? { stop } : {}),
     };
@@ -233,7 +235,7 @@ export class AzureOpenAiCompletionProvider extends AzureOpenAiGenericProvider {
       cached = false;
     try {
       ({ data, cached } = (await fetchWithCache(
-        `https://${this.apiHost}/openai/deployments/${this.deploymentName}/completions?api-version=2023-07-01-preview`,
+        `https://${this.apiHost}/openai/deployments/${this.deploymentName}/completions?api-version=2023-12-01-preview`,
         {
           method: 'POST',
           headers: {
@@ -307,6 +309,7 @@ export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvide
       function_call: this.config.function_call || undefined,
       ...(this.config.deployment_id ? { deployment_id: this.config.deployment_id } : {}),
       ...(this.config.dataSources ? { dataSources: this.config.dataSources } : {}),
+      ...(this.config.response_format ? { response_format: this.config.response_format } : {}),
       ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
       ...(this.config.stop ? { stop: this.config.stop } : {}),
     };
@@ -316,8 +319,8 @@ export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvide
       cached = false;
     try {
       const url = this.config.dataSources
-        ? `https://${this.apiHost}/openai/deployments/${this.deploymentName}/extensions/chat/completions?api-version=2023-07-01-preview`
-        : `https://${this.apiHost}/openai/deployments/${this.deploymentName}/chat/completions?api-version=2023-07-01-preview`;
+        ? `https://${this.apiHost}/openai/deployments/${this.deploymentName}/extensions/chat/completions?api-version=2023-12-01-preview`
+        : `https://${this.apiHost}/openai/deployments/${this.deploymentName}/chat/completions?api-version=2023-12-01-preview`;
 
       ({ data, cached } = (await fetchWithCache(
         url,
