@@ -60,18 +60,21 @@ function GenerateTestCases() {
         <DialogTitle>Run on Command Line</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            This feature is in beta.  UI coming soon.  Run{' '}
-            <Box
-              component="code"
-              sx={{
-                backgroundColor: theme.palette.mode === 'dark' ? '#424242' : '#f0f0f0',
-                padding: '2px 4px',
-                borderRadius: '4px',
-              }}
-            >
-              promptfoo generate dataset
-            </Box>
-            to generate test cases on the command line.
+            <p>This feature is in beta. UI coming soon.</p>
+            <p>
+              Run{' '}
+              <Box
+                component="code"
+                sx={{
+                  backgroundColor: theme.palette.mode === 'dark' ? '#424242' : '#f0f0f0',
+                  padding: '2px 4px',
+                  borderRadius: '4px',
+                }}
+              >
+                promptfoo generate dataset
+              </Box>
+              to generate test cases on the command line.
+            </p>
           </DialogContentText>
         </DialogContent>
         <DialogActions>
