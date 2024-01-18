@@ -26,6 +26,7 @@ interface AzureOpenAiCompletionOptions {
   // Promptfoo supported params
   apiHost?: string;
   apiKey?: string;
+  apiVersion?: string;
 
   // OpenAI params
   temperature?: number;
@@ -41,6 +42,8 @@ interface AzureOpenAiCompletionOptions {
   function_call?: 'none' | 'auto' | { name: string };
   response_format?: { type: 'json_object' };
   stop?: string[];
+
+  passthrough?: object;
 }
 
 class AzureOpenAiGenericProvider implements ApiProvider {
@@ -132,7 +135,9 @@ export class AzureOpenAiEmbeddingProvider extends AzureOpenAiGenericProvider {
       cached = false;
     try {
       ({ data, cached } = (await fetchWithCache(
-        `https://${this.apiHost}/openai/deployments/${this.deploymentName}/embeddings?api-version=2023-07-01-preview`,
+        `https://${this.apiHost}/openai/deployments/${this.deploymentName}/embeddings?api-version=${
+          this.config.apiVersion || '2023-12-01-preview'
+        }`,
         {
           method: 'POST',
           headers: {
@@ -229,13 +234,16 @@ export class AzureOpenAiCompletionProvider extends AzureOpenAiGenericProvider {
       ...(this.config.response_format ? { response_format: this.config.response_format } : {}),
       ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
       ...(stop ? { stop } : {}),
+      ...(this.config.passthrough || {}),
     };
     logger.debug(`Calling Azure OpenAI API: ${JSON.stringify(body)}`);
     let data,
       cached = false;
     try {
       ({ data, cached } = (await fetchWithCache(
-        `https://${this.apiHost}/openai/deployments/${this.deploymentName}/completions?api-version=2023-12-01-preview`,
+        `https://${this.apiHost}/openai/deployments/${
+          this.deploymentName
+        }/completions?api-version=${this.config.apiVersion || '2023-12-01-preview'}`,
         {
           method: 'POST',
           headers: {
@@ -312,6 +320,7 @@ export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvide
       ...(this.config.response_format ? { response_format: this.config.response_format } : {}),
       ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
       ...(this.config.stop ? { stop: this.config.stop } : {}),
+      ...(this.config.passthrough || {}),
     };
     logger.debug(`Calling Azure OpenAI API: ${JSON.stringify(body)}`);
 
@@ -319,8 +328,14 @@ export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvide
       cached = false;
     try {
       const url = this.config.dataSources
-        ? `https://${this.apiHost}/openai/deployments/${this.deploymentName}/extensions/chat/completions?api-version=2023-12-01-preview`
-        : `https://${this.apiHost}/openai/deployments/${this.deploymentName}/chat/completions?api-version=2023-12-01-preview`;
+        ? `https://${this.apiHost}/openai/deployments/${
+            this.deploymentName
+          }/extensions/chat/completions?api-version=${
+            this.config.apiVersion || '2023-12-01-preview'
+          }`
+        : `https://${this.apiHost}/openai/deployments/${
+            this.deploymentName
+          }/chat/completions?api-version=${this.config.apiVersion || '2023-12-01-preview'}`;
 
       ({ data, cached } = (await fetchWithCache(
         url,
