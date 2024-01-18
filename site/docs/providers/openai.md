@@ -597,4 +597,4 @@ There are a few things you can do if you encounter OpenAI rate limits (most comm
 
 ### OpenAI flakiness
 
-To retry HTTP requests than are Internal Server errors, set the `PROMPTFOO_RETRY_5XX` environment variable to `1`.
+To retry HTTP requests that are Internal Server errors, set the `PROMPTFOO_RETRY_5XX` environment variable to `1`.
