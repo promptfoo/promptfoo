@@ -49,7 +49,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ open, onClose }) => {
           <FormControlLabel
             control={
               <Checkbox
-                // Assuming there is a state hook for markdown rendering
                 checked={renderMarkdown}
                 onChange={(e) => setRenderMarkdown(e.target.checked)}
               />
