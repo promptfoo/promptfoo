@@ -147,3 +147,7 @@ This command will generate test cases for a specific config and write them to a 
 ```
 promptfoo generate dataset -c my_config.yaml -o new_tests.yaml -i 'All test cases for {{location}} must be European cities'
 ```
+
+:::info
+While in beta, this feature depends on OpenAI and requires the `OPENAI_API_KEY` environment variable.
+:::
