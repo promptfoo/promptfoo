@@ -4,6 +4,7 @@ import { join as pathJoin, dirname } from 'path';
 import readline from 'readline';
 
 import chalk from 'chalk';
+import yaml from 'js-yaml';
 import { Command } from 'commander';
 
 import telemetry from './telemetry';
@@ -12,7 +13,7 @@ import { readAssertions } from './assertions';
 import { loadApiProvider, loadApiProviders } from './providers';
 import { evaluate, DEFAULT_MAX_CONCURRENCY } from './evaluator';
 import { readPrompts, readProviderPromptMap } from './prompts';
-import { readTest, readTests } from './testCases';
+import { readTest, readTests, synthesize, synthesizeFromTestSuite } from './testCases';
 import {
   cleanupOldResults,
   maybeReadConfig,
@@ -84,6 +85,124 @@ function createDummyFiles(directory: string | null) {
   }
 }
 
+async function resolveConfigs(
+  cmdObj: Partial<CommandLineOptions>,
+  defaultConfig: Partial<UnifiedConfig>,
+): Promise<{ testSuite: TestSuite; config: Partial<UnifiedConfig> }> {
+  // Config parsing
+  let fileConfig: Partial<UnifiedConfig> = {};
+  const configPaths = cmdObj.config;
+  if (configPaths) {
+    fileConfig = await readConfigs(configPaths);
+  }
+
+  // Standalone assertion mode
+  if (cmdObj.assertions) {
+    if (!cmdObj.modelOutputs) {
+      logger.error(chalk.red('You must provide --model-outputs when using --assertions'));
+      process.exit(1);
+    }
+    const modelOutputs = JSON.parse(
+      readFileSync(pathJoin(process.cwd(), cmdObj.modelOutputs), 'utf8'),
+    ) as string[];
+    const assertions = await readAssertions(cmdObj.assertions);
+    fileConfig.prompts = ['{{output}}'];
+    fileConfig.providers = ['echo'];
+    fileConfig.tests = modelOutputs.map((output) => ({
+      vars: {
+        output,
+      },
+      assert: assertions,
+    }));
+  }
+
+  // Use basepath in cases where path was supplied in the config file
+  const basePath = configPaths ? dirname(configPaths[0]) : '';
+
+  const defaultTestRaw = fileConfig.defaultTest || defaultConfig.defaultTest;
+  const config: Omit<UnifiedConfig, 'evaluateOptions' | 'commandLineOptions'> = {
+    description: fileConfig.description || defaultConfig.description,
+    prompts: cmdObj.prompts || fileConfig.prompts || defaultConfig.prompts || [],
+    providers: cmdObj.providers || fileConfig.providers || defaultConfig.providers || [],
+    tests: cmdObj.tests || cmdObj.vars || fileConfig.tests || defaultConfig.tests || [],
+    scenarios: fileConfig.scenarios || defaultConfig.scenarios,
+    env: fileConfig.env || defaultConfig.env,
+    sharing:
+      process.env.PROMPTFOO_DISABLE_SHARING === '1'
+        ? false
+        : fileConfig.sharing ?? defaultConfig.sharing ?? true,
+    defaultTest: defaultTestRaw ? await readTest(defaultTestRaw, basePath) : undefined,
+    outputPath: cmdObj.output || fileConfig.outputPath || defaultConfig.outputPath,
+  };
+
+  // Validation
+  if (!config.prompts || config.prompts.length === 0) {
+    logger.error(chalk.red('You must provide at least 1 prompt'));
+    process.exit(1);
+  }
+  if (!config.providers || config.providers.length === 0) {
+    logger.error(
+      chalk.red('You must specify at least 1 provider (for example, openai:gpt-3.5-turbo)'),
+    );
+    process.exit(1);
+  }
+
+  // Parse prompts, providers, and tests
+  const parsedPrompts = readPrompts(config.prompts, cmdObj.prompts ? undefined : basePath);
+  const parsedProviders = await loadApiProviders(config.providers, {
+    env: config.env,
+    basePath,
+  });
+  const parsedTests: TestCase[] = await readTests(
+    config.tests || [],
+    cmdObj.tests ? undefined : basePath,
+  );
+
+  // Parse testCases for each scenario
+  if (fileConfig.scenarios) {
+    for (const scenario of fileConfig.scenarios) {
+      const parsedScenarioTests: TestCase[] = await readTests(
+        scenario.tests,
+        cmdObj.tests ? undefined : basePath,
+      );
+      scenario.tests = parsedScenarioTests;
+    }
+  }
+
+  const parsedProviderPromptMap = readProviderPromptMap(config, parsedPrompts);
+
+  if (parsedPrompts.length === 0) {
+    logger.error(chalk.red('No prompts found'));
+    process.exit(1);
+  }
+
+  const defaultTest: TestCase = {
+    options: {
+      prefix: cmdObj.promptPrefix,
+      suffix: cmdObj.promptSuffix,
+      provider: cmdObj.grader,
+      // rubricPrompt
+      ...(config.defaultTest?.options || {}),
+    },
+    ...config.defaultTest,
+  };
+
+  const testSuite: TestSuite = {
+    description: config.description,
+    prompts: parsedPrompts,
+    providers: parsedProviders,
+    providerPromptMap: parsedProviderPromptMap,
+    tests: parsedTests,
+    scenarios: config.scenarios,
+    defaultTest,
+    nunjucksFilters: readFilters(
+      fileConfig.nunjucksFilters || defaultConfig.nunjucksFilters || {},
+      basePath,
+    ),
+  };
+  return { config, testSuite };
+}
+
 async function main() {
   await checkForUpdates();
 
@@ -94,10 +213,12 @@ async function main() {
     pathJoin(pwd, 'promptfooconfig.yaml'),
   ];
   let defaultConfig: Partial<UnifiedConfig> = {};
+  let defaultConfigPath: string | undefined;
   for (const path of potentialPaths) {
     const maybeConfig = await maybeReadConfig(path);
     if (maybeConfig) {
       defaultConfig = maybeConfig;
+      defaultConfigPath = path;
       break;
     }
   }
@@ -222,6 +343,90 @@ async function main() {
     });
 
   program
+    .command('generate dataset')
+    .description('Generate test cases for a given prompt')
+    .option(
+      '-i, --instructions [instructions]',
+      'Additional instructions to follow while generating test cases',
+    )
+    .option(
+      '-c, --config [path]',
+      'Path to configuration file. Defaults to promptfooconfig.yaml',
+      defaultConfigPath,
+    )
+    .option('-o, --output [path]', 'Path to output file')
+    .option('-w, --write', 'Write results to promptfoo configuration file')
+    .option('--numPersonas <number>', 'Number of personas to generate', '5')
+    .option('--numTestCasesPerPersona <number>', 'Number of test cases per persona', '3')
+    .action(
+      async (
+        _,
+        options: {
+          config?: string;
+          instructions?: string;
+          output?: string;
+          numPersonas: string;
+          numTestCasesPerPersona: string;
+          write: boolean;
+        },
+      ) => {
+        let testSuite: TestSuite;
+        if (options.config) {
+          const resolved = await resolveConfigs(
+            {
+              config: [options.config],
+            },
+            defaultConfig,
+          );
+          testSuite = resolved.testSuite;
+        } else {
+          throw new Error('Could not find config file. Please use `--config`');
+        }
+
+        const results = await synthesizeFromTestSuite(testSuite, {
+          instructions: options.instructions,
+          numPersonas: parseInt(options.numPersonas, 10),
+          numTestCasesPerPersona: parseInt(options.numTestCasesPerPersona, 10),
+        });
+        const configAddition = { tests: results.map((result) => ({ vars: result })) };
+        const yamlString = yaml.dump(configAddition);
+        if (options.output) {
+          writeFileSync(options.output, yamlString);
+          printBorder();
+          logger.info(`Wrote ${results.length} new test cases to ${options.output}`);
+          printBorder();
+        } else {
+          printBorder();
+          logger.info('New test Cases');
+          printBorder();
+          logger.info(yamlString);
+        }
+
+        printBorder();
+        const configPath = options.config;
+        if (options.write && configPath) {
+          const existingConfig = yaml.load(
+            readFileSync(configPath, 'utf8'),
+          ) as Partial<UnifiedConfig>;
+          existingConfig.tests = [...(existingConfig.tests || []), ...configAddition.tests];
+          writeFileSync(configPath, yaml.dump(existingConfig));
+          logger.info(`Wrote ${results.length} new test cases to ${configPath}`);
+        } else {
+          logger.info(
+            `Copy the above test cases or run ${chalk.greenBright(
+              'promptfoo generate dataset --write',
+            )} to write directly to the config`,
+          );
+        }
+
+        telemetry.record('command_used', {
+          name: 'generate_dataset',
+        });
+        await telemetry.send();
+      },
+    );
+
+  program
     .command('eval')
     .description('Evaluate prompts')
     .option('-p, --prompts <paths...>', 'Paths to prompt files (.txt)')
@@ -313,117 +518,7 @@ async function main() {
         disableCache();
       }
 
-      // Config parsing
-      let fileConfig: Partial<UnifiedConfig> = {};
-      const configPaths = cmdObj.config;
-      if (configPaths) {
-        fileConfig = await readConfigs(configPaths);
-      }
-
-      // Standalone assertion mode
-      if (cmdObj.assertions) {
-        if (!cmdObj.modelOutputs) {
-          logger.error(chalk.red('You must provide --model-outputs when using --assertions'));
-          process.exit(1);
-        }
-        const modelOutputs = JSON.parse(
-          readFileSync(pathJoin(process.cwd(), cmdObj.modelOutputs), 'utf8'),
-        ) as string[];
-        const assertions = await readAssertions(cmdObj.assertions);
-        fileConfig.prompts = ['{{output}}'];
-        fileConfig.providers = ['echo'];
-        fileConfig.tests = modelOutputs.map((output) => ({
-          vars: {
-            output,
-          },
-          assert: assertions,
-        }));
-      }
-
-      // Use basepath in cases where path was supplied in the config file
-      const basePath = configPaths ? dirname(configPaths[0]) : '';
-
-      const defaultTestRaw = fileConfig.defaultTest || defaultConfig.defaultTest;
-      const config: Partial<UnifiedConfig> = {
-        description: fileConfig.description || defaultConfig.description,
-        prompts: cmdObj.prompts || fileConfig.prompts || defaultConfig.prompts,
-        providers: cmdObj.providers || fileConfig.providers || defaultConfig.providers,
-        tests: cmdObj.tests || cmdObj.vars || fileConfig.tests || defaultConfig.tests,
-        scenarios: fileConfig.scenarios || defaultConfig.scenarios,
-        env: fileConfig.env || defaultConfig.env,
-        sharing:
-          process.env.PROMPTFOO_DISABLE_SHARING === '1'
-            ? false
-            : fileConfig.sharing ?? defaultConfig.sharing ?? true,
-        defaultTest: defaultTestRaw ? await readTest(defaultTestRaw, basePath) : undefined,
-      };
-
-      // Validation
-      if (!config.prompts || config.prompts.length === 0) {
-        logger.error(chalk.red('You must provide at least 1 prompt'));
-        process.exit(1);
-      }
-      if (!config.providers || config.providers.length === 0) {
-        logger.error(
-          chalk.red('You must specify at least 1 provider (for example, openai:gpt-3.5-turbo)'),
-        );
-        process.exit(1);
-      }
-
-      // Parse prompts, providers, and tests
-
-      const parsedPrompts = readPrompts(config.prompts, cmdObj.prompts ? undefined : basePath);
-      const parsedProviders = await loadApiProviders(config.providers, {
-        env: config.env,
-        basePath,
-      });
-      const parsedTests: TestCase[] = await readTests(
-        config.tests || [],
-        cmdObj.tests ? undefined : basePath,
-      );
-
-      // Parse testCases for each scenario
-      if (fileConfig.scenarios) {
-        for (const scenario of fileConfig.scenarios) {
-          const parsedScenarioTests: TestCase[] = await readTests(
-            scenario.tests,
-            cmdObj.tests ? undefined : basePath,
-          );
-          scenario.tests = parsedScenarioTests;
-        }
-      }
-
-      const parsedProviderPromptMap = readProviderPromptMap(config, parsedPrompts);
-
-      if (parsedPrompts.length === 0) {
-        logger.error(chalk.red('No prompts found'));
-        process.exit(1);
-      }
-
-      const defaultTest: TestCase = {
-        options: {
-          prefix: cmdObj.promptPrefix,
-          suffix: cmdObj.promptSuffix,
-          provider: cmdObj.grader,
-          // rubricPrompt
-          ...(config.defaultTest?.options || {}),
-        },
-        ...config.defaultTest,
-      };
-
-      const testSuite: TestSuite = {
-        description: config.description,
-        prompts: parsedPrompts,
-        providers: parsedProviders,
-        providerPromptMap: parsedProviderPromptMap,
-        tests: parsedTests,
-        scenarios: config.scenarios,
-        defaultTest,
-        nunjucksFilters: readFilters(
-          fileConfig.nunjucksFilters || defaultConfig.nunjucksFilters || {},
-          basePath,
-        ),
-      };
+      const { config, testSuite } = await resolveConfigs(cmdObj, defaultConfig);
 
       let maxConcurrency = parseInt(cmdObj.maxConcurrency || '', 10);
       const delay = parseInt(cmdObj.delay || '', 0);
@@ -473,7 +568,7 @@ async function main() {
         }
       }
 
-      const outputPath = cmdObj.output || fileConfig.outputPath || defaultConfig.outputPath;
+      const { outputPath } = config;
       if (outputPath) {
         // Write output to file
         if (typeof outputPath === 'string') {
