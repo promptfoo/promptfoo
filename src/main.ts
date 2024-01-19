@@ -421,6 +421,9 @@ async function main() {
 
         telemetry.record('command_used', {
           name: 'generate_dataset',
+          numPrompts: testSuite.prompts.length,
+          numTestsExisting: (testSuite.tests || []).length,
+          numTestsGenerated: results.length,
         });
         await telemetry.send();
       },
