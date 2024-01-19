@@ -3,7 +3,7 @@ sidebar_position: 5
 sidebar_label: Overview
 ---
 
-# Test assertions
+# Assertions & metrics
 
 Assertions are used to compare the LLM output against expected values or conditions. While assertions are not required to run an eval, they are a useful way to automate your analysis.
 
