@@ -1,7 +1,7 @@
 import OpenAI from 'openai';
 
 import logger from '../logger';
-import { fetchWithCache } from '../cache';
+import { fetchWithCache, getCache, isCacheEnabled } from '../cache';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
 import { OpenAiFunction, OpenAiTool } from './openaiUtil';
 
@@ -643,6 +643,73 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
       },
       */
     };
+  }
+}
+
+export class OpenAiImageProvider extends OpenAiGenericProvider {
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    callApiOptions?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    const cache = await getCache();
+    const cacheKey = `openai:image:${JSON.stringify({context, prompt})}`;
+
+    if (!this.getApiKey()) {
+      throw new Error(
+        'OpenAI API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
+      );
+    }
+
+    const openai = new OpenAI({
+      apiKey: this.getApiKey(),
+      organization: this.getOrganization(),
+      // Unfortunate, but the OpenAI SDK's implementation of base URL is different from how we treat base URL elsewhere.
+      baseURL: this.getApiUrl() + '/v1',
+      maxRetries: 3,
+      timeout: REQUEST_TIMEOUT_MS,
+    });
+
+    let response: OpenAI.Images.ImagesResponse | undefined;
+    let cached = false;
+    if (isCacheEnabled()) {
+      // Try to get the cached response
+      const cachedResponse = await cache.get(cacheKey);
+      if (cachedResponse) {
+        logger.debug(`Retrieved cached response for ${prompt}: ${cachedResponse}`);
+        response = JSON.parse(cachedResponse as string) as OpenAI.Images.ImagesResponse;
+        cached = true;
+      }
+    }
+
+    if (!response) {
+      response = await openai.images.generate({
+        model: this.modelName,
+        prompt,
+        n: 1,
+        size: '1024x1024',
+      });
+    }
+
+    const url = response.data[0].url;
+    if (!url) {
+      return {
+        error: `No image URL found in response: ${JSON.stringify(response)}`,
+      };
+    }
+
+    if (!cached && isCacheEnabled()) {
+      try {
+        await cache.set(cacheKey, JSON.stringify(response));
+      } catch (err) {
+        logger.error(`Failed to cache response: ${String(err)}`);
+      }
+    }
+
+    return {
+      output: `[IMAGE] ${url}`,
+      cached,
+    }
   }
 }
 

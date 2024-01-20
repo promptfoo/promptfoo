@@ -171,10 +171,51 @@ function EvalOutputCell({
   const handlePromptClose = () => {
     setOpen(false);
   };
+
+  const [lightboxOpen, setLightboxOpen] = React.useState(false);
+  const toggleLightbox = () => setLightboxOpen(!lightboxOpen);
+
   let text = typeof output.text === 'string' ? output.text : JSON.stringify(output.text);
   let node: React.ReactNode | undefined;
   let chunks: string[] = [];
-  if (!output.pass && text.includes('---')) {
+  if (text.startsWith('[IMAGE]')) {
+    const url = text.slice('[IMAGE]'.length).trim();
+
+    node = (
+      <>
+        <img
+          loading="lazy"
+          src={url}
+          alt={output.prompt}
+          style={{ maxWidth: '256px', maxHeight: '256px', cursor: 'pointer' }}
+          onClick={toggleLightbox}
+        />
+        {lightboxOpen && (
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.7)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 1000,
+            }}
+            onClick={toggleLightbox}
+          >
+            <img
+              src={url}
+              alt={output.prompt}
+              style={{ maxWidth: '90%', maxHeight: '90%' }}
+            />
+          </div>
+        )}
+      </>
+    );
+  } else if (!output.pass && text.includes('---')) {
     // TODO(ian): Plumb through failure message instead of parsing it out.
     chunks = text.split('---');
     text = chunks.slice(1).join('---');
@@ -419,8 +460,7 @@ function EvalOutputCell({
             </div>
             <CustomMetrics lookup={output.namedScores} />
             <span className="fail-reason">
-              {chunks[0]
-                .trim()
+              {chunks[0]?.trim()
                 .split('\n')
                 .map((line, index) => (
                   <React.Fragment key={index}>
