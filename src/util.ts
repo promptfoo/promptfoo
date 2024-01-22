@@ -748,6 +748,12 @@ export function readFilters(
 }
 
 export function getNunjucksEngine(filters?: NunjucksFilterMap) {
+  if (process.env.PROMPTFOO_DISABLE_TEMPLATING) {
+    return {
+      renderString: (template: string) => template,
+    };
+  }
+
   const env = nunjucks.configure({
     autoescape: false,
   });
