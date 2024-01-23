@@ -110,7 +110,9 @@ export default function Eval({
       setLoaded(true);
     } else if (fetchId) {
       const run = async () => {
-        const response = await fetch(`${REMOTE_API_BASE_URL}/eval/${fetchId}`);
+        const url = `${REMOTE_API_BASE_URL}/eval/${fetchId}`;
+        console.log('Fetching eval from remote server', url);
+        const response = await fetch(url);
         if (!response.ok) {
           setFailed(true);
           return;

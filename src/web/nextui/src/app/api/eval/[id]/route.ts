@@ -7,6 +7,7 @@ import { IS_RUNNING_LOCALLY } from '@/constants';
 export const dynamic = IS_RUNNING_LOCALLY ? 'auto' : 'force-dynamic';
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+  console.log('Getting eval result with id', params.id);
   try {
     const result = await store.get(params.id);
     if (!result) {
@@ -23,6 +24,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+  console.log('Patching eval result with id', params.id);
   try {
     const evalTable = await req.json();
     if (!params.id) {
