@@ -23,17 +23,17 @@ import promptfoo, {
 import logger from '../logger';
 import { getDirectory } from '../esm';
 import {
-  getLatestResultsPath,
   getPrompts,
   getPromptsForTestCasesHash,
-  listPreviousResultFilenames,
   listPreviousResults,
   readResult,
-  filenameToDate,
   getTestCases,
   updateResult,
+  readLatestResults,
+  migrateResultsFromFileSystemToDatabase,
 } from '../util';
 import { synthesizeFromTestSuite } from '../testCases';
+import { getDbPath } from '../database';
 
 // Running jobs
 const evalJobs = new Map<string, Job>();
@@ -41,7 +41,7 @@ const evalJobs = new Map<string, Job>();
 // Prompts cache
 let allPrompts: PromptWithMetadata[] | null = null;
 
-export function startServer(port = 15500, apiBaseUrl = '', skipConfirmation = false) {
+export async function startServer(port = 15500, apiBaseUrl = '', skipConfirmation = false) {
   const app = express();
 
   const staticDir = path.join(getDirectory(), 'web', 'nextui');
@@ -57,41 +57,37 @@ export function startServer(port = 15500, apiBaseUrl = '', skipConfirmation = fa
       origin: '*',
     },
   });
+  
+  await migrateResultsFromFileSystemToDatabase();
 
-  const latestJsonPath = getLatestResultsPath();
-  const readLatestJson = () => {
-    const data = fs.readFileSync(latestJsonPath, 'utf8');
-    return JSON.parse(data);
-  };
-
-  io.on('connection', (socket) => {
+  io.on('connection', async (socket) => {
     // Send the initial table data when a client connects
-    socket.emit('init', readLatestJson());
+    socket.emit('init', await readLatestResults());
 
-    // Watch for changes to latest.json and emit the update event
-    const watcher = debounce((curr: Stats, prev: Stats) => {
+    // Watch for changes to sqlite db and emit the update event
+    const watcher = debounce(async (curr: Stats, prev: Stats) => {
       if (curr.mtime !== prev.mtime) {
-        socket.emit('update', readLatestJson());
+        socket.emit('update', await readLatestResults());
         allPrompts = null;
       }
     }, 250);
-    fs.watchFile(latestJsonPath, watcher);
+
+    const dbPath = getDbPath();
+    fs.watchFile(dbPath, watcher);
 
     // Stop watching the file when the socket connection is closed
     socket.on('disconnect', () => {
-      fs.unwatchFile(latestJsonPath, watcher);
+      fs.unwatchFile(dbPath, watcher);
     });
   });
 
   app.get('/api/results', (req, res) => {
     const previousResults = listPreviousResults();
-    previousResults.reverse();
     res.json({
-      data: previousResults.map((fileMeta) => {
-        const dateString = filenameToDate(fileMeta.fileName);
+      data: previousResults.map((meta) => {
         return {
-          id: fileMeta.fileName,
-          label: fileMeta.description ? `${fileMeta.description} (${dateString})` : dateString,
+          id: meta.evalId,
+          label: meta.description ? `${meta.description} (${meta.evalId})` : meta.evalId,
         };
       }),
     });
@@ -161,18 +157,9 @@ export function startServer(port = 15500, apiBaseUrl = '', skipConfirmation = fa
     }
   });
 
-  app.get('/api/results/:filename', (req, res) => {
-    const filename = req.params.filename;
-    const safeFilename = path.basename(filename);
-    if (
-      safeFilename !== filename ||
-      !listPreviousResultFilenames()
-        .includes(safeFilename)
-    ) {
-      res.status(400).send('Invalid filename');
-      return;
-    }
-    const file = readResult(safeFilename);
+  app.get('/api/results/:id', async (req, res) => {
+    const { id } = req.params;
+    const file = await readResult(id);
     if (!file) {
       res.status(404).send('Result not found');
       return;
@@ -180,21 +167,21 @@ export function startServer(port = 15500, apiBaseUrl = '', skipConfirmation = fa
     res.json({ data: file.result });
   });
 
-  app.get('/api/prompts', (req, res) => {
+  app.get('/api/prompts', async (req, res) => {
     if (allPrompts == null) {
-      allPrompts = getPrompts();
+      allPrompts = await getPrompts();
     }
     res.json({ data: allPrompts });
   });
 
-  app.get('/api/prompts/:sha256hash', (req, res) => {
+  app.get('/api/prompts/:sha256hash', async (req, res) => {
     const sha256hash = req.params.sha256hash;
-    const prompts = getPromptsForTestCasesHash(sha256hash);
+    const prompts = await getPromptsForTestCasesHash(sha256hash);
     res.json({ data: prompts });
   });
 
-  app.get('/api/datasets', (req, res) => {
-    res.json({ data: getTestCases() });
+  app.get('/api/datasets', async (req, res) => {
+    res.json({ data: await getTestCases() });
   });
 
   app.get('/api/config', (req, res) => {

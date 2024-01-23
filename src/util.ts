@@ -9,10 +9,13 @@ import nunjucks from 'nunjucks';
 import yaml from 'js-yaml';
 import { stringify } from 'csv-stringify/sync';
 import { globSync } from 'glob';
+import { asc, desc, eq } from 'drizzle-orm';
 
 import logger from './logger';
 import { getDirectory } from './esm';
 import { readTests } from './testCases';
+import { datasets, getDb, evals, evalsToDatasets, evalsToPrompts, prompts } from './database';
+import { runDbMigrations } from './migrate';
 
 import type {
   EvalWithMetadata,
@@ -395,50 +398,122 @@ export function setConfigDirectoryPath(newPath: string): void {
   configDirectoryPath = newPath;
 }
 
+/**
+ * TODO(ian): Remove this
+ * @deprecated Use readLatestResults directly instead.
+ */
 export function getLatestResultsPath(): string {
   return path.join(getConfigDirectoryPath(), 'output', 'latest.json');
 }
 
-export function writeLatestResults(
-  results: EvaluateSummary,
-  config: Partial<UnifiedConfig>,
-): FilePath | null {
-  const resultsDirectory = path.join(getConfigDirectoryPath(), 'output');
-
-  // Replace hyphens with colons (Windows compatibility).
-  const filename = dateToFilename(new Date());
-  const newResultsPath = path.join(resultsDirectory, filename);
-  const latestResultsPath = getLatestResultsPath();
-  try {
-    fs.mkdirSync(resultsDirectory, { recursive: true });
-
-    const resultsFileData: ResultsFile = {
-      version: 2,
-      createdAt: new Date().toISOString(),
+export function writeResultsToDatabase(results: EvaluateSummary, config: Partial<UnifiedConfig>, createdAt?: Date): string {
+  createdAt = createdAt || new Date();
+  const evalId = `eval-${createdAt.toISOString()}`;
+  const db = getDb();
+  db.insert(evals)
+    .values({
+      id: evalId,
+      createdAt: createdAt.getTime(),
+      description: config.description,
       config,
       results,
-    };
-    fs.writeFileSync(newResultsPath, JSON.stringify(resultsFileData, null, 2));
+    })
+    .run();
 
-    // Use copy instead of symlink to avoid issues with Windows permissions.
-    try {
-      // Backwards compatibility: delete old symlink.
-      fs.unlinkSync(latestResultsPath);
-    } catch {}
-    fs.copyFileSync(newResultsPath, latestResultsPath);
+  logger.debug(`Inserted evalId ${evalId}`);
 
-    cleanupOldResults();
+  // Record prompt relation
+  for (const prompt of results.table.head.prompts) {
+    const promptId = sha256(prompt.display);
+    db.insert(prompts)
+      .values({
+        id: promptId,
+        prompt: prompt.display,
+        hash: promptId,
+      })
+      .onConflictDoNothing()
+      .run();
 
-    return filename;
-  } catch (err) {
-    logger.error(`Failed to write latest results to ${newResultsPath}:\n${err}`);
-    return null;
+    db.insert(evalsToPrompts)
+      .values({
+        evalId,
+        promptId,
+      })
+      .onConflictDoNothing()
+      .run();
+
+    logger.debug(`Inserted/updated promptId ${promptId}`);
   }
+
+  /*
+  for (const result of results.results) {
+    const promptId = sha256(result.prompt.display);
+    db.insert(llmOutputs)
+      .values({
+        id: uuidv4(),
+        evalId,
+        promptId,
+        providerId: result.provider.id || 'unknown',
+        vars: JSON.stringify(result.vars),
+        response: JSON.stringify(result.response),
+        error: result.error,
+        latencyMs: result.latencyMs,
+        gradingResult: JSON.stringify(result.gradingResult),
+        namedScores: JSON.stringify(result.namedScores),
+        cost: result.cost,
+      })
+      .run();
+  }
+  logger.debug(`Inserted ${results.results.length} llmOutputs for evalId ${evalId}`);
+  */
+
+  // Record dataset relation
+  const datasetId = sha256(JSON.stringify(config.tests));
+  db.insert(datasets)
+    .values({
+      id: datasetId,
+      testCaseId: JSON.stringify(config.tests),
+    })
+    .onConflictDoNothing()
+    .run();
+  db.insert(evalsToDatasets)
+    .values({
+      evalId,
+      datasetId,
+    })
+    .onConflictDoNothing()
+    .run();
+  logger.debug(`Inserted/updated datasetId ${datasetId}`);
+
+  return evalId;
 }
 
-const resultsCache: { [fileName: string]: ResultsFile | undefined } = {};
+/**
+ * 
+ * @returns Last 100 evals in descending order.
+ */
+export function listPreviousResults(): { evalId: string; description?: string | null }[] {
+  const db = getDb();
+  const results = db
+    .select({
+      name: evals.id,
+      description: evals.description,
+    })
+    .from(evals)
+    .orderBy(desc(evals.createdAt))
+    .limit(100)
+    .all();
 
-export function listPreviousResultFilenames(): string[] {
+  return results.map((result) => ({
+    evalId: result.name,
+    description: result.description,
+  }));
+}
+
+/**
+ * @deprecated Used only for migration to sqlite
+ */
+export function listPreviousResultFilenames_fileSystem(): string[] {
   const directory = path.join(getConfigDirectoryPath(), 'output');
   const files = fs.readdirSync(directory);
   const resultsFiles = files.filter((file) => file.startsWith('eval-') && file.endsWith('.json'));
@@ -449,9 +524,14 @@ export function listPreviousResultFilenames(): string[] {
   });
 }
 
-export function listPreviousResults(): { fileName: string; description?: string }[] {
+const resultsCache: { [fileName: string]: ResultsFile | undefined } = {};
+
+/**
+ * @deprecated Used only for migration to sqlite
+ */
+export function listPreviousResults_fileSystem(): { fileName: string; description?: string }[] {
   const directory = path.join(getConfigDirectoryPath(), 'output');
-  const sortedFiles = listPreviousResultFilenames();
+  const sortedFiles = listPreviousResultFilenames_fileSystem();
   return sortedFiles.map((fileName) => {
     if (!resultsCache[fileName]) {
       try {
@@ -469,10 +549,53 @@ export function listPreviousResults(): { fileName: string; description?: string 
   });
 }
 
+let attemptedMigration = false;
+export async function migrateResultsFromFileSystemToDatabase() {
+  if (attemptedMigration) {
+    return;
+  }
+
+  const resultsFromFileSystem = listPreviousResults_fileSystem();
+  if (resultsFromFileSystem.length === 0) {
+    return;
+  }
+
+  logger.info(`🔁 Migrating ${resultsFromFileSystem.length} flat files to local database.`);
+  logger.info('This is a one-time operation and may take a minute...');
+  attemptedMigration = true;
+  
+  // First run db migrations
+  logger.info('Creating the sqlite database...');
+  await runDbMigrations();
+  
+  // Then move all the files over
+  logger.info('Moving files into database...');
+  for (const { fileName } of resultsFromFileSystem) {
+    const fileData = readResult_fileSystem(fileName);
+    if (fileData) {
+      await writeResultsToDatabase(fileData.result.results, fileData.result.config, filenameToDate(fileName));
+      logger.debug(`Migrated ${fileName} to database.`);
+      try {
+        fs.unlinkSync(path.join(getConfigDirectoryPath(), 'output', fileName));
+      } catch (err) {
+        logger.warn(`Failed to delete ${fileName} after migration: ${err}`);
+      }
+    } else {
+      logger.warn(`Failed to migrate result ${fileName} due to read error.`);
+    }
+  }
+  try {
+    fs.unlinkSync(getLatestResultsPath());
+  } catch (err) {
+    logger.warn(`Failed to delete latest.json: ${err}`);
+  }
+  logger.info('Migration complete.');
+}
+
 const RESULT_HISTORY_LENGTH = parseInt(process.env.RESULT_HISTORY_LENGTH || '', 10) || 100;
 
-export function cleanupOldResults(remaining = RESULT_HISTORY_LENGTH) {
-  const sortedFilenames = listPreviousResultFilenames();
+export function cleanupOldFileResults(remaining = RESULT_HISTORY_LENGTH) {
+  const sortedFilenames = listPreviousResultFilenames_fileSystem();
   for (let i = 0; i < sortedFilenames.length - remaining; i++) {
     fs.unlinkSync(path.join(getConfigDirectoryPath(), 'output', sortedFilenames[i]));
   }
@@ -487,6 +610,8 @@ export function filenameToDate(filename: string) {
   const formattedDateString = `${dateParts[0]}T${timePart}`;
 
   const date = new Date(formattedDateString);
+  return date;
+  /*
   return date.toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'long',
@@ -496,13 +621,54 @@ export function filenameToDate(filename: string) {
     second: '2-digit',
     timeZoneName: 'short',
   });
+  */
 }
 
 export function dateToFilename(date: Date) {
   return `eval-${date.toISOString().replace(/:/g, '-')}.json`;
 }
 
-export function readResult(
+export async function readResult(
+  id: string,
+): Promise<{ id: string; result: ResultsFile; createdAt: Date } | undefined> {
+  const db = getDb();
+  try {
+    const evalResult = await db
+      .select({
+        id: evals.id,
+        createdAt: evals.createdAt,
+        results: evals.results,
+        config: evals.config,
+      })
+      .from(evals)
+      .where(eq(evals.id, id))
+      .execute();
+
+    if (evalResult.length === 0) {
+      return undefined;
+    }
+
+    const { id: resultId, createdAt, results, config } = evalResult[0];
+    const result: ResultsFile = {
+      version: 3,
+      createdAt: new Date(createdAt).toISOString(),
+      results,
+      config,
+    };
+    return {
+      id: resultId,
+      result,
+      createdAt: new Date(createdAt),
+    };
+  } catch (err) {
+    logger.error(`Failed to read result with ID ${id} from database:\n${err}`);
+  }
+}
+
+/**
+ * @deprecated Used only for migration to sqlite
+ */
+export function readResult_fileSystem(
   name: string,
 ): { id: string; result: ResultsFile; createdAt: Date } | undefined {
   const resultsDirectory = path.join(getConfigDirectoryPath(), 'output');
@@ -511,7 +677,7 @@ export function readResult(
     const result = JSON.parse(
       fs.readFileSync(fs.realpathSync(resultsPath), 'utf-8'),
     ) as ResultsFile;
-    const createdAt = new Date(filenameToDate(name));
+    const createdAt = filenameToDate(name);
     return {
       id: sha256(JSON.stringify(result.config)),
       result,
@@ -522,38 +688,78 @@ export function readResult(
   }
 }
 
-export function updateResult(
-  filename: string,
+export async function updateResult(
+  id: string,
   newConfig?: Partial<UnifiedConfig>,
   newTable?: EvaluateTable,
-): void {
-  const resultsDirectory = path.join(getConfigDirectoryPath(), 'output');
-  const safeFilename = path.basename(filename);
-  const resultsPath = path.join(resultsDirectory, safeFilename);
+): Promise<void> {
+  const db = getDb();
   try {
-    const evalData = JSON.parse(fs.readFileSync(resultsPath, 'utf-8')) as ResultsFile;
+    // Fetch the existing eval data from the database
+    const existingEval = await db
+      .select({
+        config: evals.config,
+        results: evals.results,
+      })
+      .from(evals)
+      .where(eq(evals.id, id))
+      .limit(1)
+      .all();
+
+    if (existingEval.length === 0) {
+      logger.error(`Eval with ID ${id} not found.`);
+      return;
+    }
+
+    const evalData = existingEval[0];
     if (newConfig) {
       evalData.config = newConfig;
     }
     if (newTable) {
       evalData.results.table = newTable;
     }
-    resultsCache[safeFilename] = evalData;
-    fs.writeFileSync(resultsPath, JSON.stringify(evalData, null, 2));
-    logger.info(`Updated eval at ${resultsPath}`);
 
-    const resultFilenames = listPreviousResultFilenames();
-    if (filename === resultFilenames[resultFilenames.length - 1]) {
-      // Overwite latest.json too
-      fs.copyFileSync(resultsPath, getLatestResultsPath());
-    }
+    await db
+      .update(evals)
+      .set({
+        description: evalData.config.description,
+        config: evalData.config,
+        results: evalData.results,
+      })
+      .where(eq(evals.id, id))
+      .run();
+
+    logger.info(`Updated eval with ID ${id}`);
   } catch (err) {
-    logger.error(`Failed to update eval at ${resultsPath}:\n${err}`);
+    logger.error(`Failed to update eval with ID ${id}:\n${err}`);
   }
 }
 
-export function readLatestResults(): ResultsFile | undefined {
-  return JSON.parse(fs.readFileSync(getLatestResultsPath(), 'utf-8'));
+export async function readLatestResults(): Promise<ResultsFile | undefined> {
+  const db = getDb();
+  const latestResults = await db
+    .select({
+      id: evals.id,
+      createdAt: evals.createdAt,
+      description: evals.description,
+      results: evals.results,
+      config: evals.config,
+    })
+    .from(evals)
+    .orderBy(desc(evals.createdAt))
+    .limit(1);
+
+  if (!latestResults || latestResults.length === 0) {
+    return undefined;
+  }
+
+  const latestResult = latestResults[0];
+  return {
+    version: 3,
+    createdAt: new Date(latestResult.createdAt).toISOString(),
+    results: latestResult.results,
+    config: latestResult.config,
+  };
 }
 
 export function getPromptsForTestCases(testCases: TestCase[]) {
@@ -578,23 +784,38 @@ export function getPrompts() {
   return getPromptsWithPredicate(() => true);
 }
 
-export function getPromptsWithPredicate(
+export async function getPromptsWithPredicate(
   predicate: (result: ResultsFile) => boolean,
-): PromptWithMetadata[] {
-  const resultFilenames = listPreviousResultFilenames();
+): Promise<PromptWithMetadata[]> {
+  // TODO(ian): Make this use a proper database query
+  const db = getDb();
+  const evals_ = await db
+    .select({
+      id: evals.id,
+      createdAt: evals.createdAt,
+      results: evals.results,
+      config: evals.config,
+    })
+    .from(evals)
+    .limit(100)
+    .all();
+
   const groupedPrompts: { [hash: string]: PromptWithMetadata } = {};
 
-  for (const fileName of resultFilenames) {
-    const file = readResult(fileName);
-    if (!file) {
-      continue;
-    }
-    const { result, createdAt } = file;
-    if (result && predicate(result)) {
-      for (const prompt of result.results.table.head.prompts) {
-        const evalId = sha256(JSON.stringify(result.config));
+  for (const eval_ of evals_) {
+    const createdAt = new Date(eval_.createdAt).toISOString();
+    const resultWrapper: ResultsFile = {
+      version: 3,
+      createdAt,
+      results: eval_.results,
+      config: eval_.config,
+    };
+    if (predicate(resultWrapper)) {
+      for (const prompt of resultWrapper.results.table.head.prompts) {
         const promptId = sha256(prompt.raw);
-        const datasetId = result.config.tests ? sha256(JSON.stringify(result.config.tests)) : '-';
+        const datasetId = resultWrapper.config.tests
+          ? sha256(JSON.stringify(resultWrapper.config.tests))
+          : '-';
         if (promptId in groupedPrompts) {
           groupedPrompts[promptId].recentEvalDate = new Date(
             Math.max(
@@ -604,8 +825,7 @@ export function getPromptsWithPredicate(
           );
           groupedPrompts[promptId].count += 1;
           groupedPrompts[promptId].evals.push({
-            id: evalId,
-            filePath: fileName,
+            id: eval_.id,
             datasetId,
             metrics: prompt.metrics,
           });
@@ -615,12 +835,10 @@ export function getPromptsWithPredicate(
             id: promptId,
             prompt,
             recentEvalDate: new Date(createdAt),
-            recentEvalId: evalId,
-            recentEvalFilepath: fileName,
+            recentEvalId: eval_.id,
             evals: [
               {
-                id: evalId,
-                filePath: fileName,
+                id: eval_.id,
                 datasetId,
                 metrics: prompt.metrics,
               },
@@ -634,39 +852,48 @@ export function getPromptsWithPredicate(
   return Object.values(groupedPrompts);
 }
 
-export function getTestCases() {
+export async function getTestCases() {
   return getTestCasesWithPredicate(() => true);
 }
 
-export function getTestCasesWithPredicate(
+export async function getTestCasesWithPredicate(
   predicate: (result: ResultsFile) => boolean,
-): TestCasesWithMetadata[] {
-  const resultFilenames = listPreviousResultFilenames();
+): Promise<TestCasesWithMetadata[]> {
+  const db = getDb();
+  const evals_ = await db
+    .select({
+      id: evals.id,
+      createdAt: evals.createdAt,
+      results: evals.results,
+      config: evals.config,
+    })
+    .from(evals)
+    .limit(100)
+    .all();
+
   const groupedTestCases: { [hash: string]: TestCasesWithMetadata } = {};
 
-  for (const fileName of resultFilenames) {
-    const file = readResult(fileName);
-    if (!file) {
-      continue;
-    }
-    const { result, createdAt } = file;
-    const testCases = result?.config?.tests;
-    if (testCases && predicate(result)) {
-      const evalId = sha256(JSON.stringify(result.config));
+  for (const eval_ of evals_) {
+    const createdAt = new Date(eval_.createdAt).toISOString();
+    const resultWrapper: ResultsFile = {
+      version: 3,
+      createdAt,
+      results: eval_.results,
+      config: eval_.config,
+    };
+    const testCases = resultWrapper.config.tests;
+    if (testCases && predicate(resultWrapper)) {
+      const evalId = eval_.id;
       const datasetId = sha256(JSON.stringify(testCases));
       if (datasetId in groupedTestCases) {
         groupedTestCases[datasetId].recentEvalDate = new Date(
-          Math.max(
-            groupedTestCases[datasetId].recentEvalDate.getTime(),
-            new Date(createdAt).getTime(),
-          ),
+          Math.max(groupedTestCases[datasetId].recentEvalDate.getTime(), eval_.createdAt),
         );
         groupedTestCases[datasetId].count += 1;
-        const newPrompts = result.results.table.head.prompts.map((prompt) => ({
+        const newPrompts = resultWrapper.results.table.head.prompts.map((prompt) => ({
           id: sha256(prompt.raw),
           prompt,
           evalId,
-          evalFilepath: fileName,
         }));
         const promptsById: Record<string, TestCasesWithMetadataPrompt> = {};
         for (const prompt of groupedTestCases[datasetId].prompts.concat(newPrompts)) {
@@ -676,11 +903,10 @@ export function getTestCasesWithPredicate(
         }
         groupedTestCases[datasetId].prompts = Object.values(promptsById);
       } else {
-        const newPrompts = result.results.table.head.prompts.map((prompt) => ({
-          id: createHash('sha256').update(prompt.raw).digest('hex'),
+        const newPrompts = resultWrapper.results.table.head.prompts.map((prompt) => ({
+          id: sha256(prompt.raw),
           prompt,
           evalId,
-          evalFilepath: fileName,
         }));
         const promptsById: Record<string, TestCasesWithMetadataPrompt> = {};
         for (const prompt of newPrompts) {
@@ -694,7 +920,6 @@ export function getTestCasesWithPredicate(
           testCases,
           recentEvalDate: new Date(createdAt),
           recentEvalId: evalId,
-          recentEvalFilepath: fileName,
           prompts: Object.values(promptsById),
         };
       }
@@ -704,8 +929,8 @@ export function getTestCasesWithPredicate(
   return Object.values(groupedTestCases);
 }
 
-export function getPromptFromHash(hash: string) {
-  const prompts = getPrompts();
+export async function getPromptFromHash(hash: string) {
+  const prompts = await getPrompts();
   for (const prompt of prompts) {
     if (prompt.id.startsWith(hash)) {
       return prompt;
@@ -714,8 +939,8 @@ export function getPromptFromHash(hash: string) {
   return undefined;
 }
 
-export function getDatasetFromHash(hash: string) {
-  const datasets = getTestCases();
+export async function getDatasetFromHash(hash: string) {
+  const datasets = await getTestCases();
   for (const dataset of datasets) {
     if (dataset.id.startsWith(hash)) {
       return dataset;
@@ -724,13 +949,13 @@ export function getDatasetFromHash(hash: string) {
   return undefined;
 }
 
-export function getEvals() {
+export async function getEvals() {
   return getEvalsWithPredicate(() => true);
 }
 
-export function getEvalFromHash(hash: string) {
-  const evals = getEvals();
-  for (const eval_ of evals) {
+export async function getEvalFromHash(hash: string) {
+  const evals_ = await getEvals();
+  for (const eval_ of evals_) {
     if (eval_.id.startsWith(hash)) {
       return eval_;
     }
@@ -738,28 +963,42 @@ export function getEvalFromHash(hash: string) {
   return undefined;
 }
 
-export function getEvalsWithPredicate(
+export async function getEvalsWithPredicate(
   predicate: (result: ResultsFile) => boolean,
-): EvalWithMetadata[] {
+): Promise<EvalWithMetadata[]> {
+  const db = getDb();
+  const evals_ = await db
+    .select({
+      id: evals.id,
+      createdAt: evals.createdAt,
+      results: evals.results,
+      config: evals.config,
+    })
+    .from(evals)
+    .limit(100)
+    .all();
+
   const ret: EvalWithMetadata[] = [];
-  const resultsFilenames = listPreviousResultFilenames();
-  for (const fileName of resultsFilenames) {
-    const file = readResult(fileName);
-    if (!file) {
-      continue;
-    }
-    const { result, createdAt } = file;
-    if (result && predicate(result)) {
-      const evalId = sha256(fileName + ':' + JSON.stringify(result.config));
+
+  for (const eval_ of evals_) {
+    const createdAt = new Date(eval_.createdAt).toISOString();
+    const resultWrapper: ResultsFile = {
+      version: 3,
+      createdAt: createdAt,
+      results: eval_.results,
+      config: eval_.config,
+    };
+    if (predicate(resultWrapper)) {
+      const evalId = eval_.id;
       ret.push({
         id: evalId,
-        filePath: fileName,
-        date: createdAt,
-        config: result.config,
-        results: result.results,
+        date: new Date(eval_.createdAt),
+        config: eval_.config,
+        results: eval_.results,
       });
     }
   }
+
   return ret;
 }
 

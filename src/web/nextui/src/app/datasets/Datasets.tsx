@@ -155,7 +155,7 @@ export default function Datasets() {
                 </TableCell>
                 <TableCell style={{ width: '20%' }}>
                   {testCasesData.recentEvalId ? (
-                    <Link href={`/eval?file=${testCasesData.recentEvalFilepath}`}>
+                    <Link href={`/eval?evalId=${testCasesData.recentEvalId}`}>
                       {testCasesData.recentEvalId.slice(0, 6)}
                     </Link>
                   ) : (

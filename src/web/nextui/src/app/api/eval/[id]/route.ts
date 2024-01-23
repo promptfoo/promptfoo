@@ -11,19 +11,19 @@ import { readResult, updateResult } from '@/../../../util';
 
 export const dynamic = IS_RUNNING_LOCALLY ? 'auto' : 'force-dynamic';
 
-async function getDataForId(id: string): Promise<{data: ResultsFile | null; filePath: FilePath; uuid: string}> {
+async function getDataForId(id: string): Promise<{data: ResultsFile | null; evalId: string; uuid: string}> {
   let uuid: string;
-  let filePath: FilePath;
+  let evalId: FilePath;
   if (uuidValidate(id)) {
     uuid = id;
-    filePath = (await store.get(`uuid:${id}`)) as string;
+    evalId = (await store.get(`uuid:${id}`)) as string;
   } else {
     uuid = (await store.get(`file:${id}`)) as string;
-    filePath = id;
+    evalId = id;
   }
   let data: ResultsFile | null = null;
   try {
-    const fileContents = readResult(filePath);
+    const fileContents = await readResult(evalId);
     if (!fileContents) {
       throw new Error('No file contents');
     }
@@ -31,7 +31,7 @@ async function getDataForId(id: string): Promise<{data: ResultsFile | null; file
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
       try {
-        data = JSON.parse(filePath) as ResultsFile;
+        data = JSON.parse(evalId) as ResultsFile;
       } catch {
         throw new Error('Invalid JSON');
       }
@@ -39,7 +39,7 @@ async function getDataForId(id: string): Promise<{data: ResultsFile | null; file
       throw error;
     }
   }
-  return { data, filePath, uuid };
+  return { data, evalId, uuid };
 }
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
@@ -68,7 +68,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (!current) {
       return NextResponse.json({ error: 'Data not found' }, { status: 404 });
     }
-    updateResult(current.filePath, newData.config, newData.table);
+    updateResult(current.evalId, newData.config, newData.table);
     return NextResponse.json({ message: 'Eval updated successfully' }, { status: 200 });
   } catch (err) {
     console.error(err);

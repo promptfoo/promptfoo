@@ -28,6 +28,8 @@ jest.mock('fs', () => ({
   },
 }));
 
+jest.mock('../src/database');
+
 beforeEach(() => {
   jest.clearAllMocks();
 });

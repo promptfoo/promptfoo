@@ -205,10 +205,8 @@ export interface PromptWithMetadata {
   prompt: Prompt;
   recentEvalDate: Date;
   recentEvalId: string;
-  recentEvalFilepath: string;
   evals: {
     id: string;
-    filePath: FilePath;
     datasetId: string;
     metrics: CompletedPrompt['metrics'];
   }[];
@@ -376,7 +374,6 @@ export interface TestCasesWithMetadataPrompt {
   prompt: CompletedPrompt;
   id: string;
   evalId: string;
-  evalFilepath: FilePath;
 }
 
 export interface TestCasesWithMetadata {
@@ -384,7 +381,6 @@ export interface TestCasesWithMetadata {
   testCases: FilePath | (FilePath | TestCase)[];
   recentEvalDate: Date;
   recentEvalId: string;
-  recentEvalFilepath: FilePath;
   count: number;
   prompts: TestCasesWithMetadataPrompt[];
 }
@@ -510,7 +506,6 @@ export type UnifiedConfig = TestSuiteConfig & {
 
 export interface EvalWithMetadata {
   id: string;
-  filePath: FilePath;
   date: Date;
   config: Partial<UnifiedConfig>;
   results: EvaluateSummary;

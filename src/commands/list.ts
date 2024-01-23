@@ -19,10 +19,9 @@ export function listCommand(program: Command) {
       });
       await telemetry.send();
 
-      const evals = getEvals();
+      const evals = await getEvals();
       const tableData = evals.map((evl) => ({
-        'Eval ID': evl.id.slice(0, 6),
-        Filename: evl.filePath,
+        'Eval ID': evl.id,
         Prompts: evl.results.table.head.prompts.map((p) => sha256(p.raw).slice(0, 6)).join(', '),
         Vars: evl.results.table.head.vars.map((v) => v).join(', '),
       }));
@@ -48,7 +47,7 @@ export function listCommand(program: Command) {
       });
       await telemetry.send();
 
-      const prompts = getPrompts().sort((a, b) => b.recentEvalId.localeCompare(a.recentEvalId));
+      const prompts = (await getPrompts()).sort((a, b) => b.recentEvalId.localeCompare(a.recentEvalId));
       const tableData = prompts.map((prompt) => ({
         'Prompt ID': prompt.id.slice(0, 6),
         Raw: prompt.prompt.raw.slice(0, 100) + (prompt.prompt.raw.length > 100 ? '...' : ''),
@@ -76,7 +75,7 @@ export function listCommand(program: Command) {
       });
       await telemetry.send();
 
-      const datasets = getTestCases().sort((a, b) => b.recentEvalId.localeCompare(a.recentEvalId));
+      const datasets = (await getTestCases()).sort((a, b) => b.recentEvalId.localeCompare(a.recentEvalId));
       const tableData = datasets.map((dataset) => ({
         'Dataset ID': dataset.id.slice(0, 6),
         'Highest scoring prompt': dataset.prompts

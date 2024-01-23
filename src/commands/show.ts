@@ -6,22 +6,22 @@ import { generateTable, wrapTable } from '../table';
 import logger from '../logger';
 import telemetry from '../telemetry';
 
-export function showCommand(program: Command) {
+export async function showCommand(program: Command) {
   const showCommand = program
     .command('show <id>')
     .description('Show details of a specific resource')
     .action(async (id: string) => {
-      const evl = getEvalFromHash(id);
+      const evl = await getEvalFromHash(id);
       if (evl) {
         return handleEval(id);
       }
 
-      const prompt = getPromptFromHash(id);
+      const prompt = await getPromptFromHash(id);
       if (prompt) {
         return handlePrompt(id);
       }
 
-      const dataset = getDatasetFromHash(id);
+      const dataset = await getDatasetFromHash(id);
       if (dataset) {
         return handleDataset(id);
       }
@@ -52,7 +52,7 @@ async function handleEval(id: string) {
   });
   await telemetry.send();
 
-  const evl = getEvalFromHash(id);
+  const evl = await getEvalFromHash(id);
   if (!evl) {
     logger.error(`No evaluation found with ID ${id}`);
     return;
@@ -84,7 +84,7 @@ async function handlePrompt(id: string) {
   });
   await telemetry.send();
 
-  const prompt = getPromptFromHash(id);
+  const prompt = await getPromptFromHash(id);
   if (!prompt) {
     logger.error(`Prompt with ID ${id} not found.`);
     return;
@@ -132,7 +132,7 @@ async function handleDataset(id: string) {
   });
   await telemetry.send();
 
-  const dataset = getDatasetFromHash(id);
+  const dataset = await getDatasetFromHash(id);
   if (!dataset) {
     logger.error(`Dataset with ID ${id} not found.`);
     return;

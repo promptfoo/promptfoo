@@ -3,8 +3,8 @@ import { create } from 'zustand';
 import type { EvaluateTable, FilePath, UnifiedConfig } from './types';
 
 interface TableState {
-  filePath: FilePath | null,
-  setFilePath: (filename: FilePath) => void;
+  evalId: string | null,
+  setEvalId: (evalId: string) => void;
 
   table: EvaluateTable | null;
   setTable: (table: EvaluateTable | null) => void;
@@ -25,8 +25,8 @@ interface TableState {
 }
 
 export const useStore = create<TableState>((set) => ({
-  filePath: null,
-  setFilePath: (filePath: FilePath) => set(() => ({ filePath })),
+  evalId: null,
+  setEvalId: (evalId: string) => set(() => ({ evalId })),
 
   table: null,
   setTable: (table: EvaluateTable | null) => set(() => ({ table })),

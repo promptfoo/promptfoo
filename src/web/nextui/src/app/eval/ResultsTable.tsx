@@ -528,7 +528,7 @@ export default function ResultsTable({
   showStats,
   onFailureFilterToggle,
 }: ResultsTableProps) {
-  const { filePath, table, setTable } = useMainStore();
+  const { evalId: filePath, table, setTable } = useMainStore();
   invariant(table, 'Table should be defined');
   const { head, body } = table;
   // TODO(ian): Switch this to use prompt.metrics field once most clients have updated.
