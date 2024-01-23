@@ -103,7 +103,7 @@ export function startServer(port = 15500, apiBaseUrl = '', skipConfirmation = fa
     });
   });
 
-  app.post('/api/eval', (req, res) => {
+  app.post('/api/eval/job', (req, res) => {
     const testSuite = req.body as EvaluateTestSuite;
     const id = uuidv4();
     evalJobs.set(id, { status: 'in-progress', progress: 0, total: 0, result: null });
@@ -136,7 +136,7 @@ export function startServer(port = 15500, apiBaseUrl = '', skipConfirmation = fa
     res.json({ id });
   });
 
-  app.get('/api/eval/:id', (req, res) => {
+  app.get('/api/eval/job/:id', (req, res) => {
     const id = req.params.id;
     const job = evalJobs.get(id);
     if (!job) {
@@ -150,7 +150,7 @@ export function startServer(port = 15500, apiBaseUrl = '', skipConfirmation = fa
     }
   });
 
-  app.post('/api/eval/:id', (req, res) => {
+  app.patch('/api/eval/:id', (req, res) => {
     const id = req.params.id;
     const evalTable = req.body.table;
 
