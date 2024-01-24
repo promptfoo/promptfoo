@@ -17,7 +17,9 @@ export async function createShareableUrl(
     },
   };
 
-  const response = await fetchWithProxy(`${REMOTE_API_BASE_URL}/eval`, {
+  const apiBaseUrl =
+    typeof config.sharing === 'object' ? config.sharing.apiBaseUrl : REMOTE_API_BASE_URL;
+  const response = await fetchWithProxy(`${apiBaseUrl}/eval`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -26,5 +28,7 @@ export async function createShareableUrl(
   });
 
   const { id } = (await response.json()) as { id: string };
+  const appBaseUrl =
+    typeof config.sharing === 'object' ? config.sharing.appBaseUrl : REMOTE_APP_BASE_URL;
   return `${REMOTE_APP_BASE_URL}/eval/${id}`;
 }

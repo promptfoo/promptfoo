@@ -461,7 +461,10 @@ export interface TestSuiteConfig {
   outputPath?: FilePath | FilePath[];
 
   // Determines whether or not sharing is enabled.
-  sharing?: boolean;
+  sharing?: boolean | {
+    apiBaseUrl?: string;
+    appBaseUrl?: string;
+  };
 
   // Nunjucks filters
   nunjucksFilters?: Record<string, FilePath>;

@@ -91,3 +91,10 @@ The `PROMPTFOO_REMOTE_API_BASE_URL` environment variable specifies the base URL 
 
 Similarly, the `PROMPTFOO_REMOTE_APP_BASE_URL` environment variable sets the base URL for the UI of your self-hosted service. This will be a visible part of the shareable URL.
 
+These configuration options can also be set under the `sharing` property of your promptfoo config:
+
+```yaml
+sharing:
+  apiBaseUrl: http://localhost:3000/api
+  appBaseUrl: http://localhost:3000
+```
