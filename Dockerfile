@@ -1,7 +1,9 @@
 # https://github.com/vercel/next.js/blob/canary/examples/with-docker/Dockerfile
 
 # ---- Build ----
-FROM node:16-alpine AS builder
+FROM node:18-alpine AS builder
+ARG NEXT_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL
+ENV NEXT_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL=${NEXT_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL}
 ENV NEXT_PUBLIC_PROMPTFOO_BUILD_STANDALONE_SERVER=1
 
 WORKDIR /app
@@ -16,7 +18,7 @@ WORKDIR /app/src/web/nextui
 RUN npm prune --production
 
 # ---- Final Stage ----
-FROM node:16-alpine
+FROM node:18-alpine
 
 WORKDIR /app
 

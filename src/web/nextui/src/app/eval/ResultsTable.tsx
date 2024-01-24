@@ -565,7 +565,7 @@ export default function ResultsTable({
     setTable(newTable);
     try {
       const response = await fetch(`${await getApiBaseUrl()}/api/eval/${filePath}`, {
-        method: 'POST',
+        method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
         },

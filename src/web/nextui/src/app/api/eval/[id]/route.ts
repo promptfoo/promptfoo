@@ -1,30 +1,41 @@
-import invariant from 'tiny-invariant';
 import { NextRequest, NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { v4 as uuidv4 } from 'uuid';
 
-import { getJob, getResult, JobStatus, EvaluationJob } from '@/database';
+import store from '@/app/api/eval/shareStore';
 import { IS_RUNNING_LOCALLY } from '@/constants';
 
 export const dynamic = IS_RUNNING_LOCALLY ? 'auto' : 'force-dynamic';
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
-  const supabase = createRouteHandlerClient({ cookies });
-  const { id } = params;
-  let job: EvaluationJob | undefined;
+  console.log('Getting eval result with id', params.id);
   try {
-    job = await getJob(supabase, id);
+    const result = await store.get(params.id);
+    if (!result) {
+      return NextResponse.json({ error: 'Data not found' }, { status: 404 });
+    } else {
+      return NextResponse.json({ data: JSON.parse(result as string) });
+    }
   } catch (err) {
-    console.error(err);
-    return NextResponse.json({ error: 'Job not found' }, { status: 404 });
+    return NextResponse.json(
+      { error: 'An error occurred while retrieving data', details: err },
+      { status: 500 },
+    );
   }
+}
 
-  invariant(job, 'Job not found');
-
-  if (job.status === JobStatus.COMPLETE) {
-    const result = await getResult(supabase, id);
-    return NextResponse.json({ status: 'complete', result });
-  } else {
-    return NextResponse.json({ status: 'in-progress', progress: job.progress, total: job.total });
+export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+  console.log('Patching eval result with id', params.id);
+  try {
+    const evalTable = await req.json();
+    if (!params.id) {
+      return NextResponse.json({ error: 'Missing id' }, { status: 400 });
+    }
+    await store.set(params.id, JSON.stringify(evalTable));
+    return NextResponse.json({ message: 'Table updated successfully' }, { status: 200 });
+  } catch (error) {
+    return NextResponse.json(
+      { error: 'Failed to update evaluation table', details: error },
+      { status: 500 },
+    );
   }
 }

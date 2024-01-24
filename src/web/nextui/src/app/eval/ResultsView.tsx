@@ -32,6 +32,7 @@ import ShareModal from './ShareModal';
 import SettingsModal from './ResultsViewSettingsModal';
 import { useStore as useResultsViewStore } from './store';
 import { useStore as useMainStore } from '@/state/evalConfig';
+import { REMOTE_API_BASE_URL, REMOTE_APP_BASE_URL } from '@/../../../constants';
 
 import type { VisibilityState } from '@tanstack/table-core';
 import type { FilterMode } from './types';
@@ -95,7 +96,7 @@ export default function ResultsView({
   const handleShareButtonClick = async () => {
     setShareLoading(true);
     try {
-      const response = await fetch('https://api.promptfoo.dev/eval', {
+      const response = await fetch(`${REMOTE_API_BASE_URL}/eval`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -113,7 +114,7 @@ export default function ResultsView({
       });
 
       const { id } = await response.json();
-      const shareUrl = `https://app.promptfoo.dev/eval/${id}`;
+      const shareUrl = `${REMOTE_APP_BASE_URL}/eval/${id}`;
       setShareUrl(shareUrl);
       setShareModalOpen(true);
     } catch {

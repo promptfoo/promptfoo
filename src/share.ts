@@ -1,4 +1,5 @@
 import { fetchWithProxy } from './fetch';
+import { REMOTE_API_BASE_URL, REMOTE_APP_BASE_URL } from './constants';
 
 import type { EvaluateSummary, SharedResults, UnifiedConfig } from './types';
 
@@ -16,7 +17,7 @@ export async function createShareableUrl(
     },
   };
 
-  const response = await fetchWithProxy('https://api.promptfoo.dev/eval', {
+  const response = await fetchWithProxy(`${REMOTE_API_BASE_URL}/eval`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -25,5 +26,5 @@ export async function createShareableUrl(
   });
 
   const { id } = (await response.json()) as { id: string };
-  return `https://app.promptfoo.dev/eval/${id}`;
+  return `${REMOTE_APP_BASE_URL}/eval/${id}`;
 }
