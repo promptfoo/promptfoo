@@ -20,6 +20,7 @@ async function runWithDatabase(testSuite: EvaluateTestSuite) {
     .evaluate(
       Object.assign({}, testSuite, {
         sharing: testSuite.sharing ?? true,
+        eventSource: 'webui',
       }),
       {
         progressCallback: (progress, total) => {

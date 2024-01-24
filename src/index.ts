@@ -76,8 +76,8 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
 
   // Run the eval!
   const ret = await doEvaluate(constructedTestSuite, {
-    ...options,
     eventSource: 'library',
+    ...options,
   });
 
   if (testSuite.outputPath) {
