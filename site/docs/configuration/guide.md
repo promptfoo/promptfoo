@@ -93,7 +93,7 @@ To learn more about assertions, see docs on configuring [expected outputs](/docs
 
 Use `defaultTest` to set properties for all tests.
 
-In this example, we use a `model-graded-closedqa` assertion to ensure that the LLM does not refer to itself as an AI. This check applies to all test cases:
+In this example, we use a `llm-rubric` assertion to ensure that the LLM does not refer to itself as an AI. This check applies to all test cases:
 
 ```yaml
 prompts: [prompt1.txt, prompt2.txt]
@@ -101,7 +101,7 @@ providers: [openai:gpt-3.5-turbo, localai:chat:vicuna]
 // highlight-start
 defaultTest:
   assert:
-    - type: model-graded-closedqa
+    - type: llm-rubric
       value: does not describe self as an AI, model, or chatbot
 // highlight-end
 tests:
@@ -154,7 +154,7 @@ tests:
 // highlight-start
 assertionTemplates:
     noAIreference:
-      - type: model-graded-closedqa
+      - type: llm-rubric
         value: does not describe self as an AI, model, or chatbot
     startsUpperCase:
       - type: javascript
@@ -390,4 +390,4 @@ providers: [openai:gpt-3.5-turbo, localai:chat:vicuna]
 tests: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit?usp=sharing
 ```
 
-Here's a [full example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-sheets). 
+Here's a [full example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-sheets).

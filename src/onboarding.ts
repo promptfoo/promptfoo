@@ -45,7 +45,7 @@ tests:
       topic: new york city
     assert:
       # For more information on model-graded evals, see https://promptfoo.dev/docs/configuration/expected-outputs/model-graded
-      - type: model-graded-closedqa
+      - type: llm-rubric
         value: ensure that the output is funny
 `;
 
