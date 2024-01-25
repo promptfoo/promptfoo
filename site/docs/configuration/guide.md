@@ -219,6 +219,16 @@ tests:
       var3: file://path/to/var3.txt
 ```
 
+Javascript and Python variable files are supported.  For example:
+
+```yaml
+tests:
+  - vars:
+      context: file://fetch_from_vector_database.py
+```
+
+This is useful when testing vector databases like Pinecone, Chroma, Milvus, etc.
+
 ### Multiple variables in a single test case
 
 The `vars` map in the test also supports array values. If values are an array, the test case will run each combination of values.
