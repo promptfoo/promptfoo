@@ -12,6 +12,7 @@ import type {
   EnvOverrides,
   ProviderEmbeddingResponse,
   ProviderResponse,
+  TokenUsage,
 } from '../types.js';
 
 interface OpenAiSharedOptions {
@@ -48,6 +49,21 @@ function failApiCall(err: any) {
   return {
     error: `API error: ${String(err)}`,
   };
+}
+
+function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
+  if (data.usage) {
+    if (cached) {
+      return { cached: data.usage.total_tokens, total: data.usage.total_tokens };
+    } else {
+      return {
+        total: data.usage.total_tokens,
+        prompt: data.usage.prompt_tokens || 0,
+        completion: data.usage.completion_tokens || 0,
+      };
+    }
+  }
+  return {};
 }
 
 export class OpenAiGenericProvider implements ApiProvider {
@@ -147,16 +163,7 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
       }
       return {
         embedding,
-        tokenUsage: cached
-          ? {
-              cached: data.usage.total_tokens,
-              total: data.usage.total_tokens,
-            }
-          : {
-              total: data.usage.total_tokens,
-              prompt: data.usage.prompt_tokens,
-              completion: data.usage.completion_tokens,
-            },
+        tokenUsage: getTokenUsage(data, cached),
       };
     } catch (err) {
       logger.error(data.error.message);
@@ -276,15 +283,14 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
     try {
       return {
         output: data.choices[0].text,
-        tokenUsage: cached
-          ? { cached: data.usage.total_tokens, total: data.usage.total_tokens }
-          : {
-              total: data.usage.total_tokens,
-              prompt: data.usage.prompt_tokens,
-              completion: data.usage.completion_tokens,
-            },
+        tokenUsage: getTokenUsage(data, cached),
         cached,
-        cost: calculateCost(this.modelName, this.config, data.usage.prompt_tokens, data.usage.completion_tokens),
+        cost: calculateCost(
+          this.modelName,
+          this.config,
+          data.usage.prompt_tokens,
+          data.usage.completion_tokens,
+        ),
       };
     } catch (err) {
       return {
@@ -426,16 +432,15 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
       return {
         output,
-        tokenUsage: cached
-          ? { cached: data.usage.total_tokens, total: data.usage.total_tokens }
-          : {
-              total: data.usage.total_tokens,
-              prompt: data.usage.prompt_tokens,
-              completion: data.usage.completion_tokens,
-            },
+        tokenUsage: getTokenUsage(data, cached),
         cached,
         logProbs,
-        cost: calculateCost(this.modelName, this.config, data.usage.prompt_tokens, data.usage.completion_tokens),
+        cost: calculateCost(
+          this.modelName,
+          this.config,
+          data.usage.prompt_tokens,
+          data.usage.completion_tokens,
+        ),
       };
     } catch (err) {
       return {
@@ -460,7 +465,7 @@ function calculateCost(
   }
   const inputCost = config.cost ?? model.cost.input;
   const outputCost = config.cost ?? model.cost.output;
-  return (inputCost * promptTokens + outputCost * completionTokens) || undefined;
+  return inputCost * promptTokens + outputCost * completionTokens || undefined;
 }
 
 interface AssistantMessagesResponseDataContent {
