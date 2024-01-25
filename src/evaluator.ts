@@ -661,6 +661,9 @@ class Evaluator {
       numTests: tests.length,
       numVars: varNames.size,
       numProviders: testSuite.providers.length,
+      providerPrefixes: Array.from(
+        new Set(testSuite.providers.map((p) => p.id().split(':')[0])),
+      ).sort(),
       assertionTypes: Array.from(
         new Set(tests.flatMap((t) => t.assert || []).map((a) => a.type)),
       ).sort(),
