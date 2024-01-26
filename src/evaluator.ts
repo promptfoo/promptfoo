@@ -662,7 +662,10 @@ class Evaluator {
       numVars: varNames.size,
       numProviders: testSuite.providers.length,
       providerPrefixes: Array.from(
-        new Set(testSuite.providers.map((p) => p.id().split(':')[0])),
+        new Set(testSuite.providers.map((p) => {
+          const idParts = p.id().split(':');
+          return idParts.length > 1 ? idParts[0] : 'unknown';
+        })),
       ).sort(),
       assertionTypes: Array.from(
         new Set(tests.flatMap((t) => t.assert || []).map((a) => a.type)),
