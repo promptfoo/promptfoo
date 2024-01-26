@@ -288,8 +288,8 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
         cost: calculateCost(
           this.modelName,
           this.config,
-          data.usage.prompt_tokens,
-          data.usage.completion_tokens,
+          data.usage?.prompt_tokens,
+          data.usage?.completion_tokens,
         ),
       };
     } catch (err) {
@@ -438,8 +438,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         cost: calculateCost(
           this.modelName,
           this.config,
-          data.usage.prompt_tokens,
-          data.usage.completion_tokens,
+          data.usage?.prompt_tokens,
+          data.usage?.completion_tokens,
         ),
       };
     } catch (err) {
@@ -453,9 +453,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 function calculateCost(
   modelName: string,
   config: OpenAiSharedOptions,
-  promptTokens: number,
-  completionTokens: number,
+  promptTokens?: number,
+  completionTokens?: number,
 ): number | undefined {
+  if (!promptTokens || !completionTokens) {
+    return undefined;
+  }
+
   const model = [
     ...OpenAiChatCompletionProvider.OPENAI_CHAT_MODELS,
     ...OpenAiCompletionProvider.OPENAI_COMPLETION_MODELS,
@@ -463,6 +467,7 @@ function calculateCost(
   if (!model || !model.cost) {
     return undefined;
   }
+
   const inputCost = config.cost ?? model.cost.input;
   const outputCost = config.cost ?? model.cost.output;
   return inputCost * promptTokens + outputCost * completionTokens || undefined;
