@@ -534,10 +534,7 @@ async function main() {
       }
 
       const options: EvaluateOptions = {
-        showProgressBar:
-          typeof cmdObj.progressBar === 'undefined'
-            ? getLogLevel() !== 'debug'
-            : cmdObj.progressBar,
+        showProgressBar: getLogLevel() === 'debug' ? false : cmdObj.progressBar,
         maxConcurrency: !isNaN(maxConcurrency) && maxConcurrency > 0 ? maxConcurrency : undefined,
         repeat,
         delay: !isNaN(delay) && delay > 0 ? delay : undefined,
