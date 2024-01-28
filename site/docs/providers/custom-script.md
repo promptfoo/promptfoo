@@ -9,6 +9,12 @@ You may use any shell command as an API provider. This is particularly useful wh
 
 While Script Providers are particularly useful for evaluating chains, they can generally be used to test your prompts if they are implemented in Python or some other language.
 
+:::tip
+**Python users**: there is a dedicated [`python` provider](/docs/providers/python) that you may find easier to use.
+
+**Javascript users**: see how to implement [ApiProvider](/docs/providers/custom-api).
+:::
+
 To use a script provider, you need to create an executable that takes a prompt as its first argument and returns the result of the API call. The script should be able to be invoked from the command line.
 
 Here is an example of how to use a script provider:
