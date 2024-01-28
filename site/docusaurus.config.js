@@ -83,7 +83,7 @@ const config = {
             label: 'Tutorial',
           },
           */
-          //{to: '/blog', label: 'Blog', position: 'left'},
+          {to: '/docs/intro', label: 'Docs', position: 'right'},
           {
             href: 'https://github.com/typpo/promptfoo',
             label: 'GitHub',
