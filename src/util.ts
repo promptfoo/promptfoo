@@ -417,15 +417,20 @@ export function writeLatestResults(results: EvaluateSummary, config: Partial<Uni
 
 const resultsCache: { [fileName: string]: ResultsFile | undefined } = {};
 
-export function listPreviousResults(): { fileName: string; description?: string }[] {
+export function listPreviousResultFilenames(): string[] {
   const directory = path.join(getConfigDirectoryPath(), 'output');
   const files = fs.readdirSync(directory);
   const resultsFiles = files.filter((file) => file.startsWith('eval-') && file.endsWith('.json'));
-  const sortedFiles = resultsFiles.sort((a, b) => {
+  return resultsFiles.sort((a, b) => {
     const statA = fs.statSync(path.join(directory, a));
     const statB = fs.statSync(path.join(directory, b));
     return statA.birthtime.getTime() - statB.birthtime.getTime(); // sort in ascending order
   });
+}
+
+export function listPreviousResults(): { fileName: string; description?: string }[] {
+  const directory = path.join(getConfigDirectoryPath(), 'output');
+  const sortedFiles = listPreviousResultFilenames();
   return sortedFiles.map((fileName) => {
     if (!resultsCache[fileName]) {
       try {
@@ -446,9 +451,9 @@ export function listPreviousResults(): { fileName: string; description?: string 
 const RESULT_HISTORY_LENGTH = parseInt(process.env.RESULT_HISTORY_LENGTH || '', 10) || 100;
 
 export function cleanupOldResults(remaining = RESULT_HISTORY_LENGTH) {
-  const sortedFiles = listPreviousResults();
-  for (let i = 0; i < sortedFiles.length - remaining; i++) {
-    fs.unlinkSync(path.join(getConfigDirectoryPath(), 'output', sortedFiles[i].fileName));
+  const sortedFilenames = listPreviousResultFilenames();
+  for (let i = 0; i < sortedFilenames.length - remaining; i++) {
+    fs.unlinkSync(path.join(getConfigDirectoryPath(), 'output', sortedFilenames[i]));
   }
 }
 
@@ -506,8 +511,8 @@ export function updateResult(filename: string, newTable: EvaluateTable): void {
     fs.writeFileSync(resultsPath, JSON.stringify(evalData, null, 2));
     logger.info(`Updated results in ${resultsPath}`);
 
-    const results = listPreviousResults();
-    if (filename === results[results.length - 1].fileName) {
+    const resultFilenames = listPreviousResultFilenames();
+    if (filename === resultFilenames[resultFilenames.length - 1]) {
       // Overwite latest.json too
       fs.copyFileSync(resultsPath, getLatestResultsPath());
     }
@@ -545,11 +550,10 @@ export function getPrompts() {
 export function getPromptsWithPredicate(
   predicate: (result: ResultsFile) => boolean,
 ): PromptWithMetadata[] {
-  const resultsFiles = listPreviousResults();
+  const resultFilenames = listPreviousResultFilenames();
   const groupedPrompts: { [hash: string]: PromptWithMetadata } = {};
 
-  for (const fileMeta of resultsFiles) {
-    const { fileName } = fileMeta;
+  for (const fileName of resultFilenames) {
     const file = readResult(fileName);
     if (!file) {
       continue;
@@ -606,11 +610,10 @@ export function getTestCases() {
 export function getTestCasesWithPredicate(
   predicate: (result: ResultsFile) => boolean,
 ): TestCasesWithMetadata[] {
-  const resultsFiles = listPreviousResults();
+  const resultFilenames = listPreviousResultFilenames();
   const groupedTestCases: { [hash: string]: TestCasesWithMetadata } = {};
 
-  for (const fileMeta of resultsFiles) {
-    const { fileName } = fileMeta;
+  for (const fileName of resultFilenames) {
     const file = readResult(fileName);
     if (!file) {
       continue;
@@ -708,9 +711,8 @@ export function getEvalsWithPredicate(
   predicate: (result: ResultsFile) => boolean,
 ): EvalWithMetadata[] {
   const ret: EvalWithMetadata[] = [];
-  const resultsFiles = listPreviousResults();
-  for (const fileMeta of resultsFiles) {
-    const { fileName } = fileMeta;
+  const resultsFilenames = listPreviousResultFilenames();
+  for (const fileName of resultsFilenames) {
     const file = readResult(fileName);
     if (!file) {
       continue;

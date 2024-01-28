@@ -26,6 +26,7 @@ import {
   getLatestResultsPath,
   getPrompts,
   getPromptsForTestCasesHash,
+  listPreviousResultFilenames,
   listPreviousResults,
   readResult,
   filenameToDate,
@@ -172,8 +173,7 @@ export function startServer(port = 15500, apiBaseUrl = '', skipConfirmation = fa
     const safeFilename = path.basename(filename);
     if (
       safeFilename !== filename ||
-      !listPreviousResults()
-        .map((fileMeta) => fileMeta.fileName)
+      !listPreviousResultFilenames()
         .includes(safeFilename)
     ) {
       res.status(400).send('Invalid filename');
