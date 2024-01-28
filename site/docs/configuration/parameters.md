@@ -31,6 +31,35 @@ prompts:
 
 Use [Nunjucks](https://mozilla.github.io/nunjucks/) templating syntax to include variables in your prompts, which will be replaced with actual values from your test cases during evaluation.
 
+### Prompts as JSON
+
+Some LLM APIs accept prompts in a JSON chat format like `[{ "role" : "user", "content": "..."}]`.
+
+By default, plaintext prompts are wrapped in a `user`-role message. If you provide JSON, then promptfoo will send the `messages` object exactly as provided.
+
+Here's an example of a chat-formatted prompt:
+
+```yaml
+prompts:
+  - file://path/to/personality1.json
+```
+
+And in `personality1.json`:
+```json title=personality1.json
+[
+  {
+    "role": "system",
+    "content": "You are a helpful assistant"
+  },
+  {
+    "role": "user",
+    "content": "Tell me about {{topic}}"
+  }
+]
+```
+
+Learn more about [chat conversations with OpenAI message format](/docs/providers/openai#chat-conversations).
+
 ### Prompts from file
 
 Your prompts may be complicated enough that it's difficult to maintain them inline. In that case, reference a file. Filepaths are relative to the configuration file directory:
@@ -109,7 +138,6 @@ providers:
 In this configuration, the `gpt_chat_prompt` is used for both GPT-3.5 and GPT-4 models, while the `llama_completion_prompt` is used for the Llama v2 model. The prompts are defined in separate files within the `prompts` directory.
 
 Make sure to create the corresponding prompt files with the content formatted as expected by each model. For example, GPT models might expect a JSON array of messages, while Llama might expect a plain text format with a specific prefix.
-
 
 ### Prompt functions
 

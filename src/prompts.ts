@@ -105,6 +105,7 @@ export function readPrompts(
     resolvedPathToDisplay.set(resolvedPath, promptPathOrGlobs);
     inputType = PromptInputType.STRING;
   } else if (Array.isArray(promptPathOrGlobs)) {
+    // TODO(ian): Handle object array, such as OpenAI messages
     promptPathInfos = promptPathOrGlobs.flatMap((pathOrGlob) => {
       if (pathOrGlob.startsWith('file://')) {
         pathOrGlob = pathOrGlob.slice('file://'.length);
