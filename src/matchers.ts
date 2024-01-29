@@ -122,25 +122,22 @@ export async function getAndCheckProvider(
     }
   }
 
-  let isValidProviderType = false;
-  if (
-    type === 'embedding' &&
-    ('callEmbeddingApi' in matchedProvider || 'callSimilarityApi' in matchedProvider)
-  ) {
-    isValidProviderType = true;
-  } else if (type === 'classification' && 'callClassificationApi' in matchedProvider) {
-    isValidProviderType = true;
+  let isValidProviderType = true;
+  if (type === 'embedding') {
+    isValidProviderType = 'callEmbeddingApi' in matchedProvider || 'callSimilarityApi' in matchedProvider;
+  } else if (type === 'classification') {
+    isValidProviderType = 'callClassificationApi' in matchedProvider;
   }
 
   if (!isValidProviderType) {
     if (defaultProvider) {
       console.warn(
-        `Provider ${matchedProvider.id()} is not a valid ${type} type for '${checkName}', falling back to default`,
+        `Provider ${matchedProvider.id()} is not a valid ${type} provider for '${checkName}', falling back to default`,
       );
       return defaultProvider;
     } else {
       throw new Error(
-        `Provider ${matchedProvider.id()} is not a valid ${type} type for '${checkName}'`,
+        `Provider ${matchedProvider.id()} is not a valid ${type} provider for '${checkName}'`,
       );
     }
   }
