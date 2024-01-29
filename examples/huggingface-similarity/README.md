@@ -1,6 +1,6 @@
 To get started, set your HF_API_TOKEN environment variable.
 
-Next, edit promptfooconfig.yaml.
+Next, change a few of the prompts in prompts.txt and edit promptfooconfig.yaml.
 
 Then run:
 

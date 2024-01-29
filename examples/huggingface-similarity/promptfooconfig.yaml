@@ -1,0 +1,13 @@
+prompts:
+  - "You're a translator.  Translate this into {{language}}: {{input}}"
+  - "Speak in {{language}}: {{input}}"
+providers: [openai:gpt-3.5-turbo, openai:gpt-4]
+tests:
+  - vars:
+      language: [French, German, Spanish]
+      input: ['Hello world', 'Good morning', 'How are you?']
+    assert:
+      - type: similar
+        value: 'Hello world'
+        provider: huggingface:sentence-similarity:sentence-transformers/all-MiniLM-L6-v2
+        threshold: 0.2

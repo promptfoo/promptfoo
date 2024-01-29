@@ -7,5 +7,4 @@ tests:
     assert:
       - type: similar
         value: 'Hello world'
-        provider: huggingface:sentence-similarity:sentence-transformers/all-MiniLM-L6-v2
-        threshold: 0.7
+        threshold: 0.8
