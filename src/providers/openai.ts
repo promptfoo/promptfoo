@@ -666,7 +666,7 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    const cache = await getCache();
+    const cache = getCache();
     const cacheKey = `openai:image:${JSON.stringify({ context, prompt })}`;
 
     if (!this.getApiKey()) {
@@ -727,8 +727,14 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
       }
     }
 
+    const sanitizedPrompt = prompt
+      .replace(/\r?\n|\r/g, ' ')
+      .replace(/\[/g, '(')
+      .replace(/\]/g, ')');
+    const ellipsizedPrompt =
+      sanitizedPrompt.length > 50 ? `${sanitizedPrompt.substring(0, 47)}...` : sanitizedPrompt;
     return {
-      output: `[IMAGE] ${url}`,
+      output: `![${ellipsizedPrompt}](${url})`,
       cached,
     };
   }
