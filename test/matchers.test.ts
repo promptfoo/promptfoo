@@ -14,13 +14,13 @@ import { DefaultEmbeddingProvider, DefaultGradingProvider } from '../src/provide
 
 import { TestGrader } from './assertions.test';
 
-import {
-  type GradingConfig,
-  type ProviderResponse,
-  type ProviderClassificationResponse,
-  type ApiProvider,
-  type ProviderTypeMap,
-  ApiClassificationProvider,
+import type {
+  GradingConfig,
+  ProviderResponse,
+  ProviderClassificationResponse,
+  ApiProvider,
+  ProviderOptions,
+  ProviderTypeMap,
 } from '../src/types';
 import { HuggingfaceTextClassificationProvider } from '../src/providers/huggingface';
 
@@ -470,7 +470,7 @@ describe('getGradingProvider', () => {
   });
 
   it('should return a provider from ProviderTypeMap with basic strings', async () => {
-    const providerTypeMap: ProviderTypeMap= {
+    const providerTypeMap: ProviderTypeMap = {
       text: 'openai:chat:foo',
       embedding: 'openai:embedding:bar',
     };
@@ -488,7 +488,11 @@ describe('getGradingProvider', () => {
       getGradingProvider('text', providerTypeMap, DefaultGradingProvider),
     ).rejects.toThrow(
       new Error(
-        `Invalid provider definition for output type 'text': ${JSON.stringify(providerTypeMap, null, 2)}`,
+        `Invalid provider definition for output type 'text': ${JSON.stringify(
+          providerTypeMap,
+          null,
+          2,
+        )}`,
       ),
     );
   });
@@ -567,7 +571,7 @@ describe('matchesAnswerRelevance', () => {
 });
 
 describe('matchesClassification', () => {
-  class TestGrader extends ApiClassificationProvider {
+  class TestGrader implements ApiProvider {
     async callApi(): Promise<ProviderResponse> {
       throw new Error('Not implemented');
     }

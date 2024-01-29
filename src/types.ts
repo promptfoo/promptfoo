@@ -67,27 +67,27 @@ export interface CallApiOptionsParams {
   includeLogProbs?: boolean;
 }
 
-export abstract class ApiProvider {
-  abstract id(): string;
-  abstract callApi(
+export interface ApiProvider {
+  id: () => string;
+  callApi: (
     prompt: string,
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
-  ): Promise<ProviderResponse>;
-  callEmbeddingApi?(prompt: string): Promise<ProviderEmbeddingResponse>;
-  callClassificationApi?(prompt: string): Promise<ProviderClassificationResponse>;
+  ) => Promise<ProviderResponse>;
+  callEmbeddingApi?: (prompt: string) => Promise<ProviderEmbeddingResponse>;
+  callClassificationApi?: (prompt: string) => Promise<ProviderClassificationResponse>;
 }
 
-export abstract class ApiEmbeddingProvider extends ApiProvider {
-  abstract callEmbeddingApi(input: string): Promise<ProviderEmbeddingResponse>;
+export interface ApiEmbeddingProvider extends ApiProvider {
+  callEmbeddingApi: (input: string) => Promise<ProviderEmbeddingResponse>;
 }
 
-export abstract class ApiSimilarityProvider extends ApiProvider {
-  abstract callSimilarityApi(reference: string, input: string): Promise<ProviderSimilarityResponse>;
+export interface ApiSimilarityProvider extends ApiProvider {
+  callSimilarityApi: (reference: string, input: string) => Promise<ProviderSimilarityResponse>;
 }
 
-export abstract class ApiClassificationProvider extends ApiProvider {
-  abstract callClassificationApi(prompt: string): Promise<ProviderClassificationResponse>;
+export interface ApiClassificationProvider extends ApiProvider {
+  callClassificationApi: (prompt: string) => Promise<ProviderClassificationResponse>;
 }
 
 export interface TokenUsage {

@@ -122,17 +122,17 @@ export async function getAndCheckProvider(
     }
   }
 
-  let requiredProviderTypes;
-  if (type === 'embedding') {
-    requiredProviderTypes = [ApiEmbeddingProvider, ApiSimilarityProvider];
-  } else if (type === 'classification') {
-    requiredProviderTypes = [ApiClassificationProvider];
+  let isValidProviderType = false;
+  if (
+    type === 'embedding' &&
+    ('callEmbeddingApi' in matchedProvider || 'callSimilarityApi' in matchedProvider)
+  ) {
+    isValidProviderType = true;
+  } else if (type === 'classification' && 'callClassificationApi' in matchedProvider) {
+    isValidProviderType = true;
   }
 
-  if (
-    requiredProviderTypes &&
-    !requiredProviderTypes.some((requiredType) => matchedProvider instanceof requiredType)
-  ) {
+  if (!isValidProviderType) {
     if (defaultProvider) {
       console.warn(
         `Provider ${matchedProvider.id()} is not a valid ${type} type for '${checkName}', falling back to default`,
@@ -175,14 +175,14 @@ export async function matchesSimilarity(
     'similarity check',
   )) as ApiEmbeddingProvider | ApiSimilarityProvider;
 
-  let similarity;
+  let similarity: number;
   let tokensUsed: TokenUsage = {
     total: 0,
     prompt: 0,
     completion: 0,
   };
 
-  if (finalProvider instanceof ApiSimilarityProvider) {
+  if ('callSimilarityApi' in finalProvider) {
     const similarityResp = await finalProvider.callSimilarityApi(expected, output);
     tokensUsed = {
       ...tokensUsed,
@@ -191,11 +191,11 @@ export async function matchesSimilarity(
     if (similarityResp.error) {
       return fail(similarityResp.error, tokensUsed);
     }
-    if (!similarityResp.similarity) {
-      return fail(similarityResp.error || 'Unknown error fetching similarity');
+    if (similarityResp.similarity == null) {
+      return fail('Unknown error fetching similarity', tokensUsed);
     }
     similarity = similarityResp.similarity;
-  } else {
+  } else if ('callEmbeddingApi' in finalProvider) {
     const expectedEmbedding = await finalProvider.callEmbeddingApi(expected);
     const outputEmbedding = await finalProvider.callEmbeddingApi(output);
 
@@ -220,6 +220,8 @@ export async function matchesSimilarity(
     }
 
     similarity = cosineSimilarity(expectedEmbedding.embedding, outputEmbedding.embedding);
+  } else {
+    throw new Error('Provider must implement callSimilarityApi or callEmbeddingApi');
   }
   const pass = inverse ? similarity <= threshold : similarity >= threshold;
   const greaterThanReason = `Similarity ${similarity.toFixed(

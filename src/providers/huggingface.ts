@@ -2,7 +2,6 @@ import logger from '../logger';
 import { fetchWithCache } from '../cache';
 
 import {
-  ApiClassificationProvider,
   ApiProvider,
   ApiSimilarityProvider,
   ProviderClassificationResponse,
@@ -106,7 +105,7 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
 
 interface HuggingfaceTextClassificationOptions {}
 
-export class HuggingfaceTextClassificationProvider extends ApiClassificationProvider {
+export class HuggingfaceTextClassificationProvider implements ApiProvider {
   modelName: string;
   config: HuggingfaceTextClassificationOptions;
 
@@ -114,7 +113,6 @@ export class HuggingfaceTextClassificationProvider extends ApiClassificationProv
     modelName: string,
     options: { id?: string; config?: HuggingfaceTextClassificationOptions } = {},
   ) {
-    super();
     const { id, config } = options;
     this.modelName = modelName;
     this.id = id ? () => id : this.id;
@@ -194,7 +192,7 @@ interface HuggingfaceFeatureExtractionOptions {
   wait_for_model?: boolean;
 }
 
-export class HuggingfaceFeatureExtractionProvider extends ApiProvider {
+export class HuggingfaceFeatureExtractionProvider implements ApiProvider {
   modelName: string;
   config: HuggingfaceFeatureExtractionOptions;
 
@@ -202,7 +200,6 @@ export class HuggingfaceFeatureExtractionProvider extends ApiProvider {
     modelName: string,
     options: { id?: string; config?: HuggingfaceFeatureExtractionOptions } = {},
   ) {
-    super();
     const { id, config } = options;
     this.modelName = modelName;
     this.id = id ? () => id : this.id;
@@ -275,7 +272,7 @@ interface HuggingfaceSentenceSimilarityOptions {
   wait_for_model?: boolean;
 }
 
-export class HuggingfaceSentenceSimilarityProvider extends ApiSimilarityProvider {
+export class HuggingfaceSentenceSimilarityProvider implements ApiSimilarityProvider {
   modelName: string;
   config: HuggingfaceSentenceSimilarityOptions;
 
@@ -283,7 +280,6 @@ export class HuggingfaceSentenceSimilarityProvider extends ApiSimilarityProvider
     modelName: string,
     options: { id?: string; config?: HuggingfaceSentenceSimilarityOptions } = {},
   ) {
-    super();
     const { id, config } = options;
     this.modelName = modelName;
     this.id = id ? () => id : this.id;
