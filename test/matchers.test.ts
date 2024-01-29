@@ -14,13 +14,13 @@ import { DefaultEmbeddingProvider, DefaultGradingProvider } from '../src/provide
 
 import { TestGrader } from './assertions.test';
 
-import type {
-  GradingConfig,
-  ProviderResponse,
-  ProviderClassificationResponse,
-  ApiProvider,
-  ProviderOptions,
-  ProviderTypeMap,
+import {
+  type GradingConfig,
+  type ProviderResponse,
+  type ProviderClassificationResponse,
+  type ApiProvider,
+  type ProviderTypeMap,
+  ApiClassificationProvider,
 } from '../src/types';
 import { HuggingfaceTextClassificationProvider } from '../src/providers/huggingface';
 
@@ -567,7 +567,7 @@ describe('matchesAnswerRelevance', () => {
 });
 
 describe('matchesClassification', () => {
-  class TestGrader implements ApiProvider {
+  class TestGrader extends ApiClassificationProvider {
     async callApi(): Promise<ProviderResponse> {
       throw new Error('Not implemented');
     }

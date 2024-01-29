@@ -16,10 +16,11 @@ import {
   OPENAI_FACTUALITY_PROMPT,
 } from './prompts';
 
-import type {
+import {
   ApiClassificationProvider,
   ApiEmbeddingProvider,
   ApiProvider,
+  ApiSimilarityProvider,
   GradingConfig,
   GradingResult,
   ProviderOptions,
@@ -92,7 +93,11 @@ export async function getGradingProvider(
       finalProvider = await loadFromProviderOptions(provider as ProviderOptions);
     } else {
       throw new Error(
-        `Invalid provider definition for output type '${type}': ${JSON.stringify(provider, null, 2)}`,
+        `Invalid provider definition for output type '${type}': ${JSON.stringify(
+          provider,
+          null,
+          2,
+        )}`,
       );
     }
   } else {
@@ -107,36 +112,40 @@ export async function getAndCheckProvider(
   defaultProvider: ApiProvider | null,
   checkName: string,
 ): Promise<ApiProvider> {
-  let finalProvider = await getGradingProvider(type, provider, defaultProvider);
-
-  let requiredMethod = 'callApi';
-  if (type === 'embedding') {
-    requiredMethod = 'callEmbeddingApi';
-  } else if (type === 'classification') {
-    requiredMethod = 'callClassificationApi';
+  let matchedProvider = await getGradingProvider(type, provider, defaultProvider);
+  if (!matchedProvider) {
+    if (defaultProvider) {
+      console.warn(`No provider of type ${type} found for '${checkName}', falling back to default`);
+      return defaultProvider;
+    } else {
+      throw new Error(`No provider of type ${type} found for '${checkName}'`);
+    }
   }
 
-  invariant(finalProvider, `No provider found for '${checkName}'`);
-  if (typeof (finalProvider as any)[requiredMethod] !== 'function') {
+  let requiredProviderTypes;
+  if (type === 'embedding') {
+    requiredProviderTypes = [ApiEmbeddingProvider, ApiSimilarityProvider];
+  } else if (type === 'classification') {
+    requiredProviderTypes = [ApiClassificationProvider];
+  }
+
+  if (
+    requiredProviderTypes &&
+    !requiredProviderTypes.some((requiredType) => matchedProvider instanceof requiredType)
+  ) {
     if (defaultProvider) {
       console.warn(
-        `Provider ${finalProvider.id()} does not implement ${requiredMethod} for '${checkName}', falling back to default`,
+        `Provider ${matchedProvider.id()} is not a valid ${type} type for '${checkName}', falling back to default`,
       );
       return defaultProvider;
     } else {
       throw new Error(
-        `Provider ${finalProvider.id()} must implement ${requiredMethod} for '${checkName}'`,
+        `Provider ${matchedProvider.id()} is not a valid ${type} type for '${checkName}'`,
       );
     }
   }
 
-  invariant(finalProvider, `No provider found for ${checkName}`);
-  invariant(
-    typeof (finalProvider as any)[requiredMethod] === 'function',
-    `Provider ${finalProvider.id()} must implement ${requiredMethod} for '${checkName}'`,
-  );
-
-  return finalProvider;
+  return matchedProvider;
 }
 
 function fail(reason: string, tokensUsed?: Partial<TokenUsage>): Omit<GradingResult, 'assertion'> {
@@ -164,31 +173,54 @@ export async function matchesSimilarity(
     grading?.provider,
     DefaultEmbeddingProvider,
     'similarity check',
-  )) as ApiEmbeddingProvider;
+  )) as ApiEmbeddingProvider | ApiSimilarityProvider;
 
-  const expectedEmbedding = await finalProvider.callEmbeddingApi(expected);
-  const outputEmbedding = await finalProvider.callEmbeddingApi(output);
-
-  const tokensUsed = {
-    total: (expectedEmbedding.tokenUsage?.total || 0) + (outputEmbedding.tokenUsage?.total || 0),
-    prompt: (expectedEmbedding.tokenUsage?.prompt || 0) + (outputEmbedding.tokenUsage?.prompt || 0),
-    completion:
-      (expectedEmbedding.tokenUsage?.completion || 0) +
-      (outputEmbedding.tokenUsage?.completion || 0),
+  let similarity;
+  let tokensUsed: TokenUsage = {
+    total: 0,
+    prompt: 0,
+    completion: 0,
   };
 
-  if (expectedEmbedding.error || outputEmbedding.error) {
-    return fail(
-      expectedEmbedding.error || outputEmbedding.error || 'Unknown error fetching embeddings',
-      tokensUsed,
-    );
-  }
+  if (finalProvider instanceof ApiSimilarityProvider) {
+    const similarityResp = await finalProvider.callSimilarityApi(expected, output);
+    tokensUsed = {
+      ...tokensUsed,
+      ...similarityResp.tokenUsage,
+    };
+    if (similarityResp.error) {
+      return fail(similarityResp.error, tokensUsed);
+    }
+    if (!similarityResp.similarity) {
+      return fail(similarityResp.error || 'Unknown error fetching similarity');
+    }
+    similarity = similarityResp.similarity;
+  } else {
+    const expectedEmbedding = await finalProvider.callEmbeddingApi(expected);
+    const outputEmbedding = await finalProvider.callEmbeddingApi(output);
 
-  if (!expectedEmbedding.embedding || !outputEmbedding.embedding) {
-    return fail('Embedding not found', tokensUsed);
-  }
+    tokensUsed = {
+      total: (expectedEmbedding.tokenUsage?.total || 0) + (outputEmbedding.tokenUsage?.total || 0),
+      prompt:
+        (expectedEmbedding.tokenUsage?.prompt || 0) + (outputEmbedding.tokenUsage?.prompt || 0),
+      completion:
+        (expectedEmbedding.tokenUsage?.completion || 0) +
+        (outputEmbedding.tokenUsage?.completion || 0),
+    };
 
-  const similarity = cosineSimilarity(expectedEmbedding.embedding, outputEmbedding.embedding);
+    if (expectedEmbedding.error || outputEmbedding.error) {
+      return fail(
+        expectedEmbedding.error || outputEmbedding.error || 'Unknown error fetching embeddings',
+        tokensUsed,
+      );
+    }
+
+    if (!expectedEmbedding.embedding || !outputEmbedding.embedding) {
+      return fail('Embedding not found', tokensUsed);
+    }
+
+    similarity = cosineSimilarity(expectedEmbedding.embedding, outputEmbedding.embedding);
+  }
   const pass = inverse ? similarity <= threshold : similarity >= threshold;
   const greaterThanReason = `Similarity ${similarity.toFixed(
     2,
