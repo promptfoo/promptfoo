@@ -16,7 +16,7 @@ import {
   OPENAI_FACTUALITY_PROMPT,
 } from './prompts';
 
-import {
+import type {
   ApiClassificationProvider,
   ApiEmbeddingProvider,
   ApiProvider,
