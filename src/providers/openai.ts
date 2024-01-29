@@ -653,5 +653,5 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
 }
 
 export const DefaultEmbeddingProvider = new OpenAiEmbeddingProvider('text-embedding-3-large');
-export const DefaultGradingProvider = new OpenAiChatCompletionProvider('gpt-4-0613');
-export const DefaultSuggestionsProvider = new OpenAiChatCompletionProvider('gpt-4-0613');
+export const DefaultGradingProvider = new OpenAiChatCompletionProvider('gpt-4-0125-preview');
+export const DefaultSuggestionsProvider = new OpenAiChatCompletionProvider('gpt-4-0125-preview');
