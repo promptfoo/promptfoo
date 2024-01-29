@@ -10,6 +10,7 @@ import {
   OpenAiCompletionProvider,
   OpenAiChatCompletionProvider,
   OpenAiEmbeddingProvider,
+  OpenAiImageProvider,
 } from './providers/openai';
 import { AnthropicCompletionProvider } from './providers/anthropic';
 import { ReplicateProvider } from './providers/replicate';
@@ -153,9 +154,11 @@ export async function loadApiProvider(
       return new OpenAiCompletionProvider(modelType, providerOptions);
     } else if (modelType === 'assistant') {
       return new OpenAiAssistantProvider(modelName, providerOptions);
+    } else if (modelType === 'image') {
+      return new OpenAiImageProvider(modelName, providerOptions)
     } else {
       throw new Error(
-        `Unknown OpenAI model type: ${modelType}. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>`,
+        `Unknown OpenAI model type: ${modelType}. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>, openai:embeddings:<model name>, openai:image:<model name>`,
       );
     }
   } else if (providerPath?.startsWith('azureopenai:')) {
