@@ -283,7 +283,7 @@ table.results-table,
   background-color: var(--search-highlight-color);
 }
 
-.lightbox {
+.results-table tr .cell .lightbox {
   position: fixed;
   top: 0;
   left: 0;
@@ -296,7 +296,7 @@ table.results-table,
   z-index: 1000;
 }
 
-.lightbox img {
+.results-table tr .cell .lightbox img {
   max-width: 90%;
   max-height: 90%;
 }

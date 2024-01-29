@@ -646,14 +646,28 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
   }
 }
 
+type OpenAiImageOptions = OpenAiSharedOptions & {
+  size?: string;
+};
+
 export class OpenAiImageProvider extends OpenAiGenericProvider {
+  config: OpenAiImageOptions;
+
+  constructor(
+    modelName: string,
+    options: { config?: OpenAiImageOptions; id?: string; env?: EnvOverrides } = {},
+  ) {
+    super(modelName, options);
+    this.config = options.config || {};
+  }
+
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     const cache = await getCache();
-    const cacheKey = `openai:image:${JSON.stringify({context, prompt})}`;
+    const cacheKey = `openai:image:${JSON.stringify({ context, prompt })}`;
 
     if (!this.getApiKey()) {
       throw new Error(
@@ -687,7 +701,14 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
         model: this.modelName,
         prompt,
         n: 1,
-        size: '1024x1024',
+        size:
+          ((this.config.size || process.env.OPENAI_IMAGE_SIZE) as
+            | '1024x1024'
+            | '256x256'
+            | '512x512'
+            | '1792x1024'
+            | '1024x1792'
+            | undefined) || '1024x1024',
       });
     }
 
@@ -709,7 +730,7 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
     return {
       output: `[IMAGE] ${url}`,
       cached,
-    }
+    };
   }
 }
 
