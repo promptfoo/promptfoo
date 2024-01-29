@@ -309,7 +309,12 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         output: 0.06 / 1000,
       },
     })),
-    ...['gpt-4-1106-preview', 'gpt-4-1106-vision-preview'].map((model) => ({
+    ...[
+      'gpt-4-1106-preview',
+      'gpt-4-1106-vision-preview',
+      'gpt-4-0125-preview',
+      'gpt-4-turbo-preview',
+    ].map((model) => ({
       id: model,
       cost: {
         input: 0.01 / 1000,
@@ -328,13 +333,14 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       'gpt-3.5-turbo-0301',
       'gpt-3.5-turbo-0613',
       'gpt-3.5-turbo-1106',
+      'gpt-3.5-turbo-0125',
       'gpt-3.5-turbo-16k',
       'gpt-3.5-turbo-16k-0613',
     ].map((model) => ({
       id: model,
       cost: {
-        input: 0.001 / 1000,
-        output: 0.002 / 1000,
+        input: 0.0005 / 1000,
+        output: 0.0015 / 1000,
       },
     })),
   ];
@@ -740,6 +746,6 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
   }
 }
 
-export const DefaultEmbeddingProvider = new OpenAiEmbeddingProvider('text-embedding-ada-002');
-export const DefaultGradingProvider = new OpenAiChatCompletionProvider('gpt-4-0613');
-export const DefaultSuggestionsProvider = new OpenAiChatCompletionProvider('gpt-4-0613');
+export const DefaultEmbeddingProvider = new OpenAiEmbeddingProvider('text-embedding-3-large');
+export const DefaultGradingProvider = new OpenAiChatCompletionProvider('gpt-4-0125-preview');
+export const DefaultSuggestionsProvider = new OpenAiChatCompletionProvider('gpt-4-0125-preview');

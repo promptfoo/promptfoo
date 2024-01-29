@@ -40,6 +40,7 @@ import {
   HuggingfaceTextGenerationProvider,
 } from './providers/huggingface';
 import { AwsBedrockCompletionProvider } from './providers/bedrock';
+import { PythonProvider } from './providers/pythonCompletion';
 
 import type {
   ApiProvider,
@@ -127,6 +128,12 @@ export async function loadApiProvider(
     const scriptPath = providerPath.split(':')[1];
     return new ScriptCompletionProvider(scriptPath, {
       id: `exec:${scriptPath}`,
+      config: { basePath },
+    });
+  } else if (providerPath?.startsWith('python:')) {
+    const scriptPath = providerPath.split(':')[1];
+    return new PythonProvider(scriptPath, {
+      id: `python:${scriptPath}`,
       config: { basePath },
     });
   } else if (providerPath?.startsWith('openai:')) {
