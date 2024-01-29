@@ -192,7 +192,9 @@ export default function ResultsView({
                   renderInput={(params: AutocompleteRenderInputParams) => (
                     <TextField {...params} label="Eval run" variant="outlined" />
                   )}
-                  defaultValue={recentEvals[0]}
+                  defaultValue={
+                    recentEvals.find((evl) => evl.id === defaultEvalId) || recentEvals[0]
+                  }
                   onChange={(event, newValue: { label: string; id?: string } | null) => {
                     if (newValue && newValue.id) {
                       onRecentEvalSelected(newValue.id);

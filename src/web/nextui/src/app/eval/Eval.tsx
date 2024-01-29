@@ -84,6 +84,7 @@ export default function Eval({
       fetchEvalById(id);
       // TODO(ian): This requires next.js standalone server
       // router.push(`/eval/local:${encodeURIComponent(file)}`);
+      router.push(`/eval/?file=${encodeURIComponent(id)}`);
     } else {
       setLoaded(false);
       router.push(`/eval/remote:${encodeURIComponent(id)}`);
@@ -102,6 +103,9 @@ export default function Eval({
       const run = async () => {
         await fetchEvalById(file);
         setLoaded(true);
+        setDefaultEvalId(file);
+        // Load other recent eval runs
+        fetchRecentFileEvals();
       };
       run();
     } else if (preloadedData) {
