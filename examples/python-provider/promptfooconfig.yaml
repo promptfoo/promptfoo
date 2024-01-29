@@ -1,0 +1,23 @@
+prompts:
+  - "Write a tweet about {{topic}}"
+  - "Write a very concise, funny tweet about {{topic}}"
+
+providers:
+  - python:provider.py
+
+tests:
+  - vars:
+      topic: bananas
+    assert:
+      - type: contains
+        value: Bananamax
+  - vars:
+      topic: fruits
+    assert:
+      - type: llm-rubric
+        value: includes at least one emoji
+  - vars:
+      topic: turtles
+    assert:
+      - type: llm-rubric
+        value: is funny
