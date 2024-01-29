@@ -105,7 +105,7 @@ Prompts can be JSON too. Use this to configure multi-shot prompt formats:
 
 ### Multiple prompts in a single file
 
-If you have only one file, you can include multiple prompts in the file, separated by the delimiter `---`. If you have multiple files, each prompt should be in a separate file.
+If you have only one file, you can include multiple prompts in the file, separated by the separator `---`. If you have multiple files, each prompt should be in a separate file.
 
 Example of a single prompt file with multiple prompts (`prompts.txt`):
 
@@ -114,6 +114,10 @@ Translate the following text to French: "{{name}}: {{text}}"
 ---
 Translate the following text to German: "{{name}}: {{text}}"
 ```
+
+:::info
+The prompt separator can be overridden with the `PROMPTFOO_PROMPT_SEPARATOR` environment variable.
+:::
 
 ### Different prompts per model
 

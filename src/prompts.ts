@@ -17,7 +17,7 @@ import type {
 
 export * from './external/ragas';
 
-const PROMPT_DELIMITER = '---';
+const PROMPT_DELIMITER = process.env.PROMPTFOO_PROMPT_SEPARATOR || '---';
 
 export function readProviderPromptMap(
   config: Partial<UnifiedConfig>,
