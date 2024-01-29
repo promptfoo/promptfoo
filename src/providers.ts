@@ -36,6 +36,7 @@ import {
 } from './providers/azureopenai';
 import {
   HuggingfaceFeatureExtractionProvider,
+  HuggingfaceSentenceSimilarityProvider,
   HuggingfaceTextClassificationProvider,
   HuggingfaceTextGenerationProvider,
 } from './providers/huggingface';
@@ -219,6 +220,8 @@ export async function loadApiProvider(
     const modelName = splits.slice(2).join(':');
     if (splits[1] === 'feature-extraction') {
       return new HuggingfaceFeatureExtractionProvider(modelName, providerOptions);
+    } else if (splits[1] === 'sentence-similarity') {
+      return new HuggingfaceSentenceSimilarityProvider(modelName, providerOptions);
     } else if (splits[1] === 'text-generation') {
       return new HuggingfaceTextGenerationProvider(modelName, providerOptions);
     } else if (splits[1] === 'text-classification') {

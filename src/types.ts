@@ -79,7 +79,11 @@ export interface ApiProvider {
 }
 
 export interface ApiEmbeddingProvider extends ApiProvider {
-  callEmbeddingApi: (prompt: string) => Promise<ProviderEmbeddingResponse>;
+  callEmbeddingApi: (input: string) => Promise<ProviderEmbeddingResponse>;
+}
+
+export interface ApiSimilarityProvider extends ApiProvider {
+  callSimilarityApi: (reference: string, input: string) => Promise<ProviderSimilarityResponse>;
 }
 
 export interface ApiClassificationProvider extends ApiProvider {
@@ -105,6 +109,12 @@ export interface ProviderResponse {
 export interface ProviderEmbeddingResponse {
   error?: string;
   embedding?: number[];
+  tokenUsage?: Partial<TokenUsage>;
+}
+
+export interface ProviderSimilarityResponse {
+  error?: string;
+  similarity?: number;
   tokenUsage?: Partial<TokenUsage>;
 }
 

@@ -1,11 +1,13 @@
 import logger from '../logger';
 import { fetchWithCache } from '../cache';
 
-import type {
+import {
   ApiProvider,
+  ApiSimilarityProvider,
   ProviderClassificationResponse,
   ProviderEmbeddingResponse,
   ProviderResponse,
+  ProviderSimilarityResponse,
 } from '../types';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
@@ -217,8 +219,13 @@ export class HuggingfaceFeatureExtractionProvider implements ApiProvider {
   }
 
   async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
+    // https://huggingface.co/docs/api-inference/detailed_parameters#feature-extraction-task
     const params = {
       inputs: text,
+      options: {
+        use_cache: this.config.use_cache,
+        wait_for_model: this.config.wait_for_model,
+      },
     };
 
     let response;
@@ -251,6 +258,89 @@ export class HuggingfaceFeatureExtractionProvider implements ApiProvider {
 
       return {
         embedding: response.data,
+      };
+    } catch (err) {
+      return {
+        error: `API call error: ${String(err)}. Output:\n${response?.data}`,
+      };
+    }
+  }
+}
+
+interface HuggingfaceSentenceSimilarityOptions {
+  use_cache?: boolean;
+  wait_for_model?: boolean;
+}
+
+export class HuggingfaceSentenceSimilarityProvider implements ApiSimilarityProvider {
+  modelName: string;
+  config: HuggingfaceSentenceSimilarityOptions;
+
+  constructor(
+    modelName: string,
+    options: { id?: string; config?: HuggingfaceSentenceSimilarityOptions } = {},
+  ) {
+    const { id, config } = options;
+    this.modelName = modelName;
+    this.id = id ? () => id : this.id;
+    this.config = config || {};
+  }
+
+  id(): string {
+    return `huggingface:sentence-similarity:${this.modelName}`;
+  }
+
+  toString(): string {
+    return `[Huggingface Sentence Similarity Provider ${this.modelName}]`;
+  }
+
+  async callApi(): Promise<ProviderResponse> {
+    throw new Error('Cannot use a sentence similarity provider for text generation');
+  }
+
+  async callSimilarityApi(expected: string, input: string): Promise<ProviderSimilarityResponse> {
+    // https://huggingface.co/docs/api-inference/detailed_parameters#sentence-similarity-task
+    const params = {
+      inputs: {
+        source_sentence: expected,
+        sentences: [input],
+      },
+      options: {
+        use_cache: this.config.use_cache,
+        wait_for_model: this.config.wait_for_model,
+      },
+    };
+
+    let response;
+    try {
+      response = await fetchWithCache(
+        `https://api-inference.huggingface.co/models/${this.modelName}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(process.env.HF_API_TOKEN
+              ? { Authorization: `Bearer ${process.env.HF_API_TOKEN}` }
+              : {}),
+          },
+          body: JSON.stringify(params),
+        },
+        REQUEST_TIMEOUT_MS,
+      );
+
+      if (response.data.error) {
+        return {
+          error: `API call error: ${response.data.error}`,
+        };
+      }
+      if (!Array.isArray(response.data)) {
+        return {
+          error: `Malformed response data: ${response.data}`,
+        };
+      }
+
+      return {
+        similarity: response.data[0],
       };
     } catch (err) {
       return {

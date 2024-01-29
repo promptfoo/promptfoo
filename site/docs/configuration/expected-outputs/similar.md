@@ -42,5 +42,5 @@ By default `similar` will use OpenAI. To specify the model that creates the embe
      assert:
        - type: similar
          value: Hello world
-         provider: huggingface:feature-extraction:sentence-transformers/all-MiniLM-L6-v2
+         provider: huggingface:sentence-similarity:sentence-transformers/all-MiniLM-L6-v2
    ```

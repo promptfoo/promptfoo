@@ -470,7 +470,7 @@ describe('getGradingProvider', () => {
   });
 
   it('should return a provider from ProviderTypeMap with basic strings', async () => {
-    const providerTypeMap: ProviderTypeMap= {
+    const providerTypeMap: ProviderTypeMap = {
       text: 'openai:chat:foo',
       embedding: 'openai:embedding:bar',
     };
@@ -488,7 +488,11 @@ describe('getGradingProvider', () => {
       getGradingProvider('text', providerTypeMap, DefaultGradingProvider),
     ).rejects.toThrow(
       new Error(
-        `Invalid provider definition for output type 'text': ${JSON.stringify(providerTypeMap, null, 2)}`,
+        `Invalid provider definition for output type 'text': ${JSON.stringify(
+          providerTypeMap,
+          null,
+          2,
+        )}`,
       ),
     );
   });

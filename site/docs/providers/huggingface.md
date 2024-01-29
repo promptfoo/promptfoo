@@ -9,8 +9,9 @@ promptfoo includes support for the [HuggingFace Inference API](https://huggingfa
 To run a model, specify the task type and model name. Supported models include:
 
 - `huggingface:text-generation:<model name>`
-- `huggingface:feature-extraction:<model name>`
 - `huggingface:text-classification:<model name>`
+- `huggingface:feature-extraction:<model name>`
+- `huggingface:sentence-similarity:<model name>`
 
 For example, autocomplete with GPT-2:
 
@@ -22,6 +23,17 @@ Generate text with Mistral:
 
 ```
 huggingface:text-generation:mistralai/Mistral-7B-v0.1
+```
+
+Embeddings similarity with `sentence-transformers`:
+
+```
+# Model supports the sentence similarity API
+huggingface:sentence-similarity:sentence-transformers/all-MiniLM-L6-v2
+
+# Model supports the feature extraction API
+huggingface:feature-extraction:sentence-transformers/paraphrase-xlm-r-multilingual-v1
+
 ```
 
 Supported environment variables:
