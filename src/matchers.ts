@@ -1,6 +1,10 @@
 import invariant from 'tiny-invariant';
 import logger from './logger';
-import { DefaultEmbeddingProvider, DefaultGradingProvider } from './providers/openai';
+import {
+  DefaultEmbeddingProvider,
+  DefaultGradingJsonProvider,
+  DefaultGradingProvider,
+} from './providers/openai';
 import { getNunjucksEngine } from './util';
 import { loadApiProvider } from './providers';
 import {
@@ -124,7 +128,8 @@ export async function getAndCheckProvider(
 
   let isValidProviderType = true;
   if (type === 'embedding') {
-    isValidProviderType = 'callEmbeddingApi' in matchedProvider || 'callSimilarityApi' in matchedProvider;
+    isValidProviderType =
+      'callEmbeddingApi' in matchedProvider || 'callSimilarityApi' in matchedProvider;
   } else if (type === 'classification') {
     isValidProviderType = 'callClassificationApi' in matchedProvider;
   }
@@ -296,7 +301,7 @@ export async function matchesLlmRubric(
   let finalProvider = await getAndCheckProvider(
     'text',
     grading.provider,
-    DefaultGradingProvider,
+    DefaultGradingJsonProvider,
     'llm-rubric check',
   );
   const resp = await finalProvider.callApi(prompt);
