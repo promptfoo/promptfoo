@@ -124,6 +124,7 @@ export async function runAssertions({
       output,
       latencyMs,
       logProbs,
+      cost,
     });
     totalScore += result.score * weight;
     componentResults.push(result);
