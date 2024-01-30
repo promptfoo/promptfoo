@@ -748,4 +748,9 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
 
 export const DefaultEmbeddingProvider = new OpenAiEmbeddingProvider('text-embedding-3-large');
 export const DefaultGradingProvider = new OpenAiChatCompletionProvider('gpt-4-0125-preview');
+export const DefaultGradingJsonProvider = new OpenAiChatCompletionProvider('gpt-4-0125-preview', {
+  config: {
+    response_format: { type: 'json_object' },
+  },
+});
 export const DefaultSuggestionsProvider = new OpenAiChatCompletionProvider('gpt-4-0125-preview');
