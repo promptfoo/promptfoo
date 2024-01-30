@@ -791,6 +791,7 @@ export default function ResultsTable({
     columns.splice(0, 0, descriptionColumn);
   }
 
+  const columnVisibilityIsSet = Object.keys(columnVisibility).length > 0;
   const filteredBody = React.useMemo(() => {
     const searchRegex = new RegExp(searchText, 'i');
     return body.filter((row) => {
@@ -798,7 +799,7 @@ export default function ResultsTable({
         filterMode === 'failures'
           ? row.outputs.some((output, idx) => {
               const columnId = `Prompt ${idx + 1}`;
-              return failureFilter[columnId] && !output.pass;
+              return failureFilter[columnId] && !output.pass && (!columnVisibilityIsSet || columnVisibility[columnId]);
             })
           : filterMode === 'different'
           ? !row.outputs.every((output) => output.text === row.outputs[0].text)
@@ -815,7 +816,7 @@ export default function ResultsTable({
 
       return outputsPassFilter && outputsMatchSearch;
     });
-  }, [body, failureFilter, filterMode, searchText]);
+  }, [body, failureFilter, filterMode, searchText, columnVisibility, columnVisibilityIsSet]);
 
   const reactTable = useReactTable({
     data: filteredBody,
