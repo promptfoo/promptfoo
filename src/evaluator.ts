@@ -6,7 +6,7 @@ import invariant from 'tiny-invariant';
 
 import logger from './logger';
 import telemetry from './telemetry';
-import { runAssertions } from './assertions';
+import { runAssertions, runCompareAssertion } from './assertions';
 import { generatePrompts } from './suggestions';
 import { getNunjucksEngine, transformOutput, sha256 } from './util';
 import { maybeEmitAzureOpenAiWarning } from './providers/azureopenaiUtil';
@@ -445,7 +445,16 @@ class Evaluator {
     // Set up eval cases
     const runEvalOptions: RunEvalOptions[] = [];
     let rowIndex = 0;
-    for (const testCase of tests) {
+    for (let index = 0; index < tests.length; index++) {
+      const testCase = tests[index];
+      invariant(
+        Array.isArray(testSuite.defaultTest?.assert || []),
+        `defaultTest.assert is not an array in test case #${index + 1}`,
+      );
+      invariant(
+        Array.isArray(testCase.assert || []),
+        `testCase.assert is not an array in test case #${index + 1}`,
+      );
       // Handle default properties
       testCase.vars = { ...testSuite.defaultTest?.vars, ...testCase.vars };
       testCase.assert = [...(testSuite.defaultTest?.assert || []), ...(testCase.assert || [])];
@@ -589,6 +598,7 @@ class Evaluator {
           table.body[rowIndex] = {
             description: evalStep.test.description,
             outputs: [],
+            test: evalStep.test,
             vars: table.head.vars
               .map((varName) => {
                 const varValue = evalStep.test.vars?.[varName] || '';
@@ -639,6 +649,42 @@ class Evaluator {
       },
     );
 
+    for (const row of table.body) {
+      const compareAssertion = row.test.assert?.find((a) => a.type === 'select-best');
+      if (compareAssertion) {
+        const outputs = row.outputs.map((o) => o.text);
+        const gradingResults = await runCompareAssertion(row.test, compareAssertion, outputs);
+        row.outputs.forEach((output, index) => {
+          const gradingResult = gradingResults[index];
+          if (!output.gradingResult) {
+            output.gradingResult = gradingResult;
+          } else {
+            output.gradingResult.tokensUsed = output.gradingResult.tokensUsed || {
+              total: 0,
+              prompt: 0,
+              completion: 0,
+            };
+            output.gradingResult.tokensUsed.total += gradingResult.tokensUsed?.total || 0;
+            output.gradingResult.tokensUsed.prompt += gradingResult.tokensUsed?.prompt || 0;
+            output.gradingResult.tokensUsed.completion += gradingResult.tokensUsed?.completion || 0;
+            output.pass = output.gradingResult.pass =
+              output.gradingResult.pass && gradingResult.pass;
+            if (!gradingResult.pass) {
+              // Failure overrides the reason and the score
+              output.gradingResult.reason = gradingResult.reason;
+              output.score = output.gradingResult.score = gradingResult.score;
+              output.text = `${gradingResult.reason}\n---\n${output.text}`;
+            }
+            if (!output.gradingResult.componentResults) {
+              output.gradingResult.componentResults = [];
+            }
+            output.gradingResult.componentResults.push(gradingResult);
+          }
+        });
+      }
+    }
+
+    // Finish up
     if (progressbar) {
       progressbar.stop();
     }
@@ -653,10 +699,12 @@ class Evaluator {
       numProviders: testSuite.providers.length,
       numRepeat: options.repeat || 1,
       providerPrefixes: Array.from(
-        new Set(testSuite.providers.map((p) => {
-          const idParts = p.id().split(':');
-          return idParts.length > 1 ? idParts[0] : 'unknown';
-        })),
+        new Set(
+          testSuite.providers.map((p) => {
+            const idParts = p.id().split(':');
+            return idParts.length > 1 ? idParts[0] : 'unknown';
+          }),
+        ),
       ).sort(),
       assertionTypes: Array.from(
         new Set(tests.flatMap((t) => t.assert || []).map((a) => a.type)),

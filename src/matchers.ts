@@ -9,6 +9,7 @@ import { getNunjucksEngine } from './util';
 import { loadApiProvider } from './providers';
 import {
   ANSWER_RELEVANCY_GENERATE,
+  SELECT_BEST_PROMPT,
   CONTEXT_FAITHFULNESS_LONGFORM,
   CONTEXT_FAITHFULNESS_NLI_STATEMENTS,
   CONTEXT_RECALL,
@@ -119,7 +120,7 @@ export async function getAndCheckProvider(
   let matchedProvider = await getGradingProvider(type, provider, defaultProvider);
   if (!matchedProvider) {
     if (defaultProvider) {
-      console.warn(`No provider of type ${type} found for '${checkName}', falling back to default`);
+      logger.warn(`No provider of type ${type} found for '${checkName}', falling back to default`);
       return defaultProvider;
     } else {
       throw new Error(`No provider of type ${type} found for '${checkName}'`);
@@ -136,7 +137,7 @@ export async function getAndCheckProvider(
 
   if (!isValidProviderType) {
     if (defaultProvider) {
-      console.warn(
+      logger.warn(
         `Provider ${matchedProvider.id()} is not a valid ${type} provider for '${checkName}', falling back to default`,
       );
       return defaultProvider;
@@ -727,4 +728,65 @@ export async function matchesContextFaithfulness(
       completion: resp.tokenUsage?.completion || 0,
     },
   };
+}
+
+export async function matchesComparisonBoolean(
+  criteria: string,
+  outputs: string[],
+  grading?: GradingConfig,
+  vars?: Record<string, string | object>,
+): Promise<Omit<GradingResult, 'assertion'>[]> {
+  invariant(
+    outputs.length >= 2,
+    'select-best assertion must have at least two outputs to compare between',
+  );
+  let textProvider = await getAndCheckProvider(
+    'text',
+    grading?.provider,
+    DefaultGradingProvider,
+    'select-best check',
+  );
+
+  let promptText = nunjucks.renderString(SELECT_BEST_PROMPT, {
+    criteria: JSON.stringify(criteria).slice(1, -1),
+    outputs: outputs.map((output) => JSON.stringify(output).slice(1, -1)),
+    ...fromVars(vars),
+  });
+
+  let resp = await textProvider.callApi(promptText);
+  if (resp.error || !resp.output) {
+    return new Array(outputs.length).fill(fail(resp.error || 'No output', resp.tokenUsage));
+  }
+
+  invariant(typeof resp.output === 'string', 'select-best produced malformed response');
+
+  const firstDigitMatch = resp.output.trim().match(/\d/);
+  const verdict = firstDigitMatch ? parseInt(firstDigitMatch[0], 10) : NaN;
+
+  if (isNaN(verdict) || verdict < 0 || verdict >= outputs.length) {
+    return new Array(outputs.length).fill(fail(`Invalid select-best verdict: ${verdict}`));
+  }
+
+  const tokensUsed = {
+    total: resp.tokenUsage?.total || 0,
+    prompt: resp.tokenUsage?.prompt || 0,
+    completion: resp.tokenUsage?.completion || 0,
+  };
+  return outputs.map((output, index) => {
+    if (index === verdict) {
+      return {
+        pass: true,
+        score: 1,
+        reason: `Output selected as the best: ${criteria}`,
+        tokensUsed,
+      };
+    } else {
+      return {
+        pass: false,
+        score: 0,
+        reason: `Output not selected: ${criteria}`,
+        tokensUsed,
+      };
+    }
+  });
 }

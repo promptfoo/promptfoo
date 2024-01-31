@@ -240,6 +240,7 @@ export interface EvaluateTableRow {
   description?: string;
   outputs: EvaluateTableOutput[];
   vars: string[];
+  test: AtomicTestCase;
 }
 
 export interface EvaluateTable {
@@ -322,8 +323,9 @@ type BaseAssertionTypes =
   | 'latency'
   | 'perplexity'
   | 'perplexity-score'
-  | 'cost';
-
+  | 'cost'
+  | 'select-best';
+  
 type NotPrefixed<T extends string> = `not-${T}`;
 
 export type AssertionType = BaseAssertionTypes | NotPrefixed<BaseAssertionTypes>;
