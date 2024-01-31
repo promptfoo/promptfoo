@@ -661,6 +661,7 @@ class Evaluator {
       numTests: tests.length,
       numVars: varNames.size,
       numProviders: testSuite.providers.length,
+      numRepeat: options.repeat || 1,
       providerPrefixes: Array.from(
         new Set(testSuite.providers.map((p) => {
           const idParts = p.id().split(':');
@@ -679,6 +680,7 @@ class Evaluator {
           process.env.JENKINS ||
           process.env.GITLAB_CI,
       ),
+      hasAnyPass: results.some((r) => r.success),
     });
 
     return { version: 2, results, stats: this.stats, table };
