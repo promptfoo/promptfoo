@@ -1,9 +1,10 @@
 #!/usr/bin/env node
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
-import { join as pathJoin, dirname } from 'path';
+import fs from 'fs';
+import path from 'path';
 import readline from 'readline';
 
 import chalk from 'chalk';
+import chokidar from 'chokidar';
 import yaml from 'js-yaml';
 import { Command } from 'commander';
 
@@ -48,22 +49,25 @@ import { createShareableUrl } from './share';
 function createDummyFiles(directory: string | null) {
   if (directory) {
     // Make the directory if it doesn't exist
-    if (!existsSync(directory)) {
-      mkdirSync(directory);
+    if (!fs.existsSync(directory)) {
+      fs.mkdirSync(directory);
     }
   }
 
   if (directory) {
-    if (!existsSync(directory)) {
+    if (!fs.existsSync(directory)) {
       logger.info(`Creating directory ${directory} ...`);
-      mkdirSync(directory);
+      fs.mkdirSync(directory);
     }
   } else {
     directory = '.';
   }
 
-  writeFileSync(pathJoin(process.cwd(), directory, 'promptfooconfig.yaml'), DEFAULT_YAML_CONFIG);
-  writeFileSync(pathJoin(process.cwd(), directory, 'README.md'), DEFAULT_README);
+  fs.writeFileSync(
+    path.join(process.cwd(), directory, 'promptfooconfig.yaml'),
+    DEFAULT_YAML_CONFIG,
+  );
+  fs.writeFileSync(path.join(process.cwd(), directory, 'README.md'), DEFAULT_README);
 
   const isNpx = process.env.npm_execpath?.includes('npx');
   const runCommand = isNpx ? 'npx promptfoo@latest eval' : 'promptfoo eval';
@@ -103,7 +107,7 @@ async function resolveConfigs(
       process.exit(1);
     }
     const modelOutputs = JSON.parse(
-      readFileSync(pathJoin(process.cwd(), cmdObj.modelOutputs), 'utf8'),
+      fs.readFileSync(path.join(process.cwd(), cmdObj.modelOutputs), 'utf8'),
     ) as string[];
     const assertions = await readAssertions(cmdObj.assertions);
     fileConfig.prompts = ['{{output}}'];
@@ -117,7 +121,7 @@ async function resolveConfigs(
   }
 
   // Use basepath in cases where path was supplied in the config file
-  const basePath = configPaths ? dirname(configPaths[0]) : '';
+  const basePath = configPaths ? path.dirname(configPaths[0]) : '';
 
   const defaultTestRaw = fileConfig.defaultTest || defaultConfig.defaultTest;
   const config: Omit<UnifiedConfig, 'evaluateOptions' | 'commandLineOptions'> = {
@@ -208,9 +212,9 @@ async function main() {
 
   const pwd = process.cwd();
   const potentialPaths = [
-    pathJoin(pwd, 'promptfooconfig.js'),
-    pathJoin(pwd, 'promptfooconfig.json'),
-    pathJoin(pwd, 'promptfooconfig.yaml'),
+    path.join(pwd, 'promptfooconfig.js'),
+    path.join(pwd, 'promptfooconfig.json'),
+    path.join(pwd, 'promptfooconfig.yaml'),
   ];
   let defaultConfig: Partial<UnifiedConfig> = {};
   let defaultConfigPath: string | undefined;
@@ -234,7 +238,7 @@ async function main() {
 
   program.option('--version', 'Print version', () => {
     const packageJson = JSON.parse(
-      readFileSync(pathJoin(getDirectory(), '../package.json'), 'utf8'),
+      fs.readFileSync(path.join(getDirectory(), '../package.json'), 'utf8'),
     );
     logger.info(packageJson.version);
   });
@@ -391,7 +395,7 @@ async function main() {
         const configAddition = { tests: results.map((result) => ({ vars: result })) };
         const yamlString = yaml.dump(configAddition);
         if (options.output) {
-          writeFileSync(options.output, yamlString);
+          fs.writeFileSync(options.output, yamlString);
           printBorder();
           logger.info(`Wrote ${results.length} new test cases to ${options.output}`);
           printBorder();
@@ -406,10 +410,10 @@ async function main() {
         const configPath = options.config;
         if (options.write && configPath) {
           const existingConfig = yaml.load(
-            readFileSync(configPath, 'utf8'),
+            fs.readFileSync(configPath, 'utf8'),
           ) as Partial<UnifiedConfig>;
           existingConfig.tests = [...(existingConfig.tests || []), ...configAddition.tests];
-          writeFileSync(configPath, yaml.dump(existingConfig));
+          fs.writeFileSync(configPath, yaml.dump(existingConfig));
           logger.info(`Wrote ${results.length} new test cases to ${configPath}`);
         } else {
           logger.info(
@@ -508,119 +512,158 @@ async function main() {
       defaultConfig?.commandLineOptions?.grader,
     )
     .option('--verbose', 'Show debug logs', defaultConfig?.commandLineOptions?.verbose)
-    .option('--view [port]', 'View in browser ui')
+    .option('-w, --watch', 'Watch for changes in config and re-run')
     .action(async (cmdObj: CommandLineOptions & Command) => {
-      // Misc settings
-      if (cmdObj.verbose) {
-        setLogLevel('debug');
-      }
-      const iterations = parseInt(cmdObj.repeat || '', 10);
-      const repeat = !isNaN(iterations) && iterations > 0 ? iterations : 1;
-      if (!cmdObj.cache || repeat > 1) {
-        logger.info('Cache is disabled.');
-        disableCache();
-      }
-
-      const { config, testSuite } = await resolveConfigs(cmdObj, defaultConfig);
-
-      let maxConcurrency = parseInt(cmdObj.maxConcurrency || '', 10);
-      const delay = parseInt(cmdObj.delay || '', 0);
-
-      if (delay > 0) {
-        maxConcurrency = 1;
-        logger.info(
-          `Running at concurrency=1 because ${delay}ms delay was requested between API calls`,
-        );
-      }
-
-      const options: EvaluateOptions = {
-        showProgressBar: getLogLevel() === 'debug' ? false : cmdObj.progressBar,
-        maxConcurrency: !isNaN(maxConcurrency) && maxConcurrency > 0 ? maxConcurrency : undefined,
-        repeat,
-        delay: !isNaN(delay) && delay > 0 ? delay : undefined,
-        ...evaluateOptions,
-      };
-
-      if (cmdObj.grader && testSuite.defaultTest) {
-        testSuite.defaultTest.options = testSuite.defaultTest.options || {};
-        testSuite.defaultTest.options.provider = await loadApiProvider(cmdObj.grader);
-      }
-      if (cmdObj.generateSuggestions) {
-        options.generateSuggestions = true;
-      }
-
-      const summary = await evaluate(testSuite, {
-        ...options,
-        eventSource: 'cli',
-      });
-
-      const shareableUrl =
-        cmdObj.share && config.sharing ? await createShareableUrl(summary, config) : null;
-
-      if (cmdObj.table && getLogLevel() !== 'debug') {
-        // Output CLI table
-        const table = generateTable(summary, parseInt(cmdObj.tableCellMaxLength || '', 10));
-
-        logger.info('\n' + table.toString());
-        if (summary.table.body.length > 25) {
-          const rowsLeft = summary.table.body.length - 25;
-          logger.info(`... ${rowsLeft} more row${rowsLeft === 1 ? '' : 's'} not shown ...\n`);
+      let config: Partial<UnifiedConfig> | undefined = undefined;
+      let testSuite: TestSuite | undefined = undefined;
+      const runEvaluation = async (initialization?: boolean) => {
+        // Misc settings
+        if (cmdObj.verbose) {
+          setLogLevel('debug');
         }
-      }
-
-      const { outputPath } = config;
-      if (outputPath) {
-        // Write output to file
-        if (typeof outputPath === 'string') {
-          writeOutput(outputPath, summary, config, shareableUrl);
-        } else if (Array.isArray(outputPath)) {
-          writeMultipleOutputs(outputPath, summary, config, shareableUrl);
+        const iterations = parseInt(cmdObj.repeat || '', 10);
+        const repeat = !isNaN(iterations) && iterations > 0 ? iterations : 1;
+        if (!cmdObj.cache || repeat > 1) {
+          logger.info('Cache is disabled.');
+          disableCache();
         }
-        logger.info(chalk.yellow(`Writing output to ${outputPath}`));
-      }
 
-      telemetry.maybeShowNotice();
+        ({ config, testSuite } = await resolveConfigs(cmdObj, defaultConfig));
 
-      printBorder();
-      if (!cmdObj.write) {
-        logger.info(`${chalk.green('✔')} Evaluation complete`);
-      } else {
-        writeLatestResults(summary, config);
+        let maxConcurrency = parseInt(cmdObj.maxConcurrency || '', 10);
+        const delay = parseInt(cmdObj.delay || '', 0);
 
-        if (cmdObj.view) {
-          logger.info(`${chalk.green('✔')} Evaluation complete. Launching web viewer...`);
-        } else if (shareableUrl) {
-          logger.info(`${chalk.green('✔')} Evaluation complete: ${shareableUrl}`);
-        } else {
-          logger.info(`${chalk.green('✔')} Evaluation complete.\n`);
-          logger.info(`Run ${chalk.greenBright('promptfoo view')} to use the local web viewer`);
-          logger.info(`Run ${chalk.greenBright('promptfoo share')} to create a shareable URL`);
+        if (delay > 0) {
+          maxConcurrency = 1;
           logger.info(
-            `Run ${chalk.greenBright(
-              'promptfoo feedback',
-            )} to share feedback with the developers of this tool`,
+            `Running at concurrency=1 because ${delay}ms delay was requested between API calls`,
           );
         }
-      }
-      printBorder();
-      logger.info(chalk.green.bold(`Successes: ${summary.stats.successes}`));
-      logger.info(chalk.red.bold(`Failures: ${summary.stats.failures}`));
-      logger.info(
-        `Token usage: Total ${summary.stats.tokenUsage.total}, Prompt ${summary.stats.tokenUsage.prompt}, Completion ${summary.stats.tokenUsage.completion}, Cached ${summary.stats.tokenUsage.cached}`,
-      );
 
-      telemetry.record('command_used', {
-        name: 'eval',
-      });
-      await telemetry.send();
+        const options: EvaluateOptions = {
+          showProgressBar: getLogLevel() === 'debug' ? false : cmdObj.progressBar,
+          maxConcurrency: !isNaN(maxConcurrency) && maxConcurrency > 0 ? maxConcurrency : undefined,
+          repeat,
+          delay: !isNaN(delay) && delay > 0 ? delay : undefined,
+          ...evaluateOptions,
+        };
 
-      logger.info('Done.');
+        if (cmdObj.grader && testSuite.defaultTest) {
+          testSuite.defaultTest.options = testSuite.defaultTest.options || {};
+          testSuite.defaultTest.options.provider = await loadApiProvider(cmdObj.grader);
+        }
+        if (cmdObj.generateSuggestions) {
+          options.generateSuggestions = true;
+        }
 
-      if (cmdObj.view) {
-        startServer(parseInt(cmdObj.view, 10) || 15500);
-      } else if (summary.stats.failures > 0) {
-        process.exit(1);
-      }
+        const summary = await evaluate(testSuite, {
+          ...options,
+          eventSource: 'cli',
+        });
+
+        const shareableUrl =
+          cmdObj.share && config.sharing ? await createShareableUrl(summary, config) : null;
+
+        if (cmdObj.table && getLogLevel() !== 'debug') {
+          // Output CLI table
+          const table = generateTable(summary, parseInt(cmdObj.tableCellMaxLength || '', 10));
+
+          logger.info('\n' + table.toString());
+          if (summary.table.body.length > 25) {
+            const rowsLeft = summary.table.body.length - 25;
+            logger.info(`... ${rowsLeft} more row${rowsLeft === 1 ? '' : 's'} not shown ...\n`);
+          }
+        }
+
+        const { outputPath } = config;
+        if (outputPath) {
+          // Write output to file
+          if (typeof outputPath === 'string') {
+            writeOutput(outputPath, summary, config, shareableUrl);
+          } else if (Array.isArray(outputPath)) {
+            writeMultipleOutputs(outputPath, summary, config, shareableUrl);
+          }
+          logger.info(chalk.yellow(`Writing output to ${outputPath}`));
+        }
+
+        telemetry.maybeShowNotice();
+
+        printBorder();
+        if (!cmdObj.write) {
+          logger.info(`${chalk.green('✔')} Evaluation complete`);
+        } else {
+          writeLatestResults(summary, config);
+
+          if (shareableUrl) {
+            logger.info(`${chalk.green('✔')} Evaluation complete: ${shareableUrl}`);
+          } else {
+            logger.info(`${chalk.green('✔')} Evaluation complete.\n`);
+            logger.info(`Run ${chalk.greenBright('promptfoo view')} to use the local web viewer`);
+            logger.info(`Run ${chalk.greenBright('promptfoo share')} to create a shareable URL`);
+            logger.info(
+              `Run ${chalk.greenBright(
+                'promptfoo feedback',
+              )} to share feedback with the developers of this tool`,
+            );
+          }
+        }
+        printBorder();
+        logger.info(chalk.green.bold(`Successes: ${summary.stats.successes}`));
+        logger.info(chalk.red.bold(`Failures: ${summary.stats.failures}`));
+        logger.info(
+          `Token usage: Total ${summary.stats.tokenUsage.total}, Prompt ${summary.stats.tokenUsage.prompt}, Completion ${summary.stats.tokenUsage.completion}, Cached ${summary.stats.tokenUsage.cached}`,
+        );
+
+        telemetry.record('command_used', {
+          name: 'eval',
+          watch: Boolean(cmdObj.watch),
+        });
+        await telemetry.send();
+
+        if (cmdObj.watch) {
+          if (initialization) {
+            const configPaths = (cmdObj.config || [defaultConfigPath]).filter(Boolean) as string[];
+            if (!configPaths.length) {
+              logger.error('Could not locate config file(s) to watch');
+              process.exit(1);
+            }
+            const basePath = path.dirname(configPaths[0]);
+            const promptPaths = Array.isArray(config.prompts)
+              ? (config.prompts
+                  .map((p) =>
+                    p.startsWith('file://')
+                      ? path.resolve(basePath, p.slice('file://'.length))
+                      : null,
+                  )
+                  .filter(Boolean) as string[])
+              : [];
+            const watchPaths = Array.from(new Set([...configPaths, ...promptPaths]));
+            const watcher = chokidar.watch(watchPaths, { ignored: /^\./, persistent: true });
+
+            watcher
+              .on('change', async (path) => {
+                printBorder();
+                logger.info(`File change detected: ${path}`);
+                printBorder();
+                await runEvaluation();
+              })
+              .on('error', (error) => logger.error(`Watcher error: ${error}`))
+              .on('ready', () =>
+                watchPaths.forEach((watchPath) =>
+                  logger.info(`Watching for file changes on ${watchPath} ...`),
+                ),
+              );
+          }
+        } else {
+          logger.info('Done.');
+
+          if (summary.stats.failures > 0) {
+            process.exit(1);
+          }
+        }
+      };
+
+      await runEvaluation(true /* initialization */);
     });
 
   listCommand(program);
