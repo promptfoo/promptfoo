@@ -40,8 +40,8 @@ tests:
 
   - vars:
       city: New York
-    # postprocess returns only the 'name' property
-    postprocess: output[0].function.name
+    # Transform returns only the 'name' property
+    outputTransform: output[0].function.name
     assert:
       - type: is-json
       - type: similar

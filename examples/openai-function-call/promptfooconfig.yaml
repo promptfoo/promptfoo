@@ -37,8 +37,8 @@ tests:
 
   - vars:
       city: New York
-    # postprocess returns only the 'name' property
-    postprocess: output.name
+    # Transform returns only the 'name' property
+    outputTransform: output.name
     assert:
       - type: is-json
       - type: similar
