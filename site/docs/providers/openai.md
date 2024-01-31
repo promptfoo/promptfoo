@@ -512,6 +512,41 @@ tests:
         value: NYC
 ```
 
+### Loading tools/functions from a file
+
+Instead of duplicating function definitions across multiple configurations, you can reference an external YAML (or JSON) file that contains your functions. This allows you to maintain a single source of truth for your functions, which is particularly useful if you have multiple versions or regular changes to definitions.
+
+To load your functions from a file, specify the file path in your provider configuration like so:
+
+```yaml
+providers:
+  - file://./path/to/provider_with_function.yaml
+```
+
+Here's an example of how your `provider_with_function.yaml` might look:
+
+```yaml
+id: openai:chat:gpt-3.5-turbo-0613
+config:
+  functions:
+    - name: get_current_weather
+      description: Get the current weather in a given location
+      parameters:
+        type: object
+        properties:
+          location:
+            type: string
+            description: The city and state, e.g. San Francisco, CA
+          unit:
+            type: string
+            enum:
+              - celsius
+              - fahrenheit
+            description: The unit in which to return the temperature
+        required:
+          - location
+```
+
 ## Supported environment variables
 
 These OpenAI-related environment variables are supported:
