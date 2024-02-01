@@ -43,7 +43,7 @@ tests:
     options:
       # Transform is a cleaner way to pick out specific properties.
       # This transform returns only the 'name' property
-      outputTransform: output[0].function.name
+      transform: output[0].function.name
     assert:
       - type: equals
         value: get_current_weather
@@ -55,12 +55,12 @@ tests:
         value: get_current_weather
         # Transform is a cleaner way to pick out specific properties.
         # This transform returns only the 'name' property
-        outputTransform: output[0].function.name
+        transform: output[0].function.name
       - type: similar
         value: Paris, France
         threshold: 0.5
         # This transform returns only the parsed location argument.
-        outputTransform: JSON.parse(output[0].function.arguments).location
+        transform: JSON.parse(output[0].function.arguments).location
 
   - vars:
       city: Mars

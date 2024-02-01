@@ -307,12 +307,12 @@ To use, override the `config` key of the provider. See example [here](/docs/prov
 
 ### Transforming outputs
 
-The `TestCase.options.outputTransform` field is a Javascript snippet that modifies the LLM output before it is run through the test assertions.
+The `TestCase.options.transform` field is a Javascript snippet that modifies the LLM output before it is run through the test assertions.
 
 It is a function that takes a string output and a context object:
 
 ```
-outputTransformFn: (output: string, context: {
+transformFn: (output: string, context: {
   vars: Record<string, any>
 })
 ```
@@ -329,7 +329,7 @@ tests:
       body: Hello world
     options:
       // highlight-start
-      outputTransform: output.toUpperCase()
+      transform: output.toUpperCase()
       // highlight-end
     # ...
 ```
@@ -344,7 +344,7 @@ tests:
       body: Hello world
     options:
       // highlight-start
-      outputTransform: |
+      transform: |
         output = output.replace(context.vars.language, 'foo');
         const words = output.split(' ').filter(x => !!x);
         return JSON.stringify(words);
@@ -361,7 +361,7 @@ tests:
     assert:
       - type: equals
         value: 'foo'
-        outputTransform: output.category  # Select the 'category' key from output json
+        transform: output.category  # Select the 'category' key from output json
 ```
 
 :::tip

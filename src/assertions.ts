@@ -11,7 +11,7 @@ import { distance as levenshtein } from 'fastest-levenshtein';
 
 import telemetry from './telemetry';
 import { fetchWithRetries } from './fetch';
-import { applyOutputTransform, getNunjucksEngine } from './util';
+import { transformOutput, getNunjucksEngine } from './util';
 import {
   matchesSimilarity,
   matchesLlmRubric,
@@ -202,8 +202,8 @@ export async function runAssertion({
     type: baseType,
   });
   
-  if (assertion.outputTransform) {
-    output = applyOutputTransform(assertion.outputTransform, output, {vars: test.vars});
+  if (assertion.transform) {
+    output = transformOutput(assertion.transform, output, {vars: test.vars});
   }
 
   const outputString = coerceString(output);

@@ -773,7 +773,7 @@ export function printBorder() {
   logger.info(border);
 }
 
-export function applyOutputTransform(code: string, output: string | object | undefined, context: unknown) {
+export function transformOutput(code: string, output: string | object | undefined, context: unknown) {
   const postprocessFn = new Function(
     'output',
     'context',

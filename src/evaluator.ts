@@ -8,7 +8,7 @@ import logger from './logger';
 import telemetry from './telemetry';
 import { runAssertions } from './assertions';
 import { generatePrompts } from './suggestions';
-import { getNunjucksEngine, applyOutputTransform, sha256 } from './util';
+import { getNunjucksEngine, transformOutput, sha256 } from './util';
 import { maybeEmitAzureOpenAiWarning } from './providers/azureopenaiUtil';
 
 import type { SingleBar } from 'cli-progress';
@@ -237,9 +237,9 @@ class Evaluator {
       } else if (response.output) {
         // Create a copy of response so we can potentially mutate it.
         let processedResponse = { ...response };
-        const outputTransform = test.options?.outputTransform || test.options?.postprocess;
-        if (outputTransform) {
-          processedResponse.output = applyOutputTransform(outputTransform, processedResponse.output, { vars });
+        const transform = test.options?.transform || test.options?.postprocess;
+        if (transform) {
+          processedResponse.output = transformOutput(transform, processedResponse.output, { vars });
         }
 
         invariant(processedResponse.output != null, 'Response output should not be null');
