@@ -42,7 +42,7 @@ tests:
 
 ### Deterministic eval metrics
 
-These metrics are programmatic tests that are run on LLM output.  [See all details](/docs/configuration/expected-outputs/deterministic)
+These metrics are programmatic tests that are run on LLM output. [See all details](/docs/configuration/expected-outputs/deterministic)
 
 | Assertion Type                                                                                                     | Returns true if...                                               |
 | ------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------- |
@@ -79,17 +79,18 @@ These metrics are model-assisted, and rely on LLMs or other machine learning mod
 
 See [Model-graded evals](/docs/configuration/expected-outputs/model-graded), [classification](/docs/configuration/expected-outputs/classifier), and [similarity](/docs/configuration/expected-outputs/similar) docs for more information.
 
-| Assertion Type                                                             | Method                                                                          |
-| -------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| [similar](/docs/configuration/expected-outputs/similar)                    | Embeddings and cosine similarity are above a threshold                          |
-| [classifier](/docs/configuration/expected-outputs/classifier)              | Run LLM output through a classifier                                             |
-| [llm-rubric](/docs/configuration/expected-outputs/model-graded)            | LLM output matches a given rubric, using a Language Model to grade output       |
-| [answer-relevance](/docs/configuration/expected-outputs/model-graded)      | Ensure that LLM output is related to original query                             |
-| [context-faithfulness](/docs/configuration/expected-outputs/model-graded)  | Ensure that LLM output uses the context                                         |
-| [context-recall](/docs/configuration/expected-outputs/model-graded)        | Ensure that ground truth appears in context                                     |
-| [context-relevance](/docs/configuration/expected-outputs/model-graded)     | Ensure that context is relevant to original query                               |
-| [factuality](/docs/configuration/expected-outputs/model-graded)            | LLM output adheres to the given facts, using Factuality method from OpenAI eval |
-| [model-graded-closedqa](/docs/configuration/expected-outputs/model-graded) | LLM output adheres to given criteria, using Closed QA method from OpenAI eval   |
+| Assertion Type                                                                        | Method                                                                          |
+| ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| [similar](/docs/configuration/expected-outputs/similar)                               | Embeddings and cosine similarity are above a threshold                          |
+| [classifier](/docs/configuration/expected-outputs/classifier)                         | Run LLM output through a classifier                                             |
+| [llm-rubric](/docs/configuration/expected-outputs/model-graded)                       | LLM output matches a given rubric, using a Language Model to grade output       |
+| [answer-relevance](/docs/configuration/expected-outputs/model-graded)                 | Ensure that LLM output is related to original query                             |
+| [context-faithfulness](/docs/configuration/expected-outputs/model-graded)             | Ensure that LLM output uses the context                                         |
+| [context-recall](/docs/configuration/expected-outputs/model-graded)                   | Ensure that ground truth appears in context                                     |
+| [context-relevance](/docs/configuration/expected-outputs/model-graded)                | Ensure that context is relevant to original query                               |
+| [factuality](/docs/configuration/expected-outputs/model-graded)                       | LLM output adheres to the given facts, using Factuality method from OpenAI eval |
+| [model-graded-closedqa](/docs/configuration/expected-outputs/model-graded)            | LLM output adheres to given criteria, using Closed QA method from OpenAI eval   |
+| [select-best](https://promptfoo.dev/docs/configuration/expected-outputs/model-graded) | Compare multiple outputs for a test case and pick the best one                  |
 
 ## Weighted assertions
 
