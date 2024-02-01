@@ -730,7 +730,7 @@ export async function matchesContextFaithfulness(
   };
 }
 
-export async function matchesComparisonBoolean(
+export async function matchesSelectBest(
   criteria: string,
   outputs: string[],
   grading?: GradingConfig,

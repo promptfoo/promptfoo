@@ -100,7 +100,10 @@ The evaluate function takes the following parameters:
       | 'is-valid-openai-function-call'
       | 'is-valid-openai-tools-call'
       | 'latency'
-      | 'perplexity';
+      | 'perplexity'
+      | 'perplexity-score'
+      | 'cost'
+      | 'select-best';
 
     // The expected value, if applicable
     value?: string | string[] | object | AssertionFunction;

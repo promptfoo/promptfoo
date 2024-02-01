@@ -649,6 +649,17 @@ class Evaluator {
       },
     );
 
+    const compareRowsCount = table.body.reduce((count, row) => 
+      count + (row.test.assert?.some((a) => a.type === 'select-best') ? 1 : 0), 0);
+    
+    if (compareRowsCount > 0 && progressbar) {
+      progressbar.start(compareRowsCount, 0, {
+        provider: 'Running model-graded comparisons',
+        prompt: '',
+        vars: '',
+      });
+    }
+
     for (const row of table.body) {
       const compareAssertion = row.test.assert?.find((a) => a.type === 'select-best');
       if (compareAssertion) {
@@ -681,7 +692,16 @@ class Evaluator {
             output.gradingResult.componentResults.push(gradingResult);
           }
         });
+        if (progressbar) {
+          progressbar.increment({
+            prompt: row.outputs[0].text.slice(0, 10).replace(/\n/g, ''),
+          });
+        }
       }
+    }
+
+    if (progressbar) {
+      progressbar.stop();
     }
 
     // Finish up

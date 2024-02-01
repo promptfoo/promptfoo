@@ -13,6 +13,7 @@ Output-based:
 - `factuality` - a factual consistency eval which, given a completion `A` and reference answer `B` evaluates whether A is a subset of B, A is a superset of B, A and B are equivalent, A and B disagree, or A and B differ, but difference don't matter from the perspective of factuality. Uses the prompt from OpenAI's public evals.
 - `answer-relevance` - ensure that LLM output is related to original query
 - `classifier` - see [classifier grading docs](/docs/configuration/expected-outputs/classifier).
+- `select-best` - compare outputs from multiple test cases and choose a winner
 
 RAG-based (requires `query` and/or `context` vars):
 
@@ -110,6 +111,33 @@ tests:
         threshold: 0.9
       - type: context-faithfulness
         threshold: 0.9
+```
+
+## Examples (comparison)
+
+The `select-best` assertion type is used to compare multiple outputs in the same TestCase row and select the one that best meets a specified criterion. 
+
+Here's an example of how to use `select-best` in a configuration file:
+
+```yaml
+prompts:
+  - "Write a tweet about {{topic}}"
+  - "Write a very concise, funny tweet about {{topic}}"
+
+providers: [openai:gpt-4]
+
+tests:
+  - vars:
+      topic: bananas
+    assert:
+      - type: select-best
+        value: choose the funniest tweet
+
+  - vars:
+      topic: nyc
+    assert:
+      - type: select-best
+        value: choose the tweet that contains the most facts
 ```
 
 ## Overriding the LLM grader

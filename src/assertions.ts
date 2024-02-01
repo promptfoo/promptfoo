@@ -22,7 +22,7 @@ import {
   matchesContextRecall,
   matchesContextRelevance,
   matchesContextFaithfulness,
-  matchesComparisonBoolean,
+  matchesSelectBest,
 } from './matchers';
 
 import type { Assertion, AssertionType, GradingResult, AtomicTestCase, ApiProvider } from './types';
@@ -115,6 +115,7 @@ export async function runAssertions({
   const namedScores: Record<string, number> = {};
   for (const assertion of test.assert) {
     if (assertion.type.startsWith('select-')) {
+      // Select-type assertions are handled separately because they depend on multiple outputs.
       continue;
     }
     const weight = assertion.weight || 1;
@@ -1251,7 +1252,7 @@ export async function runCompareAssertion(
   outputs: string[],
 ): Promise<GradingResult[]> {
   invariant(typeof assertion.value === 'string', 'select-best must have a string value');
-  const comparisonResults = await matchesComparisonBoolean(assertion.value, outputs, undefined, test.vars);
+  const comparisonResults = await matchesSelectBest(assertion.value, outputs, undefined, test.vars);
   return comparisonResults.map(result => ({
     ...result,
     assertion
@@ -1281,4 +1282,5 @@ export default {
   matchesContextRecall,
   matchesContextRelevance,
   matchesContextFaithfulness,
+  matchesComparisonBoolean: matchesSelectBest,
 };
