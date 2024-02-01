@@ -505,9 +505,11 @@ export interface EvalWithMetadata {
   results: EvaluateSummary;
 }
 
+export type PromptFunction = (context: { vars: Record<string, string | object> }) => Promise<string | object>
+
 // node.js package interface
 export type EvaluateTestSuite = {
-  prompts: (string | object | Function)[];
+  prompts: (string | object | PromptFunction)[];
   writeLatestResults?: boolean;
 } & TestSuiteConfig;
 
