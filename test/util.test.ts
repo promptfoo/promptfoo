@@ -85,6 +85,7 @@ describe('util', () => {
             },
           ],
           vars: ['value1', 'value2'],
+          test: {},
         },
       ],
     };
@@ -155,6 +156,7 @@ describe('util', () => {
             },
           ],
           vars: ['value1', 'value2'],
+          test: {},
         },
       ],
     };
@@ -225,6 +227,7 @@ describe('util', () => {
             },
           ],
           vars: ['value1', 'value2'],
+          test: {},
         },
       ],
     };
@@ -295,6 +298,7 @@ describe('util', () => {
             },
           ],
           vars: ['value1', 'value2'],
+          test: {},
         },
       ],
     };
