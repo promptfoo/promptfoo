@@ -2,7 +2,7 @@ export type FilePath = string;
 
 export interface CommandLineOptions {
   // Shared with TestSuite
-  prompts: FilePath[];
+  prompts?: FilePath[];
   providers: FilePath[];
   output: FilePath[];
 
@@ -19,13 +19,13 @@ export interface CommandLineOptions {
   modelOutputs?: FilePath;
   verbose?: boolean;
   grader?: string;
-  view?: string;
   tableCellMaxLength?: string;
   write?: boolean;
   cache?: boolean;
   table?: boolean;
   share?: boolean;
   progressBar?: boolean;
+  watch?: boolean;
 
   generateSuggestions?: boolean;
   promptPrefix?: string;

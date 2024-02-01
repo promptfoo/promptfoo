@@ -43,7 +43,7 @@ By default the `eval` command will read the `promptfooconfig.yaml` configuration
 | `--share`                           | Automatically create a share link                                                                                                                                                                  |
 | `--table-cell-max-length <number>`  | Truncate console table cells to this length                                                                                                                                                        |
 | `--verbose`                         | Show debug logs                                                                                                                                                                                    |
-| `--view`                            | Open local web viewer                                                                                                                                                                              |
+| `--watch`                           | Watch the config and prompt files for changes                                                                                                                                                      |
 | `-j, --max-concurrency <number>`    | Maximum number of concurrent API calls                                                                                                                                                             |
 
 [1]: /docs/providers/openai

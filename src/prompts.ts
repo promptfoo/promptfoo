@@ -246,6 +246,7 @@ export function readPrompts(
   }
   return promptContents;
 }
+
 export const DEFAULT_GRADING_PROMPT = JSON.stringify([
   {
     role: 'system',
