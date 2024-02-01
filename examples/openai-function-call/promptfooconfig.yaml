@@ -37,12 +37,17 @@ tests:
 
   - vars:
       city: New York
-    # postprocess returns only the 'name' property
-    postprocess: output.name
     assert:
-      - type: is-json
+      - type: equals
+        value: get_current_weather
+        # Transform is a cleaner way to pick out specific properties.
+        # This transform returns only the 'name' property
+        transform: output.name
       - type: similar
         value: NYC
+        threshold: 0.5
+        # This transform returns only the parsed location argument.
+        transform: JSON.parse(output.arguments).location
 
   - vars:
       city: Paris

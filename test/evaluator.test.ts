@@ -365,13 +365,13 @@ describe('evaluator', () => {
     expect(summary.results[0].response?.output).toBe('Test output');
   });
 
-  test('evaluate with postprocess option - default test', async () => {
+  test('evaluate with transform option - default test', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
       prompts: [toPrompt('Test prompt')],
       defaultTest: {
         options: {
-          postprocess: 'output + " postprocessed"',
+          transform: 'output + " postprocessed"',
         },
       },
     };
@@ -384,7 +384,7 @@ describe('evaluator', () => {
     expect(summary.results[0].response?.output).toBe('Test output postprocessed');
   });
 
-  test('evaluate with postprocess option - single test', async () => {
+  test('evaluate with transform option - single test', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
       prompts: [toPrompt('Test prompt')],
@@ -397,7 +397,7 @@ describe('evaluator', () => {
             },
           ],
           options: {
-            postprocess: 'output + " postprocessed"',
+            transform: 'output + " postprocessed"',
           },
         },
       ],
@@ -411,7 +411,7 @@ describe('evaluator', () => {
     expect(summary.results[0].response?.output).toBe('Test output postprocessed');
   });
 
-  test('evaluate with postprocess option - json provider', async () => {
+  test('evaluate with transform option - json provider', async () => {
     const mockApiJsonProvider: ApiProvider = {
       id: jest.fn().mockReturnValue('test-provider-json'),
       callApi: jest.fn().mockResolvedValue({
@@ -432,7 +432,7 @@ describe('evaluator', () => {
             },
           ],
           options: {
-            postprocess: `JSON.parse(output).value`,
+            transform: `JSON.parse(output).value`,
           },
         },
       ],
@@ -630,7 +630,7 @@ it('should use the options from the test if they exist', async () => {
       {
         vars: { var1: 'value1', var2: 'value2' },
         options: {
-          postprocess: 'output + " postprocessed"',
+          transform: 'output + " postprocessed"',
         },
       },
     ],

@@ -305,14 +305,14 @@ promptfoo supports OpenAI tools, functions, and other provider-specific configur
 
 To use, override the `config` key of the provider. See example [here](/docs/providers/openai#using-functions).
 
-### Postprocessing
+### Transforming outputs
 
-The `TestCase.options.postprocess` field is a Javascript snippet that modifies the LLM output. Postprocessing occurs before any assertions are run.
+The `TestCase.options.transform` field is a Javascript snippet that modifies the LLM output before it is run through the test assertions.
 
-Postprocess is a function that takes a string output and a context object:
+It is a function that takes a string output and a context object:
 
 ```
-postprocessFn: (output: string, context: {
+transformFn: (output: string, context: {
   vars: Record<string, any>
 })
 ```
@@ -329,7 +329,7 @@ tests:
       body: Hello world
     options:
       // highlight-start
-      postprocess: output.toUpperCase()
+      transform: output.toUpperCase()
       // highlight-end
     # ...
 ```
@@ -344,7 +344,7 @@ tests:
       body: Hello world
     options:
       // highlight-start
-      postprocess: |
+      transform: |
         output = output.replace(context.vars.language, 'foo');
         const words = output.split(' ').filter(x => !!x);
         return JSON.stringify(words);
@@ -352,7 +352,21 @@ tests:
     # ...
 ```
 
-Tip: use `defaultTest` apply a postprocessing option to every test case in your test suite.
+It also works for assertions, which is useful for picking values out of JSON:
+
+```yaml
+tests:
+  - vars:
+      # ...
+    assert:
+      - type: equals
+        value: 'foo'
+        transform: output.category  # Select the 'category' key from output json
+```
+
+:::tip
+Use `defaultTest` apply a transform option to every test case in your test suite.
+:::
 
 ## Config structure and organization
 

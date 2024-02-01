@@ -772,3 +772,16 @@ export function printBorder() {
   const border = '='.repeat((process.stdout.columns || 80) - 10);
   logger.info(border);
 }
+
+export function transformOutput(code: string, output: string | object | undefined, context: unknown) {
+  const postprocessFn = new Function(
+    'output',
+    'context',
+    code.includes('\n') ? code : `return ${code}`,
+  );
+  const ret = postprocessFn(output, context);
+  if (output == null) {
+    throw new Error(`Postprocess function did not return a value\n\n${code}`);
+  }
+  return ret;
+}

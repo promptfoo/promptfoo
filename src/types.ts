@@ -152,7 +152,11 @@ export interface PromptConfig {
 }
 
 export interface OutputConfig {
+  /**
+   * @deprecated in > 0.38.0. Use `transform` instead.
+   */
   postprocess?: string;
+  transform?: string;
 }
 
 export interface EvaluateOptions {
@@ -354,6 +358,9 @@ export interface Assertion {
 
   // Tag this assertion result as a named metric
   metric?: string;
+  
+  // Process the output before running the assertion
+  transform?: string;
 }
 
 // Used when building prompts index from files.
