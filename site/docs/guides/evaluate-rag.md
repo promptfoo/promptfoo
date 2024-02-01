@@ -33,12 +33,25 @@ Document retrieval is the first step of a RAG. It is possible to eval the retrie
 Suppose we have a simple file `retrieve.py`, which takes a query and outputs a list of documents and their contents:
 
 ```py title=retrieve.py
-import sys
 import vectorstore
 
-query = sys.argv[1]
-for doc in vectorstore.query(query):
-  print(f'{doc.name}: {doc.content}')
+def call_api(query, options, context):
+    # Fetch relevant documents and join them into a string result.
+    documents = vectorstore.query(query)
+    output = "\n".join(f'{doc.name}: {doc.content}' for doc in documents)
+
+    result = {
+        "output": output,
+    }
+
+    # Include error handling and token usage reporting as needed
+    # if some_error_condition:
+    #     result['error'] = "An error occurred during processing"
+    #
+    # if token_usage_calculated:
+    #     result['tokenUsage'] = {"total": token_count, "prompt": prompt_token_count, "completion": completion_token_count}
+
+    return result
 ```
 
 In practice, your retrieval logic is probably more complicated than the above (e.g. query transformations and fanout). Substitute `retrieval.py` with a script of your own that prepares the query and talks to your database.
@@ -53,7 +66,7 @@ First, create `promptfooconfig.yaml`. We'll use a placeholder prompt with a sing
 
 ```yaml
 prompts: ['{{ query }}']
-providers: ['exec: python retrieve.py']
+providers: ['python: retrieve.py']
 tests:
   - vars:
       query: What is our reimbursement policy?
@@ -67,7 +80,7 @@ tests:
         value: ['parental-leave.md', 'hr-policies.html', 'Maternity Leave']
 ```
 
-In the above example, the `contains-all` assertion ensures that the output from `retrive.py` contains all the listed substrings. The `context-recall` assertions use an LLM model to ensure that the retrieval performs well.
+In the above example, the `contains-all` assertion ensures that the output from `retrieve.py` contains all the listed substrings. The `context-recall` assertions use an LLM model to ensure that the retrieval performs well.
 
 **You will get the most value out of this eval if you set up your own evaluation test cases.** View other [assertion types](/docs/configuration/expected-outputs) that you can use.
 
@@ -77,9 +90,9 @@ In order to compare multiple vector databases in your evaluation, create retriev
 
 ```yaml
 providers:
-  - 'exec: python retrieve_pinecone.py'
-  - 'exec: python retrieve_milvus.py'
-  - 'exec: python retrieve_pgvector.py'
+  - 'python: retrieve_pinecone.py'
+  - 'python: retrieve_milvus.py'
+  - 'python: retrieve_pgvector.py'
 ```
 
 Running the eval with `promptfoo eval` will create a comparison view between Pinecone, Milvus, and PGVector:
@@ -94,7 +107,7 @@ Once you are confident that your retrieval step is performing well, it's time to
 
 In this step, we are focused on evaluating whether the LLM output is correct given a query and a set of documents.
 
-Instead of using an external script provider, we'll use the built-in functionality for calling LLM APIs. If your LLM output logic is complicated, you can use an `exec` provider as shown above.
+Instead of using an external script provider, we'll use the built-in functionality for calling LLM APIs. If your LLM output logic is complicated, you can use a [`python` provider](/docs/providers/python) as shown above.
 
 First, let's set up our prompt by creating a `prompt1.txt` file:
 
@@ -201,8 +214,8 @@ Let's also add a heuristic that prefers shorter outputs. Using the `defaultTest`
 ```yaml
 defaultTest:
   assert:
-    - type: javascript
-      value: Math.max(0, Math.min(1, 1 - (output.length - 100) / 900))
+    - type: python
+      value: max(0, min(1, 1 - (len(output) - 100) / 900))
 ```
 
 Here's the final config:
@@ -212,8 +225,8 @@ prompts: [prompt1.txt]
 providers: [openai:gpt-3.5-turbo, openai:gpt-4, ollama:llama2]
 defaultTest:
   assert:
-    - type: javascript
-      value: Math.max(0, Math.min(1, 1 - (output.length - 100) / 900))
+    - type: python
+      value: max(0, min(1, 1 - (len(output) - 100) / 900))
 tests:
   - vars:
       query: What is the max purchase that doesn't require approval?
@@ -255,8 +268,8 @@ prompts: [prompt1.txt, prompt2.txt]
 
 # Test different retrieval and generation methods to find the best
 providers:
-  - exec: python retrieve_and_generate_v1.py
-  - exec: python retrieve_and_generate_v2.py
+  - python: retrieve_and_generate_v1.py
+  - python: retrieve_and_generate_v2.py
 
 tests:
   # ...
