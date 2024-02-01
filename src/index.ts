@@ -8,7 +8,7 @@ import { evaluate as doEvaluate } from './evaluator';
 import { loadApiProviders } from './providers';
 import { readTests } from './testCases';
 import { readFilters, writeLatestResults, writeMultipleOutputs, writeOutput } from './util';
-import type { EvaluateOptions, TestSuite, EvaluateTestSuite, ProviderOptions } from './types';
+import type { EvaluateOptions, TestSuite, EvaluateTestSuite, ProviderOptions, PromptFunction } from './types';
 
 export * from './types';
 
@@ -30,7 +30,7 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
         return {
           raw: promptInput.toString(),
           display: promptInput.toString(),
-          func: promptInput,
+          function: promptInput as PromptFunction,
         };
       } else if (typeof promptInput === 'string') {
         return {
