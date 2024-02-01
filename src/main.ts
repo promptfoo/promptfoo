@@ -593,13 +593,9 @@ async function main() {
           logger.info(`${chalk.green('✔')} Evaluation complete: ${shareableUrl}`);
         } else {
           logger.info(`${chalk.green('✔')} Evaluation complete.\n`);
-          logger.info(`Run ${chalk.greenBright('promptfoo view')} to use the local web viewer`);
-          logger.info(`Run ${chalk.greenBright('promptfoo share')} to create a shareable URL`);
-          logger.info(
-            `Run ${chalk.greenBright(
-              'promptfoo feedback',
-            )} to share feedback with the developers of this tool`,
-          );
+          logger.info(`» Run ${chalk.greenBright.bold('promptfoo view')} to use the local web viewer`);
+          logger.info(`» Run ${chalk.greenBright.bold('promptfoo share')} to create a shareable URL`);
+          logger.info(`» This project needs your feedback. What's one thing we can improve? ${chalk.greenBright.bold('https://forms.gle/YFLgTe1dKJKNSCsU7')}`);
         }
       }
       printBorder();
