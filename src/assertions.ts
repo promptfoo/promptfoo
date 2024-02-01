@@ -22,6 +22,7 @@ import {
   matchesContextRecall,
   matchesContextRelevance,
   matchesContextFaithfulness,
+  matchesSelectBest,
 } from './matchers';
 
 import type { Assertion, AssertionType, GradingResult, AtomicTestCase, ApiProvider } from './types';
@@ -113,6 +114,10 @@ export async function runAssertions({
   const componentResults: GradingResult[] = [];
   const namedScores: Record<string, number> = {};
   for (const assertion of test.assert) {
+    if (assertion.type.startsWith('select-')) {
+      // Select-type assertions are handled separately because they depend on multiple outputs.
+      continue;
+    }
     const weight = assertion.weight || 1;
     totalWeight += weight;
 
@@ -847,7 +852,7 @@ ${assertion.value}`,
       typeof renderedValue === 'string',
       'context-recall assertion type must have a string value',
     );
-    invariant(prompt, 'context-recall assertion type must have a prompt')
+    invariant(prompt, 'context-recall assertion type must have a prompt');
 
     // Assertion provider overrides test provider
     test.options = test.options || {};
@@ -1241,6 +1246,19 @@ export function assertionFromString(expected: string): Assertion {
   };
 }
 
+export async function runCompareAssertion(
+  test: AtomicTestCase,
+  assertion: Assertion,
+  outputs: string[],
+): Promise<GradingResult[]> {
+  invariant(typeof assertion.value === 'string', 'select-best must have a string value');
+  const comparisonResults = await matchesSelectBest(assertion.value, outputs, undefined, test.vars);
+  return comparisonResults.map(result => ({
+    ...result,
+    assertion
+  }));
+}
+
 export async function readAssertions(filePath: string): Promise<Assertion[]> {
   try {
     const assertions = yaml.load(fs.readFileSync(filePath, 'utf-8')) as Assertion[];
@@ -1264,4 +1282,5 @@ export default {
   matchesContextRecall,
   matchesContextRelevance,
   matchesContextFaithfulness,
+  matchesComparisonBoolean: matchesSelectBest,
 };

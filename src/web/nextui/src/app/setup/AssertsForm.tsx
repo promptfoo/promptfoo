@@ -62,6 +62,7 @@ const assertTypes: AssertionType[] = [
   'context-faithfulness',
   'context-recall',
   'context-relevance',
+  'select-best',
 ];
 
 const AssertsForm: React.FC<AssertsFormProps> = ({ onAdd, initialValues }) => {

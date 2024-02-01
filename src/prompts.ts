@@ -330,3 +330,18 @@ export const AI_SELF_REFERENCE_PROMPT_SYSTEM_MESSAGE = {
   role: 'system',
   content: `In this task, you will be given a string of text produced by a large language model. Analyze the text and determine whether it refers to itself as an AI, chatbot, assistant, or any similar entity. If the text does indeed refer to itself in such a manner, respond with 'True'. Otherwise, respond with 'False'.`,
 };
+
+export const SELECT_BEST_PROMPT = JSON.stringify([{
+  role: 'system',
+  content: `You are comparing multiple pieces of text to see which best fits the following criteria: {{criteria}}
+
+Here are the pieces of text:
+
+{% for output in outputs %}
+<Text index="{{ loop.index0 }}">
+{{ output }}
+</Text>
+{% endfor %}
+
+Output the index of the text that best fits the criteria. You must output a single integer.`,
+}]);
