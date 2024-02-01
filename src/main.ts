@@ -44,6 +44,7 @@ import type {
 } from './types';
 import { generateTable } from './table';
 import { createShareableUrl } from './share';
+import { addTestsFromScenarios } from './scenarios';
 
 function createDummyFiles(directory: string | null) {
   if (directory) {
@@ -522,6 +523,8 @@ async function main() {
       }
 
       const { config, testSuite } = await resolveConfigs(cmdObj, defaultConfig);
+
+      addTestsFromScenarios(testSuite);
 
       let maxConcurrency = parseInt(cmdObj.maxConcurrency || '', 10);
       const delay = parseInt(cmdObj.delay || '', 0);
