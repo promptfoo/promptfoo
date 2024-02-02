@@ -14,7 +14,7 @@ To configure the Python provider, you need to specify the path to your Python sc
 
 ```yaml
 providers:
-  - id: 'python:my_script.py':
+  - id: 'python:my_script.py'
     config:
       additionalOption: 123
 ```
