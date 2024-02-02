@@ -62,7 +62,7 @@ class PalmGenericProvider implements ApiProvider {
 }
 
 export class PalmChatProvider extends PalmGenericProvider {
-  static CHAT_MODELS = ['chat-bison-001'];
+  static CHAT_MODELS = ['chat-bison-001', 'gemini-pro', 'gemini-pro-vision'];
 
   constructor(
     modelName: string,
@@ -79,6 +79,11 @@ export class PalmChatProvider extends PalmGenericProvider {
       throw new Error(
         'Google PaLM API key is not set. Set the PALM_API_KEY environment variable or add `apiKey` to the provider config.',
       );
+    }
+
+    const isGemini = this.modelName.startsWith('gemini');
+    if (isGemini) {
+      return this.callGemini(prompt);
     }
 
     // https://developers.generativeai.google/tutorials/curl_quickstart
@@ -128,6 +133,75 @@ export class PalmChatProvider extends PalmGenericProvider {
       const output = data.candidates[0].content;
       return {
         output,
+      };
+    } catch (err) {
+      return {
+        error: `API response error: ${String(err)}: ${JSON.stringify(data)}`,
+      };
+    }
+  }
+
+  async callGemini(prompt: string): Promise<ProviderResponse> {
+    const contents = parseChatPrompt(prompt, [{ parts: [{ text: prompt }] }]);
+    const body = {
+      contents,
+      temperature: this.config.temperature,
+      topP: this.config.topP,
+      topK: this.config.topK,
+
+      safetySettings: this.config.safetySettings,
+      stopSequences: this.config.stopSequences,
+      maxOutputTokens: this.config.maxOutputTokens,
+    };
+    logger.debug(`Calling Google PaLM API: ${JSON.stringify(body)}`);
+
+    let data;
+    try {
+      // https://ai.google.dev/docs/gemini_api_overview#curl
+      // https://ai.google.dev/tutorials/rest_quickstart
+      ({ data } = (await fetchWithCache(
+        `https://${this.getApiHost()}/v1beta/models/${
+          this.modelName
+        }:generateContent?key=${this.getApiKey()}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(body),
+        },
+        REQUEST_TIMEOUT_MS,
+      )) as {
+        data: {
+          candidates: Array<{
+            content: { parts: Array<{ text: string }> };
+            safetyRatings: Array<{ category: string; probability: string }>;
+          }>;
+          promptFeedback?: { safetyRatings: Array<{ category: string; probability: string }> };
+        };
+      });
+    } catch (err) {
+      return {
+        error: `API call error: ${String(err)}`,
+      };
+    }
+
+    logger.debug(`\tPaLM API response: ${JSON.stringify(data)}`);
+
+    if (!data?.candidates || data.candidates.length === 0) {
+      return {
+        error: `API did not return any candidate responses: ${JSON.stringify(data)}`,
+      };
+    }
+
+    const candidate = data.candidates[0];
+    const parts = candidate.content.parts.map((part) => part.text).join('');
+    const safetyRatings = candidate.safetyRatings;
+    const promptFeedback = data.promptFeedback?.safetyRatings;
+
+    try {
+      return {
+        output: parts,
       };
     } catch (err) {
       return {

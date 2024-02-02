@@ -2,12 +2,14 @@
 sidebar_position: 43
 ---
 
-# Google PaLM
+# Google AI Studio
 
-The `palm` provider is compatible with Google's [PaLM](https://developers.generativeai.google/) offering, which offers access to models such as `text-bison-001`.
+The `palm` provider is compatible with Google AI Studio (formerly known as [PaLM](https://developers.generativeai.google/)), which offers access to Gemini models.
 
-You can use it by specifying one of the [available models](https://developers.generativeai.google/models/language) offered by PaLM. Currently, the following model is supported:
+You can use it by specifying one of the [available models](https://developers.generativeai.google/models/language). Currently, the following models are supported:
 
+- `palm:gemini-pro`
+- `palm:gemini-pro-vision`
 - `palm:chat-bison-001`
 
 Supported environment variables:
@@ -19,7 +21,7 @@ The PaLM provider supports various [configuration options](https://github.com/pr
 
 ```yaml
 providers:
-  - id: palm:text-bison-001
+  - id: palm:gemini-pro
     config:
       temperature: 0
       maxOutputTokens: 1024
