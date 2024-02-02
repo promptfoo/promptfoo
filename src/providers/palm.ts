@@ -39,20 +39,28 @@ class PalmGenericProvider implements ApiProvider {
   }
 
   toString(): string {
-    return `[Google PaLM Provider ${this.modelName}]`;
+    return `[Google AI Studio Provider ${this.modelName}]`;
   }
 
   getApiHost(): string | undefined {
     return (
       this.config.apiHost ||
+      this.env?.GOOGLE_API_HOST ||
       this.env?.PALM_API_HOST ||
+      process.env.GOOGLE_API_HOST ||
       process.env.PALM_API_HOST ||
       DEFAULT_API_HOST
     );
   }
 
   getApiKey(): string | undefined {
-    return this.config.apiKey || this.env?.PALM_API_KEY || process.env.PALM_API_KEY;
+    return (
+      this.config.apiKey ||
+      this.env?.GOOGLE_API_KEY ||
+      this.env?.PALM_API_KEY ||
+      process.env.GOOGLE_API_KEY ||
+      process.env.PALM_API_KEY
+    );
   }
 
   // @ts-ignore: Prompt is not used in this implementation
@@ -69,7 +77,7 @@ export class PalmChatProvider extends PalmGenericProvider {
     options: { config?: PalmCompletionOptions; id?: string; env?: EnvOverrides } = {},
   ) {
     if (!PalmChatProvider.CHAT_MODELS.includes(modelName)) {
-      logger.warn(`Using unknown Google PaLM chat model: ${modelName}`);
+      logger.warn(`Using unknown Google chat model: ${modelName}`);
     }
     super(modelName, options);
   }
@@ -77,7 +85,7 @@ export class PalmChatProvider extends PalmGenericProvider {
   async callApi(prompt: string): Promise<ProviderResponse> {
     if (!this.getApiKey()) {
       throw new Error(
-        'Google PaLM API key is not set. Set the PALM_API_KEY environment variable or add `apiKey` to the provider config.',
+        'Google API key is not set. Set the PALM_API_KEY environment variable or add `apiKey` to the provider config.',
       );
     }
 
@@ -98,7 +106,7 @@ export class PalmChatProvider extends PalmGenericProvider {
       stopSequences: this.config.stopSequences,
       maxOutputTokens: this.config.maxOutputTokens,
     };
-    logger.debug(`Calling Google PaLM API: ${JSON.stringify(body)}`);
+    logger.debug(`Calling Google API: ${JSON.stringify(body)}`);
 
     let data;
     try {
@@ -121,7 +129,7 @@ export class PalmChatProvider extends PalmGenericProvider {
       };
     }
 
-    logger.debug(`\tPaLM API response: ${JSON.stringify(data)}`);
+    logger.debug(`\tGoogle API response: ${JSON.stringify(data)}`);
 
     if (!data?.candidates || data.candidates.length === 0) {
       return {
@@ -153,7 +161,7 @@ export class PalmChatProvider extends PalmGenericProvider {
       stopSequences: this.config.stopSequences,
       maxOutputTokens: this.config.maxOutputTokens,
     };
-    logger.debug(`Calling Google PaLM API: ${JSON.stringify(body)}`);
+    logger.debug(`Calling Google API: ${JSON.stringify(body)}`);
 
     let data;
     try {
@@ -186,7 +194,7 @@ export class PalmChatProvider extends PalmGenericProvider {
       };
     }
 
-    logger.debug(`\tPaLM API response: ${JSON.stringify(data)}`);
+    logger.debug(`\tGoogle API response: ${JSON.stringify(data)}`);
 
     if (!data?.candidates || data.candidates.length === 0) {
       return {
@@ -196,8 +204,6 @@ export class PalmChatProvider extends PalmGenericProvider {
 
     const candidate = data.candidates[0];
     const parts = candidate.content.parts.map((part) => part.text).join('');
-    const safetyRatings = candidate.safetyRatings;
-    const promptFeedback = data.promptFeedback?.safetyRatings;
 
     try {
       return {

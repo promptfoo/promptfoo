@@ -263,7 +263,7 @@ export async function loadApiProvider(
       const modelName = splits.slice(1).join(':');
       return new OllamaCompletionProvider(modelName, providerOptions);
     }
-  } else if (providerPath.startsWith('palm:')) {
+  } else if (providerPath.startsWith('palm:') || providerPath.startsWith('google:')) {
     const modelName = providerPath.split(':')[1];
     return new PalmChatProvider(modelName, providerOptions);
   } else if (providerPath.startsWith('vertex')) {
