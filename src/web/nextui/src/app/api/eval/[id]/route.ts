@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { v4 as uuidv4 } from 'uuid';
 
 import store from '@/app/api/eval/shareStore';
 import { IS_RUNNING_LOCALLY } from '@/constants';

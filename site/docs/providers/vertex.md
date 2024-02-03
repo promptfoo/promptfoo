@@ -19,6 +19,10 @@ You can use it by specifying any of the available stable or latest [model versio
 - `vertex:codechat-bison-32k`
 - `vertex:codechat-bison-32k@001`
 
+:::tip
+If you are using Google AI Studio, see the [`google` provider](/docs/providers/palm).
+:::
+
 Supported environment variables:
 
 - `VERTEX_API_KEY` (required) - gcloud API token. The easiest way to get an API key is to run `gcloud auth print-access-token`.

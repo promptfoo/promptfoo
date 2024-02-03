@@ -85,7 +85,7 @@ export class PalmChatProvider extends PalmGenericProvider {
   async callApi(prompt: string): Promise<ProviderResponse> {
     if (!this.getApiKey()) {
       throw new Error(
-        'Google API key is not set. Set the PALM_API_KEY environment variable or add `apiKey` to the provider config.',
+        'Google API key is not set. Set the GOOGLE_API_KEY environment variable or add `apiKey` to the provider config.',
       );
     }
 

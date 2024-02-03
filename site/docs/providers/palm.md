@@ -13,6 +13,10 @@ You can use it by specifying one of the [available models](https://ai.google.dev
 - `google:aqa` (attributed question answering)
 - `google:chat-bison-001`
 
+:::tip
+If you are using Google Vertex, see the [`vertex` provider](/docs/providers/vertex).
+:::
+
 Supported environment variables:
 
 - `GOOGLE_API_KEY` (required) - Google AI Studio/PaLM API token

@@ -15,7 +15,7 @@ Let's imagine we're building an app that does language translation. This config 
 
 ```yaml
 prompts: [prompt1.txt, prompt2.txt]
-providers: [openai:gpt-3.5-turbo, localai:chat:vicuna]
+providers: [openai:gpt-3.5-turbo, vertex:gemini-pro]
 tests:
   - vars:
       language: French
@@ -39,7 +39,7 @@ Next, let's add an assertion. This automatically rejects any outputs that don't 
 
 ```yaml
 prompts: [prompt1.txt, prompt2.txt]
-providers: [openai:gpt-3.5-turbo, localai:chat:vicuna]
+providers: [openai:gpt-3.5-turbo, vertex:gemini-pro]
 tests:
   - vars:
       language: French
@@ -59,7 +59,7 @@ In this example, the `javascript` assertion runs Javascript against the LLM outp
 
 ```yaml
 prompts: [prompt1.txt, prompt2.txt]
-providers: [openai:gpt-3.5-turbo, localai:chat:vicuna]
+providers: [openai:gpt-3.5-turbo, vertex:gemini-pro]
 tests:
   - vars:
       language: French
@@ -97,7 +97,7 @@ In this example, we use a `llm-rubric` assertion to ensure that the LLM does not
 
 ```yaml
 prompts: [prompt1.txt, prompt2.txt]
-providers: [openai:gpt-3.5-turbo, localai:chat:vicuna]
+providers: [openai:gpt-3.5-turbo, vertex:gemini-pro]
 // highlight-start
 defaultTest:
   assert:
@@ -137,7 +137,7 @@ Use the `$ref` key to re-use assertions without having to fully define them more
 
 ```yaml
 prompts: [prompt1.txt, prompt2.txt]
-providers: [openai:gpt-3.5-turbo, localai:chat:vicuna]
+providers: [openai:gpt-3.5-turbo, vertex:gemini-pro]
 tests:
   - vars:
       language: French
@@ -400,7 +400,7 @@ YAML is nice, but some organizations maintain their LLM tests in spreadsheets fo
 
 ```yaml
 prompts: [prompt1.txt, prompt2.txt]
-providers: [openai:gpt-3.5-turbo, localai:chat:vicuna]
+providers: [openai:gpt-3.5-turbo, vertex:gemini-pro]
 // highlight-next-line
 tests: tests.csv
 ```
@@ -409,7 +409,7 @@ promptfoo also has built-in ability to pull test cases from a Google Sheet. The 
 
 ```yaml
 prompts: [prompt1.txt, prompt2.txt]
-providers: [openai:gpt-3.5-turbo, localai:chat:vicuna]
+providers: [openai:gpt-3.5-turbo, vertex:gemini-pro]
 // highlight-next-line
 tests: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit?usp=sharing
 ```
