@@ -53,3 +53,18 @@ export interface ResponseData {
 }
 
 export type GeminiApiResponse = (ResponseData | ErrorResponse)[];
+
+export function maybeCoerceToGeminiFormat(contents: any) {
+  let coerced = false;
+  if (Array.isArray(contents) && typeof contents[0].content === 'string') {
+    // This looks like an OpenAI chat prompt.  Convert it to a compatible format
+    contents = {
+      role: 'user',
+      parts: {
+        text: contents.map((item) => item.content).join(''),
+      },
+    };
+    coerced = true;
+  }
+  return { contents, coerced };
+}

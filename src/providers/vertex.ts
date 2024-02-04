@@ -3,7 +3,7 @@ import { fetchWithCache } from '../cache';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 
 import type { ApiProvider, EnvOverrides, ProviderResponse } from '../types.js';
-import type { GeminiApiResponse, ResponseData } from './vertexUtil';
+import { maybeCoerceToGeminiFormat, type GeminiApiResponse, type ResponseData } from './vertexUtil';
 
 interface VertexCompletionOptions {
   apiKey?: string;
@@ -129,17 +129,16 @@ export class VertexChatProvider extends VertexGenericProvider {
 
   async callGeminiApi(prompt: string): Promise<ProviderResponse> {
     // https://cloud.google.com/vertex-ai/docs/generative-ai/model-reference/gemini#gemini-pro
-    let contents: string | object | undefined;
-    try {
-      // Chat or multimodal
-      contents = JSON.parse(prompt);
-    } catch (err) {
-      contents = {
-        role: 'user',
-        parts: {
-          text: prompt,
-        },
-      };
+    let contents = parseChatPrompt(prompt, {
+      role: 'user',
+      parts: {
+        text: prompt,
+      },
+    });
+    const { contents: updatedContents, coerced } = maybeCoerceToGeminiFormat(contents);
+    if (coerced) {
+      logger.debug(`Coerced JSON prompt to Gemini format: ${JSON.stringify(contents)}`);
+      contents = updatedContents;
     }
 
     const body = {
@@ -182,9 +181,10 @@ export class VertexChatProvider extends VertexGenericProvider {
 
     logger.debug(`\tGemini API response: ${JSON.stringify(data)}`);
     try {
-      if (data.error) {
+      const error = data.error || data[0].error;
+      if (error) {
         return {
-          error: `Error ${data.error.code}: ${data.error.message}`,
+          error: `Error ${error.code}: ${error.message}`,
         };
       }
       const output = data
