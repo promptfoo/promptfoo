@@ -719,7 +719,7 @@ export function getEvalsWithPredicate(
     }
     const { result, createdAt } = file;
     if (result && predicate(result)) {
-      const evalId = sha256(JSON.stringify(result.config));
+      const evalId = sha256(fileName + ':' + JSON.stringify(result.config));
       ret.push({
         id: evalId,
         filePath: fileName,
