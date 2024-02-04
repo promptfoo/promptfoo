@@ -65,7 +65,10 @@ It automatically loads `promptfooconfig.*`, but you can use a custom config file
 A ProviderFunction is a function that takes a prompt as an argument and returns a Promise that resolves to a ProviderResponse. It allows you to define custom logic for calling an API.
 
 ```typescript
-type ProviderFunction = (prompt: string) => Promise<ProviderResponse>;
+type ProviderFunction = (
+  prompt: string,
+  context: { vars: Record<string, string | object> },
+) => Promise<ProviderResponse>;
 ```
 
 ### ProviderOptions
@@ -88,7 +91,12 @@ ProviderResponse is an object that represents the response from a provider. It i
 interface ProviderResponse {
   error?: string;
   output?: string | object;
-  tokenUsage?: Partial<TokenUsage>;
+  tokenUsage?: Partial<{
+    total: number;
+    prompt: number;
+    completion: number;
+    cached?: number;
+  }>;
   cached?: boolean;
   cost?: number; // required for cost assertion
   logProbs?: number[]; // required for perplexity assertion

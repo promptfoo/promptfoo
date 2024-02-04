@@ -25,139 +25,26 @@ const results = await promptfoo.evaluate(testSuite, options);
 
 The evaluate function takes the following parameters:
 
-- `testSuite`: the Javascript equivalent of the promptfooconfig.yaml
+- `testSuite`: the Javascript equivalent of the promptfooconfig.yaml as a [`TestSuiteConfiguration` object](/docs/configuration/reference#testsuiteconfiguration).
 
-  ```typescript
-  interface TestSuiteConfig {
-    // Optional description of what your LLM is trying to do
-    description?: string;
-
-    // One or more LLM APIs to use, for example: openai:gpt-3.5-turbo, openai:gpt-4, localai:chat:vicuna
-    providers: ProviderId | ProviderId[] | RawProviderConfig[] | ProviderFunction;
-
-    // One or more prompt files to load
-    prompts: string | string[];
-
-    // Path to a test file, OR list of LLM prompt variations (aka "test case")
-    tests: string | string[] | TestCase[];
-
-    // Sets the default properties for each test case. Useful for setting an assertion, on all test cases, for example.
-    defaultTest?: Omit<TestCase, 'description'>;
-
-    // Paths to write output. Writes to console/web viewer if not set.
-    outputPath?: string | string[];
-
-    // Determines whether or not sharing is enabled.
-    sharing?: boolean;
-  }
-
-  interface TestCase {
-    // Optional description of what you're testing
-    description?: string;
-
-    // Key-value pairs to substitute in the prompt
-    vars?: Record<string, string | string[] | object>;
-
-    // Optional filepath or glob pattern to load vars from
-    loadVars?: string | string[];
-
-    // Optional list of automatic checks to run on the LLM output
-    assert?: Assertion[];
-
-    // Additional configuration settings for the prompt
-    options?: PromptConfig & OutputConfig & GradingConfig;
-  }
-
-  interface Assertion {
-    type:
-      | 'equals'
-      | 'contains'
-      | 'icontains'
-      | 'contains-all'
-      | 'contains-any'
-      | 'icontains-all'
-      | 'icontains-any'
-      | 'starts-with'
-      | 'regex'
-      | 'is-json'
-      | 'contains-json'
-      | 'javascript'
-      | 'python'
-      | 'similar'
-      | 'answer-relevance'
-      | 'context-faithfulness'
-      | 'context-recall'
-      | 'context-relevance'
-      | 'llm-rubric'
-      | 'model-graded-closedqa'
-      | 'factuality'
-      | 'model-graded-factuality'
-      | 'webhook'
-      | 'rouge-n'
-      | 'rouge-s'
-      | 'rouge-l'
-      | 'levenshtein'
-      | 'is-valid-openai-function-call'
-      | 'is-valid-openai-tools-call'
-      | 'latency'
-      | 'perplexity'
-      | 'perplexity-score'
-      | 'cost'
-      | 'select-best';
-
-    // The expected value, if applicable
-    value?: string | string[] | object | AssertionFunction;
-
-    // The threshold value, only applicable for similarity (cosine distance)
-    threshold?: number;
-
-    // The weight of this assertion compared to other assertions in the test case. Defaults to 1.
-    weight?: number;
-
-    // Some assertions (similarity, llm-rubric) require an LLM provider
-    provider?: ApiProvider;
-
-    // Tag this assertion result as a named metric
-    metric?: string;
-  }
-  ```
-
-- `options`: misc options related to how the tests are run
-
-  ```typescript
-  interface EvaluateOptions {
-    maxConcurrency?: number;
-    delay?: number;
-    showProgressBar?: boolean;
-  }
-  ```
+- `options`: misc options related to how the test harness runs, as an [`EvaluateOptions` object](/docs/configuration/reference#evaluateoptions).
+  
+The results of the evaluation are returned as an [`EvaluateSummary` object](/docs/configuration/reference#evaluatesummary).
 
 ### Provider functions
 
-A `ProviderFunction` is a Javascript function that implements an LLM API call. It takes a prompt string and a context. It returns the LLM response or an error:
-
-```typescript
-type ProviderFunction = (
-  prompt: string,
-  context: { vars: Record<string, string | object> },
-) => Promise<ProviderResponse>;
-
-interface ProviderResponse {
-  error?: string;
-  output?: string | object;
-  tokenUsage?: Partial<{
-    total: number;
-    prompt: number;
-    completion: number;
-    cached?: number;
-  }>;
-}
-```
+A `ProviderFunction` is a Javascript function that implements an LLM API call. It takes a prompt string and a context. It returns the LLM response or an error.  See [`ProviderFunction` type](/docs/configuration/reference#providerfunction).
 
 ### Assertion functions
 
-An `Assertion` can take an `AssertionFunction` as its `value`. `AssertionFunction` has the following type:
+An `Assertion` can take an `AssertionFunction` as its `value`.  `AssertionFunction` parameters:
 
+- `output`: the LLM output
+- `testCase`: the test case
+- `assertion`: the assertion object
+
+<details>
+<summary>Type definition</summary>
 ```typescript
 type AssertionFunction = (
   output: string,
@@ -191,15 +78,11 @@ interface GradingResult {
 
   // The assertion that was evaluated
   assertion: Assertion | null;
-  assertion: Assertion | null;
 }
 ```
+</details>
 
-`AssertionFunction` parameters:
-
-- `output`: the LLM output
-- `testCase`: the test case
-- `assertion`: the assertion object
+For more info on different assertion types, see [assertions & metrics](/docs/configuration/expected-outputs/).
 
 ## Example
 
@@ -238,7 +121,7 @@ This code imports the `promptfoo` library, defines the evaluation options, and t
 You can also supply functions as `prompts`, `providers`, or `asserts`:
 
 ```js
-import promptfoo from '../../dist/src/index.js';
+import promptfoo from 'promptfoo';
 
 (async () => {
   const results = await promptfoo.evaluate({
@@ -289,7 +172,7 @@ import promptfoo from '../../dist/src/index.js';
 })();
 ```
 
-See the full example [here](https://github.com/typpo/promptfoo/tree/main/examples/node-package).
+There's a full example on Github [here](https://github.com/typpo/promptfoo/tree/main/examples/node-package).
 
 Here's the example output in JSON format:
 
