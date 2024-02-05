@@ -3,7 +3,12 @@
 prompts:
   - "You are a helpful assistant. Reply with a concise answer to this inquiry: '{{question}}'"
 
-providers: [vertex:gemini-pro, vertex:chat-bison] # or use the PaLM API: [palm:chat-bison-001]
+providers: [vertex:gemini-pro, vertex:chat-bison] # or use the Google AI Studio API: [google:gemini-pro]
+
+defaultTest:
+  options:
+    # Use gemini-pro for model-graded evals (e.g. assertions such as llm-rubric)
+    provider: vertex:gemini-pro
 
 tests:
   - vars:

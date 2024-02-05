@@ -95,6 +95,7 @@ export class PalmChatProvider extends PalmGenericProvider {
     }
 
     // https://developers.generativeai.google/tutorials/curl_quickstart
+    // https://ai.google.dev/api/rest/v1beta/models/generateMessage
     const messages = parseChatPrompt(prompt, [{ content: prompt }]);
     const body = {
       prompt: { messages },
