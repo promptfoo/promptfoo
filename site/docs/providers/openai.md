@@ -91,7 +91,7 @@ Supported parameters include:
 | `stop`              | Defines a list of tokens that signal the end of the output.                                                                                                     |
 | `response_format`   | Response format restrictions.                                                                                                                                   |
 | `seed`              | Seed used for deterministic output. Defaults to 0                                                                                                               |
-| `apiKey`            | Your OpenAI API key.                                                                                                                                            |
+| `apiKey`            | Your OpenAI API key, equivalent to `OPENAI_API_KEY` environment variable                                                                                        |
 | `apiHost`           | The hostname of the OpenAI API, please also read `OPENAI_API_HOST` below.                                                                                       |
 | `apiBaseUrl`        | The base URL of the OpenAI API, please also read `OPENAI_API_BASE_URL` below.                                                                                   |
 | `organization`      | Your OpenAI organization key.                                                                                                                                   |
