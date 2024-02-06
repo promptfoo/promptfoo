@@ -25,6 +25,7 @@ interface AzureOpenAiCompletionOptions {
 
   // Promptfoo supported params
   apiHost?: string;
+  apiBaseUrl?: string;
   apiKey?: string;
   apiVersion?: string;
 
@@ -49,6 +50,7 @@ interface AzureOpenAiCompletionOptions {
 class AzureOpenAiGenericProvider implements ApiProvider {
   deploymentName: string;
   apiHost?: string;
+  apiBaseUrl?: string;
 
   config: AzureOpenAiCompletionOptions;
 
@@ -62,6 +64,8 @@ class AzureOpenAiGenericProvider implements ApiProvider {
 
     this.apiHost =
       config?.apiHost || env?.AZURE_OPENAI_API_HOST || process.env.AZURE_OPENAI_API_HOST;
+    this.apiBaseUrl =
+      config?.apiBaseUrl || env?.AZURE_OPENAI_API_BASE_URL || process.env.AZURE_OPENAI_API_BASE_URL;
 
     this.config = config || {};
     this.id = id ? () => id : this.id;
@@ -99,6 +103,10 @@ class AzureOpenAiGenericProvider implements ApiProvider {
     return this._cachedApiKey;
   }
 
+  getApiBaseUrl(): string {
+    return this.apiBaseUrl || `https://${this.apiHost}`;
+  }
+
   id(): string {
     return `azureopenai:${this.deploymentName}`;
   }
@@ -123,7 +131,7 @@ export class AzureOpenAiEmbeddingProvider extends AzureOpenAiGenericProvider {
     if (!apiKey) {
       throw new Error('Azure OpenAI API key must be set for similarity comparison');
     }
-    if (!this.apiHost) {
+    if (!this.getApiBaseUrl()) {
       throw new Error('Azure OpenAI API host must be set');
     }
 
@@ -135,7 +143,7 @@ export class AzureOpenAiEmbeddingProvider extends AzureOpenAiGenericProvider {
       cached = false;
     try {
       ({ data, cached } = (await fetchWithCache(
-        `https://${this.apiHost}/openai/deployments/${this.deploymentName}/embeddings?api-version=${
+        `${this.getApiBaseUrl()}/openai/deployments/${this.deploymentName}/embeddings?api-version=${
           this.config.apiVersion || '2023-12-01-preview'
         }`,
         {
@@ -206,7 +214,7 @@ export class AzureOpenAiCompletionProvider extends AzureOpenAiGenericProvider {
         'Azure OpenAI API key is not set. Set AZURE_OPENAI_API_KEY environment variable or pass it as an argument to the constructor.',
       );
     }
-    if (!this.apiHost) {
+    if (!this.getApiBaseUrl()) {
       throw new Error('Azure OpenAI API host must be set');
     }
 
@@ -241,7 +249,7 @@ export class AzureOpenAiCompletionProvider extends AzureOpenAiGenericProvider {
       cached = false;
     try {
       ({ data, cached } = (await fetchWithCache(
-        `https://${this.apiHost}/openai/deployments/${
+        `${this.getApiBaseUrl()}/openai/deployments/${
           this.deploymentName
         }/completions?api-version=${this.config.apiVersion || '2023-12-01-preview'}`,
         {
@@ -291,7 +299,7 @@ export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvide
         'Azure OpenAI API key is not set. Set the AZURE_OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
       );
     }
-    if (!this.apiHost) {
+    if (!this.getApiBaseUrl()) {
       throw new Error('Azure OpenAI API host must be set');
     }
 
@@ -328,12 +336,12 @@ export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvide
       cached = false;
     try {
       const url = this.config.dataSources
-        ? `https://${this.apiHost}/openai/deployments/${
+        ? `${this.getApiBaseUrl()}/openai/deployments/${
             this.deploymentName
           }/extensions/chat/completions?api-version=${
             this.config.apiVersion || '2023-12-01-preview'
           }`
-        : `https://${this.apiHost}/openai/deployments/${
+        : `${this.getApiBaseUrl()}/openai/deployments/${
             this.deploymentName
           }/chat/completions?api-version=${this.config.apiVersion || '2023-12-01-preview'}`;
 

@@ -135,3 +135,43 @@ providers:
 ```
 
 (The inconsistency in naming convention between `deployment_id` and `dataSources` reflects the actual naming in the Azure API.)
+
+## Configuration
+
+These properties can be set under the provider `config` key`:
+
+General config
+
+| Name       | Description                                 |
+| ---------- | ------------------------------------------- |
+| apiHost    | API host.                                   |
+| apiBaseUrl | Base URL of the API (used instead of host). |
+| apiKey     | API key.                                    |
+| apiVersion | API version.                                |
+
+Azure-specific config
+
+| Name               | Description                                                     |
+| ------------------ | --------------------------------------------------------------- |
+| azureClientId      | Azure identity client ID.                                       |
+| azureClientSecret  | Azure identity client secret.                                   |
+| azureTenantId      | Azure identity tenant ID.                                       |
+| azureAuthorityHost | Azure identity authority host.                                  |
+| azureTokenScope    | Azure identity token scope.                                     |
+| deployment_id      | Azure cognitive services deployment ID.                         |
+| dataSources        | Azure cognitive services parameter for specifying data sources. |
+
+OpenAI config:
+
+| Name              | Description                                                            |
+| ----------------- | ---------------------------------------------------------------------- |
+| temperature       | Controls randomness of the output.                                     |
+| top_p             | Controls nucleus sampling.                                             |
+| frequency_penalty | Penalizes new tokens based on their frequency.                         |
+| presence_penalty  | Penalizes new tokens based on their presence.                          |
+| best_of           | Generates multiple outputs and chooses the best.                       |
+| functions         | Specifies functions available for use.                                 |
+| function_call     | Controls automatic function calling.                                   |
+| response_format   | Specifies the format of the response.                                  |
+| stop              | Specifies stop sequences for the generation.                           |
+| passthrough       | Anything under `passthrough` will be sent as a top-level request param |

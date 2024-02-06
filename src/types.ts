@@ -36,6 +36,7 @@ export interface EnvOverrides {
   ANTHROPIC_API_KEY?: string;
   AZURE_OPENAI_API_HOST?: string;
   AZURE_OPENAI_API_KEY?: string;
+  AZURE_OPENAI_API_BASE_URL?: string;
   AWS_BEDROCK_REGION?: string;
   OPENAI_API_KEY?: string;
   OPENAI_API_HOST?: string;
