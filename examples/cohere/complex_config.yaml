@@ -1,0 +1,11 @@
+prompts:
+  - file://prompt.yaml
+
+providers:
+  - cohere:command
+
+tests:
+  - vars:
+      question: What year was he born?
+  - vars:
+      question: What did he like eating for breakfast?

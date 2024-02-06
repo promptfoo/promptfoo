@@ -1,0 +1,8 @@
+chat_history:
+  - role: USER
+    message: 'Who discovered gravity?'
+  - role: CHATBOT
+    message: 'Isaac Newton'
+message: '{{question}}'
+connectors:
+  - id: web-search
