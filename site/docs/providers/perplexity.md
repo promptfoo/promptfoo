@@ -11,10 +11,14 @@ providers:
   - id: openai:chat:pplx-70b-chat-alpha
     config:
       apiHost: api.perplexity.ai
+      apiKeyEnvar: PERPLEXITY_API_KEY
   - id: openai:chat:llama-2-70b-chat
     config:
       apiHost: api.perplexity.ai
+      apiKeyEnvar: PERPLEXITY_API_KEY
 ```
+
+In this example, you'd have to set the `PERPLEXITY_API_KEY` environment variable (you can also enter it directly in the config using the `apiKey` property).
 
 If desired, you can instead use the `OPENAI_API_HOST` environment variable instead of the `apiHost` config key.
 

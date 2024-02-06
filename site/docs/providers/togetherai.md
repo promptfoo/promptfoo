@@ -11,7 +11,9 @@ providers:
   - id: openai:chat:mistralai/Mixtral-8x7B-Instruct-v0.1
     config:
       apiBaseUrl: https://api.together.xyz
-      apiKey: xxx
+      apiKeyEnvar: TOGETHER_API_KEY
 ```
 
-If desired, you can instead use the `OPENAI_API_BASE_URL` and `OPENAI_API_KEY` environment variables instead of the `apiBaseUrl` and `apiKey` configs.
+If desired, you can instead use the `OPENAI_API_BASE_URL` environment variables instead of the `apiBaseUrl` config property.
+
+In this example, you'd also have to set the `TOGETHER_API_KEY` environment variable (you can also enter it directly in the config using the `apiKey` property).
