@@ -216,6 +216,10 @@ defaultTest:
 
 See the [full example](https://github.com/promptfoo/promptfoo/blob/main/examples/custom-grading-prompt/promptfooconfig.yaml).
 
+#### select-best rubric prompt
+
+For control over the `select-best` rubric prompt, you may use the variables `{{outputs}}` (list of strings) and `{{criteria}}` (string).  It expects the LLM output to contain the index of the winning output.
+
 ## Classifers
 
 Classifiers can be used to detect tone, bias, toxicity, helpfulness, and much more. See [classifier documentation](/docs/configuration/expected-outputs/classifier).

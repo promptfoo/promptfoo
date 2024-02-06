@@ -747,7 +747,7 @@ export async function matchesSelectBest(
     'select-best check',
   );
 
-  let promptText = nunjucks.renderString(SELECT_BEST_PROMPT, {
+  let promptText = nunjucks.renderString(grading?.rubricPrompt || SELECT_BEST_PROMPT, {
     criteria: JSON.stringify(criteria).slice(1, -1),
     outputs: outputs.map((output) => JSON.stringify(output).slice(1, -1)),
     ...fromVars(vars),
