@@ -8,6 +8,7 @@ providers:
       prompt_truncation: AUTO
       connectors:
         - id: web-search
+      showSearchQueries: true
 
 tests:
   - vars:

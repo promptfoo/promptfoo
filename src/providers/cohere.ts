@@ -32,6 +32,10 @@ interface CohereChatOptions {
   p?: number;
   frequency_penalty?: number;
   presence_penalty?: number;
+
+  // promptfoo-provided options
+  showDocuments?: boolean;
+  showSearchQueries?: boolean;
 }
 
 export class CohereChatCompletionProvider implements ApiProvider {
@@ -136,17 +140,25 @@ export class CohereChatCompletionProvider implements ApiProvider {
         completion: data.token_count?.response_tokens || 0,
       };
 
+      let output = data.text;
+      if (this.config.showSearchQueries && data.search_queries) {
+        output +=
+          '\n\nSearch Queries:\n' +
+          data.search_queries
+            .map((query: { text: string; generation_id: string }) => query.text)
+            .join('\n');
+      }
+      if (this.config.showDocuments && data.documents) {
+        output +=
+          '\n\nDocuments:\n' +
+          data.documents
+            .map((doc: { id: string; additionalProp: string }) => JSON.stringify(doc))
+            .join('\n');
+      }
       return {
         cached,
-        output: data.text,
+        output,
         tokenUsage,
-        /*
-        generationId: data.generation_id,
-        citations: data.citations,
-        documents: data.documents,
-        searchQueries: data.search_queries,
-        searchResults: data.search_results,
-        */
       };
     } catch (error) {
       logger.error(`API call error: ${error}`);
