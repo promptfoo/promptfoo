@@ -43,6 +43,7 @@ import {
 } from './providers/huggingface';
 import { AwsBedrockCompletionProvider } from './providers/bedrock';
 import { PythonProvider } from './providers/pythonCompletion';
+import { CohereChatCompletionProvider } from './providers/cohere';
 
 import type {
   ApiProvider,
@@ -273,6 +274,9 @@ export async function loadApiProvider(
   } else if (providerPath.startsWith('mistral:')) {
     const modelName = providerPath.split(':')[1];
     return new MistralChatCompletionProvider(modelName, providerOptions);
+  } else if (providerPath.startsWith('cohere:')) {
+    const modelName = providerPath.split(':')[1];
+    return new CohereChatCompletionProvider(modelName, providerOptions);
   } else if (providerPath?.startsWith('localai:')) {
     const splits = providerPath.split(':');
     const modelType = splits[1];

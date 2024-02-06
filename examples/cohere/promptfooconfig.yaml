@@ -1,0 +1,14 @@
+prompts:
+  - "Write a tweet about {{topic}}"
+
+providers:
+  - id: cohere:command
+    config:
+      temperature: 0.5
+      prompt_truncation: AUTO
+      connectors:
+        - id: web-search
+
+tests:
+  - vars:
+      topic: the person who discovered gravity
