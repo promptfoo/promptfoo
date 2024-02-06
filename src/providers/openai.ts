@@ -17,6 +17,7 @@ import type {
 
 interface OpenAiSharedOptions {
   apiKey?: string;
+  apiKeyEnvar?: string;
   apiHost?: string;
   apiBaseUrl?: string;
   organization?: string;
@@ -111,7 +112,12 @@ export class OpenAiGenericProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    return this.config.apiKey || this.env?.OPENAI_API_KEY || process.env.OPENAI_API_KEY;
+    return (
+      this.config.apiKey ||
+      (this.config.apiKeyEnvar ? process.env[this.config.apiKeyEnvar] : undefined) ||
+      this.env?.OPENAI_API_KEY ||
+      process.env.OPENAI_API_KEY
+    );
   }
 
   // @ts-ignore: Params are not used in this implementation

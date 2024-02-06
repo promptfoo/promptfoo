@@ -4,9 +4,7 @@ sidebar_position: 1
 
 # OpenAI
 
-To use the OpenAI API, set the `OPENAI_API_KEY` environment variable,
-specify via `apiKey` field in the configuration file,
-or pass the API key as an argument to the constructor.
+To use the OpenAI API, set the `OPENAI_API_KEY` environment variable, specify via `apiKey` field in the configuration file or pass the API key as an argument to the constructor.
 
 Example:
 
@@ -92,6 +90,7 @@ Supported parameters include:
 | `response_format`   | Response format restrictions.                                                                                                                                   |
 | `seed`              | Seed used for deterministic output. Defaults to 0                                                                                                               |
 | `apiKey`            | Your OpenAI API key, equivalent to `OPENAI_API_KEY` environment variable                                                                                        |
+| `apiKeyEnvar`       | An environment variable that contains the API key                                                                                                               |
 | `apiHost`           | The hostname of the OpenAI API, please also read `OPENAI_API_HOST` below.                                                                                       |
 | `apiBaseUrl`        | The base URL of the OpenAI API, please also read `OPENAI_API_BASE_URL` below.                                                                                   |
 | `organization`      | Your OpenAI organization key.                                                                                                                                   |
@@ -128,6 +127,7 @@ interface OpenAiConfig {
 
   // General OpenAI parameters
   apiKey?: string;
+  apiKeyEnvar?: string;
   apiHost?: string;
   apiBaseUrl?: string;
   organization?: string;
