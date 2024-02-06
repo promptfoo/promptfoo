@@ -1,4 +1,4 @@
-To get started, set your OPENAI_API_KEY environment variable.
+To get started, set your GOOGLE_API_KEY environment variable.
 
 Next, edit promptfooconfig.yaml.
 
