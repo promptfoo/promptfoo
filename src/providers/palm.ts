@@ -15,6 +15,7 @@ interface PalmCompletionOptions {
   maxOutputTokens?: number;
   topP?: number;
   topK?: number;
+  generationConfig?: Record<string, any>;
 }
 
 class PalmGenericProvider implements ApiProvider {
@@ -154,13 +155,15 @@ export class PalmChatProvider extends PalmGenericProvider {
     const contents = parseChatPrompt(prompt, [{ parts: [{ text: prompt }] }]);
     const body = {
       contents,
-      temperature: this.config.temperature,
-      topP: this.config.topP,
-      topK: this.config.topK,
-
+      generationConfig: {
+        temperature: this.config.temperature,
+        topP: this.config.topP,
+        topK: this.config.topK,
+        stopSequences: this.config.stopSequences,
+        maxOutputTokens: this.config.maxOutputTokens,
+        ...this.config.generationConfig,
+      },
       safetySettings: this.config.safetySettings,
-      stopSequences: this.config.stopSequences,
-      maxOutputTokens: this.config.maxOutputTokens,
     };
     logger.debug(`Calling Google API: ${JSON.stringify(body)}`);
 

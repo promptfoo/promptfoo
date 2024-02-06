@@ -1,0 +1,14 @@
+prompts:
+  - "Write a tweet about {{topic}}"
+  - "Write a very concise, funny tweet about {{topic}}"
+
+providers:
+  - id: google:gemini-pro
+    config:
+      generationConfig:
+        temperature: 0
+        topP: 1
+
+tests:
+  - vars:
+      topic: bananas
