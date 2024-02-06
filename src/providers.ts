@@ -27,6 +27,7 @@ import {
   OllamaChatProvider,
 } from './providers/ollama';
 import { VertexChatProvider } from './providers/vertex';
+import { MistralChatCompletionProvider } from './providers/mistral';
 import { WebhookProvider } from './providers/webhook';
 import { ScriptCompletionProvider } from './providers/scriptCompletion';
 import {
@@ -269,6 +270,9 @@ export async function loadApiProvider(
   } else if (providerPath.startsWith('vertex')) {
     const modelName = providerPath.split(':')[1];
     return new VertexChatProvider(modelName, providerOptions);
+  } else if (providerPath.startsWith('mistral:')) {
+    const modelName = providerPath.split(':')[1];
+    return new MistralChatCompletionProvider(modelName, providerOptions);
   } else if (providerPath?.startsWith('localai:')) {
     const splits = providerPath.split(':');
     const modelType = splits[1];

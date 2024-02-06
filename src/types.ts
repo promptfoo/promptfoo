@@ -53,6 +53,7 @@ export interface EnvOverrides {
   VERTEX_PROJECT_ID?: string;
   VERTEX_REGION?: string;
   VERTEX_PUBLISHER?: string;
+  MISTRAL_API_KEY?: string;
 }
 
 export interface ProviderOptions {
