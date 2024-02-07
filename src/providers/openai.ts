@@ -98,6 +98,10 @@ export class OpenAiGenericProvider implements ApiProvider {
     );
   }
 
+  getApiUrlDefault(): string {
+    return 'https://api.openai.com';
+  }
+
   getApiUrl(): string {
     const apiHost = this.config.apiHost || this.env?.OPENAI_API_HOST || process.env.OPENAI_API_HOST;
     if (apiHost) {
@@ -107,7 +111,7 @@ export class OpenAiGenericProvider implements ApiProvider {
       this.config.apiBaseUrl ||
       this.env?.OPENAI_API_BASE_URL ||
       process.env.OPENAI_API_BASE_URL ||
-      'https://api.openai.com'
+      this.getApiUrlDefault()
     );
   }
 
@@ -221,11 +225,14 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
     modelName: string,
     options: { config?: OpenAiCompletionOptions; id?: string; env?: EnvOverrides } = {},
   ) {
-    if (!OpenAiCompletionProvider.OPENAI_COMPLETION_MODEL_NAMES.includes(modelName)) {
-      logger.warn(`Using unknown OpenAI completion model: ${modelName}`);
-    }
     super(modelName, options);
     this.config = options.config || {};
+    if (
+      !OpenAiCompletionProvider.OPENAI_COMPLETION_MODEL_NAMES.includes(modelName) &&
+      this.getApiUrl() === this.getApiUrlDefault()
+    ) {
+      logger.warn(`FYI: Using unknown OpenAI completion model: ${modelName}`);
+    }
   }
 
   async callApi(
