@@ -12,7 +12,7 @@ While Script Providers are particularly useful for evaluating chains, they can g
 :::tip
 **Python users**: there is a dedicated [`python` provider](/docs/providers/python) that you may find easier to use.
 
-**Javascript users**: see how to implement [ApiProvider](/docs/providers/custom-api).
+**Javascript users**: see how to implement [`ApiProvider`](/docs/providers/custom-api).
 :::
 
 To use a script provider, you need to create an executable that takes a prompt as its first argument and returns the result of the API call. The script should be able to be invoked from the command line.
