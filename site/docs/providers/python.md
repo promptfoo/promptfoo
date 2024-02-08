@@ -24,6 +24,7 @@ providers:
 Your Python script should accept a prompt, options, and context as arguments. It should return a JSON-encoded `ProviderResponse`. The `ProviderResponse` must include an `output` field containing the result of the API call. Optionally, it can include an `error` field if something goes wrong, and a `tokenUsage` field to report the number of tokens used.
 
 Here's an example of a Python script that could be used with the Python provider, which includes handling for the prompt, options, and context:
+
 ```python
 # my_script.py
 import json
@@ -82,6 +83,24 @@ class ProviderResponse:
     logProbs: Optional[List[float]]
 ```
 
+### Troubleshooting
 
+#### Viewing python output
 
+If you use `print` statements in your python script, set `LOG_LEVEL=debug` to view script invocations and output:
 
+```sh
+LOG_LEVEL=debug npx promptfoo@latest eval
+```
+
+#### Setting the Python binary path
+
+If you are using a specific Python binary (e.g. from a virtualenv or poetry), set the `PROMPTFOO_PYTHON` environment variable to be the binary location.
+
+Also note that promptfoo will respect the `PYTHONPATH`. You can use this to tell the python interpreter where your custom modules live.
+
+For example:
+
+```sh
+PROMPTFOO_PYTHON=venv/bin/python3.9 PYTHONPATH=/usr/lib/foo npx promptfoo@latest eval
+```

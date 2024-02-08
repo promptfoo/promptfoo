@@ -111,7 +111,10 @@ export async function loadApiProvider(
   const { options = {}, basePath, env } = context;
   const providerOptions = {
     id: options.id,
-    config: options.config,
+    config: {
+      ...options.config,
+      basePath,
+    },
     env,
   };
   if (providerPath.startsWith('file://')) {
@@ -129,16 +132,10 @@ export async function loadApiProvider(
   } else if (providerPath?.startsWith('exec:')) {
     // Load script module
     const scriptPath = providerPath.split(':')[1];
-    return new ScriptCompletionProvider(scriptPath, {
-      id: `exec:${scriptPath}`,
-      config: { basePath },
-    });
+    return new ScriptCompletionProvider(scriptPath, providerOptions);
   } else if (providerPath?.startsWith('python:')) {
     const scriptPath = providerPath.split(':')[1];
-    return new PythonProvider(scriptPath, {
-      id: `python:${scriptPath}`,
-      config: { basePath },
-    });
+    return new PythonProvider(scriptPath, providerOptions);
   } else if (providerPath?.startsWith('openai:')) {
     // Load OpenAI module
     const splits = providerPath.split(':');

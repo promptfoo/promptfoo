@@ -3,7 +3,9 @@ prompts:
   - "Write a very concise, funny tweet about {{topic}}"
 
 providers:
-  - python:provider.py
+  - id: python:provider.py
+    config:
+      foo: bar
 
 tests:
   - vars:
