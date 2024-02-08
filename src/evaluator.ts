@@ -548,6 +548,7 @@ class Evaluator {
 
     // Actually run the eval
     const results: EvaluateResult[] = [];
+    let numComplete = 0;
     await async.forEachOfLimit(
       runEvalOptions,
       concurrency,
@@ -556,6 +557,7 @@ class Evaluator {
 
         results.push(row);
 
+        numComplete++;
         if (progressbar) {
           progressbar.increment({
             provider: evalStep.provider.id(),
@@ -566,6 +568,10 @@ class Evaluator {
               .slice(0, 10)
               .replace(/\n/g, ' '),
           });
+        } else {
+          logger.debug(
+            `Eval #${(index as number) + 1} complete (${numComplete} of ${runEvalOptions.length})`,
+          );
         }
         if (options.progressCallback) {
           options.progressCallback(results.length, runEvalOptions.length);
@@ -649,9 +655,11 @@ class Evaluator {
       },
     );
 
-    const compareRowsCount = table.body.reduce((count, row) => 
-      count + (row.test.assert?.some((a) => a.type === 'select-best') ? 1 : 0), 0);
-    
+    const compareRowsCount = table.body.reduce(
+      (count, row) => count + (row.test.assert?.some((a) => a.type === 'select-best') ? 1 : 0),
+      0,
+    );
+
     if (compareRowsCount > 0 && progressbar) {
       progressbar.start(compareRowsCount, 0, {
         provider: 'Running model-graded comparisons',
@@ -660,7 +668,7 @@ class Evaluator {
       });
     }
 
-    for (const row of table.body) {
+    for (const [index, row] of table.body.entries()) {
       const compareAssertion = row.test.assert?.find((a) => a.type === 'select-best');
       if (compareAssertion) {
         const outputs = row.outputs.map((o) => o.text);
@@ -696,6 +704,8 @@ class Evaluator {
           progressbar.increment({
             prompt: row.outputs[0].text.slice(0, 10).replace(/\n/g, ''),
           });
+        } else {
+          logger.debug(`Model-graded comparison #${index + 1} of ${compareRowsCount} complete`);
         }
       }
     }
