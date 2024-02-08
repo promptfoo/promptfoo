@@ -26,6 +26,7 @@
     "cache-manager-fs-hash": "^1.0.0",
     "cache-manager-ioredis": "^2.1.0",
     "chart.js": "^4.3.3",
+    "csv-parse": "^5.5.3",
     "debounce": "^1.2.1",
     "diff": "^5.1.0",
     "eslint": "8.47.0",

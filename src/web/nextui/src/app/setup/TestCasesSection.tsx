@@ -16,7 +16,10 @@ import Typography from '@mui/material/Typography';
 import TestCaseDialog from './TestCaseDialog';
 import { useStore } from '@/state/evalConfig';
 
-import type { TestCase } from '@/../../../types';
+import type { CsvRow, TestCase } from '@/../../../types';
+import Tooltip from '@mui/material/Tooltip';
+import Publish from '@mui/icons-material/Publish';
+import { testCaseFromCsvRow } from '@/utils';
 
 interface TestCasesSectionProps {
   varsList: string[];
@@ -43,6 +46,25 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
     }
   };
 
+  const handleAddTestCaseFromFile = (event: React.ChangeEvent<HTMLInputElement>) => {
+    event.stopPropagation();
+    event.preventDefault();
+
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const text = e.target?.result?.toString();
+        if (text) {
+          const { parse: parseCsv } = await import('csv-parse/sync');
+          const rows: CsvRow[] = parseCsv(text, { columns: true });
+          setTestCases([...testCases, ...rows.map((row) => testCaseFromCsvRow(row))]);
+        }
+      };
+      reader.readAsText(file);
+    }
+  };
+
   const handleRemoveTestCase = (event: React.MouseEvent, index: number) => {
     event.stopPropagation();
 
@@ -61,9 +83,27 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
     <>
       <Stack direction="row" spacing={2} justifyContent="space-between">
         <Typography variant="h5">Test Cases</Typography>
-        <Button color="primary" onClick={() => setTestCaseDialogOpen(true)} variant="contained">
-          Add Test Case
-        </Button>
+        <div>
+          <label htmlFor={`file-input-add-test-case`}>
+            <Tooltip title="Upload test cases from csv">
+              <span>
+                <IconButton component="span">
+                  <Publish />
+                </IconButton>
+                <input
+                  id={`file-input-add-test-case`}
+                  type="file"
+                  accept=".csv"
+                  onChange={handleAddTestCaseFromFile}
+                  style={{ display: 'none' }}
+                />
+              </span>
+            </Tooltip>
+          </label>
+          <Button color="primary" onClick={() => setTestCaseDialogOpen(true)} variant="contained">
+            Add Test Case
+          </Button>
+        </div>
       </Stack>
       <TableContainer>
         <Table>
