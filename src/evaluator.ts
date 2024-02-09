@@ -668,7 +668,8 @@ class Evaluator {
       });
     }
 
-    for (const [index, row] of table.body.entries()) {
+    for (let index = 0; index < table.body.length; index++) {
+      const row = table.body[index];
       const compareAssertion = row.test.assert?.find((a) => a.type === 'select-best');
       if (compareAssertion) {
         const outputs = row.outputs.map((o) => o.text);
