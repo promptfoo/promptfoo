@@ -362,7 +362,7 @@ export async function matchesFactuality(
 
   invariant(typeof resp.output === 'string', 'factuality produced malformed response');
   try {
-    const option = resp.output.trim().charAt(1); // Extract the option character
+    const option = resp.output.trim().charAt(1).toUpperCase();
     let reason = '';
 
     const scoreLookup: Record<string, number> = {
