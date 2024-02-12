@@ -99,13 +99,13 @@ export class OpenAiGenericProvider implements ApiProvider {
   }
 
   getApiUrlDefault(): string {
-    return 'https://api.openai.com';
+    return 'https://api.openai.com/v1';
   }
 
   getApiUrl(): string {
     const apiHost = this.config.apiHost || this.env?.OPENAI_API_HOST || process.env.OPENAI_API_HOST;
     if (apiHost) {
-      return `https://${apiHost}`;
+      return `https://${apiHost}/v1`;
     }
     return (
       this.config.apiBaseUrl ||
@@ -148,7 +148,7 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
       cached = false;
     try {
       ({ data, cached } = (await fetchWithCache(
-        `${this.getApiUrl()}/v1/embeddings`,
+        `${this.getApiUrl()}/embeddings`,
         {
           method: 'POST',
           headers: {
@@ -275,7 +275,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       cached = false;
     try {
       ({ data, cached } = (await fetchWithCache(
-        `${this.getApiUrl()}/v1/completions`,
+        `${this.getApiUrl()}/completions`,
         {
           method: 'POST',
           headers: {
@@ -422,7 +422,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       cached = false;
     try {
       ({ data, cached } = (await fetchWithCache(
-        `${this.getApiUrl()}/v1/chat/completions`,
+        `${this.getApiUrl()}/chat/completions`,
         {
           method: 'POST',
           headers: {
@@ -541,7 +541,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
       apiKey: this.getApiKey(),
       organization: this.getOrganization(),
       // Unfortunate, but the OpenAI SDK's implementation of base URL is different from how we treat base URL elsewhere.
-      baseURL: this.getApiUrl() + '/v1',
+      baseURL: this.getApiUrl(),
       maxRetries: 3,
       timeout: REQUEST_TIMEOUT_MS,
     });
@@ -698,7 +698,7 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
       apiKey: this.getApiKey(),
       organization: this.getOrganization(),
       // Unfortunate, but the OpenAI SDK's implementation of base URL is different from how we treat base URL elsewhere.
-      baseURL: this.getApiUrl() + '/v1',
+      baseURL: this.getApiUrl(),
       maxRetries: 3,
       timeout: REQUEST_TIMEOUT_MS,
     });
