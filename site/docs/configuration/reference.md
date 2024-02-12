@@ -153,6 +153,9 @@ interface TestSuiteConfig {
 
   // Envar overrides
   env?: EnvOverrides;
+  
+  // Whether to write latest results to promptfoo storage. This enables you to use the web viewer.
+  writeLatestResults?: boolean;
 }
 ```
 

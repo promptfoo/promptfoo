@@ -107,6 +107,7 @@ const results = await promptfoo.evaluate(
         },
       },
     ],
+    writeLatestResults: true, // write results to disk so they can be viewed in web viewer
   },
   {
     maxConcurrency: 2,
