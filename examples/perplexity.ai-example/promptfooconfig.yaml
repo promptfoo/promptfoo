@@ -1,0 +1,15 @@
+prompts:
+  - "Who discovered {{topic}}?"
+
+providers:
+  # Compare GPT 3.5 vs Perplexity 70B
+  - id: openai:chat:gpt-3.5-turbo-0613
+  - id: openai:chat:pplx-70b-online
+    config:
+      apiBaseUrl: https://api.perplexity.ai
+      apiKeyEnvar: PERPLEXITY_API_KEY
+      frequency_penalty: 0.1
+
+tests:
+  - vars:
+      topic: gravity
