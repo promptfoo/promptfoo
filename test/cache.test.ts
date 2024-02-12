@@ -4,6 +4,22 @@ import fetch, { Response } from 'node-fetch';
 jest.mock('node-fetch');
 const mockedFetch = fetch as jest.MockedFunction<typeof fetch>;
 
+const mockedFetchResponse = (ok: boolean, response: object) => {
+  return {
+    ok,
+    json: () => Promise.resolve(response),
+    text: () => Promise.resolve('error'),
+    headers: {
+      get: (name: string) => {
+        if (name === 'content-type') {
+          return 'application/json';
+        }
+        return null;
+      },
+    },
+  } as Response;
+};
+
 describe('fetchWithCache', () => {
   afterEach(() => {
     mockedFetch.mockReset();
@@ -15,10 +31,7 @@ describe('fetchWithCache', () => {
     const url = 'https://api.example.com/data';
     const response = { data: 'test data' };
 
-    mockedFetch.mockResolvedValueOnce({
-      ok: false,
-      json: () => Promise.resolve(response),
-    } as Response);
+    mockedFetch.mockResolvedValueOnce(mockedFetchResponse(false, response));
 
     const result = await fetchWithCache(url, {}, 1000);
 
@@ -32,10 +45,7 @@ describe('fetchWithCache', () => {
     const url = 'https://api.example.com/data';
     const response = { data: 'test data' };
 
-    mockedFetch.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve(response),
-    } as Response);
+    mockedFetch.mockResolvedValueOnce(mockedFetchResponse(true, response));
 
     const result = await fetchWithCache(url, {}, 1000);
 
@@ -47,10 +57,7 @@ describe('fetchWithCache', () => {
     const url = 'https://api.example.com/data';
     const response = { data: 'test data' };
 
-    mockedFetch.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve(response),
-    } as Response);
+    mockedFetch.mockResolvedValueOnce(mockedFetchResponse(true, response));
 
     const result = await fetchWithCache(url, {}, 1000);
 
@@ -64,9 +71,7 @@ describe('fetchWithCache', () => {
     const url = 'https://api.example.com/data';
     const response = { data: 'test data' };
 
-    mockedFetch.mockResolvedValueOnce({
-      json: () => Promise.resolve(response),
-    } as Response);
+    mockedFetch.mockResolvedValueOnce(mockedFetchResponse(true, response));
 
     const result = await fetchWithCache(url, {}, 1000);
 
@@ -82,10 +87,7 @@ describe('fetchWithCache', () => {
     const url = 'https://api.example.com/data';
     const response = { data: 'test data' };
 
-    mockedFetch.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve(response),
-    } as Response);
+    mockedFetch.mockResolvedValueOnce(mockedFetchResponse(true, response));
 
     const result = await fetchWithCache(url, {}, 1000);
 

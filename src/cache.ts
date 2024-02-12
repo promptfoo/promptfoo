@@ -54,27 +54,9 @@ export async function fetchWithCache(
 ): Promise<{ data: any; cached: boolean }> {
   if (!enabled || bust) {
     const resp = await fetchWithRetries(url, options, timeout);
-    if (!resp.ok) {
-      throw new Error(
-        `Request failed with status ${resp.status} ${resp.statusText}:\n\n${await resp.text()}`,
-      );
-    }
-    const contentType = resp.headers.get('content-type');
-    let data;
-    if (contentType?.includes('application/json')) {
-      try {
-        data = await resp.json();
-      } catch (error) {
-        throw new Error(`Expected JSON response, but parsing failed.`);
-      }
-    } else if (format === 'json') {
-      throw new Error(`Expected JSON response, but got ${contentType}:\n\n${await resp.text()}`);
-    } else {
-      data = await resp.text();
-    }
     return {
       cached: false,
-      data: data,
+      data: format === 'json' ? await resp.json() : await resp.text(),
     };
   }
 
