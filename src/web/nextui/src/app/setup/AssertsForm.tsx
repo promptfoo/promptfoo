@@ -31,7 +31,6 @@ const assertTypes: AssertionType[] = [
   'llm-rubric',
   'model-graded-closedqa',
   'factuality',
-  'model-graded-factuality',
   'webhook',
   'rouge-n',
   'rouge-s',
