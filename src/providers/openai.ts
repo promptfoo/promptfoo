@@ -510,6 +510,14 @@ type OpenAiAssistantOptions = OpenAiSharedOptions & {
   modelName?: string;
   instructions?: string;
   tools?: OpenAI.Beta.Threads.ThreadCreateAndRunParams['tools'];
+  /**
+   * If set, automatically call these functions when the assistant activates
+   * these function tools.
+   */
+  functionToolCallbacks?: Record<
+    OpenAI.FunctionDefinition['name'],
+    (arg: string) => Promise<string>
+  >;
   metadata?: object[];
 };
 
@@ -570,7 +578,61 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
 
     logger.debug(`\tOpenAI thread run API response: ${JSON.stringify(run)}`);
 
-    while (run.status === 'in_progress' || run.status === 'queued') {
+    while (
+      run.status === 'in_progress' ||
+      run.status === 'queued' ||
+      run.status === 'requires_action'
+    ) {
+      if (run.status === 'requires_action') {
+        const requiredAction = run.required_action;
+        if (requiredAction === null || requiredAction.type !== 'submit_tool_outputs') {
+          break;
+        }
+        const functionCallsWithCallbacks = requiredAction.submit_tool_outputs.tool_calls.filter(
+          (toolCall) => {
+            return (
+              toolCall.type === 'function' &&
+              toolCall.function.name in (this.assistantConfig.functionToolCallbacks ?? {})
+            );
+          },
+        );
+        if (functionCallsWithCallbacks.length === 0) {
+          break;
+        }
+        logger.debug(
+          `Calling functionToolCallbacks for functions: ${functionCallsWithCallbacks.map(
+            ({ function: { name } }) => name,
+          )}`,
+        );
+        const toolOutputs = await Promise.all(
+          functionCallsWithCallbacks.map(async (toolCall) => {
+            logger.debug(
+              `Calling functionToolCallbacks[${toolCall.function.name}]('${toolCall.function.arguments}')`,
+            );
+            const result = await this.assistantConfig.functionToolCallbacks![
+              toolCall.function.name
+            ](toolCall.function.arguments);
+            return {
+              tool_call_id: toolCall.id,
+              output: result,
+            };
+          }),
+        );
+        logger.debug(
+          `Calling OpenAI API, submitting tool outputs for ${run.thread_id}: ${JSON.stringify(
+            toolOutputs,
+          )}`,
+        );
+        try {
+          run = await openai.beta.threads.runs.submitToolOutputs(run.thread_id, run.id, {
+            tool_outputs: toolOutputs,
+          });
+        } catch (err) {
+          return failApiCall(err);
+        }
+        continue;
+      }
+
       await new Promise((resolve) => setTimeout(resolve, 1000));
 
       logger.debug(`Calling OpenAI API, getting thread run ${run.id} status`);

@@ -618,6 +618,62 @@ tests:
   # ...
 ```
 
+### Automatically handling function tool calls
+
+You can specify JavaScript callbacks that are automatically called to create
+the output of a function tool call.
+
+This requires definining your config in a JavaScript file instead of YAML.
+
+```js
+module.exports = /** @type {import('promptfoo').TestSuiteConfig} */ ({
+  prompts: 'Please add the following numbers together: {{a}} and {{b}}',
+  providers: [
+    {
+      id: 'openai:assistant:asst_fEhNN3MClMamLfKLkIaoIpgZ',
+      config:
+        /** @type {InstanceType<import('promptfoo')["providers"]["OpenAiAssistantProvider"]>["config"]} */ ({
+          model: 'gpt-4-1106-preview',
+          instructions: 'You can add two numbers together using the `addNumbers` tool',
+          tools: [
+            {
+              type: 'function',
+              function: {
+                name: 'addNumbers',
+                description: 'Add two numbers together',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    a: { type: 'number' },
+                    b: { type: 'number' }
+                  },
+                  required: ['a', 'b']
+                }
+              }
+            }
+          ],
+          /**
+           * Map of function tool names to function callback.
+           */
+          functionToolCallbacks: {
+            // this function should accept a string, and return a string
+            // or a `Promise<string>`.
+            addNumbers: (parametersJsonString) => {
+              const { a, b } = JSON.parse(parametersJsonString);
+              return JSON.stringify(a + b);
+            }
+          }
+        })
+    }
+  ],
+  tests: [
+    {
+      vars: { a: 5, b: 6 }
+    }
+  ]
+});
+```
+
 ## Troubleshooting
 
 ### OpenAI rate limits
