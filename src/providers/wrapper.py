@@ -2,6 +2,7 @@ import json
 import os
 import sys
 import importlib
+import asyncio
 
 def call_api(script_path, prompt, options, context):
     script_dir = os.path.dirname(os.path.abspath(script_path))
@@ -10,7 +11,10 @@ def call_api(script_path, prompt, options, context):
         sys.path.insert(0, script_dir)
     print(f'Importing module {module_name} from {script_dir}...')
     script_module = importlib.import_module(module_name)
-    return script_module.call_api(prompt, options, context)
+    if asyncio.iscoroutinefunction(script_module.call_api):
+        return asyncio.run(script_module.call_api(prompt, options, context))
+    else:
+        return script_module.call_api(prompt, options, context)
 
 if __name__ == '__main__':
     script_path = sys.argv[1]
