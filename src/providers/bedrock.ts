@@ -68,6 +68,7 @@ const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'anthropic.claude-instant-v1': BEDROCK_MODEL.CLAUDE,
   'anthropic.claude-v1': BEDROCK_MODEL.CLAUDE,
   'anthropic.claude-v2': BEDROCK_MODEL.CLAUDE,
+  'anthropic.claude-v2.1': BEDROCK_MODEL.CLAUDE,
   'amazon.titan-text-lite-v1': BEDROCK_MODEL.TITAN_TEXT,
   'amazon.titan-text-express-v1': BEDROCK_MODEL.TITAN_TEXT,
 };
@@ -132,7 +133,11 @@ export class AwsBedrockCompletionProvider implements ApiProvider {
       throw new Error(`BEDROCK_STOP is not a valid JSON string: ${err}`);
     }
 
-    const model = AWS_BEDROCK_MODELS[this.modelName];
+    let model = AWS_BEDROCK_MODELS[this.modelName];
+    if (!model) {
+      logger.warn(`Unknown Amazon Bedrock model: ${this.modelName}. Assuming its API is Claude-like.`);
+      model = BEDROCK_MODEL.CLAUDE;
+    }
     const params = model.params(this.config, prompt, stop);
 
     logger.debug(`Calling Amazon Bedrock API: ${JSON.stringify(params)}`);
