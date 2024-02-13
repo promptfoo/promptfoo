@@ -163,7 +163,7 @@ function EvalOutputCell({
   filterMode: FilterMode;
   searchText: string;
 }) {
-  const {renderMarkdown} = useResultsViewStore();
+  const { renderMarkdown, prettifyJson } = useResultsViewStore();
   const [openPrompt, setOpen] = React.useState(false);
   const handlePromptOpen = () => {
     setOpen(true);
@@ -183,21 +183,10 @@ function EvalOutputCell({
 
     node = (
       <>
-        <img
-          loading="lazy"
-          src={url}
-          alt={output.prompt}
-          onClick={toggleLightbox}
-        />
+        <img loading="lazy" src={url} alt={output.prompt} onClick={toggleLightbox} />
         {lightboxOpen && (
-          <div
-            className="lightbox"
-            onClick={toggleLightbox}
-          >
-            <img
-              src={url}
-              alt={output.prompt}
-            />
+          <div className="lightbox" onClick={toggleLightbox}>
+            <img src={url} alt={output.prompt} />
           </div>
         )}
       </>
@@ -250,7 +239,7 @@ function EvalOutputCell({
       </>
     );
   }
-  
+
   if (searchText) {
     // Highlight search matches
     const regex = new RegExp(searchText, 'gi');
@@ -290,6 +279,12 @@ function EvalOutputCell({
     );
   } else if (renderMarkdown) {
     node = <ReactMarkdown>{text}</ReactMarkdown>;
+  } else if (prettifyJson) {
+    try {
+      node = <pre>{JSON.stringify(JSON.parse(text), null, 2)}</pre>;
+    } catch (error) {
+      // Ignore because it's probably not JSON.
+    }
   }
 
   const handleRating = (isPass: boolean) => {
@@ -447,7 +442,8 @@ function EvalOutputCell({
             </div>
             <CustomMetrics lookup={output.namedScores} />
             <span className="fail-reason">
-              {chunks[0]?.trim()
+              {chunks[0]
+                ?.trim()
                 .split('\n')
                 .map((line, index) => (
                   <React.Fragment key={index}>
@@ -799,7 +795,11 @@ export default function ResultsTable({
         filterMode === 'failures'
           ? row.outputs.some((output, idx) => {
               const columnId = `Prompt ${idx + 1}`;
-              return failureFilter[columnId] && !output.pass && (!columnVisibilityIsSet || columnVisibility[columnId]);
+              return (
+                failureFilter[columnId] &&
+                !output.pass &&
+                (!columnVisibilityIsSet || columnVisibility[columnId])
+              );
             })
           : filterMode === 'different'
           ? !row.outputs.every((output) => output.text === row.outputs[0].text)
