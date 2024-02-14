@@ -467,7 +467,9 @@ class Evaluator {
         testCase.options?.suffix || testSuite.defaultTest?.options?.suffix || '';
 
       // Finalize test case eval
-      const varCombinations = generateVarCombinations(testCase.vars || {});
+      const varCombinations = process.env.PROMPTFOO_DISABLE_VAR_EXPANSION
+        ? [testCase.vars]
+        : generateVarCombinations(testCase.vars || {});
 
       const numRepeat = this.options.repeat || 1;
       for (let repeatIndex = 0; repeatIndex < numRepeat; repeatIndex++) {
