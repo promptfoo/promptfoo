@@ -20,6 +20,8 @@ interface TableState {
   setShowInferenceDetails: (showInferenceDetails: boolean) => void;
   renderMarkdown: boolean;
   setRenderMarkdown: (renderMarkdown: boolean) => void;
+  prettifyJson: boolean;
+  setPrettifyJson: (prettifyJson: boolean) => void;
 }
 
 export const useStore = create<TableState>((set) => ({
@@ -39,4 +41,6 @@ export const useStore = create<TableState>((set) => ({
   setShowInferenceDetails: (showInferenceDetails: boolean) => set(() => ({ showInferenceDetails })),
   renderMarkdown: false,
   setRenderMarkdown: (renderMarkdown: boolean) => set(() => ({ renderMarkdown })),
+  prettifyJson: false,
+  setPrettifyJson: (prettifyJson: boolean) => set(() => ({ prettifyJson })),
 }));

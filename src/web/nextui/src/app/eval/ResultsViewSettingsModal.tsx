@@ -27,6 +27,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ open, onClose }) => {
     setShowInferenceDetails,
     renderMarkdown,
     setRenderMarkdown,
+    prettifyJson,
+    setPrettifyJson,
   } = useResultsViewStore();
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
@@ -54,6 +56,17 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ open, onClose }) => {
               />
             }
             label="Render model outputs as Markdown"
+          />
+        </Box>
+        <Box>
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={prettifyJson}
+                onChange={(e) => setPrettifyJson(e.target.checked)}
+              />
+            }
+            label="Prettify JSON outputs"
           />
         </Box>
         <Box>
