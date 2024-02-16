@@ -113,7 +113,7 @@ tests:
 
 ## Conclusion
 
-By using JavaScript within your assertions, you can perform complex checks on JSON outputs, including targeting specific fields. The `postprocess` can be used to tailor the output for similarity checks.
+By using JavaScript within your assertions, you can perform complex checks on JSON outputs, including targeting specific fields. The `transform` can be used to tailor the output for similarity checks.
 
 promptfoo is free and open-source software.  To install promptfoo and get started, see the [getting started guide](/docs/getting-started).
 
