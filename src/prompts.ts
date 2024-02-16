@@ -191,9 +191,9 @@ export function readPrompts(
         const fileContent = fs.readFileSync(promptPath, 'utf-8');
         const promptFunction = (context: { vars: Record<string, string | object> }) => {
           const { execSync } = require('child_process');
-          const contextString = JSON.stringify(context).replace(/"/g, '\\"').replace(/\n/g, '\\n');
+          const contextString = JSON.stringify(context).replace(/'/g, "'\\\''").replace(/\n/g, '\\n');
           const output = execSync(
-            `${process.env.PROMPTFOO_PYTHON || 'python'} "${promptPath}" "${contextString}"`,
+            `${process.env.PROMPTFOO_PYTHON || 'python'} '${promptPath}' '${contextString}'`,
           );
           return output.toString();
         };
