@@ -41,6 +41,42 @@ interface OllamaCompletionOptions {
   num_thread?: number;
 }
 
+const OllamaCompletionOptionKeys: Set<keyof OllamaCompletionOptions> = new Set([
+  'num_predict',
+  'top_k',
+  'top_p',
+  'tfs_z',
+  'seed',
+  'useNUMA',
+  'num_ctx',
+  'num_keep',
+  'num_batch',
+  'num_gqa',
+  'num_gpu',
+  'main_gpu',
+  'low_vram',
+  'f16_kv',
+  'logits_all',
+  'vocab_only',
+  'use_mmap',
+  'use_mlock',
+  'embedding_only',
+  'rope_frequency_base',
+  'rope_frequency_scale',
+  'typical_p',
+  'repeat_last_n',
+  'temperature',
+  'repeat_penalty',
+  'presence_penalty',
+  'frequency_penalty',
+  'mirostat',
+  'mirostat_tau',
+  'mirostat_eta',
+  'penalize_newline',
+  'stop',
+  'num_thread',
+]);
+
 interface OllamaCompletionJsonL {
   model: string;
   created_at: string;
@@ -101,7 +137,13 @@ export class OllamaCompletionProvider implements ApiProvider {
     const params = {
       model: this.modelName,
       prompt,
-      options: this.config,
+      options: Object.keys(this.config).reduce((options, key) => {
+        const optionName = key as keyof OllamaCompletionOptions;
+        if (OllamaCompletionOptionKeys.has(optionName)) {
+          options[optionName] = this.config[optionName];
+        }
+        return options;
+      }, {} as Partial<Record<keyof OllamaCompletionOptions, number | boolean | string[] | undefined>>),
     };
 
     logger.debug(`Calling Ollama API: ${JSON.stringify(params)}`);
