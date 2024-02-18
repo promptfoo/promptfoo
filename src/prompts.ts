@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import chalk from 'chalk';
 import invariant from 'tiny-invariant';
 import { globSync } from 'glob';
+import { PythonShell, Options as PythonShellOptions } from 'python-shell';
 
 import logger from './logger';
 
@@ -189,13 +190,16 @@ export function readPrompts(
         });
       } else if (ext === '.py') {
         const fileContent = fs.readFileSync(promptPath, 'utf-8');
-        const promptFunction = (context: { vars: Record<string, string | object> }) => {
-          const { execSync } = require('child_process');
-          const contextString = JSON.stringify(context).replace(/"/g, '\\"').replace(/\n/g, '\\n');
-          const output = execSync(
-            `${process.env.PROMPTFOO_PYTHON || 'python'} "${promptPath}" "${contextString}"`,
-          );
-          return output.toString();
+        const promptFunction = async (context: { vars: Record<string, string | object> }) => {
+          const options: PythonShellOptions = {
+            mode: 'text',
+            pythonPath: process.env.PROMPTFOO_PYTHON || 'python',
+            args: [JSON.stringify(context)],
+          };
+          logger.debug(`Executing python prompt script ${promptPath}`);
+          const results = (await PythonShell.run(promptPath, options)).join('\n');
+          logger.debug(`Python prompt script ${promptPath} returned: ${results}`);
+          return results;
         };
         let display = fileContent;
         if (inputType === PromptInputType.NAMED) {
