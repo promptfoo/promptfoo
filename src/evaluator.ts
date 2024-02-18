@@ -613,10 +613,6 @@ class Evaluator {
                 if (typeof varValue === 'string') {
                   return varValue;
                 }
-                if (Array.isArray(varValue)) {
-                  // Only flatten string arrays
-                  return typeof varValue[0] === 'string' ? varValue : JSON.stringify(varValue);
-                }
                 return JSON.stringify(varValue);
               })
               .flat(),
