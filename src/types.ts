@@ -153,7 +153,7 @@ export interface GradingConfig {
 
 export interface PromptConfig {
   prefix?: string;
-  suffix?: string;
+  suffix?: string; 
 }
 
 export interface OutputConfig {
@@ -400,7 +400,12 @@ export interface TestCase<Vars = Record<string, string | string[] | object>> {
   assert?: Assertion[];
 
   // Additional configuration settings for the prompt
-  options?: PromptConfig & OutputConfig & GradingConfig;
+  options?: PromptConfig & OutputConfig & GradingConfig & {
+    // If true, do not expand arrays of variables into multiple eval cases.
+    disableVarExpansion?: boolean;
+    // If true, do not include an implicit `_conversation` variable in the prompt.
+    disableConversationVar?: boolean;
+  };
 
   // The required score for this test case.  If not provided, the test case is graded pass/fail.
   threshold?: number;
