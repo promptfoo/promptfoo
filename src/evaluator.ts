@@ -160,7 +160,11 @@ class Evaluator {
     const vars = test.vars || {};
     const conversationKey = `${provider.id()}:${prompt.id}`;
     const usesConversation = prompt.raw.includes('_conversation');
-    if (!process.env.PROMPTFOO_DISABLE_CONVERSATION_VAR && usesConversation) {
+    if (
+      !process.env.PROMPTFOO_DISABLE_CONVERSATION_VAR &&
+      !test.options?.disableConversationVar &&
+      usesConversation
+    ) {
       vars._conversation = this.conversations[conversationKey] || [];
     }
 
@@ -467,9 +471,10 @@ class Evaluator {
         testCase.options?.suffix || testSuite.defaultTest?.options?.suffix || '';
 
       // Finalize test case eval
-      const varCombinations = process.env.PROMPTFOO_DISABLE_VAR_EXPANSION
-        ? [testCase.vars]
-        : generateVarCombinations(testCase.vars || {});
+      const varCombinations =
+        process.env.PROMPTFOO_DISABLE_VAR_EXPANSION || testCase.options.disableVarExpansion
+          ? [testCase.vars]
+          : generateVarCombinations(testCase.vars || {});
 
       const numRepeat = this.options.repeat || 1;
       for (let repeatIndex = 0; repeatIndex < numRepeat; repeatIndex++) {

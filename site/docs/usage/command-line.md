@@ -116,12 +116,14 @@ Show details of a specific resource.
 
 These general-purpose environment variables are supported:
 
-| Name                                 | Description                                                      | Default        |
-| ------------------------------------ | ---------------------------------------------------------------- | -------------- |
-| `PROMPTFOO_CONFIG_DIR`               | Directory that stores eval history                               | `~/.promptfoo` |
-| `PROMPTFOO_DISABLE_JSON_AUTOESCAPE`  | If set, disables smart variable substitution within JSON prompts |                |
-| `PROMPTFOO_DISABLE_CONVERSATION_VAR` | Prevents the `_conversation` variable from being set             |                |
-| `PROMPTFOO_DISABLE_REF_PARSER`       | Prevents JSON schema dereferencing                               |                |
+| Name                                 | Description                                                           | Default        |
+| ------------------------------------ | --------------------------------------------------------------------- | -------------- |
+| `PROMPTFOO_CONFIG_DIR`               | Directory that stores eval history                                    | `~/.promptfoo` |
+| `PROMPTFOO_DISABLE_CONVERSATION_VAR` | Prevents the `_conversation` variable from being set                  |                |
+| `PROMPTFOO_DISABLE_JSON_AUTOESCAPE`  | If set, disables smart variable substitution within JSON prompts      |                |
+| `PROMPTFOO_DISABLE_REF_PARSER`       | Prevents JSON schema dereferencing                                    |                |
+| `PROMPTFOO_DISABLE_TEMPLATING`       | Disable Nunjucks rendering                                            |                |
+| `PROMPTFOO_DISABLE_VAR_EXPANSION`    | Prevents Array-type vars from being expanded into multiple test cases |                |
 
 ## `promptfoo generate dataset`
 
