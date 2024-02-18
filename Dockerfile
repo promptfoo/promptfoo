@@ -8,6 +8,10 @@ ENV NEXT_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL=${NEXT_PUBLIC_PROMPTFOO_REMOTE_API
 ENV NEXT_PUBLIC_PROMPTFOO_BUILD_STANDALONE_SERVER=1
 ENV NEXT_TELEMETRY_DISABLED 1
 
+# These envars are not used, but must be set to prevent the build process from erroring.
+ENV NEXT_PUBLIC_SUPABASE_URL=http://placeholder.promptfoo.dev
+ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=placeholder
+
 WORKDIR /app
 COPY . .
 
