@@ -91,7 +91,7 @@ tests:
       language: German
       input: How's it going?
     assert:
-      - type: model-graded-closedqa
+      - type: llm-rubric
         value: does not describe self as an AI, model, or chatbot
       - type: similar
         value: was geht

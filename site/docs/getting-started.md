@@ -129,7 +129,7 @@ tests:
       - type: contains-json
       - type: similar
         value: ensures that output is semantically similar to this text
-      - type: model-graded-closedqa
+      - type: llm-rubric
         value: must contain a reference to X
 ```
 
@@ -157,8 +157,8 @@ defaultTest:
     - type: not-contains
       value: AI language model
 
-    # Verify that the output doesn't apologize, using model-graded eval
-    - type: model-graded-closedqa
+    # Verify that the output doesn't apologize
+    - type: llm-rubric
       value: must not contain an apology
 
     # Prefer shorter outputs using a scoring function
@@ -209,9 +209,7 @@ In [this next example](https://github.com/typpo/promptfoo/tree/main/examples/gpt
 prompts: [prompt1.txt, prompt2.txt]
 
 # Set the LLMs we want to test
-providers:
-  - openai:gpt-3.5-turbo
-  - openai:gpt-4
+providers: [openai:gpt-3.5-turbo, openai:gpt-4]
 ```
 
 A simple `npx promptfoo@latest eval` will run the example. Also note that you can override parameters directly from the command line. For example, this command:
