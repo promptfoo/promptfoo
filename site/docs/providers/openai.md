@@ -418,7 +418,7 @@ tests:
 
 Sometimes OpenAI function calls don't match `tools` schemas. Use [`is-valid-openai-tools-call`](/docs/configuration/expected-outputs/#is-valid-openai-function-call) or [`is-valid-openai-tools-call`](/docs/configuration/expected-outputs/#is-valid-openai-tools-call) assertions to enforce an exact schema match between tools and the function definition.
 
-To further test `tools` definitions, you can use the `javascript` assertion and/or `postprocess` directives. For example:
+To further test `tools` definitions, you can use the `javascript` assertion and/or `transform` directives. For example:
 
 ```yaml
 tests:
@@ -434,8 +434,8 @@ tests:
 
   - vars:
       city: New York
-      # postprocess returns only the 'name' property
-    postprocess: output[0].function.name
+      # transform returns only the 'name' property
+    transform: output[0].function.name
     assert:
       - type: is-json
       - type: similar
@@ -489,7 +489,7 @@ tests:
 
 Sometimes OpenAI function calls don't match `functions` schemas. Use [`is-valid-openai-function-call`](/docs/configuration/expected-outputs/#is-valid-openai-function-call) assertions to enforce an exact schema match between function calls and the function definition.
 
-To further test function call definitions, you can use the `javascript` assertion and/or `postprocess` directives. For example:
+To further test function call definitions, you can use the `javascript` assertion and/or `transform` directives. For example:
 
 ```yaml
 tests:
@@ -504,8 +504,8 @@ tests:
 
   - vars:
       city: New York
-    # postprocess returns only the 'name' property for this testcase
-    postprocess: output.name
+    # transform returns only the 'name' property for this testcase
+    transform: output.name
     assert:
       - type: is-json
       - type: similar
