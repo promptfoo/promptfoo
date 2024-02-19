@@ -26,6 +26,7 @@ import { styled } from '@mui/system';
 import { useRouter } from 'next/navigation';
 import { useDebounce } from 'use-debounce';
 
+import DownloadMenu from './DownloadMenu';
 import ResultsCharts from './ResultsCharts';
 import ResultsTable from './ResultsTable';
 import ConfigModal from './ConfigModal';
@@ -324,6 +325,9 @@ export default function ResultsView({
                     Edit Eval
                   </Button>
                 </Tooltip>
+              )}
+              {config && (
+                <DownloadMenu />
               )}
               {config?.sharing && (
                 <Tooltip title="Generate a unique URL that others can access">
