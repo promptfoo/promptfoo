@@ -49,6 +49,8 @@ By default the `eval` command will read the `promptfooconfig.yaml` configuration
 [1]: /docs/providers/openai
 [2]: /docs/providers/localai
 
+The `eval` command will return exit code `100` when there is at least 1 test case failure.  It will return exit code `1` for any other error.
+
 ## `promptfoo init [directory]`
 
 Initialize a new project with dummy files.

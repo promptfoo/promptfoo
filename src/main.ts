@@ -654,7 +654,7 @@ async function main() {
           logger.info('Done.');
 
           if (summary.stats.failures > 0) {
-            process.exit(1);
+            process.exit(100);
           }
         }
       };
