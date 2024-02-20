@@ -10,6 +10,7 @@ import addFormats from 'ajv-formats';
 import { distance as levenshtein } from 'fastest-levenshtein';
 
 import telemetry from './telemetry';
+import logger from './logger';
 import { fetchWithRetries } from './fetch';
 import { transformOutput, getNunjucksEngine } from './util';
 import {
@@ -25,9 +26,10 @@ import {
   matchesSelectBest,
 } from './matchers';
 
-import type { Assertion, AssertionType, GradingResult, AtomicTestCase, ApiProvider } from './types';
 import { validateFunctionCall } from './providers/openaiUtil';
 import { OpenAiChatCompletionProvider } from './providers/openai';
+
+import type { Assertion, AssertionType, GradingResult, AtomicTestCase, ApiProvider } from './types';
 
 export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
   'answer-relevance',
@@ -216,6 +218,7 @@ export async function runAssertion({
   const context = {
     prompt,
     vars: test.vars || {},
+    test,
   };
 
   // Render assertion values
@@ -236,6 +239,7 @@ export async function runAssertion({
             `Assertion malformed: ${filePath} must export a function or have a default export as a function`,
           );
         }
+        logger.debug(`Javascript script ${filePath} output: ${valueFromScript}`);
       } else if (filePath.endsWith('.py')) {
         const args = [
           filePath,
@@ -262,6 +266,7 @@ export async function runAssertion({
           );
         });
         valueFromScript = pythonScriptOutput.trim();
+        logger.debug(`Python script ${filePath} output: ${valueFromScript}`);
       } else if (filePath.endsWith('.json')) {
         valueFromScript = JSON.parse(fs.readFileSync(filePath, 'utf8'));
       } else if (filePath.endsWith('.yaml') || filePath.endsWith('.yml')) {

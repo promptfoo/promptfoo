@@ -1431,7 +1431,11 @@ describe('runAssertion', () => {
         output,
       });
 
-      expect(mockFn).toHaveBeenCalledWith('Expected output', { prompt: 'Some prompt', vars: {} });
+      expect(mockFn).toHaveBeenCalledWith('Expected output', {
+        prompt: 'Some prompt',
+        vars: {},
+        test: {},
+      });
       expect(result.pass).toBe(expectedPass);
       expect(result.reason).toContain(expectedReason);
     },
@@ -1617,7 +1621,7 @@ print(json.dumps(eval(value)))`,
                 expect.arrayContaining([
                   '/path/to/assert.py',
                   'Expected output',
-                  '{"prompt":"Some prompt that includes \\"double quotes\\" and \'single quotes\'","vars":{}}',
+                  '{"prompt":"Some prompt that includes \\"double quotes\\" and \'single quotes\'","vars":{},"test":{}}',
                 ]),
               );
               process.nextTick(() => callback(null, Buffer.from(pythonOutput), Buffer.from('')));
@@ -1750,7 +1754,7 @@ print(json.dumps(eval(value)))`,
 
   describe('perplexity-score assertion', () => {
     it('should pass when the perplexity-score assertion passes', async () => {
-      const logProbs = [-0.2, -0.4, -0.1, -0.3]; 
+      const logProbs = [-0.2, -0.4, -0.1, -0.3];
       const provider = {
         callApi: jest.fn().mockResolvedValue({ logProbs }),
       } as unknown as ApiProvider;
@@ -1787,7 +1791,7 @@ print(json.dumps(eval(value)))`,
         output: 'Some output',
         logProbs,
       });
-      console.log(result)
+      console.log(result);
       expect(result.pass).toBeFalsy();
       expect(result.reason).toBe('Perplexity score 0.44 is less than threshold 0.5');
     });
