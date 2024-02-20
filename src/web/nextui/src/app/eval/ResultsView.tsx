@@ -9,6 +9,7 @@ import Checkbox from '@mui/material/Checkbox';
 import CircularProgress from '@mui/material/CircularProgress';
 import EditIcon from '@mui/icons-material/Edit';
 import FormControl from '@mui/material/FormControl';
+import Heading from '@mui/material/Typography';
 import InputLabel from '@mui/material/InputLabel';
 import ListItemText from '@mui/material/ListItemText';
 import MenuItem from '@mui/material/MenuItem';
@@ -37,6 +38,8 @@ import { REMOTE_API_BASE_URL, REMOTE_APP_BASE_URL } from '@/../../../constants';
 import type { VisibilityState } from '@tanstack/table-core';
 import type { FilterMode } from './types';
 
+import './ResultsView.css';
+
 const ResponsiveStack = styled(Stack)(({ theme }) => ({
   maxWidth: '100%',
   flexWrap: 'wrap',
@@ -60,7 +63,7 @@ export default function ResultsView({
   defaultEvalId,
 }: ResultsViewProps) {
   const router = useRouter();
-  const { table, config, maxTextLength, wordBreak, showInferenceDetails } = useResultsViewStore();
+  const { table, config, maxTextLength, wordBreak, showInferenceDetails, filePath } = useResultsViewStore();
   const { setStateFromConfig } = useMainStore();
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
   const [selectedColumns, setSelectedColumns] = React.useState<string[]>([]);
@@ -175,6 +178,11 @@ export default function ResultsView({
 
   return (
     <div style={{ marginLeft: '1rem', marginRight: '1rem' }}>
+      {config?.description && (
+        <Box mb={2}>
+          <Heading variant="h5">{config.description} <span className="description-filepath">{filePath}</span></Heading>
+        </Box>
+      )}
       <Paper py="md">
         <ResponsiveStack direction="row" spacing={4} alignItems="center">
           <Box>
