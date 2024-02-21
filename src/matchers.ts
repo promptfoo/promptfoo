@@ -630,7 +630,7 @@ export async function matchesContextRelevance(
 
   const promptText = nunjucks.renderString(CONTEXT_RELEVANCE, {
     context: JSON.stringify(context).slice(1, -1),
-    question: JSON.stringify(question).slice(1, -1),
+    query: JSON.stringify(question).slice(1, -1),
   });
 
   const resp = await textProvider.callApi(promptText);
