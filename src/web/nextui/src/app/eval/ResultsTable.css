@@ -1,3 +1,7 @@
+pre {
+  white-space: pre-wrap;
+}
+
 .font-bold {
   font-weight: bold;
 }
