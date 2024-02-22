@@ -1,6 +1,6 @@
 import Replicate from 'replicate';
 
-import fetch, {Request,RequestInit, Response} from 'node-fetch';
+import fetch from 'node-fetch';
 import logger from '../logger';
 import { getCache, isCacheEnabled } from '../cache';
 
@@ -15,6 +15,13 @@ interface ReplicateCompletionOptions {
   top_k?: number;
   repetition_penalty?: number;
   system_prompt?: string;
+  stop_sequences?: string;
+  seed?: number;
+
+  prompt?: {
+    prefix?: string;
+    suffix?: string;
+  };
 
   // Any other key-value pairs will be passed to the Replicate API as-is
   [key: string]: any;
@@ -57,6 +64,13 @@ export class ReplicateProvider implements ApiProvider {
       );
     }
 
+    if (this.config.prompt?.prefix) {
+      prompt = this.config.prompt.prefix + prompt;
+    }
+    if (this.config.prompt?.suffix) {
+      prompt = prompt + this.config.prompt.suffix;
+    }
+
     let cache;
     let cacheKey;
     if (isCacheEnabled()) {
@@ -80,7 +94,11 @@ export class ReplicateProvider implements ApiProvider {
     logger.debug(`Calling Replicate: ${prompt}`);
     let response;
     try {
-      const getValue = (configValue: number | string | undefined, envVar: string, parseFunc = (val: any) => val) => {
+      const getValue = (
+        configValue: number | string | undefined,
+        envVar: string,
+        parseFunc = (val: any) => val,
+      ) => {
         const envValue = process.env[envVar];
         if (configValue !== undefined) {
           return configValue;
@@ -96,8 +114,14 @@ export class ReplicateProvider implements ApiProvider {
         temperature: getValue(this.config.temperature, 'REPLICATE_TEMPERATURE', parseFloat),
         top_p: getValue(this.config.top_p, 'REPLICATE_TOP_P', parseFloat),
         top_k: getValue(this.config.top_k, 'REPLICATE_TOP_K', parseInt),
-        repetition_penalty: getValue(this.config.repetition_penalty, 'REPLICATE_REPETITION_PENALTY', parseFloat),
+        repetition_penalty: getValue(
+          this.config.repetition_penalty,
+          'REPLICATE_REPETITION_PENALTY',
+          parseFloat,
+        ),
         system_prompt: getValue(this.config.system_prompt, 'REPLICATE_SYSTEM_PROMPT'),
+        stop_sequences: getValue(this.config.stop_sequences, 'REPLICATE_STOP_SEQUENCES'),
+        seed: getValue(this.config.seed, 'REPLICATE_SEED', parseInt),
       };
 
       const data = {
