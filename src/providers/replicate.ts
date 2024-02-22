@@ -10,7 +10,18 @@ interface ReplicateCompletionOptions {
   apiKey?: string;
   temperature?: number;
   max_length?: number;
+  max_new_tokens?: number;
+  top_p?: number;
+  top_k?: number;
   repetition_penalty?: number;
+  system_prompt?: string;
+  stop_sequences?: string;
+  seed?: number;
+
+  prompt?: {
+    prefix?: string;
+    suffix?: string;
+  };
 
   // Any other key-value pairs will be passed to the Replicate API as-is
   [key: string]: any;
@@ -53,6 +64,13 @@ export class ReplicateProvider implements ApiProvider {
       );
     }
 
+    if (this.config.prompt?.prefix) {
+      prompt = this.config.prompt.prefix + prompt;
+    }
+    if (this.config.prompt?.suffix) {
+      prompt = prompt + this.config.prompt.suffix;
+    }
+
     let cache;
     let cacheKey;
     if (isCacheEnabled()) {
@@ -70,23 +88,47 @@ export class ReplicateProvider implements ApiProvider {
 
     const replicate = new Replicate({
       auth: this.apiKey,
-      fetch,
+      fetch: fetch as any,
     });
 
     logger.debug(`Calling Replicate: ${prompt}`);
     let response;
     try {
+      const getValue = (
+        configValue: number | string | undefined,
+        envVar: string,
+        parseFunc = (val: any) => val,
+      ) => {
+        const envValue = process.env[envVar];
+        if (configValue !== undefined) {
+          return configValue;
+        } else if (envValue !== undefined) {
+          return parseFunc(envValue);
+        }
+        return undefined;
+      };
+
+      const inputOptions = {
+        max_length: getValue(this.config.max_length, 'REPLICATE_MAX_LENGTH', parseInt),
+        max_new_tokens: getValue(this.config.max_new_tokens, 'REPLICATE_MAX_NEW_TOKENS', parseInt),
+        temperature: getValue(this.config.temperature, 'REPLICATE_TEMPERATURE', parseFloat),
+        top_p: getValue(this.config.top_p, 'REPLICATE_TOP_P', parseFloat),
+        top_k: getValue(this.config.top_k, 'REPLICATE_TOP_K', parseInt),
+        repetition_penalty: getValue(
+          this.config.repetition_penalty,
+          'REPLICATE_REPETITION_PENALTY',
+          parseFloat,
+        ),
+        system_prompt: getValue(this.config.system_prompt, 'REPLICATE_SYSTEM_PROMPT'),
+        stop_sequences: getValue(this.config.stop_sequences, 'REPLICATE_STOP_SEQUENCES'),
+        seed: getValue(this.config.seed, 'REPLICATE_SEED', parseInt),
+      };
+
       const data = {
         input: {
           ...this.config,
           prompt,
-          max_length:
-            this.config.max_length || parseInt(process.env.REPLICATE_MAX_LENGTH || '2046', 10),
-          temperature:
-            this.config.temperature || parseFloat(process.env.REPLICATE_TEMPERATURE || '0.01'),
-          repetition_penalty:
-            this.config.repetition_penalty ||
-            parseFloat(process.env.REPLICATE_REPETITION_PENALTY || '1.0'),
+          ...Object.fromEntries(Object.entries(inputOptions).filter(([_, v]) => v !== undefined)),
         },
       };
       response = await replicate.run(this.modelName as any, data);
