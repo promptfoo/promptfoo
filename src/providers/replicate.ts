@@ -1,6 +1,6 @@
 import Replicate from 'replicate';
 
-import fetch from 'node-fetch';
+import fetch, {Request,RequestInit, Response} from 'node-fetch';
 import logger from '../logger';
 import { getCache, isCacheEnabled } from '../cache';
 
@@ -10,6 +10,9 @@ interface ReplicateCompletionOptions {
   apiKey?: string;
   temperature?: number;
   max_length?: number;
+  max_new_tokens?: number;
+  top_p?: number;
+  top_k?: number;
   repetition_penalty?: number;
 
   // Any other key-value pairs will be passed to the Replicate API as-is
@@ -70,7 +73,7 @@ export class ReplicateProvider implements ApiProvider {
 
     const replicate = new Replicate({
       auth: this.apiKey,
-      fetch,
+      fetch: fetch as any,
     });
 
     logger.debug(`Calling Replicate: ${prompt}`);
@@ -82,8 +85,14 @@ export class ReplicateProvider implements ApiProvider {
           prompt,
           max_length:
             this.config.max_length || parseInt(process.env.REPLICATE_MAX_LENGTH || '2046', 10),
+          max_new_tokens:
+            this.config.max_new_tokens || parseInt(process.env.REPLICATE_MAX_NEW_TOKENS || '1024', 10),
           temperature:
             this.config.temperature || parseFloat(process.env.REPLICATE_TEMPERATURE || '0.01'),
+          top_p:
+            this.config.top_p || parseFloat(process.env.REPLICATE_TOP_P || '1.0'),
+          top_k:
+            this.config.top_k || parseInt(process.env.REPLICATE_TOP_K || '0', 10),
           repetition_penalty:
             this.config.repetition_penalty ||
             parseFloat(process.env.REPLICATE_REPETITION_PENALTY || '1.0'),
