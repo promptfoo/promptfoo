@@ -1,4 +1,6 @@
-import { Assertion, AssertionType, CsvRow, TestCase } from "@/../../../types";
+// Helpers for parsing CSV eval files, shared by frontend and backend.
+
+import type { Assertion, AssertionType, CsvRow, TestCase } from "./types";
 
 const DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD = 0.8;
 

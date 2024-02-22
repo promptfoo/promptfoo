@@ -3,7 +3,8 @@ import * as fs from 'fs';
 import yaml from 'js-yaml';
 import { globSync } from 'glob';
 
-import { readTestsFile, readTest, readTests, testCaseFromCsvRow } from '../src/testCases';
+import { readTestsFile, readTest, readTests } from '../src/testCases';
+import { testCaseFromCsvRow } from '../src/csv';
 
 import type { AssertionType, TestCase } from '../src/types';
 
