@@ -183,7 +183,7 @@ tests:
 
 (Note that `llm-rubric` uses GPT-4 by default, which requires the `OPENAI_API_KEY` environment variable.  You can [override the grader](/docs/configuration/expected-outputs/model-graded#overriding-the-llm-grader) to a model of your choice.
 
-## Step 4: Running the Comparison
+## Step 3: Running the Comparison
 
 With your configuration and test cases set up, you're ready to run the comparison. Use the following command to start the evaluation:
 
@@ -201,7 +201,7 @@ npx promptfoo@latest view
 
 ![gemma vs llama](/img/docs/gemma-vs-llama.png)
 
-## Step 5: Analyzing the Results
+## Step 4: Analyzing the Results
 
 After running the evaluation, you'll have a dataset that compares the responses from Gemma and Llama across your test cases. Look for patterns in the results:
 
