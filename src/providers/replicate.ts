@@ -14,6 +14,7 @@ interface ReplicateCompletionOptions {
   top_p?: number;
   top_k?: number;
   repetition_penalty?: number;
+  system_prompt?: string;
 
   // Any other key-value pairs will be passed to the Replicate API as-is
   [key: string]: any;
@@ -79,23 +80,31 @@ export class ReplicateProvider implements ApiProvider {
     logger.debug(`Calling Replicate: ${prompt}`);
     let response;
     try {
+      const getValue = (configValue: number | string | undefined, envVar: string, parseFunc = (val: any) => val) => {
+        const envValue = process.env[envVar];
+        if (configValue !== undefined) {
+          return configValue;
+        } else if (envValue !== undefined) {
+          return parseFunc(envValue);
+        }
+        return undefined;
+      };
+
+      const inputOptions = {
+        max_length: getValue(this.config.max_length, 'REPLICATE_MAX_LENGTH', parseInt),
+        max_new_tokens: getValue(this.config.max_new_tokens, 'REPLICATE_MAX_NEW_TOKENS', parseInt),
+        temperature: getValue(this.config.temperature, 'REPLICATE_TEMPERATURE', parseFloat),
+        top_p: getValue(this.config.top_p, 'REPLICATE_TOP_P', parseFloat),
+        top_k: getValue(this.config.top_k, 'REPLICATE_TOP_K', parseInt),
+        repetition_penalty: getValue(this.config.repetition_penalty, 'REPLICATE_REPETITION_PENALTY', parseFloat),
+        system_prompt: getValue(this.config.system_prompt, 'REPLICATE_SYSTEM_PROMPT'),
+      };
+
       const data = {
         input: {
           ...this.config,
           prompt,
-          max_length:
-            this.config.max_length || parseInt(process.env.REPLICATE_MAX_LENGTH || '2046', 10),
-          max_new_tokens:
-            this.config.max_new_tokens || parseInt(process.env.REPLICATE_MAX_NEW_TOKENS || '1024', 10),
-          temperature:
-            this.config.temperature || parseFloat(process.env.REPLICATE_TEMPERATURE || '0.01'),
-          top_p:
-            this.config.top_p || parseFloat(process.env.REPLICATE_TOP_P || '1.0'),
-          top_k:
-            this.config.top_k || parseInt(process.env.REPLICATE_TOP_K || '0', 10),
-          repetition_penalty:
-            this.config.repetition_penalty ||
-            parseFloat(process.env.REPLICATE_REPETITION_PENALTY || '1.0'),
+          ...Object.fromEntries(Object.entries(inputOptions).filter(([_, v]) => v !== undefined)),
         },
       };
       response = await replicate.run(this.modelName as any, data);
