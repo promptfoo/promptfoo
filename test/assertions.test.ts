@@ -4,7 +4,8 @@ import child_process from 'child_process';
 import Stream from 'stream';
 
 import { Response } from 'node-fetch';
-import { runAssertions, runAssertion, assertionFromString } from '../src/assertions';
+import { runAssertions, runAssertion } from '../src/assertions';
+import { assertionFromString } from '../src/csv';
 import * as fetch from '../src/fetch';
 
 import type {
