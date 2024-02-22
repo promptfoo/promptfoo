@@ -1,0 +1,66 @@
+prompts:
+  - "{{message}}"
+
+providers:
+  - id: replicate:meta/llama-2-7b-chat
+    config:
+      temperature: 0.01 # minimum temperature
+      max_new_tokens: 1024
+      prompt:
+        prefix: "[INST] "
+        suffix: "[/INST] "
+
+  - id: replicate:cjwbw/gemma-7b-it:2790a695e5dcae15506138cc4718d1106d0d475e6dca4b1d43f42414647993d5
+    config:
+      temperature: 0.01
+      max_new_tokens: 1024
+      prompt:
+        prefix: "<start_of_turn>user\n"
+        suffix: "<end_of_turn>\n<start_of_turn>model"
+
+defaultTest:
+  options:
+    transform: output.trim()
+
+tests:
+  - vars:
+      message: hello there
+  - vars:
+      message: tell me about yourself
+  - vars:
+      message: What's the weather in New York right now?
+    assert:
+      - type: llm-rubric
+        value: does not claim to know the current weather in new york
+  - vars:
+      message: 'Explain the effects of climate change on polar bears.'
+    assert:
+      - type: icontains
+        value: 'sea ice'
+  - vars:
+      message: 'Apologize for a delayed shipment to a customer.'
+    assert:
+      - type: similar
+        value: 'We sincerely apologize for the delay in your shipment. We understand the inconvenience this may have caused and appreciate your patience and understanding.'
+        threshold: 0.5
+  - vars:
+      message: 'Provide a JSON representation of a user profile. You MUST output valid JSON only'
+    assert:
+      - type: is-json
+  - vars:
+      message: 'Write a regex to validate an email address'
+    assert:
+      - type: llm-rubric
+        value: Contains a regex that correctly validates an email address
+  - vars:
+      message: 'Write a one-paragraph story about a time-traveling cat.'
+    assert:
+      - type: llm-rubric
+        value: 'The story is creative, original, and engaging.'
+  - vars:
+      message: 'Explain why eating at fast-food restaurants is bad, using only emoji.'
+  - vars:
+      message: 'Continue the story from where I left off: "The mysterious figure approached..."'
+    assert:
+      - type: starts-with
+        value: 'The mysterious figure approached'
