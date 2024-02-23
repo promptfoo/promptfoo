@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 
 import { filenameToDate, listPreviousResults } from '../../../../../../util';
+import { IS_RUNNING_LOCALLY } from '@/constants';
+
+export const dynamic = IS_RUNNING_LOCALLY ? 'auto' : 'force-dynamic';
 
 export async function GET() {
   const previousResults = listPreviousResults();
