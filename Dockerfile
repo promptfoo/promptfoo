@@ -34,6 +34,8 @@ COPY --from=builder /app/src/web/nextui/public ./public
 COPY --from=builder /app/src/web/nextui/.next/standalone ./
 COPY --from=builder /app/src/web/nextui/.next/static ./.next/static
 
+RUN mkdir -p /root/.promptfoo/output
+
 EXPOSE 3000
 
 ENV PORT 3000

@@ -188,6 +188,10 @@ export default function Eval({
           setConfig(body.data.config);
           setLoaded(true);
           setDefaultEvalId(defaultEval.id);
+        } else {
+          return (
+            <div className="notice">No evals yet. Share some evals to this server and they will appear here.</div> 
+          );
         }
       };
       run();
@@ -195,12 +199,12 @@ export default function Eval({
   }, [fetchId, setTable, setConfig, setFilePath, fetchEvalById, preloadedData, setDefaultEvalId, file]);
 
   if (failed) {
-    return <div className="loading">404 Eval not found</div>;
+    return <div className="notice">404 Eval not found</div>;
   }
 
   if (!loaded || !table) {
     return (
-      <div className="loading">
+      <div className="notice">
         <div>
           <CircularProgress size={22} />
         </div>
