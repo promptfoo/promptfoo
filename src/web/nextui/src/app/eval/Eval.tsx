@@ -9,7 +9,7 @@ import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 
 import ResultsView from './ResultsView';
 import { getApiBaseUrl } from '@/api';
-import { IS_RUNNING_LOCALLY } from '@/constants';
+import { IS_RUNNING_LOCALLY, USE_SUPABASE } from '@/constants';
 import { REMOTE_API_BASE_URL } from '@/../../../constants';
 import { useStore } from './store';
 
@@ -64,7 +64,6 @@ export default function Eval({
   );
 
   const fetchRecentFileEvals = async () => {
-    invariant(IS_RUNNING_LOCALLY, 'Cannot fetch recent files when not running locally');
     const resp = await fetch(`${await getApiBaseUrl()}/results`, { cache: 'no-store' });
     const body = await resp.json();
     setRecentEvals(body.data);
@@ -80,14 +79,14 @@ export default function Eval({
   }, [setTable, setConfig, setFilePath]);
 
   const handleRecentEvalSelection = async (id: string) => {
-    if (IS_RUNNING_LOCALLY) {
+    if (USE_SUPABASE) {
+      setLoaded(false);
+      router.push(`/eval/remote:${encodeURIComponent(id)}`);
+    } else {
       fetchEvalById(id);
       // TODO(ian): This requires next.js standalone server
       // router.push(`/eval/local:${encodeURIComponent(file)}`);
       router.push(`/eval/?file=${encodeURIComponent(id)}`);
-    } else {
-      setLoaded(false);
-      router.push(`/eval/remote:${encodeURIComponent(id)}`);
     }
   };
 
@@ -155,7 +154,7 @@ export default function Eval({
           socket.disconnect();
         };
       });
-    } else {
+    } else if (USE_SUPABASE) {
       // TODO(ian): Move this to server
       fetchEvalsFromSupabase().then((records) => {
         setRecentEvals(
@@ -176,6 +175,22 @@ export default function Eval({
           });
         }
       });
+    } else {
+      // Fetch from next.js server
+      const run = async () => {
+        const evals = await fetchRecentFileEvals();
+        const defaultEval = evals[0];
+        if (defaultEval) {
+          const apiBaseUrl = await getApiBaseUrl();
+          const resp = await fetch(`${apiBaseUrl}/results/${defaultEval.id}`);
+          const body = await resp.json();
+          setTable(body.data.results.table);
+          setConfig(body.data.config);
+          setLoaded(true);
+          setDefaultEvalId(defaultEval.id);
+        }
+      };
+      run();
     }
   }, [fetchId, setTable, setConfig, setFilePath, fetchEvalById, preloadedData, setDefaultEvalId, file]);
 
