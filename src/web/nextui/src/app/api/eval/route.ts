@@ -11,6 +11,7 @@ export const dynamic = IS_RUNNING_LOCALLY ? 'auto' : 'force-dynamic';
 
 export async function POST(req: Request) {
   try {
+    // Share endpoint
     const payload = (await req.json()) as SharedResults;
     const newId = `f:${uuidv4()}`;
     console.log('Storing eval result with id', newId);

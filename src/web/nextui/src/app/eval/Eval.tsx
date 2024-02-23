@@ -57,8 +57,8 @@ export default function Eval({
 }: EvalOptions) {
   const router = useRouter();
   const { table, setTable, setConfig, setFilePath } = useStore();
-  const [loaded, setLoaded] = React.useState<boolean>(false);
-  const [failed, setFailed] = React.useState<boolean>(false);
+  const [loaded, setLoaded] = React.useState(false);
+  const [failed, setFailed] = React.useState(false);
   const [recentEvals, setRecentEvals] = React.useState<{ id: string; label: string }[]>(
     recentEvalsProp || [],
   );
@@ -179,15 +179,15 @@ export default function Eval({
       // Fetch from next.js server
       const run = async () => {
         const evals = await fetchRecentFileEvals();
-        const defaultEval = evals[0];
-        if (defaultEval) {
+        if (evals.length > 0) {
           const apiBaseUrl = await getApiBaseUrl();
-          const resp = await fetch(`${apiBaseUrl}/results/${defaultEval.id}`);
+          const defaultEvalId = evals[0].id;
+          const resp = await fetch(`${apiBaseUrl}/results/${defaultEvalId}`);
           const body = await resp.json();
           setTable(body.data.results.table);
           setConfig(body.data.config);
           setLoaded(true);
-          setDefaultEvalId(defaultEval.id);
+          setDefaultEvalId(defaultEvalId);
         } else {
           return (
             <div className="notice">No evals yet. Share some evals to this server and they will appear here.</div> 
