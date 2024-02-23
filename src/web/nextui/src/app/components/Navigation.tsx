@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import Logo from './Logo';
 import LoggedInAs from './LoggedInAs';
 import DarkMode from './DarkMode';
-import { IS_RUNNING_LOCALLY } from '@/constants';
+import { USE_SUPABASE } from '@/constants';
 
 import './Navigation.css';
 
@@ -41,7 +41,7 @@ export default function Navigation({
       <NavLink href="/prompts" label="Prompts" />
       <NavLink href="/datasets" label="Datasets" />
       <div className="right-aligned">
-        {IS_RUNNING_LOCALLY ? null : <LoggedInAs />}
+        {USE_SUPABASE ? null : <LoggedInAs />}
         <DarkMode darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} />
       </div>
     </Stack>
