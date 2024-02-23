@@ -8,7 +8,9 @@ primary_region = "sjc"
 
 [env]
   NODE_ENV = "production"
-  PROMPTFOO_USE_SUPABASE = "1"
+
+[build.args]
+  NEXT_PUBLIC_PROMPTFOO_USE_SUPABASE = "1"
 
 [build]
 
