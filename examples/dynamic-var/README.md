@@ -1,6 +1,6 @@
 To get started, set your OPENAI_API_KEY environment variable.
 
-Next, edit promptfooconfig.yaml and topic_generator.py.
+Next, edit promptfooconfig.yaml.
 
 Then run:
 ```

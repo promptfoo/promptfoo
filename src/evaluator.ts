@@ -1,8 +1,11 @@
 import readline from 'readline';
+import * as fs from 'fs';
+import * as path from 'path';
 
 import async from 'async';
 import chalk from 'chalk';
 import invariant from 'tiny-invariant';
+import yaml from 'js-yaml';
 
 import logger from './logger';
 import telemetry from './telemetry';
@@ -25,6 +28,7 @@ import type {
   Prompt,
   TestSuite,
 } from './types';
+import { runPython } from './python/wrapper';
 
 interface RunEvalOptions {
   provider: ApiProvider;
@@ -87,6 +91,40 @@ export async function renderPrompt(
       throw new Error(`Prompt function must return a string or object, got ${typeof result}`);
     }
     // TODO(ian): Handle promise
+  }
+
+  for (const [varName, value] of Object.entries(vars)) {
+    if (typeof value === 'string' && value.startsWith('file://')) {
+      const filePath = path.resolve(value.slice('file://'.length));
+      const fileExtension = filePath.split('.').pop();
+
+      logger.debug(`Loading var ${varName} from file: ${filePath}`);
+      switch (fileExtension) {
+        case 'yaml':
+        case 'yml':
+          vars[varName] = yaml.load(fs.readFileSync(filePath, 'utf8')) as string | object;
+          break;
+        case 'json':
+          vars[varName] = require(filePath);
+          break;
+        case 'js':
+          vars[varName] = require(filePath)(basePrompt, vars, varName);
+          break;
+        case 'py':
+          const pythonScriptOutput = (await runPython(filePath, 'get_var', [basePrompt, JSON.stringify(vars), varName])) as {output?: string; error?: string};
+          if (pythonScriptOutput.error) {
+            throw new Error(`Error running Python script ${filePath}: ${pythonScriptOutput.error}`);
+          }
+          if (!pythonScriptOutput.output) {
+            throw new Error(`Python script ${filePath} did not return any output`);
+          }
+          vars[varName] = pythonScriptOutput.output.trim();
+          break;
+        default:
+          vars[varName] = fs.readFileSync(filePath, 'utf8').trim();
+          break;
+      }
+    }
   }
 
   try {

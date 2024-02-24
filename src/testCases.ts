@@ -86,7 +86,9 @@ export async function readTest(
     const ret: TestCase = { ...testCase, vars: undefined };
     if (typeof testCase.vars === 'string' || Array.isArray(testCase.vars)) {
       ret.vars = await readVarsFiles(testCase.vars, testBasePath);
-    } else if (typeof testCase.vars === 'object') {
+    } else {
+      ret.vars = testCase.vars;
+    }/*else if (typeof testCase.vars === 'object') {
       const vars: Record<string, string | string[] | object> = {};
       for (const [key, value] of Object.entries(testCase.vars)) {
         if (typeof value === 'string' && value.startsWith('file://')) {
@@ -103,7 +105,7 @@ export async function readTest(
         }
       }
       ret.vars = vars;
-    }
+    }*/
     return ret;
   };
 
