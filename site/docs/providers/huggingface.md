@@ -76,6 +76,37 @@ providers:
       max_length: 1024
 ```
 
+## Inference endpoint
+
+HuggingFace provides the ability to pay for private hosted inference endpoints.  First, go the [Create a new Endpoint](https://ui.endpoints.huggingface.co/new) and select a model and hosting setup.
+
+![huggingface inference endpoint creation](/img/docs/huggingface-create-endpoint.png)
+
+Once the endpoint is created, take the `Endpoint URL` shown on the page:
+
+![huggingface inference endpoint url](/img/docs/huggingface-inference-endpoint.png)
+
+Then set up your promptfoo config like this:
+
+```yaml
+description: 'HF private inference endpoint'
+
+prompts:
+  - "Write a tweet about {{topic}}:"
+
+providers:
+  - id: huggingface:text-generation:gemma-7b-it
+    config:
+      apiEndpoint: https://v9igsezez4ei3cq4.us-east-1.aws.endpoints.huggingface.cloud
+      # apiKey: abc123   # Or set HF_API_TOKEN environment variable
+
+tests:
+  - vars:
+      topic: bananas
+  - vars:
+      topic: potatoes
+```
+
 ## Local inference
 
 If you're running the [Huggingface Text Generation Inference](https://github.com/huggingface/text-generation-inference) server locally, override the `apiEndpoint`:
