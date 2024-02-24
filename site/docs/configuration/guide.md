@@ -163,7 +163,7 @@ assertionTemplates:
 ```
 
 :::info
-`tools` and `functions` values in providers config are _not_ dereferenced.  This is because they are standalone JSON schemas that may  contain their own internal references.
+`tools` and `functions` values in providers config are _not_ dereferenced. This is because they are standalone JSON schemas that may contain their own internal references.
 :::
 
 #### Import tests from separate files
@@ -219,7 +219,7 @@ tests:
       var3: file://path/to/var3.txt
 ```
 
-Javascript and Python variable files are supported.  For example:
+Javascript and Python variable files are supported. For example:
 
 ```yaml
 tests:
@@ -228,6 +228,60 @@ tests:
 ```
 
 This is useful when testing vector databases like Pinecone, Chroma, Milvus, etc.
+
+#### JavaScript variables
+
+To dynamically load a variable from a JavaScript file, use the `file://` prefix in your YAML configuration, pointing to a JavaScript file that exports a function.
+
+```yaml
+tests:
+  - vars:
+      context: file://path/to/dynamicVarGenerator.js
+```
+
+`dynamicVarGenerator.js` receives `varName`, `prompt`, and `otherVars` as arguments, which you can use to query a database or anything else based on test context:
+
+```js
+module.exports = function (varName, prompt, otherVars) {
+  // Example logic to return a value based on the varName
+  if (varName === 'context') {
+    return `Processed ${otherVars.input} for prompt: ${prompt}`;
+  }
+  return {
+    output: 'default value',
+  };
+
+  // Handle potential errors
+  // return { error: 'Error message' }
+};
+```
+
+This JavaScript file processes input variables and returns a dynamic value based on the provided context.
+
+#### Python variables
+
+For Python, the approach is similar. Define a Python script that includes a `get_var` function to generate your variable's value. The function should accept `var_name`, `prompt`, and `other_vars`.
+
+```yaml
+tests:
+  - vars:
+      context: file://fetch_dynamic_context.py
+```
+
+fetch_dynamic_context.py:
+
+```python
+def get_var(var_name, prompt, other_vars):
+    # Example logic to dynamically generate variable content
+    if var_name == 'context':
+        return {
+            'output': f"Context for {other_vars['input']} in prompt: {prompt}"
+        }
+    return {'output': 'default context'}
+
+    # Handle potential errors
+    # return { 'error': 'Error message' }
+```
 
 ### Multiple variables in a single test case
 
@@ -361,7 +415,7 @@ tests:
     assert:
       - type: equals
         value: 'foo'
-        transform: output.category  # Select the 'category' key from output json
+        transform: output.category # Select the 'category' key from output json
 ```
 
 :::tip
@@ -372,17 +426,19 @@ Use `defaultTest` apply a transform option to every test case in your test suite
 
 For detailed information on the config structure, see [Configuration Reference](/docs/configuration/reference).
 
-If you have multiple sets of tests, it helps to split them into multiple config files.  Use the `--config` or `-c` parameter to run each individual config:
+If you have multiple sets of tests, it helps to split them into multiple config files. Use the `--config` or `-c` parameter to run each individual config:
 
 ```
 promptfoo eval -c usecase1.yaml
 ```
+
 and
+
 ```
 promptfoo eval -c usecase2.yaml
 ```
 
-You can run multiple configs at the same time, which will combine them into a single eval.  For example:
+You can run multiple configs at the same time, which will combine them into a single eval. For example:
 
 ```
 promptfoo eval -c my_configs/*
