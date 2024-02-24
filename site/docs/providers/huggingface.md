@@ -13,6 +13,8 @@ To run a model, specify the task type and model name. Supported models include:
 - `huggingface:feature-extraction:<model name>`
 - `huggingface:sentence-similarity:<model name>`
 
+## Examples
+
 For example, autocomplete with GPT-2:
 
 ```
@@ -34,6 +36,8 @@ huggingface:sentence-similarity:sentence-transformers/all-MiniLM-L6-v2
 # Model supports the feature extraction API
 huggingface:feature-extraction:sentence-transformers/paraphrase-xlm-r-multilingual-v1
 ```
+
+## Configuration
 
 These common HuggingFace config parameters are supported:
 
@@ -76,7 +80,7 @@ providers:
       max_length: 1024
 ```
 
-## Inference endpoint
+## Inference endpoints
 
 HuggingFace provides the ability to pay for private hosted inference endpoints.  First, go the [Create a new Endpoint](https://ui.endpoints.huggingface.co/new) and select a model and hosting setup.
 
