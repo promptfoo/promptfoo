@@ -37,6 +37,7 @@ interface RunEvalOptions {
 
   test: AtomicTestCase;
   nunjucksFilters?: NunjucksFilterMap;
+  evaluateOptions: EvaluateOptions;
 
   rowIndex: number;
   colIndex: number;
@@ -77,6 +78,7 @@ function generateVarCombinations(
 export async function renderPrompt(
   prompt: Prompt,
   vars: Record<string, string | object>,
+  evaluateOptions: EvaluateOptions,
   nunjucksFilters?: NunjucksFilterMap,
 ): Promise<string> {
   const nunjucks = getNunjucksEngine(nunjucksFilters);
@@ -90,12 +92,12 @@ export async function renderPrompt(
     } else {
       throw new Error(`Prompt function must return a string or object, got ${typeof result}`);
     }
-    // TODO(ian): Handle promise
   }
 
   for (const [varName, value] of Object.entries(vars)) {
     if (typeof value === 'string' && value.startsWith('file://')) {
-      const filePath = path.resolve(value.slice('file://'.length));
+      const basePath = evaluateOptions.basePath || '';
+      const filePath = path.resolve(process.cwd(), basePath, value.slice('file://'.length));
       const fileExtension = filePath.split('.').pop();
 
       logger.debug(`Loading var ${varName} from file: ${filePath}`);
@@ -111,7 +113,7 @@ export async function renderPrompt(
           vars[varName] = require(filePath)(basePrompt, vars, varName);
           break;
         case 'py':
-          const pythonScriptOutput = (await runPython(filePath, 'get_var', [basePrompt, JSON.stringify(vars), varName])) as {output?: string; error?: string};
+          const pythonScriptOutput = (await runPython(filePath, 'get_var', [varName, basePrompt, vars])) as {output?: string; error?: string};
           if (pythonScriptOutput.error) {
             throw new Error(`Error running Python script ${filePath}: ${pythonScriptOutput.error}`);
           }
@@ -190,6 +192,7 @@ class Evaluator {
     test,
     delay,
     nunjucksFilters: filters,
+    evaluateOptions,
   }: RunEvalOptions): Promise<EvaluateResult> {
     // Use the original prompt to set the display, not renderedPrompt
     let promptDisplay = prompt.display;
@@ -207,7 +210,7 @@ class Evaluator {
     }
 
     // Render the prompt
-    const renderedPrompt = await renderPrompt(prompt, vars, filters);
+    const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions, filters);
 
     let renderedJson = undefined;
     try {
@@ -539,6 +542,7 @@ class Evaluator {
                 rowIndex,
                 colIndex,
                 repeatIndex,
+                evaluateOptions: options,
               });
               colIndex++;
             }

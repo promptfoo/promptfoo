@@ -7,10 +7,10 @@ import logger from '../logger';
  * Runs a Python script using the provided list of arguments.
  * @param {string} scriptPath - The path to the Python script to run.
  * @param {string} method - The method name to call in the Python script.
- * @param {string[]} args - The list of arguments to pass to the Python method.
+ * @param {(string | object)[]} args - The list of arguments to pass to the Python method.
  * @returns {Promise<string[]>} - The result from the Python script.
  */
-export async function runPython(scriptPath: string, method: string, args: string[]): Promise<any> {
+export async function runPython(scriptPath: string, method: string, args: (string | object)[]): Promise<any> {
   const absPath = path.resolve(scriptPath);
   const pythonOptions: PythonShellOptions = {
     mode: 'text',
@@ -20,8 +20,7 @@ export async function runPython(scriptPath: string, method: string, args: string
   };
 
   try {
-    const relativePathToWrapper = path.relative(__dirname, path.join(__dirname, 'wrapper.py'));
-    const results = await PythonShell.run(relativePathToWrapper, pythonOptions);
+    const results = await PythonShell.run('wrapper.py', pythonOptions);
     logger.debug(`Python script ${absPath} returned: ${results.join('\n')}`);
     const result: { type: 'final_result'; data: any} = JSON.parse(results[results.length - 1]);
     if (result?.type !== 'final_result') {

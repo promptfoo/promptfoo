@@ -9,7 +9,7 @@ def call_method(script_path, method_name, *args):
     module_name = os.path.basename(script_path).rsplit('.', 1)[0]
     if script_dir not in sys.path:
         sys.path.insert(0, script_dir)
-    print(f'Importing module {module_name} from {script_dir}...')
+    print(f'Importing module {module_name} from {script_dir} ...')
     script_module = importlib.import_module(module_name)
     method_to_call = getattr(script_module, method_name)
     if asyncio.iscoroutinefunction(method_to_call):
@@ -20,7 +20,7 @@ def call_method(script_path, method_name, *args):
 if __name__ == '__main__':
     script_path = sys.argv[1]
     method_name = sys.argv[2]
-    args = [json.loads(arg) if arg.strip().startswith('{') else arg for arg in sys.argv[3:]]
+    args = [json.loads(arg) for arg in sys.argv[3:]]
 
     result = call_method(script_path, method_name, *args)
     print(json.dumps({

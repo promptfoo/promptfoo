@@ -2,7 +2,7 @@ def retrieve_documents(question: str) -> str:
     # Calculate embeddings, search vector db...
     return f'<Documents similar to {question}>'
 
-def get_var(prompt, other_vars, var_name):
+def get_var(var_name, prompt, other_vars):
     question = other_vars['question']
 
     context = retrieve_documents(question)
