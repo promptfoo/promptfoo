@@ -158,7 +158,7 @@ export async function readTests(
       // Points to a tests file with multiple test cases
       return loadTestsFromGlob(tests);
     } else {
-      // Points to a legacy vars.csv
+      // Points to tests.csv
       const vars = await readTestsFile(tests, basePath);
       return vars.map((row, idx) => {
         const test = testCaseFromCsvRow(row);

@@ -110,10 +110,14 @@ export async function renderPrompt(
           vars[varName] = require(filePath);
           break;
         case 'js':
-          vars[varName] = require(filePath)(basePrompt, vars, varName);
+          vars[varName] = require(filePath)(varName, basePrompt, vars);
           break;
         case 'py':
-          const pythonScriptOutput = (await runPython(filePath, 'get_var', [varName, basePrompt, vars])) as {output?: string; error?: string};
+          const pythonScriptOutput = (await runPython(filePath, 'get_var', [
+            varName,
+            basePrompt,
+            vars,
+          ])) as { output?: string; error?: string };
           if (pythonScriptOutput.error) {
             throw new Error(`Error running Python script ${filePath}: ${pythonScriptOutput.error}`);
           }

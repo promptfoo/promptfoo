@@ -1,10 +1,35 @@
+import * as fs from 'fs';
+import * as path from 'path';
+
 import { evaluate, renderPrompt } from '../src/evaluator';
 
 import type { ApiProvider, TestSuite, Prompt } from '../src/types';
 
 jest.mock('node-fetch', () => jest.fn());
+jest.mock('proxy-agent', () => ({
+  ProxyAgent: jest.fn().mockImplementation(() => ({})),
+}));
+jest.mock('glob', () => ({
+  globSync: jest.fn(),
+}));
+
+jest.mock('fs', () => ({
+  readFileSync: jest.fn(),
+  writeFileSync: jest.fn(),
+  statSync: jest.fn(),
+  readdirSync: jest.fn(),
+  existsSync: jest.fn(),
+  mkdirSync: jest.fn(),
+  promises: {
+    readFile: jest.fn(),
+  },
+}));
 
 jest.mock('../src/esm');
+
+beforeEach(() => {
+  jest.clearAllMocks();
+});
 
 const mockApiProvider: ApiProvider = {
   id: jest.fn().mockReturnValue('test-provider'),
@@ -647,27 +672,61 @@ it('should use the options from the test if they exist', async () => {
 describe('renderPrompt', () => {
   it('should render a prompt with a single variable', async () => {
     const prompt = toPrompt('Test prompt {{ var1 }}');
-    const renderedPrompt = await renderPrompt(prompt, { var1: 'value1' });
+    const renderedPrompt = await renderPrompt(prompt, { var1: 'value1' }, {});
     expect(renderedPrompt).toBe('Test prompt value1');
   });
 
   it('should render a JSON prompt', async () => {
     const prompt = toPrompt('[{"text": "Test prompt "}, {"text": "{{ var1 }}"}]');
-    const renderedPrompt = await renderPrompt(prompt, { var1: 'value1' });
+    const renderedPrompt = await renderPrompt(prompt, { var1: 'value1' }, {});
     expect(renderedPrompt).toBe('[{"text":"Test prompt "},{"text":"value1"}]');
   });
 
   it('should render a JSON prompt and escape the var string', async () => {
     const prompt = toPrompt('[{"text": "Test prompt "}, {"text": "{{ var1 }}"}]');
-    const renderedPrompt = await renderPrompt(prompt, { var1: 'He said "hello world!"' });
+    const renderedPrompt = await renderPrompt(prompt, { var1: 'He said "hello world!"' }, {});
     expect(renderedPrompt).toBe('[{"text":"Test prompt "},{"text":"He said \\"hello world!\\""}]');
   });
 
   it('should render a JSON prompt with nested JSON', async () => {
     const prompt = toPrompt('[{"text": "Test prompt "}, {"text": "{{ var1 }}"}]');
-    const renderedPrompt = await renderPrompt(prompt, { var1: '{"nested": "value1"}' });
+    const renderedPrompt = await renderPrompt(prompt, { var1: '{"nested": "value1"}' }, {});
     expect(renderedPrompt).toBe(
       '[{"text":"Test prompt "},{"text":"{\\"nested\\": \\"value1\\"}"}]',
     );
+  });
+
+  it('should load external yaml files in renderPrompt', async () => {
+    const prompt = toPrompt('Test prompt with {{ var1 }}');
+    const vars = { var1: 'file://test.txt' };
+    const evaluateOptions = {};
+
+    // Mock fs.readFileSync to simulate loading a YAML file
+    jest.spyOn(fs, 'readFileSync').mockReturnValueOnce('loaded from file');
+
+    const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions);
+
+    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('test.txt'), 'utf8');
+    expect(renderedPrompt).toBe('Test prompt with loaded from file');
+  });
+
+  it('should load external js files in renderPrompt and execute the exported function', async () => {
+    const prompt = toPrompt('Test prompt with {{ var1 }}');
+    const vars = { var1: 'file:///path/to/testFunction.js' };
+    const evaluateOptions = {};
+
+    jest
+      .spyOn(fs, 'readFileSync')
+      .mockReturnValueOnce(
+        'module.exports = (varName, prompt, vars) => `Dynamic value for ${varName}`;',
+      );
+    jest.doMock(
+      path.resolve('/path/to/testFunction.js'),
+      () => (varName: any, prompt: any, vars: any) => `Dynamic value for ${varName}`,
+      { virtual: true },
+    );
+
+    const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions);
+    expect(renderedPrompt).toBe('Test prompt with Dynamic value for var1');
   });
 });
