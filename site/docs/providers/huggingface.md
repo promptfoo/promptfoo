@@ -33,8 +33,32 @@ huggingface:sentence-similarity:sentence-transformers/all-MiniLM-L6-v2
 
 # Model supports the feature extraction API
 huggingface:feature-extraction:sentence-transformers/paraphrase-xlm-r-multilingual-v1
-
 ```
+
+These common HuggingFace config parameters are supported:
+
+| Parameter              | Type    | Description                                         |
+| ---------------------- | ------- | --------------------------------------------------- |
+| `top_k`                | number  | Controls diversity via the top-k sampling strategy. |
+| `top_p`                | number  | Controls diversity via nucleus sampling.            |
+| `temperature`          | number  | Controls randomness in generation.                  |
+| `repetition_penalty`   | number  | Penalty for repetition.                             |
+| `max_new_tokens`       | number  | The maximum number of new tokens to generate.       |
+| `max_time`             | number  | The maximum time in seconds model has to respond.   |
+| `return_full_text`     | boolean | Whether to return the full text or just new text.   |
+| `num_return_sequences` | number  | The number of sequences to return.                  |
+| `do_sample`            | boolean | Whether to sample the output.                       |
+| `use_cache`            | boolean | Whether to use caching.                             |
+| `wait_for_model`       | boolean | Whether to wait for the model to be ready.          |
+
+Additionally, any other keys on the `config` object are passed through directly to HuggingFace. Be sure to check the specific parameters supported by the model you're using.
+
+The provider also supports these built-in promptfoo parameters:
+
+| Parameter     | Type   | Description                        |
+| ------------- | ------ | ---------------------------------- |
+| `apiKey`      | string | Your HuggingFace API key.          |
+| `apiEndpoint` | string | Custom API endpoint for the model. |
 
 Supported environment variables:
 

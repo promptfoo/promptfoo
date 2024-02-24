@@ -12,6 +12,7 @@ import {
 import { REQUEST_TIMEOUT_MS } from './shared';
 
 interface HuggingfaceTextGenerationOptions {
+  apiKey?: string;
   apiEndpoint?: string;
   top_k?: number;
   top_p?: number;
@@ -48,6 +49,10 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
     return `[Huggingface Text Generation Provider ${this.modelName}]`;
   }
 
+  getApiKey(): string | undefined {
+    return this.config.apiKey || process.env.HF_API_TOKEN;
+  }
+
   async callApi(prompt: string): Promise<ProviderResponse> {
     const params = {
       inputs: prompt,
@@ -70,9 +75,7 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            ...(process.env.HF_API_TOKEN
-              ? { Authorization: `Bearer ${process.env.HF_API_TOKEN}` }
-              : {}),
+            ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),
           },
           body: JSON.stringify(params),
         },
