@@ -715,14 +715,9 @@ describe('renderPrompt', () => {
     const vars = { var1: 'file:///path/to/testFunction.js' };
     const evaluateOptions = {};
 
-    jest
-      .spyOn(fs, 'readFileSync')
-      .mockReturnValueOnce(
-        'module.exports = (varName, prompt, vars) => `Dynamic value for ${varName}`;',
-      );
     jest.doMock(
       path.resolve('/path/to/testFunction.js'),
-      () => (varName: any, prompt: any, vars: any) => `Dynamic value for ${varName}`,
+      () => (varName: any, prompt: any, vars: any) => ({output: `Dynamic value for ${varName}`}),
       { virtual: true },
     );
 
