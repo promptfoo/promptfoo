@@ -13,6 +13,8 @@ To run a model, specify the task type and model name. Supported models include:
 - `huggingface:feature-extraction:<model name>`
 - `huggingface:sentence-similarity:<model name>`
 
+## Examples
+
 For example, autocomplete with GPT-2:
 
 ```
@@ -34,6 +36,8 @@ huggingface:sentence-similarity:sentence-transformers/all-MiniLM-L6-v2
 # Model supports the feature extraction API
 huggingface:feature-extraction:sentence-transformers/paraphrase-xlm-r-multilingual-v1
 ```
+
+## Configuration
 
 These common HuggingFace config parameters are supported:
 
@@ -74,6 +78,37 @@ providers:
     config:
       temperature: 0.1
       max_length: 1024
+```
+
+## Inference endpoints
+
+HuggingFace provides the ability to pay for private hosted inference endpoints.  First, go the [Create a new Endpoint](https://ui.endpoints.huggingface.co/new) and select a model and hosting setup.
+
+![huggingface inference endpoint creation](/img/docs/huggingface-create-endpoint.png)
+
+Once the endpoint is created, take the `Endpoint URL` shown on the page:
+
+![huggingface inference endpoint url](/img/docs/huggingface-inference-endpoint.png)
+
+Then set up your promptfoo config like this:
+
+```yaml
+description: 'HF private inference endpoint'
+
+prompts:
+  - "Write a tweet about {{topic}}:"
+
+providers:
+  - id: huggingface:text-generation:gemma-7b-it
+    config:
+      apiEndpoint: https://v9igsezez4ei3cq4.us-east-1.aws.endpoints.huggingface.cloud
+      # apiKey: abc123   # Or set HF_API_TOKEN environment variable
+
+tests:
+  - vars:
+      topic: bananas
+  - vars:
+      topic: potatoes
 ```
 
 ## Local inference
