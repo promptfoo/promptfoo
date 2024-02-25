@@ -41,9 +41,21 @@ COPY --from=builder /app/src/web/nextui/.next/static ./.next/static
 
 RUN mkdir -p /root/.promptfoo/output
 
+# Create a script to write environment variables to .env file
+RUN echo -e '#!/bin/sh\n\
+echo "Writing environment variables to .env file..."\n\
+env | grep PROMPTFOO_ > .env\n\
+echo "Loaded environment variables:"\n\
+cat .env\n\
+echo "Starting server..."\n\
+node server.js' > entrypoint.sh
+
+# Make the script executable
+RUN chmod +x entrypoint.sh
+
 EXPOSE 3000
 
 ENV PORT 3000
 ENV HOSTNAME "0.0.0.0"
 
-CMD ["node", "server.js"]
+CMD ["sh", "entrypoint.sh"]
