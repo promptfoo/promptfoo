@@ -63,6 +63,20 @@ export class MistralChatCompletionProvider implements ApiProvider {
   env?: EnvOverrides;
 
   static MISTRAL_CHAT_MODELS = [
+    ...['open-mistral-7b'].map((model) => ({
+      id: model,
+      cost: {
+        input: 0.00025 / 1000,
+        output: 0.00025 / 1000,
+      },
+    })),
+    ...['open-mixtral-8x7b'].map((model) => ({
+      id: model,
+      cost: {
+        input: 0.0007 / 1000,
+        output: 0.0007 / 1000,
+      },
+    })),
     ...['mistral-tiny'].map((model) => ({
       id: model,
       cost: {
@@ -70,18 +84,25 @@ export class MistralChatCompletionProvider implements ApiProvider {
         output: 0.00045 / 1000,
       },
     })),
-    ...['mistral-small'].map((model) => ({
+    ...['mistral-small-latest'].map((model) => ({
       id: model,
       cost: {
-        input: 0.00064 / 1000,
-        output: 0.00193 / 1000,
+        input: 0.002 / 1000,
+        output: 0.006 / 1000,
       },
     })),
-    ...['mistral-medium'].map((model) => ({
+    ...['mistral-medium-latest'].map((model) => ({
       id: model,
       cost: {
-        input: 0.00269 / 1000,
-        output: 0.00806 / 1000,
+        input: 0.0027 / 1000,
+        output: 0.0081 / 1000,
+      },
+    })),
+    ...['mistral-large-latest'].map((model) => ({
+      id: model,
+      cost: {
+        input: 0.008 / 1000,
+        output: 0.024 / 1000,
       },
     }))
   ];
