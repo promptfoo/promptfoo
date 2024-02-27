@@ -14,17 +14,19 @@ export MISTRAL_API_KEY=your_api_key_here
 
 ## Model Selection
 
-You can specify which Mistral model to use in your configuration. Currently, the following 3 models are available:
-1. `mistral-tiny`
-2. `mistral-small`
-3. `mistral-medium`
+You can specify which Mistral model to use in your configuration. Currently, the following 5 models are available:
+1. `open-mistral-7b`
+2. `open-mixtral-8x7b`
+3. `mistral-small-latest`
+4. `mistral-medium-latest`
+5. `mistral-large-latest`
 
-Here's an example config that compares Mistral-Medium, Mistral-Small, and OpenAI GPT-3.5:
+Here's an example config that compares Mistral-Medium-Latest, Mistral-Small-Latest, and OpenAI GPT-3.5:
 
 ```yaml
 providers:
-  - mistral:mistral-medium
-  - mistral:mistral-small
+  - mistral:mistral-medium-latest
+  - mistral:mistral-small-latest
   - openai:chat:gpt-3.5-turbo
 ```
 
@@ -37,18 +39,18 @@ The Mistral provider supports several options to customize the behavior of the m
 - `max_tokens`: The maximum length of the generated text.
 - `safe_prompt`: Whether to enforce safe content in the prompt.
 - `random_seed`: A seed for deterministic outputs.
-- `fix_json`: Fixes common JSON formatting issues in the output, useful for parsing. Note: This is not a Mistral feature, but was added for convenience.
+- `response_format`: Enable JSON mode, by setting the `response_format` to `{"type": "json_object"}`. The model must be asked explicitly to generate JSON output. This is currently only supported for their updated models `mistral-small-latest` and `mistral-large-latest`.
 
 Example configuration with options:
 
 ```yaml
 providers:
-- id: mistral:mistral-medium
+- id: mistral:mistral-large-latest
   config:
     temperature: 0.7
     max_tokens: 512
     safe_prompt: true
-    fix_json: true
+    response_format: {"type": "json_object"}
 ```
 
 ## Additional Capabilities
