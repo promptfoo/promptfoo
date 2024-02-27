@@ -77,13 +77,6 @@ export class MistralChatCompletionProvider implements ApiProvider {
         output: 0.0007 / 1000,
       },
     })),
-    ...['mistral-tiny'].map((model) => ({
-      id: model,
-      cost: {
-        input: 0.00015 / 1000,
-        output: 0.00045 / 1000,
-      },
-    })),
     ...['mistral-small-latest'].map((model) => ({
       id: model,
       cost: {
