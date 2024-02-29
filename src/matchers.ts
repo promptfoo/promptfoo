@@ -389,7 +389,7 @@ export async function matchesFactuality(
       reason = optionReasons[option];
     } else {
       pass = false;
-      reason = `Invalid option: ${option}`;
+      reason = `Invalid option: ${option}. Full response from factuality checker: ${resp.output}`;
     }
 
     let score = pass ? 1 : 0;
