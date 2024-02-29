@@ -362,7 +362,17 @@ export async function matchesFactuality(
 
   invariant(typeof resp.output === 'string', 'factuality produced malformed response');
   try {
-    const option = resp.output.trim().charAt(1).toUpperCase();
+    const output = resp.output;
+    // The preferred output starts like "(A)...", but we also support leading whitespace, lowercase letters, and omitting the first parenthesis.
+    const answerMatch = output.match(/\s*\(?([a-eA-E])\)/);
+    if (!answerMatch) {
+      return fail(
+        `Factuality checker output did not match expected format: ${output}`,
+        resp.tokenUsage,
+      );
+    }
+    const option = answerMatch[1].toUpperCase();
+
     let reason = '';
 
     const scoreLookup: Record<string, number> = {
