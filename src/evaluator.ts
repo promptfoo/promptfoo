@@ -483,7 +483,7 @@ class Evaluator {
       for (let repeatIndex = 0; repeatIndex < numRepeat; repeatIndex++) {
         for (const vars of varCombinations) {
           let colIndex = 0;
-          for (const prompt of testSuite.prompts) {
+          for (const prompt of prompts) {
             for (const provider of testSuite.providers) {
               if (testSuite.providerPromptMap) {
                 const allowedPrompts = testSuite.providerPromptMap[provider.id()];
