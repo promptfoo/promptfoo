@@ -28,6 +28,7 @@ import type {
   UnifiedConfig,
   OutputFile,
   ProviderOptions,
+  Prompt,
 } from './types';
 
 let globalConfigCache: any = null;
@@ -773,7 +774,11 @@ export function printBorder() {
   logger.info(border);
 }
 
-export function transformOutput(code: string, output: string | object | undefined, context: unknown) {
+export function transformOutput(
+  code: string,
+  output: string | object | undefined,
+  context: { vars: Record<string, string | object>; prompt: Partial<Prompt> },
+) {
   const postprocessFn = new Function(
     'output',
     'context',
