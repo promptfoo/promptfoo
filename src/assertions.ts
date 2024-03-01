@@ -206,9 +206,12 @@ export async function runAssertion({
   telemetry.record('assertion_used', {
     type: baseType,
   });
-  
+
   if (assertion.transform) {
-    output = transformOutput(assertion.transform, output, {vars: test.vars});
+    output = transformOutput(assertion.transform, output, {
+      vars: test.vars,
+      prompt: { display: prompt },
+    });
   }
 
   const outputString = coerceString(output);
@@ -1159,10 +1162,15 @@ export async function runCompareAssertion(
   test.options = test.options || {};
   test.options.provider = assertion.provider || test.options.provider;
   test.options.rubricPrompt = assertion.rubricPrompt || test.options.rubricPrompt;
-  const comparisonResults = await matchesSelectBest(assertion.value, outputs, test.options, test.vars);
-  return comparisonResults.map(result => ({
+  const comparisonResults = await matchesSelectBest(
+    assertion.value,
+    outputs,
+    test.options,
+    test.vars,
+  );
+  return comparisonResults.map((result) => ({
     ...result,
-    assertion
+    assertion,
   }));
 }
 
