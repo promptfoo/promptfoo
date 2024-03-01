@@ -313,7 +313,6 @@ It is a function that takes a string output and a context object:
 
 ```
 transformFn: (output: string, context: {
-  vars: Record<string, any>;
   prompt: {
     // ID of the prompt, if assigned
     id?: string;
@@ -322,6 +321,7 @@ transformFn: (output: string, context: {
     // Prompt as sent to the LLM API and assertions.
     display?: string;
   };
+  vars?: Record<string, any>;
 }) => void;
 ```
 

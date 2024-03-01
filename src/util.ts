@@ -777,7 +777,7 @@ export function printBorder() {
 export function transformOutput(
   code: string,
   output: string | object | undefined,
-  context: { vars: Record<string, string | object>; prompt: Partial<Prompt> },
+  context: { vars?: Record<string, string | object | undefined>; prompt: Partial<Prompt> },
 ) {
   const postprocessFn = new Function(
     'output',
