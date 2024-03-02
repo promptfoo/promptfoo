@@ -51,7 +51,10 @@ export async function readVarsFiles(
   return ret;
 }
 
-export async function readTestsFile(varsPath: string, basePath: string = ''): Promise<CsvRow[]> {
+export async function readStandaloneTestsFile(
+  varsPath: string,
+  basePath: string = '',
+): Promise<TestCase[]> {
   // This function is confusingly named - it reads a CSV, JSON, or YAML file of
   // TESTS or test equivalents.
   const resolvedVarsPath = path.resolve(basePath, varsPath);
@@ -69,7 +72,11 @@ export async function readTestsFile(varsPath: string, basePath: string = ''): Pr
     rows = yaml.load(fs.readFileSync(resolvedVarsPath, 'utf-8')) as unknown as any;
   }
 
-  return rows;
+  return rows.map((row, idx) => {
+    const test = testCaseFromCsvRow(row);
+    test.description = `Row #${idx + 1}`;
+    return test;
+  });
 }
 
 type TestCaseWithVarsFile = TestCase<
@@ -143,9 +150,20 @@ export async function readTests(
     const testFiles = globSync(resolvedPath);
     const ret = [];
     for (const testFile of testFiles) {
-      const testFileContent = yaml.load(fs.readFileSync(testFile, 'utf-8')) as TestCase[];
-      for (const testCase of testFileContent) {
-        ret.push(await readTest(testCase, path.dirname(testFile)));
+      let testCases: TestCase[] | undefined;
+      if (testFile.endsWith('.csv')) {
+        testCases = await readStandaloneTestsFile(testFile, basePath);
+      } else if (testFile.endsWith('.yaml') || testFile.endsWith('.yml')) {
+        testCases = yaml.load(fs.readFileSync(testFile, 'utf-8')) as TestCase[];
+      } else if (testFile.endsWith('.json')) {
+        testCases = require(testFile);
+      } else {
+        throw new Error(`Unsupported file type for test file: ${testFile}`);
+      }
+      if (testCases) {
+        for (const testCase of testCases) {
+          ret.push(await readTest(testCase, path.dirname(testFile)));
+        }
       }
     }
     return ret;
@@ -157,12 +175,7 @@ export async function readTests(
       return loadTestsFromGlob(tests);
     } else {
       // Points to a legacy vars.csv
-      const vars = await readTestsFile(tests, basePath);
-      return vars.map((row, idx) => {
-        const test = testCaseFromCsvRow(row);
-        test.description = `Row #${idx + 1}`;
-        return test;
-      });
+      return readStandaloneTestsFile(tests, basePath);
     }
   } else if (Array.isArray(tests)) {
     for (const globOrTest of tests) {
