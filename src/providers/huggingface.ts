@@ -12,6 +12,7 @@ import {
 import { REQUEST_TIMEOUT_MS } from './shared';
 
 interface HuggingfaceTextGenerationOptions {
+  apiKey?: string;
   apiEndpoint?: string;
   top_k?: number;
   top_p?: number;
@@ -25,6 +26,20 @@ interface HuggingfaceTextGenerationOptions {
   use_cache?: boolean;
   wait_for_model?: boolean;
 }
+
+const HuggingFaceTextGenerationKeys = new Set<keyof HuggingfaceTextGenerationOptions>([
+  'top_k',
+  'top_p',
+  'temperature',
+  'repetition_penalty',
+  'max_new_tokens',
+  'max_time',
+  'return_full_text',
+  'num_return_sequences',
+  'do_sample',
+  'use_cache',
+  'wait_for_model',
+]);
 
 export class HuggingfaceTextGenerationProvider implements ApiProvider {
   modelName: string;
@@ -48,12 +63,26 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
     return `[Huggingface Text Generation Provider ${this.modelName}]`;
   }
 
+  getApiKey(): string | undefined {
+    return this.config.apiKey || process.env.HF_API_TOKEN;
+  }
+
+  getConfig() {
+    return Object.keys(this.config).reduce((options, key) => {
+      const optionName = key as keyof HuggingfaceTextGenerationOptions;
+      if (HuggingFaceTextGenerationKeys.has(optionName)) {
+        options[optionName] = this.config[optionName];
+      }
+      return options;
+    }, {} as Partial<Record<keyof HuggingfaceTextGenerationOptions, number | boolean | string | undefined>>);
+  }
+
   async callApi(prompt: string): Promise<ProviderResponse> {
     const params = {
       inputs: prompt,
       parameters: {
         return_full_text: this.config.return_full_text ?? false,
-        ...this.config,
+        ...this.getConfig(),
       },
     };
 
@@ -70,9 +99,7 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            ...(process.env.HF_API_TOKEN
-              ? { Authorization: `Bearer ${process.env.HF_API_TOKEN}` }
-              : {}),
+            ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),
           },
           body: JSON.stringify(params),
         },
@@ -103,7 +130,10 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
   }
 }
 
-interface HuggingfaceTextClassificationOptions {}
+interface HuggingfaceTextClassificationOptions {
+  apiKey?: string;
+  apiEndpoint?: string;
+}
 
 export class HuggingfaceTextClassificationProvider implements ApiProvider {
   modelName: string;
@@ -130,20 +160,21 @@ export class HuggingfaceTextClassificationProvider implements ApiProvider {
   async callClassificationApi(prompt: string): Promise<ProviderClassificationResponse> {
     const params = {
       inputs: prompt,
-      parameters: {
-        ...this.config,
-      },
+      parameters: {},
     };
 
     let response;
     try {
+      const url = this.config.apiEndpoint
+        ? this.config.apiEndpoint
+        : `https://api-inference.huggingface.co/models/${this.modelName}`;
       response = await fetchWithCache(
-        `https://api-inference.huggingface.co/models/${this.modelName}`,
+        url,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            ...(process.env.HF_API_TOKEN
+            ...(this.config.apiKey || process.env.HF_API_TOKEN
               ? { Authorization: `Bearer ${process.env.HF_API_TOKEN}` }
               : {}),
           },
@@ -188,6 +219,8 @@ export class HuggingfaceTextClassificationProvider implements ApiProvider {
 }
 
 interface HuggingfaceFeatureExtractionOptions {
+  apiKey?: string;
+  apiEndpoint?: string;
   use_cache?: boolean;
   wait_for_model?: boolean;
 }
@@ -230,13 +263,17 @@ export class HuggingfaceFeatureExtractionProvider implements ApiProvider {
 
     let response;
     try {
+      const url = this.config.apiEndpoint
+        ? this.config.apiEndpoint
+        : `https://api-inference.huggingface.co/models/${this.modelName}`;
+      logger.debug(`Huggingface API request: ${url} ${JSON.stringify(params)}`);
       response = await fetchWithCache(
-        `https://api-inference.huggingface.co/models/${this.modelName}`,
+        url,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            ...(process.env.HF_API_TOKEN
+            ...(this.config.apiKey || process.env.HF_API_TOKEN
               ? { Authorization: `Bearer ${process.env.HF_API_TOKEN}` }
               : {}),
           },

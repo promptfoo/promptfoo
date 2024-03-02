@@ -367,8 +367,16 @@ It is a function that takes a string output and a context object:
 
 ```
 transformFn: (output: string, context: {
-  vars: Record<string, any>
-})
+  prompt: {
+    // ID of the prompt, if assigned
+    id?: string;
+    // Raw prompt as provided in the test case, without {{variable}} substitution.
+    raw?: string;
+    // Prompt as sent to the LLM API and assertions.
+    display?: string;
+  };
+  vars?: Record<string, any>;
+}) => void;
 ```
 
 This is useful if you need to somehow transform or clean LLM output before running an eval.

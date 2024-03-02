@@ -151,7 +151,7 @@ export class AwsBedrockCompletionProvider implements ApiProvider {
       if (cachedResponse) {
         logger.debug(`Returning cached response for ${prompt}: ${cachedResponse}`);
         return {
-          output: JSON.parse(cachedResponse as string),
+          output: model.output(JSON.parse(cachedResponse as string)),
           tokenUsage: {},
         };
       }

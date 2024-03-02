@@ -16,7 +16,7 @@ interface MistralChatCompletionOptions {
   max_tokens?: number;
   safe_prompt?: boolean;
   random_seed?: number;
-  fix_json?: boolean;
+  response_format?: { type: 'json_object' };
   cost?: number;
 }
 
@@ -63,25 +63,39 @@ export class MistralChatCompletionProvider implements ApiProvider {
   env?: EnvOverrides;
 
   static MISTRAL_CHAT_MODELS = [
-    ...['mistral-tiny'].map((model) => ({
+    ...['open-mistral-7b'].map((model) => ({
       id: model,
       cost: {
-        input: 0.00015 / 1000,
-        output: 0.00045 / 1000,
+        input: 0.00025 / 1000,
+        output: 0.00025 / 1000,
       },
     })),
-    ...['mistral-small'].map((model) => ({
+    ...['open-mixtral-8x7b'].map((model) => ({
       id: model,
       cost: {
-        input: 0.00064 / 1000,
-        output: 0.00193 / 1000,
+        input: 0.0007 / 1000,
+        output: 0.0007 / 1000,
       },
     })),
-    ...['mistral-medium'].map((model) => ({
+    ...['mistral-small-latest'].map((model) => ({
       id: model,
       cost: {
-        input: 0.00269 / 1000,
-        output: 0.00806 / 1000,
+        input: 0.002 / 1000,
+        output: 0.006 / 1000,
+      },
+    })),
+    ...['mistral-medium-latest'].map((model) => ({
+      id: model,
+      cost: {
+        input: 0.0027 / 1000,
+        output: 0.0081 / 1000,
+      },
+    })),
+    ...['mistral-large-latest'].map((model) => ({
+      id: model,
+      cost: {
+        input: 0.008 / 1000,
+        output: 0.024 / 1000,
       },
     }))
   ];
@@ -133,6 +147,7 @@ export class MistralChatCompletionProvider implements ApiProvider {
       max_tokens: this.config?.max_tokens || 1024,
       safe_prompt: this.config?.safe_prompt || false,
       random_seed: this.config?.random_seed || null,
+      ...(this.config.response_format ? { response_format: this.config.response_format } : {}),
     };
 
     const url = 'https://api.mistral.ai/v1/chat/completions';
@@ -172,15 +187,9 @@ export class MistralChatCompletionProvider implements ApiProvider {
         error: `Malformed response data: ${JSON.stringify(data)}`,
       };
     }
-    let content;
-    if (this.config?.fix_json){
-      // Mistral is often messing up JSON responses. This fixes the output to allow for the tests to pass.
-      content = data.choices[0].message.content.replace(/\\_/g, "_").replace(/\\\*/g, "*")
-    } else {
-      content = data.choices[0].message.content
-    }
+
     return {
-      output: content,
+      output: data.choices[0].message.content,
       tokenUsage: getTokenUsage(data, cached),
       cached,
       cost: calculateCost(

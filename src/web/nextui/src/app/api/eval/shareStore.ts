@@ -7,6 +7,7 @@ const ttl = parseInt(process.env.PROMPTFOO_SHARE_TTL || String(60 * 60 * 24 * 14
 function getStore() {
   switch (storeType) {
     case 'redis':
+      console.log('Using Redis store');
       return cacheManager.caching({
         store: require('cache-manager-ioredis'),
         host: process.env.PROMPTFOO_SHARE_REDIS_HOST,
@@ -16,6 +17,7 @@ function getStore() {
         ttl,
       });
     case 'filesystem':
+      console.log('Using Filesystem store');
       return cacheManager.caching({
         store: require('cache-manager-fs-hash'),
         options: {
@@ -25,6 +27,7 @@ function getStore() {
       });
     case 'memory':
     default:
+      console.log('Using Memory store');
       return cacheManager.caching({
         store: 'memory',
         ttl,
