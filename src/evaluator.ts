@@ -211,7 +211,7 @@ class Evaluator {
 
     // Set up the special _conversation variable
     const vars = test.vars || {};
-    const conversationKey = `${provider.id()}:${prompt.id}`;
+    const conversationKey = `${provider.label || provider.id()}:${prompt.id}`;
     const usesConversation = prompt.raw.includes('_conversation');
     if (
       !process.env.PROMPTFOO_DISABLE_CONVERSATION_VAR &&
@@ -232,6 +232,7 @@ class Evaluator {
     const setup = {
       provider: {
         id: provider.id(),
+        label: provider.label,
       },
       prompt: {
         raw: renderedPrompt,
@@ -416,10 +417,10 @@ class Evaluator {
             continue;
           }
         }
-        prompts.push({
+        const completedPrompt = {
           ...prompt,
           id: sha256(typeof prompt.raw === 'object' ? JSON.stringify(prompt.raw) : prompt.raw),
-          provider: provider.id(),
+          provider: provider.label || provider.id(),
           display: prompt.display,
           metrics: {
             score: 0,
@@ -437,7 +438,8 @@ class Evaluator {
             namedScores: {},
             cost: 0,
           },
-        });
+        };
+        prompts.push(completedPrompt);
       }
     }
 
@@ -624,7 +626,7 @@ class Evaluator {
         numComplete++;
         if (progressbar) {
           progressbar.increment({
-            provider: evalStep.provider.id(),
+            provider: evalStep.provider.label || evalStep.provider.id(),
             prompt: evalStep.prompt.raw.slice(0, 10).replace(/\n/g, ' '),
             vars: Object.entries(evalStep.test.vars || {})
               .map(([k, v]) => `${k}=${v}`)
@@ -686,7 +688,7 @@ class Evaluator {
           namedScores: row.namedScores,
           text: resultText,
           prompt: row.prompt.raw,
-          provider: row.provider.id,
+          provider: row.provider.label || row.provider.id,
           latencyMs: row.latencyMs,
           tokenUsage: row.response?.tokenUsage,
           gradingResult: row.gradingResult,

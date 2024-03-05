@@ -54,6 +54,9 @@ export function readProviderPromptMap(
           'You must specify an `id` on the Provider when you override options.prompts',
         );
         ret[rawProvider.id] = rawProvider.prompts || allPrompts;
+        if (rawProvider.label) {
+          ret[rawProvider.label] = rawProvider.prompts || allPrompts;
+        }
       } else {
         const rawProvider = provider as ProviderOptionsMap;
         const originalId = Object.keys(rawProvider)[0];
