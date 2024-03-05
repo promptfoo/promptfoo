@@ -322,7 +322,7 @@ export function writeOutput(
       namedScoresText.length > 0
         ? `(${output.score.toFixed(2)}, ${namedScoresText})`
         : `(${output.score.toFixed(2)})`;
-    const gradingResultText = output.gradingResult ? `Reason: ${output.gradingResult.reason}` : '';
+    const gradingResultText = output.gradingResult ? `${output.pass ? 'Pass' : 'Fail'} Reason: ${output.gradingResult.reason}` : '';
     return `${passFailText} ${scoreText}
 
 ${output.text}
