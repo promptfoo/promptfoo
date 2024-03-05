@@ -92,7 +92,7 @@ function createDummyFiles(directory: string | null) {
 async function resolveConfigs(
   cmdObj: Partial<CommandLineOptions>,
   defaultConfig: Partial<UnifiedConfig>,
-): Promise<{ testSuite: TestSuite; config: Partial<UnifiedConfig> }> {
+): Promise<{ testSuite: TestSuite; config: Partial<UnifiedConfig>, basePath: string }> {
   // Config parsing
   let fileConfig: Partial<UnifiedConfig> = {};
   const configPaths = cmdObj.config;
@@ -204,7 +204,7 @@ async function resolveConfigs(
       basePath,
     ),
   };
-  return { config, testSuite };
+  return { config, testSuite, basePath };
 }
 
 async function main() {
@@ -516,6 +516,7 @@ async function main() {
     .action(async (cmdObj: CommandLineOptions & Command) => {
       let config: Partial<UnifiedConfig> | undefined = undefined;
       let testSuite: TestSuite | undefined = undefined;
+      let basePath: string | undefined = undefined;
       const runEvaluation = async (initialization?: boolean) => {
         // Misc settings
         if (cmdObj.verbose) {
@@ -528,7 +529,7 @@ async function main() {
           disableCache();
         }
 
-        ({ config, testSuite } = await resolveConfigs(cmdObj, defaultConfig));
+        ({ config, testSuite, basePath } = await resolveConfigs(cmdObj, defaultConfig));
 
         let maxConcurrency = parseInt(cmdObj.maxConcurrency || '', 10);
         const delay = parseInt(cmdObj.delay || '', 0);
@@ -558,6 +559,7 @@ async function main() {
 
         const summary = await evaluate(testSuite, {
           ...options,
+          basePath,
           eventSource: 'cli',
         });
 
