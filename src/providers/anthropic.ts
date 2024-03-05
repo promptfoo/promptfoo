@@ -1,8 +1,227 @@
 import Anthropic from '@anthropic-ai/sdk';
 import logger from '../logger';
 
-import type { ApiProvider, EnvOverrides, ProviderResponse } from '../types.js';
+import {
+  ApiProvider,
+  EnvOverrides,
+  ProviderResponse,
+  TokenUsage
+} from '../types.js';
+
 import { getCache, isCacheEnabled } from '../cache';
+
+interface AnthropicMessageOptions {
+  apiKey?: string;
+  temperature?: number;
+  max_tokens?: number;
+  top_p?: number;
+  top_k?: number;
+  model?: string;
+  cost?: number;
+}
+
+function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
+  if (data.usage) {
+    const total_tokens = data.usage.input_tokens + data.usage.output_tokens;
+    if (cached) {
+      return { cached: total_tokens, total: total_tokens };
+    } else {
+      return {
+        total: total_tokens,
+        prompt: data.usage.input_tokens || 0,
+        completion: data.usage.output_tokens || 0,
+      };
+    }
+  }
+  return {};
+}
+
+function calculateCost(
+  modelName: string,
+  config: AnthropicMessageOptions,
+  promptTokens?: number,
+  completionTokens?: number,
+): number | undefined {
+  if (!promptTokens || !completionTokens) {
+    return undefined;
+  }
+
+  const model = [
+    ...AnthropicMessagesProvider.ANTHROPIC_MODELS,
+  ].find((m) => m.id === modelName);
+  if (!model || !model.cost) {
+    return undefined;
+  }
+
+  const inputCost = config.cost ?? model.cost.input;
+  const outputCost = config.cost ?? model.cost.output;
+  return inputCost * promptTokens + outputCost * completionTokens || undefined;
+}
+
+function parseMessages(messages: string) {
+  try {
+    const parsedMessages = JSON.parse(messages);
+    let system: string | undefined;
+    const extractedMessages: Array<{ role: "user" | "assistant"; content: Array<{ type: "text"; text: string }> }> = [];
+
+    parsedMessages.forEach((message: { role: string; content: string }) => {
+      if (message.role === "system") {
+        system = message.content;
+      } else if (message.role === "user" || message.role === "assistant") {
+        extractedMessages.push({
+          role: message.role as "user" | "assistant",
+          content: [
+            {
+              type: "text",
+              text: message.content,
+            },
+          ],
+        });
+      }
+    });
+
+    return { system, extractedMessages };
+  } catch (err) {
+    throw new Error(`Could not parse prompt JSON: ${err}\n\n${messages}`);
+  }
+}
+
+export class AnthropicMessagesProvider implements ApiProvider {
+  modelName: string;
+  config: AnthropicMessageOptions;
+  env?: EnvOverrides;
+  apiKey?: string;
+  anthropic: Anthropic;
+
+  static ANTHROPIC_MODELS = [
+    ...['claude-instant-1.2'].map((model) => ({
+      id: model,
+      cost: {
+        input: 0.0008 / 1000,
+        output: 0.0024 / 1000,
+      },
+    })),
+    ...['claude-2.0'].map((model) => ({
+      id: model,
+      cost: {
+        input: 0.008 / 1000,
+        output: 0.024 / 1000,
+      },
+    })),
+    ...['claude-2.1'].map((model) => ({
+      id: model,
+      cost: {
+        input: 0.008 / 1000,
+        output: 0.024 / 1000,
+      },
+    })),
+    ...['claude-3-sonnet-20240229'].map((model) => ({
+      id: model,
+      cost: {
+        input: 0.003 / 1000,
+        output: 0.015 / 1000,
+      },
+    })),
+    ...['claude-3-opus-20240229'].map((model) => ({
+      id: model,
+      cost: {
+        input: 0.015 / 1000,
+        output: 0.075 / 1000,
+      },
+    }))
+  ]
+
+  static ANTHROPIC_MODELS_NAMES = AnthropicMessagesProvider.ANTHROPIC_MODELS.map(
+    (model) => model.id,
+  );
+
+  constructor(
+    modelName: string,
+    options: { id?: string; config?:  AnthropicMessageOptions; env?: EnvOverrides } = {},
+  ) {
+    if (!AnthropicMessagesProvider.ANTHROPIC_MODELS_NAMES.includes(modelName)) {
+      logger.warn(`Using unknown Anthropic model: ${modelName}`);
+    }
+    const { id, config, env } = options;
+    this.env = env;
+    this.modelName = modelName;
+    this.id = id ? () => id : this.id;
+    this.config = config || {};
+    this.apiKey = config?.apiKey || env?.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY;
+    this.anthropic = new Anthropic({ apiKey: this.apiKey });
+  }
+
+  id(): string {
+    return `anthropic:messages:${this.modelName || 'claude-2.1'}`;
+  }
+
+  toString(): string {
+    return `[Anthropic Messages Provider ${this.modelName || 'claude-2.1'}]`;
+  }
+
+  async callApi(prompt: string): Promise<ProviderResponse> {
+    if (!this.apiKey) {
+      throw new Error(
+        'Anthropic API key is not set. Set the ANTHROPIC_API_KEY environment variable or add `apiKey` to the provider config.',
+      );
+    }
+    
+    const {system, extractedMessages} = parseMessages(prompt);
+    const params: Anthropic.MessageCreateParams = {
+      model: this.modelName,
+      ...(system ? { system: system } : {}),
+      messages: extractedMessages,
+      max_tokens: this.config?.max_tokens || 1024,
+      temperature: this.config.temperature || 0
+    };
+
+    logger.debug(`Calling Anthropic Messages API: ${JSON.stringify(params)}`);
+
+    const cache = await getCache();
+    const cacheKey = `anthropic:${JSON.stringify(params)}`;
+
+    if (isCacheEnabled()) {
+      // Try to get the cached response
+      const cachedResponse = await cache.get(cacheKey);
+      if (cachedResponse) {
+        logger.debug(`Returning cached response for ${prompt}: ${cachedResponse}`);
+        return {
+          output: JSON.parse(cachedResponse as string),
+          tokenUsage: {},
+        };
+      }
+    }
+    
+    try {
+      const response = await this.anthropic.messages.create(params);
+
+      logger.debug(`Anthropic Messages API response: ${JSON.stringify(response)}`);
+
+      if (isCacheEnabled()) {
+        try {
+          await cache.set(cacheKey, JSON.stringify(response.content[0].text));
+        } catch (err) {
+          logger.error(`Failed to cache response: ${String(err)}`);
+        }
+      }
+      return {
+        output: response.content[0].text,
+        tokenUsage: getTokenUsage(response, false),
+        cost: calculateCost(
+          this.modelName,
+          this.config,
+          response.usage?.input_tokens,
+          response.usage?.output_tokens
+        )
+      };
+    } catch (err) {
+      logger.error(`Anthropic Messages API call error: ${String(err)}`);
+      return {
+        error: `API call error: ${String(err)}`,
+      };
+    }
+  }
+}
 
 interface AnthropicCompletionOptions {
   apiKey?: string;
