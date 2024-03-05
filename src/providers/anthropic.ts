@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import logger from '../logger';
 
-import {
+import type {
   ApiProvider,
   EnvOverrides,
   ProviderResponse,
