@@ -109,8 +109,9 @@ export async function loadApiProvider(
   } = {},
 ): Promise<ApiProvider> {
   const { options = {}, basePath, env } = context;
-  const providerOptions = {
-    id: options.id,
+  const providerOptions: ProviderOptions = {
+    // Hack(ian): Override id with label. This makes it so that debug and display info, which rely on id, will use the label instead.
+    id: options.label || options.id,
     config: {
       ...options.config,
       basePath,

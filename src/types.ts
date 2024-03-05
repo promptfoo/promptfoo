@@ -60,8 +60,10 @@ export interface EnvOverrides {
 
 export interface ProviderOptions {
   id?: ProviderId;
+  label?: ProviderLabel;
   config?: any;
   prompts?: string[]; // List of prompt display strings
+  env?: EnvOverrides;
 }
 
 export interface CallApiContextParams {
@@ -73,14 +75,24 @@ export interface CallApiOptionsParams {
 }
 
 export interface ApiProvider {
+  // Unique identifier for the provider
   id: () => string;
+
+  // Text generation function
   callApi: (
     prompt: string,
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ) => Promise<ProviderResponse>;
+
+  // Embedding function
   callEmbeddingApi?: (prompt: string) => Promise<ProviderEmbeddingResponse>;
+
+  // Classification function
   callClassificationApi?: (prompt: string) => Promise<ProviderClassificationResponse>;
+
+  // Shown on output 
+  label?: ProviderLabel;
 }
 
 export interface ApiEmbeddingProvider extends ApiProvider {
@@ -215,7 +227,7 @@ export interface PromptWithMetadata {
 }
 
 export interface EvaluateResult {
-  provider: Pick<ProviderOptions, 'id'>;
+  provider: Pick<ProviderOptions, 'id' | 'label'>;
   prompt: Prompt;
   vars: Record<string, string | object>;
   response?: ProviderResponse;
@@ -461,6 +473,8 @@ export interface TestSuite {
 }
 
 export type ProviderId = string;
+
+export type ProviderLabel = string;
 
 export type ProviderFunction = ApiProvider['callApi'];
 
