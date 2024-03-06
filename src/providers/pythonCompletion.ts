@@ -15,8 +15,12 @@ import type {
 export class PythonProvider implements ApiProvider {
   constructor(private scriptPath: string, private options?: ProviderOptions) {}
 
-  id() {
+  get model() {
     return `python:${this.scriptPath}`;
+  }
+
+  get label() {
+    return this.options?.label || this.model;
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {

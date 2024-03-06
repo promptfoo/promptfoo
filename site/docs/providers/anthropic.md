@@ -23,7 +23,7 @@ Config parameters may also be passed like so:
 
 ```yaml
 providers:
-  - id: anthropic:completion:claude-1
+  - model: anthropic:completion:claude-1
     prompts: chat_prompt
     config:
       temperature: 0
@@ -41,7 +41,7 @@ The easiest way to do this for _all_ your test cases is to add the [`defaultTest
 defaultTest:
   options:
     provider:
-      id: provider:chat:modelname
+      model: provider:chat:modelname
       config:
         # Provider config options
 ```
@@ -54,7 +54,7 @@ assert:
   - type: llm-rubric
     value: Do not mention that you are an AI or chat assistant
     provider:
-      id: provider:chat:modelname
+      model: provider:chat:modelname
       config:
         # Provider config options
 ```
@@ -68,7 +68,7 @@ tests:
       # ...
     options:
       provider:
-        id: provider:chat:modelname
+        model: provider:chat:modelname
         config:
           # Provider config options
     assert:

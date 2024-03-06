@@ -8,7 +8,7 @@ Here's an example of how to configure the provider to use the `mistralai/mistral
 
 ```yaml
 providers:
-  - id: openai:chat:mistralai/mistral-medium    # or any other chat model
+  - model: openai:chat:mistralai/mistral-medium    # or any other chat model
     config:
       apiBaseUrl: https://openrouter.ai/api
       apiKey: openrouter_api_key

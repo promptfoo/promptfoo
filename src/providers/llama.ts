@@ -1,7 +1,7 @@
 import { fetchWithCache } from '../cache';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
-import type { ApiProvider, ProviderResponse } from '../types.js';
+import type { ApiProvider, ProviderOptions, ProviderResponse } from '../types.js';
 
 interface LlamaCompletionOptions {
   n_predict?: number;
@@ -25,17 +25,21 @@ interface LlamaCompletionOptions {
 
 export class LlamaProvider implements ApiProvider {
   modelName: string;
+  options?: ProviderOptions;
   config?: LlamaCompletionOptions;
 
-  constructor(modelName: string, options: { config?: LlamaCompletionOptions; id?: string } = {}) {
-    const { config, id } = options;
+  constructor(modelName: string, options: ProviderOptions & { config?: LlamaCompletionOptions } = {}) {
     this.modelName = modelName;
-    this.config = config;
-    this.id = id ? () => id : this.id;
+    this.options = options;
+    this.config = options.config;
   }
 
-  id(): string {
+  get model(): string {
     return `llama:${this.modelName}`;
+  }
+
+  get label(): string {
+    return this.options?.label || this.model;
   }
 
   toString(): string {

@@ -34,7 +34,7 @@ It is possible to set webhook provider properties under the `config` key by usin
 
 ```yaml
 providers:
-  - id: webhook:http://example.com/webhook
+  - model: webhook:http://example.com/webhook
     config:
       foo: bar
       test: 123

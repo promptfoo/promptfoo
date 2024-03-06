@@ -2,12 +2,12 @@ prompts:
   - "Write a tweet about {{topic}}"
 
 providers:
-  - id: cohere:command
+  - model: cohere:command
     config:
       temperature: 0.5
       prompt_truncation: AUTO
       connectors:
-        - id: web-search
+        - model: web-search
       showSearchQueries: true
 
 tests:

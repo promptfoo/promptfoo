@@ -74,7 +74,7 @@ If you want to override the configuration of an assistant for a specific test, y
 
 ```yaml
 providers:
-  - id: openai:assistant:asst_fEhNN3MClMamLfKLkIaoIpgB
+  - model: openai:assistant:asst_fEhNN3MClMamLfKLkIaoIpgB
     config:
       model: gpt-4-1106-preview
       instructions: 'Enter a replacement for system-level instructions here'
@@ -96,10 +96,10 @@ Here's an example that compares the saved Assistant settings against new potenti
 ```yaml
 providers:
   # Original
-  - id: openai:assistant:asst_fEhNN3MClMamLfKLkIaoIpgB
+  - model: openai:assistant:asst_fEhNN3MClMamLfKLkIaoIpgB
 
   # Modified
-  - id: openai:assistant:asst_fEhNN3MClMamLfKLkIaoIpgB
+  - model: openai:assistant:asst_fEhNN3MClMamLfKLkIaoIpgB
     config:
       model: gpt-4-1106-preview
       instructions: 'Always talk like a pirate'

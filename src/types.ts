@@ -59,7 +59,7 @@ export interface EnvOverrides {
 }
 
 export interface ProviderOptions {
-  id?: ProviderId;
+  model?: ModelId;
   label?: ProviderLabel;
   config?: any;
   prompts?: string[]; // List of prompt display strings
@@ -76,7 +76,10 @@ export interface CallApiOptionsParams {
 
 export interface ApiProvider {
   // Unique identifier for the provider
-  id: () => string;
+  model: string;
+
+  // Human-readable label for the provider, shown on output
+  label: ProviderLabel;
 
   // Text generation function
   callApi: (
@@ -90,9 +93,6 @@ export interface ApiProvider {
 
   // Classification function
   callClassificationApi?: (prompt: string) => Promise<ProviderClassificationResponse>;
-
-  // Shown on output 
-  label?: ProviderLabel;
 }
 
 export interface ApiEmbeddingProvider extends ApiProvider {
@@ -227,7 +227,7 @@ export interface PromptWithMetadata {
 }
 
 export interface EvaluateResult {
-  provider: Pick<ProviderOptions, 'id' | 'label'>;
+  provider: Pick<ProviderOptions, 'model' | 'label'>;
   prompt: Prompt;
   vars: Record<string, string | object>;
   response?: ProviderResponse;
@@ -472,13 +472,13 @@ export interface TestSuite {
   env?: EnvOverrides;
 }
 
-export type ProviderId = string;
+export type ModelId = string;
 
 export type ProviderLabel = string;
 
 export type ProviderFunction = ApiProvider['callApi'];
 
-export type ProviderOptionsMap = Record<ProviderId, ProviderOptions>;
+export type ProviderOptionsMap = Record<ModelId, ProviderOptions>;
 
 // TestSuiteConfig = Test Suite, but before everything is parsed and resolved.  Providers are just strings, prompts are filepaths, tests can be filepath or inline.
 export interface TestSuiteConfig {
@@ -486,7 +486,7 @@ export interface TestSuiteConfig {
   description?: string;
 
   // One or more LLM APIs to use, for example: openai:gpt-3.5-turbo, openai:gpt-4, localai:chat:vicuna
-  providers: ProviderId | ProviderFunction | (ProviderId | ProviderOptionsMap | ProviderOptions)[];
+  providers: ModelId | ProviderFunction | (ModelId | ProviderOptionsMap | ProviderOptions)[];
 
   // One or more prompt files to load
   prompts: FilePath | FilePath[] | Record<FilePath, string>;

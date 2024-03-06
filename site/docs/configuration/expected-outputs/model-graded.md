@@ -115,7 +115,7 @@ tests:
 
 ## Examples (comparison)
 
-The `select-best` assertion type is used to compare multiple outputs in the same TestCase row and select the one that best meets a specified criterion. 
+The `select-best` assertion type is used to compare multiple outputs in the same TestCase row and select the one that best meets a specified criterion.
 
 Here's an example of how to use `select-best` in a configuration file:
 
@@ -178,7 +178,7 @@ Use the `provider.config` field to set custom parameters:
 
 ```yaml
 provider:
-  - id: openai:gpt-3.5-turbo
+  - model: openai:gpt-3.5-turbo
     config:
       temperature: 0
 ```

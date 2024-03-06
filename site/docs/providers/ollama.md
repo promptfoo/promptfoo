@@ -36,7 +36,7 @@ To pass configuration options to Ollama, use the `config` key like so:
 
 ```yaml title=promptfooconfig.yaml
 providers:
-  - id: ollama:llama2
+  - model: ollama:llama2
     config:
       num_predict: 1024
 ```

@@ -3,7 +3,7 @@ prompts:
   - "Write a very concise, funny tweet about {{topic}}"
 
 providers:
-  - id: python:provider.py   # or provider_async.py
+  - model: python:provider.py   # or provider_async.py
     config:
       foo: bar
 

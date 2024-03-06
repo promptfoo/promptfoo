@@ -3,22 +3,22 @@ prompts:
   prompts/llama_prompt.txt: llama_prompt
 
 providers:
-  - huggingface:text-generation:mistralai/Mistral-7B-Instruct-v0.1:
-      prompts: mistral_prompt
-      config:
-        temperature: 0.01
-        max_new_tokens: 128
-  - replicate:mistralai/mixtral-8x7b-instruct-v0.1:2b56576fcfbe32fa0526897d8385dd3fb3d36ba6fd0dbe033c72886b81ade93e:
-      prompts: mistral_prompt
-      config:
-        temperature: 0.01
-        max_new_tokens: 128
-        prompt_template: '{prompt}'
-  - replicate:meta/llama-2-7b-chat:8e6975e5ed6174911a6ff3d60540dfd4844201974602551e10e9e87ab143d81e:
-      prompts: llama_prompt
-      config:
-        temperature: 0.01
-        max_new_tokens: 128
+  - model: huggingface:text-generation:mistralai/Mistral-7B-Instruct-v0.1
+    prompts: mistral_prompt
+    config:
+      temperature: 0.01
+      max_new_tokens: 128
+  - model: replicate:mistralai/mixtral-8x7b-instruct-v0.1
+    prompts: mistral_prompt
+    config:
+      temperature: 0.01
+      max_new_tokens: 128
+      prompt_template: '{prompt}'
+  - model: replicate:meta/llama-2-7b-chat:8e6975e5ed6174911a6ff3d60540dfd4844201974602551e10e9e87ab143d81e
+    prompts: llama_prompt
+    config:
+      temperature: 0.01
+      max_new_tokens: 128
 
 tests:
   - vars:

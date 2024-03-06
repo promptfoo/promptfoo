@@ -26,7 +26,7 @@ The PaLM provider supports various [configuration options](https://github.com/pr
 
 ```yaml
 providers:
-  - id: google:gemini-pro
+  - model: google:gemini-pro
     config:
       temperature: 0
       maxOutputTokens: 1024

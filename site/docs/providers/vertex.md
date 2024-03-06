@@ -35,7 +35,7 @@ The Vertex provider also supports various [configuration options](https://github
 
 ```yaml
 providers:
-  - id: vertex:chat-bison-32k
+  - model: vertex:chat-bison-32k
     config:
       temperature: 0
       maxOutputTokens: 1024

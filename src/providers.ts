@@ -66,7 +66,8 @@ export async function loadApiProviders(
   } else if (typeof providerPaths === 'function') {
     return [
       {
-        id: () => 'custom-function',
+        model: 'custom-function',
+        label: 'Custom Function',
         callApi: providerPaths,
       },
     ];
@@ -77,12 +78,13 @@ export async function loadApiProviders(
           return loadApiProvider(provider, { basePath, env });
         } else if (typeof provider === 'function') {
           return {
-            id: () => `custom-function-${idx}`,
+            model: `custom-function-${idx}`,
+            label: `Custom Function ${idx}`,
             callApi: provider,
           };
-        } else if (provider.id) {
+        } else if (provider.model) {
           // List of ProviderConfig objects
-          return loadApiProvider((provider as ProviderOptions).id!, {
+          return loadApiProvider((provider as ProviderOptions).model!, {
             options: provider,
             basePath,
             env,
@@ -91,7 +93,7 @@ export async function loadApiProviders(
           // List of { id: string, config: ProviderConfig } objects
           const id = Object.keys(provider)[0];
           const providerObject = (provider as ProviderOptionsMap)[id];
-          const context = { ...providerObject, id: providerObject.id || id };
+          const context = { ...providerObject, id: providerObject.model || id };
           return loadApiProvider(id, { options: context, basePath, env });
         }
       }),
@@ -110,8 +112,8 @@ export async function loadApiProvider(
 ): Promise<ApiProvider> {
   const { options = {}, basePath, env } = context;
   const providerOptions: ProviderOptions = {
-    // Hack(ian): Override id with label. This makes it so that debug and display info, which rely on id, will use the label instead.
-    id: options.label || options.id,
+    model: options.model,
+    label: options.label || options.model,
     config: {
       ...options.config,
       basePath,
@@ -122,12 +124,13 @@ export async function loadApiProvider(
     const filePath = providerPath.slice('file://'.length);
     const yamlContent = yaml.load(fs.readFileSync(filePath, 'utf8')) as ProviderOptions;
     invariant(yamlContent, `Provider config ${filePath} is undefined`);
-    invariant(yamlContent.id, `Provider config ${filePath} must have an id`);
-    logger.info(`Loaded provider ${yamlContent.id} from ${filePath}`);
-    return loadApiProvider(yamlContent.id, { ...context, options: yamlContent });
+    invariant(yamlContent.model, `Provider config ${filePath} must have an id`);
+    logger.info(`Loaded provider ${yamlContent.model} from ${filePath}`);
+    return loadApiProvider(yamlContent.model, { ...context, options: yamlContent });
   } else if (providerPath === 'echo') {
     return {
-      id: () => 'echo',
+      model: 'echo',
+      label: 'Echo',
       callApi: async (input) => ({output: input}),
     };
   } else if (providerPath?.startsWith('exec:')) {

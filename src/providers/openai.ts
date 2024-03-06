@@ -11,6 +11,7 @@ import type {
   CallApiOptionsParams,
   EnvOverrides,
   ProviderEmbeddingResponse,
+  ProviderOptions,
   ProviderResponse,
   TokenUsage,
 } from '../types.js';
@@ -67,25 +68,32 @@ function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
   return {};
 }
 
+type OpenAiGenericOptions = ProviderOptions & { config?: OpenAiSharedOptions };
+
 export class OpenAiGenericProvider implements ApiProvider {
   modelName: string;
 
-  config: OpenAiSharedOptions;
+  options: OpenAiGenericOptions;
+  config: OpenAiGenericOptions['config'];
   env?: EnvOverrides;
 
   constructor(
     modelName: string,
-    options: { config?: OpenAiSharedOptions; id?: string; env?: EnvOverrides } = {},
+    options: ProviderOptions & { config?: OpenAiSharedOptions } = {},
   ) {
-    const { config, id, env } = options;
+    const { config, env } = options;
+    this.options = options;
     this.env = env;
-    this.modelName = modelName;
     this.config = config || {};
-    this.id = id ? () => id : this.id;
+    this.modelName = modelName;
   }
 
-  id(): string {
+  get model() {
     return `openai:${this.modelName}`;
+  }
+
+  get label() {
+    return this.options?.label || this.model;
   }
 
   toString(): string {
@@ -223,7 +231,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
 
   constructor(
     modelName: string,
-    options: { config?: OpenAiCompletionOptions; id?: string; env?: EnvOverrides } = {},
+    options: OpenAiGenericOptions = {},
   ) {
     super(modelName, options);
     this.config = options.config || {};
@@ -366,7 +374,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
   constructor(
     modelName: string,
-    options: { config?: OpenAiCompletionOptions; id?: string; env?: EnvOverrides } = {},
+    options: OpenAiGenericOptions = {},
   ) {
     if (!OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES.includes(modelName)) {
       logger.warn(`Using unknown OpenAI chat model: ${modelName}`);

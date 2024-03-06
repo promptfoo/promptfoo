@@ -12,7 +12,8 @@ To configure the Python provider, you need to specify the path to your Python sc
 
 ```yaml
 providers:
-  - id: 'python:my_script.py'
+  - model: 'python:my_script.py'
+    label: 'RAG fetch'
     config:
       additionalOption: 123
 ```
@@ -61,7 +62,7 @@ The types passed into the Python script function and the `ProviderResponse` retu
 
 ```python
 class ProviderOptions:
-    id: Optional[str]
+    model: Optional[str]
     config: Optional[Dict[str, Any]]
 
 class CallApiContextParams:

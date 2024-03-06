@@ -45,7 +45,7 @@ Example configuration with options:
 
 ```yaml
 providers:
-- id: mistral:mistral-large-latest
+- model: mistral:mistral-large-latest
   config:
     temperature: 0.7
     max_tokens: 512

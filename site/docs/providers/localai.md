@@ -27,7 +27,7 @@ You can set parameters like `temperature` and `apiBaseUrl` ([full list here](htt
 
 ```yaml title=promptfooconfig.yaml
 providers:
-  - id: localai:lunademo
+  - model: localai:lunademo
     config:
       temperature: 0.5
 ```

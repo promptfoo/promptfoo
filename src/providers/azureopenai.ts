@@ -8,6 +8,7 @@ import type {
   CallApiOptionsParams,
   EnvOverrides,
   ProviderEmbeddingResponse,
+  ProviderOptions,
   ProviderResponse,
 } from '../types';
 
@@ -47,18 +48,21 @@ interface AzureOpenAiCompletionOptions {
   passthrough?: object;
 }
 
+type AzureOpenAiGenericOptions = ProviderOptions & { config?: AzureOpenAiCompletionOptions };
+
 class AzureOpenAiGenericProvider implements ApiProvider {
   deploymentName: string;
   apiHost?: string;
   apiBaseUrl?: string;
 
+  options: AzureOpenAiGenericOptions;
   config: AzureOpenAiCompletionOptions;
 
   constructor(
     deploymentName: string,
-    options: { config?: AzureOpenAiCompletionOptions; id?: string; env?: EnvOverrides } = {},
+    options: AzureOpenAiGenericOptions = {},
   ) {
-    const { config, id, env } = options;
+    const { config, env } = options;
 
     this.deploymentName = deploymentName;
 
@@ -67,8 +71,16 @@ class AzureOpenAiGenericProvider implements ApiProvider {
     this.apiBaseUrl =
       config?.apiBaseUrl || env?.AZURE_OPENAI_API_BASE_URL || process.env.AZURE_OPENAI_API_BASE_URL;
 
-    this.config = config || {};
-    this.id = id ? () => id : this.id;
+    this.options = options;
+    this.config = options.config;
+  }
+
+  get model() {
+    return `azureopenai:${this.options.model}`;
+  }
+
+  get label() {
+    return this.options.label || this.model;
   }
 
   _cachedApiKey?: string;

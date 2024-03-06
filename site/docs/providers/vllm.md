@@ -8,7 +8,7 @@ Here's an example config that uses Mixtral-8x7b for text completions:
 
 ```yaml
 providers:
-  - id: openai:completion:mistralai/Mixtral-8x7B-v0.1
+  - model: openai:completion:mistralai/Mixtral-8x7B-v0.1
     config:
       apiBaseUrl: http://localhost:8080
 ```

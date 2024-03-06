@@ -3,21 +3,25 @@ import { fetchWithCache } from '../cache';
 
 import { REQUEST_TIMEOUT_MS } from './shared';
 
-import type { ApiProvider, ProviderResponse } from '../types.js';
+import type { ApiProvider, ProviderOptions, ProviderResponse } from '../types.js';
 
 export class WebhookProvider implements ApiProvider {
   webhookUrl: string;
+  options: ProviderOptions;
   config?: object;
 
-  constructor(webhookUrl: string, options: { id?: string; config?: object } = {}) {
-    const { id, config } = options;
+  constructor(webhookUrl: string, options: ProviderOptions = {}) {
     this.webhookUrl = webhookUrl;
-    this.id = id ? () => id : this.id;
-    this.config = config;
+    this.options = options;
+    this.config = options.config;
   }
 
-  id(): string {
+  get model(): string {
     return `webhook:${this.webhookUrl}`;
+  }
+
+  get label(): string {
+    return this.options.label || this.model;
   }
 
   toString(): string {

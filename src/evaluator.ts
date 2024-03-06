@@ -158,7 +158,7 @@ class Evaluator {
 
     // Set up the special _conversation variable
     const vars = test.vars || {};
-    const conversationKey = `${provider.label || provider.id()}:${prompt.id}`;
+    const conversationKey = `${provider.label}:${prompt.id}`;
     const usesConversation = prompt.raw.includes('_conversation');
     if (
       !process.env.PROMPTFOO_DISABLE_CONVERSATION_VAR &&
@@ -178,7 +178,7 @@ class Evaluator {
 
     const setup = {
       provider: {
-        id: provider.id(),
+        model: provider.model,
         label: provider.label,
       },
       prompt: {
@@ -359,15 +359,18 @@ class Evaluator {
       for (const provider of testSuite.providers) {
         // Check if providerPromptMap exists and if it contains the current prompt's display
         if (testSuite.providerPromptMap) {
-          const allowedPrompts = testSuite.providerPromptMap[provider.id()];
+          console.log('ayo', testSuite.providerPromptMap, provider.label)
+          const allowedPrompts = testSuite.providerPromptMap[provider.label];
+          console.log('allowedPrompts', allowedPrompts)
           if (allowedPrompts && !allowedPrompts.includes(prompt.display)) {
+            console.log('skip');
             continue;
           }
         }
         const completedPrompt = {
           ...prompt,
           id: sha256(typeof prompt.raw === 'object' ? JSON.stringify(prompt.raw) : prompt.raw),
-          provider: provider.label || provider.id(),
+          provider: provider.label || provider.model,
           display: prompt.display,
           metrics: {
             score: 0,
@@ -389,6 +392,8 @@ class Evaluator {
         prompts.push(completedPrompt);
       }
     }
+
+    console.log('prompts', prompts);
 
     // Aggregate all vars across test cases
     let tests =
@@ -488,7 +493,7 @@ class Evaluator {
           for (const prompt of testSuite.prompts) {
             for (const provider of testSuite.providers) {
               if (testSuite.providerPromptMap) {
-                const allowedPrompts = testSuite.providerPromptMap[provider.id()];
+                const allowedPrompts = testSuite.providerPromptMap[provider.label];
                 if (allowedPrompts && !allowedPrompts.includes(prompt.display)) {
                   // This prompt should not be used with this provider.
                   continue;
@@ -572,7 +577,7 @@ class Evaluator {
         numComplete++;
         if (progressbar) {
           progressbar.increment({
-            provider: evalStep.provider.label || evalStep.provider.id(),
+            provider: evalStep.provider.label,
             prompt: evalStep.prompt.raw.slice(0, 10).replace(/\n/g, ' '),
             vars: Object.entries(evalStep.test.vars || {})
               .map(([k, v]) => `${k}=${v}`)
@@ -634,7 +639,7 @@ class Evaluator {
           namedScores: row.namedScores,
           text: resultText,
           prompt: row.prompt.raw,
-          provider: row.provider.label || row.provider.id,
+          provider: row.provider.label,
           latencyMs: row.latencyMs,
           tokenUsage: row.response?.tokenUsage,
           gradingResult: row.gradingResult,
@@ -740,7 +745,7 @@ class Evaluator {
       providerPrefixes: Array.from(
         new Set(
           testSuite.providers.map((p) => {
-            const idParts = p.id().split(':');
+            const idParts = p.model.split(':');
             return idParts.length > 1 ? idParts[0] : 'unknown';
           }),
         ),

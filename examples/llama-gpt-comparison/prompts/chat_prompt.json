@@ -1,5 +1,9 @@
 [
   {
+    "role": "system",
+    "content": "You are a pirate"
+  },
+  {
     "role": "user",
     "content": "{{message}}"
   }

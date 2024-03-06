@@ -6,6 +6,7 @@ import type {
   ApiProvider,
   EnvOverrides,
   ProviderEmbeddingResponse,
+  ProviderOptions,
   ProviderResponse,
 } from '../types.js';
 
@@ -16,28 +17,31 @@ interface LocalAiCompletionOptions {
 
 class LocalAiGenericProvider implements ApiProvider {
   modelName: string;
-  apiBaseUrl: string;
+  options: ProviderOptions & { config?: LocalAiCompletionOptions };
   config: LocalAiCompletionOptions;
+  apiBaseUrl: string;
 
   constructor(
     modelName: string,
-    options: { config?: LocalAiCompletionOptions; id?: string; env?: EnvOverrides } = {},
+    options: ProviderOptions & { config?: LocalAiCompletionOptions } = {},
   ) {
-    const { id, config, env } = options;
     this.modelName = modelName;
+    this.options = options;
+    this.config = options.config || {};
     this.apiBaseUrl =
-      config?.apiBaseUrl ||
-      env?.LOCALAI_BASE_URL ||
+      this.options.env?.LOCALAI_BASE_URL ||
+      this.config.apiBaseUrl ||
       process.env.LOCALAI_BASE_URL ||
       'http://localhost:8080/v1';
-    this.config = config || {};
-    this.id = id ? () => id : this.id;
   }
 
-  id(): string {
+  get model(): string {
     return `localai:${this.modelName}`;
   }
 
+  get label(): string {
+    return this.options.label || this.model;
+  }
   toString(): string {
     return `[LocalAI Provider ${this.modelName}]`;
   }

@@ -33,12 +33,12 @@ prompts:
   - 'Respond to the user concisely: {{message}}'
 
 providers:
-  - id: openai:chat:gpt-3.5-turbo
+  - model: openai:chat:gpt-3.5-turbo
     config:
       apiKey: 'your_openai_api_key'
       temperature: 0.01
       max_tokens: 512
-  - id: openai:chat:meta/llama-2-70b-chat
+  - model: openai:chat:meta/llama-2-70b-chat
     config:
       apiKey: 'your_replicate_api_key'
       apiBaseUrl: https://openai-proxy.replicate.com

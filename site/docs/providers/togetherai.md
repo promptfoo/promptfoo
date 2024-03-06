@@ -8,7 +8,7 @@ Here's an example config that uses Mixtral provided by Together AI:
 
 ```yaml
 providers:
-  - id: openai:chat:mistralai/Mixtral-8x7B-Instruct-v0.1
+  - model: openai:chat:mistralai/Mixtral-8x7B-Instruct-v0.1
     config:
       apiBaseUrl: https://api.together.xyz
       apiKeyEnvar: TOGETHER_API_KEY

@@ -9,7 +9,14 @@ To create a custom API provider, implement the `ApiProvider` interface in a sepa
 ```javascript
 class ApiProvider {
   constructor(options: { id?: string; config: Record<string, any>});
-  id: () => string;
+
+  // Unique identifier
+  model: string;
+
+  // Displayed in UI
+  label: string;
+
+  // Fetch response from LLM
   callApi: (prompt: string, context: { vars: Record<string, any> }) => Promise<ProviderResponse>;
 }
 ```
@@ -27,14 +34,18 @@ import fetch from 'node-fetch';
 class CustomApiProvider {
   constructor(options) {
     // Provider ID can be overridden by the config file (e.g. when using multiple of the same provider)
-    this.providerId = options.id || 'custom provider';
+    this.providerId = options.model || 'custom provider';
 
     // options.config contains any custom options passed to the provider
     this.config = options.config;
   }
 
-  id() {
+  get model() {
     return this.providerId;
+  }
+
+  get label() {
+    return `Custom provider with temperature ${this.config.temperature}`;
   }
 
   async callApi(prompt, context) {
@@ -84,12 +95,12 @@ You can instantiate multiple providers of the same type with distinct IDs. In th
 
 ```yaml
 providers:
-  - customProvider.js:
-      id: custom-provider-hightemp
-      config:
-        temperature: 1.0
-  - customProvider.js:
-      id: custom-provider-lowtemp
-      config:
-        temperature: 0
+  - model: customProvider.js
+    label: custom-provider-hightemp
+    config:
+      temperature: 1.0
+  - model: customProvider.js
+    label: custom-provider-lowtemp
+    config:
+      temperature: 0
 ```

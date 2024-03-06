@@ -55,11 +55,11 @@ prompts:
   prompts/gemini_prompt.json: gemini_prompt
 
 providers:
-  - id: vertex:gemini-pro
+  - model: vertex:gemini-pro
     prompts: gemini_prompt
-  - id: openai:gpt-3.5-turbo
+  - model: openai:gpt-3.5-turbo
     prompts: gpt_prompt
-  - id: openai:gpt-4
+  - model: openai:gpt-4
     prompts: gpt_prompt
 ```
 
@@ -99,7 +99,7 @@ npx promptfoo@latest view
 
 ## Step 5: Add automatic evals (optional)
 
-Automatic evals are a nice way to scale your work, so you don't need to check each outputs every time.  
+Automatic evals are a nice way to scale your work, so you don't need to check each outputs every time.
 
 To add automatic evaluations to your test cases, you'll include assertions in your test cases. Assertions are conditions that the output of the language model must meet for the test case to be considered successful. Here's how you can add them:
 

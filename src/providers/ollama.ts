@@ -2,7 +2,7 @@ import logger from '../logger';
 import { fetchWithCache } from '../cache';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
 
-import type { ApiProvider, ProviderEmbeddingResponse, ProviderResponse } from '../types.js';
+import type { ApiProvider, ProviderEmbeddingResponse, ProviderOptions, ProviderResponse } from '../types.js';
 
 interface OllamaCompletionOptions {
   // From https://github.com/jmorganca/ollama/blob/v0.1.0/api/types.go#L161
@@ -116,17 +116,21 @@ interface OllamaChatJsonL {
 
 export class OllamaCompletionProvider implements ApiProvider {
   modelName: string;
+  options: ProviderOptions;
   config: OllamaCompletionOptions;
 
-  constructor(modelName: string, options: { id?: string; config?: OllamaCompletionOptions } = {}) {
-    const { id, config } = options;
+  constructor(modelName: string, options: ProviderOptions & { config?: OllamaCompletionOptions } = {}) {
     this.modelName = modelName;
-    this.id = id ? () => id : this.id;
-    this.config = config || {};
+    this.options = options;
+    this.config = options.config || {};
   }
 
-  id(): string {
-    return `ollama:completion:${this.modelName}`;
+  get model(): string {
+    return `ollama:${this.modelName}`;
+  }
+
+  get label(): string {
+    return this.options.label || this.model;
   }
 
   toString(): string {
@@ -200,19 +204,22 @@ export class OllamaCompletionProvider implements ApiProvider {
 
 export class OllamaChatProvider implements ApiProvider {
   modelName: string;
+  options: ProviderOptions;
   config: OllamaCompletionOptions;
 
-  constructor(modelName: string, options: { id?: string; config?: OllamaCompletionOptions } = {}) {
-    const { id, config } = options;
+  constructor(modelName: string, options: ProviderOptions & { config?: OllamaCompletionOptions } = {}) {
     this.modelName = modelName;
-    this.id = id ? () => id : this.id;
-    this.config = config || {};
+    this.options = options;
+    this.config = options.config || {};
   }
 
-  id(): string {
+  get model(): string {
     return `ollama:chat:${this.modelName}`;
   }
 
+  get label(): string {
+    return this.options.label || this.model;
+  }
   toString(): string {
     return `[Ollama Chat Provider ${this.modelName}]`;
   }

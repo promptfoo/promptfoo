@@ -76,12 +76,12 @@ prompts:
   prompts/llama_prompt.txt: llama_prompt
 
 providers:
-  - ollama:llama2:
-      prompts: llama_prompt
-  - ollama:llama2-uncensored:
-      prompts: llama_prompt
-  - openai:gpt-3.5-turbo:
-      prompts: openai_prompt
+  - model: ollama:llama2
+    prompts: llama_prompt
+  - model: ollama:llama2-uncensored
+    prompts: llama_prompt
+  - model: openai:gpt-3.5-turbo
+    prompts: openai_prompt
 ```
 
 ## Add test cases
@@ -120,12 +120,12 @@ prompts:
   prompts/llama_prompt.txt: llama_prompt
 
 providers:
-  - ollama:llama2:
-      prompts: llama_prompt
-  - ollama:llama2-uncensored:
-      prompts: llama_prompt
-  - openai:gpt-3.5-turbo:
-      prompts: openai_prompt
+  - model: ollama:llama2
+    prompts: llama_prompt
+  - model: ollama:llama2-uncensored
+    prompts: llama_prompt
+  - model: openai:gpt-3.5-turbo
+    prompts: openai_prompt
 ```
 
 Let's set up a few assertions to automatically assess the output for correctness. The `defaultTest` block is a shorthand that adds the `assert` to every test:
@@ -171,13 +171,12 @@ prompts:
   llama_prompt.txt: llama_prompt
 
 providers:
-  - ollama:llama2:
-      prompts: llama_prompt
-  - ollama:llama2-uncensored:
-      prompts: llama_prompt
-  - openai:gpt-3.5-turbo:
-      prompts: openai_prompt
-
+  - model: ollama:llama2
+    prompts: llama_prompt
+  - model: ollama:llama2-uncensored
+    prompts: llama_prompt
+  - model: openai:gpt-3.5-turbo
+    prompts: openai_prompt
 ```
 
 :::info

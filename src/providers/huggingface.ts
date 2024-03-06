@@ -6,10 +6,37 @@ import {
   ApiSimilarityProvider,
   ProviderClassificationResponse,
   ProviderEmbeddingResponse,
+  ProviderOptions,
   ProviderResponse,
   ProviderSimilarityResponse,
 } from '../types';
 import { REQUEST_TIMEOUT_MS } from './shared';
+
+abstract class HuggingfaceGenericProvider<TOptions> implements ApiProvider {
+  modelName: string;
+  options: ProviderOptions & { config?: TOptions };
+  config: TOptions;
+
+  constructor(
+    modelName: string,
+    options: ProviderOptions & { config?: TOptions } = {},
+  ) {
+    this.modelName = modelName;
+    this.options = options;
+    this.config = options.config || {} as TOptions;
+  }
+
+  get model() {
+    return `huggingface:text-generation:${this.modelName}`;
+  }
+
+  get label() {
+    return this.options.label || this.model;
+  }
+
+  abstract callApi(prompt: string): Promise<ProviderResponse>;
+}
+
 
 interface HuggingfaceTextGenerationOptions {
   apiKey?: string;
@@ -41,24 +68,7 @@ const HuggingFaceTextGenerationKeys = new Set<keyof HuggingfaceTextGenerationOpt
   'wait_for_model',
 ]);
 
-export class HuggingfaceTextGenerationProvider implements ApiProvider {
-  modelName: string;
-  config: HuggingfaceTextGenerationOptions;
-
-  constructor(
-    modelName: string,
-    options: { id?: string; config?: HuggingfaceTextGenerationOptions } = {},
-  ) {
-    const { id, config } = options;
-    this.modelName = modelName;
-    this.id = id ? () => id : this.id;
-    this.config = config || {};
-  }
-
-  id(): string {
-    return `huggingface:text-generation:${this.modelName}`;
-  }
-
+export class HuggingfaceTextGenerationProvider extends HuggingfaceGenericProvider<HuggingfaceTextGenerationOptions> {
   toString(): string {
     return `[Huggingface Text Generation Provider ${this.modelName}]`;
   }
@@ -135,22 +145,12 @@ interface HuggingfaceTextClassificationOptions {
   apiEndpoint?: string;
 }
 
-export class HuggingfaceTextClassificationProvider implements ApiProvider {
-  modelName: string;
-  config: HuggingfaceTextClassificationOptions;
-
+export class HuggingfaceTextClassificationProvider extends HuggingfaceGenericProvider<HuggingfaceTextClassificationOptions> {
   constructor(
     modelName: string,
-    options: { id?: string; config?: HuggingfaceTextClassificationOptions } = {},
+    options: ProviderOptions & { config?: HuggingfaceTextClassificationOptions } = {},
   ) {
-    const { id, config } = options;
-    this.modelName = modelName;
-    this.id = id ? () => id : this.id;
-    this.config = config || {};
-  }
-
-  id(): string {
-    return `huggingface:text-classification:${this.modelName}`;
+    super(modelName, options);
   }
 
   toString(): string {
@@ -225,24 +225,7 @@ interface HuggingfaceFeatureExtractionOptions {
   wait_for_model?: boolean;
 }
 
-export class HuggingfaceFeatureExtractionProvider implements ApiProvider {
-  modelName: string;
-  config: HuggingfaceFeatureExtractionOptions;
-
-  constructor(
-    modelName: string,
-    options: { id?: string; config?: HuggingfaceFeatureExtractionOptions } = {},
-  ) {
-    const { id, config } = options;
-    this.modelName = modelName;
-    this.id = id ? () => id : this.id;
-    this.config = config || {};
-  }
-
-  id(): string {
-    return `huggingface:feature-extraction:${this.modelName}`;
-  }
-
+export class HuggingfaceFeatureExtractionProvider extends HuggingfaceGenericProvider<HuggingfaceFeatureExtractionOptions> {
   toString(): string {
     return `[Huggingface Feature Extraction Provider ${this.modelName}]`;
   }
@@ -309,24 +292,7 @@ interface HuggingfaceSentenceSimilarityOptions {
   wait_for_model?: boolean;
 }
 
-export class HuggingfaceSentenceSimilarityProvider implements ApiSimilarityProvider {
-  modelName: string;
-  config: HuggingfaceSentenceSimilarityOptions;
-
-  constructor(
-    modelName: string,
-    options: { id?: string; config?: HuggingfaceSentenceSimilarityOptions } = {},
-  ) {
-    const { id, config } = options;
-    this.modelName = modelName;
-    this.id = id ? () => id : this.id;
-    this.config = config || {};
-  }
-
-  id(): string {
-    return `huggingface:sentence-similarity:${this.modelName}`;
-  }
-
+export class HuggingfaceSentenceSimilarityProvider extends HuggingfaceGenericProvider<HuggingfaceSentenceSimilarityOptions> {
   toString(): string {
     return `[Huggingface Sentence Similarity Provider ${this.modelName}]`;
   }
