@@ -1,8 +1,10 @@
 import path from 'path';
+import fs from 'fs';
 
 import logger from '../logger';
 import { getCache, isCacheEnabled } from '../cache';
 import { runPython } from '../python/wrapper';
+import { sha256 } from '../util';
 
 import type {
   ApiProvider,
@@ -19,7 +21,12 @@ export class PythonProvider implements ApiProvider {
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    const cacheKey = `python:${this.scriptPath}:${prompt}:${JSON.stringify(this.options)}`;
+    const absPath = path.resolve(
+      path.join(this.options?.config.basePath || __dirname, this.scriptPath),
+    );
+    logger.debug(`Computing file hash for script ${absPath}`);
+    const fileHash = sha256(fs.readFileSync(absPath, 'utf-8'));
+    const cacheKey = `python:${this.scriptPath}:${fileHash}:${prompt}:${JSON.stringify(this.options)}`;
     const cache = await getCache();
     let cachedResult;
 
