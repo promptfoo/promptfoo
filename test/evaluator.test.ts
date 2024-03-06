@@ -717,11 +717,37 @@ describe('renderPrompt', () => {
 
     jest.doMock(
       path.resolve('/path/to/testFunction.js'),
-      () => (varName: any, prompt: any, vars: any) => ({output: `Dynamic value for ${varName}`}),
+      () => (varName: any, prompt: any, vars: any) => ({ output: `Dynamic value for ${varName}` }),
       { virtual: true },
     );
 
     const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions);
     expect(renderedPrompt).toBe('Test prompt with Dynamic value for var1');
+  });
+
+  it('should load external json files in renderPrompt and parse the JSON content', async () => {
+    const prompt = toPrompt('Test prompt with {{ var1 }}');
+    const vars = { var1: 'file:///path/to/testData.json' };
+    const evaluateOptions = {};
+
+    jest.spyOn(fs, 'readFileSync').mockReturnValueOnce(JSON.stringify({ key: 'valueFromJson' }));
+
+    const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions);
+
+    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('testData.json'), 'utf8');
+    expect(renderedPrompt).toBe('Test prompt with {"key":"valueFromJson"}');
+  });
+
+  it('should load external yaml files in renderPrompt and parse the YAML content', async () => {
+    const prompt = toPrompt('Test prompt with {{ var1 }}');
+    const vars = { var1: 'file:///path/to/testData.yaml' };
+    const evaluateOptions = {};
+
+    jest.spyOn(fs, 'readFileSync').mockReturnValueOnce('key: valueFromYaml');
+
+    const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions);
+
+    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('testData.yaml'), 'utf8');
+    expect(renderedPrompt).toBe('Test prompt with {"key":"valueFromYaml"}');
   });
 });
