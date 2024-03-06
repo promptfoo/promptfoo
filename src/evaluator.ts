@@ -102,13 +102,6 @@ export async function renderPrompt(
 
       logger.debug(`Loading var ${varName} from file: ${filePath}`);
       switch (fileExtension) {
-        case 'yaml':
-        case 'yml':
-          vars[varName] = yaml.load(fs.readFileSync(filePath, 'utf8')) as string | object;
-          break;
-        case 'json':
-          vars[varName] = require(filePath);
-          break;
         case 'js':
           const javascriptOutput = require(filePath)(varName, basePrompt, vars) as {
             output?: string;
@@ -136,6 +129,11 @@ export async function renderPrompt(
           }
           vars[varName] = pythonScriptOutput.output.trim();
           break;
+        case 'yaml':
+        case 'yml':
+          vars[varName] = JSON.stringify(yaml.load(fs.readFileSync(filePath, 'utf8')) as string | object);
+          break;
+        case 'json':
         default:
           vars[varName] = fs.readFileSync(filePath, 'utf8').trim();
           break;
