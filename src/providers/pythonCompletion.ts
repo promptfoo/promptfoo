@@ -34,14 +34,11 @@ export class PythonProvider implements ApiProvider {
       cachedResult = (await cache.get(cacheKey)) as string;
     }
 
-    const absPath = path.resolve(
-      path.join(this.options?.config.basePath || __dirname, this.scriptPath),
-    );
     if (cachedResult) {
       logger.debug(`Returning cached result for script ${absPath}`);
       return JSON.parse(cachedResult);
     } else {
-      const args = [prompt, JSON.stringify(this.options), JSON.stringify(context)];
+      const args = [prompt, this.options, context];
       logger.debug(
         `Running python script ${absPath} with scriptPath ${this.scriptPath} and args: ${args.join(
           '\n',
