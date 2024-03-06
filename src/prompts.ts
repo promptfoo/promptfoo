@@ -56,7 +56,7 @@ export function readProviderPromptMap(
         );
         ret[key] = providerOptions.prompts || allPrompts;
       } else {
-        // Backwards compatibility (2024-03-05)
+        // Backwards compatibility with deprecated provider options map (2024-03-05)
         const rawProvider = provider as ProviderOptionsMap;
         const originalId = Object.keys(rawProvider)[0];
         const providerObject = rawProvider[originalId];

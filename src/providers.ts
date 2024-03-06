@@ -82,19 +82,22 @@ export async function loadApiProviders(
             label: `Custom Function ${idx}`,
             callApi: provider,
           };
-        } else if (provider.model) {
+        } else if (provider.model || provider.id) {
           // List of ProviderConfig objects
-          return loadApiProvider((provider as ProviderOptions).model!, {
+          const providerOptions = provider as ProviderOptions;
+          const model = providerOptions.model || providerOptions.id;
+          invariant(typeof model === 'string', 'Provider must have a `model` property');
+          return loadApiProvider(model, {
             options: provider,
             basePath,
             env,
           });
         } else {
-          // List of { id: string, config: ProviderConfig } objects
-          const id = Object.keys(provider)[0];
-          const providerObject = (provider as ProviderOptionsMap)[id];
-          const context = { ...providerObject, id: providerObject.model || id };
-          return loadApiProvider(id, { options: context, basePath, env });
+          // List of { model: string, config: ProviderConfig } objects
+          const model = Object.keys(provider)[0];
+          const providerObject = (provider as ProviderOptionsMap)[model];
+          const context = { ...providerObject, model: providerObject.model || providerObject.id || model };
+          return loadApiProvider(model, { options: context, basePath, env });
         }
       }),
     );
@@ -110,10 +113,11 @@ export async function loadApiProvider(
     env?: EnvOverrides;
   } = {},
 ): Promise<ApiProvider> {
+  console.trace(providerPath)
   const { options = {}, basePath, env } = context;
   const providerOptions: ProviderOptions = {
-    model: options.model,
-    label: options.label || options.model,
+    model: options.model || options.id, // backwards compatibility 2024-03-06
+    label: options.label || options.model || options.id,
     config: {
       ...options.config,
       basePath,

@@ -59,6 +59,10 @@ export interface EnvOverrides {
 }
 
 export interface ProviderOptions {
+  /**
+   * @deprecated Use `model` instead.
+   */
+  id?: ModelId;
   model?: ModelId;
   label?: ProviderLabel;
   config?: any;

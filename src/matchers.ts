@@ -71,9 +71,10 @@ async function loadFromProviderOptions(provider: ProviderOptions) {
     !Array.isArray(provider),
     `Provider must be an object, but received an array: ${JSON.stringify(provider)}`,
   );
-  invariant(provider.model, 'Provider supplied to assertion must have a `model` property');
+  const model = provider.model || provider.id;
+  invariant(typeof model === 'string', 'Provider supplied to assertion must have a `model` property');
   // TODO(ian): set basepath if invoked from filesystem config
-  return loadApiProvider(provider.model, { options: provider as ProviderOptions });
+  return loadApiProvider(model, { options: provider as ProviderOptions });
 }
 
 export async function getGradingProvider(
