@@ -10,7 +10,7 @@ import logger from '../logger';
  * @param {(string | object)[]} args - The list of arguments to pass to the Python method.
  * @returns {Promise<string[]>} - The result from the Python script.
  */
-export async function runPython(scriptPath: string, method: string, args: (string | object)[]): Promise<any> {
+export async function runPython(scriptPath: string, method: string, args: (string | object | undefined)[]): Promise<any> {
   const absPath = path.resolve(scriptPath);
   const pythonOptions: PythonShellOptions = {
     mode: 'text',
