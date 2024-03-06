@@ -3,20 +3,20 @@ prompts:
   prompts/llama_prompt.txt: llama_prompt
 
 providers:
-  - id: huggingface:text-generation:mistralai/Mistral-7B-Instruct-v0.1
+  - model: huggingface:text-generation:mistralai/Mistral-7B-Instruct-v0.1
     prompts: 
       - mistral_prompt
     config:
       temperature: 0.01
       max_new_tokens: 128
-  - id: replicate:mistralai/mixtral-8x7b-instruct-v0.1
+  - model: replicate:mistralai/mixtral-8x7b-instruct-v0.1
     prompts: 
       - mistral_prompt
     config:
       temperature: 0.01
       max_new_tokens: 128
       prompt_template: '{prompt}'
-  - id: replicate:meta/llama-2-7b-chat:2d19859030ff705a87c746f7e96eea03aefb71f166725aee39692f1476566d48
+  - model: replicate:meta/llama-2-7b-chat:2d19859030ff705a87c746f7e96eea03aefb71f166725aee39692f1476566d48
     prompts: 
       - llama_prompt
     config:

@@ -66,11 +66,14 @@ prompts:
 
 providers:
   - model: huggingface:text-generation:mistralai/Mistral-7B-Instruct-v0.1
-    prompts: mistral_prompt
+    prompts: 
+      - mistral_prompt
   - model: replicate:mistralai/mixtral-8x7b-instruct-v0.1:2b56576fcfbe32fa0526897d8385dd3fb3d36ba6fd0dbe033c72886b81ade93e
-    prompts: mistral prompt
+    prompts: 
+      - mistral_prompt
   - model: replicate:meta/llama-2-7b-chat:8e6975e5ed6174911a6ff3d60540dfd4844201974602551e10e9e87ab143d81e
-    prompts: llama_prompt
+    prompts: 
+      - llama_prompt
 ```
 
 :::tip
@@ -84,14 +87,16 @@ Each model has a `config` field where you can specify additional parameters. Let
 ```yaml title=promptfooconfig.yaml
 providers:
   - model: huggingface:text-generation:mistralai/Mistral-7B-Instruct-v0.1
-    prompts: mistral_prompt
+    prompts: 
+      - mistral_prompt
     // highlight-start
     config:
       temperature: 0.01
       max_new_tokens: 128
     // highlight-end
   - model: replicate:mistralai/mixtral-8x7b-instruct-v0.1:2b56576fcfbe32fa0526897d8385dd3fb3d36ba6fd0dbe033c72886b81ade93e
-    prompts: mistral_prompt
+    prompts: 
+      - mistral_prompt
     // highlight-start
     config:
       prompt_template: '{prompt}'
@@ -99,7 +104,8 @@ providers:
       max_new_tokens: 128
     // highlight-end
   - model: replicate:meta/llama-2-7b-chat:8e6975e5ed6174911a6ff3d60540dfd4844201974602551e10e9e87ab143d81e
-    prompts: llama_prompt
+    prompts: 
+      - llama_prompt
     // highlight-start
     config:
       temperature: 0.01

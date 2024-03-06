@@ -77,9 +77,11 @@ prompts:
 
 providers:
   - model: ollama:llama2
-    prompts: llama_prompt
+    prompts: 
+      - llama_prompt
   - model: ollama:llama2-uncensored
-    prompts: llama_prompt
+    prompts: 
+      - llama_prompt
   - model: openai:gpt-3.5-turbo
     prompts: openai_prompt
 ```
@@ -121,9 +123,11 @@ prompts:
 
 providers:
   - model: ollama:llama2
-    prompts: llama_prompt
+    prompts: 
+      - llama_prompt
   - model: ollama:llama2-uncensored
-    prompts: llama_prompt
+    prompts: 
+      - llama_prompt
   - model: openai:gpt-3.5-turbo
     prompts: openai_prompt
 ```
@@ -172,9 +176,11 @@ prompts:
 
 providers:
   - model: ollama:llama2
-    prompts: llama_prompt
+    prompts: 
+      - llama_prompt
   - model: ollama:llama2-uncensored
-    prompts: llama_prompt
+    prompts: 
+      - llama_prompt
   - model: openai:gpt-3.5-turbo
     prompts: openai_prompt
 ```
