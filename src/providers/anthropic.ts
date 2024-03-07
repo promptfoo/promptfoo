@@ -1,14 +1,10 @@
 import Anthropic from '@anthropic-ai/sdk';
 import logger from '../logger';
 
-import type {
-  ApiProvider,
-  EnvOverrides,
-  ProviderResponse,
-  TokenUsage
-} from '../types.js';
+import type { ApiProvider, EnvOverrides, ProviderResponse, TokenUsage } from '../types.js';
 
 import { getCache, isCacheEnabled } from '../cache';
+import { parseChatPrompt } from './shared';
 
 interface AnthropicMessageOptions {
   apiKey?: string;
@@ -46,9 +42,7 @@ function calculateCost(
     return undefined;
   }
 
-  const model = [
-    ...AnthropicMessagesProvider.ANTHROPIC_MODELS,
-  ].find((m) => m.id === modelName);
+  const model = [...AnthropicMessagesProvider.ANTHROPIC_MODELS].find((m) => m.id === modelName);
   if (!model || !model.cost) {
     return undefined;
   }
@@ -59,31 +53,19 @@ function calculateCost(
 }
 
 function parseMessages(messages: string) {
-  try {
-    const parsedMessages = JSON.parse(messages);
-    let system: string | undefined;
-    const extractedMessages: Array<{ role: "user" | "assistant"; content: Array<{ type: "text"; text: string }> }> = [];
-
-    parsedMessages.forEach((message: { role: string; content: string }) => {
-      if (message.role === "system") {
-        system = message.content;
-      } else if (message.role === "user" || message.role === "assistant") {
-        extractedMessages.push({
-          role: message.role as "user" | "assistant",
-          content: [
-            {
-              type: "text",
-              text: message.content,
-            },
-          ],
-        });
-      }
-    });
-
-    return { system, extractedMessages };
-  } catch (err) {
-    throw new Error(`Could not parse prompt JSON: ${err}\n\n${messages}`);
-  }
+  const chats = parseChatPrompt<{ role: 'user' | 'assistant' | 'system'; content: string }[]>(
+    messages,
+    [{ role: 'user' as const, content: messages }],
+  );
+  // Convert from OpenAI to Anthropic format
+  const system = chats.find((m) => m.role === 'system')?.content;
+  const extractedMessages = chats
+    .filter((m) => m.role === 'user' || m.role === 'assistant')
+    .map((m) => ({
+      role: m.role as 'user' | 'assistant',
+      content: [{ type: 'text' as const, text: m.content }],
+    }));
+  return { system, extractedMessages };
 }
 
 export class AnthropicMessagesProvider implements ApiProvider {
@@ -128,8 +110,8 @@ export class AnthropicMessagesProvider implements ApiProvider {
         input: 0.015 / 1000,
         output: 0.075 / 1000,
       },
-    }))
-  ]
+    })),
+  ];
 
   static ANTHROPIC_MODELS_NAMES = AnthropicMessagesProvider.ANTHROPIC_MODELS.map(
     (model) => model.id,
@@ -137,7 +119,7 @@ export class AnthropicMessagesProvider implements ApiProvider {
 
   constructor(
     modelName: string,
-    options: { id?: string; config?:  AnthropicMessageOptions; env?: EnvOverrides } = {},
+    options: { id?: string; config?: AnthropicMessageOptions; env?: EnvOverrides } = {},
   ) {
     if (!AnthropicMessagesProvider.ANTHROPIC_MODELS_NAMES.includes(modelName)) {
       logger.warn(`Using unknown Anthropic model: ${modelName}`);
@@ -165,14 +147,14 @@ export class AnthropicMessagesProvider implements ApiProvider {
         'Anthropic API key is not set. Set the ANTHROPIC_API_KEY environment variable or add `apiKey` to the provider config.',
       );
     }
-    
-    const {system, extractedMessages} = parseMessages(prompt);
+
+    const { system, extractedMessages } = parseMessages(prompt);
     const params: Anthropic.MessageCreateParams = {
       model: this.modelName,
       ...(system ? { system: system } : {}),
       messages: extractedMessages,
       max_tokens: this.config?.max_tokens || 1024,
-      temperature: this.config.temperature || 0
+      temperature: this.config.temperature || 0,
     };
 
     logger.debug(`Calling Anthropic Messages API: ${JSON.stringify(params)}`);
@@ -191,7 +173,7 @@ export class AnthropicMessagesProvider implements ApiProvider {
         };
       }
     }
-    
+
     try {
       const response = await this.anthropic.messages.create(params);
 
@@ -211,8 +193,8 @@ export class AnthropicMessagesProvider implements ApiProvider {
           this.modelName,
           this.config,
           response.usage?.input_tokens,
-          response.usage?.output_tokens
-        )
+          response.usage?.output_tokens,
+        ),
       };
     } catch (err) {
       logger.error(`Anthropic Messages API call error: ${String(err)}`);
