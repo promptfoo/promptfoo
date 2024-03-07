@@ -55,7 +55,7 @@ const ShareModal: React.FC<ShareModalProps> = ({ open, onClose, shareUrl }) => {
           }}
         />
         <DialogContentText sx={{ fontSize: '0.75rem' }}>
-          Shared URLs are deleted after 1 week.
+          Shared URLs are deleted after 2 weeks.
         </DialogContentText>
       </DialogContent>
       <DialogActions>
