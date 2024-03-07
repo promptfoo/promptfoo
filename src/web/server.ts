@@ -153,7 +153,7 @@ export function startServer(port = 15500, apiBaseUrl = '', skipConfirmation = fa
 
   app.patch('/api/eval/:id', (req, res) => {
     const id = req.params.id;
-    const evalTable = req.body.table;
+    const { table, config } = req.body;
 
     if (!id) {
       res.status(400).json({ error: 'Missing id' });
@@ -161,8 +161,8 @@ export function startServer(port = 15500, apiBaseUrl = '', skipConfirmation = fa
     }
 
     try {
-      updateResult(id, evalTable);
-      res.json({ message: 'Eval table updated successfully' });
+      updateResult(id, config, table);
+      res.json({ message: 'Eval updated successfully' });
     } catch (error) {
       res.status(500).json({ error: 'Failed to update eval table' });
     }
