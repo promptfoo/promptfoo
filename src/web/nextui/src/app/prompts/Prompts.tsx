@@ -39,7 +39,7 @@ export default function Prompts() {
 
   useEffect(() => {
     (async () => {
-      fetch(`${await getApiBaseUrl()}/api/prompts`)
+      fetch(`${await getApiBaseUrl()}/prompts`)
         .then((response) => response.json())
         .then((data) => {
           const sortedData = [...data.data].sort((a, b) => {

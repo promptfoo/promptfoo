@@ -188,6 +188,7 @@ export default function Eval({
           setConfig(body.data.config);
           setLoaded(true);
           setDefaultEvalId(defaultEvalId);
+          setFilePath(defaultEvalId);
         } else {
           return (
             <div className="notice">No evals yet. Share some evals to this server and they will appear here.</div> 
