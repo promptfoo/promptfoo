@@ -64,14 +64,14 @@ export default function Eval({
   );
 
   const fetchRecentFileEvals = async () => {
-    const resp = await fetch(`${await getApiBaseUrl()}/results`, { cache: 'no-store' });
+    const resp = await fetch(`${await getApiBaseUrl()}/api/results`, { cache: 'no-store' });
     const body = await resp.json();
     setRecentEvals(body.data);
     return body.data;
   };
 
   const fetchEvalById = React.useCallback(async (id: string) => {
-    const resp = await fetch(`${await getApiBaseUrl()}/results/${id}`, { cache: 'no-store' });
+    const resp = await fetch(`${await getApiBaseUrl()}/api/results/${id}`, { cache: 'no-store' });
     const body = await resp.json();
     setTable(body.data.results.table);
     setConfig(body.data.config);
@@ -182,7 +182,7 @@ export default function Eval({
         if (evals.length > 0) {
           const apiBaseUrl = await getApiBaseUrl();
           const defaultEvalId = evals[0].id;
-          const resp = await fetch(`${apiBaseUrl}/results/${defaultEvalId}`);
+          const resp = await fetch(`${apiBaseUrl}/api/results/${defaultEvalId}`);
           const body = await resp.json();
           setTable(body.data.results.table);
           setConfig(body.data.config);

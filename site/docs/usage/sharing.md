@@ -82,7 +82,7 @@ By default, the application uses an in-memory store. However, you can configure 
 When self-hosting, you need to set the environment variables for the `promptfoo share` command to point to your hosted application. Here's an example:
 
 ```bash
-PROMPTFOO_REMOTE_API_BASE_URL=http://localhost:3000/api PROMPTFOO_REMOTE_APP_BASE_URL=http://localhost:3000 promptfoo share -y
+PROMPTFOO_REMOTE_API_BASE_URL=http://localhost:3000 PROMPTFOO_REMOTE_APP_BASE_URL=http://localhost:3000 promptfoo share -y
 ```
 
 This will create a shareable URL using your self-hosted service.
@@ -95,6 +95,6 @@ These configuration options can also be set under the `sharing` property of your
 
 ```yaml
 sharing:
-  apiBaseUrl: http://localhost:3000/api
+  apiBaseUrl: http://localhost:3000
   appBaseUrl: http://localhost:3000
 ```
