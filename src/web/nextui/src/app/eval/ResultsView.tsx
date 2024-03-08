@@ -39,6 +39,7 @@ import type { VisibilityState } from '@tanstack/table-core';
 import type { FilterMode } from './types';
 
 import './ResultsView.css';
+import { getApiBaseUrl } from '@/api';
 
 const ResponsiveStack = styled(Stack)(({ theme }) => ({
   maxWidth: '100%',
@@ -63,7 +64,8 @@ export default function ResultsView({
   defaultEvalId,
 }: ResultsViewProps) {
   const router = useRouter();
-  const { table, config, maxTextLength, wordBreak, showInferenceDetails, filePath } = useResultsViewStore();
+  const { table, config, setConfig, maxTextLength, wordBreak, showInferenceDetails, filePath } =
+    useResultsViewStore();
   const { setStateFromConfig } = useMainStore();
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
   const [selectedColumns, setSelectedColumns] = React.useState<string[]>([]);
@@ -152,6 +154,29 @@ export default function ResultsView({
     setColumnVisibility(newColumnVisibility);
   };
 
+  const handleHeadingClick = async () => {
+    invariant(config, 'Config must be loaded before clicking its description');
+    const newDescription = window.prompt('Enter new description:', config.description);
+    if (newDescription !== null && newDescription !== config.description) {
+      const newConfig = { ...config, description: newDescription };
+      try {
+        const response = await fetch(`${await getApiBaseUrl()}/api/eval/${filePath}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ config: newConfig }),
+        });
+        if (!response.ok) {
+          throw new Error('Network response was not ok');
+        }
+        setConfig(newConfig);
+      } catch (error) {
+        console.error('Failed to update table:', error);
+      }
+    }
+  };
+
   const columnData = [
     ...head.vars.map((_, idx) => ({
       value: `Variable ${idx + 1}`,
@@ -179,8 +204,13 @@ export default function ResultsView({
   return (
     <div style={{ marginLeft: '1rem', marginRight: '1rem' }}>
       {config?.description && (
-        <Box mb={2}>
-          <Heading variant="h5">{config.description} <span className="description-filepath">{filePath}</span></Heading>
+        <Box mb={2} sx={{ display: 'flex', alignItems: 'center' }}>
+          <Heading variant="h5" sx={{ flexGrow: 1 }}>
+            <span className="description" onClick={handleHeadingClick}>
+              {config.description}
+            </span>{' '}
+            <span className="description-filepath">{filePath}</span>
+          </Heading>
         </Box>
       )}
       <Paper py="md">
