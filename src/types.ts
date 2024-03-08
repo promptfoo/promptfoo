@@ -542,3 +542,11 @@ export interface OutputFile {
   config: Partial<UnifiedConfig>;
   shareableUrl: string | null;
 }
+
+// Live eval job state
+export interface Job {
+  status: 'in-progress' | 'complete';
+  progress: number;
+  total: number;
+  result: EvaluateSummary | null;
+}

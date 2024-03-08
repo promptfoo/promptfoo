@@ -12,8 +12,8 @@ import compression from 'compression';
 import opener from 'opener';
 import { Server as SocketIOServer } from 'socket.io';
 import promptfoo, {
-  EvaluateSummary,
   EvaluateTestSuite,
+  Job,
   Prompt,
   PromptWithMetadata,
   TestCase,
@@ -34,13 +34,6 @@ import {
   updateResult,
 } from '../util';
 import { synthesizeFromTestSuite } from '../testCases';
-
-interface Job {
-  status: 'in-progress' | 'complete';
-  progress: number;
-  total: number;
-  result: EvaluateSummary | null;
-}
 
 // Running jobs
 const evalJobs = new Map<string, Job>();
