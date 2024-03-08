@@ -90,7 +90,7 @@ export function startServer(port = 15500, apiBaseUrl = '', skipConfirmation = fa
     });
   });
 
-  app.get('/results', (req, res) => {
+  app.get('/api/results', (req, res) => {
     const previousResults = listPreviousResults();
     previousResults.reverse();
     res.json({
@@ -168,7 +168,7 @@ export function startServer(port = 15500, apiBaseUrl = '', skipConfirmation = fa
     }
   });
 
-  app.get('/results/:filename', (req, res) => {
+  app.get('/api/results/:filename', (req, res) => {
     const filename = req.params.filename;
     const safeFilename = path.basename(filename);
     if (

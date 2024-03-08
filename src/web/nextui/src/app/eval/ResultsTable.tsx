@@ -26,7 +26,7 @@ import { useStore as useMainStore } from '@/app/eval/store';
 
 import type { CellContext, ColumnDef, VisibilityState } from '@tanstack/table-core';
 
-import type { EvaluateTableRow, EvaluateTableOutput, FilterMode, GradingResult } from './types';
+import type { EvaluateTableRow, EvaluateTableOutput, FilterMode, GradingResult, EvaluateTable } from './types';
 
 import './ResultsTable.css';
 
@@ -581,7 +581,7 @@ export default function ResultsTable({
     updatedOutputs[promptIndex].gradingResult = gradingResult;
     updatedRow.outputs = updatedOutputs;
     updatedData[rowIndex] = updatedRow;
-    const newTable = {
+    const newTable: EvaluateTable = {
       head,
       body: updatedData,
     };

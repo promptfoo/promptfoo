@@ -101,7 +101,7 @@ export default function ResultsView({
   const handleShareButtonClick = async () => {
     setShareLoading(true);
     try {
-      const response = await fetch(`${REMOTE_API_BASE_URL}/eval`, {
+      const response = await fetch(`${REMOTE_API_BASE_URL}/api/eval`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
