@@ -41,7 +41,7 @@ export default function Navigation({
       <NavLink href="/prompts" label="Prompts" />
       <NavLink href="/datasets" label="Datasets" />
       <div className="right-aligned">
-        {USE_SUPABASE ? null : <LoggedInAs />}
+        {USE_SUPABASE ? <LoggedInAs /> : null}
         <DarkMode darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} />
       </div>
     </Stack>
