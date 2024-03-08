@@ -9,9 +9,9 @@ The YAML configuration format runs each prompt through a series of example input
 
 Asserts are _optional_. Many people get value out of reviewing outputs manually, and the web UI helps facilitate this.
 
-## Examples
+## Example
 
-Let's imagine we're building an app that does language translation. This config runs each prompt through GPT-3.5 and Vicuna, substituting three variables:
+Let's imagine we're building an app that does language translation. This config runs each prompt through GPT-3.5 and Gemini, substituting `language` and `input` variables:
 
 ```yaml
 prompts: [prompt1.txt, prompt2.txt]
@@ -31,9 +31,9 @@ For more information on setting up a prompt file, see [input and output files](/
 
 :::
 
-Running `promptfoo eval` over this config will result in a _matrix view_ that you can use to evaluate GPT vs Vicuna.
+Running `promptfoo eval` over this config will result in a _matrix view_ that you can use to evaluate GPT vs Gemini.
 
-### Use assertions to validate output
+## Use assertions to validate output
 
 Next, let's add an assertion. This automatically rejects any outputs that don't contain JSON:
 
@@ -87,9 +87,9 @@ To learn more about assertions, see docs on configuring [expected outputs](/docs
 
 :::
 
-### Avoiding repetition
+## Avoiding repetition
 
-#### Default test cases
+### Default test cases
 
 Use `defaultTest` to set properties for all tests.
 
@@ -129,7 +129,7 @@ defaultTest:
     provider: openai:gpt-3.5-turbo-0613
 ```
 
-#### YAML references
+### YAML references
 
 promptfoo configurations support JSON schema [references](https://opis.io/json-schema/2.x/references.html), which define reusable blocks.
 
@@ -166,7 +166,7 @@ assertionTemplates:
 `tools` and `functions` values in providers config are _not_ dereferenced. This is because they are standalone JSON schemas that may contain their own internal references.
 :::
 
-#### Import tests from separate files
+## Import tests from separate files
 
 The `tests` config attribute takes a list of paths to files or directories. For example:
 
@@ -200,7 +200,7 @@ Or a list of paths:
 tests: ['tests/accuracy', 'tests/creativity', 'tests/hallucination']
 ```
 
-#### Import vars from separate files
+## Import vars from separate files
 
 The `vars` attribute can point to a file or directory. For example:
 
@@ -229,7 +229,7 @@ tests:
 
 This is useful when testing vector databases like Pinecone, Chroma, Milvus, etc.
 
-#### JavaScript variables
+### JavaScript variables
 
 To dynamically load a variable from a JavaScript file, use the `file://` prefix in your YAML configuration, pointing to a JavaScript file that exports a function.
 
@@ -258,7 +258,7 @@ module.exports = function (varName, prompt, otherVars) {
 
 This JavaScript file processes input variables and returns a dynamic value based on the provided context.
 
-#### Python variables
+### Python variables
 
 For Python, the approach is similar. Define a Python script that includes a `get_var` function to generate your variable's value. The function should accept `var_name`, `prompt`, and `other_vars`.
 
@@ -283,7 +283,7 @@ def get_var(var_name, prompt, other_vars):
     # return { 'error': 'Error message' }
 ```
 
-### Multiple variables in a single test case
+## Multiple variables in a single test case
 
 The `vars` map in the test also supports array values. If values are an array, the test case will run each combination of values.
 
@@ -308,7 +308,7 @@ Evaluates each `language` x `input` combination:
 
 <img alt="Multiple combinations of var inputs" src="https://user-images.githubusercontent.com/310310/243108917-dab27ca5-689b-4843-bb52-de8d459d783b.png" />
 
-### Using nunjucks templates
+## Using nunjucks templates
 
 In the above examples, `vars` values are strings. But `vars` can be any JSON or YAML entity, including nested objects. You can manipulate these objects in the prompt, which are [nunjucks](https://mozilla.github.io/nunjucks/) templates.
 
@@ -353,13 +353,13 @@ Running `promptfoo eval -p prompt.txt -c path_to.yaml` will call the Chat Comple
 
 Use Nunjucks templates to exert additional control over your prompt templates, including loops, conditionals, and more.
 
-### Tools and functions
+## Tools and functions
 
 promptfoo supports OpenAI tools, functions, and other provider-specific configurations like temperature, number of tokens, and so on.
 
 To use, override the `config` key of the provider. See example [here](/docs/providers/openai#using-functions).
 
-### Transforming outputs
+## Transforming outputs
 
 The `TestCase.options.transform` field is a Javascript snippet that modifies the LLM output before it is run through the test assertions.
 
