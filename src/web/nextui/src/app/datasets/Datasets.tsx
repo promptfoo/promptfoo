@@ -39,7 +39,7 @@ export default function Datasets() {
 
   useEffect(() => {
     (async () => {
-      fetch(`${await getApiBaseUrl()}/datasets`)
+      fetch(`${await getApiBaseUrl()}/api/datasets`)
         .then((response) => response.json())
         .then((data) => {
           const sortedData = [...data.data].sort((a, b) => {
