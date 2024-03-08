@@ -2,7 +2,7 @@
   "name": "promptfoo",
   "description": "LLM eval & testing toolkit",
   "author": "Ian Webster",
-  "version": "0.44.0",
+  "version": "0.46.0",
   "license": "MIT",
   "type": "commonjs",
   "repository": "promptfoo/promptfoo",
@@ -32,7 +32,7 @@
     "build:clean": "rm -rf dist",
     "build:nextui": "cd src/web/nextui && npm run build && { [ -z \"$NEXT_PUBLIC_PROMPTFOO_BUILD_STANDALONE_SERVER\" ] && cp -r out/ ../../../dist/src/web/nextui; } || true",
     "build:watch": "tsc --watch",
-    "build": "tsc && cp src/*.html dist/src && cp src/providers/wrapper.py dist/src/providers && npm run build:nextui && chmod +x dist/src/main.js",
+    "build": "tsc && cp src/*.html dist/src && cp src/python/wrapper.py dist/src/python && npm run build:nextui && chmod +x dist/src/main.js",
     "prepare": "npm run install:nextui && npm run build:clean && npm run build",
     "test": "jest",
     "test:watch": "jest --watch",
@@ -71,7 +71,7 @@
     "typescript": "^5.0.4"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.5.2",
+    "@anthropic-ai/sdk": "0.16.1",
     "@apidevtools/json-schema-ref-parser": "^10.1.0",
     "ajv": "^8.12.0",
     "ajv-formats": "^2.1.1",

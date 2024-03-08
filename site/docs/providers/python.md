@@ -2,7 +2,7 @@
 sidebar_position: 51
 ---
 
-# Python script
+# Python
 
 The `python` provider allows you to use a Python script as an API provider for evaluating prompts. This is useful when you have custom logic or models implemented in Python that you want to integrate with your test suite.
 
@@ -18,9 +18,12 @@ providers:
       additionalOption: 123
 ```
 
-### Python Script
+### Python script
 
-Your Python script should accept a prompt, options, and context as arguments. It should return a JSON-encoded `ProviderResponse`. The `ProviderResponse` must include an `output` field containing the result of the API call. Optionally, it can include an `error` field if something goes wrong, and a `tokenUsage` field to report the number of tokens used.
+Your Python script should accept a prompt, options, and context as arguments. It should return a JSON-encoded `ProviderResponse`.
+
+- The `ProviderResponse` must include an `output` field containing the result of the API call.
+- Optionally, it can include an `error` field if something goes wrong, and a `tokenUsage` field to report the number of tokens used.
 
 Here's an example of a Python script that could be used with the Python provider, which includes handling for the prompt, options, and context:
 

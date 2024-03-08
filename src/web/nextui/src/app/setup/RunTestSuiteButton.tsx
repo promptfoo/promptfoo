@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Button, CircularProgress } from '@mui/material';
 
 import { useStore } from '@/state/evalConfig';
-import { IS_RUNNING_LOCALLY, NEXTJS_BASE_URL } from '@/constants';
+import { IS_RUNNING_LOCALLY, NEXTJS_BASE_URL, USE_SUPABASE } from '@/constants';
 
 const RunTestSuiteButton: React.FC = () => {
   const router = useRouter();
@@ -52,10 +52,11 @@ const RunTestSuiteButton: React.FC = () => {
         if (progressData.status === 'complete') {
           clearInterval(intervalId);
           setIsRunning(false);
-          if (IS_RUNNING_LOCALLY) {
-            router.push('/eval');
-          } else {
+          if (USE_SUPABASE) {
             router.push(`/eval/remote:${encodeURIComponent(job.id)}`);
+          } else {
+            // TODO(ian): This just redirects to the eval page, which shows the most recent eval.  Redirect to this specific eval to avoid race.
+            router.push('/eval');
           }
         } else if (progressData.status === 'failed') {
           clearInterval(intervalId);

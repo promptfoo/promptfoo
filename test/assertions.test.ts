@@ -1792,7 +1792,6 @@ print(json.dumps(eval(value)))`,
         output: 'Some output',
         logProbs,
       });
-      console.log(result);
       expect(result.pass).toBeFalsy();
       expect(result.reason).toBe('Perplexity score 0.44 is less than threshold 0.5');
     });

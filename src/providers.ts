@@ -12,7 +12,10 @@ import {
   OpenAiEmbeddingProvider,
   OpenAiImageProvider,
 } from './providers/openai';
-import { AnthropicCompletionProvider } from './providers/anthropic';
+import { 
+  AnthropicCompletionProvider, 
+  AnthropicMessagesProvider
+} from './providers/anthropic';
 import { ReplicateProvider } from './providers/replicate';
 import {
   LocalAiCompletionProvider,
@@ -163,7 +166,7 @@ export async function loadApiProvider(
     } else if (modelType === 'assistant') {
       return new OpenAiAssistantProvider(modelName, providerOptions);
     } else if (modelType === 'image') {
-      return new OpenAiImageProvider(modelName, providerOptions)
+      return new OpenAiImageProvider(modelName, providerOptions);
     } else {
       throw new Error(
         `Unknown OpenAI model type: ${modelType}. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>, openai:embeddings:<model name>, openai:image:<model name>`,
@@ -194,8 +197,10 @@ export async function loadApiProvider(
     const modelType = splits[1];
     const modelName = splits[2];
 
-    if (modelType === 'completion') {
-      return new AnthropicCompletionProvider(modelName || 'claude-instant-1', providerOptions);
+    if (modelType === 'messages'){
+      return new AnthropicMessagesProvider(modelName, providerOptions)
+    } else if (modelType === 'completion') {
+      return new AnthropicCompletionProvider(modelName, providerOptions);
     } else if (AnthropicCompletionProvider.ANTHROPIC_COMPLETION_MODELS.includes(modelType)) {
       return new AnthropicCompletionProvider(modelType, providerOptions);
     } else {

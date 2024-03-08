@@ -202,13 +202,13 @@ import json
 output = sys.argv[1]
 context = json.loads(sys.argv[2])
 
-print(f'Received {output} with variables {context}')
+# Use `output` and `context['vars']` to determine result ...
 
-return {
-  'pass': True,
+print(json.dumps({
+  'pass': False,
   'score': 0.5,
   'reason': 'Some custom reason',
-}
+}))
 ```
 
 ## Load assertions from CSV

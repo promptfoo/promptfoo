@@ -29,6 +29,7 @@ import type {
   OutputFile,
   ProviderOptions,
   Prompt,
+  FilePath,
 } from './types';
 
 let globalConfigCache: any = null;
@@ -322,7 +323,9 @@ export function writeOutput(
       namedScoresText.length > 0
         ? `(${output.score.toFixed(2)}, ${namedScoresText})`
         : `(${output.score.toFixed(2)})`;
-    const gradingResultText = output.gradingResult ? `${output.pass ? 'Pass' : 'Fail'} Reason: ${output.gradingResult.reason}` : '';
+    const gradingResultText = output.gradingResult
+      ? `${output.pass ? 'Pass' : 'Fail'} Reason: ${output.gradingResult.reason}`
+      : '';
     return `${passFailText} ${scoreText}
 
 ${output.text}
@@ -385,7 +388,10 @@ export function getLatestResultsPath(): string {
   return path.join(getConfigDirectoryPath(), 'output', 'latest.json');
 }
 
-export function writeLatestResults(results: EvaluateSummary, config: Partial<UnifiedConfig>) {
+export function writeLatestResults(
+  results: EvaluateSummary,
+  config: Partial<UnifiedConfig>,
+): FilePath | null {
   const resultsDirectory = path.join(getConfigDirectoryPath(), 'output');
 
   // Replace hyphens with colons (Windows compatibility).
@@ -411,8 +417,11 @@ export function writeLatestResults(results: EvaluateSummary, config: Partial<Uni
     fs.copyFileSync(newResultsPath, latestResultsPath);
 
     cleanupOldResults();
+
+    return filename;
   } catch (err) {
     logger.error(`Failed to write latest results to ${newResultsPath}:\n${err}`);
+    return null;
   }
 }
 
@@ -502,15 +511,25 @@ export function readResult(
   }
 }
 
-export function updateResult(filename: string, newTable: EvaluateTable): void {
+export function updateResult(
+  filename: string,
+  newConfig?: Partial<UnifiedConfig>,
+  newTable?: EvaluateTable,
+): void {
   const resultsDirectory = path.join(getConfigDirectoryPath(), 'output');
   const safeFilename = path.basename(filename);
   const resultsPath = path.join(resultsDirectory, safeFilename);
   try {
     const evalData = JSON.parse(fs.readFileSync(resultsPath, 'utf-8')) as ResultsFile;
-    evalData.results.table = newTable;
+    if (newConfig) {
+      evalData.config = newConfig;
+    }
+    if (newTable) {
+      evalData.results.table = newTable;
+    }
+    resultsCache[safeFilename] = evalData;
     fs.writeFileSync(resultsPath, JSON.stringify(evalData, null, 2));
-    logger.info(`Updated results in ${resultsPath}`);
+    logger.info(`Updated eval at ${resultsPath}`);
 
     const resultFilenames = listPreviousResultFilenames();
     if (filename === resultFilenames[resultFilenames.length - 1]) {
@@ -518,7 +537,7 @@ export function updateResult(filename: string, newTable: EvaluateTable): void {
       fs.copyFileSync(resultsPath, getLatestResultsPath());
     }
   } catch (err) {
-    logger.error(`Failed to update results in ${resultsPath}:\n${err}`);
+    logger.error(`Failed to update eval at ${resultsPath}:\n${err}`);
   }
 }
 

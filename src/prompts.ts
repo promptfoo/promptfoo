@@ -7,6 +7,7 @@ import { globSync } from 'glob';
 import { PythonShell, Options as PythonShellOptions } from 'python-shell';
 
 import logger from './logger';
+import { runPython } from './python/wrapper';
 
 import type {
   UnifiedConfig,
@@ -140,10 +141,13 @@ export function readPrompts(
   for (const promptPathInfo of promptPathInfos) {
     const parsedPath = path.parse(promptPathInfo.resolved);
     let filename = parsedPath.base;
-    let functionName;
+    let functionName: string | undefined;
     if (parsedPath.base.includes(':')) {
       const splits = parsedPath.base.split(':');
-      if (splits[0] && (splits[0].endsWith('.js') || splits[0].endsWith('.cjs'))) {
+      if (
+        splits[0] &&
+        (splits[0].endsWith('.js') || splits[0].endsWith('.cjs') || splits[0].endsWith('.py'))
+      ) {
         [filename, functionName] = splits;
       }
     }
@@ -195,15 +199,20 @@ export function readPrompts(
       } else if (ext === '.py') {
         const fileContent = fs.readFileSync(promptPath, 'utf-8');
         const promptFunction = async (context: { vars: Record<string, string | object> }) => {
-          const options: PythonShellOptions = {
-            mode: 'text',
-            pythonPath: process.env.PROMPTFOO_PYTHON || 'python',
-            args: [JSON.stringify(context)],
-          };
-          logger.debug(`Executing python prompt script ${promptPath}`);
-          const results = (await PythonShell.run(promptPath, options)).join('\n');
-          logger.debug(`Python prompt script ${promptPath} returned: ${results}`);
-          return results;
+          if (functionName) {
+            return runPython(promptPath, functionName, [context]);
+          } else {
+            // Legacy: run the whole file
+            const options: PythonShellOptions = {
+              mode: 'text',
+              pythonPath: process.env.PROMPTFOO_PYTHON || 'python',
+              args: [JSON.stringify(context)],
+            };
+            logger.debug(`Executing python prompt script ${promptPath}`);
+            const results = (await PythonShell.run(promptPath, options)).join('\n');
+            logger.debug(`Python prompt script ${promptPath} returned: ${results}`);
+            return results;
+          }
         };
         let display = fileContent;
         if (inputType === PromptInputType.NAMED) {
@@ -339,9 +348,10 @@ export const AI_SELF_REFERENCE_PROMPT_SYSTEM_MESSAGE = {
   content: `In this task, you will be given a string of text produced by a large language model. Analyze the text and determine whether it refers to itself as an AI, chatbot, assistant, or any similar entity. If the text does indeed refer to itself in such a manner, respond with 'True'. Otherwise, respond with 'False'.`,
 };
 
-export const SELECT_BEST_PROMPT = JSON.stringify([{
-  role: 'system',
-  content: `You are comparing multiple pieces of text to see which best fits the following criteria: {{criteria}}
+export const SELECT_BEST_PROMPT = JSON.stringify([
+  {
+    role: 'system',
+    content: `You are comparing multiple pieces of text to see which best fits the following criteria: {{criteria}}
 
 Here are the pieces of text:
 
@@ -352,4 +362,5 @@ Here are the pieces of text:
 {% endfor %}
 
 Output the index of the text that best fits the criteria. You must output a single integer.`,
-}]);
+  },
+]);

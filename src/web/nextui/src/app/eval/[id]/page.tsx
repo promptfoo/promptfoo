@@ -34,8 +34,8 @@ export default async function Page({ params }: { params: { id: string } }) {
     // Load local file and list of recent files in parallel
     const apiBaseUrl = await getApiBaseUrl();
     const [response, response2] = await Promise.all([
-      fetch(`${apiBaseUrl}/results/${decodedId.slice(6)}`),
-      fetch(`${apiBaseUrl}/results`),
+      fetch(`${apiBaseUrl}/api/results/${decodedId.slice(6)}`),
+      fetch(`${apiBaseUrl}/api/results`),
     ]);
 
     if (!response.ok) {

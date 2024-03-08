@@ -1,8 +1,11 @@
 import readline from 'readline';
+import * as fs from 'fs';
+import * as path from 'path';
 
 import async from 'async';
 import chalk from 'chalk';
 import invariant from 'tiny-invariant';
+import yaml from 'js-yaml';
 
 import logger from './logger';
 import telemetry from './telemetry';
@@ -25,6 +28,7 @@ import type {
   Prompt,
   TestSuite,
 } from './types';
+import { runPython } from './python/wrapper';
 
 interface RunEvalOptions {
   provider: ApiProvider;
@@ -33,6 +37,7 @@ interface RunEvalOptions {
 
   test: AtomicTestCase;
   nunjucksFilters?: NunjucksFilterMap;
+  evaluateOptions: EvaluateOptions;
 
   rowIndex: number;
   colIndex: number;
@@ -73,6 +78,7 @@ function generateVarCombinations(
 export async function renderPrompt(
   prompt: Prompt,
   vars: Record<string, string | object>,
+  evaluateOptions: EvaluateOptions,
   nunjucksFilters?: NunjucksFilterMap,
 ): Promise<string> {
   const nunjucks = getNunjucksEngine(nunjucksFilters);
@@ -86,7 +92,53 @@ export async function renderPrompt(
     } else {
       throw new Error(`Prompt function must return a string or object, got ${typeof result}`);
     }
-    // TODO(ian): Handle promise
+  }
+
+  for (const [varName, value] of Object.entries(vars)) {
+    if (typeof value === 'string' && value.startsWith('file://')) {
+      const basePath = evaluateOptions.basePath || '';
+      const filePath = path.resolve(process.cwd(), basePath, value.slice('file://'.length));
+      const fileExtension = filePath.split('.').pop();
+
+      logger.debug(`Loading var ${varName} from file: ${filePath}`);
+      switch (fileExtension) {
+        case 'js':
+          const javascriptOutput = require(filePath)(varName, basePrompt, vars) as {
+            output?: string;
+            error?: string;
+          };
+          if (javascriptOutput.error) {
+            throw new Error(`Error running JS script ${filePath}: ${javascriptOutput.error}`);
+          }
+          if (!javascriptOutput.output) {
+            throw new Error(`JS script ${filePath} did not return any output`);
+          }
+          vars[varName] = javascriptOutput.output;
+          break;
+        case 'py':
+          const pythonScriptOutput = (await runPython(filePath, 'get_var', [
+            varName,
+            basePrompt,
+            vars,
+          ])) as { output?: string; error?: string };
+          if (pythonScriptOutput.error) {
+            throw new Error(`Error running Python script ${filePath}: ${pythonScriptOutput.error}`);
+          }
+          if (!pythonScriptOutput.output) {
+            throw new Error(`Python script ${filePath} did not return any output`);
+          }
+          vars[varName] = pythonScriptOutput.output.trim();
+          break;
+        case 'yaml':
+        case 'yml':
+          vars[varName] = JSON.stringify(yaml.load(fs.readFileSync(filePath, 'utf8')) as string | object);
+          break;
+        case 'json':
+        default:
+          vars[varName] = fs.readFileSync(filePath, 'utf8').trim();
+          break;
+      }
+    }
   }
 
   try {
@@ -152,6 +204,7 @@ class Evaluator {
     test,
     delay,
     nunjucksFilters: filters,
+    evaluateOptions,
   }: RunEvalOptions): Promise<EvaluateResult> {
     // Use the original prompt to set the display, not renderedPrompt
     let promptDisplay = prompt.display;
@@ -169,7 +222,7 @@ class Evaluator {
     }
 
     // Render the prompt
-    const renderedPrompt = await renderPrompt(prompt, vars, filters);
+    const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions, filters);
 
     let renderedJson = undefined;
     try {
@@ -511,6 +564,7 @@ class Evaluator {
                 rowIndex,
                 colIndex,
                 repeatIndex,
+                evaluateOptions: options,
               });
               colIndex++;
             }

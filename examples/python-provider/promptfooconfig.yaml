@@ -5,7 +5,7 @@ prompts:
 providers:
   - model: python:provider.py   # or provider_async.py
     config:
-      foo: bar
+      someOption: foobar
 
 tests:
   - vars:

@@ -57,11 +57,17 @@ To set up self-hosting for the sharing feature, you need to host the Next.js app
 You can use the provided [Dockerfile](https://github.com/promptfoo/promptfoo/blob/main/Dockerfile) to containerize and host the Next.js app. Here's an example Docker command to build and run the container:
 
 ```bash
-docker build --build-arg NEXT_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL=http://localhost:3000/api -t promptfoo-ui .
+docker build --build-arg NEXT_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL=http://localhost:3000 -t promptfoo-ui .
 docker run -p 3000:3000 promptfoo-ui
 ```
 
 The `NEXT_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL` tells the web app where to send the API request when the user clicks the 'Share' button.  This should be configured to match the URL of your self-hosted instance.
+
+You can also set API credentials on the running Docker instance so that evals can be run on the server.  For example:
+
+```bash
+docker run -p 3000:3000 -e -e OPENAI_API_KEY=sk-abc123 promptfoo-ui
+```
 
 ### Configuring the KV Store
 
@@ -82,7 +88,7 @@ By default, the application uses an in-memory store. However, you can configure 
 When self-hosting, you need to set the environment variables for the `promptfoo share` command to point to your hosted application. Here's an example:
 
 ```bash
-PROMPTFOO_REMOTE_API_BASE_URL=http://localhost:3000/api PROMPTFOO_REMOTE_APP_BASE_URL=http://localhost:3000 promptfoo share -y
+PROMPTFOO_REMOTE_API_BASE_URL=http://localhost:3000 PROMPTFOO_REMOTE_APP_BASE_URL=http://localhost:3000 promptfoo share -y
 ```
 
 This will create a shareable URL using your self-hosted service.
@@ -95,6 +101,6 @@ These configuration options can also be set under the `sharing` property of your
 
 ```yaml
 sharing:
-  apiBaseUrl: http://localhost:3000/api
+  apiBaseUrl: http://localhost:3000
   appBaseUrl: http://localhost:3000
 ```

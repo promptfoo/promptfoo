@@ -26,7 +26,9 @@ prompts:
   - "Write a tweet about {{topic}}"
   - "Write a very concise, funny tweet about {{topic}}"
 
-providers: [openai:gpt-3.5-turbo-0613, openai:gpt-4]
+providers:
+  - openai:gpt-3.5-turbo-0613
+  - openai:gpt-4
 
 tests:
   - vars:
