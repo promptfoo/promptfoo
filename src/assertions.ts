@@ -519,16 +519,21 @@ export async function runAssertion({
       type: 'function';
       function: { arguments: string; name: string };
     }[];
-    invariant(Array.isArray(toolsOutput), 'is-valid-tools assertion must evaluate an array');
-    invariant(toolsOutput.length > 0, 'is-valid-tools assertion must evaluate a non-empty array');
-    invariant(
-      typeof toolsOutput[0].function.name === 'string',
-      'is-valid-tools assertion must evaluate an array of objects with string name properties',
-    );
-    invariant(
-      typeof toolsOutput[0].function.arguments === 'string',
-      'is-valid-tools assertion must evaluate an array of objects with string arguments properties',
-    );
+    if (
+      !Array.isArray(toolsOutput) ||
+      toolsOutput.length === 0 ||
+      typeof toolsOutput[0].function.name !== 'string' ||
+      typeof toolsOutput[0].function.arguments !== 'string'
+    ) {
+      return {
+        pass: false,
+        score: 0,
+        reason: `OpenAI did not return a valid-looking tools response: ${JSON.stringify(
+          toolsOutput,
+        )}`,
+        assertion,
+      };
+    }
 
     try {
       toolsOutput.forEach((toolOutput) =>
@@ -555,12 +560,20 @@ export async function runAssertion({
 
   if (baseType === 'is-valid-openai-function-call') {
     const functionOutput = output as { arguments: string; name: string };
-    invariant(
-      typeof functionOutput === 'object' &&
-        typeof functionOutput.name === 'string' &&
-        typeof functionOutput.arguments === 'string',
-      'is-valid-function assertion must evaluate an object with string name and arguments properties',
-    );
+    if (
+      typeof functionOutput !== 'object' ||
+      typeof functionOutput.name !== 'string' ||
+      typeof functionOutput.arguments !== 'string'
+    ) {
+      return {
+        pass: false,
+        score: 0,
+        reason: `OpenAI did not return a valid-looking function call: ${JSON.stringify(
+          functionOutput,
+        )}`,
+        assertion,
+      };
+    }
     try {
       validateFunctionCall(
         functionOutput,
