@@ -63,6 +63,12 @@ docker run -p 3000:3000 promptfoo-ui
 
 The `NEXT_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL` tells the web app where to send the API request when the user clicks the 'Share' button.  This should be configured to match the URL of your self-hosted instance.
 
+You can also set API credentials on the running Docker instance so that evals can be run on the server.  For example:
+
+```bash
+docker run -p 3000:3000 -e -e OPENAI_API_KEY=sk-abc123 promptfoo-ui
+```
+
 ### Configuring the KV Store
 
 By default, the application uses an in-memory store. However, you can configure it to use Redis or the filesystem by setting the appropriate environment variables. Below is a table of environment variables you can set to configure the KV store:
