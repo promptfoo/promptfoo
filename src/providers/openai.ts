@@ -293,6 +293,11 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       };
     }
     logger.debug(`\tOpenAI completions API response: ${JSON.stringify(data)}`);
+    if (data.error) {
+      return {
+        error: formatOpenAiError(data),
+      };
+    }
     try {
       return {
         output: data.choices[0].text,
@@ -307,7 +312,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       };
     } catch (err) {
       return {
-        error: `API response error: ${String(err)}: ${JSON.stringify(data)}`,
+        error: `API error: ${String(err)}: ${JSON.stringify(data)}`,
       };
     }
   }
@@ -441,6 +446,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     }
 
     logger.debug(`\tOpenAI chat completions API response: ${JSON.stringify(data)}`);
+    if (data.error) {
+      return {
+        error: formatOpenAiError(data),
+      };
+    }
     try {
       const message = data.choices[0].message;
       const output =
@@ -463,10 +473,18 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       };
     } catch (err) {
       return {
-        error: `API response error: ${String(err)}: ${JSON.stringify(data)}`,
+        error: `API error: ${String(err)}: ${JSON.stringify(data)}`,
       };
     }
   }
+}
+
+function formatOpenAiError(data: { error: { message: string; type?: string; code?: string } }) {
+  return (
+    `API error: ${data.error.message}` +
+    (data.error.type ? `, Type: ${data.error.type}` : '') +
+    (data.error.code ? `, Code: ${data.error.code}` : '')
+  );
 }
 
 function calculateCost(
