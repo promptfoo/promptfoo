@@ -190,9 +190,9 @@ export async function loadApiProvider(
     const modelName = splits[2];
 
     if (modelType === 'messages'){
-      return new AnthropicMessagesProvider(modelName || 'claude-instant-1', providerOptions)
+      return new AnthropicMessagesProvider(modelName, providerOptions)
     } else if (modelType === 'completion') {
-      return new AnthropicCompletionProvider(modelName || 'claude-instant-1', providerOptions);
+      return new AnthropicCompletionProvider(modelName, providerOptions);
     } else if (AnthropicCompletionProvider.ANTHROPIC_COMPLETION_MODELS.includes(modelType)) {
       return new AnthropicCompletionProvider(modelType, providerOptions);
     } else {
