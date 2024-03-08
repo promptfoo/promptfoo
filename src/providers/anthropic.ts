@@ -1,4 +1,4 @@
-import Anthropic from '@anthropic-ai/sdk';
+import Anthropic, { APIError } from '@anthropic-ai/sdk';
 import logger from '../logger';
 
 import type { ApiProvider, EnvOverrides, ProviderResponse, TokenUsage } from '../types.js';
@@ -186,6 +186,7 @@ export class AnthropicMessagesProvider implements ApiProvider {
           logger.error(`Failed to cache response: ${String(err)}`);
         }
       }
+
       return {
         output: response.content[0].text,
         tokenUsage: getTokenUsage(response, false),
@@ -198,6 +199,12 @@ export class AnthropicMessagesProvider implements ApiProvider {
       };
     } catch (err) {
       logger.error(`Anthropic Messages API call error: ${String(err)}`);
+      if (err instanceof APIError && err.error) {
+        const errorDetails = err.error as { error: { message: string; type: string } };
+        return {
+          error: `API call error: ${errorDetails.error.message}, status ${err.status}, type ${errorDetails.error.type}`,
+        };
+      }
       return {
         error: `API call error: ${String(err)}`,
       };
