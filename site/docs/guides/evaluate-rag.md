@@ -161,6 +161,48 @@ The `factuality` and `answer-relevance` assertions use OpenAI's model-grading pr
 
 The `similar` assertion uses embeddings to evaluate the relevancy of the RAG output to the expected result.
 
+### Using dynamic context
+
+You can define a Python script that fetches `context` based on other variables in the test case.  This is useful if you want to retrieve specific docs for each test case.
+
+Here's how you can modify the `promptfooconfig.yaml` and create a `load_context.py` script to achieve this:
+
+1. Update the `promptfooconfig.yaml` file:
+
+```yaml
+# ...
+
+tests:
+  - vars:
+      question: "What is the parental leave policy?"
+      context: file://./load_context.py
+```
+
+2. Create the `load_context.py` script:
+
+```python
+def retrieve_documents(question: str) -> str:
+    # Calculate embeddings, search vector db...
+    return f'<Documents similar to {question}>'
+
+def get_var(var_name, prompt, other_vars):
+    question = other_vars['question']
+
+    context = retrieve_documents(question)
+    return {
+        'output': context
+    }
+
+    # In case of error:
+    # return {
+    #     'error': 'Error message'
+    # }
+```
+
+The `load_context.py` script defines two functions:
+- `get_var(var_name, prompt, other_vars)`: This is a special function that promptfoo looks for when loading dynamic variables.
+- `retrieve_documents(question: str) -> str`: This function takes the `question` as input and retrieves relevant documents based on the question. You can implement your own logic here to search a vector database or do anything else to fetch context.
+
 ### Run the eval
 
 The `promptfoo eval` command will run the evaluation and check if your tests are passed. Use the web viewer to view the test output. You can click into a test case to see the full prompt, as well as the test outcomes.
