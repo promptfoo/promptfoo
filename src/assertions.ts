@@ -671,10 +671,26 @@ ${renderedValue}`,
         result = valueFromScript;
       } else {
         const isMultiline = renderedValue.includes('\n');
+        let indentStyle = '    '; 
+        if (isMultiline) {
+          // Detect the indentation style of the first indented line
+          const match = renderedValue.match(/^(?!\s*$)\s+/m);
+          if (match) {
+            indentStyle = match[0];
+          }
+        }
+
         const pythonScript = `import json
 
 def main(output, context):
-${isMultiline ? renderedValue.split('\n').map(line => '    ' + line).join('\n') : `    return ${renderedValue}`}
+${
+  isMultiline
+    ? renderedValue
+        .split('\n')
+        .map((line) => `${indentStyle}${line}`)
+        .join('\n')
+    : `    return ${renderedValue}`
+}
 `;
         const pythonResult = await runPythonCode(pythonScript, 'main', [output, context]);
         if (typeof pythonResult === 'object') {
