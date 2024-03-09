@@ -1,0 +1,19 @@
+prompts:
+  - 'Answer this question as concisely as possible: {{question}}'
+
+providers:
+  - id: openai:chat:mixtral-8x7b-32768
+    config:
+      apiBaseUrl: https://api.groq.com/openai/v1
+      apiKeyEnvar: GROQ_API_KEY
+  - id: openai:chat:llama2-70b-4096
+    config:
+      apiBaseUrl: https://api.groq.com/openai/v1
+      apiKeyEnvar: GROQ_API_KEY
+
+tests:
+  - vars:
+      question: What is the capital of France?
+    assert:
+      - type: equals
+        value: Paris
