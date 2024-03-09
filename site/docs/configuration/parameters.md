@@ -294,11 +294,6 @@ The output file is specified by the `outputPath` key in the promptfoo configurat
 
 ## Permuting inputs and assertions
 
-A vanilla `prompts.txt`/`promptfooconfig.yaml` pair supports
-each test combining one set of variables with one set of assertions.
-Trying to combine many sets of variables with many sets of assertions
-can lead to exponentially more config entries.
+A vanilla `prompts.txt`/`promptfooconfig.yaml` pair supports each test combining one set of variables with one set of assertions.  Trying to combine many sets of variables with many sets of assertions can lead to exponentially more config entries.
 
-[Scenarios](/docs/configuration/scenarios.md)
-enables one to use all possible combinations of 1+ sets of variables
-and 1+ sets of assertions within one config entry.
+[Scenarios](/docs/configuration/scenarios.md) enable you to use all possible combinations of 1+ sets of variables and 1+ sets of assertions within one config entry.

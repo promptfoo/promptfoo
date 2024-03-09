@@ -51,7 +51,7 @@ This will create a `promptfooconfig.yaml` file in your current directory.
      ```
 
    - **Custom**: See how to call your existing [Javascript](/docs/providers/custom-api), [Python](/docs/providers/python), or [other](/docs/providers/custom-script) code.
-   - **APIs**: See setup instructions for [Azure](/docs/providers/azure), [Replicate](/docs/providers/replicate), [HuggingFace](/docs/providers/huggingface), [AWS Bedrock](/docs/providers/aws-bedrock), and [more](/docs/providers).
+   - **APIs**: See setup instructions for [Azure](/docs/providers/azure), [Anthropic](/docs/providers/anthropic), [Mistral](/docs/providers/mistral), [HuggingFace](/docs/providers/huggingface), [AWS Bedrock](/docs/providers/aws-bedrock), and [more](/docs/providers).
 
 1. **Add test inputs**: Add some example inputs for your prompts. Optionally, add [assertions](/docs/configuration/expected-outputs) to set output requirements that are checked automatically.
 

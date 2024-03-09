@@ -21,7 +21,7 @@ PROMPTFOO_DISABLE_TELEMETRY=1
 
 ## Updates
 
-The CLI checks NPM's package registry for updates. If there is a newer version available, it will notify the user.
+The CLI checks NPM's package registry for updates. If there is a newer version available, it will display a banner to the user.
 
 To disable, set:
 
