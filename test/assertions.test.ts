@@ -16,6 +16,7 @@ import type {
   GradingResult,
 } from '../src/types';
 import { OpenAiChatCompletionProvider } from '../src/providers/openai';
+import * as pythonWrapper from '../src/python/wrapper';
 
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
@@ -47,6 +48,7 @@ export class TestGrader implements ApiProvider {
 const Grader = new TestGrader();
 
 beforeEach(() => {
+  jest.restoreAllMocks();
   jest.resetModules();
 });
 
@@ -1445,44 +1447,7 @@ describe('runAssertion', () => {
   it('should handle output strings with both single and double quotes correctly in python assertion', async () => {
     const expectedPythonValue = '0.5';
 
-    const mockStdout = new Stream.Readable();
-    mockStdout.push(expectedPythonValue);
-    mockStdout.push(null);
-
-    const mockStderr = new Stream.Readable();
-    mockStderr.push(null);
-
-    const mockChildProcess: Partial<child_process.ChildProcess> = {
-      stdout: mockStdout,
-      stderr: mockStderr,
-      stdin: new Stream.Writable({
-        write: () => {},
-      }),
-      on: (event: string, callback: (code: any, signal?: any) => void) => {
-        if (event === 'close') {
-          setImmediate(() => callback(0, null)); // Simulate a successful exit with no signal
-        }
-        return mockChildProcess as child_process.ChildProcess;
-      },
-    };
-
-    jest.spyOn(child_process, 'spawn').mockImplementation((command, args, options) => {
-      expect(command).toBe('python');
-      expect(args).toEqual(
-        expect.arrayContaining([
-          '-u',
-          '-c',
-          `import json
-import sys
-data = json.load(sys.stdin)
-output = data['output']
-context = data['context']
-value = data['value']
-print(json.dumps(eval(value)))`,
-        ]),
-      );
-      return mockChildProcess as child_process.ChildProcess;
-    });
+    const spy = jest.spyOn(pythonWrapper, 'runPythonCode').mockResolvedValue(expectedPythonValue);
 
     const output =
       'This is a string with "double quotes"\n and \'single quotes\' \n\n and some \n\t newlines.';
@@ -1499,80 +1464,80 @@ print(json.dumps(eval(value)))`,
       test: {} as AtomicTestCase,
       output,
     });
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy).toHaveBeenCalledWith(expect.anything(), 'main', [
+      output,
+      { prompt: 'Some prompt', test: {}, vars: {} },
+    ]);
 
     expect(result.reason).toBe('Assertion passed');
     expect(result.score).toBe(Number(expectedPythonValue));
     expect(result.pass).toBeTruthy();
-    expect(child_process.spawn).toHaveBeenCalledTimes(1);
 
     jest.restoreAllMocks();
   });
 
-  it('should fail with stderr', async () => {
-    const expectedPythonValue = '0.5';
+  it.each([
+    ['boolean', false, 0, 'Python code returned false', false],
+    ['number', 0, 0, 'Python code returned false', false],
+    [
+      'GradingResult',
+      `{"pass": false, "score": 0, "reason": "Custom error"}`,
+      0,
+      'Custom error',
+      false,
+    ],
+    ['boolean', true, 1, 'Assertion passed', true],
+    ['number', 1, 1, 'Assertion passed', true],
+    [
+      'GradingResult',
+      `{"pass": true, "score": 1, "reason": "Custom success"}`,
+      1,
+      'Custom success',
+      true,
+    ],
+  ])(
+    'should handle inline return type %s with return value: %p',
+    async (type, returnValue, expectedScore, expectedReason, expectedPass) => {
+      const output =
+        'This is a string with "double quotes"\n and \'single quotes\' \n\n and some \n\t newlines.';
 
-    const mockStdout = new Stream.Readable();
-    mockStdout.push(expectedPythonValue);
-    mockStdout.push(null);
+      let resolvedValue;
+      if (type === 'GradingResult') {
+        resolvedValue = JSON.parse(returnValue as string);
+      } else {
+        resolvedValue = returnValue;
+      }
 
-    const mockStderr = new Stream.Readable();
-    mockStderr.push('Some error');
-    mockStderr.push(null);
+      const pythonAssertion: Assertion = {
+        type: 'python',
+        value: returnValue.toString(),
+      };
 
-    const mockChildProcess: Partial<child_process.ChildProcess> = {
-      stdout: mockStdout,
-      stderr: mockStderr,
-      stdin: new Stream.Writable({
-        write: () => {},
-      }),
-      on: (event: string, callback: (code: any, signal?: any) => void) => {
-        if (event === 'close') {
-          setImmediate(() => callback(0, null)); // Simulate a successful exit with no signal
-        }
-        return mockChildProcess as child_process.ChildProcess;
-      },
-    };
+      const spy = jest.spyOn(pythonWrapper, 'runPythonCode').mockResolvedValue(resolvedValue);
 
-    jest.spyOn(child_process, 'spawn').mockImplementation((command, args, options) => {
-      expect(command).toBe('python');
-      expect(args).toEqual(
-        expect.arrayContaining([
-          '-u',
-          '-c',
-          `import json
-import sys
-data = json.load(sys.stdin)
-output = data['output']
-context = data['context']
-value = data['value']
-print(json.dumps(eval(value)))`,
-        ]),
-      );
-      return mockChildProcess as child_process.ChildProcess;
-    });
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4'),
+        assertion: pythonAssertion,
+        test: {} as AtomicTestCase,
+        output,
+      });
 
-    const output =
-      'This is a string with "double quotes"\n and \'single quotes\' \n\n and some \n\t newlines.';
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(spy).toHaveBeenCalledWith(expect.anything(), 'main', [
+        output,
+        { prompt: 'Some prompt', test: {}, vars: {} },
+      ]);
 
-    const pythonAssertion: Assertion = {
-      type: 'python',
-      value: expectedPythonValue,
-    };
+      expect(result.reason).toMatch(new RegExp(`^${expectedReason}`));
+      expect(result.score).toBe(expectedScore);
+      expect(result.pass).toBe(expectedPass);
 
-    const result: GradingResult = await runAssertion({
-      prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4'),
-      assertion: pythonAssertion,
-      test: {} as AtomicTestCase,
-      output,
-    });
-
-    expect(result.reason).toBe('Python code execution failed: Some error');
-    expect(result.pass).toBeFalsy();
-    expect(child_process.spawn).toHaveBeenCalledTimes(1);
-
-    jest.restoreAllMocks();
-  });
+      jest.restoreAllMocks();
+    },
+  );
 
   it.each([
     ['boolean', 'True', true, 'Assertion passed'],
@@ -1592,10 +1557,9 @@ print(json.dumps(eval(value)))`,
       'Custom reason',
     ],
   ])(
-    'should pass when the file:// assertion with .py file returns a %s',
+    'should handle when the file:// assertion with .py file returns a %s',
     async (type, pythonOutput, expectedPass, expectedReason) => {
       const output = 'Expected output';
-
       const mockChildProcess = {
         stdout: new Stream.Readable(),
         stderr: new Stream.Readable(),
