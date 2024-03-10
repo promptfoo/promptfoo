@@ -33,17 +33,17 @@ Python assertions support multiline strings:
 assert:
   - type: python
     value: |
-      // Insert your scoring logic here...
+      # Insert your scoring logic here...
       if output == 'Expected output':
-          print(json.dumps({
+          return {
             'pass': True,
             'score': 0.5,
-          }))
+          }
       else:
-          print(json.dumps({
+          return {
             'pass': False,
             'score': 0,
-          }))
+          }
 ```
 
 ## Using test context

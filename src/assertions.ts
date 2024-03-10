@@ -30,6 +30,7 @@ import { validateFunctionCall } from './providers/openaiUtil';
 import { OpenAiChatCompletionProvider } from './providers/openai';
 
 import type { Assertion, AssertionType, GradingResult, AtomicTestCase, ApiProvider } from './types';
+import { runPythonCode } from './python/wrapper';
 
 export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
   'answer-relevance',
@@ -670,47 +671,33 @@ ${renderedValue}`,
         result = valueFromScript;
       } else {
         const isMultiline = renderedValue.includes('\n');
-        let pythonScript = `import json
-import sys
-data = json.load(sys.stdin)
-output = data['output']
-context = data['context']
-value = data['value']
-${isMultiline ? 'exec(value)' : 'print(json.dumps(eval(value)))'}`;
-        const pythonProcessInput = JSON.stringify({ output, context, value: renderedValue });
-        const child = spawn(process.env.PROMPTFOO_PYTHON || 'python', ['-u', '-c', pythonScript]);
-        child.stdin.write(pythonProcessInput);
-        child.stdin.end();
-        let childStdout = '';
-        let childStderr = '';
-        await new Promise<void>((resolve, reject) => {
-          // Collect output and wait for process to exit
-          child.stdout.on('data', (data) => {
-            childStdout += data;
-          });
-
-          // Listen for errors on the child process
-          child.on('error', (error) => {
-            reject(error);
-          });
-
-          child.stderr.on('data', (data) => {
-            childStderr += data;
-          });
-
-          // Listen for the process to close, which may happen after 'end'
-          child.on('close', (code) => {
-            if (code !== 0) {
-              reject(new Error(`Child process exited with code ${code}`));
-            } else {
-              resolve();
-            }
-          });
-        });
-        if (childStderr) {
-          throw new Error(childStderr);
+        let indentStyle = '    '; 
+        if (isMultiline) {
+          // Detect the indentation style of the first indented line
+          const match = renderedValue.match(/^(?!\s*$)\s+/m);
+          if (match) {
+            indentStyle = match[0];
+          }
         }
-        result = childStdout.trim();
+
+        const pythonScript = `import json
+
+def main(output, context):
+${
+  isMultiline
+    ? renderedValue
+        .split('\n')
+        .map((line) => `${indentStyle}${line}`)
+        .join('\n')
+    : `    return ${renderedValue}`
+}
+`;
+        const pythonResult = await runPythonCode(pythonScript, 'main', [output, context]);
+        if (typeof pythonResult === 'object') {
+          result = JSON.stringify(pythonResult);
+        } else {
+          result = String(pythonResult);
+        }
       }
 
       if (result.toLowerCase() === 'true') {

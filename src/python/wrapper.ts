@@ -1,5 +1,8 @@
-import { PythonShell, Options as PythonShellOptions } from 'python-shell';
+import os from 'os';
 import path from 'path';
+import { promises as fs } from 'fs';
+
+import { PythonShell, Options as PythonShellOptions } from 'python-shell';
 
 import logger from '../logger';
 
@@ -8,9 +11,13 @@ import logger from '../logger';
  * @param {string} scriptPath - The path to the Python script to run.
  * @param {string} method - The method name to call in the Python script.
  * @param {(string | object)[]} args - The list of arguments to pass to the Python method.
- * @returns {Promise<string[]>} - The result from the Python script.
+ * @returns {Promise<any>} - The result from the Python script.
  */
-export async function runPython(scriptPath: string, method: string, args: (string | object | undefined)[]): Promise<any> {
+export async function runPython(
+  scriptPath: string,
+  method: string,
+  args: (string | object | undefined)[],
+): Promise<any> {
   const absPath = path.resolve(scriptPath);
   const pythonOptions: PythonShellOptions = {
     mode: 'text',
@@ -22,7 +29,7 @@ export async function runPython(scriptPath: string, method: string, args: (strin
   try {
     const results = await PythonShell.run('wrapper.py', pythonOptions);
     logger.debug(`Python script ${absPath} returned: ${results.join('\n')}`);
-    const result: { type: 'final_result'; data: any} = JSON.parse(results[results.length - 1]);
+    const result: { type: 'final_result'; data: any } = JSON.parse(results[results.length - 1]);
     if (result?.type !== 'final_result') {
       throw new Error(
         'The Python script `call_api` function must return a dict with an `output` or `error` string',
@@ -30,7 +37,38 @@ export async function runPython(scriptPath: string, method: string, args: (strin
     }
     return result.data;
   } catch (error) {
-    console.error(`Error running Python script: ${error}`);
+    logger.error(`Error running Python script: ${error}`);
     throw error;
+  }
+}
+
+/**
+ * Executes Python code by writing it to a temporary file
+ * @param {string} code - The Python code to execute.
+ * @param {string} method - The method name to call in the Python script.
+ * @param {(string | object | undefined)[]} args - The list of arguments to pass to the Python method.
+ * @returns {Promise<any>} - The result from executing the Python code.
+ */
+export async function runPythonCode(
+  code: string,
+  method: string,
+  args: (string | object | undefined)[],
+): Promise<any> {
+  const tempFilePath = path.join(
+    os.tmpdir(),
+    `temp-python-code-${Date.now()}-${Math.random().toString(16).slice(2)}.py`,
+  );
+  try {
+    await fs.writeFile(tempFilePath, code);
+    // Necessary to await so temp file doesn't get deleted.
+    const result = await runPython(tempFilePath, method, args);
+    return result;
+  } catch (error) {
+    logger.error(`Error executing Python code: ${error}`);
+    throw error;
+  } finally {
+    await fs
+      .unlink(tempFilePath)
+      .catch((error) => logger.error(`Error removing temporary file: ${error}`));
   }
 }
