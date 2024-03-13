@@ -598,7 +598,8 @@ export async function runAssertion({
 
   if (baseType === 'javascript') {
     try {
-      const validateResult = (result: unknown): boolean | number | GradingResult => {
+      const validateResult = async (result: unknown): Promise<boolean | number | GradingResult> => {
+        result = await Promise.resolve(result);
         if (typeof result === 'boolean' || typeof result === 'number') {
           return result;
         } else if (typeof result === 'object' && result !== null) {
@@ -623,7 +624,7 @@ export async function runAssertion({
 
       if (typeof assertion.value === 'function') {
         let ret = assertion.value(outputString, test, assertion);
-        ret = validateResult(ret);
+        ret = await validateResult(ret);
         if (!ret.assertion) {
           // Populate the assertion object if the custom function didn't return it.
           const functionString = assertion.value.toString();
@@ -644,13 +645,13 @@ export async function runAssertion({
             typeof valueFromScript === 'object',
           `Javascript assertion script must return a boolean, number, or object (${assertion.value})`,
         );
-        result = validateResult(valueFromScript);
+        result = await validateResult(valueFromScript);
       } else {
         const functionBody = renderedValue.includes('\n')
           ? renderedValue
           : `return ${renderedValue}`;
         const customFunction = new Function('output', 'context', functionBody);
-        result = validateResult(customFunction(output, context));
+        result = await validateResult(customFunction(output, context));
       }
       if (typeof result === 'boolean') {
         pass = result !== inverse;
