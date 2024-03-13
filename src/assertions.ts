@@ -598,9 +598,33 @@ export async function runAssertion({
 
   if (baseType === 'javascript') {
     try {
+      const validateResult = (result: unknown): boolean | number | GradingResult => {
+        if (typeof result === 'boolean' || typeof result === 'number') {
+          return result;
+        } else if (typeof result === 'object' && result !== null) {
+          if (!('pass' in result) || typeof result.pass !== 'boolean') {
+            throw new Error('Custom function must return an object with a boolean "pass" key');
+          }
+          if (!('score' in result) || typeof result.score !== 'number') {
+            throw new Error('Custom function must return an object with a number "score" key');
+          }
+          if (!('reason' in result) || typeof result.reason !== 'string') {
+            throw new Error('Custom function must return an object with a string "reason" key');
+          }
+          return result as GradingResult;
+        } else {
+          throw new Error(
+            `Custom function must return a boolean, number, or GradingResult object. Got type ${typeof result}: ${JSON.stringify(
+              result,
+            )}`,
+          );
+        }
+      };
+
       if (typeof assertion.value === 'function') {
-        const ret = assertion.value(outputString, test, assertion);
-        if (ret && !ret.assertion) {
+        let ret = assertion.value(outputString, test, assertion);
+        ret = validateResult(ret);
+        if (!ret.assertion) {
           // Populate the assertion object if the custom function didn't return it.
           const functionString = assertion.value.toString();
           ret.assertion = {
@@ -620,13 +644,13 @@ export async function runAssertion({
             typeof valueFromScript === 'object',
           `Javascript assertion script must return a boolean, number, or object (${assertion.value})`,
         );
-        result = valueFromScript as boolean | number | GradingResult;
+        result = validateResult(valueFromScript);
       } else {
         const functionBody = renderedValue.includes('\n')
           ? renderedValue
           : `return ${renderedValue}`;
         const customFunction = new Function('output', 'context', functionBody);
-        result = customFunction(output, context) as boolean | number | GradingResult;
+        result = validateResult(customFunction(output, context));
       }
       if (typeof result === 'boolean') {
         pass = result !== inverse;
@@ -671,7 +695,7 @@ ${renderedValue}`,
         result = valueFromScript;
       } else {
         const isMultiline = renderedValue.includes('\n');
-        let indentStyle = '    '; 
+        let indentStyle = '    ';
         if (isMultiline) {
           // Detect the indentation style of the first indented line
           const match = renderedValue.match(/^(?!\s*$)\s+/m);
