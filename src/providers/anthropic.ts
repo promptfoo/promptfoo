@@ -97,6 +97,13 @@ export class AnthropicMessagesProvider implements ApiProvider {
         output: 0.024 / 1000,
       },
     })),
+    ...['claude-3-haiku-20240307'].map((model) => ({
+      id: model,
+      cost: {
+        input: 0.00025 / 1000,
+        output: 0.00125 / 1000,
+      },
+    })),
     ...['claude-3-sonnet-20240229'].map((model) => ({
       id: model,
       cost: {
