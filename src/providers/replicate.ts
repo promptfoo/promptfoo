@@ -139,8 +139,21 @@ export class ReplicateProvider implements ApiProvider {
     }
     logger.debug(`\tReplicate API response: ${JSON.stringify(response)}`);
     try {
+      let formattedOutput;
+      if (Array.isArray(response)) {
+        if (response.length === 0 || typeof response[0] === 'string') {
+          formattedOutput = response.join('');
+        } else {
+          formattedOutput = JSON.stringify(response);
+        }
+      } else if (typeof response === 'string') {
+        formattedOutput = response;
+      } else {
+        formattedOutput = JSON.stringify(response);
+      }
+
       const result = {
-        output: (response as string[]).join(''),
+        output: formattedOutput,
         tokenUsage: {}, // TODO: add token usage once Replicate API supports it
       };
       if (cache && cacheKey) {
