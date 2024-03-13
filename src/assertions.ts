@@ -598,19 +598,19 @@ export async function runAssertion({
 
   if (baseType === 'javascript') {
     try {
-      const validateResult = async (result: unknown): Promise<boolean | number | GradingResult> => {
+      const validateResult = async (result: any): Promise<boolean | number | GradingResult> => {
         result = await Promise.resolve(result);
         if (typeof result === 'boolean' || typeof result === 'number') {
           return result;
         } else if (typeof result === 'object' && result !== null) {
           if (!('pass' in result) || typeof result.pass !== 'boolean') {
-            throw new Error('Custom function must return an object with a boolean "pass" key');
+            throw new Error(`Expected object with 'pass' boolean but got ${typeof result.pass}`);
           }
           if (!('score' in result) || typeof result.score !== 'number') {
-            throw new Error('Custom function must return an object with a number "score" key');
+            throw new Error(`Expected object with 'score' number but got ${typeof result.score}`);
           }
           if (!('reason' in result) || typeof result.reason !== 'string') {
-            throw new Error('Custom function must return an object with a string "reason" key');
+            throw new Error(`Expected object with 'reason' string but got ${typeof result.reason}`);
           }
           return result as GradingResult;
         } else {
