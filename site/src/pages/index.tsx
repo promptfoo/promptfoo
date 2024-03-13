@@ -29,8 +29,8 @@ export default function Home(): JSX.Element {
   const { siteConfig } = useDocusaurusContext();
   return (
     <Layout
-      title="LLM evaluation"
-      description="Library for evaluating LLM prompt quality and testing."
+      title="Iterate on LLMs faster"
+      description="Tailored LLM evals for your use case. Maximize model quality and catch regressions."
     >
       <HomepageHeader />
       <main>
