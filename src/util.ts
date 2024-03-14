@@ -274,7 +274,7 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
     }
   });
   if (Array.isArray(prompts)) {
-    prompts.push(...seenPrompts);
+    prompts.push(...Array.from(seenPrompts));
   }
 
   // Combine all configs into a single UnifiedConfig
