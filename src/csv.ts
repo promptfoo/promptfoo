@@ -1,6 +1,6 @@
 // Helpers for parsing CSV eval files, shared by frontend and backend.
 
-import type { Assertion, AssertionType, CsvRow, TestCase } from "./types";
+import type { Assertion, AssertionType, CsvRow, TestCase } from './types';
 
 const DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD = 0.8;
 
@@ -8,6 +8,7 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
   const vars: Record<string, string> = {};
   const asserts: Assertion[] = [];
   const options: TestCase['options'] = {};
+  let description: string | undefined;
   for (const [key, value] of Object.entries(row)) {
     if (key.startsWith('__expected')) {
       if (value.trim() !== '') {
@@ -17,6 +18,8 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
       options.prefix = value;
     } else if (key === '__suffix') {
       options.suffix = value;
+    } else if (key === '__description') {
+      description = value;
     } else {
       vars[key] = value;
     }
@@ -26,6 +29,7 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
     vars,
     assert: asserts,
     options,
+    ...(description ? { description } : {}),
   };
 }
 

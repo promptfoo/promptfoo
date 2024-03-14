@@ -283,6 +283,7 @@ The tests file optionally supports several special columns:
   - For multiple assertions, use `__expected1`, `__expected2`, `__expected3`, etc.
 - `__prefix`: This string is prepended to each prompt before it's sent to the API
 - `__suffix`: This string is appended to each prompt before it's sent to the API
+- `__description`: The test description
 
 ## Output File
 
