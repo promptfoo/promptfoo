@@ -17,7 +17,7 @@ class CustomApiProvider {
     return null;
   }
 
-  async callEmbeddingsApi(prompt) {
+  async callEmbeddingApi(prompt) {
     const body = {
       model: 'text-embedding-3-large',
       input: prompt,
