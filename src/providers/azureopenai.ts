@@ -10,6 +10,7 @@ import type {
   ProviderEmbeddingResponse,
   ProviderResponse,
 } from '../types';
+import type { OpenAiFunction, OpenAiTool } from './openaiUtil';
 
 interface AzureOpenAiCompletionOptions {
   // Azure identity params
@@ -35,12 +36,10 @@ interface AzureOpenAiCompletionOptions {
   frequency_penalty?: number;
   presence_penalty?: number;
   best_of?: number;
-  functions?: {
-    name: string;
-    description?: string;
-    parameters: any;
-  }[];
+  functions?: OpenAiFunction[];
   function_call?: 'none' | 'auto' | { name: string };
+  tools?: OpenAiTool[];
+  tool_choice?: 'none' | 'auto' | { type: 'function'; function?: { name: string } };
   response_format?: { type: 'json_object' };
   stop?: string[];
 
@@ -321,8 +320,10 @@ export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvide
         this.config.presence_penalty ?? parseFloat(process.env.OPENAI_PRESENCE_PENALTY || '0'),
       frequency_penalty:
         this.config.frequency_penalty ?? parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0'),
-      functions: this.config.functions || undefined,
-      function_call: this.config.function_call || undefined,
+      ...(this.config.functions ? { functions: this.config.functions } : {}),
+      ...(this.config.function_call ? { function_call: this.config.function_call } : {}),
+      ...(this.config.tools ? { tools: this.config.tools } : {}),
+      ...(this.config.tool_choice ? { tool_choice: this.config.tool_choice } : {}),
       ...(this.config.deployment_id ? { deployment_id: this.config.deployment_id } : {}),
       ...(this.config.dataSources ? { dataSources: this.config.dataSources } : {}),
       ...(this.config.response_format ? { response_format: this.config.response_format } : {}),
@@ -373,7 +374,8 @@ export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvide
       const message = this.config.dataSources
         ? data.choices[0].messages.find((msg: { role: string }) => msg.role === 'assistant')
         : data.choices[0].message;
-      const output = message.content == null ? message.function_call : message.content;
+      const output =
+        message.content === null ? message.function_call || message.tool_calls : message.content;
       const logProbs = data.choices[0].logprobs?.content?.map(
         (logProbObj: { token: string; logprob: number }) => logProbObj.logprob,
       );
