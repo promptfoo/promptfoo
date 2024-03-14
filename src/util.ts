@@ -194,6 +194,12 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
   }
 }
 
+/**
+ * Reads multiple configuration files and combines them into a single UnifiedConfig.
+ *
+ * @param {string[]} configPaths - An array of paths to configuration files. Supports glob patterns.
+ * @returns {Promise<UnifiedConfig>} A promise that resolves to a unified configuration object.
+ */
 export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig> {
   const configs: UnifiedConfig[] = [];
   for (const configPath of configPaths) {
@@ -250,21 +256,26 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
     return relativePath;
   };
 
+  const seenPrompts = new Set<string>();
   configs.forEach((config, idx) => {
     if (typeof config.prompts === 'string') {
       invariant(Array.isArray(prompts), 'Cannot mix string and map-type prompts');
-      config.prompts = makeAbsolute(configPaths[idx], config.prompts);
-      prompts.push(config.prompts);
+      const absolutePrompt = makeAbsolute(configPaths[idx], config.prompts);
+      seenPrompts.add(absolutePrompt);
     } else if (Array.isArray(config.prompts)) {
       invariant(Array.isArray(prompts), 'Cannot mix configs with map and array-type prompts');
-      config.prompts = config.prompts.map((prompt) => makeAbsolute(configPaths[idx], prompt));
-      prompts.push(...config.prompts);
+      config.prompts
+        .map((prompt) => makeAbsolute(configPaths[idx], prompt))
+        .forEach((prompt) => seenPrompts.add(prompt));
     } else {
       // Object format such as { 'prompts/prompt1.txt': 'foo', 'prompts/prompt2.txt': 'bar' }
       invariant(typeof prompts === 'object', 'Cannot mix configs with map and array-type prompts');
       prompts = { ...prompts, ...config.prompts };
     }
   });
+  if (Array.isArray(prompts)) {
+    prompts.push(...seenPrompts);
+  }
 
   // Combine all configs into a single UnifiedConfig
   const combinedConfig: UnifiedConfig = {
