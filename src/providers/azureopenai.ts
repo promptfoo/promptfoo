@@ -41,6 +41,15 @@ interface AzureOpenAiCompletionOptions {
     parameters: any;
   }[];
   function_call?: 'none' | 'auto' | { name: string };
+  tools?: {
+    type: string;
+    function:{
+    name: string;
+    description?: string;
+    parameters: any;
+    }
+  }[];
+  tool_choice?: 'none' | 'auto' | { type: 'function'; function?: { name: string } };
   response_format?: { type: 'json_object' };
   stop?: string[];
 
@@ -323,6 +332,8 @@ export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvide
         this.config.frequency_penalty ?? parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0'),
       functions: this.config.functions || undefined,
       function_call: this.config.function_call || undefined,
+      ...(this.config.tools ? { tools: this.config.tools } : {}),
+      ...(this.config.tool_choice ? { tool_choice: this.config.tool_choice } : {}),
       ...(this.config.deployment_id ? { deployment_id: this.config.deployment_id } : {}),
       ...(this.config.dataSources ? { dataSources: this.config.dataSources } : {}),
       ...(this.config.response_format ? { response_format: this.config.response_format } : {}),
