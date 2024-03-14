@@ -548,6 +548,33 @@ describe('util', () => {
       ]);
     });
 
+    test('dedupes prompts when reading configs', async () => {
+      (fs.existsSync as jest.Mock).mockReturnValue(true);
+      (fs.readFileSync as jest.Mock).mockImplementation((path: string) => {
+        if (path === 'config1.json') {
+          return JSON.stringify({
+            description: 'test1',
+            prompts: ['prompt1', 'file://prompt2.txt', 'prompt3'],
+          });
+        } else if (path === 'config2.json') {
+          return JSON.stringify({
+            description: 'test2',
+            prompts: ['prompt3', 'file://prompt2.txt', 'prompt4'],
+          });
+        }
+        return null;
+      });
+
+      const configPaths = ['config1.json', 'config2.json'];
+      const result = await readConfigs(configPaths);
+
+      expect(result.prompts).toEqual([
+        'prompt1',
+        'file://' + path.resolve(path.dirname(configPaths[0]), 'prompt2.txt'),
+        'prompt3',
+        'prompt4',
+      ]);
+    });
   });
 
   describe('dereferenceConfig', () => {
