@@ -30,6 +30,7 @@ interface AzureOpenAiCompletionOptions {
   apiVersion?: string;
 
   // OpenAI params
+  max_tokens?: number;
   temperature?: number;
   top_p?: number;
   frequency_penalty?: number;
@@ -52,6 +53,7 @@ interface AzureOpenAiCompletionOptions {
   tool_choice?: 'none' | 'auto' | { type: 'function'; function?: { name: string } };
   response_format?: { type: 'json_object' };
   stop?: string[];
+  seed?: number;
 
   passthrough?: object;
 }
@@ -238,7 +240,7 @@ export class AzureOpenAiCompletionProvider extends AzureOpenAiGenericProvider {
     const body = {
       model: this.deploymentName,
       prompt,
-      max_tokens: parseInt(process.env.OPENAI_MAX_TOKENS || '1024'),
+      max_tokens: this.config.max_tokens ?? parseInt(process.env.OPENAI_MAX_TOKENS || '1024'),
       temperature: this.config.temperature ?? parseFloat(process.env.OPENAI_TEMPERATURE || '0'),
       top_p: this.config.top_p ?? parseFloat(process.env.OPENAI_TOP_P || '1'),
       presence_penalty:
@@ -246,6 +248,7 @@ export class AzureOpenAiCompletionProvider extends AzureOpenAiGenericProvider {
       frequency_penalty:
         this.config.frequency_penalty ?? parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0'),
       best_of: this.config.best_of ?? parseInt(process.env.OPENAI_BEST_OF || '1'),
+      ...(this.config.seed !== undefined ? { seed: this.config.seed } : {}),
       ...(this.config.deployment_id ? { deployment_id: this.config.deployment_id } : {}),
       ...(this.config.dataSources ? { dataSources: this.config.dataSources } : {}),
       ...(this.config.response_format ? { response_format: this.config.response_format } : {}),
@@ -323,7 +326,7 @@ export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvide
     const body = {
       model: this.deploymentName,
       messages: messages,
-      max_tokens: parseInt(process.env.OPENAI_MAX_TOKENS || '1024'),
+      max_tokens: this.config.max_tokens ?? parseInt(process.env.OPENAI_MAX_TOKENS || '1024'),
       temperature: this.config.temperature ?? parseFloat(process.env.OPENAI_TEMPERATURE || '0'),
       top_p: this.config.top_p ?? parseFloat(process.env.OPENAI_TOP_P || '1'),
       presence_penalty:
@@ -332,6 +335,7 @@ export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvide
         this.config.frequency_penalty ?? parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0'),
       functions: this.config.functions || undefined,
       function_call: this.config.function_call || undefined,
+      ...(this.config.seed !== undefined ? { seed: this.config.seed } : {}),
       ...(this.config.tools ? { tools: this.config.tools } : {}),
       ...(this.config.tool_choice ? { tool_choice: this.config.tool_choice } : {}),
       ...(this.config.deployment_id ? { deployment_id: this.config.deployment_id } : {}),
