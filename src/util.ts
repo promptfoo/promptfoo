@@ -22,6 +22,7 @@ import {
   evalsToPrompts,
   prompts,
   getDbSignalPath,
+  getDbPath,
 } from './database';
 import { runDbMigrations } from './migrate';
 
@@ -578,6 +579,10 @@ export async function migrateResultsFromFileSystemToDatabase() {
     return;
   }
 
+  // First run db migrations
+  logger.debug('Running db migrations...');
+  await runDbMigrations();
+
   const fileNames = listPreviousResultFilenames_fileSystem();
   if (fileNames.length === 0) {
     return;
@@ -586,10 +591,6 @@ export async function migrateResultsFromFileSystemToDatabase() {
   logger.info(`🔁 Migrating ${fileNames.length} flat files to local database.`);
   logger.info('This is a one-time operation and may take a minute...');
   attemptedMigration = true;
-
-  // First run db migrations
-  logger.info('Creating the sqlite database...');
-  await runDbMigrations();
 
   const outputDir = path.join(getConfigDirectoryPath(), 'output');
   const backupDir = `${outputDir}-backup-${new Date()
@@ -629,7 +630,7 @@ export async function migrateResultsFromFileSystemToDatabase() {
   } catch (err) {
     logger.warn(`Failed to delete latest.json: ${err}`);
   }
-  logger.info('Migration complete.');
+  logger.info('Migration complete. Please restart your web server if it is running.');
 }
 
 const RESULT_HISTORY_LENGTH = parseInt(process.env.RESULT_HISTORY_LENGTH || '', 10) || 100;

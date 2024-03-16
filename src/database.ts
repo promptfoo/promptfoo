@@ -147,7 +147,7 @@ export const llmOutputsRelations = relations(llmOutputs, ({ one }) => ({
 let dbInstance: ReturnType<typeof drizzle> | null = null;
 
 export function getDbPath() {
-  return path.resolve(getConfigDirectoryPath(), 'sqlite.db');
+  return path.resolve(getConfigDirectoryPath(), 'promptfoo.db');
 }
 
 export function getDbSignalPath() {
