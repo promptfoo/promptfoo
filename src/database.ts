@@ -150,6 +150,10 @@ export function getDbPath() {
   return path.resolve(getConfigDirectoryPath(), 'sqlite.db');
 }
 
+export function getDbSignalPath() {
+  return path.resolve(getConfigDirectoryPath(), 'evalLastWritten');
+}
+
 export function getDb() {
   if (!dbInstance) {
     const sqlite = new Database(getDbPath());

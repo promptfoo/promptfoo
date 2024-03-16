@@ -14,7 +14,15 @@ import { asc, desc, eq } from 'drizzle-orm';
 import logger from './logger';
 import { getDirectory } from './esm';
 import { readTests } from './testCases';
-import { datasets, getDb, evals, evalsToDatasets, evalsToPrompts, prompts } from './database';
+import {
+  datasets,
+  getDb,
+  evals,
+  evalsToDatasets,
+  evalsToPrompts,
+  prompts,
+  getDbSignalPath,
+} from './database';
 import { runDbMigrations } from './migrate';
 
 import type {
@@ -490,6 +498,15 @@ export async function writeResultsToDatabase(
   logger.debug(`Awaiting ${promises.length} promises to database...`);
   await Promise.all(promises);
 
+  // "touch" db signal path
+  const filePath = getDbSignalPath();
+  try {
+    const now = new Date();
+    fs.utimesSync(filePath, now, now);
+  } catch (err) {
+    fs.closeSync(fs.openSync(filePath, 'w'));
+  }
+
   return evalId;
 }
 
@@ -575,7 +592,10 @@ export async function migrateResultsFromFileSystemToDatabase() {
   await runDbMigrations();
 
   const outputDir = path.join(getConfigDirectoryPath(), 'output');
-  const backupDir = `${outputDir}-backup-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}`;
+  const backupDir = `${outputDir}-backup-${new Date()
+    .toISOString()
+    .slice(0, 10)
+    .replace(/-/g, '')}`;
   try {
     fs.cpSync(outputDir, backupDir, { recursive: true });
     logger.info(`Backup of output directory created at ${backupDir}`);

@@ -33,7 +33,7 @@ import {
   migrateResultsFromFileSystemToDatabase,
 } from '../util';
 import { synthesizeFromTestSuite } from '../testCases';
-import { getDbPath } from '../database';
+import { getDbPath, getDbSignalPath } from '../database';
 
 // Running jobs
 const evalJobs = new Map<string, Job>();
@@ -57,28 +57,20 @@ export async function startServer(port = 15500, apiBaseUrl = '', skipConfirmatio
       origin: '*',
     },
   });
-  
+
   await migrateResultsFromFileSystemToDatabase();
 
+  const watchFilePath = getDbSignalPath();
+  const watcher = debounce(async (curr: Stats, prev: Stats) => {
+    if (curr.mtime !== prev.mtime) {
+      io.emit('update', await readLatestResults());
+      allPrompts = null;
+    }
+  }, 250);
+  fs.watchFile(watchFilePath, watcher);
+
   io.on('connection', async (socket) => {
-    // Send the initial table data when a client connects
     socket.emit('init', await readLatestResults());
-
-    // Watch for changes to sqlite db and emit the update event
-    const watcher = debounce(async (curr: Stats, prev: Stats) => {
-      if (curr.mtime !== prev.mtime) {
-        socket.emit('update', await readLatestResults());
-        allPrompts = null;
-      }
-    }, 250);
-
-    const dbPath = getDbPath();
-    fs.watchFile(dbPath, watcher);
-
-    // Stop watching the file when the socket connection is closed
-    socket.on('disconnect', () => {
-      fs.unwatchFile(dbPath, watcher);
-    });
   });
 
   app.get('/api/results', (req, res) => {
