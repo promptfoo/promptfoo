@@ -538,6 +538,9 @@ export function listPreviousResults(): { evalId: string; description?: string | 
  */
 export function listPreviousResultFilenames_fileSystem(): string[] {
   const directory = path.join(getConfigDirectoryPath(), 'output');
+  if (!fs.existsSync(directory)) {
+    return [];
+  }
   const files = fs.readdirSync(directory);
   const resultsFiles = files.filter((file) => file.startsWith('eval-') && file.endsWith('.json'));
   return resultsFiles.sort((a, b) => {
@@ -554,6 +557,9 @@ const resultsCache: { [fileName: string]: ResultsFile | undefined } = {};
  */
 export function listPreviousResults_fileSystem(): { fileName: string; description?: string }[] {
   const directory = path.join(getConfigDirectoryPath(), 'output');
+  if (!fs.existsSync(directory)) {
+    return [];
+  }
   const sortedFiles = listPreviousResultFilenames_fileSystem();
   return sortedFiles.map((fileName) => {
     if (!resultsCache[fileName]) {
