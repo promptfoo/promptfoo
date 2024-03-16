@@ -102,7 +102,7 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
 
   if (testSuite.writeLatestResults) {
     await migrateResultsFromFileSystemToDatabase();
-    writeResultsToDatabase(ret, testSuite);
+    await writeResultsToDatabase(ret, testSuite);
   }
 
   await telemetry.send();

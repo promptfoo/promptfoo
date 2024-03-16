@@ -340,6 +340,8 @@ Here are some of the available scripts:
 - `build:watch`: Continuously watch and transpile TypeScript files on changes
 - `test`: Run test suite
 - `test:watch`: Continuously run test suite on changes
+- `db:generate`: Generate new db migrations (and create the db if it doesn't already exist)
+- `db:migrate`: Run existing db migrations (and create the db if it doesn't already exist)
 
 # [» View full documentation «](https://promptfoo.dev/docs/intro)
 

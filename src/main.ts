@@ -598,7 +598,7 @@ async function main() {
         if (!cmdObj.write) {
           logger.info(`${chalk.green('✔')} Evaluation complete`);
         } else {
-          writeResultsToDatabase(summary, config);
+          await writeResultsToDatabase(summary, config);
 
           if (shareableUrl) {
             logger.info(`${chalk.green('✔')} Evaluation complete: ${shareableUrl}`);

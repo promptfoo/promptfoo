@@ -1,3 +1,4 @@
+import * as path from 'path';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { getDb } from './database';
 
@@ -6,7 +7,7 @@ import { getDb } from './database';
  */
 export async function runDbMigrations() {
   const db = getDb();
-  await migrate(db, { migrationsFolder: './drizzle' });
+  await migrate(db, { migrationsFolder: path.join(__dirname, '..', 'drizzle') });
 }
 
 if (require.main === module) {

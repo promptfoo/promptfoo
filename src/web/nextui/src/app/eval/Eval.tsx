@@ -70,22 +70,22 @@ export default function Eval({
     return body.data;
   };
 
-  const fetchEvalById = React.useCallback(async (id: string) => {
-    const resp = await fetch(`${await getApiBaseUrl()}/api/results/${id}`, { cache: 'no-store' });
-    const body = await resp.json();
-    setTable(body.data.results.table);
-    setConfig(body.data.config);
-    setEvalId(id);
-  }, [setTable, setConfig, setEvalId]);
+  const fetchEvalById = React.useCallback(
+    async (id: string) => {
+      const resp = await fetch(`${await getApiBaseUrl()}/api/results/${id}`, { cache: 'no-store' });
+      const body = await resp.json();
+      setTable(body.data.results.table);
+      setConfig(body.data.config);
+      setEvalId(id);
+    },
+    [setTable, setConfig, setEvalId],
+  );
 
   const handleRecentEvalSelection = async (id: string) => {
     if (USE_SUPABASE) {
       setLoaded(false);
       router.push(`/eval/remote:${encodeURIComponent(id)}`);
     } else {
-      fetchEvalById(id);
-      // TODO(ian): This requires next.js standalone server
-      // router.push(`/eval/local:${encodeURIComponent(file)}`);
       router.push(`/eval/?evalId=${encodeURIComponent(id)}`);
     }
   };
@@ -191,13 +191,24 @@ export default function Eval({
           setEvalId(defaultEvalId);
         } else {
           return (
-            <div className="notice">No evals yet. Share some evals to this server and they will appear here.</div> 
+            <div className="notice">
+              No evals yet. Share some evals to this server and they will appear here.
+            </div>
           );
         }
       };
       run();
     }
-  }, [fetchId, setTable, setConfig, setEvalId, fetchEvalById, preloadedData, setDefaultEvalId, evalId]);
+  }, [
+    fetchId,
+    setTable,
+    setConfig,
+    setEvalId,
+    fetchEvalById,
+    preloadedData,
+    setDefaultEvalId,
+    evalId,
+  ]);
 
   if (failed) {
     return <div className="notice">404 Eval not found</div>;

@@ -406,90 +406,95 @@ export function getLatestResultsPath(): string {
   return path.join(getConfigDirectoryPath(), 'output', 'latest.json');
 }
 
-export function writeResultsToDatabase(results: EvaluateSummary, config: Partial<UnifiedConfig>, createdAt?: Date): string {
+export async function writeResultsToDatabase(
+  results: EvaluateSummary,
+  config: Partial<UnifiedConfig>,
+  createdAt?: Date,
+): Promise<string> {
   createdAt = createdAt || new Date();
-  const evalId = `eval-${createdAt.toISOString()}`;
+  const evalId = `eval-${createdAt.toISOString().slice(0, 19)}`;
   const db = getDb();
-  db.insert(evals)
-    .values({
-      id: evalId,
-      createdAt: createdAt.getTime(),
-      description: config.description,
-      config,
-      results,
-    })
-    .run();
 
-  logger.debug(`Inserted evalId ${evalId}`);
+  const promises = [];
+  promises.push(
+    db
+      .insert(evals)
+      .values({
+        id: evalId,
+        createdAt: createdAt.getTime(),
+        description: config.description,
+        config,
+        results,
+      })
+      .run(),
+  );
+
+  logger.debug(`Inserting eval ${evalId}`);
 
   // Record prompt relation
   for (const prompt of results.table.head.prompts) {
     const promptId = sha256(prompt.display);
-    db.insert(prompts)
-      .values({
-        id: promptId,
-        prompt: prompt.display,
-        hash: promptId,
-      })
-      .onConflictDoNothing()
-      .run();
 
-    db.insert(evalsToPrompts)
-      .values({
-        evalId,
-        promptId,
-      })
-      .onConflictDoNothing()
-      .run();
+    promises.push(
+      db
+        .insert(prompts)
+        .values({
+          id: promptId,
+          prompt: prompt.display,
+          hash: promptId,
+        })
+        .onConflictDoNothing()
+        .run(),
+    );
 
-    logger.debug(`Inserted/updated promptId ${promptId}`);
+    promises.push(
+      db
+        .insert(evalsToPrompts)
+        .values({
+          evalId,
+          promptId,
+        })
+        .onConflictDoNothing()
+        .run(),
+    );
+
+    logger.debug(`Inserting prompt ${promptId}`);
   }
-
-  /*
-  for (const result of results.results) {
-    const promptId = sha256(result.prompt.display);
-    db.insert(llmOutputs)
-      .values({
-        id: uuidv4(),
-        evalId,
-        promptId,
-        providerId: result.provider.id || 'unknown',
-        vars: JSON.stringify(result.vars),
-        response: JSON.stringify(result.response),
-        error: result.error,
-        latencyMs: result.latencyMs,
-        gradingResult: JSON.stringify(result.gradingResult),
-        namedScores: JSON.stringify(result.namedScores),
-        cost: result.cost,
-      })
-      .run();
-  }
-  logger.debug(`Inserted ${results.results.length} llmOutputs for evalId ${evalId}`);
-  */
 
   // Record dataset relation
   const datasetId = sha256(JSON.stringify(config.tests));
-  db.insert(datasets)
-    .values({
-      id: datasetId,
-      testCaseId: JSON.stringify(config.tests),
-    })
-    .onConflictDoNothing()
-    .run();
-  db.insert(evalsToDatasets)
-    .values({
-      evalId,
-      datasetId,
-    })
-    .onConflictDoNothing()
-    .run();
-  logger.debug(`Inserted/updated datasetId ${datasetId}`);
+  promises.push(
+    db
+      .insert(datasets)
+      .values({
+        id: datasetId,
+        testCaseId: JSON.stringify(config.tests),
+      })
+      .onConflictDoNothing()
+      .run(),
+  );
+
+  promises.push(
+    db
+      .insert(evalsToDatasets)
+      .values({
+        evalId,
+        datasetId,
+      })
+      .onConflictDoNothing()
+      .run(),
+  );
+
+  logger.debug(`Inserting dataset ${datasetId}`);
+
+  logger.debug(`Awaiting ${promises.length} promises to database...`);
+  await Promise.all(promises);
 
   return evalId;
 }
 
 /**
- * 
+ *
  * @returns Last 100 evals in descending order.
  */
 export function listPreviousResults(): { evalId: string; description?: string | null }[] {
@@ -552,38 +557,53 @@ export function listPreviousResults_fileSystem(): { fileName: string; descriptio
 let attemptedMigration = false;
 export async function migrateResultsFromFileSystemToDatabase() {
   if (attemptedMigration) {
+    // TODO(ian): Record this bit in the database.
     return;
   }
 
-  const resultsFromFileSystem = listPreviousResults_fileSystem();
-  if (resultsFromFileSystem.length === 0) {
+  const fileNames = listPreviousResultFilenames_fileSystem();
+  if (fileNames.length === 0) {
     return;
   }
 
-  logger.info(`🔁 Migrating ${resultsFromFileSystem.length} flat files to local database.`);
+  logger.info(`🔁 Migrating ${fileNames.length} flat files to local database.`);
   logger.info('This is a one-time operation and may take a minute...');
   attemptedMigration = true;
-  
+
   // First run db migrations
   logger.info('Creating the sqlite database...');
   await runDbMigrations();
-  
-  // Then move all the files over
+
+  const outputDir = path.join(getConfigDirectoryPath(), 'output');
+  const backupDir = `${outputDir}-backup-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}`;
+  try {
+    fs.cpSync(outputDir, backupDir, { recursive: true });
+    logger.info(`Backup of output directory created at ${backupDir}`);
+  } catch (backupError) {
+    logger.error(`Failed to create backup of output directory: ${backupError}`);
+    return;
+  }
+
   logger.info('Moving files into database...');
-  for (const { fileName } of resultsFromFileSystem) {
+  const migrationPromises = fileNames.map(async (fileName) => {
     const fileData = readResult_fileSystem(fileName);
     if (fileData) {
-      await writeResultsToDatabase(fileData.result.results, fileData.result.config, filenameToDate(fileName));
+      await writeResultsToDatabase(
+        fileData.result.results,
+        fileData.result.config,
+        filenameToDate(fileName),
+      );
       logger.debug(`Migrated ${fileName} to database.`);
       try {
-        fs.unlinkSync(path.join(getConfigDirectoryPath(), 'output', fileName));
+        fs.unlinkSync(path.join(outputDir, fileName));
       } catch (err) {
         logger.warn(`Failed to delete ${fileName} after migration: ${err}`);
       }
     } else {
       logger.warn(`Failed to migrate result ${fileName} due to read error.`);
     }
-  }
+  });
+  await Promise.all(migrationPromises);
   try {
     fs.unlinkSync(getLatestResultsPath());
   } catch (err) {
@@ -651,7 +671,7 @@ export async function readResult(
     const { id: resultId, createdAt, results, config } = evalResult[0];
     const result: ResultsFile = {
       version: 3,
-      createdAt: new Date(createdAt).toISOString(),
+      createdAt: new Date(createdAt).toISOString().slice(0, 10),
       results,
       config,
     };
