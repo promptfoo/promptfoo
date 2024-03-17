@@ -1,0 +1,47 @@
+description: 'JSON object evals'
+
+prompts:
+  - "Output a JSON object that contains the keys `color` and `countries`, describing the following object: {{item}}"
+
+
+providers:
+  - openai:chat:gpt-3.5-turbo
+
+tests:
+  - vars:
+      item: Banana
+    assert:
+      - type: is-json
+      - type: javascript
+        # Parse the JSON and test the contents
+        value: JSON.parse(output).color === 'yellow' && JSON.parse(output).countries.includes('Ecuador')
+
+  - vars:
+      item: Passion fruit
+    options:
+      # Parse the JSON before all assertions
+      transform: JSON.parse(output)
+    assert:
+      - type: is-json
+        # Optional JSON schema
+        value:
+          required: ["color", "countries"]
+          type: object
+          properties:
+            color:
+              type: string
+            countries:
+              type: array
+              items:
+                type: string
+      - type: javascript
+        # JSON.parse is no longer necessary here
+        value: output.color === 'purple' && output.countries.includes('Brazil')
+      - type: contains-any
+        transform: output.countries
+        value: [Guatemala, Costa Rica, India, Indonesia]
+
+# Uncomment to parse JSON outputs for ALL tests
+# defaultTest:
+#   options:
+#     transform: JSON.parse(output)

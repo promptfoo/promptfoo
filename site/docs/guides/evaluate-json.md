@@ -40,11 +40,11 @@ assert:
   - type: is-json
 ```
 
-If you want to validate the structure of the JSON output, you can define a JSON schema. Here's an example of using the `is-json` assertion with a schema that requires `color` and `location` to be strings:
+If you want to validate the structure of the JSON output, you can define a JSON schema. Here's an example of using the `is-json` assertion with a schema that requires `color` to be a string and `countries` to be a list of strings:
 
 ```yaml title=promptfooconfig.yaml
 prompts:
-  - "Output a JSON object that contains the keys `color` and `location`, describing the following object: {{item}}"
+  - "Output a JSON object that contains the keys `color` and `countries`, describing the following object: {{item}}"
 
 tests:
   - vars:
@@ -53,13 +53,15 @@ tests:
       // highlight-start
       - type: is-json
         value:
-          required: ["color", "location"]
+          required: ["color", "countries"]
           type: object
           properties:
             color:
               type: string
-            location:
-              type: string
+            countries:
+              type: array
+              items:
+                type: string
       // highlight-end
 ```
 
@@ -70,11 +72,11 @@ This will ensure that the output is valid JSON that contains the required fields
 
 To assert on specific fields of a JSON output, use the `javascript` assertion type. This allows you to write custom JavaScript code to perform logical checks on the JSON fields.
 
-Here's an example configuration that demonstrates how to assert that `color` equals "Yellow" and `location` contains the substring "Guatemala":
+Here's an example configuration that demonstrates how to assert that `color` equals "Yellow" and `countries` contains "Ecuador":
 
 ```yaml
 prompts:
-  - "Output a JSON object that contains the keys `color` and `location`, describing the following object: {{item}}"
+  - "Output a JSON object that contains the keys `color` and `countries`, describing the following object: {{item}}"
 
 tests:
   - vars:
@@ -86,8 +88,29 @@ tests:
       // highlight-start
       # Parse the JSON and test the contents
       - type: javascript
-        value: output.color === 'yellow' && ["Guatemala", "Costa Rica"].includes(outputObj.location)
+        value: JSON.parse(output).color === 'yellow' && JSON.parse(output).countries.includes('Ecuador')
       // highlight-end
+```
+
+If you don't want to add `JSON.parse` to every assertion, you can add a transform under `test.options` that parses the JSON before the result is passed to the assertions:
+
+```yaml
+tests:
+  - vars:
+      item: Banana
+    // highlight-start
+    options:
+      transform: JSON.parse(output)
+    // highlight-end
+    assert:
+      - type: is-json
+        # ...
+
+      - type: javascript
+        // highlight-start
+        # `output` is now a parsed object
+        value: output.color === 'yellow' && output.countries.includes('Ecuador')
+        // highlight-end
 ```
 
 ### Extracting specific JSON fields for testing
@@ -102,7 +125,7 @@ tests:
       item: banana
     // highlight-start
     options:
-      transform: output.location
+      transform: JSON.parse(output).countries
     // highlight-end
     assert:
       - type: contains-any
@@ -110,6 +133,10 @@ tests:
       - type: llm-rubric
         value: is someplace likely to find {{item}}
 ```
+
+## Example
+
+See the full example in [Github](https://github.com/promptfoo/promptfoo/tree/main/examples/json-output).
 
 ## Conclusion
 
