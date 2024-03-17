@@ -69,12 +69,15 @@ prompts:
   prompts/completion_prompt.txt: completion_prompt
 
 providers:
-  - openai:gpt-3.5-turbo-0613:
-      prompts: chat_prompt
-  - openai:gpt-4-0613:
-      prompts: chat_prompt
-  - replicate:replicate/llama70b-v2-chat:e951f18578850b652510200860fc4ea62b3b16fac280f83ff32282f87bbd2e48:
-      prompts: completion_prompt
+  - id: openai:gpt-3.5-turbo-0613
+    label: gpt-3.5
+    prompts: chat_prompt
+  - id: openai:gpt-4-0613
+    label: gpt-4
+    prompts: chat_prompt
+  - id: replicate:meta/llama70b-v2-chat:02e509c789964a7ea8736978a43525956ef40397be9033abf9fd2badfe68c9e3
+    label: llama70b-v2-chat
+    prompts: completion_prompt
 ```
 
 :::info
@@ -161,27 +164,27 @@ Each model has a `config` field where you can specify additional parameters. Let
 
 ```yaml title=promptfooconfig.yaml
 providers:
-  - openai:gpt-3.5-turbo-0613:
-      prompts: chat_prompt
-      // highlight-start
-      config:
-        temperature: 0
-        max_tokens: 128
-      // highlight-end
-  - openai:gpt-4-0613:
-      prompts: chat_prompt
-      // highlight-start
-      config:
-        temperature: 0
-        max_tokens: 128
-      // highlight-end
-  - replicate:replicate/llama70b-v2-chat:e951f18578850b652510200860fc4ea62b3b16fac280f83ff32282f87bbd2e48:
-      prompts: completion_prompt
-      // highlight-start
-      config:
-        temperature: 0.01  # minimum temperature
-        max_length: 128
-      // highlight-end
+  - id: openai:gpt-3.5-turbo-0613
+    prompts: chat_prompt
+    // highlight-start
+    config:
+      temperature: 0
+      max_tokens: 128
+    // highlight-end
+  - id: openai:gpt-4-0613
+    prompts: chat_prompt
+    // highlight-start
+    config:
+      temperature: 0
+      max_tokens: 128
+    // highlight-end
+  - id: replicate:meta/llama70b-v2-chat:02e509c789964a7ea8736978a43525956ef40397be9033abf9fd2badfe68c9e3
+    prompts: completion_prompt
+    // highlight-start
+    config:
+      temperature: 0.01  # minimum temperature
+      max_length: 128
+    // highlight-end
 ```
 
 Here's what each parameter means:
