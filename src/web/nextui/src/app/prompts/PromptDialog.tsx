@@ -62,8 +62,8 @@ const PromptDialog: React.FC<PromptDialogProps> = ({ openDialog, handleClose, se
                 return (
                   <TableRow key={`eval-${evalData.id}`}>
                     <TableCell>
-                      <Link href={`/eval/?file=${evalData.filePath}`}>
-                        {evalData.id.slice(0, 6)}
+                      <Link href={`/eval/?evalId=${evalData.id}`}>
+                        {evalData.id}
                       </Link>
                     </TableCell>
                     <TableCell>

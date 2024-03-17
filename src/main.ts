@@ -16,16 +16,17 @@ import { evaluate, DEFAULT_MAX_CONCURRENCY } from './evaluator';
 import { readPrompts, readProviderPromptMap } from './prompts';
 import { readTest, readTests, synthesize, synthesizeFromTestSuite } from './testCases';
 import {
-  cleanupOldResults,
+  cleanupOldFileResults,
   maybeReadConfig,
+  migrateResultsFromFileSystemToDatabase,
   printBorder,
   readConfigs,
   readFilters,
   readLatestResults,
   setConfigDirectoryPath,
-  writeLatestResults,
   writeMultipleOutputs,
   writeOutput,
+  writeResultsToDatabase,
 } from './util';
 import { DEFAULT_README, DEFAULT_YAML_CONFIG } from './onboarding';
 import { disableCache, clearCache } from './cache';
@@ -92,7 +93,7 @@ function createDummyFiles(directory: string | null) {
 async function resolveConfigs(
   cmdObj: Partial<CommandLineOptions>,
   defaultConfig: Partial<UnifiedConfig>,
-): Promise<{ testSuite: TestSuite; config: Partial<UnifiedConfig>, basePath: string }> {
+): Promise<{ testSuite: TestSuite; config: Partial<UnifiedConfig>; basePath: string }> {
   // Config parsing
   let fileConfig: Partial<UnifiedConfig> = {};
   const configPaths = cmdObj.config;
@@ -275,7 +276,8 @@ async function main() {
         if (directory) {
           setConfigDirectoryPath(directory);
         }
-        startServer(cmdObj.port, cmdObj.apiBaseUrl, cmdObj.yes);
+        // Block indefinitely on server
+        await startServer(cmdObj.port, cmdObj.apiBaseUrl, cmdObj.yes);
       },
     );
 
@@ -291,7 +293,7 @@ async function main() {
       await telemetry.send();
 
       const createPublicUrl = async () => {
-        const latestResults = readLatestResults();
+        const latestResults = await readLatestResults();
         if (!latestResults) {
           logger.error('Could not load results. Do you need to run `promptfoo eval` first?');
           process.exit(1);
@@ -332,7 +334,7 @@ async function main() {
       telemetry.maybeShowNotice();
       logger.info('Clearing cache...');
       await clearCache();
-      cleanupOldResults(0);
+      cleanupOldFileResults(0);
       telemetry.record('command_used', {
         name: 'cache_clear',
       });
@@ -590,19 +592,29 @@ async function main() {
 
         telemetry.maybeShowNotice();
 
+        await migrateResultsFromFileSystemToDatabase();
+
         printBorder();
         if (!cmdObj.write) {
           logger.info(`${chalk.green('✔')} Evaluation complete`);
         } else {
-          writeLatestResults(summary, config);
+          await writeResultsToDatabase(summary, config);
 
           if (shareableUrl) {
             logger.info(`${chalk.green('✔')} Evaluation complete: ${shareableUrl}`);
           } else {
             logger.info(`${chalk.green('✔')} Evaluation complete.\n`);
-            logger.info(`» Run ${chalk.greenBright.bold('promptfoo view')} to use the local web viewer`);
-            logger.info(`» Run ${chalk.greenBright.bold('promptfoo share')} to create a shareable URL`);
-            logger.info(`» This project needs your feedback. What's one thing we can improve? ${chalk.greenBright.bold('https://forms.gle/YFLgTe1dKJKNSCsU7')}`);
+            logger.info(
+              `» Run ${chalk.greenBright.bold('promptfoo view')} to use the local web viewer`,
+            );
+            logger.info(
+              `» Run ${chalk.greenBright.bold('promptfoo share')} to create a shareable URL`,
+            );
+            logger.info(
+              `» This project needs your feedback. What's one thing we can improve? ${chalk.greenBright.bold(
+                'https://forms.gle/YFLgTe1dKJKNSCsU7',
+              )}`,
+            );
           }
         }
         printBorder();

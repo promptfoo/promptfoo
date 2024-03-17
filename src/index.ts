@@ -7,8 +7,20 @@ import { disableCache } from './cache';
 import { evaluate as doEvaluate } from './evaluator';
 import { loadApiProviders } from './providers';
 import { readTests } from './testCases';
-import { readFilters, writeLatestResults, writeMultipleOutputs, writeOutput } from './util';
-import type { EvaluateOptions, TestSuite, EvaluateTestSuite, ProviderOptions, PromptFunction } from './types';
+import {
+  readFilters,
+  writeResultsToDatabase,
+  writeMultipleOutputs,
+  writeOutput,
+  migrateResultsFromFileSystemToDatabase,
+} from './util';
+import type {
+  EvaluateOptions,
+  TestSuite,
+  EvaluateTestSuite,
+  ProviderOptions,
+  PromptFunction,
+} from './types';
 
 export * from './types';
 
@@ -89,7 +101,8 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
   }
 
   if (testSuite.writeLatestResults) {
-    writeLatestResults(ret, testSuite);
+    await migrateResultsFromFileSystemToDatabase();
+    await writeResultsToDatabase(ret, testSuite);
   }
 
   await telemetry.send();

@@ -64,7 +64,7 @@ export default function ResultsView({
   defaultEvalId,
 }: ResultsViewProps) {
   const router = useRouter();
-  const { table, config, setConfig, maxTextLength, wordBreak, showInferenceDetails, filePath } =
+  const { table, config, setConfig, maxTextLength, wordBreak, showInferenceDetails, evalId } =
     useResultsViewStore();
   const { setStateFromConfig } = useMainStore();
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
@@ -160,7 +160,7 @@ export default function ResultsView({
     if (newDescription !== null && newDescription !== config.description) {
       const newConfig = { ...config, description: newDescription };
       try {
-        const response = await fetch(`${await getApiBaseUrl()}/api/eval/${filePath}`, {
+        const response = await fetch(`${await getApiBaseUrl()}/api/eval/${evalId}`, {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
@@ -203,16 +203,14 @@ export default function ResultsView({
 
   return (
     <div style={{ marginLeft: '1rem', marginRight: '1rem' }}>
-      {config?.description && (
-        <Box mb={2} sx={{ display: 'flex', alignItems: 'center' }}>
-          <Heading variant="h5" sx={{ flexGrow: 1 }}>
-            <span className="description" onClick={handleHeadingClick}>
-              {config.description}
-            </span>{' '}
-            <span className="description-filepath">{filePath}</span>
-          </Heading>
-        </Box>
-      )}
+      <Box mb={2} sx={{ display: 'flex', alignItems: 'center' }}>
+        <Heading variant="h5" sx={{ flexGrow: 1 }}>
+          <span className="description" onClick={handleHeadingClick}>
+            {config?.description || evalId}
+          </span>{' '}
+          {config?.description && <span className="description-filepath">{evalId}</span>}
+        </Heading>
+      </Box>
       <Paper py="md">
         <ResponsiveStack direction="row" spacing={4} alignItems="center">
           <Box>
