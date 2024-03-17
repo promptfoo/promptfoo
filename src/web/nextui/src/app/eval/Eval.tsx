@@ -146,7 +146,11 @@ export default function Eval({
           setTable(data.results.table);
           setConfig(data.config);
           fetchRecentFileEvals().then((newRecentEvals) => {
-            setDefaultEvalId(newRecentEvals[0]?.id);
+            const newId = newRecentEvals[0]?.id;
+            if (newId) {
+              setDefaultEvalId(newId);
+              setEvalId(newId);
+            }
           });
         });
 
