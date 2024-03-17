@@ -2,14 +2,14 @@ prompts:
   - 'Respond to the following instruction: {{message}}'
 
 providers:
-  - openai:gpt-3.5-turbo-0613:
-      id: openai-gpt-3.5-turbo-lowtemp
-      config:
-        temperature: 0
-  - openai:gpt-3.5-turbo-0613:
-      id: openai-gpt-3.5-turbo-hightemp
-      config:
-        temperature: 1
+  - id: openai:gpt-3.5-turbo-0613
+    label: openai-gpt-3.5-turbo-lowtemp
+    config:
+      temperature: 0
+  - id: openai:gpt-3.5-turbo-0613
+    label: openai-gpt-3.5-turbo-hightemp
+    config:
+      temperature: 1
 
 tests:
   - vars:

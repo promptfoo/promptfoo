@@ -39,14 +39,14 @@ prompts:
   - 'Respond to the following instruction: {{message}}'
 
 providers:
-  - openai:gpt-3.5-turbo-0613:
-      id: openai-gpt-3.5-turbo-lowtemp
-      config:
-        temperature: 0.2
-  - openai:gpt-3.5-turbo-0613:
-      id: openai-gpt-3.5-turbo-hightemp
-      config:
-        temperature: 0.9
+  - id: openai:gpt-3.5-turbo-0613
+    label: openai-gpt-3.5-turbo-lowtemp
+    config:
+      temperature: 0.2
+  - id: openai:gpt-3.5-turbo-0613
+    label: openai-gpt-3.5-turbo-hightemp
+    config:
+      temperature: 0.9
 
 tests:
   - vars:
@@ -130,18 +130,18 @@ Set a constant seed in the provider config:
 
 ```yaml
 providers:
-  - openai:gpt-3.5-turbo-0613:
-      id: openai-gpt-3.5-turbo-lowtemp
-      config:
-        temperature: 0.2
-        // highlight-next-line
-        seed: 0
-  - openai:gpt-3.5-turbo-0613:
-      id: openai-gpt-3.5-turbo-hightemp
-      config:
-        temperature: 0.9
-        // highlight-next-line
-        seed: 0
+  - id: openai:gpt-3.5-turbo-0613
+    label: openai-gpt-3.5-turbo-lowtemp
+    config:
+      temperature: 0.2
+      // highlight-next-line
+      seed: 0
+  - id: openai:gpt-3.5-turbo-0613
+    label: openai-gpt-3.5-turbo-hightemp
+    config:
+      temperature: 0.9
+      // highlight-next-line
+      seed: 0
 ```
 
 The `eval` command also has a parameter, `repeat`, which runs each test multiple times:
