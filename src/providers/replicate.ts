@@ -4,7 +4,7 @@ import fetch from 'node-fetch';
 import logger from '../logger';
 import { getCache, isCacheEnabled } from '../cache';
 
-import type { ApiProvider, EnvOverrides, ProviderResponse } from '../types.js';
+import type { ApiProvider, EnvOverrides, ProviderOptions, ProviderResponse } from '../types.js';
 
 interface ReplicateCompletionOptions {
   apiKey?: string;
@@ -27,17 +27,20 @@ interface ReplicateCompletionOptions {
   [key: string]: any;
 }
 
+type ReplicateGenericOptions = ProviderOptions & { config?: ReplicateCompletionOptions };
+
 export class ReplicateProvider implements ApiProvider {
   modelName: string;
   apiKey?: string;
   replicate: any;
+  options: ReplicateGenericOptions;
   config: ReplicateCompletionOptions;
 
   constructor(
     modelName: string,
-    options: { config?: ReplicateCompletionOptions; id?: string; env?: EnvOverrides } = {},
+    options: ReplicateGenericOptions = {},
   ) {
-    const { config, id, env } = options;
+    const { config, env } = options;
     this.modelName = modelName;
     this.apiKey =
       config?.apiKey ||
@@ -45,12 +48,16 @@ export class ReplicateProvider implements ApiProvider {
       env?.REPLICATE_API_TOKEN ||
       process.env.REPLICATE_API_TOKEN ||
       process.env.REPLICATE_API_KEY;
-    this.config = config || {};
-    this.id = id ? () => id : this.id;
+    this.options = options;
+    this.config = config;
   }
 
-  id(): string {
+  get model(): string {
     return `replicate:${this.modelName}`;
+  }
+
+  get label(): string {
+    return this.options.label || this.model;
   }
 
   toString(): string {

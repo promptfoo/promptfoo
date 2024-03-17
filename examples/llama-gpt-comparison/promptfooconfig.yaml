@@ -3,23 +3,27 @@ prompts:
   prompts/completion_prompt.txt: completion_prompt
 
 providers:
-  - openai:gpt-3.5-turbo-0613:
-      id: openai-gpt-3.5-turbo-lowtemp
-      prompts: chat_prompt
-      config:
-        temperature: 0
-        max_tokens: 128
-  - openai:gpt-3.5-turbo-0613:
-      id: openai-gpt-3.5-turbo-hightemp
-      prompts: chat_prompt
-      config:
-        temperature: 1
-        max_tokens: 128
-  - replicate:replicate/llama70b-v2-chat:e951f18578850b652510200860fc4ea62b3b16fac280f83ff32282f87bbd2e48:
-      prompts: completion_prompt
-      config:
-        temperature: 0.01 # minimum temperature
-        max_length: 128
+  - model: openai:gpt-3.5-turbo-0613
+    label: openai-gpt-3.5-turbo-lowtemp
+    prompts: 
+      - chat_prompt
+    config:
+      temperature: 0
+      max_tokens: 128
+  - model: openai:gpt-3.5-turbo-0613
+    label: openai-gpt-3.5-turbo-hightemp
+    prompts: 
+      - chat_prompt
+    config:
+      temperature: 1
+      max_tokens: 128
+  - model: replicate:meta/llama70b-v2-chat:02e509c789964a7ea8736978a43525956ef40397be9033abf9fd2badfe68c9e3
+    label: llama70b-v2-chat
+    prompts: 
+      - completion_prompt
+    config:
+      temperature: 0.01 # minimum temperature
+      max_length: 128
 
 tests:
   - vars:

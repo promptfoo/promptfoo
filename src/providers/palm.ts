@@ -2,7 +2,7 @@ import logger from '../logger';
 import { fetchWithCache } from '../cache';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 
-import type { ApiProvider, EnvOverrides, ProviderResponse } from '../types.js';
+import type { ApiProvider, EnvOverrides, ProviderOptions, ProviderResponse } from '../types.js';
 
 const DEFAULT_API_HOST = 'generativelanguage.googleapis.com';
 
@@ -20,25 +20,25 @@ interface PalmCompletionOptions {
 
 class PalmGenericProvider implements ApiProvider {
   modelName: string;
-
+  options: ProviderOptions & { config?: PalmCompletionOptions };
   config: PalmCompletionOptions;
-  env?: EnvOverrides;
 
   constructor(
     modelName: string,
-    options: { config?: PalmCompletionOptions; id?: string; env?: EnvOverrides } = {},
+    options: ProviderOptions & { config?: PalmCompletionOptions } = {},
   ) {
-    const { config, id, env } = options;
-    this.env = env;
     this.modelName = modelName;
-    this.config = config || {};
-    this.id = id ? () => id : this.id;
+    this.options = options;
+    this.config = options.config || {};
   }
 
-  id(): string {
+  get model() {
     return `palm:${this.modelName}`;
   }
 
+  get label() {
+    return this.options.label || this.model;
+  }
   toString(): string {
     return `[Google AI Studio Provider ${this.modelName}]`;
   }
@@ -46,8 +46,8 @@ class PalmGenericProvider implements ApiProvider {
   getApiHost(): string | undefined {
     return (
       this.config.apiHost ||
-      this.env?.GOOGLE_API_HOST ||
-      this.env?.PALM_API_HOST ||
+      this.options.env?.GOOGLE_API_HOST ||
+      this.options.env?.PALM_API_HOST ||
       process.env.GOOGLE_API_HOST ||
       process.env.PALM_API_HOST ||
       DEFAULT_API_HOST
@@ -57,8 +57,8 @@ class PalmGenericProvider implements ApiProvider {
   getApiKey(): string | undefined {
     return (
       this.config.apiKey ||
-      this.env?.GOOGLE_API_KEY ||
-      this.env?.PALM_API_KEY ||
+      this.options.env?.GOOGLE_API_KEY ||
+      this.options.env?.PALM_API_KEY ||
       process.env.GOOGLE_API_KEY ||
       process.env.PALM_API_KEY
     );
@@ -75,7 +75,7 @@ export class PalmChatProvider extends PalmGenericProvider {
 
   constructor(
     modelName: string,
-    options: { config?: PalmCompletionOptions; id?: string; env?: EnvOverrides } = {},
+    options: ProviderOptions & { config?: PalmCompletionOptions } = {},
   ) {
     if (!PalmChatProvider.CHAT_MODELS.includes(modelName)) {
       logger.warn(`Using unknown Google chat model: ${modelName}`);

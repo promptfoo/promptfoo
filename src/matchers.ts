@@ -71,9 +71,10 @@ async function loadFromProviderOptions(provider: ProviderOptions) {
     !Array.isArray(provider),
     `Provider must be an object, but received an array: ${JSON.stringify(provider)}`,
   );
-  invariant(provider.id, 'Provider supplied to assertion must have an id');
+  const model = provider.model || provider.id;
+  invariant(typeof model === 'string', 'Provider supplied to assertion must have a `model` property');
   // TODO(ian): set basepath if invoked from filesystem config
-  return loadApiProvider(provider.id, { options: provider as ProviderOptions });
+  return loadApiProvider(model, { options: provider as ProviderOptions });
 }
 
 export async function getGradingProvider(
@@ -85,7 +86,7 @@ export async function getGradingProvider(
   if (typeof provider === 'string') {
     // Defined as a string
     finalProvider = await loadApiProvider(provider);
-  } else if (typeof provider === 'object' && typeof (provider as ApiProvider).id === 'function') {
+  } else if (typeof provider === 'object' && typeof (provider as ApiProvider).model === 'string') {
     // Defined as an ApiProvider interface
     finalProvider = provider as ApiProvider;
   } else if (typeof provider === 'object') {
@@ -93,7 +94,7 @@ export async function getGradingProvider(
     if (typeValue) {
       // Defined as embedding, classification, or text record
       finalProvider = await getGradingProvider(type, typeValue, defaultProvider);
-    } else if ((provider as ProviderOptions).id) {
+    } else if ((provider as ProviderOptions).model) {
       // Defined as ProviderOptions
       finalProvider = await loadFromProviderOptions(provider as ProviderOptions);
     } else {
@@ -138,12 +139,12 @@ export async function getAndCheckProvider(
   if (!isValidProviderType) {
     if (defaultProvider) {
       logger.warn(
-        `Provider ${matchedProvider.id()} is not a valid ${type} provider for '${checkName}', falling back to default`,
+        `Provider ${matchedProvider.label} is not a valid ${type} provider for '${checkName}', falling back to default`,
       );
       return defaultProvider;
     } else {
       throw new Error(
-        `Provider ${matchedProvider.id()} is not a valid ${type} provider for '${checkName}'`,
+        `Provider ${matchedProvider.label} is not a valid ${type} provider for '${checkName}'`,
       );
     }
   }
@@ -532,7 +533,7 @@ export async function matchesAnswerRelevance(
 
   invariant(
     typeof embeddingProvider.callEmbeddingApi === 'function',
-    `Provider ${embeddingProvider.id} must implement callEmbeddingApi for similarity check`,
+    `Provider ${embeddingProvider.label} must implement callEmbeddingApi for similarity check`,
   );
 
   const inputEmbeddingResp = await embeddingProvider.callEmbeddingApi(input);

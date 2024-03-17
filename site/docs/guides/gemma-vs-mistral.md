@@ -53,7 +53,7 @@ Next, specify the models you're comparing by setting up their configurations:
 #### Mistral Configuration
 
 ```yaml
-- id: replicate:mistralai/mistral-7b-instruct-v0.2
+- model: replicate:mistralai/mistral-7b-instruct-v0.2
   config:
     temperature: 0.01
     max_new_tokens: 1024
@@ -65,7 +65,7 @@ Next, specify the models you're comparing by setting up their configurations:
 #### Mixtral Configuration
 
 ```yaml
-- id: replicate:mistralai/mixtral-8x7b-instruct-v0.1
+- model: replicate:mistralai/mixtral-8x7b-instruct-v0.1
   config:
     temperature: 0.01
     max_new_tokens: 1024
@@ -77,7 +77,7 @@ Next, specify the models you're comparing by setting up their configurations:
 #### Gemma Configuration
 
 ```yaml
-- id: replicate:cjwbw/gemma-7b-it:2790a695e5dcae15506138cc4718d1106d0d475e6dca4b1d43f42414647993d5
+- model: replicate:cjwbw/gemma-7b-it:2790a695e5dcae15506138cc4718d1106d0d475e6dca4b1d43f42414647993d5
   config:
     temperature: 0.01
     max_new_tokens: 1024
@@ -95,7 +95,7 @@ prompts:
   - "{{message}}"
 
 providers:
-  - id: replicate:mistralai/mistral-7b-instruct-v0.2
+  - model: replicate:mistralai/mistral-7b-instruct-v0.2
     config:
       temperature: 0.01
       max_new_tokens: 1024
@@ -103,7 +103,7 @@ providers:
         prefix: "<s>[INST] "
         suffix: " [/INST]"
 
-  - id: replicate:mistralai/mixtral-8x7b-instruct-v0.1
+  - model: replicate:mistralai/mixtral-8x7b-instruct-v0.1
     config:
       temperature: 0.01
       max_new_tokens: 1024
@@ -111,7 +111,7 @@ providers:
         prefix: "<s>[INST] "
         suffix: " [/INST]"
 
-  - id: replicate:cjwbw/gemma-7b-it:2790a695e5dcae15506138cc4718d1106d0d475e6dca4b1d43f42414647993d5
+  - model: replicate:cjwbw/gemma-7b-it:2790a695e5dcae15506138cc4718d1106d0d475e6dca4b1d43f42414647993d5
     config:
       temperature: 0.01
       max_new_tokens: 1024
@@ -122,7 +122,7 @@ providers:
 
 ## Step 2: Build a test set
 
-Design test cases that reflect a variety of requests that are representative of your app's use case. 
+Design test cases that reflect a variety of requests that are representative of your app's use case.
 
 For this example, we're focusing on riddles to test the models' ability to understand and generate creative and logical responses.
 

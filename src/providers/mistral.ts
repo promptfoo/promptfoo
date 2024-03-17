@@ -4,6 +4,7 @@ import { fetchWithCache } from '../cache';
 import {
   ApiProvider,
   EnvOverrides,
+  ProviderOptions,
   ProviderResponse,
   TokenUsage,
 } from '../types';
@@ -59,6 +60,7 @@ function calculateCost(
 
 export class MistralChatCompletionProvider implements ApiProvider {
   modelName: string;
+  options: ProviderOptions;
   config:  MistralChatCompletionOptions;
   env?: EnvOverrides;
 
@@ -106,20 +108,24 @@ export class MistralChatCompletionProvider implements ApiProvider {
 
   constructor(
     modelName: string,
-    options: { id?: string; config?:  MistralChatCompletionOptions; env?: EnvOverrides } = {},
+    options: ProviderOptions & { config?:  MistralChatCompletionOptions } = {},
   ) {
     if (!MistralChatCompletionProvider.MISTRAL_CHAT_MODELS_NAMES.includes(modelName)) {
       logger.warn(`Using unknown Mistral chat model: ${modelName}`);
     }
-    const { id, config, env } = options;
+    const { config, env } = options;
     this.env = env;
     this.modelName = modelName;
-    this.id = id ? () => id : this.id;
-    this.config = config || {};
+    this.options = options;
+    this.config = config;
   }
 
-  id(): string {
+  get model(): string {
     return `mistral:${this.modelName}`;
+  }
+
+  get label(): string {
+    return this.options.label || this.model;
   }
 
   toString(): string {

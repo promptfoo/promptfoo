@@ -3,7 +3,7 @@ prompts:
   - "Write a very concise, funny tweet about {{topic}}"
 
 providers:
-  - id: google:gemini-pro
+  - model: google:gemini-pro
     config:
       generationConfig:
         temperature: 0

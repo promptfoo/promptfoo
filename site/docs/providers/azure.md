@@ -19,7 +19,7 @@ Also set the `apiHost` value to point to your endpoint:
 
 ```yaml
 providers:
-  - id: azureopenai:chat:deploymentNameHere
+  - model: azureopenai:chat:deploymentNameHere
     config:
       apiHost: 'xxxxxxxx.openai.azure.com'
 ```
@@ -28,7 +28,7 @@ Additional config parameters are passed like so:
 
 ```yaml
 providers:
-  - id: azureopenai:chat:deploymentNameHere
+  - model: azureopenai:chat:deploymentNameHere
     config:
       apiHost: 'xxxxxxxx.openai.azure.com'
       // highlight-start
@@ -47,7 +47,7 @@ To use client credentials for authentication with Azure, you need to set the fol
 
 ```yaml
 providers:
-  - id: azureopenai:chat:deploymentNameHere
+  - model: azureopenai:chat:deploymentNameHere
     config:
       apiHost: 'xxxxxxxx.openai.azure.com'
       azureClientId: 'your-azure-client-id'
@@ -77,7 +77,7 @@ The easiest way to do this for _all_ your test cases is to add the [`defaultTest
 defaultTest:
   options:
     provider:
-      id: azureopenai:chat:gpt-4-deployment-name
+      model: azureopenai:chat:gpt-4-deployment-name
       config:
         apiHost: 'xxxxxxx.openai.azure.com'
 ```
@@ -90,7 +90,7 @@ assert:
   - type: llm-rubric
     value: Do not mention that you are an AI or chat assistant
     provider:
-      id: azureopenai:chat:xxxx
+      model: azureopenai:chat:xxxx
       config:
         apiHost: 'xxxxxxx.openai.azure.com'
 ```
@@ -104,7 +104,7 @@ tests:
       # ...
     options:
       provider:
-        id: azureopenai:chat:xxxx
+        model: azureopenai:chat:xxxx
         config:
           apiHost: 'xxxxxxx.openai.azure.com'
     assert:
@@ -122,7 +122,7 @@ You may also specify `deployment_id` and `dataSources`, used to integrate with t
 
 ```yaml
 providers:
-  - id: azureopenai:chat:deploymentNameHere
+  - model: azureopenai:chat:deploymentNameHere
     config:
       apiHost: 'xxxxxxxx.openai.azure.com'
       deployment_id: 'abc123'

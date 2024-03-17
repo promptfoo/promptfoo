@@ -18,7 +18,7 @@ Here's an example of using Llama on Replicate. In the case of Llama, the version
 
 ```yaml
 providers:
-  - id: replicate:meta/llama-2-7b-chat
+  - model: replicate:meta/llama-2-7b-chat
     config:
       temperature: 0.01
       max_length: 1024
@@ -31,7 +31,7 @@ Here's an example of using Gemma on Replicate.  Note that unlike Llama, it does 
 
 ```yaml
 providers:
-  - id: replicate:cjwbw/gemma-7b-it:2790a695e5dcae15506138cc4718d1106d0d475e6dca4b1d43f42414647993d5
+  - model: replicate:cjwbw/gemma-7b-it:2790a695e5dcae15506138cc4718d1106d0d475e6dca4b1d43f42414647993d5
     config:
       temperature: 0.01
       max_new_tokens: 1024

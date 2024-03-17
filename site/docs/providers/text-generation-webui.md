@@ -10,22 +10,22 @@ python server.py --loader <LOADER-NAME> --model <MODEL-NAME> --api
 ```
 
 
-Usage is compatible with the [OpenAI API](/docs/providers/openai). 
+Usage is compatible with the [OpenAI API](/docs/providers/openai).
 
 In promptfoo we can address the API as follows.
 
 ```yaml
 providers:
-  - openai:chat:<MODEL-NAME>:
-      id: <MODEL-ID>
-      config:
-        apiKey: placeholder
-        apiBaseUrl: http://localhost:5000
-        temperature: 0.8
-        max_tokens: 1024
-        passthrough: # These config values are passed directly to the API
-          mode: instruct
-          instruction_template: LLama-v2
+  - model: openai:chat:<MODEL-NAME>
+    label: <MODEL-NAME>
+    config:
+      apiKey: placeholder
+      apiBaseUrl: http://localhost:5000
+      temperature: 0.8
+      max_tokens: 1024
+      passthrough: # These config values are passed directly to the API
+        mode: instruct
+        instruction_template: LLama-v2
 ```
 
 If desired, you can instead use the `OPENAI_API_BASE_URL` and `OPENAI_API_KEY` environment variables instead of the `apiBaseUrl` and `apiKey` configs.

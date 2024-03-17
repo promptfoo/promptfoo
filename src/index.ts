@@ -56,8 +56,8 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
         if (assertion.provider) {
           if (typeof assertion.provider === 'object') {
             const casted = assertion.provider as ProviderOptions;
-            invariant(casted.id, 'Provider object must have an id');
-            assertion.provider = await loadApiProvider(casted.id, { options: casted });
+            invariant(casted.model, 'Provider object must have a `model` property');
+            assertion.provider = await loadApiProvider(casted.model, { options: casted });
           } else if (typeof assertion.provider === 'string') {
             assertion.provider = await loadApiProvider(assertion.provider);
           } else {

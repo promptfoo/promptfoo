@@ -14,7 +14,7 @@ Here's an example configuration:
 
 ```yaml
 providers:
-  - id: cohere:command
+  - model: cohere:command
     config:
       temperature: 0.5
       max_tokens: 256

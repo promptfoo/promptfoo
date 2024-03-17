@@ -32,7 +32,7 @@ The OpenAI provider supports a handful of [configuration options](https://github
 
 ```yaml title=promptfooconfig.yaml
 providers:
-  - id: openai:gpt-3.5-turbo
+  - model: openai:gpt-3.5-turbo
     config:
       temperature: 0
       max_tokens: 1024
@@ -64,7 +64,7 @@ The `providers` list takes a `config` key that allows you to set parameters like
 
 ```yaml
 providers:
-  - id: openai:gpt-3.5-turbo-0613
+  - model: openai:gpt-3.5-turbo-0613
     config:
       temperature: 0
       max_tokens: 128
@@ -451,7 +451,7 @@ In addition, you can use `functions` to define custom functions. Each function s
 ```yaml
 prompts: [prompt.txt]
 providers:
-  - id: openai:chat:gpt-3.5-turbo-0613
+  - model: openai:chat:gpt-3.5-turbo-0613
     // highlight-start
     config:
       functions:
@@ -526,7 +526,7 @@ providers:
 Here's an example of how your `provider_with_function.yaml` might look:
 
 ```yaml
-id: openai:chat:gpt-3.5-turbo-0613
+model: openai:chat:gpt-3.5-turbo-0613
 config:
   functions:
     - name: get_current_weather
@@ -598,7 +598,7 @@ prompts:
   - 'Write a tweet about {{topic}}'
 providers:
   // highlight-start
-  - id: openai:assistant:asst_fEhNN3MClMamLfKLkIaoIpgZ
+  - model: openai:assistant:asst_fEhNN3MClMamLfKLkIaoIpgZ
     config:
       model: gpt-4-1106-preview
       instructions: "You always speak like a pirate"
@@ -630,7 +630,7 @@ module.exports = /** @type {import('promptfoo').TestSuiteConfig} */ ({
   prompts: 'Please add the following numbers together: {{a}} and {{b}}',
   providers: [
     {
-      id: 'openai:assistant:asst_fEhNN3MClMamLfKLkIaoIpgZ',
+      model: 'openai:assistant:asst_fEhNN3MClMamLfKLkIaoIpgZ',
       config:
         /** @type {InstanceType<import('promptfoo')["providers"]["OpenAiAssistantProvider"]>["config"]} */ ({
           model: 'gpt-4-1106-preview',

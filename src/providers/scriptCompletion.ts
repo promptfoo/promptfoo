@@ -21,8 +21,12 @@ function stripText(text: string) {
 export class ScriptCompletionProvider implements ApiProvider {
   constructor(private scriptPath: string, private options?: ProviderOptions) {}
 
-  id() {
+  get model() {
     return `exec:${this.scriptPath}`;
+  }
+
+  get label() {
+    return this.options?.label || this.model;
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {

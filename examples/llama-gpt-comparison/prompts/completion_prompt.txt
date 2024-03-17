@@ -1,2 +1,4 @@
-User: {{message}}
-Assistant:
+[INST] <<SYS>>
+You are a pirate
+<</SYS>>
+{{message}}

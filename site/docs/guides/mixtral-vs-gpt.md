@@ -45,8 +45,8 @@ export OPENAI_API_KEY=your_openai_api_key
 In this example, we're using Replicate, but you can also use providers like [HuggingFace](/docs/providers/huggingface), [TogetherAI](/docs/providers/togetherai), etc:
 
 ```yaml
-- huggingface:text-generation:mistralai/Mistral-7B-Instruct-v0.1
-- id: openai:chat:mistralai/Mixtral-8x7B-Instruct-v0.1
+- model: huggingface:text-generation:mistralai/Mistral-7B-Instruct-v0.1
+- model: openai:chat:mistralai/Mixtral-8x7B-Instruct-v0.1
   config:
     apiBaseUrl: https://api.together.xyz
 ```
@@ -60,19 +60,19 @@ Customize the behavior of each model by setting parameters such as `temperature`
 
 ```yaml title=promptfooconfig.yaml
 providers:
-  - id: openai:gpt-3.5-turbo-0613
+  - model: openai:gpt-3.5-turbo-0613
     // highlight-start
     config:
       temperature: 0
       max_tokens: 128
     // highlight-end
-  - id: openai:gpt-4-turbo-0613
+  - model: openai:gpt-4-turbo-0613
     // highlight-start
     config:
       temperature: 0
       max_tokens: 128
     // highlight-end
-  - id: replicate:mistralai/mixtral-8x7b-instruct-v0.1:2b56576fcfbe32fa0526897d8385dd3fb3d36ba6fd0dbe033c72886b81ade93e
+  - model: replicate:mistralai/mixtral-8x7b-instruct-v0.1:2b56576fcfbe32fa0526897d8385dd3fb3d36ba6fd0dbe033c72886b81ade93e
     // highlight-start
     config:
       temperature: 0.01

@@ -26,6 +26,7 @@ export function readProviderPromptMap(
   parsedPrompts: Prompt[],
 ): TestSuite['providerPromptMap'] {
   const ret: Record<string, string[]> = {};
+  console.log('provider promptmap');
 
   if (!config.providers) {
     return ret;
@@ -47,22 +48,25 @@ export function readProviderPromptMap(
   for (const provider of config.providers) {
     if (typeof provider === 'object') {
       // It's either a ProviderOptionsMap or a ProviderOptions
-      if (provider.id) {
-        const rawProvider = provider as ProviderOptions;
+      const providerOptions = provider as ProviderOptions;
+      const key = providerOptions.label || providerOptions.model;
+      if (key) {
         invariant(
-          rawProvider.id,
-          'You must specify an `id` on the Provider when you override options.prompts',
+          key,
+          'You must specify a `model` or `label` property on the Provider when you override options.prompts',
         );
-        ret[rawProvider.id] = rawProvider.prompts || allPrompts;
+        ret[key] = providerOptions.prompts || allPrompts;
       } else {
+        // Backwards compatibility with deprecated provider options map (2024-03-05)
         const rawProvider = provider as ProviderOptionsMap;
         const originalId = Object.keys(rawProvider)[0];
         const providerObject = rawProvider[originalId];
-        const id = providerObject.id || originalId;
+        const id = providerObject.label || originalId;
         ret[id] = rawProvider[originalId].prompts || allPrompts;
       }
     }
   }
+  console.log(ret)
 
   return ret;
 }

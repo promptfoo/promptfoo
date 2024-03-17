@@ -131,12 +131,12 @@ prompts:
   prompts/llama_completion_prompt.txt: llama_completion_prompt
 
 providers:
-  - openai:gpt-3.5-turbo-0613:
-      prompts: gpt_chat_prompt
-  - openai:gpt-4-turbo-0613:
-      prompts: gpt_chat_prompt
-  - replicate:replicate/llama70b-v2-chat:e951f18578850b652510200860fc4ea62b3b16fac280f83ff32282f87bbd2e48:
-      prompts: llama_completion_prompt
+  - model: openai:gpt-3.5-turbo-0613
+    prompts: gpt_chat_prompt
+  - model: openai:gpt-4-turbo-0613
+    prompts: gpt_chat_prompt
+  - model: replicate:replicate/llama70b-v2-chat:e951f18578850b652510200860fc4ea62b3b16fac280f83ff32282f87bbd2e48
+    prompts: llama_completion_prompt
 ```
 
 In this configuration, the `gpt_chat_prompt` is used for both GPT-3.5 and GPT-4 models, while the `llama_completion_prompt` is used for the Llama v2 model. The prompts are defined in separate files within the `prompts` directory.

@@ -2,7 +2,7 @@ prompts:
   - 'Convert this English to {{language}}: {{input}}'
   - 'Translate to {{language}}: {{input}}'
 providers:
-  - id: bedrock:completion:anthropic.claude-instant-v1
+  - model: bedrock:completion:anthropic.claude-instant-v1
     config:
       region: 'us-west-2'
       temperature: 0.7

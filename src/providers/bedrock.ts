@@ -5,7 +5,7 @@ import { getCache, isCacheEnabled } from '../cache';
 
 import type { BedrockRuntime } from '@aws-sdk/client-bedrock-runtime';
 
-import type { ApiProvider, EnvOverrides, ProviderResponse } from '../types.js';
+import type { ApiProvider, EnvOverrides, ProviderOptions, ProviderResponse } from '../types.js';
 
 interface BedrockOptions {
   region?: string;
@@ -73,27 +73,34 @@ const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'amazon.titan-text-express-v1': BEDROCK_MODEL.TITAN_TEXT,
 };
 
+type AwsBedrockGenericOptions = ProviderOptions & { config?: BedrockOptions };
+
 export class AwsBedrockCompletionProvider implements ApiProvider {
   static AWS_BEDROCK_COMPLETION_MODELS = Object.keys(AWS_BEDROCK_MODELS);
 
   modelName: string;
+  options: AwsBedrockGenericOptions;
   config: BedrockOptions;
   env?: EnvOverrides;
   bedrock?: BedrockRuntime;
 
   constructor(
     modelName: string,
-    options: { config?: BedrockOptions; id?: string; env?: EnvOverrides } = {},
+    options: ProviderOptions = {},
   ) {
-    const { config, id, env } = options;
+    const { config, env } = options;
     this.env = env;
     this.modelName = modelName;
-    this.config = config || {};
-    this.id = id ? () => id : this.id;
+    this.options = options;
+    this.config = config;
   }
 
-  id(): string {
+  get model(): string {
     return `bedrock:${this.modelName}`;
+  }
+
+  get label(): string {
+    return this.options.label || this.model;
   }
 
   async getBedrockInstance() {

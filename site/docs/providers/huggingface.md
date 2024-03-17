@@ -74,7 +74,7 @@ Here's an example of how this provider might appear in your promptfoo config:
 
 ```yaml
 providers:
-  - id: huggingface:text-generation:mistralai/Mistral-7B-v0.1
+  - model: huggingface:text-generation:mistralai/Mistral-7B-v0.1
     config:
       temperature: 0.1
       max_length: 1024
@@ -99,7 +99,7 @@ prompts:
   - "Write a tweet about {{topic}}:"
 
 providers:
-  - id: huggingface:text-generation:gemma-7b-it
+  - model: huggingface:text-generation:gemma-7b-it
     config:
       apiEndpoint: https://v9igsezez4ei3cq4.us-east-1.aws.endpoints.huggingface.cloud
       # apiKey: abc123   # Or set HF_API_TOKEN environment variable
@@ -117,7 +117,7 @@ If you're running the [Huggingface Text Generation Inference](https://github.com
 
 ```yaml
 providers:
-  - id: huggingface:text-generation:my-local-model
+  - model: huggingface:text-generation:my-local-model
     config:
       apiEndpoint: http://127.0.0.1:8080/generate
 ```

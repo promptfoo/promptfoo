@@ -69,12 +69,12 @@ prompts:
   prompts/completion_prompt.txt: completion_prompt
 
 providers:
-  - openai:gpt-3.5-turbo-0613:
-      prompts: chat_prompt
-  - openai:gpt-4-0613:
-      prompts: chat_prompt
-  - replicate:replicate/llama70b-v2-chat:e951f18578850b652510200860fc4ea62b3b16fac280f83ff32282f87bbd2e48:
-      prompts: completion_prompt
+  - model: openai:gpt-3.5-turbo-0613
+    prompts: chat_prompt
+  - model: openai:gpt-4-0613
+    prompts: chat_prompt
+  - model: replicate:replicate/llama70b-v2-chat:e951f18578850b652510200860fc4ea62b3b16fac280f83ff32282f87bbd2e48
+    prompts: completion_prompt
 ```
 
 :::info
@@ -161,27 +161,27 @@ Each model has a `config` field where you can specify additional parameters. Let
 
 ```yaml title=promptfooconfig.yaml
 providers:
-  - openai:gpt-3.5-turbo-0613:
-      prompts: chat_prompt
-      // highlight-start
-      config:
-        temperature: 0
-        max_tokens: 128
-      // highlight-end
-  - openai:gpt-4-0613:
-      prompts: chat_prompt
-      // highlight-start
-      config:
-        temperature: 0
-        max_tokens: 128
-      // highlight-end
-  - replicate:replicate/llama70b-v2-chat:e951f18578850b652510200860fc4ea62b3b16fac280f83ff32282f87bbd2e48:
-      prompts: completion_prompt
-      // highlight-start
-      config:
-        temperature: 0.01  # minimum temperature
-        max_length: 128
-      // highlight-end
+  - model: openai:gpt-3.5-turbo-0613
+    prompts: chat_prompt
+    // highlight-start
+    config:
+      temperature: 0
+      max_tokens: 128
+    // highlight-end
+  - model: openai:gpt-4-0613
+    prompts: chat_prompt
+    // highlight-start
+    config:
+      temperature: 0
+      max_tokens: 128
+    // highlight-end
+  - model: replicate:replicate/llama70b-v2-chat:e951f18578850b652510200860fc4ea62b3b16fac280f83ff32282f87bbd2e48
+    prompts: completion_prompt
+    // highlight-start
+    config:
+      temperature: 0.01  # minimum temperature
+      max_length: 128
+    // highlight-end
 ```
 
 Here's what each parameter means:

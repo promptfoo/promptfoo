@@ -2,7 +2,7 @@ prompts:
   - 'Generate one very interesting fact about {{topic}}'
 
 providers:
-  - id: azureopenai:chat:gpt-35-turbo-deployment1
+  - model: azureopenai:chat:gpt-35-turbo-deployment1
     config:
       apiHost: 'your-org.openai.azure.com'
 
@@ -20,6 +20,6 @@ tests:
       - type: similar
         value: Bananas are naturally radioactive.
         provider:
-          id: azureopenai:embeddings:ada-deployment1
+          model: azureopenai:embeddings:ada-deployment1
           config:
             apiHost: 'your-org.openai.azure.com'

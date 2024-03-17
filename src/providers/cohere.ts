@@ -1,7 +1,7 @@
 import { fetchWithCache } from '../cache';
 import logger from '../logger';
 
-import type { ApiProvider, EnvOverrides, ProviderResponse, TokenUsage } from '../types';
+import type { ApiProvider, EnvOverrides, ProviderOptions, ProviderResponse, TokenUsage } from '../types';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
 interface CohereChatOptions {
@@ -46,26 +46,31 @@ export class CohereChatCompletionProvider implements ApiProvider {
     'command-light-nightly',
   ];
 
-  private apiKey: string;
-  private modelName: string;
-  private config: CohereChatOptions;
+  apiKey: string;
+  modelName: string;
+  options: ProviderOptions & { config?: CohereChatOptions };
+  config: CohereChatOptions;
 
   constructor(
     modelName: string,
-    options: { config?: CohereChatOptions; id?: string; env?: EnvOverrides } = {},
+    options: ProviderOptions & { config?: CohereChatOptions } = {},
   ) {
-    const { config, id, env } = options;
-    this.apiKey = config?.apiKey || env?.COHERE_API_KEY || process.env.COHERE_API_KEY || '';
     this.modelName = modelName;
+    this.options = options;
+    this.config = options.config || {} as CohereChatOptions;
+    this.apiKey = this.config.apiKey || process.env.COHERE_API_KEY || '';
+
     if (!CohereChatCompletionProvider.COHERE_CHAT_MODELS.includes(this.modelName)) {
       logger.warn(`Using unknown Cohere chat model: ${this.modelName}`);
     }
-    this.id = id ? () => id : this.id;
-    this.config = config || {};
   }
 
-  id() {
+  get model() {
     return `cohere:${this.modelName}`;
+  }
+
+  get label() {
+    return this.options.label || this.model;
   }
 
   async callApi(prompt: string): Promise<ProviderResponse> {

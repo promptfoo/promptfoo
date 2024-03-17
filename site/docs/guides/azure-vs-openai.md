@@ -45,8 +45,8 @@ Edit your `promptfooconfig.yaml` to include both OpenAI and Azure OpenAI as prov
 
 ```yaml
 providers:
-  - id: openai:chat:gpt-3.5-turbo
-  - id: azureopenai:chat:my-gpt-35-turbo-deployment
+  - model: openai:chat:gpt-3.5-turbo
+  - model: azureopenai:chat:my-gpt-35-turbo-deployment
     config:
       apiHost: myazurehost.openai.azure.com
 ```
@@ -59,11 +59,11 @@ For each provider, you may configure additional parameters such as `temperature`
 
 ```yaml
 providers:
-  - id: openai:chat:gpt-3.5-turbo
+  - model: openai:chat:gpt-3.5-turbo
     config:
       temperature: 0
       max_tokens: 128
-  - id: azureopenai:chat:my-gpt-35-turbo-deployment
+  - model: azureopenai:chat:my-gpt-35-turbo-deployment
     config:
       apiHost: your_azure_openai_host
       temperature: 0

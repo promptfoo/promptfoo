@@ -2,7 +2,7 @@ prompts:
   - 'Convert this English to {{language}}: {{input}}'
   - 'Translate to {{language}}: {{input}}'
 providers:
-  - id: bedrock:completion:amazon.titan-text-lite-v1
+  - model: bedrock:completion:amazon.titan-text-lite-v1
     config:
       region: 'us-west-2'
       textGenerationConfig:

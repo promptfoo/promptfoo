@@ -2,7 +2,7 @@ import logger from '../logger';
 import { fetchWithCache } from '../cache';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 
-import type { ApiProvider, EnvOverrides, ProviderResponse } from '../types.js';
+import type { ApiProvider, EnvOverrides, ProviderOptions, ProviderResponse } from '../types.js';
 import { maybeCoerceToGeminiFormat, type GeminiApiResponse, type ResponseData } from './vertexUtil';
 
 interface VertexCompletionOptions {
@@ -24,23 +24,24 @@ interface VertexCompletionOptions {
 
 class VertexGenericProvider implements ApiProvider {
   modelName: string;
-
+  options: ProviderOptions & { config?: VertexCompletionOptions };
   config: VertexCompletionOptions;
-  env?: EnvOverrides;
 
   constructor(
     modelName: string,
-    options: { config?: VertexCompletionOptions; id?: string; env?: EnvOverrides } = {},
+    options: ProviderOptions & { config?: VertexCompletionOptions } = {},
   ) {
-    const { config, id, env } = options;
-    this.env = env;
     this.modelName = modelName;
-    this.config = config || {};
-    this.id = id ? () => id : this.id;
+    this.options = options;
+    this.config = options.config || {} as VertexCompletionOptions;
   }
 
-  id(): string {
+  get model() {
     return `vertex:${this.modelName}`;
+  }
+
+  get label() {
+    return this.options.label || this.model;
   }
 
   toString(): string {
@@ -50,30 +51,30 @@ class VertexGenericProvider implements ApiProvider {
   getApiHost(): string | undefined {
     return (
       this.config.apiHost ||
-      this.env?.VERTEX_API_HOST ||
+      this.options.env?.VERTEX_API_HOST ||
       process.env.VERTEX_API_HOST ||
       `${this.getRegion()}-aiplatform.googleapis.com`
     );
   }
 
   getProjectId(): string | undefined {
-    return this.config.projectId || this.env?.VERTEX_PROJECT_ID || process.env.VERTEX_PROJECT_ID;
+    return this.config.projectId || this.options.env?.VERTEX_PROJECT_ID || process.env.VERTEX_PROJECT_ID;
   }
 
   getApiKey(): string | undefined {
-    return this.config.apiKey || this.env?.VERTEX_API_KEY || process.env.VERTEX_API_KEY;
+    return this.config.apiKey || this.options.env?.VERTEX_API_KEY || process.env.VERTEX_API_KEY;
   }
 
   getRegion(): string {
     return (
-      this.config.region || this.env?.VERTEX_REGION || process.env.VERTEX_REGION || 'us-central1'
+      this.config.region || this.options.env?.VERTEX_REGION || process.env.VERTEX_REGION || 'us-central1'
     );
   }
 
   getPublisher(): string | undefined {
     return (
       this.config.publisher ||
-      this.env?.VERTEX_PUBLISHER ||
+      this.options.env?.VERTEX_PUBLISHER ||
       process.env.VERTEX_PUBLISHER ||
       'google'
     );
@@ -101,7 +102,7 @@ export class VertexChatProvider extends VertexGenericProvider {
 
   constructor(
     modelName: string,
-    options: { config?: VertexCompletionOptions; id?: string; env?: EnvOverrides } = {},
+    options: ProviderOptions & { config?: VertexCompletionOptions } = {},
   ) {
     if (!VertexChatProvider.CHAT_MODELS.includes(modelName)) {
       logger.warn(`Using unknown Google Vertex chat model: ${modelName}`);

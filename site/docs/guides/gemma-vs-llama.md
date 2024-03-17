@@ -27,7 +27,7 @@ Let's start by creating a new directory for our eval:
 npx promptfoo@latest init gemma-vs-llama
 ```
 
-`cd gemma-vs-llama` and begin editing `promptfooconfig.yaml`.  
+`cd gemma-vs-llama` and begin editing `promptfooconfig.yaml`.
 
 This config is where you define how you will interact with the Gemma and Llama models. It includes details such as the models you're comparing, the parameters for generating responses, and the format of your prompts.
 
@@ -40,7 +40,7 @@ prompts:
   - "{{message}}"
 ```
 
-Each prompt in this list will be run through both Gemma and Llama.  
+Each prompt in this list will be run through both Gemma and Llama.
 
 You should modify this prompt to match the use case you want to test.  For example:
 
@@ -57,7 +57,7 @@ The next section of the configuration file deals with the providers, which in th
 ##### Llama Configuration
 
 ```yaml
-- id: replicate:meta/llama-2-7b-chat
+- model: replicate:meta/llama-2-7b-chat
   config:
     temperature: 0.01
     max_new_tokens: 128
@@ -74,7 +74,7 @@ The next section of the configuration file deals with the providers, which in th
 ##### Gemma Configuration
 
 ```yaml
-- id: replicate:cjwbw/gemma-7b-it:2790a695e5dcae15506138cc4718d1106d0d475e6dca4b1d43f42414647993d5
+- model: replicate:cjwbw/gemma-7b-it:2790a695e5dcae15506138cc4718d1106d0d475e6dca4b1d43f42414647993d5
   config:
     temperature: 0.01
     max_new_tokens: 128
@@ -96,7 +96,7 @@ prompts:
   - "{{message}}"
 
 providers:
-  - id: replicate:meta/llama-2-7b-chat
+  - model: replicate:meta/llama-2-7b-chat
     config:
       temperature: 0.01
       max_new_tokens: 128
@@ -104,7 +104,7 @@ providers:
         prefix: "[INST] "
         suffix: "[/INST] "
 
-  - id: replicate:cjwbw/gemma-7b-it:2790a695e5dcae15506138cc4718d1106d0d475e6dca4b1d43f42414647993d5
+  - model: replicate:cjwbw/gemma-7b-it:2790a695e5dcae15506138cc4718d1106d0d475e6dca4b1d43f42414647993d5
     config:
       temperature: 0.01
       max_new_tokens: 128
@@ -115,7 +115,7 @@ providers:
 
 ## Step 2: Defining Test Cases
 
-Test cases are where you specify the inputs that will be fed to both models. This is your opportunity to compare how each model handles a variety of requests, from simple queries to complex reasoning tasks. 
+Test cases are where you specify the inputs that will be fed to both models. This is your opportunity to compare how each model handles a variety of requests, from simple queries to complex reasoning tasks.
 
 **_Modify these test cases to fit your needs_**.  Here are some examples:
 
@@ -205,9 +205,9 @@ npx promptfoo@latest view
 
 After running the evaluation, you'll have a dataset that compares the responses from Gemma and Llama across your test cases. Look for patterns in the results:
 
-- Which model is more accurate or relevant in its responses?  
+- Which model is more accurate or relevant in its responses?
   - In our small example set, Llama was a little more likely to hallucinate., e.g. claiming to know the weather in New York.
-- Are there noticeable differences in how they handle certain types of questions?  
+- Are there noticeable differences in how they handle certain types of questions?
   - It seems like Gemma is more likely to respond verbosely and include markdown formatting.
   - Llama has a weird habit of roleplaying (e.g. extra output such as `*adjusts glasses*`) and by default prefers to preface responses with "Of course!"
 

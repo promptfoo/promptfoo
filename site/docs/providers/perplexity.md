@@ -8,11 +8,11 @@ Here's an example config that compares Perplexity's 70B model with Llama-2 70B.
 
 ```yaml
 providers:
-  - id: openai:chat:pplx-70b-chat-alpha
+  - model: openai:chat:pplx-70b-chat-alpha
     config:
       apiHost: api.perplexity.ai
       apiKeyEnvar: PERPLEXITY_API_KEY
-  - id: openai:chat:llama-2-70b-chat
+  - model: openai:chat:llama-2-70b-chat
     config:
       apiHost: api.perplexity.ai
       apiKeyEnvar: PERPLEXITY_API_KEY

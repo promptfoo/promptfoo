@@ -4,11 +4,11 @@ The `temperature`` setting in language models is like a dial that adjusts how pr
 
 In general, a low temperature leads to "safer", more expected words, while a higher temperature encourages the model to choose less obvious words.  This is why higher temperature is commonly associated with more creative outputs.
 
-Under the hood, `temperature` adjusts how the model calculates the likelihood of each word it might pick next.  
+Under the hood, `temperature` adjusts how the model calculates the likelihood of each word it might pick next.
 
 The `temperature` parameter affects each output token by scaling the logits (the raw output scores from the model) before they are passed through the softmax function that turns them into probabilities. Lower temperatures sharpen the distinction between high and low scores, making the high scores more dominant, while higher temperatures flatten this distinction, giving lower-scoring words a better chance of being chosen.
 
-## Finding the optimal temperature 
+## Finding the optimal temperature
 
 The best way to find the optimal temperature parameter is to run a systematic *evaluation*.
 
@@ -40,11 +40,11 @@ prompts:
 
 providers:
   - openai:gpt-3.5-turbo-0613:
-      id: openai-gpt-3.5-turbo-lowtemp
+      model: openai-gpt-3.5-turbo-lowtemp
       config:
         temperature: 0.2
   - openai:gpt-3.5-turbo-0613:
-      id: openai-gpt-3.5-turbo-hightemp
+      model: openai-gpt-3.5-turbo-hightemp
       config:
         temperature: 0.9
 
@@ -71,7 +71,7 @@ To run the evaluation, use the following command:
 npx promptfoo@latest eval
 ```
 
-This command shows the outputs side-by-side in the command line.  
+This command shows the outputs side-by-side in the command line.
 
 ## Adding automated checks
 
@@ -131,13 +131,13 @@ Set a constant seed in the provider config:
 ```yaml
 providers:
   - openai:gpt-3.5-turbo-0613:
-      id: openai-gpt-3.5-turbo-lowtemp
+      model: openai-gpt-3.5-turbo-lowtemp
       config:
         temperature: 0.2
         // highlight-next-line
         seed: 0
   - openai:gpt-3.5-turbo-0613:
-      id: openai-gpt-3.5-turbo-hightemp
+      model: openai-gpt-3.5-turbo-hightemp
       config:
         temperature: 0.9
         // highlight-next-line
