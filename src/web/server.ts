@@ -224,7 +224,6 @@ export async function startServer(port = 15500, apiBaseUrl = '', skipConfirmatio
           openUrl();
         }
         rl.close();
-        logger.info('Press Ctrl+C to stop the server');
       });
     }
   });
