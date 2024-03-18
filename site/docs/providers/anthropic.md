@@ -122,7 +122,7 @@ The easiest way to do this for _all_ your test cases is to add the [`defaultTest
 defaultTest:
   options:
     provider:
-      id: provider:chat:modelname
+      id: anthropic:messages:claude-3-opus-20240229
       config:
         # Provider config options
 ```
@@ -135,7 +135,7 @@ assert:
   - type: llm-rubric
     value: Do not mention that you are an AI or chat assistant
     provider:
-      id: provider:chat:modelname
+      id: anthropic:messages:claude-3-opus-20240229
       config:
         # Provider config options
 ```
@@ -149,7 +149,7 @@ tests:
       # ...
     options:
       provider:
-        id: provider:chat:modelname
+        id: anthropic:messages:claude-3-opus-20240229
         config:
           # Provider config options
     assert:
