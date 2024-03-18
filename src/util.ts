@@ -435,6 +435,7 @@ export async function writeResultsToDatabase(
         config,
         results,
       })
+      .onConflictDoNothing()
       .run(),
   );
 
@@ -450,7 +451,6 @@ export async function writeResultsToDatabase(
         .values({
           id: promptId,
           prompt: prompt.display,
-          hash: promptId,
         })
         .onConflictDoNothing()
         .run(),
@@ -471,13 +471,13 @@ export async function writeResultsToDatabase(
   }
 
   // Record dataset relation
-  const datasetId = sha256(JSON.stringify(config.tests));
+  const datasetId = sha256(JSON.stringify(config.tests || []));
   promises.push(
     db
       .insert(datasets)
       .values({
         id: datasetId,
-        testCaseId: JSON.stringify(config.tests),
+        tests: config.tests,
       })
       .onConflictDoNothing()
       .run(),

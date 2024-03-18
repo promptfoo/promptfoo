@@ -15,7 +15,6 @@ export const prompts = sqliteTable('prompts', {
   id: text('id').primaryKey(),
   createdAt: integer('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
   prompt: text('prompt').notNull(),
-  hash: text('hash').notNull(),
 });
 
 export const promptsRelations = relations(prompts, ({ many }) => ({
@@ -26,7 +25,7 @@ export const promptsRelations = relations(prompts, ({ many }) => ({
 
 export const datasets = sqliteTable('datasets', {
   id: text('id').primaryKey(),
-  testCaseId: text('test_case_id').notNull(),
+  tests: text('tests', { mode: 'json' }).$type<UnifiedConfig['tests']>(),
   createdAt: integer('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
