@@ -32,7 +32,8 @@ import json
 
 def call_api(prompt, options, context):
     # The 'options' parameter contains additional configuration for the API call.
-    additional_option = options.get('additionalOption', None)
+    config = options.get('config', None)
+    additional_option = config.get('additionalOption', None)
 
     # The 'context' parameter provides info about which vars were used to create the final prompt.
     user_variable = context['vars'].get('userVariable', None)
