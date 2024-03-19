@@ -17,6 +17,9 @@ ENV NEXT_PUBLIC_PROMPTFOO_USE_SUPABASE=${NEXT_PUBLIC_PROMPTFOO_USE_SUPABASE}
 ENV NEXT_PUBLIC_SUPABASE_URL=http://placeholder.promptfoo.dev
 ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=placeholder
 
+ARG PROMPTFOO_MIGRATIONS_DIR=/app/drizzle
+ENV PROMPTFOO_MIGRATIONS_DIR=${PROMPTFOO_MIGRATIONS_DIR}
+
 WORKDIR /app
 COPY . .
 
@@ -38,6 +41,8 @@ WORKDIR /app
 COPY --from=builder /app/src/web/nextui/public ./public
 COPY --from=builder /app/src/web/nextui/.next/standalone ./
 COPY --from=builder /app/src/web/nextui/.next/static ./.next/static
+COPY --from=builder /app/drizzle ./.next/server/drizzle
+#COPY --from=builder /app/node_modules/better-sqlite3/build/Release/better_sqlite3.node ./.next/build/better_sqlite3.node
 
 RUN mkdir -p /root/.promptfoo/output
 
