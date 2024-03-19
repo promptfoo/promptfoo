@@ -11,6 +11,9 @@ import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
 
 interface MistralChatCompletionOptions {
   apiKey?: string;
+  apiKeyEnvar?: string;
+  apiHost?: string;
+  apiBaseUrl?: string;
   temperature?: number;
   top_p?: number;
   max_tokens?: number;
@@ -126,8 +129,31 @@ export class MistralChatCompletionProvider implements ApiProvider {
     return `[Mistral Provider ${this.modelName}]`;
   }
 
+  getApiUrlDefault(): string {
+    return 'https://api.mistral.ai/v1';
+  }
+
+  getApiUrl(): string {
+    const apiHost =
+      this.config.apiHost || this.env?.MISTRAL_API_HOST || process.env.MISTRAL_API_HOST;
+    if (apiHost) {
+      return `https://${apiHost}/v1`;
+    }
+    return (
+      this.config.apiBaseUrl ||
+      this.env?.MISTRAL_API_BASE_URL ||
+      process.env.MISTRAL_API_BASE_URL ||
+      this.getApiUrlDefault()
+    );
+  }
+
   getApiKey(): string | undefined {
-    return this.config.apiKey || this.env?.MISTRAL_API_KEY || process.env.MISTRAL_API_KEY;
+    return (
+      this.config.apiKey ||
+      (this.config.apiKeyEnvar ? process.env[this.config.apiKeyEnvar] : undefined) ||
+      this.env?.MISTRAL_API_KEY ||
+      process.env.MISTRAL_API_KEY
+    );
   }
 
   async callApi(prompt: string): Promise<ProviderResponse> {
@@ -150,7 +176,7 @@ export class MistralChatCompletionProvider implements ApiProvider {
       ...(this.config.response_format ? { response_format: this.config.response_format } : {}),
     };
 
-    const url = 'https://api.mistral.ai/v1/chat/completions';
+    const url = `${this.getApiUrl()}/chat/completions`;
     logger.debug(`Mistral API request: ${url} ${JSON.stringify(body)}`);
 
     let data, 
