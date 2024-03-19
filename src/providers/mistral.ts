@@ -1,12 +1,7 @@
 import logger from '../logger';
 import { fetchWithCache } from '../cache';
 
-import {
-  ApiProvider,
-  EnvOverrides,
-  ProviderResponse,
-  TokenUsage,
-} from '../types';
+import { ApiProvider, EnvOverrides, ProviderResponse, TokenUsage } from '../types';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
 
 interface MistralChatCompletionOptions {
@@ -48,9 +43,9 @@ function calculateCost(
     return undefined;
   }
 
-  const model = [
-    ...MistralChatCompletionProvider.MISTRAL_CHAT_MODELS,
-  ].find((m) => m.id === modelName);
+  const model = [...MistralChatCompletionProvider.MISTRAL_CHAT_MODELS].find(
+    (m) => m.id === modelName,
+  );
   if (!model || !model.cost) {
     return undefined;
   }
@@ -62,7 +57,7 @@ function calculateCost(
 
 export class MistralChatCompletionProvider implements ApiProvider {
   modelName: string;
-  config:  MistralChatCompletionOptions;
+  config: MistralChatCompletionOptions;
   env?: EnvOverrides;
 
   static MISTRAL_CHAT_MODELS = [
@@ -100,7 +95,7 @@ export class MistralChatCompletionProvider implements ApiProvider {
         input: 0.008 / 1000,
         output: 0.024 / 1000,
       },
-    }))
+    })),
   ];
 
   static MISTRAL_CHAT_MODELS_NAMES = MistralChatCompletionProvider.MISTRAL_CHAT_MODELS.map(
@@ -109,7 +104,7 @@ export class MistralChatCompletionProvider implements ApiProvider {
 
   constructor(
     modelName: string,
-    options: { id?: string; config?:  MistralChatCompletionOptions; env?: EnvOverrides } = {},
+    options: { id?: string; config?: MistralChatCompletionOptions; env?: EnvOverrides } = {},
   ) {
     if (!MistralChatCompletionProvider.MISTRAL_CHAT_MODELS_NAMES.includes(modelName)) {
       logger.warn(`Using unknown Mistral chat model: ${modelName}`);
@@ -159,12 +154,12 @@ export class MistralChatCompletionProvider implements ApiProvider {
   async callApi(prompt: string): Promise<ProviderResponse> {
     if (!this.getApiKey()) {
       throw new Error(
-        'Mistra API key is not set. Set the MISTRAL_API_KEY environment variable or add `apiKey` to the provider config.',
+        'Mistral API key is not set. Set the MISTRAL_API_KEY environment variable or add `apiKey` or `apiKeyEnvar` to the provider config.',
       );
     }
 
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
-    
+
     const body = {
       model: this.modelName,
       messages: messages,
@@ -179,7 +174,7 @@ export class MistralChatCompletionProvider implements ApiProvider {
     const url = `${this.getApiUrl()}/chat/completions`;
     logger.debug(`Mistral API request: ${url} ${JSON.stringify(body)}`);
 
-    let data, 
+    let data,
       cached = false;
 
     try {
@@ -189,12 +184,12 @@ export class MistralChatCompletionProvider implements ApiProvider {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${this.getApiKey()}`,
+            Authorization: `Bearer ${this.getApiKey()}`,
           },
           body: JSON.stringify(body),
         },
         REQUEST_TIMEOUT_MS,
-        )) as unknown as { data: any; cached: boolean });
+      )) as unknown as { data: any; cached: boolean });
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,
