@@ -10,10 +10,7 @@ import { getDb } from './database';
 export async function runDbMigrations() {
   try {
     const db = getDb();
-    const migrationsFolder = path.join(__dirname, '..', 'drizzle');
-    await migrate(db, {
-      migrationsFolder,
-    });
+    await migrate(db, { migrationsFolder: path.join(__dirname, '..', 'drizzle') });
   } catch (error) {
     logger.error('Error running database migrations:', error);
   }
