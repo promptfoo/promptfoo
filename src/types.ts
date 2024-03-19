@@ -46,6 +46,8 @@ export interface EnvOverrides {
   REPLICATE_API_KEY?: string;
   REPLICATE_API_TOKEN?: string;
   LOCALAI_BASE_URL?: string;
+  MISTRAL_API_HOST?: string;
+  MISTRAL_API_BASE_URL?: string;
   PALM_API_KEY?: string;
   PALM_API_HOST?: string;
   GOOGLE_API_KEY?: string;
