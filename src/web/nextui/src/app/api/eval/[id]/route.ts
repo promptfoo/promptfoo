@@ -12,23 +12,25 @@ import { readResult, updateResult } from '@/../../../util';
 export const dynamic = IS_RUNNING_LOCALLY ? 'auto' : 'force-dynamic';
 
 async function getDataForId(id: string): Promise<{data: ResultsFile | null; evalId: string; uuid: string}> {
-  let uuid: string;
+  let uuidLookup: string;
   let evalId: FilePath;
-  if (uuidValidate(id)) {
-    uuid = id;
+  const actualUuid = id.includes(':') ? id.split(':')[1] : id;
+  if (uuidValidate(actualUuid)) {
+    uuidLookup = id;
     evalId = (await store.get(`uuid:${id}`)) as string;
   } else {
-    uuid = (await store.get(`file:${id}`)) as string;
+    uuidLookup = (await store.get(`file:${id}`)) as string;
     evalId = id;
   }
   let data: ResultsFile | null = null;
   try {
-    const fileContents = await readResult(evalId);
-    if (!fileContents) {
-      throw new Error('No file contents');
+    const eval_ = await readResult(evalId);
+    if (!eval_) {
+      throw new Error('Could not find eval');
     }
-    data = fileContents?.result;
+    data = eval_?.result;
   } catch (error) {
+    console.error('Failed to read eval', error);
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
       try {
         data = JSON.parse(evalId) as ResultsFile;
@@ -39,17 +41,19 @@ async function getDataForId(id: string): Promise<{data: ResultsFile | null; eval
       throw error;
     }
   }
-  return { data, evalId, uuid };
+  return { data, evalId, uuid: uuidLookup };
 }
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const data = await getDataForId(params.id);
-    if (!data) {
+    const resp = await getDataForId(params.id);
+    if (!resp) {
+      console.error('Data not found for id', params.id);
       return NextResponse.json({ error: 'Data not found or invalid JSON' }, { status: 404 });
     }
-    return NextResponse.json({ data });
+    return NextResponse.json(resp);
   } catch (error) {
+    console.error('Failed to fetch data', error);
     return NextResponse.json(
       { error: 'An error occurred while fetching the data', details: error },
       { status: 500 },
