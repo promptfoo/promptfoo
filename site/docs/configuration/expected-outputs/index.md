@@ -311,9 +311,9 @@ These metrics will be shown in the UI:
 
 See [named metrics example](https://github.com/promptfoo/promptfoo/tree/main/examples/named-metrics).
 
-## Running assertions directly on outputso
+## Running assertions directly on outputs
 
-Sometimes you already have LLM outputs and you want to run assertions on them.  The `eval` command supports standalone assertion files. 
+If you already have LLM outputs and want to run assertions on them, the `eval` command supports standalone assertion files.
 
 Put your outputs in a JSON string array, like this `output.json`:
 
