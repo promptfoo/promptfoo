@@ -32,6 +32,7 @@ Examples of use cases supported by the HuggingFace ecosystem include:
 - **Toxicity** via [DistilBERT-toxic-comment-model](https://huggingface.co/martin-ha/toxic-comment-model), [twitter-roberta-base-offensive](https://huggingface.co/cardiffnlp/twitter-roberta-base-offensive), [bertweet-large-sexism-detector](https://huggingface.co/NLP-LTU/bertweet-large-sexism-detector), etc.
 - **Grounding, factuality, and evidence-type** classification via [MiniLM-evidence-types](https://huggingface.co/marieke93/MiniLM-evidence-types) and similar
 - **Helpfulness** via [quora_helpful_answers_classifier](https://huggingface.co/Radella/quora_helpful_answers_classifier), [distilbert-base-uncased-helpful-amazon](https://huggingface.co/banjtheman/distilbert-base-uncased-helpful-amazon), etc.
+- **Personal Identifiable Information (PII)** classification via models such as [starpii](https://huggingface.co/bigcode/starpii) and [deberta_finetuned_pii](https://huggingface.co/lakshyakh93/deberta_finetuned_pii).
 
 There are many models out there to choose from! In general, it's best to select a model that is fine-tuned for your use case.
 
@@ -73,3 +74,17 @@ tests:
   - vars:
       topic: jack fruits
 ```
+
+## PII detection example
+
+This assertion uses [starpii](https://huggingface.co/bigcode/starpii) to determine whether an LLM output potentially contains PII:
+
+```yaml
+assert:
+  - type: not-classifier
+    provider: huggingface:token-classification:bigcode/starpii
+    # Ensure that outputs are not PII, with a score > 0.75
+    threshold: 0.75
+```
+
+The `not-classifier` type inverts the result of the classifier.  In this case, the starpii model is trained to detect PII, but we want to assert that the LLM output is _not_ PII.  So, we invert the classifier to accept values that are _not_ PII.

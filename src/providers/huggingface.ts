@@ -386,3 +386,96 @@ export class HuggingfaceSentenceSimilarityProvider implements ApiSimilarityProvi
     }
   }
 }
+
+interface HuggingfaceTokenClassificationOptions {
+  apiKey?: string;
+  apiEndpoint?: string;
+  aggregation_strategy?: string;
+  use_cache?: boolean;
+  wait_for_model?: boolean;
+}
+
+export class HuggingfaceTokenExtractionProvider implements ApiProvider {
+  modelName: string;
+  config: HuggingfaceTokenClassificationOptions;
+
+  constructor(
+    modelName: string,
+    options: { id?: string; config?: HuggingfaceTokenClassificationOptions } = {},
+  ) {
+    const { id, config } = options;
+    this.modelName = modelName;
+    this.id = id ? () => id : this.id;
+    this.config = config || {};
+  }
+
+  id(): string {
+    return `huggingface:token-classification:${this.modelName}`;
+  }
+
+  async callClassificationApi(input: string): Promise<ProviderClassificationResponse> {
+    const params = {
+      inputs: input,
+      parameters: {
+        aggregation_strategy: this.config.aggregation_strategy || 'simple',
+      },
+      options: {
+        use_cache: this.config.use_cache !== undefined ? this.config.use_cache : true,
+        wait_for_model: this.config.wait_for_model || false,
+      },
+    };
+
+    let response;
+    try {
+      const url = this.config.apiEndpoint
+        ? this.config.apiEndpoint
+        : `https://api-inference.huggingface.co/models/${this.modelName}`;
+      response = await fetchWithCache(
+        url,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(process.env.HF_API_TOKEN
+              ? { Authorization: `Bearer ${process.env.HF_API_TOKEN}` }
+              : {}),
+          },
+          body: JSON.stringify(params),
+        },
+        REQUEST_TIMEOUT_MS,
+      );
+
+      if (response.data.error) {
+        return {
+          error: `API call error: ${response.data.error}`,
+        };
+      }
+      if (!Array.isArray(response.data)) {
+        return {
+          error: `Malformed response data: ${response.data}`,
+        };
+      }
+
+      // Take the highest score of each entity group
+      const classification: Record<string, number> = {};
+      for (const item of response.data) {
+        if (!classification[item.entity_group] || classification[item.entity_group] < item.score) {
+          classification[item.entity_group] = item.score;
+        }
+      }
+      return { classification };
+    } catch (err) {
+      return {
+        error: `API call error: ${String(err)}. Output:\n${response?.data}`,
+      };
+    }
+  }
+
+  async callApi(prompt: string): Promise<ProviderResponse> {
+    const ret = await this.callClassificationApi(prompt);
+    return {
+      error: ret.error,
+      output: JSON.stringify(ret.classification),
+    };
+  }
+}
