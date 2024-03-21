@@ -620,6 +620,21 @@ describe('matchesClassification', () => {
     expect(result.reason).toBe(`Classification ${expected} has score 0.60 < ${threshold}`);
   });
 
+  it('should pass when the maximum classification score is above the threshold with undefined expected', async () => {
+    const expected = undefined;
+    const output = 'Sample output';
+    const threshold = 0.55;
+
+    const grader = new TestGrader();
+    const grading: GradingConfig = {
+      provider: grader,
+    };
+
+    const result = await matchesClassification(expected, output, threshold, grading);
+    expect(result.pass).toBeTruthy();
+    expect(result.reason).toBe(`Maximum classification score 0.60 >= ${threshold}`);
+  });
+
   it('should use the overridden classification grading config', async () => {
     const expected = 'classA';
     const output = 'Sample output';
