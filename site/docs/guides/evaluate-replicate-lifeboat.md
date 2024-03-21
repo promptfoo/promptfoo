@@ -41,7 +41,7 @@ providers:
   - id: openai:chat:meta/llama-2-70b-chat
     config:
       apiKey: 'your_replicate_api_key'
-      apiBaseUrl: https://openai-proxy.replicate.com
+      apiBaseUrl: https://openai-proxy.replicate.com/v1
       temperature: 0.01 # Llama requires non-zero temperature
       max_tokens: 512
 

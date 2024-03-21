@@ -10,7 +10,7 @@ Here's an example of how to configure the provider to use the `mistralai/mistral
 providers:
   - id: openai:chat:mistralai/mistral-medium    # or any other chat model
     config:
-      apiBaseUrl: https://openrouter.ai/api
+      apiBaseUrl: https://openrouter.ai/api/v1
       apiKey: openrouter_api_key
 ```
 

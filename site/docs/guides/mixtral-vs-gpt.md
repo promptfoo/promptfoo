@@ -48,7 +48,7 @@ In this example, we're using Replicate, but you can also use providers like [Hug
 - huggingface:text-generation:mistralai/Mistral-7B-Instruct-v0.1
 - id: openai:chat:mistralai/Mixtral-8x7B-Instruct-v0.1
   config:
-    apiBaseUrl: https://api.together.xyz
+    apiBaseUrl: https://api.together.xyz/v1
 ```
 
 Local options such as [ollama](/docs/providers/ollama), [vllm](/docs/providers/vllm), and [localai](/docs/providers/localai) also exist. See [providers](/docs/providers) for all options.

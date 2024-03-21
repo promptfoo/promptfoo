@@ -20,7 +20,7 @@ providers:
       id: <MODEL-ID>
       config:
         apiKey: placeholder
-        apiBaseUrl: http://localhost:5000
+        apiBaseUrl: http://localhost:5000/v1
         temperature: 0.8
         max_tokens: 1024
         passthrough: # These config values are passed directly to the API
