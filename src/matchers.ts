@@ -294,7 +294,7 @@ export async function matchesClassification(
   return {
     pass: false,
     score,
-    reason: `Classification ${expected} has score ${score} < ${threshold}`,
+    reason: `Classification ${expected} has score ${score.toFixed(2)} < ${threshold}`,
   };
 }
 
