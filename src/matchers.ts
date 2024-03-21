@@ -247,8 +247,16 @@ export async function matchesSimilarity(
   };
 }
 
+/**
+ *
+ * @param expected Expected classification. If undefined, matches any classification.
+ * @param output Text to classify.
+ * @param threshold Value between 0 and 1. If the expected classification is undefined, the threshold is the minimum score for any classification. If the expected classification is defined, the threshold is the minimum score for that classification.
+ * @param grading
+ * @returns Pass if the output matches the classification with a score greater than or equal to the threshold.
+ */
 export async function matchesClassification(
-  expected: string,
+  expected: string | undefined,
   output: string,
   threshold: number,
   grading?: GradingConfig,
@@ -265,13 +273,22 @@ export async function matchesClassification(
   if (!resp.classification) {
     return fail(resp.error || 'Unknown error fetching classification');
   }
+  let score;
+  if (expected === undefined) {
+    score = Math.max(...Object.values(resp.classification));
+  } else {
+    score = resp.classification[expected] || 0;
+  }
 
-  const score = resp.classification[expected] || 0;
   if (score >= threshold) {
+    const reason =
+      expected === undefined
+        ? `Maximum classification score ${score.toFixed(2)} >= ${threshold}`
+        : `Classification ${expected} has score ${score.toFixed(2)} >= ${threshold}`;
     return {
       pass: true,
       score,
-      reason: `Classification ${expected} has score ${score} >= ${threshold}`,
+      reason,
     };
   }
   return {

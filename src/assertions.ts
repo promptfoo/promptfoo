@@ -1043,21 +1043,28 @@ ${assertion.value}`,
 
   if (baseType === 'classifier') {
     invariant(
-      typeof renderedValue === 'string',
-      '"classifier" assertion type must have a string value',
+      typeof renderedValue === 'string' || typeof renderedValue === 'undefined',
+      '"classifier" assertion type must have a string value or be undefined',
     );
 
     // Assertion provider overrides test provider
     test.options = test.options || {};
     test.options.provider = assertion.provider || test.options.provider;
+    const classificationResult = await matchesClassification(
+      renderedValue,
+      outputString,
+      assertion.threshold ?? 1,
+      test.options,
+    );
+
+    if (inverse) {
+      classificationResult.pass = !classificationResult.pass;
+      classificationResult.score = 1 - classificationResult.score;
+    }
+
     return {
       assertion,
-      ...(await matchesClassification(
-        renderedValue,
-        outputString,
-        assertion.threshold ?? 1,
-        test.options,
-      )),
+      ...classificationResult,
     };
   }
 
