@@ -602,7 +602,7 @@ describe('matchesClassification', () => {
 
     const result = await matchesClassification(expected, output, threshold, grading);
     expect(result.pass).toBeTruthy();
-    expect(result.reason).toBe(`Classification ${expected} has score 0.6 >= ${threshold}`);
+    expect(result.reason).toBe(`Classification ${expected} has score 0.60 >= ${threshold}`);
   });
 
   it('should fail when the classification score is below the threshold', async () => {
@@ -617,7 +617,7 @@ describe('matchesClassification', () => {
 
     const result = await matchesClassification(expected, output, threshold, grading);
     expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe(`Classification ${expected} has score 0.6 < ${threshold}`);
+    expect(result.reason).toBe(`Classification ${expected} has score 0.60 < ${threshold}`);
   });
 
   it('should use the overridden classification grading config', async () => {
@@ -643,7 +643,7 @@ describe('matchesClassification', () => {
 
     const result = await matchesClassification(expected, output, threshold, grading);
     expect(result.pass).toBeTruthy();
-    expect(result.reason).toBe(`Classification ${expected} has score 0.6 >= ${threshold}`);
+    expect(result.reason).toBe(`Classification ${expected} has score 0.60 >= ${threshold}`);
     expect(mockCallApi).toHaveBeenCalled();
 
     mockCallApi.mockRestore();
