@@ -344,4 +344,19 @@ Then run the eval command:
 promptfoo eval --assertions asserts.yaml --model-outputs outputs.json
 ```
 
+### Tagging outputs
+
+Promptfoo accepts a slightly more complex JSON structure that includes an `output` field for the model's output and a `tags` field for the associated tags. These tags are shown in the web UI as a comma-separated list.  It's useful if you want to keep track of certain output attributes:
+
+```json
+[
+  {"output": "Hello world", "tags": ["foo", "bar"]},
+  {"output": "Greetings, planet", "tags": ["baz", "abc"]},
+  {"output": "Salutations, Earth", "tags": ["def", "ghi"]}
+]
+```
+
+
+### Processing and formatting outputs
+
 If you need to do any processing/formatting of outputs, use a [Javascript provider](/docs/providers/custom-api/), [Python provider](https://promptfoo.dev/docs/providers/python/), or [custom script](/docs/providers/custom-script/).
