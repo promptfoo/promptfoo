@@ -52,7 +52,7 @@ function calculateCost(
   return inputCost * promptTokens + outputCost * completionTokens || undefined;
 }
 
-function parseMessages(messages: string) {
+export function parseMessages(messages: string) {
   const chats = parseChatPrompt<{ role: 'user' | 'assistant' | 'system'; content: string }[]>(
     messages,
     [{ role: 'user' as const, content: messages }],
@@ -158,7 +158,7 @@ export class AnthropicMessagesProvider implements ApiProvider {
     const { system, extractedMessages } = parseMessages(prompt);
     const params: Anthropic.MessageCreateParams = {
       model: this.modelName,
-      ...(system ? { system: system } : {}),
+      ...(system ? { system } : {}),
       messages: extractedMessages,
       max_tokens: this.config?.max_tokens || 1024,
       temperature: this.config.temperature || 0,

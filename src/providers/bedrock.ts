@@ -6,6 +6,7 @@ import { getCache, isCacheEnabled } from '../cache';
 import type { BedrockRuntime } from '@aws-sdk/client-bedrock-runtime';
 
 import type { ApiProvider, EnvOverrides, ProviderResponse } from '../types.js';
+import { parseMessages } from './anthropic';
 
 interface BedrockOptions {
   region?: string;
@@ -19,59 +20,98 @@ interface TextGenerationOptions {
 }
 
 interface BedrockTextGenerationOptions extends BedrockOptions {
-  textGenerationConfig?: TextGenerationOptions
+  textGenerationConfig?: TextGenerationOptions;
 }
 
-interface BedrockClaudeCompletionOptions extends BedrockOptions {
+interface BedrockClaudeLegacyCompletionOptions extends BedrockOptions {
   max_tokens_to_sample?: number;
   temperature?: number;
   top_p?: number;
   top_k?: number;
 }
 
+interface BedrockClaudeMessagesCompletionOptions extends BedrockOptions {
+  max_tokens?: number;
+  temperature?: number;
+}
+
 interface IBedrockModel {
-  params: (config: BedrockOptions, prompt: string, stop: string[]) => any,
-  output: (responseJson: any) => any,
+  params: (config: BedrockOptions, prompt: string, stop: string[]) => any;
+  output: (responseJson: any) => any;
 }
 
 const BEDROCK_MODEL = {
-  CLAUDE: {
-    params: (config: BedrockClaudeCompletionOptions, prompt: string, stop: string[]) => ({
+  CLAUDE_COMPLETION: {
+    params: (config: BedrockClaudeLegacyCompletionOptions, prompt: string, stop: string[]) => ({
       prompt: `${Anthropic.HUMAN_PROMPT} ${prompt} ${Anthropic.AI_PROMPT}`,
       max_tokens_to_sample:
         config?.max_tokens_to_sample || parseInt(process.env.AWS_BEDROCK_MAX_TOKENS || '1024'),
-      temperature:
-        config.temperature ?? parseFloat(process.env.AWS_BEDROCK_TEMPERATURE || '0'),
+      temperature: config.temperature ?? parseFloat(process.env.AWS_BEDROCK_TEMPERATURE || '0'),
       stop_sequences: stop,
     }),
     output: (responseJson: any) => {
       return responseJson?.completion;
     },
   },
+  CLAUDE_MESSAGES: {
+    params: (config: BedrockClaudeMessagesCompletionOptions, prompt: string, stop: string[]) => {
+      const { system, extractedMessages } = parseMessages(prompt);
+      return {
+        max_tokens: config?.max_tokens || parseInt(process.env.AWS_BEDROCK_MAX_TOKENS || '1024'),
+        temperature: config.temperature || 0,
+        messages: extractedMessages,
+        ...(system ? { system } : {}),
+      };
+    },
+    output: (responseJson: any) => {
+      return responseJson?.content[0].text;
+    }
+  },
   TITAN_TEXT: {
     params: (config: BedrockTextGenerationOptions, prompt: string, stop: string[]) => ({
       inputText: prompt,
       textGenerationConfig: {
-        maxTokenCount: config?.textGenerationConfig?.maxTokenCount || parseInt(process.env.AWS_BEDROCK_MAX_TOKENS || '1024'),
-        temperature: config?.textGenerationConfig?.temperature || parseFloat(process.env.AWS_BEDROCK_TEMPERATURE || '0'),
-        topP: config?.textGenerationConfig?.topP || parseFloat(process.env.AWS_BEDROCK_TOP_P || '1'),
+        maxTokenCount:
+          config?.textGenerationConfig?.maxTokenCount ||
+          parseInt(process.env.AWS_BEDROCK_MAX_TOKENS || '1024'),
+        temperature:
+          config?.textGenerationConfig?.temperature ||
+          parseFloat(process.env.AWS_BEDROCK_TEMPERATURE || '0'),
+        topP:
+          config?.textGenerationConfig?.topP || parseFloat(process.env.AWS_BEDROCK_TOP_P || '1'),
         stopSequences: config?.textGenerationConfig?.stopSequences || stop,
-      }
+      },
     }),
     output: (responseJson: any) => {
       return responseJson?.results[0]?.outputText;
     },
-  }
-}
+  },
+};
 
 const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
-  'anthropic.claude-instant-v1': BEDROCK_MODEL.CLAUDE,
-  'anthropic.claude-v1': BEDROCK_MODEL.CLAUDE,
-  'anthropic.claude-v2': BEDROCK_MODEL.CLAUDE,
-  'anthropic.claude-v2.1': BEDROCK_MODEL.CLAUDE,
+  'anthropic.claude-instant-v1': BEDROCK_MODEL.CLAUDE_COMPLETION,
+  'anthropic.claude-v1': BEDROCK_MODEL.CLAUDE_COMPLETION,
+  'anthropic.claude-v2': BEDROCK_MODEL.CLAUDE_COMPLETION,
+  'anthropic.claude-v2.1': BEDROCK_MODEL.CLAUDE_COMPLETION,
+  'anthropic.claude-2.0': BEDROCK_MODEL.CLAUDE_COMPLETION,
+  'anthropic.claude-2.1': BEDROCK_MODEL.CLAUDE_COMPLETION,
+  'anthropic.claude-3-opus-20240229': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'anthropic.claude-3-sonnet-20240229': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'anthropic.claude-3-haiku-20240229': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'amazon.titan-text-lite-v1': BEDROCK_MODEL.TITAN_TEXT,
   'amazon.titan-text-express-v1': BEDROCK_MODEL.TITAN_TEXT,
 };
+
+function getHandlerForModel(modelName: string) {
+  const ret = AWS_BEDROCK_MODELS[modelName];
+  if (ret) {
+    return ret;
+  }
+  if (modelName.startsWith('anthropic.claude')) {
+    return BEDROCK_MODEL.CLAUDE_MESSAGES;
+  }
+  throw new Error(`Unknown Amazon Bedrock model: ${modelName}`);
+}
 
 export class AwsBedrockCompletionProvider implements ApiProvider {
   static AWS_BEDROCK_COMPLETION_MODELS = Object.keys(AWS_BEDROCK_MODELS);
@@ -133,10 +173,12 @@ export class AwsBedrockCompletionProvider implements ApiProvider {
       throw new Error(`BEDROCK_STOP is not a valid JSON string: ${err}`);
     }
 
-    let model = AWS_BEDROCK_MODELS[this.modelName];
+    let model = getHandlerForModel(this.modelName);
     if (!model) {
-      logger.warn(`Unknown Amazon Bedrock model: ${this.modelName}. Assuming its API is Claude-like.`);
-      model = BEDROCK_MODEL.CLAUDE;
+      logger.warn(
+        `Unknown Amazon Bedrock model: ${this.modelName}. Assuming its API is Claude-like.`,
+      );
+      model = BEDROCK_MODEL.CLAUDE_COMPLETION;
     }
     const params = model.params(this.config, prompt, stop);
 
