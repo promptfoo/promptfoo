@@ -33,6 +33,7 @@ interface BedrockClaudeLegacyCompletionOptions extends BedrockOptions {
 interface BedrockClaudeMessagesCompletionOptions extends BedrockOptions {
   max_tokens?: number;
   temperature?: number;
+  anthropic_version?: string;
 }
 
 interface IBedrockModel {
@@ -59,6 +60,7 @@ const BEDROCK_MODEL = {
       return {
         max_tokens: config?.max_tokens || parseInt(process.env.AWS_BEDROCK_MAX_TOKENS || '1024'),
         temperature: config.temperature || 0,
+        anthropic_version: config.anthropic_version || 'bedrock-2023-05-31',
         messages: extractedMessages,
         ...(system ? { system } : {}),
       };
@@ -92,12 +94,7 @@ const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'anthropic.claude-instant-v1': BEDROCK_MODEL.CLAUDE_COMPLETION,
   'anthropic.claude-v1': BEDROCK_MODEL.CLAUDE_COMPLETION,
   'anthropic.claude-v2': BEDROCK_MODEL.CLAUDE_COMPLETION,
-  'anthropic.claude-v2.1': BEDROCK_MODEL.CLAUDE_COMPLETION,
-  'anthropic.claude-2.0': BEDROCK_MODEL.CLAUDE_COMPLETION,
-  'anthropic.claude-2.1': BEDROCK_MODEL.CLAUDE_COMPLETION,
-  'anthropic.claude-3-opus-20240229': BEDROCK_MODEL.CLAUDE_MESSAGES,
-  'anthropic.claude-3-sonnet-20240229': BEDROCK_MODEL.CLAUDE_MESSAGES,
-  'anthropic.claude-3-haiku-20240229': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'anthropic.claude-v2:1': BEDROCK_MODEL.CLAUDE_COMPLETION,
   'amazon.titan-text-lite-v1': BEDROCK_MODEL.TITAN_TEXT,
   'amazon.titan-text-express-v1': BEDROCK_MODEL.TITAN_TEXT,
 };
@@ -178,7 +175,7 @@ export class AwsBedrockCompletionProvider implements ApiProvider {
       logger.warn(
         `Unknown Amazon Bedrock model: ${this.modelName}. Assuming its API is Claude-like.`,
       );
-      model = BEDROCK_MODEL.CLAUDE_COMPLETION;
+      model = BEDROCK_MODEL.CLAUDE_MESSAGES;
     }
     const params = model.params(this.config, prompt, stop);
 
@@ -203,10 +200,10 @@ export class AwsBedrockCompletionProvider implements ApiProvider {
     let response;
     try {
       response = await bedrockInstance.invokeModel({
-        body: JSON.stringify(params),
         modelId: this.modelName,
         accept: 'application/json',
         contentType: 'application/json',
+        body: JSON.stringify(params),
       });
     } catch (err) {
       return {
