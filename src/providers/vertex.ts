@@ -1,9 +1,11 @@
+import { GoogleAuth, GoogleAuthOptions } from "google-auth-library";
+
 import logger from '../logger';
 import { fetchWithCache } from '../cache';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 
 import type { ApiProvider, EnvOverrides, ProviderResponse } from '../types.js';
-import { maybeCoerceToGeminiFormat, type GeminiApiResponse, type ResponseData } from './vertexUtil';
+import { maybeCoerceToGeminiFormat, type GeminiApiResponse, type GeminiResponseData, GeminiErrorResponse } from './vertexUtil';
 
 interface VertexCompletionOptions {
   apiKey?: string;
@@ -47,6 +49,15 @@ class VertexGenericProvider implements ApiProvider {
     return `[Google Vertex Provider ${this.modelName}]`;
   }
 
+  async getGoogleClient() {
+    const auth = new GoogleAuth({
+      scopes: "https://www.googleapis.com/auth/cloud-platform",
+    });
+    const client = await auth.getClient();
+    const projectId = await auth.getProjectId();
+    return { client, projectId };
+  }
+
   getApiHost(): string | undefined {
     return (
       this.config.apiHost ||
@@ -56,8 +67,8 @@ class VertexGenericProvider implements ApiProvider {
     );
   }
 
-  getProjectId(): string | undefined {
-    return this.config.projectId || this.env?.VERTEX_PROJECT_ID || process.env.VERTEX_PROJECT_ID;
+  async getProjectId() {
+    return (await this.getGoogleClient()).projectId || this.config.projectId || this.env?.VERTEX_PROJECT_ID || process.env.VERTEX_PROJECT_ID;
   }
 
   getApiKey(): string | undefined {
@@ -156,23 +167,16 @@ export class VertexChatProvider extends VertexGenericProvider {
     };
     logger.debug(`Calling Google Vertex API (Gemini): ${JSON.stringify(body)}`);
 
-    let data, cached;
+    let data;
     try {
-      ({ cached, data } = await fetchWithCache(
-        // POST https://us-central1-aiplatform.googleapis.com/
-        `https://${this.getApiHost()}/v1/projects/${this.getProjectId()}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${
-          this.modelName
-        }:streamGenerateContent`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${this.getApiKey()}`,
-          },
-          body: JSON.stringify(body),
-        },
-        REQUEST_TIMEOUT_MS,
-      )) as unknown as { cached: boolean; data: GeminiApiResponse };
+      const { client, projectId } = await this.getGoogleClient();
+      const url = `https://${this.getApiHost()}/v1/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${this.modelName}:streamGenerateContent`;
+      const res = await client.request({
+        url,
+        method: 'POST',
+        data: body,
+      });
+      data = res.data as GeminiApiResponse;
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,
@@ -181,14 +185,16 @@ export class VertexChatProvider extends VertexGenericProvider {
 
     logger.debug(`\tGemini API response: ${JSON.stringify(data)}`);
     try {
-      const error = data.error || data[0].error;
+      const dataWithError = data as GeminiErrorResponse[];
+      const error = dataWithError[0].error;
       if (error) {
         return {
           error: `Error ${error.code}: ${error.message}`,
         };
       }
-      const output = data
-        .map((datum: ResponseData) => {
+      const dataWithResponse = data as GeminiResponseData[];
+      const output = dataWithResponse
+        .map((datum: GeminiResponseData) => {
           const part = datum.candidates[0].content.parts[0];
           if ('text' in part) {
             return part.text;
@@ -196,15 +202,16 @@ export class VertexChatProvider extends VertexGenericProvider {
           return JSON.stringify(part);
         })
         .join('');
-      const lastData = data[data.length - 1];
+      const lastData = dataWithResponse[dataWithResponse.length - 1];
+      let cached = false;
       const tokenUsage = cached
         ? {
-            cached: lastData.usageMetadata.totalTokenCount,
+            cached: lastData.usageMetadata?.totalTokenCount || 0,
           }
         : {
-            total: lastData.usageMetadata.totalTokenCount,
-            prompt: lastData.usageMetadata.promptTokenCount,
-            completion: lastData.usageMetadata.completionTokenCount,
+            total: lastData.usageMetadata?.totalTokenCount || 0,
+            prompt: lastData.usageMetadata?.promptTokenCount || 0,
+            completion: lastData.usageMetadata?.candidatesTokenCount || 0,
           };
       return {
         cached,
