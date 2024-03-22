@@ -3,6 +3,7 @@ import { GoogleAuth, GoogleAuthOptions } from "google-auth-library";
 import logger from '../logger';
 import { fetchWithCache } from '../cache';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
+import { getCache, isCacheEnabled } from '../cache';
 
 import type { ApiProvider, EnvOverrides, ProviderResponse } from '../types.js';
 import { maybeCoerceToGeminiFormat, type GeminiApiResponse, type GeminiResponseData, GeminiErrorResponse } from './vertexUtil';
@@ -165,7 +166,19 @@ export class VertexChatProvider extends VertexGenericProvider {
         topK: this.config.topK,
       },
     };
-    logger.debug(`Calling Google Vertex API (Gemini): ${JSON.stringify(body)}`);
+    logger.debug(`Preparing to call Google Vertex API (Gemini) with body: ${JSON.stringify(body)}`);
+
+    const cache = await getCache();
+    const cacheKey = `vertex:gemini:${JSON.stringify(body)}`;
+
+    let cachedResponse;
+    if (isCacheEnabled()) {
+      cachedResponse = await cache.get(cacheKey);
+      if (cachedResponse) {
+        logger.debug(`Returning cached response for prompt: ${prompt}`);
+        return { ...JSON.parse(cachedResponse as string), cached: true };
+      }
+    }
 
     let data;
     try {
@@ -183,7 +196,7 @@ export class VertexChatProvider extends VertexGenericProvider {
       };
     }
 
-    logger.debug(`\tGemini API response: ${JSON.stringify(data)}`);
+    logger.debug(`Gemini API response: ${JSON.stringify(data)}`);
     try {
       const dataWithError = data as GeminiErrorResponse[];
       const error = dataWithError[0].error;
@@ -203,21 +216,22 @@ export class VertexChatProvider extends VertexGenericProvider {
         })
         .join('');
       const lastData = dataWithResponse[dataWithResponse.length - 1];
-      let cached = false;
-      const tokenUsage = cached
-        ? {
-            cached: lastData.usageMetadata?.totalTokenCount || 0,
-          }
-        : {
-            total: lastData.usageMetadata?.totalTokenCount || 0,
-            prompt: lastData.usageMetadata?.promptTokenCount || 0,
-            completion: lastData.usageMetadata?.candidatesTokenCount || 0,
-          };
-      return {
-        cached,
+      const tokenUsage = {
+        total: lastData.usageMetadata?.totalTokenCount || 0,
+        prompt: lastData.usageMetadata?.promptTokenCount || 0,
+        completion: lastData.usageMetadata?.candidatesTokenCount || 0,
+      };
+      const response = {
+        cached: false,
         output,
         tokenUsage,
       };
+
+      if (isCacheEnabled()) {
+        await cache.set(cacheKey, JSON.stringify(response));
+      }
+
+      return response;
     } catch (err) {
       return {
         error: `Gemini API response error: ${String(err)}: ${JSON.stringify(data)}`,
