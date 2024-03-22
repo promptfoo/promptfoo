@@ -33,7 +33,9 @@ import { OpenAiChatCompletionProvider } from './providers/openai';
 import type { Assertion, AssertionType, GradingResult, AtomicTestCase, ApiProvider } from './types';
 import { runPythonCode } from './python/wrapper';
 
-const MAX_CONCURRENCY_ASSERTIONS = 3;
+const ASSERTIONS_MAX_CONCURRENCY = process.env.PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY
+  ? parseInt(process.env.PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY, 10)
+  : 3;
 
 export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
   'answer-relevance',
@@ -116,7 +118,7 @@ export async function runAssertions({
   const componentResults: GradingResult[] = [];
   const namedScores: Record<string, number> = {};
 
-  await async.forEachOfLimit(test.assert, MAX_CONCURRENCY_ASSERTIONS, async (assertion, index) => {
+  await async.forEachOfLimit(test.assert, ASSERTIONS_MAX_CONCURRENCY, async (assertion, index) => {
     if (assertion.type.startsWith('select-')) {
       // Select-type assertions are handled separately because they depend on multiple outputs.
       return;
