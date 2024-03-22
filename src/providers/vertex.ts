@@ -18,7 +18,15 @@ import type { ApiProvider, EnvOverrides, ProviderResponse, TokenUsage } from '..
 let cachedAuth: GoogleAuth | undefined;
 async function getGoogleClient() {
   if (!cachedAuth) {
-    const { GoogleAuth } = await import('google-auth-library');
+    let GoogleAuth;
+    try {
+      const importedModule = await import('google-auth-library');
+      GoogleAuth = importedModule.GoogleAuth;
+    } catch (err) {
+      throw new Error(
+        'The google-auth-library package is required as a peer dependency. Please install it in your project or globally.',
+      );
+    }
     cachedAuth = new GoogleAuth({
       scopes: 'https://www.googleapis.com/auth/cloud-platform',
     });
