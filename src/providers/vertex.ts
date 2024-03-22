@@ -13,7 +13,7 @@ import {
 
 import type { GoogleAuth } from 'google-auth-library';
 
-import type { ApiProvider, EnvOverrides, ProviderResponse } from '../types.js';
+import type { ApiProvider, EnvOverrides, ProviderResponse, TokenUsage } from '../types.js';
 
 let cachedAuth: GoogleAuth | undefined;
 async function getGoogleClient() {
@@ -192,8 +192,12 @@ export class VertexChatProvider extends VertexGenericProvider {
       cachedResponse = await cache.get(cacheKey);
       if (cachedResponse) {
         logger.debug(`Returning cached response for prompt: ${prompt}`);
-        // TODO(ian): Add cached token usage
-        return { ...JSON.parse(cachedResponse as string), cached: true };
+        const parsedCachedResponse = JSON.parse(cachedResponse as string);
+        const tokenUsage = parsedCachedResponse.tokenUsage as TokenUsage;
+        if (tokenUsage) {
+          tokenUsage.cached = tokenUsage.total;
+        }
+        return { ...parsedCachedResponse, cached: true };
       }
     }
 
@@ -293,8 +297,12 @@ export class VertexChatProvider extends VertexGenericProvider {
       cachedResponse = await cache.get(cacheKey);
       if (cachedResponse) {
         logger.debug(`Returning cached response for prompt: ${prompt}`);
-        // TODO(ian): Add cached token usage
-        return { ...JSON.parse(cachedResponse as string), cached: true };
+        const parsedCachedResponse = JSON.parse(cachedResponse as string);
+        const tokenUsage = parsedCachedResponse.tokenUsage as TokenUsage;
+        if (tokenUsage) {
+          tokenUsage.cached = tokenUsage.total;
+        }
+        return { ...parsedCachedResponse, cached: true };
       }
     }
 
