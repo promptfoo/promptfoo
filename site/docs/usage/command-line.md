@@ -49,7 +49,7 @@ By default the `eval` command will read the `promptfooconfig.yaml` configuration
 [1]: /docs/providers/openai
 [2]: /docs/providers/localai
 
-The `eval` command will return exit code `100` when there is at least 1 test case failure.  It will return exit code `1` for any other error.
+The `eval` command will return exit code `100` when there is at least 1 test case failure. It will return exit code `1` for any other error.
 
 ## `promptfoo init [directory]`
 
@@ -118,14 +118,15 @@ Show details of a specific resource.
 
 These general-purpose environment variables are supported:
 
-| Name                                 | Description                                                           | Default        |
-| ------------------------------------ | --------------------------------------------------------------------- | -------------- |
-| `PROMPTFOO_CONFIG_DIR`               | Directory that stores eval history                                    | `~/.promptfoo` |
-| `PROMPTFOO_DISABLE_CONVERSATION_VAR` | Prevents the `_conversation` variable from being set                  |                |
-| `PROMPTFOO_DISABLE_JSON_AUTOESCAPE`  | If set, disables smart variable substitution within JSON prompts      |                |
-| `PROMPTFOO_DISABLE_REF_PARSER`       | Prevents JSON schema dereferencing                                    |                |
-| `PROMPTFOO_DISABLE_TEMPLATING`       | Disable Nunjucks rendering                                            |                |
-| `PROMPTFOO_DISABLE_VAR_EXPANSION`    | Prevents Array-type vars from being expanded into multiple test cases |                |
+| Name                                   | Description                                                           | Default        |
+| -------------------------------------- | --------------------------------------------------------------------- | -------------- |
+| `PROMPTFOO_CONFIG_DIR`                 | Directory that stores eval history                                    | `~/.promptfoo` |
+| `PROMPTFOO_DISABLE_CONVERSATION_VAR`   | Prevents the `_conversation` variable from being set                  |                |
+| `PROMPTFOO_DISABLE_JSON_AUTOESCAPE`    | If set, disables smart variable substitution within JSON prompts      |                |
+| `PROMPTFOO_DISABLE_REF_PARSER`         | Prevents JSON schema dereferencing                                    |                |
+| `PROMPTFOO_DISABLE_TEMPLATING`         | Disable Nunjucks rendering                                            |                |
+| `PROMPTFOO_DISABLE_VAR_EXPANSION`      | Prevents Array-type vars from being expanded into multiple test cases |                |
+| `PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY` | How many assertions to run at a time                                  | 3              |
 
 ## `promptfoo generate dataset`
 
