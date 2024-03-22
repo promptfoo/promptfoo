@@ -23,7 +23,7 @@ export function generateTable(summary: EvaluateSummary, tableCellMaxLength = 250
     ].map((h) => ellipsize(h, tableCellMaxLength)),
     colWidths: Array(headLength).fill(Math.floor(maxWidth / headLength)),
     wordWrap: true,
-    wrapOnWordBoundary: false,
+    wrapOnWordBoundary: true, // if false, ansi colors break
     style: {
       head: ['blue', 'bold'],
     },
