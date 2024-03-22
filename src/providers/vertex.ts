@@ -1,9 +1,32 @@
 import logger from '../logger';
 import { fetchWithCache } from '../cache';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
+import { getCache, isCacheEnabled } from '../cache';
+
+import {
+  maybeCoerceToGeminiFormat,
+  type GeminiApiResponse,
+  type GeminiResponseData,
+  GeminiErrorResponse,
+  Palm2ApiResponse,
+} from './vertexUtil';
+
+import type { GoogleAuth } from 'google-auth-library';
 
 import type { ApiProvider, EnvOverrides, ProviderResponse } from '../types.js';
-import { maybeCoerceToGeminiFormat, type GeminiApiResponse, type ResponseData } from './vertexUtil';
+
+let cachedAuth: GoogleAuth | undefined;
+async function getGoogleClient() {
+  if (!cachedAuth) {
+    const { GoogleAuth } = await import('google-auth-library');
+    cachedAuth = new GoogleAuth({
+      scopes: 'https://www.googleapis.com/auth/cloud-platform',
+    });
+  }
+  const client = await cachedAuth.getClient();
+  const projectId = await cachedAuth.getProjectId();
+  return { client, projectId };
+}
 
 interface VertexCompletionOptions {
   apiKey?: string;
@@ -56,8 +79,13 @@ class VertexGenericProvider implements ApiProvider {
     );
   }
 
-  getProjectId(): string | undefined {
-    return this.config.projectId || this.env?.VERTEX_PROJECT_ID || process.env.VERTEX_PROJECT_ID;
+  async getProjectId() {
+    return (
+      (await getGoogleClient()).projectId ||
+      this.config.projectId ||
+      this.env?.VERTEX_PROJECT_ID ||
+      process.env.VERTEX_PROJECT_ID
+    );
   }
 
   getApiKey(): string | undefined {
@@ -154,41 +182,51 @@ export class VertexChatProvider extends VertexGenericProvider {
         topK: this.config.topK,
       },
     };
-    logger.debug(`Calling Google Vertex API (Gemini): ${JSON.stringify(body)}`);
+    logger.debug(`Preparing to call Google Vertex API (Gemini) with body: ${JSON.stringify(body)}`);
 
-    let data, cached;
+    const cache = await getCache();
+    const cacheKey = `vertex:gemini:${JSON.stringify(body)}`;
+
+    let cachedResponse;
+    if (isCacheEnabled()) {
+      cachedResponse = await cache.get(cacheKey);
+      if (cachedResponse) {
+        logger.debug(`Returning cached response for prompt: ${prompt}`);
+        // TODO(ian): Add cached token usage
+        return { ...JSON.parse(cachedResponse as string), cached: true };
+      }
+    }
+
+    let data;
     try {
-      ({ cached, data } = await fetchWithCache(
-        // POST https://us-central1-aiplatform.googleapis.com/
-        `https://${this.getApiHost()}/v1/projects/${this.getProjectId()}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${
-          this.modelName
-        }:streamGenerateContent`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${this.getApiKey()}`,
-          },
-          body: JSON.stringify(body),
-        },
-        REQUEST_TIMEOUT_MS,
-      )) as unknown as { cached: boolean; data: GeminiApiResponse };
+      const { client, projectId } = await getGoogleClient();
+      const url = `https://${this.getApiHost()}/v1/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${
+        this.modelName
+      }:streamGenerateContent`;
+      const res = await client.request({
+        url,
+        method: 'POST',
+        data: body,
+      });
+      data = res.data as GeminiApiResponse;
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,
       };
     }
 
-    logger.debug(`\tGemini API response: ${JSON.stringify(data)}`);
+    logger.debug(`Gemini API response: ${JSON.stringify(data)}`);
     try {
-      const error = data.error || data[0].error;
+      const dataWithError = data as GeminiErrorResponse[];
+      const error = dataWithError[0].error;
       if (error) {
         return {
           error: `Error ${error.code}: ${error.message}`,
         };
       }
-      const output = data
-        .map((datum: ResponseData) => {
+      const dataWithResponse = data as GeminiResponseData[];
+      const output = dataWithResponse
+        .map((datum: GeminiResponseData) => {
           const part = datum.candidates[0].content.parts[0];
           if ('text' in part) {
             return part.text;
@@ -196,21 +234,23 @@ export class VertexChatProvider extends VertexGenericProvider {
           return JSON.stringify(part);
         })
         .join('');
-      const lastData = data[data.length - 1];
-      const tokenUsage = cached
-        ? {
-            cached: lastData.usageMetadata.totalTokenCount,
-          }
-        : {
-            total: lastData.usageMetadata.totalTokenCount,
-            prompt: lastData.usageMetadata.promptTokenCount,
-            completion: lastData.usageMetadata.completionTokenCount,
-          };
-      return {
-        cached,
+      const lastData = dataWithResponse[dataWithResponse.length - 1];
+      const tokenUsage = {
+        total: lastData.usageMetadata?.totalTokenCount || 0,
+        prompt: lastData.usageMetadata?.promptTokenCount || 0,
+        completion: lastData.usageMetadata?.candidatesTokenCount || 0,
+      };
+      const response = {
+        cached: false,
         output,
         tokenUsage,
       };
+
+      if (isCacheEnabled()) {
+        await cache.set(cacheKey, JSON.stringify(response));
+      }
+
+      return response;
     } catch (err) {
       return {
         error: `Gemini API response error: ${String(err)}: ${JSON.stringify(data)}`,
@@ -219,7 +259,6 @@ export class VertexChatProvider extends VertexGenericProvider {
   }
 
   async callPalm2Api(prompt: string): Promise<ProviderResponse> {
-    // https://cloud.google.com/vertex-ai/docs/generative-ai/model-reference/text-chat#generative-ai-text-chat-drest
     const instances = parseChatPrompt(prompt, [
       {
         messages: [
@@ -244,42 +283,62 @@ export class VertexChatProvider extends VertexGenericProvider {
         topK: this.config.topK,
       },
     };
-    logger.debug(`Calling Google Vertex API: ${JSON.stringify(body)}`);
+    logger.debug(`Calling Vertex Palm2 API: ${JSON.stringify(body)}`);
 
-    let data;
+    const cache = await getCache();
+    const cacheKey = `vertex:palm2:${JSON.stringify(body)}`;
+
+    let cachedResponse;
+    if (isCacheEnabled()) {
+      cachedResponse = await cache.get(cacheKey);
+      if (cachedResponse) {
+        logger.debug(`Returning cached response for prompt: ${prompt}`);
+        // TODO(ian): Add cached token usage
+        return { ...JSON.parse(cachedResponse as string), cached: true };
+      }
+    }
+
+    let data: Palm2ApiResponse;
     try {
-      ({ data } = (await fetchWithCache(
-        // POST https://us-central1-aiplatform.googleapis.com/
-        `https://${this.getApiHost()}/v1/projects/${this.getProjectId()}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${
-          this.modelName
-        }:predict`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${this.getApiKey()}`,
-          },
-          body: JSON.stringify(body),
+      const { client, projectId } = await getGoogleClient();
+      const url = `https://${this.getApiHost()}/v1/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${
+        this.modelName
+      }:predict`;
+      const res = await client.request<Palm2ApiResponse>({
+        url,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.getApiKey()}`,
         },
-        REQUEST_TIMEOUT_MS,
-      )) as unknown as any);
+        data: body,
+      });
+      data = res.data;
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,
       };
     }
 
-    logger.debug(`\tVertex API response: ${JSON.stringify(data)}`);
+    logger.debug(`Vertex Palm2 API response: ${JSON.stringify(data)}`);
     try {
       if (data.error) {
         return {
           error: `Error ${data.error.code}: ${data.error.message}`,
         };
       }
-      const output = data.predictions[0].candidates[0].content;
-      return {
+      const output = data.predictions?.[0].candidates[0].content;
+
+      const response = {
         output,
+        cached: false,
       };
+
+      if (isCacheEnabled()) {
+        await cache.set(cacheKey, JSON.stringify(response));
+      }
+
+      return response;
     } catch (err) {
       return {
         error: `API response error: ${String(err)}: ${JSON.stringify(data)}`,

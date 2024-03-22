@@ -33,13 +33,13 @@ interface Candidate {
   safetyRatings: SafetyRating[];
 }
 
-interface UsageMetadata {
+interface GeminiUsageMetadata {
   promptTokenCount: number;
   candidatesTokenCount?: number;
   totalTokenCount: number;
 }
 
-interface ErrorResponse {
+export interface GeminiErrorResponse {
   error: {
     code: number;
     message: string;
@@ -47,12 +47,28 @@ interface ErrorResponse {
   };
 }
 
-export interface ResponseData {
+export interface GeminiResponseData {
   candidates: Candidate[];
-  usageMetadata?: UsageMetadata;
+  usageMetadata?: GeminiUsageMetadata;
 }
 
-export type GeminiApiResponse = (ResponseData | ErrorResponse)[];
+export type GeminiApiResponse = (GeminiResponseData | GeminiErrorResponse)[];
+
+export interface Palm2ApiResponse {
+  error?: {
+    code: string;
+    message: string;
+  };
+  predictions?: [
+    {
+      candidates: [
+        {
+          content: string;
+        },
+      ];
+    },
+  ];
+}
 
 export function maybeCoerceToGeminiFormat(contents: any) {
   let coerced = false;
