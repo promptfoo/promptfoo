@@ -477,16 +477,6 @@ export class AzureOpenAiAssistantProvider extends AzureOpenAiGenericProvider {
       throw new Error('Azure OpenAI API host must be set');
     }
 
-    /*
-    const assistant = await this.assistantsClient.createAssistant({
-      model: this.assistantConfig.model || 'gpt-4-1106-preview',
-      name: this.assistantConfig.name,
-      instructions: this.assistantConfig.instructions,
-      tools: this.assistantConfig.tools,
-      metadata: this.assistantConfig.metadata,
-    });
-    */
-
     const assistantId = this.deploymentName;
 
     const assistantThread = await this.assistantsClient.createThread();
