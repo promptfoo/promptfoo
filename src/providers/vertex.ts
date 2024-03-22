@@ -192,6 +192,7 @@ export class VertexChatProvider extends VertexGenericProvider {
       cachedResponse = await cache.get(cacheKey);
       if (cachedResponse) {
         logger.debug(`Returning cached response for prompt: ${prompt}`);
+        // TODO(ian): Add cached token usage
         return { ...JSON.parse(cachedResponse as string), cached: true };
       }
     }
@@ -292,6 +293,7 @@ export class VertexChatProvider extends VertexGenericProvider {
       cachedResponse = await cache.get(cacheKey);
       if (cachedResponse) {
         logger.debug(`Returning cached response for prompt: ${prompt}`);
+        // TODO(ian): Add cached token usage
         return { ...JSON.parse(cachedResponse as string), cached: true };
       }
     }
