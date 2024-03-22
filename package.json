@@ -43,7 +43,8 @@
   },
   "peerDependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.458.0",
-    "@azure/identity": "^4.0.0"
+    "@azure/identity": "^4.0.0",
+    "@azure/openai-assistants": "^1.0.0-beta.5"
   },
   "devDependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.458.0",

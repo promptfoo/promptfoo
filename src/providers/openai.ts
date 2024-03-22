@@ -2,7 +2,7 @@ import OpenAI from 'openai';
 
 import logger from '../logger';
 import { fetchWithCache, getCache, isCacheEnabled } from '../cache';
-import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
+import { REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase } from './shared';
 import { OpenAiFunction, OpenAiTool } from './openaiUtil';
 
 import type {
@@ -538,10 +538,6 @@ type OpenAiAssistantOptions = OpenAiSharedOptions & {
   >;
   metadata?: object[];
 };
-
-function toTitleCase(str: string) {
-  return str.replace(/\w\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase());
-}
 
 export class OpenAiAssistantProvider extends OpenAiGenericProvider {
   assistantId: string;

@@ -34,6 +34,7 @@ import { MistralChatCompletionProvider } from './providers/mistral';
 import { WebhookProvider } from './providers/webhook';
 import { ScriptCompletionProvider } from './providers/scriptCompletion';
 import {
+  AzureOpenAiAssistantProvider,
   AzureOpenAiChatCompletionProvider,
   AzureOpenAiCompletionProvider,
   AzureOpenAiEmbeddingProvider,
@@ -174,6 +175,8 @@ export async function loadApiProvider(
 
     if (modelType === 'chat') {
       return new AzureOpenAiChatCompletionProvider(deploymentName, providerOptions);
+    } else if (modelType === 'assistant') {
+      return new AzureOpenAiAssistantProvider(deploymentName, providerOptions);
     } else if (modelType === 'embedding' || modelType === 'embeddings') {
       return new AzureOpenAiEmbeddingProvider(
         deploymentName || 'text-embedding-ada-002',
@@ -183,7 +186,7 @@ export async function loadApiProvider(
       return new AzureOpenAiCompletionProvider(deploymentName, providerOptions);
     } else {
       throw new Error(
-        `Unknown Azure OpenAI model type: ${modelType}. Use one of the following providers: azureopenai:chat:<model name>, azureopenai:completion:<model name>`,
+        `Unknown Azure OpenAI model type: ${modelType}. Use one of the following providers: azureopenai:chat:<model name>, azureopenai:assistant:<assistant id>, azureopenai:completion:<model name>`,
       );
     }
   } else if (providerPath?.startsWith('anthropic:')) {
