@@ -54,6 +54,22 @@ export interface GeminiResponseData {
 
 export type GeminiApiResponse = (GeminiResponseData | GeminiErrorResponse)[];
 
+export interface Palm2ApiResponse {
+  error?: {
+    code: string;
+    message: string;
+  };
+  predictions?: [
+    {
+      candidates: [
+        {
+          content: string;
+        },
+      ];
+    },
+  ];
+}
+
 export function maybeCoerceToGeminiFormat(contents: any) {
   let coerced = false;
   if (Array.isArray(contents) && typeof contents[0].content === 'string') {
