@@ -211,14 +211,10 @@ export async function loadApiProvider(
     const modelName = splits.slice(2).join(':');
 
     if (modelType === 'completion') {
+      // Backwards compatibility: `completion` used to be required
       return new AwsBedrockCompletionProvider(modelName || 'anthropic.claude-v2', providerOptions);
-    } else if (AwsBedrockCompletionProvider.AWS_BEDROCK_COMPLETION_MODELS.includes(modelType)) {
-      return new AwsBedrockCompletionProvider(modelType, providerOptions);
-    } else {
-      throw new Error(
-        `Unknown Amazon Bedrock model type: ${modelType}. Use one of the following providers: bedrock:completion:<model name>`,
-      );
     }
+    return new AwsBedrockCompletionProvider(modelType, providerOptions);
   } else if (providerPath?.startsWith('huggingface:') || providerPath?.startsWith('hf:')) {
     const splits = providerPath.split(':');
     if (splits.length < 3) {
