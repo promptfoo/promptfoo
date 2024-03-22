@@ -54,10 +54,15 @@ export async function fetchWithCache(
 ): Promise<{ data: any; cached: boolean }> {
   if (!enabled || bust) {
     const resp = await fetchWithRetries(url, options, timeout);
-    return {
-      cached: false,
-      data: format === 'json' ? await resp.json() : await resp.text(),
-    };
+    const respText = await resp.text();
+    try {
+      return {
+        cached: false,
+        data: format === 'json' ? JSON.parse(respText) : respText,
+      };
+    } catch (error) {
+      throw new Error(`Error parsing response as JSON: ${respText}`);
+    }
   }
 
   const cache = await getCache();
@@ -79,8 +84,9 @@ export async function fetchWithCache(
 
   // Fetch the actual data and store it in the cache
   const response = await fetchWithRetries(url, options, timeout);
+  const responseText = await response.text();
   try {
-    const data = format === 'json' ? await response.json() : await response.text();
+    const data = format === 'json' ? JSON.parse(responseText) : responseText;
     if (response.ok) {
       logger.debug(`Storing ${url} response in cache: ${JSON.stringify(data)}`);
       await cache.set(cacheKey, JSON.stringify(data));
@@ -90,7 +96,11 @@ export async function fetchWithCache(
       data,
     };
   } catch (err) {
-    throw new Error(`Error parsing response from ${url}: ${err}`);
+    throw new Error(
+      `Error parsing response from ${url}: ${
+        (err as Error).message
+      }. Received text: ${responseText}`,
+    );
   }
 }
 

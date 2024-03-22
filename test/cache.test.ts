@@ -7,8 +7,7 @@ const mockedFetch = fetch as jest.MockedFunction<typeof fetch>;
 const mockedFetchResponse = (ok: boolean, response: object) => {
   return {
     ok,
-    json: () => Promise.resolve(response),
-    text: () => Promise.resolve('error'),
+    text: () => Promise.resolve(JSON.stringify(response)),
     headers: {
       get: (name: string) => {
         if (name === 'content-type') {
@@ -17,7 +16,7 @@ const mockedFetchResponse = (ok: boolean, response: object) => {
         return null;
       },
     },
-  } as Response;
+  } as unknown as Response;
 };
 
 describe('fetchWithCache', () => {
