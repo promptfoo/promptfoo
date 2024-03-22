@@ -109,16 +109,27 @@ async function resolveConfigs(
     }
     const modelOutputs = JSON.parse(
       fs.readFileSync(path.join(process.cwd(), cmdObj.modelOutputs), 'utf8'),
-    ) as string[];
+    ) as string[] | { output: string; tags?: string[] }[];
     const assertions = await readAssertions(cmdObj.assertions);
     fileConfig.prompts = ['{{output}}'];
     fileConfig.providers = ['echo'];
-    fileConfig.tests = modelOutputs.map((output) => ({
-      vars: {
-        output,
-      },
-      assert: assertions,
-    }));
+    fileConfig.tests = modelOutputs.map((output) => {
+      if (typeof output === 'string') {
+        return {
+          vars: {
+            output,
+          },
+          assert: assertions,
+        };
+      }
+      return {
+        vars: {
+          output: output.output,
+          ...(output.tags === undefined ? {} : { tags: output.tags.join(', ') }),
+        },
+        assert: assertions,
+      };
+    });
   }
 
   // Use basepath in cases where path was supplied in the config file
