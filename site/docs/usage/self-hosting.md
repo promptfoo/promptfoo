@@ -4,9 +4,10 @@ sidebar_position: 50
 
 # Self-hosting
 
-promptfoo provides a Docker image that allows you to host a central server that stores your team's evals.  
+promptfoo provides a Docker image that allows you to host a central server that stores your team's evals.
 
-The self-hosted app consists of: 
+The self-hosted app consists of:
+
 - Next.js application that runs the web ui.
 - filesystem store that persists the eval results.
 - key-value (KV) store that persists shared data (redis, filesystem, or memory).
@@ -17,17 +18,21 @@ Clone the repository and see the provided [Dockerfile](https://github.com/prompt
 
 ```bash
 docker build --build-arg NEXT_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL=http://localhost:3000 -t promptfoo-ui .
-docker run -p 3000:3000 -v /path/to/local_output:/root/.promptfoo/output promptfoo-ui
+docker run -p 3000:3000 -v /path/to/local_promptfoo:/root/.promptfoo promptfoo-ui
 ```
 
-- `NEXT_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL` tells the web app where to send the API request when the user clicks the 'Share' button.  This should be configured to match the URL of your self-hosted instance.
-- The `-v` argument maps the working directory `/root/.promptfoo/output` to a path on your local filesystem `/path/to/local_output`.  Replace this path with your preferred local path.  You can omit this argument, but then your evals won't be persisted.
+- `NEXT_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL` tells the web app where to send the API request when the user clicks the 'Share' button. This should be configured to match the URL of your self-hosted instance.
+- The `-v` argument maps the working directory `/root/.promptfoo` to a path on your local filesystem `/path/to/local_promptfoo`. Replace this path with your preferred local path. You can omit this argument, but then your evals won't be persisted.
 
-You can also set API credentials on the running Docker instance so that evals can be run on the server.  For example, we'll set the OpenAI API key so users can run evals directly from the web ui:
+You can also set API credentials on the running Docker instance so that evals can be run on the server. For example, we'll set the OpenAI API key so users can run evals directly from the web ui:
 
 ```bash
 docker run -p 3000:3000 -e -e OPENAI_API_KEY=sk-abc123 promptfoo-ui
 ```
+
+## Configuring eval storage
+
+promptfoo uses a sqlite database located in `/root/.promptfoo` on the image, as well as some other files in that directory to track state. Be sure to persist this directory (and the `promptfoo.db` file specifically) in order to save evals.
 
 ## Configuring the KV Store
 
