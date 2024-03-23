@@ -12,3 +12,5 @@ tests:
       topic: bob dylan
   - vars:
       topic: the Roman Empire
+  - vars:
+      topic: file://./another_topic.txt

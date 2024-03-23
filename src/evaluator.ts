@@ -82,18 +82,10 @@ export async function renderPrompt(
   nunjucksFilters?: NunjucksFilterMap,
 ): Promise<string> {
   const nunjucks = getNunjucksEngine(nunjucksFilters);
-  let basePrompt = prompt.raw;
-  if (prompt.function) {
-    const result = await prompt.function({ vars });
-    if (typeof result === 'string') {
-      basePrompt = result;
-    } else if (typeof result === 'object') {
-      basePrompt = JSON.stringify(result);
-    } else {
-      throw new Error(`Prompt function must return a string or object, got ${typeof result}`);
-    }
-  }
 
+  let basePrompt = prompt.raw;
+
+  // Load files
   for (const [varName, value] of Object.entries(vars)) {
     if (typeof value === 'string' && value.startsWith('file://')) {
       const basePath = evaluateOptions.basePath || '';
@@ -138,6 +130,18 @@ export async function renderPrompt(
           vars[varName] = fs.readFileSync(filePath, 'utf8').trim();
           break;
       }
+    }
+  }
+
+  // Apply prompt functions
+  if (prompt.function) {
+    const result = await prompt.function({ vars });
+    if (typeof result === 'string') {
+      basePrompt = result;
+    } else if (typeof result === 'object') {
+      basePrompt = JSON.stringify(result);
+    } else {
+      throw new Error(`Prompt function must return a string or object, got ${typeof result}`);
     }
   }
 
