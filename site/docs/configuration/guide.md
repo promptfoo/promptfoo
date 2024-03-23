@@ -5,9 +5,9 @@ sidebar_label: Guide
 
 # Configuration
 
-The YAML configuration format runs each prompt through a series of example inputs (aka "test case") and checks if they meet requirements (aka "assert").
+The YAML configuration format runs each prompt through a series of example inputs (aka "test case") and checks if they meet requirements (aka "assertions").
 
-Asserts are _optional_. Many people get value out of reviewing outputs manually, and the web UI helps facilitate this.
+Assertions are _optional_. Many people get value out of reviewing outputs manually, and the web UI helps facilitate this.
 
 ## Example
 

@@ -43,3 +43,11 @@
 .hero__title {
   font-size: 4rem;
 }
+
+.theme-doc-sidebar-item-category-level-1 > div {
+  font-weight: bold;
+}
+
+.theme-doc-sidebar-item-link-level-1.menu__list-item {
+  font-weight: bold;
+}

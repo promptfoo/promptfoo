@@ -11,8 +11,8 @@ With promptfoo, you can:
 - **Systematically test prompts, models, and RAGs** with predefined [test cases](/docs/configuration/expected-outputs)
 - **Evaluate quality and catch regressions** by comparing LLM outputs [side-by-side](/docs/usage/web-ui)
 - **Speed up evaluations** with [caching](/docs/configuration/caching) and concurrent tests
-- **Score outputs automatically** by defining [expectations](/docs/configuration/expected-outputs)
-- Use as a [CLI](/docs/usage/command-line), or integrate into your workflow as a [library](/docs/usage/node-package)
+- **Score outputs automatically** by defining [assertions and metrics](/docs/configuration/expected-outputs)
+- Use as a [CLI](/docs/usage/command-line) or integrate into your workflow as a [library](/docs/usage/node-package)
 - Use OpenAI, Anthropic, Azure, Google, HuggingFace, open-source models like Llama, or integrate custom API providers for [any LLM API](/docs/providers)
 
 The goal: **test-driven LLM development**, not trial-and-error.
