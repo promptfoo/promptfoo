@@ -2,7 +2,7 @@
 sidebar_position: 51
 ---
 
-# Python
+# Custom Python
 
 The `python` provider allows you to use a Python script as an API provider for evaluating prompts. This is useful when you have custom logic or models implemented in Python that you want to integrate with your test suite.
 

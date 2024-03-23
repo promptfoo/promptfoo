@@ -2,7 +2,7 @@
 sidebar_position: 50
 ---
 
-# Custom API Provider
+# Custom Javascript
 
 To create a custom API provider, implement the `ApiProvider` interface in a separate module. Here is the interface:
 
