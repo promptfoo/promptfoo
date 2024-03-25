@@ -1,16 +1,16 @@
 import invariant from 'tiny-invariant';
-import {
-  AssistantCreationOptions,
-  AssistantsClient,
-  AzureKeyCredential,
-  FunctionDefinition,
-  RunStepToolCallDetails,
-  RunStepMessageCreationDetails,
-} from '@azure/openai-assistants';
 
 import logger from '../logger';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase } from './shared';
 import { fetchWithCache } from '../cache';
+
+import type {
+  AssistantsClient,
+  AssistantCreationOptions,
+  FunctionDefinition,
+  RunStepToolCallDetails,
+  RunStepMessageCreationDetails,
+} from '@azure/openai-assistants';
 
 import type {
   ApiProvider,
@@ -452,6 +452,8 @@ export class AzureOpenAiAssistantProvider extends AzureOpenAiGenericProvider {
     if (!apiKey) {
       throw new Error('Azure OpenAI API key must be set');
     }
+
+    const { AssistantsClient, AzureKeyCredential } = await import('@azure/openai-assistants');
 
     this.assistantsClient = new AssistantsClient(
       this.getApiBaseUrl(),
