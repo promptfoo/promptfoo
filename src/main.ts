@@ -668,20 +668,19 @@ async function main() {
                   .filter(Boolean) as string[])
               : [];
             const varPaths = Array.isArray(config.tests)
-              ? (config.tests
-                  .map((t) => {
-                    if (typeof t === 'string' && t.startsWith('file://')) {
-                      return path.resolve(basePath, t.slice('file://'.length));
-                    } else if (typeof t !== 'string' && t.vars) {
-                      Object.values(t.vars).forEach((v) => {
-                        if (typeof v === 'string' && v.startsWith('file://')) {
-                          return path.resolve(basePath, v.slice('file://'.length));
-                        }
-                      });
-                    }
-                    return null;
-                  })
-                  .filter(Boolean) as string[])
+              ? config.tests.flatMap((t) => {
+                  if (typeof t === 'string' && t.startsWith('file://')) {
+                    return path.resolve(basePath, t.slice('file://'.length));
+                  } else if (typeof t !== 'string' && t.vars) {
+                    return Object.values(t.vars).flatMap((v) => {
+                      if (typeof v === 'string' && v.startsWith('file://')) {
+                        return path.resolve(basePath, v.slice('file://'.length));
+                      }
+                      return [];
+                    });
+                  }
+                  return [];
+                }).filter(Boolean)
               : [];
             const watchPaths = Array.from(
               new Set([...configPaths, ...promptPaths, ...providerPaths, ...varPaths]),
