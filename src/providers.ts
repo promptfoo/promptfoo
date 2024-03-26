@@ -12,10 +12,7 @@ import {
   OpenAiEmbeddingProvider,
   OpenAiImageProvider,
 } from './providers/openai';
-import { 
-  AnthropicCompletionProvider, 
-  AnthropicMessagesProvider
-} from './providers/anthropic';
+import { AnthropicCompletionProvider, AnthropicMessagesProvider } from './providers/anthropic';
 import { ReplicateProvider } from './providers/replicate';
 import {
   LocalAiCompletionProvider,
@@ -133,7 +130,7 @@ export async function loadApiProvider(
   } else if (providerPath === 'echo') {
     return {
       id: () => 'echo',
-      callApi: async (input) => ({output: input}),
+      callApi: async (input) => ({ output: input }),
     };
   } else if (providerPath?.startsWith('exec:')) {
     // Load script module
@@ -194,8 +191,8 @@ export async function loadApiProvider(
     const modelType = splits[1];
     const modelName = splits[2];
 
-    if (modelType === 'messages'){
-      return new AnthropicMessagesProvider(modelName, providerOptions)
+    if (modelType === 'messages') {
+      return new AnthropicMessagesProvider(modelName, providerOptions);
     } else if (modelType === 'completion') {
       return new AnthropicCompletionProvider(modelName, providerOptions);
     } else if (AnthropicCompletionProvider.ANTHROPIC_COMPLETION_MODELS.includes(modelType)) {
@@ -299,7 +296,9 @@ export async function loadApiProvider(
   }
 
   // Load custom module
-  const CustomApiProvider = (await import(path.join(process.cwd(), providerPath))).default;
+  const CustomApiProvider = (
+    await import(path.resolve(path.join(basePath || process.cwd(), providerPath)))
+  ).default;
   return new CustomApiProvider(options);
 }
 
