@@ -177,18 +177,19 @@ export class VertexChatProvider extends VertexGenericProvider {
       contents = updatedContents;
     }
 
+    // https://ai.google.dev/api/rest/v1/models/streamGenerateContent
     const body = {
       contents,
-      generation_config: {
+      generationConfig: {
         context: this.config.context,
         examples: this.config.examples,
-        safetySettings: this.config.safetySettings,
         stopSequence: this.config.stopSequence,
         temperature: this.config.temperature,
         maxOutputTokens: this.config.maxOutputTokens,
         topP: this.config.topP,
         topK: this.config.topK,
       },
+      safetySettings: this.config.safetySettings,
     };
     logger.debug(`Preparing to call Google Vertex API (Gemini) with body: ${JSON.stringify(body)}`);
 
