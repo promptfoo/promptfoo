@@ -65,12 +65,15 @@ prompts:
   prompts/llama_prompt.txt: llama_prompt
 
 providers:
-  - huggingface:text-generation:mistralai/Mistral-7B-Instruct-v0.1:
-      prompts: mistral_prompt
-  - replicate:mistralai/mixtral-8x7b-instruct-v0.1:2b56576fcfbe32fa0526897d8385dd3fb3d36ba6fd0dbe033c72886b81ade93e:
-      prompts: mistral prompt
-  - replicate:meta/llama-2-7b-chat:8e6975e5ed6174911a6ff3d60540dfd4844201974602551e10e9e87ab143d81e:
-      prompts: llama_prompt
+  - id: huggingface:text-generation:mistralai/Mistral-7B-Instruct-v0.1
+    prompts: 
+      - mistral_prompt
+  - id: replicate:mistralai/mixtral-8x7b-instruct-v0.1:2b56576fcfbe32fa0526897d8385dd3fb3d36ba6fd0dbe033c72886b81ade93e
+    prompts: 
+      - mistral prompt
+  - id: replicate:meta/llama-2-7b-chat:8e6975e5ed6174911a6ff3d60540dfd4844201974602551e10e9e87ab143d81e
+    prompts: 
+      - llama_prompt
 ```
 
 :::tip
@@ -83,28 +86,31 @@ Each model has a `config` field where you can specify additional parameters. Let
 
 ```yaml title=promptfooconfig.yaml
 providers:
-  - huggingface:text-generation:mistralai/Mistral-7B-Instruct-v0.1:
-      prompts: mistral_prompt
-      // highlight-start
-      config:
-        temperature: 0.01
-        max_new_tokens: 128
-      // highlight-end
-  - replicate:mistralai/mixtral-8x7b-instruct-v0.1:2b56576fcfbe32fa0526897d8385dd3fb3d36ba6fd0dbe033c72886b81ade93e
-      prompts: mistral_prompt
-      // highlight-start
-      config:
-        prompt_template: '{prompt}'
-        temperature: 0.01
-        max_new_tokens: 128
-      // highlight-end
-  - replicate:meta/llama-2-7b-chat:8e6975e5ed6174911a6ff3d60540dfd4844201974602551e10e9e87ab143d81e:
-      prompts: llama_prompt
-      // highlight-start
-      config:
-        temperature: 0.01
-        max_new_tokens: 128
-      // highlight-end
+  - id: huggingface:text-generation:mistralai/Mistral-7B-Instruct-v0.1
+    prompts: 
+      - mistral_prompt
+    // highlight-start
+    config:
+      temperature: 0.01
+      max_new_tokens: 128
+    // highlight-end
+  - id: replicate:mistralai/mixtral-8x7b-instruct-v0.1:2b56576fcfbe32fa0526897d8385dd3fb3d36ba6fd0dbe033c72886b81ade93e
+    prompts: 
+      - mistral_prompt
+    // highlight-start
+    config:
+      prompt_template: '{prompt}'
+      temperature: 0.01
+      max_new_tokens: 128
+    // highlight-end
+  - id: replicate:meta/llama-2-7b-chat:8e6975e5ed6174911a6ff3d60540dfd4844201974602551e10e9e87ab143d81e
+    prompts: 
+      - llama_prompt
+    // highlight-start
+    config:
+      temperature: 0.01
+      max_new_tokens: 128
+    // highlight-end
 ```
 
 Mistral supports [HuggingFace text generation parameters](https://huggingface.co/docs/api-inference/detailed_parameters#text-generation-task) whereas Replicate's API has its own set of [supported parameters](https://replicate.com/meta/llama-2-7b-chat/api).

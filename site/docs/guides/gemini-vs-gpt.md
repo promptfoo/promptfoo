@@ -58,9 +58,11 @@ providers:
   - id: vertex:gemini-pro
     prompts: gemini_prompt
   - id: openai:gpt-3.5-turbo
-    prompts: gpt_prompt
+    prompts: 
+      - gpt_prompt
   - id: openai:gpt-4
-    prompts: gpt_prompt
+    prompts: 
+      - gpt_prompt
 ```
 
 ## Step 3: Add test cases
