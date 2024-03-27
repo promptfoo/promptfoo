@@ -209,9 +209,9 @@ export async function loadApiProvider(
 
     if (modelType === 'completion') {
       // Backwards compatibility: `completion` used to be required
-      return new AwsBedrockCompletionProvider(modelName || 'anthropic.claude-v2', providerOptions);
+      return new AwsBedrockCompletionProvider(modelName, providerOptions);
     }
-    return new AwsBedrockCompletionProvider(modelType, providerOptions);
+    return new AwsBedrockCompletionProvider(`${modelType}${modelName ? `:${modelName}` : ''}`, providerOptions);
   } else if (providerPath?.startsWith('huggingface:') || providerPath?.startsWith('hf:')) {
     const splits = providerPath.split(':');
     if (splits.length < 3) {
