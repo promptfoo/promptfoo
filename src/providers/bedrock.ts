@@ -67,7 +67,7 @@ const BEDROCK_MODEL = {
     },
     output: (responseJson: any) => {
       return responseJson?.content[0].text;
-    }
+    },
   },
   TITAN_TEXT: {
     params: (config: BedrockTextGenerationOptions, prompt: string, stop: string[]) => ({
