@@ -216,6 +216,9 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
   const configs: UnifiedConfig[] = [];
   for (const configPath of configPaths) {
     const globPaths = globSync(configPath);
+    if (globPaths.length === 0) {
+      throw new Error(`No configuration file found at ${configPath}`);
+    }
     for (const globPath of globPaths) {
       const config = await readConfig(globPath);
       configs.push(config);
