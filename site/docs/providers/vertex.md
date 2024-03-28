@@ -57,8 +57,9 @@ The Vertex provider also supports various [configuration options](https://github
 providers:
   - id: vertex:chat-bison-32k
     config:
-      temperature: 0
-      maxOutputTokens: 1024
+      generationConfig:
+        temperature: 0
+        maxOutputTokens: 1024
 ```
 
 ## Safety settings
@@ -79,20 +80,20 @@ See more details on Google's SafetySetting API [here](https://ai.google.dev/api/
 
 ## Other configuration options
 
-| Option            | Description                                                                                     | Default Value                        |
-| ----------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------ |
-| `apiKey`          | gcloud API token.                                                                               | None                                 |
-| `apiHost`         | Full Google API host, e.g., for an LLM proxy.                                                   | `{region}-aiplatform.googleapis.com` |
-| `projectId`       | gcloud project ID.                                                                              | None                                 |
-| `region`          | gcloud region.                                                                                  | `us-central1`                        |
-| `publisher`       | Model publisher.                                                                                | `google`                             |
-| `context`         | Context for the model to consider when generating responses.                                    | None                                 |
-| `examples`        | Examples to prime the model.                                                                    | None                                 |
-| `safetySettings`  | [Safety settings](https://ai.google.dev/api/rest/v1/SafetySetting) to filter generated content. | None                                 |
-| `stopSequence`    | Sequence of tokens that will stop the generation.                                               | None                                 |
-| `temperature`     | Controls randomness. Lower values make the model more deterministic.                            | None                                 |
-| `maxOutputTokens` | Maximum number of tokens to generate.                                                           | None                                 |
-| `topP`            | Nucleus sampling: higher values cause the model to consider more candidates.                    | None                                 |
-| `topK`            | Controls diversity via random sampling: lower values make sampling more deterministic.          | None                                 |
+| Option                             | Description                                                                                     | Default Value                        |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------ |
+| `apiKey`                           | gcloud API token.                                                                               | None                                 |
+| `apiHost`                          | Full Google API host, e.g., for an LLM proxy.                                                   | `{region}-aiplatform.googleapis.com` |
+| `projectId`                        | gcloud project ID.                                                                              | None                                 |
+| `region`                           | gcloud region.                                                                                  | `us-central1`                        |
+| `publisher`                        | Model publisher.                                                                                | `google`                             |
+| `context`                          | Context for the model to consider when generating responses.                                    | None                                 |
+| `examples`                         | Examples to prime the model.                                                                    | None                                 |
+| `safetySettings`                   | [Safety settings](https://ai.google.dev/api/rest/v1/SafetySetting) to filter generated content. | None                                 |
+| `generationConfig.temperature`     | Controls randomness. Lower values make the model more deterministic.                            | None                                 |
+| `generationConfig.maxOutputTokens` | Maximum number of tokens to generate.                                                           | None                                 |
+| `generationConfig.topP`            | Nucleus sampling: higher values cause the model to consider more candidates.                    | None                                 |
+| `generationConfig.topK`            | Controls diversity via random sampling: lower values make sampling more deterministic.          | None                                 |
+| `generationConfig.stopSequences`   | Set of string outputs that will stop output generation.                                         | []                                   |
 
 Note that not all models support all parameters. Please consult the [Google documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/overview) on how to use and format parameters.
