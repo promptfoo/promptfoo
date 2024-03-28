@@ -13,8 +13,9 @@ import { runAssertions, runCompareAssertion } from './assertions';
 import { generatePrompts } from './suggestions';
 import { getNunjucksEngine, transformOutput, sha256 } from './util';
 import { maybeEmitAzureOpenAiWarning } from './providers/azureopenaiUtil';
+import { runPython } from './python/wrapper';
 
-import type { SingleBar } from 'cli-progress';
+import type { MultiBar, SingleBar } from 'cli-progress';
 import type {
   ApiProvider,
   AtomicTestCase,
@@ -28,7 +29,6 @@ import type {
   Prompt,
   TestSuite,
 } from './types';
-import { runPython } from './python/wrapper';
 
 interface RunEvalOptions {
   provider: ApiProvider;
@@ -123,7 +123,9 @@ export async function renderPrompt(
           break;
         case 'yaml':
         case 'yml':
-          vars[varName] = JSON.stringify(yaml.load(fs.readFileSync(filePath, 'utf8')) as string | object);
+          vars[varName] = JSON.stringify(
+            yaml.load(fs.readFileSync(filePath, 'utf8')) as string | object,
+          );
           break;
         case 'json':
         default:
@@ -594,22 +596,30 @@ class Evaluator {
       concurrency = 1;
     }
 
-    // Start the progress bar...
-    let progressbar: SingleBar | undefined;
+    // Start the progress bars...
+    let multibar: MultiBar | undefined;
+    let progressbars: SingleBar[] = [];
     if (options.showProgressBar) {
       const cliProgress = await import('cli-progress');
-      progressbar = new cliProgress.SingleBar(
+      multibar = new cliProgress.MultiBar(
         {
           format:
-            'Eval: [{bar}] {percentage}% | ETA: {eta}s | {value}/{total} | {provider} "{prompt}" {vars}',
+            '[{bar}] {percentage}% | ETA: {eta}s | {value}/{total} | {provider} "{prompt}" {vars}',
+          hideCursor: true,
         },
         cliProgress.Presets.shades_classic,
       );
-      progressbar.start(runEvalOptions.length, 0, {
-        provider: '',
-        prompt: '',
-        vars: '',
-      });
+      const stepsPerThread = Math.floor(runEvalOptions.length / concurrency);
+      const remainingSteps = runEvalOptions.length % concurrency;
+      for (let i = 0; i < concurrency; i++) {
+        const totalSteps = i < remainingSteps ? stepsPerThread + 1 : stepsPerThread;
+        const progressbar = multibar.create(totalSteps, 0, {
+          provider: '',
+          prompt: '',
+          vars: '',
+        });
+        progressbars.push(progressbar);
+      }
     }
     if (options.progressCallback) {
       options.progressCallback(0, runEvalOptions.length);
@@ -627,7 +637,9 @@ class Evaluator {
         results.push(row);
 
         numComplete++;
-        if (progressbar) {
+        if (multibar) {
+          const threadIndex = (index as number) % concurrency;
+          const progressbar = progressbars[threadIndex];
           progressbar.increment({
             provider: evalStep.provider.label || evalStep.provider.id(),
             prompt: evalStep.prompt.raw.slice(0, 10).replace(/\n/g, ' '),
@@ -725,8 +737,9 @@ class Evaluator {
       0,
     );
 
-    if (compareRowsCount > 0 && progressbar) {
-      progressbar.start(compareRowsCount, 0, {
+    let progressBar;
+    if (compareRowsCount > 0 && multibar) {
+      progressBar = multibar.create(compareRowsCount, 0, {
         provider: 'Running model-graded comparisons',
         prompt: '',
         vars: '',
@@ -766,8 +779,8 @@ class Evaluator {
             output.gradingResult.componentResults.push(gradingResult);
           }
         });
-        if (progressbar) {
-          progressbar.increment({
+        if (progressBar) {
+          progressBar.increment({
             prompt: row.outputs[0].text.slice(0, 10).replace(/\n/g, ''),
           });
         } else {
@@ -776,13 +789,9 @@ class Evaluator {
       }
     }
 
-    if (progressbar) {
-      progressbar.stop();
-    }
-
     // Finish up
-    if (progressbar) {
-      progressbar.stop();
+    if (multibar) {
+      multibar.stop();
     }
     if (options.progressCallback) {
       options.progressCallback(runEvalOptions.length, runEvalOptions.length);
