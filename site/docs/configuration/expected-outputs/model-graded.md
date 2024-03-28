@@ -115,14 +115,14 @@ tests:
 
 ## Examples (comparison)
 
-The `select-best` assertion type is used to compare multiple outputs in the same TestCase row and select the one that best meets a specified criterion. 
+The `select-best` assertion type is used to compare multiple outputs in the same TestCase row and select the one that best meets a specified criterion.
 
 Here's an example of how to use `select-best` in a configuration file:
 
 ```yaml
 prompts:
-  - "Write a tweet about {{topic}}"
-  - "Write a very concise, funny tweet about {{topic}}"
+  - 'Write a tweet about {{topic}}'
+  - 'Write a very concise, funny tweet about {{topic}}'
 
 providers: [openai:gpt-4]
 
@@ -185,6 +185,26 @@ provider:
 
 Also note that [custom providers](/docs/providers/custom-api) are supported as well.
 
+### Multiple graders
+
+Some assertions (such as `answer-relevance`) use multiple types of providers. To override both the embedding and text providers separately, you can do something like this:
+
+```yaml
+defaultTest:
+  options:
+    provider:
+      text:
+        id: azureopenai:chat:gpt-4-deployment
+        config:
+          apiHost: xxx.openai.azure.com
+      embedding:
+        id: azureopenai:embeddings:text-embedding-ada-002-deployment
+        config:
+          apiHost: xxx.openai.azure.com
+```
+
+If you are implementing a custom provider, `text` providers require a `callApi` function that returns a [`ProviderResponse`](/docs/configuration/reference/#providerresponse), whereas embedding providers require a `callEmbeddingApi` function that returns a [`ProviderEmbeddingResponse`](/docs/configuration/reference/#providerembeddingresponse).
+
 ## Overriding the rubric prompt
 
 For the greatest control over the output of `llm-rubric`, you may set a custom prompt using the `rubricPrompt` property of `TestCase` or `Assertion`.
@@ -218,7 +238,7 @@ See the [full example](https://github.com/promptfoo/promptfoo/blob/main/examples
 
 #### select-best rubric prompt
 
-For control over the `select-best` rubric prompt, you may use the variables `{{outputs}}` (list of strings) and `{{criteria}}` (string).  It expects the LLM output to contain the index of the winning output.
+For control over the `select-best` rubric prompt, you may use the variables `{{outputs}}` (list of strings) and `{{criteria}}` (string). It expects the LLM output to contain the index of the winning output.
 
 ## Classifers
 

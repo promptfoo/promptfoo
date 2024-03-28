@@ -96,7 +96,7 @@ def main():
     success = test_output(processed)
     return success
 
-print(main())
+print(json.dumps(main()))
 ```
 
 ## Overriding the Python binary

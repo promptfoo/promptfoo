@@ -14,19 +14,21 @@ import type {
 } from '../types';
 
 export class PythonProvider implements ApiProvider {
-  constructor(private scriptPath: string, private options?: ProviderOptions) {}
+  constructor(private scriptPath: string, private options?: ProviderOptions) {
+    this.id = () => options?.id ?? `python:${this.scriptPath}`;
+  }
 
   id() {
     return `python:${this.scriptPath}`;
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    const absPath = path.resolve(
-      path.join(this.options?.config.basePath, this.scriptPath),
-    );
+    const absPath = path.resolve(path.join(this.options?.config.basePath, this.scriptPath));
     logger.debug(`Computing file hash for script ${absPath}`);
     const fileHash = sha256(fs.readFileSync(absPath, 'utf-8'));
-    const cacheKey = `python:${this.scriptPath}:${fileHash}:${prompt}:${JSON.stringify(this.options)}`;
+    const cacheKey = `python:${this.scriptPath}:${fileHash}:${prompt}:${JSON.stringify(
+      this.options,
+    )}`;
     const cache = await getCache();
     let cachedResult;
 
@@ -44,7 +46,10 @@ export class PythonProvider implements ApiProvider {
           '\n',
         )}`,
       );
-      const result = (await runPython(absPath, 'call_api', args)) as {output?: string; error?: string}
+      const result = (await runPython(absPath, 'call_api', args)) as {
+        output?: string;
+        error?: string;
+      };
       if (!('output' in result) && !('error' in result)) {
         throw new Error(
           'The Python script `call_api` function must return a dict with an `output` or `error` string',
