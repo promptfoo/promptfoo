@@ -414,7 +414,6 @@ class Evaluator {
     // Split prompts by provider
     for (const prompt of testSuite.prompts) {
       for (const provider of testSuite.providers) {
-        console.log(provider)
         // Check if providerPromptMap exists and if it contains the current prompt's display
         if (testSuite.providerPromptMap) {
           const allowedPrompts = testSuite.providerPromptMap[provider.id()];
@@ -422,7 +421,6 @@ class Evaluator {
             continue;
           }
         }
-        console.log('provider label', provider.label, provider.id())
         const completedPrompt = {
           ...prompt,
           id: sha256(typeof prompt.raw === 'object' ? JSON.stringify(prompt.raw) : prompt.raw),
@@ -448,7 +446,6 @@ class Evaluator {
         prompts.push(completedPrompt);
       }
     }
-    //console.log(prompts)
 
     // Aggregate all vars across test cases
     let tests =
@@ -583,7 +580,6 @@ class Evaluator {
       head: {
         prompts,
         vars: Array.from(varNames).sort(),
-        // TODO(ian): add assertions to table?
       },
       body: [],
     };
