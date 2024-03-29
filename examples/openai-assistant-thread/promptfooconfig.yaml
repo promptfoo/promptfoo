@@ -1,0 +1,29 @@
+prompts: "{{ query }}"
+providers: [openai:assistant:asst_VXGBnVRee0ddzDH8wrAefQTU]
+
+# Test multiple follow-ups
+tests:
+  - vars:
+      query:
+        - banana
+        - lemon
+    thread:
+      - vars:
+          query: I will say a fruit, please specify what color it is
+        assert:
+          - type: llm-rubric
+            value: "Asks about which fruit that I'm interested in"
+      - assert:
+          - type: contains
+            value: yellow
+  - thread:
+      - vars:
+          query: I will specify a vehicle, please specify how many wheels it typically has
+        assert:
+          - type: llm-rubric
+            value: "Asks about what vehicle that I'm interested in"
+      - vars:
+          query: Car
+        assert:
+          - type: contains
+            value: four

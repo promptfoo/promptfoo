@@ -90,9 +90,15 @@ export function isProviderOptions(provider: any): provider is ProviderOptions {
 
 export interface CallApiContextParams {
   vars: Record<string, string | object>;
+  thread: ThreadContext;
   logger?: typeof logger;
   fetchWithCache?: typeof fetchWithCache;
   getCache?: typeof getCache;
+}
+
+export interface ThreadContext {
+  useThread: boolean;
+  thread?: any;
 }
 
 export interface CallApiOptionsParams {
@@ -157,6 +163,7 @@ export interface ProviderResponse {
   cost?: number;
   cached?: boolean;
   logProbs?: number[];
+  thread?: any;
 }
 
 export interface ProviderEmbeddingResponse {
@@ -219,6 +226,7 @@ export interface RunEvalOptions {
   test: AtomicTestCase;
   nunjucksFilters?: NunjucksFilterMap;
   evaluateOptions: EvaluateOptions;
+  thread: ThreadContext;
 
   rowIndex: number;
   colIndex: number;
@@ -233,6 +241,7 @@ export interface EvaluateOptions {
     total: number,
     index: number,
     evalStep: RunEvalOptions,
+    threadIndex: number,
   ) => void;
   generateSuggestions?: boolean;
   repeat?: number;
@@ -510,6 +519,8 @@ export interface TestCase<Vars = Record<string, string | string[] | object>> {
 
   // Optional list of automatic checks to run on the LLM output
   assert?: (AssertionSet | Assertion)[];
+
+  thread?: TestCase<Vars>[];
 
   // Additional configuration settings for the prompt
   options?: PromptConfig &

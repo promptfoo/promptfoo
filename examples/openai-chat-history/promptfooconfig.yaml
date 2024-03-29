@@ -14,7 +14,9 @@ defaultTest:
 # Test multiple follow-ups
 tests:
   - vars:
-      question: Did he create any other companies?
+      question:
+        - Did he create any other companies?
+        - Is he human?
   - vars:
       question: What is his role at Internet.org?
   - vars:

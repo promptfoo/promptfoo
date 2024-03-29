@@ -34,6 +34,7 @@ import type {
   TestSuite,
   ProviderResponse,
   Assertion,
+  ThreadContext,
 } from './types';
 export const DEFAULT_MAX_CONCURRENCY = 4;
 
@@ -267,6 +268,7 @@ class Evaluator {
     delay,
     nunjucksFilters: filters,
     evaluateOptions,
+    thread
   }: RunEvalOptions): Promise<EvaluateResult> {
     // Use the original prompt to set the display, not renderedPrompt
     let promptDisplay = prompt.display;
@@ -321,6 +323,7 @@ class Evaluator {
           renderedPrompt,
           {
             vars,
+            thread,
 
             // These are removed in python and script providers, but every Javascript provider gets them
             logger,
@@ -332,6 +335,14 @@ class Evaluator {
             includeLogProbs: test.assert?.some((a) => a.type === 'perplexity'),
           },
         );
+
+        if (thread.useThread) {
+          if (!response.thread && !response.error) {
+            throw new Error("Provider returned no thread id even though it was expected.")
+          }
+          logger.debug(`Using thread with context ${JSON.stringify(response.thread)}`)
+          thread.thread = response.thread
+        }
       }
       const endTime = Date.now();
       latencyMs = endTime - startTime;
@@ -573,78 +584,113 @@ class Evaluator {
     // Prepare vars
     const varNames: Set<string> = new Set();
     const varsWithSpecialColsRemoved: Record<string, string | string[] | object>[] = [];
-    for (const testCase of tests) {
-      if (testCase.vars) {
-        const varWithSpecialColsRemoved: Record<string, string | string[] | object> = {};
-        for (const varName of Object.keys(testCase.vars)) {
-          varNames.add(varName);
-          varWithSpecialColsRemoved[varName] = testCase.vars[varName];
+    for (const mainTestCase of tests) {
+      const allTestCases = mainTestCase.thread ? [...mainTestCase.thread, mainTestCase] : [mainTestCase]
+      for (const testCase of allTestCases) {
+        if (testCase.vars) {
+          const varWithSpecialColsRemoved: Record<string, string | string[] | object> = {};
+          for (const varName of Object.keys(testCase.vars)) {
+            varNames.add(varName);
+            varWithSpecialColsRemoved[varName] = testCase.vars[varName];
+          }
+          varsWithSpecialColsRemoved.push(varWithSpecialColsRemoved);
         }
-        varsWithSpecialColsRemoved.push(varWithSpecialColsRemoved);
       }
     }
 
     // Set up eval cases
-    let runEvalOptions: RunEvalOptions[] = [];
+    let runEvalOptions: RunEvalOptions[][] = [];
     let rowIndex = 0;
     for (let index = 0; index < tests.length; index++) {
-      const testCase = tests[index];
-      invariant(
-        Array.isArray(testSuite.defaultTest?.assert || []),
-        `defaultTest.assert is not an array in test case #${index + 1}`,
-      );
-      invariant(
-        Array.isArray(testCase.assert || []),
-        `testCase.assert is not an array in test case #${index + 1}`,
-      );
-      // Handle default properties
-      testCase.vars = { ...testSuite.defaultTest?.vars, ...testCase.vars };
-      testCase.assert = [...(testSuite.defaultTest?.assert || []), ...(testCase.assert || [])];
-      testCase.threshold = testCase.threshold ?? testSuite.defaultTest?.threshold;
-      testCase.options = { ...testSuite.defaultTest?.options, ...testCase.options };
-
-      const prependToPrompt =
-        testCase.options?.prefix || testSuite.defaultTest?.options?.prefix || '';
-      const appendToPrompt =
-        testCase.options?.suffix || testSuite.defaultTest?.options?.suffix || '';
-
-      // Finalize test case eval
-      const varCombinations =
-        process.env.PROMPTFOO_DISABLE_VAR_EXPANSION || testCase.options.disableVarExpansion
-          ? [testCase.vars]
-          : generateVarCombinations(testCase.vars || {});
-
-      const numRepeat = this.options.repeat || 1;
-      for (let repeatIndex = 0; repeatIndex < numRepeat; repeatIndex++) {
-        for (const vars of varCombinations) {
-          let colIndex = 0;
-          for (const prompt of testSuite.prompts) {
-            for (const provider of testSuite.providers) {
-              if (testSuite.providerPromptMap) {
-                const allowedPrompts = testSuite.providerPromptMap[provider.id()];
-                if (allowedPrompts && !allowedPrompts.includes(prompt.display)) {
-                  // This prompt should not be used with this provider.
-                  continue;
-                }
-              }
-              runEvalOptions.push({
-                delay: options.delay || 0,
-                provider,
-                prompt: {
-                  ...prompt,
-                  raw: prependToPrompt + prompt.raw + appendToPrompt,
-                },
-                test: { ...testCase, vars, options: testCase.options },
-                nunjucksFilters: testSuite.nunjucksFilters,
-                rowIndex,
-                colIndex,
-                repeatIndex,
-                evaluateOptions: options,
-              });
-              colIndex++;
+      const mainTestCase = tests[index];
+      const allTestCases = mainTestCase.thread || [mainTestCase];
+      const startRow = rowIndex
+      let colIndex = 0;
+      for (const prompt of testSuite.prompts) {
+        for (const provider of testSuite.providers) {
+          rowIndex = startRow
+          if (testSuite.providerPromptMap) {
+            const allowedPrompts = testSuite.providerPromptMap[provider.id()];
+            if (allowedPrompts && !allowedPrompts.includes(prompt.display)) {
+              // This prompt should not be used with this provider.
+              continue;
             }
           }
-          rowIndex++;
+
+          const vars = { ...testSuite.defaultTest?.vars, ...mainTestCase.vars };
+          const threadVarCombinations =
+            process.env.PROMPTFOO_DISABLE_VAR_EXPANSION || mainTestCase.options?.disableVarExpansion
+              ? [vars]
+              : generateVarCombinations(vars || {});
+
+          for (const threadVars of threadVarCombinations){
+            const numRepeat = this.options.repeat || 1;
+            for (let repeatIndex = 0; repeatIndex < numRepeat; repeatIndex++) {
+              // Thread context that will be shared between tests in this thread.
+              const threadContext: ThreadContext = { useThread: !!mainTestCase.thread }
+              const threadEvals: RunEvalOptions[] = []
+              for (let subIndex = 0; subIndex < allTestCases.length; subIndex++) {
+                const testCase = allTestCases[subIndex];
+                const testCaseNum = mainTestCase.thread ? `${index + 1}.${subIndex + 1}` : `${index + 1}`;
+                invariant(
+                  Array.isArray(testSuite.defaultTest?.assert || []),
+                  `defaultTest.assert is not an array in test case #${testCaseNum}`,
+                );
+                invariant(
+                  Array.isArray(testCase.assert || []),
+                  `testCase.assert is not an array in test case #${testCaseNum}`,
+                );
+                // Handle default properties
+                testCase.assert = [...(testSuite.defaultTest?.assert || []), ...(testCase.assert || [])];
+                testCase.threshold = testCase.threshold ?? mainTestCase.threshold ?? testSuite.defaultTest?.threshold;
+                testCase.options = { ...testSuite.defaultTest?.options, ...mainTestCase.options, ...testCase.options };
+
+                const prependToPrompt =
+                  testCase.options?.prefix || mainTestCase.options?.prefix || testSuite.defaultTest?.options?.prefix || '';
+                const appendToPrompt =
+                  testCase.options?.suffix || mainTestCase.options?.suffix || testSuite.defaultTest?.options?.suffix || '';
+
+                // Finalize test case eval
+                let varCombinations;
+                if (threadContext.useThread) {
+                  const threadAndTestVars = { ...threadVars, ...testCase.vars }
+                  varCombinations =
+                    process.env.PROMPTFOO_DISABLE_VAR_EXPANSION || testCase.options.disableVarExpansion
+                      ? [threadAndTestVars]
+                      : generateVarCombinations(threadAndTestVars || {});
+                } else {
+                  varCombinations = threadVarCombinations
+                }
+                for (const vars of varCombinations) {
+                  const runEvalOption: RunEvalOptions = {
+                    delay: options.delay || 0,
+                    provider,
+                    prompt: {
+                      ...prompt,
+                      raw: prependToPrompt + prompt.raw + appendToPrompt,
+                    },
+                    test: { ...testCase, vars, options: testCase.options },
+                    nunjucksFilters: testSuite.nunjucksFilters,
+                    rowIndex,
+                    colIndex,
+                    repeatIndex,
+                    evaluateOptions: options,
+                    thread: threadContext,
+                  }
+                  if (threadContext.useThread) {
+                    threadEvals.push(runEvalOption)
+                  } else {
+                    runEvalOptions.push([runEvalOption]);
+                  }
+                  rowIndex++;
+                }
+              }
+              if (threadContext.useThread) {
+                runEvalOptions.push(threadEvals)
+              }
+            }
+          }
+          colIndex++
         }
       }
     }
@@ -674,108 +720,109 @@ class Evaluator {
     const results: EvaluateResult[] = [];
     let numComplete = 0;
 
-    const processEvalStep = async (evalStep: RunEvalOptions, index: number | string) => {
+    const processEvalStep = async (evalThread: RunEvalOptions[], index: number | string) => {
       if (typeof index !== 'number') {
         throw new Error('Expected index to be a number');
       }
+      for (let evalThreadIndex = 0; evalThreadIndex < evalThread.length; evalThreadIndex++) {
+        const evalStep = evalThread[evalThreadIndex];
 
-      const row = await this.runEval(evalStep);
+        const row = await this.runEval(evalStep);
+        results.push(row);
+        numComplete++;
+        if (options.progressCallback) {
+          options.progressCallback(results.length, runEvalOptions.flat(1).length, index, evalStep, evalThreadIndex);
+        }
 
-      results.push(row);
-
-      numComplete++;
-      if (options.progressCallback) {
-        options.progressCallback(results.length, runEvalOptions.length, index, evalStep);
-      }
-
-      // Bookkeeping for table
-      let resultText: string | undefined;
-      const outputTextDisplay =
-        typeof row.response?.output === 'object'
-          ? JSON.stringify(row.response.output)
-          : row.response?.output || null;
-      if (isTest) {
-        if (row.success) {
-          resultText = `${outputTextDisplay || row.error || ''}`;
+        // Bookkeeping for table
+        let resultText: string | undefined;
+        const outputTextDisplay =
+          typeof row.response?.output === 'object'
+            ? JSON.stringify(row.response.output)
+            : row.response?.output || null;
+        if (isTest) {
+          if (row.success) {
+            resultText = `${outputTextDisplay || row.error || ''}`;
+          } else {
+            resultText = `${row.error}\n---\n${outputTextDisplay || ''}`;
+          }
+        } else if (row.error) {
+          resultText = `${row.error}`;
         } else {
-          resultText = `${row.error}\n---\n${outputTextDisplay || ''}`;
+          resultText = outputTextDisplay || row.error || '';
         }
-      } else if (row.error) {
-        resultText = `${row.error}`;
-      } else {
-        resultText = outputTextDisplay || row.error || '';
-      }
 
-      const { rowIndex, colIndex } = evalStep;
-      if (!table.body[rowIndex]) {
-        table.body[rowIndex] = {
-          description: evalStep.test.description,
-          outputs: [],
-          test: evalStep.test,
-          vars: table.head.vars
-            .map((varName) => {
-              const varValue = evalStep.test.vars?.[varName] || '';
-              if (typeof varValue === 'string') {
-                return varValue;
-              }
-              return JSON.stringify(varValue);
-            })
-            .flat(),
+        const { rowIndex, colIndex } = evalStep;
+        if (!table.body[rowIndex]) {
+          table.body[rowIndex] = {
+            description: evalStep.test.description,
+            outputs: [],
+            test: evalStep.test,
+            vars: table.head.vars
+              .map((varName) => {
+                const varValue = evalStep.test.vars?.[varName] || '';
+                if (typeof varValue === 'string') {
+                  return varValue;
+                }
+                return JSON.stringify(varValue);
+              })
+              .flat(),
+          };
+        }
+        table.body[rowIndex].outputs[colIndex] = {
+          pass: row.success,
+          score: row.score,
+          namedScores: row.namedScores,
+          text: resultText,
+          prompt: row.prompt.raw,
+          provider: row.provider.label || row.provider.id,
+          latencyMs: row.latencyMs,
+          tokenUsage: row.response?.tokenUsage,
+          gradingResult: row.gradingResult,
+          cost: row.cost || 0,
         };
-      }
-      table.body[rowIndex].outputs[colIndex] = {
-        pass: row.success,
-        score: row.score,
-        namedScores: row.namedScores,
-        text: resultText,
-        prompt: row.prompt.raw,
-        provider: row.provider.label || row.provider.id,
-        latencyMs: row.latencyMs,
-        tokenUsage: row.response?.tokenUsage,
-        gradingResult: row.gradingResult,
-        cost: row.cost || 0,
-      };
 
-      const metrics = table.head.prompts[colIndex].metrics;
-      invariant(metrics, 'Expected prompt.metrics to be set');
-      metrics.score += row.score;
-      for (const [key, value] of Object.entries(row.namedScores)) {
-        metrics.namedScores[key] = (metrics.namedScores[key] || 0) + value;
-      }
+        const metrics = table.head.prompts[colIndex].metrics;
+        invariant(metrics, 'Expected prompt.metrics to be set');
+        metrics.score += row.score;
+        for (const [key, value] of Object.entries(row.namedScores)) {
+          metrics.namedScores[key] = (metrics.namedScores[key] || 0) + value;
+        }
 
-      if (testSuite.derivedMetrics) {
-        const math = await import('mathjs');
-        for (const metric of testSuite.derivedMetrics) {
-          if (metrics.namedScores[metric.name] === undefined) {
-            metrics.namedScores[metric.name] = 0;
-          }
-          try {
-            if (typeof metric.value === 'function') {
-              metrics.namedScores[metric.name] = metric.value(metrics.namedScores, evalStep);
-            } else {
-              const evaluatedValue = math.evaluate(metric.value, metrics.namedScores);
-              metrics.namedScores[metric.name] = evaluatedValue;
+        if (testSuite.derivedMetrics) {
+          const math = await import('mathjs');
+          for (const metric of testSuite.derivedMetrics) {
+            if (metrics.namedScores[metric.name] === undefined) {
+              metrics.namedScores[metric.name] = 0;
             }
-          } catch (error) {
-            logger.debug(
-              `Could not evaluate derived metric '${metric.name}': ${(error as Error).message}`,
-            );
+            try {
+              if (typeof metric.value === 'function') {
+                metrics.namedScores[metric.name] = metric.value(metrics.namedScores, evalStep);
+              } else {
+                const evaluatedValue = math.evaluate(metric.value, metrics.namedScores);
+                metrics.namedScores[metric.name] = evaluatedValue;
+              }
+            } catch (error) {
+              logger.debug(
+                `Could not evaluate derived metric '${metric.name}': ${(error as Error).message}`,
+              );
+            }
           }
         }
+        metrics.testPassCount += row.success ? 1 : 0;
+        metrics.testFailCount += row.success ? 0 : 1;
+        metrics.assertPassCount +=
+          row.gradingResult?.componentResults?.filter((r) => r.pass).length || 0;
+        metrics.assertFailCount +=
+          row.gradingResult?.componentResults?.filter((r) => !r.pass).length || 0;
+        metrics.totalLatencyMs += row.latencyMs || 0;
+        metrics.tokenUsage.cached =
+          (metrics.tokenUsage.cached || 0) + (row.response?.tokenUsage?.cached || 0);
+        metrics.tokenUsage.completion += row.response?.tokenUsage?.completion || 0;
+        metrics.tokenUsage.prompt += row.response?.tokenUsage?.prompt || 0;
+        metrics.tokenUsage.total += row.response?.tokenUsage?.total || 0;
+        metrics.cost += row.cost || 0;
       }
-      metrics.testPassCount += row.success ? 1 : 0;
-      metrics.testFailCount += row.success ? 0 : 1;
-      metrics.assertPassCount +=
-        row.gradingResult?.componentResults?.filter((r) => r.pass).length || 0;
-      metrics.assertFailCount +=
-        row.gradingResult?.componentResults?.filter((r) => !r.pass).length || 0;
-      metrics.totalLatencyMs += row.latencyMs || 0;
-      metrics.tokenUsage.cached =
-        (metrics.tokenUsage.cached || 0) + (row.response?.tokenUsage?.cached || 0);
-      metrics.tokenUsage.completion += row.response?.tokenUsage?.completion || 0;
-      metrics.tokenUsage.prompt += row.response?.tokenUsage?.prompt || 0;
-      metrics.tokenUsage.total += row.response?.tokenUsage?.total || 0;
-      metrics.cost += row.cost || 0;
     };
 
     // Set up main progress bars
@@ -799,7 +846,7 @@ class Evaluator {
       }
     };
 
-    const createMultiBars = async (evalOptions: RunEvalOptions[]) => {
+    const createMultiBars = async (evalOptions: RunEvalOptions[][]) => {
       const cliProgress = await import('cli-progress');
       multibar = new cliProgress.MultiBar(
         {
@@ -809,8 +856,9 @@ class Evaluator {
         },
         cliProgress.Presets.shades_classic,
       );
-      const stepsPerThread = Math.floor(evalOptions.length / concurrency);
-      const remainingSteps = evalOptions.length % concurrency;
+      const numEvalRuns = evalOptions.flat(1).length
+      const stepsPerThread = Math.floor(numEvalRuns / concurrency);
+      const remainingSteps = numEvalRuns % concurrency;
       multiProgressBars = [];
       for (let i = 0; i < concurrency; i++) {
         const totalSteps = i < remainingSteps ? stepsPerThread + 1 : stepsPerThread;
@@ -828,14 +876,14 @@ class Evaluator {
     // Run the evals
     if (this.options.interactiveProviders) {
       runEvalOptions = runEvalOptions.sort((a, b) =>
-        a.provider.id().localeCompare(b.provider.id()),
+        a[0].provider.id().localeCompare(b[0].provider.id()),
       );
       logger.warn('Providers are running in serial with user input.');
 
       // Group evalOptions by provider
-      const groupedEvalOptions = runEvalOptions.reduce<Record<string, RunEvalOptions[]>>(
+      const groupedEvalOptions = runEvalOptions.reduce<Record<string, RunEvalOptions[][]>>(
         (acc, evalOption) => {
-          const providerId = evalOption.provider.id();
+          const providerId = evalOption[0].provider.id();
           if (!acc[providerId]) {
             acc[providerId] = [];
           }
