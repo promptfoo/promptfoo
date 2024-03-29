@@ -26,7 +26,13 @@ import { useStore as useMainStore } from '@/app/eval/store';
 
 import type { CellContext, ColumnDef, VisibilityState } from '@tanstack/table-core';
 
-import type { EvaluateTableRow, EvaluateTableOutput, FilterMode, GradingResult, EvaluateTable } from './types';
+import type {
+  EvaluateTableRow,
+  EvaluateTableOutput,
+  FilterMode,
+  GradingResult,
+  EvaluateTable,
+} from './types';
 
 import './ResultsTable.css';
 
@@ -428,7 +434,7 @@ function EvalOutputCell({
         <>
           <div className="status pass">
             <div className="pill">
-              PASS<span className="score">{scoreToString(output.score)}</span>
+              PASS <span className="score">{scoreToString(output.score)}</span>
             </div>
             <CustomMetrics lookup={output.namedScores} />
           </div>
