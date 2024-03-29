@@ -9,8 +9,8 @@ import Tooltip from '@mui/material/Tooltip';
 
 import { useStore as useResultsViewStore } from './store';
 
-function DownloadMenu({ fileName }: { fileName: string }) {
-  const { table, config } = useResultsViewStore();
+function DownloadMenu() {
+  const { table, config, evalId } = useResultsViewStore();
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
 
   const openDownloadDialog = (blob: Blob, downloadName: string) => {
@@ -38,30 +38,25 @@ function DownloadMenu({ fileName }: { fileName: string }) {
       alert('No table data');
       return;
     }
-    const formattedData = [];
-    for (const row of table.body) {
-      const chosen = row.outputs.filter((output) => output.pass).map((output) => output.text);
-      const rejected = row.outputs.filter((output) => !output.pass).map((output) => output.text);
-
-      if (!row.test.vars?.question) {
-        alert(`question var not present in row:\n\n${JSON.stringify(row)}`);
-        return;
-      }
-      if (!row.test.vars?.system) {
-        alert(`system var not present in row:\n\n${JSON.stringify(row)}`);
-        return;
-      }
-      const question = row.test.vars.question;
-      const system = row.test.vars.system;
-      formattedData.push({
-        system,
-        question,
-        chosen,
-        rejected,
-      });
-    }
+    const formattedData = table.body.map((row, index) => ({
+      chosen: row.outputs.filter((output) => output.pass).map((output) => output.text),
+      rejected: row.outputs.filter((output) => !output.pass).map((output) => output.text),
+      vars: row.test.vars,
+      providers: table.head.prompts.map((prompt) => prompt.provider),
+      prompts: table.head.prompts.map((prompt) => prompt.display),
+    }));
     const blob = new Blob([JSON.stringify(formattedData, null, 2)], { type: 'application/json' });
-    openDownloadDialog(blob, `${fileName}-dpo.json`);
+    openDownloadDialog(blob, `${evalId}-dpo.json`);
+  };
+
+  const downloadTable = () => {
+    setAnchorEl(null);
+    if (!table) {
+      alert('No table data');
+      return;
+    }
+    const blob = new Blob([JSON.stringify(table, null, 2)], { type: 'application/json' });
+    openDownloadDialog(blob, `${evalId}-table.json`);
   };
 
   return (
@@ -87,6 +82,7 @@ function DownloadMenu({ fileName }: { fileName: string }) {
         onClose={() => setAnchorEl(null)}
       >
         <MenuItem onClick={downloadConfig}>YAML config</MenuItem>
+        <MenuItem onClick={downloadTable}>Table JSON</MenuItem>
         <MenuItem onClick={downloadDpoJson}>DPO JSON</MenuItem>
       </Menu>
     </>
