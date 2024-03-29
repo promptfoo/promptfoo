@@ -33,6 +33,7 @@ Examples of use cases supported by the HuggingFace ecosystem include:
 - **Grounding, factuality, and evidence-type** classification via [MiniLM-evidence-types](https://huggingface.co/marieke93/MiniLM-evidence-types) and similar
 - **Helpfulness** via [quora_helpful_answers_classifier](https://huggingface.co/Radella/quora_helpful_answers_classifier), [distilbert-base-uncased-helpful-amazon](https://huggingface.co/banjtheman/distilbert-base-uncased-helpful-amazon), etc.
 - **Personal Identifiable Information (PII)** classification via models such as [starpii](https://huggingface.co/bigcode/starpii) and [deberta_finetuned_pii](https://huggingface.co/lakshyakh93/deberta_finetuned_pii).
+- **Prompt injection** classification via [deberta-v3-base-prompt-injection](https://huggingface.co/protectai/deberta-v3-base-prompt-injection).
 
 There are many models out there to choose from! In general, it's best to select a model that is fine-tuned for your use case.
 
@@ -88,3 +89,15 @@ assert:
 ```
 
 The `not-classifier` type inverts the result of the classifier.  In this case, the starpii model is trained to detect PII, but we want to assert that the LLM output is _not_ PII.  So, we invert the classifier to accept values that are _not_ PII.
+
+## Prompt injection example
+
+This assertion uses a [fine-tuned deberta-v3-base](https://huggingface.co/protectai/deberta-v3-base-prompt-injection) model to detect prompt injections.
+
+```
+assert:
+  - type: classifier
+    provider: huggingface:text-classification:protectai/deberta-v3-base-prompt-injection
+    value: 'SAFE'
+    threshold: 0.9 # score for "SAFE" must be greater than or equal to this value
+```
