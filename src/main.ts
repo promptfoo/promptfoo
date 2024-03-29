@@ -375,6 +375,7 @@ async function main() {
     .option('-w, --write', 'Write results to promptfoo configuration file')
     .option('--numPersonas <number>', 'Number of personas to generate', '5')
     .option('--numTestCasesPerPersona <number>', 'Number of test cases per persona', '3')
+    .option('--no-cache', 'Do not read or write results to disk cache', false)
     .action(
       async (
         _,
@@ -385,8 +386,14 @@ async function main() {
           numPersonas: string;
           numTestCasesPerPersona: string;
           write: boolean;
+          cache: boolean;
         },
       ) => {
+        if (!options.cache) {
+          logger.info('Cache is disabled.');
+          disableCache();
+        }
+
         let testSuite: TestSuite;
         if (options.config) {
           const resolved = await resolveConfigs(
