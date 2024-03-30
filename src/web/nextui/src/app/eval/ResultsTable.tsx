@@ -169,7 +169,7 @@ function EvalOutputCell({
   filterMode: FilterMode;
   searchText: string;
 }) {
-  const { renderMarkdown, prettifyJson } = useResultsViewStore();
+  const { renderMarkdown, prettifyJson, showPrompts } = useResultsViewStore();
   const [openPrompt, setOpen] = React.useState(false);
   const handlePromptOpen = () => {
     setOpen(true);
@@ -460,6 +460,12 @@ function EvalOutputCell({
             </span>
           </div>
         </>
+      )}
+      {showPrompts && firstOutput.prompt && (
+        <div className="prompt">
+          <span className="pill">Prompt</span>
+          {output.prompt}
+        </div>
       )}
       <TruncatedText text={node || text} maxLength={maxTextLength} />
       {comment}

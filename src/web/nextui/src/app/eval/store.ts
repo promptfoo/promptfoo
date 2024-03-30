@@ -22,6 +22,8 @@ interface TableState {
   setRenderMarkdown: (renderMarkdown: boolean) => void;
   prettifyJson: boolean;
   setPrettifyJson: (prettifyJson: boolean) => void;
+  showPrompts: boolean;
+  setShowPrompts: (showPrompts: boolean) => void;
 }
 
 export const useStore = create<TableState>((set) => ({
@@ -43,4 +45,6 @@ export const useStore = create<TableState>((set) => ({
   setRenderMarkdown: (renderMarkdown: boolean) => set(() => ({ renderMarkdown })),
   prettifyJson: false,
   setPrettifyJson: (prettifyJson: boolean) => set(() => ({ prettifyJson })),
+  showPrompts: false,
+  setShowPrompts: (showPrompts: boolean) => set(() => ({ showPrompts })),
 }));
