@@ -26,12 +26,12 @@ import {
   matchesContextFaithfulness,
   matchesSelectBest,
 } from './matchers';
-
 import { validateFunctionCall } from './providers/openaiUtil';
 import { OpenAiChatCompletionProvider } from './providers/openai';
+import { runPythonCode } from './python/wrapper';
+import { importModule } from './esm';
 
 import type { Assertion, AssertionType, GradingResult, AtomicTestCase, ApiProvider } from './types';
-import { runPythonCode } from './python/wrapper';
 
 const ASSERTIONS_MAX_CONCURRENCY = process.env.PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY
   ? parseInt(process.env.PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY, 10)
@@ -229,8 +229,8 @@ export async function runAssertion({
     if (renderedValue.startsWith('file://')) {
       // Load the file
       const filePath = renderedValue.slice('file://'.length);
-      if (filePath.endsWith('.js') || filePath.endsWith('.cjs')) {
-        const requiredModule = require(path.resolve(filePath));
+      if (filePath.endsWith('.js') || filePath.endsWith('.cjs') || filePath.endsWith('.mjs')) {
+        const requiredModule = await importModule(filePath);
         if (typeof requiredModule === 'function') {
           valueFromScript = await Promise.resolve(requiredModule(output, context));
         } else if (requiredModule.default && typeof requiredModule.default === 'function') {

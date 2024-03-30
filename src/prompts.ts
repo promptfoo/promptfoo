@@ -8,6 +8,7 @@ import { PythonShell, Options as PythonShellOptions } from 'python-shell';
 
 import logger from './logger';
 import { runPython } from './python/wrapper';
+import { importModule } from './esm';
 
 import type {
   UnifiedConfig,
@@ -87,10 +88,10 @@ enum PromptInputType {
   NAMED = 3,
 }
 
-export function readPrompts(
+export async function readPrompts(
   promptPathOrGlobs: string | string[] | Record<string, string>,
   basePath: string = '',
-): Prompt[] {
+): Promise<Prompt[]> {
   let promptPathInfos: { raw: string; resolved: string }[] = [];
   let promptContents: Prompt[] = [];
 
@@ -145,7 +146,10 @@ export function readPrompts(
       const splits = parsedPath.base.split(':');
       if (
         splits[0] &&
-        (splits[0].endsWith('.js') || splits[0].endsWith('.cjs') || splits[0].endsWith('.py'))
+        (splits[0].endsWith('.js') ||
+          splits[0].endsWith('.cjs') ||
+          splits[0].endsWith('.mjs') ||
+          splits[0].endsWith('.py'))
       ) {
         [filename, functionName] = splits;
       }
@@ -182,14 +186,8 @@ export function readPrompts(
       promptContents.push(...fileContents.map((content) => ({ raw: content, display: content })));
     } else {
       const ext = path.parse(promptPath).ext;
-      if (ext === '.js' || ext === '.cjs') {
-        const importedModule = require(promptPath);
-        let promptFunction;
-        if (functionName) {
-          promptFunction = importedModule[functionName];
-        } else {
-          promptFunction = importedModule.default || importedModule;
-        }
+      if (ext === '.js' || ext === '.cjs' || ext === '.mjs') {
+        const promptFunction = await importModule(promptPath, functionName);
         promptContents.push({
           raw: String(promptFunction),
           display: String(promptFunction),

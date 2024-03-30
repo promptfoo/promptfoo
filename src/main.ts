@@ -164,7 +164,7 @@ async function resolveConfigs(
   }
 
   // Parse prompts, providers, and tests
-  const parsedPrompts = readPrompts(config.prompts, cmdObj.prompts ? undefined : basePath);
+  const parsedPrompts = await readPrompts(config.prompts, cmdObj.prompts ? undefined : basePath);
   const parsedProviders = await loadApiProviders(config.providers, {
     env: config.env,
     basePath,
@@ -211,7 +211,7 @@ async function resolveConfigs(
     tests: parsedTests,
     scenarios: config.scenarios,
     defaultTest,
-    nunjucksFilters: readFilters(
+    nunjucksFilters: await readFilters(
       fileConfig.nunjucksFilters || defaultConfig.nunjucksFilters || {},
       basePath,
     ),

@@ -2,6 +2,7 @@ prompts:
   - prompt_chat.js
   - prompt_string.js
   - prompt_multiple.js:prompt2
+  - prompt_esm.mjs
   - prompt_python.py
   - prompt_python.py:prompt1
 providers: [openai:gpt-3.5-turbo-0613]

@@ -385,13 +385,13 @@ describe('util', () => {
     });
   });
 
-  test('readFilters', () => {
+  test('readFilters', async () => {
     const mockFilter = jest.fn();
     jest.doMock(path.resolve('filter.js'), () => mockFilter, { virtual: true });
 
     (globSync as jest.Mock).mockImplementation((pathOrGlob) => [pathOrGlob]);
 
-    const filters = readFilters({ testFilter: 'filter.js' });
+    const filters = await readFilters({ testFilter: 'filter.js' });
 
     expect(filters.testFilter).toBe(mockFilter);
   });

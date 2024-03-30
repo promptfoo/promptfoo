@@ -9,10 +9,10 @@ import nunjucks from 'nunjucks';
 import yaml from 'js-yaml';
 import { stringify } from 'csv-stringify/sync';
 import { globSync } from 'glob';
-import { asc, desc, eq } from 'drizzle-orm';
+import { desc, eq } from 'drizzle-orm';
 
 import logger from './logger';
-import { getDirectory } from './esm';
+import { getDirectory, importModule } from './esm';
 import { readTests } from './testCases';
 import {
   datasets,
@@ -22,7 +22,6 @@ import {
   evalsToPrompts,
   prompts,
   getDbSignalPath,
-  getDbPath,
 } from './database';
 import { runDbMigrations } from './migrate';
 
@@ -200,7 +199,9 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
       let rawConfig = yaml.load(fs.readFileSync(configPath, 'utf-8')) as UnifiedConfig;
       return dereferenceConfig(rawConfig);
     case '.js':
-      return require(configPath) as UnifiedConfig;
+    case '.cjs':
+    case '.mjs':
+      return (await importModule(configPath)) as UnifiedConfig;
     default:
       throw new Error(`Unsupported configuration file format: ${ext}`);
   }
@@ -1052,18 +1053,17 @@ export async function getEvalsWithPredicate(
   return ret;
 }
 
-export function readFilters(
+export async function readFilters(
   filters: Record<string, string>,
   basePath: string = '',
-): NunjucksFilterMap {
+): Promise<NunjucksFilterMap> {
   const ret: NunjucksFilterMap = {};
   for (const [name, filterPath] of Object.entries(filters)) {
     const globPath = path.join(basePath, filterPath);
     const filePaths = globSync(globPath);
     for (const filePath of filePaths) {
       const finalPath = path.resolve(filePath);
-      const importedModule = require(finalPath);
-      ret[name] = importedModule.default || importedModule;
+      ret[name] = await importModule(finalPath);
     }
   }
   return ret;

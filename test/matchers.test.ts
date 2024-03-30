@@ -19,7 +19,6 @@ import type {
   ProviderResponse,
   ProviderClassificationResponse,
   ApiProvider,
-  ProviderOptions,
   ProviderTypeMap,
 } from '../src/types';
 import { HuggingfaceTextClassificationProvider } from '../src/providers/huggingface';
