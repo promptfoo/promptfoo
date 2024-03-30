@@ -680,20 +680,32 @@ describe('renderPrompt', () => {
   it('should render a JSON prompt', async () => {
     const prompt = toPrompt('[{"text": "Test prompt "}, {"text": "{{ var1 }}"}]');
     const renderedPrompt = await renderPrompt(prompt, { var1: 'value1' }, {});
-    expect(renderedPrompt).toBe('[{"text":"Test prompt "},{"text":"value1"}]');
+    expect(renderedPrompt).toBe(
+      JSON.stringify(JSON.parse('[{"text":"Test prompt "},{"text":"value1"}]'), null, 2),
+    );
   });
 
   it('should render a JSON prompt and escape the var string', async () => {
     const prompt = toPrompt('[{"text": "Test prompt "}, {"text": "{{ var1 }}"}]');
     const renderedPrompt = await renderPrompt(prompt, { var1: 'He said "hello world!"' }, {});
-    expect(renderedPrompt).toBe('[{"text":"Test prompt "},{"text":"He said \\"hello world!\\""}]');
+    expect(renderedPrompt).toBe(
+      JSON.stringify(
+        JSON.parse('[{"text":"Test prompt "},{"text":"He said \\"hello world!\\""}]'),
+        null,
+        2,
+      ),
+    );
   });
 
   it('should render a JSON prompt with nested JSON', async () => {
     const prompt = toPrompt('[{"text": "Test prompt "}, {"text": "{{ var1 }}"}]');
     const renderedPrompt = await renderPrompt(prompt, { var1: '{"nested": "value1"}' }, {});
     expect(renderedPrompt).toBe(
-      '[{"text":"Test prompt "},{"text":"{\\"nested\\": \\"value1\\"}"}]',
+      JSON.stringify(
+        JSON.parse('[{"text":"Test prompt "},{"text":"{\\"nested\\": \\"value1\\"}"}]'),
+        null,
+        2,
+      ),
     );
   });
 
