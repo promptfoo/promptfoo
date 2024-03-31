@@ -201,6 +201,7 @@ Using nunjucks templates, we can combine multiple chat messages. Here's an examp
 # Set up the conversation history
 defaultTest:
   vars:
+    system_message: Answer concisely
     messages:
       - user: Who founded Facebook?
       - assistant: Mark Zuckerberg
@@ -221,20 +222,30 @@ In the prompt template, we construct the conversation history followed by a user
 
 ```liquid title=prompt.json
 [
+  {
+    "role": "system",
+    "content": {{ system_message | dump }}
+  },
   {% for message in messages %}
     {% for role, content in message %}
       {
         "role": "{{ role }}",
-        "content": "{{ content }}"
+        "content": {{ content | dump }}
       },
     {% endfor %}
   {% endfor %}
   {
     "role": "user",
-    "content": "{{ question }}"
+    "content": {{ question | dump }}
   }
 ]
 ```
+
+:::info
+Variables containing multiple lines and quotes are automatically escaped in JSON prompt files.
+
+If the file is not valid JSON (such as in the case above, due to the nunjucks `{% for %}` loops), use the built-in nunjucks filter [`dump`](https://mozilla.github.io/nunjucks/templating.html#dump) to stringify the object as JSON.
+:::
 
 ### Using the `_conversation` variable
 
