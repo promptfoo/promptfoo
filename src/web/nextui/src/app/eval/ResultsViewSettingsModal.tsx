@@ -29,6 +29,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ open, onClose }) => {
     setRenderMarkdown,
     prettifyJson,
     setPrettifyJson,
+    showPrompts,
+    setShowPrompts,
   } = useResultsViewStore();
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
@@ -68,6 +70,19 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ open, onClose }) => {
             }
             label="Prettify JSON outputs"
           />
+        </Box>
+        <Box>
+          <Tooltip title="Show the final prompt that produced the output in each cell.">
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={showPrompts}
+                  onChange={(e) => setShowPrompts(e.target.checked)}
+                />
+              }
+              label="Show full prompt in output cell"
+            />
+          </Tooltip>
         </Box>
         <Box>
           <Tooltip title="Show detailed inference statistics such as latency, tokens used, cost, etc.">

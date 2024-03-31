@@ -173,7 +173,7 @@ export async function renderPrompt(
       }
       return obj;
     };
-    return JSON.stringify(walk(parsed));
+    return JSON.stringify(walk(parsed), null, 2);
   } catch (err) {
     return nunjucks.renderString(basePrompt, vars);
   }
