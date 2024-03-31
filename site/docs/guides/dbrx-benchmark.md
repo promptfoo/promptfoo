@@ -2,7 +2,7 @@
 sidebar_label: DBRX benchmarks
 ---
 
-# DBRX vs Mixtral vs GPT: benchmark your own data
+# DBRX vs Mixtral vs GPT: create your own benchmark
 
 There are many generic benchmarks that measure LLMs like DBRX, Mixtral, and others in a similar performance class.  But public benchmarks are often gamed and don't always reflect real use cases.
 
