@@ -2,9 +2,9 @@
 sidebar_label: DBRX benchmarks
 ---
 
-# DBRX vs Mixtral vs GPT: benchmark with your own data
+# DBRX vs Mixtral vs GPT: benchmark your own data
 
-There are many generic benchmarks that measure LLMs like DBRX, Mixtral, and others in a similar performance class.  But public benchmarks are often gamed and don't always reflect real use cases.  
+There are many generic benchmarks that measure LLMs like DBRX, Mixtral, and others in a similar performance class.  But public benchmarks are often gamed and don't always reflect real use cases.
 
 How well do these models actually perform for _your specific needs_?  As a developer, it's good to understand the tradeoffs between each model.
 
@@ -32,13 +32,13 @@ For more details on promptfoo setup, see [Installation](/docs/installation).
 
 ## Step 2: Configure the models
 
-After entering the `dbrx-benchmark` directory, edit the `promptfooconfig.yaml` to include the models you want to compare. 
+After entering the `dbrx-benchmark` directory, edit the `promptfooconfig.yaml` to include the models you want to compare.
 
 OpenRouter uses the OpenAI format, so we'll just override the base URL of the OpenAI provider.  Here's an example configuration with DBRX, Mixtral, and GPT-3.5:
 
 ```yaml title=promptfooconfig.yaml
 providers:
-  - id: openai:chat:databricks/dbrx-instruct 
+  - id: openai:chat:databricks/dbrx-instruct
     config:
       apiBaseUrl: https://openrouter.ai/api/v1
       apiKeyEnvar: OPENROUTER_API_KEY
@@ -54,7 +54,7 @@ providers:
 Set your API keys as environment variables:
 
 ```bash
-export OPENROUTER_API_KEY=your_openrouter_api_key 
+export OPENROUTER_API_KEY=your_openrouter_api_key
 export OPENAI_API_KEY=your_openai_api_key
 ```
 
@@ -66,7 +66,7 @@ Customize the behavior of each model by setting parameters such as `temperature`
 providers:
   - id: openai:chat:databricks/dbrx-instruct
     config:
-      apiBaseUrl: https://openrouter.ai/api/v1  
+      apiBaseUrl: https://openrouter.ai/api/v1
       apiKeyEnvar: OPENROUTER_API_KEY
       // highlight-start
       temperature: 0
@@ -78,7 +78,7 @@ providers:
       // highlight-start
       temperature: 0
       // highlight-end
-  - id: openai:gpt-3.5-turbo-0613  
+  - id: openai:gpt-3.5-turbo-0613
     // highlight-start
     config:
       temperature: 0
@@ -112,7 +112,7 @@ We're just going to make up some questions as an example.  You should modify the
 tests:
   - vars:
       query: 'What is the capital of France?'
-  - vars:  
+  - vars:
       query: 'Explain the theory of relativity.'
   - vars:
       query: 'Write a poem about the sea.'
@@ -120,7 +120,7 @@ tests:
       query: 'What are the health benefits of eating apples?'
   - vars:
       query: "Translate 'Hello, how are you?' into Spanish."
-  - vars:  
+  - vars:
       query: 'Output a JSON list of colors'
 ```
 
@@ -135,7 +135,7 @@ tests:
       - type: contains
         value: 'Paris'
     // highlight-end
-  - vars:  
+  - vars:
       query: 'Explain the theory of relativity.'
     // highlight-start
     assert:
@@ -146,7 +146,7 @@ tests:
       query: 'Write a poem about the sea.'
     // highlight-start
     assert:
-      - type: llm-rubric  
+      - type: llm-rubric
         value: 'The poem should evoke imagery such as waves or the ocean.'
     // highlight-end
   - vars:
@@ -163,7 +163,7 @@ tests:
       - type: similar
         value: 'Hola, ¿cómo estás?'
     // highlight-end
-  - vars:  
+  - vars:
       query: 'Output a JSON list of colors'
     // highlight-start
     assert:
@@ -187,7 +187,7 @@ This command will execute each test case against each configured model and recor
 
 To visualize the results, use the `promptfoo` viewer:
 
-```bash 
+```bash
 npx promptfoo@latest view
 ```
 
@@ -202,7 +202,7 @@ Clicking into a specific output will show details on the assertions:
 You can also output the results to a file in various formats, such as JSON, YAML, or CSV:
 
 ```bash
-npx promptfoo@latest eval -o results.csv  
+npx promptfoo@latest eval -o results.csv
 ```
 
 ## Analysis
