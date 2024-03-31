@@ -128,6 +128,10 @@ These general-purpose environment variables are supported:
 | `PROMPTFOO_DISABLE_VAR_EXPANSION`      | Prevents Array-type vars from being expanded into multiple test cases |                |
 | `PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY` | How many assertions to run at a time                                  | 3              |
 
+:::tip
+promptfoo will load environment variables from the `.env` in your current working directory.
+:::
+
 ## `promptfoo generate dataset`
 
 BETA: Generate synthetic test cases based on existing prompts and variables.

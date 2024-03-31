@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import readline from 'readline';
 
+import 'dotenv/config';
 import chalk from 'chalk';
 import chokidar from 'chokidar';
 import yaml from 'js-yaml';
