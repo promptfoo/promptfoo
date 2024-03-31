@@ -46,6 +46,7 @@ import {
 import { AwsBedrockCompletionProvider } from './providers/bedrock';
 import { PythonProvider } from './providers/pythonCompletion';
 import { CohereChatCompletionProvider } from './providers/cohere';
+import { importModule } from './esm';
 
 import type {
   ApiProvider,
@@ -211,7 +212,10 @@ export async function loadApiProvider(
       // Backwards compatibility: `completion` used to be required
       return new AwsBedrockCompletionProvider(modelName, providerOptions);
     }
-    return new AwsBedrockCompletionProvider(`${modelType}${modelName ? `:${modelName}` : ''}`, providerOptions);
+    return new AwsBedrockCompletionProvider(
+      `${modelType}${modelName ? `:${modelName}` : ''}`,
+      providerOptions,
+    );
   } else if (providerPath?.startsWith('huggingface:') || providerPath?.startsWith('hf:')) {
     const splits = providerPath.split(':');
     if (splits.length < 3) {
@@ -296,9 +300,8 @@ export async function loadApiProvider(
   }
 
   // Load custom module
-  const CustomApiProvider = (
-    await import(path.resolve(path.join(basePath || process.cwd(), providerPath)))
-  ).default;
+  const modulePath = path.join(basePath || process.cwd(), providerPath);
+  const CustomApiProvider = await importModule(modulePath);
   return new CustomApiProvider(options);
 }
 

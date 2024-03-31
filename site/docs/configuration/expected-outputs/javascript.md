@@ -173,6 +173,10 @@ async function main(output, context) {
 module.exports = main;
 ```
 
+### ES modules
+
+ES modules are supported, but must have a `.mjs` file extension.  Alternatively, if you are transpiling Javascript or Typescript, we recommend pointing promptfoo to the transpiled plain Javascript output.
+
 ## Other assertion types
 
 For more info on assertions, see [Test assertions](/docs/configuration/expected-outputs).

@@ -33,6 +33,7 @@ jest.mock('fs', () => ({
   },
 }));
 
+jest.mock('../src/esm');
 jest.mock('../src/database');
 
 export class TestGrader implements ApiProvider {

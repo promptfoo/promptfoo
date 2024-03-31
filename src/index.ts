@@ -34,7 +34,7 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
     }),
     tests: await readTests(testSuite.tests),
 
-    nunjucksFilters: readFilters(testSuite.nunjucksFilters || {}),
+    nunjucksFilters: await readFilters(testSuite.nunjucksFilters || {}),
 
     // Full prompts expected (not filepaths)
     prompts: testSuite.prompts.map((promptInput) => {

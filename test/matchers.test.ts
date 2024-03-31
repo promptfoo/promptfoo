@@ -19,10 +19,11 @@ import type {
   ProviderResponse,
   ProviderClassificationResponse,
   ApiProvider,
-  ProviderOptions,
   ProviderTypeMap,
 } from '../src/types';
 import { HuggingfaceTextClassificationProvider } from '../src/providers/huggingface';
+
+jest.mock('../src/esm');
 
 const Grader = new TestGrader();
 
