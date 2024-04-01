@@ -5,7 +5,7 @@ import { getPrompts } from '@/../../../util';
 
 export const dynamic = IS_RUNNING_LOCALLY ? 'auto' : 'force-dynamic';
 
-export async function POST(req: Request) {
+export async function GET(req: Request) {
   try {
     return NextResponse.json({ data: await getPrompts() });
   } catch (error) {
