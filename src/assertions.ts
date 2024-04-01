@@ -269,11 +269,14 @@ export async function runAssertion({
         valueFromScript = pythonScriptOutput.trim();
         logger.debug(`Python script ${filePath} output: ${valueFromScript}`);
       } else if (filePath.endsWith('.json')) {
-        valueFromScript = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+        renderedValue = JSON.parse(fs.readFileSync(filePath, 'utf8'));
       } else if (filePath.endsWith('.yaml') || filePath.endsWith('.yml')) {
-        valueFromScript = yaml.load(fs.readFileSync(filePath, 'utf8')) as object;
+        renderedValue = yaml.load(fs.readFileSync(filePath, 'utf8')) as object;
+      } else if (filePath.endsWith('.txt')) {
+        // Trim to remove trailing newline
+        renderedValue = fs.readFileSync(filePath, 'utf8').trim();
       } else {
-        throw new Error(`Assertion malformed: ${filePath} must end in .js or .py`);
+        throw new Error(`Unsupported file type: ${filePath}`);
       }
     } else {
       // It's a normal string value
