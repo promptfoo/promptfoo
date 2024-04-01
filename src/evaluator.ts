@@ -613,12 +613,14 @@ class Evaluator {
       const remainingSteps = runEvalOptions.length % concurrency;
       for (let i = 0; i < concurrency; i++) {
         const totalSteps = i < remainingSteps ? stepsPerThread + 1 : stepsPerThread;
-        const progressbar = multibar.create(totalSteps, 0, {
-          provider: '',
-          prompt: '',
-          vars: '',
-        });
-        progressbars.push(progressbar);
+        if (totalSteps > 0) {
+          const progressbar = multibar.create(totalSteps, 0, {
+            provider: '',
+            prompt: '',
+            vars: '',
+          });
+          progressbars.push(progressbar);
+        }
       }
     }
     if (options.progressCallback) {
