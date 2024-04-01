@@ -1093,19 +1093,34 @@ export function printBorder() {
   logger.info(border);
 }
 
-export function transformOutput(
-  code: string,
+export async function transformOutput(
+  codeOrFilepath: string,
   output: string | object | undefined,
   context: { vars?: Record<string, string | object | undefined>; prompt: Partial<Prompt> },
 ) {
-  const postprocessFn = new Function(
-    'output',
-    'context',
-    code.includes('\n') ? code : `return ${code}`,
-  );
-  const ret = postprocessFn(output, context);
-  if (output == null) {
-    throw new Error(`Postprocess function did not return a value\n\n${code}`);
+  let postprocessFn;
+  if (codeOrFilepath.startsWith('file://')) {
+    const filePath = codeOrFilepath.slice('file://'.length);
+    const requiredModule = await importModule(filePath);
+    if (typeof requiredModule === 'function') {
+      postprocessFn = requiredModule;
+    } else if (requiredModule.default && typeof requiredModule.default === 'function') {
+      postprocessFn = requiredModule.default;
+    } else {
+      throw new Error(
+        `Transform ${filePath} must export a function or have a default export as a function`,
+      );
+    }
+  } else {
+    postprocessFn = new Function(
+      'output',
+      'context',
+      codeOrFilepath.includes('\n') ? codeOrFilepath : `return ${codeOrFilepath}`,
+    );
+  }
+  const ret = await Promise.resolve(postprocessFn(output, context));
+  if (ret == null) {
+    throw new Error(`Transform function did not return a value\n\n${codeOrFilepath}`);
   }
   return ret;
 }

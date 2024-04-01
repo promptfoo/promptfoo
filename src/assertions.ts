@@ -208,7 +208,7 @@ export async function runAssertion({
   });
 
   if (assertion.transform) {
-    output = transformOutput(assertion.transform, output, {
+    output = await transformOutput(assertion.transform, output, {
       vars: test.vars,
       prompt: { display: prompt },
     });
