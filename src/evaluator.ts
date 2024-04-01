@@ -303,7 +303,7 @@ class Evaluator {
         let processedResponse = { ...response };
         const transform = test.options?.transform || test.options?.postprocess;
         if (transform) {
-          processedResponse.output = transformOutput(transform, processedResponse.output, {
+          processedResponse.output = await transformOutput(transform, processedResponse.output, {
             vars,
             prompt,
           });

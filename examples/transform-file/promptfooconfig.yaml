@@ -1,0 +1,16 @@
+description: 'Transform with external function'
+
+prompts:
+  - "Write a tweet about {{topic}}"
+
+providers:
+  - openai:gpt-3.5-turbo-0613
+
+defaultTest:
+  options:
+    transform: file://transform.js
+    # transform: file://transform.py
+
+tests:
+  - vars:
+      topic: bananas
