@@ -24,6 +24,7 @@ import {
   getDbSignalPath,
 } from './database';
 import { runDbMigrations } from './migrate';
+import { runPython } from './python/wrapper';
 
 import type {
   EvalWithMetadata,
@@ -40,7 +41,6 @@ import type {
   OutputFile,
   ProviderOptions,
   Prompt,
-  FilePath,
 } from './types';
 
 let globalConfigCache: any = null;
@@ -1101,15 +1101,30 @@ export async function transformOutput(
   let postprocessFn;
   if (codeOrFilepath.startsWith('file://')) {
     const filePath = codeOrFilepath.slice('file://'.length);
-    const requiredModule = await importModule(filePath);
-    if (typeof requiredModule === 'function') {
-      postprocessFn = requiredModule;
-    } else if (requiredModule.default && typeof requiredModule.default === 'function') {
-      postprocessFn = requiredModule.default;
+    if (
+      codeOrFilepath.endsWith('.js') ||
+      codeOrFilepath.endsWith('.cjs') ||
+      codeOrFilepath.endsWith('.mjs')
+    ) {
+      const requiredModule = await importModule(filePath);
+      if (typeof requiredModule === 'function') {
+        postprocessFn = requiredModule;
+      } else if (requiredModule.default && typeof requiredModule.default === 'function') {
+        postprocessFn = requiredModule.default;
+      } else {
+        throw new Error(
+          `Transform ${filePath} must export a function or have a default export as a function`,
+        );
+      }
+    } else if (codeOrFilepath.endsWith('.py')) {
+      postprocessFn = async (
+        output: string,
+        context: { vars: Record<string, string | object> },
+      ) => {
+        return runPython(filePath, 'get_transform', [output, context]);
+      };
     } else {
-      throw new Error(
-        `Transform ${filePath} must export a function or have a default export as a function`,
-      );
+      throw new Error(`Unsupported transform file format: ${codeOrFilepath}`);
     }
   } else {
     postprocessFn = new Function(

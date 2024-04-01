@@ -5,3 +5,5 @@ scratch
 node_modules
 dist
 .aider*
+
+__pycache__
