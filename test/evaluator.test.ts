@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { evaluate, renderPrompt } from '../src/evaluator';
+import { evaluate, renderPrompt, resolveVariables } from '../src/evaluator';
 
 import type { ApiProvider, TestSuite, Prompt } from '../src/types';
 
@@ -762,5 +762,39 @@ describe('renderPrompt', () => {
 
     expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('testData.yaml'), 'utf8');
     expect(renderedPrompt).toBe('Test prompt with {"key":"valueFromYaml"}');
+  });
+});
+
+describe('resolveVariables', () => {
+  it('should replace placeholders with corresponding variable values', () => {
+    const variables = { final: '{{ my_greeting }}, {{name}}!', my_greeting: 'Hello', name: 'John' };
+    const expected = { final: 'Hello, John!', my_greeting: 'Hello', name: 'John' };
+    expect(resolveVariables(variables)).toEqual(expected);
+  });
+
+  it('should handle nested variable substitutions', () => {
+    const variables = { first: '{{second}}', second: '{{third}}', third: 'value' };
+    const expected = { first: 'value', second: 'value', third: 'value' };
+    expect(resolveVariables(variables)).toEqual(expected);
+  });
+
+  it('should throw an error if a variable is not found', () => {
+    const variables = { greeting: 'Hello, {{name}}!' };
+    expect(() => resolveVariables(variables)).toThrow(
+      'Variable "name" not found for substitution.',
+    );
+  });
+
+  it('should not modify variables without placeholders', () => {
+    const variables = { greeting: 'Hello, world!', name: 'John' };
+    const expected = { greeting: 'Hello, world!', name: 'John' };
+    expect(resolveVariables(variables)).toEqual(expected);
+  });
+
+  it('should leave unresolved placeholders if corresponding variable is missing', () => {
+    const variables = { greeting: 'Hello, {{name}}!', name: '{{unknown}}' };
+    expect(() => resolveVariables(variables)).toThrow(
+      'Variable "unknown" not found for substitution.',
+    );
   });
 });
