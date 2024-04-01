@@ -75,6 +75,35 @@ function generateVarCombinations(
   return combinations;
 }
 
+export function resolveVariables(
+  variables: Record<string, string | object>,
+): Record<string, string | object> {
+  let resolved = true;
+  const regex = /\{\{\s*(\w+)\s*\}\}/; // Matches {{variableName}}, {{ variableName }}, etc.
+
+  do {
+    resolved = true;
+    for (const key of Object.keys(variables)) {
+      if (typeof variables[key] !== 'string') {
+        continue;
+      }
+      const value = variables[key] as string;
+      const match = regex.exec(value);
+      if (match) {
+        const [placeholder, varName] = match;
+        if (variables[varName] !== undefined) {
+          variables[key] = value.replace(placeholder, variables[varName] as string);
+          resolved = false; // Indicate that we've made a replacement and should check again
+        } else {
+          throw new Error(`Variable "${varName}" not found for substitution.`);
+        }
+      }
+    }
+  } while (!resolved);
+
+  return variables;
+}
+
 export async function renderPrompt(
   prompt: Prompt,
   vars: Record<string, string | object>,
@@ -146,6 +175,9 @@ export async function renderPrompt(
       throw new Error(`Prompt function must return a string or object, got ${typeof result}`);
     }
   }
+
+  // Resolve variable mappings
+  resolveVariables(vars);
 
   try {
     if (process.env.PROMPTFOO_DISABLE_JSON_AUTOESCAPE) {
