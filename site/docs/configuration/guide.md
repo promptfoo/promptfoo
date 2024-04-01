@@ -310,7 +310,35 @@ Evaluates each `language` x `input` combination:
 
 In the above examples, `vars` values are strings. But `vars` can be any JSON or YAML entity, including nested objects. You can manipulate these objects in the prompt, which are [nunjucks](https://mozilla.github.io/nunjucks/) templates.
 
-For example, consider this test case, which lists a handful of user and assistant messages in an OpenAI-compatible format:
+### Escaping JSON strings
+
+If the prompt is valid JSON, nunjucks variables are automatically escaped when they are included in strings:
+
+```yaml
+tests:
+  - vars:
+      system_message: >
+        This multiline "system message" with quotes...
+        Is automatically escaped in JSON prompts!
+```
+
+```json
+{
+  "role": "system",
+  "content": "{{ system_message }}"
+}
+```
+
+You can also manually escape the string using the nunjucks [dump](https://mozilla.github.io/nunjucks/templating.html#dump) filter. This is necessary if your prompt is not valid JSON, for example if you are using nunjucks syntax:
+
+```liquid
+{
+  "role": {% if 'admin' in message %} "system" {% else %} "user" {% endif %},
+  "content": {{ message | dump }}
+}
+```
+
+Here's another example.  Consider this test case, which lists a handful of user and assistant messages in an OpenAI-compatible format:
 
 ```yaml
 tests:
@@ -324,10 +352,10 @@ tests:
           content: great, thanks
 ```
 
-The corresponding `prompt.txt` file simply passes through the `previous_messages` object using the [dump](https://mozilla.github.io/nunjucks/templating.html#dump) and [safe](https://mozilla.github.io/nunjucks/templating.html#safe) filters to convert the object to a JSON string:
+The corresponding `prompt.txt` file simply passes through the `previous_messages` object using the [dump](https://mozilla.github.io/nunjucks/templating.html#dump) filter to convert the object to a JSON string:
 
 ```nunjucks
-{{ previous_messages | dump | safe }}
+{{ previous_messages | dump }}
 ```
 
 Running `promptfoo eval -p prompt.txt -c path_to.yaml` will call the Chat Completion API with the following prompt:
