@@ -1,7 +1,7 @@
 import chalk from 'chalk';
 import { Command } from 'commander';
 
-import { getEvals, getPrompts, getTestCases, printBorder, sha256 } from '../util';
+import { getEvals, getPrompts, getTestCases, printBorder, setupEnv, sha256 } from '../util';
 import { wrapTable } from '../table';
 import logger from '../logger';
 import telemetry from '../telemetry';
@@ -12,7 +12,9 @@ export function listCommand(program: Command) {
   listCommand
     .command('evals')
     .description('List evaluations.')
-    .action(async () => {
+    .option('--env-path <path>', 'Path to the environment file')
+    .action(async (cmdObj: { envPath?: string }) => {
+      setupEnv(cmdObj.envPath);
       telemetry.maybeShowNotice();
       telemetry.record('command_used', {
         name: 'list evals',
@@ -40,14 +42,18 @@ export function listCommand(program: Command) {
   listCommand
     .command('prompts')
     .description('List prompts used')
-    .action(async () => {
+    .option('--env-path <path>', 'Path to the environment file')
+    .action(async (cmdObj: { envPath?: string }) => {
+      setupEnv(cmdObj.envPath);
       telemetry.maybeShowNotice();
       telemetry.record('command_used', {
         name: 'list prompts',
       });
       await telemetry.send();
 
-      const prompts = (await getPrompts()).sort((a, b) => b.recentEvalId.localeCompare(a.recentEvalId));
+      const prompts = (await getPrompts()).sort((a, b) =>
+        b.recentEvalId.localeCompare(a.recentEvalId),
+      );
       const tableData = prompts.map((prompt) => ({
         'Prompt ID': prompt.id.slice(0, 6),
         Raw: prompt.prompt.raw.slice(0, 100) + (prompt.prompt.raw.length > 100 ? '...' : ''),
@@ -68,14 +74,18 @@ export function listCommand(program: Command) {
   listCommand
     .command('datasets')
     .description('List datasets used')
-    .action(async () => {
+    .option('--env-path <path>', 'Path to the environment file')
+    .action(async (cmdObj: { envPath?: string }) => {
+      setupEnv(cmdObj.envPath);
       telemetry.maybeShowNotice();
       telemetry.record('command_used', {
         name: 'list datasets',
       });
       await telemetry.send();
 
-      const datasets = (await getTestCases()).sort((a, b) => b.recentEvalId.localeCompare(a.recentEvalId));
+      const datasets = (await getTestCases()).sort((a, b) =>
+        b.recentEvalId.localeCompare(a.recentEvalId),
+      );
       const tableData = datasets.map((dataset) => ({
         'Dataset ID': dataset.id.slice(0, 6),
         'Highest scoring prompt': dataset.prompts

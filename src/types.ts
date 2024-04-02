@@ -30,6 +30,8 @@ export interface CommandLineOptions {
   generateSuggestions?: boolean;
   promptPrefix?: string;
   promptSuffix?: string;
+  
+  envPath?: FilePath;
 }
 
 export interface EnvOverrides {

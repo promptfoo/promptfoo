@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { createHash } from 'crypto';
 
+import dotenv from 'dotenv';
 import $RefParser from '@apidevtools/json-schema-ref-parser';
 import invariant from 'tiny-invariant';
 import nunjucks from 'nunjucks';
@@ -1138,4 +1139,12 @@ export async function transformOutput(
     throw new Error(`Transform function did not return a value\n\n${codeOrFilepath}`);
   }
   return ret;
+}
+
+export function setupEnv(envPath: string | undefined) {
+  if (envPath) {
+    dotenv.config({ path: envPath });
+  } else {
+    dotenv.config();
+  }
 }
