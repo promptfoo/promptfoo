@@ -160,6 +160,7 @@ describe('prompts', () => {
       } else if (path.includes('2.txt')) {
         return fileContents['2.txt'];
       }
+      throw new Error('Unexpected file path in test');
     });
     (fs.statSync as jest.Mock).mockImplementation((path: string) => ({
       isDirectory: () => path.includes('/prompts/')
@@ -168,7 +169,7 @@ describe('prompts', () => {
       if (path.includes('/prompts/')) {
         return ['prompt1.txt', 'prompt2.txt'];
       }
-      return [];
+      throw new Error('Unexpected directory path in test');
     });
 
     const promptPaths = ['file://./prompts/*.txt'];
