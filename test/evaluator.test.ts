@@ -778,23 +778,22 @@ describe('resolveVariables', () => {
     expect(resolveVariables(variables)).toEqual(expected);
   });
 
-  it('should throw an error if a variable is not found', () => {
-    const variables = { greeting: 'Hello, {{name}}!' };
-    expect(() => resolveVariables(variables)).toThrow(
-      'Variable "name" not found for substitution.',
-    );
-  });
-
   it('should not modify variables without placeholders', () => {
     const variables = { greeting: 'Hello, world!', name: 'John' };
     const expected = { greeting: 'Hello, world!', name: 'John' };
     expect(resolveVariables(variables)).toEqual(expected);
   });
 
-  it('should leave unresolved placeholders if corresponding variable is missing', () => {
+  it('should not fail if a variable is not found', () => {
+    const variables = { greeting: 'Hello, {{name}}!' };
+    expect(resolveVariables(variables)).toEqual({ greeting: 'Hello, {{name}}!' });
+  });
+
+  it('should not fail for unresolved placeholders', () => {
     const variables = { greeting: 'Hello, {{name}}!', name: '{{unknown}}' };
-    expect(() => resolveVariables(variables)).toThrow(
-      'Variable "unknown" not found for substitution.',
-    );
+    expect(resolveVariables(variables)).toEqual({
+      greeting: 'Hello, {{unknown}}!',
+      name: '{{unknown}}',
+    });
   });
 });
