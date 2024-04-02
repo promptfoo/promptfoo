@@ -96,7 +96,8 @@ export function resolveVariables(
           variables[key] = value.replace(placeholder, variables[varName] as string);
           resolved = false; // Indicate that we've made a replacement and should check again
         } else {
-          logger.warn(`Variable "${varName}" not found for substitution.`);
+          // Do nothing - final nunjucks render will fail if necessary.
+          // logger.warn(`Variable "${varName}" not found for substitution.`);
         }
       }
     }
