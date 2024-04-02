@@ -120,7 +120,9 @@ export async function readPrompts(
       }
       resolvedPath = path.resolve(basePath, pathOrGlob);
       resolvedPathToDisplay.set(resolvedPath, pathOrGlob);
-      const globbedPaths = globSync(resolvedPath);
+      const globbedPaths = globSync(resolvedPath, {
+        windowsPathsNoEscape: true,
+      });
       if (globbedPaths.length > 0) {
         return globbedPaths.map((globbedPath) => ({ raw: pathOrGlob, resolved: globbedPath }));
       }
