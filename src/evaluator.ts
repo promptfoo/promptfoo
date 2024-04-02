@@ -81,6 +81,7 @@ export function resolveVariables(
   let resolved = true;
   const regex = /\{\{\s*(\w+)\s*\}\}/; // Matches {{variableName}}, {{ variableName }}, etc.
 
+  let iterations = 0;
   do {
     resolved = true;
     for (const key of Object.keys(variables)) {
@@ -95,11 +96,12 @@ export function resolveVariables(
           variables[key] = value.replace(placeholder, variables[varName] as string);
           resolved = false; // Indicate that we've made a replacement and should check again
         } else {
-          throw new Error(`Variable "${varName}" not found for substitution.`);
+          logger.warn(`Variable "${varName}" not found for substitution.`);
         }
       }
     }
-  } while (!resolved);
+    iterations++;
+  } while (!resolved && iterations < 5);
 
   return variables;
 }
