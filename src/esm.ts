@@ -18,8 +18,9 @@ export async function importModule(modulePath: string, functionName?: string) {
   // This is some hacky shit. It prevents typescript from transpiling `import` to `require`, which breaks mjs imports.
   const resolvedPath = path.resolve(modulePath);
   const importedModule = await eval(`import('${resolvedPath}')`);
+  const mod = importedModule?.default?.default || importedModule?.default || importedModule;
   if (functionName) {
-    return importedModule[functionName];
+    return mod[functionName];
   }
-  return importedModule?.default || importedModule;
+  return mod;
 }
