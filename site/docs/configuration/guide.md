@@ -489,7 +489,7 @@ tests:
     # ...
 ```
 
-It also works for assertions, which is useful for picking values out of JSON:
+It also works in assertions, which is useful for picking values out of JSON:
 
 ```yaml
 tests:
