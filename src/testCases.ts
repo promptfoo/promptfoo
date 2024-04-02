@@ -42,7 +42,9 @@ export async function readVarsFiles(
   const ret: Record<string, string | string[] | object> = {};
   for (const pathOrGlob of pathOrGlobs) {
     const resolvedPath = path.resolve(basePath, pathOrGlob);
-    const paths = globSync(resolvedPath);
+    const paths = globSync(resolvedPath, {
+      windowsPathsNoEscape: true,
+    });
 
     for (const p of paths) {
       const yamlData = yaml.load(fs.readFileSync(p, 'utf-8'));
@@ -151,7 +153,9 @@ export async function readTests(
 
   const loadTestsFromGlob = async (loadTestsGlob: string) => {
     const resolvedPath = path.resolve(basePath, loadTestsGlob);
-    const testFiles = globSync(resolvedPath);
+    const testFiles = globSync(resolvedPath, {
+      windowsPathsNoEscape: true,
+    });
     const ret = [];
     for (const testFile of testFiles) {
       let testCases: TestCase[] | undefined;

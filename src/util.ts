@@ -216,7 +216,9 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
 export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig> {
   const configs: UnifiedConfig[] = [];
   for (const configPath of configPaths) {
-    const globPaths = globSync(configPath);
+    const globPaths = globSync(configPath, {
+      windowsPathsNoEscape: true,
+    });
     if (globPaths.length === 0) {
       throw new Error(`No configuration file found at ${configPath}`);
     }
@@ -1060,7 +1062,9 @@ export async function readFilters(
   const ret: NunjucksFilterMap = {};
   for (const [name, filterPath] of Object.entries(filters)) {
     const globPath = path.join(basePath, filterPath);
-    const filePaths = globSync(globPath);
+    const filePaths = globSync(globPath, {
+      windowsPathsNoEscape: true,
+    });
     for (const filePath of filePaths) {
       const finalPath = path.resolve(filePath);
       ret[name] = await importModule(finalPath);
