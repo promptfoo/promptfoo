@@ -118,15 +118,11 @@ export async function readPrompts(
         // This path is explicitly marked as a file, ensure that it's not used as a raw prompt.
         forceLoadFromFile.add(pathOrGlob);
       }
-      console.log('basePath', basePath);
-      console.log('promptPathInfos', promptPathInfos);
       resolvedPath = path.resolve(basePath, pathOrGlob);
-      console.log('resolvedPath', resolvedPath);
       resolvedPathToDisplay.set(resolvedPath, pathOrGlob);
       const globbedPaths = globSync(resolvedPath.replace(/\\/g, '/'), {
         windowsPathsNoEscape: true,
       });
-      console.log('globbedPaths', globbedPaths);
       if (globbedPaths.length > 0) {
         return globbedPaths.map((globbedPath) => ({ raw: pathOrGlob, resolved: globbedPath }));
       }
