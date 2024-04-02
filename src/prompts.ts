@@ -123,7 +123,7 @@ export async function readPrompts(
       resolvedPath = path.resolve(basePath, pathOrGlob);
       console.log('resolvedPath', resolvedPath);
       resolvedPathToDisplay.set(resolvedPath, pathOrGlob);
-      const globbedPaths = globSync(resolvedPath, {
+      const globbedPaths = globSync(resolvedPath.replace(/\\/g, '/'), {
         windowsPathsNoEscape: true,
       });
       console.log('globbedPaths', globbedPaths);
