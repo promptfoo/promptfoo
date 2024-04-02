@@ -14,7 +14,7 @@ import type {
 } from '../types';
 
 interface PythonProviderConfig {
-  pythonPath?: string;
+  pythonExecutable?: string;
 }
 
 export class PythonProvider implements ApiProvider {
@@ -54,7 +54,7 @@ export class PythonProvider implements ApiProvider {
         )}`,
       );
       const result = (await runPython(absPath, 'call_api', args, {
-        pythonPath: this.config.pythonPath,
+        pythonExecutable: this.config.pythonExecutable,
       })) as {
         output?: string;
         error?: string;
