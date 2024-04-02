@@ -671,6 +671,7 @@ export async function runAssertion({
         pass: false,
         score: 0,
         reason: `Custom function threw error: ${(err as Error).message}
+Stack Trace: ${(err as Error).stack}
 ${renderedValue}`,
         assertion,
       };
