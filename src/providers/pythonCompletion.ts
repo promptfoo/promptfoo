@@ -23,7 +23,7 @@ export class PythonProvider implements ApiProvider {
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    const absPath = path.resolve(path.join(this.options?.config.basePath, this.scriptPath));
+    const absPath = path.resolve(path.join(this.options?.config.basePath || '', this.scriptPath));
     logger.debug(`Computing file hash for script ${absPath}`);
     const fileHash = sha256(fs.readFileSync(absPath, 'utf-8'));
     const cacheKey = `python:${this.scriptPath}:${fileHash}:${prompt}:${JSON.stringify(
