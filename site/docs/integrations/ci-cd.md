@@ -6,7 +6,7 @@ sidebar_label: CI/CD
 
 When scaling an LLM app, it's essential to be able to measure the impact of any prompt or model change. This guide shows how to use integrate promptfoo with CI/CD workflows to automatically evaluate test cases and ensure quality.
 
-This approach works for any CI system.  If you're using Github, you can skip directly to the [Github Actions tutorial](/docs/integrations/github-action) or view the action on the [Github Marketplace](https://github.com/marketplace/actions/test-llm-outputs).
+This approach works for any CI system. If you're using Github, you can skip directly to the [Github Actions tutorial](/docs/integrations/github-action) or view the action on the [Github Marketplace](https://github.com/marketplace/actions/test-llm-outputs).
 
 ![automatic LLM eval on CI](/img/docs/github-action-comment.png)
 

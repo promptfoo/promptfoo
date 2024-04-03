@@ -125,7 +125,9 @@ export async function readPrompts(
         windowsPathsNoEscape: true,
       });
       logger.debug(
-        `Expanded prompt ${pathOrGlob} to ${resolvedPath} and then to ${JSON.stringify(globbedPaths)}`,
+        `Expanded prompt ${pathOrGlob} to ${resolvedPath} and then to ${JSON.stringify(
+          globbedPaths,
+        )}`,
       );
       if (globbedPaths.length > 0) {
         return globbedPaths.map((globbedPath) => ({ raw: pathOrGlob, resolved: globbedPath }));
@@ -143,7 +145,7 @@ export async function readPrompts(
     });
     inputType = PromptInputType.NAMED;
   }
-  
+
   logger.debug(`Resolved prompt paths: ${JSON.stringify(promptPathInfos)}`);
 
   for (const promptPathInfo of promptPathInfos) {

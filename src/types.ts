@@ -93,7 +93,7 @@ export interface ApiProvider {
   // Classification function
   callClassificationApi?: (prompt: string) => Promise<ProviderClassificationResponse>;
 
-  // Shown on output 
+  // Shown on output
   label?: ProviderLabel;
 }
 
@@ -148,10 +148,9 @@ export interface CsvRow {
 
 export type VarMapping = Record<string, string>;
 
-export type ProviderTypeMap = Partial<Record<
-  'embedding' | 'classification' | 'text',
-  string | ProviderOptions | ApiProvider
->>;
+export type ProviderTypeMap = Partial<
+  Record<'embedding' | 'classification' | 'text', string | ProviderOptions | ApiProvider>
+>;
 
 export interface GradingConfig {
   rubricPrompt?: string;
@@ -167,7 +166,7 @@ export interface GradingConfig {
 
 export interface PromptConfig {
   prefix?: string;
-  suffix?: string; 
+  suffix?: string;
 }
 
 export interface OutputConfig {
@@ -343,7 +342,7 @@ type BaseAssertionTypes =
   | 'perplexity-score'
   | 'cost'
   | 'select-best';
-  
+
 type NotPrefixed<T extends string> = `not-${T}`;
 
 export type AssertionType = BaseAssertionTypes | NotPrefixed<BaseAssertionTypes>;
@@ -378,7 +377,7 @@ export interface Assertion {
 
   // Tag this assertion result as a named metric
   metric?: string;
-  
+
   // Process the output before running the assertion
   transform?: string;
 }
@@ -411,12 +410,14 @@ export interface TestCase<Vars = Record<string, string | string[] | object>> {
   assert?: Assertion[];
 
   // Additional configuration settings for the prompt
-  options?: PromptConfig & OutputConfig & GradingConfig & {
-    // If true, do not expand arrays of variables into multiple eval cases.
-    disableVarExpansion?: boolean;
-    // If true, do not include an implicit `_conversation` variable in the prompt.
-    disableConversationVar?: boolean;
-  };
+  options?: PromptConfig &
+    OutputConfig &
+    GradingConfig & {
+      // If true, do not expand arrays of variables into multiple eval cases.
+      disableVarExpansion?: boolean;
+      // If true, do not include an implicit `_conversation` variable in the prompt.
+      disableConversationVar?: boolean;
+    };
 
   // The required score for this test case.  If not provided, the test case is graded pass/fail.
   threshold?: number;
@@ -503,10 +504,12 @@ export interface TestSuiteConfig {
   outputPath?: FilePath | FilePath[];
 
   // Determines whether or not sharing is enabled.
-  sharing?: boolean | {
-    apiBaseUrl?: string;
-    appBaseUrl?: string;
-  };
+  sharing?:
+    | boolean
+    | {
+        apiBaseUrl?: string;
+        appBaseUrl?: string;
+      };
 
   // Nunjucks filters
   nunjucksFilters?: Record<string, FilePath>;
@@ -527,7 +530,9 @@ export interface EvalWithMetadata {
   results: EvaluateSummary;
 }
 
-export type PromptFunction = (context: { vars: Record<string, string | object> }) => Promise<string | object>
+export type PromptFunction = (context: {
+  vars: Record<string, string | object>;
+}) => Promise<string | object>;
 
 // node.js package interface
 export type EvaluateTestSuite = {

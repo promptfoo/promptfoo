@@ -207,7 +207,7 @@ Here's an example of a simple full assistant eval:
 
 ```yaml
 prompts:
-  - "Write a tweet about {{topic}}"
+  - 'Write a tweet about {{topic}}'
 
 providers:
   - id: azureopenai:assistant:asst_E4GyOBYKlnAzMi19SZF2Sn8I

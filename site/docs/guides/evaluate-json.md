@@ -4,13 +4,13 @@ sidebar_label: Evaluating JSON outputs
 
 # LLM evaluation techniques for JSON outputs
 
-Getting an LLM to output valid JSON can be a difficult task.  There are a few failure modes:
+Getting an LLM to output valid JSON can be a difficult task. There are a few failure modes:
 
 - **Hallucation**: OpenAI function calling and other nascent frameworks are notorious for hallucinating functions and arguments.
-- **Invalid JSON**: Asking an LLM to produce JSON output is unreliable.  Some inference engines such as [llama.cpp](https://github.com/ggerganov/llama.cpp/tree/master) support constrained output with GBNF grammars.  OpenAI began supporting this in late 2023 with the [response format](https://platform.openai.com/docs/api-reference/chat/create#chat-create-response_format) parameter.
-- **Schema non-conformance**: Getting the model to output JSON is only half the battle.  The JSON may be malformed or incomplete.
+- **Invalid JSON**: Asking an LLM to produce JSON output is unreliable. Some inference engines such as [llama.cpp](https://github.com/ggerganov/llama.cpp/tree/master) support constrained output with GBNF grammars. OpenAI began supporting this in late 2023 with the [response format](https://platform.openai.com/docs/api-reference/chat/create#chat-create-response_format) parameter.
+- **Schema non-conformance**: Getting the model to output JSON is only half the battle. The JSON may be malformed or incomplete.
 
-This guide explains some eval techniques for testing your model's JSON quality output by ensuring that specific fields are present in the outputted object.  It's useful for tweaking your prompt and model to ensure that it outputs valid JSON that conforms to your desired specification.
+This guide explains some eval techniques for testing your model's JSON quality output by ensuring that specific fields are present in the outputted object. It's useful for tweaking your prompt and model to ensure that it outputs valid JSON that conforms to your desired specification.
 
 ## Prerequisites
 
@@ -66,7 +66,6 @@ tests:
 ```
 
 This will ensure that the output is valid JSON that contains the required fields with the correct data types.
-
 
 ## Ensuring the validity of specific JSON fields
 
@@ -142,6 +141,6 @@ See the full example in [Github](https://github.com/promptfoo/promptfoo/tree/mai
 
 By using JavaScript within your assertions, you can perform complex checks on JSON outputs, including targeting specific fields. The `transform` can be used to tailor the output for similarity checks.
 
-promptfoo is free and open-source software.  To install promptfoo and get started, see the [getting started guide](/docs/getting-started).
+promptfoo is free and open-source software. To install promptfoo and get started, see the [getting started guide](/docs/getting-started).
 
-For more on different assertion types available, see [assertions documentation](/docs/configuration/expected-outputs).  You might also be interested in [Evaluating RAG pipelines](/docs/guides/evaluate-rag) guide, which provides insights into evaluating retrieval-augmented generation applications.
+For more on different assertion types available, see [assertions documentation](/docs/configuration/expected-outputs). You might also be interested in [Evaluating RAG pipelines](/docs/guides/evaluate-rag) guide, which provides insights into evaluating retrieval-augmented generation applications.

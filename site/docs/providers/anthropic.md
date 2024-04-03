@@ -36,6 +36,7 @@ The `anthropic` provider supports the following models via the messages API:
 To allow for compatibility with the OpenAI prompt template, the following format is supported.
 
 Example: `prompt.json`
+
 ```json
 [
   {
@@ -68,10 +69,10 @@ Example configuration with options and prompts:
 
 ```yaml
 providers:
-- id: anthropic:messages:claude-3-opus-20240229
-  config:
-    temperature: 0.0
-    max_tokens: 512
+  - id: anthropic:messages:claude-3-opus-20240229
+    config:
+      temperature: 0.0
+      max_tokens: 512
 prompts: [prompt.json]
 ```
 

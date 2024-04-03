@@ -3,6 +3,7 @@ To get started, set your OPENAI_API_KEY environment variable.
 Next, edit assert.py and promptfooconfig.yaml.
 
 Then run:
+
 ```
 promptfoo eval
 ```

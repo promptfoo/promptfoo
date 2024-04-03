@@ -163,7 +163,7 @@ The `similar` assertion uses embeddings to evaluate the relevancy of the RAG out
 
 ### Using dynamic context
 
-You can define a Python script that fetches `context` based on other variables in the test case.  This is useful if you want to retrieve specific docs for each test case.
+You can define a Python script that fetches `context` based on other variables in the test case. This is useful if you want to retrieve specific docs for each test case.
 
 Here's how you can modify the `promptfooconfig.yaml` and create a `load_context.py` script to achieve this:
 
@@ -174,7 +174,7 @@ Here's how you can modify the `promptfooconfig.yaml` and create a `load_context.
 
 tests:
   - vars:
-      question: "What is the parental leave policy?"
+      question: 'What is the parental leave policy?'
       context: file://./load_context.py
 ```
 
@@ -200,6 +200,7 @@ def get_var(var_name, prompt, other_vars):
 ```
 
 The `load_context.py` script defines two functions:
+
 - `get_var(var_name, prompt, other_vars)`: This is a special function that promptfoo looks for when loading dynamic variables.
 - `retrieve_documents(question: str) -> str`: This function takes the `question` as input and retrieves relevant documents based on the question. You can implement your own logic here to search a vector database or do anything else to fetch context.
 

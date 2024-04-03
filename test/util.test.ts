@@ -770,7 +770,9 @@ describe('util', () => {
     test('transforms output using an imported function from a file', async () => {
       const output = 'hello';
       const context = { vars: { key: 'value' }, prompt: { id: '123' } };
-      jest.doMock(path.resolve('transform.js'), () => (output: string) => output.toUpperCase(), { virtual: true });
+      jest.doMock(path.resolve('transform.js'), () => (output: string) => output.toUpperCase(), {
+        virtual: true,
+      });
       const transformFunctionPath = 'file://transform.js';
       const transformedOutput = await transformOutput(transformFunctionPath, output, context);
       expect(transformedOutput).toEqual('HELLO');

@@ -9,8 +9,7 @@ python server.py --loader <LOADER-NAME> --model <MODEL-NAME> --api
 # Replace `python server.py` with ./start_linux if simple installer is used
 ```
 
-
-Usage is compatible with the [OpenAI API](/docs/providers/openai). 
+Usage is compatible with the [OpenAI API](/docs/providers/openai).
 
 In promptfoo we can address the API as follows.
 

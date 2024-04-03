@@ -16,10 +16,12 @@ class CustomApiProvider {
   async callApi(prompt) {
     const body = {
       model: 'gpt-3.5-turbo',
-      messages: [{
-        role: 'user',
-        content: prompt,
-      }],
+      messages: [
+        {
+          role: 'user',
+          content: prompt,
+        },
+      ],
       max_tokens: parseInt(this.config?.max_tokens, 10) || 1024,
       temperature: parseFloat(this.config?.temperature) || 0,
     };

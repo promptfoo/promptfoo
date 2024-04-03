@@ -16,7 +16,7 @@ export async function POST(req: Request) {
     const payload = (await req.json()) as SharedResults;
     const newId = `f:${uuidv4()}`;
     console.log('Storing eval result with id', newId);
-    
+
     // Run db migrations if necessary
     await runDbMigrations();
 
@@ -31,7 +31,7 @@ export async function POST(req: Request) {
     await store.set(`uuid:${newId}`, evalId);
     // And a reverse pointer...
     await store.set(`file:${evalId}`, newId);
-    
+
     return NextResponse.json({ id: newId }, { status: 200 });
   } catch (error) {
     console.error('Failed to store evaluation result', error);

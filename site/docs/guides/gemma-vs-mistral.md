@@ -35,15 +35,15 @@ Your configuration starts with the prompts you'll use for testing. We're just go
 
 ```yaml
 prompts:
-  - "{{message}}"
+  - '{{message}}'
 ```
 
 You should customize these prompts based on your use case. For example:
 
 ```yaml
 prompts:
-  - "Summarize this article: {{article}}"
-  - "Generate a technical explanation for {{concept}}"
+  - 'Summarize this article: {{article}}'
+  - 'Generate a technical explanation for {{concept}}'
 ```
 
 ### Configuring providers
@@ -58,8 +58,8 @@ Next, specify the models you're comparing by setting up their configurations:
     temperature: 0.01
     max_new_tokens: 1024
     prompt:
-      prefix: "<s>[INST] "
-      suffix: " [/INST]"
+      prefix: '<s>[INST] '
+      suffix: ' [/INST]'
 ```
 
 #### Mixtral Configuration
@@ -70,8 +70,8 @@ Next, specify the models you're comparing by setting up their configurations:
     temperature: 0.01
     max_new_tokens: 1024
     prompt:
-      prefix: "<s>[INST] "
-      suffix: " [/INST]"
+      prefix: '<s>[INST] '
+      suffix: ' [/INST]'
 ```
 
 #### Gemma Configuration
@@ -92,7 +92,7 @@ Combine the configurations for a direct comparison:
 
 ```yaml
 prompts:
-  - "{{message}}"
+  - '{{message}}'
 
 providers:
   - id: replicate:mistralai/mistral-7b-instruct-v0.2
@@ -100,16 +100,16 @@ providers:
       temperature: 0.01
       max_new_tokens: 1024
       prompt:
-        prefix: "<s>[INST] "
-        suffix: " [/INST]"
+        prefix: '<s>[INST] '
+        suffix: ' [/INST]'
 
   - id: replicate:mistralai/mixtral-8x7b-instruct-v0.1
     config:
       temperature: 0.01
       max_new_tokens: 1024
       prompt:
-        prefix: "<s>[INST] "
-        suffix: " [/INST]"
+        prefix: '<s>[INST] '
+        suffix: ' [/INST]'
 
   - id: replicate:cjwbw/gemma-7b-it:2790a695e5dcae15506138cc4718d1106d0d475e6dca4b1d43f42414647993d5
     config:
@@ -122,18 +122,18 @@ providers:
 
 ## Step 2: Build a test set
 
-Design test cases that reflect a variety of requests that are representative of your app's use case. 
+Design test cases that reflect a variety of requests that are representative of your app's use case.
 
 For this example, we're focusing on riddles to test the models' ability to understand and generate creative and logical responses.
 
 ```yaml
 tests:
   - vars:
-      message: "I speak without a mouth and hear without ears. I have no body, but I come alive with wind. What am I?"
+      message: 'I speak without a mouth and hear without ears. I have no body, but I come alive with wind. What am I?'
   - vars:
-      message: "You see a boat filled with people. It has not sunk, but when you look again you don’t see a single person on the boat. Why?"
+      message: 'You see a boat filled with people. It has not sunk, but when you look again you don’t see a single person on the boat. Why?'
   - vars:
-      message: "The more of this there is, the less you see. What is it?"
+      message: 'The more of this there is, the less you see. What is it?'
   - vars:
       message: >-
         I have keys but no locks. I have space but no room. You can enter, but
@@ -231,12 +231,13 @@ This shows a view like this:
 Upon completing the evaluation, look at the test results to identify which model performs best across your test cases. You should tailor the test evaluation to your application's needs specifically.
 
 Here's what we noticed from our small riddle test set:
+
 - Gemma passes in 100% of cases, Mixtral in 93%, and Mistral in 73%
 - Gemma outperforms Mistral v0.2 and Mixtral v0.1
 - Gemma is more likely to answer up-front and not include commentary like "What a delightful riddle!"
 
 ![some example gemma and mistral outputs](/img/docs/gemma-vs-mistral-examples.png)
 
-When constructing your own test set, think about edge cases and unusual criteria that are specific to your app and may not be in model training data.  Ideally, it's best to set up a feedback loop where real users of your app can flag failure cases.  Use this to build your test set over time.
+When constructing your own test set, think about edge cases and unusual criteria that are specific to your app and may not be in model training data. Ideally, it's best to set up a feedback loop where real users of your app can flag failure cases. Use this to build your test set over time.
 
 To learn more about setting up promptfoo, see [Getting Started](/docs/getting-started) or our more detailed [Configuration Guide](/docs/configuration/guide).

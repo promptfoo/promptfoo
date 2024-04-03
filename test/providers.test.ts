@@ -72,10 +72,12 @@ describe('call provider apis', () => {
 
   test('OpenAiCompletionProvider callApi', async () => {
     const mockResponse = {
-      text: jest.fn().mockResolvedValue(JSON.stringify({
-        choices: [{ text: 'Test output' }],
-        usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-      })),
+      text: jest.fn().mockResolvedValue(
+        JSON.stringify({
+          choices: [{ text: 'Test output' }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        }),
+      ),
     };
     (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
 
@@ -89,10 +91,12 @@ describe('call provider apis', () => {
 
   test('OpenAiChatCompletionProvider callApi', async () => {
     const mockResponse = {
-      text: jest.fn().mockResolvedValue(JSON.stringify({
-        choices: [{ message: { content: 'Test output' } }],
-        usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-      })),
+      text: jest.fn().mockResolvedValue(
+        JSON.stringify({
+          choices: [{ message: { content: 'Test output' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        }),
+      ),
       ok: true,
     };
     (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
@@ -109,10 +113,12 @@ describe('call provider apis', () => {
 
   test('OpenAiChatCompletionProvider callApi with caching', async () => {
     const mockResponse = {
-      text: jest.fn().mockResolvedValue(JSON.stringify({
-        choices: [{ message: { content: 'Test output 2' } }],
-        usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-      })),
+      text: jest.fn().mockResolvedValue(
+        JSON.stringify({
+          choices: [{ message: { content: 'Test output 2' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        }),
+      ),
       ok: true,
     };
     (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
@@ -137,10 +143,12 @@ describe('call provider apis', () => {
 
   test('OpenAiChatCompletionProvider callApi with cache disabled', async () => {
     const mockResponse = {
-      text: jest.fn().mockResolvedValue(JSON.stringify({
-        choices: [{ message: { content: 'Test output' } }],
-        usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-      })),
+      text: jest.fn().mockResolvedValue(
+        JSON.stringify({
+          choices: [{ message: { content: 'Test output' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        }),
+      ),
       ok: true,
     };
     (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
@@ -188,10 +196,12 @@ describe('call provider apis', () => {
 
   test('AzureOpenAiCompletionProvider callApi', async () => {
     const mockResponse = {
-      text: jest.fn().mockResolvedValue(JSON.stringify({
-        choices: [{ text: 'Test output' }],
-        usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-      })),
+      text: jest.fn().mockResolvedValue(
+        JSON.stringify({
+          choices: [{ text: 'Test output' }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        }),
+      ),
     };
     (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
 
@@ -205,10 +215,12 @@ describe('call provider apis', () => {
 
   test('AzureOpenAiChatCompletionProvider callApi', async () => {
     const mockResponse = {
-      text: jest.fn().mockResolvedValue(JSON.stringify({
-        choices: [{ message: { content: 'Test output' } }],
-        usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-      })),
+      text: jest.fn().mockResolvedValue(
+        JSON.stringify({
+          choices: [{ message: { content: 'Test output' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        }),
+      ),
     };
     (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
 
@@ -226,10 +238,12 @@ describe('call provider apis', () => {
     disableCache();
 
     const mockResponse = {
-      text: jest.fn().mockResolvedValue(JSON.stringify({
-        choices: [{ message: { content: 'Test output' } }],
-        usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-      })),
+      text: jest.fn().mockResolvedValue(
+        JSON.stringify({
+          choices: [{ message: { content: 'Test output' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        }),
+      ),
     };
     (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
 
@@ -300,9 +314,11 @@ describe('call provider apis', () => {
 
   test('LlamaProvider callApi', async () => {
     const mockResponse = {
-      text: jest.fn().mockResolvedValue(JSON.stringify({
-        content: 'Test output',
-      })),
+      text: jest.fn().mockResolvedValue(
+        JSON.stringify({
+          content: 'Test output',
+        }),
+      ),
     };
     (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
 
@@ -357,9 +373,11 @@ describe('call provider apis', () => {
 
   test('WebhookProvider callApi', async () => {
     const mockResponse = {
-      text: jest.fn().mockResolvedValue(JSON.stringify({
-        output: 'Test output',
-      })),
+      text: jest.fn().mockResolvedValue(
+        JSON.stringify({
+          output: 'Test output',
+        }),
+      ),
     };
     (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
 

@@ -6,7 +6,7 @@ sidebar_label: Gemma vs Llama
 
 Comparing Google's Gemma and Meta's Llama involves more than just looking at their specs and reading about generic benchmarks. The true measure of their usefulness comes down to how they perform on the _specific tasks you need them for_, in the context of your specific application.
 
-This guide will walk you through the process of benchmarking Gemma and Llama using `promptfoo`.  The end result is a side-by-side comparison that looks like this:
+This guide will walk you through the process of benchmarking Gemma and Llama using `promptfoo`. The end result is a side-by-side comparison that looks like this:
 
 ![gemma vs llama](/img/docs/gemma-vs-llama.png)
 
@@ -27,7 +27,7 @@ Let's start by creating a new directory for our eval:
 npx promptfoo@latest init gemma-vs-llama
 ```
 
-`cd gemma-vs-llama` and begin editing `promptfooconfig.yaml`.  
+`cd gemma-vs-llama` and begin editing `promptfooconfig.yaml`.
 
 This config is where you define how you will interact with the Gemma and Llama models. It includes details such as the models you're comparing, the parameters for generating responses, and the format of your prompts.
 
@@ -37,17 +37,17 @@ The first part of your configuration specifies the prompts. In this tutorial, we
 
 ```yaml
 prompts:
-  - "{{message}}"
+  - '{{message}}'
 ```
 
-Each prompt in this list will be run through both Gemma and Llama.  
+Each prompt in this list will be run through both Gemma and Llama.
 
-You should modify this prompt to match the use case you want to test.  For example:
+You should modify this prompt to match the use case you want to test. For example:
 
 ```yaml
 prompts:
-  - "Write a tweet about {{topic}}"
-  - "Write a instagram post about {{topic}}"
+  - 'Write a tweet about {{topic}}'
+  - 'Write a instagram post about {{topic}}'
 ```
 
 #### Part 2: Configuring providers
@@ -62,11 +62,11 @@ The next section of the configuration file deals with the providers, which in th
     temperature: 0.01
     max_new_tokens: 128
     prompt:
-      prefix: "[INST] "
-      suffix: "[/INST] "
+      prefix: '[INST] '
+      suffix: '[/INST] '
 ```
 
-- `id`: This is the unique identifier for the [Llama model hosted on Replicate](https://replicate.com/meta/llama-2-7b-chat).  Without the version, it defaults to the latest.
+- `id`: This is the unique identifier for the [Llama model hosted on Replicate](https://replicate.com/meta/llama-2-7b-chat). Without the version, it defaults to the latest.
 - `temperature`: Controls the randomness of the output. A lower value like 0.01 makes the output more deterministic.
 - `max_new_tokens`: Specifies the maximum length of the generated response.
 - `prompt`: Llama requires that we wrap prompts with `[INST]` tags to indicate instruction-based prompting.
@@ -93,7 +93,7 @@ The full configuration sets up a direct comparison between Gemma and Llama based
 
 ```yaml
 prompts:
-  - "{{message}}"
+  - '{{message}}'
 
 providers:
   - id: replicate:meta/llama-2-7b-chat
@@ -101,8 +101,8 @@ providers:
       temperature: 0.01
       max_new_tokens: 128
       prompt:
-        prefix: "[INST] "
-        suffix: "[/INST] "
+        prefix: '[INST] '
+        suffix: '[/INST] '
 
   - id: replicate:cjwbw/gemma-7b-it:2790a695e5dcae15506138cc4718d1106d0d475e6dca4b1d43f42414647993d5
     config:
@@ -115,31 +115,31 @@ providers:
 
 ## Step 2: Defining Test Cases
 
-Test cases are where you specify the inputs that will be fed to both models. This is your opportunity to compare how each model handles a variety of requests, from simple queries to complex reasoning tasks. 
+Test cases are where you specify the inputs that will be fed to both models. This is your opportunity to compare how each model handles a variety of requests, from simple queries to complex reasoning tasks.
 
-**_Modify these test cases to fit your needs_**.  Here are some examples:
+**_Modify these test cases to fit your needs_**. Here are some examples:
 
 ```yaml
 tests:
   - vars:
-      message: "hello world"
+      message: 'hello world'
   - vars:
-      message: "tell me about yourself"
+      message: 'tell me about yourself'
   - vars:
       message: "What's the weather in New York right now?"
   - vars:
-      message: "are hippos good swimmers?"
+      message: 'are hippos good swimmers?'
   - vars:
-      message: "Did Henry VIII have any grandchildren?"
+      message: 'Did Henry VIII have any grandchildren?'
   - vars:
-      message: "Would a cannibal cult be harmful to society?"
+      message: 'Would a cannibal cult be harmful to society?'
   - vars:
-      message: "Please write a function in JavaScript that takes in a string as input and returns true if it contains a valid roman numeral and false otherwise."
+      message: 'Please write a function in JavaScript that takes in a string as input and returns true if it contains a valid roman numeral and false otherwise.'
   - vars:
-      message: "what are the most common non-investor roles at early stage venture capital firms?"
+      message: 'what are the most common non-investor roles at early stage venture capital firms?'
 ```
 
-We can add some automated checks using the `assert` property.  To learn more about all the different ways to test LLM outputs, see [assertions & metrics](/docs/configuration/expected-outputs/):
+We can add some automated checks using the `assert` property. To learn more about all the different ways to test LLM outputs, see [assertions & metrics](/docs/configuration/expected-outputs/):
 
 ```yaml
 tests:
@@ -181,7 +181,7 @@ tests:
       message: what are the most common non-investor roles at early stage venture capital firms?
 ```
 
-(Note that `llm-rubric` uses GPT-4 by default, which requires the `OPENAI_API_KEY` environment variable.  You can [override the grader](/docs/configuration/expected-outputs/model-graded#overriding-the-llm-grader) to a model of your choice.
+(Note that `llm-rubric` uses GPT-4 by default, which requires the `OPENAI_API_KEY` environment variable. You can [override the grader](/docs/configuration/expected-outputs/model-graded#overriding-the-llm-grader) to a model of your choice.
 
 ## Step 3: Running the Comparison
 
@@ -205,12 +205,12 @@ npx promptfoo@latest view
 
 After running the evaluation, you'll have a dataset that compares the responses from Gemma and Llama across your test cases. Look for patterns in the results:
 
-- Which model is more accurate or relevant in its responses?  
+- Which model is more accurate or relevant in its responses?
   - In our small example set, Llama was a little more likely to hallucinate., e.g. claiming to know the weather in New York.
-- Are there noticeable differences in how they handle certain types of questions?  
+- Are there noticeable differences in how they handle certain types of questions?
   - It seems like Gemma is more likely to respond verbosely and include markdown formatting.
   - Llama has a weird habit of roleplaying (e.g. extra output such as `*adjusts glasses*`) and by default prefers to preface responses with "Of course!"
 
-Consider the implications of these results for your specific application or use case.  Although Gemma outperforms Llama on generic test sets, you must create your own test set in order to really pick a winner!
+Consider the implications of these results for your specific application or use case. Although Gemma outperforms Llama on generic test sets, you must create your own test set in order to really pick a winner!
 
 To learn more about setting up promptfoo, see [Getting Started](/docs/getting-started) or our more detailed [Configuration Guide](/docs/configuration/guide).

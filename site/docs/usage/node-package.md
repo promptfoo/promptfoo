@@ -28,16 +28,16 @@ The evaluate function takes the following parameters:
 - `testSuite`: the Javascript equivalent of the promptfooconfig.yaml as a [`TestSuiteConfiguration` object](/docs/configuration/reference#testsuiteconfiguration).
 
 - `options`: misc options related to how the test harness runs, as an [`EvaluateOptions` object](/docs/configuration/reference#evaluateoptions).
-  
+
 The results of the evaluation are returned as an [`EvaluateSummary` object](/docs/configuration/reference#evaluatesummary).
 
 ### Provider functions
 
-A `ProviderFunction` is a Javascript function that implements an LLM API call. It takes a prompt string and a context. It returns the LLM response or an error.  See [`ProviderFunction` type](/docs/configuration/reference#providerfunction).
+A `ProviderFunction` is a Javascript function that implements an LLM API call. It takes a prompt string and a context. It returns the LLM response or an error. See [`ProviderFunction` type](/docs/configuration/reference#providerfunction).
 
 ### Assertion functions
 
-An `Assertion` can take an `AssertionFunction` as its `value`.  `AssertionFunction` parameters:
+An `Assertion` can take an `AssertionFunction` as its `value`. `AssertionFunction` parameters:
 
 - `output`: the LLM output
 - `testCase`: the test case
@@ -53,33 +53,34 @@ type AssertionFunction = (
 ) => Promise<GradingResult>;
 
 interface GradingResult {
-  // Whether the test passed or failed
-  pass: boolean;
+// Whether the test passed or failed
+pass: boolean;
 
-  // Test score, typically between 0 and 1
-  score: number;
+// Test score, typically between 0 and 1
+score: number;
 
-  // Plain text reason for the result
-  reason: string;
+// Plain text reason for the result
+reason: string;
 
-  // Map of labeled metrics to values
-  namedScores?: Record<string, number>;
+// Map of labeled metrics to values
+namedScores?: Record<string, number>;
 
-  // Record of tokens usage for this assertion
-  tokensUsed?: Partial<{
-    total: number;
-    prompt: number;
-    completion: number;
-    cached?: number;
-  }>;
+// Record of tokens usage for this assertion
+tokensUsed?: Partial<{
+total: number;
+prompt: number;
+completion: number;
+cached?: number;
+}>;
 
-  // List of results for each component of the assertion
-  componentResults?: GradingResult[];
+// List of results for each component of the assertion
+componentResults?: GradingResult[];
 
-  // The assertion that was evaluated
-  assertion: Assertion | null;
+// The assertion that was evaluated
+assertion: Assertion | null;
 }
-```
+
+````
 </details>
 
 For more info on different assertion types, see [assertions & metrics](/docs/configuration/expected-outputs/).
@@ -115,7 +116,7 @@ const results = await promptfoo.evaluate(
 );
 
 console.log(results);
-```
+````
 
 This code imports the `promptfoo` library, defines the evaluation options, and then calls the `evaluate` function with these options.
 

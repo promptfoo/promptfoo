@@ -1,5 +1,5 @@
 prompts:
-  - "{{message}}"
+  - '{{message}}'
 
 defaultTest:
   options:
@@ -11,16 +11,16 @@ providers:
       temperature: 0.01
       max_new_tokens: 1024
       prompt:
-        prefix: "<s>[INST] "
-        suffix: " [/INST]"
+        prefix: '<s>[INST] '
+        suffix: ' [/INST]'
 
   - id: replicate:mistralai/mixtral-8x7b-instruct-v0.1
     config:
       temperature: 0.01
       max_new_tokens: 1024
       prompt:
-        prefix: "<s>[INST] "
-        suffix: " [/INST]"
+        prefix: '<s>[INST] '
+        suffix: ' [/INST]'
 
   - id: replicate:cjwbw/gemma-7b-it:2790a695e5dcae15506138cc4718d1106d0d475e6dca4b1d43f42414647993d5
     config:
@@ -32,7 +32,7 @@ providers:
 
 tests:
   - vars:
-      message: "I speak without a mouth and hear without ears. I have no body, but I come alive with wind. What am I?"
+      message: 'I speak without a mouth and hear without ears. I have no body, but I come alive with wind. What am I?'
     assert:
       # Make sure the LLM output contains this word
       - type: icontains
@@ -41,12 +41,12 @@ tests:
       - type: llm-rubric
         value: Do not apologize
   - vars:
-      message: "You see a boat filled with people. It has not sunk, but when you look again you don’t see a single person on the boat. Why?"
+      message: 'You see a boat filled with people. It has not sunk, but when you look again you don’t see a single person on the boat. Why?'
     assert:
       - type: llm-rubric
         value: explains that the people are below deck, or they are all in a relationship
   - vars:
-      message: "The more of this there is, the less you see. What is it?"
+      message: 'The more of this there is, the less you see. What is it?'
     assert:
       - type: icontains
         value: darkness

@@ -88,7 +88,7 @@ assert:
     threshold: 0.75
 ```
 
-The `not-classifier` type inverts the result of the classifier.  In this case, the starpii model is trained to detect PII, but we want to assert that the LLM output is _not_ PII.  So, we invert the classifier to accept values that are _not_ PII.
+The `not-classifier` type inverts the result of the classifier. In this case, the starpii model is trained to detect PII, but we want to assert that the LLM output is _not_ PII. So, we invert the classifier to accept values that are _not_ PII.
 
 ## Prompt injection example
 

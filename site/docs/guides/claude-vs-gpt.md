@@ -1,14 +1,14 @@
 ---
-sidebar_label: Claude 3 vs GPT-4 
+sidebar_label: Claude 3 vs GPT-4
 ---
 
 # Claude 3 vs GPT-4: Benchmark on Your Own Data
 
-When evaluating the performance of LLMs, generic benchmarks will only get you so far.  This is especially the case for Claude vs GPT, as there are many split evaluations (subjective and objective) on their efficacy.
+When evaluating the performance of LLMs, generic benchmarks will only get you so far. This is especially the case for Claude vs GPT, as there are many split evaluations (subjective and objective) on their efficacy.
 
-You should test these models on tasks that are relevant to your specific use case, rather than relying solely on public benchmarks. 
+You should test these models on tasks that are relevant to your specific use case, rather than relying solely on public benchmarks.
 
-This guide will walk you through setting up a comparison between Anthropic's Claude 3 Opus and OpenAI's latest GPT-4 preview using `promptfoo`.  The end result is a side-by-side evaluation of how these models perform on custom tasks:
+This guide will walk you through setting up a comparison between Anthropic's Claude 3 Opus and OpenAI's latest GPT-4 preview using `promptfoo`. The end result is a side-by-side evaluation of how these models perform on custom tasks:
 
 ![Claude 3 vs GPT-4 comparison](/img/docs/claude3-vs-gpt4.png)
 
@@ -36,7 +36,7 @@ Specify the Claude 3 and GPT-4 model IDs under `providers`:
 
 ```yaml
 providers:
-  - anthropic:messages:claude-3-opus-20240229 
+  - anthropic:messages:claude-3-opus-20240229
   - openai:chat:gpt-4-0125-preview
 ```
 
@@ -48,7 +48,7 @@ providers:
     config:
       temperature: 0.3
       max_tokens: 1024
-  - id: openai:chat:gpt-4-0125-preview  
+  - id: openai:chat:gpt-4-0125-preview
     config:
       temperature: 0.3
       max_tokens: 1024
@@ -57,7 +57,6 @@ providers:
 ### Define Your Prompts
 
 Next, define the prompt(s) you want to test the models on. For this example, we'll just use a simple prompt:
-
 
 ```yaml
 prompts:
@@ -77,7 +76,7 @@ The contents of `prompt.yaml`:
 - role: system
   content: 'You are a careful riddle solver'
 - role: user
-  content: |  
+  content: |
     Answer this riddle:
     {{riddle}}
 ```
@@ -86,7 +85,7 @@ The `{{riddle}}` placeholder will be populated by test case variables.
 
 ## Step 2: Create Test Cases
 
-Now it's time to create a set of test cases that represent the types of queries your application needs to handle. 
+Now it's time to create a set of test cases that represent the types of queries your application needs to handle.
 
 The key is to focus your analysis on the cases that matter most for your application. Think about the edge cases and specific competencies that you need in an LLM.
 
@@ -95,17 +94,17 @@ In this example, we'll use a few riddles to test the models' reasoning and langu
 ```yaml
 tests:
   - vars:
-      riddle: "I speak without a mouth and hear without ears. I have no body, but I come alive with wind. What am I?"
+      riddle: 'I speak without a mouth and hear without ears. I have no body, but I come alive with wind. What am I?'
     assert:
       - type: icontains
         value: echo
-  - vars:  
+  - vars:
       riddle: "You see a boat filled with people. It has not sunk, but when you look again you don't see a single person on the boat. Why?"
     assert:
       - type: llm-rubric
         value: explains that the people are below deck, or they are all in a relationship
   - vars:
-      riddle: "The more of this there is, the less you see. What is it?" 
+      riddle: 'The more of this there is, the less you see. What is it?'
     assert:
       - type: icontains
         value: darkness
@@ -148,11 +147,11 @@ npx promptfoo@latest eval -o results.json
 
 ## Step 4: Analyze the Results
 
-With the evaluation complete, it's time to dig into the results and see how the models compared on your test cases. 
+With the evaluation complete, it's time to dig into the results and see how the models compared on your test cases.
 
 Some key things to look for:
 
-- Which model had a higher overall pass rate on the test assertions?  In this case, both models did equally well in terms of getting the answer, which is great - these riddles often trip up less powerful models like GPT 3.5 and Claude 2.
+- Which model had a higher overall pass rate on the test assertions? In this case, both models did equally well in terms of getting the answer, which is great - these riddles often trip up less powerful models like GPT 3.5 and Claude 2.
 - Were there specific test cases where one model significantly outperformed the other?
 - How did the models compare on other output quality metrics.
 - Consider model properties like speed and cost in addition to quality.
@@ -192,11 +191,11 @@ Clicking into a specific test case shows the individual test results:
 
 ![claude test details](/img/docs/claude3-result-details.png)
 
-Of course, our requirements are different from yours.  You should customize these values to suit your use case.
+Of course, our requirements are different from yours. You should customize these values to suit your use case.
 
 ## Conclusion
 
-By running this type of targeted evaluation, you can gain valuable insights into how Claude 3 Opus and GPT-4 are likely to perform on your application's real-world data and tasks. 
+By running this type of targeted evaluation, you can gain valuable insights into how Claude 3 Opus and GPT-4 are likely to perform on your application's real-world data and tasks.
 
 `promptfoo` makes it easy to set up a repeatable evaluation pipeline so you can test models as they evolve and measure the impact of model and prompt changes.
 

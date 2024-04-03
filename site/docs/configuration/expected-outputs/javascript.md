@@ -175,7 +175,7 @@ module.exports = main;
 
 ### ES modules
 
-ES modules are supported, but must have a `.mjs` file extension.  Alternatively, if you are transpiling Javascript or Typescript, we recommend pointing promptfoo to the transpiled plain Javascript output.
+ES modules are supported, but must have a `.mjs` file extension. Alternatively, if you are transpiling Javascript or Typescript, we recommend pointing promptfoo to the transpiled plain Javascript output.
 
 ## Other assertion types
 

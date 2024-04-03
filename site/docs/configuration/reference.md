@@ -143,17 +143,19 @@ interface TestSuiteConfig {
   outputPath?: FilePath | FilePath[];
 
   // Determines whether or not sharing is enabled.
-  sharing?: boolean | {
-    apiBaseUrl?: string;
-    appBaseUrl?: string;
-  };
+  sharing?:
+    | boolean
+    | {
+        apiBaseUrl?: string;
+        appBaseUrl?: string;
+      };
 
   // Nunjucks filters
   nunjucksFilters?: Record<string, FilePath>;
 
   // Envar overrides
   env?: EnvOverrides;
-  
+
   // Whether to write latest results to promptfoo storage. This enables you to use the web viewer.
   writeLatestResults?: boolean;
 }

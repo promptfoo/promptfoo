@@ -77,14 +77,14 @@ prompts:
 
 providers:
   - id: ollama:llama2
-    prompts: 
-    - llama_prompt
+    prompts:
+      - llama_prompt
   - id: ollama:llama2-uncensored
-    prompts: 
-    - llama_prompt
+    prompts:
+      - llama_prompt
   - id: openai:gpt-3.5-turbo
-    prompts: 
-    - openai_prompt
+    prompts:
+      - openai_prompt
 ```
 
 ## Add test cases
@@ -124,13 +124,13 @@ prompts:
 
 providers:
   - id: ollama:llama2
-    prompts: 
+    prompts:
     - llama_prompt
   - id: ollama:llama2-uncensored
-    prompts: 
+    prompts:
     - llama_prompt
   - id: openai:gpt-3.5-turbo
-    prompts: 
+    prompts:
     - openai_prompt
 ```
 
@@ -178,13 +178,13 @@ prompts:
 
 providers:
   - id: ollama:llama2
-    prompts: 
+    prompts:
     - llama_prompt
   - id: ollama:llama2-uncensored
-    prompts: 
+    prompts:
     - llama_prompt
   - id: openai:gpt-3.5-turbo
-    prompts: 
+    prompts:
     - openai_prompt
 ```
 

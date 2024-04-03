@@ -656,12 +656,12 @@ module.exports = /** @type {import('promptfoo').TestSuiteConfig} */ ({
                   type: 'object',
                   properties: {
                     a: { type: 'number' },
-                    b: { type: 'number' }
+                    b: { type: 'number' },
                   },
-                  required: ['a', 'b']
-                }
-              }
-            }
+                  required: ['a', 'b'],
+                },
+              },
+            },
           ],
           /**
            * Map of function tool names to function callback.
@@ -672,16 +672,16 @@ module.exports = /** @type {import('promptfoo').TestSuiteConfig} */ ({
             addNumbers: (parametersJsonString) => {
               const { a, b } = JSON.parse(parametersJsonString);
               return JSON.stringify(a + b);
-            }
-          }
-        })
-    }
+            },
+          },
+        }),
+    },
   ],
   tests: [
     {
-      vars: { a: 5, b: 6 }
-    }
-  ]
+      vars: { a: 5, b: 6 },
+    },
+  ],
 });
 ```
 

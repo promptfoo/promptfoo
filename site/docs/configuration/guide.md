@@ -507,7 +507,7 @@ Use `defaultTest` apply a transform option to every test case in your test suite
 
 ### Transforms from separate files
 
-Transform functions can be executed from external Python or Javascript files.  For example:
+Transform functions can be executed from external Python or Javascript files. For example:
 
 ```yaml
 defaultTest:
@@ -516,6 +516,7 @@ defaultTest:
 ```
 
 Here's `transform.js`:
+
 ```js
 module.exports = (output, context) => {
   // context.vars, context.prompt
@@ -525,6 +526,7 @@ module.exports = (output, context) => {
 ```
 
 Or the equivalent `transform.py`:
+
 ```py
 def get_transform(output, context):
     # context['vars'], context['prompt']

@@ -23,11 +23,11 @@ providers:
       temperature: 0.01
       max_length: 1024
       prompt:
-        prefix: "[INST] "
-        suffix: " [/INST]"
+        prefix: '[INST] '
+        suffix: ' [/INST]'
 ```
 
-Here's an example of using Gemma on Replicate.  Note that unlike Llama, it does not have a default version, so we specify the model version:
+Here's an example of using Gemma on Replicate. Note that unlike Llama, it does not have a default version, so we specify the model version:
 
 ```yaml
 providers:

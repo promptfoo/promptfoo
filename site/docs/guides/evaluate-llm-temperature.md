@@ -2,21 +2,21 @@
 
 The `temperature`` setting in language models is like a dial that adjusts how predictable or surprising the responses from the model will be, helping application developers fine-tune the AI's creativity to suit different tasks.
 
-In general, a low temperature leads to "safer", more expected words, while a higher temperature encourages the model to choose less obvious words.  This is why higher temperature is commonly associated with more creative outputs.
+In general, a low temperature leads to "safer", more expected words, while a higher temperature encourages the model to choose less obvious words. This is why higher temperature is commonly associated with more creative outputs.
 
-Under the hood, `temperature` adjusts how the model calculates the likelihood of each word it might pick next.  
+Under the hood, `temperature` adjusts how the model calculates the likelihood of each word it might pick next.
 
 The `temperature` parameter affects each output token by scaling the logits (the raw output scores from the model) before they are passed through the softmax function that turns them into probabilities. Lower temperatures sharpen the distinction between high and low scores, making the high scores more dominant, while higher temperatures flatten this distinction, giving lower-scoring words a better chance of being chosen.
 
-## Finding the optimal temperature 
+## Finding the optimal temperature
 
-The best way to find the optimal temperature parameter is to run a systematic *evaluation*.
+The best way to find the optimal temperature parameter is to run a systematic _evaluation_.
 
-The optimal temperature will always depend on your specific use case.  That's why it's important to:
+The optimal temperature will always depend on your specific use case. That's why it's important to:
 
- - Quantitatively measure the performance of your prompt+model outputs at various temperature settings.
- - Ensure consistency in the model's behavior, which is particularly important when deploying LLMs in production environments.
- - Compare the model's performance against a set of predefined criteria or benchmarks
+- Quantitatively measure the performance of your prompt+model outputs at various temperature settings.
+- Ensure consistency in the model's behavior, which is particularly important when deploying LLMs in production environments.
+- Compare the model's performance against a set of predefined criteria or benchmarks
 
 By running a temperature eval, you can make data-driven decisions that balance the reliability and creativity of your LLM app.
 
@@ -71,7 +71,7 @@ To run the evaluation, use the following command:
 npx promptfoo@latest eval
 ```
 
-This command shows the outputs side-by-side in the command line.  
+This command shows the outputs side-by-side in the command line.
 
 ## Adding automated checks
 
@@ -95,7 +95,7 @@ tests:
 
 This assertion will use a language model to determine whether the LLM output adheres to the criteria.
 
-In the above example comparing different GPT 3.5 temperatures, we notice that GPT actually _hallucinates_ an incorrect answer to the question about Henry VII's grandchildren.  It gets it correct with low temperature, but incorrect with high temperature:
+In the above example comparing different GPT 3.5 temperatures, we notice that GPT actually _hallucinates_ an incorrect answer to the question about Henry VII's grandchildren. It gets it correct with low temperature, but incorrect with high temperature:
 
 ![gpt hallucinating with high temperature](/img/docs/gpt-temperature-hallucination.png)
 
@@ -103,18 +103,18 @@ There are many other [assertion types](/docs/configuration/expected-outputs). Fo
 
 ```yaml
 tests:
-    vars:
-      message: Generate a list of potential risks for a space mission.
-    assert:
-      - type: icontains-all
-        value: ['radiation', 'isolation', 'environment']
+  vars:
+    message: Generate a list of potential risks for a space mission.
+  assert:
+    - type: icontains-all
+      value: ['radiation', 'isolation', 'environment']
 ```
 
 In this case, a higher temperature leads to more creative results, but also leads to a mention of "as an AI language model":
 
 ![llm temperature comparison web view](/img/docs/llm-temperature-comparison-webview.png)
 
-It's worth spending a few minutes to set up these automated checks.  They help streamline the evaluation process and quickly identify bad outputs.
+It's worth spending a few minutes to set up these automated checks. They help streamline the evaluation process and quickly identify bad outputs.
 
 After the evaluation is complete, you can use the web viewer to review the outputs and compare the performance at different temperatures:
 
@@ -124,7 +124,7 @@ npx promptfoo@latest view
 
 ## Evaluating randomness
 
-LLMs are inherently nondeterminstic, which means their outputs will vary with each call at nonzero temperatures (and sometimes even at zero temperature).  OpenAI introduced the `seed` variable to improve reproducibility of outputs, and other providers will probably follow suit.
+LLMs are inherently nondeterminstic, which means their outputs will vary with each call at nonzero temperatures (and sometimes even at zero temperature). OpenAI introduced the `seed` variable to improve reproducibility of outputs, and other providers will probably follow suit.
 
 Set a constant seed in the provider config:
 

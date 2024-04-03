@@ -163,7 +163,7 @@ describe('prompts', () => {
       throw new Error('Unexpected file path in test');
     });
     (fs.statSync as jest.Mock).mockImplementation((path: string) => ({
-      isDirectory: () => path.includes('prompts')
+      isDirectory: () => path.includes('prompts'),
     }));
     (fs.readdirSync as jest.Mock).mockImplementation((path: string) => {
       if (path.includes('prompts')) {

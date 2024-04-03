@@ -47,7 +47,9 @@ export function listCommand(program: Command) {
       });
       await telemetry.send();
 
-      const prompts = (await getPrompts()).sort((a, b) => b.recentEvalId.localeCompare(a.recentEvalId));
+      const prompts = (await getPrompts()).sort((a, b) =>
+        b.recentEvalId.localeCompare(a.recentEvalId),
+      );
       const tableData = prompts.map((prompt) => ({
         'Prompt ID': prompt.id.slice(0, 6),
         Raw: prompt.prompt.raw.slice(0, 100) + (prompt.prompt.raw.length > 100 ? '...' : ''),
@@ -75,7 +77,9 @@ export function listCommand(program: Command) {
       });
       await telemetry.send();
 
-      const datasets = (await getTestCases()).sort((a, b) => b.recentEvalId.localeCompare(a.recentEvalId));
+      const datasets = (await getTestCases()).sort((a, b) =>
+        b.recentEvalId.localeCompare(a.recentEvalId),
+      );
       const tableData = datasets.map((dataset) => ({
         'Dataset ID': dataset.id.slice(0, 6),
         'Highest scoring prompt': dataset.prompts
