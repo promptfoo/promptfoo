@@ -92,6 +92,7 @@ export async function readPrompts(
   promptPathOrGlobs: string | string[] | Record<string, string>,
   basePath: string = '',
 ): Promise<Prompt[]> {
+  logger.debug(`Reading prompts from ${JSON.stringify(promptPathOrGlobs)}`);
   let promptPathInfos: { raw: string; resolved: string }[] = [];
   let promptContents: Prompt[] = [];
 
@@ -123,6 +124,9 @@ export async function readPrompts(
       const globbedPaths = globSync(resolvedPath.replace(/\\/g, '/'), {
         windowsPathsNoEscape: true,
       });
+      logger.debug(
+        `Expanded prompt ${pathOrGlob} to ${resolvedPath} and then to ${JSON.stringify(globbedPaths)}`,
+      );
       if (globbedPaths.length > 0) {
         return globbedPaths.map((globbedPath) => ({ raw: pathOrGlob, resolved: globbedPath }));
       }
@@ -139,6 +143,8 @@ export async function readPrompts(
     });
     inputType = PromptInputType.NAMED;
   }
+  
+  logger.debug(`Resolved prompt paths: ${JSON.stringify(promptPathInfos)}`);
 
   for (const promptPathInfo of promptPathInfos) {
     const parsedPath = path.parse(promptPathInfo.resolved);
