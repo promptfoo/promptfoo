@@ -17,11 +17,12 @@ export async function runPython(
   scriptPath: string,
   method: string,
   args: (string | object | undefined)[],
+  options: { pythonExecutable?: string } = {},
 ): Promise<any> {
   const absPath = path.resolve(scriptPath);
   const pythonOptions: PythonShellOptions = {
     mode: 'text',
-    pythonPath: process.env.PROMPTFOO_PYTHON || 'python',
+    pythonPath: options.pythonExecutable || process.env.PROMPTFOO_PYTHON || 'python',
     scriptPath: __dirname,
     args: [absPath, method, ...args.map((arg) => JSON.stringify(arg))],
   };

@@ -85,6 +85,19 @@ class ProviderResponse:
     logProbs: Optional[List[float]]
 ```
 
+### Setting the Python executable
+
+In some scenarios, you may need to specify a custom Python executable. This is particularly useful when working with virtual environments or when the default Python path does not point to the desired Python interpreter.
+
+Here's an example of how you can override the Python executable using the `pythonExecutable` option:
+
+```yaml
+providers:
+  - id: 'python:my_script.py'
+    config:
+      pythonExecutable: /path/to/python3.11
+```
+
 ### Troubleshooting
 
 #### Viewing python output
