@@ -581,7 +581,6 @@ async function main() {
 
         const summary = await evaluate(testSuite, {
           ...options,
-          basePath,
           eventSource: 'cli',
         });
 
