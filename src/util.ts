@@ -11,6 +11,7 @@ import { stringify } from 'csv-stringify/sync';
 import { globSync } from 'glob';
 import { desc, eq } from 'drizzle-orm';
 
+import cliState from './cliState';
 import logger from './logger';
 import { getDirectory, importModule } from './esm';
 import { readTests } from './testCases';
@@ -1057,9 +1058,9 @@ export async function getEvalsWithPredicate(
 
 export async function readFilters(
   filters: Record<string, string>,
-  basePath: string = '',
 ): Promise<NunjucksFilterMap> {
   const ret: NunjucksFilterMap = {};
+  const basePath = cliState.basePath || '';
   for (const [name, filterPath] of Object.entries(filters)) {
     const globPath = path.join(basePath, filterPath);
     const filePaths = globSync(globPath, {
