@@ -735,7 +735,12 @@ ${
         pass = false;
         score = 0.0;
       } else if (result.startsWith('{')) {
-        const parsed = JSON.parse(result);
+        let parsed;
+        try {
+          parsed = JSON.parse(result);
+        } catch (err) {
+          throw new Error(`Invalid JSON: ${err} when parsing result: ${result}`);
+        }
         if (!parsed.hasOwnProperty('pass') || !parsed.hasOwnProperty('score')) {
           throw new Error(
             'Python assertion must return a boolean, number, or {pass, score, reason} object',

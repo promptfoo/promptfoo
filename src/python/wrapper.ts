@@ -29,7 +29,12 @@ export async function runPython(
   try {
     const results = await PythonShell.run('wrapper.py', pythonOptions);
     logger.debug(`Python script ${absPath} returned: ${results.join('\n')}`);
-    const result: { type: 'final_result'; data: any } = JSON.parse(results[results.length - 1]);
+    let result: { type: 'final_result'; data: any } | undefined;
+    try {
+      result = JSON.parse(results[results.length - 1]);
+    } catch (error) {
+      throw new Error(`Invalid JSON: ${error} when parsing result: ${results[results.length - 1]}`);
+    }
     if (result?.type !== 'final_result') {
       throw new Error(
         'The Python script `call_api` function must return a dict with an `output` or `error` string',
