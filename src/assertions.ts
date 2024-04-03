@@ -743,7 +743,7 @@ ${
         }
         if (!parsed.hasOwnProperty('pass') || !parsed.hasOwnProperty('score')) {
           throw new Error(
-            'Python assertion must return a boolean, number, or {pass, score, reason} object',
+            `Python assertion must return a boolean, number, or {pass, score, reason} object. Got instead: ${result}`,
           );
         }
         return parsed;
@@ -752,7 +752,7 @@ ${
         pass = assertion.threshold ? score >= assertion.threshold : score > 0;
         if (isNaN(score)) {
           throw new Error(
-            'Python assertion must return a boolean, number, or {pass, score, reason} object',
+            `Python assertion must return a boolean, number, or {pass, score, reason} object. Instead got:\n${result}`,
           );
         }
         if (typeof assertion.threshold !== 'undefined' && score < assertion.threshold) {
