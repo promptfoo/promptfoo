@@ -6,7 +6,7 @@ sidebar_label: Cohere Command-R benchmarks
 
 Not all large language models are created equal. While public benchmarks provide a general sense of capability, the only way to truly understand which model will perform best for your specific application is to run your own custom evaluation.
 
-This guide will show you how to perform a custom benchmark on Cohere's Command-R, comparing it to GPT-4 and Claude Opus on the use cases that matter most to you. Running your own benchmark will give you confidence that you're selecting the optimal model to deliver the best experience to your users. 
+This guide will show you how to perform a custom benchmark on Cohere's Command-R and Command-R Plus, comparing it to GPT-4 and Claude Opus on the use cases that matter most to you. Running your own benchmark will give you confidence that you're selecting the optimal model to deliver the best experience to your users. 
 
 The end result is a side-by-side comparison view that looks like this:
 
@@ -34,7 +34,7 @@ Edit `promptfooconfig.yaml` to specify the models to compare:
 
 ```yaml title=promptfooconfig.yaml
 providers:
-  - id: cohere:command-r
+  - id: cohere:command-r   # or command-r-plus
   - id: openai:gpt-4-0125-preview
   - id: anthropic:messages:claude-3-opus-20240229
 ```
