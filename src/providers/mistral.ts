@@ -146,7 +146,10 @@ export class MistralChatCompletionProvider implements ApiProvider {
     logger.debug(`Mistral apiKeyenvar: ${this.config.apiKeyEnvar}`);
     return (
       this.config.apiKey ||
-      (this.config.apiKeyEnvar ? process.env[this.config.apiKeyEnvar] : undefined) ||
+      (this.config?.apiKeyEnvar
+        ? process.env[this.config.apiKeyEnvar] ||
+          this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
+        : undefined) ||
       this.env?.MISTRAL_API_KEY ||
       process.env.MISTRAL_API_KEY
     );
