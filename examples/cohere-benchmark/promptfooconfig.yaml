@@ -1,0 +1,96 @@
+description: 'Cohere benchmark'
+
+providers:
+  - id: cohere:command-r
+    config:
+      temperature: 0
+  - id: openai:gpt-4-0125-preview
+    config:
+      temperature: 0
+  - id: anthropic:messages:claude-3-opus-20240229
+    config:
+      temperature: 0
+
+prompts:
+  - |
+    Extract the 3 most important clauses from this contract,
+    and explain each one in plain English:
+
+    {{contract}}
+
+tests:
+  - vars:
+      contract: |
+        Seller agrees to convey the property located at 123 Main St
+        to Buyer for a total purchase price of $500,000. Closing to
+        occur on or before June 30, 2023. Sale is contingent upon
+        Buyer obtaining financing and the property appraising for
+        at least the purchase price. Seller to provide a clear
+        title free of any liens or encumbrances...
+    assert:
+      - type: llm-rubric
+        value: |
+          The summary should cover:
+          - The purchase price of $500,000
+          - The closing deadline of June 30, 2023
+          - The financing and appraisal contingencies
+          - Seller's responsibility to provide clear title
+      - type: javascript
+        value: output.length < 500
+  - vars:
+      contract: |
+        The tenant agrees to pay a monthly rent of $2,000 for the apartment at 456 Elm Street, starting from July 1, 2023. The lease term is 12 months. The tenant is responsible for utilities. The landlord must approve any subletting in writing.
+    assert:
+      - type: llm-rubric
+        value: |
+          Summary should include:
+          - Monthly rent amount of $2,000
+          - Lease start date of July 1, 2023, and term of 12 months
+          - Tenant's responsibility for utilities
+          - Requirement for written approval for subletting
+
+  - vars:
+      contract: |
+        This agreement between ABC Corp and XYZ Inc. for software development services shall commence on August 15, 2023, and continue for a period of 18 months. ABC Corp will pay XYZ Inc. a total of $150,000, payable in monthly installments of $8,333.33. Either party may terminate the agreement with 30 days' written notice. XYZ Inc. agrees to deliver the software product in three phases, with specific milestones outlined in Exhibit A.
+    assert:
+      - type: llm-rubric
+        value: |
+          Summary should cover:
+          - The agreement's start date of August 15, 2023, and duration of 18 months
+          - Payment terms of $150,000 total, in monthly installments of $8,333.33
+          - Termination clause requiring 30 days' written notice
+          - Delivery of software in three phases with milestones in Exhibit A
+
+  - vars:
+      contract: |
+        In the event of a dispute arising under this contract, both parties agree to first seek resolution through mediation before pursuing any legal action. The prevailing party in any litigation will be entitled to recover reasonable attorney fees and costs. This contract is governed by the laws of the State of New York.
+    assert:
+      - type: llm-rubric
+        value: |
+          Summary should highlight:
+          - Agreement to seek mediation before legal action
+          - Prevailing party's right to recover attorney fees
+          - Governing law of the State of New York
+
+  - vars:
+      contract: |
+        The consultant agrees to provide marketing services to the client for a project fee of $25,000. The fee is non-refundable and payable upon signing of this agreement. The consultant will deliver a comprehensive marketing plan within 45 days of the agreement date. The client has the right to request up to two revisions of the marketing plan.
+    assert:
+      - type: llm-rubric
+        value: |
+          Summary should include:
+          - Project fee of $25,000, non-refundable and payable upon signing
+          - Delivery of a marketing plan within 45 days
+          - Client's right to request up to two revisions
+
+  - vars:
+      contract: |
+        The seller agrees to deliver 100 units of Product X to the buyer by no later than September 30, 2023. The buyer agrees to pay $50 per unit, for a total purchase price of $5,000. Payment is due within 30 days of delivery. If the seller fails to deliver the products on time, the buyer is entitled to a 5% discount on the total purchase price.
+    assert:
+      - type: llm-rubric
+        value: |
+          Summary should cover:
+          - Delivery of 100 units of Product X by September 30, 2023
+          - Purchase price of $50 per unit, totaling $5,000
+          - Payment due within 30 days of delivery
+          - 5% discount entitlement for late delivery
