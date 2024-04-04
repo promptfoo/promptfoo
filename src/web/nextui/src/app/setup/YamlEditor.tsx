@@ -29,6 +29,8 @@ const YamlEditorComponent: React.FC = () => {
     setPrompts,
     testCases,
     setTestCases,
+    defaultTest,
+    setDefaultTest,
   } = useStore();
 
   const [code, setCode] = React.useState('');
@@ -53,10 +55,11 @@ const YamlEditorComponent: React.FC = () => {
       providers,
       prompts,
       tests: testCases,
+      defaultTest,
     };
 
     setCode(yaml.dump(testSuite));
-  }, [env, description, providers, prompts, testCases]);
+  }, [env, description, providers, prompts, testCases, defaultTest]);
 
   const handleChange = (yamlObj: any) => {
     setEnv(yamlObj.env || {});
@@ -64,6 +67,7 @@ const YamlEditorComponent: React.FC = () => {
     setProviders(yamlObj.providers || []);
     setPrompts(yamlObj.prompts || []);
     setTestCases(yamlObj.tests || []);
+    setDefaultTest(yamlObj.defaultTest || {});
   };
 
   return (
