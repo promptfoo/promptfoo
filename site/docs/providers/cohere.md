@@ -1,6 +1,6 @@
 # Cohere
 
-The `cohere` provider is an interface to Cohere AI's [chat inference API](https://docs.cohere.com/reference/chat).
+The `cohere` provider is an interface to Cohere AI's [chat inference API](https://docs.cohere.com/reference/chat), with models such as Command R that are optimized for RAG and tool usage.
 
 ## Setup
 
@@ -9,6 +9,14 @@ First, set the `COHERE_API_KEY` environment variable with your Cohere API key.
 Next, edit the promptfoo configuration file to point to the Cohere provider.
 
 - `cohere:<model name>` - uses the specified Cohere model (e.g., `command`, `command-light`).
+
+The following models are confirmed supported. For an up-to-date list of supported models, see [Cohere Models](https://docs.cohere.com/docs/models).
+- command-light
+- command-light-nightly
+- command
+- command-nightly
+- command-r
+- command-r-plus
 
 Here's an example configuration:
 
