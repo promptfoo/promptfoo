@@ -37,6 +37,7 @@ interface AzureOpenAiCompletionOptions {
   apiHost?: string;
   apiBaseUrl?: string;
   apiKey?: string;
+  apiKeyEnvar?: string;
   apiVersion?: string;
 
   // OpenAI params
@@ -74,12 +75,14 @@ class AzureOpenAiGenericProvider implements ApiProvider {
   apiBaseUrl?: string;
 
   config: AzureOpenAiCompletionOptions;
+  env?: EnvOverrides;
 
   constructor(
     deploymentName: string,
     options: { config?: AzureOpenAiCompletionOptions; id?: string; env?: EnvOverrides } = {},
   ) {
     const { config, id, env } = options;
+    this.env = env;
 
     this.deploymentName = deploymentName;
 
@@ -115,7 +118,14 @@ class AzureOpenAiGenericProvider implements ApiProvider {
           )
         ).token;
       } else {
-        this._cachedApiKey = this.config?.apiKey || process.env.AZURE_OPENAI_API_KEY;
+        this._cachedApiKey =
+          this.config?.apiKey ||
+          (this.config?.apiKeyEnvar
+            ? process.env[this.config.apiKeyEnvar] ||
+              this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
+            : undefined) ||
+          this.env?.AZURE_OPENAI_API_KEY ||
+          process.env.AZURE_OPENAI_API_KEY;
         if (!this._cachedApiKey) {
           throw new Error('Azure OpenAI API key must be set');
         }
