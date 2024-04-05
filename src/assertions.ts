@@ -28,7 +28,7 @@ import {
 } from './matchers';
 import { validateFunctionCall } from './providers/openaiUtil';
 import { OpenAiChatCompletionProvider } from './providers/openai';
-import { runPythonCode } from './python/wrapper';
+import { runPython, runPythonCode } from './python/wrapper';
 import { importModule } from './esm';
 
 import type { Assertion, AssertionType, GradingResult, AtomicTestCase, ApiProvider } from './types';
@@ -242,32 +242,13 @@ export async function runAssertion({
         }
         logger.debug(`Javascript script ${filePath} output: ${valueFromScript}`);
       } else if (filePath.endsWith('.py')) {
-        const args = [
-          filePath,
-          typeof output === 'string' ? output : JSON.stringify(output),
-          JSON.stringify(context),
-        ];
-        const pythonScriptOutput = await new Promise<string>((resolve, reject) => {
-          execFile(
-            process.env.PROMPTFOO_PYTHON || 'python',
-            args,
-            null,
-            (error, stdout, stderr) => {
-              if (error) {
-                reject(error);
-                return;
-              }
-              const stringErr = String(stderr);
-              if (stringErr) {
-                reject(new Error(stringErr));
-              } else {
-                resolve(String(stdout));
-              }
-            },
-          );
-        });
-        valueFromScript = pythonScriptOutput.trim();
-        logger.debug(`Python script ${filePath} output: ${valueFromScript}`);
+        try {
+          const pythonScriptOutput = await runPython(filePath, 'get_assert', [output, context]);
+          valueFromScript = pythonScriptOutput;
+          logger.debug(`Python script ${filePath} output: ${valueFromScript}`);
+        } catch (error) {
+          throw new Error(`Python script execution failed: ${error}`);
+        }
       } else if (filePath.endsWith('.json')) {
         renderedValue = JSON.parse(fs.readFileSync(filePath, 'utf8'));
       } else if (filePath.endsWith('.yaml') || filePath.endsWith('.yml')) {
@@ -690,12 +671,8 @@ ${renderedValue}`,
   if (baseType === 'python') {
     invariant(typeof renderedValue === 'string', 'python assertion must have a string value');
     try {
-      let result: string;
+      let result: string | number | boolean | object | GradingResult | undefined;
       if (typeof valueFromScript !== 'undefined') {
-        invariant(
-          typeof valueFromScript === 'string',
-          `Python assertion script must return a string (${assertion.value})`,
-        );
         result = valueFromScript;
       } else {
         const isMultiline = renderedValue.includes('\n');
@@ -720,21 +697,22 @@ ${
     : `    return ${renderedValue}`
 }
 `;
-        const pythonResult = await runPythonCode(pythonScript, 'main', [output, context]);
-        if (typeof pythonResult === 'object') {
-          result = JSON.stringify(pythonResult);
-        } else {
-          result = String(pythonResult);
-        }
+        result = await runPythonCode(pythonScript, 'main', [output, context]);
       }
 
-      if (result.toLowerCase() === 'true') {
+      if (
+        (typeof result === 'boolean' && result) ||
+        (typeof result === 'string' && result.toLowerCase() === 'true')
+      ) {
         pass = true;
         score = 1.0;
-      } else if (result.toLowerCase() === 'false') {
+      } else if (
+        (typeof result === 'boolean' && !result) ||
+        (typeof result === 'string' && result.toLowerCase() === 'false')
+      ) {
         pass = false;
         score = 0.0;
-      } else if (result.startsWith('{')) {
+      } else if (typeof result === 'string' && result.startsWith('{')) {
         let parsed;
         try {
           parsed = JSON.parse(result);
@@ -747,8 +725,15 @@ ${
           );
         }
         return parsed;
+      } else if (typeof result === 'object') {
+        if (!result.hasOwnProperty('pass') || !result.hasOwnProperty('score')) {
+          throw new Error(
+            `Python assertion must return a boolean, number, or {pass, score, reason} object. Got instead: ${result}`,
+          );
+        }
+        return result as GradingResult;
       } else {
-        score = parseFloat(result);
+        score = parseFloat(String(result));
         pass = assertion.threshold ? score >= assertion.threshold : score > 0;
         if (isNaN(score)) {
           throw new Error(

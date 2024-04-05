@@ -1545,6 +1545,8 @@ describe('runAssertion', () => {
   it.each([
     ['boolean', 'True', true, 'Assertion passed'],
     ['number', '0.5', true, 'Assertion passed'],
+    ['boolean', true, true, 'Assertion passed'],
+    ['number', 0.5, true, 'Assertion passed'],
     [
       'GradingResult',
       '{"pass": true, "score": 1, "reason": "Custom reason"}',
@@ -1563,40 +1565,7 @@ describe('runAssertion', () => {
     'should handle when the file:// assertion with .py file returns a %s',
     async (type, pythonOutput, expectedPass, expectedReason) => {
       const output = 'Expected output';
-      const mockChildProcess = {
-        stdout: new Stream.Readable(),
-        stderr: new Stream.Readable(),
-      } as child_process.ChildProcess;
-      jest
-        .spyOn(child_process, 'execFile')
-        .mockImplementation(
-          (
-            file: string,
-            args: readonly string[] | null | undefined,
-            options: child_process.ExecFileOptions | null | undefined,
-            callback?:
-              | null
-              | ((
-                  error: child_process.ExecFileException | null,
-                  stdout: string | Buffer,
-                  stderr: string | Buffer,
-                ) => void),
-          ) => {
-            expect(callback).toBeTruthy();
-            if (callback) {
-              expect(file).toBe('python');
-              expect(args).toEqual(
-                expect.arrayContaining([
-                  '/path/to/assert.py',
-                  'Expected output',
-                  '{"prompt":"Some prompt that includes \\"double quotes\\" and \'single quotes\'","vars":{},"test":{}}',
-                ]),
-              );
-              process.nextTick(() => callback(null, Buffer.from(pythonOutput), Buffer.from('')));
-            }
-            return mockChildProcess;
-          },
-        );
+      jest.spyOn(pythonWrapper, 'runPython').mockResolvedValue(pythonOutput);
 
       const fileAssertion: Assertion = {
         type: 'python',
@@ -1611,11 +1580,20 @@ describe('runAssertion', () => {
         output,
       });
 
+      expect(pythonWrapper.runPython).toHaveBeenCalledWith('/path/to/assert.py', 'get_assert', [
+        output,
+        {
+          prompt: 'Some prompt that includes "double quotes" and \'single quotes\'',
+          vars: {},
+          test: {},
+        },
+      ]);
+
       expect(result.pass).toBe(expectedPass);
       expect(result.reason).toContain(expectedReason);
-      expect(child_process.execFile).toHaveBeenCalledTimes(1);
+      expect(pythonWrapper.runPython).toHaveBeenCalledTimes(1);
 
-      jest.resetAllMocks();
+      jest.restoreAllMocks();
     },
   );
 
