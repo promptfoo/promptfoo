@@ -264,7 +264,7 @@ class Evaluator {
     }
 
     // Render the prompt
-    const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions, filters, provider);
+    const renderedPrompt = await renderPrompt(prompt, vars, filters, provider);
 
     let renderedJson = undefined;
     try {
