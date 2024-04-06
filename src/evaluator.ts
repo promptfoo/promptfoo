@@ -170,7 +170,7 @@ export async function renderPrompt(
 
   // Apply prompt functions
   if (prompt.function) {
-    const result = await prompt.function({ vars }, provider);
+    const result = await prompt.function({ vars, provider });
     if (typeof result === 'string') {
       basePrompt = result;
     } else if (typeof result === 'object') {

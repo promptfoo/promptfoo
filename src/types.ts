@@ -194,8 +194,10 @@ export interface Prompt {
   raw: string;
   display: string;
   function?: (
-    context: { vars: Record<string, string | object> },
-    provider?: ApiProvider,
+    context: { 
+      vars: Record<string, string | object>,
+      provider?: ApiProvider,
+    },
   ) => Promise<string | object>;
 }
 
