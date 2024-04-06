@@ -76,6 +76,19 @@ providers:
 prompts: [prompt.json]
 ```
 
+### Images / Vision
+
+You can include images in the prompts in Claude 3 models.
+
+See the [Claude vision example](https://github.com/typpo/promptfoo/tree/main/examples/claude-vision).
+
+One important note: The Claude API only supports base64 representations of images.
+This is different from how OpenAI's vision works, in that it supports grabbing images
+from a URL. As a result, if you are trying to compare Claude 3 and OpenAI vision capabilities,
+you will need to have separate prompts for each.
+
+See the [OpenAI vision example](https://github.com/typpo/promptfoo/tree/main/examples/openai-vision) to see where there are differences here.
+
 ### Additional Capabilities
 
 - **Caching**: Caches previous LLM requests by default.
