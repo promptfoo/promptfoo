@@ -6,6 +6,7 @@ import async from 'async';
 import chalk from 'chalk';
 import invariant from 'tiny-invariant';
 import yaml from 'js-yaml';
+import { globSync } from 'glob';
 
 import cliState from './cliState';
 import logger from './logger';
@@ -54,7 +55,16 @@ function generateVarCombinations(
   const combinations: Record<string, string | any[]>[] = [{}];
 
   for (const key of keys) {
-    let values: any[] = Array.isArray(vars[key]) ? vars[key] : [vars[key]];
+    let values: any[] = [];
+
+    if (typeof vars[key] === 'string' && vars[key].startsWith('file://')) {
+      const filePath = vars[key].slice('file://'.length);
+      const resolvedPath = path.resolve(cliState.basePath || '', filePath);
+      const filePaths = globSync(resolvedPath.replace(/\\/g, '/'));
+      values = filePaths.map((path: string) => `file://${path}`);
+    } else {
+      values = Array.isArray(vars[key]) ? vars[key] : [vars[key]];
+    }
 
     // Check if it's an array but not a string array
     if (Array.isArray(vars[key]) && typeof vars[key][0] !== 'string') {
