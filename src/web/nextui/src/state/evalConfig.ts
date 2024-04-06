@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 
 import type {
   EnvOverrides,
+  EvaluateOptions,
   EvaluateTestSuite,
   ProviderOptions,
   TestCase,
@@ -16,12 +17,14 @@ export interface State {
   providers: ProviderOptions[];
   prompts: string[];
   defaultTest: TestCase;
+  evaluateOptions: EvaluateOptions;
   setEnv: (env: EnvOverrides) => void;
   setTestCases: (testCases: TestCase[]) => void;
   setDescription: (description: string) => void;
   setProviders: (providers: ProviderOptions[]) => void;
   setPrompts: (prompts: string[]) => void;
   setDefaultTest: (testCase: TestCase) => void;
+  setEvaluateOptions: (options: EvaluateOptions) => void;
   setStateFromConfig: (config: Partial<UnifiedConfig>) => void;
   getTestSuite: () => EvaluateTestSuite;
 }
@@ -35,12 +38,14 @@ export const useStore = create<State>()(
       providers: [],
       prompts: [],
       defaultTest: {},
+      evaluateOptions: {},
       setEnv: (env) => set({ env }),
       setTestCases: (testCases) => set({ testCases }),
       setDescription: (description) => set({ description }),
       setProviders: (providers) => set({ providers }),
       setPrompts: (prompts) => set({ prompts }),
       setDefaultTest: (testCase) => set({ defaultTest: testCase }),
+      setEvaluateOptions: (options) => set({ evaluateOptions: options }),
       setStateFromConfig: (config: Partial<UnifiedConfig>) => {
         const updates: Partial<State> = {};
         if (config.description) {
