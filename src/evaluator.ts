@@ -112,6 +112,7 @@ export async function renderPrompt(
   prompt: Prompt,
   vars: Record<string, string | object>,
   nunjucksFilters?: NunjucksFilterMap,
+  provider?: ApiProvider,
 ): Promise<string> {
   const nunjucks = getNunjucksEngine(nunjucksFilters);
 
@@ -169,7 +170,7 @@ export async function renderPrompt(
 
   // Apply prompt functions
   if (prompt.function) {
-    const result = await prompt.function({ vars });
+    const result = await prompt.function({ vars, provider });
     if (typeof result === 'string') {
       basePrompt = result;
     } else if (typeof result === 'object') {
@@ -263,7 +264,7 @@ class Evaluator {
     }
 
     // Render the prompt
-    const renderedPrompt = await renderPrompt(prompt, vars, filters);
+    const renderedPrompt = await renderPrompt(prompt, vars, filters, provider);
 
     let renderedJson = undefined;
     try {

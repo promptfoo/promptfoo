@@ -16,6 +16,7 @@ import type {
   ProviderOptionsMap,
   TestSuite,
   ProviderOptions,
+  ApiProvider,
 } from './types';
 
 export * from './external/ragas';
@@ -205,9 +206,20 @@ export async function readPrompts(
         });
       } else if (ext === '.py') {
         const fileContent = fs.readFileSync(promptPath, 'utf-8');
-        const promptFunction = async (context: { vars: Record<string, string | object> }) => {
+        const promptFunction = async (context: {
+          vars: Record<string, string | object>;
+          provider?: ApiProvider;
+        }) => {
           if (functionName) {
-            return runPython(promptPath, functionName, [context]);
+            return runPython(promptPath, functionName, [
+              {
+                ...context,
+                provider: {
+                  id: context.provider?.id,
+                  label: context.provider?.label,
+                },
+              },
+            ]);
           } else {
             // Legacy: run the whole file
             const options: PythonShellOptions = {

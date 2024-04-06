@@ -192,7 +192,12 @@ export interface Prompt {
   id?: string;
   raw: string;
   display: string;
-  function?: (context: { vars: Record<string, string | object> }) => Promise<string | object>;
+  function?: (
+    context: { 
+      vars: Record<string, string | object>,
+      provider?: ApiProvider,
+    },
+  ) => Promise<string | object>;
 }
 
 // Used for final prompt display
