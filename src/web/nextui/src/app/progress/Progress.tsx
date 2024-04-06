@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
+import Autocomplete from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import DownloadIcon from '@mui/icons-material/Download';
@@ -137,6 +138,22 @@ export default function Cols() {
   const handleFilterChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setFilter({ ...filter, [event.target.name]: event.target.value });
   };
+  const evalIdOptions = React.useMemo(
+    () => Array.from(new Set(cols.map((col) => col.evalId))),
+    [cols],
+  );
+  const datasetIdOptions = React.useMemo(
+    () => Array.from(new Set(cols.map((col) => col.datasetId))),
+    [cols],
+  );
+  const providerOptions = React.useMemo(
+    () => Array.from(new Set(cols.map((col) => col.provider))),
+    [cols],
+  );
+  const promptIdOptions = React.useMemo(
+    () => Array.from(new Set(cols.map((col) => col.promptId))),
+    [cols],
+  );
 
   return (
     <Box paddingX={2}>
@@ -169,37 +186,49 @@ export default function Cols() {
       </Box>
       <Box>This page shows performance metrics for recent evals.</Box>
       <Box display="flex" flexDirection="row" gap={2} mt={2}>
-        <TextField
-          label="Eval ID"
-          variant="outlined"
-          size="small"
-          name="evalId"
-          value={filter.evalId || ''}
-          onChange={handleFilterChange}
+        <Autocomplete
+          options={evalIdOptions}
+          value={filter.evalId}
+          onChange={(event, newValue) => {
+            setFilter({ ...filter, evalId: newValue || '' });
+          }}
+          renderInput={(params) => (
+            <TextField {...params} label="Eval ID" variant="outlined" size="small" fullWidth />
+          )}
+          sx={{ width: 220 }}
         />
-        <TextField
-          label="Dataset ID"
-          variant="outlined"
-          size="small"
-          name="datasetId"
-          value={filter.datasetId || ''}
-          onChange={handleFilterChange}
+        <Autocomplete
+          options={datasetIdOptions}
+          value={filter.datasetId}
+          onChange={(event, newValue) => {
+            setFilter({ ...filter, datasetId: newValue || '' });
+          }}
+          renderInput={(params) => (
+            <TextField {...params} label="Dataset ID" variant="outlined" size="small" fullWidth />
+          )}
+          sx={{ width: 220 }}
         />
-        <TextField
-          label="Provider"
-          variant="outlined"
-          size="small"
-          name="provider"
-          value={filter.provider || ''}
-          onChange={handleFilterChange}
+        <Autocomplete
+          options={providerOptions}
+          value={filter.provider}
+          onChange={(event, newValue) => {
+            setFilter({ ...filter, provider: newValue || '' });
+          }}
+          renderInput={(params) => (
+            <TextField {...params} label="Provider" variant="outlined" size="small" fullWidth />
+          )}
+          sx={{ width: 220 }}
         />
-        <TextField
-          label="Prompt ID"
-          variant="outlined"
-          size="small"
-          name="promptId"
-          value={filter.promptId || ''}
-          onChange={handleFilterChange}
+        <Autocomplete
+          options={promptIdOptions}
+          value={filter.promptId}
+          onChange={(event, newValue) => {
+            setFilter({ ...filter, promptId: newValue || '' });
+          }}
+          renderInput={(params) => (
+            <TextField {...params} label="Prompt ID" variant="outlined" size="small" fullWidth />
+          )}
+          sx={{ width: 220 }}
         />
       </Box>
       <Table>
@@ -271,14 +300,20 @@ export default function Cols() {
               }
             >
               <TableCell>
-                <Link href={`/eval?evalId=${col.evalId}`}>{col.evalId}</Link>
+                <Link href={`/eval?evalId=${col.evalId}`} onClick={(e) => e.stopPropagation()}>
+                  {col.evalId}
+                </Link>
               </TableCell>
               <TableCell>
-                <Link href={`/datasets?id=${col.datasetId}`}>{col.datasetId?.slice(0, 6)}</Link>
+                <Link href={`/datasets?id=${col.datasetId}`} onClick={(e) => e.stopPropagation()}>
+                  {col.datasetId?.slice(0, 6)}
+                </Link>
               </TableCell>
               <TableCell>{col.provider}</TableCell>
               <TableCell>
-                <Link href={`/prompts?id=${col.promptId}`}>[{col.promptId?.slice(0, 6)}]</Link>{' '}
+                <Link href={`/prompts?id=${col.promptId}`} onClick={(e) => e.stopPropagation()}>
+                  [{col.promptId?.slice(0, 6)}]
+                </Link>{' '}
                 {col.raw}
               </TableCell>
               <TableCell>{calculatePassRate(col.metrics)}</TableCell>
