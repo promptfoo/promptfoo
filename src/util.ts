@@ -42,6 +42,7 @@ import type {
   OutputFile,
   ProviderOptions,
   Prompt,
+  CompletedPrompt,
 } from './types';
 
 let globalConfigCache: any = null;
@@ -1143,4 +1144,42 @@ export async function transformOutput(
     throw new Error(`Transform function did not return a value\n\n${codeOrFilepath}`);
   }
   return ret;
+}
+
+export type StandaloneEval = CompletedPrompt & {
+  evalId: string;
+  datasetId: string | null;
+  promptId: string | null;
+};
+export function getStandaloneEvals(): StandaloneEval[] {
+  const db = getDb();
+  const results = db
+    .select({
+      evalId: evals.id,
+      description: evals.description,
+      config: evals.config,
+      results: evals.results,
+      promptId: evalsToPrompts.promptId,
+      datasetId: evalsToDatasets.datasetId,
+    })
+    .from(evals)
+    .leftJoin(evalsToPrompts, eq(evals.id, evalsToPrompts.evalId))
+    .leftJoin(evalsToDatasets, eq(evals.id, evalsToDatasets.evalId))
+    .orderBy(desc(evals.createdAt))
+    .limit(100)
+    .all();
+
+  const flatResults: StandaloneEval[] = [];
+  results.forEach((result) => {
+    const table = result.results.table;
+    table.head.prompts.forEach((col) => {
+      flatResults.push({
+        evalId: result.evalId,
+        promptId: result.promptId,
+        datasetId: result.datasetId,
+        ...col,
+      });
+    });
+  });
+  return flatResults;
 }
