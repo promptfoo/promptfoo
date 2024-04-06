@@ -7,6 +7,7 @@ import Button from '@mui/material/Button';
 import DownloadIcon from '@mui/icons-material/Download';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
+import Pagination from '@mui/material/Pagination';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
@@ -118,6 +119,9 @@ export default function Cols() {
     });
   }, [cols, sortField, sortOrder]);
 
+  const [page, setPage] = React.useState(1);
+  const rowsPerPage = 25;
+
   return (
     <Box paddingX={2}>
       <Box display="flex" justifyContent="space-between" alignItems="center">
@@ -147,9 +151,7 @@ export default function Cols() {
           </Menu>
         </div>
       </Box>
-      <Box>
-        This page shows performance metrics for provider/prompt combinations from recent evals.
-      </Box>
+      <Box>This page shows performance metrics for recent evals.</Box>
       <Table>
         <TableHead>
           <TableRow>
@@ -204,7 +206,7 @@ export default function Cols() {
           </TableRow>
         </TableHead>
         <TableBody>
-          {sortedCols.map((col, index) => (
+          {sortedCols.slice((page - 1) * rowsPerPage, page * rowsPerPage).map((col, index) => (
             <TableRow key={index} hover style={{ cursor: 'pointer' }}>
               <TableCell>
                 <Link href={`/eval?evalId=${col.evalId}`}>{col.evalId}</Link>
@@ -231,6 +233,14 @@ export default function Cols() {
           ))}
         </TableBody>
       </Table>
+      {Math.ceil(cols.length / rowsPerPage) > 1 && (
+        <Pagination
+          count={Math.ceil(sortedCols.length / rowsPerPage)}
+          page={page}
+          onChange={(event, value) => setPage(value)}
+          sx={{ pt: 2, pb: 4, display: 'flex', justifyContent: 'center' }}
+        />
+      )}
     </Box>
   );
 }

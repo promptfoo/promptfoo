@@ -40,6 +40,7 @@ export default function Navigation({
       <NavLink href="/eval" label="Evals" />
       <NavLink href="/prompts" label="Prompts" />
       <NavLink href="/datasets" label="Datasets" />
+      <NavLink href="/progress" label="Progress" />
       <div className="right-aligned">
         {USE_SUPABASE ? <LoggedInAs /> : null}
         <DarkMode darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} />
