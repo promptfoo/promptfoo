@@ -14,6 +14,7 @@ import TableCell from '@mui/material/TableCell';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import TableSortLabel from '@mui/material/TableSortLabel';
+import TextField from '@mui/material/TextField';
 
 import type { StandaloneEval } from '@/../../../util';
 
@@ -22,6 +23,10 @@ export default function Cols() {
   const [sortField, setSortField] = useState<string | null>(null);
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const [page, setPage] = React.useState(1);
+  const [filter, setFilter] = useState({ evalId: '', datasetId: '', provider: '', promptId: '' });
+
+  const rowsPerPage = 25;
   const open = Boolean(anchorEl);
 
   useEffect(() => {
@@ -98,8 +103,18 @@ export default function Cols() {
       .join('\n');
   };
 
+  const filteredCols = React.useMemo(() => {
+    return cols.filter(
+      (col) =>
+        (filter.evalId ? col.evalId?.includes(filter.evalId) : true) &&
+        (filter.datasetId ? col.datasetId?.startsWith(filter.datasetId) : true) &&
+        (filter.provider ? col.provider?.includes(filter.provider) : true) &&
+        (filter.promptId ? col.promptId?.startsWith(filter.promptId) : true),
+    );
+  }, [cols, filter]);
+
   const sortedCols = React.useMemo(() => {
-    return cols.sort((a, b) => {
+    return filteredCols.sort((a, b) => {
       if (!sortField) return 0;
       if (sortField === 'passRate') {
         const aValue = parseFloat(calculatePassRate(a.metrics));
@@ -117,10 +132,11 @@ export default function Cols() {
         return 0;
       }
     });
-  }, [cols, sortField, sortOrder]);
+  }, [filteredCols, sortField, sortOrder]);
 
-  const [page, setPage] = React.useState(1);
-  const rowsPerPage = 25;
+  const handleFilterChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setFilter({ ...filter, [event.target.name]: event.target.value });
+  };
 
   return (
     <Box paddingX={2}>
@@ -152,6 +168,40 @@ export default function Cols() {
         </div>
       </Box>
       <Box>This page shows performance metrics for recent evals.</Box>
+      <Box display="flex" flexDirection="row" gap={2} mt={2}>
+        <TextField
+          label="Eval ID"
+          variant="outlined"
+          size="small"
+          name="evalId"
+          value={filter.evalId || ''}
+          onChange={handleFilterChange}
+        />
+        <TextField
+          label="Dataset ID"
+          variant="outlined"
+          size="small"
+          name="datasetId"
+          value={filter.datasetId || ''}
+          onChange={handleFilterChange}
+        />
+        <TextField
+          label="Provider"
+          variant="outlined"
+          size="small"
+          name="provider"
+          value={filter.provider || ''}
+          onChange={handleFilterChange}
+        />
+        <TextField
+          label="Prompt ID"
+          variant="outlined"
+          size="small"
+          name="promptId"
+          value={filter.promptId || ''}
+          onChange={handleFilterChange}
+        />
+      </Box>
       <Table>
         <TableHead>
           <TableRow>
@@ -207,7 +257,19 @@ export default function Cols() {
         </TableHead>
         <TableBody>
           {sortedCols.slice((page - 1) * rowsPerPage, page * rowsPerPage).map((col, index) => (
-            <TableRow key={index} hover style={{ cursor: 'pointer' }}>
+            <TableRow
+              key={index}
+              hover
+              onClick={() =>
+                setFilter({
+                  ...filter,
+                  evalId: col.evalId,
+                  datasetId: col.datasetId || '',
+                  promptId: col.promptId || '',
+                  provider: col.provider,
+                })
+              }
+            >
               <TableCell>
                 <Link href={`/eval?evalId=${col.evalId}`}>{col.evalId}</Link>
               </TableCell>
@@ -233,7 +295,7 @@ export default function Cols() {
           ))}
         </TableBody>
       </Table>
-      {Math.ceil(cols.length / rowsPerPage) > 1 && (
+      {Math.ceil(filteredCols.length / rowsPerPage) > 1 && (
         <Pagination
           count={Math.ceil(sortedCols.length / rowsPerPage)}
           page={page}
