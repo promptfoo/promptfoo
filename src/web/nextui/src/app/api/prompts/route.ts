@@ -1,11 +1,14 @@
 import { NextResponse } from 'next/server';
 
-import { IS_RUNNING_LOCALLY } from '@/constants';
+import { IS_RUNNING_LOCALLY, USE_SUPABASE } from '@/constants';
 import { getPrompts } from '@/../../../util';
 
 export const dynamic = IS_RUNNING_LOCALLY ? 'auto' : 'force-dynamic';
 
 export async function GET(req: Request) {
+  if (USE_SUPABASE || IS_RUNNING_LOCALLY) {
+    return NextResponse.json({ error: 'Not implemented' });
+  }
   try {
     return NextResponse.json({ data: await getPrompts() });
   } catch (error) {
