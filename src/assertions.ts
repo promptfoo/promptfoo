@@ -10,6 +10,7 @@ import Ajv, { ValidateFunction } from 'ajv';
 import addFormats from 'ajv-formats';
 import { distance as levenshtein } from 'fastest-levenshtein';
 
+import cliState from './cliState';
 import telemetry from './telemetry';
 import logger from './logger';
 import { fetchWithRetries } from './fetch';
@@ -242,8 +243,9 @@ export async function runAssertion({
         }
         logger.debug(`Javascript script ${filePath} output: ${valueFromScript}`);
       } else if (filePath.endsWith('.py')) {
+        const basePath = cliState.basePath || '';
         const args = [
-          filePath,
+          path.resolve(basePath, filePath),
           typeof output === 'string' ? output : JSON.stringify(output),
           JSON.stringify(context),
         ];

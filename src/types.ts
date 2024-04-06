@@ -186,7 +186,6 @@ export interface EvaluateOptions {
   delay?: number;
   cache?: boolean;
   eventSource?: string;
-  basePath?: string;
 }
 
 export interface Prompt {
