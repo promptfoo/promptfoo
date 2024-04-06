@@ -52,19 +52,36 @@ function calculateCost(
   return inputCost * promptTokens + outputCost * completionTokens || undefined;
 }
 
+interface AnthropicMessageInput {
+  role: 'user' | 'assistant' | 'system';
+  content: string | Array<Anthropic.ImageBlockParam | Anthropic.TextBlockParam>;
+}
+
 export function parseMessages(messages: string) {
-  const chats = parseChatPrompt<{ role: 'user' | 'assistant' | 'system'; content: string }[]>(
+  // We need to be able to handle the 'system' role prompts that
+  // are in the style of OpenAI's chat prompts.
+  // As a result, AnthropicMessageInput is the same as Anthropic.MessageParam
+  // just with the system role added on
+  const chats = parseChatPrompt<AnthropicMessageInput[]>(
     messages,
     [{ role: 'user' as const, content: messages }],
   );
   // Convert from OpenAI to Anthropic format
-  const system = chats.find((m) => m.role === 'system')?.content;
-  const extractedMessages = chats
+  const systemMessage = chats.find((m) => m.role === 'system')?.content;
+  const system = typeof systemMessage === 'string' ? systemMessage : undefined;
+  const extractedMessages: Anthropic.MessageParam[] = chats
     .filter((m) => m.role === 'user' || m.role === 'assistant')
-    .map((m) => ({
-      role: m.role as 'user' | 'assistant',
-      content: [{ type: 'text' as const, text: m.content }],
-    }));
+    .map((m) => {
+      const role = m.role as 'user' | 'assistant';
+      if (typeof m.content === 'string') {
+        const content = [{ type: 'text' as const, text: m.content }];
+        return { role, content };
+      }
+      else {
+        const content = [...m.content];
+        return { role, content };
+      }
+    });
   return { system, extractedMessages };
 }
 
@@ -162,6 +179,7 @@ export class AnthropicMessagesProvider implements ApiProvider {
       messages: extractedMessages,
       max_tokens: this.config?.max_tokens || 1024,
       temperature: this.config.temperature || 0,
+      stream: false
     };
 
     logger.debug(`Calling Anthropic Messages API: ${JSON.stringify(params)}`);

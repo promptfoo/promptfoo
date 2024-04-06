@@ -1587,7 +1587,7 @@ describe('runAssertion', () => {
               expect(file).toBe('python');
               expect(args).toEqual(
                 expect.arrayContaining([
-                  '/path/to/assert.py',
+                  path.resolve('/path/to/assert.py'),
                   'Expected output',
                   '{"prompt":"Some prompt that includes \\"double quotes\\" and \'single quotes\'","vars":{},"test":{}}',
                 ]),

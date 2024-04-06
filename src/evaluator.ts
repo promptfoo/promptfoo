@@ -7,6 +7,7 @@ import chalk from 'chalk';
 import invariant from 'tiny-invariant';
 import yaml from 'js-yaml';
 
+import cliState from './cliState';
 import logger from './logger';
 import telemetry from './telemetry';
 import { runAssertions, runCompareAssertion } from './assertions';
@@ -110,7 +111,6 @@ export function resolveVariables(
 export async function renderPrompt(
   prompt: Prompt,
   vars: Record<string, string | object>,
-  evaluateOptions: EvaluateOptions,
   nunjucksFilters?: NunjucksFilterMap,
   provider?: ApiProvider,
 ): Promise<string> {
@@ -121,7 +121,7 @@ export async function renderPrompt(
   // Load files
   for (const [varName, value] of Object.entries(vars)) {
     if (typeof value === 'string' && value.startsWith('file://')) {
-      const basePath = evaluateOptions.basePath || '';
+      const basePath = cliState.basePath || '';
       const filePath = path.resolve(process.cwd(), basePath, value.slice('file://'.length));
       const fileExtension = filePath.split('.').pop();
 

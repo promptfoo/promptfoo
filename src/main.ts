@@ -9,6 +9,7 @@ import chokidar from 'chokidar';
 import yaml from 'js-yaml';
 import { Command } from 'commander';
 
+import cliState from './cliState';
 import telemetry from './telemetry';
 import logger, { getLogLevel, setLogLevel } from './logger';
 import { readAssertions } from './assertions';
@@ -214,7 +215,6 @@ async function resolveConfigs(
     defaultTest,
     nunjucksFilters: await readFilters(
       fileConfig.nunjucksFilters || defaultConfig.nunjucksFilters || {},
-      basePath,
     ),
   };
   return { config, testSuite, basePath };
@@ -551,6 +551,7 @@ async function main() {
         }
 
         ({ config, testSuite, basePath } = await resolveConfigs(cmdObj, defaultConfig));
+        cliState.basePath = basePath;
 
         let maxConcurrency = parseInt(cmdObj.maxConcurrency || '', 10);
         const delay = parseInt(cmdObj.delay || '', 0);
@@ -580,7 +581,6 @@ async function main() {
 
         const summary = await evaluate(testSuite, {
           ...options,
-          basePath,
           eventSource: 'cli',
         });
 

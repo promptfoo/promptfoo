@@ -1,0 +1,7 @@
+prompts: [prompt.json]
+providers: [openai:chat:gpt-4-vision-preview]
+
+tests:
+  - assert:
+    - type: contains
+      value: 'boardwalk'
