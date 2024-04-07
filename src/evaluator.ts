@@ -48,7 +48,7 @@ interface RunEvalOptions {
 
 export const DEFAULT_MAX_CONCURRENCY = 4;
 
-function generateVarCombinations(
+export function generateVarCombinations(
   vars: Record<string, string | string[] | any>,
 ): Record<string, string | any[]>[] {
   const keys = Object.keys(vars);
