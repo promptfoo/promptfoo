@@ -1580,14 +1580,18 @@ describe('runAssertion', () => {
         output,
       });
 
-      expect(pythonWrapper.runPython).toHaveBeenCalledWith('/path/to/assert.py', 'get_assert', [
-        output,
-        {
-          prompt: 'Some prompt that includes "double quotes" and \'single quotes\'',
-          vars: {},
-          test: {},
-        },
-      ]);
+      expect(pythonWrapper.runPython).toHaveBeenCalledWith(
+        path.resolve('/path/to/assert.py'),
+        'get_assert',
+        [
+          output,
+          {
+            prompt: 'Some prompt that includes "double quotes" and \'single quotes\'',
+            vars: {},
+            test: {},
+          },
+        ],
+      );
 
       expect(result.pass).toBe(expectedPass);
       expect(result.reason).toContain(expectedReason);
