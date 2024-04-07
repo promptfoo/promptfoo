@@ -31,6 +31,7 @@ import {
   updateResult,
   readLatestResults,
   migrateResultsFromFileSystemToDatabase,
+  getStandaloneEvals,
 } from '../util';
 import { synthesizeFromTestSuite } from '../testCases';
 import { getDbPath, getDbSignalPath } from '../database';
@@ -164,6 +165,13 @@ export async function startServer(port = 15500, apiBaseUrl = '', skipConfirmatio
       allPrompts = await getPrompts();
     }
     res.json({ data: allPrompts });
+  });
+
+  app.get('/api/progress', async (req, res) => {
+    const results = await getStandaloneEvals();
+    res.json({
+      data: results,
+    });
   });
 
   app.get('/api/prompts/:sha256hash', async (req, res) => {

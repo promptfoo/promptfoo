@@ -6,7 +6,9 @@ import async from 'async';
 import chalk from 'chalk';
 import invariant from 'tiny-invariant';
 import yaml from 'js-yaml';
+import { globSync } from 'glob';
 
+import cliState from './cliState';
 import logger from './logger';
 import telemetry from './telemetry';
 import { runAssertions, runCompareAssertion } from './assertions';
@@ -46,14 +48,23 @@ interface RunEvalOptions {
 
 export const DEFAULT_MAX_CONCURRENCY = 4;
 
-function generateVarCombinations(
+export function generateVarCombinations(
   vars: Record<string, string | string[] | any>,
 ): Record<string, string | any[]>[] {
   const keys = Object.keys(vars);
   const combinations: Record<string, string | any[]>[] = [{}];
 
   for (const key of keys) {
-    let values: any[] = Array.isArray(vars[key]) ? vars[key] : [vars[key]];
+    let values: any[] = [];
+
+    if (typeof vars[key] === 'string' && vars[key].startsWith('file://')) {
+      const filePath = vars[key].slice('file://'.length);
+      const resolvedPath = path.resolve(cliState.basePath || '', filePath);
+      const filePaths = globSync(resolvedPath.replace(/\\/g, '/'));
+      values = filePaths.map((path: string) => `file://${path}`);
+    } else {
+      values = Array.isArray(vars[key]) ? vars[key] : [vars[key]];
+    }
 
     // Check if it's an array but not a string array
     if (Array.isArray(vars[key]) && typeof vars[key][0] !== 'string') {
@@ -110,8 +121,8 @@ export function resolveVariables(
 export async function renderPrompt(
   prompt: Prompt,
   vars: Record<string, string | object>,
-  evaluateOptions: EvaluateOptions,
   nunjucksFilters?: NunjucksFilterMap,
+  provider?: ApiProvider,
 ): Promise<string> {
   const nunjucks = getNunjucksEngine(nunjucksFilters);
 
@@ -120,7 +131,7 @@ export async function renderPrompt(
   // Load files
   for (const [varName, value] of Object.entries(vars)) {
     if (typeof value === 'string' && value.startsWith('file://')) {
-      const basePath = evaluateOptions.basePath || '';
+      const basePath = cliState.basePath || '';
       const filePath = path.resolve(process.cwd(), basePath, value.slice('file://'.length));
       const fileExtension = filePath.split('.').pop();
 
@@ -169,7 +180,7 @@ export async function renderPrompt(
 
   // Apply prompt functions
   if (prompt.function) {
-    const result = await prompt.function({ vars });
+    const result = await prompt.function({ vars, provider });
     if (typeof result === 'string') {
       basePrompt = result;
     } else if (typeof result === 'object') {
@@ -263,7 +274,7 @@ class Evaluator {
     }
 
     // Render the prompt
-    const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions, filters);
+    const renderedPrompt = await renderPrompt(prompt, vars, filters, provider);
 
     let renderedJson = undefined;
     try {

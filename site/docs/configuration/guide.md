@@ -306,6 +306,16 @@ Evaluates each `language` x `input` combination:
 
 <img alt="Multiple combinations of var inputs" src="https://user-images.githubusercontent.com/310310/243108917-dab27ca5-689b-4843-bb52-de8d459d783b.png" />
 
+Vars can also be imported from globbed filepaths. They are automatically expanded into an array.  For example:
+
+```yaml
+  - vars:
+      language: [French, German, Spanish]
+      // highlight-start
+      input: file://path/to/inputs/*.txt
+      // highlight-end
+```
+
 ## Using nunjucks templates
 
 Use Nunjucks templates to exert additional control over your prompt templates, including loops, conditionals, and more.
