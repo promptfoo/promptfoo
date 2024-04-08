@@ -793,6 +793,9 @@ class Evaluator {
           await createMultiBars(providerEvalOptions);
         }
         await async.forEachOfLimit(providerEvalOptions, concurrency, processEvalStep);
+        if (multibar) {
+          multibar.stop();
+        }
 
         // Prompt to continue to the next provider unless it's the last one
         if (
@@ -804,7 +807,7 @@ class Evaluator {
               input: process.stdin,
               output: process.stdout,
             });
-            rl.question(`Ready to continue to the next provider? (Y/n) `, (answer) => {
+            rl.question(`\nReady to continue to the next provider? (Y/n) `, (answer) => {
               rl.close();
               if (answer.toLowerCase() === 'n') {
                 logger.info('Aborting evaluation.');
