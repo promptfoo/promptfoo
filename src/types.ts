@@ -26,6 +26,7 @@ export interface CommandLineOptions {
   share?: boolean;
   progressBar?: boolean;
   watch?: boolean;
+  interactiveProviders?: boolean;
 
   generateSuggestions?: boolean;
   promptPrefix?: string;
@@ -186,6 +187,7 @@ export interface EvaluateOptions {
   delay?: number;
   cache?: boolean;
   eventSource?: string;
+  interactiveProviders?: boolean;
 }
 
 export interface Prompt {

@@ -557,7 +557,7 @@ class Evaluator {
     }
 
     // Set up eval cases
-    const runEvalOptions: RunEvalOptions[] = [];
+    let runEvalOptions: RunEvalOptions[] = [];
     let rowIndex = 0;
     for (let index = 0; index < tests.length; index++) {
       const testCase = tests[index];
@@ -645,7 +645,7 @@ class Evaluator {
     // Start the progress bars...
     let multibar: MultiBar | undefined;
     let progressbars: SingleBar[] = [];
-    if (options.showProgressBar) {
+    if (options.showProgressBar && !options.interactiveProviders) {
       const cliProgress = await import('cli-progress');
       multibar = new cliProgress.MultiBar(
         {
@@ -676,109 +676,142 @@ class Evaluator {
     // Actually run the eval
     const results: EvaluateResult[] = [];
     let numComplete = 0;
-    await async.forEachOfLimit(
-      runEvalOptions,
-      concurrency,
-      async (evalStep: RunEvalOptions, index: number | string) => {
-        const row = await this.runEval(evalStep);
+    
+    const processEvalStep = async (evalStep: RunEvalOptions, index: number | string) => {
+      const row = await this.runEval(evalStep);
 
-        results.push(row);
+      results.push(row);
 
-        numComplete++;
-        if (multibar) {
-          const threadIndex = (index as number) % concurrency;
-          const progressbar = progressbars[threadIndex];
-          progressbar.increment({
-            provider: evalStep.provider.label || evalStep.provider.id(),
-            prompt: evalStep.prompt.raw.slice(0, 10).replace(/\n/g, ' '),
-            vars: Object.entries(evalStep.test.vars || {})
-              .map(([k, v]) => `${k}=${v}`)
-              .join(' ')
-              .slice(0, 10)
-              .replace(/\n/g, ' '),
-          });
+      numComplete++;
+      if (multibar) {
+        const threadIndex = (index as number) % concurrency;
+        const progressbar = progressbars[threadIndex];
+        progressbar.increment({
+          provider: evalStep.provider.label || evalStep.provider.id(),
+          prompt: evalStep.prompt.raw.slice(0, 10).replace(/\n/g, ' '),
+          vars: Object.entries(evalStep.test.vars || {})
+            .map(([k, v]) => `${k}=${v}`)
+            .join(' ')
+            .slice(0, 10)
+            .replace(/\n/g, ' '),
+        });
+      } else {
+        logger.debug(
+          `Eval #${(index as number) + 1} complete (${numComplete} of ${runEvalOptions.length})`,
+        );
+      }
+      if (options.progressCallback) {
+        options.progressCallback(results.length, runEvalOptions.length);
+      }
+
+      // Bookkeeping for table
+      if (typeof index !== 'number') {
+        throw new Error('Expected index to be a number');
+      }
+
+      let resultText: string | undefined;
+      const outputTextDisplay =
+        typeof row.response?.output === 'object'
+          ? JSON.stringify(row.response.output)
+          : row.response?.output || null;
+      if (isTest) {
+        if (row.success) {
+          resultText = `${outputTextDisplay || row.error || ''}`;
         } else {
-          logger.debug(
-            `Eval #${(index as number) + 1} complete (${numComplete} of ${runEvalOptions.length})`,
-          );
+          resultText = `${row.error}\n---\n${outputTextDisplay || ''}`;
         }
-        if (options.progressCallback) {
-          options.progressCallback(results.length, runEvalOptions.length);
-        }
+      } else if (row.error) {
+        resultText = `${row.error}`;
+      } else {
+        resultText = outputTextDisplay || row.error || '';
+      }
 
-        // Bookkeeping for table
-        if (typeof index !== 'number') {
-          throw new Error('Expected index to be a number');
-        }
-
-        let resultText: string | undefined;
-        const outputTextDisplay =
-          typeof row.response?.output === 'object'
-            ? JSON.stringify(row.response.output)
-            : row.response?.output || null;
-        if (isTest) {
-          if (row.success) {
-            resultText = `${outputTextDisplay || row.error || ''}`;
-          } else {
-            resultText = `${row.error}\n---\n${outputTextDisplay || ''}`;
-          }
-        } else if (row.error) {
-          resultText = `${row.error}`;
-        } else {
-          resultText = outputTextDisplay || row.error || '';
-        }
-
-        const { rowIndex, colIndex } = evalStep;
-        if (!table.body[rowIndex]) {
-          table.body[rowIndex] = {
-            description: evalStep.test.description,
-            outputs: [],
-            test: evalStep.test,
-            vars: table.head.vars
-              .map((varName) => {
-                const varValue = evalStep.test.vars?.[varName] || '';
-                if (typeof varValue === 'string') {
-                  return varValue;
-                }
-                return JSON.stringify(varValue);
-              })
-              .flat(),
-          };
-        }
-        table.body[rowIndex].outputs[colIndex] = {
-          pass: row.success,
-          score: row.score,
-          namedScores: row.namedScores,
-          text: resultText,
-          prompt: row.prompt.raw,
-          provider: row.provider.label || row.provider.id,
-          latencyMs: row.latencyMs,
-          tokenUsage: row.response?.tokenUsage,
-          gradingResult: row.gradingResult,
-          cost: row.cost || 0,
+      const { rowIndex, colIndex } = evalStep;
+      if (!table.body[rowIndex]) {
+        table.body[rowIndex] = {
+          description: evalStep.test.description,
+          outputs: [],
+          test: evalStep.test,
+          vars: table.head.vars
+            .map((varName) => {
+              const varValue = evalStep.test.vars?.[varName] || '';
+              if (typeof varValue === 'string') {
+                return varValue;
+              }
+              return JSON.stringify(varValue);
+            })
+            .flat(),
         };
+      }
+      table.body[rowIndex].outputs[colIndex] = {
+        pass: row.success,
+        score: row.score,
+        namedScores: row.namedScores,
+        text: resultText,
+        prompt: row.prompt.raw,
+        provider: row.provider.label || row.provider.id,
+        latencyMs: row.latencyMs,
+        tokenUsage: row.response?.tokenUsage,
+        gradingResult: row.gradingResult,
+        cost: row.cost || 0,
+      };
 
-        const metrics = table.head.prompts[colIndex].metrics;
-        invariant(metrics, 'Expected prompt.metrics to be set');
-        metrics.score += row.score;
-        for (const [key, value] of Object.entries(row.namedScores)) {
-          metrics.namedScores[key] = (metrics.namedScores[key] || 0) + value;
+      const metrics = table.head.prompts[colIndex].metrics;
+      invariant(metrics, 'Expected prompt.metrics to be set');
+      metrics.score += row.score;
+      for (const [key, value] of Object.entries(row.namedScores)) {
+        metrics.namedScores[key] = (metrics.namedScores[key] || 0) + value;
+      }
+      metrics.testPassCount += row.success ? 1 : 0;
+      metrics.testFailCount += row.success ? 0 : 1;
+      metrics.assertPassCount +=
+        row.gradingResult?.componentResults?.filter((r) => r.pass).length || 0;
+      metrics.assertFailCount +=
+        row.gradingResult?.componentResults?.filter((r) => !r.pass).length || 0;
+      metrics.totalLatencyMs += row.latencyMs || 0;
+      metrics.tokenUsage.cached =
+        (metrics.tokenUsage.cached || 0) + (row.response?.tokenUsage?.cached || 0);
+      metrics.tokenUsage.completion += row.response?.tokenUsage?.completion || 0;
+      metrics.tokenUsage.prompt += row.response?.tokenUsage?.prompt || 0;
+      metrics.tokenUsage.total += row.response?.tokenUsage?.total || 0;
+      metrics.cost += row.cost || 0;
+    };
+
+    if (this.options.interactiveProviders) {
+      runEvalOptions = runEvalOptions.sort((a, b) => (
+        a.provider.id().localeCompare(b.provider.id())
+      ));
+      logger.warn('Providers are running in serial with user input.');
+
+      let currentProvider = '';
+      for (let i = 0; i < runEvalOptions.length; i++) {
+        const evalStep = runEvalOptions[i];
+        if (evalStep.provider.id() !== currentProvider) {
+          currentProvider = evalStep.provider.id();
+          const providerEvalOptions = runEvalOptions.filter(
+            (option) => option.provider.id() === currentProvider
+          );
+          logger.info(`Running ${providerEvalOptions.length} evaluations for provider ${currentProvider}...`);
+          await async.forEachOfLimit(providerEvalOptions, concurrency, processEvalStep);
+          await new Promise((resolve) => {
+            const rl = readline.createInterface({
+              input: process.stdin,
+              output: process.stdout,
+            });
+            rl.question(`Ready to continue to the next provider? (Y/n) `, (answer) => {
+              rl.close();
+              if (answer.toLowerCase() === 'n') {
+                logger.info('Aborting evaluation.');
+                process.exit(1);
+              }
+              resolve(true);
+            });
+          });
         }
-        metrics.testPassCount += row.success ? 1 : 0;
-        metrics.testFailCount += row.success ? 0 : 1;
-        metrics.assertPassCount +=
-          row.gradingResult?.componentResults?.filter((r) => r.pass).length || 0;
-        metrics.assertFailCount +=
-          row.gradingResult?.componentResults?.filter((r) => !r.pass).length || 0;
-        metrics.totalLatencyMs += row.latencyMs || 0;
-        metrics.tokenUsage.cached =
-          (metrics.tokenUsage.cached || 0) + (row.response?.tokenUsage?.cached || 0);
-        metrics.tokenUsage.completion += row.response?.tokenUsage?.completion || 0;
-        metrics.tokenUsage.prompt += row.response?.tokenUsage?.prompt || 0;
-        metrics.tokenUsage.total += row.response?.tokenUsage?.total || 0;
-        metrics.cost += row.cost || 0;
-      },
-    );
+      }
+    } else {
+      await async.forEachOfLimit(runEvalOptions, concurrency, processEvalStep);
+    }
 
     const compareRowsCount = table.body.reduce(
       (count, row) => count + (row.test.assert?.some((a) => a.type === 'select-best') ? 1 : 0),

@@ -245,6 +245,7 @@ async function main() {
     evaluateOptions.generateSuggestions = defaultConfig.evaluateOptions.generateSuggestions;
     evaluateOptions.maxConcurrency = defaultConfig.evaluateOptions.maxConcurrency;
     evaluateOptions.showProgressBar = defaultConfig.evaluateOptions.showProgressBar;
+    evaluateOptions.interactiveProviders = defaultConfig.evaluateOptions.interactiveProviders;
   }
 
   const program = new Command();
@@ -534,6 +535,7 @@ async function main() {
     )
     .option('--verbose', 'Show debug logs', defaultConfig?.commandLineOptions?.verbose)
     .option('-w, --watch', 'Watch for changes in config and re-run')
+    .option('--interactive-providers', 'Run providers interactively, one at a time', defaultConfig?.evaluateOptions?.interactiveProviders)
     .action(async (cmdObj: CommandLineOptions & Command) => {
       let config: Partial<UnifiedConfig> | undefined = undefined;
       let testSuite: TestSuite | undefined = undefined;
@@ -568,6 +570,7 @@ async function main() {
           maxConcurrency: !isNaN(maxConcurrency) && maxConcurrency > 0 ? maxConcurrency : undefined,
           repeat,
           delay: !isNaN(delay) && delay > 0 ? delay : undefined,
+          interactiveProviders: cmdObj.interactiveProviders,
           ...evaluateOptions,
         };
 
