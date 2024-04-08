@@ -234,6 +234,45 @@ describe('call provider apis', () => {
     expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
   });
 
+  test('AzureOpenAiChatCompletionProvider callApi with dataSources', async () => {
+    const dataSources = [
+      {
+        type: 'AzureCognitiveSearch',
+        endpoint: 'https://search.windows.net',
+        indexName: 'search-test',
+        semanticConfiguration: 'default',
+        queryType: 'vectorSimpleHybrid',
+      },
+    ];
+    const mockResponse = {
+      text: jest.fn().mockResolvedValue(
+        JSON.stringify({
+          choices: [
+            { message: { role: 'system', content: 'System prompt' } },
+            { message: { role: 'user', content: 'Test prompt' } },
+            { message: { role: 'assistant', content: 'Test response' } },
+          ],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        }),
+      ),
+    };
+    (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
+
+    const provider = new AzureOpenAiChatCompletionProvider('gpt-3.5-turbo', {
+      config: { dataSources },
+    });
+    const result = await provider.callApi(
+      JSON.stringify([
+        { role: 'system', content: 'System prompt' },
+        { role: 'user', content: 'Test prompt' },
+      ]),
+    );
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(result.output).toBe('Test response');
+    expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+  });
+
   test('AzureOpenAiChatCompletionProvider callApi with cache disabled', async () => {
     disableCache();
 

@@ -405,8 +405,12 @@ export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvide
           error: `API response error: ${data.error.code} ${data.error.message}`,
         };
       }
-      const message = this.config.dataSources
-        ? data.choices[0].messages.find((msg: { role: string }) => msg.role === 'assistant')
+      const hasDataSources = !!this.config.dataSources;
+      const message = hasDataSources
+        ? data.choices.find(
+            (choice: { message: { role: string; content: string } }) =>
+              choice.message.role === 'assistant',
+          )?.message
         : data.choices[0].message;
       const output = message.content == null ? message.function_call : message.content;
       const logProbs = data.choices[0].logprobs?.content?.map(
