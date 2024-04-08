@@ -195,7 +195,7 @@ export interface RunEvalOptions {
 export interface EvaluateOptions {
   maxConcurrency?: number;
   showProgressBar?: boolean;
-  progressCallback?: (progress: number, total: number, index?: number, evalStep?: RunEvalOptions) => void;
+  progressCallback?: (progress: number, total: number, index: number, evalStep: RunEvalOptions) => void;
   generateSuggestions?: boolean;
   repeat?: number;
   delay?: number;

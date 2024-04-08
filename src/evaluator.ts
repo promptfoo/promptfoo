@@ -716,30 +716,89 @@ class Evaluator {
       metrics.cost += row.cost || 0;
     };
 
+    // Set up main progress bars
     let multibar: MultiBar | undefined;
+    let multiProgressBars: SingleBar[] = [];
+    this.options.progressCallback = (completed, total, index, evalStep) => {
+      if (multibar && evalStep) {
+        const threadIndex = index % concurrency;
+        const progressbar = multiProgressBars[threadIndex];
+        progressbar.increment({
+          provider: evalStep.provider.label || evalStep.provider.id(),
+          prompt: evalStep.prompt.raw.slice(0, 10).replace(/\n/g, ' '),
+          vars: Object.entries(evalStep.test.vars || {})
+            .map(([k, v]) => `${k}=${v}`)
+            .join(' ')
+            .slice(0, 10)
+            .replace(/\n/g, ' '),
+        });
+      } else {
+        logger.debug(`Eval #${index + 1} complete (${numComplete} of ${runEvalOptions.length})`);
+      }
+    };
+
+    const createMultiBars = async (evalOptions: RunEvalOptions[]) => {
+      const cliProgress = await import('cli-progress');
+      multibar = new cliProgress.MultiBar(
+        {
+          format:
+            '[{bar}] {percentage}% | ETA: {eta}s | {value}/{total} | {provider} "{prompt}" {vars}',
+          hideCursor: true,
+        },
+        cliProgress.Presets.shades_classic,
+      );
+      const stepsPerThread = Math.floor(evalOptions.length / concurrency);
+      const remainingSteps = evalOptions.length % concurrency;
+      multiProgressBars = [];
+      for (let i = 0; i < concurrency; i++) {
+        const totalSteps = i < remainingSteps ? stepsPerThread + 1 : stepsPerThread;
+        if (totalSteps > 0) {
+          const progressbar = multibar.create(totalSteps, 0, {
+            provider: '',
+            prompt: '',
+            vars: '',
+          });
+          multiProgressBars.push(progressbar);
+        }
+      }
+    };
+
+    // Run the evals
     if (this.options.interactiveProviders) {
       runEvalOptions = runEvalOptions.sort((a, b) =>
         a.provider.id().localeCompare(b.provider.id()),
       );
       logger.warn('Providers are running in serial with user input.');
 
-      let currentProvider = '';
-      for (let i = 0; i < runEvalOptions.length; i++) {
-        const evalStep = runEvalOptions[i];
-        if (evalStep.provider.id() !== currentProvider) {
-          currentProvider = evalStep.provider.id();
-          const providerEvalOptions = runEvalOptions.filter(
-            (option) => option.provider.id() === currentProvider,
-          );
-          logger.info(
-            `Running ${providerEvalOptions.length} evaluations for provider ${currentProvider} with concurrency=${concurrency}...`,
-          );
+      // Group evalOptions by provider
+      const groupedEvalOptions = runEvalOptions.reduce<Record<string, RunEvalOptions[]>>(
+        (acc, evalOption) => {
+          const providerId = evalOption.provider.id();
+          if (!acc[providerId]) {
+            acc[providerId] = [];
+          }
+          acc[providerId].push(evalOption);
+          return acc;
+        },
+        {},
+      );
 
-          this.options.progressCallback = (completed, total) => {
-            logger.debug(`Eval #${completed} complete (${completed} of ${total})`);
-          };
+      // Process each group
+      for (const [providerId, providerEvalOptions] of Object.entries(groupedEvalOptions)) {
+        logger.info(
+          `Running ${providerEvalOptions.length} evaluations for provider ${providerId} with concurrency=${concurrency}...`,
+        );
 
-          await async.forEachOfLimit(providerEvalOptions, concurrency, processEvalStep);
+        if (this.options.showProgressBar) {
+          await createMultiBars(providerEvalOptions);
+        }
+        await async.forEachOfLimit(providerEvalOptions, concurrency, processEvalStep);
+
+        // Prompt to continue to the next provider unless it's the last one
+        if (
+          Object.keys(groupedEvalOptions).indexOf(providerId) <
+          Object.keys(groupedEvalOptions).length - 1
+        ) {
           await new Promise((resolve) => {
             const rl = readline.createInterface({
               input: process.stdin,
@@ -757,54 +816,9 @@ class Evaluator {
         }
       }
     } else {
-      if (options.showProgressBar) {
-        const cliProgress = await import('cli-progress');
-        multibar = new cliProgress.MultiBar(
-          {
-            format:
-              '[{bar}] {percentage}% | ETA: {eta}s | {value}/{total} | {provider} "{prompt}" {vars}',
-            hideCursor: true,
-          },
-          cliProgress.Presets.shades_classic,
-        );
-        const stepsPerThread = Math.floor(runEvalOptions.length / concurrency);
-        const remainingSteps = runEvalOptions.length % concurrency;
-        const multiProgressBars: SingleBar[] = [];
-        for (let i = 0; i < concurrency; i++) {
-          const totalSteps = i < remainingSteps ? stepsPerThread + 1 : stepsPerThread;
-          if (totalSteps > 0) {
-            const progressbar = multibar.create(totalSteps, 0, {
-              provider: '',
-              prompt: '',
-              vars: '',
-            });
-            multiProgressBars.push(progressbar);
-          }
-        }
-
-        this.options.progressCallback = (completed, total, index, evalStep) => {
-          if (multibar && evalStep) {
-            const threadIndex = (index as number) % concurrency;
-            const progressbar = multiProgressBars[threadIndex];
-            progressbar.increment({
-              provider: evalStep.provider.label || evalStep.provider.id(),
-              prompt: evalStep.prompt.raw.slice(0, 10).replace(/\n/g, ' '),
-              vars: Object.entries(evalStep.test.vars || {})
-                .map(([k, v]) => `${k}=${v}`)
-                .join(' ')
-                .slice(0, 10)
-                .replace(/\n/g, ' '),
-            });
-          } else {
-            logger.debug(
-              `Eval #${(index as number) + 1} complete (${numComplete} of ${
-                runEvalOptions.length
-              })`,
-            );
-          }
-        };
+      if (this.options.showProgressBar) {
+        await createMultiBars(runEvalOptions);
       }
-
       await async.forEachOfLimit(runEvalOptions, concurrency, processEvalStep);
     }
 
