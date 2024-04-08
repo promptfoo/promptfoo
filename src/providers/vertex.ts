@@ -122,17 +122,27 @@ class VertexGenericProvider implements ApiProvider {
 }
 
 export class VertexChatProvider extends VertexGenericProvider {
+  // TODO(ian): Completion models 
+  // https://cloud.google.com/vertex-ai/generative-ai/docs/learn/model-versioning#gemini-model-versions
   static CHAT_MODELS = [
     'chat-bison',
     'chat-bison@001',
+    'chat-bison@002',
     'chat-bison-32k',
     'chat-bison-32k@001',
+    'chat-bison-32k@002',
     'codechat-bison',
     'codechat-bison@001',
+    'codechat-bison@002',
     'codechat-bison-32k',
     'codechat-bison-32k@001',
+    'codechat-bison-32k@002',
     'gemini-pro',
     'gemini-ultra',
+    'gemini-1.0-pro-vision',
+    'gemini-1.0-pro-vision-001',
+    'gemini-1.0-pro',
+    'gemini-1.0-pro-001',
   ];
 
   constructor(
