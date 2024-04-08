@@ -178,10 +178,24 @@ export interface OutputConfig {
   transform?: string;
 }
 
+export interface RunEvalOptions {
+  provider: ApiProvider;
+  prompt: Prompt;
+  delay: number;
+
+  test: AtomicTestCase;
+  nunjucksFilters?: NunjucksFilterMap;
+  evaluateOptions: EvaluateOptions;
+
+  rowIndex: number;
+  colIndex: number;
+  repeatIndex: number;
+}
+
 export interface EvaluateOptions {
   maxConcurrency?: number;
   showProgressBar?: boolean;
-  progressCallback?: (progress: number, total: number) => void;
+  progressCallback?: (progress: number, total: number, index?: number, evalStep?: RunEvalOptions) => void;
   generateSuggestions?: boolean;
   repeat?: number;
   delay?: number;
