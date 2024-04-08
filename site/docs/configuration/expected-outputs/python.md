@@ -83,18 +83,20 @@ This file will be called with an `output` string and an `AssertContext` object. 
 Here's an example assert.py:
 
 ```py
-def get_assert(output, context) -> Union[bool, float, Gradingresult]
+def get_assert(output, context) -> Union[bool, float, Dict[str, Any]]
     print('Prompt:', context['prompt'])
     print('Vars', context['vars']['topic']
 
-    success = test_output(output)
+    # Determine the result...
+    result = test_output(output)
 
-    return success
-
-class GradingResult:
-    pass: bool
-    score: float
-    reason: str
+    # Here's an example GradingResult dict
+    result = {
+      'pass': True,
+      'score': 0.6,
+      'reason': 'Looks good to me',
+    }
+    return result
 ```
 
 ## Overriding the Python binary
