@@ -294,11 +294,16 @@ export async function runAssertion({
 
     if (pass && renderedValue) {
       let validate: ValidateFunction;
-      if (typeof renderedValue === 'string' && renderedValue.startsWith('file://')) {
-        // Reference the JSON schema from external file
-        const schema = valueFromScript;
-        invariant(schema, 'is-json references a file that does not export a JSON schema');
-        validate = ajv.compile(schema as object);
+      if (typeof renderedValue === 'string') {
+        if (renderedValue.startsWith('file://')) {
+          // Reference the JSON schema from external file
+          const schema = valueFromScript;
+          invariant(schema, 'is-json references a file that does not export a JSON schema');
+          validate = ajv.compile(schema as object);
+        } else {
+          const scheme = yaml.load(renderedValue) as object;
+          validate = ajv.compile(scheme);
+        }
       } else if (typeof renderedValue === 'object') {
         // Value is JSON schema
         validate = ajv.compile(renderedValue);
@@ -472,16 +477,21 @@ export async function runAssertion({
       pass = jsonMatch !== inverse;
       if (pass && renderedValue) {
         let validate: ValidateFunction;
-        if (typeof renderedValue === 'string' && renderedValue.startsWith('file://')) {
-          // Reference the JSON schema from external file
-          const schema = valueFromScript;
-          invariant(schema, 'is-json references a file that does not export a JSON schema');
-          validate = ajv.compile(schema as object);
+        if (typeof renderedValue === 'string') {
+          if (renderedValue.startsWith('file://')) {
+            // Reference the JSON schema from external file
+            const schema = valueFromScript;
+            invariant(schema, 'contains-json references a file that does not export a JSON schema');
+            validate = ajv.compile(schema as object);
+          } else {
+            const scheme = yaml.load(renderedValue) as object;
+            validate = ajv.compile(scheme);
+          }
         } else if (typeof renderedValue === 'object') {
           // Value is JSON schema
           validate = ajv.compile(renderedValue);
         } else {
-          throw new Error('is-json assertion must have a string or object value');
+          throw new Error('contains-json assertion must have a string or object value');
         }
         pass = validate(jsonMatch);
         if (pass) {

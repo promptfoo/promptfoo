@@ -189,6 +189,23 @@ describe('runAssertion', () => {
     },
   };
 
+  const isJsonAssertionWithSchemaYamlString: Assertion = {
+    type: 'is-json',
+    value: `
+          required: ["latitude", "longitude"]
+          type: object
+          properties:
+            latitude:
+              type: number
+              minimum: -90
+              maximum: 90
+            longitude:
+              type: number
+              minimum: -180
+              maximum: 180
+`,
+  };
+
   const containsJsonAssertion: Assertion = {
     type: 'contains-json',
   };
@@ -211,6 +228,23 @@ describe('runAssertion', () => {
         },
       },
     },
+  };
+
+  const containsJsonAssertionWithSchemaYamlString: Assertion = {
+    type: 'contains-json',
+    value: `
+          required: ["latitude", "longitude"]
+          type: object
+          properties:
+            latitude:
+              type: number
+              minimum: -90
+              maximum: 90
+            longitude:
+              type: number
+              minimum: -180
+              maximum: 180
+`,
   };
 
   const javascriptStringAssertion: Assertion = {
@@ -356,6 +390,36 @@ describe('runAssertion', () => {
       prompt: 'Some prompt',
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: isJsonAssertionWithSchema,
+      test: {} as AtomicTestCase,
+      output,
+    });
+    expect(result.pass).toBeFalsy();
+    expect(result.reason).toBe(
+      'JSON does not conform to the provided schema. Errors: data/latitude must be number',
+    );
+  });
+
+  it('should pass when the is-json assertion passes with schema YAML string', async () => {
+    const output = '{"latitude": 80.123, "longitude": -1}';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      assertion: isJsonAssertionWithSchemaYamlString,
+      test: {} as AtomicTestCase,
+      output,
+    });
+    expect(result.pass).toBeTruthy();
+    expect(result.reason).toBe('Assertion passed');
+  });
+
+  it('should fail when the is-json assertion fails with schema YAML string', async () => {
+    const output = '{"latitude": "high", "longitude": [-1]}';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      assertion: isJsonAssertionWithSchemaYamlString,
       test: {} as AtomicTestCase,
       output,
     });
@@ -556,6 +620,20 @@ describe('runAssertion', () => {
   });
 
   it('should pass when the contains-json assertion passes with schema', async () => {
+    const output = 'here is the answer\n\n```{"latitude": 80.123, "longitude": -1}```';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      assertion: containsJsonAssertionWithSchema,
+      test: {} as AtomicTestCase,
+      output,
+    });
+    expect(result.pass).toBeTruthy();
+    expect(result.reason).toBe('Assertion passed');
+  });
+
+  it('should pass when the contains-json assertion passes with schema with YAML string', async () => {
     const output = 'here is the answer\n\n```{"latitude": 80.123, "longitude": -1}```';
 
     const result: GradingResult = await runAssertion({
@@ -1951,6 +2029,29 @@ describe('assertionFromString', () => {
 
     const result: Assertion = assertionFromString(expected);
     expect(result.type).toBe('is-json');
+  });
+
+  it('should create an is-json assertion with value', () => {
+    const expected =
+`is-json:
+      required: ['color']
+      type:object
+      properties:
+        color:
+          type:string
+`;
+
+    const result: Assertion = assertionFromString(expected);
+    expect(result.type).toBe('is-json');
+    expect(result.value).toBe(
+`
+      required: ['color']
+      type:object
+      properties:
+        color:
+          type:string
+`
+    );
   });
 
   it('should create an contains-json assertion', () => {
