@@ -20,14 +20,20 @@ export async function runPython(
   options: { pythonExecutable?: string } = {},
 ): Promise<any> {
   const absPath = path.resolve(scriptPath);
+  const tempJsonPath = path.join(
+      os.tmpdir(),
+      `temp-python-input-json-${Date.now()}-${Math.random().toString(16).slice(2)}.json`
+    );
   const pythonOptions: PythonShellOptions = {
     mode: 'text',
     pythonPath: options.pythonExecutable || process.env.PROMPTFOO_PYTHON || 'python',
     scriptPath: __dirname,
-    args: [absPath, method, ...args.map((arg) => JSON.stringify(arg))],
+    args: [absPath, method, tempJsonPath],
   };
 
   try {
+    await fs.writeFile(tempJsonPath, JSON.stringify(args));
+
     const results = await PythonShell.run('wrapper.py', pythonOptions);
     logger.debug(`Python script ${absPath} returned: ${results.join('\n')}`);
     let result: { type: 'final_result'; data: any } | undefined;
@@ -45,6 +51,10 @@ export async function runPython(
   } catch (error) {
     logger.error(`Error running Python script: ${error}`);
     throw error;
+  } finally {
+    await fs
+      .unlink(tempJsonPath)
+      .catch((error) => logger.error(`Error removing temporary file: ${error}`));
   }
 }
 
