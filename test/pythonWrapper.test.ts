@@ -21,9 +21,8 @@ describe('Python Wrapper', () => {
       expect(mockPythonShellRun).toHaveBeenCalledWith('wrapper.py', expect.any(Object));
       expect(mockPythonShellRun.mock.calls[0][1].args).toEqual([
         expect.stringContaining('testScript.py'),
-        'testMethod',
-        '"arg1"',
-        '{"key":"value"}',
+        "testMethod",
+        expect.stringContaining('temp-python-input-json'),
       ]);
     });
 
