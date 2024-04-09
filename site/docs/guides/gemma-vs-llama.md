@@ -74,7 +74,7 @@ The next section of the configuration file deals with the providers, which in th
 ##### Gemma Configuration
 
 ```yaml
-- id: replicate:cjwbw/gemma-7b-it:2790a695e5dcae15506138cc4718d1106d0d475e6dca4b1d43f42414647993d5
+- id: replicate:google-deepmind/gemma-7b-it:2790a695e5dcae15506138cc4718d1106d0d475e6dca4b1d43f42414647993d5
   config:
     temperature: 0.01
     max_new_tokens: 128
@@ -83,7 +83,7 @@ The next section of the configuration file deals with the providers, which in th
       suffix: "<end_of_turn>\n<start_of_turn>model"
 ```
 
-- `id`: The unique identifier for the [Gemma model on Replicate](https://replicate.com/cjwbw/gemma-7b-it).
+- `id`: The unique identifier for the [Gemma model on Replicate](https://replicate.com/google-deepmind/gemma-7b-it).
 - `temperature` and `max_new_tokens` settings are similar to Llama's configuration.
 - `prompt`: Gemma uses a different format, with `<start_of_turn>` and `<end_of_turn>` tags to delineate the user's input and the model's turn to respond.
 
@@ -104,7 +104,7 @@ providers:
         prefix: '[INST] '
         suffix: '[/INST] '
 
-  - id: replicate:cjwbw/gemma-7b-it:2790a695e5dcae15506138cc4718d1106d0d475e6dca4b1d43f42414647993d5
+  - id: replicate:google-deepmind/gemma-7b-it:2790a695e5dcae15506138cc4718d1106d0d475e6dca4b1d43f42414647993d5
     config:
       temperature: 0.01
       max_new_tokens: 128

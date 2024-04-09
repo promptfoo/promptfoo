@@ -77,7 +77,7 @@ Next, specify the models you're comparing by setting up their configurations:
 #### Gemma Configuration
 
 ```yaml
-- id: replicate:cjwbw/gemma-7b-it:2790a695e5dcae15506138cc4718d1106d0d475e6dca4b1d43f42414647993d5
+- id: replicate:google-deepmind/gemma-7b-it:2790a695e5dcae15506138cc4718d1106d0d475e6dca4b1d43f42414647993d5
   config:
     temperature: 0.01
     max_new_tokens: 1024
@@ -111,7 +111,7 @@ providers:
         prefix: '<s>[INST] '
         suffix: ' [/INST]'
 
-  - id: replicate:cjwbw/gemma-7b-it:2790a695e5dcae15506138cc4718d1106d0d475e6dca4b1d43f42414647993d5
+  - id: replicate:google-deepmind/gemma-7b-it:2790a695e5dcae15506138cc4718d1106d0d475e6dca4b1d43f42414647993d5
     config:
       temperature: 0.01
       max_new_tokens: 1024
