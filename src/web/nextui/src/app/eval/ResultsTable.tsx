@@ -9,10 +9,15 @@ import {
   createColumnHelper,
   flexRender,
   getCoreRowModel,
+  getPaginationRowModel,
   useReactTable,
 } from '@tanstack/react-table';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
+import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
+import Typography from '@mui/material/Typography';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import Link from 'next/link';
@@ -35,6 +40,8 @@ import type {
 } from './types';
 
 import './ResultsTable.css';
+
+const NUM_ROWS_PER_PAGE = 50;
 
 function formatRowOutput(output: EvaluateTableOutput | string) {
   if (typeof output === 'string') {
@@ -830,14 +837,17 @@ export default function ResultsTable({
     });
   }, [body, failureFilter, filterMode, searchText, columnVisibility, columnVisibilityIsSet]);
 
+  const [pagination, setPagination] = React.useState({ pageIndex: 0, pageSize: NUM_ROWS_PER_PAGE });
+
   const reactTable = useReactTable({
     data: filteredBody,
     columns,
     columnResizeMode: 'onChange',
     getCoreRowModel: getCoreRowModel(),
-
+    getPaginationRowModel: getPaginationRowModel(),
     state: {
       columnVisibility,
+      pagination,
     },
   });
 
@@ -850,41 +860,35 @@ export default function ResultsTable({
         }}
       >
         <thead>
-          {reactTable.getHeaderGroups().map((headerGroup: any) => (
+          {reactTable.getHeaderGroups().map((headerGroup) => (
             <tr key={headerGroup.id} className="header">
-              {headerGroup.headers.map((header: any) => {
-                return (
-                  <th
-                    key={header.id}
-                    {...{
-                      colSpan: header.colSpan,
-                      style: {
-                        width: header.getSize(),
-                      },
-                    }}
-                  >
-                    {header.isPlaceholder
-                      ? null
-                      : flexRender(header.column.columnDef.header, header.getContext())}
-                    <div
-                      {...{
-                        onMouseDown: header.getResizeHandler(),
-                        onTouchStart: header.getResizeHandler(),
-                        className: `resizer ${header.column.getIsResizing() ? 'isResizing' : ''}`,
-                      }}
-                    />
-                  </th>
-                );
-              })}
+              {headerGroup.headers.map((header) => (
+                <th
+                  key={header.id}
+                  colSpan={header.colSpan}
+                  style={{
+                    width: header.getSize(),
+                  }}
+                >
+                  {header.isPlaceholder
+                    ? null
+                    : flexRender(header.column.columnDef.header, header.getContext())}
+                  <div
+                    onMouseDown={header.getResizeHandler()}
+                    onTouchStart={header.getResizeHandler()}
+                    className={`resizer ${header.column.getIsResizing() ? 'isResizing' : ''}`}
+                  />
+                </th>
+              ))}
             </tr>
           ))}
         </thead>
         <tbody>
-          {reactTable.getRowModel().rows.map((row: any, rowIndex: any) => {
+          {reactTable.getRowModel().rows.map((row, rowIndex) => {
             let colBorderDrawn = false;
             return (
               <tr key={row.id}>
-                {row.getVisibleCells().map((cell: any) => {
+                {row.getVisibleCells().map((cell) => {
                   const isMetadataCol =
                     cell.column.id.startsWith('Variable') || cell.column.id === 'description';
                   const shouldDrawColBorder = !isMetadataCol && !colBorderDrawn;
@@ -895,14 +899,12 @@ export default function ResultsTable({
                   return (
                     <td
                       key={cell.id}
-                      {...{
-                        style: {
-                          width: cell.column.getSize(),
-                        },
-                        className: `${isMetadataCol ? 'variable' : ''} ${
-                          shouldDrawRowBorder ? 'first-prompt-row' : ''
-                        } ${shouldDrawColBorder ? 'first-prompt-col' : ''}`,
+                      style={{
+                        width: cell.column.getSize(),
                       }}
+                      className={`${isMetadataCol ? 'variable' : ''} ${
+                        shouldDrawRowBorder ? 'first-prompt-row' : ''
+                      } ${shouldDrawColBorder ? 'first-prompt-col' : ''}`}
                     >
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </td>
@@ -913,6 +915,51 @@ export default function ResultsTable({
           })}
         </tbody>
       </table>
+      {reactTable.getPageCount() > 1 && (
+        <Box className="pagination" sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Button
+            onClick={() =>
+              setPagination((old) => ({ ...old, pageIndex: Math.max(old.pageIndex - 1, 0) }))
+            }
+            disabled={reactTable.getState().pagination.pageIndex === 0}
+            variant="contained"
+          >
+            Previous
+          </Button>
+          <Typography component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            Page
+            <TextField
+              size="small"
+              type="number"
+              value={reactTable.getState().pagination.pageIndex + 1}
+              onChange={(e) => {
+                const page = e.target.value ? Number(e.target.value) - 1 : 0;
+                setPagination((old) => ({
+                  ...old,
+                  pageIndex: Math.min(Math.max(page, 0), reactTable.getPageCount() - 1),
+                }));
+              }}
+              InputProps={{
+                style: { width: '60px', textAlign: 'center' },
+              }}
+              variant="outlined"
+            />
+            <span>of {reactTable.getPageCount()}</span>
+          </Typography>
+          <Button
+            onClick={() =>
+              setPagination((old) => ({
+                ...old,
+                pageIndex: Math.min(old.pageIndex + 1, reactTable.getPageCount() - 1),
+              }))
+            }
+            disabled={reactTable.getState().pagination.pageIndex + 1 >= reactTable.getPageCount()}
+            variant="contained"
+          >
+            Next
+          </Button>
+        </Box>
+      )}
       <GenerateTestCases />
     </div>
   );
