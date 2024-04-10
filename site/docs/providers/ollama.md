@@ -59,3 +59,15 @@ To investigate and fix this issue, there's a few possible solutions:
    `export OLLAMA_BASE_URL="http://127.0.0.1:11434"`.
 3. Update your OS's [`hosts`](<https://en.wikipedia.org/wiki/Hosts_(file)>) file
    to bind `localhost` to IPv4.
+
+## Evaluating models in serial
+
+Many users don't have enough RAM to run all the models. The eval command includes an `--interactive-providers` option that runs evals on only 1 provider at a time:
+
+```sh
+promptfoo eval --interactive-providers
+```
+
+When you include this argument, the eval will prompt you when it's time to swap out the currently running model:
+
+![ollama eval model swap](/img/docs/interactive-providers.png)

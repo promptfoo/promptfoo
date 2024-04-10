@@ -45,6 +45,7 @@ By default the `eval` command will read the `promptfooconfig.yaml` configuration
 | `--verbose`                         | Show debug logs                                                                                                                                                                                    |
 | `--watch`                           | Watch the config and prompt files for changes                                                                                                                                                      |
 | `-j, --max-concurrency <number>`    | Maximum number of concurrent API calls                                                                                                                                                             |
+| `--interactive-providers`           | Run 1 provider at a time and prompt user to continue                                                                                                                                               |
 
 [1]: /docs/providers/openai
 [2]: /docs/providers/localai
