@@ -1,6 +1,7 @@
-# promptfoo: test your LLM app
+# promptfoo: test your LLM app locally
 
 [![npm](https://img.shields.io/npm/v/promptfoo)](https://npmjs.com/package/promptfoo)
+[![npm](https://img.shields.io/npm/dm/promptfoo)](https://npmjs.com/package/promptfoo)
 [![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/typpo/promptfoo/main.yml)](https://github.com/typpo/promptfoo/actions/workflows/main.yml)
 ![MIT license](https://img.shields.io/github/license/typpo/promptfoo)
 [![Discord](https://dcbadge.vercel.app/api/server/gHPS9jjfbs?style=flat&compact=true)](https://discord.gg/gHPS9jjfbs)
@@ -9,20 +10,21 @@
 
 With promptfoo, you can:
 
-- **Systematically test prompts, models, and RAGs** with predefined test cases
-- **Evaluate quality and catch regressions** by comparing LLM outputs side-by-side
-- **Speed up evaluations** with caching and concurrency
-- **Score outputs automatically** by defining [test cases](https://promptfoo.dev/docs/configuration/expected-outputs)
+- **Build reliable prompts, models, and RAGs** with benchmarks specific to your use-case
+- **Speed up evaluations** with caching, concurrency, and live reloading
+- **Score outputs automatically** by defining [metrics](https://promptfoo.dev/docs/configuration/expected-outputs)
 - Use as a [CLI](https://promptfoo.dev/docs/usage/command-line), [library](https://promptfoo.dev/docs/usage/node-package), or in [CI/CD](https://promptfoo.dev/docs/integrations/github-action)
 - Use OpenAI, Anthropic, Azure, Google, HuggingFace, open-source models like Llama, or integrate custom API providers for [any LLM API](https://promptfoo.dev/docs/providers)
 
 The goal: **test-driven LLM development** instead of trial-and-error.
 
+```sh
+npx promptfoo@latest init
+```
+
 # [» View full documentation «](https://promptfoo.dev/docs/intro)
 
-promptfoo produces matrix views that let you quickly evaluate outputs across many prompts.
-
-Here's an example of a side-by-side comparison of multiple prompts and inputs:
+promptfoo produces matrix views that let you quickly evaluate outputs across many prompts and inputs:
 
 ![prompt evaluation matrix - web viewer](https://github.com/promptfoo/promptfoo/assets/310310/ce5a7817-da82-4484-b26d-32474f1cabc5)
 
