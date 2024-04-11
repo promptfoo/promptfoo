@@ -16,7 +16,7 @@ export default function HomepageInfo(): JSX.Element {
     <>
       <section className={styles.section}>
         <div className="container">
-          <h2 className={styles.blurb}>Used by developers at</h2>
+          <h2 className={styles.blurb}>Used by 10,000+ developers at companies like</h2>
           <div className={styles.logoContainer}>
             <img src="/img/brands/discord-logo-blue.svg" alt="Discord" />
             <img style={{ maxWidth: '85px' }} src="/img/brands/google-logo.svg" alt="Google" />

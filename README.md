@@ -36,12 +36,13 @@ It works on the command line too:
 
 There are many different ways to evaluate prompts. Here are some reasons to consider promptfoo:
 
-- **Battle-tested**: promptfoo was built to eval & improve LLM apps serving over 10 million users in production. The tooling is flexible and can be adapted to many setups.
-- **Simple, declarative test cases**: Define your evals without writing code or working with heavy notebooks.
-- **Language agnostic**: Use Javascript, Python, or whatever else you're working in.
+- **Developer friendly**: promptfoo is fast, with quality-of-life features like live reloads and caching.
+- **Battle-tested**: Originally built for LLM apps serving over 10 million users in production. Our tooling is flexible and can be adapted to many setups.
+- **Simple, declarative test cases**: Define evals without writing code or working with heavy notebooks.
+- **Language agnostic**: Use Python, Javascript, or any other language.
 - **Share & collaborate**: Built-in share functionality & web viewer for working with teammates.
 - **Open-source**: LLM evals are a commodity and should be served by 100% open-source projects with no strings attached.
-- **Private**: This software runs completely locally. Your evals run on your machine and talk directly with the LLM.
+- **Private**: This software runs completely locally. The evals run on your machine and talk directly with the LLM.
 
 ## Workflow
 
