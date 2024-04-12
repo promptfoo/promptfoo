@@ -838,8 +838,8 @@ export default function ResultsTable({
 
         return outputsPassFilter && outputsMatchSearch;
       });
-    } catch (e) {
-      console.error('Invalid regular expression:', e.message);
+    } catch (err) {
+      console.error('Invalid regular expression:', (err as Error).message);
       return body;
     }
   }, [body, failureFilter, filterMode, searchText, columnVisibility, columnVisibilityIsSet]);
