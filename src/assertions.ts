@@ -228,6 +228,8 @@ export async function runAssertion({
   let valueFromScript: string | boolean | number | GradingResult | object | undefined;
   if (typeof renderedValue === 'string') {
     if (renderedValue.startsWith('file://')) {
+      const basePath = cliState.basePath || '';
+
       // Load the file
       const filePath = renderedValue.slice('file://'.length);
       if (filePath.endsWith('.js') || filePath.endsWith('.cjs') || filePath.endsWith('.mjs')) {
@@ -243,7 +245,6 @@ export async function runAssertion({
         }
         logger.debug(`Javascript script ${filePath} output: ${valueFromScript}`);
       } else if (filePath.endsWith('.py')) {
-        const basePath = cliState.basePath || '';
         try {
           const pythonScriptOutput = await runPython(path.resolve(basePath, filePath), 'get_assert', [output, context]);
           valueFromScript = pythonScriptOutput;
@@ -253,12 +254,12 @@ export async function runAssertion({
           throw new Error(`Python script execution failed: ${error}`);
         }
       } else if (filePath.endsWith('.json')) {
-        renderedValue = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+        renderedValue = JSON.parse(fs.readFileSync(path.resolve(basePath, filePath), 'utf8'));
       } else if (filePath.endsWith('.yaml') || filePath.endsWith('.yml')) {
-        renderedValue = yaml.load(fs.readFileSync(filePath, 'utf8')) as object;
+        renderedValue = yaml.load(fs.readFileSync(path.resolve(basePath, filePath), 'utf8')) as object;
       } else if (filePath.endsWith('.txt')) {
         // Trim to remove trailing newline
-        renderedValue = fs.readFileSync(filePath, 'utf8').trim();
+        renderedValue = fs.readFileSync(path.resolve(basePath, filePath), 'utf8').trim();
       } else {
         throw new Error(`Unsupported file type: ${filePath}`);
       }
