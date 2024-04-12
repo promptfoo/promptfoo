@@ -12,6 +12,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import DownloadIcon from '@mui/icons-material/Download';
 import EditIcon from '@mui/icons-material/Edit';
 import FormControl from '@mui/material/FormControl';
+import FormControlLabel from '@mui/material/FormControlLabel';
 import Heading from '@mui/material/Typography';
 import InputLabel from '@mui/material/InputLabel';
 import ListItemText from '@mui/material/ListItemText';
@@ -160,6 +161,30 @@ export default function ResultsView({
     setColumnVisibility(newColumnVisibility);
   };
 
+  const [clearAllVariables, setClearAllVariables] = React.useState(false);
+  const handleCheckClearAllVariables = () => {
+    setClearAllVariables(!clearAllVariables);
+
+    const allColumns = [
+      ...head.vars.map((_, idx) => `Variable ${idx + 1}`),
+      ...head.prompts.map((_, idx) => `Prompt ${idx + 1}`),
+    ];
+    const newColumnVisibility: VisibilityState = {};
+
+    if (!clearAllVariables) {
+      allColumns.forEach((col) => {
+        newColumnVisibility[col] = !col.startsWith("Variable");
+      });
+      setSelectedColumns(allColumns.filter((col) => !col.startsWith("Variable")));
+    } else {
+      allColumns.forEach((col) => {
+        newColumnVisibility[col] = true;
+      });
+      setSelectedColumns(allColumns);
+    }
+    setColumnVisibility(newColumnVisibility);
+  };
+
   const handleDescriptionClick = async () => {
     invariant(config, 'Config must be loaded before clicking its description');
     const newDescription = window.prompt('Enter new description:', config.description);
@@ -297,6 +322,11 @@ export default function ResultsView({
                 ))}
               </Select>
             </FormControl>
+            <FormControlLabel
+              sx={{ m: 1, midWidth: 200, maxWidth: 350}}
+              control={<Checkbox checked={clearAllVariables} onChange={handleCheckClearAllVariables}/>}
+              label="Clear all variables"
+            />
           </Box>
           <Box>
             <FormControl sx={{ minWidth: 180 }} size="small">
