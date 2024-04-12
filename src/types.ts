@@ -32,7 +32,7 @@ export interface CommandLineOptions {
   promptPrefix?: string;
   promptSuffix?: string;
   
-  envPath?: FilePath;
+  envFile?: FilePath;
 }
 
 export interface EnvOverrides {

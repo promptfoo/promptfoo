@@ -1149,6 +1149,7 @@ export async function transformOutput(
 
 export function setupEnv(envPath: string | undefined) {
   if (envPath) {
+    logger.info(`Loading environment variables from ${envPath}`);
     dotenv.config({ path: envPath });
   } else {
     dotenv.config();
