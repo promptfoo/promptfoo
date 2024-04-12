@@ -1,7 +1,7 @@
 import chalk from 'chalk';
 import { Command } from 'commander';
 
-import { getEvalFromHash, getPromptFromHash, getDatasetFromHash, printBorder } from '../util';
+import { getEvalFromHash, getPromptFromHash, getDatasetFromHash, printBorder, setupEnv } from '../util';
 import { generateTable, wrapTable } from '../table';
 import logger from '../logger';
 import telemetry from '../telemetry';
@@ -10,7 +10,9 @@ export async function showCommand(program: Command) {
   const showCommand = program
     .command('show <id>')
     .description('Show details of a specific resource')
-    .action(async (id: string) => {
+    .option('--env-path <path>', 'Path to the environment file')
+    .action(async (id: string, cmdObj: { envPath?: string }) => {
+      setupEnv(cmdObj.envPath);
       const evl = await getEvalFromHash(id);
       if (evl) {
         return handleEval(id);

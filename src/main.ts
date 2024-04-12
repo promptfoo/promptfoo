@@ -3,7 +3,6 @@ import fs from 'fs';
 import path from 'path';
 import readline from 'readline';
 
-import 'dotenv/config';
 import chalk from 'chalk';
 import chokidar from 'chokidar';
 import yaml from 'js-yaml';
@@ -26,6 +25,7 @@ import {
   readFilters,
   readLatestResults,
   setConfigDirectoryPath,
+  setupEnv,
   writeMultipleOutputs,
   writeOutput,
   writeResultsToDatabase,
@@ -275,11 +275,13 @@ async function main() {
     .option('-p, --port <number>', 'Port number', '15500')
     .option('-y, --yes', 'Skip confirmation and auto-open the URL')
     .option('--api-base-url <url>', 'Base URL for viewer API calls')
+    .option('--env-file <path>', 'Path to .env file')
     .action(
       async (
         directory: string | undefined,
-        cmdObj: { port: number; yes: boolean; apiBaseUrl?: string } & Command,
+        cmdObj: { port: number; yes: boolean; apiBaseUrl?: string; envFile?: string } & Command,
       ) => {
+        setupEnv(cmdObj.envFile);
         telemetry.maybeShowNotice();
         telemetry.record('command_used', {
           name: 'view',
@@ -298,7 +300,9 @@ async function main() {
     .command('share')
     .description('Create a shareable URL of your most recent eval')
     .option('-y, --yes', 'Skip confirmation')
-    .action(async (cmdObj: { yes: boolean } & Command) => {
+    .option('--env-file <path>', 'Path to .env file')
+    .action(async (cmdObj: { yes: boolean; envFile?: string; } & Command) => {
+      setupEnv(cmdObj.envFile);
       telemetry.maybeShowNotice();
       telemetry.record('command_used', {
         name: 'share',
@@ -343,7 +347,9 @@ async function main() {
     .description('Manage cache')
     .command('clear')
     .description('Clear cache')
-    .action(async () => {
+    .option('--env-file <path>', 'Path to .env file')
+    .action(async (cmdObj: { envFile?: string; }) => {
+      setupEnv(cmdObj.envFile);
       telemetry.maybeShowNotice();
       logger.info('Clearing cache...');
       await clearCache();
@@ -378,6 +384,7 @@ async function main() {
     .option('--numPersonas <number>', 'Number of personas to generate', '5')
     .option('--numTestCasesPerPersona <number>', 'Number of test cases per persona', '3')
     .option('--no-cache', 'Do not read or write results to disk cache', false)
+    .option('--env-file <path>', 'Path to .env file')
     .action(
       async (
         _,
@@ -389,8 +396,10 @@ async function main() {
           numTestCasesPerPersona: string;
           write: boolean;
           cache: boolean;
+          envFile?: string;
         },
       ) => {
+        setupEnv(options.envFile);
         if (!options.cache) {
           logger.info('Cache is disabled.');
           disableCache();
@@ -535,8 +544,10 @@ async function main() {
     )
     .option('--verbose', 'Show debug logs', defaultConfig?.commandLineOptions?.verbose)
     .option('-w, --watch', 'Watch for changes in config and re-run')
+    .option('--env-file <path>', 'Path to .env file')
     .option('--interactive-providers', 'Run providers interactively, one at a time', defaultConfig?.evaluateOptions?.interactiveProviders)
     .action(async (cmdObj: CommandLineOptions & Command) => {
+      setupEnv(cmdObj.envFile);
       let config: Partial<UnifiedConfig> | undefined = undefined;
       let testSuite: TestSuite | undefined = undefined;
       let basePath: string | undefined = undefined;
