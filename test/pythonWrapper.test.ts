@@ -22,7 +22,7 @@ describe('Python Wrapper', () => {
       expect(mockPythonShellRun.mock.calls[0][1].args).toEqual([
         expect.stringContaining('testScript.py'),
         "testMethod",
-        expect.stringContaining('temp-python-input-json'),
+        expect.stringContaining('promptfoo-python-input-json'),
       ]);
     });
 

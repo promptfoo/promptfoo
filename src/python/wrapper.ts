@@ -22,7 +22,7 @@ export async function runPython(
   const absPath = path.resolve(scriptPath);
   const tempJsonPath = path.join(
       os.tmpdir(),
-      `temp-python-input-json-${Date.now()}-${Math.random().toString(16).slice(2)}.json`
+      `promptfoo-python-input-json-${Date.now()}-${Math.random().toString(16).slice(2)}.json`
     );
   const pythonOptions: PythonShellOptions = {
     mode: 'text',
