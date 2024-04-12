@@ -78,25 +78,25 @@ assert:
     value: file://relative/path/to/script.py
 ```
 
-This file will be called from the shell in the form of: `python relative/path/to/assert.py <output> <context>`. The contents of `stdout` are used as the assertion response.
+This file will be called with an `output` string and an `AssertContext` object. It expects that either a bool (pass/fail), float (score), or `GradingResult` will be returned.
 
-The context variable is a JSON string, described above. Here's an example assert.py:
+Here's an example assert.py:
 
 ```py
-import json
-import sys
+def get_assert(output, context) -> Union[bool, float, Dict[str, Any]]
+    print('Prompt:', context['prompt'])
+    print('Vars', context['vars']['topic']
 
-def main():
-    if len(sys.argv) >= 3:
-        output = sys.argv[1]
-        context = json.loads(sys.argv[2])
-    else:
-        raise ValueError("Model output and context are expected from promptfoo.")
-    processed = preprocess_output(output)
-    success = test_output(processed)
-    return success
+    # Determine the result...
+    result = test_output(output)
 
-print(json.dumps(main()))
+    # Here's an example GradingResult dict
+    result = {
+      'pass': True,
+      'score': 0.6,
+      'reason': 'Looks good to me',
+    }
+    return result
 ```
 
 ## Overriding the Python binary

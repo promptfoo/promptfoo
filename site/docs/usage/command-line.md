@@ -46,6 +46,7 @@ By default the `eval` command will read the `promptfooconfig.yaml` configuration
 | `--watch`                           | Watch the config and prompt files for changes                                                                                                                                                      |
 | `-j, --max-concurrency <number>`    | Maximum number of concurrent API calls                                                                                                                                                             |
 | `--env-path`                        | Path to env file (defaults to .env)                                                                                                                                                                |
+| `--interactive-providers`           | Run 1 provider at a time and prompt user to continue                                                                                                                                               |
 
 [1]: /docs/providers/openai
 [2]: /docs/providers/localai

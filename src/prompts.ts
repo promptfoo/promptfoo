@@ -16,6 +16,7 @@ import type {
   ProviderOptionsMap,
   TestSuite,
   ProviderOptions,
+  ApiProvider,
 } from './types';
 
 export * from './external/ragas';
@@ -92,6 +93,7 @@ export async function readPrompts(
   promptPathOrGlobs: string | string[] | Record<string, string>,
   basePath: string = '',
 ): Promise<Prompt[]> {
+  logger.debug(`Reading prompts from ${JSON.stringify(promptPathOrGlobs)}`);
   let promptPathInfos: { raw: string; resolved: string }[] = [];
   let promptContents: Prompt[] = [];
 
@@ -120,7 +122,14 @@ export async function readPrompts(
       }
       resolvedPath = path.resolve(basePath, pathOrGlob);
       resolvedPathToDisplay.set(resolvedPath, pathOrGlob);
-      const globbedPaths = globSync(resolvedPath);
+      const globbedPaths = globSync(resolvedPath.replace(/\\/g, '/'), {
+        windowsPathsNoEscape: true,
+      });
+      logger.debug(
+        `Expanded prompt ${pathOrGlob} to ${resolvedPath} and then to ${JSON.stringify(
+          globbedPaths,
+        )}`,
+      );
       if (globbedPaths.length > 0) {
         return globbedPaths.map((globbedPath) => ({ raw: pathOrGlob, resolved: globbedPath }));
       }
@@ -137,6 +146,8 @@ export async function readPrompts(
     });
     inputType = PromptInputType.NAMED;
   }
+
+  logger.debug(`Resolved prompt paths: ${JSON.stringify(promptPathInfos)}`);
 
   for (const promptPathInfo of promptPathInfos) {
     const parsedPath = path.parse(promptPathInfo.resolved);
@@ -195,9 +206,20 @@ export async function readPrompts(
         });
       } else if (ext === '.py') {
         const fileContent = fs.readFileSync(promptPath, 'utf-8');
-        const promptFunction = async (context: { vars: Record<string, string | object> }) => {
+        const promptFunction = async (context: {
+          vars: Record<string, string | object>;
+          provider?: ApiProvider;
+        }) => {
           if (functionName) {
-            return runPython(promptPath, functionName, [context]);
+            return runPython(promptPath, functionName, [
+              {
+                ...context,
+                provider: {
+                  id: context.provider?.id,
+                  label: context.provider?.label,
+                },
+              },
+            ]);
           } else {
             // Legacy: run the whole file
             const options: PythonShellOptions = {

@@ -318,11 +318,7 @@ If you already have LLM outputs and want to run assertions on them, the `eval` c
 Put your outputs in a JSON string array, like this `output.json`:
 
 ```json
-[
-  "Hello world",
-  "Greetings, planet",
-  "Salutations, Earth"
-]
+["Hello world", "Greetings, planet", "Salutations, Earth"]
 ```
 
 And create a list of assertions (`asserts.yaml`):
@@ -332,7 +328,7 @@ And create a list of assertions (`asserts.yaml`):
   value: hello
 
 - type: javascript
-  value: 1 / (output.length + 1)  # prefer shorter outputs
+  value: 1 / (output.length + 1) # prefer shorter outputs
 
 - type: model-graded-closedqa
   value: ensure that the output contains a greeting
@@ -346,16 +342,15 @@ promptfoo eval --assertions asserts.yaml --model-outputs outputs.json
 
 ### Tagging outputs
 
-Promptfoo accepts a slightly more complex JSON structure that includes an `output` field for the model's output and a `tags` field for the associated tags. These tags are shown in the web UI as a comma-separated list.  It's useful if you want to keep track of certain output attributes:
+Promptfoo accepts a slightly more complex JSON structure that includes an `output` field for the model's output and a `tags` field for the associated tags. These tags are shown in the web UI as a comma-separated list. It's useful if you want to keep track of certain output attributes:
 
 ```json
 [
-  {"output": "Hello world", "tags": ["foo", "bar"]},
-  {"output": "Greetings, planet", "tags": ["baz", "abc"]},
-  {"output": "Salutations, Earth", "tags": ["def", "ghi"]}
+  { "output": "Hello world", "tags": ["foo", "bar"] },
+  { "output": "Greetings, planet", "tags": ["baz", "abc"] },
+  { "output": "Salutations, Earth", "tags": ["def", "ghi"] }
 ]
 ```
-
 
 ### Processing and formatting outputs
 

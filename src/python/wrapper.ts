@@ -17,19 +17,31 @@ export async function runPython(
   scriptPath: string,
   method: string,
   args: (string | object | undefined)[],
+  options: { pythonExecutable?: string } = {},
 ): Promise<any> {
   const absPath = path.resolve(scriptPath);
+  const tempJsonPath = path.join(
+      os.tmpdir(),
+      `promptfoo-python-input-json-${Date.now()}-${Math.random().toString(16).slice(2)}.json`
+    );
   const pythonOptions: PythonShellOptions = {
     mode: 'text',
-    pythonPath: process.env.PROMPTFOO_PYTHON || 'python',
+    pythonPath: options.pythonExecutable || process.env.PROMPTFOO_PYTHON || 'python',
     scriptPath: __dirname,
-    args: [absPath, method, ...args.map((arg) => JSON.stringify(arg))],
+    args: [absPath, method, tempJsonPath],
   };
 
   try {
+    await fs.writeFile(tempJsonPath, JSON.stringify(args));
+
     const results = await PythonShell.run('wrapper.py', pythonOptions);
     logger.debug(`Python script ${absPath} returned: ${results.join('\n')}`);
-    const result: { type: 'final_result'; data: any } = JSON.parse(results[results.length - 1]);
+    let result: { type: 'final_result'; data: any } | undefined;
+    try {
+      result = JSON.parse(results[results.length - 1]);
+    } catch (error) {
+      throw new Error(`Invalid JSON: ${error} when parsing result: ${results[results.length - 1]}`);
+    }
     if (result?.type !== 'final_result') {
       throw new Error(
         'The Python script `call_api` function must return a dict with an `output` or `error` string',
@@ -39,6 +51,10 @@ export async function runPython(
   } catch (error) {
     logger.error(`Error running Python script: ${error}`);
     throw error;
+  } finally {
+    await fs
+      .unlink(tempJsonPath)
+      .catch((error) => logger.error(`Error removing temporary file: ${error}`));
   }
 }
 

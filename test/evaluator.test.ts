@@ -1,7 +1,13 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import glob from 'glob';
 
-import { evaluate, renderPrompt, resolveVariables } from '../src/evaluator';
+import {
+  evaluate,
+  renderPrompt,
+  resolveVariables,
+  generateVarCombinations,
+} from '../src/evaluator';
 
 import type { ApiProvider, TestSuite, Prompt } from '../src/types';
 
@@ -778,23 +784,73 @@ describe('resolveVariables', () => {
     expect(resolveVariables(variables)).toEqual(expected);
   });
 
-  it('should throw an error if a variable is not found', () => {
-    const variables = { greeting: 'Hello, {{name}}!' };
-    expect(() => resolveVariables(variables)).toThrow(
-      'Variable "name" not found for substitution.',
-    );
-  });
-
   it('should not modify variables without placeholders', () => {
     const variables = { greeting: 'Hello, world!', name: 'John' };
     const expected = { greeting: 'Hello, world!', name: 'John' };
     expect(resolveVariables(variables)).toEqual(expected);
   });
 
-  it('should leave unresolved placeholders if corresponding variable is missing', () => {
+  it('should not fail if a variable is not found', () => {
+    const variables = { greeting: 'Hello, {{name}}!' };
+    expect(resolveVariables(variables)).toEqual({ greeting: 'Hello, {{name}}!' });
+  });
+
+  it('should not fail for unresolved placeholders', () => {
     const variables = { greeting: 'Hello, {{name}}!', name: '{{unknown}}' };
-    expect(() => resolveVariables(variables)).toThrow(
-      'Variable "unknown" not found for substitution.',
-    );
+    expect(resolveVariables(variables)).toEqual({
+      greeting: 'Hello, {{unknown}}!',
+      name: '{{unknown}}',
+    });
+  });
+});
+
+describe('generateVarCombinations', () => {
+  it('should generate combinations for simple variables', () => {
+    const vars = { language: 'English', greeting: 'Hello' };
+    const expected = [{ language: 'English', greeting: 'Hello' }];
+    expect(generateVarCombinations(vars)).toEqual(expected);
+  });
+
+  it('should generate combinations for array variables', () => {
+    const vars = { language: ['English', 'French'], greeting: 'Hello' };
+    const expected = [
+      { language: 'English', greeting: 'Hello' },
+      { language: 'French', greeting: 'Hello' },
+    ];
+    expect(generateVarCombinations(vars)).toEqual(expected);
+  });
+
+  it('should handle file paths and expand them into combinations', () => {
+    const vars = { language: 'English', greeting: 'file:///path/to/greetings/*.txt' };
+    jest.spyOn(glob, 'globSync').mockReturnValue(['greeting1.txt', 'greeting2.txt']);
+    const expected = [
+      { language: 'English', greeting: 'file://greeting1.txt' },
+      { language: 'English', greeting: 'file://greeting2.txt' },
+    ];
+    expect(generateVarCombinations(vars)).toEqual(expected);
+  });
+
+  it('should correctly handle nested array variables', () => {
+    const vars = {
+      options: [
+        ['opt1', 'opt2'],
+        ['opt3', 'opt4'],
+      ],
+    };
+    const expected = [
+      {
+        options: [
+          ['opt1', 'opt2'],
+          ['opt3', 'opt4'],
+        ],
+      },
+    ];
+    expect(generateVarCombinations(vars)).toEqual(expected);
+  });
+
+  it('should return an empty array for empty input', () => {
+    const vars = {};
+    const expected = [{}];
+    expect(generateVarCombinations(vars)).toEqual(expected);
   });
 });

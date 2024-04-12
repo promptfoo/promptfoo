@@ -35,7 +35,7 @@ class CustomApiProvider {
     if (!data) {
       return {
         error: 'Unknown error',
-      }
+      };
     }
     const ret = {
       embedding: data.data[0].embedding,

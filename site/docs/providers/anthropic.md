@@ -36,6 +36,7 @@ The `anthropic` provider supports the following models via the messages API:
 To allow for compatibility with the OpenAI prompt template, the following format is supported.
 
 Example: `prompt.json`
+
 ```json
 [
   {
@@ -68,12 +69,25 @@ Example configuration with options and prompts:
 
 ```yaml
 providers:
-- id: anthropic:messages:claude-3-opus-20240229
-  config:
-    temperature: 0.0
-    max_tokens: 512
+  - id: anthropic:messages:claude-3-opus-20240229
+    config:
+      temperature: 0.0
+      max_tokens: 512
 prompts: [prompt.json]
 ```
+
+### Images / Vision
+
+You can include images in the prompts in Claude 3 models.
+
+See the [Claude vision example](https://github.com/typpo/promptfoo/tree/main/examples/claude-vision).
+
+One important note: The Claude API only supports base64 representations of images.
+This is different from how OpenAI's vision works, in that it supports grabbing images
+from a URL. As a result, if you are trying to compare Claude 3 and OpenAI vision capabilities,
+you will need to have separate prompts for each.
+
+See the [OpenAI vision example](https://github.com/typpo/promptfoo/tree/main/examples/openai-vision) to see where there are differences here.
 
 ### Additional Capabilities
 

@@ -326,9 +326,7 @@ export default function ResultsView({
                   </Button>
                 </Tooltip>
               )}
-              {config && (
-                <DownloadMenu />
-              )}
+              {config && <DownloadMenu />}
               {config?.sharing && (
                 <Tooltip title="Generate a unique URL that others can access">
                   <Button

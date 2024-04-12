@@ -24,6 +24,9 @@ ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=placeholder
 WORKDIR /app
 COPY . .
 
+# Necessary for node-gyp deps
+RUN apk update && apk add python3 build-base --no-cache
+
 # Envars are read in from src/web/nextui/.env.production
 RUN echo "*** Building with env vars from .env.production"
 

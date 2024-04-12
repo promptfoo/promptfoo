@@ -66,9 +66,7 @@ export default function DatasetDialog({ openDialog, handleClose, testCase }: Dat
               .map((promptData, index) => (
                 <TableRow key={index} hover>
                   <TableCell>
-                    <Link href={`/eval/?evalId=${promptData.evalId}`}>
-                      {promptData.evalId}
-                    </Link>
+                    <Link href={`/eval/?evalId=${promptData.evalId}`}>{promptData.evalId}</Link>
                   </TableCell>
                   <TableCell style={{ minWidth: '8em' }}>
                     <Link href={`/prompts/?id=${promptData.id}`}>{promptData.id.slice(0, 6)}</Link>

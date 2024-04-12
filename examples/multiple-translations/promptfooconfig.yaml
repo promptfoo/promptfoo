@@ -4,6 +4,8 @@ tests:
   - vars:
       language: [French, German, Spanish]
       input: ['Hello world', 'Good morning', 'How are you?']
+      # You can also import vars from file. For example:
+      # input: 'file://vars/*.txt'
     assert:
       - type: similar
         value: 'Hello world'

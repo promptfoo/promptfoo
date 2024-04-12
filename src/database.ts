@@ -13,7 +13,9 @@ import type { EvaluateSummary, UnifiedConfig } from './types';
 
 export const prompts = sqliteTable('prompts', {
   id: text('id').primaryKey(),
-  createdAt: integer('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+  createdAt: integer('created_at')
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
   prompt: text('prompt').notNull(),
 });
 
@@ -26,7 +28,9 @@ export const promptsRelations = relations(prompts, ({ many }) => ({
 export const datasets = sqliteTable('datasets', {
   id: text('id').primaryKey(),
   tests: text('tests', { mode: 'json' }).$type<UnifiedConfig['tests']>(),
-  createdAt: integer('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+  createdAt: integer('created_at')
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
 });
 
 export const datasetsRelations = relations(datasets, ({ many }) => ({
@@ -37,7 +41,9 @@ export const datasetsRelations = relations(datasets, ({ many }) => ({
 
 export const evals = sqliteTable('evals', {
   id: text('id').primaryKey(),
-  createdAt: integer('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+  createdAt: integer('created_at')
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
   description: text('description'),
   results: text('results', { mode: 'json' }).$type<EvaluateSummary>().notNull(),
   config: text('config', { mode: 'json' }).$type<Partial<UnifiedConfig>>().notNull(),

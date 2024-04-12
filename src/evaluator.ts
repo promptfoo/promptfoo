@@ -6,7 +6,9 @@ import async from 'async';
 import chalk from 'chalk';
 import invariant from 'tiny-invariant';
 import yaml from 'js-yaml';
+import { globSync } from 'glob';
 
+import cliState from './cliState';
 import logger from './logger';
 import telemetry from './telemetry';
 import { runAssertions, runCompareAssertion } from './assertions';
@@ -27,33 +29,29 @@ import type {
   EvaluateTable,
   NunjucksFilterMap,
   Prompt,
+  RunEvalOptions,
   TestSuite,
 } from './types';
 
-interface RunEvalOptions {
-  provider: ApiProvider;
-  prompt: Prompt;
-  delay: number;
-
-  test: AtomicTestCase;
-  nunjucksFilters?: NunjucksFilterMap;
-  evaluateOptions: EvaluateOptions;
-
-  rowIndex: number;
-  colIndex: number;
-  repeatIndex: number;
-}
-
 export const DEFAULT_MAX_CONCURRENCY = 4;
 
-function generateVarCombinations(
+export function generateVarCombinations(
   vars: Record<string, string | string[] | any>,
 ): Record<string, string | any[]>[] {
   const keys = Object.keys(vars);
   const combinations: Record<string, string | any[]>[] = [{}];
 
   for (const key of keys) {
-    let values: any[] = Array.isArray(vars[key]) ? vars[key] : [vars[key]];
+    let values: any[] = [];
+
+    if (typeof vars[key] === 'string' && vars[key].startsWith('file://')) {
+      const filePath = vars[key].slice('file://'.length);
+      const resolvedPath = path.resolve(cliState.basePath || '', filePath);
+      const filePaths = globSync(resolvedPath.replace(/\\/g, '/'));
+      values = filePaths.map((path: string) => `file://${path}`);
+    } else {
+      values = Array.isArray(vars[key]) ? vars[key] : [vars[key]];
+    }
 
     // Check if it's an array but not a string array
     if (Array.isArray(vars[key]) && typeof vars[key][0] !== 'string') {
@@ -81,6 +79,7 @@ export function resolveVariables(
   let resolved = true;
   const regex = /\{\{\s*(\w+)\s*\}\}/; // Matches {{variableName}}, {{ variableName }}, etc.
 
+  let iterations = 0;
   do {
     resolved = true;
     for (const key of Object.keys(variables)) {
@@ -95,11 +94,13 @@ export function resolveVariables(
           variables[key] = value.replace(placeholder, variables[varName] as string);
           resolved = false; // Indicate that we've made a replacement and should check again
         } else {
-          throw new Error(`Variable "${varName}" not found for substitution.`);
+          // Do nothing - final nunjucks render will fail if necessary.
+          // logger.warn(`Variable "${varName}" not found for substitution.`);
         }
       }
     }
-  } while (!resolved);
+    iterations++;
+  } while (!resolved && iterations < 5);
 
   return variables;
 }
@@ -107,8 +108,8 @@ export function resolveVariables(
 export async function renderPrompt(
   prompt: Prompt,
   vars: Record<string, string | object>,
-  evaluateOptions: EvaluateOptions,
   nunjucksFilters?: NunjucksFilterMap,
+  provider?: ApiProvider,
 ): Promise<string> {
   const nunjucks = getNunjucksEngine(nunjucksFilters);
 
@@ -117,7 +118,7 @@ export async function renderPrompt(
   // Load files
   for (const [varName, value] of Object.entries(vars)) {
     if (typeof value === 'string' && value.startsWith('file://')) {
-      const basePath = evaluateOptions.basePath || '';
+      const basePath = cliState.basePath || '';
       const filePath = path.resolve(process.cwd(), basePath, value.slice('file://'.length));
       const fileExtension = filePath.split('.').pop();
 
@@ -166,7 +167,7 @@ export async function renderPrompt(
 
   // Apply prompt functions
   if (prompt.function) {
-    const result = await prompt.function({ vars });
+    const result = await prompt.function({ vars, provider });
     if (typeof result === 'string') {
       basePrompt = result;
     } else if (typeof result === 'object') {
@@ -260,7 +261,7 @@ class Evaluator {
     }
 
     // Render the prompt
-    const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions, filters);
+    const renderedPrompt = await renderPrompt(prompt, vars, filters, provider);
 
     let renderedJson = undefined;
     try {
@@ -543,7 +544,7 @@ class Evaluator {
     }
 
     // Set up eval cases
-    const runEvalOptions: RunEvalOptions[] = [];
+    let runEvalOptions: RunEvalOptions[] = [];
     let rowIndex = 0;
     for (let index = 0; index < tests.length; index++) {
       const testCase = tests[index];
@@ -628,10 +629,115 @@ class Evaluator {
       concurrency = 1;
     }
 
-    // Start the progress bars...
+    // Actually run the eval
+    const results: EvaluateResult[] = [];
+    let numComplete = 0;
+
+    const processEvalStep = async (evalStep: RunEvalOptions, index: number | string) => {
+      if (typeof index !== 'number') {
+        throw new Error('Expected index to be a number');
+      }
+
+      const row = await this.runEval(evalStep);
+
+      results.push(row);
+
+      numComplete++;
+      if (options.progressCallback) {
+        options.progressCallback(results.length, runEvalOptions.length, index, evalStep);
+      }
+
+      // Bookkeeping for table
+      let resultText: string | undefined;
+      const outputTextDisplay =
+        typeof row.response?.output === 'object'
+          ? JSON.stringify(row.response.output)
+          : row.response?.output || null;
+      if (isTest) {
+        if (row.success) {
+          resultText = `${outputTextDisplay || row.error || ''}`;
+        } else {
+          resultText = `${row.error}\n---\n${outputTextDisplay || ''}`;
+        }
+      } else if (row.error) {
+        resultText = `${row.error}`;
+      } else {
+        resultText = outputTextDisplay || row.error || '';
+      }
+
+      const { rowIndex, colIndex } = evalStep;
+      if (!table.body[rowIndex]) {
+        table.body[rowIndex] = {
+          description: evalStep.test.description,
+          outputs: [],
+          test: evalStep.test,
+          vars: table.head.vars
+            .map((varName) => {
+              const varValue = evalStep.test.vars?.[varName] || '';
+              if (typeof varValue === 'string') {
+                return varValue;
+              }
+              return JSON.stringify(varValue);
+            })
+            .flat(),
+        };
+      }
+      table.body[rowIndex].outputs[colIndex] = {
+        pass: row.success,
+        score: row.score,
+        namedScores: row.namedScores,
+        text: resultText,
+        prompt: row.prompt.raw,
+        provider: row.provider.label || row.provider.id,
+        latencyMs: row.latencyMs,
+        tokenUsage: row.response?.tokenUsage,
+        gradingResult: row.gradingResult,
+        cost: row.cost || 0,
+      };
+
+      const metrics = table.head.prompts[colIndex].metrics;
+      invariant(metrics, 'Expected prompt.metrics to be set');
+      metrics.score += row.score;
+      for (const [key, value] of Object.entries(row.namedScores)) {
+        metrics.namedScores[key] = (metrics.namedScores[key] || 0) + value;
+      }
+      metrics.testPassCount += row.success ? 1 : 0;
+      metrics.testFailCount += row.success ? 0 : 1;
+      metrics.assertPassCount +=
+        row.gradingResult?.componentResults?.filter((r) => r.pass).length || 0;
+      metrics.assertFailCount +=
+        row.gradingResult?.componentResults?.filter((r) => !r.pass).length || 0;
+      metrics.totalLatencyMs += row.latencyMs || 0;
+      metrics.tokenUsage.cached =
+        (metrics.tokenUsage.cached || 0) + (row.response?.tokenUsage?.cached || 0);
+      metrics.tokenUsage.completion += row.response?.tokenUsage?.completion || 0;
+      metrics.tokenUsage.prompt += row.response?.tokenUsage?.prompt || 0;
+      metrics.tokenUsage.total += row.response?.tokenUsage?.total || 0;
+      metrics.cost += row.cost || 0;
+    };
+
+    // Set up main progress bars
     let multibar: MultiBar | undefined;
-    let progressbars: SingleBar[] = [];
-    if (options.showProgressBar) {
+    let multiProgressBars: SingleBar[] = [];
+    this.options.progressCallback = (completed, total, index, evalStep) => {
+      if (multibar && evalStep) {
+        const threadIndex = index % concurrency;
+        const progressbar = multiProgressBars[threadIndex];
+        progressbar.increment({
+          provider: evalStep.provider.label || evalStep.provider.id(),
+          prompt: evalStep.prompt.raw.slice(0, 10).replace(/\n/g, ' '),
+          vars: Object.entries(evalStep.test.vars || {})
+            .map(([k, v]) => `${k}=${v}`)
+            .join(' ')
+            .slice(0, 10)
+            .replace(/\n/g, ' '),
+        });
+      } else {
+        logger.debug(`Eval #${index + 1} complete (${numComplete} of ${runEvalOptions.length})`);
+      }
+    };
+
+    const createMultiBars = async (evalOptions: RunEvalOptions[]) => {
       const cliProgress = await import('cli-progress');
       multibar = new cliProgress.MultiBar(
         {
@@ -641,8 +747,9 @@ class Evaluator {
         },
         cliProgress.Presets.shades_classic,
       );
-      const stepsPerThread = Math.floor(runEvalOptions.length / concurrency);
-      const remainingSteps = runEvalOptions.length % concurrency;
+      const stepsPerThread = Math.floor(evalOptions.length / concurrency);
+      const remainingSteps = evalOptions.length % concurrency;
+      multiProgressBars = [];
       for (let i = 0; i < concurrency; i++) {
         const totalSteps = i < remainingSteps ? stepsPerThread + 1 : stepsPerThread;
         if (totalSteps > 0) {
@@ -651,121 +758,74 @@ class Evaluator {
             prompt: '',
             vars: '',
           });
-          progressbars.push(progressbar);
+          multiProgressBars.push(progressbar);
         }
       }
-    }
-    if (options.progressCallback) {
-      options.progressCallback(0, runEvalOptions.length);
-    }
+    };
 
-    // Actually run the eval
-    const results: EvaluateResult[] = [];
-    let numComplete = 0;
-    await async.forEachOfLimit(
-      runEvalOptions,
-      concurrency,
-      async (evalStep: RunEvalOptions, index: number | string) => {
-        const row = await this.runEval(evalStep);
+    // Run the evals
+    if (this.options.interactiveProviders) {
+      runEvalOptions = runEvalOptions.sort((a, b) =>
+        a.provider.id().localeCompare(b.provider.id()),
+      );
+      logger.warn('Providers are running in serial with user input.');
 
-        results.push(row);
-
-        numComplete++;
-        if (multibar) {
-          const threadIndex = (index as number) % concurrency;
-          const progressbar = progressbars[threadIndex];
-          progressbar.increment({
-            provider: evalStep.provider.label || evalStep.provider.id(),
-            prompt: evalStep.prompt.raw.slice(0, 10).replace(/\n/g, ' '),
-            vars: Object.entries(evalStep.test.vars || {})
-              .map(([k, v]) => `${k}=${v}`)
-              .join(' ')
-              .slice(0, 10)
-              .replace(/\n/g, ' '),
-          });
-        } else {
-          logger.debug(
-            `Eval #${(index as number) + 1} complete (${numComplete} of ${runEvalOptions.length})`,
-          );
-        }
-        if (options.progressCallback) {
-          options.progressCallback(results.length, runEvalOptions.length);
-        }
-
-        // Bookkeeping for table
-        if (typeof index !== 'number') {
-          throw new Error('Expected index to be a number');
-        }
-
-        let resultText: string | undefined;
-        const outputTextDisplay =
-          typeof row.response?.output === 'object'
-            ? JSON.stringify(row.response.output)
-            : row.response?.output || null;
-        if (isTest) {
-          if (row.success) {
-            resultText = `${outputTextDisplay || row.error || ''}`;
-          } else {
-            resultText = `${row.error}\n---\n${outputTextDisplay || ''}`;
+      // Group evalOptions by provider
+      const groupedEvalOptions = runEvalOptions.reduce<Record<string, RunEvalOptions[]>>(
+        (acc, evalOption) => {
+          const providerId = evalOption.provider.id();
+          if (!acc[providerId]) {
+            acc[providerId] = [];
           }
-        } else if (row.error) {
-          resultText = `${row.error}`;
-        } else {
-          resultText = outputTextDisplay || row.error || '';
+          acc[providerId].push(evalOption);
+          return acc;
+        },
+        {},
+      );
+
+      // Process each group
+      for (const [providerId, providerEvalOptions] of Object.entries(groupedEvalOptions)) {
+        logger.info(
+          `Running ${providerEvalOptions.length} evaluations for provider ${providerId} with concurrency=${concurrency}...`,
+        );
+
+        if (this.options.showProgressBar) {
+          await createMultiBars(providerEvalOptions);
+        }
+        await async.forEachOfLimit(providerEvalOptions, concurrency, processEvalStep);
+        if (multibar) {
+          multibar.stop();
         }
 
-        const { rowIndex, colIndex } = evalStep;
-        if (!table.body[rowIndex]) {
-          table.body[rowIndex] = {
-            description: evalStep.test.description,
-            outputs: [],
-            test: evalStep.test,
-            vars: table.head.vars
-              .map((varName) => {
-                const varValue = evalStep.test.vars?.[varName] || '';
-                if (typeof varValue === 'string') {
-                  return varValue;
-                }
-                return JSON.stringify(varValue);
-              })
-              .flat(),
-          };
+        // Prompt to continue to the next provider unless it's the last one
+        if (
+          Object.keys(groupedEvalOptions).indexOf(providerId) <
+          Object.keys(groupedEvalOptions).length - 1
+        ) {
+          await new Promise((resolve) => {
+            const rl = readline.createInterface({
+              input: process.stdin,
+              output: process.stdout,
+            });
+            rl.question(`\nReady to continue to the next provider? (Y/n) `, (answer) => {
+              rl.close();
+              if (answer.toLowerCase() === 'n') {
+                logger.info('Aborting evaluation.');
+                process.exit(1);
+              }
+              resolve(true);
+            });
+          });
         }
-        table.body[rowIndex].outputs[colIndex] = {
-          pass: row.success,
-          score: row.score,
-          namedScores: row.namedScores,
-          text: resultText,
-          prompt: row.prompt.raw,
-          provider: row.provider.label || row.provider.id,
-          latencyMs: row.latencyMs,
-          tokenUsage: row.response?.tokenUsage,
-          gradingResult: row.gradingResult,
-          cost: row.cost || 0,
-        };
+      }
+    } else {
+      if (this.options.showProgressBar) {
+        await createMultiBars(runEvalOptions);
+      }
+      await async.forEachOfLimit(runEvalOptions, concurrency, processEvalStep);
+    }
 
-        const metrics = table.head.prompts[colIndex].metrics;
-        invariant(metrics, 'Expected prompt.metrics to be set');
-        metrics.score += row.score;
-        for (const [key, value] of Object.entries(row.namedScores)) {
-          metrics.namedScores[key] = (metrics.namedScores[key] || 0) + value;
-        }
-        metrics.testPassCount += row.success ? 1 : 0;
-        metrics.testFailCount += row.success ? 0 : 1;
-        metrics.assertPassCount +=
-          row.gradingResult?.componentResults?.filter((r) => r.pass).length || 0;
-        metrics.assertFailCount +=
-          row.gradingResult?.componentResults?.filter((r) => !r.pass).length || 0;
-        metrics.totalLatencyMs += row.latencyMs || 0;
-        metrics.tokenUsage.cached =
-          (metrics.tokenUsage.cached || 0) + (row.response?.tokenUsage?.cached || 0);
-        metrics.tokenUsage.completion += row.response?.tokenUsage?.completion || 0;
-        metrics.tokenUsage.prompt += row.response?.tokenUsage?.prompt || 0;
-        metrics.tokenUsage.total += row.response?.tokenUsage?.total || 0;
-        metrics.cost += row.cost || 0;
-      },
-    );
-
+    // Do we have to run comparisons between row outputs?
     const compareRowsCount = table.body.reduce(
       (count, row) => count + (row.test.assert?.some((a) => a.type === 'select-best') ? 1 : 0),
       0,
@@ -827,8 +887,8 @@ class Evaluator {
     if (multibar) {
       multibar.stop();
     }
-    if (options.progressCallback) {
-      options.progressCallback(runEvalOptions.length, runEvalOptions.length);
+    if (progressBar) {
+      progressBar.stop();
     }
 
     telemetry.record('eval_ran', {

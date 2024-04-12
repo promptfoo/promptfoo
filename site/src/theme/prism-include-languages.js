@@ -1,9 +1,9 @@
 import siteConfig from '@generated/docusaurus.config';
 export default function prismIncludeLanguages(PrismObject) {
   const {
-    themeConfig: {prism},
+    themeConfig: { prism },
   } = siteConfig;
-  const {additionalLanguages} = prism;
+  const { additionalLanguages } = prism;
   // Prism components work on the Prism instance on the window, while prism-
   // react-renderer uses its own Prism instance. We temporarily mount the
   // instance onto window, import components to enhance it, then remove it to

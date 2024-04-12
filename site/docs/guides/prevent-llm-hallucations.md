@@ -135,8 +135,7 @@ For more info on running the eval itself, see the [Getting Started guide](/docs/
 
 ### Measuring perplexity
 
-
-Perplexity is a measure of how well a language model predicts a sample of text. In the context of LLMs, a lower perplexity score indicates greater confidence in the model's completion, and therefore lower chance of hallucation. 
+Perplexity is a measure of how well a language model predicts a sample of text. In the context of LLMs, a lower perplexity score indicates greater confidence in the model's completion, and therefore lower chance of hallucation.
 
 By using the `perplexity` assertion type, we can set a threshold to ensure that the model's predictions meet our confidence requirements.
 
@@ -150,7 +149,7 @@ assert:
 
 In this example, we've decided that a perplexity score greater than 5 signals that the model is not certain enough about its prediction, and hallucination risk is too highi.
 
-Determining the perplexity threshold is a bit of trial and error.  You can also remove the threshold and simply compare multiple models:
+Determining the perplexity threshold is a bit of trial and error. You can also remove the threshold and simply compare multiple models:
 
 ```yaml
 providers:
@@ -163,10 +162,9 @@ tests:
     - type: perplexity
 ```
 
-The evaluation will output the perplexity scores of each model, and you can get a feel for what scores you're comfortable with.  Keep in mind that different models and domains may require different thresholds for optimal performance.
+The evaluation will output the perplexity scores of each model, and you can get a feel for what scores you're comfortable with. Keep in mind that different models and domains may require different thresholds for optimal performance.
 
 For more detailed information on perplexity and other useful metrics, refer to the [perplexity assertion](/docs/configuration/expected-outputs/#perplexity).
-
 
 ### Retrieval-augmented generation
 

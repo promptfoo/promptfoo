@@ -371,6 +371,12 @@ This has the effect of including the conversation history _within_ the prompt co
 ]
 ```
 
+## Images / gpt-4-vision
+
+You can include images in the prompt by using content blocks.
+
+See [OpenAI vision example](https://github.com/typpo/promptfoo/tree/main/examples/openai-vision).
+
 ## Using tools and functions
 
 OpenAI tools and functions are supported. See [OpenAI tools example](https://github.com/typpo/promptfoo/tree/main/examples/openai-tools-call) and [OpenAI functions example](https://github.com/typpo/promptfoo/tree/main/examples/openai-function-call).
@@ -656,12 +662,12 @@ module.exports = /** @type {import('promptfoo').TestSuiteConfig} */ ({
                   type: 'object',
                   properties: {
                     a: { type: 'number' },
-                    b: { type: 'number' }
+                    b: { type: 'number' },
                   },
-                  required: ['a', 'b']
-                }
-              }
-            }
+                  required: ['a', 'b'],
+                },
+              },
+            },
           ],
           /**
            * Map of function tool names to function callback.
@@ -672,16 +678,16 @@ module.exports = /** @type {import('promptfoo').TestSuiteConfig} */ ({
             addNumbers: (parametersJsonString) => {
               const { a, b } = JSON.parse(parametersJsonString);
               return JSON.stringify(a + b);
-            }
-          }
-        })
-    }
+            },
+          },
+        }),
+    },
   ],
   tests: [
     {
-      vars: { a: 5, b: 6 }
-    }
-  ]
+      vars: { a: 5, b: 6 },
+    },
+  ],
 });
 ```
 

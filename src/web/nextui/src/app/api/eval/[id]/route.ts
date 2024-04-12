@@ -11,7 +11,9 @@ import { readResult, updateResult } from '@/../../../util';
 
 export const dynamic = IS_RUNNING_LOCALLY ? 'auto' : 'force-dynamic';
 
-async function getDataForId(id: string): Promise<{data: ResultsFile | null; evalId: string; uuid: string}> {
+async function getDataForId(
+  id: string,
+): Promise<{ data: ResultsFile | null; evalId: string; uuid: string }> {
   let uuidLookup: string;
   let evalId: FilePath;
   const actualUuid = id.includes(':') ? id.split(':')[1] : id;
@@ -64,7 +66,10 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   console.log('Patching eval result with id', params.id);
   try {
-    const newData = (await req.json()) as { table?: EvaluateTable; config?: Partial<UnifiedConfig> };
+    const newData = (await req.json()) as {
+      table?: EvaluateTable;
+      config?: Partial<UnifiedConfig>;
+    };
     if (!params.id) {
       return NextResponse.json({ error: 'Missing id' }, { status: 400 });
     }
@@ -76,6 +81,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     return NextResponse.json({ message: 'Eval updated successfully' }, { status: 200 });
   } catch (err) {
     console.error(err);
-    return NextResponse.json({ error: 'Failed to update eval', details: String(err) }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Failed to update eval', details: String(err) },
+      { status: 500 },
+    );
   }
 }

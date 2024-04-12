@@ -7,7 +7,8 @@ const prompts = [
   'Write a haiku about: {{body}}',
 
   // Or message arrays...
-  [{
+  [
+    {
       role: 'system',
       content: 'You are speaking to a time traveler. Begin your conversation.',
     },
@@ -21,14 +22,15 @@ const prompts = [
   (vars) => {
     const genres = ['fantasy', 'sci-fi', 'mystery', 'horror'];
     const characters = {
-      'fantasy': 'wizard',
+      fantasy: 'wizard',
       'sci-fi': 'alien',
-      'mystery': 'detective',
-      'horror': 'ghost'
+      mystery: 'detective',
+      horror: 'ghost',
     };
     const genre = genres[Math.floor(Math.random() * genres.length)];
     const character = characters[genre];
-    return [{
+    return [
+      {
         role: 'system',
         content: `You have encountered a ${character} in a ${genre} setting. Engage with the character using the knowledge typical for that genre.`,
       },
@@ -53,7 +55,8 @@ const providers = [
   },
 ];
 
-const tests = [{
+const tests = [
+  {
     vars: {
       body: 'Hello world',
     },
@@ -62,18 +65,20 @@ const tests = [{
     vars: {
       body: "I'm hungry",
     },
-    assert: [{
-      type: 'javascript',
-      value: (output) => {
-        // Logic for checking LLM output goes here...
-        const pass = output.includes("foo bar");
-        return {
-          pass,
-          score: pass ? 1.0 : 0.0,
-          reason: pass ? 'Output contained substring' : 'Output did not contain substring',
-        };
+    assert: [
+      {
+        type: 'javascript',
+        value: (output) => {
+          // Logic for checking LLM output goes here...
+          const pass = output.includes('foo bar');
+          return {
+            pass,
+            score: pass ? 1.0 : 0.0,
+            reason: pass ? 'Output contained substring' : 'Output did not contain substring',
+          };
+        },
       },
-    }, ],
+    ],
   },
 ];
 

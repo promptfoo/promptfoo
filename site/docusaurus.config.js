@@ -83,7 +83,7 @@ const config = {
             label: 'Tutorial',
           },
           */
-          {to: '/docs/intro', label: 'Docs', position: 'right'},
+          { to: '/docs/intro', label: 'Docs', position: 'right' },
           {
             href: 'https://github.com/typpo/promptfoo',
             label: 'GitHub',
@@ -160,7 +160,16 @@ const config = {
       prism: {
         theme: lightCodeTheme,
         darkTheme: darkCodeTheme,
-        additionalLanguages: ['bash', 'javascript', 'typescript', 'python', 'json', 'yaml', 'markup-templating', 'liquid'],
+        additionalLanguages: [
+          'bash',
+          'javascript',
+          'typescript',
+          'python',
+          'json',
+          'yaml',
+          'markup-templating',
+          'liquid',
+        ],
       },
       zoom: {
         selector: '.markdown :not(em) > img',

@@ -147,4 +147,40 @@ describe('prompts', () => {
     const result = await readPrompts('prompt.js');
     expect(result[0].function).toBeDefined();
   });
+
+  test('readPrompts with glob pattern for .txt files', async () => {
+    const fileContents: Record<string, string> = {
+      '1.txt': 'First text file content',
+      '2.txt': 'Second text file content',
+    };
+
+    (fs.readFileSync as jest.Mock).mockImplementation((path: string) => {
+      if (path.includes('1.txt')) {
+        return fileContents['1.txt'];
+      } else if (path.includes('2.txt')) {
+        return fileContents['2.txt'];
+      }
+      throw new Error('Unexpected file path in test');
+    });
+    (fs.statSync as jest.Mock).mockImplementation((path: string) => ({
+      isDirectory: () => path.includes('prompts'),
+    }));
+    (fs.readdirSync as jest.Mock).mockImplementation((path: string) => {
+      if (path.includes('prompts')) {
+        return ['prompt1.txt', 'prompt2.txt'];
+      }
+      throw new Error('Unexpected directory path in test');
+    });
+
+    const promptPaths = ['file://./prompts/*.txt'];
+
+    const result = await readPrompts(promptPaths);
+
+    expect(fs.readdirSync).toHaveBeenCalledTimes(1);
+    expect(fs.readFileSync).toHaveBeenCalledTimes(2);
+    expect(fs.statSync).toHaveBeenCalledTimes(1);
+    expect(result).toHaveLength(2);
+    expect(result[0]).toEqual({ raw: fileContents['1.txt'], display: fileContents['1.txt'] });
+    expect(result[1]).toEqual({ raw: fileContents['2.txt'], display: fileContents['2.txt'] });
+  });
 });

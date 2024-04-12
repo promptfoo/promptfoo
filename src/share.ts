@@ -26,7 +26,7 @@ export async function createShareableUrl(
     },
     body: JSON.stringify(sharedResults),
   });
-  
+
   const responseJson = (await response.json()) as { id?: string; error?: string };
   if (responseJson.error) {
     throw new Error(`Failed to create shareable URL: ${responseJson.error}`);

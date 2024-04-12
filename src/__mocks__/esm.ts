@@ -9,5 +9,5 @@ export function importModule(filePath: string, functionName?: string) {
   if (functionName) {
     return mod[functionName];
   }
-  return mod;    
+  return mod;
 }

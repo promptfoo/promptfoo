@@ -1,5 +1,5 @@
 [
-  {"output": "Hello world", "tags": ["foo", "bar"]},
-  {"output": "Greetings, planet", "tags": ["foo", "bar"]},
-  {"output": "Salutations, Earth", "tags": ["foo", "bar"]}
+  { "output": "Hello world", "tags": ["foo", "bar"] },
+  { "output": "Greetings, planet", "tags": ["foo", "bar"] },
+  { "output": "Salutations, Earth", "tags": ["foo", "bar"] }
 ]

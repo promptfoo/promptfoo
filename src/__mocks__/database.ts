@@ -12,17 +12,29 @@ const mockSqliteTable = jest.fn().mockImplementation((tableName, schema) => {
 });
 
 module.exports = {
-  prompts: mockSqliteTable('prompts', {/* schema definition */}),
+  prompts: mockSqliteTable('prompts', {
+    /* schema definition */
+  }),
   promptsRelations: mockRelations,
-  datasets: mockSqliteTable('datasets', {/* schema definition */}),
+  datasets: mockSqliteTable('datasets', {
+    /* schema definition */
+  }),
   datasetsRelations: mockRelations,
-  evals: mockSqliteTable('evals', {/* schema definition */}),
+  evals: mockSqliteTable('evals', {
+    /* schema definition */
+  }),
   evalsRelations: mockRelations,
-  evalsToPrompts: mockSqliteTable('evals_to_prompts', {/* schema definition */}),
+  evalsToPrompts: mockSqliteTable('evals_to_prompts', {
+    /* schema definition */
+  }),
   evalsToPromptsRelations: mockRelations,
-  evalsToDatasets: mockSqliteTable('evals_to_datasets', {/* schema definition */}),
+  evalsToDatasets: mockSqliteTable('evals_to_datasets', {
+    /* schema definition */
+  }),
   evalsToDatasetsRelations: mockRelations,
-  llmOutputs: mockSqliteTable('llm_outputs', {/* schema definition */}),
+  llmOutputs: mockSqliteTable('llm_outputs', {
+    /* schema definition */
+  }),
   llmOutputsRelations: mockRelations,
   getDb: jest.fn(() => mockDbInstance),
 };

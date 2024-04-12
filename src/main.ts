@@ -8,6 +8,7 @@ import chokidar from 'chokidar';
 import yaml from 'js-yaml';
 import { Command } from 'commander';
 
+import cliState from './cliState';
 import telemetry from './telemetry';
 import logger, { getLogLevel, setLogLevel } from './logger';
 import { readAssertions } from './assertions';
@@ -214,7 +215,6 @@ async function resolveConfigs(
     defaultTest,
     nunjucksFilters: await readFilters(
       fileConfig.nunjucksFilters || defaultConfig.nunjucksFilters || {},
-      basePath,
     ),
   };
   return { config, testSuite, basePath };
@@ -245,6 +245,7 @@ async function main() {
     evaluateOptions.generateSuggestions = defaultConfig.evaluateOptions.generateSuggestions;
     evaluateOptions.maxConcurrency = defaultConfig.evaluateOptions.maxConcurrency;
     evaluateOptions.showProgressBar = defaultConfig.evaluateOptions.showProgressBar;
+    evaluateOptions.interactiveProviders = defaultConfig.evaluateOptions.interactiveProviders;
   }
 
   const program = new Command();
@@ -544,6 +545,7 @@ async function main() {
     .option('--verbose', 'Show debug logs', defaultConfig?.commandLineOptions?.verbose)
     .option('-w, --watch', 'Watch for changes in config and re-run')
     .option('--env-path', 'Path to .env file')
+    .option('--interactive-providers', 'Run providers interactively, one at a time', defaultConfig?.evaluateOptions?.interactiveProviders)
     .action(async (cmdObj: CommandLineOptions & Command) => {
       setupEnv(cmdObj.envPath);
       let config: Partial<UnifiedConfig> | undefined = undefined;
@@ -562,6 +564,7 @@ async function main() {
         }
 
         ({ config, testSuite, basePath } = await resolveConfigs(cmdObj, defaultConfig));
+        cliState.basePath = basePath;
 
         let maxConcurrency = parseInt(cmdObj.maxConcurrency || '', 10);
         const delay = parseInt(cmdObj.delay || '', 0);
@@ -578,6 +581,7 @@ async function main() {
           maxConcurrency: !isNaN(maxConcurrency) && maxConcurrency > 0 ? maxConcurrency : undefined,
           repeat,
           delay: !isNaN(delay) && delay > 0 ? delay : undefined,
+          interactiveProviders: cmdObj.interactiveProviders,
           ...evaluateOptions,
         };
 
@@ -591,7 +595,6 @@ async function main() {
 
         const summary = await evaluate(testSuite, {
           ...options,
-          basePath,
           eventSource: 'cli',
         });
 

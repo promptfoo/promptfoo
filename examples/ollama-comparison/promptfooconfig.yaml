@@ -4,17 +4,17 @@ prompts:
 
 providers:
   - id: ollama:llama2
-    prompts: 
+    prompts:
       - llama_prompt
     config:
       num_predict: 1024
   - id: ollama:llama2-uncensored
-    prompts: 
+    prompts:
       - llama_prompt
     config:
       num_predict: 1024
   - id: openai:gpt-3.5-turbo
-    prompts: 
+    prompts:
       - openai_prompt
 
 defaultTest:

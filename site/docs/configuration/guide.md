@@ -306,6 +306,16 @@ Evaluates each `language` x `input` combination:
 
 <img alt="Multiple combinations of var inputs" src="https://user-images.githubusercontent.com/310310/243108917-dab27ca5-689b-4843-bb52-de8d459d783b.png" />
 
+Vars can also be imported from globbed filepaths. They are automatically expanded into an array.  For example:
+
+```yaml
+  - vars:
+      language: [French, German, Spanish]
+      // highlight-start
+      input: file://path/to/inputs/*.txt
+      // highlight-end
+```
+
 ## Using nunjucks templates
 
 Use Nunjucks templates to exert additional control over your prompt templates, including loops, conditionals, and more.
@@ -507,7 +517,7 @@ Use `defaultTest` apply a transform option to every test case in your test suite
 
 ### Transforms from separate files
 
-Transform functions can be executed from external Python or Javascript files.  For example:
+Transform functions can be executed from external Python or Javascript files. For example:
 
 ```yaml
 defaultTest:
@@ -516,6 +526,7 @@ defaultTest:
 ```
 
 Here's `transform.js`:
+
 ```js
 module.exports = (output, context) => {
   // context.vars, context.prompt
@@ -525,6 +536,7 @@ module.exports = (output, context) => {
 ```
 
 Or the equivalent `transform.py`:
+
 ```py
 def get_transform(output, context):
     # context['vars'], context['prompt']

@@ -13,9 +13,16 @@ import type {
   ProviderResponse,
 } from '../types';
 
+interface PythonProviderConfig {
+  pythonExecutable?: string;
+}
+
 export class PythonProvider implements ApiProvider {
+  private config: PythonProviderConfig;
+
   constructor(private scriptPath: string, private options?: ProviderOptions) {
     this.id = () => options?.id ?? `python:${this.scriptPath}`;
+    this.config = options?.config ?? {};
   }
 
   id() {
@@ -23,7 +30,7 @@ export class PythonProvider implements ApiProvider {
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    const absPath = path.resolve(path.join(this.options?.config.basePath, this.scriptPath));
+    const absPath = path.resolve(path.join(this.options?.config.basePath || '', this.scriptPath));
     logger.debug(`Computing file hash for script ${absPath}`);
     const fileHash = sha256(fs.readFileSync(absPath, 'utf-8'));
     const cacheKey = `python:${this.scriptPath}:${fileHash}:${prompt}:${JSON.stringify(
@@ -46,7 +53,9 @@ export class PythonProvider implements ApiProvider {
           '\n',
         )}`,
       );
-      const result = (await runPython(absPath, 'call_api', args)) as {
+      const result = (await runPython(absPath, 'call_api', args, {
+        pythonExecutable: this.config.pythonExecutable,
+      })) as {
         output?: string;
         error?: string;
       };

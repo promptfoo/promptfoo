@@ -20,9 +20,11 @@ def call_method(script_path, method_name, *args):
 if __name__ == '__main__':
     script_path = sys.argv[1]
     method_name = sys.argv[2]
-    args = [json.loads(arg) for arg in sys.argv[3:]]
+    json_path = sys.argv[3]
+    with open(json_path, 'r') as fp:
+        data = json.load(fp)
 
-    result = call_method(script_path, method_name, *args)
+    result = call_method(script_path, method_name, *data)
     print(json.dumps({
       'type': 'final_result',
       'data': result

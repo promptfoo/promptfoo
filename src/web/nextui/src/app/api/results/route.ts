@@ -6,7 +6,7 @@ import { IS_RUNNING_LOCALLY, USE_SUPABASE } from '@/constants';
 export const dynamic = IS_RUNNING_LOCALLY ? 'auto' : 'force-dynamic';
 
 export async function GET() {
-  if (USE_SUPABASE) {
+  if (USE_SUPABASE || IS_RUNNING_LOCALLY) {
     return NextResponse.json({ error: 'Not implemented' });
   }
   let previousResults: { evalId: string; description?: string | null }[];

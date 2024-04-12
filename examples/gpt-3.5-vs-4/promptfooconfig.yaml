@@ -16,7 +16,7 @@ defaultTest:
 
 tests:
   - vars:
-      riddle: "I speak without a mouth and hear without ears. I have no body, but I come alive with wind. What am I?"
+      riddle: 'I speak without a mouth and hear without ears. I have no body, but I come alive with wind. What am I?'
     assert:
       # Make sure the LLM output contains this word
       - type: contains
@@ -25,12 +25,12 @@ tests:
       - type: llm-rubric
         value: Do not apologize
   - vars:
-      riddle: "You see a boat filled with people. It has not sunk, but when you look again you don’t see a single person on the boat. Why?"
+      riddle: 'You see a boat filled with people. It has not sunk, but when you look again you don’t see a single person on the boat. Why?'
     assert:
       - type: llm-rubric
         value: explains that the people are below deck
   - vars:
-      riddle: "The more of this there is, the less you see. What is it?"
+      riddle: 'The more of this there is, the less you see. What is it?'
     assert:
       - type: contains
         value: darkness
@@ -74,4 +74,3 @@ tests:
       riddle: >-
         I am light as a feather, but even the world's strongest man couldn’t
         hold me for much longer than a minute. What am I?
-

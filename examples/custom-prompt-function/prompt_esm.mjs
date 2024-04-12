@@ -10,4 +10,4 @@ export default async function ({ vars }) {
       content: `Tell me about ${vars.topic}`,
     },
   ];
-};
+}

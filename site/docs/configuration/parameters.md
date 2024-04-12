@@ -183,7 +183,7 @@ To reference a specific function in your prompt file, use the following syntax: 
 
 ```javascript title=prompt.js:prompt1
 // highlight-start
-module.exports.prompt1 = async function ({ vars }) {
+module.exports.prompt1 = async function ({ vars, provider }) {
   // highlight-end
   return [
     {

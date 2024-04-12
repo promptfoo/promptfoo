@@ -1,5 +1,5 @@
 prompts:
-  - "Who discovered {{topic}}?"
+  - 'Who discovered {{topic}}?'
 
 providers:
   # Compare GPT 3.5 vs Perplexity 70B

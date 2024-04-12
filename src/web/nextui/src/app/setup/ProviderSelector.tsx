@@ -79,7 +79,7 @@ const defaultProviders: ProviderOptions[] = ([] as (ProviderOptions & { id: stri
         max_new_tokens: 128,
         min_new_tokens: -1,
         repetition_penality: 1.15,
-        prompt_template: '{prompt}'
+        prompt_template: '{prompt}',
       },
     })),
   )
@@ -98,7 +98,7 @@ const defaultProviders: ProviderOptions[] = ([] as (ProviderOptions & { id: stri
       'anthropic:messages:claude-2.1',
       'anthropic:messages:claude-3-haiku-20240307',
       'anthropic:messages:claude-3-sonnet-20240229',
-      'anthropic:messages:claude-3-opus-20240229'
+      'anthropic:messages:claude-3-opus-20240229',
     ].map((id) => ({ id, config: { max_tokens: 1024, temperature: 0.5 } })),
   )
   .concat(
@@ -270,7 +270,7 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange
           const splits = optionString.split(':');
           if (splits.length > 1) {
             // account for Anthropic messages ID format having the descriptive text in the third split
-            if (splits.length > 2 && splits[0] === "anthropic"){
+            if (splits.length > 2 && splits[0] === 'anthropic') {
               return splits[2];
             } else {
               return splits[1];

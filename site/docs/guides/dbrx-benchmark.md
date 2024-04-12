@@ -4,9 +4,9 @@ sidebar_label: DBRX benchmarks
 
 # DBRX vs Mixtral vs GPT: create your own benchmark
 
-There are many generic benchmarks that measure LLMs like DBRX, Mixtral, and others in a similar performance class.  But public benchmarks are often gamed and don't always reflect real use cases.
+There are many generic benchmarks that measure LLMs like DBRX, Mixtral, and others in a similar performance class. But public benchmarks are often gamed and don't always reflect real use cases.
 
-How well do these models actually perform for _your specific needs_?  As a developer, it's good to understand the tradeoffs between each model.
+How well do these models actually perform for _your specific needs_? As a developer, it's good to understand the tradeoffs between each model.
 
 In this guide, we'll walk through how to create your own personalized benchmark comparing DBRX, Mixtral 8x7b, and GPT-3.5 on use cases that are relevant to you.
 
@@ -34,7 +34,7 @@ For more details on promptfoo setup, see [Installation](/docs/installation).
 
 After entering the `dbrx-benchmark` directory, edit the `promptfooconfig.yaml` to include the models you want to compare.
 
-OpenRouter uses the OpenAI format, so we'll just override the base URL of the OpenAI provider.  Here's an example configuration with DBRX, Mixtral, and GPT-3.5:
+OpenRouter uses the OpenAI format, so we'll just override the base URL of the OpenAI provider. Here's an example configuration with DBRX, Mixtral, and GPT-3.5:
 
 ```yaml title=promptfooconfig.yaml
 providers:
@@ -106,7 +106,7 @@ If desired, you can test multiple prompts (just add more to the list), test [dif
 
 Define the test cases that you want to use for the evaluation. This includes setting up variables that will be interpolated into the prompts.
 
-We're just going to make up some questions as an example.  You should modify the prompt and test cases to reflect your own LLM use case:
+We're just going to make up some questions as an example. You should modify the prompt and test cases to reflect your own LLM use case:
 
 ```yaml
 tests:
@@ -124,7 +124,7 @@ tests:
       query: 'Output a JSON list of colors'
 ```
 
-For automated testing, add assertions.  These are automatically checked against the outputs:
+For automated testing, add assertions. These are automatically checked against the outputs:
 
 ```yaml
 tests:
@@ -173,7 +173,7 @@ tests:
     // highlight-end
 ```
 
-Many types of assertions are supported, both deterministic and LLM-graded.  See [Assertions and Metrics](/docs/configuration/expected-outputs/) to find assertions that match your needs.
+Many types of assertions are supported, both deterministic and LLM-graded. See [Assertions and Metrics](/docs/configuration/expected-outputs/) to find assertions that match your needs.
 
 ## Step 5: Run the comparison
 
@@ -215,9 +215,8 @@ In the very basic example we ran above, DBRX tends to answer verbosely, which ca
 
 This doesn't mean DBRX is not capable of answering well - it probably just means we need to tweak the prompt a bit in order to get output quality similar to the other models.
 
-Our benchmark for our custom use case rated DBRX at 66%, Mixtral at 100%, and GPT 3.5 at 83%.  While public benchmarks can provide a general sense of model performance, they are no substitute for running a benchmark on your own data and use cases.
-
+Our benchmark for our custom use case rated DBRX at 66%, Mixtral at 100%, and GPT 3.5 at 83%. While public benchmarks can provide a general sense of model performance, they are no substitute for running a benchmark on your own data and use cases.
 
 ## Next steps
 
-promptfoo is a completely [open source](https://github.com/promptfoo/promptfoo) eval project.  If you're interested in running your own evals, head over to [Getting Started](/docs/getting-started).
+promptfoo is a completely [open source](https://github.com/promptfoo/promptfoo) eval project. If you're interested in running your own evals, head over to [Getting Started](/docs/getting-started).

@@ -1,5 +1,5 @@
 prompts:
-  - "Write a {{sentence}}"
+  - 'Write a {{sentence}}'
 
 providers:
   - openai:gpt-3.5-turbo-0613
