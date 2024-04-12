@@ -255,41 +255,43 @@ function EvalOutputCell({
 
   if (searchText) {
     // Highlight search matches
-    const regex = new RegExp(searchText, 'gi');
-    const matches: { start: number; end: number }[] = [];
-    let match;
-    let lastIndex = 0;
-    while ((match = regex.exec(text)) !== null) {
-      matches.push({
-        start: match.index,
-        end: regex.lastIndex,
-      });
-      lastIndex = regex.lastIndex;
+    try {
+      const regex = new RegExp(searchText, 'gi');
+      const matches: { start: number; end: number }[] = [];
+      let match;
+      while ((match = regex.exec(text)) !== null) {
+        matches.push({
+          start: match.index,
+          end: regex.lastIndex,
+        });
+      }
+      node = (
+        <>
+          {matches.length > 0 ? (
+            <>
+              <span key="text-before">{text.substring(0, matches[0].start)}</span>
+              {matches.map((range, index) => (
+                <>
+                  <span className="search-highlight" key={'match-' + index}>
+                    {text.substring(range.start, range.end)}
+                  </span>
+                  <span key={'text-after-' + index}>
+                    {text.substring(
+                      range.end,
+                      matches[index + 1] ? matches[index + 1].start : text.length,
+                    )}
+                  </span>
+                </>
+              ))}
+            </>
+          ) : (
+            <span key="no-match">{text}</span>
+          )}
+        </>
+      );
+    } catch (error) {
+      console.error('Invalid regular expression:', (error as Error).message);
     }
-    node = (
-      <>
-        {matches.length > 0 ? (
-          <>
-            <span key="text-before">{text.substring(0, matches[0].start)}</span>
-            {matches.map((range, index) => (
-              <>
-                <span className="search-highlight" key={'match-' + index}>
-                  {text.substring(range.start, range.end)}
-                </span>
-                <span key={'text-after-' + index}>
-                  {text.substring(
-                    range.end,
-                    matches[index + 1] ? matches[index + 1].start : text.length,
-                  )}
-                </span>
-              </>
-            ))}
-          </>
-        ) : (
-          <span key="no-match">{text}</span>
-        )}
-      </>
-    );
   } else if (renderMarkdown) {
     node = <ReactMarkdown>{text}</ReactMarkdown>;
   } else if (prettifyJson) {
@@ -808,33 +810,38 @@ export default function ResultsTable({
 
   const columnVisibilityIsSet = Object.keys(columnVisibility).length > 0;
   const filteredBody = React.useMemo(() => {
-    const searchRegex = new RegExp(searchText, 'i');
-    return body.filter((row) => {
-      const outputsPassFilter =
-        filterMode === 'failures'
-          ? row.outputs.some((output, idx) => {
-              const columnId = `Prompt ${idx + 1}`;
-              return (
-                failureFilter[columnId] &&
-                !output.pass &&
-                (!columnVisibilityIsSet || columnVisibility[columnId])
-              );
+    try {
+      const searchRegex = new RegExp(searchText, 'i');
+      return body.filter((row) => {
+        const outputsPassFilter =
+          filterMode === 'failures'
+            ? row.outputs.some((output, idx) => {
+                const columnId = `Prompt ${idx + 1}`;
+                return (
+                  failureFilter[columnId] &&
+                  !output.pass &&
+                  (!columnVisibilityIsSet || columnVisibility[columnId])
+                );
+              })
+            : filterMode === 'different'
+            ? !row.outputs.every((output) => output.text === row.outputs[0].text)
+            : true;
+
+        const outputsMatchSearch = searchText
+          ? row.outputs.some((output) => {
+              const stringifiedOutput = `${output.text} ${Object.keys(output.namedScores)} ${
+                output.gradingResult?.reason
+              }`;
+              return searchRegex.test(stringifiedOutput);
             })
-          : filterMode === 'different'
-          ? !row.outputs.every((output) => output.text === row.outputs[0].text)
           : true;
 
-      const outputsMatchSearch = searchText
-        ? row.outputs.some((output) => {
-            const stringifiedOutput = `${output.text} ${Object.keys(output.namedScores)} ${
-              output.gradingResult?.reason
-            }`;
-            return searchRegex.test(stringifiedOutput);
-          })
-        : true;
-
-      return outputsPassFilter && outputsMatchSearch;
-    });
+        return outputsPassFilter && outputsMatchSearch;
+      });
+    } catch (e) {
+      console.error('Invalid regular expression:', e.message);
+      return body;
+    }
   }, [body, failureFilter, filterMode, searchText, columnVisibility, columnVisibilityIsSet]);
 
   const [pagination, setPagination] = React.useState({ pageIndex: 0, pageSize: NUM_ROWS_PER_PAGE });
