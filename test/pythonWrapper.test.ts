@@ -6,9 +6,16 @@ jest.mock('../src/esm');
 
 jest.mock('python-shell');
 
+beforeEach(() => {
+  jest.clearAllMocks(); // This clears all mock call counts
+});
+
 describe('Python Wrapper', () => {
   describe('runPython', () => {
     it('should correctly run a Python script with provided arguments', async () => {
+      jest.spyOn(fs, 'writeFile').mockResolvedValue();
+      jest.spyOn(fs, 'unlink').mockResolvedValue();
+
       const mockPythonShellRun = PythonShell.run as jest.Mock;
       mockPythonShellRun.mockResolvedValue(['{"type": "final_result", "data": "test result"}']);
 
@@ -22,9 +29,9 @@ describe('Python Wrapper', () => {
       expect(mockPythonShellRun.mock.calls[0][1].args).toEqual([
         expect.stringContaining('testScript.py'),
         'testMethod',
-        '"arg1"',
-        '{"key":"value"}',
+        expect.stringContaining('promptfoo-python-input-json'),
       ]);
+      expect(fs.unlink).toHaveBeenCalledTimes(1);
     });
 
     it('should throw an error if the Python script execution fails', async () => {
@@ -60,7 +67,7 @@ describe('Python Wrapper', () => {
 
       await pythonWrapper.runPythonCode('print("cleanup test")', 'main', []);
 
-      expect(fs.unlink).toHaveBeenCalledTimes(1);
+      expect(fs.unlink).toHaveBeenCalledTimes(2);
     });
 
     it('should throw an error if Python code execution fails', async () => {
