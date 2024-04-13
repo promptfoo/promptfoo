@@ -504,7 +504,7 @@ export type ProviderOptionsMap = Record<ProviderId, ProviderOptions>;
 
 // TestSuiteConfig = Test Suite, but before everything is parsed and resolved.  Providers are just strings, prompts are filepaths, tests can be filepath or inline.
 export interface TestSuiteConfig {
-  // Optional description of what your LLM is trying to do
+  // Optional description of what you're trying to test
   description?: string;
 
   // One or more LLM APIs to use, for example: openai:gpt-3.5-turbo, openai:gpt-4, localai:chat:vicuna

@@ -121,14 +121,14 @@ interface ProviderEmbeddingResponse {
 
 ```typescript
 interface TestSuiteConfig {
-  // Optional description of what your LLM is trying to do
+  // Optional description of what you're trying to test
   description?: string;
 
   // One or more LLM APIs to use, for example: openai:gpt-3.5-turbo, openai:gpt-4, localai:chat:vicuna
   providers: ProviderId | ProviderFunction | (ProviderId | ProviderOptionsMap | ProviderOptions)[];
 
-  // One or more prompt files to load
-  prompts: FilePath | FilePath[];
+  // One or more prompts
+  prompts: (FilePath | object | PromptFunction)[];
 
   // Path to a test file, OR list of LLM prompt variations (aka "test case")
   tests: FilePath | (FilePath | TestCase)[];
