@@ -18,6 +18,9 @@ const prompts = [
     },
   ],
 
+  // Or files
+  'file://prompt.txt',
+
   // Or functions
   (vars) => {
     const genres = ['fantasy', 'sci-fi', 'mystery', 'horror'];
@@ -83,7 +86,14 @@ const tests = [
 ];
 
 (async () => {
-  const results = await promptfoo.evaluate({ prompts, providers, tests });
+  const results = await promptfoo.evaluate({
+    prompts,
+    providers,
+    tests,
+
+    // Persist results locally so they are visible in the promptfoo viewer
+    writeLatestResults: true,
+  });
 
   console.log('RESULTS:');
   const resultsString = JSON.stringify(results, null, 2);

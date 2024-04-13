@@ -67,10 +67,10 @@ namedScores?: Record<string, number>;
 
 // Record of tokens usage for this assertion
 tokensUsed?: Partial<{
-total: number;
-prompt: number;
-completion: number;
-cached?: number;
+  total: number;
+  prompt: number;
+  completion: number;
+  cached?: number;
 }>;
 
 // List of results for each component of the assertion
