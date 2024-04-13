@@ -103,7 +103,7 @@ assert:
     threshold: 0.9 # score for "SAFE" must be greater than or equal to this value
 ```
 
-### Bias detection example
+## Bias detection example
 
 This assertion uses a [fine-tuned distilbert model](https://huggingface.co/d4data/bias-detection-model) classify biased text.
 
