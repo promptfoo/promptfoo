@@ -21,6 +21,7 @@ import type {
   ProviderOptions,
   PromptFunction,
 } from './types';
+import { readPrompts } from './prompts';
 
 export * from './types';
 
@@ -37,25 +38,30 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
     nunjucksFilters: await readFilters(testSuite.nunjucksFilters || {}),
 
     // Full prompts expected (not filepaths)
-    prompts: testSuite.prompts.map((promptInput) => {
-      if (typeof promptInput === 'function') {
-        return {
-          raw: promptInput.toString(),
-          display: promptInput.toString(),
-          function: promptInput as PromptFunction,
-        };
-      } else if (typeof promptInput === 'string') {
-        return {
-          raw: promptInput,
-          display: promptInput,
-        };
-      } else {
-        return {
-          raw: JSON.stringify(promptInput),
-          display: JSON.stringify(promptInput),
-        };
-      }
-    }),
+    prompts: (
+      await Promise.all(
+        testSuite.prompts.map(async (promptInput) => {
+          if (typeof promptInput === 'function') {
+            return {
+              raw: promptInput.toString(),
+              display: promptInput.toString(),
+              function: promptInput as PromptFunction,
+            };
+          } else if (typeof promptInput === 'string') {
+            const prompts = await readPrompts(promptInput);
+            return prompts.map((p) => ({
+              raw: p.raw,
+              display: p.display,
+            }));
+          } else {
+            return {
+              raw: JSON.stringify(promptInput),
+              display: JSON.stringify(promptInput),
+            };
+          }
+        }),
+      )
+    ).flat(),
   };
 
   // Resolve nested providers
