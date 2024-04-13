@@ -13,7 +13,7 @@ promptfoo is available as a node package [on npm](https://www.npmjs.com/package/
 npm install promptfoo
 ```
 
-## Usage
+## Run a full eval
 
 Use `promptfoo` as a library in your project by importing the `evaluate` function:
 
@@ -67,10 +67,10 @@ namedScores?: Record<string, number>;
 
 // Record of tokens usage for this assertion
 tokensUsed?: Partial<{
-  total: number;
-  prompt: number;
-  completion: number;
-  cached?: number;
+total: number;
+prompt: number;
+completion: number;
+cached?: number;
 }>;
 
 // List of results for each component of the assertion
@@ -85,7 +85,7 @@ assertion: Assertion | null;
 
 For more info on different assertion types, see [assertions & metrics](/docs/configuration/expected-outputs/).
 
-## Example
+### Example
 
 `promptfoo` exports an `evaluate` function that you can use to run prompt evaluations.
 
@@ -237,3 +237,136 @@ Here's the example output in JSON format:
   ]
 }
 ```
+
+## Run an eval on existing outputs
+
+You can use promptfoo to evaluate metrics on outputs you've already produced, without running the full evaluation pipeline. This is useful if you want to analyze the quality of outputs from an existing system or dataset.
+
+### How to use
+
+Use the `evaluateMetrics` function provided by `promptfoo` to run evaluations on pre-existing outputs. Here's how you can integrate this into your project:
+
+```ts
+import promptfoo from 'promptfoo';
+
+const modelOutputs = [
+  'This is the first output.',
+  'This is the second output, which contains a specific substring.',
+  // ...
+];
+
+const metrics = [
+  {
+    metric: 'Apologetic',
+    type: 'llm-rubric',
+    value: 'does not apologize',
+  },
+  {
+    metric: 'Contains Expected Substring',
+    type: 'contains',
+    value: 'specific substring',
+  },
+  {
+    metric: 'Is Biased',
+    type: 'classifier',
+    provider: 'huggingface:text-classification:d4data/bias-detection-model',
+    value: 'Biased',
+  },
+];
+
+const options = {
+  maxConcurrency: 2,
+};
+
+(async () => {
+  const evaluation = await promptfoo.evaluateMetrics(modelOutputs, metrics, options);
+
+  evaluation.results.forEach((result) => {
+    console.log('---------------------');
+    console.log(`Eval for output: "${result.vars.output}"`);
+    console.log('Metrics:');
+    console.log(`  Overall: ${result.gradingResult.score}`);
+    console.log(`  Components:`);
+    for (const [key, value] of Object.entries(result.namedScores)) {
+      console.log(`    ${key}: ${value}`);
+    }
+  });
+
+  console.log('---------------------');
+  console.log('Done.');
+})();
+```
+
+### Parameters
+
+- `modelOutputs`: An array of strings, where each string is a response output from the language model that you want to evaluate.
+
+- `metrics`: An array of objects specifying the metrics to apply. Each metric object (a partial [Assertion](/docs/configuration/reference#assertion)) can have different properties depending on its type. Common properties include:
+
+  - `metric`: The name of the metric.
+  - `type`: The type of the metric (e.g., `contains`, `llm-rubric`, `classifier`).
+  - `value`: The expected value or condition for the metric.
+
+- `options`: Configuration [EvaluateOptions](/docs/configuration/reference#evaluateoptions) for the evaluation process, such as:
+  - `maxConcurrency`: The maximum number of concurrent evaluations to perform. This helps in managing resource usage when evaluating large datasets.
+
+### Output format
+
+The output of the `evaluateMetrics` function is an [EvaluateSummary](/docs/configuration/reference#evaluatesummary) object that includes detailed results of the evaluation. Includes:
+
+- `vars`: Variables used in the metric evaluation. In this case, the only variable is `output`.
+- `gradingResult`: An object describing the overall grading outcome, including:
+  - `score`: A numeric score representing the overall evaluation result.
+  - `componentResults`: Detailed results for each component of the metric evaluated.
+- `namedScores`: A breakdown of scores by individual metrics.
+
+### Example output
+
+Here's an example of what the output might look like when printed:
+
+```json
+{
+  "results": [
+    {
+      "vars": {
+        "output": "This is the first output."
+      },
+      "gradingResult": {
+        "score": 0.66,
+        "pass": false,
+        "reason": "Output failed 1 out of 3 metrics"
+      },
+      "namedScores": {
+        "Apologetic": 1,
+        "Contains Expected Substring": 0,
+        "Is Biased": 1
+      }
+    },
+    {
+      "vars": {
+        "output": "This is the second output, which contains a specific substring."
+      },
+      "gradingResult": {
+        "score": 1,
+        "pass": true,
+        "reason": "Output passed all metrics"
+      },
+      "namedScores": {
+        "Apologetic": 1,
+        "Contains Expected Substring": 1,
+        "Is Biased": 1
+      }
+    }
+    // ... more result objects for each output
+  ],
+  "stats": {
+    "successes": 1,
+    "failures": 1,
+    "totalOutputs": 2
+  }
+}
+```
+
+This code loads a set of model outputs, defines several metrics to evaluate them against, and then calls `evaluateMetrics` with these outputs and metrics. It then logs the evaluation results for each output, including the overall score and the scores for each individual metric.
+
+For a complete example, see the [metrics-posthoc.js](https://github.com/typpo/promptfoo/blob/main/examples/node-package/metrics-posthoc.js) file in the promptfoo examples directory.

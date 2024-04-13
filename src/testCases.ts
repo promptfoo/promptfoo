@@ -12,12 +12,10 @@ import { OpenAiChatCompletionProvider } from './providers/openai';
 import { testCaseFromCsvRow } from './csv';
 
 import type {
-  Assertion,
   CsvRow,
   TestCase,
   TestSuite,
   TestSuiteConfig,
-  UnifiedConfig,
   VarMapping,
 } from './types';
 

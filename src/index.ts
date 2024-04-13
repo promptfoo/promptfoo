@@ -20,12 +20,36 @@ import type {
   EvaluateTestSuite,
   ProviderOptions,
   PromptFunction,
+  Assertion,
 } from './types';
 import { readPrompts } from './prompts';
 
 export * from './types';
 
 export { generateTable } from './table';
+
+export async function evaluateMetrics(
+  modelOutputs: string[],
+  metrics: Omit<Assertion, 'metric'>[],
+  evaluateOptions: EvaluateOptions = {},
+) {
+  const testSuite: EvaluateTestSuite = {
+    prompts: ['{{output}}'],
+    providers: ['echo'],
+    tests: [],
+  };
+  testSuite.tests = modelOutputs.map((output) => {
+    return {
+      vars: {
+        output,
+      },
+      // Create new objects so we don't mutate the original
+      assert: metrics.map(metric => ({ ...metric })),
+    };
+  });
+  
+  return evaluate(testSuite, evaluateOptions);
+}
 
 async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions = {}) {
   const constructedTestSuite: TestSuite = {

@@ -1,3 +1,8 @@
+//
+// This example shows a full eval that runs inference via LLM API and evaluates
+// the results.
+//
+
 import fs from 'node:fs';
 
 import promptfoo from '../../dist/src/index.js';
