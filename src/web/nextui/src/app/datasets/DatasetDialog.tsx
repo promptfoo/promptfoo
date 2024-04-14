@@ -71,16 +71,22 @@ export default function DatasetDialog({ openDialog, handleClose, testCase }: Dat
                   <TableCell style={{ minWidth: '8em' }}>
                     <Link href={`/prompts/?id=${promptData.id}`}>{promptData.id.slice(0, 6)}</Link>
                   </TableCell>
-                  <TableCell>{promptData.prompt.metrics?.score.toFixed(2) ?? '-'}</TableCell>
                   <TableCell>
-                    {promptData.prompt.metrics?.testPassCount !== undefined &&
-                    promptData.prompt.metrics?.testFailCount !== undefined
+                    {
+                      typeof promptData.prompt.metrics?.score === 'number'
+                        ? promptData.prompt.metrics.score.toFixed(2)
+                        : '-'
+                    }
+                  </TableCell>
+                  <TableCell>
+                    {typeof promptData.prompt.metrics?.testPassCount === 'number' &&
+                     typeof promptData.prompt.metrics?.testFailCount === 'number' &&
+                     (promptData.prompt.metrics.testPassCount + promptData.prompt.metrics.testFailCount) > 0
                       ? (
-                          (promptData.prompt.metrics?.testPassCount /
-                            (promptData.prompt.metrics?.testPassCount +
-                              promptData.prompt.metrics?.testFailCount)) *
-                          100.0
-                        ).toFixed(2) + '%'
+                          ((promptData.prompt.metrics.testPassCount /
+                            (promptData.prompt.metrics.testPassCount + promptData.prompt.metrics.testFailCount)) * 100.0
+                          ).toFixed(2) + '%'
+                        )
                       : '-'}
                   </TableCell>
                   <TableCell>{promptData.prompt.metrics?.testPassCount ?? '-'}</TableCell>
