@@ -29,7 +29,7 @@ export * from './types';
 export { generateTable } from './table';
 
 export async function evaluateMetrics(
-  modelOutputs: string[],
+  data: (string | { vars: Record<string, string | object | string[]>; output?: string })[],
   metrics: Omit<Assertion, 'metric'>[],
   evaluateOptions: EvaluateOptions = {},
 ) {
@@ -38,16 +38,28 @@ export async function evaluateMetrics(
     providers: ['echo'],
     tests: [],
   };
-  testSuite.tests = modelOutputs.map((output) => {
-    return {
-      vars: {
-        output,
-      },
-      // Create new objects so we don't mutate the original
-      assert: metrics.map(metric => ({ ...metric })),
-    };
+  testSuite.tests = data.map((ctx) => {
+    if (typeof ctx === 'string') {
+      return {
+        vars: {
+          output: ctx,
+        },
+        // Create new objects so we don't mutate the original
+        assert: metrics.map((metric) => ({ ...metric })),
+      };
+    } else {
+      return {
+        vars: {
+          ...ctx.vars,
+          ...(ctx.output ? { output: ctx.output } : {}),
+        },
+        // Create new objects so we don't mutate the original
+        assert: metrics.map((metric) => ({ ...metric })),
+      };
+    }
   });
-  
+  console.log(JSON.stringify(testSuite, null, 2));
+
   return evaluate(testSuite, evaluateOptions);
 }
 

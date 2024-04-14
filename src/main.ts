@@ -111,26 +111,30 @@ async function resolveConfigs(
     }
     const modelOutputs = JSON.parse(
       fs.readFileSync(path.join(process.cwd(), cmdObj.modelOutputs), 'utf8'),
-    ) as string[] | { output: string; tags?: string[] }[];
+    ) as
+      | string[]
+      | { output?: string; tags?: string[]; vars?: Record<string, string | string[] | object> }[];
     const assertions = await readAssertions(cmdObj.assertions);
     fileConfig.prompts = ['{{output}}'];
     fileConfig.providers = ['echo'];
-    fileConfig.tests = modelOutputs.map((output) => {
-      if (typeof output === 'string') {
+    fileConfig.tests = modelOutputs.map((ctx) => {
+      if (typeof ctx === 'string') {
         return {
           vars: {
-            output,
+            output: ctx,
           },
-          assert: assertions,
+          assert: assertions.map((assertion) => ({ ...assertion })),
+        };
+      } else {
+        return {
+          vars: {
+            ...ctx.vars,
+            ...(ctx.tags ? { tags: ctx.tags.join(', ') } : {}),
+            ...(ctx.output ? { output: ctx.output } : {}),
+          },
+          assert: assertions.map((assertion) => ({ ...assertion })),
         };
       }
-      return {
-        vars: {
-          output: output.output,
-          ...(output.tags === undefined ? {} : { tags: output.tags.join(', ') }),
-        },
-        assert: assertions,
-      };
     });
   }
 
@@ -301,7 +305,7 @@ async function main() {
     .description('Create a shareable URL of your most recent eval')
     .option('-y, --yes', 'Skip confirmation')
     .option('--env-file <path>', 'Path to .env file')
-    .action(async (cmdObj: { yes: boolean; envFile?: string; } & Command) => {
+    .action(async (cmdObj: { yes: boolean; envFile?: string } & Command) => {
       setupEnv(cmdObj.envFile);
       telemetry.maybeShowNotice();
       telemetry.record('command_used', {
@@ -348,7 +352,7 @@ async function main() {
     .command('clear')
     .description('Clear cache')
     .option('--env-file <path>', 'Path to .env file')
-    .action(async (cmdObj: { envFile?: string; }) => {
+    .action(async (cmdObj: { envFile?: string }) => {
       setupEnv(cmdObj.envFile);
       telemetry.maybeShowNotice();
       logger.info('Clearing cache...');
@@ -545,7 +549,11 @@ async function main() {
     .option('--verbose', 'Show debug logs', defaultConfig?.commandLineOptions?.verbose)
     .option('-w, --watch', 'Watch for changes in config and re-run')
     .option('--env-file <path>', 'Path to .env file')
-    .option('--interactive-providers', 'Run providers interactively, one at a time', defaultConfig?.evaluateOptions?.interactiveProviders)
+    .option(
+      '--interactive-providers',
+      'Run providers interactively, one at a time',
+      defaultConfig?.evaluateOptions?.interactiveProviders,
+    )
     .action(async (cmdObj: CommandLineOptions & Command) => {
       setupEnv(cmdObj.envFile);
       let config: Partial<UnifiedConfig> | undefined = undefined;

@@ -4,10 +4,26 @@
 
 import promptfoo from '../../dist/src/index.js';
 
-const modelOutputs = [
-  // Load your data here
-  'foo',
-  'bar',
+// Load your data here
+let modelOutputs = ['foo', 'bar'];
+
+// You can also load your data as an array of objects, where each object has a `vars` field
+modelOutputs = [
+  {
+    vars: {
+      question: 'What is the capital of France?',
+      context: 'Paris, the capital of France, has a population of 2.148 million.',
+    },
+    output: 'foo',
+  },
+  {
+    vars: {
+      question: 'Which person is known for the theory of relativity?',
+      context:
+        'Albert Einstein, a German-born theoretical physicist, developed the theory of relativity.',
+    },
+    output: 'bar',
+  },
 ];
 
 const metrics = [

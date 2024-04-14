@@ -249,7 +249,7 @@ Use the `evaluateMetrics` function provided by `promptfoo` to run evaluations on
 ```ts
 import promptfoo from 'promptfoo';
 
-const modelOutputs = [
+const data = [
   'This is the first output.',
   'This is the second output, which contains a specific substring.',
   // ...
@@ -279,7 +279,7 @@ const options = {
 };
 
 (async () => {
-  const evaluation = await promptfoo.evaluateMetrics(modelOutputs, metrics, options);
+  const evaluation = await promptfoo.evaluateMetrics(data, metrics, options);
 
   evaluation.results.forEach((result) => {
     console.log('---------------------');
@@ -297,9 +297,31 @@ const options = {
 })();
 ```
 
+If you want to include additional data (such as question or context for RAG applications), `data` can also be a list of objects:
+
+```ts
+modelOutputs = [
+  {
+    vars: {
+      question: 'What is the capital of France?',
+      context: 'Paris, the capital of France, has a population of 2.148 million.',
+    },
+    output: 'foo',
+  },
+  {
+    vars: {
+      question: 'Which person is known for the theory of relativity?',
+      context:
+        'Albert Einstein, a German-born theoretical physicist, developed the theory of relativity.',
+    },
+    output: 'bar',
+  },
+];
+```
+
 ### Parameters
 
-- `modelOutputs`: An array of strings, where each string is a response output from the language model that you want to evaluate.
+- `data`: An array that can contain either strings or objects. Each string is a direct response output from the language model. Objects should have a `vars` property, which is a record of string or object values, and may optionally include an `output` property if a specific output is to be evaluated.
 
 - `metrics`: An array of objects specifying the metrics to apply. Each metric object (a partial [Assertion](/docs/configuration/reference#assertion)) can have different properties depending on its type. Common properties include:
 

@@ -313,7 +313,7 @@ See [named metrics example](https://github.com/promptfoo/promptfoo/tree/main/exa
 
 ## Running assertions directly on outputs
 
-If you already have LLM outputs and want to run assertions on them, the `eval` command supports standalone assertion files.
+If you already have LLM outputs and want to run assertions on them (post-hoc eval), the `eval` command supports standalone assertion files.
 
 Put your outputs in a JSON string array, like this `output.json`:
 
@@ -342,13 +342,13 @@ promptfoo eval --assertions asserts.yaml --model-outputs outputs.json
 
 ### Tagging outputs
 
-Promptfoo accepts a slightly more complex JSON structure that includes an `output` field for the model's output and a `tags` field for the associated tags. These tags are shown in the web UI as a comma-separated list. It's useful if you want to keep track of certain output attributes:
+Promptfoo accepts a JSON structure that includes an `output` field for the model's output, a `vars` field, and a `tags` field for associated labels which are displayed in the web UI. These tags are shown in the web UI as a comma-separated list. It's useful if you want to keep track of certain output attributes:
 
 ```json
 [
-  { "output": "Hello world", "tags": ["foo", "bar"] },
-  { "output": "Greetings, planet", "tags": ["baz", "abc"] },
-  { "output": "Salutations, Earth", "tags": ["def", "ghi"] }
+  { "output": "Hello world", "tags": ["foo", "bar"], "vars": { "foo": "abc" } },
+  { "output": "Greetings, planet", "tags": ["baz", "abc"], "vars": { "foo": "def" } },
+  { "output": "Salutations, Earth", "tags": ["def", "ghi"], "vars": { "foo": "ghi" } }
 ]
 ```
 
