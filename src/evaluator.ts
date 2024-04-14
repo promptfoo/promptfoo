@@ -31,6 +31,7 @@ import type {
   Prompt,
   RunEvalOptions,
   TestSuite,
+  ProviderResponse,
 } from './types';
 
 export const DEFAULT_MAX_CONCURRENCY = 4;
@@ -284,15 +285,25 @@ class Evaluator {
     let latencyMs = 0;
     try {
       const startTime = Date.now();
-      const response = await provider.callApi(
-        renderedPrompt,
-        {
-          vars,
-        },
-        {
-          includeLogProbs: test.assert?.some((a) => a.type === 'perplexity'),
-        },
-      );
+      let response: ProviderResponse = {
+        output: '',
+        tokenUsage: {},
+        cost: 0,
+        cached: false,
+      };
+      if (!test.output){
+        response = await provider.callApi(
+          renderedPrompt,
+          {
+            vars,
+          },
+          {
+            includeLogProbs: test.assert?.some((a) => a.type === 'perplexity'),
+          },
+        );
+      } else {
+        response.output = test.output;
+      }
       const endTime = Date.now();
       latencyMs = endTime - startTime;
 
@@ -306,7 +317,7 @@ class Evaluator {
       this.conversations[conversationKey].push({
         prompt: renderedJson || renderedPrompt,
         input: conversationLastInput || renderedJson || renderedPrompt,
-        output: response.output || '',
+        output: test.output || response.output || '',
       });
 
       if (!response.cached) {

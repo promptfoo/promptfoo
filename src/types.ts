@@ -31,7 +31,7 @@ export interface CommandLineOptions {
   generateSuggestions?: boolean;
   promptPrefix?: string;
   promptSuffix?: string;
-  
+
   envFile?: FilePath;
 }
 
@@ -211,7 +211,7 @@ export interface Prompt {
   raw: string;
   display: string;
   function?: (
-    context: { 
+    context: {
       vars: Record<string, string | object>,
       provider?: ApiProvider,
     },
@@ -428,6 +428,9 @@ export interface TestCase<Vars = Record<string, string | string[] | object>> {
   // Key-value pairs to substitute in the prompt
   vars?: Vars;
 
+  // Output related from running values in Vars with prompt. Having this value would skip running the prompt through the provider, and go straight to the assertions
+  output?: string;
+
   // Optional list of automatic checks to run on the LLM output
   assert?: Assertion[];
 
@@ -459,6 +462,7 @@ export interface Scenario {
 // Same as a TestCase, except the `vars` object has been flattened into its final form.
 export interface AtomicTestCase<Vars = Record<string, string | object>> extends TestCase {
   vars?: Record<string, string | object>;
+  output?: string;
 }
 
 export type NunjucksFilterMap = Record<string, (...args: any[]) => string>;
