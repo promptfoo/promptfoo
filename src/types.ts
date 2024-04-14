@@ -429,7 +429,7 @@ export interface TestCase<Vars = Record<string, string | string[] | object>> {
   vars?: Vars;
 
   // Output related from running values in Vars with prompt. Having this value would skip running the prompt through the provider, and go straight to the assertions
-  output?: string;
+  output?: string | object;
 
   // Optional list of automatic checks to run on the LLM output
   assert?: Assertion[];
