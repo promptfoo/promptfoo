@@ -317,7 +317,7 @@ class Evaluator {
       this.conversations[conversationKey].push({
         prompt: renderedJson || renderedPrompt,
         input: conversationLastInput || renderedJson || renderedPrompt,
-        output: test.output || response.output || '',
+        output: response.output || '',
       });
 
       if (!response.cached) {
