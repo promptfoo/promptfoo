@@ -701,6 +701,27 @@ class Evaluator {
       for (const [key, value] of Object.entries(row.namedScores)) {
         metrics.namedScores[key] = (metrics.namedScores[key] || 0) + value;
       }
+
+      if (testSuite.compositeMetrics) {
+        const math = await import('mathjs');
+        for (const metric of testSuite.compositeMetrics) {
+          if (metrics.namedScores[metric.name] === undefined) {
+            metrics.namedScores[metric.name] = 0;
+          }
+          try {
+            if (typeof metric.value === 'function') {
+              metrics.namedScores[metric.name] = metric.value(metrics.namedScores, evalStep);
+            } else {
+              const evaluatedValue = math.evaluate(metric.value, metrics.namedScores);
+              metrics.namedScores[metric.name] = evaluatedValue;
+            }
+          } catch (error) {
+            logger.debug(
+              `Could not evaluate composite metric '${metric.name}': ${(error as Error).message}`,
+            );
+          }
+        }
+      }
       metrics.testPassCount += row.success ? 1 : 0;
       metrics.testFailCount += row.success ? 0 : 1;
       metrics.assertPassCount +=

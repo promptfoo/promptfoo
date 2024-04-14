@@ -102,6 +102,7 @@
     "fastest-levenshtein": "^1.0.16",
     "glob": "^10.2.6",
     "js-yaml": "^4.1.0",
+    "mathjs": "^12.4.1",
     "node-fetch": "^2.6.7",
     "nunjucks": "^3.2.4",
     "openai": "^4.19.0",

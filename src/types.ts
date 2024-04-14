@@ -31,7 +31,7 @@ export interface CommandLineOptions {
   generateSuggestions?: boolean;
   promptPrefix?: string;
   promptSuffix?: string;
-  
+
   envFile?: FilePath;
 }
 
@@ -197,7 +197,12 @@ export interface RunEvalOptions {
 export interface EvaluateOptions {
   maxConcurrency?: number;
   showProgressBar?: boolean;
-  progressCallback?: (progress: number, total: number, index: number, evalStep: RunEvalOptions) => void;
+  progressCallback?: (
+    progress: number,
+    total: number,
+    index: number,
+    evalStep: RunEvalOptions,
+  ) => void;
   generateSuggestions?: boolean;
   repeat?: number;
   delay?: number;
@@ -210,12 +215,10 @@ export interface Prompt {
   id?: string;
   raw: string;
   display: string;
-  function?: (
-    context: { 
-      vars: Record<string, string | object>,
-      provider?: ApiProvider,
-    },
-  ) => Promise<string | object>;
+  function?: (context: {
+    vars: Record<string, string | object>;
+    provider?: ApiProvider;
+  }) => Promise<string | object>;
 }
 
 // Used for final prompt display
@@ -463,6 +466,13 @@ export interface AtomicTestCase<Vars = Record<string, string | object>> extends 
 
 export type NunjucksFilterMap = Record<string, (...args: any[]) => string>;
 
+export type CompositeMetric = {
+  // The name of this metric
+  name: string;
+  // The function to calculate the metric - either a mathematical expression or a function that takes the results and returns a number
+  value: string | ((scores: Record<string, number>, context: RunEvalOptions) => number);
+};
+
 // The test suite defines the "knobs" that we are tuning in prompt engineering: providers and prompts
 export interface TestSuite {
   // Optional description of what your LLM is trying to do
@@ -492,6 +502,9 @@ export interface TestSuite {
 
   // Envar overrides
   env?: EnvOverrides;
+
+  // Metrics to calculate after the eval has been completed
+  compositeMetrics?: CompositeMetric[];
 }
 
 export type ProviderId = string;
