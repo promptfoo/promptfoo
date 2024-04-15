@@ -10,11 +10,14 @@ import Checkbox from '@mui/material/Checkbox';
 import CircularProgress from '@mui/material/CircularProgress';
 import DeleteIcon from '@mui/icons-material/Delete';
 import DownloadIcon from '@mui/icons-material/Download';
+import Dialog from '@mui/material/Dialog';
+import DialogContent from '@mui/material/DialogContent';
 import EditIcon from '@mui/icons-material/Edit';
 import FormControl from '@mui/material/FormControl';
-import FormControlLabel from '@mui/material/FormControlLabel';
 import Heading from '@mui/material/Typography';
 import InputLabel from '@mui/material/InputLabel';
+import List from '@mui/material/List';
+import ListItem from '@mui/material/ListItem';
 import ListItemText from '@mui/material/ListItemText';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import Menu from '@mui/material/Menu';
@@ -47,6 +50,7 @@ import type { FilterMode } from './types';
 
 import './ResultsView.css';
 import { getApiBaseUrl } from '@/api';
+import { DialogTitle } from '@mui/material';
 
 const ResponsiveStack = styled(Stack)(({ theme }) => ({
   maxWidth: '100%',
@@ -142,6 +146,13 @@ export default function ResultsView({
   invariant(table, 'Table data must be loaded before rendering ResultsView');
   const { head } = table;
 
+  const [columnDialogOpen, setColumnDialogOpen] = React.useState(false);
+  const handleColumnDialogOpen = () => {
+    setColumnDialogOpen(true);
+  };
+  const handleColumnDialogClose = () => {
+    setColumnDialogOpen(false);
+  };
   const handleChange = (event: SelectChangeEvent<typeof selectedColumns>) => {
     const {
       target: { value },
@@ -303,30 +314,38 @@ export default function ResultsView({
             )}
           </Box>
           <Box>
-            <FormControl sx={{ m: 1, minWidth: 200, maxWidth: 350 }} size="small">
-              <InputLabel id="visible-columns-label">Columns</InputLabel>
-              <Select
-                labelId="visible-columns-label"
-                id="visible-columns"
-                multiple
-                value={selectedColumns}
-                onChange={handleChange}
-                input={<OutlinedInput label="Visible columns" />}
-                renderValue={(selected: string[]) => selected.join(', ')}
+            <Button
+              color="primary"
+              onClick={handleColumnDialogOpen}
+            >
+              Open Column Dialog
+            </Button>
+            <Dialog
+              open={columnDialogOpen}
+              onClose={handleColumnDialogClose}
+            >
+              <DialogTitle>Select Columns to Show</DialogTitle>
+              <Button
+                color="primary"
+                onClick={handleCheckClearAllVariables}
               >
-                {columnData.map((column) => (
-                  <MenuItem dense key={column.value} value={column.value}>
-                    <Checkbox checked={selectedColumns.indexOf(column.value) > -1} />
-                    <ListItemText primary={column.label} />
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-            <FormControlLabel
-              sx={{ m: 1, midWidth: 200, maxWidth: 350}}
-              control={<Checkbox checked={clearAllVariables} onChange={handleCheckClearAllVariables}/>}
-              label="Clear all variables"
-            />
+                {!clearAllVariables ? "Clear All Variables" : "Reset All Variables"}
+              </Button>
+
+              <DialogContent>
+                <List sx={{ m: 1, minWidth: 200, maxWidth: 350 }}>
+                  {columnData.map((column) => (
+                    <ListItem
+                      key={column.value}
+                      value={column.value}
+                    >
+                      <Checkbox checked={selectedColumns.indexOf(column.value) > -1} />
+                      <ListItemText primary={column.label} />
+                    </ListItem>
+                  ))}
+                </List>
+              </DialogContent>
+            </Dialog>
           </Box>
           <Box>
             <FormControl sx={{ minWidth: 180 }} size="small">
