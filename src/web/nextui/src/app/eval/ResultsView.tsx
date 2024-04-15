@@ -172,9 +172,8 @@ export default function ResultsView({
     setColumnVisibility(newColumnVisibility);
   };
 
-  const [clearAllVariables, setClearAllVariables] = React.useState(false);
+  const [variablesVisible, setVariablesVisible] = React.useState(true);
   const handleCheckClearAllVariables = () => {
-    setClearAllVariables(!clearAllVariables);
 
     const allColumns = [
       ...head.vars.map((_, idx) => `Variable ${idx + 1}`),
@@ -182,7 +181,7 @@ export default function ResultsView({
     ];
     const newColumnVisibility: VisibilityState = {};
 
-    if (!clearAllVariables) {
+    if (variablesVisible) {
       allColumns.forEach((col) => {
         newColumnVisibility[col] = !col.startsWith("Variable");
       });
@@ -194,6 +193,7 @@ export default function ResultsView({
       setSelectedColumns(allColumns);
     }
     setColumnVisibility(newColumnVisibility);
+    setVariablesVisible(!variablesVisible);
   };
 
   const handleDescriptionClick = async () => {
@@ -329,7 +329,7 @@ export default function ResultsView({
                 color="primary"
                 onClick={handleCheckClearAllVariables}
               >
-                {!clearAllVariables ? "Clear All Variables" : "Reset All Variables"}
+                {variablesVisible ? "Clear All Variables" : "Reset All Variables"}
               </Button>
 
               <DialogContent>
