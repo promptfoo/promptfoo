@@ -31,6 +31,7 @@ import type {
   Prompt,
   RunEvalOptions,
   TestSuite,
+  ProviderResponse,
 } from './types';
 
 export const DEFAULT_MAX_CONCURRENCY = 4;
@@ -284,15 +285,25 @@ class Evaluator {
     let latencyMs = 0;
     try {
       const startTime = Date.now();
-      const response = await provider.callApi(
-        renderedPrompt,
-        {
-          vars,
-        },
-        {
-          includeLogProbs: test.assert?.some((a) => a.type === 'perplexity'),
-        },
-      );
+      let response: ProviderResponse = {
+        output: '',
+        tokenUsage: {},
+        cost: 0,
+        cached: false,
+      };
+      if (!test.providerOutput){
+        response = await provider.callApi(
+          renderedPrompt,
+          {
+            vars,
+          },
+          {
+            includeLogProbs: test.assert?.some((a) => a.type === 'perplexity'),
+          },
+        );
+      } else {
+        response.output = test.providerOutput;
+      }
       const endTime = Date.now();
       latencyMs = endTime - startTime;
 
