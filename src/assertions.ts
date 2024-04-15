@@ -620,7 +620,7 @@ export async function runAssertion({
       };
 
       if (typeof assertion.value === 'function') {
-        let ret = assertion.value(outputString, test, assertion);
+        let ret = assertion.value(outputString, context);
         ret = await validateResult(ret);
         if (!ret.assertion) {
           // Populate the assertion object if the custom function didn't return it.
