@@ -8,7 +8,7 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
   const vars: Record<string, string> = {};
   const asserts: Assertion[] = [];
   const options: TestCase['options'] = {};
-  let providerOutput: string | undefined;
+  let providerOutput: string | object | undefined;
   let description: string | undefined;
   for (const [key, value] of Object.entries(row)) {
     if (key.startsWith('__expected')) {
