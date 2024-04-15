@@ -8,7 +8,7 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
   const vars: Record<string, string> = {};
   const asserts: Assertion[] = [];
   const options: TestCase['options'] = {};
-  let providerOutput: string | undefined; // Change made
+  let providerOutput: string | undefined;
   let description: string | undefined;
   for (const [key, value] of Object.entries(row)) {
     if (key.startsWith('__expected')) {
@@ -21,8 +21,8 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
       options.suffix = value;
     } else if (key === '__description') {
       description = value;
-    } else if (key === 'provider_output') { // Change made
-      providerOutput = value; // Change made
+    } else if (key === 'provider_output') {
+      providerOutput = value;
     } else {
       vars[key] = value;
     }
