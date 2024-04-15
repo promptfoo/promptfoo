@@ -215,10 +215,12 @@ export interface Prompt {
   id?: string;
   raw: string;
   display: string;
-  function?: (context: {
-    vars: Record<string, string | object>;
-    provider?: ApiProvider;
-  }) => Promise<string | object>;
+  function?: (
+    context: {
+      vars: Record<string, string | object>,
+      provider?: ApiProvider,
+    },
+  ) => Promise<string | object>;
 }
 
 // Used for final prompt display
@@ -430,6 +432,9 @@ export interface TestCase<Vars = Record<string, string | string[] | object>> {
 
   // Key-value pairs to substitute in the prompt
   vars?: Vars;
+
+  // Output related from running values in Vars with provider. Having this value would skip running the prompt through the provider, and go straight to the assertions
+  providerOutput?: string | object;
 
   // Optional list of automatic checks to run on the LLM output
   assert?: Assertion[];
