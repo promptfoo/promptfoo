@@ -32,6 +32,7 @@ import {
   readLatestResults,
   migrateResultsFromFileSystemToDatabase,
   getStandaloneEvals,
+  deleteEval,
 } from '../util';
 import { synthesizeFromTestSuite } from '../testCases';
 import { getDbPath, getDbSignalPath } from '../database';
@@ -147,6 +148,16 @@ export async function startServer(port = 15500, apiBaseUrl = '', skipConfirmatio
       res.json({ message: 'Eval updated successfully' });
     } catch (error) {
       res.status(500).json({ error: 'Failed to update eval table' });
+    }
+  });
+
+  app.delete('/api/eval/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+      await deleteEval(id);
+      res.json({ message: 'Eval deleted successfully' });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to delete eval' });
     }
   });
 

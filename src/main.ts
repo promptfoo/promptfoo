@@ -38,6 +38,7 @@ import { checkForUpdates } from './updates';
 import { gatherFeedback } from './feedback';
 import { listCommand } from './commands/list';
 import { showCommand } from './commands/show';
+import { deleteCommand } from './commands/delete';
 
 import type {
   CommandLineOptions,
@@ -739,6 +740,7 @@ async function main() {
 
   listCommand(program);
   showCommand(program);
+  deleteCommand(program);
 
   program.parse(process.argv);
 

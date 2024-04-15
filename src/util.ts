@@ -1058,6 +1058,21 @@ export async function getEvalsWithPredicate(
   return ret;
 }
 
+export async function deleteEval(evalId: string): Promise<void> {
+  const db = getDb();
+  try {
+    await db
+      .delete(evals)
+      .where(eq(evals.id, evalId))
+      .run();
+    logger.info(`Deleted eval with ID ${evalId}`);
+  } catch (err) {
+    logger.error(`Failed to delete eval with ID ${evalId}: ${err}`);
+    throw new Error(`Failed to delete eval with ID ${evalId}`);
+  }
+}
+
+
 export async function readFilters(
   filters: Record<string, string>,
 ): Promise<NunjucksFilterMap> {

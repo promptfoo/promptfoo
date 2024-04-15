@@ -7,6 +7,7 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
 import CircularProgress from '@mui/material/CircularProgress';
+import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import FormControl from '@mui/material/FormControl';
 import Heading from '@mui/material/Typography';
@@ -155,7 +156,7 @@ export default function ResultsView({
     setColumnVisibility(newColumnVisibility);
   };
 
-  const handleHeadingClick = async () => {
+  const handleDescriptionClick = async () => {
     invariant(config, 'Config must be loaded before clicking its description');
     const newDescription = window.prompt('Enter new description:', config.description);
     if (newDescription !== null && newDescription !== config.description) {
@@ -174,6 +175,23 @@ export default function ResultsView({
         setConfig(newConfig);
       } catch (error) {
         console.error('Failed to update table:', error);
+      }
+    }
+  };
+
+  const handleDeleteEvalClick = async () => {
+    if (window.confirm('Are you sure you want to delete this evaluation?')) {
+      try {
+        const response = await fetch(`${await getApiBaseUrl()}/api/eval/${evalId}`, {
+          method: 'DELETE',
+        });
+        if (!response.ok) {
+          throw new Error('Network response was not ok');
+        }
+        router.push('/');
+      } catch (error) {
+        console.error('Failed to delete evaluation:', error);
+        alert('Failed to delete evaluation');
       }
     }
   };
@@ -206,7 +224,7 @@ export default function ResultsView({
     <div style={{ marginLeft: '1rem', marginRight: '1rem' }}>
       <Box mb={2} sx={{ display: 'flex', alignItems: 'center' }}>
         <Heading variant="h5" sx={{ flexGrow: 1 }}>
-          <span className="description" onClick={handleHeadingClick}>
+          <span className="description" onClick={handleDescriptionClick}>
             {config?.description || evalId}
           </span>{' '}
           {config?.description && <span className="description-filepath">{evalId}</span>}
@@ -336,6 +354,17 @@ export default function ResultsView({
                     startIcon={shareLoading ? <CircularProgress size={16} /> : <ShareIcon />}
                   >
                     Share
+                  </Button>
+                </Tooltip>
+              )}
+              {config && (
+                <Tooltip title="Delete this eval">
+                  <Button
+                    color="primary"
+                    onClick={handleDeleteEvalClick}
+                    startIcon={<DeleteIcon />}
+                  >
+                    Delete
                   </Button>
                 </Tooltip>
               )}
