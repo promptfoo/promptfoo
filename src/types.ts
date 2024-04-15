@@ -31,7 +31,7 @@ export interface CommandLineOptions {
   generateSuggestions?: boolean;
   promptPrefix?: string;
   promptSuffix?: string;
-  
+
   envFile?: FilePath;
 }
 
@@ -211,7 +211,7 @@ export interface Prompt {
   raw: string;
   display: string;
   function?: (
-    context: { 
+    context: {
       vars: Record<string, string | object>,
       provider?: ApiProvider,
     },
@@ -427,6 +427,9 @@ export interface TestCase<Vars = Record<string, string | string[] | object>> {
 
   // Key-value pairs to substitute in the prompt
   vars?: Vars;
+
+  // Output related from running values in Vars with provider. Having this value would skip running the prompt through the provider, and go straight to the assertions
+  providerOutput?: string | object;
 
   // Optional list of automatic checks to run on the LLM output
   assert?: Assertion[];
