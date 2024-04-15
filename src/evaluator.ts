@@ -291,7 +291,7 @@ class Evaluator {
         cost: 0,
         cached: false,
       };
-      if (!test.output){
+      if (!test.providerResponse){
         response = await provider.callApi(
           renderedPrompt,
           {
@@ -302,7 +302,7 @@ class Evaluator {
           },
         );
       } else {
-        response.output = test.output;
+        response.output = test.providerResponse;
       }
       const endTime = Date.now();
       latencyMs = endTime - startTime;

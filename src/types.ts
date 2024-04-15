@@ -428,8 +428,8 @@ export interface TestCase<Vars = Record<string, string | string[] | object>> {
   // Key-value pairs to substitute in the prompt
   vars?: Vars;
 
-  // Output related from running values in Vars with prompt. Having this value would skip running the prompt through the provider, and go straight to the assertions
-  output?: string | object;
+  // Output related from running values in Vars with provider. Having this value would skip running the prompt through the provider, and go straight to the assertions
+  providerResponse?: string | object;
 
   // Optional list of automatic checks to run on the LLM output
   assert?: Assertion[];
