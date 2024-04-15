@@ -1009,7 +1009,7 @@ export async function getEvals() {
   return getEvalsWithPredicate(() => true);
 }
 
-export async function getEvalFromHash(hash: string) {
+export async function getEvalFromId(hash: string) {
   const evals_ = await getEvals();
   for (const eval_ of evals_) {
     if (eval_.id.startsWith(hash)) {
@@ -1029,6 +1029,7 @@ export async function getEvalsWithPredicate(
       createdAt: evals.createdAt,
       results: evals.results,
       config: evals.config,
+      description: evals.description,
     })
     .from(evals)
     .limit(100)
@@ -1051,6 +1052,7 @@ export async function getEvalsWithPredicate(
         date: new Date(eval_.createdAt),
         config: eval_.config,
         results: eval_.results,
+        description: eval_.description || undefined,
       });
     }
   }
@@ -1058,23 +1060,19 @@ export async function getEvalsWithPredicate(
   return ret;
 }
 
-export async function deleteEval(evalId: string): Promise<void> {
+export async function deleteEval(evalId: string) {
   const db = getDb();
-  try {
-    await db.transaction(async () => {
-      // We need to clean up foreign keys first. We don't have onDelete: 'cascade' set on all these relationships.
-      await db.delete(evalsToPrompts).where(eq(evalsToPrompts.evalId, evalId)).run();
-      await db.delete(evalsToDatasets).where(eq(evalsToDatasets.evalId, evalId)).run();
+  await db.transaction(async () => {
+    // We need to clean up foreign keys first. We don't have onDelete: 'cascade' set on all these relationships.
+    await db.delete(evalsToPrompts).where(eq(evalsToPrompts.evalId, evalId)).run();
+    await db.delete(evalsToDatasets).where(eq(evalsToDatasets.evalId, evalId)).run();
 
-      // Finally, delete the eval record
-      await db.delete(evals).where(eq(evals.id, evalId)).run();
-    });
-
-    logger.info(`Deleted eval with ID ${evalId} and all related records.`);
-  } catch (err) {
-    logger.error(`Failed to delete eval with ID ${evalId}: ${err}`);
-    throw new Error(`Failed to delete eval with ID ${evalId}`);
-  }
+    // Finally, delete the eval record
+    const deletedIds = await db.delete(evals).where(eq(evals.id, evalId)).run();
+    if (deletedIds.changes === 0) {
+      throw new Error(`Eval with ID ${evalId} not found`);
+    }
+  });
 }
 
 export async function readFilters(filters: Record<string, string>): Promise<NunjucksFilterMap> {
