@@ -1061,21 +1061,23 @@ export async function getEvalsWithPredicate(
 export async function deleteEval(evalId: string): Promise<void> {
   const db = getDb();
   try {
-    await db
-      .delete(evals)
-      .where(eq(evals.id, evalId))
-      .run();
-    logger.info(`Deleted eval with ID ${evalId}`);
+    await db.transaction(async () => {
+      // We need to clean up foreign keys first. We don't have onDelete: 'cascade' set on all these relationships.
+      await db.delete(evalsToPrompts).where(eq(evalsToPrompts.evalId, evalId)).run();
+      await db.delete(evalsToDatasets).where(eq(evalsToDatasets.evalId, evalId)).run();
+
+      // Finally, delete the eval record
+      await db.delete(evals).where(eq(evals.id, evalId)).run();
+    });
+
+    logger.info(`Deleted eval with ID ${evalId} and all related records.`);
   } catch (err) {
     logger.error(`Failed to delete eval with ID ${evalId}: ${err}`);
     throw new Error(`Failed to delete eval with ID ${evalId}`);
   }
 }
 
-
-export async function readFilters(
-  filters: Record<string, string>,
-): Promise<NunjucksFilterMap> {
+export async function readFilters(filters: Record<string, string>): Promise<NunjucksFilterMap> {
   const ret: NunjucksFilterMap = {};
   const basePath = cliState.basePath || '';
   for (const [name, filterPath] of Object.entries(filters)) {

@@ -60,6 +60,8 @@ export const evalsToPrompts = sqliteTable(
     evalId: text('eval_id')
       .notNull()
       .references(() => evals.id),
+    // Drizzle doesn't support this migration for sqlite, so we remove foreign keys manually.
+    //.references(() => evals.id, { onDelete: 'cascade' }),
     promptId: text('prompt_id')
       .notNull()
       .references(() => prompts.id),
@@ -86,6 +88,8 @@ export const evalsToDatasets = sqliteTable(
     evalId: text('eval_id')
       .notNull()
       .references(() => evals.id),
+    // Drizzle doesn't support this migration for sqlite, so we remove foreign keys manually.
+    //.references(() => evals.id, { onDelete: 'cascade' }),
     datasetId: text('dataset_id')
       .notNull()
       .references(() => datasets.id),
