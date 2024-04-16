@@ -162,7 +162,7 @@ export default function ResultsView({
   const handleColumnDialogClose = () => {
     setColumnDialogOpen(false);
   };
-  const handleChange = (column: {value: string; label: string; group: string}) => {
+  const toggleColumnVisibility = (column: {value: string; label: string; group: string}) => {
     const target = column.value;
     const updatedSelectedColumns: string [] = selectedColumns.includes(target) ? selectedColumns.filter((col) => col !== target) : [...selectedColumns, target];
     setSelectedColumns(updatedSelectedColumns);
@@ -341,7 +341,7 @@ export default function ResultsView({
                     >
                       <ListItemButton
                         role={undefined}
-                        onClick={(_event) => handleChange(column)}
+                        onClick={(_event) => toggleColumnVisibility(column)}
                         dense
                       >
                         <ListItemIcon>
