@@ -1,10 +1,5 @@
 import invariant from 'tiny-invariant';
 import logger from './logger';
-import {
-  DefaultEmbeddingProvider,
-  DefaultGradingJsonProvider,
-  DefaultGradingProvider,
-} from './providers/openai';
 import { getNunjucksEngine } from './util';
 import { loadApiProvider } from './providers';
 import {
@@ -32,6 +27,7 @@ import type {
   ProviderTypeMap,
   TokenUsage,
 } from './types';
+import { getDefaultProviders } from './providers/defaults';
 
 const nunjucks = getNunjucksEngine();
 
@@ -174,7 +170,7 @@ export async function matchesSimilarity(
   let finalProvider = (await getAndCheckProvider(
     'embedding',
     grading?.provider,
-    DefaultEmbeddingProvider,
+    getDefaultProviders().embeddingProvider,
     'similarity check',
   )) as ApiEmbeddingProvider | ApiSimilarityProvider;
 
@@ -319,7 +315,7 @@ export async function matchesLlmRubric(
   let finalProvider = await getAndCheckProvider(
     'text',
     grading.provider,
-    DefaultGradingJsonProvider,
+    getDefaultProviders().gradingJsonProvider,
     'llm-rubric check',
   );
   const resp = await finalProvider.callApi(prompt);
@@ -372,7 +368,7 @@ export async function matchesFactuality(
   let finalProvider = await getAndCheckProvider(
     'text',
     grading.provider,
-    DefaultGradingProvider,
+    getDefaultProviders().gradingProvider,
     'factuality check',
   );
   const resp = await finalProvider.callApi(prompt);
@@ -465,7 +461,7 @@ export async function matchesClosedQa(
   let finalProvider = await getAndCheckProvider(
     'text',
     grading.provider,
-    DefaultGradingProvider,
+    getDefaultProviders().gradingProvider,
     'model-graded-closedqa check',
   );
   const resp = await finalProvider.callApi(prompt);
@@ -508,13 +504,13 @@ export async function matchesAnswerRelevance(
   let embeddingProvider = await getAndCheckProvider(
     'embedding',
     grading?.provider,
-    DefaultEmbeddingProvider,
+    getDefaultProviders().embeddingProvider,
     'answer relevancy check',
   );
   let textProvider = await getAndCheckProvider(
     'text',
     grading?.provider,
-    DefaultGradingProvider,
+    getDefaultProviders().gradingProvider,
     'answer relevancy check',
   );
 
@@ -608,7 +604,7 @@ export async function matchesContextRecall(
   let textProvider = await getAndCheckProvider(
     'text',
     grading?.provider,
-    DefaultGradingProvider,
+    getDefaultProviders().gradingProvider,
     'context recall check',
   );
 
@@ -654,7 +650,7 @@ export async function matchesContextRelevance(
   let textProvider = await getAndCheckProvider(
     'text',
     grading?.provider,
-    DefaultGradingProvider,
+    getDefaultProviders().gradingProvider,
     'context relevance check',
   );
 
@@ -701,7 +697,7 @@ export async function matchesContextFaithfulness(
   let textProvider = await getAndCheckProvider(
     'text',
     grading?.provider,
-    DefaultGradingProvider,
+    getDefaultProviders().gradingProvider,
     'faithfulness check',
   );
 
@@ -773,7 +769,7 @@ export async function matchesSelectBest(
   let textProvider = await getAndCheckProvider(
     'text',
     grading?.provider,
-    DefaultGradingProvider,
+    getDefaultProviders().gradingProvider,
     'select-best check',
   );
 
