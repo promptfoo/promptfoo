@@ -2,16 +2,21 @@ import * as React from 'react';
 
 import invariant from 'tiny-invariant';
 
+import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import Autocomplete, { AutocompleteRenderInputParams } from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
 import CircularProgress from '@mui/material/CircularProgress';
+import DeleteIcon from '@mui/icons-material/Delete';
+import DownloadIcon from '@mui/icons-material/Download';
 import EditIcon from '@mui/icons-material/Edit';
 import FormControl from '@mui/material/FormControl';
 import Heading from '@mui/material/Typography';
 import InputLabel from '@mui/material/InputLabel';
 import ListItemText from '@mui/material/ListItemText';
+import ListItemIcon from '@mui/material/ListItemIcon';
+import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import OutlinedInput from '@mui/material/OutlinedInput';
 import Paper from '@mui/material/Box';
@@ -155,7 +160,7 @@ export default function ResultsView({
     setColumnVisibility(newColumnVisibility);
   };
 
-  const handleHeadingClick = async () => {
+  const handleDescriptionClick = async () => {
     invariant(config, 'Config must be loaded before clicking its description');
     const newDescription = window.prompt('Enter new description:', config.description);
     if (newDescription !== null && newDescription !== config.description) {
@@ -174,6 +179,23 @@ export default function ResultsView({
         setConfig(newConfig);
       } catch (error) {
         console.error('Failed to update table:', error);
+      }
+    }
+  };
+
+  const handleDeleteEvalClick = async () => {
+    if (window.confirm('Are you sure you want to delete this evaluation?')) {
+      try {
+        const response = await fetch(`${await getApiBaseUrl()}/api/eval/${evalId}`, {
+          method: 'DELETE',
+        });
+        if (!response.ok) {
+          throw new Error('Network response was not ok');
+        }
+        router.push('/');
+      } catch (error) {
+        console.error('Failed to delete evaluation:', error);
+        alert('Failed to delete evaluation');
       }
     }
   };
@@ -202,11 +224,24 @@ export default function ResultsView({
     setSelectedColumns(columnData.map((col) => col.value));
   }, [head]);
 
+  // State for anchor element
+  const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
+
+  // Handle menu close
+  const handleMenuClose = () => {
+    setAnchorEl(null);
+  };
+
+  // Function to open the eval actions menu
+  const handleOpenMenu = (event: React.MouseEvent<HTMLElement>) => {
+    setAnchorEl(event.currentTarget);
+  };
+
   return (
     <div style={{ marginLeft: '1rem', marginRight: '1rem' }}>
       <Box mb={2} sx={{ display: 'flex', alignItems: 'center' }}>
         <Heading variant="h5" sx={{ flexGrow: 1 }}>
-          <span className="description" onClick={handleHeadingClick}>
+          <span className="description" onClick={handleDescriptionClick}>
             {config?.description || evalId}
           </span>{' '}
           {config?.description && <span className="description-filepath">{evalId}</span>}
@@ -292,7 +327,64 @@ export default function ResultsView({
           <Box flexGrow={1} />
           <Box display="flex" justifyContent="flex-end">
             <ResponsiveStack direction="row" spacing={2}>
-              <Tooltip title="Edit table view settings">
+              <Button color="primary" onClick={handleOpenMenu} startIcon={<ArrowDropDownIcon />}>
+                Eval actions
+              </Button>
+              {config && (
+                <Menu
+                  id="eval-actions-menu"
+                  anchorEl={anchorEl}
+                  keepMounted
+                  open={Boolean(anchorEl)}
+                  onClose={handleMenuClose}
+                >
+                  <Tooltip title="View the configuration that defines this eval" placement="left">
+                    <MenuItem onClick={() => setConfigModalOpen(true)}>
+                      <ListItemIcon>
+                        <VisibilityIcon fontSize="small" />
+                      </ListItemIcon>
+                      View YAML
+                    </MenuItem>
+                  </Tooltip>
+                  <Tooltip title="Edit this eval in the web UI" placement="left">
+                    <MenuItem
+                      onClick={() => {
+                        setStateFromConfig(config);
+                        router.push('/setup/');
+                      }}
+                    >
+                      <ListItemIcon>
+                        <EditIcon fontSize="small" />
+                      </ListItemIcon>
+                      Edit Eval
+                    </MenuItem>
+                  </Tooltip>
+                  <DownloadMenu />
+                  {config?.sharing && (
+                    <Tooltip title="Generate a unique URL that others can access" placement="left">
+                      <MenuItem onClick={handleShareButtonClick} disabled={shareLoading}>
+                        <ListItemIcon>
+                          {shareLoading ? (
+                            <CircularProgress size={16} />
+                          ) : (
+                            <ShareIcon fontSize="small" />
+                          )}
+                        </ListItemIcon>
+                        Share
+                      </MenuItem>
+                    </Tooltip>
+                  )}
+                  <Tooltip title="Delete this eval" placement="left">
+                    <MenuItem onClick={handleDeleteEvalClick}>
+                      <ListItemIcon>
+                        <DeleteIcon fontSize="small" />
+                      </ListItemIcon>
+                      Delete
+                    </MenuItem>
+                  </Tooltip>
+                </Menu>
+              )}
+              <Tooltip title="Edit table view settings" placement="left">
                 <Button
                   color="primary"
                   onClick={() => setViewSettingsModalOpen(true)}
@@ -301,44 +393,6 @@ export default function ResultsView({
                   Table Settings
                 </Button>
               </Tooltip>
-              {config && (
-                <Tooltip title="View the configuration that defines this eval">
-                  <Button
-                    color="primary"
-                    onClick={() => setConfigModalOpen(true)}
-                    startIcon={<VisibilityIcon />}
-                  >
-                    View YAML
-                  </Button>
-                </Tooltip>
-              )}
-              {config && (
-                <Tooltip title="Edit eval">
-                  <Button
-                    color="primary"
-                    onClick={() => {
-                      setStateFromConfig(config);
-                      router.push('/setup/');
-                    }}
-                    startIcon={<EditIcon />}
-                  >
-                    Edit Eval
-                  </Button>
-                </Tooltip>
-              )}
-              {config && <DownloadMenu />}
-              {config?.sharing && (
-                <Tooltip title="Generate a unique URL that others can access">
-                  <Button
-                    color="primary"
-                    onClick={handleShareButtonClick}
-                    disabled={shareLoading}
-                    startIcon={shareLoading ? <CircularProgress size={16} /> : <ShareIcon />}
-                  >
-                    Share
-                  </Button>
-                </Tooltip>
-              )}
             </ResponsiveStack>
           </Box>
         </ResponsiveStack>

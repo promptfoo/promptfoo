@@ -7,7 +7,7 @@ import store from '@/app/api/eval/shareStore';
 import { IS_RUNNING_LOCALLY } from '@/constants';
 
 import type { EvaluateTable, FilePath, ResultsFile, UnifiedConfig } from '@/../../../types';
-import { readResult, updateResult } from '@/../../../util';
+import { readResult, updateResult, deleteEval } from '@/../../../util';
 
 export const dynamic = IS_RUNNING_LOCALLY ? 'auto' : 'force-dynamic';
 
@@ -83,6 +83,23 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     console.error(err);
     return NextResponse.json(
       { error: 'Failed to update eval', details: String(err) },
+      { status: 500 },
+    );
+  }
+}
+
+export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+  console.log('Deleting eval result with id', params.id);
+  try {
+    if (!params.id) {
+      return NextResponse.json({ error: 'Missing id' }, { status: 400 });
+    }
+    await deleteEval(params.id);
+    return NextResponse.json({ message: 'Eval deleted successfully' }, { status: 200 });
+  } catch (error) {
+    console.error('Failed to delete eval', error);
+    return NextResponse.json(
+      { error: 'Failed to delete eval', details: String(error) },
       { status: 500 },
     );
   }

@@ -1,17 +1,20 @@
 import * as React from 'react';
 
 import yaml from 'js-yaml';
-import Button from '@mui/material/Button';
 import DownloadIcon from '@mui/icons-material/Download';
-import Menu from '@mui/material/Menu';
+import Dialog from '@mui/material/Dialog';
+import DialogContent from '@mui/material/DialogContent';
+import Stack from '@mui/material/Stack';
+import Button from '@mui/material/Button';
 import MenuItem from '@mui/material/MenuItem';
-import Tooltip from '@mui/material/Tooltip';
+import ListItemIcon from '@mui/material/ListItemIcon';
+import ListItemText from '@mui/material/ListItemText';
 
 import { useStore as useResultsViewStore } from './store';
 
 function DownloadMenu() {
   const { table, config, evalId } = useResultsViewStore();
-  const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
+  const [open, setOpen] = React.useState(false);
 
   const openDownloadDialog = (blob: Blob, downloadName: string) => {
     const url = URL.createObjectURL(blob);
@@ -25,15 +28,14 @@ function DownloadMenu() {
   };
 
   const downloadConfig = () => {
-    setAnchorEl(null);
     const configData = yaml.dump(config);
     const mimeType = 'text/yaml;charset=utf-8';
     const blob = new Blob([configData], { type: mimeType });
     openDownloadDialog(blob, 'promptfooconfig.yaml');
+    handleClose();
   };
 
   const downloadDpoJson = () => {
-    setAnchorEl(null);
     if (!table) {
       alert('No table data');
       return;
@@ -47,44 +49,65 @@ function DownloadMenu() {
     }));
     const blob = new Blob([JSON.stringify(formattedData, null, 2)], { type: 'application/json' });
     openDownloadDialog(blob, `${evalId}-dpo.json`);
+    handleClose();
   };
 
   const downloadTable = () => {
-    setAnchorEl(null);
     if (!table) {
       alert('No table data');
       return;
     }
     const blob = new Blob([JSON.stringify(table, null, 2)], { type: 'application/json' });
     openDownloadDialog(blob, `${evalId}-table.json`);
+    handleClose();
+  };
+
+  const handleOpen = () => {
+    setOpen(true);
+  };
+
+  const handleClose = () => {
+    setOpen(false);
   };
 
   return (
     <>
-      <Tooltip title="Download options">
-        <Button
-          color="primary"
-          aria-controls="download-menu"
-          aria-haspopup="true"
-          onClick={(event) => {
-            setAnchorEl(event.currentTarget);
-          }}
-          startIcon={<DownloadIcon />}
-        >
-          Download
-        </Button>
-      </Tooltip>
-      <Menu
-        id="download-menu"
-        anchorEl={anchorEl}
-        keepMounted
-        open={Boolean(anchorEl)}
-        onClose={() => setAnchorEl(null)}
-      >
-        <MenuItem onClick={downloadConfig}>YAML config</MenuItem>
-        <MenuItem onClick={downloadTable}>Table JSON</MenuItem>
-        <MenuItem onClick={downloadDpoJson}>DPO JSON</MenuItem>
-      </Menu>
+      <MenuItem onClick={handleOpen}>
+        <ListItemIcon>
+          <DownloadIcon fontSize="small" />
+        </ListItemIcon>
+        <ListItemText>Download</ListItemText>
+      </MenuItem>
+      <Dialog onClose={handleClose} open={open}>
+        <DialogContent>
+          <Stack direction="column" spacing={2} sx={{ width: '100%' }}>
+            <Button
+              onClick={downloadConfig}
+              startIcon={<DownloadIcon />}
+              fullWidth
+              sx={{ justifyContent: 'flex-start' }}
+            >
+              Download YAML Config
+            </Button>
+            <Button
+              onClick={downloadTable}
+              startIcon={<DownloadIcon />}
+              fullWidth
+              sx={{ justifyContent: 'flex-start' }}
+            >
+              Download Table JSON
+            </Button>
+            <Button
+              onClick={downloadDpoJson}
+              startIcon={<DownloadIcon />}
+              fullWidth
+              sx={{ justifyContent: 'flex-start' }}
+            >
+              Download DPO JSON
+            </Button>
+          </Stack>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

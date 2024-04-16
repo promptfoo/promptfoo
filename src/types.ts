@@ -553,6 +553,7 @@ export interface EvalWithMetadata {
   date: Date;
   config: Partial<UnifiedConfig>;
   results: EvaluateSummary;
+  description?: string;
 }
 
 export type PromptFunction = (context: {
