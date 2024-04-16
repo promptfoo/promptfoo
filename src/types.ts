@@ -197,7 +197,12 @@ export interface RunEvalOptions {
 export interface EvaluateOptions {
   maxConcurrency?: number;
   showProgressBar?: boolean;
-  progressCallback?: (progress: number, total: number, index: number, evalStep: RunEvalOptions) => void;
+  progressCallback?: (
+    progress: number,
+    total: number,
+    index: number,
+    evalStep: RunEvalOptions,
+  ) => void;
   generateSuggestions?: boolean;
   repeat?: number;
   delay?: number;
@@ -375,15 +380,7 @@ export interface Assertion {
   type: AssertionType;
 
   // The expected value, if applicable
-  value?:
-    | string
-    | string[]
-    | object
-    | ((
-        output: string | object,
-        testCase: AtomicTestCase,
-        assertion: Assertion,
-      ) => Promise<GradingResult>);
+  value?: AssertionValue;
 
   // The threshold value, only applicable for similarity (cosine distance)
   threshold?: number;
@@ -403,6 +400,25 @@ export interface Assertion {
   // Process the output before running the assertion
   transform?: string;
 }
+
+export type AssertionValue =
+  | string
+  | string[]
+  | object
+  | AssertionValueFunction;
+
+export type AssertionValueFunction = (
+  output: string,
+  context: AssertionValueFunctionContext
+) => AssertionValueFunctionResult | Promise<AssertionValueFunctionResult>;
+
+export interface AssertionValueFunctionContext {
+  prompt: string | undefined;
+  vars: Record<string, string | object>;
+  test: AtomicTestCase<Record<string, string | object>>;
+}
+
+export type AssertionValueFunctionResult = boolean | number | GradingResult;
 
 // Used when building prompts index from files.
 export interface TestCasesWithMetadataPrompt {
