@@ -150,6 +150,10 @@ export default function ResultsView({
 
   invariant(table, 'Table data must be loaded before rendering ResultsView');
   const { head } = table;
+  const allColumns = [
+    ...head.vars.map((_, idx) => `Variable ${idx + 1}`),
+    ...head.prompts.map((_, idx) => `Prompt ${idx + 1}`),
+  ];
 
   const [columnDialogOpen, setColumnDialogOpen] = React.useState(false);
   const handleColumnDialogOpen = () => {
@@ -163,10 +167,6 @@ export default function ResultsView({
     const updatedSelectedColumns: string [] = selectedColumns.includes(target) ? selectedColumns.filter((col) => col !== target) : [...selectedColumns, target];
     setSelectedColumns(updatedSelectedColumns);
 
-    const allColumns = [
-      ...head.vars.map((_, idx) => `Variable ${idx + 1}`),
-      ...head.prompts.map((_, idx) => `Prompt ${idx + 1}`),
-    ];
     const newColumnVisibility: VisibilityState = {};
     allColumns.forEach((col) => {
       newColumnVisibility[col] = updatedSelectedColumns.includes(col);
@@ -176,10 +176,6 @@ export default function ResultsView({
 
   const [variablesVisible, setVariablesVisible] = React.useState(true);
   const handleCheckClearAllVariables = () => {
-    const allColumns = [
-      ...head.vars.map((_, idx) => `Variable ${idx + 1}`),
-      ...head.prompts.map((_, idx) => `Prompt ${idx + 1}`),
-    ];
     const newColumnVisibility: VisibilityState = {};
 
     if (variablesVisible) {
