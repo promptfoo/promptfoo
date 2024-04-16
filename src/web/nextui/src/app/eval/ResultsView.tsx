@@ -10,6 +10,7 @@ import Checkbox from '@mui/material/Checkbox';
 import CircularProgress from '@mui/material/CircularProgress';
 import DeleteIcon from '@mui/icons-material/Delete';
 import DownloadIcon from '@mui/icons-material/Download';
+import ClearIcon from '@mui/icons-material/Clear';
 import Dialog from '@mui/material/Dialog';
 import DialogContent from '@mui/material/DialogContent';
 import EditIcon from '@mui/icons-material/Edit';
@@ -24,12 +25,14 @@ import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import OutlinedInput from '@mui/material/OutlinedInput';
 import Paper from '@mui/material/Box';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import Select, { SelectChangeEvent } from '@mui/material/Select';
 import SettingsIcon from '@mui/icons-material/Settings';
 import ShareIcon from '@mui/icons-material/Share';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
+import ViewColumnIcon from '@mui/icons-material/ViewColumn';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import { styled } from '@mui/system';
 import { useRouter } from 'next/navigation';
@@ -317,6 +320,7 @@ export default function ResultsView({
             <Button
               color="primary"
               onClick={handleColumnDialogOpen}
+              startIcon={<ViewColumnIcon />}
             >
               Open Column Dialog
             </Button>
@@ -328,6 +332,7 @@ export default function ResultsView({
               <Button
                 color="primary"
                 onClick={handleCheckClearAllVariables}
+                startIcon={variablesVisible ? <ClearIcon /> : <RestartAltIcon />}
               >
                 {variablesVisible ? "Clear All Variables" : "Reset All Variables"}
               </Button>
