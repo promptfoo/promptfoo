@@ -160,17 +160,7 @@ export default function ResultsView({
   };
   const handleChange = (column: {value: string; label: string; group: string}) => {
     const target = column.value;
-    const hide = selectedColumns.includes(target);
-    const updatedSelectedColumns: string [] = [];
-    for (const col of selectedColumns) {
-      if (col === target) {
-        continue;
-      }
-      updatedSelectedColumns.push(col);
-    }
-    if (!hide) {
-      updatedSelectedColumns.push(target);
-    }
+    const updatedSelectedColumns: string [] = selectedColumns.includes(target) ? selectedColumns.filter((col) => col !== target) : [...selectedColumns, target];
     setSelectedColumns(updatedSelectedColumns);
 
     const allColumns = [
