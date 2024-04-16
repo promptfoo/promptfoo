@@ -175,9 +175,8 @@ export default function ResultsView({
   };
 
   const [variablesVisible, setVariablesVisible] = React.useState(true);
-  const handleCheckClearAllVariables = () => {
+  const handleClearAllVariables = () => {
     const newColumnVisibility: VisibilityState = {};
-
     if (variablesVisible) {
       allColumns.forEach((col) => {
         newColumnVisibility[col] = !col.startsWith("Variable");
@@ -325,7 +324,7 @@ export default function ResultsView({
               <DialogTitle>Select Columns to Show</DialogTitle>
               <Button
                 color="primary"
-                onClick={handleCheckClearAllVariables}
+                onClick={handleClearAllVariables}
                 startIcon={variablesVisible ? <ClearIcon /> : <RestartAltIcon />}
               >
                 {variablesVisible ? "Clear All Variables" : "Reset All Variables"}
