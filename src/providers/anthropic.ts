@@ -351,3 +351,7 @@ export class AnthropicCompletionProvider implements ApiProvider {
     }
   }
 }
+
+export const DefaultGradingProvider = new AnthropicMessagesProvider('claude-3-opus-20240229');
+export const DefaultGradingJsonProvider = new AnthropicMessagesProvider('claude-3-opus-20240229');
+export const DefaultSuggestionsProvider = new AnthropicMessagesProvider('claude-3-opus-20240229');
