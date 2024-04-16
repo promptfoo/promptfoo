@@ -482,6 +482,13 @@ export interface AtomicTestCase<Vars = Record<string, string | object>> extends 
 
 export type NunjucksFilterMap = Record<string, (...args: any[]) => string>;
 
+export type DerivedMetric = {
+  // The name of this metric
+  name: string;
+  // The function to calculate the metric - either a mathematical expression or a function that takes the results and returns a number
+  value: string | ((scores: Record<string, number>, context: RunEvalOptions) => number);
+};
+
 // The test suite defines the "knobs" that we are tuning in prompt engineering: providers and prompts
 export interface TestSuite {
   // Optional description of what your LLM is trying to do
@@ -511,6 +518,9 @@ export interface TestSuite {
 
   // Envar overrides
   env?: EnvOverrides;
+
+  // Metrics to calculate after the eval has been completed
+  derivedMetrics?: DerivedMetric[];
 }
 
 export type ProviderId = string;

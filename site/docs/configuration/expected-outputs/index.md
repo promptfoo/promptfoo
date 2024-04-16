@@ -311,6 +311,44 @@ These metrics will be shown in the UI:
 
 See [named metrics example](https://github.com/promptfoo/promptfoo/tree/main/examples/named-metrics).
 
+## Creating derived metrics
+
+Derived metrics, also known as composite or calculated metrics, are computed at runtime based on other metrics. They are aggregated and displayed as named metrics (see above).
+
+Derived metrics are calculated after all individual test evaluations are completed. They can be defined using mathematical expressions or custom functions that aggregate or transform the named scores collected during the tests.
+
+### Configuring derived metrics
+
+To configure derived metrics in your test suite, you add a `derivedMetrics` array to the `TestSuite` object. Each entry in this array is an object that specifies the name of the metric and the formula or function used to calculate it.
+
+#### Usage
+
+Each derived metric has the following properties:
+
+- **name**: The name of the metric. This is used as the identifier in the output results.
+- **value**: The calculation method for the metric. This can be a string representing a mathematical expression or a function that takes the current scores and the evaluation context as arguments and returns a numeric value.
+
+#### Example
+
+Here's an example of how to define derived metrics in a test suite configuration:
+
+```yaml
+derivedMetrics:
+  - name: 'EfficiencyAdjustedPerformance'
+    value: '(PerformanceScore / InferenceTime) * EfficiencyFactor'
+  # - ...
+```
+
+In this example, `EfficiencyAdjustedPerformance` is calculated using a simple mathematical expression that uses existing named scores.
+
+:::info
+Good to know:
+
+- Derived metrics are calculated in the order they are provided. You can reference previous derived metrics.
+- In order to reference a basic metric, you must name it (see named scores above).
+- In order to be used in a mathematical expression, named scores must not have any spaces or special characters in them.
+  :::
+
 ## Running assertions directly on outputs
 
 If you already have LLM outputs and want to run assertions on them, the `eval` command supports standalone assertion files.
