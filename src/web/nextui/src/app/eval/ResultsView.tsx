@@ -12,6 +12,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import DownloadIcon from '@mui/icons-material/Download';
 import ClearIcon from '@mui/icons-material/Clear';
 import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import EditIcon from '@mui/icons-material/Edit';
 import FormControl from '@mui/material/FormControl';
@@ -53,7 +54,6 @@ import type { FilterMode } from './types';
 
 import './ResultsView.css';
 import { getApiBaseUrl } from '@/api';
-import { DialogTitle } from '@mui/material';
 
 const ResponsiveStack = styled(Stack)(({ theme }) => ({
   maxWidth: '100%',
