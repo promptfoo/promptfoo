@@ -20,6 +20,8 @@ import Heading from '@mui/material/Typography';
 import InputLabel from '@mui/material/InputLabel';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
+import ListItemButton from '@mui/material/ListItemButton';
+import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import Menu from '@mui/material/Menu';
@@ -156,11 +158,20 @@ export default function ResultsView({
   const handleColumnDialogClose = () => {
     setColumnDialogOpen(false);
   };
-  const handleChange = (event: SelectChangeEvent<typeof selectedColumns>) => {
-    const {
-      target: { value },
-    } = event;
-    setSelectedColumns(typeof value === 'string' ? value.split(',') : value);
+  const handleChange = (column: {value: string; label: string; group: string}) => {
+    const target = column.value;
+    const hide = selectedColumns.includes(target);
+    const updatedSelectedColumns: string [] = [];
+    for (const col of selectedColumns) {
+      if (col === target) {
+        continue;
+      }
+      updatedSelectedColumns.push(col);
+    }
+    if (!hide) {
+      updatedSelectedColumns.push(target);
+    }
+    setSelectedColumns(updatedSelectedColumns);
 
     const allColumns = [
       ...head.vars.map((_, idx) => `Variable ${idx + 1}`),
@@ -168,16 +179,13 @@ export default function ResultsView({
     ];
     const newColumnVisibility: VisibilityState = {};
     allColumns.forEach((col) => {
-      newColumnVisibility[col] = (typeof value === 'string' ? value.split(',') : value).includes(
-        col,
-      );
+      newColumnVisibility[col] = updatedSelectedColumns.includes(col);
     });
     setColumnVisibility(newColumnVisibility);
   };
 
   const [variablesVisible, setVariablesVisible] = React.useState(true);
   const handleCheckClearAllVariables = () => {
-
     const allColumns = [
       ...head.vars.map((_, idx) => `Variable ${idx + 1}`),
       ...head.prompts.map((_, idx) => `Prompt ${idx + 1}`),
@@ -343,9 +351,22 @@ export default function ResultsView({
                     <ListItem
                       key={column.value}
                       value={column.value}
+                      disablePadding
                     >
-                      <Checkbox checked={selectedColumns.indexOf(column.value) > -1} />
-                      <ListItemText primary={column.label} />
+                      <ListItemButton
+                        role={undefined}
+                        onClick={(_event) => handleChange(column)}
+                        dense
+                      >
+                        <ListItemIcon>
+                          <Checkbox
+                            checked={selectedColumns.indexOf(column.value) > -1}
+                            tabIndex={-1}
+                            disableRipple
+                          />
+                        </ListItemIcon>
+                        <ListItemText primary={column.label} />
+                      </ListItemButton>
                     </ListItem>
                   ))}
                 </List>
