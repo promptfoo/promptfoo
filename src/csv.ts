@@ -21,7 +21,7 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
       options.suffix = value;
     } else if (key === '__description') {
       description = value;
-    } else if (key === 'provider_output') {
+    } else if (key === '__providerOutput') {
       providerOutput = value;
     } else {
       vars[key] = value;
