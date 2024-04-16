@@ -471,7 +471,7 @@ export interface AtomicTestCase<Vars = Record<string, string | object>> extends 
 
 export type NunjucksFilterMap = Record<string, (...args: any[]) => string>;
 
-export type CompositeMetric = {
+export type DerivedMetric = {
   // The name of this metric
   name: string;
   // The function to calculate the metric - either a mathematical expression or a function that takes the results and returns a number
@@ -509,7 +509,7 @@ export interface TestSuite {
   env?: EnvOverrides;
 
   // Metrics to calculate after the eval has been completed
-  compositeMetrics?: CompositeMetric[];
+  derivedMetrics?: DerivedMetric[];
 }
 
 export type ProviderId = string;

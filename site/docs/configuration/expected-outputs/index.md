@@ -319,21 +319,21 @@ Derived metrics are calculated after all individual test evaluations are complet
 
 ### Configuring derived metrics
 
-To configure derived metrics in your test suite, you add a `compositeMetrics` array to the `TestSuite` object. Each entry in this array is an object that specifies the name of the metric and the formula or function used to calculate it.
+To configure derived metrics in your test suite, you add a `derivedMetrics` array to the `TestSuite` object. Each entry in this array is an object that specifies the name of the metric and the formula or function used to calculate it.
 
 #### Usage
 
-Each composite metric has the following properties:
+Each derived metric has the following properties:
 
 - **name**: The name of the metric. This is used as the identifier in the output results.
 - **value**: The calculation method for the metric. This can be a string representing a mathematical expression or a function that takes the current scores and the evaluation context as arguments and returns a numeric value.
 
 #### Example
 
-Here's an example of how to define composite metrics in a test suite configuration:
+Here's an example of how to define derived metrics in a test suite configuration:
 
 ```yaml
-compositeMetrics:
+derivedMetrics:
   - name: 'EfficiencyAdjustedPerformance'
     value: '(PerformanceScore / InferenceTime) * EfficiencyFactor'
   # - ...

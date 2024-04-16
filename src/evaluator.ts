@@ -713,9 +713,9 @@ class Evaluator {
         metrics.namedScores[key] = (metrics.namedScores[key] || 0) + value;
       }
 
-      if (testSuite.compositeMetrics) {
+      if (testSuite.derivedMetrics) {
         const math = await import('mathjs');
-        for (const metric of testSuite.compositeMetrics) {
+        for (const metric of testSuite.derivedMetrics) {
           if (metrics.namedScores[metric.name] === undefined) {
             metrics.namedScores[metric.name] = 0;
           }
@@ -728,7 +728,7 @@ class Evaluator {
             }
           } catch (error) {
             logger.debug(
-              `Could not evaluate composite metric '${metric.name}': ${(error as Error).message}`,
+              `Could not evaluate derived metric '${metric.name}': ${(error as Error).message}`,
             );
           }
         }
