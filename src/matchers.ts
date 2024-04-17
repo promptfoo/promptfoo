@@ -523,21 +523,10 @@ export async function matchesAnswerRelevance(
   const candidateQuestions: string[] = [];
   for (let i = 0; i < 3; i++) {
     // TODO(ian): Parallelize
-    const promptText = nunjucks.renderString(ANSWER_RELEVANCY_GENERATE['content'],
+    const promptText = nunjucks.renderString(ANSWER_RELEVANCY_GENERATE,
       {answer: JSON.stringify(output).slice(1, -1)},
     );
-    const resp = await textProvider.callApi(
-      JSON.stringify([
-        {
-          role: 'system',
-          content: promptText,
-        },
-        {
-          role: 'user',
-          content: output,
-        },
-      ]),
-    );
+    const resp = await textProvider.callApi(promptText);
     if (resp.error || !resp.output) {
       tokensUsed.total += resp.tokenUsage?.total || 0;
       tokensUsed.prompt += resp.tokenUsage?.prompt || 0;
