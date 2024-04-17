@@ -528,7 +528,10 @@ export async function matchesAnswerRelevance(
     );
     const resp = await textProvider.callApi(
       JSON.stringify([
-        promptText,
+        {
+          role: 'system',
+          content: promptText,
+        },
         {
           role: 'user',
           content: output,
