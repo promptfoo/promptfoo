@@ -523,9 +523,12 @@ export async function matchesAnswerRelevance(
   const candidateQuestions: string[] = [];
   for (let i = 0; i < 3; i++) {
     // TODO(ian): Parallelize
+    const promptText = nunjucks.renderString(ANSWER_RELEVANCY_GENERATE['content'],
+      {answer: JSON.stringify(output).slice(1, -1)},
+    );
     const resp = await textProvider.callApi(
       JSON.stringify([
-        ANSWER_RELEVANCY_GENERATE,
+        promptText,
         {
           role: 'user',
           content: output,
