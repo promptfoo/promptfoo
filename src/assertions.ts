@@ -881,7 +881,7 @@ ${assertion.value}`,
 
     return {
       assertion,
-      ...(await matchesAnswerRelevance(prompt, output, assertion.threshold || 0, test.options)),
+      ...(await matchesAnswerRelevance(test.vars?.query === 'string' ? test.vars.query : prompt, output, assertion.threshold || 0, test.options)),
     };
   }
 
