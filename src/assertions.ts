@@ -124,7 +124,7 @@ export async function runAssertions({
       // Select-type assertions are handled separately because they depend on multiple outputs.
       return;
     }
-    const weight = assertion.weight || 1;
+    const weight = assertion.weight ?? 1;
     totalWeight += weight;
     const result = await runAssertion({
       prompt,
