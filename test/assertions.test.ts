@@ -1560,27 +1560,38 @@ describe('runAssertion', () => {
   });
 
   it.each([
-    ['boolean', false, 0, 'Python code returned false', false],
-    ['number', 0, 0, 'Python code returned false', false],
+    ['boolean', false, 0, 'Python code returned false', false, undefined],
+    ['number', 0, 0, 'Python code returned false', false, undefined],
     [
       'GradingResult',
       `{"pass": false, "score": 0, "reason": "Custom error"}`,
       0,
       'Custom error',
       false,
+      undefined,
     ],
-    ['boolean', true, 1, 'Assertion passed', true],
-    ['number', 1, 1, 'Assertion passed', true],
+    ['boolean', true, 1, 'Assertion passed', true, undefined],
+    ['number', 1, 1, 'Assertion passed', true, undefined],
     [
       'GradingResult',
       `{"pass": true, "score": 1, "reason": "Custom success"}`,
       1,
       'Custom success',
       true,
+      undefined,
+    ],
+    [
+      'GradingResult',
+      // This score is less than the assertion threshold in the test
+      `{"pass": true, "score": 0.4, "reason": "Foo bar"}`,
+      0.4,
+      'Python score 0.4 is less than threshold 0.5',
+      false,
+      0.5,
     ],
   ])(
     'should handle inline return type %s with return value: %p',
-    async (type, returnValue, expectedScore, expectedReason, expectedPass) => {
+    async (type, returnValue, expectedScore, expectedReason, expectedPass, threshold) => {
       const output =
         'This is a string with "double quotes"\n and \'single quotes\' \n\n and some \n\t newlines.';
 
@@ -1594,6 +1605,7 @@ describe('runAssertion', () => {
       const pythonAssertion: Assertion = {
         type: 'python',
         value: returnValue.toString(),
+        threshold,
       };
 
       const spy = jest.spyOn(pythonWrapper, 'runPythonCode').mockResolvedValue(resolvedValue);
@@ -2032,8 +2044,7 @@ describe('assertionFromString', () => {
   });
 
   it('should create an is-json assertion with value', () => {
-    const expected =
-`is-json:
+    const expected = `is-json:
       required: ['color']
       type:object
       properties:
@@ -2044,13 +2055,13 @@ describe('assertionFromString', () => {
     const result: Assertion = assertionFromString(expected);
     expect(result.type).toBe('is-json');
     expect(result.value).toBe(
-`
+      `
       required: ['color']
       type:object
       properties:
         color:
           type:string
-`
+`,
     );
   });
 

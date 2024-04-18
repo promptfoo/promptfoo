@@ -246,7 +246,11 @@ export async function runAssertion({
         logger.debug(`Javascript script ${filePath} output: ${valueFromScript}`);
       } else if (filePath.endsWith('.py')) {
         try {
-          const pythonScriptOutput = await runPython(path.resolve(basePath, filePath), 'get_assert', [output, context]);
+          const pythonScriptOutput = await runPython(
+            path.resolve(basePath, filePath),
+            'get_assert',
+            [output, context],
+          );
           valueFromScript = pythonScriptOutput;
           logger.debug(`Python script ${filePath} output: ${valueFromScript}`);
           logger.debug(`Python script ${filePath} output: ${valueFromScript}`);
@@ -256,7 +260,9 @@ export async function runAssertion({
       } else if (filePath.endsWith('.json')) {
         renderedValue = JSON.parse(fs.readFileSync(path.resolve(basePath, filePath), 'utf8'));
       } else if (filePath.endsWith('.yaml') || filePath.endsWith('.yml')) {
-        renderedValue = yaml.load(fs.readFileSync(path.resolve(basePath, filePath), 'utf8')) as object;
+        renderedValue = yaml.load(
+          fs.readFileSync(path.resolve(basePath, filePath), 'utf8'),
+        ) as object;
       } else if (filePath.endsWith('.txt')) {
         // Trim to remove trailing newline
         renderedValue = fs.readFileSync(path.resolve(basePath, filePath), 'utf8').trim();
@@ -745,7 +751,12 @@ ${
             `Python assertion must return a boolean, number, or {pass, score, reason} object. Got instead: ${result}`,
           );
         }
-        return result as GradingResult;
+        const pythonGradingResult = result as GradingResult;
+        if (assertion.threshold && pythonGradingResult.score < assertion.threshold) {
+          pythonGradingResult.pass = false;
+          pythonGradingResult.reason = `Python score ${pythonGradingResult.score} is less than threshold ${assertion.threshold}`;
+        }
+        return pythonGradingResult;
       } else {
         score = parseFloat(String(result));
         pass = assertion.threshold ? score >= assertion.threshold : score > 0;
@@ -771,8 +782,7 @@ ${
       score,
       reason: pass
         ? 'Assertion passed'
-        : `Python code returned ${pass ? 'true' : 'false'}
-${assertion.value}`,
+        : `Python code returned ${pass ? 'true' : 'false'}\n${assertion.value}`,
       assertion,
     };
   }
