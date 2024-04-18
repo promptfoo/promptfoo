@@ -254,14 +254,14 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
   });
 
   const tests: UnifiedConfig['tests'] = [];
-  configs.forEach(async (config) => {
+  for (const config of configs) {
     if (typeof config.tests === 'string') {
       const newTests = await readTests(config.tests, path.dirname(configPaths[0]));
       tests.push(...newTests);
     } else if (Array.isArray(config.tests)) {
       tests.push(...config.tests);
     }
-  });
+  }
 
   const configsAreStringOrArray = configs.every(
     (config) => typeof config.prompts === 'string' || Array.isArray(config.prompts),
