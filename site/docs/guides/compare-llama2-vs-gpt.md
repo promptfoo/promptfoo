@@ -1,12 +1,12 @@
 ---
-sidebar_label: Llama 2 vs GPT benchmark
+sidebar_label: Llama vs GPT benchmark
 ---
 
-# Llama 2 vs GPT: Benchmark on your own data
+# Llama 3 vs GPT: Benchmark on your own data
 
-This guide describes how to compare three models - Llama v2 70B, GPT 3.5, and GPT 4 - using the `promptfoo` CLI.
+This guide describes how to compare three models - Llama 3 70B, GPT 3.5, and GPT 4 - using the `promptfoo` CLI.
 
-LLM use cases vary widely and there is no one-size-fits-all benchmark. We'll use some dummy test cases from the [Hacker News thread on Llama 2](https://news.ycombinator.com/item?id=36774627), but you can substitute your own.
+LLM use cases vary widely and there is no one-size-fits-all benchmark. We'll use some dummy test cases from the [Hacker News thread on Llama](https://news.ycombinator.com/item?id=36774627), but you can substitute your own.
 
 The end result is a view that compares the performance of Llama, GPT 3.5, and GPT 4 side-by-side:
 
@@ -32,7 +32,7 @@ Now let's start editing `promptfooconfig.yaml`. First, we'll add the list of mod
 providers:
   - openai:gpt-3.5-turbo-0613
   - openai:gpt-4-turbo-0613
-  - replicate:replicate/llama70b-v2-chat:e951f18578850b652510200860fc4ea62b3b16fac280f83ff32282f87bbd2e48
+  - replicate:meta/meta-llama-3-70b-instruct
 ```
 
 The first two [providers](/docs/providers) reference built-in OpenAI models. The third provider references the hosted [Replicate](https://replicate.com/replicate/llama70b-v2-chat) version of chat-tuned Llama v2 with 70 billion parameters.
@@ -54,19 +54,22 @@ First, we'll put the OpenAI chat prompts in `prompts/chat_prompt.json`:
 ]
 ```
 
-Next, we'll put the Llama chat prompt in `prompts/completion_prompt.txt`:
+Next, we'll put the Llama chat prompt in `prompts/llama_prompt.txt`:
 
-```title=prompts/completion_prompt.txt
-User: {{message}}
-Assistant:
+```title=prompts/llama_prompt.txt
+<|begin_of_text|><|start_header_id|>system<|end_header_id|>
+
+You are a helpful assistant<|eot_id|><|start_header_id|>user<|end_header_id|>
+
+{{message}}<|eot_id|><|start_header_id|>assistant<|end_header_id|>
 ```
 
-Now, let's go back to `promptfooconfig.yaml` and add our prompts. We'll name them `chat_prompt` and `completion_prompt` respectively:
+Now, let's go back to `promptfooconfig.yaml` and add our prompts. We'll name them `chat_prompt` and `llama_prompt` respectively:
 
 ```yaml title=promptfooconfig.yaml
 prompts:
   prompts/chat_prompt.json: chat_prompt
-  prompts/completion_prompt.txt: completion_prompt
+  prompts/llama_prompt.txt: llama_prompt
 
 providers:
   - id: openai:gpt-3.5-turbo-0613
@@ -75,9 +78,9 @@ providers:
   - id: openai:gpt-4-0613
     label: gpt-4
     prompts: chat_prompt
-  - id: replicate:meta/llama70b-v2-chat:02e509c789964a7ea8736978a43525956ef40397be9033abf9fd2badfe68c9e3
-    label: llama70b-v2-chat
-    prompts: completion_prompt
+  - id: replicate:meta/meta-llama-3-70b-instruct
+    label: llama70b-v3-chat
+    prompts: llama_prompt
 ```
 
 :::info
@@ -178,8 +181,8 @@ providers:
       temperature: 0
       max_tokens: 128
     // highlight-end
-  - id: replicate:meta/llama70b-v2-chat:02e509c789964a7ea8736978a43525956ef40397be9033abf9fd2badfe68c9e3
-    prompts: completion_prompt
+  - id: replicate:meta/meta-llama-3-70b-instruct
+    prompts: llama_prompt
     // highlight-start
     config:
       temperature: 0.01  # minimum temperature
@@ -216,7 +219,7 @@ This will run each of the test cases against each of the models and output the r
 
 Then, to open the web viewer, run `npx promptfoo@latest view`. Here's what we see:
 
-![llama2 and gpt comparison](/img/docs/llama-gpt-comparison.png)
+![llama3 and gpt comparison](/img/docs/llama-gpt-comparison.png)
 
 You can also output a CSV:
 
