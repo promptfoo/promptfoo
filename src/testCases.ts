@@ -181,7 +181,7 @@ export async function readTests(
       // Points to a tests file with multiple test cases
       return loadTestsFromGlob(tests);
     } else {
-      // Points to a legacy vars.csv
+      // Points to a tests.csv or Google Sheet
       return readStandaloneTestsFile(tests, basePath);
     }
   } else if (Array.isArray(tests)) {
