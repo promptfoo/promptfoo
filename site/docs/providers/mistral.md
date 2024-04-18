@@ -18,9 +18,10 @@ You can specify which Mistral model to use in your configuration. Currently, the
 
 1. `open-mistral-7b`
 2. `open-mixtral-8x7b`
-3. `mistral-small-latest`
-4. `mistral-medium-latest`
-5. `mistral-large-latest`
+3. `open-mixtral-8x22b`
+4. `mistral-small-latest`
+5. `mistral-medium-latest`
+6. `mistral-large-latest`
 
 Here's an example config that compares Mistral-Medium-Latest, Mistral-Small-Latest, and OpenAI GPT-3.5:
 
