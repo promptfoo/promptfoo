@@ -1,14 +1,28 @@
+---
+sidebar_label: Google Sheets
+---
+
 # Importing Test Cases from Google Sheets
 
 promptfoo allows you to import eval test cases directly from Google Sheets. This can be done either unauthenticated (if the sheet is public) or authenticated using Google's Default Application Credentials, typically with a service account for programmatic access.
 
 ## Unauthenticated Access
 
-If the Google Sheet is set to be accessible by "anyone with the link," you can directly specify the share URL in your YAML configuration.
+If the Google Sheet is set to be accessible by "anyone with the link," you can directly specify the share URL in your YAML configuration. For example:
 
 ```yaml
+prompts:
+  - prompt1.txt
+  - prompt2.txt
+providers:
+  - anthropic:messages:claude-3-opus-20240229
+  - openai:chat:gpt-4-0125-preview
+// highlight-start
 tests: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit?usp=sharing
+// highlight-end
 ```
+
+Here's an [example sheet](https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit#gid=0). For more information on how to set up the sheet itself, see [loading assertions from CSV](/docs/configuration/expected-outputs/#load-assertions-from-csv).
 
 ## Authenticated Access with Default Application Credentials
 
