@@ -16,17 +16,19 @@ For sheets that are not publicly accessible, you can use authenticated access. T
 
 1. **Install peer dependencies**: `npm install googleapis`
 
-2. **Service Account Setup**: Create a service account in your Google Cloud Platform project and download the JSON key file.
+1. **Service Account Setup**: Create a [service account](https://console.cloud.google.com/iam-admin/serviceaccounts) in your Google Cloud Platform project. Create a JSON key file and download it.
 
-3. **Share Sheet**: Share the Google Sheet with the email address of your service account with at least viewer permissions.
+1. **Enable Google Sheets API**: Enable the [Google Sheets API](https://console.cloud.google.com/apis/library/sheets.googleapis.com) (`sheets.googleapis.com`).
 
-4. **Configure Environment**: Set the `GOOGLE_APPLICATION_CREDENTIALS` environment variable to the path of the JSON key file:
+1. **Share Sheet**: Share the Google Sheet with the email address of your service account (`your-service-account@project-name.iam.gserviceaccount.com`) with at least viewer permissions.
+
+1. **Configure Environment**: Set the `GOOGLE_APPLICATION_CREDENTIALS` environment variable to the path of the JSON key file:
 
 ```bash
 export GOOGLE_APPLICATION_CREDENTIALS="/path/to/your/service-account-file.json"
 ```
 
-5. **Update YAML Configuration**: Use the same URL format as in unauthenticated access, but the system will automatically use the authenticated method to access the sheet:
+1. **Update YAML Configuration**: Use the same URL format as in unauthenticated access, but the system will automatically use the authenticated method to access the sheet:
 
 ```yaml
 tests: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit?usp=sharing

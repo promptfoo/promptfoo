@@ -4,7 +4,7 @@ import type { CsvRow } from './types';
 
 async function checkGoogleSheetAccess(url: string) {
   try {
-    const response = await fetch(url, { method: 'HEAD' });
+    const response = await fetch(url);
     if (response.ok) {
       return { public: true, status: response.status };
     } else {
@@ -18,6 +18,7 @@ async function checkGoogleSheetAccess(url: string) {
 
 export async function fetchCsvFromGoogleSheet(url: string): Promise<CsvRow[]> {
   const { public: isPublic } = await checkGoogleSheetAccess(url);
+  logger.debug(`Google Sheets URL: ${url}, isPublic: ${isPublic}`);
   if (isPublic) {
     return fetchCsvFromGoogleSheetUnauthenticated(url);
   }
