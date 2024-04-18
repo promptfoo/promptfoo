@@ -7,9 +7,9 @@ import { parse as parseCsv } from 'csv-parse/sync';
 import { globSync } from 'glob';
 
 import logger from './logger';
-import { fetchCsvFromGoogleSheet } from './fetch';
 import { OpenAiChatCompletionProvider } from './providers/openai';
 import { testCaseFromCsvRow } from './csv';
+import { fetchCsvFromGoogleSheet } from './googleSheets';
 
 import type {
   Assertion,
@@ -66,8 +66,7 @@ export async function readStandaloneTestsFile(
   let rows: CsvRow[] = [];
 
   if (varsPath.startsWith('https://docs.google.com/spreadsheets/')) {
-    const csvData = await fetchCsvFromGoogleSheet(varsPath);
-    rows = parseCsv(csvData, { columns: true });
+    rows = await fetchCsvFromGoogleSheet(varsPath);
   } else if (fileExtension === 'csv') {
     rows = parseCsv(fs.readFileSync(resolvedVarsPath, 'utf-8'), { columns: true });
   } else if (fileExtension === 'json') {

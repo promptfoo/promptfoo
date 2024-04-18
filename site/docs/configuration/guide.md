@@ -306,7 +306,7 @@ Evaluates each `language` x `input` combination:
 
 <img alt="Multiple combinations of var inputs" src="https://user-images.githubusercontent.com/310310/243108917-dab27ca5-689b-4843-bb52-de8d459d783b.png" />
 
-Vars can also be imported from globbed filepaths. They are automatically expanded into an array.  For example:
+Vars can also be imported from globbed filepaths. They are automatically expanded into an array. For example:
 
 ```yaml
   - vars:
@@ -583,7 +583,7 @@ providers: [openai:gpt-3.5-turbo, vertex:gemini-pro]
 tests: tests.csv
 ```
 
-promptfoo also has built-in ability to pull test cases from a Google Sheet. The sheet must be visible to "anyone with the link". For example:
+promptfoo also has built-in ability to pull test cases from a Google Sheet. The easiest way to get started is to set the sheet visible to "anyone with the link". For example:
 
 ```yaml
 prompts: [prompt1.txt, prompt2.txt]
@@ -593,3 +593,5 @@ tests: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsK
 ```
 
 Here's a [full example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-sheets).
+
+See [Google Sheets integration](/docs/integrations/google-sheets) for details on how to set up promptfoo to access a private spreadsheet.
