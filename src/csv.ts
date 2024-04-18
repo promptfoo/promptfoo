@@ -1,4 +1,4 @@
-// Helpers for parsing CSV eval files, shared by frontend and backend.
+// Helpers for parsing CSV eval files, shared by frontend and backend. Cannot import native modules.
 
 import type { Assertion, AssertionType, CsvRow, TestCase } from './types';
 
