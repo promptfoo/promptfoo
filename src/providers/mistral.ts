@@ -75,6 +75,13 @@ export class MistralChatCompletionProvider implements ApiProvider {
         output: 0.0007 / 1000,
       },
     })),
+    ...['open-mixtral-8x22b'].map((model) => ({
+      id: model,
+      cost: {
+        input: 0.002 / 1000,
+        output: 0.006 / 1000,
+      },
+    })),
     ...['mistral-small-latest'].map((model) => ({
       id: model,
       cost: {
