@@ -18,3 +18,8 @@ tests:
     assert:
       - type: python
         value: file://assert.py
+  - vars:
+      topic: fruits that smell bad
+    assert:
+      - type: python
+        value: file://assert.py

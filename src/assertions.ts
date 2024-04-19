@@ -746,17 +746,28 @@ ${
         }
         return parsed;
       } else if (typeof result === 'object') {
-        if (!result.hasOwnProperty('pass') || !result.hasOwnProperty('score')) {
+        if (
+          !result.hasOwnProperty('pass') ||
+          !result.hasOwnProperty('score') ||
+          !result.hasOwnProperty('reason')
+        ) {
           throw new Error(
-            `Python assertion must return a boolean, number, or {pass, score, reason} object. Got instead: ${result}`,
+            `Python assertion must return a boolean, number, or {pass, score, reason} object. Got instead:\n${JSON.stringify(
+              result,
+              null,
+              2,
+            )}`,
           );
         }
-        const pythonGradingResult = result as GradingResult;
+        const pythonGradingResult = result as Omit<GradingResult, 'assertion'>;
         if (assertion.threshold && pythonGradingResult.score < assertion.threshold) {
           pythonGradingResult.pass = false;
           pythonGradingResult.reason = `Python score ${pythonGradingResult.score} is less than threshold ${assertion.threshold}`;
         }
-        return pythonGradingResult;
+        return {
+          ...pythonGradingResult,
+          assertion,
+        };
       } else {
         score = parseFloat(String(result));
         pass = assertion.threshold ? score >= assertion.threshold : score > 0;
