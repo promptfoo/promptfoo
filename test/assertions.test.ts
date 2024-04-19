@@ -2251,4 +2251,20 @@ describe('assertionFromString', () => {
     const result: Assertion = assertionFromString(expected);
     expect(result.type).toBe('is-valid-openai-function-call');
   });
+  
+  it('should create a python assertion', () => {
+    const expected = 'python: file://file.py ';
+
+    const result: Assertion = assertionFromString(expected);
+    expect(result.type).toBe('python');
+    expect(result.value).toBe('file://file.py');
+  });
+  
+  it('should create a javascript assertion', () => {
+    const expected = 'javascript: x > 10';
+
+    const result: Assertion = assertionFromString(expected);
+    expect(result.type).toBe('javascript');
+    expect(result.value).toBe('x > 10');
+  });
 });
