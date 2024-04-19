@@ -306,7 +306,7 @@ export async function matchesLlmRubric(
     );
   }
 
-  const prompt = nunjucks.renderString(grading.rubricPrompt || DEFAULT_GRADING_PROMPT, {
+  const prompt = nunjucks.renderString(grading?.rubricPrompt || DEFAULT_GRADING_PROMPT, {
     output: JSON.stringify(output).slice(1, -1),
     rubric: JSON.stringify(expected).slice(1, -1),
     ...fromVars(vars),
@@ -358,7 +358,7 @@ export async function matchesFactuality(
     );
   }
 
-  const prompt = nunjucks.renderString(grading.rubricPrompt || OPENAI_FACTUALITY_PROMPT, {
+  const prompt = nunjucks.renderString(grading?.rubricPrompt || OPENAI_FACTUALITY_PROMPT, {
     input: JSON.stringify(input).slice(1, -1),
     ideal: JSON.stringify(expected).slice(1, -1),
     completion: JSON.stringify(output).slice(1, -1),
@@ -451,7 +451,7 @@ export async function matchesClosedQa(
     );
   }
 
-  const prompt = nunjucks.renderString(grading.rubricPrompt || OPENAI_CLOSED_QA_PROMPT, {
+  const prompt = nunjucks.renderString(grading?.rubricPrompt || OPENAI_CLOSED_QA_PROMPT, {
     input: JSON.stringify(input).slice(1, -1),
     criteria: JSON.stringify(expected).slice(1, -1),
     completion: JSON.stringify(output).slice(1, -1),
@@ -523,9 +523,9 @@ export async function matchesAnswerRelevance(
   const candidateQuestions: string[] = [];
   for (let i = 0; i < 3; i++) {
     // TODO(ian): Parallelize
-    const promptText = nunjucks.renderString(ANSWER_RELEVANCY_GENERATE,
-      {answer: JSON.stringify(output).slice(1, -1)},
-    );
+    const promptText = nunjucks.renderString(grading?.rubricPrompt || ANSWER_RELEVANCY_GENERATE, {
+      answer: JSON.stringify(output).slice(1, -1),
+    });
     const resp = await textProvider.callApi(promptText);
     if (resp.error || !resp.output) {
       tokensUsed.total += resp.tokenUsage?.total || 0;
@@ -603,7 +603,7 @@ export async function matchesContextRecall(
     'context recall check',
   );
 
-  const promptText = nunjucks.renderString(CONTEXT_RECALL, {
+  const promptText = nunjucks.renderString(grading?.rubricPrompt || CONTEXT_RECALL, {
     context: JSON.stringify(context).slice(1, -1),
     groundTruth: JSON.stringify(groundTruth).slice(1, -1),
     ...fromVars(vars),
@@ -649,7 +649,7 @@ export async function matchesContextRelevance(
     'context relevance check',
   );
 
-  const promptText = nunjucks.renderString(CONTEXT_RELEVANCE, {
+  const promptText = nunjucks.renderString(grading?.rubricPrompt || CONTEXT_RELEVANCE, {
     context: JSON.stringify(context).slice(1, -1),
     query: JSON.stringify(question).slice(1, -1),
   });
@@ -696,7 +696,8 @@ export async function matchesContextFaithfulness(
     'faithfulness check',
   );
 
-  let promptText = nunjucks.renderString(CONTEXT_FAITHFULNESS_LONGFORM, {
+  // FIXME(ian): Need a way to pass in multiple prompts
+  let promptText = nunjucks.renderString(grading?.rubricPrompt || CONTEXT_FAITHFULNESS_LONGFORM, {
     question: JSON.stringify(query).slice(1, -1),
     answer: JSON.stringify(output).slice(1, -1),
     ...fromVars(vars),
@@ -710,7 +711,7 @@ export async function matchesContextFaithfulness(
   invariant(typeof resp.output === 'string', 'context-faithfulness produced malformed response');
 
   let statements = resp.output.split('\n');
-  promptText = nunjucks.renderString(CONTEXT_FAITHFULNESS_NLI_STATEMENTS, {
+  promptText = nunjucks.renderString(grading?.rubricPrompt || CONTEXT_FAITHFULNESS_NLI_STATEMENTS, {
     context: JSON.stringify(context).slice(1, -1),
     statements: JSON.stringify(statements.join('\n')).slice(1, -1),
     ...fromVars(vars),
