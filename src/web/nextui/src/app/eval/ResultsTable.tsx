@@ -15,11 +15,13 @@ import {
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import MenuItem from '@mui/material/MenuItem';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import Select from '@mui/material/Select';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import FormControlLabel from '@mui/material/FormControlLabel';
-import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import Link from 'next/link';
 
 import CustomMetrics from '@/app/eval/CustomMetrics';
@@ -40,8 +42,6 @@ import type {
 } from './types';
 
 import './ResultsTable.css';
-
-const NUM_ROWS_PER_PAGE = 50;
 
 function formatRowOutput(output: EvaluateTableOutput | string) {
   if (typeof output === 'string') {
@@ -844,7 +844,7 @@ export default function ResultsTable({
     }
   }, [body, failureFilter, filterMode, searchText, columnVisibility, columnVisibilityIsSet]);
 
-  const [pagination, setPagination] = React.useState({ pageIndex: 0, pageSize: NUM_ROWS_PER_PAGE });
+  const [pagination, setPagination] = React.useState({ pageIndex: 0, pageSize: 50 });
 
   const reactTable = useReactTable({
     data: filteredBody,
@@ -965,6 +965,23 @@ export default function ResultsTable({
           >
             Next
           </Button>
+          <Typography component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Select
+              value={pagination.pageSize}
+              onChange={(e) => setPagination({ pageIndex: 0, pageSize: Number(e.target.value) })}
+              displayEmpty
+              inputProps={{ 'aria-label': 'Results per page' }}
+              size="small"
+              sx={{ m: 1, minWidth: 80 }}
+            >
+              <MenuItem value={10}>10</MenuItem>
+              <MenuItem value={50}>50</MenuItem>
+              <MenuItem value={100}>100</MenuItem>
+              <MenuItem value={500}>500</MenuItem>
+              <MenuItem value={1000}>1000</MenuItem>
+            </Select>
+            <span>results per page</span>
+          </Typography>
         </Box>
       )}
       <GenerateTestCases />
