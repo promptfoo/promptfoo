@@ -55,7 +55,7 @@ export function assertionFromString(expected: string): Assertion {
       sliceLength = 'eval:'.length;
     }
 
-    const functionBody = expected.slice(sliceLength);
+    const functionBody = expected.slice(sliceLength).trim();
     return {
       type: 'javascript',
       value: functionBody,
@@ -69,7 +69,7 @@ export function assertionFromString(expected: string): Assertion {
   }
   if (expected.startsWith('python:')) {
     const sliceLength = 'python:'.length;
-    const functionBody = expected.slice(sliceLength);
+    const functionBody = expected.slice(sliceLength).trim();
     return {
       type: 'python',
       value: functionBody,
