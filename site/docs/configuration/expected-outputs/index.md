@@ -29,14 +29,14 @@ tests:
 
 ## Assertion properties
 
-| Property     | Type   | Required | Description                                                                                             |
-| ------------ | ------ | -------- | ------------------------------------------------------------------------------------------------------- |
-| type         | string | Yes      | Type of assertion                                                                                       |
-| value        | string | No       | The expected value, if applicable                                                                       |
-| threshold    | number | No       | The threshold value, applicable only to certain types such as `similar`, `cost`, `javascript`, `python` |
-| weight       | string | No       | How heavily to weigh the assertion. Defaults to 1.0                                                     |
-| provider     | string | No       | Some assertions (similarity, llm-rubric, model-graded-\*) require an [LLM provider](/docs/providers)    |
-| rubricPrompt | string | No       | LLM rubric grading prompt                                                                               |
+| Property     | Type               | Required | Description                                                                                             |
+| ------------ | ------------------ | -------- | ------------------------------------------------------------------------------------------------------- |
+| type         | string             | Yes      | Type of assertion                                                                                       |
+| value        | string             | No       | The expected value, if applicable                                                                       |
+| threshold    | number             | No       | The threshold value, applicable only to certain types such as `similar`, `cost`, `javascript`, `python` |
+| weight       | string             | No       | How heavily to weigh the assertion. Defaults to 1.0                                                     |
+| provider     | string             | No       | Some assertions (similarity, llm-rubric, model-graded-\*) require an [LLM provider](/docs/providers)    |
+| rubricPrompt | string \| string[] | No       | Model-graded LLM prompt                                                                                 |
 
 ## Assertion types
 

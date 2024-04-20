@@ -216,23 +216,19 @@ The rubric prompt has two built-in variables that you may use:
 
 In this example, we set `rubricPrompt` under `defaultTest`, which applies it to every test in this test suite:
 
-```yaml
 defaultTest:
   options:
-    rubricPrompt:
-      - role: system
-        content: >-
-          Grade the output by the following specifications, keeping track of the points scored:
-
-          Did the output mention {{x}}? +1 point
-          Did the output describe {{y}}? + 1 point
-          Did the output ask to clarify {{z}}? +1 point
-
-          Calculate the score but always pass the test. Output your response in the following JSON format:
-          {pass: true, score: number, reason: string}
-      - role: user
-        content: 'Output: {{ output }}'
-```
+    rubricPrompt: >
+      [
+        {
+          "role": "system",
+          "content": "Grade the output by the following specifications, keeping track of the points scored:\n\nDid the output mention {{x}}? +1 point\nDid the output describe {{y}}? +1 point\nDid the output ask to clarify {{z}}? +1 point\n\nCalculate the score but always pass the test. Output your response in the following JSON format:\n{pass: true, score: number, reason: string}"
+        },
+        {
+          "role": "user",
+          "content": "Output: {{ output }}"
+        }
+      ]
 
 See the [full example](https://github.com/promptfoo/promptfoo/blob/main/examples/custom-grading-prompt/promptfooconfig.yaml).
 
