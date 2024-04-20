@@ -4,11 +4,9 @@ sidebar_position: 41
 
 # Ollama
 
-The `ollama` provider is compatible with [Ollama](https://github.com/jmorganca/ollama),
-which enables access to Mixtral, Mistal, Llama2, Codellama, Orca, Vicuna, and more.
+The `ollama` provider is compatible with [Ollama](https://github.com/jmorganca/ollama), which enables access to Llama, Mixtral, Mistral, and more.
 
-You can use its `/api/generate` endpoint
-by specifying any of the following providers from the [Ollama library](https://ollama.ai/library):
+You can use its `/api/generate` endpoint by specifying any of the following providers from the [Ollama library](https://ollama.ai/library):
 
 - `ollama:completion:llama3:text`
 - `ollama:completion:llama2:text`
