@@ -4,28 +4,31 @@ sidebar_position: 41
 
 # Ollama
 
-The `ollama` provider is compatible with [Ollama](https://github.com/jmorganca/ollama),
-which enables access to Mixtral, Mistal, Llama2, Codellama, Orca, Vicuna, and more.
+The `ollama` provider is compatible with [Ollama](https://github.com/jmorganca/ollama), which enables access to Llama, Mixtral, Mistral, and more.
 
-You can use its `/api/generate` endpoint
-by specifying any of the following providers from the [Ollama library](https://ollama.ai/library):
+You can use its `/api/generate` endpoint by specifying any of the following providers from the [Ollama library](https://ollama.ai/library):
 
-- `ollama:completion:llama2`
-- `ollama:completion:llama2:13b`
-- `ollama:completion:llama2:70b`
+- `ollama:completion:llama3:text`
+- `ollama:completion:llama2:text`
 - `ollama:completion:llama2-uncensored`
 - `ollama:completion:codellama`
 - `ollama:completion:orca-mini`
-- `ollama:completion:mixtral:8x7b`
 - ...
 
 Or, use the `/api/chat` endpoint for chat-formatted prompts:
 
-- `ollama:chat:llama2:7b-chat`
-- `ollama:chat:llama2:70b-chat`
+- `ollama:chat:llama3`
+- `ollama:chat:llama3:8b`
+- `ollama:chat:llama3:70b`
+- `ollama:chat:llama2`
+- `ollama:chat:llama2:7b`
+- `ollama:chat:llama2:13b`
+- `ollama:chat:llama2:70b`
+- `ollama:chat:mixtral:8x7b`
+- `ollama:chat:mixtral:8x22b`
 - ...
 
-Also supported is the `/api/embeddings` endpoint via `ollama:embeddings:<model name>`.
+We also support the `/api/embeddings` endpoint via `ollama:embeddings:<model name>` for model-graded assertions such as [similarity](/docs/configuration/expected-outputs/similar/).
 
 Supported environment variables:
 
