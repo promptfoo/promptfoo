@@ -156,7 +156,7 @@ export type ProviderTypeMap = Partial<
 >;
 
 export interface GradingConfig {
-  rubricPrompt?: string;
+  rubricPrompt?: string | string[];
   provider?: string | ProviderOptions | ApiProvider | ProviderTypeMap;
   factuality?: {
     subset?: number;

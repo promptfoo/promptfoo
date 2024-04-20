@@ -36,7 +36,7 @@ A test case represents a single example input that is fed into all prompts and p
 | options.suffix       | string                                      | No       | This is appended to the prompt                                                                                                              |
 | options.transform    | string                                      | No       | A JavaScript snippet that runs on LLM output before any assertions                                                                          |
 | options.provider     | string                                      | No       | The API provider to use for LLM rubric grading                                                                                              |
-| options.rubricPrompt | string                                      | No       | The prompt to use for LLM rubric grading                                                                                                    |
+| options.rubricPrompt | string \| string[]                          | No       | Model-graded LLM prompt                                                                                                                     |
 
 ### Assertion
 

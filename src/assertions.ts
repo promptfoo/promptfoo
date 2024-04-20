@@ -857,6 +857,7 @@ ${
 
     if (test.options.rubricPrompt) {
       // Substitute vars in prompt
+      invariant(typeof test.options.rubricPrompt === 'string', 'rubricPrompt must be a string');
       test.options.rubricPrompt = nunjucks.renderString(test.options.rubricPrompt, test.vars || {});
     }
 
@@ -880,6 +881,7 @@ ${
 
     if (test.options.rubricPrompt) {
       // Substitute vars in prompt
+      invariant(typeof test.options.rubricPrompt === 'string', 'rubricPrompt must be a string');
       test.options.rubricPrompt = nunjucks.renderString(test.options.rubricPrompt, test.vars || {});
     }
 
