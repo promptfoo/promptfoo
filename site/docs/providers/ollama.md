@@ -17,8 +17,10 @@ You can use its `/api/generate` endpoint by specifying any of the following prov
 
 Or, use the `/api/chat` endpoint for chat-formatted prompts:
 
+- `ollama:chat:llama3`
 - `ollama:chat:llama3:8b`
 - `ollama:chat:llama3:70b`
+- `ollama:chat:llama2`
 - `ollama:chat:llama2:7b`
 - `ollama:chat:llama2:13b`
 - `ollama:chat:llama2:70b`
