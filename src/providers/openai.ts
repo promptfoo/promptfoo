@@ -378,7 +378,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     options: { config?: OpenAiCompletionOptions; id?: string; env?: EnvOverrides } = {},
   ) {
     if (!OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES.includes(modelName)) {
-      logger.warn(`Using unknown OpenAI chat model: ${modelName}`);
+      logger.debug(`Using unknown OpenAI chat model: ${modelName}`);
     }
     super(modelName, options);
     this.config = options.config || {};
