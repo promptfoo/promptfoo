@@ -304,6 +304,7 @@ export async function loadApiProvider(
   }
 
   ret.transform = options.transform;
+  ret.delay = options.delay;
   return ret;
 }
 
