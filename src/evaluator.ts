@@ -321,8 +321,8 @@ class Evaluator {
       });
 
       if (!response.cached) {
-        let sleep = delay;
-        if (!delay && process.env.PROMPTFOO_DELAY_MS) {
+        let sleep = provider.delay ?? delay;
+        if (!sleep && process.env.PROMPTFOO_DELAY_MS) {
           sleep = parseInt(process.env.PROMPTFOO_DELAY_MS, 10) || 0;
         }
         if (sleep) {

@@ -720,4 +720,14 @@ config:
     expect(providers[1]).toBeInstanceOf(OpenAiCompletionProvider);
     expect(providers[2]).toBeInstanceOf(AnthropicCompletionProvider);
   });
+
+  test('loadApiProvider sets provider.delay', async () => {
+    const providerOptions = {
+      id: 'test-delay',
+      config: {},
+      delay: 500,
+    };
+    const provider = await loadApiProvider('echo', { options: providerOptions });
+    expect(provider.delay).toBe(500);
+  });
 });

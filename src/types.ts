@@ -69,6 +69,7 @@ export interface ProviderOptions {
   config?: any;
   prompts?: string[]; // List of prompt display strings
   transform?: string;
+  delay?: number;
   env?: EnvOverrides;
 }
 
@@ -102,6 +103,9 @@ export interface ApiProvider {
   
   // Applied by the evaluator on provider response
   transform?: string;
+  
+  // Custom delay for the provider.
+  delay?: number;
 }
 
 export interface ApiEmbeddingProvider extends ApiProvider {

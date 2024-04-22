@@ -79,7 +79,15 @@ ProviderOptions is an object that includes the `id` of the provider and an optio
 interface ProviderOptions {
   id?: ProviderId;
   config?: any;
-  prompts?: string[]; // List of prompt display strings
+
+  // List of prompt display strings
+  prompts?: string[];
+
+  // Transform the output, either with inline Javascript or external py/js script (see `Transforms`)
+  transform?: string;
+
+  // Sleep this long before each request
+  delay?: number;
 }
 ```
 
