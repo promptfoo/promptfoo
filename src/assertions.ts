@@ -901,7 +901,7 @@ ${
     // Assertion provider overrides test provider
     test.options = test.options || {};
     test.options.provider = assertion.provider || test.options.provider;
-    let input = test.vars?.query === 'string' ? test.vars.query : prompt;
+    let input = typeof test.vars?.query === 'string' ? test.vars.query : prompt;
     return {
       assertion,
       ...(await matchesAnswerRelevance(input, output, assertion.threshold || 0, test.options)),
