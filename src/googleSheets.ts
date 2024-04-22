@@ -70,3 +70,35 @@ export async function fetchCsvFromGoogleSheetAuthenticated(url: string): Promise
     return csvRow;
   });
 }
+
+export async function writeCsvToGoogleSheet(rows: CsvRow[], url: string): Promise<void> {
+  const { google } = await import('googleapis');
+  const auth = new google.auth.GoogleAuth({
+    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+  });
+  const sheets = google.sheets('v4');
+
+  const match = url.match(/\/d\/([^/]+)/);
+  if (!match) {
+    throw new Error(`Invalid Google Sheets URL: ${url}`);
+  }
+  const spreadsheetId = match[1];
+  const range = 'A1:ZZZ';
+
+  // Extract headers from the first row
+  const headers = Object.keys(rows[0]);
+
+  // Convert rows to a 2D array
+  const values = [headers, ...rows.map((row) => headers.map((header) => row[header]))];
+
+  // Write data to the sheet
+  await sheets.spreadsheets.values.update({
+    spreadsheetId,
+    range,
+    valueInputOption: 'USER_ENTERED',
+    auth,
+    requestBody: {
+      values,
+    },
+  });
+}

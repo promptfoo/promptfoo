@@ -627,9 +627,9 @@ async function main() {
         if (outputPath) {
           // Write output to file
           if (typeof outputPath === 'string') {
-            writeOutput(outputPath, summary, config, shareableUrl);
+            await writeOutput(outputPath, summary, config, shareableUrl);
           } else if (Array.isArray(outputPath)) {
-            writeMultipleOutputs(outputPath, summary, config, shareableUrl);
+            await writeMultipleOutputs(outputPath, summary, config, shareableUrl);
           }
           logger.info(chalk.yellow(`Writing output to ${outputPath}`));
         }
