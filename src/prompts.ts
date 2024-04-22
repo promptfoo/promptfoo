@@ -75,6 +75,7 @@ export function readProviderPromptMap(
 function maybeFilepath(str: string): boolean {
   return (
     !str.includes('\n') &&
+    !str.includes('portkey://') &&
     (str.includes('/') ||
       str.includes('\\') ||
       str.includes('*') ||

@@ -33,6 +33,7 @@ import type {
   TestSuite,
   ProviderResponse,
 } from './types';
+import { getPrompt } from './integrations/portkey';
 
 export const DEFAULT_MAX_CONCURRENCY = 4;
 
@@ -180,7 +181,14 @@ export async function renderPrompt(
 
   // Resolve variable mappings
   resolveVariables(vars);
+  
+  // Third party integrations
+  if (prompt.raw.startsWith('portkey://')) {
+    const portKeyResult = await getPrompt(prompt.raw.slice('portkey://'.length), vars);
+    return JSON.stringify(portKeyResult.messages);
+  }
 
+  // Render prompt
   try {
     if (process.env.PROMPTFOO_DISABLE_JSON_AUTOESCAPE) {
       return nunjucks.renderString(basePrompt, vars);
