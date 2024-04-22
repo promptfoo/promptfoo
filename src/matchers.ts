@@ -327,9 +327,9 @@ export async function matchesLlmRubric(
 
   invariant(typeof resp.output === 'string', 'llm-rubric produced malformed response');
   try {
-    const firstBrace = resp.output.indexOf('{');
-    const lastBrace = resp.output.lastIndexOf('}');
-    const jsonStr = resp.output.substring(firstBrace, lastBrace + 1);
+    const firstOpeningBrace = resp.output.indexOf('{');
+    const firstClosingBrace = resp.output.indexOf('}');
+    const jsonStr = resp.output.substring(firstOpeningBrace, firstClosingBrace + 1);
     const parsed = JSON.parse(jsonStr) as Partial<GradingResult>;
     const pass = parsed.pass ?? (typeof parsed.score === 'undefined' ? true : parsed.score > 0);
     return {
