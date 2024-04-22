@@ -302,7 +302,7 @@ async function main() {
     .description('Create a shareable URL of your most recent eval')
     .option('-y, --yes', 'Skip confirmation')
     .option('--env-file <path>', 'Path to .env file')
-    .action(async (cmdObj: { yes: boolean; envFile?: string; } & Command) => {
+    .action(async (cmdObj: { yes: boolean; envFile?: string } & Command) => {
       setupEnv(cmdObj.envFile);
       telemetry.maybeShowNotice();
       telemetry.record('command_used', {
@@ -349,7 +349,7 @@ async function main() {
     .command('clear')
     .description('Clear cache')
     .option('--env-file <path>', 'Path to .env file')
-    .action(async (cmdObj: { envFile?: string; }) => {
+    .action(async (cmdObj: { envFile?: string }) => {
       setupEnv(cmdObj.envFile);
       telemetry.maybeShowNotice();
       logger.info('Clearing cache...');
@@ -546,12 +546,18 @@ async function main() {
     .option('--verbose', 'Show debug logs', defaultConfig?.commandLineOptions?.verbose)
     .option('-w, --watch', 'Watch for changes in config and re-run')
     .option('--env-file <path>', 'Path to .env file')
-    .option('--interactive-providers', 'Run providers interactively, one at a time', defaultConfig?.evaluateOptions?.interactiveProviders)
+    .option(
+      '--interactive-providers',
+      'Run providers interactively, one at a time',
+      defaultConfig?.evaluateOptions?.interactiveProviders,
+    )
+    .option('-n, --first-n', 'Only run the first N tests')
     .action(async (cmdObj: CommandLineOptions & Command) => {
       setupEnv(cmdObj.envFile);
       let config: Partial<UnifiedConfig> | undefined = undefined;
       let testSuite: TestSuite | undefined = undefined;
       let basePath: string | undefined = undefined;
+
       const runEvaluation = async (initialization?: boolean) => {
         // Misc settings
         if (cmdObj.verbose) {
@@ -575,6 +581,10 @@ async function main() {
           logger.info(
             `Running at concurrency=1 because ${delay}ms delay was requested between API calls`,
           );
+        }
+
+        if (cmdObj.firstN) {
+          testSuite.tests = testSuite.tests?.slice(0, cmdObj.firstN);
         }
 
         const options: EvaluateOptions = {
