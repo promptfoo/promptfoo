@@ -216,6 +216,7 @@ The rubric prompt has two built-in variables that you may use:
 
 In this example, we set `rubricPrompt` under `defaultTest`, which applies it to every test in this test suite:
 
+```yaml
 defaultTest:
   options:
     rubricPrompt: >
@@ -229,6 +230,7 @@ defaultTest:
           "content": "Output: {{ output }}"
         }
       ]
+```
 
 See the [full example](https://github.com/promptfoo/promptfoo/blob/main/examples/custom-grading-prompt/promptfooconfig.yaml).
 
