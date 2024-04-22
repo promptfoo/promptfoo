@@ -68,6 +68,7 @@ export interface ProviderOptions {
   label?: ProviderLabel;
   config?: any;
   prompts?: string[]; // List of prompt display strings
+  transform?: string;
   env?: EnvOverrides;
 }
 
@@ -98,6 +99,9 @@ export interface ApiProvider {
 
   // Shown on output
   label?: ProviderLabel;
+  
+  // Applied by the evaluator on provider response
+  transform?: string;
 }
 
 export interface ApiEmbeddingProvider extends ApiProvider {
