@@ -291,7 +291,7 @@ class Evaluator {
         cost: 0,
         cached: false,
       };
-      if (!test.providerOutput){
+      if (!test.providerOutput) {
         response = await provider.callApi(
           renderedPrompt,
           {
@@ -345,7 +345,8 @@ class Evaluator {
       } else if (response.output) {
         // Create a copy of response so we can potentially mutate it.
         let processedResponse = { ...response };
-        const transform = test.options?.transform || test.options?.postprocess;
+        const transform =
+          test.options?.transform || test.options?.postprocess || provider.transform;
         if (transform) {
           processedResponse.output = await transformOutput(transform, processedResponse.output, {
             vars,

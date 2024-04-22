@@ -477,6 +477,40 @@ describe('evaluator', () => {
     expect(summary.stats.failures).toBe(0);
     expect(summary.results[0].response?.output).toBe(123);
   });
+  
+  test('evaluate with provider transform', async () => {
+    const mockApiProviderWithTransform: ApiProvider = {
+      id: jest.fn().mockReturnValue('test-provider-transform'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Original output',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+      }),
+      transform: '`Transformed: ${output}`',
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProviderWithTransform],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          assert: [
+            {
+              type: 'equals',
+              value: 'Transformed: Original output',
+            },
+          ],
+          options: {}, // No test transform, relying on provider's transform
+        },
+      ],
+    };
+
+    const summary = await evaluate(testSuite, {});
+
+    expect(mockApiProviderWithTransform.callApi).toHaveBeenCalledTimes(1);
+    expect(summary.stats.successes).toBe(1);
+    expect(summary.stats.failures).toBe(0);
+    expect(summary.results[0].response?.output).toBe('Transformed: Original output');
+  });
 
   test('evaluate with providerPromptMap', async () => {
     const testSuite: TestSuite = {
