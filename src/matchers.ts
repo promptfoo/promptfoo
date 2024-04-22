@@ -92,6 +92,14 @@ export async function getGradingProvider(
     } else if ((provider as ProviderOptions).id) {
       // Defined as ProviderOptions
       finalProvider = await loadFromProviderOptions(provider as ProviderOptions);
+    } else if (Array.isArray(provider)) {
+      throw new Error(
+        `Provider must be an object or string, but received an array.\n\nCheck that the provider ${JSON.stringify(
+          provider[0],
+          null,
+          2,
+        )} is not nested in an array.`,
+      );
     } else {
       throw new Error(
         `Invalid provider definition for output type '${type}': ${JSON.stringify(
