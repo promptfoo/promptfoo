@@ -71,37 +71,41 @@ export async function fetchWithCache(
   delete copy.headers;
   const cacheKey = `fetch:${url}:${JSON.stringify(copy)}`;
 
-  // Try to get the cached response
-  const cachedResponse = await cache.get(cacheKey);
+  let cached = true;
+  let errorResponse = null;
 
-  if (cachedResponse) {
-    logger.debug(`Returning cached response for ${url}: ${cachedResponse}`);
-    return {
-      cached: true,
-      data: JSON.parse(cachedResponse as string),
-    };
-  }
-
-  // Fetch the actual data and store it in the cache
-  const response = await fetchWithRetries(url, options, timeout);
-  const responseText = await response.text();
-  try {
-    const data = format === 'json' ? JSON.parse(responseText) : responseText;
-    if (response.ok) {
-      logger.debug(`Storing ${url} response in cache: ${JSON.stringify(data)}`);
-      await cache.set(cacheKey, JSON.stringify(data));
+  // Use wrap to ensure that the fetch is only done once even for concurrent invocations
+  const cachedResponse = await cache.wrap(cacheKey, async () => {
+    // Fetch the actual data and store it in the cache
+    cached = false;
+    const response = await fetchWithRetries(url, options, timeout);
+    const responseText = await response.text();
+    try {
+      const data = JSON.stringify(format === 'json' ? JSON.parse(responseText) : responseText);
+      if (!response.ok) {
+        errorResponse = data;
+        // Don't cache error responses
+        return;
+      }
+      logger.debug(`Storing ${url} response in cache: ${data}`);
+      return data;
+    } catch (err) {
+      throw new Error(
+        `Error parsing response from ${url}: ${
+          (err as Error).message
+        }. Received text: ${responseText}`,
+      );
     }
-    return {
-      cached: false,
-      data,
-    };
-  } catch (err) {
-    throw new Error(
-      `Error parsing response from ${url}: ${
-        (err as Error).message
-      }. Received text: ${responseText}`,
-    );
+  });
+
+  if (cached) {
+    logger.debug(`Returning cached response for ${url}: ${cachedResponse}`);
   }
+
+  return {
+    cached,
+    data: JSON.parse((cachedResponse ?? errorResponse) as string),
+  };
 }
 
 export function enableCache() {

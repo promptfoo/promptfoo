@@ -1,4 +1,4 @@
-import { fetchWithCache, disableCache, enableCache } from '../src/cache';
+import { fetchWithCache, disableCache, enableCache, clearCache } from '../src/cache';
 import fetch, { Response } from 'node-fetch';
 
 jest.mock('node-fetch');
@@ -62,6 +62,26 @@ describe('fetchWithCache', () => {
 
     expect(mockedFetch).toHaveBeenCalledTimes(0);
     expect(result).toEqual({ cached: true, data: response });
+  });
+
+  it('should only fetch data once with cache enabled', async () => {
+    enableCache();
+    clearCache();
+
+    const url = 'https://api.example.com/data';
+    const response = { data: 'test data' };
+
+    mockedFetch.mockResolvedValueOnce(mockedFetchResponse(true, response));
+    mockedFetch.mockRejectedValue(new Error('Should not be called'));
+
+    const [a, b] = await Promise.all([
+      fetchWithCache(url, {}, 1000),
+      fetchWithCache(url, {}, 1000),
+    ]);
+
+    expect(mockedFetch).toHaveBeenCalledTimes(1);
+    expect(a).toEqual({ cached: false, data: response });
+    expect(b).toEqual({ cached: true, data: response });
   });
 
   it('should fetch data without cache for a single test', async () => {
