@@ -667,6 +667,13 @@ config:
     const provider = await loadApiProvider('bedrock:completion:anthropic.claude-v2:1');
     expect(provider).toBeInstanceOf(AwsBedrockCompletionProvider);
   });
+  
+  test('loadApiProvider with openrouter', async () => {
+    const provider = await loadApiProvider('openrouter:mistralai/mistral-medium');
+    expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
+    // Intentionally openai, because it's just a wrapper around openai
+    expect(provider.id()).toBe('openai:mistralai/mistral-medium');
+  });
 
   test('loadApiProvider with RawProviderConfig', async () => {
     const rawProviderConfig = {

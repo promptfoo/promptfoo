@@ -188,6 +188,17 @@ export async function loadApiProvider(
         `Unknown Azure OpenAI model type: ${modelType}. Use one of the following providers: azureopenai:chat:<model name>, azureopenai:assistant:<assistant id>, azureopenai:completion:<model name>`,
       );
     }
+  } else if (providerPath?.startsWith('openrouter:')) {
+    const splits = providerPath.split(':');
+    const modelName = splits.slice(1).join(':');
+    ret = new OpenAiChatCompletionProvider(modelName, {
+      ...providerOptions,
+      config: {
+        ...providerOptions.config,
+        apiBaseUrl: 'https://openrouter.ai/api/v1',
+        apiKeyEnvar: 'OPENROUTER_API_KEY',
+      },
+    });
   } else if (providerPath?.startsWith('anthropic:')) {
     const splits = providerPath.split(':');
     const modelType = splits[1];
