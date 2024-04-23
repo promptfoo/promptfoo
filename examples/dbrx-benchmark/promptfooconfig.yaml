@@ -2,15 +2,11 @@ prompts:
   - 'Think deeply and answer concisely: {{query}}'
 
 providers:
-  - id: openai:chat:databricks/dbrx-instruct
+  - id: openrouter:databricks/dbrx-instruct
     config:
-      apiBaseUrl: https://openrouter.ai/api/v1
-      apiKeyEnvar: OPENROUTER_API_KEY
       temperature: 0
-  - id: openai:chat:mistralai/mixtral-8x7b-instruct
+  - id: openrouter:mistralai/mixtral-8x7b-instruct
     config:
-      apiBaseUrl: https://openrouter.ai/api/v1
-      apiKeyEnvar: OPENROUTER_API_KEY
       temperature: 0
   - id: openai:gpt-3.5-turbo-0125
     config:
