@@ -100,9 +100,9 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
 
   if (testSuite.outputPath) {
     if (typeof testSuite.outputPath === 'string') {
-      writeOutput(testSuite.outputPath, ret, testSuite, null);
+      await writeOutput(testSuite.outputPath, ret, testSuite, null);
     } else if (Array.isArray(testSuite.outputPath)) {
-      writeMultipleOutputs(testSuite.outputPath, ret, testSuite, null);
+      await writeMultipleOutputs(testSuite.outputPath, ret, testSuite, null);
     }
   }
 

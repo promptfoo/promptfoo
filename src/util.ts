@@ -44,7 +44,9 @@ import type {
   ProviderOptions,
   Prompt,
   CompletedPrompt,
+  CsvRow,
 } from './types';
+import { writeCsvToGoogleSheet } from './googleSheets';
 
 let globalConfigCache: any = null;
 
@@ -327,23 +329,23 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
   return combinedConfig;
 }
 
-export function writeMultipleOutputs(
+export async function writeMultipleOutputs(
   outputPaths: string[],
   results: EvaluateSummary,
   config: Partial<UnifiedConfig>,
   shareableUrl: string | null,
-): void {
-  for (const outputPath of outputPaths) {
-    writeOutput(outputPath, results, config, shareableUrl);
-  }
+) {
+  await Promise.all(
+    outputPaths.map((outputPath) => writeOutput(outputPath, results, config, shareableUrl)),
+  );
 }
 
-export function writeOutput(
+export async function writeOutput(
   outputPath: string,
   results: EvaluateSummary,
   config: Partial<UnifiedConfig>,
   shareableUrl: string | null,
-): void {
+) {
   const outputExtension = outputPath.split('.').pop()?.toLowerCase();
 
   const outputToSimpleString = (output: EvaluateTableOutput) => {
@@ -365,44 +367,62 @@ ${output.text}
 ${gradingResultText}`.trim();
   };
 
-  // Ensure the directory exists
-  const outputDir = path.dirname(outputPath);
-  if (!fs.existsSync(outputDir)) {
-    fs.mkdirSync(outputDir, { recursive: true });
-  }
-
-  if (outputExtension === 'csv') {
-    const csvOutput = stringify([
-      [
-        ...results.table.head.vars,
-        ...results.table.head.prompts.map((prompt) => JSON.stringify(prompt)),
-      ],
-      ...results.table.body.map((row) => [...row.vars, ...row.outputs.map(outputToSimpleString)]),
-    ]);
-    fs.writeFileSync(outputPath, csvOutput);
-  } else if (outputExtension === 'json') {
-    fs.writeFileSync(
-      outputPath,
-      JSON.stringify({ results, config, shareableUrl } as OutputFile, null, 2),
-    );
-  } else if (outputExtension === 'yaml' || outputExtension === 'yml' || outputExtension === 'txt') {
-    fs.writeFileSync(outputPath, yaml.dump({ results, config, shareableUrl } as OutputFile));
-  } else if (outputExtension === 'html') {
-    const template = fs.readFileSync(`${getDirectory()}/tableOutput.html`, 'utf-8');
-    const table = [
-      [...results.table.head.vars, ...results.table.head.prompts.map((prompt) => prompt.display)],
-      ...results.table.body.map((row) => [...row.vars, ...row.outputs.map(outputToSimpleString)]),
-    ];
-    const htmlOutput = getNunjucksEngine().renderString(template, {
-      config,
-      table,
-      results: results.results,
+  if (outputPath.match(/^https:\/\/docs\.google\.com\/spreadsheets\//)) {
+    const rows = results.table.body.map((row) => {
+      const csvRow: CsvRow = {};
+      results.table.head.vars.forEach((varName, index) => {
+        csvRow[varName] = row.vars[index];
+      });
+      results.table.head.prompts.forEach((prompt, index) => {
+        csvRow[prompt.display] = outputToSimpleString(row.outputs[index]);
+      });
+      return csvRow;
     });
-    fs.writeFileSync(outputPath, htmlOutput);
+    await writeCsvToGoogleSheet(rows, outputPath);
   } else {
-    throw new Error(
-      `Unsupported output file format ${outputExtension}, please use csv, txt, json, yaml, yml, html.`,
-    );
+    // Ensure the directory exists
+    const outputDir = path.dirname(outputPath);
+    if (!fs.existsSync(outputDir)) {
+      fs.mkdirSync(outputDir, { recursive: true });
+    }
+
+    if (outputExtension === 'csv') {
+      const csvOutput = stringify([
+        [
+          ...results.table.head.vars,
+          ...results.table.head.prompts.map((prompt) => JSON.stringify(prompt)),
+        ],
+        ...results.table.body.map((row) => [...row.vars, ...row.outputs.map(outputToSimpleString)]),
+      ]);
+      fs.writeFileSync(outputPath, csvOutput);
+    } else if (outputExtension === 'json') {
+      fs.writeFileSync(
+        outputPath,
+        JSON.stringify({ results, config, shareableUrl } as OutputFile, null, 2),
+      );
+    } else if (
+      outputExtension === 'yaml' ||
+      outputExtension === 'yml' ||
+      outputExtension === 'txt'
+    ) {
+      fs.writeFileSync(outputPath, yaml.dump({ results, config, shareableUrl } as OutputFile));
+    } else if (outputExtension === 'html') {
+      const template = fs.readFileSync(`${getDirectory()}/tableOutput.html`, 'utf-8');
+      const table = [
+        [...results.table.head.vars, ...results.table.head.prompts.map((prompt) => prompt.display)],
+        ...results.table.body.map((row) => [...row.vars, ...row.outputs.map(outputToSimpleString)]),
+      ];
+      const htmlOutput = getNunjucksEngine().renderString(template, {
+        config,
+        table,
+        results: results.results,
+      });
+      fs.writeFileSync(outputPath, htmlOutput);
+    } else {
+      throw new Error(
+        `Unsupported output file format ${outputExtension}, please use csv, txt, json, yaml, yml, html.`,
+      );
+    }
   }
 }
 
