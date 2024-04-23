@@ -92,6 +92,7 @@ export async function writeCsvToGoogleSheet(rows: CsvRow[], url: string): Promis
   const values = [headers, ...rows.map((row) => headers.map((header) => row[header]))];
 
   // Write data to the sheet
+  logger.debug(`Writing CSV to Google Sheets URL: ${url} with ${values.length} rows`);
   await sheets.spreadsheets.values.update({
     spreadsheetId,
     range,
