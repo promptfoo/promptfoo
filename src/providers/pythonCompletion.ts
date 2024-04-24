@@ -64,7 +64,7 @@ export class PythonProvider implements ApiProvider {
           'The Python script `call_api` function must return a dict with an `output` or `error` string',
         );
       }
-      if (isCacheEnabled()) {
+      if (isCacheEnabled() && !('error' in result)) {
         await cache.set(cacheKey, JSON.stringify(result));
       }
       return result;
