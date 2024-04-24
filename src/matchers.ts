@@ -338,7 +338,7 @@ export async function matchesLlmRubric(
     const firstOpeningBrace = resp.output.indexOf('{');
     const firstClosingBrace = resp.output.indexOf('}');
     const jsonStr = resp.output.substring(firstOpeningBrace, firstClosingBrace + 1);
-    const parsed = JSON.parse(jsonStr) as Partial<GradingResult>;
+    const parsed = JSON.parse(jsonStr.replace(",\n}","\n}")) as Partial<GradingResult>;
     const pass = parsed.pass ?? (typeof parsed.score === 'undefined' ? true : parsed.score > 0);
     return {
       pass,
