@@ -116,6 +116,7 @@ export async function readPrompts(
   } else if (Array.isArray(promptPathOrGlobs)) {
     // TODO(ian): Handle object array, such as OpenAI messages
     promptPathInfos = promptPathOrGlobs.flatMap((pathOrGlob) => {
+      invariant(typeof pathOrGlob === 'string', `Prompt path must be a string, but got ${JSON.stringify(pathOrGlob)}`);
       if (pathOrGlob.startsWith('file://')) {
         pathOrGlob = pathOrGlob.slice('file://'.length);
         // This path is explicitly marked as a file, ensure that it's not used as a raw prompt.
