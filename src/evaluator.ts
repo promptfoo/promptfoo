@@ -34,7 +34,7 @@ import type {
   ProviderResponse,
 } from './types';
 import { getPrompt } from './integrations/portkey';
-
+import { getLangfusePrompt } from './integrations/langfuse';
 export const DEFAULT_MAX_CONCURRENCY = 4;
 
 export function generateVarCombinations(
@@ -186,6 +186,12 @@ export async function renderPrompt(
   if (prompt.raw.startsWith('portkey://')) {
     const portKeyResult = await getPrompt(prompt.raw.slice('portkey://'.length), vars);
     return JSON.stringify(portKeyResult.messages);
+  }
+  if (prompt.raw.startsWith('langfuse://')) {
+    const langfusePrompt = prompt.raw.slice('langfuse://'.length);
+    const [helper, version] = langfusePrompt.split(':');
+    const langfuseResult = await getLangfusePrompt(helper, Number(version));
+    return langfuseResult;
   }
 
   // Render prompt
