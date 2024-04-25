@@ -1,8 +1,8 @@
 {
-  "name": "@w3-search/promptfoo",
+  "name": "promptfoo",
   "description": "LLM eval & testing toolkit",
   "author": "Ian Webster",
-  "version": "0.55.0",
+  "version": "0.55.1",
   "license": "MIT",
   "type": "commonjs",
   "repository": "promptfoo/promptfoo",

@@ -86,14 +86,7 @@ function convertResponse(response: TextGenerationCreateOutput): ProviderResponse
 
   const providerResponse: ProviderResponse = {
     error: undefined,
-    output: response.results.map((result) => ({
-      generated_text: result.generated_text,
-      generated_token_count: result.generated_token_count,
-      input_token_count: result.input_token_count,
-      stop_reason: result.stop_reason,
-      seed: result.seed,
-    })),
-
+    output: response.results.map(result => result.generated_text).join(', '),
     tokenUsage,
     cost: undefined,
     cached: undefined,
@@ -134,11 +127,11 @@ export class BAMChatProvider implements ApiProvider {
   }
 
   id(): string {
-    return `bam:chat:${this.modelName || 'google/flan-ul2'}`;
+    return `bam:chat:${this.modelName || 'ibm/granite-13b-chat-v2'}`;
   }
 
   toString(): string {
-    return `[BAM chat Provider ${this.modelName || 'google/flan-ul2'}]`;
+    return `[BAM chat Provider ${this.modelName || 'ibm/granite-13b-chat-v2'}]`;
   }
 
   getApiKey(): string | undefined {
@@ -166,8 +159,8 @@ export class BAMChatProvider implements ApiProvider {
       const params: TextGenerationCreateInput = {
         model_id: this.modelName,
         input: prompt,
-        parameters: {},
-        moderations: {},
+        ...(this.config ? { parameters: this.config } : {}),
+        ...(this.moderations ? { moderations: this.moderations } : {}),
       };
 
       const cacheKey = `bam:${JSON.stringify(params)}`;
