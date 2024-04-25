@@ -20,7 +20,6 @@ import { runPython } from './python/wrapper';
 import type { MultiBar, SingleBar } from 'cli-progress';
 import type {
   ApiProvider,
-  AtomicTestCase,
   CompletedPrompt,
   EvaluateOptions,
   EvaluateResult,
@@ -33,8 +32,6 @@ import type {
   TestSuite,
   ProviderResponse,
 } from './types';
-import { getPrompt } from './integrations/portkey';
-import { getLangfusePrompt } from './integrations/langfuse';
 export const DEFAULT_MAX_CONCURRENCY = 4;
 
 export function generateVarCombinations(
@@ -181,16 +178,17 @@ export async function renderPrompt(
 
   // Resolve variable mappings
   resolveVariables(vars);
-  
+
   // Third party integrations
   if (prompt.raw.startsWith('portkey://')) {
+    const { getPrompt } = await import('./integrations/portkey');
     const portKeyResult = await getPrompt(prompt.raw.slice('portkey://'.length), vars);
     return JSON.stringify(portKeyResult.messages);
-  }
-  if (prompt.raw.startsWith('langfuse://')) {
+  } else if (prompt.raw.startsWith('langfuse://')) {
+    const { getPrompt } = await import('./integrations/langfuse');
     const langfusePrompt = prompt.raw.slice('langfuse://'.length);
     const [helper, version] = langfusePrompt.split(':');
-    const langfuseResult = await getLangfusePrompt(helper, Number(version));
+    const langfuseResult = await getPrompt(helper, Number(version));
     return langfuseResult;
   }
 

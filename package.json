@@ -46,7 +46,8 @@
     "@azure/identity": "^4.0.0",
     "@azure/openai-assistants": "^1.0.0-beta.5",
     "google-auth-library": "^9.7.0",
-    "googleapis": "^134.0.0"
+    "googleapis": "^134.0.0",
+    "langfuse": "^3.7.0"
   },
   "devDependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.458.0",
@@ -103,7 +104,6 @@
     "fastest-levenshtein": "^1.0.16",
     "glob": "^10.2.6",
     "js-yaml": "^4.1.0",
-    "langfuse": "^3.7.0",
     "mathjs": "^12.4.1",
     "node-fetch": "^2.6.7",
     "nunjucks": "^3.2.4",
