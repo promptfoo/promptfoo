@@ -76,6 +76,7 @@ function maybeFilepath(str: string): boolean {
   return (
     !str.includes('\n') &&
     !str.includes('portkey://') &&
+    !str.includes('langfuse://') &&
     (str.includes('/') ||
       str.includes('\\') ||
       str.includes('*') ||
