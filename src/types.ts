@@ -38,8 +38,6 @@ export interface CommandLineOptions {
 
 export interface EnvOverrides {
   ANTHROPIC_API_KEY?: string;
-  WATSONX_API_KEY?: string;
-  WATSONX_API_HOST?: string;
   BAM_API_KEY?: string;
   BAM_API_HOST?: string;
   AZURE_OPENAI_API_HOST?: string;
