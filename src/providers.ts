@@ -46,6 +46,7 @@ import {
 import { AwsBedrockCompletionProvider } from './providers/bedrock';
 import { PythonProvider } from './providers/pythonCompletion';
 import { CohereChatCompletionProvider } from './providers/cohere';
+import { BAMChatProvider, BAMEmbeddingProvider } from './providers/bam';
 import { importModule } from './esm';
 
 import type {
@@ -255,7 +256,20 @@ export async function loadApiProvider(
     const splits = providerPath.split(':');
     const modelName = splits.slice(1).join(':');
     ret = new ReplicateProvider(modelName, providerOptions);
-  } else if (providerPath.startsWith('webhook:')) {
+  } else if (providerPath?.startsWith('bam:')) {
+    const splits = providerPath.split(':');
+    const modelType = splits[1];
+    const modelName = splits.slice(2).join(':');
+    if (modelType === 'chat') {
+      ret = new BAMChatProvider(modelName || 'ibm/granite-13b-chat-v2', providerOptions);
+    } else {
+      throw new Error(
+        `Invalid BAM provider: ${providerPath}. Use one of the following providers: bam:chat:<model name>`,
+      );
+    }
+  }
+
+  if (providerPath.startsWith('webhook:')) {
     const webhookUrl = providerPath.substring('webhook:'.length);
     ret = new WebhookProvider(webhookUrl, providerOptions);
   } else if (providerPath === 'llama' || providerPath.startsWith('llama:')) {
@@ -327,5 +341,7 @@ export default {
   ReplicateProvider,
   LocalAiCompletionProvider,
   LocalAiChatProvider,
+  BAMChatProvider,
+  BAMEmbeddingProvider,
   loadApiProvider,
 };
