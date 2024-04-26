@@ -51,6 +51,16 @@ interface VertexCompletionOptions {
   maxOutputTokens?: number;
   topP?: number;
   topK?: number;
+
+  generationConfig?: {
+    context?: string;
+    examples?: { input: string; output: string }[];
+    stopSequence?: string[];
+    temperature?: number;
+    maxOutputTokens?: number;
+    topP?: number;
+    topK?: number;
+  };
 }
 
 class VertexGenericProvider implements ApiProvider {
@@ -122,7 +132,7 @@ class VertexGenericProvider implements ApiProvider {
 }
 
 export class VertexChatProvider extends VertexGenericProvider {
-  // TODO(ian): Completion models 
+  // TODO(ian): Completion models
   // https://cloud.google.com/vertex-ai/generative-ai/docs/learn/model-versioning#gemini-model-versions
   static CHAT_MODELS = [
     'chat-bison',
@@ -201,6 +211,7 @@ export class VertexChatProvider extends VertexGenericProvider {
         maxOutputTokens: this.config.maxOutputTokens,
         topP: this.config.topP,
         topK: this.config.topK,
+        ...this.config.generationConfig,
       },
       safetySettings: this.config.safetySettings,
     };
