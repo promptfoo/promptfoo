@@ -38,6 +38,8 @@ export interface CommandLineOptions {
 
 export interface EnvOverrides {
   ANTHROPIC_API_KEY?: string;
+  BAM_API_KEY?: string;
+  BAM_API_HOST?: string;
   AZURE_OPENAI_API_HOST?: string;
   AZURE_OPENAI_API_KEY?: string;
   AZURE_OPENAI_API_BASE_URL?: string;
@@ -224,12 +226,10 @@ export interface Prompt {
   id?: string;
   raw: string;
   display: string;
-  function?: (
-    context: {
-      vars: Record<string, string | object>,
-      provider?: ApiProvider,
-    },
-  ) => Promise<string | object>;
+  function?: (context: {
+    vars: Record<string, string | object>;
+    provider?: ApiProvider;
+  }) => Promise<string | object>;
 }
 
 // Used for final prompt display
@@ -410,15 +410,11 @@ export interface Assertion {
   transform?: string;
 }
 
-export type AssertionValue =
-  | string
-  | string[]
-  | object
-  | AssertionValueFunction;
+export type AssertionValue = string | string[] | object | AssertionValueFunction;
 
 export type AssertionValueFunction = (
   output: string,
-  context: AssertionValueFunctionContext
+  context: AssertionValueFunctionContext,
 ) => AssertionValueFunctionResult | Promise<AssertionValueFunctionResult>;
 
 export interface AssertionValueFunctionContext {

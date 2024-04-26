@@ -46,6 +46,7 @@ import {
 import { AwsBedrockCompletionProvider } from './providers/bedrock';
 import { PythonProvider } from './providers/pythonCompletion';
 import { CohereChatCompletionProvider } from './providers/cohere';
+import { BAMChatProvider, BAMEmbeddingProvider } from './providers/bam';
 import { importModule } from './esm';
 
 import type {
@@ -134,14 +135,14 @@ export async function loadApiProvider(
       id: () => 'echo',
       callApi: async (input) => ({ output: input }),
     };
-  } else if (providerPath?.startsWith('exec:')) {
+  } else if (providerPath.startsWith('exec:')) {
     // Load script module
     const scriptPath = providerPath.split(':')[1];
     ret = new ScriptCompletionProvider(scriptPath, providerOptions);
-  } else if (providerPath?.startsWith('python:')) {
+  } else if (providerPath.startsWith('python:')) {
     const scriptPath = providerPath.split(':')[1];
     ret = new PythonProvider(scriptPath, providerOptions);
-  } else if (providerPath?.startsWith('openai:')) {
+  } else if (providerPath.startsWith('openai:')) {
     // Load OpenAI module
     const splits = providerPath.split(':');
     const modelType = splits[1];
@@ -166,7 +167,7 @@ export async function loadApiProvider(
         `Unknown OpenAI model type: ${modelType}. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>, openai:embeddings:<model name>, openai:image:<model name>`,
       );
     }
-  } else if (providerPath?.startsWith('azureopenai:')) {
+  } else if (providerPath.startsWith('azureopenai:')) {
     // Load Azure OpenAI module
     const splits = providerPath.split(':');
     const modelType = splits[1];
@@ -188,7 +189,7 @@ export async function loadApiProvider(
         `Unknown Azure OpenAI model type: ${modelType}. Use one of the following providers: azureopenai:chat:<model name>, azureopenai:assistant:<assistant id>, azureopenai:completion:<model name>`,
       );
     }
-  } else if (providerPath?.startsWith('openrouter:')) {
+  } else if (providerPath.startsWith('openrouter:')) {
     const splits = providerPath.split(':');
     const modelName = splits.slice(1).join(':');
     ret = new OpenAiChatCompletionProvider(modelName, {
@@ -199,7 +200,7 @@ export async function loadApiProvider(
         apiKeyEnvar: 'OPENROUTER_API_KEY',
       },
     });
-  } else if (providerPath?.startsWith('anthropic:')) {
+  } else if (providerPath.startsWith('anthropic:')) {
     const splits = providerPath.split(':');
     const modelType = splits[1];
     const modelName = splits[2];
@@ -215,7 +216,7 @@ export async function loadApiProvider(
         `Unknown Anthropic model type: ${modelType}. Use one of the following providers: anthropic:completion:<model name>`,
       );
     }
-  } else if (providerPath?.startsWith('bedrock:')) {
+  } else if (providerPath.startsWith('bedrock:')) {
     const splits = providerPath.split(':');
     const modelType = splits[1];
     const modelName = splits.slice(2).join(':');
@@ -228,7 +229,7 @@ export async function loadApiProvider(
       `${modelType}${modelName ? `:${modelName}` : ''}`,
       providerOptions,
     );
-  } else if (providerPath?.startsWith('huggingface:') || providerPath?.startsWith('hf:')) {
+  } else if (providerPath.startsWith('huggingface:') || providerPath.startsWith('hf:')) {
     const splits = providerPath.split(':');
     if (splits.length < 3) {
       throw new Error(
@@ -251,10 +252,21 @@ export async function loadApiProvider(
         `Invalid Huggingface provider path: ${providerPath}. Use one of the following providers: huggingface:feature-extraction:<model name>, huggingface:text-generation:<model name>, huggingface:text-classification:<model name>, huggingface:token-classification:<model name>`,
       );
     }
-  } else if (providerPath?.startsWith('replicate:')) {
+  } else if (providerPath.startsWith('replicate:')) {
     const splits = providerPath.split(':');
     const modelName = splits.slice(1).join(':');
     ret = new ReplicateProvider(modelName, providerOptions);
+  } else if (providerPath.startsWith('bam:')) {
+    const splits = providerPath.split(':');
+    const modelType = splits[1];
+    const modelName = splits.slice(2).join(':');
+    if (modelType === 'chat') {
+      ret = new BAMChatProvider(modelName || 'ibm/granite-13b-chat-v2', providerOptions);
+    } else {
+      throw new Error(
+        `Invalid BAM provider: ${providerPath}. Use one of the following providers: bam:chat:<model name>`,
+      );
+    }
   } else if (providerPath.startsWith('webhook:')) {
     const webhookUrl = providerPath.substring('webhook:'.length);
     ret = new WebhookProvider(webhookUrl, providerOptions);
@@ -293,7 +305,7 @@ export async function loadApiProvider(
   } else if (providerPath.startsWith('cohere:')) {
     const modelName = providerPath.split(':')[1];
     ret = new CohereChatCompletionProvider(modelName, providerOptions);
-  } else if (providerPath?.startsWith('localai:')) {
+  } else if (providerPath.startsWith('localai:')) {
     const splits = providerPath.split(':');
     const modelType = splits[1];
     const modelName = splits[2];
@@ -327,5 +339,7 @@ export default {
   ReplicateProvider,
   LocalAiCompletionProvider,
   LocalAiChatProvider,
+  BAMChatProvider,
+  BAMEmbeddingProvider,
   loadApiProvider,
 };
