@@ -127,7 +127,6 @@ export class BAMChatProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    logger.debug(`BAM apiKeyenvar: ${this.config?.apiKeyEnvar}`);
     return (
       this.config?.apiKey ||
       (this.config?.apiKeyEnvar
