@@ -24,6 +24,7 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import Link from 'next/link';
 
+import CommentDialog from '@/app/eval/TableCommentDialog';
 import CustomMetrics from '@/app/eval/CustomMetrics';
 import EvalOutputPromptDialog from '@/app/eval/EvalOutputPromptDialog';
 import GenerateTestCases from '@/app/eval/GenerateTestCases';
@@ -188,6 +189,22 @@ function EvalOutputCell({
   const [lightboxOpen, setLightboxOpen] = React.useState(false);
   const toggleLightbox = () => setLightboxOpen(!lightboxOpen);
 
+  const [commentDialogOpen, setCommentDialogOpen] = React.useState(false);
+  const [commentText, setCommentText] = React.useState(output.gradingResult?.comment || '');
+
+  const handleCommentOpen = () => {
+    setCommentDialogOpen(true);
+  };
+
+  const handleCommentClose = () => {
+    setCommentDialogOpen(false);
+  };
+
+  const handleCommentSave = () => {
+    onRating(rowIndex, promptIndex, undefined, undefined, commentText);
+    setCommentDialogOpen(false);
+  };
+
   let text = typeof output.text === 'string' ? output.text : JSON.stringify(output.text);
   let node: React.ReactNode | undefined;
   let chunks: string[] = [];
@@ -318,13 +335,6 @@ function EvalOutputCell({
     }
   };
 
-  const handleComment = () => {
-    const comment = prompt('Comment:', output.gradingResult?.comment || '');
-    if (comment != null) {
-      onRating(rowIndex, promptIndex, undefined, undefined, comment);
-    }
-  };
-
   let tokenUsageDisplay;
   let latencyDisplay;
   let tokPerSecDisplay;
@@ -364,7 +374,7 @@ function EvalOutputCell({
   }
 
   const comment = output.gradingResult?.comment ? (
-    <div className="comment" onClick={handleComment}>
+    <div className="comment" onClick={handleCommentOpen}>
       {output.gradingResult.comment}
     </div>
   ) : null;
@@ -428,7 +438,7 @@ function EvalOutputCell({
           <span>🔢</span>
         </Tooltip>
       </span>
-      <span className="action" onClick={handleComment}>
+      <span className="action" onClick={handleCommentOpen}>
         <Tooltip title="Edit comment">
           <span>✏️</span>
         </Tooltip>
@@ -480,6 +490,14 @@ function EvalOutputCell({
       {comment}
       {detail}
       {actions}
+      <CommentDialog
+        open={commentDialogOpen}
+        contextText={output.text}
+        commentText={commentText}
+        onClose={handleCommentClose}
+        onSave={handleCommentSave}
+        onChange={setCommentText}
+      />
     </div>
   );
 }
