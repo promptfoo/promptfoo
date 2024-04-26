@@ -14,6 +14,6 @@ providers:
       apiKeyEnvar: TOGETHER_API_KEY
 ```
 
-If desired, you can instead use the `OPENAI_API_BASE_URL` environment variables instead of the `apiBaseUrl` config property.
+If desired, you can instead use the `OPENAI_BASE_URL` environment variables instead of the `apiBaseUrl` config property.
 
 In this example, you'd also have to set the `TOGETHER_API_KEY` environment variable (you can also enter it directly in the config using the `apiKey` property).

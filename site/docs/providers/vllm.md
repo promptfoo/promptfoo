@@ -13,4 +13,4 @@ providers:
       apiBaseUrl: http://localhost:8080/v1
 ```
 
-If desired, you can instead use the `OPENAI_API_BASE_URL` environment variable instead of the `apiBaseUrl` config.
+If desired, you can instead use the `OPENAI_BASE_URL` environment variable instead of the `apiBaseUrl` config.

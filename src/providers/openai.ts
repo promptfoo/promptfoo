@@ -110,7 +110,9 @@ export class OpenAiGenericProvider implements ApiProvider {
     return (
       this.config.apiBaseUrl ||
       this.env?.OPENAI_API_BASE_URL ||
+      this.env?.OPENAI_BASE_URL ||
       process.env.OPENAI_API_BASE_URL ||
+      process.env.OPENAI_BASE_URL ||
       this.getApiUrlDefault()
     );
   }

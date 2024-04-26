@@ -27,4 +27,4 @@ providers:
           instruction_template: LLama-v2
 ```
 
-If desired, you can instead use the `OPENAI_API_BASE_URL` and `OPENAI_API_KEY` environment variables instead of the `apiBaseUrl` and `apiKey` configs.
+If desired, you can instead use the `OPENAI_BASE_URL` and `OPENAI_API_KEY` environment variables instead of the `apiBaseUrl` and `apiKey` configs.
