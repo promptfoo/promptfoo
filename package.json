@@ -47,7 +47,8 @@
     "@azure/openai-assistants": "^1.0.0-beta.5",
     "google-auth-library": "^9.7.0",
     "googleapis": "^134.0.0",
-    "langfuse": "^3.7.0"
+    "langfuse": "^3.7.0",
+    "@ibm-generative-ai/node-sdk": "^2.0.6"
   },
   "devDependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.458.0",
@@ -82,7 +83,6 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.20.1",
     "@apidevtools/json-schema-ref-parser": "^10.1.0",
-    "@ibm-generative-ai/node-sdk": "^2.0.6",
     "ajv": "^8.12.0",
     "ajv-formats": "^2.1.1",
     "async": "^3.2.4",
