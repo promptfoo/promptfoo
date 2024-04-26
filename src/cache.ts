@@ -34,7 +34,7 @@ export function getCache() {
       }
     }
     cacheInstance = cacheManager.caching({
-      store: cacheType === 'disk' ? fsStore : 'memory',
+      store: cacheType === 'disk' && enabled ? fsStore : 'memory',
       options: {
         max: process.env.PROMPTFOO_CACHE_MAX_FILE_COUNT || 10_000, // number of files
         path: cachePath,
