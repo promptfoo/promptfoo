@@ -11,6 +11,7 @@ interface ReplicateCompletionOptions {
   temperature?: number;
   max_length?: number;
   max_new_tokens?: number;
+  max_tokens?: number;
   top_p?: number;
   top_k?: number;
   repetition_penalty?: number;

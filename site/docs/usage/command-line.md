@@ -181,3 +181,35 @@ promptfoo generate dataset -c my_config.yaml -o new_tests.yaml -i 'All test case
 :::info
 While in beta, this feature depends on OpenAI and requires the `OPENAI_API_KEY` environment variable.
 :::
+
+## `promptfoo generate redteam`
+
+BETA: Generate adversarial test cases to challenge your prompts and models.
+
+| Option                      | Description                                                | Default              |
+| --------------------------- | ---------------------------------------------------------- | -------------------- |
+| `-c, --config <path>`       | Path to the configuration file                             | promptfooconfig.yaml |
+| `-o, --output <path>`       | Path to write the generated test cases                     | stdout               |
+| `-w, --write`               | Write the generated test cases directly to the config file | false                |
+| `--purpose <purpose>`       | Set the system purpose. If not set, inferred from config    |                      |
+| `--injectVar <varname>`     | Override the variable to inject user input into the prompt | `{{query}}`          |
+| `--no-cache`                | Do not read or write results to disk cache                 | false                |
+| `--env-file <path>`         | Path to .env file                                          |                      |
+
+For example, this command will generate adversarial test cases and write them to a file:
+
+```
+promptfoo generate redteam -w
+```
+
+This command overrides the system purpose and the variable to inject adversarial user input:
+
+```
+promptfoo generate redteam -w --purpose 'Travel agent that helps users plan trips' --injectVar 'message'
+```
+
+:::danger
+Adversarial testing produces offensive, toxic, and harmful test inputs, and may cause your system to produce harmful outputs. 
+:::
+
+While in beta, this implementation requires `OPENAI_API_KEY` and `REPLICATE_API_KEY` to be set.

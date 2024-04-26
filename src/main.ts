@@ -15,7 +15,8 @@ import { readAssertions } from './assertions';
 import { loadApiProvider, loadApiProviders } from './providers';
 import { evaluate, DEFAULT_MAX_CONCURRENCY } from './evaluator';
 import { readPrompts, readProviderPromptMap } from './prompts';
-import { readTest, readTests, synthesize, synthesizeFromTestSuite } from './testCases';
+import { readTest, readTests, synthesizeFromTestSuite } from './testCases';
+import { synthesizeFromTestSuite as redteamSynthesizeFromTestSuite } from './redteam';
 import {
   cleanupOldFileResults,
   maybeReadConfig,
@@ -241,11 +242,11 @@ async function main() {
   ];
   let defaultConfig: Partial<UnifiedConfig> = {};
   let defaultConfigPath: string | undefined;
-  for (const path of potentialPaths) {
-    const maybeConfig = await maybeReadConfig(path);
+  for (const _path of potentialPaths) {
+    const maybeConfig = await maybeReadConfig(_path);
     if (maybeConfig) {
       defaultConfig = maybeConfig;
-      defaultConfigPath = path;
+      defaultConfigPath = _path;
       break;
     }
   }
@@ -378,9 +379,14 @@ async function main() {
       gatherFeedback(message);
     });
 
-  program
-    .command('generate dataset')
-    .description('Generate test cases for a given prompt')
+  const generateCommand =
+    program
+      .command('generate')
+      .description('Generate synthetic data');
+
+  generateCommand
+    .command('dataset')
+    .description('Generate test cases')
     .option(
       '-i, --instructions [instructions]',
       'Additional instructions to follow while generating test cases',
@@ -388,7 +394,6 @@ async function main() {
     .option(
       '-c, --config [path]',
       'Path to configuration file. Defaults to promptfooconfig.yaml',
-      defaultConfigPath,
     )
     .option('-o, --output [path]', 'Path to output file')
     .option('-w, --write', 'Write results to promptfoo configuration file')
@@ -417,10 +422,11 @@ async function main() {
         }
 
         let testSuite: TestSuite;
-        if (options.config) {
+        const configPath = options.config || defaultConfigPath;
+        if (configPath) {
           const resolved = await resolveConfigs(
             {
-              config: [options.config],
+              config: [configPath],
             },
             defaultConfig,
           );
@@ -449,7 +455,6 @@ async function main() {
         }
 
         printBorder();
-        const configPath = options.config;
         if (options.write && configPath) {
           const existingConfig = yaml.load(
             fs.readFileSync(configPath, 'utf8'),
@@ -470,6 +475,93 @@ async function main() {
           numPrompts: testSuite.prompts.length,
           numTestsExisting: (testSuite.tests || []).length,
           numTestsGenerated: results.length,
+        });
+        await telemetry.send();
+      },
+    );
+
+  interface RedteamCommandOptions {
+    config?: string;
+    output?: string;
+    write: boolean;
+    cache: boolean;
+    envFile?: string;
+    purpose?: string;
+    injectVar?: string;
+  }
+
+  generateCommand
+    .command('redteam')
+    .description('Generate adversarial test cases')
+    .option(
+      '-c, --config [path]',
+      'Path to configuration file. Defaults to promptfooconfig.yaml',
+    )
+    .option('-o, --output [path]', 'Path to output file')
+    .option('-w, --write', 'Write results to promptfoo configuration file')
+    .option('--purpose <purpose>', 'Set the system purpose. If not set, the system purpose will be inferred from the config file')
+    .option('--injectVar <varname>', 'Override the variable to inject user input into the prompt. If not set, the variable will defalt to {{query}}')
+    .option('--no-cache', 'Do not read or write results to disk cache', false)
+    .option('--env-file <path>', 'Path to .env file')
+    .action(
+      async (
+        _,
+        { config, output, write, cache, envFile, purpose, injectVar }: RedteamCommandOptions,
+      ) => {
+        setupEnv(envFile);
+        if (!cache) {
+          logger.info('Cache is disabled.');
+          disableCache();
+        }
+
+        let testSuite: TestSuite;
+        const configPath = config || defaultConfigPath;
+        if (configPath) {
+          const resolved = await resolveConfigs(
+            {
+              config: [configPath],
+            },
+            defaultConfig,
+          );
+          testSuite = resolved.testSuite;
+        } else {
+          throw new Error('Could not find config file. Please use `--config`');
+        }
+
+        const redteamTests = await redteamSynthesizeFromTestSuite(testSuite, {
+          purpose,
+          injectVar,
+        });
+
+        if (output) {
+          const existingYaml = yaml.load(fs.readFileSync(configPath, 'utf8')) as object;
+          const updatedYaml = {
+            ...existingYaml,
+            tests: redteamTests,
+          };
+          fs.writeFileSync(
+            output,
+            yaml.dump(updatedYaml, { skipInvalid: true }),
+          );
+          printBorder();
+          logger.info(`Wrote ${redteamTests.length} new test cases to ${output}`);
+          printBorder();
+        } else if (write && configPath) {
+          const existingConfig = yaml.load(
+            fs.readFileSync(configPath, 'utf8'),
+          ) as Partial<UnifiedConfig>;
+          existingConfig.tests = [...(existingConfig.tests || []), ...redteamTests];
+          fs.writeFileSync(configPath, yaml.dump(existingConfig));
+          logger.info(`Wrote ${redteamTests.length} new test cases to ${configPath}`);
+        } else {
+          logger.info(yaml.dump(redteamTests, { skipInvalid: true }));
+        }
+
+        telemetry.record('command_used', {
+          name: 'generate redteam',
+          numPrompts: testSuite.prompts.length,
+          numTestsExisting: (testSuite.tests || []).length,
+          numTestsGenerated: redteamTests.length,
         });
         await telemetry.send();
       },
@@ -719,38 +811,38 @@ async function main() {
             const basePath = path.dirname(configPaths[0]);
             const promptPaths = Array.isArray(config.prompts)
               ? (config.prompts
-                  .map((p) =>
-                    p.startsWith('file://')
-                      ? path.resolve(basePath, p.slice('file://'.length))
-                      : null,
-                  )
-                  .filter(Boolean) as string[])
+                .map((p) =>
+                  p.startsWith('file://')
+                    ? path.resolve(basePath, p.slice('file://'.length))
+                    : null,
+                )
+                .filter(Boolean) as string[])
               : [];
             const providerPaths = Array.isArray(config.providers)
               ? (config.providers
-                  .map((p) =>
-                    typeof p === 'string' && p.startsWith('file://')
-                      ? path.resolve(basePath, p.slice('file://'.length))
-                      : null,
-                  )
-                  .filter(Boolean) as string[])
+                .map((p) =>
+                  typeof p === 'string' && p.startsWith('file://')
+                    ? path.resolve(basePath, p.slice('file://'.length))
+                    : null,
+                )
+                .filter(Boolean) as string[])
               : [];
             const varPaths = Array.isArray(config.tests)
               ? config.tests
-                  .flatMap((t) => {
-                    if (typeof t === 'string' && t.startsWith('file://')) {
-                      return path.resolve(basePath, t.slice('file://'.length));
-                    } else if (typeof t !== 'string' && t.vars) {
-                      return Object.values(t.vars).flatMap((v) => {
-                        if (typeof v === 'string' && v.startsWith('file://')) {
-                          return path.resolve(basePath, v.slice('file://'.length));
-                        }
-                        return [];
-                      });
-                    }
-                    return [];
-                  })
-                  .filter(Boolean)
+                .flatMap((t) => {
+                  if (typeof t === 'string' && t.startsWith('file://')) {
+                    return path.resolve(basePath, t.slice('file://'.length));
+                  } else if (typeof t !== 'string' && t.vars) {
+                    return Object.values(t.vars).flatMap((v) => {
+                      if (typeof v === 'string' && v.startsWith('file://')) {
+                        return path.resolve(basePath, v.slice('file://'.length));
+                      }
+                      return [];
+                    });
+                  }
+                  return [];
+                })
+                .filter(Boolean)
               : [];
             const watchPaths = Array.from(
               new Set([...configPaths, ...promptPaths, ...providerPaths, ...varPaths]),
