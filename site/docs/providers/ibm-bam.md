@@ -6,6 +6,14 @@ sidebar_position: 43
 
 The `bam` provider integrates with IBM's BAM API, allowing access to various models like `meta-llama/llama-2-70b-chat` and `ibm/granite-13b-chat-v2`.
 
+## Setup
+
+This provider requires you to install the IBM SDK:
+
+```
+npm install @ibm-generative-ai/node-sdk
+```
+
 ## Configuration
 
 Configure the BAM provider by specifying the model and various generation parameters. Here is an example of how to configure the BAM provider in your configuration file:
