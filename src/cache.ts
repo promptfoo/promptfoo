@@ -20,16 +20,18 @@ let enabled =
       process.env.PROMPTFOO_CACHE_ENABLED === 'true' ||
       process.env.PROMPTFOO_CACHE_ENABLED === 'yes';
 
-const cacheType =
+let cacheType =
   process.env.PROMPTFOO_CACHE_TYPE || (process.env.NODE_ENV === 'test' ? 'memory' : 'disk');
 
 export function getCache() {
   if (!cacheInstance) {
-    const cachePath =
-      process.env.PROMPTFOO_CACHE_PATH || path.join(getConfigDirectoryPath(), 'cache');
-    if (!fs.existsSync(cachePath)) {
-      logger.info(`Creating cache folder at ${cachePath}.`);
-      fs.mkdirSync(cachePath, { recursive: true });
+    let cachePath = '';
+    if (cacheType === 'disk' && enabled) {
+      cachePath = process.env.PROMPTFOO_CACHE_PATH || path.join(getConfigDirectoryPath(), 'cache');
+      if (!fs.existsSync(cachePath)) {
+        logger.info(`Creating cache folder at ${cachePath}.`);
+        fs.mkdirSync(cachePath, { recursive: true });
+      }
     }
     cacheInstance = cacheManager.caching({
       store: cacheType === 'disk' ? fsStore : 'memory',
