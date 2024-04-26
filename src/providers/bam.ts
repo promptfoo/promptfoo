@@ -1,18 +1,14 @@
+import logger from '../logger';
 import { getCache, isCacheEnabled } from '../cache';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
 import type {
-  ApiProvider,
-  EnvOverrides,
-  ProviderResponse,
-  TokenUsage,
-} from '../types.js';
-import {
   Client as GenAIClient,
   TextGenerationCreateInput,
   TextGenerationCreateOutput,
 } from '@ibm-generative-ai/node-sdk';
-import logger from '../logger';
+
+import type { ApiProvider, EnvOverrides, ProviderResponse, TokenUsage } from '../types.js';
 
 interface BAMGenerationParameters {
   apiKey?: string | null;
@@ -86,7 +82,7 @@ function convertResponse(response: TextGenerationCreateOutput): ProviderResponse
 
   const providerResponse: ProviderResponse = {
     error: undefined,
-    output: response.results.map(result => result.generated_text).join(', '),
+    output: response.results.map((result) => result.generated_text).join(', '),
     tokenUsage,
     cost: undefined,
     cached: undefined,
@@ -102,7 +98,7 @@ export class BAMChatProvider implements ApiProvider {
   moderations?: BAMModerations;
   env?: EnvOverrides;
   apiKey?: string;
-  client: GenAIClient;
+  client: GenAIClient | undefined;
 
   constructor(
     modelName: string,
@@ -120,10 +116,6 @@ export class BAMChatProvider implements ApiProvider {
     this.moderations = moderations;
     this.id = id ? () => id : this.id;
     this.apiKey = process.env?.BAM_API_KAY;
-    this.client = new GenAIClient({
-      apiKey: this.apiKey,
-      endpoint: 'https://bam-api.res.ibm.com/',
-    });
   }
 
   id(): string {
@@ -145,6 +137,17 @@ export class BAMChatProvider implements ApiProvider {
       this.env?.BAM_API_KEY ||
       process.env.BAM_API_KEY
     );
+  }
+
+  async getClient() {
+    if (!this.client) {
+      const { Client } = await import('@ibm-generative-ai/node-sdk');
+      this.client = new Client({
+        apiKey: this.apiKey,
+        endpoint: 'https://bam-api.res.ibm.com/',
+      });
+    }
+    return this.client;
   }
 
   async callApi(prompt: string): Promise<ProviderResponse> {
@@ -176,7 +179,8 @@ export class BAMChatProvider implements ApiProvider {
         }
       }
       const signal = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
-      const result = await this.client.text.generation.create(params, { signal });
+      const client = await this.getClient();
+      const result = await client.text.generation.create(params, { signal });
 
       return convertResponse(result);
     } catch (err) {
