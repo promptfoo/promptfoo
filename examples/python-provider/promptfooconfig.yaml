@@ -4,6 +4,7 @@ prompts:
 
 providers:
   - id: python:provider.py # or provider_async.py
+    label: My custom provider
     config:
       someOption: foobar
 
