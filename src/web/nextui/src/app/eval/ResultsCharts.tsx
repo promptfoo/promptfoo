@@ -322,7 +322,7 @@ function ScatterChart({ table }: ChartProps) {
   );
 }
 
-export default function ResultsCharts({ columnVisibility }: ResultsChartsProps) {
+function ResultsCharts({ columnVisibility }: ResultsChartsProps) {
   const theme = useTheme();
   Chart.defaults.color = theme.palette.mode === 'dark' ? '#aaa' : '#666';
   const [showCharts, setShowCharts] = useState(true);
@@ -362,3 +362,5 @@ export default function ResultsCharts({ columnVisibility }: ResultsChartsProps) 
     </ErrorBoundary>
   );
 }
+
+export default React.memo(ResultsCharts);
