@@ -177,7 +177,6 @@ function EvalOutputCell({
   showDiffs: boolean;
   searchText: string;
 }) {
-  console.trace('rendering evaloutputcell');
   const { renderMarkdown, prettifyJson, showPrompts } = useResultsViewStore();
   const [openPrompt, setOpen] = React.useState(false);
   const handlePromptOpen = () => {
@@ -729,8 +728,6 @@ function ResultsTable({
     return [];
   }, [columnHelper, head.vars, maxTextLength]);
 
-  const memoizedHandleRating = React.useCallback(handleRating, [handleRating]);
-
   const getOutput = React.useCallback(
     (rowIndex: number, promptIndex: number) => {
       return filteredBody[rowIndex].outputs[promptIndex];
@@ -870,7 +867,7 @@ function ResultsTable({
                 maxTextLength={maxTextLength}
                 rowIndex={info.row.index}
                 promptIndex={idx}
-                onRating={memoizedHandleRating}
+                onRating={handleRating}
                 firstOutput={getFirstOutput(info.row.index)}
                 showDiffs={filterMode === 'different'}
                 searchText={searchText}
@@ -897,7 +894,7 @@ function ResultsTable({
     searchText,
     getOutput,
     getFirstOutput,
-    memoizedHandleRating,
+    handleRating,
   ]);
 
   const descriptionColumn = React.useMemo(() => {
