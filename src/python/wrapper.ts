@@ -21,9 +21,9 @@ export async function runPython(
 ): Promise<any> {
   const absPath = path.resolve(scriptPath);
   const tempJsonPath = path.join(
-      os.tmpdir(),
-      `promptfoo-python-input-json-${Date.now()}-${Math.random().toString(16).slice(2)}.json`
-    );
+    os.tmpdir(),
+    `promptfoo-python-input-json-${Date.now()}-${Math.random().toString(16).slice(2)}.json`,
+  );
   const pythonOptions: PythonShellOptions = {
     mode: 'text',
     pythonPath: options.pythonExecutable || process.env.PROMPTFOO_PYTHON || 'python',
@@ -40,7 +40,11 @@ export async function runPython(
     try {
       result = JSON.parse(results[results.length - 1]);
     } catch (error) {
-      throw new Error(`Invalid JSON: ${error} when parsing result: ${results[results.length - 1]}`);
+      throw new Error(
+        `Invalid JSON: ${(error as Error).message} when parsing result: ${
+          results[results.length - 1]
+        }\nStack Trace: ${(error as Error).stack}`,
+      );
     }
     if (result?.type !== 'final_result') {
       throw new Error(
@@ -49,8 +53,18 @@ export async function runPython(
     }
     return result.data;
   } catch (error) {
-    logger.error(`Error running Python script: ${error}`);
-    throw error;
+    logger.error(
+      `Error running Python script: ${(error as Error).message}\nStack Trace: ${
+        (error as Error).stack?.replace('--- Python Traceback ---', 'Python Traceback: ') ||
+        'No Python traceback available'
+      }`,
+    );
+    throw new Error(
+      `Error running Python script: ${(error as Error).message}\nStack Trace: ${
+        (error as Error).stack?.replace('--- Python Traceback ---', 'Python Traceback: ') ||
+        'No Python traceback available'
+      }`,
+    );
   } finally {
     await fs
       .unlink(tempJsonPath)
