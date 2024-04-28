@@ -49,6 +49,9 @@ export function generateVarCombinations(
       const resolvedPath = path.resolve(cliState.basePath || '', filePath);
       const filePaths = globSync(resolvedPath.replace(/\\/g, '/'));
       values = filePaths.map((path: string) => `file://${path}`);
+      if (values.length === 0) {
+        throw new Error(`No files found for variable ${key} at path ${resolvedPath}`);
+      }
     } else {
       values = Array.isArray(vars[key]) ? vars[key] : [vars[key]];
     }
