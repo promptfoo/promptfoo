@@ -89,7 +89,11 @@ class AzureOpenAiGenericProvider implements ApiProvider {
     this.apiHost =
       config?.apiHost || env?.AZURE_OPENAI_API_HOST || process.env.AZURE_OPENAI_API_HOST;
     this.apiBaseUrl =
-      config?.apiBaseUrl || env?.AZURE_OPENAI_API_BASE_URL || process.env.AZURE_OPENAI_API_BASE_URL;
+      config?.apiBaseUrl ||
+      env?.AZURE_OPENAI_API_BASE_URL ||
+      env?.AZURE_OPENAI_BASE_URL ||
+      process.env.AZURE_OPENAI_API_BASE_URL ||
+      process.env.AZURE_OPENAI_BASE_URL;
 
     this.config = config || {};
     this.id = id ? () => id : this.id;
@@ -412,7 +416,12 @@ export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvide
               choice.message.role === 'assistant',
           )?.message
         : data.choices[0].message;
-      const output = message.content == null ? message.tool_calls == null ? message.function_call : message.tool_calls : message.content;
+      const output =
+        message.content == null
+          ? message.tool_calls == null
+            ? message.function_call
+            : message.tool_calls
+          : message.content;
       const logProbs = data.choices[0].logprobs?.content?.map(
         (logProbObj: { token: string; logprob: number }) => logProbObj.logprob,
       );

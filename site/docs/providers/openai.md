@@ -92,7 +92,7 @@ Supported parameters include:
 | `apiKey`            | Your OpenAI API key, equivalent to `OPENAI_API_KEY` environment variable                                                                                        |
 | `apiKeyEnvar`       | An environment variable that contains the API key                                                                                                               |
 | `apiHost`           | The hostname of the OpenAI API, please also read `OPENAI_API_HOST` below.                                                                                       |
-| `apiBaseUrl`        | The base URL of the OpenAI API, please also read `OPENAI_API_BASE_URL` below.                                                                                   |
+| `apiBaseUrl`        | The base URL of the OpenAI API, please also read `OPENAI_BASE_URL` below.                                                                                       |
 | `organization`      | Your OpenAI organization key.                                                                                                                                   |
 
 Here are the type declarations of `config` parameters:
@@ -572,8 +572,8 @@ These OpenAI-related environment variables are supported:
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `OPENAI_TEMPERATURE`             | Temperature model parameter, defaults to 0.                                                                                                      |
 | `OPENAI_MAX_TOKENS`              | Max_tokens model parameter, defaults to 1024.                                                                                                    |
-| `OPENAI_API_HOST`                | The hostname to use (useful if you're using an API proxy). Takes priority over `OPENAI_API_BASE_URL`.                                            |
-| `OPENAI_API_BASE_URL`            | The base URL (protocol + hostname + port) to use, this is a more general option than `OPENAI_API_HOST`.                                          |
+| `OPENAI_API_HOST`                | The hostname to use (useful if you're using an API proxy). Takes priority over `OPENAI_BASE_URL`.                                                |
+| `OPENAI_BASE_URL`                | The base URL (protocol + hostname + port) to use, this is a more general option than `OPENAI_API_HOST`.                                          |
 | `OPENAI_API_KEY`                 | OpenAI API key.                                                                                                                                  |
 | `OPENAI_ORGANIZATION`            | The OpenAI organization key to use.                                                                                                              |
 | `PROMPTFOO_REQUIRE_JSON_PROMPTS` | By default the chat completion provider will wrap non-JSON messages in a single user message. Setting this envar to true disables that behavior. |
