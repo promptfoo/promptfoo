@@ -810,9 +810,6 @@ function ResultsTable({
                 </div>
               ) : null;
 
-              const allProvidersSame = head.prompts.every(
-                (p) => p.provider === head.prompts[0].provider,
-              );
               const providerParts = prompt.provider ? prompt.provider.split(':') : [];
               const providerDisplay =
                 providerParts.length > 1 ? (
@@ -825,7 +822,7 @@ function ResultsTable({
               return (
                 <div className="output-header">
                   <div className="pills">
-                    {!allProvidersSame && prompt.provider ? (
+                    {prompt.provider ? (
                       <div className="provider">{providerDisplay}</div>
                     ) : null}
                     <div className="summary">
