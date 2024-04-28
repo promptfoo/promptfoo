@@ -34,12 +34,7 @@ import { useStore as useMainStore } from '@/app/eval/store';
 
 import type { CellContext, ColumnDef, VisibilityState } from '@tanstack/table-core';
 
-import type {
-  EvaluateTableRow,
-  EvaluateTableOutput,
-  FilterMode,
-  EvaluateTable,
-} from './types';
+import type { EvaluateTableRow, EvaluateTableOutput, FilterMode, EvaluateTable } from './types';
 
 import './ResultsTable.css';
 
@@ -153,13 +148,7 @@ interface PromptOutputProps {
   rowIndex: number;
   promptIndex: number;
   showStats: boolean;
-  onRating: (
-    rowIndex: number,
-    promptIndex: number,
-    isPass?: boolean,
-    score?: number,
-    comment?: string,
-  ) => void;
+  onRating: (isPass?: boolean, score?: number, comment?: string) => void;
 }
 
 function EvalOutputCell({
@@ -201,7 +190,7 @@ function EvalOutputCell({
   };
 
   const handleCommentSave = () => {
-    onRating(rowIndex, promptIndex, undefined, undefined, commentText);
+    onRating(undefined, undefined, commentText);
     setCommentDialogOpen(false);
   };
 
@@ -321,9 +310,9 @@ function EvalOutputCell({
 
   const handleRating = React.useCallback(
     (isPass: boolean) => {
-      onRating(rowIndex, promptIndex, isPass, undefined, output.gradingResult?.comment);
+      onRating(isPass, undefined, output.gradingResult?.comment);
     },
-    [onRating, rowIndex, promptIndex, output.gradingResult?.comment],
+    [onRating, output.gradingResult?.comment],
   );
 
   const handleSetScore = React.useCallback(() => {
@@ -331,12 +320,12 @@ function EvalOutputCell({
     if (score !== null) {
       const parsedScore = parseFloat(score);
       if (!isNaN(parsedScore) && parsedScore >= 0.0 && parsedScore <= 1.0) {
-        onRating(rowIndex, promptIndex, undefined, parsedScore, output.gradingResult?.comment);
+        onRating(undefined, parsedScore, output.gradingResult?.comment);
       } else {
         alert('Invalid score. Please enter a value between 0.0 and 1.0.');
       }
     }
-  }, [onRating, rowIndex, promptIndex, output.score, output.gradingResult?.comment]);
+  }, [onRating, output.score, output.gradingResult?.comment]);
 
   let tokenUsageDisplay;
   let latencyDisplay;
@@ -561,6 +550,15 @@ interface ResultsTableProps {
   onFailureFilterToggle: (columnId: string, checked: boolean) => void;
 }
 
+interface ExtendedEvaluateTableOutput extends EvaluateTableOutput {
+  originalRowIndex?: number;
+  originalPromptIndex?: number;
+}
+
+interface ExtendedEvaluateTableRow extends EvaluateTableRow {
+  outputs: ExtendedEvaluateTableOutput[];
+}
+
 function ResultsTable({
   maxTextLength,
   columnVisibility,
@@ -630,35 +628,44 @@ function ResultsTable({
   const filteredBody = React.useMemo(() => {
     try {
       const searchRegex = new RegExp(searchText, 'i');
-      return body.filter((row) => {
-        const outputsPassFilter =
-          filterMode === 'failures'
-            ? row.outputs.some((output, idx) => {
-                const columnId = `Prompt ${idx + 1}`;
-                return (
-                  failureFilter[columnId] &&
-                  !output.pass &&
-                  (!columnVisibilityIsSet || columnVisibility[columnId])
-                );
+      return body
+        .map((row, rowIndex) => ({
+          ...row,
+          outputs: row.outputs.map((output, promptIndex) => ({
+            ...output,
+            originalRowIndex: rowIndex,
+            originalPromptIndex: promptIndex,
+          })),
+        }))
+        .filter((row) => {
+          const outputsPassFilter =
+            filterMode === 'failures'
+              ? row.outputs.some((output, idx) => {
+                  const columnId = `Prompt ${idx + 1}`;
+                  return (
+                    failureFilter[columnId] &&
+                    !output.pass &&
+                    (!columnVisibilityIsSet || columnVisibility[columnId])
+                  );
+                })
+              : filterMode === 'different'
+              ? !row.outputs.every((output) => output.text === row.outputs[0].text)
+              : true;
+
+          const outputsMatchSearch = searchText
+            ? row.outputs.some((output) => {
+                const stringifiedOutput = `${output.text} ${Object.keys(output.namedScores)} ${
+                  output.gradingResult?.reason
+                }`;
+                return searchRegex.test(stringifiedOutput);
               })
-            : filterMode === 'different'
-            ? !row.outputs.every((output) => output.text === row.outputs[0].text)
             : true;
 
-        const outputsMatchSearch = searchText
-          ? row.outputs.some((output) => {
-              const stringifiedOutput = `${output.text} ${Object.keys(output.namedScores)} ${
-                output.gradingResult?.reason
-              }`;
-              return searchRegex.test(stringifiedOutput);
-            })
-          : true;
-
-        return outputsPassFilter && outputsMatchSearch;
-      });
+          return outputsPassFilter && outputsMatchSearch;
+        }) as ExtendedEvaluateTableRow[];
     } catch (err) {
       console.error('Invalid regular expression:', (err as Error).message);
-      return body;
+      return body as ExtendedEvaluateTableRow[];
     }
   }, [body, failureFilter, filterMode, searchText, columnVisibility, columnVisibilityIsSet]);
 
@@ -861,19 +868,26 @@ function ResultsTable({
                 </div>
               );
             },
-            cell: (info: CellContext<EvaluateTableRow, EvaluateTableOutput>) => (
-              <MemoizedEvalOutputCell
-                output={getOutput(info.row.index, idx)}
-                maxTextLength={maxTextLength}
-                rowIndex={info.row.index}
-                promptIndex={idx}
-                onRating={handleRating}
-                firstOutput={getFirstOutput(info.row.index)}
-                showDiffs={filterMode === 'different'}
-                searchText={searchText}
-                showStats={showStats}
-              />
-            ),
+            cell: (info: CellContext<EvaluateTableRow, EvaluateTableOutput>) => {
+              const output = getOutput(info.row.index, idx);
+              return (
+                <MemoizedEvalOutputCell
+                  output={output}
+                  maxTextLength={maxTextLength}
+                  rowIndex={info.row.index}
+                  promptIndex={idx}
+                  onRating={handleRating.bind(
+                    null,
+                    output.originalRowIndex ?? info.row.index,
+                    output.originalPromptIndex ?? idx,
+                  )}
+                  firstOutput={getFirstOutput(info.row.index)}
+                  showDiffs={filterMode === 'different'}
+                  searchText={searchText}
+                  showStats={showStats}
+                />
+              );
+            },
           }),
         ),
       }),
