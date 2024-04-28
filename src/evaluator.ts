@@ -16,6 +16,7 @@ import { generatePrompts } from './suggestions';
 import { getNunjucksEngine, transformOutput, sha256 } from './util';
 import { maybeEmitAzureOpenAiWarning } from './providers/azureopenaiUtil';
 import { runPython } from './python/wrapper';
+import { importModule } from './esm';
 
 import type { MultiBar, SingleBar } from 'cli-progress';
 import type {
@@ -124,15 +125,19 @@ export async function renderPrompt(
       logger.debug(`Loading var ${varName} from file: ${filePath}`);
       switch (fileExtension) {
         case 'js':
-          const javascriptOutput = require(filePath)(varName, basePrompt, vars) as {
+          const javascriptOutput = (await (
+            await importModule(filePath)
+          )(varName, basePrompt, vars, provider)) as {
             output?: string;
             error?: string;
           };
           if (javascriptOutput.error) {
-            throw new Error(`Error running JS script ${filePath}: ${javascriptOutput.error}`);
+            throw new Error(`Error running ${filePath}: ${javascriptOutput.error}`);
           }
           if (!javascriptOutput.output) {
-            throw new Error(`JS script ${filePath} did not return any output`);
+            throw new Error(
+              `Expected ${filePath} to return { output: string } but got ${javascriptOutput}`,
+            );
           }
           vars[varName] = javascriptOutput.output;
           break;
