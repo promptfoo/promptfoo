@@ -551,7 +551,7 @@ async function main() {
       'Run providers interactively, one at a time',
       defaultConfig?.evaluateOptions?.interactiveProviders,
     )
-    .option('-n, --first-n', 'Only run the first N tests')
+    .option('-n, --first-n <number>', 'Only run the first N tests')
     .action(async (cmdObj: CommandLineOptions & Command) => {
       setupEnv(cmdObj.envFile);
       let config: Partial<UnifiedConfig> | undefined = undefined;
@@ -584,7 +584,7 @@ async function main() {
         }
 
         if (cmdObj.firstN) {
-          testSuite.tests = testSuite.tests?.slice(0, cmdObj.firstN);
+          testSuite.tests = testSuite.tests?.slice(0, Number(cmdObj.firstN));
         }
 
         const options: EvaluateOptions = {
