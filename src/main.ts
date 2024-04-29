@@ -49,6 +49,7 @@ import type {
 } from './types';
 import { generateTable } from './table';
 import { createShareableUrl } from './share';
+import {filterTests} from './commands/eval/filterTests';
 
 function createDummyFiles(directory: string | null) {
   if (directory) {
@@ -552,6 +553,7 @@ async function main() {
       defaultConfig?.evaluateOptions?.interactiveProviders,
     )
     .option('-n, --first-n <number>', 'Only run the first N tests')
+    .option('--pattern <pattern>', 'Only run tests whose description matches the regular expression pattern')
     .action(async (cmdObj: CommandLineOptions & Command) => {
       setupEnv(cmdObj.envFile);
       let config: Partial<UnifiedConfig> | undefined = undefined;
@@ -583,9 +585,10 @@ async function main() {
           );
         }
 
-        if (cmdObj.firstN) {
-          testSuite.tests = testSuite.tests?.slice(0, Number(cmdObj.firstN));
-        }
+        testSuite.tests = filterTests(testSuite.tests, {
+          firstN: cmdObj.firstN,
+          pattern: cmdObj.pattern,
+        });
 
         const options: EvaluateOptions = {
           showProgressBar: getLogLevel() === 'debug' ? false : cmdObj.progressBar,
