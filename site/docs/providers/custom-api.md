@@ -6,11 +6,46 @@ sidebar_position: 50
 
 To create a custom API provider, implement the `ApiProvider` interface in a separate module. Here is the interface:
 
-```javascript
-class ApiProvider {
-  constructor(options: { id?: string; config: Record<string, any>});
+```ts
+export interface CallApiContextParams {
+  vars: Record<string, string | object>;
+}
+
+export interface CallApiOptionsParams {
+  // Whether to include logprobs in API response (used with OpenAI providers)
+  includeLogProbs?: boolean;
+
+  // Used when provider is overridden on the test case.
+  originalProvider?: ApiProvider;
+}
+
+export interface ApiProvider {
+  constructor(options: { id?: string; config: Record<string, any> });
+
+  // Unique identifier for the provider
   id: () => string;
-  callApi: (prompt: string, context: { vars: Record<string, any> }) => Promise<ProviderResponse>;
+
+  // Text generation function
+  callApi: (
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ) => Promise<ProviderResponse>;
+
+  // Embedding function
+  callEmbeddingApi?: (prompt: string) => Promise<ProviderEmbeddingResponse>;
+
+  // Classification function
+  callClassificationApi?: (prompt: string) => Promise<ProviderClassificationResponse>;
+
+  // Shown on output UI
+  label?: ProviderLabel;
+
+  // Applied by the evaluator on provider response
+  transform?: string;
+
+  // Custom delay for the provider.
+  delay?: number;
 }
 ```
 
@@ -65,7 +100,7 @@ module.exports = CustomApiProvider;
 Include the custom provider in promptfoo config:
 
 ```yaml
-providers: ['./customApiProvider.js']
+providers: ['file://relative/path/to/customApiProvider.js']
 ```
 
 Alternatively, you can pass the path to the custom API provider directly in the CLI:
@@ -84,14 +119,14 @@ You can instantiate multiple providers of the same type with distinct IDs. In th
 
 ```yaml
 providers:
-  - customProvider.js:
-      id: custom-provider-hightemp
-      config:
-        temperature: 1.0
-  - customProvider.js:
-      id: custom-provider-lowtemp
-      config:
-        temperature: 0
+  - id: file:///absolute/path/to/customProvider.js
+    label: custom-provider-hightemp
+    config:
+      temperature: 1.0
+  - id: file:///absolute/path/to/customProvider.js
+    label: custom-provider-lowtemp
+    config:
+      temperature: 0
 ```
 
 ### ES modules
