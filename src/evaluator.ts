@@ -311,18 +311,21 @@ class Evaluator {
         cost: 0,
         cached: false,
       };
-      if (!test.providerOutput) {
-        response = await provider.callApi(
+
+      if (test.providerOutput) {
+        response.output = test.providerOutput;
+      } else {
+        response = await ((test.provider as ApiProvider) || provider).callApi(
           renderedPrompt,
           {
             vars,
           },
           {
+            providerId: provider.id(),
+            providerLabel: provider.label,
             includeLogProbs: test.assert?.some((a) => a.type === 'perplexity'),
           },
         );
-      } else {
-        response.output = test.providerOutput;
       }
       const endTime = Date.now();
       latencyMs = endTime - startTime;

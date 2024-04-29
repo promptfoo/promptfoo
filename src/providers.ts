@@ -104,6 +104,7 @@ export async function loadApiProviders(
   throw new Error('Invalid providers list');
 }
 
+// FIXME(ian): Make loadApiProvider handle all the different provider types (string, ProviderOptions, ApiProvider, etc), rather than the callers.
 export async function loadApiProvider(
   providerPath: string,
   context: {

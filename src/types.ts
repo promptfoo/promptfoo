@@ -84,6 +84,8 @@ export interface CallApiContextParams {
 
 export interface CallApiOptionsParams {
   includeLogProbs?: boolean;
+  providerId?: string;
+  providerLabel?: string;
 }
 
 export interface ApiProvider {
@@ -450,6 +452,9 @@ export interface TestCase<Vars = Record<string, string | string[] | object>> {
 
   // Key-value pairs to substitute in the prompt
   vars?: Vars;
+  
+  // Override the provider.
+  provider?: string | ProviderOptions | ApiProvider;
 
   // Output related from running values in Vars with provider. Having this value would skip running the prompt through the provider, and go straight to the assertions
   providerOutput?: string | object;
