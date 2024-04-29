@@ -28,6 +28,7 @@ export interface CommandLineOptions {
   watch?: boolean;
   interactiveProviders?: boolean;
   firstN?: string;
+  pattern?: string;
 
   generateSuggestions?: boolean;
   promptPrefix?: string;
@@ -106,10 +107,10 @@ export interface ApiProvider {
 
   // Shown on output
   label?: ProviderLabel;
-  
+
   // Applied by the evaluator on provider response
   transform?: string;
-  
+
   // Custom delay for the provider.
   delay?: number;
 }
@@ -451,7 +452,7 @@ export interface TestCase<Vars = Record<string, string | string[] | object>> {
 
   // Key-value pairs to substitute in the prompt
   vars?: Vars;
-  
+
   // Override the provider.
   provider?: string | ProviderOptions | ApiProvider;
 
