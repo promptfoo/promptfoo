@@ -12,14 +12,14 @@ import { testCaseFromCsvRow } from './csv';
 import { fetchCsvFromGoogleSheet } from './googleSheets';
 
 import type {
-  Assertion,
   CsvRow,
+  ProviderOptions,
   TestCase,
   TestSuite,
   TestSuiteConfig,
-  UnifiedConfig,
   VarMapping,
 } from './types';
+import { loadApiProvider } from './providers';
 
 const SYNTHESIZE_DEFAULT_PROVIDER = 'gpt-4-0125-preview';
 
@@ -128,6 +128,18 @@ export async function readTest(
     testCase = await loadTestWithVars(rawTestCase, testBasePath);
   } else {
     testCase = await loadTestWithVars(test, basePath);
+  }
+
+  if (testCase.provider && typeof testCase.provider !== 'function') {
+    // Load provider
+    if (typeof testCase.provider === 'string') {
+      testCase.provider = await loadApiProvider(testCase.provider);
+    } else if (typeof testCase.provider.id === 'string') {
+      testCase.provider = await loadApiProvider(testCase.provider.id, {
+        options: testCase.provider as ProviderOptions,
+        basePath,
+      });
+    }
   }
 
   // Validation of the shape of test

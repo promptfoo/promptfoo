@@ -248,6 +248,9 @@ You can also use `promptfoo` as a library in your project by importing the `eval
 
     // The required score for this test case.  If not provided, the test case is graded pass/fail.
     threshold?: number;
+    
+    // Override the provider for this test
+    provider?: string | ProviderOptions | ApiProvider;
   }
 
   interface Assertion {
