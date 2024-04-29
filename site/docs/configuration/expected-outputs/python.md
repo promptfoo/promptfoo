@@ -39,11 +39,10 @@ assert:
             'pass': True,
             'score': 0.5,
           }
-      else:
-          return {
-            'pass': False,
-            'score': 0,
-          }
+      return {
+        'pass': False,
+        'score': 0,
+      }
 ```
 
 ## Using test context
@@ -81,7 +80,7 @@ assert:
 ```
 
 This file will be called with an `output` string and an `AssertContext` object (see above).
-It expects that either a bool (pass/fail), float (score), or `GradingResult` will be returned.
+It expects that either a `bool` (pass/fail), `float` (score), or `GradingResult` will be returned.
 
 Here's an example `assert.py`:
 
