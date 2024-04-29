@@ -27,7 +27,7 @@ export interface CommandLineOptions {
   progressBar?: boolean;
   watch?: boolean;
   interactiveProviders?: boolean;
-  firstN?: number;
+  firstN?: string;
 
   generateSuggestions?: boolean;
   promptPrefix?: string;
