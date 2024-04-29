@@ -124,7 +124,7 @@ export async function loadApiProvider(
     env,
   };
   let ret: ApiProvider;
-  if (providerPath.startsWith('file://')) {
+  if (providerPath.startsWith('file://') && (providerPath.endsWith('.yaml')|| providerPath.endsWith('.yml'))){
     const filePath = providerPath.slice('file://'.length);
     const yamlContent = yaml.load(fs.readFileSync(filePath, 'utf8')) as ProviderOptions;
     invariant(yamlContent, `Provider config ${filePath} is undefined`);
@@ -321,6 +321,9 @@ export async function loadApiProvider(
       ret = new LocalAiChatProvider(modelType, providerOptions);
     }
   } else {
+    if (providerPath.startsWith('file://')) {
+      providerPath = providerPath.slice('file://'.length);
+    }
     // Load custom module
     const modulePath = path.join(basePath || process.cwd(), providerPath);
     const CustomApiProvider = await importModule(modulePath);

@@ -321,8 +321,7 @@ class Evaluator {
             vars,
           },
           {
-            providerId: provider.id(),
-            providerLabel: provider.label,
+            originalProvider: provider,
             includeLogProbs: test.assert?.some((a) => a.type === 'perplexity'),
           },
         );

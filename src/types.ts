@@ -84,8 +84,7 @@ export interface CallApiContextParams {
 
 export interface CallApiOptionsParams {
   includeLogProbs?: boolean;
-  providerId?: string;
-  providerLabel?: string;
+  originalProvider?: ApiProvider;
 }
 
 export interface ApiProvider {
