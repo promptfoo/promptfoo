@@ -89,6 +89,10 @@ export async function fetchWithCache(
         // Don't cache error responses
         return;
       }
+      if (!data) {
+        // Don't cache empty responses
+        return;
+      }
       logger.debug(`Storing ${url} response in cache: ${data}`);
       return data;
     } catch (err) {
@@ -100,7 +104,7 @@ export async function fetchWithCache(
     }
   });
 
-  if (cached) {
+  if (cached && cachedResponse) {
     logger.debug(`Returning cached response for ${url}: ${cachedResponse}`);
   }
 
