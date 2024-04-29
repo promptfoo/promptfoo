@@ -199,7 +199,7 @@ npx promptfoo eval -p prompts.txt -r openai:gpt-3.5-turbo -t tests.csv
 ![Side-by-side evaluation of LLM prompt quality, html output](https://user-images.githubusercontent.com/310310/235483444-4ddb832d-e103-4b9c-a862-b0d6cc11cdc0.png)
 -->
 
-This command will evaluate the prompts in `prompts.txt`, substituing the variable values from `vars.csv`, and output results in your terminal.
+This command will evaluate the prompts in `prompts.txt`, substituting the variable values from `vars.csv`, and output results in your terminal.
 
 You can also output a nice [spreadsheet](https://docs.google.com/spreadsheets/d/1nanoj3_TniWrDl1Sj-qYqIMD6jwm5FBy15xPFdUTsmI/edit?usp=sharing), [JSON](https://github.com/typpo/promptfoo/blob/main/examples/simple-cli/output.json), YAML, or an HTML file:
 
