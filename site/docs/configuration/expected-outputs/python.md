@@ -51,7 +51,9 @@ assert:
 A `context` object is available in the Python function. Here is its type definition:
 
 ```py
-class AssertContext:
+from typing import Dict, TypedDict, Union
+
+class AssertContext(TypedDict):
     prompt: str
     vars: Dict[str, Union[str, object]]
 ```
@@ -78,25 +80,24 @@ assert:
     value: file://relative/path/to/script.py
 ```
 
-This file will be called with an `output` string and an `AssertContext` object. It expects that either a bool (pass/fail), float (score), or `GradingResult` will be returned.
+This file will be called with an `output` string and an `AssertContext` object (see above).
+It expects that either a bool (pass/fail), float (score), or `GradingResult` will be returned.
 
-Here's an example assert.py:
+Here's an example `assert.py`:
 
 ```py
-def get_assert(output, context) -> Union[bool, float, Dict[str, Any]]
+from typing import Dict, TypedDict, Union
+
+def get_assert(output: str, context) -> Union[bool, float, Dict[str, Any]]:
     print('Prompt:', context['prompt'])
-    print('Vars', context['vars']['topic']
+    print('Vars', context['vars']['topic'])
 
-    # Determine the result...
-    result = test_output(output)
-
-    # Here's an example GradingResult dict
-    result = {
+    # This return is an example GradingResult dict
+    return {
       'pass': True,
       'score': 0.6,
       'reason': 'Looks good to me',
     }
-    return result
 ```
 
 ## Overriding the Python binary
