@@ -3,11 +3,13 @@ import * as path from 'path';
 import * as os from 'os';
 import { createHash } from 'crypto';
 
+
 import dotenv from 'dotenv';
 import $RefParser from '@apidevtools/json-schema-ref-parser';
 import invariant from 'tiny-invariant';
 import nunjucks from 'nunjucks';
 import yaml from 'js-yaml';
+import deepEqual from 'fast-deep-equal';
 import { stringify } from 'csv-stringify/sync';
 import { globSync } from 'glob';
 import { desc, eq } from 'drizzle-orm';
@@ -28,23 +30,26 @@ import {
 import { runDbMigrations } from './migrate';
 import { runPython } from './python/wrapper';
 
-import type {
-  EvalWithMetadata,
-  EvaluateSummary,
-  EvaluateTable,
-  EvaluateTableOutput,
-  NunjucksFilterMap,
-  PromptWithMetadata,
-  ResultsFile,
-  TestCase,
-  TestCasesWithMetadata,
-  TestCasesWithMetadataPrompt,
-  UnifiedConfig,
-  OutputFile,
-  ProviderOptions,
-  Prompt,
-  CompletedPrompt,
-  CsvRow,
+import {
+  type EvalWithMetadata,
+  type EvaluateResult,
+  type EvaluateSummary,
+  type EvaluateTable,
+  type EvaluateTableOutput,
+  type NunjucksFilterMap,
+  type PromptWithMetadata,
+  type ResultsFile,
+  type TestCase,
+  type TestCasesWithMetadata,
+  type TestCasesWithMetadataPrompt,
+  type UnifiedConfig,
+  type OutputFile,
+  type ProviderOptions,
+  type Prompt,
+  type CompletedPrompt,
+  type CsvRow,
+  isApiProvider,
+  isProviderOptions,
 } from './types';
 import { writeCsvToGoogleSheet } from './googleSheets';
 
@@ -398,7 +403,7 @@ ${gradingResultText}`.trim();
     } else if (outputExtension === 'json') {
       fs.writeFileSync(
         outputPath,
-        JSON.stringify({ results, config, shareableUrl } as OutputFile, null, 2),
+        JSON.stringify({ results, config, shareableUrl } satisfies OutputFile, null, 2),
       );
     } else if (
       outputExtension === 'yaml' ||
@@ -423,6 +428,17 @@ ${gradingResultText}`.trim();
         `Unsupported output file format ${outputExtension}, please use csv, txt, json, yaml, yml, html.`,
       );
     }
+  }
+}
+
+export async function readOutput(outputPath: string): Promise<OutputFile> {
+  const ext = path.parse(outputPath).ext.slice(1);
+
+  switch (ext) {
+    case 'json':
+      return JSON.parse(fs.readFileSync(outputPath, 'utf-8')) as OutputFile;
+    default:
+      throw new Error(`Unsupported output file format: ${ext} currently only supports json`);
   }
 }
 
@@ -1227,4 +1243,27 @@ export function getStandaloneEvals(): StandaloneEval[] {
     });
   });
   return flatResults;
+}
+
+export function providerToIdentifier(provider: TestCase['provider']): string | undefined {
+  if (isApiProvider(provider)) {
+    return provider.id();
+  } else if (isProviderOptions(provider)) {
+    return provider.id;
+  }
+
+  return provider;
+}
+
+export function varsMatch(
+  vars1: Record<string, string | string[] | object> | undefined,
+  vars2: Record<string, string | string[] | object> | undefined,
+) {
+  return deepEqual(vars1, vars2);
+}
+
+export function resultIsForTestCase(result: EvaluateResult, testCase: TestCase): boolean {
+  const providersMatch = testCase.provider ? providerToIdentifier(testCase.provider) === providerToIdentifier(result.provider) : true;
+
+  return varsMatch(testCase.vars, result.vars) && providersMatch;
 }
