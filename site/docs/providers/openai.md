@@ -94,6 +94,7 @@ Supported parameters include:
 | `apiHost`           | The hostname of the OpenAI API, please also read `OPENAI_API_HOST` below.                                                                                       |
 | `apiBaseUrl`        | The base URL of the OpenAI API, please also read `OPENAI_BASE_URL` below.                                                                                       |
 | `organization`      | Your OpenAI organization key.                                                                                                                                   |
+| `headers`           | Additional headers to include in the request.                                                                                                                   |
 
 Here are the type declarations of `config` parameters:
 
@@ -120,7 +121,7 @@ interface OpenAiConfig {
       parameters: any;
     };
   }[];
-  tool_choice?: 'none' | 'auto' | { type: 'function'; function?: { name: string } };
+  tool_choice?: 'none' | 'auto' | { type: 'function'; function?: { name: string } } | { type: 'file_search' };
   stop?: string[];
   response_format?: { type: string };
   seed?: number;
@@ -131,6 +132,7 @@ interface OpenAiConfig {
   apiHost?: string;
   apiBaseUrl?: string;
   organization?: string;
+  headers?: { [key: string]: string };
 }
 ```
 
@@ -607,6 +609,8 @@ The following properties can be overwritten in provider config:
 - `instructions` - System prompt
 - `tools` - Enabled [tools](https://platform.openai.com/docs/api-reference/runs/createRun)
 - `thread.messages` - A list of message objects that the thread is created with.
+- `temperature` - Temperature for the model
+- `toolChoice` - Controls whether the AI should use a tool
 
 Here's an example of a more detailed config:
 
@@ -619,9 +623,12 @@ providers:
     config:
       model: gpt-4-1106-preview
       instructions: "You always speak like a pirate"
+      temperature: 0.2
+      toolChoice:
+        type: file_search
       tools:
         - type: code_interpreter
-        - type: retrieval
+        - type: file_search
       thread:
         messages:
           - role: user
