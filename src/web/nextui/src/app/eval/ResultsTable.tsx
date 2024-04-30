@@ -1014,9 +1014,10 @@ function ResultsTable({
       {reactTable.getPageCount() > 1 && (
         <Box className="pagination" sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <Button
-            onClick={() =>
-              setPagination((old) => ({ ...old, pageIndex: Math.max(old.pageIndex - 1, 0) }))
-            }
+            onClick={() => {
+              setPagination((old) => ({ ...old, pageIndex: Math.max(old.pageIndex - 1, 0) }));
+              window.scrollTo(0, 0);
+            }}
             disabled={reactTable.getState().pagination.pageIndex === 0}
             variant="contained"
           >
@@ -1043,12 +1044,13 @@ function ResultsTable({
             <span>of {reactTable.getPageCount()}</span>
           </Typography>
           <Button
-            onClick={() =>
+            onClick={() => {
               setPagination((old) => ({
                 ...old,
                 pageIndex: Math.min(old.pageIndex + 1, reactTable.getPageCount() - 1),
-              }))
-            }
+              }));
+              window.scrollTo(0, 0);
+            }}
             disabled={reactTable.getState().pagination.pageIndex + 1 >= reactTable.getPageCount()}
             variant="contained"
           >
@@ -1057,7 +1059,10 @@ function ResultsTable({
           <Typography component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <Select
               value={pagination.pageSize}
-              onChange={(e) => setPagination({ pageIndex: 0, pageSize: Number(e.target.value) })}
+              onChange={(e) => {
+                setPagination({ pageIndex: 0, pageSize: Number(e.target.value) });
+                window.scrollTo(0, 0);
+              }}
               displayEmpty
               inputProps={{ 'aria-label': 'Results per page' }}
               size="small"
