@@ -22,6 +22,7 @@ interface OpenAiSharedOptions {
   apiBaseUrl?: string;
   organization?: string;
   cost?: number;
+  headers?: { [key: string]: string };
 }
 
 type OpenAiCompletionOptions = OpenAiSharedOptions & {
@@ -160,6 +161,7 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${this.getApiKey()}`,
             ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
+            ...this.config.headers,
           },
           body: JSON.stringify(body),
         },
@@ -287,6 +289,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${this.getApiKey()}`,
             ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
+            ...this.config.headers,
           },
           body: JSON.stringify(body),
         },
@@ -440,6 +443,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${this.getApiKey()}`,
             ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
+            ...this.config.headers,
           },
           body: JSON.stringify(body),
         },
@@ -543,6 +547,12 @@ type OpenAiAssistantOptions = OpenAiSharedOptions & {
     (arg: string) => Promise<string>
   >;
   metadata?: object[];
+  temperature?: number;
+  toolChoice?:
+    | 'none'
+    | 'auto'
+    | { type: 'function'; function?: { name: string } }
+    | { type: 'file_search' };
 };
 
 export class OpenAiAssistantProvider extends OpenAiGenericProvider {
@@ -572,6 +582,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
       baseURL: this.getApiUrl(),
       maxRetries: 3,
       timeout: REQUEST_TIMEOUT_MS,
+      defaultHeaders: this.assistantConfig.headers,
     });
 
     const messages = parseChatPrompt(prompt, [
@@ -583,6 +594,8 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
       instructions: this.assistantConfig.instructions || undefined,
       tools: this.assistantConfig.tools || undefined,
       metadata: this.assistantConfig.metadata || undefined,
+      temperature: this.assistantConfig.temperature || undefined,
+      tool_choice: this.assistantConfig.toolChoice || undefined,
       thread: {
         messages,
       },
@@ -604,18 +617,18 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
       run.status === 'requires_action'
     ) {
       if (run.status === 'requires_action') {
-        const requiredAction = run.required_action;
+        const requiredAction: OpenAI.Beta.Threads.Runs.Run.RequiredAction | null =
+          run.required_action;
         if (requiredAction === null || requiredAction.type !== 'submit_tool_outputs') {
           break;
         }
-        const functionCallsWithCallbacks = requiredAction.submit_tool_outputs.tool_calls.filter(
-          (toolCall) => {
+        const functionCallsWithCallbacks: OpenAI.Beta.Threads.Runs.RequiredActionFunctionToolCall[] =
+          requiredAction.submit_tool_outputs.tool_calls.filter((toolCall) => {
             return (
               toolCall.type === 'function' &&
               toolCall.function.name in (this.assistantConfig.functionToolCallbacks ?? {})
             );
-          },
-        );
+          });
         if (functionCallsWithCallbacks.length === 0) {
           break;
         }
@@ -715,8 +728,8 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
               `[Call function ${toolCall.function.name} with arguments ${toolCall.function.arguments}]`,
             );
             outputBlocks.push(`[Function output: ${toolCall.function.output}]`);
-          } else if (toolCall.type === 'retrieval') {
-            outputBlocks.push(`[Ran retrieval]`);
+          } else if (toolCall.type === 'file_search') {
+            outputBlocks.push(`[Ran file search]`);
           } else if (toolCall.type === 'code_interpreter') {
             const output = toolCall.code_interpreter.outputs
               .map((output) => (output.type === 'logs' ? output.logs : `<${output.type} output>`))
@@ -783,6 +796,7 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
       baseURL: this.getApiUrl(),
       maxRetries: 3,
       timeout: REQUEST_TIMEOUT_MS,
+      defaultHeaders: this.config.headers,
     });
 
     let response: OpenAI.Images.ImagesResponse | undefined;

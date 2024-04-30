@@ -108,7 +108,7 @@
     "mathjs": "^12.4.1",
     "node-fetch": "^2.6.7",
     "nunjucks": "^3.2.4",
-    "openai": "^4.19.0",
+    "openai": "^4.38.5",
     "opener": "^1.5.2",
     "proxy-agent": "^6.3.1",
     "python-shell": "^5.0.0",
