@@ -50,11 +50,12 @@ assert:
 A `context` object is available in the Python function. Here is its type definition:
 
 ```py
-from typing import Dict, TypedDict, Union
+from typing import Any, Dict, TypedDict, Union
 
 class AssertContext(TypedDict):
     prompt: str
-    vars: Dict[str, Union[str, object]]
+    vars: Dict[str, str]
+    test: Dict[str, Any]  # Contains keys like "vars", "assert", "options"
 ```
 
 For example, if the test case has a var `example`, access it in Python like this:
