@@ -765,7 +765,8 @@ async function main() {
           logger.info('Done.');
 
           if (summary.stats.failures > 0) {
-            process.exit(100);
+            const exitCode = Number(process.env.PROMPTFOO_FAILED_TEST_EXIT_CODE);
+            process.exit(isNaN(exitCode) ? 100 : exitCode);
           }
         }
       };
