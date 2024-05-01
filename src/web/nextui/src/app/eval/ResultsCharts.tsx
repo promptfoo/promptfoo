@@ -91,7 +91,7 @@ function HistogramChart({ table }: ChartProps) {
         (bin) => scores.filter((score) => score >= bin && score < bin + binSize).length,
       );
       return {
-        label: `Prompt ${promptIdx + 1}`,
+        label: `Column ${promptIdx + 1}`,
         data: counts,
         backgroundColor: COLOR_PALETTE[promptIdx % COLOR_PALETTE.length],
       };
@@ -117,7 +117,7 @@ function HistogramChart({ table }: ChartProps) {
             callbacks: {
               title: function (context) {
                 const datasetIndex = context[0].datasetIndex;
-                return `Prompt ${datasetIndex + 1}`;
+                return `Column ${datasetIndex + 1}`;
               },
               label: function (context) {
                 const labelIndex = context.dataIndex;
@@ -156,7 +156,7 @@ function PassRateChart({ table }: ChartProps) {
       const passCount = outputs.filter((output) => output.pass).length;
       const passRate = (passCount / outputs.length) * 100;
       return {
-        label: `Prompt ${promptIdx + 1}`,
+        label: `Column ${promptIdx + 1}`,
         data: [passRate],
         backgroundColor: COLOR_PALETTE[promptIdx % COLOR_PALETTE.length],
       };
