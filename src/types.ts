@@ -30,10 +30,10 @@ export interface CommandLineOptions {
   progressBar?: boolean;
   watch?: boolean;
   interactiveProviders?: boolean;
-
   filterFailing?: string;
   filterFirstN?: string;
   filterPattern?: string;
+  var?: Record<string, string>
 
   generateSuggestions?: boolean;
   promptPrefix?: string;
