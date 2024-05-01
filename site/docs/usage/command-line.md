@@ -117,6 +117,18 @@ Show details of a specific resource.
 | `prompt <id>`  | Show details of a specific prompt     |
 | `dataset <id>` | Show details of a specific dataset    |
 
+## `promptfoo import <filepath>`
+
+Import an eval file from JSON format.
+
+## `promptfoo export`
+
+Export an eval record to JSON format. Outputs to stdout by default.
+
+| Option                    | Description   |
+| ------------------------- | ------------- |
+| `-o, --output <filepath>` | File to write |
+
 # Environment variables
 
 These general-purpose environment variables are supported:
