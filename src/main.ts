@@ -39,6 +39,8 @@ import { gatherFeedback } from './feedback';
 import { listCommand } from './commands/list';
 import { showCommand } from './commands/show';
 import { deleteCommand } from './commands/delete';
+import { importCommand } from './commands/import';
+import { exportCommand } from './commands/export';
 
 import type {
   CommandLineOptions,
@@ -754,6 +756,8 @@ async function main() {
   listCommand(program);
   showCommand(program);
   deleteCommand(program);
+  importCommand(program);
+  exportCommand(program);
 
   program.parse(process.argv);
 
