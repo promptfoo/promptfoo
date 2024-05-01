@@ -384,7 +384,7 @@ export default function ResultsView({
                   </Tooltip>
                 </Menu>
               )}
-              <Tooltip title="Edit table view settings" placement="left">
+              <Tooltip title="Edit table view settings" placement="bottom">
                 <Button
                   color="primary"
                   onClick={() => setViewSettingsModalOpen(true)}
