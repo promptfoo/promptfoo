@@ -47,7 +47,9 @@ By default the `eval` command will read the `promptfooconfig.yaml` configuration
 | `-j, --max-concurrency <number>`    | Maximum number of concurrent API calls                                                                                                                                                             |
 | `--env-file`                        | Path to env file (defaults to .env)                                                                                                                                                                |
 | `--interactive-providers`           | Run 1 provider at a time and prompt user to continue                                                                                                                                               |
-| `-n, --first-n`                     | Run the first N test cases                                                                                                                                                                         |
+| `--filter-failing <path>` | Run only failing tests from previous evaluation. Path to JSON output file from the previous evaluation. |
+| `-n, --filter-first-n` | Run the first N test cases |
+| `--filter-pattern <pattern>` | Run only test cases whose `description` matches the regex pattern |
 
 [1]: /docs/providers/openai
 [2]: /docs/providers/localai
