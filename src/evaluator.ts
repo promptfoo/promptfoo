@@ -323,6 +323,7 @@ class Evaluator {
           {
             originalProvider: provider,
             includeLogProbs: test.assert?.some((a) => a.type === 'perplexity'),
+            logger,
           },
         );
       }

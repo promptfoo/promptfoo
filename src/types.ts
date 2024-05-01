@@ -1,3 +1,5 @@
+import type logger from "./logger";
+
 export type FilePath = string;
 
 export interface CommandLineOptions {
@@ -86,6 +88,7 @@ export interface CallApiContextParams {
 export interface CallApiOptionsParams {
   includeLogProbs?: boolean;
   originalProvider?: ApiProvider;
+  logger?: typeof logger;
 }
 
 export interface ApiProvider {
