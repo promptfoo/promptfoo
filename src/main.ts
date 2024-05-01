@@ -49,7 +49,7 @@ import type {
 } from './types';
 import { generateTable } from './table';
 import { createShareableUrl } from './share';
-import {filterTests} from './commands/eval/filterTests';
+import { filterTests } from './commands/eval/filterTests';
 
 function createDummyFiles(directory: string | null) {
   if (directory) {
@@ -553,7 +553,23 @@ async function main() {
       defaultConfig?.evaluateOptions?.interactiveProviders,
     )
     .option('-n, --first-n <number>', 'Only run the first N tests')
-    .option('--pattern <pattern>', 'Only run tests whose description matches the regular expression pattern')
+    .option(
+      '--pattern <pattern>',
+      'Only run tests whose description matches the regular expression pattern',
+    )
+    .option(
+      '--var <key=value>',
+      'Set a variable in key=value format',
+      (value, previous: Record<string, string> = {}) => {
+        const [key, val] = value.split('=');
+        if (!key || val === undefined) {
+          throw new Error('--var must be specified in key=value format.');
+        }
+        previous[key] = val;
+        return previous;
+      },
+      {},
+    )
     .action(async (cmdObj: CommandLineOptions & Command) => {
       setupEnv(cmdObj.envFile);
       let config: Partial<UnifiedConfig> | undefined = undefined;
@@ -599,9 +615,14 @@ async function main() {
           ...evaluateOptions,
         };
 
-        if (cmdObj.grader && testSuite.defaultTest) {
+        if (cmdObj.grader) {
+          testSuite.defaultTest = testSuite.defaultTest || {};
           testSuite.defaultTest.options = testSuite.defaultTest.options || {};
           testSuite.defaultTest.options.provider = await loadApiProvider(cmdObj.grader);
+        }
+        if (cmdObj.var) {
+          testSuite.defaultTest = testSuite.defaultTest || {};
+          testSuite.defaultTest.vars = { ...testSuite.defaultTest.vars, ...cmdObj.var };
         }
         if (cmdObj.generateSuggestions) {
           options.generateSuggestions = true;

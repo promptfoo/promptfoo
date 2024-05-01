@@ -29,6 +29,7 @@ export interface CommandLineOptions {
   interactiveProviders?: boolean;
   firstN?: string;
   pattern?: string;
+  var?: Record<string, string>
 
   generateSuggestions?: boolean;
   promptPrefix?: string;
