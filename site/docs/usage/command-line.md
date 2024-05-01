@@ -103,11 +103,15 @@ Send feedback to the promptfoo developers.
 
 List various resources like evaluations, prompts, and datasets.
 
-| Option     | Description      |
+| Subcommand | Description      |
 | ---------- | ---------------- |
 | `evals`    | List evaluations |
 | `prompts`  | List prompts     |
 | `datasets` | List datasets    |
+
+| Option | Description                                                     |
+| ------ | --------------------------------------------------------------- |
+| `-n`   | Show the first n records, sorted by descending date of creation |
 
 ## `promptfoo show <id>`
 
