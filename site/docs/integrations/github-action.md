@@ -65,6 +65,8 @@ To make this GitHub Action work for your project, you'll need to do a few things
 
    To do this, go to your repository's Settings > Secrets and variables > Actions > New repository secret and create one named OPENAI_API_KEY.
 
+1. **Set environment variables**: The action uses `PROMPTFOO_CONFIG_DIR` and `PROMPTFOO_CACHE_PATH` to record state on the filesystem.
+
 1. **Add it to your project**: Github automatically runs workflows in the `.github/workflows` directory, so save it as something like `.github/workflows/prompt-eval.yml`.
 
 Here are the supported parameters:
