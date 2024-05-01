@@ -17,6 +17,7 @@ import { getNunjucksEngine, transformOutput, sha256 } from './util';
 import { maybeEmitAzureOpenAiWarning } from './providers/azureopenaiUtil';
 import { runPython } from './python/wrapper';
 import { importModule } from './esm';
+import { fetchWithCache, getCache } from './cache';
 
 import type { MultiBar, SingleBar } from 'cli-progress';
 import type {
@@ -319,6 +320,9 @@ class Evaluator {
           renderedPrompt,
           {
             vars,
+            logger,
+            fetchWithCache,
+            getCache,
           },
           {
             originalProvider: provider,

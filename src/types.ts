@@ -1,3 +1,6 @@
+import type logger from "./logger";
+import type { fetchWithCache, getCache } from "./cache";
+
 export type FilePath = string;
 
 export interface CommandLineOptions {
@@ -87,6 +90,9 @@ export function isProviderOptions(provider: any): provider is ProviderOptions {
 
 export interface CallApiContextParams {
   vars: Record<string, string | object>;
+  logger?: typeof logger;
+  fetchWithCache?: typeof fetchWithCache;
+  getCache?: typeof getCache;
 }
 
 export interface CallApiOptionsParams {
