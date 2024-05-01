@@ -655,8 +655,8 @@ function ResultsTable({
           const outputsMatchSearch = searchText
             ? row.outputs.some((output) => {
                 const stringifiedOutput = `${output.text} ${Object.keys(output.namedScores)} ${
-                  output.gradingResult?.reason
-                }`;
+                  output.gradingResult?.reason || ''
+                } ${output.gradingResult?.comment || ''}`;
                 return searchRegex.test(stringifiedOutput);
               })
             : true;
