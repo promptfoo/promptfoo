@@ -552,11 +552,9 @@ async function main() {
       'Run providers interactively, one at a time',
       defaultConfig?.evaluateOptions?.interactiveProviders,
     )
-    .option('-n, --first-n <number>', 'Only run the first N tests')
-    .option(
-      '--pattern <pattern>',
-      'Only run tests whose description matches the regular expression pattern',
-    )
+    .option('-n, --filter-first-n <number>', 'Only run the first N tests')
+    .option('--filter-pattern <pattern>', 'Only run tests whose description matches the regular expression pattern')
+    .option('--filter-failing <path>', 'Path to json output file')
     .option(
       '--var <key=value>',
       'Set a variable in key=value format',
@@ -601,9 +599,10 @@ async function main() {
           );
         }
 
-        testSuite.tests = filterTests(testSuite.tests, {
-          firstN: cmdObj.firstN,
-          pattern: cmdObj.pattern,
+        testSuite.tests = await filterTests(testSuite, {
+          firstN: cmdObj.filterFirstN,
+          pattern: cmdObj.filterPattern,
+          failing: cmdObj.filterFailing,
         });
 
         const options: EvaluateOptions = {

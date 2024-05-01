@@ -27,8 +27,9 @@ export interface CommandLineOptions {
   progressBar?: boolean;
   watch?: boolean;
   interactiveProviders?: boolean;
-  firstN?: string;
-  pattern?: string;
+  filterFailing?: string;
+  filterFirstN?: string;
+  filterPattern?: string;
   var?: Record<string, string>
 
   generateSuggestions?: boolean;
@@ -80,6 +81,10 @@ export interface ProviderOptions {
   env?: EnvOverrides;
 }
 
+export function isProviderOptions(provider: any): provider is ProviderOptions {
+  return !isApiProvider(provider) && typeof provider === 'object';
+}
+
 export interface CallApiContextParams {
   vars: Record<string, string | object>;
 }
@@ -114,6 +119,10 @@ export interface ApiProvider {
 
   // Custom delay for the provider.
   delay?: number;
+}
+
+export function isApiProvider(provider: any): provider is ApiProvider {
+  return typeof provider === 'object' && 'id' in provider && typeof provider.id === 'function';
 }
 
 export interface ApiEmbeddingProvider extends ApiProvider {
