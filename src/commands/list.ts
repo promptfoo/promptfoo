@@ -13,7 +13,8 @@ export function listCommand(program: Command) {
     .command('evals')
     .description('List evaluations.')
     .option('--env-path <path>', 'Path to the environment file')
-    .action(async (cmdObj: { envPath?: string }) => {
+    .option('-n <limit>', 'Number of evals to display')
+    .action(async (cmdObj: { envPath?: string; n?: string }) => {
       setupEnv(cmdObj.envPath);
       telemetry.maybeShowNotice();
       telemetry.record('command_used', {
@@ -21,7 +22,7 @@ export function listCommand(program: Command) {
       });
       await telemetry.send();
 
-      const evals = await getEvals();
+      const evals = await getEvals(Number(cmdObj.n) || undefined);
       const tableData = evals.map((evl) => ({
         'Eval ID': evl.id,
         Description: evl.description || '',
@@ -44,7 +45,8 @@ export function listCommand(program: Command) {
     .command('prompts')
     .description('List prompts used')
     .option('--env-path <path>', 'Path to the environment file')
-    .action(async (cmdObj: { envPath?: string }) => {
+    .option('-n <limit>', 'Number of prompts to display')
+    .action(async (cmdObj: { envPath?: string; n?: string }) => {
       setupEnv(cmdObj.envPath);
       telemetry.maybeShowNotice();
       telemetry.record('command_used', {
@@ -52,7 +54,7 @@ export function listCommand(program: Command) {
       });
       await telemetry.send();
 
-      const prompts = (await getPrompts()).sort((a, b) =>
+      const prompts = (await getPrompts(Number(cmdObj.n) || undefined)).sort((a, b) =>
         b.recentEvalId.localeCompare(a.recentEvalId),
       );
       const tableData = prompts.map((prompt) => ({
@@ -76,7 +78,8 @@ export function listCommand(program: Command) {
     .command('datasets')
     .description('List datasets used')
     .option('--env-path <path>', 'Path to the environment file')
-    .action(async (cmdObj: { envPath?: string }) => {
+    .option('-n <limit>', 'Number of datasets to display')
+    .action(async (cmdObj: { envPath?: string; n?: string }) => {
       setupEnv(cmdObj.envPath);
       telemetry.maybeShowNotice();
       telemetry.record('command_used', {
@@ -84,7 +87,7 @@ export function listCommand(program: Command) {
       });
       await telemetry.send();
 
-      const datasets = (await getTestCases()).sort((a, b) =>
+      const datasets = (await getTestCases(Number(cmdObj.n) || undefined)).sort((a, b) =>
         b.recentEvalId.localeCompare(a.recentEvalId),
       );
       const tableData = datasets.map((dataset) => ({

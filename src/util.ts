@@ -48,6 +48,8 @@ import type {
 } from './types';
 import { writeCsvToGoogleSheet } from './googleSheets';
 
+const DEFAULT_QUERY_LIMIT = 100;
+
 let globalConfigCache: any = null;
 
 export function resetGlobalConfig(): void {
@@ -542,9 +544,11 @@ export async function writeResultsToDatabase(
 
 /**
  *
- * @returns Last 100 evals in descending order.
+ * @returns Last n evals in descending order.
  */
-export function listPreviousResults(): { evalId: string; description?: string | null }[] {
+export function listPreviousResults(
+  limit: number = DEFAULT_QUERY_LIMIT,
+): { evalId: string; description?: string | null }[] {
   const db = getDb();
   const results = db
     .select({
@@ -553,7 +557,7 @@ export function listPreviousResults(): { evalId: string; description?: string | 
     })
     .from(evals)
     .orderBy(desc(evals.createdAt))
-    .limit(100)
+    .limit(limit)
     .all();
 
   return results.map((result) => ({
@@ -668,7 +672,8 @@ export async function migrateResultsFromFileSystemToDatabase() {
   logger.info('Migration complete. Please restart your web server if it is running.');
 }
 
-const RESULT_HISTORY_LENGTH = parseInt(process.env.RESULT_HISTORY_LENGTH || '', 10) || 100;
+const RESULT_HISTORY_LENGTH =
+  parseInt(process.env.RESULT_HISTORY_LENGTH || '', 10) || DEFAULT_QUERY_LIMIT;
 
 export function cleanupOldFileResults(remaining = RESULT_HISTORY_LENGTH) {
   const sortedFilenames = listPreviousResultFilenames_fileSystem();
@@ -844,24 +849,28 @@ export function getPromptsForTestCases(testCases: TestCase[]) {
   return getPromptsForTestCasesHash(testCasesSha256);
 }
 
-export function getPromptsForTestCasesHash(testCasesSha256: string) {
+export function getPromptsForTestCasesHash(
+  testCasesSha256: string,
+  limit: number = DEFAULT_QUERY_LIMIT,
+) {
   return getPromptsWithPredicate((result) => {
     const testsJson = JSON.stringify(result.config.tests);
     const hash = sha256(testsJson);
     return hash === testCasesSha256;
-  });
+  }, limit);
 }
 
 export function sha256(str: string) {
   return createHash('sha256').update(str).digest('hex');
 }
 
-export function getPrompts() {
-  return getPromptsWithPredicate(() => true);
+export function getPrompts(limit: number = DEFAULT_QUERY_LIMIT) {
+  return getPromptsWithPredicate(() => true, limit);
 }
 
 export async function getPromptsWithPredicate(
   predicate: (result: ResultsFile) => boolean,
+  limit: number,
 ): Promise<PromptWithMetadata[]> {
   // TODO(ian): Make this use a proper database query
   const db = getDb();
@@ -873,7 +882,7 @@ export async function getPromptsWithPredicate(
       config: evals.config,
     })
     .from(evals)
-    .limit(100)
+    .limit(limit)
     .all();
 
   const groupedPrompts: { [hash: string]: PromptWithMetadata } = {};
@@ -928,12 +937,13 @@ export async function getPromptsWithPredicate(
   return Object.values(groupedPrompts);
 }
 
-export async function getTestCases() {
-  return getTestCasesWithPredicate(() => true);
+export async function getTestCases(limit: number = DEFAULT_QUERY_LIMIT) {
+  return getTestCasesWithPredicate(() => true, limit);
 }
 
 export async function getTestCasesWithPredicate(
   predicate: (result: ResultsFile) => boolean,
+  limit: number,
 ): Promise<TestCasesWithMetadata[]> {
   const db = getDb();
   const evals_ = await db
@@ -944,7 +954,7 @@ export async function getTestCasesWithPredicate(
       config: evals.config,
     })
     .from(evals)
-    .limit(100)
+    .limit(limit)
     .all();
 
   const groupedTestCases: { [hash: string]: TestCasesWithMetadata } = {};
@@ -1025,8 +1035,8 @@ export async function getDatasetFromHash(hash: string) {
   return undefined;
 }
 
-export async function getEvals() {
-  return getEvalsWithPredicate(() => true);
+export async function getEvals(limit: number = DEFAULT_QUERY_LIMIT) {
+  return getEvalsWithPredicate(() => true, limit);
 }
 
 export async function getEvalFromId(hash: string) {
@@ -1041,6 +1051,7 @@ export async function getEvalFromId(hash: string) {
 
 export async function getEvalsWithPredicate(
   predicate: (result: ResultsFile) => boolean,
+  limit: number,
 ): Promise<EvalWithMetadata[]> {
   const db = getDb();
   const evals_ = await db
@@ -1052,7 +1063,8 @@ export async function getEvalsWithPredicate(
       description: evals.description,
     })
     .from(evals)
-    .limit(100)
+    .orderBy(desc(evals.createdAt))
+    .limit(limit)
     .all();
 
   const ret: EvalWithMetadata[] = [];
@@ -1196,7 +1208,8 @@ export type StandaloneEval = CompletedPrompt & {
   datasetId: string | null;
   promptId: string | null;
 };
-export function getStandaloneEvals(): StandaloneEval[] {
+
+export function getStandaloneEvals(limit: number = DEFAULT_QUERY_LIMIT): StandaloneEval[] {
   const db = getDb();
   const results = db
     .select({
@@ -1211,7 +1224,7 @@ export function getStandaloneEvals(): StandaloneEval[] {
     .leftJoin(evalsToPrompts, eq(evals.id, evalsToPrompts.evalId))
     .leftJoin(evalsToDatasets, eq(evals.id, evalsToDatasets.evalId))
     .orderBy(desc(evals.createdAt))
-    .limit(100)
+    .limit(limit)
     .all();
 
   const flatResults: StandaloneEval[] = [];
