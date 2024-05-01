@@ -1,4 +1,5 @@
 import type logger from "./logger";
+import type { fetchWithCache, getCache } from "./cache";
 
 export type FilePath = string;
 
@@ -83,12 +84,14 @@ export interface ProviderOptions {
 
 export interface CallApiContextParams {
   vars: Record<string, string | object>;
+  logger?: typeof logger;
+  fetchWithCache?: typeof fetchWithCache;
+  getCache?: typeof getCache;
 }
 
 export interface CallApiOptionsParams {
   includeLogProbs?: boolean;
   originalProvider?: ApiProvider;
-  logger?: typeof logger;
 }
 
 export interface ApiProvider {
