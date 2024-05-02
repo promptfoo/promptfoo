@@ -98,7 +98,7 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
     ...options,
   });
 
-  let evalId: string | undefined = undefined
+  let evalId: string | null = null
   if (testSuite.writeLatestResults) {
     await migrateResultsFromFileSystemToDatabase();
     evalId = await writeResultsToDatabase(ret, testSuite);

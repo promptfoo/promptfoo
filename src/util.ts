@@ -338,7 +338,7 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
 
 export async function writeMultipleOutputs(
   outputPaths: string[],
-  evalId: string | undefined,
+  evalId: string | null,
   results: EvaluateSummary,
   config: Partial<UnifiedConfig>,
   shareableUrl: string | null,
@@ -350,7 +350,7 @@ export async function writeMultipleOutputs(
 
 export async function writeOutput(
   outputPath: string,
-  evalId: string | undefined,
+  evalId: string | null,
   results: EvaluateSummary,
   config: Partial<UnifiedConfig>,
   shareableUrl: string | null,
