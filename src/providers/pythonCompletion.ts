@@ -47,6 +47,11 @@ export class PythonProvider implements ApiProvider {
       logger.debug(`Returning cached result for script ${absPath}`);
       return JSON.parse(cachedResult);
     } else {
+      // These are not useful in Python
+      delete context?.fetchWithCache;
+      delete context?.getCache;
+      delete context?.logger;
+
       const args = [prompt, this.options, context];
       logger.debug(
         `Running python script ${absPath} with scriptPath ${this.scriptPath} and args: ${args.join(

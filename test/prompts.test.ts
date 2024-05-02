@@ -9,6 +9,10 @@ import type { Prompt } from '../src/types';
 
 jest.mock('../src/esm');
 
+jest.mock('proxy-agent', () => ({
+  ProxyAgent: jest.fn().mockImplementation(() => ({})),
+}));
+
 jest.mock('glob', () => ({
   globSync: jest.fn(),
 }));
@@ -21,6 +25,8 @@ jest.mock('fs', () => ({
   existsSync: jest.fn(),
   mkdirSync: jest.fn(),
 }));
+
+jest.mock('../src/database');
 
 function toPrompt(text: string): Prompt {
   return { raw: text, display: text };

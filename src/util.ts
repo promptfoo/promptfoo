@@ -1280,3 +1280,15 @@ export function resultIsForTestCase(result: EvaluateResult, testCase: TestCase):
 
   return varsMatch(testCase.vars, result.vars) && providersMatch;
 }
+
+export function safeJsonStringify(value: any): string {
+  // Prevent circular references
+  const cache = new Set();
+  return JSON.stringify(value, (key, val) => {
+    if (typeof val === 'object' && val !== null) {
+      if (cache.has(val)) return;
+      cache.add(val);
+    }
+    return val;
+  });
+};

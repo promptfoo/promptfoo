@@ -4,6 +4,7 @@ import invariant from 'tiny-invariant';
 
 import logger from '../logger';
 import { getCache, isCacheEnabled } from '../cache';
+import { safeJsonStringify } from '../util';
 
 import type {
   ApiProvider,
@@ -57,10 +58,14 @@ export class ScriptCompletionProvider implements ApiProvider {
         }
         const command = scriptParts.shift();
         invariant(command, 'No command found in script path');
+        // These are not useful in the shell
+        delete context?.fetchWithCache;
+        delete context?.getCache;
+        delete context?.logger;
         const scriptArgs = scriptParts.concat([
           prompt,
-          JSON.stringify(this.options || {}),
-          JSON.stringify(context || {}),
+          safeJsonStringify(this.options || {}),
+          safeJsonStringify(context || {}),
         ]);
         const options = this.options?.config.basePath ? { cwd: this.options.config.basePath } : {};
 
