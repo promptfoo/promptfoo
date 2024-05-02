@@ -320,6 +320,8 @@ class Evaluator {
           renderedPrompt,
           {
             vars,
+
+            // These are removed in python and script providers, but every Javascript provider gets them
             logger,
             fetchWithCache,
             getCache,

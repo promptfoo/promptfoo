@@ -5,6 +5,7 @@ import { promises as fs } from 'fs';
 import { PythonShell, Options as PythonShellOptions } from 'python-shell';
 
 import logger from '../logger';
+import { safeJsonStringify } from '../util';
 
 /**
  * Runs a Python script using the provided list of arguments.
@@ -32,7 +33,7 @@ export async function runPython(
   };
 
   try {
-    await fs.writeFile(tempJsonPath, JSON.stringify(args));
+    await fs.writeFile(tempJsonPath, safeJsonStringify(args));
 
     const results = await PythonShell.run('wrapper.py', pythonOptions);
     logger.debug(`Python script ${absPath} returned: ${results.join('\n')}`);
