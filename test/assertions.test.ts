@@ -17,6 +17,7 @@ import type {
 } from '../src/types';
 import { OpenAiChatCompletionProvider } from '../src/providers/openai';
 import * as pythonWrapper from '../src/python/wrapper';
+import cliState from '../src/cliState';
 
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
@@ -35,6 +36,10 @@ jest.mock('fs', () => ({
 
 jest.mock('../src/esm');
 jest.mock('../src/database');
+
+jest.mock('../src/cliState', () => ({
+  basePath: '/config_path',
+}));
 
 export class TestGrader implements ApiProvider {
   async callApi(): Promise<ProviderResponse> {
@@ -1524,6 +1529,34 @@ describe('runAssertion', () => {
       expect(result.reason).toContain(expectedReason);
     },
   );
+
+  it('should resolve js paths relative to the configuration file', async () => {
+    const output = 'Expected output';
+    const mockFn = jest.fn((output: string) => output === 'Expected output');
+
+    jest.doMock(path.resolve('/config_path/path/to/assert.js'), () => mockFn, { virtual: true });
+
+    const fileAssertion: Assertion = {
+      type: 'javascript',
+      value: 'file://./path/to/assert.js',
+    };
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      assertion: fileAssertion,
+      test: {} as AtomicTestCase,
+      output,
+    });
+
+    expect(mockFn).toHaveBeenCalledWith('Expected output', {
+      prompt: 'Some prompt',
+      vars: {},
+      test: {},
+    });
+    expect(result.pass).toBe(true);
+    expect(result.reason).toContain('Assertion passed');
+  });
 
   it('should handle output strings with both single and double quotes correctly in python assertion', async () => {
     const expectedPythonValue = '0.5';

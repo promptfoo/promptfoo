@@ -229,9 +229,8 @@ export async function runAssertion({
   if (typeof renderedValue === 'string') {
     if (renderedValue.startsWith('file://')) {
       const basePath = cliState.basePath || '';
+      const filePath = path.resolve(basePath, renderedValue.slice('file://'.length));
 
-      // Load the file
-      const filePath = renderedValue.slice('file://'.length);
       if (filePath.endsWith('.js') || filePath.endsWith('.cjs') || filePath.endsWith('.mjs')) {
         const requiredModule = await importModule(filePath);
         if (typeof requiredModule === 'function') {
@@ -246,11 +245,7 @@ export async function runAssertion({
         logger.debug(`Javascript script ${filePath} output: ${valueFromScript}`);
       } else if (filePath.endsWith('.py')) {
         try {
-          const pythonScriptOutput = await runPython(
-            path.resolve(basePath, filePath),
-            'get_assert',
-            [output, context],
-          );
+          const pythonScriptOutput = await runPython(filePath, 'get_assert', [output, context]);
           valueFromScript = pythonScriptOutput;
           logger.debug(`Python script ${filePath} output: ${valueFromScript}`);
           logger.debug(`Python script ${filePath} output: ${valueFromScript}`);
