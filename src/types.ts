@@ -634,6 +634,7 @@ export interface ResultsFile {
 
 // File exported as --output option
 export interface OutputFile {
+  evalId?: string
   results: EvaluateSummary;
   config: Partial<UnifiedConfig>;
   shareableUrl: string | null;

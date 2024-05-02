@@ -338,17 +338,19 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
 
 export async function writeMultipleOutputs(
   outputPaths: string[],
+  evalId: string | undefined,
   results: EvaluateSummary,
   config: Partial<UnifiedConfig>,
   shareableUrl: string | null,
 ) {
   await Promise.all(
-    outputPaths.map((outputPath) => writeOutput(outputPath, results, config, shareableUrl)),
+    outputPaths.map((outputPath) => writeOutput(outputPath, evalId, results, config, shareableUrl)),
   );
 }
 
 export async function writeOutput(
   outputPath: string,
+  evalId: string | undefined,
   results: EvaluateSummary,
   config: Partial<UnifiedConfig>,
   shareableUrl: string | null,
@@ -405,7 +407,7 @@ ${gradingResultText}`.trim();
     } else if (outputExtension === 'json') {
       fs.writeFileSync(
         outputPath,
-        JSON.stringify({ results, config, shareableUrl } satisfies OutputFile, null, 2),
+        JSON.stringify({ evalId, results, config, shareableUrl } satisfies OutputFile, null, 2),
       );
     } else if (
       outputExtension === 'yaml' ||

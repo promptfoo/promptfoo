@@ -98,17 +98,18 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
     ...options,
   });
 
-  if (testSuite.outputPath) {
-    if (typeof testSuite.outputPath === 'string') {
-      await writeOutput(testSuite.outputPath, ret, testSuite, null);
-    } else if (Array.isArray(testSuite.outputPath)) {
-      await writeMultipleOutputs(testSuite.outputPath, ret, testSuite, null);
-    }
-  }
-
+  let evalId: string | undefined = undefined
   if (testSuite.writeLatestResults) {
     await migrateResultsFromFileSystemToDatabase();
-    await writeResultsToDatabase(ret, testSuite);
+    evalId = await writeResultsToDatabase(ret, testSuite);
+  }
+
+  if (testSuite.outputPath) {
+    if (typeof testSuite.outputPath === 'string') {
+      await writeOutput(testSuite.outputPath, evalId, ret, testSuite, null);
+    } else if (Array.isArray(testSuite.outputPath)) {
+      await writeMultipleOutputs(testSuite.outputPath, evalId, ret, testSuite, null);
+    }
   }
 
   await telemetry.send();
