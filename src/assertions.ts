@@ -274,13 +274,13 @@ export async function runAssertion({
   }
 
   if (baseType === 'equals') {
-    pass = renderedValue == outputString;
+    pass = (renderedValue == outputString) !== inverse;
     return {
       pass,
       score: pass ? 1 : 0,
       reason: pass
         ? 'Assertion passed'
-        : `Expected output "${renderedValue}" but got "${outputString}"`,
+        : `Expected output "${renderedValue}" to ${inverse ? 'not ' : ''}equal "${outputString}"`,
       assertion,
     };
   }

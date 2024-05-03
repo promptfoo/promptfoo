@@ -93,7 +93,7 @@ describe('runAssertions', () => {
       output,
     });
     expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe('Expected output "Expected output" but got "Different output"');
+    expect(result.reason).toBe('Expected output "Expected output" to equal "Different output"');
   });
 
   it('should handle output as an object', async () => {
@@ -106,7 +106,7 @@ describe('runAssertions', () => {
       output,
     });
     expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe('Expected output "Expected output" but got "{"key":"value"}"');
+    expect(result.reason).toBe('Expected output "Expected output" to equal "{"key":"value"}"');
   });
 
   it('should fail when combined score is less than threshold', async () => {
@@ -330,7 +330,40 @@ describe('runAssertion', () => {
       output,
     });
     expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe('Expected output "Expected output" but got "Different output"');
+    expect(result.reason).toBe('Expected output "Expected output" to equal "Different output"');
+  });
+
+  const notEqualsAssertion: Assertion = {
+    type: 'not-equals',
+    value: 'Unexpected output',
+  };
+
+  it('should pass when the not-equals assertion passes', async () => {
+    const output = 'Expected output';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      assertion: notEqualsAssertion,
+      test: {} as AtomicTestCase,
+      output,
+      provider: new OpenAiChatCompletionProvider('gpt-4'),
+    });
+    expect(result.pass).toBeTruthy();
+    expect(result.reason).toBe('Assertion passed');
+  });
+
+  it('should fail when the not-equals assertion fails', async () => {
+    const output = 'Unexpected output';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      assertion: notEqualsAssertion,
+      test: {} as AtomicTestCase,
+      output,
+      provider: new OpenAiChatCompletionProvider('gpt-4'),
+    });
+    expect(result.pass).toBeFalsy();
+    expect(result.reason).toBe('Expected output "Unexpected output" to not equal "Unexpected output"');
   });
 
   it('should handle output as an object', async () => {
@@ -343,7 +376,7 @@ describe('runAssertion', () => {
       output,
     });
     expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe('Expected output "Expected output" but got "{"key":"value"}"');
+    expect(result.reason).toBe('Expected output "Expected output" to equal "{"key":"value"}"');
   });
 
   it('should pass when the is-json assertion passes', async () => {
