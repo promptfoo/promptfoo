@@ -114,7 +114,7 @@
     "proxy-agent": "^6.3.1",
     "python-shell": "^5.0.0",
     "replicate": "^0.27.1",
-    "rouge": "^1.0.3",
+    "rouge": "git+https://github.com/kenlimmj/rouge.git#f35111b599aca55f1d4dc1d4a3d15e28e7f7c55f",
     "semver": "^7.5.3",
     "socket.io": "^4.6.1",
     "tiny-invariant": "^1.3.1",

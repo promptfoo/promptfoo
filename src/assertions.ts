@@ -64,7 +64,7 @@ function coerceString(value: string | object): string {
 function handleRougeScore(
   baseType: 'rouge-n',
   assertion: Assertion,
-  expected: string | string[],
+  expected: string,
   output: string,
   inverted: boolean,
 ): GradingResult {
@@ -1041,8 +1041,8 @@ ${
 
   if (baseType === 'rouge-n') {
     invariant(
-      typeof renderedValue === 'string' || Array.isArray(renderedValue),
-      '"rouge" assertion type must be a value (string or string array)',
+      typeof renderedValue === 'string',
+      '"rouge" assertion type must be a string value',
     );
     return handleRougeScore(baseType, assertion, renderedValue, outputString, inverse);
   }
