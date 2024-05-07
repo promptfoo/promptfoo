@@ -352,6 +352,9 @@ export async function runAssertion({
 
   if (baseType === 'contains-any') {
     invariant(renderedValue, '"contains-any" assertion type must have a value');
+    if (typeof renderedValue === 'string') {
+      renderedValue = renderedValue.split(',').map((v) => v.trim());
+    }
     invariant(
       Array.isArray(renderedValue),
       '"contains-any" assertion type must have an array value',
@@ -369,6 +372,9 @@ export async function runAssertion({
 
   if (baseType === 'icontains-any') {
     invariant(renderedValue, '"icontains-any" assertion type must have a value');
+    if (typeof renderedValue === 'string') {
+      renderedValue = renderedValue.split(',').map((v) => v.trim());
+    }
     invariant(
       Array.isArray(renderedValue),
       '"icontains-any" assertion type must have an array value',
@@ -389,6 +395,9 @@ export async function runAssertion({
 
   if (baseType === 'contains-all') {
     invariant(renderedValue, '"contains-all" assertion type must have a value');
+    if (typeof renderedValue === 'string') {
+      renderedValue = renderedValue.split(',').map((v) => v.trim());
+    }
     invariant(
       Array.isArray(renderedValue),
       '"contains-all" assertion type must have an array value',
@@ -406,6 +415,9 @@ export async function runAssertion({
 
   if (baseType === 'icontains-all') {
     invariant(renderedValue, '"icontains-all" assertion type must have a value');
+    if (typeof renderedValue === 'string') {
+      renderedValue = renderedValue.split(',').map((v) => v.trim());
+    }
     invariant(
       Array.isArray(renderedValue),
       '"icontains-all" assertion type must have an array value',
