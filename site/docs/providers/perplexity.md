@@ -4,15 +4,15 @@ The [Perplexity API](https://blog.perplexity.ai/blog/introducing-pplx-api) (pplx
 
 It is compatible with the [OpenAI API](/docs/providers/openai). In order to use the Perplexity API in an eval, set the `apiHost` config key to `api.perplexity.ai`.
 
-Here's an example config that compares Perplexity's 70B model with Llama-2 70B.
+Here's an example config that compares Perplexity's large and small Llama 3 online models:
 
 ```yaml
 providers:
-  - id: openai:chat:pplx-70b-chat-alpha
+  - id: openai:chat:llama-3-sonar-large-32k-online
     config:
       apiHost: api.perplexity.ai
       apiKeyEnvar: PERPLEXITY_API_KEY
-  - id: openai:chat:llama-2-70b-chat
+  - id: openai:chat:llama-3-sonar-small-32k-online
     config:
       apiHost: api.perplexity.ai
       apiKeyEnvar: PERPLEXITY_API_KEY
