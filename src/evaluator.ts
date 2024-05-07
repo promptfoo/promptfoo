@@ -33,6 +33,7 @@ import type {
   RunEvalOptions,
   TestSuite,
   ProviderResponse,
+  Assertion,
 } from './types';
 export const DEFAULT_MAX_CONCURRENCY = 4;
 
@@ -903,7 +904,7 @@ class Evaluator {
 
     for (let index = 0; index < table.body.length; index++) {
       const row = table.body[index];
-      const compareAssertion = row.test.assert?.find((a) => a.type === 'select-best');
+      const compareAssertion = row.test.assert?.find((a) => a.type === 'select-best') as Assertion;
       if (compareAssertion) {
         const outputs = row.outputs.map((o) => o.text);
         const gradingResults = await runCompareAssertion(row.test, compareAssertion, outputs);

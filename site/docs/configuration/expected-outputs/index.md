@@ -34,9 +34,60 @@ tests:
 | type         | string             | Yes      | Type of assertion                                                                                       |
 | value        | string             | No       | The expected value, if applicable                                                                       |
 | threshold    | number             | No       | The threshold value, applicable only to certain types such as `similar`, `cost`, `javascript`, `python` |
-| weight       | string             | No       | How heavily to weigh the assertion. Defaults to 1.0                                                     |
+| weight       | number             | No       | How heavily to weigh the assertion. Defaults to 1.0                                                     |
 | provider     | string             | No       | Some assertions (similarity, llm-rubric, model-graded-\*) require an [LLM provider](/docs/providers)    |
 | rubricPrompt | string \| string[] | No       | Model-graded LLM prompt                                                                                 |
+
+## Grouping assertions via Assertion Sets
+
+Assertions can be grouped together using an `assert-set`.
+
+Example:
+
+```yaml
+tests:
+  - description: 'Test that the output is cheap and fast'
+    vars:
+      example: 'Hello, World!'
+    assert:
+      - type: assert-set
+        assert:
+          - type: cost
+            threshold: 0.001
+          - type: latency
+            threshold: 200
+```
+
+In the above example if all assertions of the `assert-set` pass the entire `assert-set` passes.
+
+There are cases where you may only need a certain number of assertions to pass. Here you can use `threshold`.
+
+Example - if one of two assertions need to pass or 50%:
+
+```yaml
+tests:
+  - description: 'Test that the output is cheap or fast'
+    vars:
+      example: 'Hello, World!'
+    assert:
+      - type: assert-set
+        threshold: 0.5
+        assert:
+          - type: cost
+            threshold: 0.001
+          - type: latency
+            threshold: 200
+```
+
+## Assertion Set properties
+
+| Property     | Type               | Required | Description                                                                                                           |
+| ------------ | ------------------ | -------- | --------------------------------------------------------------------------------------------------------------------- |
+| type         | string             | Yes      | Must be assert-set                                                                                                    |
+| assert       | array of asserts   | Yes      | Assertions to be run for the set                                                                                      |
+| threshold    | number             | No       | Success threshold for the assert-set. Ex. 1 out of 4 equal weights assertions need to pass. Threshold should be 0.25  |
+| weight       | number             | No       | How heavily to weigh the assertion set within test assertions. Defaults to 1.0                                        |
+| metric       | string             | No       | Metric name for this assertion set within the test                                                                    |
 
 ## Assertion types
 

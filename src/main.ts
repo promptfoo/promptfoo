@@ -52,6 +52,7 @@ import type {
 import { generateTable } from './table';
 import { createShareableUrl } from './share';
 import { filterTests } from './commands/eval/filterTests';
+import { validateAssertions } from './assertions/validateAssertions';
 
 function createDummyFiles(directory: string | null) {
   if (directory) {
@@ -221,6 +222,11 @@ async function resolveConfigs(
       fileConfig.nunjucksFilters || defaultConfig.nunjucksFilters || {},
     ),
   };
+
+  if (testSuite.tests) {
+    validateAssertions(testSuite.tests);
+  }
+
   return { config, testSuite, basePath };
 }
 
@@ -555,7 +561,10 @@ async function main() {
       defaultConfig?.evaluateOptions?.interactiveProviders,
     )
     .option('-n, --filter-first-n <number>', 'Only run the first N tests')
-    .option('--filter-pattern <pattern>', 'Only run tests whose description matches the regular expression pattern')
+    .option(
+      '--filter-pattern <pattern>',
+      'Only run tests whose description matches the regular expression pattern',
+    )
     .option('--filter-failing <path>', 'Path to json output file')
     .option(
       '--var <key=value>',

@@ -1,10 +1,15 @@
-import { GradingResult } from '../types';
+import { AssertionSet, GradingResult } from '../types';
 
 const DEFAULT_TOKENS_USED = {
   total: 0,
   prompt: 0,
   completion: 0,
 };
+
+interface ParentAssertionSet {
+  index: number;
+  assertionSet: AssertionSet;
+}
 
 export class AssertionsResult {
   static noAssertsResult(): GradingResult {
@@ -20,12 +25,29 @@ export class AssertionsResult {
   private tokensUsed = {
     ...DEFAULT_TOKENS_USED,
   };
+  private threshold: number | undefined;
+  private _parentAssertionSet: ParentAssertionSet | undefined;
   private totalScore: number = 0;
   private totalWeight: number = 0;
   private failedReason: string | undefined;
   private componentResults: GradingResult[] = [];
   private namedScores: Record<string, number> = {};
   private result: GradingResult | null = null;
+
+  constructor({
+    threshold,
+    parentAssertionSet,
+  }: {
+    threshold?: number;
+    parentAssertionSet?: ParentAssertionSet;
+  } = {}) {
+    this.threshold = threshold;
+    this._parentAssertionSet = parentAssertionSet;
+  }
+
+  get parentAssertionSet() {
+    return this._parentAssertionSet;
+  }
 
   addResult({
     index,
@@ -63,7 +85,7 @@ export class AssertionsResult {
     }
   }
 
-  testResult({ threshold }: { threshold?: number }): GradingResult {
+  testResult(): GradingResult {
     if (this.result) {
       return this.result;
     }
@@ -73,14 +95,14 @@ export class AssertionsResult {
 
     let reason = !this.failedReason ? 'All assertions passed' : this.failedReason;
 
-    if (threshold) {
+    if (this.threshold) {
       // Existence of a test threshold overrides the pass/fail status of individual assertions
-      pass = score >= threshold;
+      pass = score >= this.threshold;
 
       if (pass) {
-        reason = `Aggregate score ${score.toFixed(2)} ≥ ${threshold} threshold`;
+        reason = `Aggregate score ${score.toFixed(2)} ≥ ${this.threshold} threshold`;
       } else {
-        reason = `Aggregate score ${score.toFixed(2)} < ${threshold} threshold`;
+        reason = `Aggregate score ${score.toFixed(2)} < ${this.threshold} threshold`;
       }
     }
 

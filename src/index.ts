@@ -71,6 +71,10 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
     }
     if (test.assert) {
       for (const assertion of test.assert) {
+        if (assertion.type === 'assert-set' || typeof assertion.provider === 'function') {
+          continue;
+        }
+
         if (assertion.provider) {
           if (typeof assertion.provider === 'object') {
             const casted = assertion.provider as ProviderOptions;
@@ -79,7 +83,7 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
           } else if (typeof assertion.provider === 'string') {
             assertion.provider = await loadApiProvider(assertion.provider);
           } else {
-            // It's a function, no need to do anything
+            throw new Error('Invalid provider type');
           }
         }
       }

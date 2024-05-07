@@ -26,7 +26,11 @@ export function maybeEmitAzureOpenAiWarning(testSuite: TestSuite, tests: TestCas
   if (hasAzure && !hasOpenAi && !testSuite.defaultTest?.options?.provider) {
     const modelGradedAsserts = tests.flatMap((t) =>
       (t.assert || []).filter(
-        (a) => MODEL_GRADED_ASSERTION_TYPES.has(a.type) && !a.provider && !t.options?.provider,
+        (a) =>
+          a.type !== 'assert-set' &&
+          MODEL_GRADED_ASSERTION_TYPES.has(a.type) &&
+          !a.provider &&
+          !t.options?.provider,
       ),
     );
     if (modelGradedAsserts.length > 0) {

@@ -109,36 +109,85 @@ export async function runAssertions({
     return AssertionsResult.noAssertsResult();
   }
 
-  const assertResults = new AssertionsResult();
-
-  await async.forEachOfLimit(test.assert, ASSERTIONS_MAX_CONCURRENCY, async (assertion, index) => {
-    if (assertion.type.startsWith('select-')) {
-      // Select-type assertions are handled separately because they depend on multiple outputs.
-      return;
-    }
-
-    const result = await runAssertion({
-      prompt,
-      provider,
-      assertion,
-      test,
-      output,
-      latencyMs,
-      logProbs,
-      cost,
-    });
-
-    assertResults.addResult({
-      index: Number(index),
-      result,
-      metric: assertion.metric,
-      weight: assertion.weight,
-    });
-  });
-
-  return assertResults.testResult({
+  const mainAssertResult = new AssertionsResult({
     threshold: test.threshold,
   });
+  const subAssertResults: AssertionsResult[] = [];
+  const asserts: {
+    assertion: Assertion;
+    assertResult: AssertionsResult;
+    index: number;
+  }[] = test.assert
+    .map((assertion, i) => {
+      if (assertion.type === 'assert-set') {
+        const subAssertResult = new AssertionsResult({
+          threshold: assertion.threshold,
+          parentAssertionSet: {
+            assertionSet: assertion,
+            index: i,
+          },
+        });
+
+        subAssertResults.push(subAssertResult);
+
+        return assertion.assert.map((subAssert, j) => {
+          return {
+            assertion: subAssert,
+            assertResult: subAssertResult,
+            index: j,
+          };
+        });
+      }
+
+      return { assertion, assertResult: mainAssertResult, index: i };
+    })
+    .flat();
+
+  await async.forEachOfLimit(
+    asserts,
+    ASSERTIONS_MAX_CONCURRENCY,
+    async ({ assertion, assertResult, index }) => {
+      if (assertion.type.startsWith('select-')) {
+        // Select-type assertions are handled separately because they depend on multiple outputs.
+        return;
+      }
+
+      const result = await runAssertion({
+        prompt,
+        provider,
+        assertion,
+        test,
+        output,
+        latencyMs,
+        logProbs,
+        cost,
+      });
+
+      assertResult.addResult({
+        index,
+        result,
+        metric: assertion.metric,
+        weight: assertion.weight,
+      });
+    },
+  );
+
+  subAssertResults.forEach((subAssertResult) => {
+    const result = subAssertResult.testResult();
+    const {
+      index,
+      assertionSet: { metric, weight },
+    } = subAssertResult.parentAssertionSet!;
+
+    mainAssertResult.addResult({
+      index,
+      result,
+      metric,
+      weight,
+    });
+  });
+
+  return mainAssertResult.testResult();
 }
 
 export async function runAssertion({
