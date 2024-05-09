@@ -162,6 +162,196 @@ describe('runAssertions', () => {
     expect(result.pass).toBeTruthy();
     expect(result.reason).toBe('Aggregate score 0.33 ≥ 0.25 threshold');
   });
+
+  describe('assert-set', () => {
+    const prompt = 'Some prompt';
+    const provider = new OpenAiChatCompletionProvider('gpt-4');
+
+    it('assert-set success', async () => {
+      const output = 'Expected output';
+      const test: AtomicTestCase = {
+        assert: [
+          {
+            type: 'assert-set',
+            assert: [
+              {
+                type: 'equals',
+                value: output,
+              },
+            ],
+          },
+        ],
+      };
+
+      const result: GradingResult = await runAssertions({
+        prompt,
+        provider,
+        test,
+        output,
+      });
+      expect(result.pass).toBeTruthy();
+      expect(result.reason).toBe('All assertions passed');
+    });
+
+    it('assert-set failure', async () => {
+      const output = 'Expected output';
+      const test: AtomicTestCase = {
+        assert: [
+          {
+            type: 'assert-set',
+            assert: [
+              {
+                type: 'equals',
+                value: 'Something different',
+              },
+            ],
+          },
+        ],
+      };
+
+      const result: GradingResult = await runAssertions({
+        prompt,
+        provider,
+        test,
+        output,
+      });
+      expect(result.pass).toStrictEqual(false);
+      expect(result.reason).toBe(
+        'Expected output "Something different" to equal "Expected output"',
+      );
+    });
+
+    it('assert-set threshold success', async () => {
+      const output = 'Expected output';
+      const test: AtomicTestCase = {
+        assert: [
+          {
+            type: 'assert-set',
+            threshold: 0.25,
+            assert: [
+              {
+                type: 'equals',
+                value: 'Hello world',
+                weight: 2,
+              },
+              {
+                type: 'contains',
+                value: 'Expected',
+                weight: 1,
+              },
+            ],
+          },
+        ],
+      };
+
+      const result: GradingResult = await runAssertions({
+        prompt,
+        provider,
+        test,
+        output,
+      });
+      expect(result.pass).toStrictEqual(true);
+      expect(result.reason).toBe('All assertions passed');
+    });
+
+    it('assert-set threshold failure', async () => {
+      const output = 'Expected output';
+      const test: AtomicTestCase = {
+        assert: [
+          {
+            type: 'assert-set',
+            threshold: 0.5,
+            assert: [
+              {
+                type: 'equals',
+                value: 'Hello world',
+                weight: 2,
+              },
+              {
+                type: 'contains',
+                value: 'Expected',
+                weight: 1,
+              },
+            ],
+          },
+        ],
+      };
+
+      const result: GradingResult = await runAssertions({
+        prompt,
+        provider,
+        test,
+        output,
+      });
+      expect(result.pass).toStrictEqual(false);
+      expect(result.reason).toBe('Aggregate score 0.33 < 0.5 threshold');
+    });
+
+    it('assert-set with metric', async () => {
+      const metric = 'The best metric';
+      const output = 'Expected output';
+      const test: AtomicTestCase = {
+        assert: [
+          {
+            type: 'assert-set',
+            metric,
+            threshold: 0.5,
+            assert: [
+              {
+                type: 'equals',
+                value: 'Hello world',
+              },
+              {
+                type: 'contains',
+                value: 'Expected',
+              },
+            ],
+          },
+        ],
+      };
+
+      const result: GradingResult = await runAssertions({
+        prompt,
+        provider,
+        test,
+        output,
+      });
+      expect(result.namedScores).toStrictEqual({
+        [metric]: 0.5,
+      });
+    });
+
+    it('uses assert-set weight', async () => {
+      const output = 'Expected';
+      const test: AtomicTestCase = {
+        assert: [
+          {
+            type: 'equals',
+            value: 'Nope',
+            weight: 10,
+          },
+          {
+            type: 'assert-set',
+            weight: 90,
+            assert: [
+              {
+                type: 'equals',
+                value: 'Expected',
+              },
+            ],
+          },
+        ],
+      };
+
+      const result: GradingResult = await runAssertions({
+        prompt,
+        provider,
+        test,
+        output,
+      });
+      expect(result.score).toStrictEqual(0.9);
+    });
+  });
 });
 
 describe('runAssertion', () => {
@@ -363,7 +553,9 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe('Expected output "Unexpected output" to not equal "Unexpected output"');
+    expect(result.reason).toBe(
+      'Expected output "Unexpected output" to not equal "Unexpected output"',
+    );
   });
 
   it('should handle output as an object', async () => {
@@ -2317,7 +2509,7 @@ describe('assertionFromString', () => {
     const result: Assertion = assertionFromString(expected);
     expect(result.type).toBe('is-valid-openai-function-call');
   });
-  
+
   it('should create a python assertion', () => {
     const expected = 'python: file://file.py ';
 
@@ -2325,7 +2517,7 @@ describe('assertionFromString', () => {
     expect(result.type).toBe('python');
     expect(result.value).toBe('file://file.py');
   });
-  
+
   it('should create a javascript assertion', () => {
     const expected = 'javascript: x > 10';
 

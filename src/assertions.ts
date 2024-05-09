@@ -33,6 +33,7 @@ import { runPython, runPythonCode } from './python/wrapper';
 import { importModule } from './esm';
 
 import type { Assertion, AssertionType, GradingResult, AtomicTestCase, ApiProvider } from './types';
+import { AssertionsResult } from './assertions/AssertionsResult';
 
 const ASSERTIONS_MAX_CONCURRENCY = process.env.PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY
   ? parseInt(process.env.PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY, 10)
@@ -104,77 +105,89 @@ export async function runAssertions({
   logProbs?: number[];
   cost?: number;
 }): Promise<GradingResult> {
-  const tokensUsed = {
-    total: 0,
-    prompt: 0,
-    completion: 0,
-  };
   if (!test.assert || test.assert.length < 1) {
-    return { pass: true, score: 1, reason: 'No assertions', tokensUsed, assertion: null };
+    return AssertionsResult.noAssertsResult();
   }
-  let totalScore = 0;
-  let totalWeight = 0;
-  let allPass = true;
-  let failedReason = '';
-  const componentResults: GradingResult[] = [];
-  const namedScores: Record<string, number> = {};
 
-  await async.forEachOfLimit(test.assert, ASSERTIONS_MAX_CONCURRENCY, async (assertion, index) => {
-    if (assertion.type.startsWith('select-')) {
-      // Select-type assertions are handled separately because they depend on multiple outputs.
-      return;
-    }
-    const weight = assertion.weight ?? 1;
-    totalWeight += weight;
-    const result = await runAssertion({
-      prompt,
-      provider,
-      assertion,
-      test,
-      output,
-      latencyMs,
-      logProbs,
-      cost,
-    });
-    totalScore += result.score * weight;
-    componentResults[Number(index)] = result;
-    if (assertion.metric) {
-      namedScores[assertion.metric] = (namedScores[assertion.metric] || 0) + result.score;
-    }
-    if (result.tokensUsed) {
-      tokensUsed.total += result.tokensUsed.total;
-      tokensUsed.prompt += result.tokensUsed.prompt;
-      tokensUsed.completion += result.tokensUsed.completion;
-    }
-    if (!result.pass) {
-      allPass = false;
-      failedReason = result.reason;
-      if (process.env.PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES) {
-        throw new Error(result.reason);
+  const mainAssertResult = new AssertionsResult({
+    threshold: test.threshold,
+  });
+  const subAssertResults: AssertionsResult[] = [];
+  const asserts: {
+    assertion: Assertion;
+    assertResult: AssertionsResult;
+    index: number;
+  }[] = test.assert
+    .map((assertion, i) => {
+      if (assertion.type === 'assert-set') {
+        const subAssertResult = new AssertionsResult({
+          threshold: assertion.threshold,
+          parentAssertionSet: {
+            assertionSet: assertion,
+            index: i,
+          },
+        });
+
+        subAssertResults.push(subAssertResult);
+
+        return assertion.assert.map((subAssert, j) => {
+          return {
+            assertion: subAssert,
+            assertResult: subAssertResult,
+            index: j,
+          };
+        });
       }
-    }
+
+      return { assertion, assertResult: mainAssertResult, index: i };
+    })
+    .flat();
+
+  await async.forEachOfLimit(
+    asserts,
+    ASSERTIONS_MAX_CONCURRENCY,
+    async ({ assertion, assertResult, index }) => {
+      if (assertion.type.startsWith('select-')) {
+        // Select-type assertions are handled separately because they depend on multiple outputs.
+        return;
+      }
+
+      const result = await runAssertion({
+        prompt,
+        provider,
+        assertion,
+        test,
+        output,
+        latencyMs,
+        logProbs,
+        cost,
+      });
+
+      assertResult.addResult({
+        index,
+        result,
+        metric: assertion.metric,
+        weight: assertion.weight,
+      });
+    },
+  );
+
+  subAssertResults.forEach((subAssertResult) => {
+    const result = subAssertResult.testResult();
+    const {
+      index,
+      assertionSet: { metric, weight },
+    } = subAssertResult.parentAssertionSet!;
+
+    mainAssertResult.addResult({
+      index,
+      result,
+      metric,
+      weight,
+    });
   });
 
-  const finalScore = totalScore / totalWeight;
-  let finalReason = allPass ? 'All assertions passed' : failedReason;
-  if (test.threshold) {
-    // Existence of a test threshold overrides the pass/fail status of individual assertions
-    allPass = finalScore >= test.threshold;
-    if (allPass) {
-      finalReason = `Aggregate score ${finalScore.toFixed(2)} ≥ ${test.threshold} threshold`;
-    } else {
-      finalReason = `Aggregate score ${finalScore.toFixed(2)} < ${test.threshold} threshold`;
-    }
-  }
-  return {
-    pass: allPass,
-    score: finalScore,
-    namedScores: namedScores,
-    reason: finalReason,
-    tokensUsed,
-    componentResults,
-    assertion: null,
-  };
+  return mainAssertResult.testResult();
 }
 
 export async function runAssertion({

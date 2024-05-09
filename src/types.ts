@@ -1,5 +1,5 @@
-import type logger from "./logger";
-import type { fetchWithCache, getCache } from "./cache";
+import type logger from './logger';
+import type { fetchWithCache, getCache } from './cache';
 
 export type FilePath = string;
 
@@ -33,7 +33,7 @@ export interface CommandLineOptions {
   filterFailing?: string;
   filterFirstN?: string;
   filterPattern?: string;
-  var?: Record<string, string>
+  var?: Record<string, string>;
 
   generateSuggestions?: boolean;
   promptPrefix?: string;
@@ -403,6 +403,22 @@ type NotPrefixed<T extends string> = `not-${T}`;
 
 export type AssertionType = BaseAssertionTypes | NotPrefixed<BaseAssertionTypes>;
 
+export interface AssertionSet {
+  type: 'assert-set';
+
+  // Sub assertions to be run for this assertion set
+  assert: Assertion[];
+
+  // The weight of this assertion compared to other assertions in the test case. Defaults to 1.
+  weight?: number;
+
+  // Tag this assertion result as a named metric
+  metric?: string;
+
+  // The required score for this assert set. If not provided, the test case is graded pass/fail.
+  threshold?: number;
+}
+
 // TODO(ian): maybe Assertion should support {type: config} to make the yaml cleaner
 export interface Assertion {
   // Type of assertion
@@ -476,7 +492,7 @@ export interface TestCase<Vars = Record<string, string | string[] | object>> {
   providerOutput?: string | object;
 
   // Optional list of automatic checks to run on the LLM output
-  assert?: Assertion[];
+  assert?: (AssertionSet | Assertion)[];
 
   // Additional configuration settings for the prompt
   options?: PromptConfig &
