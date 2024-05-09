@@ -65,7 +65,7 @@ function coerceString(value: string | object): string {
 function handleRougeScore(
   baseType: 'rouge-n',
   assertion: Assertion,
-  expected: string | string[],
+  expected: string,
   output: string,
   inverted: boolean,
 ): GradingResult {
@@ -78,10 +78,10 @@ function handleRougeScore(
     pass,
     score: inverted ? 1 - score : score,
     reason: pass
-      ? `${baseType.toUpperCase()} score ${score} is greater than or equal to threshold ${
-          assertion.threshold || 0.75
-        }`
-      : `${baseType.toUpperCase()} score ${score} is less than threshold ${
+      ? `${baseType.toUpperCase()} score ${score.toFixed(
+          2,
+        )} is greater than or equal to threshold ${assertion.threshold || 0.75}`
+      : `${baseType.toUpperCase()} score ${score.toFixed(2)} is less than threshold ${
           assertion.threshold || 0.75
         }`,
     assertion,
@@ -1065,10 +1065,7 @@ ${
   }
 
   if (baseType === 'rouge-n') {
-    invariant(
-      typeof renderedValue === 'string' || Array.isArray(renderedValue),
-      '"rouge" assertion type must be a value (string or string array)',
-    );
+    invariant(typeof renderedValue === 'string', '"rouge" assertion type must be a string value');
     return handleRougeScore(baseType, assertion, renderedValue, outputString, inverse);
   }
 
