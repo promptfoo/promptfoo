@@ -1344,7 +1344,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result.pass).toBeTruthy();
-    expect(result.reason).toBe('ROUGE-N score 1 is greater than or equal to threshold 0.75');
+    expect(result.reason).toBe('ROUGE-N score 1.00 is greater than or equal to threshold 0.75');
   });
 
   it('should fail when the rouge-n assertion fails', async () => {
@@ -1358,7 +1358,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe('ROUGE-N score 0.2 is less than threshold 0.75');
+    expect(result.reason).toBe('ROUGE-N score 0.17 is less than threshold 0.75');
   });
 
   // Test for starts-with assertion
