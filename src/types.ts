@@ -363,6 +363,18 @@ export interface GradingResult {
   comment?: string;
 }
 
+export function isGradingResult(result: any): result is GradingResult {
+  return typeof result === 'object' && result !== null &&
+    typeof result.pass === 'boolean' &&
+    typeof result.score === 'number' &&
+    typeof result.reason === 'string' &&
+    (typeof result.namedScores === 'undefined' || typeof result.namedScores === 'object') &&
+    (typeof result.tokensUsed === 'undefined' || typeof result.tokensUsed === 'object') &&
+    (typeof result.componentResults === 'undefined' || Array.isArray(result.componentResults)) &&
+    (result.assertion === null || typeof result.assertion === 'object') &&
+    (typeof result.comment === 'undefined' || typeof result.comment === 'string');
+}
+
 type BaseAssertionTypes =
   | 'equals'
   | 'contains'

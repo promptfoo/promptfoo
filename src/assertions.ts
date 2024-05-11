@@ -32,7 +32,14 @@ import { OpenAiChatCompletionProvider } from './providers/openai';
 import { runPython, runPythonCode } from './python/wrapper';
 import { importModule } from './esm';
 
-import type { Assertion, AssertionType, GradingResult, AtomicTestCase, ApiProvider } from './types';
+import {
+  type Assertion,
+  type AssertionType,
+  type GradingResult,
+  type AtomicTestCase,
+  type ApiProvider,
+  isGradingResult,
+} from './types';
 import { AssertionsResult } from './assertions/AssertionsResult';
 
 const ASSERTIONS_MAX_CONCURRENCY = process.env.PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY
@@ -623,19 +630,8 @@ export async function runAssertion({
     try {
       const validateResult = async (result: any): Promise<boolean | number | GradingResult> => {
         result = await Promise.resolve(result);
-        if (typeof result === 'boolean' || typeof result === 'number') {
+        if (typeof result === 'boolean' || typeof result === 'number' || isGradingResult(result)) {
           return result;
-        } else if (typeof result === 'object' && result !== null) {
-          if (!('pass' in result) || typeof result.pass !== 'boolean') {
-            throw new Error(`Expected object with 'pass' boolean but got ${typeof result.pass}`);
-          }
-          if (!('score' in result) || typeof result.score !== 'number') {
-            throw new Error(`Expected object with 'score' number but got ${typeof result.score}`);
-          }
-          if (!('reason' in result) || typeof result.reason !== 'string') {
-            throw new Error(`Expected object with 'reason' string but got ${typeof result.reason}`);
-          }
-          return result as GradingResult;
         } else {
           throw new Error(
             `Custom function must return a boolean, number, or GradingResult object. Got type ${typeof result}: ${JSON.stringify(
@@ -759,18 +755,14 @@ ${
         } catch (err) {
           throw new Error(`Invalid JSON: ${err} when parsing result: ${result}`);
         }
-        if (!parsed.hasOwnProperty('pass') || !parsed.hasOwnProperty('score')) {
+        if (!isGradingResult(parsed)) {
           throw new Error(
             `Python assertion must return a boolean, number, or {pass, score, reason} object. Got instead: ${result}`,
           );
         }
         return parsed;
       } else if (typeof result === 'object') {
-        if (
-          !result.hasOwnProperty('pass') ||
-          !result.hasOwnProperty('score') ||
-          !result.hasOwnProperty('reason')
-        ) {
+        if (!isGradingResult(result)) {
           throw new Error(
             `Python assertion must return a boolean, number, or {pass, score, reason} object. Got instead:\n${JSON.stringify(
               result,
