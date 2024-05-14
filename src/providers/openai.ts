@@ -336,11 +336,22 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       },
     })),
     ...[
+      'gpt-4o',
+      'gpt-4o-2024-05-13',
+    ].map((model) => ({
+      id: model,
+      cost: {
+        input: 0.005 / 1000,
+        output: 0.015 / 1000,
+      },
+    })),
+    ...[
       'gpt-4-1106-preview',
       'gpt-4-1106-vision-preview',
       'gpt-4-0125-preview',
       'gpt-4-turbo-preview',
       'gpt-4-turbo',
+      'gpt-4-turbo-2024-04-09	',
     ].map((model) => ({
       id: model,
       cost: {
