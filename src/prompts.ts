@@ -11,13 +11,14 @@ import { runPython } from './python/wrapper';
 import { importModule } from './esm';
 import { safeJsonStringify } from './util';
 
-import type {
-  UnifiedConfig,
-  Prompt,
-  ProviderOptionsMap,
-  TestSuite,
-  ProviderOptions,
-  ApiProvider,
+import {
+  type UnifiedConfig,
+  type Prompt,
+  type ProviderOptionsMap,
+  type TestSuite,
+  type ProviderOptions,
+  type ApiProvider,
+  isPrompt,
 } from './types';
 
 export * from './external/ragas';
@@ -118,6 +119,12 @@ export async function readPrompts(
   } else if (Array.isArray(promptPathOrGlobs)) {
     // TODO(ian): Handle object array, such as OpenAI messages
     promptPathInfos = promptPathOrGlobs.flatMap((pathOrGlob) => {
+      let display = pathOrGlob;
+      if (isPrompt(pathOrGlob)) {
+        // Parse prompt config object {id, label}
+        display = pathOrGlob.display || pathOrGlob.id;
+        pathOrGlob = pathOrGlob.id;
+      }
       invariant(typeof pathOrGlob === 'string', `Prompt path must be a string, but got ${JSON.stringify(pathOrGlob)}`);
       if (pathOrGlob.startsWith('file://')) {
         pathOrGlob = pathOrGlob.slice('file://'.length);
@@ -125,7 +132,7 @@ export async function readPrompts(
         forceLoadFromFile.add(pathOrGlob);
       }
       resolvedPath = path.resolve(basePath, pathOrGlob);
-      resolvedPathToDisplay.set(resolvedPath, pathOrGlob);
+      resolvedPathToDisplay.set(resolvedPath, display);
       const globbedPaths = globSync(resolvedPath.replace(/\\/g, '/'), {
         windowsPathsNoEscape: true,
       });
@@ -238,8 +245,9 @@ export async function readPrompts(
           }
         };
         let display = fileContent;
-        if (inputType === PromptInputType.NAMED) {
-          display = resolvedPathToDisplay.get(promptPath) || promptPath;
+        const resolvedPathLookup = functionName ? `${promptPath}:${functionName}` : promptPath;
+        if (inputType === PromptInputType.NAMED || resolvedPathToDisplay.has(resolvedPathLookup)) {
+          display = resolvedPathToDisplay.get(resolvedPathLookup) || resolvedPathLookup;
         }
 
         promptContents.push({
