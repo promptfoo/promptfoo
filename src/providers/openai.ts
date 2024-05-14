@@ -355,6 +355,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         output: 0.12 / 1000,
       },
     })),
+    ...['gpt-4o', 'gpt-4o-2024-05-13'].map((model) => ({
+      id: model,
+      cost: {
+        input: 0.005 / 1000,
+        output: 0.015 / 1000,
+      },
+    })),
     ...[
       'gpt-3.5-turbo',
       'gpt-3.5-turbo-0301',
