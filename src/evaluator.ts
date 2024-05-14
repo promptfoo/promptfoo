@@ -197,8 +197,19 @@ export async function renderPrompt(
   } else if (prompt.raw.startsWith('langfuse://')) {
     const { getPrompt } = await import('./integrations/langfuse');
     const langfusePrompt = prompt.raw.slice('langfuse://'.length);
-    const [helper, version] = langfusePrompt.split(':');
-    const langfuseResult = await getPrompt(helper, Number(version));
+
+    // we default to "text" type.
+    const [helper, version, promptType = 'text'] = langfusePrompt.split(':');
+    if (promptType !== 'text' && promptType !== 'chat') {
+      throw new Error('Unknown promptfoo prompt type');
+    }
+
+    const langfuseResult = await getPrompt(
+      helper,
+      vars,
+      promptType,
+      version !== 'latest' ? Number(version) : undefined,
+    );
     return langfuseResult;
   }
 
