@@ -1,7 +1,7 @@
 import logger from '../logger';
 import { fetchWithCache } from '../cache';
 
-import { ApiProvider, EnvOverrides, ProviderResponse, TokenUsage } from '../types';
+import { ApiProvider, CallApiContextParams, EnvOverrides, ProviderResponse, TokenUsage } from '../types';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
 
 interface MistralChatCompletionOptions {
@@ -162,14 +162,20 @@ export class MistralChatCompletionProvider implements ApiProvider {
     );
   }
 
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     if (!this.getApiKey()) {
       throw new Error(
         'Mistral API key is not set. Set the MISTRAL_API_KEY environment variable or add `apiKey` or `apiKeyEnvar` to the provider config.',
       );
     }
 
-    const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
+    const messages = [];
+    if (context?.thread.useThread) {
+      if (context.thread.thread) {
+        messages.push(...context.thread.thread);
+      }
+    }
+    messages.push(...parseChatPrompt(prompt, [{ role: 'user', content: prompt }]));
 
     const body = {
       model: this.modelName,
@@ -222,6 +228,7 @@ export class MistralChatCompletionProvider implements ApiProvider {
 
     return {
       output: data.choices[0].message.content,
+      thread: [...messages, data.choices[0].message],
       tokenUsage: getTokenUsage(data, cached),
       cached,
       cost: calculateCost(

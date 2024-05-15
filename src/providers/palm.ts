@@ -2,7 +2,7 @@ import logger from '../logger';
 import { fetchWithCache } from '../cache';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 
-import type { ApiProvider, EnvOverrides, ProviderResponse } from '../types.js';
+import type { ApiProvider, CallApiContextParams, EnvOverrides, ProviderResponse } from '../types.js';
 
 const DEFAULT_API_HOST = 'generativelanguage.googleapis.com';
 
@@ -83,7 +83,7 @@ export class PalmChatProvider extends PalmGenericProvider {
     super(modelName, options);
   }
 
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     if (!this.getApiKey()) {
       throw new Error(
         'Google API key is not set. Set the GOOGLE_API_KEY environment variable or add `apiKey` to the provider config.',
@@ -95,9 +95,15 @@ export class PalmChatProvider extends PalmGenericProvider {
       return this.callGemini(prompt);
     }
 
+    const messages = [];
+    if (context?.thread.useThread) {
+      if (context.thread.thread) {
+        messages.push(...context.thread.thread);
+      }
+    }
     // https://developers.generativeai.google/tutorials/curl_quickstart
     // https://ai.google.dev/api/rest/v1beta/models/generateMessage
-    const messages = parseChatPrompt(prompt, [{ content: prompt }]);
+    messages.push(...parseChatPrompt(prompt, [{ content: prompt }]));
     const body = {
       prompt: { messages },
       temperature: this.config.temperature,
@@ -143,6 +149,7 @@ export class PalmChatProvider extends PalmGenericProvider {
       const output = data.candidates[0].content;
       return {
         output,
+        thread: [...messages, output.candidates[0]],
       };
     } catch (err) {
       return {

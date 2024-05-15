@@ -2,7 +2,7 @@ import logger from '../logger';
 import { fetchWithCache } from '../cache';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
 
-import type { ApiProvider, ProviderEmbeddingResponse, ProviderResponse } from '../types.js';
+import type { ApiProvider, CallApiContextParams, ProviderEmbeddingResponse, ProviderResponse } from '../types.js';
 
 interface OllamaCompletionOptions {
   // From https://github.com/jmorganca/ollama/blob/v0.1.0/api/types.go#L161
@@ -217,8 +217,14 @@ export class OllamaChatProvider implements ApiProvider {
     return `[Ollama Chat Provider ${this.modelName}]`;
   }
 
-  async callApi(prompt: string): Promise<ProviderResponse> {
-    const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
+  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+    const messages = [];
+    if (context?.thread.useThread) {
+      if (context.thread.thread) {
+        messages.push(...context.thread.thread);
+      }
+    }
+    messages.push(...parseChatPrompt(prompt, [{ role: 'user', content: prompt }]));
 
     const params = {
       model: this.modelName,
@@ -260,21 +266,23 @@ export class OllamaChatProvider implements ApiProvider {
     }
 
     try {
-      const output = response.data
+      const responseMessages = response.data
         .split('\n')
         .filter((line: string) => line.trim() !== '')
         .map((line: string) => {
           const parsed = JSON.parse(line) as OllamaChatJsonL;
           if (parsed.message?.content) {
-            return parsed.message.content;
+            return parsed.message;
           }
           return null;
         })
-        .filter((s: string | null) => s !== null)
+        .filter((s: {content: string, role: string} | null) => s !== null)
+      const output = responseMessages
+        .map((message: {content: string, role: string}) => message.content)
         .join('');
-
       return {
         output,
+        thread: [...messages, ...responseMessages]
       };
     } catch (err) {
       return {

@@ -659,7 +659,7 @@ class Evaluator {
                       ? [threadAndTestVars]
                       : generateVarCombinations(threadAndTestVars || {});
                 } else {
-                  varCombinations = threadVarCombinations
+                  varCombinations = [threadVars]
                 }
                 for (const vars of varCombinations) {
                   const runEvalOption: RunEvalOptions = {

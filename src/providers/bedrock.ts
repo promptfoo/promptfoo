@@ -5,7 +5,7 @@ import { getCache, isCacheEnabled } from '../cache';
 
 import type { BedrockRuntime } from '@aws-sdk/client-bedrock-runtime';
 
-import type { ApiProvider, EnvOverrides, ProviderResponse } from '../types.js';
+import type { ApiProvider, CallApiContextParams, EnvOverrides, ProviderResponse } from '../types.js';
 import { parseMessages } from './anthropic';
 
 interface BedrockOptions {
@@ -37,8 +37,9 @@ interface BedrockClaudeMessagesCompletionOptions extends BedrockOptions {
 }
 
 interface IBedrockModel {
-  params: (config: BedrockOptions, prompt: string, stop: string[]) => any;
+  params: (config: BedrockOptions, prompt: string, stop: string[], thread: any) => any;
   output: (responseJson: any) => any;
+  thread?: (thread: any, responseJson: any) => any;
 }
 
 const BEDROCK_MODEL = {
@@ -55,19 +56,31 @@ const BEDROCK_MODEL = {
     },
   },
   CLAUDE_MESSAGES: {
-    params: (config: BedrockClaudeMessagesCompletionOptions, prompt: string, stop: string[]) => {
+    params: (config: BedrockClaudeMessagesCompletionOptions, prompt: string, stop: string[], thread: any) => {
+      const allMessages = [];
+      if (thread) {
+          allMessages.push(...thread);
+      }
       const { system, extractedMessages } = parseMessages(prompt);
+      allMessages.push(...extractedMessages)
       return {
         max_tokens: config?.max_tokens || parseInt(process.env.AWS_BEDROCK_MAX_TOKENS || '1024'),
         temperature: config.temperature || 0,
         anthropic_version: config.anthropic_version || 'bedrock-2023-05-31',
-        messages: extractedMessages,
+        messages: allMessages,
         ...(system ? { system } : {}),
       };
     },
     output: (responseJson: any) => {
       return responseJson?.content[0].text;
     },
+    thread: (thread: any, responseJson: any) => {
+      const newThread = [...thread];
+      if (responseJson && responseJson.content) {
+        newThread.push(responseJson);
+      }
+      return newThread;
+    }
   },
   TITAN_TEXT: {
     params: (config: BedrockTextGenerationOptions, prompt: string, stop: string[]) => ({
@@ -160,7 +173,7 @@ export class AwsBedrockCompletionProvider implements ApiProvider {
     );
   }
 
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     let stop: string[];
     try {
       stop = process.env.AWS_BEDROCK_STOP
@@ -177,7 +190,8 @@ export class AwsBedrockCompletionProvider implements ApiProvider {
       );
       model = BEDROCK_MODEL.CLAUDE_MESSAGES;
     }
-    const params = model.params(this.config, prompt, stop);
+    const thread = context?.thread.useThread ? context.thread.thread : null;
+    const params = model.params(this.config, prompt, stop, context?.thread.useThread ? context.thread.thread : null);
 
     logger.debug(`Calling Amazon Bedrock API: ${JSON.stringify(params)}`);
 
@@ -189,8 +203,11 @@ export class AwsBedrockCompletionProvider implements ApiProvider {
       const cachedResponse = await cache.get(cacheKey);
       if (cachedResponse) {
         logger.debug(`Returning cached response for ${prompt}: ${cachedResponse}`);
+        const responseJson = JSON.parse(cachedResponse as string);
+        const newThread = model.thread ? model.thread(thread, responseJson) : null;
         return {
-          output: model.output(JSON.parse(cachedResponse as string)),
+          output: model.output(responseJson),
+          thread: newThread,
           tokenUsage: {},
         };
       }
@@ -219,8 +236,11 @@ export class AwsBedrockCompletionProvider implements ApiProvider {
       }
     }
     try {
+      const responseJson = JSON.parse(response.body.transformToString());
+      const newThread = model.thread ? model.thread(thread, responseJson) : null;
       return {
-        output: model.output(JSON.parse(response.body.transformToString())),
+        output: model.output(responseJson),
+        thread: newThread,
         tokenUsage: {}, // TODO: add token usage once Amazon Bedrock API supports it
       };
     } catch (err) {
