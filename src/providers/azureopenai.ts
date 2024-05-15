@@ -20,7 +20,6 @@ import type {
   ProviderEmbeddingResponse,
   ProviderResponse,
 } from '../types';
-import Anthropic from '@anthropic-ai/sdk';
 
 interface AzureOpenAiCompletionOptions {
   // Azure identity params

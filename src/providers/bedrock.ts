@@ -75,7 +75,10 @@ const BEDROCK_MODEL = {
       return responseJson?.content[0].text;
     },
     thread: (thread: any, responseJson: any) => {
-      const newThread = [...thread];
+      const newThread = [];
+      if (thread) {
+
+      }
       if (responseJson && responseJson.content) {
         newThread.push(responseJson);
       }

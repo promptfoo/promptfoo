@@ -3,7 +3,8 @@ import { fetchWithCache } from '../cache';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
 
 import type {
-  ApiProvider, CallApiContextParams,
+  ApiProvider,
+  CallApiContextParams,
   EnvOverrides,
   ProviderEmbeddingResponse,
   ProviderResponse,
