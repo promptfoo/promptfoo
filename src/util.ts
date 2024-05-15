@@ -564,9 +564,10 @@ export async function writeResultsToDatabase(
  */
 export function listPreviousResults(
   limit: number = DEFAULT_QUERY_LIMIT,
+  filterDescription?: string,
 ): { evalId: string; description?: string | null }[] {
   const db = getDb();
-  const results = db
+  let results = db
     .select({
       name: evals.id,
       description: evals.description,
@@ -576,7 +577,12 @@ export function listPreviousResults(
     .limit(limit)
     .all();
 
-  return results.map((result) => ({
+  if (filterDescription) {
+    const regex = new RegExp(filterDescription, 'i');
+    results = results.filter(result => regex.test(result.description || ''));
+  }
+
+  return results.map(result => ({
     evalId: result.name,
     description: result.description,
   }));
@@ -832,9 +838,9 @@ export async function updateResult(
   }
 }
 
-export async function readLatestResults(): Promise<ResultsFile | undefined> {
+export async function readLatestResults(filterDescription?: string): Promise<ResultsFile | undefined> {
   const db = getDb();
-  const latestResults = await db
+  let latestResults = await db
     .select({
       id: evals.id,
       createdAt: evals.createdAt,
@@ -846,7 +852,12 @@ export async function readLatestResults(): Promise<ResultsFile | undefined> {
     .orderBy(desc(evals.createdAt))
     .limit(1);
 
-  if (!latestResults || latestResults.length === 0) {
+  if (filterDescription) {
+    const regex = new RegExp(filterDescription, 'i');
+    latestResults = latestResults.filter(result => regex.test(result.description || ''));
+  }
+
+  if (!latestResults.length) {
     return undefined;
   }
 
