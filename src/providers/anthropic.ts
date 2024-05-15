@@ -1,7 +1,7 @@
 import Anthropic, { APIError } from '@anthropic-ai/sdk';
 import logger from '../logger';
 
-import type { ApiProvider, EnvOverrides, ProviderResponse, TokenUsage } from '../types.js';
+import type { ApiProvider, CallApiContextParams, EnvOverrides, ProviderResponse, TokenUsage } from '../types.js';
 
 import { getCache, isCacheEnabled } from '../cache';
 import { parseChatPrompt } from './shared';
@@ -165,18 +165,25 @@ export class AnthropicMessagesProvider implements ApiProvider {
     return `[Anthropic Messages Provider ${this.modelName || 'claude-2.1'}]`;
   }
 
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     if (!this.apiKey) {
       throw new Error(
         'Anthropic API key is not set. Set the ANTHROPIC_API_KEY environment variable or add `apiKey` to the provider config.',
       );
     }
 
+    const allMessages: Anthropic.Messages.MessageParam[] = [];
+    if (context?.thread.useThread) {
+      if (context.thread.thread) {
+        allMessages.push(...(context.thread.thread as Anthropic.Messages.MessageParam[]));
+      }
+    }
     const { system, extractedMessages } = parseMessages(prompt);
+    allMessages.push(...extractedMessages);
     const params: Anthropic.MessageCreateParams = {
       model: this.modelName,
       ...(system ? { system } : {}),
-      messages: extractedMessages,
+      messages: allMessages,
       max_tokens: this.config?.max_tokens || 1024,
       temperature: this.config.temperature || 0,
       stream: false
@@ -192,8 +199,14 @@ export class AnthropicMessagesProvider implements ApiProvider {
       const cachedResponse = await cache.get(cacheKey);
       if (cachedResponse) {
         logger.debug(`Returning cached response for ${prompt}: ${cachedResponse}`);
+        const content = JSON.parse(cachedResponse as string)
+        const threadMessages: Anthropic.Messages.MessageParam[] = [...params.messages, {
+          role: 'assistant',
+          content: content
+        }];
         return {
-          output: JSON.parse(cachedResponse as string),
+          output: content,
+          thread: threadMessages,
           tokenUsage: {},
         };
       }
@@ -212,8 +225,14 @@ export class AnthropicMessagesProvider implements ApiProvider {
         }
       }
 
+      const threadMessages: Anthropic.Messages.MessageParam[] = [...params.messages, {
+        role: 'assistant',
+        content: response.content
+      }];
+
       return {
         output: response.content[0].text,
+        thread: threadMessages,
         tokenUsage: getTokenUsage(response, false),
         cost: calculateCost(
           this.modelName,

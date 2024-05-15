@@ -407,7 +407,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       );
     }
 
-    const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
+    const messages = [];
+    if (context?.thread.useThread) {
+      if (context.thread.thread) {
+        messages.push(...context.thread.thread);
+      }
+    }
+    messages.push(...parseChatPrompt(prompt, [{ role: 'user', content: prompt }]));
 
     let stop: string;
     try {
@@ -476,8 +482,12 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         (logProbObj: { token: string; logprob: number }) => logProbObj.logprob,
       );
 
+      if (message.content) {
+        messages.push(message)
+      }
       return {
         output,
+        thread: messages,
         tokenUsage: getTokenUsage(data, cached),
         cached,
         logProbs,

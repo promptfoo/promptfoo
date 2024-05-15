@@ -13,7 +13,7 @@ import {
 
 import type { GoogleAuth } from 'google-auth-library';
 
-import type { ApiProvider, EnvOverrides, ProviderResponse, TokenUsage } from '../types.js';
+import type { ApiProvider, CallApiContextParams, EnvOverrides, ProviderResponse, TokenUsage } from '../types.js';
 
 let cachedAuth: GoogleAuth | undefined;
 async function getGoogleClient() {
@@ -170,7 +170,7 @@ export class VertexChatProvider extends VertexGenericProvider {
     super(modelName, options);
   }
 
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     if (!this.getApiKey()) {
       throw new Error(
         'Google Vertex API key is not set. Set the VERTEX_API_KEY environment variable or add `apiKey` to the provider config. You can get an API token by running `gcloud auth print-access-token`',
@@ -185,7 +185,7 @@ export class VertexChatProvider extends VertexGenericProvider {
     if (this.modelName.includes('gemini')) {
       return this.callGeminiApi(prompt);
     }
-    return this.callPalm2Api(prompt);
+    return this.callPalm2Api(prompt, context);
   }
 
   async callGeminiApi(prompt: string): Promise<ProviderResponse> {
@@ -297,7 +297,7 @@ export class VertexChatProvider extends VertexGenericProvider {
     }
   }
 
-  async callPalm2Api(prompt: string): Promise<ProviderResponse> {
+  async callPalm2Api(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     const instances = parseChatPrompt(prompt, [
       {
         messages: [
@@ -308,6 +308,11 @@ export class VertexChatProvider extends VertexGenericProvider {
         ],
       },
     ]);
+    if (context?.thread.useThread) {
+      if (context.thread.thread && instances[0].messages) {
+        instances[0].messages = [...context.thread.thread, ...(instances[0].messages || [])]
+      }
+    }
 
     const body = {
       instances,
@@ -374,6 +379,7 @@ export class VertexChatProvider extends VertexGenericProvider {
 
       const response = {
         output,
+        thread: instances[0].messages,
         cached: false,
       };
 

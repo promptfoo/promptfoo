@@ -20,6 +20,7 @@ import type {
   ProviderEmbeddingResponse,
   ProviderResponse,
 } from '../types';
+import Anthropic from '@anthropic-ai/sdk';
 
 interface AzureOpenAiCompletionOptions {
   // Azure identity params
@@ -339,7 +340,13 @@ export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvide
       throw new Error('Azure OpenAI API host must be set');
     }
 
-    const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
+    const messages: { role: string, content: string }[] = [];
+    if (context?.thread.useThread) {
+      if (context.thread.thread) {
+        messages.push(...context.thread.thread);
+      }
+    }
+    messages.push(...parseChatPrompt(prompt, [{ role: 'user', content: prompt }]));
 
     let stop: string;
     try {
@@ -425,8 +432,13 @@ export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvide
       const logProbs = data.choices[0].logprobs?.content?.map(
         (logProbObj: { token: string; logprob: number }) => logProbObj.logprob,
       );
+      const threadMessages = body.messages
+      if (message.content) {
+        threadMessages.push(message)
+      }
       return {
         output,
+        thread: threadMessages,
         tokenUsage: cached
           ? { cached: data.usage?.total_tokens, total: data?.usage?.total_tokens }
           : {
@@ -504,10 +516,11 @@ export class AzureOpenAiAssistantProvider extends AzureOpenAiGenericProvider {
 
     const assistantId = this.deploymentName;
 
-    const assistantThread = await this.assistantsClient.createThread();
-    await this.assistantsClient.createMessage(assistantThread.id, 'user', prompt);
+    const assistantThreadId = context?.thread.useThread && context.thread.thread
+      || await this.assistantsClient.createThread().then(thread => thread.id);
+    await this.assistantsClient.createMessage(assistantThreadId, 'user', prompt);
 
-    let run = await this.assistantsClient.createRun(assistantThread.id, {
+    let run = await this.assistantsClient.createRun(assistantThreadId, {
       assistantId,
     });
 
@@ -629,6 +642,7 @@ export class AzureOpenAiAssistantProvider extends AzureOpenAiGenericProvider {
 
     return {
       output: outputBlocks.join('\n\n').trim(),
+      thread: run.threadId
       /*
       tokenUsage: {
         total: data.usage.total_tokens,

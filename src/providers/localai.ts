@@ -3,7 +3,7 @@ import { fetchWithCache } from '../cache';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
 
 import type {
-  ApiProvider,
+  ApiProvider, CallApiContextParams,
   EnvOverrides,
   ProviderEmbeddingResponse,
   ProviderResponse,
@@ -49,8 +49,14 @@ class LocalAiGenericProvider implements ApiProvider {
 }
 
 export class LocalAiChatProvider extends LocalAiGenericProvider {
-  async callApi(prompt: string): Promise<ProviderResponse> {
-    const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
+  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+    const messages = [];
+    if (context?.thread.useThread) {
+      if (context.thread.thread) {
+        messages.push(...context.thread.thread);
+      }
+    }
+    messages.push(...parseChatPrompt(prompt, [{ role: 'user', content: prompt }]));
     const body = {
       model: this.modelName,
       messages: messages,
@@ -81,6 +87,7 @@ export class LocalAiChatProvider extends LocalAiGenericProvider {
     try {
       return {
         output: data.choices[0].message.content,
+        thread: [...messages, data.choices[0].message]
       };
     } catch (err) {
       return {
