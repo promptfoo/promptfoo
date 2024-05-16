@@ -9,6 +9,7 @@ import { PythonShell, Options as PythonShellOptions } from 'python-shell';
 import logger from './logger';
 import { runPython } from './python/wrapper';
 import { importModule } from './esm';
+import { safeJsonStringify } from './util';
 
 import type {
   UnifiedConfig,
@@ -228,7 +229,7 @@ export async function readPrompts(
             const options: PythonShellOptions = {
               mode: 'text',
               pythonPath: process.env.PROMPTFOO_PYTHON || 'python',
-              args: [JSON.stringify(context)],
+              args: [safeJsonStringify(context)],
             };
             logger.debug(`Executing python prompt script ${promptPath}`);
             const results = (await PythonShell.run(promptPath, options)).join('\n');
