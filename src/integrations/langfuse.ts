@@ -8,11 +8,21 @@ import { Langfuse } from 'langfuse';
 
 const langfuse = new Langfuse(langfuseParams);
 
-export async function getPrompt(id: string, version?: number): Promise<string> {
-  const prompt = await langfuse.getPrompt(id, version);
-  const outputPrompt = prompt.getLangchainPrompt();
-  if (typeof outputPrompt !== 'string') {
-    return JSON.stringify(outputPrompt);
+export async function getPrompt(
+  id: string,
+  vars: Record<string, any>,
+  type: 'text' | 'chat' | undefined,
+  version?: number,
+): Promise<string> {
+  let prompt;
+  if (type === 'text' || type === undefined) {
+    prompt = await langfuse.getPrompt(id, version, { type: 'text' });
+  } else {
+    prompt = await langfuse.getPrompt(id, version, { type: 'chat' });
   }
-  return outputPrompt;
+  const compiledPrompt = prompt.compile(vars);
+  if (typeof compiledPrompt !== 'string') {
+    return JSON.stringify(compiledPrompt);
+  }
+  return compiledPrompt;
 }
