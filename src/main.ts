@@ -285,11 +285,12 @@ async function main() {
     .option('-p, --port <number>', 'Port number', '15500')
     .option('-y, --yes', 'Skip confirmation and auto-open the URL')
     .option('--api-base-url <url>', 'Base URL for viewer API calls')
+    .option('--filter-description <pattern>', 'Filter evals by description using a regex pattern')
     .option('--env-file <path>', 'Path to .env file')
     .action(
       async (
         directory: string | undefined,
-        cmdObj: { port: number; yes: boolean; apiBaseUrl?: string; envFile?: string } & Command,
+        cmdObj: { port: number; yes: boolean; apiBaseUrl?: string; envFile?: string; filterDescription?: string } & Command,
       ) => {
         setupEnv(cmdObj.envFile);
         telemetry.maybeShowNotice();
@@ -302,7 +303,7 @@ async function main() {
           setConfigDirectoryPath(directory);
         }
         // Block indefinitely on server
-        await startServer(cmdObj.port, cmdObj.apiBaseUrl, cmdObj.yes);
+        await startServer(cmdObj.port, cmdObj.apiBaseUrl, cmdObj.yes, cmdObj.filterDescription);
       },
     );
 
