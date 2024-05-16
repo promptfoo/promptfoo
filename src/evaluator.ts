@@ -982,7 +982,7 @@ class Evaluator {
       hasAnyPass: results.some((r) => r.success),
     });
 
-    return { version: 2, results, stats: this.stats, table };
+    return { version: 2, timestamp: new Date().toISOString(), results, stats: this.stats, table };
   }
 }
 

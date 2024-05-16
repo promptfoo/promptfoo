@@ -477,7 +477,7 @@ export async function writeResultsToDatabase(
       .insert(evals)
       .values({
         id: evalId,
-        createdAt: createdAt.getTime(),
+        createdAt: new Date(results.timestamp).getTime(),
         description: config.description,
         config,
         results,
