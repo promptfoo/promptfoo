@@ -600,15 +600,13 @@ class Evaluator {
 
     // Set up eval cases
     let runEvalOptions: RunEvalOptions[][] = [];
-    let rowIndex = 0;
-    for (let index = 0; index < tests.length; index++) {
-      const mainTestCase = tests[index];
-      const allTestCases = mainTestCase.thread || [mainTestCase];
-      const startRow = rowIndex
-      let colIndex = 0;
-      for (const prompt of testSuite.prompts) {
-        for (const provider of testSuite.providers) {
-          rowIndex = startRow
+    let colIndex = 0;
+    for (const prompt of testSuite.prompts) {
+      for (const provider of testSuite.providers) {
+        let rowIndex = 0;
+        for (let index = 0; index < tests.length; index++) {
+          const mainTestCase = tests[index];
+          const allTestCases = mainTestCase.thread || [mainTestCase];
           if (testSuite.providerPromptMap) {
             const allowedPrompts = testSuite.providerPromptMap[provider.id()];
             if (allowedPrompts && !allowedPrompts.includes(prompt.display)) {
@@ -690,8 +688,8 @@ class Evaluator {
               }
             }
           }
-          colIndex++
         }
+        colIndex++
       }
     }
 
