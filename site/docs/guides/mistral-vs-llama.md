@@ -6,7 +6,7 @@ sidebar_label: Mistral vs Llama 3
 
 When Mistral was was released, it was the "best 7B model to date" based on a [number of evals](https://mistral.ai/news/announcing-mistral-7b/). Mixtral, a mixture-of-experts model based on Mistral, was recently [announced](https://mistral.ai/news/mixtral-of-experts/) with even more impressive eval performance.
 
-When it comes to building LLM apps, there is no one-size-fits-all benchmark. To maximize the quality of your LLM application, consider building your own benchmark to supplement public benchmarks. This guide describes how to compare Mixtral 8x7b vs Mistral 7B vs Llama 7B using the `promptfoo` CLI.
+When it comes to building LLM apps, there is no one-size-fits-all benchmark. To maximize the quality of your LLM application, consider building your own benchmark to supplement public benchmarks. This guide describes how to compare Mixtral 8x7b vs Mistral 7B vs Llama 3 8B using the `promptfoo` CLI.
 
 The end result is a view that compares the performance of Mistral, Mixtral, and Llama side-by-side:
 
@@ -16,7 +16,7 @@ View the final example code [here](https://github.com/promptfoo/promptfoo/tree/m
 
 ## Requirements
 
-This guide assumes that you have promptfoo [installed](/docs/installation). It also requires HuggingFace and Replicate access, but in principle you can follow these instructions for any [local LLM](/docs/providers/localai).
+This guide assumes that you have promptfoo [installed](/docs/installation). It also uses OpenRouter, but in principle you can follow these instructions for any [local LLM](/docs/providers/localai).
 
 ## Set up the config
 
@@ -30,12 +30,12 @@ Now let's start editing `promptfooconfig.yaml`. Create a list of models we'd lik
 
 ```yaml title=promptfooconfig.yaml
 providers:
-  - huggingface:text-generation:mistralai/Mistral-7B-Instruct-v0.1
-  - replicate:mistralai/mixtral-8x7b-instruct-v0.1:2b56576fcfbe32fa0526897d8385dd3fb3d36ba6fd0dbe033c72886b81ade93e
-  - replicate:meta/meta-llama-3-8b-instruct
+  - openrouter:mistralai/mistral-7b-instruct
+  - openrouter:mistralai/mixtral-8x7b-instruct
+  - openrouter:meta-llama/llama-3-8b-instruct
 ```
 
-The first [provider](/docs/providers) references the model [Mistral-7B-Instruct-v0.1 on HuggingFace](https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.1). The second references [Mixtral 8x7b Instruct on Replicate](https://replicate.com/mistralai/mixtral-8x7b-instruct-v0.1), and the third references [Replicate's](https://replicate.com/meta/meta-llama-3-8b-instruct) instruct-tuned Llama v2, which aren't available through HuggingFace's free Inference API.
+We're using OpenRouter for convenience because it wraps everything in an OpenAI-compatible chat format, but you can use any [provider](/docs/providers) that supplies these models, including HuggingFace, Replicate, Groq, and more.
 
 :::tip
 If you prefer to run against locally hosted versions of these models, this can be done via [LocalAI](/docs/providers/localai), [Ollama](/docs/providers/ollama), or [Llama.cpp](/docs/providers/llama.cpp) (using [quantized Mistral](https://huggingface.co/TheBloke/Mistral-7B-v0.1-GGUF)).
@@ -43,7 +43,20 @@ If you prefer to run against locally hosted versions of these models, this can b
 
 ## Set up the prompts
 
-Next, we'll add some prompts. Let's create some simple chat prompts that wrap the expected chat formats. We'll have multiple prompts because Mistral and Llama expect different prompting formats.
+Setting up prompts is straightforward.  Just include one or more prompts with any `{{variables}}` you like:
+
+```yaml
+prompts:
+  - "Respond to this user input: {{message}}"
+```
+
+<details>
+
+<summary>Advanced: Click here to see how to format prompts differently for each model</summary>
+
+If you're using different APIs that give you direct access to the raw model, you may have to format prompts different.
+
+Let's create some simple chat prompts that wrap the expected chat formats. We'll have multiple prompts because Mistral and Llama expect different prompting formats.
 
 First, we'll put the Mistral chat prompt in `prompts/mistral_prompt.txt` using the special `<s>` and `[INST]` tokens that the model was fine-tuned on:
 
@@ -59,7 +72,12 @@ Next, we'll put the slightly different Llama chat prompt in `prompts/llama_promp
 {{message}}<|eot_id|><|start_header_id|>assistant<|end_header_id|>
 ```
 
-Now, let's go back to `promptfooconfig.yaml` and add our prompts. We'll name them `mistral_prompt` and `llama_prompt` respectively:
+Now, let's go back to `promptfooconfig.yaml` and add our prompts. We'll name them `mistral_prompt` and `llama_prompt` respectively.  For example:
+
+```yaml title=promptfooconfig.yaml
+prompts:
+  prompts/mistral_prompt.txt: mistral_prompt
+  prompts/llama_prompt.txt: llama_prompt
 
 ```yaml title=promptfooconfig.yaml
 prompts:
@@ -82,56 +100,39 @@ providers:
 These prompt files are [Nunjucks templates](https://mozilla.github.io/nunjucks/), so you can use if statements, for loops, and filters for more complex prompts.
 :::
 
+</details>
+
 ## Configure model parameters
 
-Each model has a `config` field where you can specify additional parameters. Let's add `temperature` and `max_length` for each model:
+Each model has a `config` field where you can specify additional parameters. Let's add `temperature` for each model:
 
 ```yaml title=promptfooconfig.yaml
 providers:
-  - id: huggingface:text-generation:mistralai/Mistral-7B-Instruct-v0.1
-    prompts:
-      - mistral_prompt
+  - id: openrouter:mistralai/mistral-7b-instruct
     // highlight-start
     config:
-      temperature: 0.01
-      max_new_tokens: 128
+      temperature: 0.5
     // highlight-end
-  - id: replicate:mistralai/mixtral-8x7b-instruct-v0.1:2b56576fcfbe32fa0526897d8385dd3fb3d36ba6fd0dbe033c72886b81ade93e
-    prompts:
-      - mistral_prompt
+  - id: openrouter:mistralai/mixtral-8x7b-instruct
     // highlight-start
     config:
-      prompt_template: '{prompt}'
-      temperature: 0.01
-      max_new_tokens: 128
+      temperature: 0.5
     // highlight-end
-  - id: replicate:meta/meta-llama-3-8b-instruct
-    prompts:
-      - llama_prompt
+  - id: openrouter:meta-llama/llama-3-8b-instruct
     // highlight-start
     config:
-      temperature: 0.01
-      max_new_tokens: 128
+      temperature: 0.5
     // highlight-end
 ```
-
-Mistral supports [HuggingFace text generation parameters](https://huggingface.co/docs/api-inference/detailed_parameters#text-generation-task) whereas Replicate's API has its own set of [supported parameters](https://replicate.com/meta/llama-2-7b-chat/api).
-
-Here's what each parameter means:
-
-- `temperature`: This parameter controls the randomness of the model's output. Lower values make the output more deterministic.
-- `max_new_tokens`: This parameter controls the maximum length of the model's output.
-- `prompt_template`: Replicate has wrapped mixtral with a prompt template - we don't want to use it.
 
 These settings will apply to all test cases run against these models.
 
 ## Set environment variables
 
-To configure HuggingFace and Replicate providers, be sure to set the following environment variables:
+To configure the OpenRouter provider, be sure to set the environment variable:
 
 ```bash
-HF_API_TOKEN=your_huggingface_api_key
-REPLICATE_API_TOKEN=your_replicate_api_token
+OPENROUTER_API_KEY=your_openrouter_api_key
 ```
 
 ## Add test cases
@@ -224,9 +225,9 @@ npx promptfoo@latest eval -o output.csv
 
 ## Conclusion
 
-On this limited dataset, Mistral and Mixtral score 75%, but Llama2 scores 50%. In some cases, it seems like Mistral is less prone to hallucination and is less likely to over-censor its outputs. But these are just a handful of use cases - far from conclusive.
+On this limited dataset, Mistral, Mixtral score 75%, but Llama2 scores 50%. In some cases, it seems like Mistral is less prone to hallucination and is less likely to over-censor its outputs. But these are just a handful of use cases - far from conclusive.
 
-Contrast this with generic public benchmarks, which show that Mixtral 8x7B >> Llama2 70B > Mistral 7B >> Llama2 7B.
+Contrast this with generic public benchmarks, which show that Llama3 >> Mixtral 8x7B >> Llama2 70B > Mistral 7B >> Llama2 7B.
 
 | Model                                                                                     | Average | ARC   | HellaSwag | MMLU  | TruthfulQA | Winogrande | GSM8k | GPQA | MATH | HumanEval | DROP |
 | ----------------------------------------------------------------------------------------- | ------- | ----- | --------- | ----- | ---------- | ---------- | ----- | ---- | ---- | --------- | ---- |

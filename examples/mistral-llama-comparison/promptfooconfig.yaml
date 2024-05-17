@@ -1,27 +1,16 @@
 prompts:
-  prompts/mistral_prompt.txt: mistral_prompt
-  prompts/llama_prompt.txt: llama_prompt
+  - "{{message}}"
 
 providers:
-  - id: huggingface:text-generation:mistralai/Mistral-7B-Instruct-v0.1
-    prompts:
-      - mistral_prompt
+  - id: openrouter:mistralai/mistral-7b-instruct
     config:
-      temperature: 0.01
-      max_new_tokens: 128
-  - id: replicate:mistralai/mixtral-8x7b-instruct-v0.1:2b56576fcfbe32fa0526897d8385dd3fb3d36ba6fd0dbe033c72886b81ade93e
-    prompts:
-      - mistral_prompt
+      temperature: 0.5
+  - id: openrouter:mistralai/mixtral-8x7b-instruct
     config:
-      temperature: 0.01
-      max_new_tokens: 128
-      prompt_template: '{prompt}'
-  - id: replicate:meta/llama-2-7b-chat:8e6975e5ed6174911a6ff3d60540dfd4844201974602551e10e9e87ab143d81e
-    prompts:
-      - llama_prompt
+      temperature: 0.5
+  - id: openrouter:meta-llama/llama-3-8b-instruct
     config:
-      temperature: 0.01
-      max_new_tokens: 128
+      temperature: 0.5
 
 tests:
   - vars:
