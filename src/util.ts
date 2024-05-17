@@ -1307,23 +1307,23 @@ export function safeJsonStringify(value: any): string {
   });
 }
 
-export function renderVarsInObject(obj: any, vars?: Record<string, string | object>): any {
+export function renderVarsInObject<T>(obj: T, vars?: Record<string, string | object>): T {
   // Renders nunjucks template strings with context variables
   if (!vars || process.env.PROMPTFOO_DISABLE_TEMPLATING) {
     return obj;
   }
   if (typeof obj === 'string') {
-    return nunjucks.renderString(obj, vars);
+    return nunjucks.renderString(obj, vars) as unknown as T;
   }
   if (Array.isArray(obj)) {
-    return obj.map((item) => renderVarsInObject(item, vars));
+    return obj.map((item) => renderVarsInObject(item, vars)) as unknown as T;
   }
   if (typeof obj === 'object' && obj !== null) {
-    const result: any = {};
+    const result: Record<string, unknown> = {};
     for (const key in obj) {
-      result[key] = renderVarsInObject(obj[key], vars);
+      result[key] = renderVarsInObject((obj as Record<string, unknown>)[key], vars);
     }
-    return result;
+    return result as T;
   }
   return obj;
 }
