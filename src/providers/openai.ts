@@ -4,6 +4,7 @@ import logger from '../logger';
 import { fetchWithCache, getCache, isCacheEnabled } from '../cache';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase } from './shared';
 import { OpenAiFunction, OpenAiTool } from './openaiUtil';
+import { safeJsonStringify } from '../util';
 
 import type {
   ApiProvider,
@@ -123,7 +124,7 @@ export class OpenAiGenericProvider implements ApiProvider {
       this.config.apiKey ||
       (this.config?.apiKeyEnvar
         ? process.env[this.config.apiKeyEnvar] ||
-          this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
+        this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
         : undefined) ||
       this.env?.OPENAI_API_KEY ||
       process.env.OPENAI_API_KEY
@@ -496,12 +497,16 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   }
 }
 
-function formatOpenAiError(data: { error: { message: string; type?: string; code?: string } }) {
-  return (
-    `API error: ${data.error.message}` +
-    (data.error.type ? `, Type: ${data.error.type}` : '') +
-    (data.error.code ? `, Code: ${data.error.code}` : '')
-  );
+function formatOpenAiError(data: { error: { message: string; type?: string; code?: string } }): string {
+  let errorMessage = `API error: ${data.error.message}`;
+  if (data.error.type) {
+    errorMessage += `, Type: ${data.error.type}`;
+  }
+  if (data.error.code) {
+    errorMessage += `, Code: ${data.error.code}`;
+  }
+  errorMessage += '\n\n' + safeJsonStringify(data, true /* prettyPrint */);
+  return errorMessage;
 }
 
 function calculateCost(
@@ -556,10 +561,10 @@ type OpenAiAssistantOptions = OpenAiSharedOptions & {
   metadata?: object[];
   temperature?: number;
   toolChoice?:
-    | 'none'
-    | 'auto'
-    | { type: 'function'; function?: { name: string } }
-    | { type: 'file_search' };
+  | 'none'
+  | 'auto'
+  | { type: 'function'; function?: { name: string } }
+  | { type: 'file_search' };
 };
 
 export class OpenAiAssistantProvider extends OpenAiGenericProvider {
