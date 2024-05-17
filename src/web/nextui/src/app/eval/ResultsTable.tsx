@@ -738,9 +738,15 @@ function ResultsTable({
               header: () => (
                 <TableHeader text={varName} maxLength={maxTextLength} className="font-bold" />
               ),
-              cell: (info: CellContext<EvaluateTableRow, string>) => (
-                <MemoizedTruncatedText text={info.getValue()} maxLength={maxTextLength} />
-              ),
+              cell: (info: CellContext<EvaluateTableRow, string>) => {
+                const { renderMarkdown } = useResultsViewStore();
+                const value = info.getValue();
+                return renderMarkdown ? (
+                  <ReactMarkdown>{value}</ReactMarkdown>
+                ) : (
+                  <MemoizedTruncatedText text={value} maxLength={maxTextLength} />
+                );
+              },
               size: 50,
             }),
           ),
