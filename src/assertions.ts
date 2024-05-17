@@ -571,6 +571,7 @@ export async function runAssertion({
         validateFunctionCall(
           toolOutput.function,
           (provider as OpenAiChatCompletionProvider).config.tools?.map((tool) => tool.function),
+          test.vars,
         ),
       );
       return {
@@ -609,6 +610,7 @@ export async function runAssertion({
       validateFunctionCall(
         functionOutput,
         (provider as OpenAiChatCompletionProvider).config.functions,
+        test.vars,
       );
       return {
         pass: true,
