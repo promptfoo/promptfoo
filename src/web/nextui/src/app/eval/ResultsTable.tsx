@@ -358,10 +358,24 @@ function EvalOutputCell({
       </span>
     );
   } else if (output.tokenUsage?.total) {
+    const promptTokens = Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
+      output.tokenUsage.prompt,
+    );
+    const completionTokens = Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
+      output.tokenUsage.completion,
+    );
+    const totalTokens = Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
+      output.tokenUsage.total,
+    );
+
     tokenUsageDisplay = (
-      <span>
-        {Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(output.tokenUsage.total)}
-      </span>
+      <Tooltip
+        title={`${promptTokens} prompt tokens + ${completionTokens} completion tokens = ${totalTokens} total`}
+      >
+        <span>
+          {totalTokens} ({promptTokens}+{completionTokens})
+        </span>
+      </Tooltip>
     );
   }
 
@@ -822,9 +836,7 @@ function ResultsTable({
               return (
                 <div className="output-header">
                   <div className="pills">
-                    {prompt.provider ? (
-                      <div className="provider">{providerDisplay}</div>
-                    ) : null}
+                    {prompt.provider ? <div className="provider">{providerDisplay}</div> : null}
                     <div className="summary">
                       <div className={`highlight ${isHighestPassing ? 'success' : ''}`}>
                         <strong>{pct}% passing</strong> ({numGoodTests[idx]}/{body.length} cases)
