@@ -241,6 +241,7 @@ export async function runAssertion({
     prompt,
     vars: test.vars || {},
     test,
+    logProbs,
   };
 
   // Render assertion values

@@ -1295,16 +1295,17 @@ export function resultIsForTestCase(result: EvaluateResult, testCase: TestCase):
   return varsMatch(testCase.vars, result.vars) && providersMatch;
 }
 
-export function safeJsonStringify(value: any): string {
+export function safeJsonStringify(value: any, prettyPrint: boolean = false): string {
   // Prevent circular references
   const cache = new Set();
+  const space = prettyPrint ? 2 : undefined;
   return JSON.stringify(value, (key, val) => {
     if (typeof val === 'object' && val !== null) {
       if (cache.has(val)) return;
       cache.add(val);
     }
     return val;
-  });
+  }, space);
 }
 
 export function renderVarsInObject<T>(obj: T, vars?: Record<string, string | object>): T {
