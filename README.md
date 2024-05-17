@@ -248,7 +248,7 @@ You can also use `promptfoo` as a library in your project by importing the `eval
 
     // The required score for this test case.  If not provided, the test case is graded pass/fail.
     threshold?: number;
-    
+
     // Override the provider for this test
     provider?: string | ProviderOptions | ApiProvider;
   }
@@ -329,12 +329,23 @@ npx path/to/promptfoo-source eval
 
 The web UI is located in `src/web/nextui`. To run it in dev mode, run `npm run local:web`. This will host the web UI at http://localhost:3000. The web UI expects `promptfoo view` to be running separately.
 
-You may also have to set some placeholder envars (it is _not_ necessary to sign up for a supabase account):
+In order to build the next.js app, you'll have to set some placeholder envars (it is _not_ necessary to sign up for a supabase account).  You can edit `src/web/nextui/.env` to include the following placeholders:
 
 ```sh
-NEXT_PUBLIC_SUPABASE_URL=http://
-NEXT_PUBLIC_SUPABASE_ANON_KEY=abc
+DATABASE_URL="postgresql://..."
+
+NEXT_PUBLIC_PROMPTFOO_WITH_DATABASE=1
+NEXT_PUBLIC_SUPABASE_URL=https://placeholder.promptfoo.dev
+NEXT_PUBLIC_SUPABASE_ANON_KEY=abc123
 ```
+
+Then run:
+
+```sh
+npm build
+```
+
+The build has some side effects such as e.g. copying HTML templates, migrations, etc.
 
 Contributions are welcome! Please feel free to submit a pull request or open an issue.
 
