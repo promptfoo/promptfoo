@@ -521,7 +521,7 @@ describe('call provider apis', () => {
                   inputArgs.concat([
                     'Test prompt',
                     '{"config":{"some_config_val":42}}',
-                    '{"vars":{"var1":"value 1","var2":"value 2 \\"with some double \\"quotes\\"\\""}}',
+                    '{"vars":{"var1":"value 1","var2":"value 2 \\"with some double \\"quotes\\"\\""},"thread":{"useThread":false}}',
                   ]),
                 ),
               );
@@ -541,6 +541,9 @@ describe('call provider apis', () => {
           var1: 'value 1',
           var2: 'value 2 "with some double "quotes""',
         },
+        thread: {
+          useThread: false
+        }
       });
 
       expect(result.output).toBe(mockResponse);

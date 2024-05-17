@@ -407,7 +407,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       );
     }
 
-    const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
+    const messages = [];
+    if (context?.thread.useThread) {
+      if (context.thread.thread) {
+        messages.push(...context.thread.thread);
+      }
+    }
+    messages.push(...parseChatPrompt(prompt, [{ role: 'user', content: prompt }]));
 
     let stop: string;
     try {
@@ -476,8 +482,12 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         (logProbObj: { token: string; logprob: number }) => logProbObj.logprob,
       );
 
+      if (message.content) {
+        messages.push(message)
+      }
       return {
         output,
+        thread: messages,
         tokenUsage: getTokenUsage(data, cached),
         cached,
         logProbs,
@@ -575,7 +585,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
     this.assistantId = assistantId;
   }
 
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     if (!this.getApiKey()) {
       throw new Error(
         'OpenAI API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
@@ -611,7 +621,21 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
     logger.debug(`Calling OpenAI API, creating thread run: ${JSON.stringify(body)}`);
     let run;
     try {
-      run = await openai.beta.threads.createAndRun(body);
+      if (context?.thread.useThread) {
+        let threadId = context.thread.thread || await openai.beta.threads.create().then(t => t.id);
+        for (const message of messages) {
+          await openai.beta.threads.messages.create(threadId, { content: message.content, role: message.role })
+        }
+        run = await openai.beta.threads.runs.create(threadId, {
+          assistant_id: body.assistant_id,
+          model: body.model,
+          tools: body.tools,
+          metadata: body.metadata,
+          instructions: body.instructions
+        });
+      } else {
+        run = await openai.beta.threads.createAndRun(body);
+      }
     } catch (err) {
       return failApiCall(err);
     }
@@ -756,6 +780,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
 
     return {
       output: outputBlocks.join('\n\n').trim(),
+      thread: run.thread_id,
       /*
       tokenUsage: {
         total: data.usage.total_tokens,

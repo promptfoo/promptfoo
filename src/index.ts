@@ -65,25 +65,28 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
   };
 
   // Resolve nested providers
-  for (const test of constructedTestSuite.tests || []) {
-    if (test.options?.provider && typeof test.options.provider === 'function') {
-      test.options.provider = await loadApiProvider(test.options.provider);
-    }
-    if (test.assert) {
-      for (const assertion of test.assert) {
-        if (assertion.type === 'assert-set' || typeof assertion.provider === 'function') {
-          continue;
-        }
+  for (const mainTest of constructedTestSuite.tests || []) {
+    const allTests = mainTest.thread ? [...mainTest.thread, mainTest] : [mainTest];
+    for (const test of allTests) {
+      if (test.options?.provider && typeof test.options.provider === 'function') {
+        test.options.provider = await loadApiProvider(test.options.provider);
+      }
+      if (test.assert) {
+        for (const assertion of test.assert) {
+          if (assertion.type === 'assert-set' || typeof assertion.provider === 'function') {
+            continue;
+          }
 
-        if (assertion.provider) {
-          if (typeof assertion.provider === 'object') {
-            const casted = assertion.provider as ProviderOptions;
-            invariant(casted.id, 'Provider object must have an id');
-            assertion.provider = await loadApiProvider(casted.id, { options: casted });
-          } else if (typeof assertion.provider === 'string') {
-            assertion.provider = await loadApiProvider(assertion.provider);
-          } else {
-            throw new Error('Invalid provider type');
+          if (assertion.provider) {
+            if (typeof assertion.provider === 'object') {
+              const casted = assertion.provider as ProviderOptions;
+              invariant(casted.id, 'Provider object must have an id');
+              assertion.provider = await loadApiProvider(casted.id, { options: casted });
+            } else if (typeof assertion.provider === 'string') {
+              assertion.provider = await loadApiProvider(assertion.provider);
+            } else {
+              throw new Error('Invalid provider type');
+            }
           }
         }
       }

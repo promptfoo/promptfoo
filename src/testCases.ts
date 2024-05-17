@@ -93,11 +93,11 @@ export async function readTest(
     testCase: TestCaseWithVarsFile,
     testBasePath: string,
   ): Promise<TestCase> => {
-    const ret: TestCase = { ...testCase, vars: undefined };
+    const ret: TestCase = { ...(testCase as TestCase), vars: undefined };
     if (typeof testCase.vars === 'string' || Array.isArray(testCase.vars)) {
       ret.vars = await readVarsFiles(testCase.vars, testBasePath);
     } else {
-      ret.vars = testCase.vars;
+      ret.vars = testCase.vars as Record<string, string | string[] | object>;
     } /*else if (typeof testCase.vars === 'object') {
       const vars: Record<string, string | string[] | object> = {};
       for (const [key, value] of Object.entries(testCase.vars)) {
@@ -142,15 +142,34 @@ export async function readTest(
     }
   }
 
-  // Validation of the shape of test
-  if (!testCase.assert && !testCase.vars && !testCase.options) {
+  const testCaseValidationError = (errorMessage: string, badTestCase: TestCase) => {
     throw new Error(
-      `Test case must have either assert, vars, or options property. Instead got ${JSON.stringify(
-        testCase,
+      `$errorMessage Instead got "${JSON.stringify(
+        badTestCase,
         null,
         2,
       )}`,
     );
+  }
+
+  const validateTestCase = (testCaseToValidate: TestCase) => {
+    if (!testCaseToValidate.assert && !testCaseToValidate.vars && !testCaseToValidate.options && !testCaseToValidate.thread) {
+      testCaseValidationError("Test case must have either assert, vars, thread, or options property.", testCaseToValidate)
+    }
+  }
+
+  // Validation of the shape of test
+  validateTestCase(testCase)
+  if (testCase.thread) {
+    testCase.thread.forEach((subTestCase) => {
+      if (subTestCase.thread) {
+        testCaseValidationError(`Sub test case can not have thread`, testCase);
+      }
+      validateTestCase(subTestCase)
+    })
+    if (testCase.assert) {
+      testCaseValidationError(`Test case can not have both assert and thread.`, testCase);
+    }
   }
 
   return testCase;
