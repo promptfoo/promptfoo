@@ -13,7 +13,7 @@ import logger from './logger';
 import telemetry from './telemetry';
 import { runAssertions, runCompareAssertion } from './assertions';
 import { generatePrompts } from './suggestions';
-import { getNunjucksEngine, transformOutput, sha256 } from './util';
+import { getNunjucksEngine, transformOutput, sha256, renderVarsInObject } from './util';
 import { maybeEmitAzureOpenAiWarning } from './providers/azureopenaiUtil';
 import { runPython } from './python/wrapper';
 import { importModule } from './esm';
@@ -186,6 +186,13 @@ export async function renderPrompt(
     }
   }
 
+  // Remove any trailing newlines from vars, as this tends to be a footgun for JSON prompts.
+  for (const key of Object.keys(vars)) {
+    if (typeof vars[key] === 'string') {
+      vars[key] = (vars[key] as string).replace(/\n$/, '');
+    }
+  }
+
   // Resolve variable mappings
   resolveVariables(vars);
 
@@ -221,26 +228,9 @@ export async function renderPrompt(
 
     const parsed = JSON.parse(basePrompt);
 
-    // Remove any trailing newlines from vars
-    for (const key of Object.keys(vars)) {
-      if (typeof vars[key] === 'string') {
-        vars[key] = (vars[key] as string).replace(/\n$/, '');
-      }
-    }
-
     // The _raw_ prompt is valid JSON. That means that the user likely wants to substitute vars _within_ the JSON itself.
     // Recursively walk the JSON structure. If we find a string, render it with nunjucks.
-    const walk = (obj: any) => {
-      if (typeof obj === 'string') {
-        return nunjucks.renderString(obj, vars);
-      } else if (typeof obj === 'object') {
-        for (const key of Object.keys(obj)) {
-          obj[key] = walk(obj[key]);
-        }
-      }
-      return obj;
-    };
-    return JSON.stringify(walk(parsed), null, 2);
+    return JSON.stringify(renderVarsInObject(parsed, vars), null, 2);
   } catch (err) {
     return nunjucks.renderString(basePrompt, vars);
   }

@@ -1,8 +1,9 @@
 import invariant from 'tiny-invariant';
 
 import logger from '../logger';
-import { REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase } from './shared';
 import { fetchWithCache } from '../cache';
+import { renderVarsInObject } from '../util';
+import { REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase } from './shared';
 
 import type {
   AssistantsClient,
@@ -357,10 +358,10 @@ export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvide
         this.config.presence_penalty ?? parseFloat(process.env.OPENAI_PRESENCE_PENALTY || '0'),
       frequency_penalty:
         this.config.frequency_penalty ?? parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0'),
-      functions: this.config.functions || undefined,
-      function_call: this.config.function_call || undefined,
+      ...(this.config.functions ? { functions: renderVarsInObject(this.config.functions, context?.vars) } : {}),
+      ...(this.config.function_call ? { function_call: this.config.function_call } : {}),
       ...(this.config.seed !== undefined ? { seed: this.config.seed } : {}),
-      ...(this.config.tools ? { tools: this.config.tools } : {}),
+      ...(this.config.tools ? { tools: renderVarsInObject(this.config.tools, context?.vars) } : {}),
       ...(this.config.tool_choice ? { tool_choice: this.config.tool_choice } : {}),
       ...(this.config.deployment_id ? { deployment_id: this.config.deployment_id } : {}),
       ...(this.config.dataSources ? { dataSources: this.config.dataSources } : {}),

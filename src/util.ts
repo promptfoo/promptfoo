@@ -3,7 +3,6 @@ import * as path from 'path';
 import * as os from 'os';
 import { createHash } from 'crypto';
 
-
 import dotenv from 'dotenv';
 import $RefParser from '@apidevtools/json-schema-ref-parser';
 import invariant from 'tiny-invariant';
@@ -579,10 +578,10 @@ export function listPreviousResults(
 
   if (filterDescription) {
     const regex = new RegExp(filterDescription, 'i');
-    results = results.filter(result => regex.test(result.description || ''));
+    results = results.filter((result) => regex.test(result.description || ''));
   }
 
-  return results.map(result => ({
+  return results.map((result) => ({
     evalId: result.name,
     description: result.description,
   }));
@@ -838,7 +837,9 @@ export async function updateResult(
   }
 }
 
-export async function readLatestResults(filterDescription?: string): Promise<ResultsFile | undefined> {
+export async function readLatestResults(
+  filterDescription?: string,
+): Promise<ResultsFile | undefined> {
   const db = getDb();
   let latestResults = await db
     .select({
@@ -854,7 +855,7 @@ export async function readLatestResults(filterDescription?: string): Promise<Res
 
   if (filterDescription) {
     const regex = new RegExp(filterDescription, 'i');
-    latestResults = latestResults.filter(result => regex.test(result.description || ''));
+    latestResults = latestResults.filter((result) => regex.test(result.description || ''));
   }
 
   if (!latestResults.length) {
@@ -1287,7 +1288,9 @@ export function varsMatch(
 }
 
 export function resultIsForTestCase(result: EvaluateResult, testCase: TestCase): boolean {
-  const providersMatch = testCase.provider ? providerToIdentifier(testCase.provider) === providerToIdentifier(result.provider) : true;
+  const providersMatch = testCase.provider
+    ? providerToIdentifier(testCase.provider) === providerToIdentifier(result.provider)
+    : true;
 
   return varsMatch(testCase.vars, result.vars) && providersMatch;
 }
@@ -1302,4 +1305,25 @@ export function safeJsonStringify(value: any): string {
     }
     return val;
   });
-};
+}
+
+export function renderVarsInObject(obj: any, vars?: Record<string, string | object>): any {
+  // Renders nunjucks template strings with context variables
+  if (!vars || process.env.PROMPTFOO_DISABLE_TEMPLATING) {
+    return obj;
+  }
+  if (typeof obj === 'string') {
+    return nunjucks.renderString(obj, vars);
+  }
+  if (Array.isArray(obj)) {
+    return obj.map((item) => renderVarsInObject(item, vars));
+  }
+  if (typeof obj === 'object' && obj !== null) {
+    const result: any = {};
+    for (const key in obj) {
+      result[key] = renderVarsInObject(obj[key], vars);
+    }
+    return result;
+  }
+  return obj;
+}
