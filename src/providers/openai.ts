@@ -2,6 +2,7 @@ import OpenAI from 'openai';
 
 import logger from '../logger';
 import { fetchWithCache, getCache, isCacheEnabled } from '../cache';
+import { renderVarsInObject } from '../util';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase } from './shared';
 import { OpenAiFunction, OpenAiTool } from './openaiUtil';
 import { safeJsonStringify } from '../util';
@@ -429,9 +430,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         this.config.presence_penalty ?? parseFloat(process.env.OPENAI_PRESENCE_PENALTY || '0'),
       frequency_penalty:
         this.config.frequency_penalty ?? parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0'),
-      ...(this.config.functions ? { functions: this.config.functions } : {}),
+      ...(this.config.functions
+        ? { functions: renderVarsInObject(this.config.functions, context?.vars) }
+        : {}),
       ...(this.config.function_call ? { function_call: this.config.function_call } : {}),
-      ...(this.config.tools ? { tools: this.config.tools } : {}),
+      ...(this.config.tools ? { tools: renderVarsInObject(this.config.tools, context?.vars) } : {}),
       ...(this.config.tool_choice ? { tool_choice: this.config.tool_choice } : {}),
       ...(this.config.response_format ? { response_format: this.config.response_format } : {}),
       ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
@@ -580,7 +583,11 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
     this.assistantId = assistantId;
   }
 
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    callApiOptions?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
     if (!this.getApiKey()) {
       throw new Error(
         'OpenAI API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
@@ -604,7 +611,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
       assistant_id: this.assistantId,
       model: this.assistantConfig.modelName || undefined,
       instructions: this.assistantConfig.instructions || undefined,
-      tools: this.assistantConfig.tools || undefined,
+      tools: renderVarsInObject(this.assistantConfig.tools, context?.vars) || undefined,
       metadata: this.assistantConfig.metadata || undefined,
       temperature: this.assistantConfig.temperature || undefined,
       tool_choice: this.assistantConfig.toolChoice || undefined,
