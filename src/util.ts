@@ -466,7 +466,7 @@ export async function writeResultsToDatabase(
   config: Partial<UnifiedConfig>,
   createdAt?: Date,
 ): Promise<string> {
-  createdAt = createdAt || new Date();
+  createdAt = createdAt || (results.timestamp ? new Date(results.timestamp) : new Date());
   const evalId = `eval-${createdAt.toISOString().slice(0, 19)}`;
   const db = getDb();
 
@@ -476,7 +476,7 @@ export async function writeResultsToDatabase(
       .insert(evals)
       .values({
         id: evalId,
-        createdAt: new Date(results.timestamp).getTime(),
+        createdAt: createdAt.getTime(),
         description: config.description,
         config,
         results,
