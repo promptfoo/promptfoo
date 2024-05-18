@@ -6,8 +6,13 @@ import { parseMessages } from './anthropic';
 
 import type { BedrockRuntime } from '@aws-sdk/client-bedrock-runtime';
 
-import type { ApiProvider, EnvOverrides, ProviderResponse, ProviderEmbeddingResponse } from '../types.js';
-import { ApiEmbeddingProvider } from 'promptfoo';
+import type {
+  ApiProvider,
+  ApiEmbeddingProvider,
+  EnvOverrides,
+  ProviderResponse,
+  ProviderEmbeddingResponse,
+} from '../types.js';
 
 interface BedrockOptions {
   region?: string;
@@ -131,11 +136,11 @@ export abstract class AwsBedrockGenericProvider {
   id(): string {
     return `bedrock:${this.modelName}`;
   }
-  
+
   toString(): string {
     return `[Amazon Bedrock Provider ${this.modelName}]`;
   }
-  
+
   async getBedrockInstance() {
     if (!this.bedrock) {
       try {
@@ -234,7 +239,10 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
   }
 }
 
-export class AwsBedrockEmbeddingProvider extends AwsBedrockGenericProvider implements ApiEmbeddingProvider {
+export class AwsBedrockEmbeddingProvider
+  extends AwsBedrockGenericProvider
+  implements ApiEmbeddingProvider
+{
   async callApi(): Promise<ProviderEmbeddingResponse> {
     throw new Error('callApi is not implemented for embedding provider');
   }
@@ -259,7 +267,11 @@ export class AwsBedrockEmbeddingProvider extends AwsBedrockGenericProvider imple
         error: `API call error: ${String(err)}`,
       };
     }
-    logger.debug(`\tAWS Bedrock API response (embeddings): ${JSON.stringify(response.body.transformToString())}`);
+    logger.debug(
+      `\tAWS Bedrock API response (embeddings): ${JSON.stringify(
+        response.body.transformToString(),
+      )}`,
+    );
 
     try {
       const data = JSON.parse(response.body.transformToString());
@@ -272,9 +284,10 @@ export class AwsBedrockEmbeddingProvider extends AwsBedrockGenericProvider imple
       };
     } catch (err) {
       return {
-        error: `API response error: ${String(err)}: ${JSON.stringify(response.body.transformToString())}`,
+        error: `API response error: ${String(err)}: ${JSON.stringify(
+          response.body.transformToString(),
+        )}`,
       };
     }
   }
 }
-
