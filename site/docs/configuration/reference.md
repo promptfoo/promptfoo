@@ -253,6 +253,7 @@ EvaluateSummary is an object that represents a summary of the evaluation results
 ```typescript
 interface EvaluateSummary {
   version: number;
+  timestamp: string;  // ISO 8601 datetime
   results: EvaluateResult[];
   table: EvaluateTable;
   stats: EvaluateStats;
