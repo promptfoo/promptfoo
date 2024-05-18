@@ -359,10 +359,10 @@ function EvalOutputCell({
     );
   } else if (output.tokenUsage?.total) {
     const promptTokens = Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
-      output.tokenUsage.prompt,
+      output.tokenUsage.prompt ?? 0,
     );
     const completionTokens = Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
-      output.tokenUsage.completion,
+      output.tokenUsage.completion ?? 0,
     );
     const totalTokens = Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
       output.tokenUsage.total,
@@ -373,7 +373,8 @@ function EvalOutputCell({
         title={`${promptTokens} prompt tokens + ${completionTokens} completion tokens = ${totalTokens} total`}
       >
         <span>
-          {totalTokens} ({promptTokens}+{completionTokens})
+          {totalTokens}
+          {(promptTokens !== '0' || completionTokens !== '0') && ` (${promptTokens}+${completionTokens})`}
         </span>
       </Tooltip>
     );
