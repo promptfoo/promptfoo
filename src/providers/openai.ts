@@ -800,7 +800,7 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     const cache = getCache();
-    const cacheKey = `openai:image:${JSON.stringify({ context, prompt })}`;
+    const cacheKey = `openai:image:${safeJsonStringify({ context, prompt })}`;
 
     if (!this.getApiKey()) {
       throw new Error(
