@@ -43,7 +43,7 @@ import {
   HuggingfaceTextGenerationProvider,
   HuggingfaceTokenExtractionProvider,
 } from './providers/huggingface';
-import { AwsBedrockCompletionProvider } from './providers/bedrock';
+import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './providers/bedrock';
 import { PythonProvider } from './providers/pythonCompletion';
 import { CohereChatCompletionProvider } from './providers/cohere';
 import { BAMChatProvider, BAMEmbeddingProvider } from './providers/bam';
@@ -225,11 +225,14 @@ export async function loadApiProvider(
     if (modelType === 'completion') {
       // Backwards compatibility: `completion` used to be required
       ret = new AwsBedrockCompletionProvider(modelName, providerOptions);
+    } else if (modelType === 'embeddings' || modelType === 'embedding') {
+      ret = new AwsBedrockEmbeddingProvider(modelName, providerOptions);
+    } else {
+      ret = new AwsBedrockCompletionProvider(
+        `${modelType}${modelName ? `:${modelName}` : ''}`,
+        providerOptions,
+      );
     }
-    ret = new AwsBedrockCompletionProvider(
-      `${modelType}${modelName ? `:${modelName}` : ''}`,
-      providerOptions,
-    );
   } else if (providerPath.startsWith('huggingface:') || providerPath.startsWith('hf:')) {
     const splits = providerPath.split(':');
     if (splits.length < 3) {

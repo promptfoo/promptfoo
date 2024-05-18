@@ -2,11 +2,12 @@ import Anthropic from '@anthropic-ai/sdk';
 
 import logger from '../logger';
 import { getCache, isCacheEnabled } from '../cache';
+import { parseMessages } from './anthropic';
 
 import type { BedrockRuntime } from '@aws-sdk/client-bedrock-runtime';
 
-import type { ApiProvider, EnvOverrides, ProviderResponse } from '../types.js';
-import { parseMessages } from './anthropic';
+import type { ApiProvider, EnvOverrides, ProviderResponse, ProviderEmbeddingResponse } from '../types.js';
+import { ApiEmbeddingProvider } from 'promptfoo';
 
 interface BedrockOptions {
   region?: string;
@@ -110,13 +111,11 @@ function getHandlerForModel(modelName: string) {
   throw new Error(`Unknown Amazon Bedrock model: ${modelName}`);
 }
 
-export class AwsBedrockCompletionProvider implements ApiProvider {
-  static AWS_BEDROCK_COMPLETION_MODELS = Object.keys(AWS_BEDROCK_MODELS);
-
+export abstract class AwsBedrockGenericProvider {
   modelName: string;
-  config: BedrockOptions;
   env?: EnvOverrides;
   bedrock?: BedrockRuntime;
+  config: BedrockOptions;
 
   constructor(
     modelName: string,
@@ -132,7 +131,11 @@ export class AwsBedrockCompletionProvider implements ApiProvider {
   id(): string {
     return `bedrock:${this.modelName}`;
   }
-
+  
+  toString(): string {
+    return `[Amazon Bedrock Provider ${this.modelName}]`;
+  }
+  
   async getBedrockInstance() {
     if (!this.bedrock) {
       try {
@@ -147,10 +150,6 @@ export class AwsBedrockCompletionProvider implements ApiProvider {
     return this.bedrock;
   }
 
-  toString(): string {
-    return `[Amazon Bedrock Provider ${this.modelName}]`;
-  }
-
   getRegion(): string {
     return (
       this.config?.region ||
@@ -159,6 +158,10 @@ export class AwsBedrockCompletionProvider implements ApiProvider {
       'us-west-2'
     );
   }
+}
+
+export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider implements ApiProvider {
+  static AWS_BEDROCK_COMPLETION_MODELS = Object.keys(AWS_BEDROCK_MODELS);
 
   async callApi(prompt: string): Promise<ProviderResponse> {
     let stop: string[];
@@ -230,3 +233,48 @@ export class AwsBedrockCompletionProvider implements ApiProvider {
     }
   }
 }
+
+export class AwsBedrockEmbeddingProvider extends AwsBedrockGenericProvider implements ApiEmbeddingProvider {
+  async callApi(): Promise<ProviderEmbeddingResponse> {
+    throw new Error('callApi is not implemented for embedding provider');
+  }
+
+  async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
+    const params = {
+      inputText: text,
+    };
+
+    logger.debug(`Calling AWS Bedrock API for embeddings: ${JSON.stringify(params)}`);
+    let response;
+    try {
+      const bedrockInstance = await this.getBedrockInstance();
+      response = await bedrockInstance.invokeModel({
+        modelId: this.modelName,
+        accept: 'application/json',
+        contentType: 'application/json',
+        body: JSON.stringify(params),
+      });
+    } catch (err) {
+      return {
+        error: `API call error: ${String(err)}`,
+      };
+    }
+    logger.debug(`\tAWS Bedrock API response (embeddings): ${JSON.stringify(response.body.transformToString())}`);
+
+    try {
+      const data = JSON.parse(response.body.transformToString());
+      const embedding = data?.embedding;
+      if (!embedding) {
+        throw new Error('No embedding found in AWS Bedrock API response');
+      }
+      return {
+        embedding,
+      };
+    } catch (err) {
+      return {
+        error: `API response error: ${String(err)}: ${JSON.stringify(response.body.transformToString())}`,
+      };
+    }
+  }
+}
+
