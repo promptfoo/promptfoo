@@ -173,17 +173,6 @@ export class VertexChatProvider extends VertexGenericProvider {
   }
 
   async callApi(prompt: string): Promise<ProviderResponse> {
-    if (!this.getApiKey()) {
-      throw new Error(
-        'Google Vertex API key is not set. Set the VERTEX_API_KEY environment variable or add `apiKey` to the provider config. You can get an API token by running `gcloud auth print-access-token`',
-      );
-    }
-    if (!this.getProjectId()) {
-      throw new Error(
-        'Google Vertex project ID is not set. Set the VERTEX_PROJECT_ID environment variable or add `projectId` to the provider config.',
-      );
-    }
-
     if (this.modelName.includes('gemini')) {
       return this.callGeminiApi(prompt);
     }
@@ -251,8 +240,23 @@ export class VertexChatProvider extends VertexGenericProvider {
       });
       data = res.data as GeminiApiResponse;
     } catch (err) {
+      const geminiError = err as any;
+      if (
+        geminiError.response &&
+        geminiError.response.data &&
+        geminiError.response.data[0] &&
+        geminiError.response.data[0].error
+      ) {
+        const errorDetails = geminiError.response.data[0].error;
+        const code = errorDetails.code;
+        const message = errorDetails.message;
+        const status = errorDetails.status;
+        return {
+          error: `API call error: Status ${status}, Code ${code}, Message:\n\n${message}`,
+        };
+      }
       return {
-        error: `API call error: ${JSON.stringify(err)}`,
+        error: `API call error: ${JSON.stringify(err, null, 2)}`,
       };
     }
 
@@ -354,7 +358,6 @@ export class VertexChatProvider extends VertexGenericProvider {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.getApiKey()}`,
         },
         data: body,
       });
