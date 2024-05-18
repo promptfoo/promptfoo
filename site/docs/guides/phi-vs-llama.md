@@ -8,6 +8,10 @@ When choosing between LLMs like Phi 3 and Llama 3, it's important to benchmark t
 
 This guide walks you through the steps to set up a comprehensive benchmark of Llama and Phi using promptfoo + Ollama.
 
+In the end, you'll be able to create a side-by-side evaluation view that looks like this:
+
+![phi vs llama](/img/docs/phi-vs-llama.png)
+
 ## Requirements
 
 Before starting, ensure you have the following:
@@ -130,7 +134,9 @@ Then, view the results:
 npx promptfoo@latest view
 ```
 
-This will open a web viewer showing a side-by-side comparison of the models' performance.
+This will open a web viewer showing a side-by-side comparison of the models' performance.  It will look something like this (the exact appearance will vary based on your test cases and scoring mechanisms):
+
+![phi vs llama](/img/docs/phi-vs-llama.png)
 
 ## Step 5: Analyze the results
 
