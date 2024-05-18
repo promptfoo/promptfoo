@@ -726,6 +726,7 @@ function ResultsTable({
 
   const columnHelper = React.useMemo(() => createColumnHelper<EvaluateTableRow>(), []);
 
+  const { renderMarkdown } = useResultsViewStore();
   const variableColumns = React.useMemo(() => {
     if (head.vars.length > 0) {
       return [
@@ -738,9 +739,14 @@ function ResultsTable({
               header: () => (
                 <TableHeader text={varName} maxLength={maxTextLength} className="font-bold" />
               ),
-              cell: (info: CellContext<EvaluateTableRow, string>) => (
-                <MemoizedTruncatedText text={info.getValue()} maxLength={maxTextLength} />
-              ),
+              cell: (info: CellContext<EvaluateTableRow, string>) => {
+                const value = info.getValue();
+                return renderMarkdown ? (
+                  <ReactMarkdown>{value}</ReactMarkdown>
+                ) : (
+                  <MemoizedTruncatedText text={value} maxLength={maxTextLength} />
+                );
+              },
               size: 50,
             }),
           ),
@@ -748,7 +754,7 @@ function ResultsTable({
       ];
     }
     return [];
-  }, [columnHelper, head.vars, maxTextLength]);
+  }, [columnHelper, head.vars, maxTextLength, renderMarkdown]);
 
   const getOutput = React.useCallback(
     (rowIndex: number, promptIndex: number) => {
