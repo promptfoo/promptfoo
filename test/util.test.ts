@@ -98,7 +98,7 @@ describe('util', () => {
       };
       const summary = {
         version: 2,
-        timestamp: '2024--01-01T00:00:00.000Z',
+        timestamp: '2024-01-01T00:00:00.000Z',
         stats: {
           successes: 1,
           failures: 1,
@@ -170,7 +170,7 @@ describe('util', () => {
       };
       const summary = {
         version: 2,
-        timestamp: '2024--01-01T00:00:00.000Z',
+        timestamp: '2024-01-01T00:00:00.000Z',
         stats: {
           successes: 1,
           failures: 1,
@@ -242,7 +242,7 @@ describe('util', () => {
       };
       const summary = {
         version: 2,
-        timestamp: '2024--01-01T00:00:00.000Z',
+        timestamp: '2024-01-01T00:00:00.000Z',
         stats: {
           successes: 1,
           failures: 1,
@@ -314,7 +314,7 @@ describe('util', () => {
       };
       const summary = {
         version: 2,
-        timestamp: '2024--01-01T00:00:00.000Z',
+        timestamp: '2024-01-01T00:00:00.000Z',
         stats: {
           successes: 1,
           failures: 1,
