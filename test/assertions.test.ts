@@ -360,6 +360,11 @@ describe('runAssertion', () => {
     value: 'Expected output',
   };
 
+  const equalityAssertionWithObject: Assertion = {
+    type: 'equals',
+    value: { key: 'value' },
+  };
+
   const isJsonAssertion: Assertion = {
     type: 'is-json',
   };
@@ -569,6 +574,86 @@ describe('runAssertion', () => {
     });
     expect(result.pass).toBeFalsy();
     expect(result.reason).toBe('Expected output "Expected output" to equal "{"key":"value"}"');
+  });
+
+  it('should pass when the equality assertion with object passes', async () => {
+    const output = { key: 'value' };
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      assertion: equalityAssertionWithObject,
+      test: {} as AtomicTestCase,
+      output,
+    });
+    expect(result.pass).toBeTruthy();
+    expect(result.reason).toBe('Assertion passed');
+  });
+
+  it('should fail when the equality assertion with object fails', async () => {
+    const output = { key: "not value" };
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      assertion: equalityAssertionWithObject,
+      test: {} as AtomicTestCase,
+      output,
+    });
+    expect(result.pass).toBeFalsy();
+    expect(result.reason).toBe(`Expected output \"{\"key\":\"value\"}\" to equal \"{\"key\":\"not value\"}\"`);
+  });
+
+  it('should pass when the equality assertion with object passes with external json', async () => {
+    const assertion: Assertion = {
+      type: 'equals',
+      value: 'file:///output.json',
+    };
+
+    (fs.readFileSync as jest.Mock).mockReturnValue(
+        JSON.stringify({
+          "key": "value"
+        }),
+    );
+
+    const output = '{"key": "value"}';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      assertion,
+      test: {} as AtomicTestCase,
+      output,
+    });
+    expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve('/output.json'), 'utf8');
+    expect(result.pass).toBeTruthy();
+    expect(result.reason).toBe('Assertion passed');
+  });
+
+  it('should fail when the equality assertion with object fails with external object', async () => {
+    const assertion: Assertion = {
+      type: 'equals',
+      value: 'file:///output.json',
+    };
+
+    (fs.readFileSync as jest.Mock).mockReturnValue(
+        JSON.stringify({
+          "key": "value"
+        }),
+    );
+
+    const output = '{"key": "not value"}';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      assertion,
+      test: {} as AtomicTestCase,
+      output,
+    });
+    expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve('/output.json'), 'utf8');
+    expect(result.pass).toBeFalsy();
+    expect(result.reason).toBe(`Expected output \"{\"key\":\"value\"}\" to equal \"{\"key\": \"not value\"}\"`);
   });
 
   it('should pass when the is-json assertion passes', async () => {

@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { execFile, spawn } from 'child_process';
+import util from 'node:util';
 
 import async from 'async';
 import rouge from 'rouge';
@@ -294,13 +295,19 @@ export async function runAssertion({
   }
 
   if (baseType === 'equals') {
-    pass = (renderedValue == outputString) !== inverse;
+    if (typeof renderedValue === 'object') {
+      pass = util.isDeepStrictEqual(renderedValue, JSON.parse(outputString)) !== inverse;
+      renderedValue = JSON.stringify(renderedValue);
+    } else {
+      pass = (renderedValue == outputString) !== inverse;
+    }
+
     return {
       pass,
       score: pass ? 1 : 0,
       reason: pass
-        ? 'Assertion passed'
-        : `Expected output "${renderedValue}" to ${inverse ? 'not ' : ''}equal "${outputString}"`,
+          ? 'Assertion passed'
+          : `Expected output "${renderedValue}" to ${inverse ? 'not ' : ''}equal "${outputString}"`,
       assertion,
     };
   }
