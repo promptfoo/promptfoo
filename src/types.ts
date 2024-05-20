@@ -462,12 +462,6 @@ export interface Assertion {
 
   // Process the output before running the assertion
   transform?: string;
-  
-  // If this assertion fails, produces a related suggestion. Used by preset adversarial tests.
-  failSuggestion?: {
-    id: string;
-    message: string;
-  };
 }
 
 export type AssertionValue = string | string[] | object | AssertionValueFunction;
