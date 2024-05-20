@@ -1,7 +1,6 @@
 import dedent from 'dedent';
 import invariant from 'tiny-invariant';
 import PromptfooHarmfulCompletionProvider from '../providers/promptfoo';
-import { getNunjucksEngine } from '../util';
 import type { TestCase } from '../types';
 
 export async function getHarmfulTests(purpose: string, injectVar: string): Promise<TestCase[]> {
