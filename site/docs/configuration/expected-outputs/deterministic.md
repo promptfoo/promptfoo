@@ -190,6 +190,22 @@ assert:
     value: 'The expected output'
 ```
 
+You can also check whether it matches the expected JSON format.
+
+```yaml
+assert:
+  - type: equals
+    value: { 'key': 'value' }
+```
+
+If your JSON schema is large, import it from a file:
+
+```yaml
+assert:
+  - type: equals
+    value: "file://path/to/expected.json"
+```
+
 ### Is-JSON
 
 The `is-json` assertion checks if the LLM output is a valid JSON string.
