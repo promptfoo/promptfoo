@@ -323,6 +323,9 @@ export async function loadApiProvider(
     } else {
       ret = new LocalAiChatProvider(modelType, providerOptions);
     }
+  } else if (providerPath === 'promptfoo:redteam:iterative') {
+    const RedteamIterativeProvider = (await import(path.join(__dirname, './redteam/iterative'))).default;
+    ret = new RedteamIterativeProvider(providerOptions);
   } else {
     if (providerPath.startsWith('file://')) {
       providerPath = providerPath.slice('file://'.length);

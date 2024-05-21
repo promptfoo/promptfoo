@@ -99,6 +99,7 @@
     "csv-parse": "^5.3.8",
     "csv-stringify": "^6.3.2",
     "debounce": "^1.2.1",
+    "dedent": "^1.5.3",
     "dotenv": "^16.4.5",
     "drizzle-orm": "^0.29.3",
     "express": "^4.18.2",

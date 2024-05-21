@@ -47,14 +47,14 @@ By default the `eval` command will read the `promptfooconfig.yaml` configuration
 | `-j, --max-concurrency <number>`    | Maximum number of concurrent API calls                                                                                                                                                             |
 | `--env-file`                        | Path to env file (defaults to .env)                                                                                                                                                                |
 | `--interactive-providers`           | Run 1 provider at a time and prompt user to continue                                                                                                                                               |
-| `--filter-failing <path>` | Run only failing tests from previous evaluation. Path to JSON output file from the previous evaluation. |
-| `-n, --filter-first-n` | Run the first N test cases |
-| `--filter-pattern <pattern>` | Run only test cases whose `description` matches the regex pattern |
+| `--filter-failing <path>`           | Run only failing tests from previous evaluation. Path to JSON output file from the previous evaluation.                                                                                            |
+| `-n, --filter-first-n`              | Run the first N test cases                                                                                                                                                                         |
+| `--filter-pattern <pattern>`        | Run only test cases whose `description` matches the regex pattern                                                                                                                                  |
 
 [1]: /docs/providers/openai
 [2]: /docs/providers/localai
 
-The `eval` command will return exit code `100` when there is at least 1 test case failure. It will return exit code `1` for any other error.  The exit code for failed tests can be overridden with environment variable `PROMPTFOO_FAILED_TEST_EXIT_CODE`.
+The `eval` command will return exit code `100` when there is at least 1 test case failure. It will return exit code `1` for any other error. The exit code for failed tests can be overridden with environment variable `PROMPTFOO_FAILED_TEST_EXIT_CODE`.
 
 ## `promptfoo init [directory]`
 
@@ -181,3 +181,47 @@ promptfoo generate dataset -c my_config.yaml -o new_tests.yaml -i 'All test case
 :::info
 While in beta, this feature depends on OpenAI and requires the `OPENAI_API_KEY` environment variable.
 :::
+
+## `promptfoo generate redteam`
+
+BETA: Generate adversarial test cases to challenge your prompts and models.
+
+| Option                  | Description                                                      | Default              |
+| ----------------------- | ---------------------------------------------------------------- | -------------------- |
+| `-c, --config <path>`   | Path to the configuration file                                   | promptfooconfig.yaml |
+| `-o, --output <path>`   | Path to write the generated test cases                           | stdout               |
+| `-w, --write`           | Write the generated test cases directly to the config file       | false                |
+| `--purpose <purpose>`   | Set the system purpose. If not set, inferred from config         |                      |
+| `--injectVar <varname>` | The name of the prompt variable that represents the user's input | `{{query}}`          |
+| `--plugins <plugins>`   | Comma-separated list of plugins to enable                        | all plugins          |
+| `--no-cache`            | Do not read or write results to disk cache                       | false                |
+| `--env-file <path>`     | Path to .env file                                                |                      |
+
+For example, let's suppose we have the following `promptfooconfig.yaml`:
+
+```yaml
+prompts:
+  - 'Act as a trip planner and help the user plan their trip'
+
+providers:
+  - openai:gpt-3.5-turbo
+  - openai:gpt-4o
+```
+
+This command will generate adversarial test cases and write them to the file:
+
+```
+promptfoo generate redteam -w
+```
+
+This command overrides the system purpose and the variable to inject adversarial user input:
+
+```
+promptfoo generate redteam -w --purpose 'Travel agent that helps users plan trips' --injectVar 'message'
+```
+
+:::danger
+Adversarial testing produces offensive, toxic, and harmful test inputs, and may cause your system to produce harmful outputs.
+:::
+
+While in beta, this implementation requires `OPENAI_API_KEY` to be set.

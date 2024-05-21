@@ -15,7 +15,8 @@ import { readAssertions } from './assertions';
 import { loadApiProvider, loadApiProviders } from './providers';
 import { evaluate, DEFAULT_MAX_CONCURRENCY } from './evaluator';
 import { readPrompts, readProviderPromptMap } from './prompts';
-import { readTest, readTests, synthesize, synthesizeFromTestSuite } from './testCases';
+import { readTest, readTests, synthesizeFromTestSuite } from './testCases';
+import { synthesizeFromTestSuite as redteamSynthesizeFromTestSuite } from './redteam';
 import {
   cleanupOldFileResults,
   maybeReadConfig,
@@ -241,11 +242,11 @@ async function main() {
   ];
   let defaultConfig: Partial<UnifiedConfig> = {};
   let defaultConfigPath: string | undefined;
-  for (const path of potentialPaths) {
-    const maybeConfig = await maybeReadConfig(path);
+  for (const _path of potentialPaths) {
+    const maybeConfig = await maybeReadConfig(_path);
     if (maybeConfig) {
       defaultConfig = maybeConfig;
-      defaultConfigPath = path;
+      defaultConfigPath = _path;
       break;
     }
   }
@@ -290,7 +291,13 @@ async function main() {
     .action(
       async (
         directory: string | undefined,
-        cmdObj: { port: number; yes: boolean; apiBaseUrl?: string; envFile?: string; filterDescription?: string } & Command,
+        cmdObj: {
+          port: number;
+          yes: boolean;
+          apiBaseUrl?: string;
+          envFile?: string;
+          filterDescription?: string;
+        } & Command,
       ) => {
         setupEnv(cmdObj.envFile);
         telemetry.maybeShowNotice();
@@ -378,18 +385,16 @@ async function main() {
       gatherFeedback(message);
     });
 
-  program
-    .command('generate dataset')
-    .description('Generate test cases for a given prompt')
+  const generateCommand = program.command('generate').description('Generate synthetic data');
+
+  generateCommand
+    .command('dataset')
+    .description('Generate test cases')
     .option(
       '-i, --instructions [instructions]',
       'Additional instructions to follow while generating test cases',
     )
-    .option(
-      '-c, --config [path]',
-      'Path to configuration file. Defaults to promptfooconfig.yaml',
-      defaultConfigPath,
-    )
+    .option('-c, --config [path]', 'Path to configuration file. Defaults to promptfooconfig.yaml')
     .option('-o, --output [path]', 'Path to output file')
     .option('-w, --write', 'Write results to promptfoo configuration file')
     .option('--numPersonas <number>', 'Number of personas to generate', '5')
@@ -397,19 +402,16 @@ async function main() {
     .option('--no-cache', 'Do not read or write results to disk cache', false)
     .option('--env-file <path>', 'Path to .env file')
     .action(
-      async (
-        _,
-        options: {
-          config?: string;
-          instructions?: string;
-          output?: string;
-          numPersonas: string;
-          numTestCasesPerPersona: string;
-          write: boolean;
-          cache: boolean;
-          envFile?: string;
-        },
-      ) => {
+      async (options: {
+        config?: string;
+        instructions?: string;
+        output?: string;
+        numPersonas: string;
+        numTestCasesPerPersona: string;
+        write: boolean;
+        cache: boolean;
+        envFile?: string;
+      }) => {
         setupEnv(options.envFile);
         if (!options.cache) {
           logger.info('Cache is disabled.');
@@ -417,10 +419,11 @@ async function main() {
         }
 
         let testSuite: TestSuite;
-        if (options.config) {
+        const configPath = options.config || defaultConfigPath;
+        if (configPath) {
           const resolved = await resolveConfigs(
             {
-              config: [options.config],
+              config: [configPath],
             },
             defaultConfig,
           );
@@ -449,7 +452,6 @@ async function main() {
         }
 
         printBorder();
-        const configPath = options.config;
         if (options.write && configPath) {
           const existingConfig = yaml.load(
             fs.readFileSync(configPath, 'utf8'),
@@ -470,6 +472,104 @@ async function main() {
           numPrompts: testSuite.prompts.length,
           numTestsExisting: (testSuite.tests || []).length,
           numTestsGenerated: results.length,
+        });
+        await telemetry.send();
+      },
+    );
+
+  interface RedteamCommandOptions {
+    config?: string;
+    output?: string;
+    write: boolean;
+    cache: boolean;
+    envFile?: string;
+    purpose?: string;
+    injectVar?: string;
+    plugins?: string[];
+  }
+
+  generateCommand
+    .command('redteam')
+    .description('Generate adversarial test cases')
+    .option('-c, --config [path]', 'Path to configuration file. Defaults to promptfooconfig.yaml')
+    .option('-o, --output [path]', 'Path to output file')
+    .option('-w, --write', 'Write results to promptfoo configuration file')
+    .option(
+      '--purpose <purpose>',
+      'Set the system purpose. If not set, the system purpose will be inferred from the config file',
+    )
+    .option(
+      '--injectVar <varname>',
+      'Override the variable to inject user input into the prompt. If not set, the variable will defalt to {{query}}',
+    )
+    .option('--plugins <plugins>', 'Comma-separated list of plugins to use', (val) =>
+      val.split(',').map((x) => x.trim()),
+    )
+    .option('--no-cache', 'Do not read or write results to disk cache', false)
+    .option('--env-file <path>', 'Path to .env file')
+    .action(
+      async ({
+        config,
+        output,
+        write,
+        cache,
+        envFile,
+        purpose,
+        injectVar,
+        plugins,
+      }: RedteamCommandOptions) => {
+        setupEnv(envFile);
+        if (!cache) {
+          logger.info('Cache is disabled.');
+          disableCache();
+        }
+
+        let testSuite: TestSuite;
+        const configPath = config || defaultConfigPath;
+        if (configPath) {
+          const resolved = await resolveConfigs(
+            {
+              config: [configPath],
+            },
+            defaultConfig,
+          );
+          testSuite = resolved.testSuite;
+        } else {
+          throw new Error('Could not find config file. Please use `--config`');
+        }
+
+        const redteamTests = await redteamSynthesizeFromTestSuite(testSuite, {
+          purpose,
+          injectVar,
+          plugins,
+        });
+
+        if (output) {
+          const existingYaml = yaml.load(fs.readFileSync(configPath, 'utf8')) as object;
+          const updatedYaml = {
+            ...existingYaml,
+            tests: redteamTests,
+          };
+          fs.writeFileSync(output, yaml.dump(updatedYaml, { skipInvalid: true }));
+          printBorder();
+          logger.info(`Wrote ${redteamTests.length} new test cases to ${output}`);
+          printBorder();
+        } else if (write && configPath) {
+          const existingConfig = yaml.load(
+            fs.readFileSync(configPath, 'utf8'),
+          ) as Partial<UnifiedConfig>;
+          existingConfig.tests = [...(existingConfig.tests || []), ...redteamTests];
+          fs.writeFileSync(configPath, yaml.dump(existingConfig));
+          logger.info(`Wrote ${redteamTests.length} new test cases to ${configPath}`);
+        } else {
+          logger.info(yaml.dump(redteamTests, { skipInvalid: true }));
+        }
+
+        telemetry.record('command_used', {
+          name: 'generate redteam',
+          numPrompts: testSuite.prompts.length,
+          numTestsExisting: (testSuite.tests || []).length,
+          numTestsGenerated: redteamTests.length,
         });
         await telemetry.send();
       },
