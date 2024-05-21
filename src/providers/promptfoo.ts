@@ -37,7 +37,7 @@ class PromptfooHarmfulCompletionProvider implements ApiProvider {
 
     try {
       logger.debug(`Calling promptfoo generate harmful API with body: ${JSON.stringify(body)}`);
-      const response = await fetch('https://promptfoo-redteam.ty.workers.dev/generateHarmful', {
+      const response = await fetch('https://api.promptfoo.dev/redteam/generateHarmful', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

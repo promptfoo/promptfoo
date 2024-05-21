@@ -193,6 +193,7 @@ BETA: Generate adversarial test cases to challenge your prompts and models.
 | `-w, --write`           | Write the generated test cases directly to the config file       | false                |
 | `--purpose <purpose>`   | Set the system purpose. If not set, inferred from config         |                      |
 | `--injectVar <varname>` | The name of the prompt variable that represents the user's input | `{{query}}`          |
+| `--plugins <plugins>`   | Comma-separated list of plugins to enable                        | all plugins          |
 | `--no-cache`            | Do not read or write results to disk cache                       | false                |
 | `--env-file <path>`     | Path to .env file                                                |                      |
 
@@ -200,7 +201,7 @@ For example, let's suppose we have the following `promptfooconfig.yaml`:
 
 ```yaml
 prompts:
-  - "Act as a trip planner and help the user plan their trip"
+  - 'Act as a trip planner and help the user plan their trip'
 
 providers:
   - openai:gpt-3.5-turbo

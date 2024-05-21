@@ -291,7 +291,13 @@ async function main() {
     .action(
       async (
         directory: string | undefined,
-        cmdObj: { port: number; yes: boolean; apiBaseUrl?: string; envFile?: string; filterDescription?: string } & Command,
+        cmdObj: {
+          port: number;
+          yes: boolean;
+          apiBaseUrl?: string;
+          envFile?: string;
+          filterDescription?: string;
+        } & Command,
       ) => {
         setupEnv(cmdObj.envFile);
         telemetry.maybeShowNotice();
@@ -379,10 +385,7 @@ async function main() {
       gatherFeedback(message);
     });
 
-  const generateCommand =
-    program
-      .command('generate')
-      .description('Generate synthetic data');
+  const generateCommand = program.command('generate').description('Generate synthetic data');
 
   generateCommand
     .command('dataset')
@@ -391,10 +394,7 @@ async function main() {
       '-i, --instructions [instructions]',
       'Additional instructions to follow while generating test cases',
     )
-    .option(
-      '-c, --config [path]',
-      'Path to configuration file. Defaults to promptfooconfig.yaml',
-    )
+    .option('-c, --config [path]', 'Path to configuration file. Defaults to promptfooconfig.yaml')
     .option('-o, --output [path]', 'Path to output file')
     .option('-w, --write', 'Write results to promptfoo configuration file')
     .option('--numPersonas <number>', 'Number of personas to generate', '5')
@@ -402,19 +402,16 @@ async function main() {
     .option('--no-cache', 'Do not read or write results to disk cache', false)
     .option('--env-file <path>', 'Path to .env file')
     .action(
-      async (
-        _,
-        options: {
-          config?: string;
-          instructions?: string;
-          output?: string;
-          numPersonas: string;
-          numTestCasesPerPersona: string;
-          write: boolean;
-          cache: boolean;
-          envFile?: string;
-        },
-      ) => {
+      async (options: {
+        config?: string;
+        instructions?: string;
+        output?: string;
+        numPersonas: string;
+        numTestCasesPerPersona: string;
+        write: boolean;
+        cache: boolean;
+        envFile?: string;
+      }) => {
         setupEnv(options.envFile);
         if (!options.cache) {
           logger.info('Cache is disabled.');
@@ -488,26 +485,39 @@ async function main() {
     envFile?: string;
     purpose?: string;
     injectVar?: string;
+    plugins?: string[];
   }
 
   generateCommand
     .command('redteam')
     .description('Generate adversarial test cases')
-    .option(
-      '-c, --config [path]',
-      'Path to configuration file. Defaults to promptfooconfig.yaml',
-    )
+    .option('-c, --config [path]', 'Path to configuration file. Defaults to promptfooconfig.yaml')
     .option('-o, --output [path]', 'Path to output file')
     .option('-w, --write', 'Write results to promptfoo configuration file')
-    .option('--purpose <purpose>', 'Set the system purpose. If not set, the system purpose will be inferred from the config file')
-    .option('--injectVar <varname>', 'Override the variable to inject user input into the prompt. If not set, the variable will defalt to {{query}}')
+    .option(
+      '--purpose <purpose>',
+      'Set the system purpose. If not set, the system purpose will be inferred from the config file',
+    )
+    .option(
+      '--injectVar <varname>',
+      'Override the variable to inject user input into the prompt. If not set, the variable will defalt to {{query}}',
+    )
+    .option('--plugins <plugins>', 'Comma-separated list of plugins to use', (val) =>
+      val.split(',').map((x) => x.trim()),
+    )
     .option('--no-cache', 'Do not read or write results to disk cache', false)
     .option('--env-file <path>', 'Path to .env file')
     .action(
-      async (
-        _,
-        { config, output, write, cache, envFile, purpose, injectVar }: RedteamCommandOptions,
-      ) => {
+      async ({
+        config,
+        output,
+        write,
+        cache,
+        envFile,
+        purpose,
+        injectVar,
+        plugins,
+      }: RedteamCommandOptions) => {
         setupEnv(envFile);
         if (!cache) {
           logger.info('Cache is disabled.');
@@ -531,6 +541,7 @@ async function main() {
         const redteamTests = await redteamSynthesizeFromTestSuite(testSuite, {
           purpose,
           injectVar,
+          plugins,
         });
 
         if (output) {
@@ -539,10 +550,7 @@ async function main() {
             ...existingYaml,
             tests: redteamTests,
           };
-          fs.writeFileSync(
-            output,
-            yaml.dump(updatedYaml, { skipInvalid: true }),
-          );
+          fs.writeFileSync(output, yaml.dump(updatedYaml, { skipInvalid: true }));
           printBorder();
           logger.info(`Wrote ${redteamTests.length} new test cases to ${output}`);
           printBorder();
@@ -811,38 +819,38 @@ async function main() {
             const basePath = path.dirname(configPaths[0]);
             const promptPaths = Array.isArray(config.prompts)
               ? (config.prompts
-                .map((p) =>
-                  p.startsWith('file://')
-                    ? path.resolve(basePath, p.slice('file://'.length))
-                    : null,
-                )
-                .filter(Boolean) as string[])
+                  .map((p) =>
+                    p.startsWith('file://')
+                      ? path.resolve(basePath, p.slice('file://'.length))
+                      : null,
+                  )
+                  .filter(Boolean) as string[])
               : [];
             const providerPaths = Array.isArray(config.providers)
               ? (config.providers
-                .map((p) =>
-                  typeof p === 'string' && p.startsWith('file://')
-                    ? path.resolve(basePath, p.slice('file://'.length))
-                    : null,
-                )
-                .filter(Boolean) as string[])
+                  .map((p) =>
+                    typeof p === 'string' && p.startsWith('file://')
+                      ? path.resolve(basePath, p.slice('file://'.length))
+                      : null,
+                  )
+                  .filter(Boolean) as string[])
               : [];
             const varPaths = Array.isArray(config.tests)
               ? config.tests
-                .flatMap((t) => {
-                  if (typeof t === 'string' && t.startsWith('file://')) {
-                    return path.resolve(basePath, t.slice('file://'.length));
-                  } else if (typeof t !== 'string' && t.vars) {
-                    return Object.values(t.vars).flatMap((v) => {
-                      if (typeof v === 'string' && v.startsWith('file://')) {
-                        return path.resolve(basePath, v.slice('file://'.length));
-                      }
-                      return [];
-                    });
-                  }
-                  return [];
-                })
-                .filter(Boolean)
+                  .flatMap((t) => {
+                    if (typeof t === 'string' && t.startsWith('file://')) {
+                      return path.resolve(basePath, t.slice('file://'.length));
+                    } else if (typeof t !== 'string' && t.vars) {
+                      return Object.values(t.vars).flatMap((v) => {
+                        if (typeof v === 'string' && v.startsWith('file://')) {
+                          return path.resolve(basePath, v.slice('file://'.length));
+                        }
+                        return [];
+                      });
+                    }
+                    return [];
+                  })
+                  .filter(Boolean)
               : [];
             const watchPaths = Array.from(
               new Set([...configPaths, ...promptPaths, ...providerPaths, ...varPaths]),

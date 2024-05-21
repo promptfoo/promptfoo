@@ -1,3 +1,4 @@
+import chalk from 'chalk';
 import dedent from 'dedent';
 import cliProgress from 'cli-progress';
 import invariant from 'tiny-invariant';
@@ -17,6 +18,25 @@ interface SynthesizeOptions {
   prompts: string[];
   injectVar?: string;
   purpose?: string;
+  plugins: string[];
+}
+
+const ALL_PLUGINS = [
+  'harmful',
+  'prompt-injection',
+  'jailbreak',
+  'hijacking',
+  'hallucination',
+  'excessive-agency',
+  'overconfidence',
+];
+
+function validatePlugins(plugins: string[]) {
+  for (const plugin of plugins) {
+    if (!ALL_PLUGINS.includes(plugin)) {
+      throw new Error(`Invalid plugin: ${plugin}. Must be one of: ${ALL_PLUGINS.join(', ')}`);
+    }
+  }
 }
 
 export async function synthesizeFromTestSuite(
@@ -25,6 +45,7 @@ export async function synthesizeFromTestSuite(
 ) {
   return synthesize({
     ...options,
+    plugins: options.plugins && options.plugins.length > 0 ? options.plugins : ALL_PLUGINS,
     prompts: testSuite.prompts.map((prompt) => prompt.raw),
   });
 }
@@ -33,9 +54,16 @@ export async function synthesize({
   prompts,
   injectVar,
   purpose: purposeOverride,
+  plugins,
 }: SynthesizeOptions) {
+  validatePlugins(plugins);
   const reasoningProvider = new OpenAiChatCompletionProvider(SYNTHESIS_MODEL);
 
+  logger.info(
+    `Synthesizing test cases for ${prompts.length} ${
+      prompts.length === 1 ? 'prompt' : 'prompts'
+    }...\nPlugins: ${chalk.yellow(plugins.join(', '))}`,
+  );
   // Progressbar
   let spinner;
   if (process.env.LOG_LEVEL !== 'debug') {
@@ -62,46 +90,66 @@ export async function synthesize({
 
   const testCases: TestCase[] = [];
 
-  logger.debug('Generating harmful test cases');
-  const adversarialPrompts = await getHarmfulTests(purpose, injectVar);
-  testCases.push(...adversarialPrompts);
-  logger.debug(`Added ${adversarialPrompts.length} harmful test cases`);
+  let adversarialPrompts: TestCase[] = [];
+  if (
+    plugins.includes('harmful') ||
+    plugins.includes('prompt-injection') ||
+    plugins.includes('jailbreak')
+  ) {
+    logger.debug('Generating harmful test cases');
+    adversarialPrompts = await getHarmfulTests(purpose, injectVar);
+    testCases.push(...adversarialPrompts);
+    logger.debug(`Added ${adversarialPrompts.length} harmful test cases`);
+  }
 
-  if (spinner) spinner.update(25, { speed: 'Injecting adversarial tests' });
-  logger.debug('Adding injections to adversarial prompts');
-  const injectedPrompts = await addInjections(adversarialPrompts, injectVar);
-  testCases.push(...injectedPrompts);
-  logger.debug(`Added ${injectedPrompts.length} injected test cases`);
+  if (plugins.includes('prompt-injection')) {
+    if (spinner) spinner.update(25, { speed: 'Injecting adversarial tests' });
+    logger.debug('Adding injections to adversarial prompts');
+    const injectedPrompts = await addInjections(adversarialPrompts, injectVar);
+    testCases.push(...injectedPrompts);
+    logger.debug(`Added ${injectedPrompts.length} injected test cases`);
+  }
 
-  if (spinner) spinner.update(40, { speed: 'Adding iterative jailbreaks' });
-  logger.debug('Adding iterative jailbreaks to adversarial prompts');
-  const redTeamConversations = await addIterativeJailbreaks(adversarialPrompts, injectVar);
-  testCases.push(...redTeamConversations);
-  logger.debug(`Added ${redTeamConversations.length} iterative jailbreak test cases`);
+  if (plugins.includes('jailbreak')) {
+    if (spinner) spinner.update(40, { speed: 'Adding iterative jailbreaks' });
+    logger.debug('Adding iterative jailbreaks to adversarial prompts');
+    const redTeamConversations = await addIterativeJailbreaks(adversarialPrompts, injectVar);
+    testCases.push(...redTeamConversations);
+    logger.debug(`Added ${redTeamConversations.length} iterative jailbreak test cases`);
+  }
 
-  if (spinner) spinner.update(60, { speed: 'Generating hijacking tests' });
-  logger.debug('Generating hijacking tests');
-  const hijackingTests = await getHijackingTests(purpose, injectVar);
-  testCases.push(...hijackingTests);
-  logger.debug(`Added ${hijackingTests.length} hijacking test cases`);
+  if (plugins.includes('hijacking')) {
+    if (spinner) spinner.update(60, { speed: 'Generating hijacking tests' });
+    logger.debug('Generating hijacking tests');
+    const hijackingTests = await getHijackingTests(purpose, injectVar);
+    testCases.push(...hijackingTests);
+    logger.debug(`Added ${hijackingTests.length} hijacking test cases`);
+  }
 
-  if (spinner) spinner.update(70, { speed: 'Generating hallucination tests' });
-  logger.debug('Generating hallucination tests');
-  const hallucinationTests = await getHallucinationTests(purpose, injectVar);
-  testCases.push(...hallucinationTests);
-  logger.debug(`Added ${hallucinationTests.length} hallucination test cases`);
+  if (plugins.includes('hallucination')) {
+    if (spinner) spinner.update(70, { speed: 'Generating hallucination tests' });
+    logger.debug('Generating hallucination tests');
+    const hallucinationTests = await getHallucinationTests(purpose, injectVar);
+    testCases.push(...hallucinationTests);
+    logger.debug(`Added ${hallucinationTests.length} hallucination test cases`);
+  }
 
-  if (spinner) spinner.update(80, { speed: 'Generating overconfidence tests' });
-  logger.debug('Generating overconfidence tests');
-  const overconfidenceTests = await getOverconfidenceTests(purpose, injectVar);
-  testCases.push(...overconfidenceTests);
-  logger.debug(`Added ${overconfidenceTests.length} overconfidence test cases`);
+  if (plugins.includes('excessive-agency')) {
+    if (spinner) spinner.update(80, { speed: 'Generating excessive agency/overconfidence tests' });
+    logger.debug('Generating excessive agency/overconfidence tests');
+    const overconfidenceTests = await getOverconfidenceTests(purpose, injectVar);
+    testCases.push(...overconfidenceTests);
+    logger.debug(`Added ${overconfidenceTests.length} overconfidence test cases`);
+  }
 
-  if (spinner) spinner.update(90, { speed: 'Generating underconfidence tests' });
-  logger.debug('Generating underconfidence tests');
-  const underconfidenceTests = await getUnderconfidenceTests(purpose, injectVar);
-  testCases.push(...underconfidenceTests);
-  logger.debug(`Added ${underconfidenceTests.length} underconfidence test cases`);
+  if (plugins.includes('overreliance')) {
+    if (spinner) spinner.update(90, { speed: 'Generating overreliance/underconfidence tests' });
+    logger.debug('Generating overreliance/underconfidence tests');
+    const underconfidenceTests = await getUnderconfidenceTests(purpose, injectVar);
+    testCases.push(...underconfidenceTests);
+    logger.debug(`Added ${underconfidenceTests.length} underconfidence test cases`);
+  }
+
   if (spinner) {
     spinner.update(100, { speed: 'Tests generated' });
     spinner.stop();
