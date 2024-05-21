@@ -610,11 +610,7 @@ describe('runAssertion', () => {
       value: 'file:///output.json',
     };
 
-    (fs.readFileSync as jest.Mock).mockReturnValue(
-        JSON.stringify({
-          "key": "value"
-        }),
-    );
+    (fs.readFileSync as jest.Mock).mockReturnValue(JSON.stringify({"key": "value"}));
 
     const output = '{"key": "value"}';
 
@@ -636,11 +632,7 @@ describe('runAssertion', () => {
       value: 'file:///output.json',
     };
 
-    (fs.readFileSync as jest.Mock).mockReturnValue(
-        JSON.stringify({
-          "key": "value"
-        }),
-    );
+    (fs.readFileSync as jest.Mock).mockReturnValue(JSON.stringify({"key": "value"}));
 
     const output = '{"key": "not value"}';
 
