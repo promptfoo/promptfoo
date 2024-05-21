@@ -198,7 +198,7 @@ assert:
     value: { 'key': 'value' }
 ```
 
-If your JSON schema is large, import it from a file:
+If your expected JSON is large, import it from a file:
 
 ```yaml
 assert:
