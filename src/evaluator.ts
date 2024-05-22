@@ -219,7 +219,7 @@ export async function renderPrompt(
     );
     return langfuseResult;
   }
-
+  
   // Render prompt
   try {
     if (process.env.PROMPTFOO_DISABLE_JSON_AUTOESCAPE) {
@@ -244,6 +244,7 @@ class Evaluator {
     string,
     { prompt: string | object; input: string; output: string | object }[]
   >;
+  registers: Record<string, string | object>;
 
   constructor(testSuite: TestSuite, options: EvaluateOptions) {
     this.testSuite = testSuite;
@@ -259,6 +260,7 @@ class Evaluator {
       },
     };
     this.conversations = {};
+    this.registers = {};
   }
 
   async runEval({
@@ -283,6 +285,9 @@ class Evaluator {
     ) {
       vars._conversation = this.conversations[conversationKey] || [];
     }
+
+    // Overwrite vars with any saved register values
+    Object.assign(vars, this.registers);
 
     // Render the prompt
     const renderedPrompt = await renderPrompt(prompt, vars, filters, provider);
@@ -425,6 +430,11 @@ class Evaluator {
         this.stats.successes++;
       } else {
         this.stats.failures++;
+      }
+
+      if (test.storeOutputAs && ret.response?.output) {
+        // Save the output in a register for later use
+        this.registers[test.storeOutputAs] = ret.response.output;
       }
 
       return ret;
@@ -663,12 +673,20 @@ class Evaluator {
 
     // Determine run parameters
     let concurrency = options.maxConcurrency || DEFAULT_MAX_CONCURRENCY;
-    const usesConversation = prompts.some((p) => p.raw.includes('_conversation'));
-    if (usesConversation && concurrency > 1) {
-      logger.info(
-        `Setting concurrency to 1 because the ${chalk.cyan('_conversation')} variable is used.`,
-      );
-      concurrency = 1;
+    if (concurrency > 1) {
+      const usesConversation = prompts.some((p) => p.raw.includes('_conversation'));
+      const usesStoreOutputAs = tests.some((t) => t.storeOutputAs);
+      if (usesConversation) {
+        logger.info(
+          `Setting concurrency to 1 because the ${chalk.cyan('_conversation')} variable is used.`,
+        );
+        concurrency = 1;
+      } else if (usesStoreOutputAs) {
+        logger.info(
+          `Setting concurrency to 1 because storeOutputAs is used.`,
+        );
+        concurrency = 1;
+      }
     }
 
     // Actually run the eval
