@@ -342,7 +342,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=abc123
 Then run:
 
 ```sh
-npm build
+npm run build
 ```
 
 The build has some side effects such as e.g. copying HTML templates, migrations, etc.
