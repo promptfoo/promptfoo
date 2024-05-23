@@ -3,7 +3,7 @@ import { diffSentences, diffJson, diffWords } from 'diff';
 
 import './index.css';
 
-import ReactMarkdown from 'react-markdown';
+import MarkdownRenderer from '@/app/components/MarkdownRenderer';
 import invariant from 'tiny-invariant';
 import {
   createColumnHelper,
@@ -299,7 +299,7 @@ function EvalOutputCell({
       console.error('Invalid regular expression:', (error as Error).message);
     }
   } else if (renderMarkdown) {
-    node = <ReactMarkdown>{text}</ReactMarkdown>;
+    node = <MarkdownRenderer content={text} />
   } else if (prettifyJson) {
     try {
       node = <pre>{JSON.stringify(JSON.parse(text), null, 2)}</pre>;
@@ -749,7 +749,7 @@ function ResultsTable({
                 return (
                   <div className="cell">
                     {renderMarkdown ? (
-                      <ReactMarkdown>{value}</ReactMarkdown>
+                      <MarkdownRenderer content={value} />
                     ) : (
                       <MemoizedTruncatedText text={value} maxLength={maxTextLength} />
                     )}
