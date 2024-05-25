@@ -232,7 +232,7 @@ export async function runAssertion({
   if (assertion.transform) {
     output = await transformOutput(assertion.transform, output, {
       vars: test.vars,
-      prompt: { display: prompt },
+      prompt: { label: prompt },
     });
   }
 

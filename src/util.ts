@@ -380,7 +380,7 @@ ${gradingResultText}`.trim();
         csvRow[varName] = row.vars[index];
       });
       results.table.head.prompts.forEach((prompt, index) => {
-        csvRow[prompt.display] = outputToSimpleString(row.outputs[index]);
+        csvRow[prompt.label] = outputToSimpleString(row.outputs[index]);
       });
       return csvRow;
     });
@@ -415,7 +415,7 @@ ${gradingResultText}`.trim();
     } else if (outputExtension === 'html') {
       const template = fs.readFileSync(`${getDirectory()}/tableOutput.html`, 'utf-8');
       const table = [
-        [...results.table.head.vars, ...results.table.head.prompts.map((prompt) => prompt.display)],
+        [...results.table.head.vars, ...results.table.head.prompts.map((prompt) => prompt.label)],
         ...results.table.body.map((row) => [...row.vars, ...row.outputs.map(outputToSimpleString)]),
       ];
       const htmlOutput = getNunjucksEngine().renderString(template, {
@@ -489,14 +489,15 @@ export async function writeResultsToDatabase(
 
   // Record prompt relation
   for (const prompt of results.table.head.prompts) {
-    const promptId = sha256(prompt.display);
+    const label = prompt.label || prompt.display || prompt.raw;
+    const promptId = sha256(label);
 
     promises.push(
       db
         .insert(prompts)
         .values({
           id: promptId,
-          prompt: prompt.display,
+          prompt: label,
         })
         .onConflictDoNothing()
         .run(),

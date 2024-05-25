@@ -29,7 +29,7 @@ jest.mock('fs', () => ({
 jest.mock('../src/database');
 
 function toPrompt(text: string): Prompt {
-  return { raw: text, display: text };
+  return { raw: text, label: text };
 }
 
 beforeEach(() => {
@@ -106,8 +106,8 @@ describe('prompts', () => {
 
     expect(fs.readFileSync).toHaveBeenCalledTimes(2);
     expect(result).toHaveLength(2);
-    expect(result[0]).toEqual({ raw: 'some raw text', display: 'foo1' });
-    expect(result[1]).toEqual(expect.objectContaining({ raw: 'some raw text', display: 'foo2' }));
+    expect(result[0]).toEqual({ raw: 'some raw text', label: 'foo1' });
+    expect(result[1]).toEqual(expect.objectContaining({ raw: 'some raw text', label: 'foo2' }));
   });
 
   test('readPrompts with JSONL file', async () => {
@@ -138,14 +138,14 @@ describe('prompts', () => {
     const result = await readPrompts('prompt.py');
     expect(fs.readFileSync).toHaveBeenCalledTimes(1);
     expect(result[0].raw).toEqual(code);
-    expect(result[0].display).toEqual(code);
+    expect(result[0].label).toEqual(code);
     expect(result[0].function).toBeDefined();
   });
 
   test('readPrompts with Prompt object array', async () => {
     const prompts = [
-      { id: 'prompts.py:prompt1', display: 'First prompt' },
-      { id: 'prompts.py:prompt2', display: 'Second prompt' },
+      { id: 'prompts.py:prompt1', label: 'First prompt' },
+      { id: 'prompts.py:prompt2', label: 'Second prompt' },
     ];
 
     const code = `def prompt1:
@@ -160,12 +160,12 @@ def prompt2:
     expect(result).toHaveLength(2);
     expect(result[0]).toEqual({
       raw: code,
-      display: 'First prompt',
+      label: 'First prompt',
       function: expect.any(Function),
     });
     expect(result[1]).toEqual({
       raw: code,
-      display: 'Second prompt',
+      label: 'Second prompt',
       function: expect.any(Function),
     });
   });
@@ -214,7 +214,7 @@ def prompt2:
     expect(fs.readFileSync).toHaveBeenCalledTimes(2);
     expect(fs.statSync).toHaveBeenCalledTimes(1);
     expect(result).toHaveLength(2);
-    expect(result[0]).toEqual({ raw: fileContents['1.txt'], display: fileContents['1.txt'] });
-    expect(result[1]).toEqual({ raw: fileContents['2.txt'], display: fileContents['2.txt'] });
+    expect(result[0]).toEqual({ raw: fileContents['1.txt'], label: fileContents['1.txt'] });
+    expect(result[1]).toEqual({ raw: fileContents['2.txt'], label: fileContents['2.txt'] });
   });
 });

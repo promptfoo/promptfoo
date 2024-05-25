@@ -245,7 +245,11 @@ export interface EvaluateOptions {
 export interface Prompt {
   id?: string;
   raw: string;
-  display: string;
+  /**
+   * @deprecated in > 0.59.0. Use `label` instead.
+   */
+  display?: string;
+  label: string;
   function?: (context: {
     vars: Record<string, string | object>;
     provider?: ApiProvider;

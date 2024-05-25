@@ -81,9 +81,12 @@ export default function ResultsView({
   };
 
   const [failureFilter, setFailureFilter] = React.useState<{ [key: string]: boolean }>({});
-  const handleFailureFilterToggle = React.useCallback((columnId: string, checked: boolean) => {
-    setFailureFilter((prevFailureFilter) => ({ ...prevFailureFilter, [columnId]: checked }));
-  }, [setFailureFilter]);
+  const handleFailureFilterToggle = React.useCallback(
+    (columnId: string, checked: boolean) => {
+      setFailureFilter((prevFailureFilter) => ({ ...prevFailureFilter, [columnId]: checked }));
+    },
+    [setFailureFilter],
+  );
 
   const [filterMode, setFilterMode] = React.useState<FilterMode>('all');
   const handleFilterModeChange = (event: SelectChangeEvent<unknown>) => {
@@ -207,22 +210,22 @@ export default function ResultsView({
         }`,
         group: 'Variables',
       })),
-      ...head.prompts.map((_, idx) => ({
-        value: `Prompt ${idx + 1}`,
-        label: `Prompt ${idx + 1}: ${
-          head.prompts[idx].display.length > 100
-            ? head.prompts[idx].display.slice(0, 97) + '...'
-            : head.prompts[idx].display
-        }`,
-        group: 'Prompts',
-      })),
+      ...head.prompts.map((_, idx) => {
+        const prompt = head.prompts[idx];
+        const label = prompt.label || prompt.display || prompt.raw;
+        return {
+          value: `Prompt ${idx + 1}`,
+          label: `Prompt ${idx + 1}: ${label.length > 100 ? label.slice(0, 97) + '...' : label}`,
+          group: 'Prompts',
+        };
+      }),
     ];
   }, [head.vars, head.prompts]);
 
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
   const [selectedColumns, setSelectedColumns] = React.useState<string[]>(
-  columnData.map((col) => col.value)
-);
+    columnData.map((col) => col.value),
+  );
 
   // State for anchor element
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
