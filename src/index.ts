@@ -44,19 +44,19 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
           if (typeof promptInput === 'function') {
             return {
               raw: promptInput.toString(),
-              display: promptInput.toString(),
+              label: promptInput.toString(),
               function: promptInput as PromptFunction,
             };
           } else if (typeof promptInput === 'string') {
             const prompts = await readPrompts(promptInput);
             return prompts.map((p) => ({
               raw: p.raw,
-              display: p.display,
+              label: p.label,
             }));
           } else {
             return {
               raw: JSON.stringify(promptInput),
-              display: JSON.stringify(promptInput),
+              label: JSON.stringify(promptInput),
             };
           }
         }),

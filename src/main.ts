@@ -819,11 +819,14 @@ async function main() {
             const basePath = path.dirname(configPaths[0]);
             const promptPaths = Array.isArray(config.prompts)
               ? (config.prompts
-                  .map((p) =>
-                    p.startsWith('file://')
-                      ? path.resolve(basePath, p.slice('file://'.length))
-                      : null,
-                  )
+                  .map((p) => {
+                    if (typeof p === 'string' && p.startsWith('file://')) {
+                      return path.resolve(basePath, p.slice('file://'.length));
+                    } else if (typeof p === 'object' && p.id && p.id.startsWith('file://')) {
+                      return path.resolve(basePath, p.id.slice('file://'.length));
+                    }
+                    return null;
+                  })
                   .filter(Boolean) as string[])
               : [];
             const providerPaths = Array.isArray(config.providers)

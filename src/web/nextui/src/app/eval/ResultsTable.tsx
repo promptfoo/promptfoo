@@ -34,7 +34,12 @@ import { useStore as useMainStore } from '@/app/eval/store';
 
 import type { CellContext, ColumnDef, VisibilityState } from '@tanstack/table-core';
 
-import type { EvaluateTableRow, EvaluateTableOutput, FilterMode, EvaluateTable } from './types';
+import {
+  EvaluateTableRow,
+  EvaluateTableOutput,
+  FilterMode,
+  EvaluateTable,
+} from './types';
 
 import './ResultsTable.css';
 
@@ -872,7 +877,7 @@ function ResultsTable({
                   </div>
                   <TableHeader
                     className="prompt-container"
-                    text={prompt.display}
+                    text={prompt.label || prompt.display || prompt.raw}
                     expandedText={prompt.raw}
                     maxLength={maxTextLength}
                     resourceId={prompt.id}

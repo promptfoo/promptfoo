@@ -63,7 +63,7 @@ const mockGradingApiProviderFails: ApiProvider = {
 };
 
 function toPrompt(text: string): Prompt {
-  return { raw: text, display: text };
+  return { raw: text, label: text };
 }
 
 describe('evaluator', () => {
@@ -89,7 +89,7 @@ describe('evaluator', () => {
     expect(summary.stats.failures).toBe(0);
     expect(summary.stats.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, cached: 0 });
     expect(summary.results[0].prompt.raw).toBe('Test prompt value1 value2');
-    expect(summary.results[0].prompt.display).toBe('Test prompt {{ var1 }} {{ var2 }}');
+    expect(summary.results[0].prompt.label).toBe('Test prompt {{ var1 }} {{ var2 }}');
     expect(summary.results[0].response?.output).toBe('Test output');
   });
 
@@ -111,7 +111,7 @@ describe('evaluator', () => {
     expect(summary.stats.failures).toBe(0);
     expect(summary.stats.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, cached: 0 });
     expect(summary.results[0].prompt.raw).toBe('Test prompt 1 < 2 he said "hello world"...');
-    expect(summary.results[0].prompt.display).toBe('Test prompt {{ var1 }} {{ var2 }}');
+    expect(summary.results[0].prompt.label).toBe('Test prompt {{ var1 }} {{ var2 }}');
     expect(summary.results[0].response?.output).toBe('Test output');
   });
 
@@ -133,14 +133,14 @@ describe('evaluator', () => {
     expect(summary.stats.failures).toBe(0);
     expect(summary.stats.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, cached: 0 });
     expect(summary.results[0].prompt.raw).toBe('Test prompt value1 value2');
-    expect(summary.results[0].prompt.display).toBe('Test prompt {{ var1.prop1 }} {{ var2 }}');
+    expect(summary.results[0].prompt.label).toBe('Test prompt {{ var1.prop1 }} {{ var2 }}');
     expect(summary.results[0].response?.output).toBe('Test output');
   });
 
   test('evaluate with named prompt', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
-      prompts: [{ raw: 'Test prompt {{ var1 }} {{ var2 }}', display: 'test display name' }],
+      prompts: [{ raw: 'Test prompt {{ var1 }} {{ var2 }}', label: 'test display name' }],
       tests: [
         {
           vars: { var1: 'value1', var2: 'value2' },
@@ -155,7 +155,7 @@ describe('evaluator', () => {
     expect(summary.stats.failures).toBe(0);
     expect(summary.stats.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, cached: 0 });
     expect(summary.results[0].prompt.raw).toBe('Test prompt value1 value2');
-    expect(summary.results[0].prompt.display).toBe('test display name');
+    expect(summary.results[0].prompt.label).toBe('test display name');
     expect(summary.results[0].response?.output).toBe('Test output');
   });
 
@@ -177,7 +177,7 @@ describe('evaluator', () => {
     expect(summary.stats.failures).toBe(0);
     expect(summary.stats.tokenUsage).toEqual({ total: 40, prompt: 20, completion: 20, cached: 0 });
     expect(summary.results[0].prompt.raw).toBe('Test prompt value1 value2');
-    expect(summary.results[0].prompt.display).toBe('Test prompt {{ var1 }} {{ var2 }}');
+    expect(summary.results[0].prompt.label).toBe('Test prompt {{ var1 }} {{ var2 }}');
     expect(summary.results[0].response?.output).toBe('Test output');
   });
 
@@ -199,7 +199,7 @@ describe('evaluator', () => {
     expect(summary.stats.failures).toBe(0);
     expect(summary.stats.tokenUsage).toEqual({ total: 20, prompt: 10, completion: 10, cached: 0 });
     expect(summary.results[0].prompt.raw).toBe('Test prompt value1 value2');
-    expect(summary.results[0].prompt.display).toBe('Test prompt {{ var1 }} {{ var2 }}');
+    expect(summary.results[0].prompt.label).toBe('Test prompt {{ var1 }} {{ var2 }}');
     expect(summary.results[0].response?.output).toBe('Test output');
   });
 
@@ -216,7 +216,7 @@ describe('evaluator', () => {
     expect(summary.stats.failures).toBe(0);
     expect(summary.stats.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, cached: 0 });
     expect(summary.results[0].prompt.raw).toBe('Test prompt');
-    expect(summary.results[0].prompt.display).toBe('Test prompt');
+    expect(summary.results[0].prompt.label).toBe('Test prompt');
     expect(summary.results[0].response?.output).toBe('Test output');
   });
 
@@ -233,7 +233,7 @@ describe('evaluator', () => {
     expect(summary.stats.failures).toBe(0);
     expect(summary.stats.tokenUsage).toEqual({ total: 30, prompt: 15, completion: 15, cached: 0 });
     expect(summary.results[0].prompt.raw).toBe('Test prompt');
-    expect(summary.results[0].prompt.display).toBe('Test prompt');
+    expect(summary.results[0].prompt.label).toBe('Test prompt');
     expect(summary.results[0].response?.output).toBe('Test output');
   });
 
@@ -533,7 +533,7 @@ describe('evaluator', () => {
     expect(summary.stats.failures).toBe(0);
     expect(summary.stats.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, cached: 0 });
     expect(summary.results[0].prompt.raw).toBe('Test prompt 1');
-    expect(summary.results[0].prompt.display).toBe('Test prompt 1');
+    expect(summary.results[0].prompt.label).toBe('Test prompt 1');
     expect(summary.results[0].response?.output).toBe('Test output');
   });
 

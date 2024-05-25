@@ -248,7 +248,11 @@ export interface EvaluateOptions {
 export interface Prompt {
   id?: string;
   raw: string;
-  display: string;
+  /**
+   * @deprecated in > 0.59.0. Use `label` instead.
+   */
+  display?: string;
+  label: string;
   function?: (context: {
     vars: Record<string, string | object>;
     provider?: ApiProvider;
@@ -605,7 +609,7 @@ export interface TestSuiteConfig {
   providers: ProviderId | ProviderFunction | (ProviderId | ProviderOptionsMap | ProviderOptions)[];
 
   // One or more prompt files to load
-  prompts: FilePath | FilePath[] | Record<FilePath, string>;
+  prompts: FilePath | (FilePath | Prompt)[] | Record<FilePath, string>;
 
   // Path to a test file, OR list of LLM prompt variations (aka "test case")
   tests: FilePath | (FilePath | TestCase)[];
