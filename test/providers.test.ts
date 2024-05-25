@@ -581,8 +581,30 @@ describe('call provider apis', () => {
     });
 
     describe('CloudflareAiChatCompletionProvider', () => {
-      test.todo('Should handle chat provider', async () => {
-        // TODO: Finish this test
+      test('Should handle chat provider', async () => {
+        const provider = new CloudflareAiChatCompletionProvider(testModelName, {
+          config: cloudflareMinimumConfig,
+        });
+
+        const responsePayload: ICloudflareTextGenerationResponse = {
+          success: true,
+          errors: [],
+          messages: [],
+          result: {
+            response: 'Test text output',
+          },
+        };
+        const mockResponse = {
+          text: jest.fn().mockResolvedValue(JSON.stringify(responsePayload)),
+          ok: true,
+        };
+
+        (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
+        const result = await provider.callApi('Test chat prompt');
+
+        expect(fetch).toHaveBeenCalledTimes(1);
+        expect(result.output).toBe(responsePayload.result.response);
+        expect(result.tokenUsage).toEqual(tokenUsageDefaultResponse);
       });
     });
 
@@ -820,21 +842,19 @@ config:
     await expect(() => loadApiProvider(`cloudflare-ai:${modelName}`)).rejects.toThrowError(
       /Unknown Cloudflare AI model type/,
     );
-    for (const unsupportedModelType of unsupportedModelTypes) {
-      await expect(() => loadApiProvider(`cloudflare-ai:${modelName}`)).rejects.toThrowError(
-        /Unknown Cloudflare AI model type/,
-      );
-    }
 
     for (const unsupportedModelType of unsupportedModelTypes) {
-      await expect(() => loadApiProvider(`cloudflare-ai:${modelName}`)).rejects.toThrowError(
-        /Unknown Cloudflare AI model type/,
-      );
+      await expect(() =>
+        loadApiProvider(`cloudflare-ai:${unsupportedModelType}:${modelName}`),
+      ).rejects.toThrowError(/Unknown Cloudflare AI model type/);
     }
 
     for (const { modelType, providerKlass } of supportedModelTypes) {
       const cfProvider = await loadApiProvider(`cloudflare-ai:${modelType}:${modelName}`);
-      expect(cfProvider.id()).toBe(`cloudflare-ai:${modelName}`);
+      const modelTypeForId: (typeof supportedModelTypes)[number]['modelType'] =
+        modelType === 'embeddings' ? 'embedding' : modelType;
+
+      expect(cfProvider.id()).toMatch(`cloudflare-ai:${modelTypeForId}:${modelName}`);
       expect(cfProvider).toBeInstanceOf(providerKlass);
     }
   });

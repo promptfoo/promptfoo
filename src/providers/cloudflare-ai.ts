@@ -57,7 +57,9 @@ export type IBuildCloudflareResponse<SuccessData extends Record<string, unknown>
     }
   | { success: false; errors: unknown[]; messages: unknown[] };
 
-class CloudflareAiGenericProvider implements ApiProvider {
+abstract class CloudflareAiGenericProvider implements ApiProvider {
+  abstract readonly modelType: 'embedding' | 'chat' | 'completion';
+
   deploymentName: string;
   config: ICloudflareProviderConfig;
   env?: EnvOverrides;
@@ -105,7 +107,7 @@ class CloudflareAiGenericProvider implements ApiProvider {
 
     invariant(
       accountIdCandidate,
-      'Cloudflare account ID required. Supply it via config apiKey or apiKeyEnvar, or the CLOUDFLARE_API_KEY environment variable',
+      'Cloudflare account ID required. Supply it via config apiKey or apiKeyEnvar, or the CLOUDFLARE_ACCOUNT_ID environment variable',
     );
 
     invariant(
@@ -135,7 +137,7 @@ class CloudflareAiGenericProvider implements ApiProvider {
   }
 
   id(): string {
-    return `cloudflare-ai:${this.deploymentName}`;
+    return `cloudflare-ai:${this.modelType}:${this.deploymentName}`;
   }
 
   toString(): string {
@@ -187,6 +189,8 @@ type IEmbeddingsResponse = {
 export type ICloudflareEmbeddingResponse = IBuildCloudflareResponse<IEmbeddingsResponse>;
 
 export class CloudflareAiEmbeddingProvider extends CloudflareAiGenericProvider {
+  readonly modelType = 'embedding';
+
   async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
     const body: Omit<Cloudflare.Workers.AI.AIRunParams.TextEmbeddings, ICloudflareParamsToIgnore> =
       {
@@ -252,6 +256,8 @@ export class CloudflareAiEmbeddingProvider extends CloudflareAiGenericProvider {
 export type ICloudflareTextGenerationResponse = IBuildCloudflareResponse<{ response: string }>;
 
 export class CloudflareAiCompletionProvider extends CloudflareAiGenericProvider {
+  readonly modelType = 'completion';
+
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
@@ -315,6 +321,8 @@ export class CloudflareAiCompletionProvider extends CloudflareAiGenericProvider 
 }
 
 export class CloudflareAiChatCompletionProvider extends CloudflareAiGenericProvider {
+  readonly modelType = 'chat';
+
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
