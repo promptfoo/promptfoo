@@ -21,7 +21,13 @@ import {
   writeOutput,
 } from '../src/util';
 
-import type { ApiProvider, EvaluateResult, EvaluateTable, TestCase, UnifiedConfig } from '../src/types';
+import type {
+  ApiProvider,
+  EvaluateResult,
+  EvaluateTable,
+  TestCase,
+  UnifiedConfig,
+} from '../src/types';
 
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
@@ -62,7 +68,7 @@ describe('util', () => {
           },
           prompt: {
             raw: 'Test prompt',
-            display: '[display] Test prompt',
+            label: '[display] Test prompt',
           },
           response: {
             output: 'Test output',
@@ -75,7 +81,7 @@ describe('util', () => {
       ];
       const table: EvaluateTable = {
         head: {
-          prompts: [{ raw: 'Test prompt', display: '[display] Test prompt', provider: 'foo' }],
+          prompts: [{ raw: 'Test prompt', label: '[display] Test prompt', provider: 'foo' }],
           vars: ['var1', 'var2'],
         },
         body: [
@@ -134,7 +140,7 @@ describe('util', () => {
           },
           prompt: {
             raw: 'Test prompt',
-            display: '[display] Test prompt',
+            label: '[display] Test prompt',
           },
           response: {
             output: 'Test output',
@@ -147,7 +153,7 @@ describe('util', () => {
       ];
       const table: EvaluateTable = {
         head: {
-          prompts: [{ raw: 'Test prompt', display: '[display] Test prompt', provider: 'foo' }],
+          prompts: [{ raw: 'Test prompt', label: '[display] Test prompt', provider: 'foo' }],
           vars: ['var1', 'var2'],
         },
         body: [
@@ -206,7 +212,7 @@ describe('util', () => {
           },
           prompt: {
             raw: 'Test prompt',
-            display: '[display] Test prompt',
+            label: '[display] Test prompt',
           },
           response: {
             output: 'Test output',
@@ -219,7 +225,7 @@ describe('util', () => {
       ];
       const table: EvaluateTable = {
         head: {
-          prompts: [{ raw: 'Test prompt', display: '[display] Test prompt', provider: 'foo' }],
+          prompts: [{ raw: 'Test prompt', label: '[display] Test prompt', provider: 'foo' }],
           vars: ['var1', 'var2'],
         },
         body: [
@@ -278,7 +284,7 @@ describe('util', () => {
           },
           prompt: {
             raw: 'Test prompt',
-            display: '[display] Test prompt',
+            label: '[display] Test prompt',
           },
           response: {
             output: 'Test output',
@@ -291,7 +297,7 @@ describe('util', () => {
       ];
       const table: EvaluateTable = {
         head: {
-          prompts: [{ raw: 'Test prompt', display: '[display] Test prompt', provider: 'foo' }],
+          prompts: [{ raw: 'Test prompt', label: '[display] Test prompt', provider: 'foo' }],
           vars: ['var1', 'var2'],
         },
         body: [
@@ -347,16 +353,19 @@ describe('util', () => {
     });
 
     it('fails for csv output', async () => {
-      await expect(readOutput('output.csv'))
-        .rejects.toThrow('Unsupported output file format: csv currently only supports json');
+      await expect(readOutput('output.csv')).rejects.toThrow(
+        'Unsupported output file format: csv currently only supports json',
+      );
     });
 
     it('fails for yaml output', async () => {
-      await expect(readOutput('output.yaml'))
-        .rejects.toThrow('Unsupported output file format: yaml currently only supports json');
+      await expect(readOutput('output.yaml')).rejects.toThrow(
+        'Unsupported output file format: yaml currently only supports json',
+      );
 
-      await expect(readOutput('output.yml'))
-        .rejects.toThrow('Unsupported output file format: yml currently only supports json');
+      await expect(readOutput('output.yml')).rejects.toThrow(
+        'Unsupported output file format: yml currently only supports json',
+      );
     });
   });
 
@@ -878,7 +887,7 @@ describe('util', () => {
       provider: 'provider',
       vars: {
         key: 'value',
-      }
+      },
     };
     const result = {
       provider: 'provider',
@@ -887,7 +896,7 @@ describe('util', () => {
       },
     } as any as EvaluateResult;
 
-    it ('is true', () => {
+    it('is true', () => {
       expect(resultIsForTestCase(result, testCase)).toStrictEqual(true);
     });
 
