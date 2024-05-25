@@ -606,7 +606,7 @@ export interface TestSuiteConfig {
   providers: ProviderId | ProviderFunction | (ProviderId | ProviderOptionsMap | ProviderOptions)[];
 
   // One or more prompt files to load
-  prompts: FilePath | FilePath[] | Record<FilePath, string>;
+  prompts: FilePath | (FilePath | Prompt)[] | Record<FilePath, string>;
 
   // Path to a test file, OR list of LLM prompt variations (aka "test case")
   tests: FilePath | (FilePath | TestCase)[];

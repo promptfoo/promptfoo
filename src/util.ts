@@ -277,25 +277,45 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
   const configsAreObjects = configs.every((config) => typeof config.prompts === 'object');
   let prompts: UnifiedConfig['prompts'] = configsAreStringOrArray ? [] : {};
 
-  const makeAbsolute = (configPath: string, relativePath: string) => {
-    if (relativePath.startsWith('file://')) {
-      relativePath =
-        'file://' + path.resolve(path.dirname(configPath), relativePath.slice('file://'.length));
+  const makeAbsolute = (configPath: string, relativePath: string | Prompt) => {
+    if (typeof relativePath === 'string') {
+      if (relativePath.startsWith('file://')) {
+        relativePath =
+          'file://' + path.resolve(path.dirname(configPath), relativePath.slice('file://'.length));
+      }
+      return relativePath;
+    } else if (typeof relativePath === 'object' && relativePath.id) {
+      if (relativePath.id.startsWith('file://')) {
+        relativePath.id =
+          'file://' +
+          path.resolve(path.dirname(configPath), relativePath.id.slice('file://'.length));
+      }
+      return relativePath;
+    } else {
+      throw new Error('Invalid prompt object');
     }
-    return relativePath;
   };
 
   const seenPrompts = new Set<string>();
+  const addSeenPrompt = (prompt: string | Prompt) => {
+    if (typeof prompt === 'string') {
+      seenPrompts.add(prompt);
+    } else if (typeof prompt === 'object' && prompt.id) {
+      seenPrompts.add(prompt.id);
+    } else {
+      throw new Error('Invalid prompt object');
+    }
+  };
   configs.forEach((config, idx) => {
     if (typeof config.prompts === 'string') {
       invariant(Array.isArray(prompts), 'Cannot mix string and map-type prompts');
       const absolutePrompt = makeAbsolute(configPaths[idx], config.prompts);
-      seenPrompts.add(absolutePrompt);
+      addSeenPrompt(absolutePrompt);
     } else if (Array.isArray(config.prompts)) {
       invariant(Array.isArray(prompts), 'Cannot mix configs with map and array-type prompts');
       config.prompts
         .map((prompt) => makeAbsolute(configPaths[idx], prompt))
-        .forEach((prompt) => seenPrompts.add(prompt));
+        .forEach((prompt) => addSeenPrompt(prompt));
     } else {
       // Object format such as { 'prompts/prompt1.txt': 'foo', 'prompts/prompt2.txt': 'bar' }
       invariant(typeof prompts === 'object', 'Cannot mix configs with map and array-type prompts');
@@ -1300,13 +1320,17 @@ export function safeJsonStringify(value: any, prettyPrint: boolean = false): str
   // Prevent circular references
   const cache = new Set();
   const space = prettyPrint ? 2 : undefined;
-  return JSON.stringify(value, (key, val) => {
-    if (typeof val === 'object' && val !== null) {
-      if (cache.has(val)) return;
-      cache.add(val);
-    }
-    return val;
-  }, space);
+  return JSON.stringify(
+    value,
+    (key, val) => {
+      if (typeof val === 'object' && val !== null) {
+        if (cache.has(val)) return;
+        cache.add(val);
+      }
+      return val;
+    },
+    space,
+  );
 }
 
 export function renderVarsInObject<T>(obj: T, vars?: Record<string, string | object>): T {
