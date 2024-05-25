@@ -209,6 +209,9 @@ export interface OutputConfig {
    */
   postprocess?: string;
   transform?: string;
+  
+  // The name of the variable to store the output of this test case
+  storeOutputAs?: string;
 }
 
 export interface RunEvalOptions {
@@ -524,9 +527,6 @@ export interface TestCase<Vars = Record<string, string | string[] | object>> {
 
   // The required score for this test case.  If not provided, the test case is graded pass/fail.
   threshold?: number;
-  
-  // The name of the variable to store the output of this test case
-  storeOutputAs?: string;
 }
 
 export interface Scenario {

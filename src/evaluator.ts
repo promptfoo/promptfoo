@@ -432,9 +432,9 @@ class Evaluator {
         this.stats.failures++;
       }
 
-      if (test.storeOutputAs && ret.response?.output) {
+      if (test.options?.storeOutputAs && ret.response?.output) {
         // Save the output in a register for later use
-        this.registers[test.storeOutputAs] = ret.response.output;
+        this.registers[test.options.storeOutputAs] = ret.response.output;
       }
 
       return ret;
@@ -675,7 +675,7 @@ class Evaluator {
     let concurrency = options.maxConcurrency || DEFAULT_MAX_CONCURRENCY;
     if (concurrency > 1) {
       const usesConversation = prompts.some((p) => p.raw.includes('_conversation'));
-      const usesStoreOutputAs = tests.some((t) => t.storeOutputAs);
+      const usesStoreOutputAs = tests.some((t) => t.options?.storeOutputAs);
       if (usesConversation) {
         logger.info(
           `Setting concurrency to 1 because the ${chalk.cyan('_conversation')} variable is used.`,
