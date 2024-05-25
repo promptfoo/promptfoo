@@ -136,7 +136,7 @@ interface TestSuiteConfig {
   providers: ProviderId | ProviderFunction | (ProviderId | ProviderOptionsMap | ProviderOptions)[];
 
   // One or more prompts
-  prompts: (FilePath | object | PromptFunction)[];
+  prompts: (FilePath | Prompt | PromptFunction)[];
 
   // Path to a test file, OR list of LLM prompt variations (aka "test case")
   tests: FilePath | (FilePath | TestCase)[];
@@ -193,8 +193,34 @@ interface Scenario {
 }
 ```
 
-Also, see [this table here](/docs/configuration/scenarios#configuration)
-for descriptions.
+Also, see [this table here](/docs/configuration/scenarios#configuration) for descriptions.
+
+### Prompt
+
+A `Prompt` is what it sounds like.  When specifying a prompt object in a static config, it should look like this:
+
+```typescript
+interface Prompt {
+  id: string;    // Path, usually prefixed with file://
+  label: string; // How to display it in outputs and web UI
+}
+```
+
+When passing a `Prompt` object directly to the Javascript library:
+
+```typescript
+interface Prompt {
+  // The actual prompt
+  raw: string;  
+  // How it should appear in the UI
+  label: string;  
+  // A function to generate a prompt on a per-input basis. Overrides the raw prompt.
+  function?: (context: {
+    vars: Record<string, string | object>;
+    provider?: ApiProvider;
+  }) => Promise<string | object>;
+}
+```
 
 ### EvaluateOptions
 

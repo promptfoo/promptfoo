@@ -128,8 +128,10 @@ Here's an example of how to set separate prompts for Llama v2 and GPT models:
 
 ```yaml title=promptfooconfig.yaml
 prompts:
-  prompts/gpt_chat_prompt.json: gpt_chat_prompt
-  prompts/llama_completion_prompt.txt: llama_completion_prompt
+  - id: file://prompts/gpt_chat_prompt.json
+    label: gpt_chat_prompt
+  - id: file://prompts/llama_completion_prompt.txt
+    label: llama_completion_prompt
 
 providers:
   - id: openai:gpt-3.5-turbo-0613
