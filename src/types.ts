@@ -243,17 +243,13 @@ export interface EvaluateOptions {
 }
 
 export interface Prompt {
-  id: string;
+  id?: string;
   raw: string;
   display: string;
   function?: (context: {
     vars: Record<string, string | object>;
     provider?: ApiProvider;
   }) => Promise<string | object>;
-}
-
-export function isPrompt(obj: any): obj is Prompt {
-  return typeof obj === 'object' && 'id' in obj && 'raw' in obj && 'display' in obj;
 }
 
 // Used for final prompt display

@@ -94,7 +94,7 @@ enum PromptInputType {
 }
 
 export async function readPrompts(
-  promptPathOrGlobs: string | string[] | Record<string, string>,
+  promptPathOrGlobs: string | (string | Prompt)[] | Record<string, string>,
   basePath: string = '',
 ): Promise<Prompt[]> {
   logger.debug(`Reading prompts from ${JSON.stringify(promptPathOrGlobs)}`);
@@ -119,33 +119,38 @@ export async function readPrompts(
   } else if (Array.isArray(promptPathOrGlobs)) {
     // TODO(ian): Handle object array, such as OpenAI messages
     promptPathInfos = promptPathOrGlobs.flatMap((pathOrGlob) => {
-      let display = pathOrGlob;
-      if (isPrompt(pathOrGlob)) {
-        // Parse prompt config object {id, label}
-        display = pathOrGlob.display || pathOrGlob.id;
-        pathOrGlob = pathOrGlob.id;
+      let display;
+      let rawPath: string;
+      if (typeof pathOrGlob === 'object') {
+        // Parse prompt config object {id, display}
+        display = pathOrGlob.display;
+        invariant(pathOrGlob.id, 'Prompt object requires id');
+        rawPath = pathOrGlob.id;
+      } else {
+        display = pathOrGlob;
+        rawPath = pathOrGlob;
       }
-      invariant(typeof pathOrGlob === 'string', `Prompt path must be a string, but got ${JSON.stringify(pathOrGlob)}`);
-      if (pathOrGlob.startsWith('file://')) {
-        pathOrGlob = pathOrGlob.slice('file://'.length);
+      invariant(typeof rawPath === 'string', `Prompt path must be a string, but got ${JSON.stringify(rawPath)}`);
+      if (rawPath.startsWith('file://')) {
+        rawPath = rawPath.slice('file://'.length);
         // This path is explicitly marked as a file, ensure that it's not used as a raw prompt.
-        forceLoadFromFile.add(pathOrGlob);
+        forceLoadFromFile.add(rawPath);
       }
-      resolvedPath = path.resolve(basePath, pathOrGlob);
+      resolvedPath = path.resolve(basePath, rawPath);
       resolvedPathToDisplay.set(resolvedPath, display);
       const globbedPaths = globSync(resolvedPath.replace(/\\/g, '/'), {
         windowsPathsNoEscape: true,
       });
       logger.debug(
-        `Expanded prompt ${pathOrGlob} to ${resolvedPath} and then to ${JSON.stringify(
+        `Expanded prompt ${rawPath} to ${resolvedPath} and then to ${JSON.stringify(
           globbedPaths,
         )}`,
       );
       if (globbedPaths.length > 0) {
-        return globbedPaths.map((globbedPath) => ({ raw: pathOrGlob, resolved: globbedPath }));
+        return globbedPaths.map((globbedPath) => ({ raw: rawPath, resolved: globbedPath }));
       }
       // globSync will return empty if no files match, which is the case when the path includes a function name like: file.js:func
-      return [{ raw: pathOrGlob, resolved: resolvedPath }];
+      return [{ raw: rawPath, resolved: resolvedPath }];
     });
     inputType = PromptInputType.ARRAY;
   } else if (typeof promptPathOrGlobs === 'object') {
