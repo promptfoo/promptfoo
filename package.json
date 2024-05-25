@@ -26,7 +26,7 @@
   },
   "scripts": {
     "tsc": "tsc",
-    "local": "ts-node --esm --files src/main.ts",
+    "local": "ts-node --cwdMode --transpileOnly src/main.ts",
     "local:web": "cd src/web/nextui && npm run dev",
     "install:nextui": "cd src/web/nextui && npm install",
     "build:clean": "rm -rf dist",
