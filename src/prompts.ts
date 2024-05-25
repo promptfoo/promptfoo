@@ -93,7 +93,7 @@ enum PromptInputType {
 }
 
 export async function readPrompts(
-  promptPathOrGlobs: string | (string | Prompt)[] | Record<string, string>,
+  promptPathOrGlobs: string | (string | Partial<Prompt>)[] | Record<string, string>,
   basePath: string = '',
 ): Promise<Prompt[]> {
   logger.debug(`Reading prompts from ${JSON.stringify(promptPathOrGlobs)}`);
@@ -117,14 +117,17 @@ export async function readPrompts(
     inputType = PromptInputType.STRING;
   } else if (Array.isArray(promptPathOrGlobs)) {
     // TODO(ian): Handle object array, such as OpenAI messages
+    inputType = PromptInputType.ARRAY;
     promptPathInfos = promptPathOrGlobs.flatMap((pathOrGlob) => {
       let display;
       let rawPath: string;
       if (typeof pathOrGlob === 'object') {
         // Parse prompt config object {id, display}
+        invariant(pathOrGlob.display, `Prompt object requires display, but got ${JSON.stringify(pathOrGlob)}`);
         display = pathOrGlob.display;
-        invariant(pathOrGlob.id, 'Prompt object requires id');
+        invariant(pathOrGlob.id, `Prompt object requires id, but got ${JSON.stringify(pathOrGlob)}`);
         rawPath = pathOrGlob.id;
+        inputType = PromptInputType.NAMED;
       } else {
         display = pathOrGlob;
         rawPath = pathOrGlob;
@@ -151,7 +154,6 @@ export async function readPrompts(
       // globSync will return empty if no files match, which is the case when the path includes a function name like: file.js:func
       return [{ raw: rawPath, resolved: resolvedPath }];
     });
-    inputType = PromptInputType.ARRAY;
   } else if (typeof promptPathOrGlobs === 'object') {
     // Display/contents mapping
     promptPathInfos = Object.keys(promptPathOrGlobs).map((key) => {
@@ -249,8 +251,8 @@ export async function readPrompts(
           }
         };
         let display = fileContent;
-        const resolvedPathLookup = functionName ? `${promptPath}:${functionName}` : promptPath;
-        if (inputType === PromptInputType.NAMED || resolvedPathToDisplay.has(resolvedPathLookup)) {
+        if (inputType === PromptInputType.NAMED) {
+          const resolvedPathLookup = functionName ? `${promptPath}:${functionName}` : promptPath;
           display = resolvedPathToDisplay.get(resolvedPathLookup) || resolvedPathLookup;
         }
 

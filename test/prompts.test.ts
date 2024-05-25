@@ -142,6 +142,34 @@ describe('prompts', () => {
     expect(result[0].function).toBeDefined();
   });
 
+  test('readPrompts with Prompt object array', async () => {
+    const prompts = [
+      { id: 'prompts.py:prompt1', display: 'First prompt' },
+      { id: 'prompts.py:prompt2', display: 'Second prompt' },
+    ];
+
+    const code = `def prompt1:
+  return 'First prompt'
+def prompt2:
+  return 'Second prompt'`;
+    (fs.readFileSync as jest.Mock).mockReturnValue(code);
+
+    const result = await readPrompts(prompts);
+
+    expect(fs.readFileSync).toHaveBeenCalledTimes(2);
+    expect(result).toHaveLength(2);
+    expect(result[0]).toEqual({
+      raw: code,
+      display: 'First prompt',
+      function: expect.any(Function),
+    });
+    expect(result[1]).toEqual({
+      raw: code,
+      display: 'Second prompt',
+      function: expect.any(Function),
+    });
+  });
+
   test('readPrompts with .js file', async () => {
     jest.doMock(
       path.resolve('prompt.js'),
