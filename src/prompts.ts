@@ -11,14 +11,13 @@ import { runPython } from './python/wrapper';
 import { importModule } from './esm';
 import { safeJsonStringify } from './util';
 
-import {
-  type UnifiedConfig,
-  type Prompt,
-  type ProviderOptionsMap,
-  type TestSuite,
-  type ProviderOptions,
-  type ApiProvider,
-  isPrompt,
+import type {
+  UnifiedConfig,
+  Prompt,
+  ProviderOptionsMap,
+  TestSuite,
+  ProviderOptions,
+  ApiProvider,
 } from './types';
 
 export * from './external/ragas';
