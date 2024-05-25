@@ -202,7 +202,6 @@ export class CloudflareAiEmbeddingProvider extends CloudflareAiGenericProvider {
         {
           method: 'POST',
           headers: this.buildApiHeaders(),
-
           body: JSON.stringify(body),
         },
         REQUEST_TIMEOUT_MS,
