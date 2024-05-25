@@ -40,23 +40,7 @@ providers:
 
 ## Formatting chat messages
 
-The [prompt file](/docs/configuration/parameters#prompt-files) supports a message in OpenAI's JSON prompt format. This allows you to set multiple messages including the system prompt. For example:
-
-```json
-[
-  { "role": "system", "content": "You are a helpful assistant." },
-  { "role": "user", "content": "Who won the world series in {{ year }}?" }
-]
-```
-
-Equivalent yaml is also supported:
-
-```yaml
-- role: system
-  content: You are a helpful assistant.
-- role: user
-  content: Who won the world series in {{ year }}?
-```
+For information on setting up chat conversation, see [chat threads](/docs/configuration/chat).
 
 ## Configuring parameters
 
