@@ -1325,6 +1325,9 @@ export function renderVarsInObject<T>(obj: T, vars?: Record<string, string | obj
       result[key] = renderVarsInObject((obj as Record<string, unknown>)[key], vars);
     }
     return result as T;
+  } else if (typeof obj === 'function') {
+    const fn = obj as Function;
+    return renderVarsInObject(fn({ vars }) as T);
   }
   return obj;
 }
