@@ -25,18 +25,19 @@ Here is the main structure of the promptfoo configuration file:
 
 A test case represents a single example input that is fed into all prompts and providers.
 
-| Property             | Type                                        | Required | Description                                                                                                                                 |
-| -------------------- | ------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| description          | string                                      | No       | Description of what you're testing                                                                                                          |
-| vars                 | Record\<string, string \| string[] \| any\> | No       | Key-value pairs to substitute in the prompt. If `vars` is a plain string, it will be treated as a YAML filepath to load a var mapping from. |
-| assert               | [Assertion](#assertion)[]                   | No       | List of automatic checks to run on the LLM output                                                                                           |
-| threshold            | number                                      | No       | Test will fail if the combined score of assertions is less than this number                                                                 |
-| options              | Object                                      | No       | Additional configuration settings                                                                                                           |
-| options.prefix       | string                                      | No       | This is prepended to the prompt                                                                                                             |
-| options.suffix       | string                                      | No       | This is appended to the prompt                                                                                                              |
-| options.transform    | string                                      | No       | A JavaScript snippet that runs on LLM output before any assertions                                                                          |
-| options.provider     | string                                      | No       | The API provider to use for LLM rubric grading                                                                                              |
-| options.rubricPrompt | string \| string[]                          | No       | Model-graded LLM prompt                                                                                                                     |
+| Property              | Type                                        | Required | Description                                                                                                                                 |
+| --------------------- | ------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| description           | string                                      | No       | Description of what you're testing                                                                                                          |
+| vars                  | Record\<string, string \| string[] \| any\> | No       | Key-value pairs to substitute in the prompt. If `vars` is a plain string, it will be treated as a YAML filepath to load a var mapping from. |
+| assert                | [Assertion](#assertion)[]                   | No       | List of automatic checks to run on the LLM output                                                                                           |
+| threshold             | number                                      | No       | Test will fail if the combined score of assertions is less than this number                                                                 |
+| options               | Object                                      | No       | Additional configuration settings                                                                                                           |
+| options.prefix        | string                                      | No       | This is prepended to the prompt                                                                                                             |
+| options.suffix        | string                                      | No       | This is appended to the prompt                                                                                                              |
+| options.transform     | string                                      | No       | A filepath (js or py), or JavaScript snippet that runs on LLM output before any assertions                                                  |
+| options.storeOutputAs | string                                      | No       | The output of this test will be stored as a variable, which can be used in subsequent tests                                                 |
+| options.provider      | string                                      | No       | The API provider to use for LLM rubric grading                                                                                              |
+| options.rubricPrompt  | string \| string[]                          | No       | Model-graded LLM prompt                                                                                                                     |
 
 ### Assertion
 
@@ -253,7 +254,7 @@ EvaluateSummary is an object that represents a summary of the evaluation results
 ```typescript
 interface EvaluateSummary {
   version: number;
-  timestamp: string;  // ISO 8601 datetime
+  timestamp: string; // ISO 8601 datetime
   results: EvaluateResult[];
   table: EvaluateTable;
   stats: EvaluateStats;

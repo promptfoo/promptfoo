@@ -209,6 +209,9 @@ export interface OutputConfig {
    */
   postprocess?: string;
   transform?: string;
+  
+  // The name of the variable to store the output of this test case
+  storeOutputAs?: string;
 }
 
 export interface RunEvalOptions {
