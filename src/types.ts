@@ -72,6 +72,8 @@ export interface EnvOverrides {
   VERTEX_REGION?: string;
   VERTEX_PUBLISHER?: string;
   MISTRAL_API_KEY?: string;
+  CLOUDFLARE_API_KEY?: string;
+  CLOUDFLARE_ACCOUNT_ID?: string;
 }
 
 export interface ProviderOptions {

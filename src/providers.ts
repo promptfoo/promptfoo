@@ -47,6 +47,7 @@ import {
 import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './providers/bedrock';
 import { PythonProvider } from './providers/pythonCompletion';
 import { CohereChatCompletionProvider } from './providers/cohere';
+import * as CloudflareAiProviders from './providers/cloudflare-ai';
 import { BAMChatProvider, BAMEmbeddingProvider } from './providers/bam';
 import { HttpProvider } from './providers/http';
 import { importModule } from './esm';
@@ -126,7 +127,10 @@ export async function loadApiProvider(
     env,
   };
   let ret: ApiProvider;
-  if (providerPath.startsWith('file://') && (providerPath.endsWith('.yaml')|| providerPath.endsWith('.yml'))){
+  if (
+    providerPath.startsWith('file://') &&
+    (providerPath.endsWith('.yaml') || providerPath.endsWith('.yml'))
+  ) {
     const filePath = providerPath.slice('file://'.length);
     const yamlContent = yaml.load(fs.readFileSync(filePath, 'utf8')) as ProviderOptions;
     invariant(yamlContent, `Provider config ${filePath} is undefined`);
@@ -281,6 +285,32 @@ export async function loadApiProvider(
         `Invalid BAM provider: ${providerPath}. Use one of the following providers: bam:chat:<model name>`,
       );
     }
+  } else if (providerPath.startsWith('cloudflare-ai:')) {
+    // Load Cloudflare AI
+    const splits = providerPath.split(':');
+    const modelType = splits[1];
+    const deploymentName = splits[2];
+
+    if (modelType === 'chat') {
+      ret = new CloudflareAiProviders.CloudflareAiChatCompletionProvider(
+        deploymentName,
+        providerOptions,
+      );
+    } else if (modelType === 'embedding' || modelType === 'embeddings') {
+      ret = new CloudflareAiProviders.CloudflareAiEmbeddingProvider(
+        deploymentName,
+        providerOptions,
+      );
+    } else if (modelType === 'completion') {
+      ret = new CloudflareAiProviders.CloudflareAiCompletionProvider(
+        deploymentName,
+        providerOptions,
+      );
+    } else {
+      throw new Error(
+        `Unknown Cloudflare AI model type: ${modelType}. Use one of the following providers: cloudflare-ai:chat:<model name>, cloudflare-ai:completion:<model name>, cloudflare-ai:embedding:`,
+      );
+    }
   } else if (providerPath.startsWith('webhook:')) {
     const webhookUrl = providerPath.substring('webhook:'.length);
     ret = new WebhookProvider(webhookUrl, providerOptions);
@@ -336,7 +366,8 @@ export async function loadApiProvider(
   } else if (providerPath.startsWith('http:') || providerPath.startsWith('https:')) {
     ret = new HttpProvider(providerPath, providerOptions);
   } else if (providerPath === 'promptfoo:redteam:iterative') {
-    const RedteamIterativeProvider = (await import(path.join(__dirname, './redteam/iterative'))).default;
+    const RedteamIterativeProvider = (await import(path.join(__dirname, './redteam/iterative')))
+      .default;
     ret = new RedteamIterativeProvider(providerOptions);
   } else {
     if (providerPath.startsWith('file://')) {

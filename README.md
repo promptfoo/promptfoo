@@ -364,3 +364,12 @@ Here are some of the available scripts:
 # [» View full documentation «](https://promptfoo.dev/docs/intro)
 
 [providers-docs]: https://promptfoo.dev/docs/providers
+
+
+### Adding a New Provider
+
+1. Create an implementation in `src/providers/SOME_PROVIDER_FILE`
+2. Update `loadApiProvider` in `src/providers.ts` to load your provider via string
+3. Add test cases in `test/providers.test.ts`
+   1. Test the actual provider implementation
+   2. Test loading the provider via a `loadApiProvider` test
