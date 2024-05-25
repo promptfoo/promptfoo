@@ -461,11 +461,47 @@ tests:
         value: NYC
 ```
 
+:::tip
+Functions can use variables from test cases:
+
+```js
+{
+  type: "function",
+  function: {
+    description: "Get temperature in {{city}}"
+    // ...
+  }
+}
+```
+
+They can also include functions that dynamically reference vars:
+
+```js
+{
+  type: "function",
+  function: {
+    name: "get_temperature",
+    parameters: {
+      type: "object",
+        properties: {
+          unit: {
+            type: "string",
+            // highlight-start
+            enum: (vars) => vars.units,
+            // highlight-end
+          }
+        },
+    }
+  }
+}
+```
+:::
+
 ### Using functions
 
 > `functions` and `function_call` is deprecated in favor of `tools` and `tool_choice`, see detail in [OpenAI API reference](https://platform.openai.com/docs/api-reference/chat/create#chat-create-function_call).
 
-In addition, you can use `functions` to define custom functions. Each function should be an object with a `name`, optional `description`, and `parameters`. For example:
+Use the `functions` config to define custom functions. Each function should be an object with a `name`, optional `description`, and `parameters`. For example:
 
 ```yaml
 prompts: [prompt.txt]
