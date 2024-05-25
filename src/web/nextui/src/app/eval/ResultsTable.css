@@ -117,7 +117,7 @@ table.results-table,
 .results-table tr .cell img {
   max-width: 256px;
   max-height: 256px;
-  cursor: pointer;
+  cursor: zoom-in;
 }
 
 .results-table tr .variable > *,
@@ -322,6 +322,7 @@ table.results-table,
 .results-table tr .cell .lightbox img {
   max-width: 90%;
   max-height: 90%;
+  cursor: zoom-out;
 }
 
 .resizer {

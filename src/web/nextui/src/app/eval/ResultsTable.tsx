@@ -197,19 +197,24 @@ function EvalOutputCell({
   let text = typeof output.text === 'string' ? output.text : JSON.stringify(output.text);
   let node: React.ReactNode | undefined;
   let chunks: string[] = [];
-  if (text.startsWith('[IMAGE]')) {
-    const url = text.slice('[IMAGE]'.length).trim();
-
-    node = (
-      <>
-        <img loading="lazy" src={url} alt={output.prompt} onClick={toggleLightbox} />
-        {lightboxOpen && (
-          <div className="lightbox" onClick={toggleLightbox}>
-            <img src={url} alt={output.prompt} />
-          </div>
-        )}
-      </>
-    );
+  let hasImageLightbox = false;
+  if (text.startsWith('![')) {
+    const imageUrlRegex = /^!\[.*?\]\((.*?)\)/;
+    const imageUrlMatch = text.match(imageUrlRegex);
+    if (imageUrlMatch) {
+      const url = imageUrlMatch[1];
+      node = (
+        <>
+          <img loading="lazy" src={url} alt={output.prompt} onClick={toggleLightbox} />
+          {lightboxOpen && (
+            <div className="lightbox" onClick={toggleLightbox}>
+              <img src={url} alt={output.prompt} />
+            </div>
+          )}
+        </>
+      );
+      hasImageLightbox = true;
+    }
   } else if (!output.pass && text.includes('---')) {
     // TODO(ian): Plumb through failure message instead of parsing it out.
     chunks = text.split('---');
@@ -298,7 +303,7 @@ function EvalOutputCell({
     } catch (error) {
       console.error('Invalid regular expression:', (error as Error).message);
     }
-  } else if (renderMarkdown) {
+  } else if (renderMarkdown && !hasImageLightbox) {
     node = <ReactMarkdown>{text}</ReactMarkdown>;
   } else if (prettifyJson) {
     try {
@@ -374,7 +379,8 @@ function EvalOutputCell({
       >
         <span>
           {totalTokens}
-          {(promptTokens !== '0' || completionTokens !== '0') && ` (${promptTokens}+${completionTokens})`}
+          {(promptTokens !== '0' || completionTokens !== '0') &&
+            ` (${promptTokens}+${completionTokens})`}
         </span>
       </Tooltip>
     );
