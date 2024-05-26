@@ -23,12 +23,23 @@ interface SynthesizeOptions {
 
 const ALL_PLUGINS = [
   'harmful',
+  'harmful:violent-crime',
+  'harmful:non-violent-crime',
+  'harmful:sex-crime',
+  'harmful:child-exploitation',
+  'harmful:specialized-advice',
+  'harmful:privacy',
+  'harmful:intellectual-property',
+  'harmful:indiscriminate-weapons',
+  'harmful:hate',
+  'harmful:self-harm',
+  'harmful:sexual-content',
   'prompt-injection',
   'jailbreak',
   'hijacking',
   'hallucination',
   'excessive-agency',
-  'overconfidence',
+  'overreliance',
 ];
 
 function validatePlugins(plugins: string[]) {

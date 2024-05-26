@@ -11,9 +11,10 @@ import {
   OpenAiChatCompletionProvider,
   OpenAiEmbeddingProvider,
   OpenAiImageProvider,
+  OpenAiModerationProvider,
 } from './providers/openai';
 import { AnthropicCompletionProvider, AnthropicMessagesProvider } from './providers/anthropic';
-import { ReplicateProvider } from './providers/replicate';
+import { ReplicateModerationProvider, ReplicateProvider } from './providers/replicate';
 import {
   LocalAiCompletionProvider,
   LocalAiChatProvider,
@@ -152,9 +153,11 @@ export async function loadApiProvider(
     if (modelType === 'chat') {
       ret = new OpenAiChatCompletionProvider(modelName || 'gpt-3.5-turbo', providerOptions);
     } else if (modelType === 'embedding' || modelType === 'embeddings') {
-      ret = new OpenAiEmbeddingProvider(modelName || 'text-embedding-ada-002', providerOptions);
+      ret = new OpenAiEmbeddingProvider(modelName || 'text-embedding-3-large', providerOptions);
     } else if (modelType === 'completion') {
-      ret = new OpenAiCompletionProvider(modelName || 'text-davinci-003', providerOptions);
+      ret = new OpenAiCompletionProvider(modelName || 'gpt-3.5-turbo-instruct', providerOptions);
+    } else if (modelType === 'moderation') {
+      ret = new OpenAiModerationProvider(modelName || 'text-moderation-latest', providerOptions);
     } else if (OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES.includes(modelType)) {
       ret = new OpenAiChatCompletionProvider(modelType, providerOptions);
     } else if (OpenAiCompletionProvider.OPENAI_COMPLETION_MODEL_NAMES.includes(modelType)) {
@@ -258,8 +261,14 @@ export async function loadApiProvider(
     }
   } else if (providerPath.startsWith('replicate:')) {
     const splits = providerPath.split(':');
-    const modelName = splits.slice(1).join(':');
-    ret = new ReplicateProvider(modelName, providerOptions);
+    const modelType = splits[1];
+    const modelName = splits.slice(2).join(':');
+    if (modelType === 'moderation') {
+      ret = new ReplicateModerationProvider(modelName, providerOptions);
+    } else {
+      // By default, there is no model type.
+      ret = new ReplicateProvider(modelType + ':' + modelName, providerOptions);
+    }
   } else if (providerPath.startsWith('bam:')) {
     const splits = providerPath.split(':');
     const modelType = splits[1];

@@ -143,6 +143,10 @@ export interface ApiClassificationProvider extends ApiProvider {
   callClassificationApi: (prompt: string) => Promise<ProviderClassificationResponse>;
 }
 
+export interface ApiModerationProvider extends ApiProvider {
+  callModerationApi: (prompt: string, response: string) => Promise<ProviderModerationResponse>;
+}
+
 export interface TokenUsage {
   total: number;
   prompt: number;
@@ -176,14 +180,27 @@ export interface ProviderClassificationResponse {
   classification?: Record<string, number>;
 }
 
+export interface ModerationFlag {
+  code: string;
+  description: string;
+  confidence: number;
+}
+
+export interface ProviderModerationResponse {
+  error?: string;
+  flags?: ModerationFlag[];
+}
+
 export interface CsvRow {
   [key: string]: string;
 }
 
 export type VarMapping = Record<string, string>;
 
+export type ProviderType = 'embedding' | 'classification' | 'text' | 'moderation';
+
 export type ProviderTypeMap = Partial<
-  Record<'embedding' | 'classification' | 'text', string | ProviderOptions | ApiProvider>
+  Record<ProviderType, string | ProviderOptions | ApiProvider>
 >;
 
 export interface GradingConfig {
@@ -209,7 +226,7 @@ export interface OutputConfig {
    */
   postprocess?: string;
   transform?: string;
-  
+
   // The name of the variable to store the output of this test case
   storeOutputAs?: string;
 }

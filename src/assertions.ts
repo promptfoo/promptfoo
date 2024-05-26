@@ -27,6 +27,7 @@ import {
   matchesContextRelevance,
   matchesContextFaithfulness,
   matchesSelectBest,
+  matchesModeration,
 } from './matchers';
 import { validateFunctionCall } from './providers/openaiUtil';
 import { OpenAiChatCompletionProvider } from './providers/openai';
@@ -1010,6 +1011,25 @@ ${
     };
   }
 
+  if (baseType === 'moderation') {
+    // Assertion provider overrides test provider
+    test.options = test.options || {};
+    test.options.provider = assertion.provider || test.options.provider;
+
+    invariant(prompt, 'moderation assertion type must have a prompt');
+    invariant(typeof output === 'string', 'moderation assertion type must have a string output');
+
+    const moderationResult = await matchesModeration(prompt, output, test.options);
+
+    pass = moderationResult.pass;
+    return {
+      pass,
+      score: moderationResult.score,
+      reason: moderationResult.reason,
+      assertion,
+    };
+  }
+
   if (baseType === 'webhook') {
     invariant(renderedValue, '"webhook" assertion type must have a URL value');
     invariant(typeof renderedValue === 'string', '"webhook" assertion type must have a URL value');
@@ -1279,4 +1299,5 @@ export default {
   matchesContextRelevance,
   matchesContextFaithfulness,
   matchesComparisonBoolean: matchesSelectBest,
+  matchesModeration,
 };
