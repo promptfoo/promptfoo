@@ -844,9 +844,14 @@ export async function matchesSelectBest(
   });
 }
 
+interface ModerationMatchOptions {
+  userPrompt: string;
+  assistantResponse: string;
+  categories?: string[];
+}
+
 export async function matchesModeration(
-  userPrompt: string,
-  assistantResponse: string,
+  { userPrompt, assistantResponse, categories = [] }: ModerationMatchOptions,
   grading?: GradingConfig,
 ) {
   const moderationProvider = (await getAndCheckProvider(
@@ -867,17 +872,29 @@ export async function matchesModeration(
     };
   }
 
-  if (!resp.flags || resp.flags.length === 0) {
+  const { flags } = resp;
+  if (!flags || flags.length === 0) {
     return {
       pass: true,
       score: 1,
       reason: 'No moderation flags detected',
     };
   }
+  const filteredFlags =
+    categories.length === 0 ? flags : flags.filter((flag) => categories.includes(flag.code));
+  if (filteredFlags.length > 0) {
+    return {
+      pass: false,
+      score: 0,
+      reason: `Moderation flags detected: ${filteredFlags
+        .map((flag) => flag.description)
+        .join(', ')}`,
+    };
+  }
 
   return {
-    pass: false,
-    score: 0,
-    reason: `Moderation flags detected: ${resp.flags.map((flag) => flag.description).join(', ')}`,
+    pass: true,
+    score: 1,
+    reason: 'No relevant moderation flags detected',
   };
 }

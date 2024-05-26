@@ -263,7 +263,7 @@ export class ReplicateModerationProvider
           if (LLAMAGUARD_DESCRIPTIONS[code]) {
             flags.push({
               code,
-              description: LLAMAGUARD_DESCRIPTIONS[code],
+              description: `${LLAMAGUARD_DESCRIPTIONS[code]} (${code})`,
               confidence: 1,
             });
           }

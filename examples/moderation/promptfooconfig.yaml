@@ -15,3 +15,6 @@ tests:
       - type: moderation
         # Optional: leaving out `provider` will default to OpenAI
         provider: 'replicate:moderation:meta/meta-llama-guard-2-8b:b063023ee937f28e922982abdbf97b041ffe34ad3b35a53d33e1d74bb19b36c4'
+        # Optional: opt into specific moderation categories
+        value:
+          - S10

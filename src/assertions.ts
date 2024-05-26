@@ -1018,8 +1018,19 @@ ${
 
     invariant(prompt, 'moderation assertion type must have a prompt');
     invariant(typeof output === 'string', 'moderation assertion type must have a string output');
-
-    const moderationResult = await matchesModeration(prompt, output, test.options);
+    invariant(
+      !assertion.value ||
+        (Array.isArray(assertion.value) && typeof assertion.value[0] === 'string'),
+      'moderation assertion value must be a string array if set',
+    );
+    const moderationResult = await matchesModeration(
+      {
+        userPrompt: prompt,
+        assistantResponse: output,
+        categories: Array.isArray(assertion.value) ? assertion.value : [],
+      },
+      test.options,
+    );
 
     pass = moderationResult.pass;
     return {
