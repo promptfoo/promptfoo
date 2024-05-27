@@ -144,6 +144,7 @@ Model-assisted eval metrics
 | [context-relevance](https://promptfoo.dev/docs/configuration/expected-outputs/model-graded)     | Ensure that context is relevant to original query                               |
 | [factuality](https://promptfoo.dev/docs/configuration/expected-outputs/model-graded)            | LLM output adheres to the given facts, using Factuality method from OpenAI eval |
 | [model-graded-closedqa](https://promptfoo.dev/docs/configuration/expected-outputs/model-graded) | LLM output adheres to given criteria, using Closed QA method from OpenAI eval   |
+| [moderation](https://promptfoo.dev/docs/configuration/expected-outputs/moderation)              | Make sure outputs are safe                                                      |
 | [select-best](https://promptfoo.dev/docs/configuration/expected-outputs/model-graded)           | Compare multiple outputs for a test case and pick the best one                  |
 
 Every test type can be negated by prepending `not-`. For example, `not-equals` or `not-regex`.
@@ -329,7 +330,7 @@ npx path/to/promptfoo-source eval
 
 The web UI is located in `src/web/nextui`. To run it in dev mode, run `npm run local:web`. This will host the web UI at http://localhost:3000. The web UI expects `promptfoo view` to be running separately.
 
-In order to build the next.js app, you'll have to set some placeholder envars (it is _not_ necessary to sign up for a supabase account).  You can edit `src/web/nextui/.env` to include the following placeholders:
+In order to build the next.js app, you'll have to set some placeholder envars (it is _not_ necessary to sign up for a supabase account). You can edit `src/web/nextui/.env` to include the following placeholders:
 
 ```sh
 DATABASE_URL="postgresql://..."

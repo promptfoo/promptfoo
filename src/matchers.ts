@@ -26,6 +26,8 @@ import type {
   ProviderOptions,
   ProviderTypeMap,
   TokenUsage,
+  ProviderType,
+  ApiModerationProvider,
 } from './types';
 import { getDefaultProviders } from './providers/defaults';
 
@@ -73,7 +75,7 @@ async function loadFromProviderOptions(provider: ProviderOptions) {
 }
 
 export async function getGradingProvider(
-  type: 'embedding' | 'classification' | 'text',
+  type: ProviderType,
   provider: GradingConfig['provider'],
   defaultProvider: ApiProvider | null,
 ): Promise<ApiProvider | null> {
@@ -116,7 +118,7 @@ export async function getGradingProvider(
 }
 
 export async function getAndCheckProvider(
-  type: 'embedding' | 'classification' | 'text',
+  type: ProviderType,
   provider: GradingConfig['provider'],
   defaultProvider: ApiProvider | null,
   checkName: string,
@@ -137,6 +139,8 @@ export async function getAndCheckProvider(
       'callEmbeddingApi' in matchedProvider || 'callSimilarityApi' in matchedProvider;
   } else if (type === 'classification') {
     isValidProviderType = 'callClassificationApi' in matchedProvider;
+  } else if (type === 'moderation') {
+    isValidProviderType = 'callModerationApi' in matchedProvider;
   }
 
   if (!isValidProviderType) {
@@ -838,4 +842,59 @@ export async function matchesSelectBest(
       };
     }
   });
+}
+
+interface ModerationMatchOptions {
+  userPrompt: string;
+  assistantResponse: string;
+  categories?: string[];
+}
+
+export async function matchesModeration(
+  { userPrompt, assistantResponse, categories = [] }: ModerationMatchOptions,
+  grading?: GradingConfig,
+) {
+  const moderationProvider = (await getAndCheckProvider(
+    'moderation',
+    grading?.provider,
+    getDefaultProviders().moderationProvider,
+    'moderation check',
+  )) as ApiModerationProvider;
+
+  invariant(moderationProvider, 'Moderation provider must be defined');
+
+  const resp = await moderationProvider.callModerationApi(userPrompt, assistantResponse);
+  if (resp.error) {
+    return {
+      pass: false,
+      score: 0,
+      reason: `Moderation API error: ${resp.error}`,
+    };
+  }
+
+  const { flags } = resp;
+  if (!flags || flags.length === 0) {
+    return {
+      pass: true,
+      score: 1,
+      reason: 'No moderation flags detected',
+    };
+  }
+  const filteredFlags =
+    categories.length === 0 ? flags : flags.filter((flag) => categories.includes(flag.code));
+  if (filteredFlags.length > 0) {
+    return {
+      pass: false,
+      score: 0,
+      reason: `Moderation flags detected: ${filteredFlags
+        .map((flag) => flag.description)
+        .join(', ')}`,
+    };
+  }
+
+  return {
+    pass: true,
+    score: 1,
+    reason: 'No relevant moderation flags detected',
+  };
 }
