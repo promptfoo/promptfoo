@@ -199,9 +199,7 @@ export type VarMapping = Record<string, string>;
 
 export type ProviderType = 'embedding' | 'classification' | 'text' | 'moderation';
 
-export type ProviderTypeMap = Partial<
-  Record<ProviderType, string | ProviderOptions | ApiProvider>
->;
+export type ProviderTypeMap = Partial<Record<ProviderType, string | ProviderOptions | ApiProvider>>;
 
 export interface GradingConfig {
   rubricPrompt?: string | string[];
@@ -439,7 +437,8 @@ type BaseAssertionTypes =
   | 'perplexity'
   | 'perplexity-score'
   | 'cost'
-  | 'select-best';
+  | 'select-best'
+  | 'moderation';
 
 type NotPrefixed<T extends string> = `not-${T}`;
 
