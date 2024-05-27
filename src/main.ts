@@ -432,6 +432,14 @@ async function main() {
           throw new Error('Could not find config file. Please use `--config`');
         }
 
+        const startTime = Date.now();
+        telemetry.record('command_used', {
+          name: 'generate_dataset - started',
+          numPrompts: testSuite.prompts.length,
+          numTestsExisting: (testSuite.tests || []).length,
+        });
+        await telemetry.send();
+
         const results = await synthesizeFromTestSuite(testSuite, {
           instructions: options.instructions,
           numPersonas: parseInt(options.numPersonas, 10),
@@ -472,6 +480,7 @@ async function main() {
           numPrompts: testSuite.prompts.length,
           numTestsExisting: (testSuite.tests || []).length,
           numTestsGenerated: results.length,
+          duration: Math.round((Date.now() - startTime) / 1000),
         });
         await telemetry.send();
       },
@@ -538,6 +547,14 @@ async function main() {
           throw new Error('Could not find config file. Please use `--config`');
         }
 
+        const startTime = Date.now();
+        telemetry.record('command_used', {
+          name: 'generate redteam - started',
+          numPrompts: testSuite.prompts.length,
+          numTestsExisting: (testSuite.tests || []).length,
+        });
+        await telemetry.send();
+
         const redteamTests = await redteamSynthesizeFromTestSuite(testSuite, {
           purpose,
           injectVar,
@@ -570,6 +587,7 @@ async function main() {
           numPrompts: testSuite.prompts.length,
           numTestsExisting: (testSuite.tests || []).length,
           numTestsGenerated: redteamTests.length,
+          duration: Math.round((Date.now() - startTime) / 1000),
         });
         await telemetry.send();
       },
@@ -687,6 +705,13 @@ async function main() {
       let basePath: string | undefined = undefined;
 
       const runEvaluation = async (initialization?: boolean) => {
+        const startTime = Date.now();
+        telemetry.record('command_used', {
+          name: 'eval - started',
+          watch: Boolean(cmdObj.watch),
+        });
+        await telemetry.send();
+
         // Misc settings
         if (cmdObj.verbose) {
           setLogLevel('debug');
@@ -806,6 +831,7 @@ async function main() {
         telemetry.record('command_used', {
           name: 'eval',
           watch: Boolean(cmdObj.watch),
+          duration: Math.round((Date.now() - startTime) / 1000),
         });
         await telemetry.send();
 
