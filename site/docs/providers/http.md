@@ -29,12 +29,12 @@ providers:
     config:
       body:
         prompt: '{{prompt}}'
-        engine: '{{engine}}'
+        model: '{{model}}'
         translate: '{{language}}'
 
 tests:
   - vars:
-      engine: 'foo'
+      model: 'gpt-4'
       language: 'French'
 ```
 
