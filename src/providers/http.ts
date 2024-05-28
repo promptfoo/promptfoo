@@ -3,7 +3,7 @@ import invariant from 'tiny-invariant';
 import logger from '../logger';
 import { fetchWithCache } from '../cache';
 import { REQUEST_TIMEOUT_MS } from './shared';
-import { getNunjucksEngine } from '../util';
+import { getNunjucksEngine, safeJsonStringify } from '../util';
 
 import type {
   ApiProvider,
@@ -34,17 +34,21 @@ export class HttpProvider implements ApiProvider {
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // Render all nested strings
     const nunjucks = getNunjucksEngine();
+    const stringifiedConfig = safeJsonStringify(this.config);
     const renderedConfig: { method: string; headers: Record<string, string>; body: any } =
-      JSON.parse(nunjucks.renderString(JSON.stringify(this.config), { prompt, ...context?.vars }));
+      JSON.parse(
+        nunjucks.renderString(stringifiedConfig, {
+          prompt,
+          ...context?.vars,
+        }),
+      );
 
     const method = renderedConfig.method || 'POST';
     const headers = renderedConfig.headers || { 'Content-Type': 'application/json' };
     invariant(typeof method === 'string', 'Expected method to be a string');
     invariant(typeof headers === 'object', 'Expected headers to be an object');
 
-    logger.debug(
-      `Calling HTTP provider: ${this.url} with config: ${JSON.stringify(renderedConfig)}`,
-    );
+    logger.debug(`Calling HTTP provider: ${this.url} with config: ${stringifiedConfig}`);
     let response;
     try {
       response = await fetchWithCache(
