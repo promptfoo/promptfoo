@@ -48,6 +48,7 @@ import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './pro
 import { PythonProvider } from './providers/pythonCompletion';
 import { CohereChatCompletionProvider } from './providers/cohere';
 import { BAMChatProvider, BAMEmbeddingProvider } from './providers/bam';
+import { HttpProvider } from './providers/http';
 import { importModule } from './esm';
 
 import type {
@@ -332,6 +333,8 @@ export async function loadApiProvider(
     } else {
       ret = new LocalAiChatProvider(modelType, providerOptions);
     }
+  } else if (providerPath.startsWith('http:') || providerPath.startsWith('https:')) {
+    ret = new HttpProvider(providerPath, providerOptions);
   } else if (providerPath === 'promptfoo:redteam:iterative') {
     const RedteamIterativeProvider = (await import(path.join(__dirname, './redteam/iterative'))).default;
     ret = new RedteamIterativeProvider(providerOptions);
