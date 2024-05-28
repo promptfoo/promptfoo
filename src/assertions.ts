@@ -271,7 +271,6 @@ export async function runAssertion({
           const pythonScriptOutput = await runPython(filePath, 'get_assert', [output, context]);
           valueFromScript = pythonScriptOutput;
           logger.debug(`Python script ${filePath} output: ${valueFromScript}`);
-          logger.debug(`Python script ${filePath} output: ${valueFromScript}`);
         } catch (error) {
           throw new Error(`Python script execution failed: ${error}`);
         }
