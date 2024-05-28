@@ -5,17 +5,22 @@ import { fetchWithCache } from '../cache';
 import { REQUEST_TIMEOUT_MS } from './shared';
 import { getNunjucksEngine } from '../util';
 
-import type { ApiProvider, ProviderResponse } from '../types.js';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  ProviderOptions,
+  ProviderResponse,
+} from '../types.js';
 
 export class HttpProvider implements ApiProvider {
   url: string;
   config: any;
   responseParser: (data: any) => ProviderResponse;
 
-  constructor(url: string, config: any) {
+  constructor(url: string, options: ProviderOptions) {
     this.url = url;
-    this.config = config;
-    this.responseParser = createResponseParser(config.responseParser);
+    this.config = options.config;
+    this.responseParser = createResponseParser(this.config.responseParser);
   }
 
   id(): string {
@@ -26,11 +31,11 @@ export class HttpProvider implements ApiProvider {
     return `[HTTP Provider ${this.url}]`;
   }
 
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // Render all nested strings
     const nunjucks = getNunjucksEngine();
     const renderedConfig: { method: string; headers: Record<string, string>; body: any } =
-      JSON.parse(nunjucks.renderString(JSON.stringify(this.config), { prompt }));
+      JSON.parse(nunjucks.renderString(JSON.stringify(this.config), { prompt, ...context?.vars }));
 
     const method = renderedConfig.method || 'POST';
     const headers = renderedConfig.headers || { 'Content-Type': 'application/json' };
