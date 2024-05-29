@@ -33,6 +33,7 @@ import {
   type ICloudflareProviderBaseConfig,
   type ICloudflareTextGenerationResponse,
   type ICloudflareEmbeddingResponse,
+  type ICloudflareProviderConfig,
 } from '../src/providers/cloudflare-ai';
 
 import type { ProviderOptionsMap, ProviderFunction } from '../src/types';
@@ -585,6 +586,81 @@ describe('call provider apis', () => {
         } finally {
           enableCache();
         }
+      });
+
+      test('callApi handles cloudflare error properly', async () => {
+        const PROMPT = 'Test prompt for caching';
+        const provider = new CloudflareAiCompletionProvider(testModelName, {
+          config: cloudflareMinimumConfig,
+        });
+
+        const responsePayload: ICloudflareTextGenerationResponse = {
+          success: false,
+          errors: ['Some error occurred'],
+          messages: [],
+        };
+        const mockResponse = {
+          text: jest.fn().mockResolvedValue(JSON.stringify(responsePayload)),
+          ok: true,
+        };
+
+        fetchMock.mockResolvedValue(mockResponse);
+        const result = await provider.callApi(PROMPT);
+
+        expect(result.error).toContain(JSON.stringify(responsePayload.errors));
+      });
+
+      test('Can be invoked with custom configuration', async () => {
+        const cloudflareChatConfig: ICloudflareProviderConfig = {
+          accountId: 'MADE_UP_ACCOUNT_ID',
+          apiKey: 'MADE_UP_API_KEY',
+          frequency_penalty: 10,
+        };
+        const rawProviderConfigs: ProviderOptionsMap[] = [
+          {
+            [`cloudflare-ai:completion:${testModelName}`]: {
+              config: cloudflareChatConfig,
+            },
+          },
+        ];
+
+        const providers = await loadApiProviders(rawProviderConfigs);
+        expect(providers).toHaveLength(1);
+        expect(providers[0]).toBeInstanceOf(CloudflareAiCompletionProvider);
+
+        const cfProvider = providers[0] as CloudflareAiCompletionProvider;
+        expect(cfProvider.config).toEqual(cloudflareChatConfig);
+
+        const PROMPT = 'Test prompt for custom configuration';
+
+        const responsePayload: ICloudflareTextGenerationResponse = {
+          success: true,
+          errors: [],
+          messages: [],
+          result: {
+            response: 'Test text output',
+          },
+        };
+        const mockResponse = {
+          text: jest.fn().mockResolvedValue(JSON.stringify(responsePayload)),
+          ok: true,
+        };
+
+        fetchMock.mockResolvedValue(mockResponse);
+        await cfProvider.callApi(PROMPT);
+
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        expect(fetchMock.mock.calls.length).toBe(1);
+        const [url, { body, headers, method }] = fetchMock.mock.calls[0];
+        expect(url).toContain(cloudflareChatConfig.accountId);
+        expect(method).toBe('POST');
+        expect(headers['Authorization']).toContain(cloudflareChatConfig.apiKey);
+        const hydratedBody = JSON.parse(body);
+        expect(hydratedBody.prompt).toBe(PROMPT);
+
+        const { accountId, apiKey, ...passThroughConfig } = cloudflareChatConfig;
+        const { prompt, ...bodyWithoutPrompt } = hydratedBody;
+        expect(bodyWithoutPrompt).toEqual(passThroughConfig);
       });
     });
 

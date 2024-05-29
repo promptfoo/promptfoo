@@ -48,20 +48,22 @@ import type {
   ProviderResponse,
 } from '../types';
 
+export type ICloudflareSuccessResponse<SuccessData extends Record<string, unknown>> = {
+  success: true;
+  errors: [];
+  messages: unknown[];
+  result: SuccessData;
+};
+
 export type IBuildCloudflareResponse<SuccessData extends Record<string, unknown>> =
-  | {
-      success: true;
-      errors: [];
-      messages: unknown[];
-      result: SuccessData;
-    }
+  | ICloudflareSuccessResponse<SuccessData>
   | { success: false; errors: unknown[]; messages: unknown[] };
 
 abstract class CloudflareAiGenericProvider implements ApiProvider {
   abstract readonly modelType: 'embedding' | 'chat' | 'completion';
 
   deploymentName: string;
-  config: ICloudflareProviderConfig;
+  public readonly config: ICloudflareProviderConfig;
   env?: EnvOverrides;
 
   constructor(
@@ -172,6 +174,70 @@ abstract class CloudflareAiGenericProvider implements ApiProvider {
     return tokenUsage;
   }
 
+  /**
+   * Handles the actual marshalling of Cloudflare API response data into the response types expected
+   * by inheriting consumers
+   *
+   * This is meant to be used internally across the inheriting providers
+   * @param body
+   * @returns
+   */
+  protected async handleApiCall<
+    InitialResponse extends IBuildCloudflareResponse<{}>,
+    SuccessResponse extends InitialResponse = InitialResponse extends ICloudflareSuccessResponse<{}>
+      ? InitialResponse
+      : never,
+  >(
+    body: Record<string, unknown>,
+  ): Promise<
+    | {
+        data: SuccessResponse;
+        cached: boolean;
+        tokenUsage: ProviderEmbeddingResponse['tokenUsage'];
+      }
+    | { error: string }
+  > {
+    let data: InitialResponse;
+    let cached: boolean;
+
+    logger.debug(`Calling Cloudflare AI API: ${JSON.stringify(body)}`);
+
+    const url = this.buildUrl();
+
+    try {
+      ({ data, cached } = (await fetchWithCache(
+        url,
+        {
+          method: 'POST',
+          headers: this.buildApiHeaders(),
+          body: JSON.stringify(body),
+        },
+        REQUEST_TIMEOUT_MS,
+      )) as unknown as any);
+    } catch (err) {
+      return {
+        error: `API call error: ${String(err)}`,
+      };
+    }
+    logger.debug(`\tCloudflare AI API response: ${JSON.stringify(data)}`);
+    const tokenUsage = this.getTokenUsageFromResponse(data);
+
+    if (!data.success) {
+      return {
+        error: `API response error: ${JSON.stringify(data.errors)} (messages: ${String(
+          data.messages,
+        )} -- URL: ${url}): ${JSON.stringify(data)}`,
+        tokenUsage,
+      };
+    }
+
+    return {
+      cached,
+      data: data as SuccessResponse,
+      tokenUsage,
+    };
+  }
+
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
@@ -197,49 +263,21 @@ export class CloudflareAiEmbeddingProvider extends CloudflareAiGenericProvider {
         text,
       };
 
-    let data: ICloudflareEmbeddingResponse;
-    let cached = false;
-
-    try {
-      ({ data, cached } = (await fetchWithCache(
-        this.buildUrl(),
-        {
-          method: 'POST',
-          headers: this.buildApiHeaders(),
-          body: JSON.stringify(body),
-        },
-        REQUEST_TIMEOUT_MS,
-      )) as unknown as any);
-    } catch (err) {
-      return {
-        error: `API call error: ${String(err)}`,
-        tokenUsage: {
-          total: 0,
-          prompt: 0,
-          completion: 0,
-        },
-      };
+    const cfResponse = await this.handleApiCall<ICloudflareEmbeddingResponse>(body);
+    if ('error' in cfResponse) {
+      return { error: cfResponse.error };
     }
 
-    logger.debug(`\tCloudflare AI API response (embeddings): ${JSON.stringify(data)}`);
-
-    const tokenUsage = this.getTokenUsageFromResponse(data);
-
-    if (!data.success) {
-      return {
-        error: `API response error: ${String(data.errors)} (messages: ${String(
-          data.messages,
-        )}): ${JSON.stringify(data)}`,
-        tokenUsage,
-      };
-    }
+    const { data, tokenUsage, cached } = cfResponse;
 
     try {
       const embedding = data.result.data[0];
       if (!embedding) {
+        logger.error('No data could be found in the Cloudflare API response', JSON.stringify(data));
         throw new Error('No embedding returned');
       }
       const ret = {
+        cached,
         embedding,
         tokenUsage,
       };
@@ -276,47 +314,18 @@ export class CloudflareAiCompletionProvider extends CloudflareAiGenericProvider 
       top_k: this.config.top_k,
     };
 
-    logger.debug(`Calling Cloudflare AI API: ${JSON.stringify(body)}`);
-    let data: ICloudflareTextGenerationResponse;
-    let cached = false;
-
-    try {
-      ({ data, cached } = (await fetchWithCache(
-        this.buildUrl(),
-        {
-          method: 'POST',
-          headers: this.buildApiHeaders(),
-          body: JSON.stringify(body),
-        },
-        REQUEST_TIMEOUT_MS,
-      )) as unknown as any);
-    } catch (err) {
-      return {
-        error: `API call error: ${String(err)}`,
-      };
-    }
-    logger.debug(`\tCloudflare AI API response: ${JSON.stringify(data)}`);
-    const tokenUsage = this.getTokenUsageFromResponse(data);
-
-    if (!data.success) {
-      return {
-        error: `API response error: ${String(data.errors)} (messages: ${String(
-          data.messages,
-        )}): ${JSON.stringify(data)}`,
-        tokenUsage,
-      };
+    const cfResponse = await this.handleApiCall<ICloudflareTextGenerationResponse>(body);
+    if ('error' in cfResponse) {
+      return { error: cfResponse.error };
     }
 
-    try {
-      return {
-        output: data.result.response,
-        tokenUsage,
-      };
-    } catch (err) {
-      return {
-        error: `API response error: ${String(err)}: ${JSON.stringify(data)}`,
-      };
-    }
+    const { data, cached, tokenUsage } = cfResponse;
+
+    return {
+      output: data.result.response,
+      tokenUsage,
+      cached,
+    };
   }
 }
 
@@ -345,46 +354,17 @@ export class CloudflareAiChatCompletionProvider extends CloudflareAiGenericProvi
       top_k: this.config.top_k,
     };
 
-    logger.debug(`Calling Cloudflare AI API: ${JSON.stringify(body)}`);
-    let data: ICloudflareTextGenerationResponse;
-    let cached = false;
-
-    try {
-      ({ data, cached } = (await fetchWithCache(
-        this.buildUrl(),
-        {
-          method: 'POST',
-          headers: this.buildApiHeaders(),
-          body: JSON.stringify(body),
-        },
-        REQUEST_TIMEOUT_MS,
-      )) as unknown as any);
-    } catch (err) {
-      return {
-        error: `API call error: ${String(err)}`,
-      };
-    }
-    logger.debug(`\tCloudflare AI API response: ${JSON.stringify(data)}`);
-    const tokenUsage = this.getTokenUsageFromResponse(data);
-
-    if (!data.success) {
-      return {
-        error: `API response error: ${String(data.errors)} (messages: ${String(
-          data.messages,
-        )}): ${JSON.stringify(data)}`,
-        tokenUsage,
-      };
+    const cfResponse = await this.handleApiCall<ICloudflareTextGenerationResponse>(body);
+    if ('error' in cfResponse) {
+      return { error: cfResponse.error };
     }
 
-    try {
-      return {
-        output: data.result.response,
-        tokenUsage,
-      };
-    } catch (err) {
-      return {
-        error: `API response error: ${String(err)}: ${JSON.stringify(data)}`,
-      };
-    }
+    const { data, cached, tokenUsage } = cfResponse;
+
+    return {
+      output: data.result.response,
+      tokenUsage,
+      cached,
+    };
   }
 }
