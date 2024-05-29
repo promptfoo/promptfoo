@@ -495,6 +495,11 @@ describe('call provider apis', () => {
   });
 
   describe('CloudflareAi', () => {
+    beforeAll(() => {
+      enableCache();
+    });
+
+    const fetchMock = fetch as unknown as jest.Mock;
     const cloudflareMinimumConfig: Required<
       Pick<ICloudflareProviderBaseConfig, 'accountId' | 'apiKey'>
     > = {
@@ -513,6 +518,7 @@ describe('call provider apis', () => {
 
     describe('CloudflareAiCompletionProvider', () => {
       test('callApi with caching enabled', async () => {
+        const PROMPT = 'Test prompt for caching';
         const provider = new CloudflareAiCompletionProvider(testModelName, {
           config: cloudflareMinimumConfig,
         });
@@ -530,20 +536,22 @@ describe('call provider apis', () => {
           ok: true,
         };
 
-        (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
-        const result = await provider.callApi('Test prompt');
+        fetchMock.mockResolvedValue(mockResponse);
+        const result = await provider.callApi(PROMPT);
 
         expect(fetch).toHaveBeenCalledTimes(1);
         expect(result.output).toBe(responsePayload.result.response);
         expect(result.tokenUsage).toEqual(tokenUsageDefaultResponse);
 
-        const resultFromCache = await provider.callApi('Test prompt');
+        const resultFromCache = await provider.callApi(PROMPT);
+
         expect(fetch).toHaveBeenCalledTimes(1);
         expect(resultFromCache.output).toBe(responsePayload.result.response);
         expect(resultFromCache.tokenUsage).toEqual(tokenUsageDefaultResponse);
       });
 
       test('callApi with caching disabled', async () => {
+        const PROMPT = 'test prompt without caching';
         try {
           disableCache();
           const provider = new CloudflareAiCompletionProvider(testModelName, {
@@ -563,14 +571,14 @@ describe('call provider apis', () => {
             ok: true,
           };
 
-          (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
-          const result = await provider.callApi('Test prompt');
+          fetchMock.mockResolvedValue(mockResponse);
+          const result = await provider.callApi(PROMPT);
 
           expect(fetch).toHaveBeenCalledTimes(1);
           expect(result.output).toBe(responsePayload.result.response);
           expect(result.tokenUsage).toEqual(tokenUsageDefaultResponse);
 
-          const resultFromCache = await provider.callApi('Test prompt');
+          const resultFromCache = await provider.callApi(PROMPT);
           expect(fetch).toHaveBeenCalledTimes(2);
           expect(resultFromCache.output).toBe(responsePayload.result.response);
           expect(resultFromCache.tokenUsage).toEqual(tokenUsageDefaultResponse);
@@ -599,7 +607,7 @@ describe('call provider apis', () => {
           ok: true,
         };
 
-        (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
+        fetchMock.mockResolvedValue(mockResponse);
         const result = await provider.callApi('Test chat prompt');
 
         expect(fetch).toHaveBeenCalledTimes(1);
@@ -629,7 +637,7 @@ describe('call provider apis', () => {
           ok: true,
         };
 
-        (fetch as unknown as jest.Mock).mockResolvedValue(mockResponse);
+        fetchMock.mockResolvedValue(mockResponse);
         const result = await provider.callEmbeddingApi('Create embeddings from this');
 
         expect(fetch).toHaveBeenCalledTimes(1);
