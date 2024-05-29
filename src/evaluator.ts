@@ -219,7 +219,7 @@ export async function renderPrompt(
     );
     return langfuseResult;
   }
-
+  
   // Render prompt
   try {
     if (process.env.PROMPTFOO_DISABLE_JSON_AUTOESCAPE) {
@@ -244,6 +244,7 @@ class Evaluator {
     string,
     { prompt: string | object; input: string; output: string | object }[]
   >;
+  registers: Record<string, string | object>;
 
   constructor(testSuite: TestSuite, options: EvaluateOptions) {
     this.testSuite = testSuite;
@@ -259,6 +260,7 @@ class Evaluator {
       },
     };
     this.conversations = {};
+    this.registers = {};
   }
 
   async runEval({
@@ -269,8 +271,8 @@ class Evaluator {
     nunjucksFilters: filters,
     evaluateOptions,
   }: RunEvalOptions): Promise<EvaluateResult> {
-    // Use the original prompt to set the display, not renderedPrompt
-    let promptDisplay = prompt.display;
+    // Use the original prompt to set the label, not renderedPrompt
+    let promptLabel = prompt.label;
 
     // Set up the special _conversation variable
     const vars = test.vars || {};
@@ -283,6 +285,9 @@ class Evaluator {
     ) {
       vars._conversation = this.conversations[conversationKey] || [];
     }
+
+    // Overwrite vars with any saved register values
+    Object.assign(vars, this.registers);
 
     // Render the prompt
     const renderedPrompt = await renderPrompt(prompt, vars, filters, provider);
@@ -299,7 +304,7 @@ class Evaluator {
       },
       prompt: {
         raw: renderedPrompt,
-        display: promptDisplay,
+        label: promptLabel,
       },
       vars,
     };
@@ -427,6 +432,11 @@ class Evaluator {
         this.stats.failures++;
       }
 
+      if (test.options?.storeOutputAs && ret.response?.output) {
+        // Save the output in a register for later use
+        this.registers[test.options.storeOutputAs] = ret.response.output;
+      }
+
       return ret;
     } catch (err) {
       this.stats.failures++;
@@ -471,7 +481,7 @@ class Evaluator {
             async (answer) => {
               rl.close();
               if (answer.toLowerCase().startsWith('y')) {
-                testSuite.prompts.push({ raw: prompt, display: prompt });
+                testSuite.prompts.push({ raw: prompt, label: prompt });
                 numAdded++;
               } else {
                 logger.info('Skipping this prompt.');
@@ -491,10 +501,10 @@ class Evaluator {
     // Split prompts by provider
     for (const prompt of testSuite.prompts) {
       for (const provider of testSuite.providers) {
-        // Check if providerPromptMap exists and if it contains the current prompt's display
+        // Check if providerPromptMap exists and if it contains the current prompt's label
         if (testSuite.providerPromptMap) {
           const allowedPrompts = testSuite.providerPromptMap[provider.id()];
-          if (allowedPrompts && !allowedPrompts.includes(prompt.display)) {
+          if (allowedPrompts && !allowedPrompts.includes(prompt.label)) {
             continue;
           }
         }
@@ -502,7 +512,7 @@ class Evaluator {
           ...prompt,
           id: sha256(typeof prompt.raw === 'object' ? JSON.stringify(prompt.raw) : prompt.raw),
           provider: provider.label || provider.id(),
-          display: prompt.display,
+          label: prompt.label,
           metrics: {
             score: 0,
             testPassCount: 0,
@@ -623,7 +633,7 @@ class Evaluator {
             for (const provider of testSuite.providers) {
               if (testSuite.providerPromptMap) {
                 const allowedPrompts = testSuite.providerPromptMap[provider.id()];
-                if (allowedPrompts && !allowedPrompts.includes(prompt.display)) {
+                if (allowedPrompts && !allowedPrompts.includes(prompt.label)) {
                   // This prompt should not be used with this provider.
                   continue;
                 }
@@ -663,12 +673,20 @@ class Evaluator {
 
     // Determine run parameters
     let concurrency = options.maxConcurrency || DEFAULT_MAX_CONCURRENCY;
-    const usesConversation = prompts.some((p) => p.raw.includes('_conversation'));
-    if (usesConversation && concurrency > 1) {
-      logger.info(
-        `Setting concurrency to 1 because the ${chalk.cyan('_conversation')} variable is used.`,
-      );
-      concurrency = 1;
+    if (concurrency > 1) {
+      const usesConversation = prompts.some((p) => p.raw.includes('_conversation'));
+      const usesStoreOutputAs = tests.some((t) => t.options?.storeOutputAs);
+      if (usesConversation) {
+        logger.info(
+          `Setting concurrency to 1 because the ${chalk.cyan('_conversation')} variable is used.`,
+        );
+        concurrency = 1;
+      } else if (usesStoreOutputAs) {
+        logger.info(
+          `Setting concurrency to 1 because storeOutputAs is used.`,
+        );
+        concurrency = 1;
+      }
     }
 
     // Actually run the eval

@@ -77,6 +77,7 @@ class TokenUsage:
     prompt: int
     completion: int
 
+class ProviderResponse:
     output: Optional[Union[str, Dict[str, Any]]]
     error: Optional[str]
     tokenUsage: Optional[TokenUsage]

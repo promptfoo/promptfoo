@@ -5,7 +5,12 @@ import invariant from 'tiny-invariant';
 
 import logger from '../logger';
 import { OpenAiChatCompletionProvider } from '../providers/openai';
-import { getHarmfulTests, addInjections, addIterativeJailbreaks } from './getHarmfulTests';
+import {
+  getHarmfulTests,
+  addInjections,
+  addIterativeJailbreaks,
+  HARM_CATEGORIES,
+} from './getHarmfulTests';
 import { getHijackingTests } from './getHijackingTests';
 import { getHallucinationTests } from './getHallucinationTests';
 import { getOverconfidenceTests } from './getOverconfidenceTests';
@@ -21,20 +26,24 @@ interface SynthesizeOptions {
   plugins: string[];
 }
 
-const ALL_PLUGINS = [
-  'harmful',
-  'prompt-injection',
-  'jailbreak',
-  'hijacking',
-  'hallucination',
-  'excessive-agency',
-  'overconfidence',
-];
+const ALL_PLUGINS = new Set(
+  [
+    'harmful',
+    'prompt-injection',
+    'jailbreak',
+    'hijacking',
+    'hallucination',
+    'excessive-agency',
+    'overreliance',
+  ].concat(Object.keys(HARM_CATEGORIES)),
+);
 
 function validatePlugins(plugins: string[]) {
   for (const plugin of plugins) {
-    if (!ALL_PLUGINS.includes(plugin)) {
-      throw new Error(`Invalid plugin: ${plugin}. Must be one of: ${ALL_PLUGINS.join(', ')}`);
+    if (!ALL_PLUGINS.has(plugin)) {
+      throw new Error(
+        `Invalid plugin: ${plugin}. Must be one of: ${Array.from(ALL_PLUGINS).join(', ')}`,
+      );
     }
   }
 }
@@ -45,7 +54,8 @@ export async function synthesizeFromTestSuite(
 ) {
   return synthesize({
     ...options,
-    plugins: options.plugins && options.plugins.length > 0 ? options.plugins : ALL_PLUGINS,
+    plugins:
+      options.plugins && options.plugins.length > 0 ? options.plugins : Array.from(ALL_PLUGINS),
     prompts: testSuite.prompts.map((prompt) => prompt.raw),
   });
 }
@@ -92,12 +102,16 @@ export async function synthesize({
 
   let adversarialPrompts: TestCase[] = [];
   if (
-    plugins.includes('harmful') ||
     plugins.includes('prompt-injection') ||
-    plugins.includes('jailbreak')
+    plugins.includes('jailbreak') ||
+    plugins.some((p) => p.startsWith('harmful'))
   ) {
     logger.debug('Generating harmful test cases');
-    adversarialPrompts = await getHarmfulTests(purpose, injectVar);
+    adversarialPrompts = await getHarmfulTests(
+      purpose,
+      injectVar,
+      plugins.filter((p) => p.startsWith('harmful:')),
+    );
     testCases.push(...adversarialPrompts);
     logger.debug(`Added ${adversarialPrompts.length} harmful test cases`);
   }

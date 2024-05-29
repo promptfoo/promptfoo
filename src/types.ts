@@ -143,6 +143,10 @@ export interface ApiClassificationProvider extends ApiProvider {
   callClassificationApi: (prompt: string) => Promise<ProviderClassificationResponse>;
 }
 
+export interface ApiModerationProvider extends ApiProvider {
+  callModerationApi: (prompt: string, response: string) => Promise<ProviderModerationResponse>;
+}
+
 export interface TokenUsage {
   total: number;
   prompt: number;
@@ -176,15 +180,26 @@ export interface ProviderClassificationResponse {
   classification?: Record<string, number>;
 }
 
+export interface ModerationFlag {
+  code: string;
+  description: string;
+  confidence: number;
+}
+
+export interface ProviderModerationResponse {
+  error?: string;
+  flags?: ModerationFlag[];
+}
+
 export interface CsvRow {
   [key: string]: string;
 }
 
 export type VarMapping = Record<string, string>;
 
-export type ProviderTypeMap = Partial<
-  Record<'embedding' | 'classification' | 'text', string | ProviderOptions | ApiProvider>
->;
+export type ProviderType = 'embedding' | 'classification' | 'text' | 'moderation';
+
+export type ProviderTypeMap = Partial<Record<ProviderType, string | ProviderOptions | ApiProvider>>;
 
 export interface GradingConfig {
   rubricPrompt?: string | string[];
@@ -209,6 +224,9 @@ export interface OutputConfig {
    */
   postprocess?: string;
   transform?: string;
+
+  // The name of the variable to store the output of this test case
+  storeOutputAs?: string;
 }
 
 export interface RunEvalOptions {
@@ -245,7 +263,11 @@ export interface EvaluateOptions {
 export interface Prompt {
   id?: string;
   raw: string;
-  display: string;
+  /**
+   * @deprecated in > 0.59.0. Use `label` instead.
+   */
+  display?: string;
+  label: string;
   function?: (context: {
     vars: Record<string, string | object>;
     provider?: ApiProvider;
@@ -415,7 +437,8 @@ type BaseAssertionTypes =
   | 'perplexity'
   | 'perplexity-score'
   | 'cost'
-  | 'select-best';
+  | 'select-best'
+  | 'moderation';
 
 type NotPrefixed<T extends string> = `not-${T}`;
 
@@ -602,7 +625,7 @@ export interface TestSuiteConfig {
   providers: ProviderId | ProviderFunction | (ProviderId | ProviderOptionsMap | ProviderOptions)[];
 
   // One or more prompt files to load
-  prompts: FilePath | FilePath[] | Record<FilePath, string>;
+  prompts: FilePath | (FilePath | Prompt)[] | Record<FilePath, string>;
 
   // Path to a test file, OR list of LLM prompt variations (aka "test case")
   tests: FilePath | (FilePath | TestCase)[];

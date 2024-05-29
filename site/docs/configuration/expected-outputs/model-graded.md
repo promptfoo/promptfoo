@@ -13,6 +13,7 @@ Output-based:
 - `factuality` - a factual consistency eval which, given a completion `A` and reference answer `B` evaluates whether A is a subset of B, A is a superset of B, A and B are equivalent, A and B disagree, or A and B differ, but difference don't matter from the perspective of factuality. Uses the prompt from OpenAI's public evals.
 - `answer-relevance` - ensure that LLM output is related to original query
 - `classifier` - see [classifier grading docs](/docs/configuration/expected-outputs/classifier).
+- `moderation` - see [moderation grading docs](/docs/configuration/expected-outputs/moderation).
 - `select-best` - compare outputs from multiple test cases and choose a winner
 
 RAG-based (requires `query` and/or `context` vars):

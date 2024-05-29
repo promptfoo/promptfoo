@@ -18,7 +18,7 @@ export function generateTable(summary: EvaluateSummary, tableCellMaxLength = 250
     head: [
       ...head.vars,
       ...head.prompts.map((prompt) =>
-        allProvidersSame ? prompt.display : `[${prompt.provider}] ${prompt.display}`,
+        allProvidersSame ? prompt.label : `[${prompt.provider}] ${prompt.label}`,
       ),
     ].map((h) => ellipsize(h, tableCellMaxLength)),
     colWidths: Array(headLength).fill(Math.floor(maxWidth / headLength)),

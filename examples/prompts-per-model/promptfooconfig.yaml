@@ -1,0 +1,48 @@
+prompts:
+  - id: file://prompt1.txt
+    label: My first prompt
+  - id: file://prompt2.txt
+    label: My second prompt
+
+providers:
+  - id: openai:gpt-3.5-turbo-0613
+    prompts:
+      - My first prompt
+      - My second prompt
+  - id: openai:gpt-4
+    prompts:
+      - My first prompt
+
+tests:
+  - vars:
+      topic: bananas
+  - vars:
+      topic: space tourism
+  - vars:
+      topic: AI-created music
+  - vars:
+      topic: virtual reality adventures
+  - vars:
+      topic: moonlight dances
+  - vars:
+      topic: whispers of the forest
+  - vars:
+      topic: forgotten melodies
+  - vars:
+      topic: midnight snacking
+  - vars:
+      topic: silent disco parties
+  - vars:
+      topic: eco-friendly packaging
+  - vars:
+      topic: the ethical implications of AI
+  - vars:
+      topic: using quantum computing for climate models
+  - vars:
+      topic: the impact of deepfakes on societal trust
+  - vars:
+      topic: artificial intelligence in poetry
+  - vars:
+      topic: collaborative storytelling with AI
+  - vars:
+      topic: virtual reality classroom experiences

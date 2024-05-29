@@ -45,7 +45,7 @@ function DownloadMenu() {
       rejected: row.outputs.filter((output) => !output.pass).map((output) => output.text),
       vars: row.test.vars,
       providers: table.head.prompts.map((prompt) => prompt.provider),
-      prompts: table.head.prompts.map((prompt) => prompt.display),
+      prompts: table.head.prompts.map((prompt) => prompt.label || prompt.display || prompt.raw),
     }));
     const blob = new Blob([JSON.stringify(formattedData, null, 2)], { type: 'application/json' });
     openDownloadDialog(blob, `${evalId}-dpo.json`);

@@ -27,6 +27,7 @@ import {
   matchesContextRelevance,
   matchesContextFaithfulness,
   matchesSelectBest,
+  matchesModeration,
 } from './matchers';
 import { validateFunctionCall } from './providers/openaiUtil';
 import { OpenAiChatCompletionProvider } from './providers/openai';
@@ -232,7 +233,7 @@ export async function runAssertion({
   if (assertion.transform) {
     output = await transformOutput(assertion.transform, output, {
       vars: test.vars,
-      prompt: { display: prompt },
+      prompt: { label: prompt },
     });
   }
 
@@ -269,7 +270,6 @@ export async function runAssertion({
         try {
           const pythonScriptOutput = await runPython(filePath, 'get_assert', [output, context]);
           valueFromScript = pythonScriptOutput;
-          logger.debug(`Python script ${filePath} output: ${valueFromScript}`);
           logger.debug(`Python script ${filePath} output: ${valueFromScript}`);
         } catch (error) {
           throw new Error(`Python script execution failed: ${error}`);
@@ -1010,6 +1010,36 @@ ${
     };
   }
 
+  if (baseType === 'moderation') {
+    // Assertion provider overrides test provider
+    test.options = test.options || {};
+    test.options.provider = assertion.provider || test.options.provider;
+
+    invariant(prompt, 'moderation assertion type must have a prompt');
+    invariant(typeof output === 'string', 'moderation assertion type must have a string output');
+    invariant(
+      !assertion.value ||
+        (Array.isArray(assertion.value) && typeof assertion.value[0] === 'string'),
+      'moderation assertion value must be a string array if set',
+    );
+    const moderationResult = await matchesModeration(
+      {
+        userPrompt: prompt,
+        assistantResponse: output,
+        categories: Array.isArray(assertion.value) ? assertion.value : [],
+      },
+      test.options,
+    );
+
+    pass = moderationResult.pass;
+    return {
+      pass,
+      score: moderationResult.score,
+      reason: moderationResult.reason,
+      assertion,
+    };
+  }
+
   if (baseType === 'webhook') {
     invariant(renderedValue, '"webhook" assertion type must have a URL value');
     invariant(typeof renderedValue === 'string', '"webhook" assertion type must have a URL value');
@@ -1279,4 +1309,5 @@ export default {
   matchesContextRelevance,
   matchesContextFaithfulness,
   matchesComparisonBoolean: matchesSelectBest,
+  matchesModeration,
 };

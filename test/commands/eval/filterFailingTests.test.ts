@@ -21,7 +21,7 @@ describe('filterFailingTests', () => {
   const restResult = {
     prompt: {
       raw: 'prompt',
-      display: 'prompt',
+      label: 'prompt',
     },
     score: 0.5,
     latencyMs: 1_000,
