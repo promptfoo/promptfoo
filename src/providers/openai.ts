@@ -47,6 +47,15 @@ type OpenAiCompletionOptions = OpenAiSharedOptions & {
   stop?: string[];
   seed?: number;
   passthrough?: object;
+  
+  /**
+   * If set, automatically call these functions when the assistant activates
+   * these function tools.
+   */
+  functionToolCallbacks?: Record<
+    OpenAI.FunctionDefinition['name'],
+    (arg: string) => Promise<string>
+  >;
 };
 
 function failApiCall(err: any) {
@@ -476,6 +485,31 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       const logProbs = data.choices[0].logprobs?.content?.map(
         (logProbObj: { token: string; logprob: number }) => logProbObj.logprob,
       );
+
+      // Handle function tool callbacks
+      const functionCalls = message.function_call ? [message.function_call] || message.tool_calls;
+      if (functionCalls && this.config.functionToolCallbacks) {
+        for (const functionCall of functionCalls) {
+          const functionName = functionCall.name;
+          if (this.config.functionToolCallbacks[functionName]) {
+            const functionResult = await this.config.functionToolCallbacks[functionName](
+              message.function_call.arguments,
+            );
+            return {
+              output: functionResult,
+              tokenUsage: getTokenUsage(data, cached),
+              cached,
+              logProbs,
+              cost: calculateCost(
+                this.modelName,
+                this.config,
+                data.usage?.prompt_tokens,
+                data.usage?.completion_tokens,
+              ),
+            };
+          }
+        }
+      }
 
       return {
         output,
