@@ -25,6 +25,7 @@
     "promptfoo": "dist/src/main.js"
   },
   "scripts": {
+    "bin": "dist/src/main.js",
     "tsc": "tsc",
     "local": "ts-node --cwdMode --transpileOnly src/main.ts",
     "local:web": "cd src/web/nextui && npm run dev",
