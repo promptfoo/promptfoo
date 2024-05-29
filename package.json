@@ -83,7 +83,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.20.1",
     "@apidevtools/json-schema-ref-parser": "^10.1.0",
-    "ajv": "^8.12.0",
+    "ajv": "^8.14.0",
     "ajv-formats": "^2.1.1",
     "async": "^3.2.4",
     "better-sqlite3": "^10.0.0",
