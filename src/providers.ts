@@ -48,6 +48,7 @@ import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './pro
 import { PythonProvider } from './providers/pythonCompletion';
 import { CohereChatCompletionProvider } from './providers/cohere';
 import { BAMChatProvider, BAMEmbeddingProvider } from './providers/bam';
+import { PortkeyChatCompletionProvider } from './providers/portkey';
 import { HttpProvider } from './providers/http';
 import { importModule } from './esm';
 
@@ -126,7 +127,10 @@ export async function loadApiProvider(
     env,
   };
   let ret: ApiProvider;
-  if (providerPath.startsWith('file://') && (providerPath.endsWith('.yaml')|| providerPath.endsWith('.yml'))){
+  if (
+    providerPath.startsWith('file://') &&
+    (providerPath.endsWith('.yaml') || providerPath.endsWith('.yml'))
+  ) {
     const filePath = providerPath.slice('file://'.length);
     const yamlContent = yaml.load(fs.readFileSync(filePath, 'utf8')) as ProviderOptions;
     invariant(yamlContent, `Provider config ${filePath} is undefined`);
@@ -205,6 +209,10 @@ export async function loadApiProvider(
         apiKeyEnvar: 'OPENROUTER_API_KEY',
       },
     });
+  } else if (providerPath.startsWith('portkey:')) {
+    const splits = providerPath.split(':');
+    const modelName = splits.slice(1).join(':');
+    ret = new PortkeyChatCompletionProvider(modelName, providerOptions);
   } else if (providerPath.startsWith('anthropic:')) {
     const splits = providerPath.split(':');
     const modelType = splits[1];
@@ -336,7 +344,8 @@ export async function loadApiProvider(
   } else if (providerPath.startsWith('http:') || providerPath.startsWith('https:')) {
     ret = new HttpProvider(providerPath, providerOptions);
   } else if (providerPath === 'promptfoo:redteam:iterative') {
-    const RedteamIterativeProvider = (await import(path.join(__dirname, './redteam/iterative'))).default;
+    const RedteamIterativeProvider = (await import(path.join(__dirname, './redteam/iterative')))
+      .default;
     ret = new RedteamIterativeProvider(providerOptions);
   } else {
     if (providerPath.startsWith('file://')) {
