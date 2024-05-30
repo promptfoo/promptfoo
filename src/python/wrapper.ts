@@ -35,7 +35,18 @@ export async function runPython(
   try {
     await fs.writeFile(tempJsonPath, safeJsonStringify(args));
 
-    const results = await PythonShell.run('wrapper.py', pythonOptions);
+    let results;
+    try {
+      results = await PythonShell.run('wrapper.py', pythonOptions);
+    } catch (error) {
+      return {
+        pass: false,
+        score: 0,
+        reason: `Failed to execute Python script: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      };
+    }
     logger.debug(`Python script ${absPath} returned: ${results.join('\n')}`);
     let result: { type: 'final_result'; data: any } | undefined;
     try {
@@ -48,9 +59,7 @@ export async function runPython(
       );
     }
     if (result?.type !== 'final_result') {
-      throw new Error(
-        'The Python script `call_api` function must return a dict with an `output` or `error` string',
-      );
+      throw new Error('The Python script `call_api` function must return a dict with an `output`');
     }
     return result.data;
   } catch (error) {
