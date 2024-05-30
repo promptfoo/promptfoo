@@ -37,7 +37,6 @@
     "build:nextui": "cd src/web/nextui && npm run build && { [ -z \"$NEXT_PUBLIC_PROMPTFOO_BUILD_STANDALONE_SERVER\" ] && cp -r out/ ../../../dist/src/web/nextui; } || true",
     "build:watch": "tsc --watch",
     "build": "tsc && cp src/*.html dist/src && cp src/python/wrapper.py dist/src/python && cp -r drizzle/ dist/ && npm run build:nextui && chmod +x dist/src/main.js",
-    "debug:prepare": "npm run install:nextui && npm run build:clean && npm run build",
     "test": "jest",
     "test:watch": "jest --watch",
     "format": "prettier -w .",
