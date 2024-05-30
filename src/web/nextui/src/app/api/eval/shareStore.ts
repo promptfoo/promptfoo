@@ -2,7 +2,8 @@ import cacheManager from 'cache-manager';
 
 const storeType = process.env.PROMPTFOO_SHARE_STORE_TYPE || 'memory';
 
-const ttl = parseInt(process.env.PROMPTFOO_SHARE_TTL || String(60 * 60 * 24 * 14), 10);
+// cache-manager-fs-hash as of version 2.0 uses milliseconds
+const ttl = parseInt(process.env.PROMPTFOO_SHARE_TTL || String(60 * 60 * 24 * 14), 10) * 1_000;
 
 function getStore() {
   // TODO(ian): Just use the sqlite db for this
