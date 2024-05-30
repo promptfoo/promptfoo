@@ -40,6 +40,8 @@ tests:
 
 If not specified, HTTP POST with content-type application/json is assumed.
 
+## Parsing a JSON response
+
 If your API responds with a JSON object and you want to pick out a specific value, use the `responseParser` property to set a Javascript snippet that manipulates the provided `json` object.  
 
 For example, this `responseParser` configuration:
@@ -78,5 +80,28 @@ Extracts the message content from this response:
             "index": 0
         }
     ]
+}
+```
+
+## Using as a library
+
+If you are using promptfoo as a [node library](/docs/usage/node-package/), you can provide the equivalent provider config:
+
+```js
+{
+  // ...
+  providers: [{
+    id: 'https://example.com/generate',
+    config: {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: {
+        foo: '{{bar}}',
+      },
+      responseParser: (json) => json.output,
+    }
+  }],
 }
 ```
