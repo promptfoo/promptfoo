@@ -1,14 +1,12 @@
 /** @type {import('ts-jest/dist/types').InitialOptionsTsJest} */
 import type { Config } from 'jest';
+import type { TsJestTransformerOptions } from 'ts-jest';
+
+const tsJestConfig: TsJestTransformerOptions & Record<string, unknown> = { useESM: true };
 
 const config: Config = {
   transform: {
-    '\\.[jt]sx?$': 'ts-jest',
-  },
-  globals: {
-    'ts-jest': {
-      useESM: true,
-    },
+    '^.+\\.m?[tj]sx?$': ['ts-jest', tsJestConfig],
   },
   /*
   moduleNameMapper: {

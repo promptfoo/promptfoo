@@ -781,6 +781,12 @@ async function main() {
             const rowsLeft = summary.table.body.length - 25;
             logger.info(`... ${rowsLeft} more row${rowsLeft === 1 ? '' : 's'} not shown ...\n`);
           }
+        } else if (summary.stats.failures !== 0) {
+          logger.debug(
+            `At least one evaluation failure occurred. This might be caused by the underlying call to the provider, or a test failure. Context: \n${JSON.stringify(
+              summary.results,
+            )}`,
+          );
         }
 
         const { outputPath } = config;
