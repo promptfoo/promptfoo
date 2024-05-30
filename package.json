@@ -19,7 +19,7 @@
     "dist"
   ],
   "engines": {
-    "node": ">=16"
+    "node": ">=18"
   },
   "bin": {
     "promptfoo": "dist/src/main.js"
@@ -34,7 +34,7 @@
     "build:nextui": "cd src/web/nextui && npm run build && { [ -z \"$NEXT_PUBLIC_PROMPTFOO_BUILD_STANDALONE_SERVER\" ] && cp -r out/ ../../../dist/src/web/nextui; } || true",
     "build:watch": "tsc --watch",
     "build": "tsc && cp src/*.html dist/src && cp src/python/wrapper.py dist/src/python && cp -r drizzle/ dist/ && npm run build:nextui && chmod +x dist/src/main.js",
-    "prepare": "npm run install:nextui && npm run build:clean && npm run build",
+    "debug:prepare": "npm run install:nextui && npm run build:clean && npm run build",
     "test": "jest",
     "test:watch": "jest --watch",
     "format": "prettier -w .",
@@ -88,7 +88,7 @@
     "ajv": "^8.14.0",
     "ajv-formats": "^2.1.1",
     "async": "^3.2.4",
-    "better-sqlite3": "^10.0.0",
+    "better-sqlite3": "^10.1.0",
     "cache-manager": "^4.1.0",
     "cache-manager-fs-hash": "^1.0.0",
     "chalk": "^4.1.2",
