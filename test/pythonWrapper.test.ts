@@ -2,6 +2,8 @@ import * as pythonWrapper from '../src/python/wrapper';
 import { promises as fs } from 'fs';
 import { PythonShell } from 'python-shell';
 
+jest.mock('../src/esm');
+
 jest.mock('python-shell');
 
 beforeEach(() => {
