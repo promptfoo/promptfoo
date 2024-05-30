@@ -361,7 +361,6 @@ These OpenAI-related environment variables are supported:
 | `OPENAI_BASE_URL`                | The base URL (protocol + hostname + port) to use, this is a more general option than `OPENAI_API_HOST`.                                          |
 | `OPENAI_API_KEY`                 | OpenAI API key.                                                                                                                                  |
 | `OPENAI_ORGANIZATION`            | The OpenAI organization key to use.                                                                                                              |
-| `PROMPTFOO_REQUIRE_JSON_PROMPTS` | By default the chat completion provider will wrap non-JSON messages in a single user message. Setting this envar to true disables that behavior. |
 | `PROMPTFOO_DELAY_MS`             | Number of milliseconds to delay between API calls. Useful if you are hitting OpenAI rate limits (defaults to 0).                                 |
 | `PROMPTFOO_REQUEST_BACKOFF_MS`   | Base number of milliseconds to backoff and retry if a request fails (defaults to 5000).                                                          |
 
