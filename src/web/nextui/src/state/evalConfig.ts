@@ -73,6 +73,12 @@ export const useStore = create<State>()(
             console.warn('Invalid prompts config', config.prompts);
           }
         }
+        if (config.defaultTest) {
+          updates.defaultTest = config.defaultTest;
+        }
+        if (config.evaluateOptions) {
+          updates.evaluateOptions = config.evaluateOptions;
+        }
         set(updates);
       },
       getTestSuite: () => {
