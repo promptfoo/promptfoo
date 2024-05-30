@@ -42,7 +42,9 @@ export async function runPython(
       return {
         pass: false,
         score: 0,
-        reason: `Failed to execute Python script: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        reason: `Failed to execute Python script: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
       };
     }
     logger.debug(`Python script ${absPath} returned: ${results.join('\n')}`);
@@ -57,9 +59,7 @@ export async function runPython(
       );
     }
     if (result?.type !== 'final_result') {
-      throw new Error(
-        'The Python script `call_api` function must return a dict with an `output`',
-      );
+      throw new Error('The Python script `call_api` function must return a dict with an `output`');
     }
     return result.data;
   } catch (error) {

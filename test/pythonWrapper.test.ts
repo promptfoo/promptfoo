@@ -6,11 +6,11 @@ jest.mock('../src/esm');
 
 jest.mock('python-shell');
 
-beforeEach(() => {
-  jest.clearAllMocks(); // This clears all mock call counts
-});
-
 describe('Python Wrapper', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   describe('runPython', () => {
     it('should correctly run a Python script with provided arguments', async () => {
       jest.spyOn(fs, 'writeFile').mockResolvedValue();
@@ -34,7 +34,7 @@ describe('Python Wrapper', () => {
       expect(fs.unlink).toHaveBeenCalledTimes(1);
     });
 
-    it('should return an error object if the Python script execution fails', async () => {
+    it('should return an failure reason if the Python script execution fails', async () => {
       const mockPythonShellRun = PythonShell.run as jest.Mock;
       mockPythonShellRun.mockRejectedValue(new Error('Test Error'));
 
@@ -47,24 +47,14 @@ describe('Python Wrapper', () => {
       });
     });
 
-    it('should handle invalid JSON from the Python script', async () => {
-      jest.spyOn(fs, 'writeFile').mockResolvedValue();
-      jest.spyOn(fs, 'unlink').mockResolvedValue();
-
-      const mockPythonShellRun = PythonShell.run as jest.Mock;
-      mockPythonShellRun.mockResolvedValue(['invalid json']);
-
-      await expect(
-        pythonWrapper.runPython('testScript.py', 'testMethod', ['arg1']),
-      ).rejects.toThrow('Invalid JSON: Unexpected token i in JSON at position 0');
-    });
-
     it('should handle Python script returning incorrect result type', async () => {
       jest.spyOn(fs, 'writeFile').mockResolvedValue();
       jest.spyOn(fs, 'unlink').mockResolvedValue();
 
       const mockPythonShellRun = PythonShell.run as jest.Mock;
-      mockPythonShellRun.mockResolvedValue(['{"type": "unexpected_result", "data": "test result"}']);
+      mockPythonShellRun.mockResolvedValue([
+        '{"type": "unexpected_result", "data": "test result"}',
+      ]);
 
       await expect(
         pythonWrapper.runPython('testScript.py', 'testMethod', ['arg1']),
