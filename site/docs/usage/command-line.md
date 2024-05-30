@@ -139,15 +139,16 @@ Export an eval record to JSON format. Outputs to stdout by default.
 
 These general-purpose environment variables are supported:
 
-| Name                                   | Description                                                           | Default        |
-| -------------------------------------- | --------------------------------------------------------------------- | -------------- |
-| `PROMPTFOO_CONFIG_DIR`                 | Directory that stores eval history                                    | `~/.promptfoo` |
-| `PROMPTFOO_DISABLE_CONVERSATION_VAR`   | Prevents the `_conversation` variable from being set                  |                |
-| `PROMPTFOO_DISABLE_JSON_AUTOESCAPE`    | If set, disables smart variable substitution within JSON prompts      |                |
-| `PROMPTFOO_DISABLE_REF_PARSER`         | Prevents JSON schema dereferencing                                    |                |
-| `PROMPTFOO_DISABLE_TEMPLATING`         | Disable Nunjucks rendering                                            |                |
-| `PROMPTFOO_DISABLE_VAR_EXPANSION`      | Prevents Array-type vars from being expanded into multiple test cases |                |
-| `PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY` | How many assertions to run at a time                                  | 3              |
+| Name                                   | Description                                                                                                                                      | Default        |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | -------------- |
+| `PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY` | How many assertions to run at a time                                                                                                             | 3              |
+| `PROMPTFOO_CONFIG_DIR`                 | Directory that stores eval history                                                                                                               | `~/.promptfoo` |
+| `PROMPTFOO_DISABLE_CONVERSATION_VAR`   | Prevents the `_conversation` variable from being set                                                                                             |                |
+| `PROMPTFOO_DISABLE_JSON_AUTOESCAPE`    | If set, disables smart variable substitution within JSON prompts                                                                                 |                |
+| `PROMPTFOO_DISABLE_REF_PARSER`         | Prevents JSON schema dereferencing                                                                                                               |                |
+| `PROMPTFOO_DISABLE_TEMPLATING`         | Disable Nunjucks rendering                                                                                                                       |                |
+| `PROMPTFOO_DISABLE_VAR_EXPANSION`      | Prevents Array-type vars from being expanded into multiple test cases                                                                            |                |
+| `PROMPTFOO_REQUIRE_JSON_PROMPTS`       | By default the chat completion provider will wrap non-JSON messages in a single user message. Setting this envar to true disables that behavior. |
 
 :::tip
 promptfoo will load environment variables from the `.env` in your current working directory.

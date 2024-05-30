@@ -416,14 +416,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
-    let stop: string;
-    try {
-      stop = process.env.OPENAI_STOP
-        ? JSON.parse(process.env.OPENAI_STOP)
-        : this.config?.stop || [];
-    } catch (err) {
-      throw new Error(`OPENAI_STOP is not a valid JSON string: ${err}`);
-    }
     const body = {
       model: this.modelName,
       messages: messages,
@@ -540,20 +532,6 @@ function calculateCost(
   const inputCost = config.cost ?? model.cost.input;
   const outputCost = config.cost ?? model.cost.output;
   return inputCost * promptTokens + outputCost * completionTokens || undefined;
-}
-
-interface AssistantMessagesResponseDataContent {
-  type: string;
-  text?: {
-    value: string;
-  };
-}
-
-interface AssistantMessagesResponseData {
-  data: {
-    role: string;
-    content?: AssistantMessagesResponseDataContent[];
-  }[];
 }
 
 type OpenAiAssistantOptions = OpenAiSharedOptions & {

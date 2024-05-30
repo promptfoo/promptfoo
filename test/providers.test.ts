@@ -26,6 +26,15 @@ import {
   HuggingfaceTextClassificationProvider,
 } from '../src/providers/huggingface';
 import { ScriptCompletionProvider } from '../src/providers/scriptCompletion';
+import {
+  CloudflareAiChatCompletionProvider,
+  CloudflareAiCompletionProvider,
+  CloudflareAiEmbeddingProvider,
+  type ICloudflareProviderBaseConfig,
+  type ICloudflareTextGenerationResponse,
+  type ICloudflareEmbeddingResponse,
+  type ICloudflareProviderConfig,
+} from '../src/providers/cloudflare-ai';
 
 import type { ProviderOptionsMap, ProviderFunction } from '../src/types';
 
@@ -486,6 +495,234 @@ describe('call provider apis', () => {
     });
   });
 
+  describe('CloudflareAi', () => {
+    beforeAll(() => {
+      enableCache();
+    });
+
+    const fetchMock = fetch as unknown as jest.Mock;
+    const cloudflareMinimumConfig: Required<
+      Pick<ICloudflareProviderBaseConfig, 'accountId' | 'apiKey'>
+    > = {
+      accountId: 'testAccountId',
+      apiKey: 'testApiKey',
+    };
+
+    const testModelName = '@cf/meta/llama-2-7b-chat-fp16';
+    // Token usage is not implemented for cloudflare so this is the default that
+    // is returned
+    const tokenUsageDefaultResponse = {
+      total: undefined,
+      prompt: undefined,
+      completion: undefined,
+    };
+
+    describe('CloudflareAiCompletionProvider', () => {
+      test('callApi with caching enabled', async () => {
+        const PROMPT = 'Test prompt for caching';
+        const provider = new CloudflareAiCompletionProvider(testModelName, {
+          config: cloudflareMinimumConfig,
+        });
+
+        const responsePayload: ICloudflareTextGenerationResponse = {
+          success: true,
+          errors: [],
+          messages: [],
+          result: {
+            response: 'Test text output',
+          },
+        };
+        const mockResponse = {
+          text: jest.fn().mockResolvedValue(JSON.stringify(responsePayload)),
+          ok: true,
+        };
+
+        fetchMock.mockResolvedValue(mockResponse);
+        const result = await provider.callApi(PROMPT);
+
+        expect(fetch).toHaveBeenCalledTimes(1);
+        expect(result.output).toBe(responsePayload.result.response);
+        expect(result.tokenUsage).toEqual(tokenUsageDefaultResponse);
+
+        const resultFromCache = await provider.callApi(PROMPT);
+
+        expect(fetch).toHaveBeenCalledTimes(1);
+        expect(resultFromCache.output).toBe(responsePayload.result.response);
+        expect(resultFromCache.tokenUsage).toEqual(tokenUsageDefaultResponse);
+      });
+
+      test('callApi with caching disabled', async () => {
+        const PROMPT = 'test prompt without caching';
+        try {
+          disableCache();
+          const provider = new CloudflareAiCompletionProvider(testModelName, {
+            config: cloudflareMinimumConfig,
+          });
+
+          const responsePayload: ICloudflareTextGenerationResponse = {
+            success: true,
+            errors: [],
+            messages: [],
+            result: {
+              response: 'Test text output',
+            },
+          };
+          const mockResponse = {
+            text: jest.fn().mockResolvedValue(JSON.stringify(responsePayload)),
+            ok: true,
+          };
+
+          fetchMock.mockResolvedValue(mockResponse);
+          const result = await provider.callApi(PROMPT);
+
+          expect(fetch).toHaveBeenCalledTimes(1);
+          expect(result.output).toBe(responsePayload.result.response);
+          expect(result.tokenUsage).toEqual(tokenUsageDefaultResponse);
+
+          const resultFromCache = await provider.callApi(PROMPT);
+          expect(fetch).toHaveBeenCalledTimes(2);
+          expect(resultFromCache.output).toBe(responsePayload.result.response);
+          expect(resultFromCache.tokenUsage).toEqual(tokenUsageDefaultResponse);
+        } finally {
+          enableCache();
+        }
+      });
+
+      test('callApi handles cloudflare error properly', async () => {
+        const PROMPT = 'Test prompt for caching';
+        const provider = new CloudflareAiCompletionProvider(testModelName, {
+          config: cloudflareMinimumConfig,
+        });
+
+        const responsePayload: ICloudflareTextGenerationResponse = {
+          success: false,
+          errors: ['Some error occurred'],
+          messages: [],
+        };
+        const mockResponse = {
+          text: jest.fn().mockResolvedValue(JSON.stringify(responsePayload)),
+          ok: true,
+        };
+
+        fetchMock.mockResolvedValue(mockResponse);
+        const result = await provider.callApi(PROMPT);
+
+        expect(result.error).toContain(JSON.stringify(responsePayload.errors));
+      });
+
+      test('Can be invoked with custom configuration', async () => {
+        const cloudflareChatConfig: ICloudflareProviderConfig = {
+          accountId: 'MADE_UP_ACCOUNT_ID',
+          apiKey: 'MADE_UP_API_KEY',
+          frequency_penalty: 10,
+        };
+        const rawProviderConfigs: ProviderOptionsMap[] = [
+          {
+            [`cloudflare-ai:completion:${testModelName}`]: {
+              config: cloudflareChatConfig,
+            },
+          },
+        ];
+
+        const providers = await loadApiProviders(rawProviderConfigs);
+        expect(providers).toHaveLength(1);
+        expect(providers[0]).toBeInstanceOf(CloudflareAiCompletionProvider);
+
+        const cfProvider = providers[0] as CloudflareAiCompletionProvider;
+        expect(cfProvider.config).toEqual(cloudflareChatConfig);
+
+        const PROMPT = 'Test prompt for custom configuration';
+
+        const responsePayload: ICloudflareTextGenerationResponse = {
+          success: true,
+          errors: [],
+          messages: [],
+          result: {
+            response: 'Test text output',
+          },
+        };
+        const mockResponse = {
+          text: jest.fn().mockResolvedValue(JSON.stringify(responsePayload)),
+          ok: true,
+        };
+
+        fetchMock.mockResolvedValue(mockResponse);
+        await cfProvider.callApi(PROMPT);
+
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        expect(fetchMock.mock.calls.length).toBe(1);
+        const [url, { body, headers, method }] = fetchMock.mock.calls[0];
+        expect(url).toContain(cloudflareChatConfig.accountId);
+        expect(method).toBe('POST');
+        expect(headers['Authorization']).toContain(cloudflareChatConfig.apiKey);
+        const hydratedBody = JSON.parse(body);
+        expect(hydratedBody.prompt).toBe(PROMPT);
+
+        const { accountId, apiKey, ...passThroughConfig } = cloudflareChatConfig;
+        const { prompt, ...bodyWithoutPrompt } = hydratedBody;
+        expect(bodyWithoutPrompt).toEqual(passThroughConfig);
+      });
+    });
+
+    describe('CloudflareAiChatCompletionProvider', () => {
+      test('Should handle chat provider', async () => {
+        const provider = new CloudflareAiChatCompletionProvider(testModelName, {
+          config: cloudflareMinimumConfig,
+        });
+
+        const responsePayload: ICloudflareTextGenerationResponse = {
+          success: true,
+          errors: [],
+          messages: [],
+          result: {
+            response: 'Test text output',
+          },
+        };
+        const mockResponse = {
+          text: jest.fn().mockResolvedValue(JSON.stringify(responsePayload)),
+          ok: true,
+        };
+
+        fetchMock.mockResolvedValue(mockResponse);
+        const result = await provider.callApi('Test chat prompt');
+
+        expect(fetch).toHaveBeenCalledTimes(1);
+        expect(result.output).toBe(responsePayload.result.response);
+        expect(result.tokenUsage).toEqual(tokenUsageDefaultResponse);
+      });
+    });
+
+    describe('CloudflareAiEmbeddingProvider', () => {
+      test('Should return embeddings in the proper format', async () => {
+        const provider = new CloudflareAiEmbeddingProvider(testModelName, {
+          config: cloudflareMinimumConfig,
+        });
+
+        const responsePayload: ICloudflareEmbeddingResponse = {
+          success: true,
+          errors: [],
+          messages: [],
+          result: {
+            shape: [1, 3],
+            data: [[0.02055364102125168, -0.013749595731496811, 0.0024201320484280586]],
+          },
+        };
+
+        const mockResponse = {
+          text: jest.fn().mockResolvedValue(JSON.stringify(responsePayload)),
+          ok: true,
+        };
+
+        fetchMock.mockResolvedValue(mockResponse);
+        const result = await provider.callEmbeddingApi('Create embeddings from this');
+
+        expect(fetch).toHaveBeenCalledTimes(1);
+        expect(result.embedding).toEqual(responsePayload.result.data[0]);
+        expect(result.tokenUsage).toEqual(tokenUsageDefaultResponse);
+      });
+    });
+  });
+
   describe.each([
     ['python rag.py', 'python', ['rag.py']],
     ['echo "hello world"', 'echo', ['hello world']],
@@ -667,12 +904,43 @@ config:
     const provider = await loadApiProvider('bedrock:completion:anthropic.claude-v2:1');
     expect(provider).toBeInstanceOf(AwsBedrockCompletionProvider);
   });
-  
+
   test('loadApiProvider with openrouter', async () => {
     const provider = await loadApiProvider('openrouter:mistralai/mistral-medium');
     expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
     // Intentionally openai, because it's just a wrapper around openai
     expect(provider.id()).toBe('openai:mistralai/mistral-medium');
+  });
+
+  test('loadApiProvider with cloudflare-ai', async () => {
+    const supportedModelTypes = [
+      { modelType: 'chat', providerKlass: CloudflareAiChatCompletionProvider },
+      { modelType: 'embedding', providerKlass: CloudflareAiEmbeddingProvider },
+      { modelType: 'embeddings', providerKlass: CloudflareAiEmbeddingProvider },
+      { modelType: 'completion', providerKlass: CloudflareAiCompletionProvider },
+    ] as const;
+    const unsupportedModelTypes = ['assistant'] as const;
+    const modelName = 'mistralai/mistral-medium';
+
+    // Without any model type should throw an error
+    await expect(() => loadApiProvider(`cloudflare-ai:${modelName}`)).rejects.toThrowError(
+      /Unknown Cloudflare AI model type/,
+    );
+
+    for (const unsupportedModelType of unsupportedModelTypes) {
+      await expect(() =>
+        loadApiProvider(`cloudflare-ai:${unsupportedModelType}:${modelName}`),
+      ).rejects.toThrowError(/Unknown Cloudflare AI model type/);
+    }
+
+    for (const { modelType, providerKlass } of supportedModelTypes) {
+      const cfProvider = await loadApiProvider(`cloudflare-ai:${modelType}:${modelName}`);
+      const modelTypeForId: (typeof supportedModelTypes)[number]['modelType'] =
+        modelType === 'embeddings' ? 'embedding' : modelType;
+
+      expect(cfProvider.id()).toMatch(`cloudflare-ai:${modelTypeForId}:${modelName}`);
+      expect(cfProvider).toBeInstanceOf(providerKlass);
+    }
   });
 
   test('loadApiProvider with RawProviderConfig', async () => {
