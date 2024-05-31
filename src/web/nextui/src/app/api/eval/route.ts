@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
 
-import store from '@/app/api/eval/shareStore';
+import storePromise from '@/app/api/eval/shareStore';
 import { IS_RUNNING_LOCALLY } from '@/constants';
 import { writeResultsToDatabase } from '@/../../../util';
 import { runDbMigrations } from '@/../../../../migrate';
@@ -12,6 +12,7 @@ export const dynamic = IS_RUNNING_LOCALLY ? 'auto' : 'force-dynamic';
 
 export async function POST(req: Request) {
   try {
+    const store = await storePromise;
     // Share endpoint
     const payload = (await req.json()) as SharedResults;
     const newId = `f:${uuidv4()}`;

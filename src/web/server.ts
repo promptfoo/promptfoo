@@ -43,7 +43,12 @@ const evalJobs = new Map<string, Job>();
 // Prompts cache
 let allPrompts: PromptWithMetadata[] | null = null;
 
-export async function startServer(port = 15500, apiBaseUrl = '', skipConfirmation = false, filterDescription?: string) {
+export async function startServer(
+  port = 15500,
+  apiBaseUrl = '',
+  skipConfirmation = false,
+  filterDescription?: string,
+) {
   const app = express();
 
   const staticDir = path.join(getDirectory(), 'web', 'nextui');
@@ -55,6 +60,7 @@ export async function startServer(port = 15500, apiBaseUrl = '', skipConfirmatio
 
   const httpServer = http.createServer(app);
   const io = new SocketIOServer(httpServer, {
+    // @ts-expect-error bad typings from the socket.io library
     cors: {
       origin: '*',
     },

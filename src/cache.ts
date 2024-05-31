@@ -1,14 +1,13 @@
 import fs from 'fs';
 import path from 'path';
 
-import cacheManager from 'cache-manager';
-import fsStore from 'cache-manager-fs-hash';
+import { caching, type Cache, type MemoryConfig } from 'cache-manager';
+import { DiskStore } from 'cache-manager-fs-hash';
 
 import logger from './logger';
 import { fetchWithRetries } from './fetch';
 import { getConfigDirectoryPath } from './util';
 
-import type { Cache } from 'cache-manager';
 import type { RequestInfo, RequestInit } from 'node-fetch';
 
 let cacheInstance: Cache | undefined;
@@ -23,7 +22,7 @@ let enabled =
 let cacheType =
   process.env.PROMPTFOO_CACHE_TYPE || (process.env.NODE_ENV === 'test' ? 'memory' : 'disk');
 
-export function getCache() {
+export async function getCache(): Promise<Cache> {
   if (!cacheInstance) {
     let cachePath = '';
     if (cacheType === 'disk' && enabled) {
@@ -33,17 +32,28 @@ export function getCache() {
         fs.mkdirSync(cachePath, { recursive: true });
       }
     }
-    cacheInstance = cacheManager.caching({
-      store: cacheType === 'disk' && enabled ? fsStore : 'memory',
-      options: {
-        max: process.env.PROMPTFOO_CACHE_MAX_FILE_COUNT || 10_000, // number of files
-        path: cachePath,
-        ttl: process.env.PROMPTFOO_CACHE_TTL || 60 * 60 * 24 * 14, // in seconds, 14 days
-        maxsize: process.env.PROMPTFOO_CACHE_MAX_SIZE || 1e7, // in bytes, 10mb
-        //zip: true, // whether to use gzip compression
-      },
-    });
+
+    if (cacheInstance) {
+      return cacheInstance;
+    }
+
+    const cacheOptions: MemoryConfig = {
+      ttl: (Number.parseInt(process.env.PROMPTFOO_CACHE_TTL || '') || 60 * 60 * 24 * 14) * 1_000, // in milliseconds, 14 days
+    } as const;
+
+    const diskCacheOptions = {
+      max: process.env.PROMPTFOO_CACHE_MAX_FILE_COUNT || 10_000, // number of files
+      path: cachePath,
+      maxsize: process.env.PROMPTFOO_CACHE_MAX_SIZE || 1e7, // in bytes, 10mb
+      //zip: true, // whether to use gzip compression
+    };
+
+    cacheInstance =
+      cacheType === 'disk' && enabled
+        ? await caching(new DiskStore(diskCacheOptions))
+        : await caching('memory', cacheOptions);
   }
+
   return cacheInstance;
 }
 
@@ -123,7 +133,8 @@ export function disableCache() {
 }
 
 export async function clearCache() {
-  return getCache().reset();
+  const cache = await getCache();
+  await cache.reset();
 }
 
 export function isCacheEnabled() {

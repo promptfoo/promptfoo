@@ -1,9 +1,7 @@
-import * as fs from 'fs';
-
 import { NextRequest, NextResponse } from 'next/server';
 import { validate as uuidValidate } from 'uuid';
 
-import store from '@/app/api/eval/shareStore';
+import storePromise from '@/app/api/eval/shareStore';
 import { IS_RUNNING_LOCALLY } from '@/constants';
 
 import type { EvaluateTable, FilePath, ResultsFile, UnifiedConfig } from '@/../../../types';
@@ -14,6 +12,7 @@ export const dynamic = IS_RUNNING_LOCALLY ? 'auto' : 'force-dynamic';
 async function getDataForId(
   id: string,
 ): Promise<{ data: ResultsFile | null; evalId: string; uuid: string }> {
+  const store = await storePromise;
   let uuidLookup: string;
   let evalId: FilePath;
   const actualUuid = id.includes(':') ? id.split(':')[1] : id;

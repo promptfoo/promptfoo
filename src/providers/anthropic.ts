@@ -62,10 +62,9 @@ export function parseMessages(messages: string) {
   // are in the style of OpenAI's chat prompts.
   // As a result, AnthropicMessageInput is the same as Anthropic.MessageParam
   // just with the system role added on
-  const chats = parseChatPrompt<AnthropicMessageInput[]>(
-    messages,
-    [{ role: 'user' as const, content: messages }],
-  );
+  const chats = parseChatPrompt<AnthropicMessageInput[]>(messages, [
+    { role: 'user' as const, content: messages },
+  ]);
   // Convert from OpenAI to Anthropic format
   const systemMessage = chats.find((m) => m.role === 'system')?.content;
   const system = typeof systemMessage === 'string' ? systemMessage : undefined;
@@ -76,8 +75,7 @@ export function parseMessages(messages: string) {
       if (typeof m.content === 'string') {
         const content = [{ type: 'text' as const, text: m.content }];
         return { role, content };
-      }
-      else {
+      } else {
         const content = [...m.content];
         return { role, content };
       }
@@ -179,7 +177,7 @@ export class AnthropicMessagesProvider implements ApiProvider {
       messages: extractedMessages,
       max_tokens: this.config?.max_tokens || 1024,
       temperature: this.config.temperature || 0,
-      stream: false
+      stream: false,
     };
 
     logger.debug(`Calling Anthropic Messages API: ${JSON.stringify(params)}`);
@@ -203,17 +201,23 @@ export class AnthropicMessagesProvider implements ApiProvider {
       const response = await this.anthropic.messages.create(params);
 
       logger.debug(`Anthropic Messages API response: ${JSON.stringify(response)}`);
+      const responseData = response.content[0];
+      if (responseData.type !== 'text') {
+        throw new Error(
+          `Expected response data to be of type text, but received: ${JSON.stringify(responseData)} `,
+        );
+      }
 
       if (isCacheEnabled()) {
         try {
-          await cache.set(cacheKey, JSON.stringify(response.content[0].text));
+          await cache.set(cacheKey, JSON.stringify(responseData.text));
         } catch (err) {
           logger.error(`Failed to cache response: ${String(err)}`);
         }
       }
 
       return {
-        output: response.content[0].text,
+        output: responseData.text,
         tokenUsage: getTokenUsage(response, false),
         cost: calculateCost(
           this.modelName,

@@ -10,8 +10,18 @@
     "skipLibCheck": true,
     "sourceMap": true,
     "strict": true,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "allowJs": true,
+    "incremental": true,
+    "composite": true
   },
-  "include": ["src/", "typings/**/*"],
-  "exclude": ["node_modules", "dist", "src/web/client/**/*", "src/web/nextui/**/*", "src/workers/**/*"]
+  "references": [{ "path": "./src/web/nextui" }],
+  "include": ["package.json", "src/**/*", "typings/**/*"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src/web/client/**/*",
+    "src/web/nextui/**/*",
+    "src/workers/**/*"
+  ]
 }

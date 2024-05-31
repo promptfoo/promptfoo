@@ -66,7 +66,7 @@ describe('fetchWithCache', () => {
 
   it('should only fetch data once with cache enabled', async () => {
     enableCache();
-    clearCache();
+    await clearCache();
 
     const url = 'https://api.example.com/data';
     const response = { data: 'test data' };
