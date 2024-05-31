@@ -53,4 +53,5 @@ providers:
     team: xxx
   portkeyConfig: xxx
   portkeyProvider: xxx
+  portkeyApiBaseUrl: xxx
 ```
