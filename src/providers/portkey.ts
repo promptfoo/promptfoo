@@ -28,7 +28,7 @@ export class PortkeyChatCompletionProvider extends OpenAiChatCompletionProvider 
       {
         key: 'x-portkey-provider',
         value: process.env.PORTKEY_PROVIDER || providerOptions.config?.portkeyProvider,
-      },
+      }
     ].reduce((acc: Record<string, string>, { key, value }) => {
       if (value) acc[key] = value;
       return acc;
@@ -38,7 +38,7 @@ export class PortkeyChatCompletionProvider extends OpenAiChatCompletionProvider 
       ...providerOptions,
       config: {
         ...providerOptions.config,
-        apiBaseUrl: 'https://api.portkey.ai/v1',
+        apiBaseUrl: process.env.PORTKEY_API_BASE_URL || providerOptions.config?.portkeyApiBaseUrl || 'https://api.portkey.ai/v1',
         headers,
       },
     });
