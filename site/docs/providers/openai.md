@@ -137,7 +137,7 @@ To set `tools` on an OpenAI provider, use the provider's `config` key. Add your 
 ```yaml
 prompts: [prompt.txt]
 providers:
-  - 'openai:chat:gpt-3.5-turbo-0613':
+  - id: openai:chat:gpt-3.5-turbo-0613
     // highlight-start
     config:
       tools: [
