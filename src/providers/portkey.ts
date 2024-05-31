@@ -28,7 +28,7 @@ export class PortkeyChatCompletionProvider extends OpenAiChatCompletionProvider 
       {
         key: 'x-portkey-provider',
         value: process.env.PORTKEY_PROVIDER || providerOptions.config?.portkeyProvider,
-      }
+      },
     ].reduce((acc: Record<string, string>, { key, value }) => {
       if (value) acc[key] = value;
       return acc;
