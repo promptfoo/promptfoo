@@ -85,7 +85,7 @@ export function maybeRecordFirstRun(): boolean {
     const config = readGlobalConfig();
     if (!config.hasRun) {
       config.hasRun = true;
-      fs.writeFileSync(path.join(getConfigDirectoryPath(), 'promptfoo.yaml'), yaml.dump(config));
+      fs.writeFileSync(path.join(getConfigDirectoryPath(true /* createIfNotExists */), 'promptfoo.yaml'), yaml.dump(config));
       return true;
     }
     return false;
@@ -465,8 +465,12 @@ export async function readOutput(outputPath: string): Promise<OutputFile> {
 
 let configDirectoryPath: string | undefined = process.env.PROMPTFOO_CONFIG_DIR;
 
-export function getConfigDirectoryPath(): string {
-  return configDirectoryPath || path.join(os.homedir(), '.promptfoo');
+export function getConfigDirectoryPath(createIfNotExists: boolean = false): string {
+  const p = configDirectoryPath || path.join(os.homedir(), '.promptfoo');
+  if (createIfNotExists && !fs.existsSync(p)) {
+    fs.mkdirSync(p, { recursive: true });
+  }
+  return p;
 }
 
 export function setConfigDirectoryPath(newPath: string): void {
@@ -673,7 +677,7 @@ export async function migrateResultsFromFileSystemToDatabase() {
   logger.info('This is a one-time operation and may take a minute...');
   attemptedMigration = true;
 
-  const outputDir = path.join(getConfigDirectoryPath(), 'output');
+  const outputDir = path.join(getConfigDirectoryPath(true /* createIfNotExists */), 'output');
   const backupDir = `${outputDir}-backup-${new Date()
     .toISOString()
     .slice(0, 10)
