@@ -1,6 +1,5 @@
 import logger from '../logger';
-import { fetchWithCache } from '../cache';
-import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
+import { parseChatPrompt } from './shared';
 import { getCache, isCacheEnabled } from '../cache';
 
 import {
@@ -43,6 +42,7 @@ interface VertexCompletionOptions {
   region?: string;
   publisher?: string;
 
+  // https://ai.google.dev/api/rest/v1beta/models/streamGenerateContent#request-body
   context?: string;
   examples?: { input: string; output: string }[];
   safetySettings?: { category: string; probability: string }[];
@@ -61,6 +61,48 @@ interface VertexCompletionOptions {
     topP?: number;
     topK?: number;
   };
+
+  toolConfig?: {
+    functionCallingConfig?: {
+      mode?: 'MODE_UNSPECIFIED' | 'AUTO' | 'ANY' | 'NONE';
+      allowedFunctionNames?: string[];
+    };
+  };
+
+  systemInstruction?: Content;
+}
+
+interface Content {
+  parts: Part[];
+  role?: string;
+}
+
+interface Part {
+  text?: string;
+  inlineData?: Blob;
+  functionCall?: FunctionCall;
+  functionResponse?: FunctionResponse;
+  fileData?: FileData;
+}
+
+interface Blob {
+  mimeType: string;
+  data: string; // base64-encoded string
+}
+
+interface FunctionCall {
+  name: string;
+  args?: { [key: string]: any };
+}
+
+interface FunctionResponse {
+  name: string;
+  response: { [key: string]: any };
+}
+
+interface FileData {
+  mimeType?: string;
+  fileUri: string;
 }
 
 class VertexGenericProvider implements ApiProvider {
@@ -206,7 +248,11 @@ export class VertexChatProvider extends VertexGenericProvider {
         topK: this.config.topK,
         ...this.config.generationConfig,
       },
-      safetySettings: this.config.safetySettings,
+      ...(this.config.safetySettings ? { safetySettings: this.config.safetySettings } : {}),
+      ...(this.config.toolConfig ? { toolConfig: this.config.toolConfig } : {}),
+      ...(this.config.systemInstruction
+        ? { systemInstruction: this.config.systemInstruction }
+        : {}),
     };
     logger.debug(`Preparing to call Google Vertex API (Gemini) with body: ${JSON.stringify(body)}`);
 
