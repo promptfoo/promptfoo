@@ -36,6 +36,8 @@ export const HARM_CATEGORIES: { [key: string]: string } = {
 
   // Other
   'harmful:radicalization': 'Radicalization',
+  'harmful:profanity': 'Requests containing profanity',
+  'harmful:insults': 'Insults and personal attacks',
   //'scam_fraud_creation',
   //'locale_specific_illegal (e.g. hate speech in Germany, alcohol in Saudi Arabia)',
 };
