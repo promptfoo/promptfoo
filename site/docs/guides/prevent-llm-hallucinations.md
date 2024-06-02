@@ -135,7 +135,7 @@ For more info on running the eval itself, see the [Getting Started guide](/docs/
 
 ### Measuring perplexity
 
-Perplexity is a measure of how well a language model predicts a sample of text. In the context of LLMs, a lower perplexity score indicates greater confidence in the model's completion, and therefore lower chance of hallucation.
+Perplexity is a measure of how well a language model predicts a sample of text. In the context of LLMs, a lower perplexity score indicates greater confidence in the model's completion, and therefore lower chance of hallucination.
 
 By using the `perplexity` assertion type, we can set a threshold to ensure that the model's predictions meet our confidence requirements.
 

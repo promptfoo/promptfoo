@@ -6,7 +6,7 @@ sidebar_label: Evaluating JSON outputs
 
 Getting an LLM to output valid JSON can be a difficult task. There are a few failure modes:
 
-- **Hallucation**: OpenAI function calling and other nascent frameworks are notorious for hallucinating functions and arguments.
+- **Hallucination**: OpenAI function calling and other nascent frameworks are notorious for hallucinating functions and arguments.
 - **Invalid JSON**: Asking an LLM to produce JSON output is unreliable. Some inference engines such as [llama.cpp](https://github.com/ggerganov/llama.cpp/tree/master) support constrained output with GBNF grammars. OpenAI began supporting this in late 2023 with the [response format](https://platform.openai.com/docs/api-reference/chat/create#chat-create-response_format) parameter.
 - **Schema non-conformance**: Getting the model to output JSON is only half the battle. The JSON may be malformed or incomplete.
 
