@@ -612,6 +612,7 @@ interface ResultsTableProps {
   searchText: string;
   showStats: boolean;
   onFailureFilterToggle: (columnId: string, checked: boolean) => void;
+  onSearchTextChange: (text: string) => void;
 }
 
 interface ExtendedEvaluateTableOutput extends EvaluateTableOutput {
@@ -632,6 +633,7 @@ function ResultsTable({
   searchText,
   showStats,
   onFailureFilterToggle,
+  onSearchTextChange,
 }: ResultsTableProps) {
   const { evalId: filePath, table, setTable } = useMainStore();
 
@@ -908,7 +910,10 @@ function ResultsTable({
                     </div>
                     {prompt.metrics?.namedScores &&
                     Object.keys(prompt.metrics.namedScores).length > 0 ? (
-                      <CustomMetrics lookup={prompt.metrics.namedScores} />
+                      <CustomMetrics
+                        lookup={prompt.metrics.namedScores}
+                        onSearchTextChange={onSearchTextChange}
+                      />
                     ) : null}
                     {/* TODO(ian): Remove backwards compatibility for prompt.provider added 12/26/23 */}
                   </div>
