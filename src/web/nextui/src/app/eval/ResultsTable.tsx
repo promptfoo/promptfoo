@@ -34,14 +34,10 @@ import { useStore as useMainStore } from '@/app/eval/store';
 
 import type { CellContext, ColumnDef, VisibilityState } from '@tanstack/table-core';
 
-import {
-  EvaluateTableRow,
-  EvaluateTableOutput,
-  FilterMode,
-  EvaluateTable,
-} from './types';
+import { EvaluateTableRow, EvaluateTableOutput, FilterMode, EvaluateTable } from './types';
 
 import './ResultsTable.css';
+import { useShiftKey } from '../hooks/useShiftKey';
 
 function formatRowOutput(output: EvaluateTableOutput | string) {
   if (typeof output === 'string') {
@@ -199,6 +195,18 @@ function EvalOutputCell({
     setCommentDialogOpen(false);
   };
 
+  const handleToggleHighlight = () => {
+    let newCommentText;
+    if (commentText.startsWith('!highlight')) {
+      newCommentText = commentText.slice('!highlight'.length).trim();
+      onRating(undefined, undefined, newCommentText);
+    } else {
+      newCommentText = ('!highlight ' + commentText).trim();
+      onRating(undefined, undefined, newCommentText);
+    }
+    setCommentText(newCommentText);
+  };
+
   let text = typeof output.text === 'string' ? output.text : JSON.stringify(output.text);
   let node: React.ReactNode | undefined;
   let chunks: string[] = [];
@@ -337,6 +345,12 @@ function EvalOutputCell({
     }
   }, [onRating, output.score, output.gradingResult?.comment]);
 
+  const [copied, setCopied] = React.useState(false);
+  const handleCopy = React.useCallback(() => {
+    navigator.clipboard.writeText(output.text);
+    setCopied(true);
+  }, [output.text]);
+
   let tokenUsageDisplay;
   let latencyDisplay;
   let tokPerSecDisplay;
@@ -423,8 +437,27 @@ function EvalOutputCell({
     </div>
   ) : null;
 
+  const shiftKeyPressed = useShiftKey();
   const actions = (
     <div className="cell-actions">
+      {shiftKeyPressed && (
+        <>
+          <span className="action" onClick={handleCopy} onMouseDown={(e) => e.preventDefault()}>
+            <Tooltip title="Copy output to clipboard">
+              <span>{copied ? '✅' : '📋'}</span>
+            </Tooltip>
+          </span>
+          <span
+            className="action"
+            onClick={handleToggleHighlight}
+            onMouseDown={(e) => e.preventDefault()}
+          >
+            <Tooltip title="Toggle test highlight">
+              <span>🌟</span>
+            </Tooltip>
+          </span>
+        </>
+      )}
       {output.prompt && (
         <>
           <span className="action" onClick={handlePromptOpen}>
