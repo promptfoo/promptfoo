@@ -12,7 +12,6 @@ ENV NEXT_TELEMETRY_DISABLED 1
 ARG NEXT_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL
 ENV NEXT_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL=${NEXT_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL}
 
-
 # Supabase opt-in
 ARG NEXT_PUBLIC_PROMPTFOO_USE_SUPABASE
 ENV NEXT_PUBLIC_PROMPTFOO_USE_SUPABASE=${NEXT_PUBLIC_PROMPTFOO_USE_SUPABASE}
@@ -57,7 +56,7 @@ env > .env\n\
 echo "Loaded environment variables:"\n\
 cat .env\n\
 echo "Starting server..."\n\
-node server.js' > entrypoint.sh
+node src/web/nextui/server.js' > entrypoint.sh
 
 # Make the script executable
 RUN chmod +x entrypoint.sh
