@@ -11,6 +11,7 @@ import ResultsView from './ResultsView';
 import { getApiBaseUrl } from '@/api';
 import { IS_RUNNING_LOCALLY, USE_SUPABASE } from '@/constants';
 import { REMOTE_API_BASE_URL } from '@/../../../constants';
+import { ShiftKeyProvider } from '@/app/contexts/ShiftKeyContext';
 import { useStore } from './store';
 
 import type { EvaluateSummary, UnifiedConfig, SharedResults } from '@/../../../types';
@@ -230,10 +231,12 @@ export default function Eval({
   }
 
   return (
-    <ResultsView
-      defaultEvalId={defaultEvalId}
-      recentEvals={recentEvals}
-      onRecentEvalSelected={handleRecentEvalSelection}
-    />
+    <ShiftKeyProvider>
+      <ResultsView
+        defaultEvalId={defaultEvalId}
+        recentEvals={recentEvals}
+        onRecentEvalSelected={handleRecentEvalSelection}
+      />
+    </ShiftKeyProvider>
   );
 }

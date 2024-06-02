@@ -1,6 +1,11 @@
+const outputType = process.env.NEXT_PUBLIC_PROMPTFOO_BUILD_STANDALONE_SERVER ? 'standalone' : 'export';
+console.log('**************************************************');
+console.log(`Building next.js in ${outputType} mode`);
+console.log('**************************************************');
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: process.env.NEXT_PUBLIC_PROMPTFOO_BUILD_STANDALONE_SERVER ? 'standalone' : 'export',
+  output: outputType,
   trailingSlash: true,
   webpack: (config, { buildId, dev, isServer, defaultLoaders, webpack }) => {
     config.externals.push({

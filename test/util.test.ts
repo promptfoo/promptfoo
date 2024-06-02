@@ -122,7 +122,7 @@ describe('util', () => {
         description: 'test',
       };
       const shareableUrl = null;
-      writeOutput(outputPath, summary, config, shareableUrl);
+      writeOutput(outputPath, null, summary, config, shareableUrl);
 
       expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
     });
@@ -194,7 +194,7 @@ describe('util', () => {
         description: 'test',
       };
       const shareableUrl = null;
-      writeOutput(outputPath, summary, config, shareableUrl);
+      writeOutput(outputPath, null, summary, config, shareableUrl);
 
       expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
     });
@@ -266,7 +266,7 @@ describe('util', () => {
         description: 'test',
       };
       const shareableUrl = null;
-      writeOutput(outputPath, summary, config, shareableUrl);
+      writeOutput(outputPath, null, summary, config, shareableUrl);
 
       expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
     });
@@ -338,7 +338,7 @@ describe('util', () => {
         description: 'test',
       };
       const shareableUrl = null;
-      writeMultipleOutputs(outputPath, summary, config, shareableUrl);
+      writeMultipleOutputs(outputPath, null, summary, config, shareableUrl);
 
       expect(fs.writeFileSync).toHaveBeenCalledTimes(2);
     });

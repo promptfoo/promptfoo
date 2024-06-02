@@ -380,6 +380,11 @@ function MetricChart({ table }: ChartProps) {
       },
       options: {
         scales: {
+          x: {
+            grid: {
+              display: false,
+            },
+          },
           y: {
             ticks: {
               callback: function (value: string | number, index: number, values: any[]) {
