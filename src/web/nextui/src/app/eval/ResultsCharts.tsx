@@ -444,7 +444,7 @@ function ResultsCharts({ columnVisibility }: ResultsChartsProps) {
             <PassRateChart table={table} />
           </div>
           <div style={{ width: '33%' }}>
-            {scoreSet.size === 2 &&
+            {scoreSet.size <= 3 &&
             Object.keys(table.head.prompts[0].metrics?.namedScores || {}).length > 1 ? (
               <MetricChart table={table} />
             ) : (

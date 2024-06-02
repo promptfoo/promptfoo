@@ -700,6 +700,10 @@ function ResultsTable({
     }
   }, [body, failureFilter, filterMode, searchText, columnVisibility, columnVisibilityIsSet]);
 
+  React.useEffect(() => {
+    setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+  }, [failureFilter, filterMode, searchText]);
+
   // TODO(ian): Switch this to use prompt.metrics field once most clients have updated.
   const numGoodTests = React.useMemo(
     () =>
