@@ -2,7 +2,7 @@
 sidebar_label: Preventing hallucinations
 ---
 
-# How to measure and prevent LLM hallucations
+# How to measure and prevent LLM hallucinations
 
 LLMs have great potential, but they are prone to generating incorrect or misleading information, a phenomenon known as hallucination. Factuality and LLM "grounding" is a key concern for developers building LLM applications.
 
@@ -14,7 +14,7 @@ LLM app developers have several tools at their disposal:
 - **Fine-tuning** to improve accuracy.
 - **Controlled decoding** to force certain outputs.
 
-There is no way to completely eliminate hallucation risk, but you can substantially reduce the likelihood of hallucinations by adopting a metrics-driven approach to LLM evaluation that defines and measures LLM responses to common hallucination cases.
+There is no way to completely eliminate hallucination risk, but you can substantially reduce the likelihood of hallucinations by adopting a metrics-driven approach to LLM evaluation that defines and measures LLM responses to common hallucination cases.
 
 Your goal should be: _How can I quantify the effectiveness of these hallucination countermeasures?_
 
@@ -147,7 +147,7 @@ assert:
     threshold: 5 # Replace with your desired perplexity threshold
 ```
 
-In this example, we've decided that a perplexity score greater than 5 signals that the model is not certain enough about its prediction, and hallucination risk is too highi.
+In this example, we've decided that a perplexity score greater than 5 signals that the model is not certain enough about its prediction, and hallucination risk is too high.
 
 Determining the perplexity threshold is a bit of trial and error. You can also remove the threshold and simply compare multiple models:
 
@@ -168,7 +168,7 @@ For more detailed information on perplexity and other useful metrics, refer to t
 
 ### Retrieval-augmented generation
 
-We can use retrieval-augmented generation to provide additional context to the LLM. Common approaches here are with LangChain, LlamaIndex, or a direct integration with an external datasource such as a vector database or API.
+We can use retrieval-augmented generation to provide additional context to the LLM. Common approaches here are with LangChain, LlamaIndex, or a direct integration with an external data source such as a vector database or API.
 
 By using a script as a custom provider, we can fetch relevant information and include it in the prompt.
 
@@ -198,7 +198,7 @@ question = sys.argv[1]
 print(agent.run(question))
 ```
 
-We use LangChain in this example because it's a popular library, but any custom script will do. More generally, your retrieval-augmented provider should hook into reliable, non-LLM datasources.
+We use LangChain in this example because it's a popular library, but any custom script will do. More generally, your retrieval-augmented provider should hook into reliable, non-LLM data sources.
 
 Then, we can use this provider in our evaluation and compare the results:
 

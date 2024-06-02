@@ -137,7 +137,7 @@ const config = {
               },
               {
                 label: 'Minimizing hallucinations',
-                to: '/docs/guides/prevent-llm-hallucations',
+                to: '/docs/guides/prevent-llm-hallucinations',
               },
             ],
           },
@@ -184,7 +184,20 @@ const config = {
         indexName: 'promptfoo',
       },
     }),
-  plugins: [require.resolve('docusaurus-plugin-image-zoom')],
+  plugins: [
+    require.resolve('docusaurus-plugin-image-zoom'),
+    [
+      '@docusaurus/plugin-client-redirects',
+      {
+        redirects: [
+          {
+            to: '/docs/guides/prevent-llm-hallucinations',
+            from: ['/docs/guides/prevent-llm-hallucations'],
+          },
+        ],
+      },
+    ],
+  ],
 };
 
 module.exports = config;
