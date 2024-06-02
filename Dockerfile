@@ -31,6 +31,7 @@ RUN apk update && apk add python3 build-base --no-cache
 RUN echo "*** Building with env vars from .env.production"
 
 RUN npm install
+RUN npm run build
 
 WORKDIR /app/src/web/nextui
 RUN npm prune --production

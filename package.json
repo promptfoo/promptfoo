@@ -43,7 +43,8 @@
     "format": "prettier -w .",
     "db:migrate": "npx tsx src/migrate.ts",
     "db:generate": "npx drizzle-kit generate:sqlite",
-    "audit:fix": "npm audit fix && cd src/web/nextui && npm audit fix && cd ../../site && npm audit fix"
+    "audit:fix": "npm audit fix && cd src/web/nextui && npm audit fix && cd ../../site && npm audit fix",
+    "prepublishOnly": "npm run build:clean && npm run build"
   },
   "peerDependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.458.0",
