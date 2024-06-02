@@ -103,6 +103,13 @@ export class MistralChatCompletionProvider implements ApiProvider {
         output: 0.024 / 1000,
       },
     })),
+    ...['codestral-latest'].map((model) => ({
+      id: model,
+      cost: {
+        input: 0.002 / 1000,
+        output: 0.006 / 1000,
+      },
+    })),
   ];
 
   static MISTRAL_CHAT_MODELS_NAMES = MistralChatCompletionProvider.MISTRAL_CHAT_MODELS.map(

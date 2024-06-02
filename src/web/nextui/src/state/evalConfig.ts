@@ -63,11 +63,21 @@ export const useStore = create<State>()(
           } else if (Array.isArray(config.prompts)) {
             // If it looks like a file path, don't set it.
             updates.prompts = config.prompts.filter(
-              (p) => !p.endsWith('.txt') && !p.endsWith('.json') && !p.endsWith('.yaml'),
+              (p): p is string =>
+                typeof p === 'string' &&
+                !p.endsWith('.txt') &&
+                !p.endsWith('.json') &&
+                !p.endsWith('.yaml'),
             );
           } else {
             console.warn('Invalid prompts config', config.prompts);
           }
+        }
+        if (config.defaultTest) {
+          updates.defaultTest = config.defaultTest;
+        }
+        if (config.evaluateOptions) {
+          updates.evaluateOptions = config.evaluateOptions;
         }
         set(updates);
       },

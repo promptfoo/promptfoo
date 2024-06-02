@@ -47,6 +47,11 @@ export class PythonProvider implements ApiProvider {
       logger.debug(`Returning cached result for script ${absPath}`);
       return JSON.parse(cachedResult);
     } else {
+      // These are not useful in Python
+      delete context?.fetchWithCache;
+      delete context?.getCache;
+      delete context?.logger;
+
       const args = [prompt, this.options, context];
       logger.debug(
         `Running python script ${absPath} with scriptPath ${this.scriptPath} and args: ${args.join(
@@ -56,12 +61,12 @@ export class PythonProvider implements ApiProvider {
       const result = (await runPython(absPath, 'call_api', args, {
         pythonExecutable: this.config.pythonExecutable,
       })) as {
-        output?: string;
+        output?: string | object;
         error?: string;
       };
       if (!('output' in result) && !('error' in result)) {
         throw new Error(
-          'The Python script `call_api` function must return a dict with an `output` or `error` string',
+          'The Python script `call_api` function must return a dict with an `output` string/object or `error` string',
         );
       }
       if (isCacheEnabled() && !('error' in result)) {

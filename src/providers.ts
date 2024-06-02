@@ -11,9 +11,10 @@ import {
   OpenAiChatCompletionProvider,
   OpenAiEmbeddingProvider,
   OpenAiImageProvider,
+  OpenAiModerationProvider,
 } from './providers/openai';
 import { AnthropicCompletionProvider, AnthropicMessagesProvider } from './providers/anthropic';
-import { ReplicateProvider } from './providers/replicate';
+import { ReplicateModerationProvider, ReplicateProvider } from './providers/replicate';
 import {
   LocalAiCompletionProvider,
   LocalAiChatProvider,
@@ -43,10 +44,13 @@ import {
   HuggingfaceTextGenerationProvider,
   HuggingfaceTokenExtractionProvider,
 } from './providers/huggingface';
-import { AwsBedrockCompletionProvider } from './providers/bedrock';
+import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './providers/bedrock';
 import { PythonProvider } from './providers/pythonCompletion';
 import { CohereChatCompletionProvider } from './providers/cohere';
+import * as CloudflareAiProviders from './providers/cloudflare-ai';
 import { BAMChatProvider, BAMEmbeddingProvider } from './providers/bam';
+import { PortkeyChatCompletionProvider } from './providers/portkey';
+import { HttpProvider } from './providers/http';
 import { importModule } from './esm';
 
 import type {
@@ -124,7 +128,10 @@ export async function loadApiProvider(
     env,
   };
   let ret: ApiProvider;
-  if (providerPath.startsWith('file://') && (providerPath.endsWith('.yaml')|| providerPath.endsWith('.yml'))){
+  if (
+    providerPath.startsWith('file://') &&
+    (providerPath.endsWith('.yaml') || providerPath.endsWith('.yml'))
+  ) {
     const filePath = providerPath.slice('file://'.length);
     const yamlContent = yaml.load(fs.readFileSync(filePath, 'utf8')) as ProviderOptions;
     invariant(yamlContent, `Provider config ${filePath} is undefined`);
@@ -152,9 +159,11 @@ export async function loadApiProvider(
     if (modelType === 'chat') {
       ret = new OpenAiChatCompletionProvider(modelName || 'gpt-3.5-turbo', providerOptions);
     } else if (modelType === 'embedding' || modelType === 'embeddings') {
-      ret = new OpenAiEmbeddingProvider(modelName || 'text-embedding-ada-002', providerOptions);
+      ret = new OpenAiEmbeddingProvider(modelName || 'text-embedding-3-large', providerOptions);
     } else if (modelType === 'completion') {
-      ret = new OpenAiCompletionProvider(modelName || 'text-davinci-003', providerOptions);
+      ret = new OpenAiCompletionProvider(modelName || 'gpt-3.5-turbo-instruct', providerOptions);
+    } else if (modelType === 'moderation') {
+      ret = new OpenAiModerationProvider(modelName || 'text-moderation-latest', providerOptions);
     } else if (OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES.includes(modelType)) {
       ret = new OpenAiChatCompletionProvider(modelType, providerOptions);
     } else if (OpenAiCompletionProvider.OPENAI_COMPLETION_MODEL_NAMES.includes(modelType)) {
@@ -201,6 +210,10 @@ export async function loadApiProvider(
         apiKeyEnvar: 'OPENROUTER_API_KEY',
       },
     });
+  } else if (providerPath.startsWith('portkey:')) {
+    const splits = providerPath.split(':');
+    const modelName = splits.slice(1).join(':');
+    ret = new PortkeyChatCompletionProvider(modelName, providerOptions);
   } else if (providerPath.startsWith('anthropic:')) {
     const splits = providerPath.split(':');
     const modelType = splits[1];
@@ -225,11 +238,14 @@ export async function loadApiProvider(
     if (modelType === 'completion') {
       // Backwards compatibility: `completion` used to be required
       ret = new AwsBedrockCompletionProvider(modelName, providerOptions);
+    } else if (modelType === 'embeddings' || modelType === 'embedding') {
+      ret = new AwsBedrockEmbeddingProvider(modelName, providerOptions);
+    } else {
+      ret = new AwsBedrockCompletionProvider(
+        `${modelType}${modelName ? `:${modelName}` : ''}`,
+        providerOptions,
+      );
     }
-    ret = new AwsBedrockCompletionProvider(
-      `${modelType}${modelName ? `:${modelName}` : ''}`,
-      providerOptions,
-    );
   } else if (providerPath.startsWith('huggingface:') || providerPath.startsWith('hf:')) {
     const splits = providerPath.split(':');
     if (splits.length < 3) {
@@ -255,8 +271,14 @@ export async function loadApiProvider(
     }
   } else if (providerPath.startsWith('replicate:')) {
     const splits = providerPath.split(':');
-    const modelName = splits.slice(1).join(':');
-    ret = new ReplicateProvider(modelName, providerOptions);
+    const modelType = splits[1];
+    const modelName = splits.slice(2).join(':');
+    if (modelType === 'moderation') {
+      ret = new ReplicateModerationProvider(modelName, providerOptions);
+    } else {
+      // By default, there is no model type.
+      ret = new ReplicateProvider(modelType + ':' + modelName, providerOptions);
+    }
   } else if (providerPath.startsWith('bam:')) {
     const splits = providerPath.split(':');
     const modelType = splits[1];
@@ -266,6 +288,32 @@ export async function loadApiProvider(
     } else {
       throw new Error(
         `Invalid BAM provider: ${providerPath}. Use one of the following providers: bam:chat:<model name>`,
+      );
+    }
+  } else if (providerPath.startsWith('cloudflare-ai:')) {
+    // Load Cloudflare AI
+    const splits = providerPath.split(':');
+    const modelType = splits[1];
+    const deploymentName = splits[2];
+
+    if (modelType === 'chat') {
+      ret = new CloudflareAiProviders.CloudflareAiChatCompletionProvider(
+        deploymentName,
+        providerOptions,
+      );
+    } else if (modelType === 'embedding' || modelType === 'embeddings') {
+      ret = new CloudflareAiProviders.CloudflareAiEmbeddingProvider(
+        deploymentName,
+        providerOptions,
+      );
+    } else if (modelType === 'completion') {
+      ret = new CloudflareAiProviders.CloudflareAiCompletionProvider(
+        deploymentName,
+        providerOptions,
+      );
+    } else {
+      throw new Error(
+        `Unknown Cloudflare AI model type: ${modelType}. Use one of the following providers: cloudflare-ai:chat:<model name>, cloudflare-ai:completion:<model name>, cloudflare-ai:embedding:`,
       );
     }
   } else if (providerPath.startsWith('webhook:')) {
@@ -320,6 +368,12 @@ export async function loadApiProvider(
     } else {
       ret = new LocalAiChatProvider(modelType, providerOptions);
     }
+  } else if (providerPath.startsWith('http:') || providerPath.startsWith('https:')) {
+    ret = new HttpProvider(providerPath, providerOptions);
+  } else if (providerPath === 'promptfoo:redteam:iterative') {
+    const RedteamIterativeProvider = (await import(path.join(__dirname, './redteam/iterative')))
+      .default;
+    ret = new RedteamIterativeProvider(providerOptions);
   } else {
     if (providerPath.startsWith('file://')) {
       providerPath = providerPath.slice('file://'.length);

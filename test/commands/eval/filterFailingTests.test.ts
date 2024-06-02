@@ -21,7 +21,7 @@ describe('filterFailingTests', () => {
   const restResult = {
     prompt: {
       raw: 'prompt',
-      display: 'prompt',
+      label: 'prompt',
     },
     score: 0.5,
     latencyMs: 1_000,
@@ -32,6 +32,7 @@ describe('filterFailingTests', () => {
     jest.mocked(readOutput).mockResolvedValue({
       results: {
         version: 2,
+        timestamp: '2024-01-01T00:00:00.000Z',
         results: [
           { ...restResult, success: true, provider: { id: 'provider1' }, vars: varsSuccess },
           { ...restResult, success: false, provider: { id: 'provider2' }, vars: varsFailure },

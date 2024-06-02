@@ -44,19 +44,19 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
           if (typeof promptInput === 'function') {
             return {
               raw: promptInput.toString(),
-              display: promptInput.toString(),
+              label: promptInput.toString(),
               function: promptInput as PromptFunction,
             };
           } else if (typeof promptInput === 'string') {
             const prompts = await readPrompts(promptInput);
             return prompts.map((p) => ({
               raw: p.raw,
-              display: p.display,
+              label: p.label,
             }));
           } else {
             return {
               raw: JSON.stringify(promptInput),
-              display: JSON.stringify(promptInput),
+              label: JSON.stringify(promptInput),
             };
           }
         }),
@@ -71,6 +71,10 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
     }
     if (test.assert) {
       for (const assertion of test.assert) {
+        if (assertion.type === 'assert-set' || typeof assertion.provider === 'function') {
+          continue;
+        }
+
         if (assertion.provider) {
           if (typeof assertion.provider === 'object') {
             const casted = assertion.provider as ProviderOptions;
@@ -79,7 +83,7 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
           } else if (typeof assertion.provider === 'string') {
             assertion.provider = await loadApiProvider(assertion.provider);
           } else {
-            // It's a function, no need to do anything
+            throw new Error('Invalid provider type');
           }
         }
       }

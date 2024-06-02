@@ -98,9 +98,11 @@ assert:
   - type: llm-rubric
     value: Do not mention that you are an AI or chat assistant
     provider:
-      id: provider:chat:modelname
-      config:
-        # Provider config options
+      text:
+        id: provider:chat:modelname
+        config:
+          region: us-east-1
+          # Other provider config options...
 ```
 
 Or individual tests:
@@ -118,4 +120,18 @@ tests:
     assert:
       - type: llm-rubric
         value: Do not mention that you are an AI or chat assistant
+```
+
+## Embeddings
+
+To override the embeddings provider for all assertions that require embeddings (such as similarity), use `defaultTest`:
+
+```yaml
+defaultTest:
+  options:
+    provider:
+      embedding:
+        id: bedrock:embeddings:amazon.titan-embed-text-v2:0
+        config:
+          region: us-east-1
 ```

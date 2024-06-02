@@ -144,6 +144,7 @@ Model-assisted eval metrics
 | [context-relevance](https://promptfoo.dev/docs/configuration/expected-outputs/model-graded)     | Ensure that context is relevant to original query                               |
 | [factuality](https://promptfoo.dev/docs/configuration/expected-outputs/model-graded)            | LLM output adheres to the given facts, using Factuality method from OpenAI eval |
 | [model-graded-closedqa](https://promptfoo.dev/docs/configuration/expected-outputs/model-graded) | LLM output adheres to given criteria, using Closed QA method from OpenAI eval   |
+| [moderation](https://promptfoo.dev/docs/configuration/expected-outputs/moderation)              | Make sure outputs are safe                                                      |
 | [select-best](https://promptfoo.dev/docs/configuration/expected-outputs/model-graded)           | Compare multiple outputs for a test case and pick the best one                  |
 
 Every test type can be negated by prepending `not-`. For example, `not-equals` or `not-regex`.
@@ -248,7 +249,7 @@ You can also use `promptfoo` as a library in your project by importing the `eval
 
     // The required score for this test case.  If not provided, the test case is graded pass/fail.
     threshold?: number;
-    
+
     // Override the provider for this test
     provider?: string | ProviderOptions | ApiProvider;
   }
@@ -329,12 +330,23 @@ npx path/to/promptfoo-source eval
 
 The web UI is located in `src/web/nextui`. To run it in dev mode, run `npm run local:web`. This will host the web UI at http://localhost:3000. The web UI expects `promptfoo view` to be running separately.
 
-You may also have to set some placeholder envars (it is _not_ necessary to sign up for a supabase account):
+In order to build the next.js app, you'll have to set some placeholder envars (it is _not_ necessary to sign up for a supabase account). You can edit `src/web/nextui/.env` to include the following placeholders:
 
 ```sh
-NEXT_PUBLIC_SUPABASE_URL=http://
-NEXT_PUBLIC_SUPABASE_ANON_KEY=abc
+DATABASE_URL="postgresql://..."
+
+NEXT_PUBLIC_PROMPTFOO_WITH_DATABASE=1
+NEXT_PUBLIC_SUPABASE_URL=https://placeholder.promptfoo.dev
+NEXT_PUBLIC_SUPABASE_ANON_KEY=abc123
 ```
+
+Then run:
+
+```sh
+npm run build
+```
+
+The build has some side effects such as e.g. copying HTML templates, migrations, etc.
 
 Contributions are welcome! Please feel free to submit a pull request or open an issue.
 
@@ -349,6 +361,17 @@ Here are some of the available scripts:
 - `db:generate`: Generate new db migrations (and create the db if it doesn't already exist). Note that after generating a new migration, you'll have to `npm i` to copy the migrations into `dist/`.
 - `db:migrate`: Run existing db migrations (and create the db if it doesn't already exist)
 
+To run the CLI during development you can run a command like: `npm run local -- eval --config $(readlink -f ./examples/cloudflare-ai/chat_config.yaml)`, where any parts of the command after `--` are passed through to our CLI entrypoint. Since the Next dev server isn't supported in this mode, see the instructions above for running the web server.
+
 # [» View full documentation «](https://promptfoo.dev/docs/intro)
 
 [providers-docs]: https://promptfoo.dev/docs/providers
+
+
+### Adding a New Provider
+
+1. Create an implementation in `src/providers/SOME_PROVIDER_FILE`
+2. Update `loadApiProvider` in `src/providers.ts` to load your provider via string
+3. Add test cases in `test/providers.test.ts`
+   1. Test the actual provider implementation
+   2. Test loading the provider via a `loadApiProvider` test

@@ -1,6 +1,5 @@
 import logger from '../logger';
-import { fetchWithCache } from '../cache';
-import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
+import { parseChatPrompt } from './shared';
 import { getCache, isCacheEnabled } from '../cache';
 
 import {
@@ -43,6 +42,7 @@ interface VertexCompletionOptions {
   region?: string;
   publisher?: string;
 
+  // https://ai.google.dev/api/rest/v1beta/models/streamGenerateContent#request-body
   context?: string;
   examples?: { input: string; output: string }[];
   safetySettings?: { category: string; probability: string }[];
@@ -61,6 +61,48 @@ interface VertexCompletionOptions {
     topP?: number;
     topK?: number;
   };
+
+  toolConfig?: {
+    functionCallingConfig?: {
+      mode?: 'MODE_UNSPECIFIED' | 'AUTO' | 'ANY' | 'NONE';
+      allowedFunctionNames?: string[];
+    };
+  };
+
+  systemInstruction?: Content;
+}
+
+interface Content {
+  parts: Part[];
+  role?: string;
+}
+
+interface Part {
+  text?: string;
+  inlineData?: Blob;
+  functionCall?: FunctionCall;
+  functionResponse?: FunctionResponse;
+  fileData?: FileData;
+}
+
+interface Blob {
+  mimeType: string;
+  data: string; // base64-encoded string
+}
+
+interface FunctionCall {
+  name: string;
+  args?: { [key: string]: any };
+}
+
+interface FunctionResponse {
+  name: string;
+  response: { [key: string]: any };
+}
+
+interface FileData {
+  mimeType?: string;
+  fileUri: string;
 }
 
 class VertexGenericProvider implements ApiProvider {
@@ -153,8 +195,12 @@ export class VertexChatProvider extends VertexGenericProvider {
     'gemini-1.0-pro-vision-001',
     'gemini-1.0-pro',
     'gemini-1.0-pro-001',
+    'gemini-1.0-pro-002',
     'gemini-pro-vision',
     'gemini-1.5-pro-latest',
+    'gemini-1.5-pro-preview-0409',
+    'gemini-1.5-pro-preview-0514',
+    'gemini-1.5-flash-preview-0514',
     'aqa',
   ];
 
@@ -169,17 +215,6 @@ export class VertexChatProvider extends VertexGenericProvider {
   }
 
   async callApi(prompt: string): Promise<ProviderResponse> {
-    if (!this.getApiKey()) {
-      throw new Error(
-        'Google Vertex API key is not set. Set the VERTEX_API_KEY environment variable or add `apiKey` to the provider config. You can get an API token by running `gcloud auth print-access-token`',
-      );
-    }
-    if (!this.getProjectId()) {
-      throw new Error(
-        'Google Vertex project ID is not set. Set the VERTEX_PROJECT_ID environment variable or add `projectId` to the provider config.',
-      );
-    }
-
     if (this.modelName.includes('gemini')) {
       return this.callGeminiApi(prompt);
     }
@@ -213,7 +248,11 @@ export class VertexChatProvider extends VertexGenericProvider {
         topK: this.config.topK,
         ...this.config.generationConfig,
       },
-      safetySettings: this.config.safetySettings,
+      ...(this.config.safetySettings ? { safetySettings: this.config.safetySettings } : {}),
+      ...(this.config.toolConfig ? { toolConfig: this.config.toolConfig } : {}),
+      ...(this.config.systemInstruction
+        ? { systemInstruction: this.config.systemInstruction }
+        : {}),
     };
     logger.debug(`Preparing to call Google Vertex API (Gemini) with body: ${JSON.stringify(body)}`);
 
@@ -247,8 +286,23 @@ export class VertexChatProvider extends VertexGenericProvider {
       });
       data = res.data as GeminiApiResponse;
     } catch (err) {
+      const geminiError = err as any;
+      if (
+        geminiError.response &&
+        geminiError.response.data &&
+        geminiError.response.data[0] &&
+        geminiError.response.data[0].error
+      ) {
+        const errorDetails = geminiError.response.data[0].error;
+        const code = errorDetails.code;
+        const message = errorDetails.message;
+        const status = errorDetails.status;
+        return {
+          error: `API call error: Status ${status}, Code ${code}, Message:\n\n${message}`,
+        };
+      }
       return {
-        error: `API call error: ${JSON.stringify(err)}`,
+        error: `API call error: ${JSON.stringify(err, null, 2)}`,
       };
     }
 
@@ -350,7 +404,6 @@ export class VertexChatProvider extends VertexGenericProvider {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.getApiKey()}`,
         },
         data: body,
       });

@@ -1,0 +1,18 @@
+prompts:
+  - "Respond to the user: {{message}}"
+
+providers:
+  - openai:gpt-4o
+
+tests:
+  - vars:
+      message: "What's your favorite fruit? You must pick one. Output the name of a fruit only"
+    options:
+      storeOutputAs: favoriteFruit
+      transform: output.split(' ')[0]
+  - vars:
+      message: "Why do you like {{favoriteFruit}} so much?"
+    options:
+      storeOutputAs: reason
+  - vars:
+      message: 'Write a snarky 2 sentence rebuttal to this argument for loving {{favoriteFruit}}: \"{{reason}}\"'

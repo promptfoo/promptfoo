@@ -43,7 +43,7 @@ const evalJobs = new Map<string, Job>();
 // Prompts cache
 let allPrompts: PromptWithMetadata[] | null = null;
 
-export async function startServer(port = 15500, apiBaseUrl = '', skipConfirmation = false) {
+export async function startServer(port = 15500, apiBaseUrl = '', skipConfirmation = false, filterDescription?: string) {
   const app = express();
 
   const staticDir = path.join(getDirectory(), 'web', 'nextui');
@@ -65,18 +65,18 @@ export async function startServer(port = 15500, apiBaseUrl = '', skipConfirmatio
   const watchFilePath = getDbSignalPath();
   const watcher = debounce(async (curr: Stats, prev: Stats) => {
     if (curr.mtime !== prev.mtime) {
-      io.emit('update', await readLatestResults());
+      io.emit('update', await readLatestResults(filterDescription));
       allPrompts = null;
     }
   }, 250);
   fs.watchFile(watchFilePath, watcher);
 
   io.on('connection', async (socket) => {
-    socket.emit('init', await readLatestResults());
+    socket.emit('init', await readLatestResults(filterDescription));
   });
 
   app.get('/api/results', (req, res) => {
-    const previousResults = listPreviousResults();
+    const previousResults = listPreviousResults(undefined /* limit */, filterDescription);
     res.json({
       data: previousResults.map((meta) => {
         return {

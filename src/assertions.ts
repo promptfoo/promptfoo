@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { execFile, spawn } from 'child_process';
+import util from 'node:util';
 
 import async from 'async';
 import rouge from 'rouge';
@@ -26,13 +27,22 @@ import {
   matchesContextRelevance,
   matchesContextFaithfulness,
   matchesSelectBest,
+  matchesModeration,
 } from './matchers';
 import { validateFunctionCall } from './providers/openaiUtil';
 import { OpenAiChatCompletionProvider } from './providers/openai';
 import { runPython, runPythonCode } from './python/wrapper';
 import { importModule } from './esm';
 
-import type { Assertion, AssertionType, GradingResult, AtomicTestCase, ApiProvider } from './types';
+import {
+  type Assertion,
+  type AssertionType,
+  type GradingResult,
+  type AtomicTestCase,
+  type ApiProvider,
+  isGradingResult,
+} from './types';
+import { AssertionsResult } from './assertions/AssertionsResult';
 
 const ASSERTIONS_MAX_CONCURRENCY = process.env.PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY
   ? parseInt(process.env.PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY, 10)
@@ -64,7 +74,7 @@ function coerceString(value: string | object): string {
 function handleRougeScore(
   baseType: 'rouge-n',
   assertion: Assertion,
-  expected: string | string[],
+  expected: string,
   output: string,
   inverted: boolean,
 ): GradingResult {
@@ -77,10 +87,10 @@ function handleRougeScore(
     pass,
     score: inverted ? 1 - score : score,
     reason: pass
-      ? `${baseType.toUpperCase()} score ${score} is greater than or equal to threshold ${
-          assertion.threshold || 0.75
-        }`
-      : `${baseType.toUpperCase()} score ${score} is less than threshold ${
+      ? `${baseType.toUpperCase()} score ${score.toFixed(
+          2,
+        )} is greater than or equal to threshold ${assertion.threshold || 0.75}`
+      : `${baseType.toUpperCase()} score ${score.toFixed(2)} is less than threshold ${
           assertion.threshold || 0.75
         }`,
     assertion,
@@ -104,77 +114,89 @@ export async function runAssertions({
   logProbs?: number[];
   cost?: number;
 }): Promise<GradingResult> {
-  const tokensUsed = {
-    total: 0,
-    prompt: 0,
-    completion: 0,
-  };
   if (!test.assert || test.assert.length < 1) {
-    return { pass: true, score: 1, reason: 'No assertions', tokensUsed, assertion: null };
+    return AssertionsResult.noAssertsResult();
   }
-  let totalScore = 0;
-  let totalWeight = 0;
-  let allPass = true;
-  let failedReason = '';
-  const componentResults: GradingResult[] = [];
-  const namedScores: Record<string, number> = {};
 
-  await async.forEachOfLimit(test.assert, ASSERTIONS_MAX_CONCURRENCY, async (assertion, index) => {
-    if (assertion.type.startsWith('select-')) {
-      // Select-type assertions are handled separately because they depend on multiple outputs.
-      return;
-    }
-    const weight = assertion.weight ?? 1;
-    totalWeight += weight;
-    const result = await runAssertion({
-      prompt,
-      provider,
-      assertion,
-      test,
-      output,
-      latencyMs,
-      logProbs,
-      cost,
-    });
-    totalScore += result.score * weight;
-    componentResults[Number(index)] = result;
-    if (assertion.metric) {
-      namedScores[assertion.metric] = (namedScores[assertion.metric] || 0) + result.score;
-    }
-    if (result.tokensUsed) {
-      tokensUsed.total += result.tokensUsed.total;
-      tokensUsed.prompt += result.tokensUsed.prompt;
-      tokensUsed.completion += result.tokensUsed.completion;
-    }
-    if (!result.pass) {
-      allPass = false;
-      failedReason = result.reason;
-      if (process.env.PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES) {
-        throw new Error(result.reason);
+  const mainAssertResult = new AssertionsResult({
+    threshold: test.threshold,
+  });
+  const subAssertResults: AssertionsResult[] = [];
+  const asserts: {
+    assertion: Assertion;
+    assertResult: AssertionsResult;
+    index: number;
+  }[] = test.assert
+    .map((assertion, i) => {
+      if (assertion.type === 'assert-set') {
+        const subAssertResult = new AssertionsResult({
+          threshold: assertion.threshold,
+          parentAssertionSet: {
+            assertionSet: assertion,
+            index: i,
+          },
+        });
+
+        subAssertResults.push(subAssertResult);
+
+        return assertion.assert.map((subAssert, j) => {
+          return {
+            assertion: subAssert,
+            assertResult: subAssertResult,
+            index: j,
+          };
+        });
       }
-    }
+
+      return { assertion, assertResult: mainAssertResult, index: i };
+    })
+    .flat();
+
+  await async.forEachOfLimit(
+    asserts,
+    ASSERTIONS_MAX_CONCURRENCY,
+    async ({ assertion, assertResult, index }) => {
+      if (assertion.type.startsWith('select-')) {
+        // Select-type assertions are handled separately because they depend on multiple outputs.
+        return;
+      }
+
+      const result = await runAssertion({
+        prompt,
+        provider,
+        assertion,
+        test,
+        output,
+        latencyMs,
+        logProbs,
+        cost,
+      });
+
+      assertResult.addResult({
+        index,
+        result,
+        metric: assertion.metric,
+        weight: assertion.weight,
+      });
+    },
+  );
+
+  subAssertResults.forEach((subAssertResult) => {
+    const result = subAssertResult.testResult();
+    const {
+      index,
+      assertionSet: { metric, weight },
+    } = subAssertResult.parentAssertionSet!;
+
+    mainAssertResult.addResult({
+      index,
+      result,
+      metric,
+      weight,
+    });
   });
 
-  const finalScore = totalScore / totalWeight;
-  let finalReason = allPass ? 'All assertions passed' : failedReason;
-  if (test.threshold) {
-    // Existence of a test threshold overrides the pass/fail status of individual assertions
-    allPass = finalScore >= test.threshold;
-    if (allPass) {
-      finalReason = `Aggregate score ${finalScore.toFixed(2)} ≥ ${test.threshold} threshold`;
-    } else {
-      finalReason = `Aggregate score ${finalScore.toFixed(2)} < ${test.threshold} threshold`;
-    }
-  }
-  return {
-    pass: allPass,
-    score: finalScore,
-    namedScores: namedScores,
-    reason: finalReason,
-    tokensUsed,
-    componentResults,
-    assertion: null,
-  };
+  return mainAssertResult.testResult();
 }
 
 export async function runAssertion({
@@ -211,7 +233,7 @@ export async function runAssertion({
   if (assertion.transform) {
     output = await transformOutput(assertion.transform, output, {
       vars: test.vars,
-      prompt: { display: prompt },
+      prompt: { label: prompt },
     });
   }
 
@@ -221,6 +243,7 @@ export async function runAssertion({
     prompt,
     vars: test.vars || {},
     test,
+    logProbs,
   };
 
   // Render assertion values
@@ -229,9 +252,8 @@ export async function runAssertion({
   if (typeof renderedValue === 'string') {
     if (renderedValue.startsWith('file://')) {
       const basePath = cliState.basePath || '';
+      const filePath = path.resolve(basePath, renderedValue.slice('file://'.length));
 
-      // Load the file
-      const filePath = renderedValue.slice('file://'.length);
       if (filePath.endsWith('.js') || filePath.endsWith('.cjs') || filePath.endsWith('.mjs')) {
         const requiredModule = await importModule(filePath);
         if (typeof requiredModule === 'function') {
@@ -246,13 +268,8 @@ export async function runAssertion({
         logger.debug(`Javascript script ${filePath} output: ${valueFromScript}`);
       } else if (filePath.endsWith('.py')) {
         try {
-          const pythonScriptOutput = await runPython(
-            path.resolve(basePath, filePath),
-            'get_assert',
-            [output, context],
-          );
+          const pythonScriptOutput = await runPython(filePath, 'get_assert', [output, context]);
           valueFromScript = pythonScriptOutput;
-          logger.debug(`Python script ${filePath} output: ${valueFromScript}`);
           logger.debug(`Python script ${filePath} output: ${valueFromScript}`);
         } catch (error) {
           throw new Error(`Python script execution failed: ${error}`);
@@ -279,13 +296,19 @@ export async function runAssertion({
   }
 
   if (baseType === 'equals') {
-    pass = renderedValue == outputString;
+    if (typeof renderedValue === 'object') {
+      pass = util.isDeepStrictEqual(renderedValue, JSON.parse(outputString)) !== inverse;
+      renderedValue = JSON.stringify(renderedValue);
+    } else {
+      pass = (renderedValue == outputString) !== inverse;
+    }
+
     return {
       pass,
       score: pass ? 1 : 0,
       reason: pass
         ? 'Assertion passed'
-        : `Expected output "${renderedValue}" but got "${outputString}"`,
+        : `Expected output "${renderedValue}" to ${inverse ? 'not ' : ''}equal "${outputString}"`,
       assertion,
     };
   }
@@ -357,6 +380,9 @@ export async function runAssertion({
 
   if (baseType === 'contains-any') {
     invariant(renderedValue, '"contains-any" assertion type must have a value');
+    if (typeof renderedValue === 'string') {
+      renderedValue = renderedValue.split(',').map((v) => v.trim());
+    }
     invariant(
       Array.isArray(renderedValue),
       '"contains-any" assertion type must have an array value',
@@ -374,6 +400,9 @@ export async function runAssertion({
 
   if (baseType === 'icontains-any') {
     invariant(renderedValue, '"icontains-any" assertion type must have a value');
+    if (typeof renderedValue === 'string') {
+      renderedValue = renderedValue.split(',').map((v) => v.trim());
+    }
     invariant(
       Array.isArray(renderedValue),
       '"icontains-any" assertion type must have an array value',
@@ -394,6 +423,9 @@ export async function runAssertion({
 
   if (baseType === 'contains-all') {
     invariant(renderedValue, '"contains-all" assertion type must have a value');
+    if (typeof renderedValue === 'string') {
+      renderedValue = renderedValue.split(',').map((v) => v.trim());
+    }
     invariant(
       Array.isArray(renderedValue),
       '"contains-all" assertion type must have an array value',
@@ -411,6 +443,9 @@ export async function runAssertion({
 
   if (baseType === 'icontains-all') {
     invariant(renderedValue, '"icontains-all" assertion type must have a value');
+    if (typeof renderedValue === 'string') {
+      renderedValue = renderedValue.split(',').map((v) => v.trim());
+    }
     invariant(
       Array.isArray(renderedValue),
       '"icontains-all" assertion type must have an array value',
@@ -544,6 +579,7 @@ export async function runAssertion({
         validateFunctionCall(
           toolOutput.function,
           (provider as OpenAiChatCompletionProvider).config.tools?.map((tool) => tool.function),
+          test.vars,
         ),
       );
       return {
@@ -582,6 +618,7 @@ export async function runAssertion({
       validateFunctionCall(
         functionOutput,
         (provider as OpenAiChatCompletionProvider).config.functions,
+        test.vars,
       );
       return {
         pass: true,
@@ -603,19 +640,8 @@ export async function runAssertion({
     try {
       const validateResult = async (result: any): Promise<boolean | number | GradingResult> => {
         result = await Promise.resolve(result);
-        if (typeof result === 'boolean' || typeof result === 'number') {
+        if (typeof result === 'boolean' || typeof result === 'number' || isGradingResult(result)) {
           return result;
-        } else if (typeof result === 'object' && result !== null) {
-          if (!('pass' in result) || typeof result.pass !== 'boolean') {
-            throw new Error(`Expected object with 'pass' boolean but got ${typeof result.pass}`);
-          }
-          if (!('score' in result) || typeof result.score !== 'number') {
-            throw new Error(`Expected object with 'score' number but got ${typeof result.score}`);
-          }
-          if (!('reason' in result) || typeof result.reason !== 'string') {
-            throw new Error(`Expected object with 'reason' string but got ${typeof result.reason}`);
-          }
-          return result as GradingResult;
         } else {
           throw new Error(
             `Custom function must return a boolean, number, or GradingResult object. Got type ${typeof result}: ${JSON.stringify(
@@ -739,18 +765,14 @@ ${
         } catch (err) {
           throw new Error(`Invalid JSON: ${err} when parsing result: ${result}`);
         }
-        if (!parsed.hasOwnProperty('pass') || !parsed.hasOwnProperty('score')) {
+        if (!isGradingResult(parsed)) {
           throw new Error(
             `Python assertion must return a boolean, number, or {pass, score, reason} object. Got instead: ${result}`,
           );
         }
         return parsed;
       } else if (typeof result === 'object') {
-        if (
-          !result.hasOwnProperty('pass') ||
-          !result.hasOwnProperty('score') ||
-          !result.hasOwnProperty('reason')
-        ) {
+        if (!isGradingResult(result)) {
           throw new Error(
             `Python assertion must return a boolean, number, or {pass, score, reason} object. Got instead:\n${JSON.stringify(
               result,
@@ -988,6 +1010,36 @@ ${
     };
   }
 
+  if (baseType === 'moderation') {
+    // Assertion provider overrides test provider
+    test.options = test.options || {};
+    test.options.provider = assertion.provider || test.options.provider;
+
+    invariant(prompt, 'moderation assertion type must have a prompt');
+    invariant(typeof output === 'string', 'moderation assertion type must have a string output');
+    invariant(
+      !assertion.value ||
+        (Array.isArray(assertion.value) && typeof assertion.value[0] === 'string'),
+      'moderation assertion value must be a string array if set',
+    );
+    const moderationResult = await matchesModeration(
+      {
+        userPrompt: prompt,
+        assistantResponse: output,
+        categories: Array.isArray(assertion.value) ? assertion.value : [],
+      },
+      test.options,
+    );
+
+    pass = moderationResult.pass;
+    return {
+      pass,
+      score: moderationResult.score,
+      reason: moderationResult.reason,
+      assertion,
+    };
+  }
+
   if (baseType === 'webhook') {
     invariant(renderedValue, '"webhook" assertion type must have a URL value');
     invariant(typeof renderedValue === 'string', '"webhook" assertion type must have a URL value');
@@ -1045,10 +1097,7 @@ ${
   }
 
   if (baseType === 'rouge-n') {
-    invariant(
-      typeof renderedValue === 'string' || Array.isArray(renderedValue),
-      '"rouge" assertion type must be a value (string or string array)',
-    );
+    invariant(typeof renderedValue === 'string', '"rouge" assertion type must be a string value');
     return handleRougeScore(baseType, assertion, renderedValue, outputString, inverse);
   }
 
@@ -1260,4 +1309,5 @@ export default {
   matchesContextRelevance,
   matchesContextFaithfulness,
   matchesComparisonBoolean: matchesSelectBest,
+  matchesModeration,
 };

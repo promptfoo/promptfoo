@@ -47,8 +47,6 @@ table.results-table,
   position: relative;
   box-shadow: inset 0 0 0 1px var(--border-color);
   vertical-align: top;
-
-  padding: 1rem;
 }
 
 .compact.results-table th,
@@ -113,18 +111,19 @@ table.results-table,
   flex-direction: column;
   white-space: pre-wrap;
   height: 100%;
+  padding: 1rem;
 }
 
 .results-table tr .cell img {
   max-width: 256px;
   max-height: 256px;
-  cursor: pointer;
+  cursor: zoom-in;
 }
 
 .results-table tr .variable > *,
 .compact.results-table tr .cell > * {
   /* Header and vars always inline, cells are inline in compact mode. */
-  display: inline;
+  /*display: inline;*/
 }
 
 .results-table tr .cell .prompt {
@@ -323,6 +322,7 @@ table.results-table,
 .results-table tr .cell .lightbox img {
   max-width: 90%;
   max-height: 90%;
+  cursor: zoom-out;
 }
 
 .resizer {

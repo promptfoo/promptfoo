@@ -73,8 +73,6 @@ export default function ResultsView({
   const { table, config, setConfig, maxTextLength, wordBreak, showInferenceDetails, evalId } =
     useResultsViewStore();
   const { setStateFromConfig } = useMainStore();
-  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
-  const [selectedColumns, setSelectedColumns] = React.useState<string[]>([]);
 
   const [searchText, setSearchText] = React.useState('');
   const [debouncedSearchText] = useDebounce(searchText, 1000);
@@ -83,9 +81,12 @@ export default function ResultsView({
   };
 
   const [failureFilter, setFailureFilter] = React.useState<{ [key: string]: boolean }>({});
-  const handleFailureFilterToggle = (columnId: string, checked: boolean) => {
-    setFailureFilter((prevFailureFilter) => ({ ...prevFailureFilter, [columnId]: checked }));
-  };
+  const handleFailureFilterToggle = React.useCallback(
+    (columnId: string, checked: boolean) => {
+      setFailureFilter((prevFailureFilter) => ({ ...prevFailureFilter, [columnId]: checked }));
+    },
+    [setFailureFilter],
+  );
 
   const [filterMode, setFilterMode] = React.useState<FilterMode>('all');
   const handleFilterModeChange = (event: SelectChangeEvent<unknown>) => {
@@ -200,29 +201,31 @@ export default function ResultsView({
     }
   };
 
-  const columnData = [
-    ...head.vars.map((_, idx) => ({
-      value: `Variable ${idx + 1}`,
-      label: `Var ${idx + 1}: ${
-        head.vars[idx].length > 100 ? head.vars[idx].slice(0, 97) + '...' : head.vars[idx]
-      }`,
-      group: 'Variables',
-    })),
-    ...head.prompts.map((_, idx) => ({
-      value: `Prompt ${idx + 1}`,
-      label: `Prompt ${idx + 1}: ${
-        head.prompts[idx].display.length > 100
-          ? head.prompts[idx].display.slice(0, 97) + '...'
-          : head.prompts[idx].display
-      }`,
-      group: 'Prompts',
-    })),
-  ];
+  const columnData = React.useMemo(() => {
+    return [
+      ...head.vars.map((_, idx) => ({
+        value: `Variable ${idx + 1}`,
+        label: `Var ${idx + 1}: ${
+          head.vars[idx].length > 100 ? head.vars[idx].slice(0, 97) + '...' : head.vars[idx]
+        }`,
+        group: 'Variables',
+      })),
+      ...head.prompts.map((_, idx) => {
+        const prompt = head.prompts[idx];
+        const label = prompt.label || prompt.display || prompt.raw;
+        return {
+          value: `Prompt ${idx + 1}`,
+          label: `Prompt ${idx + 1}: ${label.length > 100 ? label.slice(0, 97) + '...' : label}`,
+          group: 'Prompts',
+        };
+      }),
+    ];
+  }, [head.vars, head.prompts]);
 
-  // Set all columns as selected by default
-  React.useEffect(() => {
-    setSelectedColumns(columnData.map((col) => col.value));
-  }, [head]);
+  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
+  const [selectedColumns, setSelectedColumns] = React.useState<string[]>(
+    columnData.map((col) => col.value),
+  );
 
   // State for anchor element
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);

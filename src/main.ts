@@ -15,7 +15,8 @@ import { readAssertions } from './assertions';
 import { loadApiProvider, loadApiProviders } from './providers';
 import { evaluate, DEFAULT_MAX_CONCURRENCY } from './evaluator';
 import { readPrompts, readProviderPromptMap } from './prompts';
-import { readTest, readTests, synthesize, synthesizeFromTestSuite } from './testCases';
+import { readTest, readTests, synthesizeFromTestSuite } from './testCases';
+import { synthesizeFromTestSuite as redteamSynthesizeFromTestSuite } from './redteam';
 import {
   cleanupOldFileResults,
   maybeReadConfig,
@@ -52,6 +53,7 @@ import type {
 import { generateTable } from './table';
 import { createShareableUrl } from './share';
 import { filterTests } from './commands/eval/filterTests';
+import { validateAssertions } from './assertions/validateAssertions';
 
 function createDummyFiles(directory: string | null) {
   if (directory) {
@@ -221,6 +223,11 @@ async function resolveConfigs(
       fileConfig.nunjucksFilters || defaultConfig.nunjucksFilters || {},
     ),
   };
+
+  if (testSuite.tests) {
+    validateAssertions(testSuite.tests);
+  }
+
   return { config, testSuite, basePath };
 }
 
@@ -235,11 +242,11 @@ async function main() {
   ];
   let defaultConfig: Partial<UnifiedConfig> = {};
   let defaultConfigPath: string | undefined;
-  for (const path of potentialPaths) {
-    const maybeConfig = await maybeReadConfig(path);
+  for (const _path of potentialPaths) {
+    const maybeConfig = await maybeReadConfig(_path);
     if (maybeConfig) {
       defaultConfig = maybeConfig;
-      defaultConfigPath = path;
+      defaultConfigPath = _path;
       break;
     }
   }
@@ -279,11 +286,18 @@ async function main() {
     .option('-p, --port <number>', 'Port number', '15500')
     .option('-y, --yes', 'Skip confirmation and auto-open the URL')
     .option('--api-base-url <url>', 'Base URL for viewer API calls')
+    .option('--filter-description <pattern>', 'Filter evals by description using a regex pattern')
     .option('--env-file <path>', 'Path to .env file')
     .action(
       async (
         directory: string | undefined,
-        cmdObj: { port: number; yes: boolean; apiBaseUrl?: string; envFile?: string } & Command,
+        cmdObj: {
+          port: number;
+          yes: boolean;
+          apiBaseUrl?: string;
+          envFile?: string;
+          filterDescription?: string;
+        } & Command,
       ) => {
         setupEnv(cmdObj.envFile);
         telemetry.maybeShowNotice();
@@ -296,7 +310,7 @@ async function main() {
           setConfigDirectoryPath(directory);
         }
         // Block indefinitely on server
-        await startServer(cmdObj.port, cmdObj.apiBaseUrl, cmdObj.yes);
+        await startServer(cmdObj.port, cmdObj.apiBaseUrl, cmdObj.yes, cmdObj.filterDescription);
       },
     );
 
@@ -371,18 +385,16 @@ async function main() {
       gatherFeedback(message);
     });
 
-  program
-    .command('generate dataset')
-    .description('Generate test cases for a given prompt')
+  const generateCommand = program.command('generate').description('Generate synthetic data');
+
+  generateCommand
+    .command('dataset')
+    .description('Generate test cases')
     .option(
       '-i, --instructions [instructions]',
       'Additional instructions to follow while generating test cases',
     )
-    .option(
-      '-c, --config [path]',
-      'Path to configuration file. Defaults to promptfooconfig.yaml',
-      defaultConfigPath,
-    )
+    .option('-c, --config [path]', 'Path to configuration file. Defaults to promptfooconfig.yaml')
     .option('-o, --output [path]', 'Path to output file')
     .option('-w, --write', 'Write results to promptfoo configuration file')
     .option('--numPersonas <number>', 'Number of personas to generate', '5')
@@ -390,19 +402,16 @@ async function main() {
     .option('--no-cache', 'Do not read or write results to disk cache', false)
     .option('--env-file <path>', 'Path to .env file')
     .action(
-      async (
-        _,
-        options: {
-          config?: string;
-          instructions?: string;
-          output?: string;
-          numPersonas: string;
-          numTestCasesPerPersona: string;
-          write: boolean;
-          cache: boolean;
-          envFile?: string;
-        },
-      ) => {
+      async (options: {
+        config?: string;
+        instructions?: string;
+        output?: string;
+        numPersonas: string;
+        numTestCasesPerPersona: string;
+        write: boolean;
+        cache: boolean;
+        envFile?: string;
+      }) => {
         setupEnv(options.envFile);
         if (!options.cache) {
           logger.info('Cache is disabled.');
@@ -410,10 +419,11 @@ async function main() {
         }
 
         let testSuite: TestSuite;
-        if (options.config) {
+        const configPath = options.config || defaultConfigPath;
+        if (configPath) {
           const resolved = await resolveConfigs(
             {
-              config: [options.config],
+              config: [configPath],
             },
             defaultConfig,
           );
@@ -421,6 +431,14 @@ async function main() {
         } else {
           throw new Error('Could not find config file. Please use `--config`');
         }
+
+        const startTime = Date.now();
+        telemetry.record('command_used', {
+          name: 'generate_dataset - started',
+          numPrompts: testSuite.prompts.length,
+          numTestsExisting: (testSuite.tests || []).length,
+        });
+        await telemetry.send();
 
         const results = await synthesizeFromTestSuite(testSuite, {
           instructions: options.instructions,
@@ -442,7 +460,6 @@ async function main() {
         }
 
         printBorder();
-        const configPath = options.config;
         if (options.write && configPath) {
           const existingConfig = yaml.load(
             fs.readFileSync(configPath, 'utf8'),
@@ -463,6 +480,114 @@ async function main() {
           numPrompts: testSuite.prompts.length,
           numTestsExisting: (testSuite.tests || []).length,
           numTestsGenerated: results.length,
+          duration: Math.round((Date.now() - startTime) / 1000),
+        });
+        await telemetry.send();
+      },
+    );
+
+  interface RedteamCommandOptions {
+    config?: string;
+    output?: string;
+    write: boolean;
+    cache: boolean;
+    envFile?: string;
+    purpose?: string;
+    injectVar?: string;
+    plugins?: string[];
+  }
+
+  generateCommand
+    .command('redteam')
+    .description('Generate adversarial test cases')
+    .option('-c, --config [path]', 'Path to configuration file. Defaults to promptfooconfig.yaml')
+    .option('-o, --output [path]', 'Path to output file')
+    .option('-w, --write', 'Write results to promptfoo configuration file')
+    .option(
+      '--purpose <purpose>',
+      'Set the system purpose. If not set, the system purpose will be inferred from the config file',
+    )
+    .option(
+      '--injectVar <varname>',
+      'Override the variable to inject user input into the prompt. If not set, the variable will defalt to {{query}}',
+    )
+    .option('--plugins <plugins>', 'Comma-separated list of plugins to use', (val) =>
+      val.split(',').map((x) => x.trim()),
+    )
+    .option('--no-cache', 'Do not read or write results to disk cache', false)
+    .option('--env-file <path>', 'Path to .env file')
+    .action(
+      async ({
+        config,
+        output,
+        write,
+        cache,
+        envFile,
+        purpose,
+        injectVar,
+        plugins,
+      }: RedteamCommandOptions) => {
+        setupEnv(envFile);
+        if (!cache) {
+          logger.info('Cache is disabled.');
+          disableCache();
+        }
+
+        let testSuite: TestSuite;
+        const configPath = config || defaultConfigPath;
+        if (configPath) {
+          const resolved = await resolveConfigs(
+            {
+              config: [configPath],
+            },
+            defaultConfig,
+          );
+          testSuite = resolved.testSuite;
+        } else {
+          throw new Error('Could not find config file. Please use `--config`');
+        }
+
+        const startTime = Date.now();
+        telemetry.record('command_used', {
+          name: 'generate redteam - started',
+          numPrompts: testSuite.prompts.length,
+          numTestsExisting: (testSuite.tests || []).length,
+        });
+        await telemetry.send();
+
+        const redteamTests = await redteamSynthesizeFromTestSuite(testSuite, {
+          purpose,
+          injectVar,
+          plugins,
+        });
+
+        if (output) {
+          const existingYaml = yaml.load(fs.readFileSync(configPath, 'utf8')) as object;
+          const updatedYaml = {
+            ...existingYaml,
+            tests: redteamTests,
+          };
+          fs.writeFileSync(output, yaml.dump(updatedYaml, { skipInvalid: true }));
+          printBorder();
+          logger.info(`Wrote ${redteamTests.length} new test cases to ${output}`);
+          printBorder();
+        } else if (write && configPath) {
+          const existingConfig = yaml.load(
+            fs.readFileSync(configPath, 'utf8'),
+          ) as Partial<UnifiedConfig>;
+          existingConfig.tests = [...(existingConfig.tests || []), ...redteamTests];
+          fs.writeFileSync(configPath, yaml.dump(existingConfig));
+          logger.info(`Wrote ${redteamTests.length} new test cases to ${configPath}`);
+        } else {
+          logger.info(yaml.dump(redteamTests, { skipInvalid: true }));
+        }
+
+        telemetry.record('command_used', {
+          name: 'generate redteam',
+          numPrompts: testSuite.prompts.length,
+          numTestsExisting: (testSuite.tests || []).length,
+          numTestsGenerated: redteamTests.length,
+          duration: Math.round((Date.now() - startTime) / 1000),
         });
         await telemetry.send();
       },
@@ -489,7 +614,7 @@ async function main() {
     .option('-a, --assertions <path>', 'Path to assertions file')
     .option('--model-outputs <path>', 'Path to JSON containing list of LLM output strings')
     .option('-t, --tests <path>', 'Path to CSV with test cases')
-    .option('-o, --output <paths...>', 'Path to output file (csv, txt, json, yaml, yml, html)')
+    .option('-o, --output <paths...>', 'Path to output file (csv, txt, json, yaml, yml, html), default is no output file')
     .option(
       '-j, --max-concurrency <number>',
       'Maximum number of concurrent API calls',
@@ -555,7 +680,10 @@ async function main() {
       defaultConfig?.evaluateOptions?.interactiveProviders,
     )
     .option('-n, --filter-first-n <number>', 'Only run the first N tests')
-    .option('--filter-pattern <pattern>', 'Only run tests whose description matches the regular expression pattern')
+    .option(
+      '--filter-pattern <pattern>',
+      'Only run tests whose description matches the regular expression pattern',
+    )
     .option('--filter-failing <path>', 'Path to json output file')
     .option(
       '--var <key=value>',
@@ -577,6 +705,13 @@ async function main() {
       let basePath: string | undefined = undefined;
 
       const runEvaluation = async (initialization?: boolean) => {
+        const startTime = Date.now();
+        telemetry.record('command_used', {
+          name: 'eval - started',
+          watch: Boolean(cmdObj.watch),
+        });
+        await telemetry.send();
+
         // Misc settings
         if (cmdObj.verbose) {
           setLogLevel('debug');
@@ -646,6 +781,12 @@ async function main() {
             const rowsLeft = summary.table.body.length - 25;
             logger.info(`... ${rowsLeft} more row${rowsLeft === 1 ? '' : 's'} not shown ...\n`);
           }
+        } else if (summary.stats.failures !== 0) {
+          logger.debug(
+            `At least one evaluation failure occurred. This might be caused by the underlying call to the provider, or a test failure. Context: \n${JSON.stringify(
+              summary.results,
+            )}`,
+          );
         }
 
         let evalId: string | null = null
@@ -699,6 +840,7 @@ async function main() {
         telemetry.record('command_used', {
           name: 'eval',
           watch: Boolean(cmdObj.watch),
+          duration: Math.round((Date.now() - startTime) / 1000),
         });
         await telemetry.send();
 
@@ -712,11 +854,14 @@ async function main() {
             const basePath = path.dirname(configPaths[0]);
             const promptPaths = Array.isArray(config.prompts)
               ? (config.prompts
-                  .map((p) =>
-                    p.startsWith('file://')
-                      ? path.resolve(basePath, p.slice('file://'.length))
-                      : null,
-                  )
+                  .map((p) => {
+                    if (typeof p === 'string' && p.startsWith('file://')) {
+                      return path.resolve(basePath, p.slice('file://'.length));
+                    } else if (typeof p === 'object' && p.id && p.id.startsWith('file://')) {
+                      return path.resolve(basePath, p.id.slice('file://'.length));
+                    }
+                    return null;
+                  })
                   .filter(Boolean) as string[])
               : [];
             const providerPaths = Array.isArray(config.providers)

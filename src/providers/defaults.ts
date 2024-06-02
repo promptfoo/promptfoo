@@ -3,6 +3,7 @@ import {
   DefaultGradingJsonProvider as OpenAiGradingJsonProvider,
   DefaultGradingProvider as OpenAiGradingProvider,
   DefaultSuggestionsProvider as OpenAiSuggestionsProvider,
+  DefaultModerationProvider as OpenAiModerationProvider,
 } from './openai';
 
 import {
@@ -10,6 +11,8 @@ import {
   DefaultGradingJsonProvider as AnthropicGradingJsonProvider,
   DefaultSuggestionsProvider as AnthropicSuggestionsProvider,
 } from './anthropic';
+
+import { DefaultModerationProvider as ReplicateModerationProvider } from './replicate';
 
 import { EnvOverrides } from '../types';
 
@@ -25,6 +28,7 @@ export function getDefaultProviders(env?: EnvOverrides) {
       gradingProvider: AnthropicGradeProvider,
       gradingJsonProvider: AnthropicGradingJsonProvider,
       suggestionsProvider: AnthropicSuggestionsProvider,
+      moderationProvider: OpenAiModerationProvider,
     };
   }
   return {
@@ -32,5 +36,6 @@ export function getDefaultProviders(env?: EnvOverrides) {
     gradingProvider: OpenAiGradingProvider,
     gradingJsonProvider: OpenAiGradingJsonProvider,
     suggestionsProvider: OpenAiSuggestionsProvider,
+    moderationProvider: OpenAiModerationProvider,
   };
 }

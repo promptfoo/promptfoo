@@ -3,7 +3,6 @@ import * as path from 'path';
 import * as os from 'os';
 import { createHash } from 'crypto';
 
-
 import dotenv from 'dotenv';
 import $RefParser from '@apidevtools/json-schema-ref-parser';
 import invariant from 'tiny-invariant';
@@ -86,7 +85,7 @@ export function maybeRecordFirstRun(): boolean {
     const config = readGlobalConfig();
     if (!config.hasRun) {
       config.hasRun = true;
-      fs.writeFileSync(path.join(getConfigDirectoryPath(), 'promptfoo.yaml'), yaml.dump(config));
+      fs.writeFileSync(path.join(getConfigDirectoryPath(true /* createIfNotExists */), 'promptfoo.yaml'), yaml.dump(config));
       return true;
     }
     return false;
@@ -278,25 +277,45 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
   const configsAreObjects = configs.every((config) => typeof config.prompts === 'object');
   let prompts: UnifiedConfig['prompts'] = configsAreStringOrArray ? [] : {};
 
-  const makeAbsolute = (configPath: string, relativePath: string) => {
-    if (relativePath.startsWith('file://')) {
-      relativePath =
-        'file://' + path.resolve(path.dirname(configPath), relativePath.slice('file://'.length));
+  const makeAbsolute = (configPath: string, relativePath: string | Prompt) => {
+    if (typeof relativePath === 'string') {
+      if (relativePath.startsWith('file://')) {
+        relativePath =
+          'file://' + path.resolve(path.dirname(configPath), relativePath.slice('file://'.length));
+      }
+      return relativePath;
+    } else if (typeof relativePath === 'object' && relativePath.id) {
+      if (relativePath.id.startsWith('file://')) {
+        relativePath.id =
+          'file://' +
+          path.resolve(path.dirname(configPath), relativePath.id.slice('file://'.length));
+      }
+      return relativePath;
+    } else {
+      throw new Error('Invalid prompt object');
     }
-    return relativePath;
   };
 
   const seenPrompts = new Set<string>();
+  const addSeenPrompt = (prompt: string | Prompt) => {
+    if (typeof prompt === 'string') {
+      seenPrompts.add(prompt);
+    } else if (typeof prompt === 'object' && prompt.id) {
+      seenPrompts.add(prompt.id);
+    } else {
+      throw new Error('Invalid prompt object');
+    }
+  };
   configs.forEach((config, idx) => {
     if (typeof config.prompts === 'string') {
       invariant(Array.isArray(prompts), 'Cannot mix string and map-type prompts');
       const absolutePrompt = makeAbsolute(configPaths[idx], config.prompts);
-      seenPrompts.add(absolutePrompt);
+      addSeenPrompt(absolutePrompt);
     } else if (Array.isArray(config.prompts)) {
       invariant(Array.isArray(prompts), 'Cannot mix configs with map and array-type prompts');
       config.prompts
         .map((prompt) => makeAbsolute(configPaths[idx], prompt))
-        .forEach((prompt) => seenPrompts.add(prompt));
+        .forEach((prompt) => addSeenPrompt(prompt));
     } else {
       // Object format such as { 'prompts/prompt1.txt': 'foo', 'prompts/prompt2.txt': 'bar' }
       invariant(typeof prompts === 'object', 'Cannot mix configs with map and array-type prompts');
@@ -383,7 +402,7 @@ ${gradingResultText}`.trim();
         csvRow[varName] = row.vars[index];
       });
       results.table.head.prompts.forEach((prompt, index) => {
-        csvRow[prompt.display] = outputToSimpleString(row.outputs[index]);
+        csvRow[prompt.label] = outputToSimpleString(row.outputs[index]);
       });
       return csvRow;
     });
@@ -418,7 +437,7 @@ ${gradingResultText}`.trim();
     } else if (outputExtension === 'html') {
       const template = fs.readFileSync(`${getDirectory()}/tableOutput.html`, 'utf-8');
       const table = [
-        [...results.table.head.vars, ...results.table.head.prompts.map((prompt) => prompt.display)],
+        [...results.table.head.vars, ...results.table.head.prompts.map((prompt) => prompt.label)],
         ...results.table.body.map((row) => [...row.vars, ...row.outputs.map(outputToSimpleString)]),
       ];
       const htmlOutput = getNunjucksEngine().renderString(template, {
@@ -448,8 +467,12 @@ export async function readOutput(outputPath: string): Promise<OutputFile> {
 
 let configDirectoryPath: string | undefined = process.env.PROMPTFOO_CONFIG_DIR;
 
-export function getConfigDirectoryPath(): string {
-  return configDirectoryPath || path.join(os.homedir(), '.promptfoo');
+export function getConfigDirectoryPath(createIfNotExists: boolean = false): string {
+  const p = configDirectoryPath || path.join(os.homedir(), '.promptfoo');
+  if (createIfNotExists && !fs.existsSync(p)) {
+    fs.mkdirSync(p, { recursive: true });
+  }
+  return p;
 }
 
 export function setConfigDirectoryPath(newPath: string): void {
@@ -469,7 +492,7 @@ export async function writeResultsToDatabase(
   config: Partial<UnifiedConfig>,
   createdAt?: Date,
 ): Promise<string> {
-  createdAt = createdAt || new Date();
+  createdAt = createdAt || (results.timestamp ? new Date(results.timestamp) : new Date());
   const evalId = `eval-${createdAt.toISOString().slice(0, 19)}`;
   const db = getDb();
 
@@ -492,14 +515,15 @@ export async function writeResultsToDatabase(
 
   // Record prompt relation
   for (const prompt of results.table.head.prompts) {
-    const promptId = sha256(prompt.display);
+    const label = prompt.label || prompt.display || prompt.raw;
+    const promptId = sha256(label);
 
     promises.push(
       db
         .insert(prompts)
         .values({
           id: promptId,
-          prompt: prompt.display,
+          prompt: label,
         })
         .onConflictDoNothing()
         .run(),
@@ -566,9 +590,10 @@ export async function writeResultsToDatabase(
  */
 export function listPreviousResults(
   limit: number = DEFAULT_QUERY_LIMIT,
+  filterDescription?: string,
 ): { evalId: string; description?: string | null }[] {
   const db = getDb();
-  const results = db
+  let results = db
     .select({
       name: evals.id,
       description: evals.description,
@@ -577,6 +602,11 @@ export function listPreviousResults(
     .orderBy(desc(evals.createdAt))
     .limit(limit)
     .all();
+
+  if (filterDescription) {
+    const regex = new RegExp(filterDescription, 'i');
+    results = results.filter((result) => regex.test(result.description || ''));
+  }
 
   return results.map((result) => ({
     evalId: result.name,
@@ -649,7 +679,7 @@ export async function migrateResultsFromFileSystemToDatabase() {
   logger.info('This is a one-time operation and may take a minute...');
   attemptedMigration = true;
 
-  const outputDir = path.join(getConfigDirectoryPath(), 'output');
+  const outputDir = path.join(getConfigDirectoryPath(true /* createIfNotExists */), 'output');
   const backupDir = `${outputDir}-backup-${new Date()
     .toISOString()
     .slice(0, 10)
@@ -834,9 +864,11 @@ export async function updateResult(
   }
 }
 
-export async function readLatestResults(): Promise<ResultsFile | undefined> {
+export async function readLatestResults(
+  filterDescription?: string,
+): Promise<ResultsFile | undefined> {
   const db = getDb();
-  const latestResults = await db
+  let latestResults = await db
     .select({
       id: evals.id,
       createdAt: evals.createdAt,
@@ -848,7 +880,12 @@ export async function readLatestResults(): Promise<ResultsFile | undefined> {
     .orderBy(desc(evals.createdAt))
     .limit(1);
 
-  if (!latestResults || latestResults.length === 0) {
+  if (filterDescription) {
+    const regex = new RegExp(filterDescription, 'i');
+    latestResults = latestResults.filter((result) => regex.test(result.description || ''));
+  }
+
+  if (!latestResults.length) {
     return undefined;
   }
 
@@ -1278,7 +1315,50 @@ export function varsMatch(
 }
 
 export function resultIsForTestCase(result: EvaluateResult, testCase: TestCase): boolean {
-  const providersMatch = testCase.provider ? providerToIdentifier(testCase.provider) === providerToIdentifier(result.provider) : true;
+  const providersMatch = testCase.provider
+    ? providerToIdentifier(testCase.provider) === providerToIdentifier(result.provider)
+    : true;
 
   return varsMatch(testCase.vars, result.vars) && providersMatch;
+}
+
+export function safeJsonStringify(value: any, prettyPrint: boolean = false): string {
+  // Prevent circular references
+  const cache = new Set();
+  const space = prettyPrint ? 2 : undefined;
+  return JSON.stringify(
+    value,
+    (key, val) => {
+      if (typeof val === 'object' && val !== null) {
+        if (cache.has(val)) return;
+        cache.add(val);
+      }
+      return val;
+    },
+    space,
+  );
+}
+
+export function renderVarsInObject<T>(obj: T, vars?: Record<string, string | object>): T {
+  // Renders nunjucks template strings with context variables
+  if (!vars || process.env.PROMPTFOO_DISABLE_TEMPLATING) {
+    return obj;
+  }
+  if (typeof obj === 'string') {
+    return nunjucks.renderString(obj, vars) as unknown as T;
+  }
+  if (Array.isArray(obj)) {
+    return obj.map((item) => renderVarsInObject(item, vars)) as unknown as T;
+  }
+  if (typeof obj === 'object' && obj !== null) {
+    const result: Record<string, unknown> = {};
+    for (const key in obj) {
+      result[key] = renderVarsInObject((obj as Record<string, unknown>)[key], vars);
+    }
+    return result as T;
+  } else if (typeof obj === 'function') {
+    const fn = obj as Function;
+    return renderVarsInObject(fn({ vars }) as T);
+  }
+  return obj;
 }

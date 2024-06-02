@@ -6,7 +6,7 @@ sidebar_position: 4
 
 ## Requirements
 
-Node 16 or newer.
+Node 18 or newer.
 
 ## For command-line usage
 

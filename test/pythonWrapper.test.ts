@@ -6,11 +6,11 @@ jest.mock('../src/esm');
 
 jest.mock('python-shell');
 
-beforeEach(() => {
-  jest.clearAllMocks(); // This clears all mock call counts
-});
-
 describe('Python Wrapper', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   describe('runPython', () => {
     it('should correctly run a Python script with provided arguments', async () => {
       jest.spyOn(fs, 'writeFile').mockResolvedValue();
@@ -34,13 +34,33 @@ describe('Python Wrapper', () => {
       expect(fs.unlink).toHaveBeenCalledTimes(1);
     });
 
-    it('should throw an error if the Python script execution fails', async () => {
+    it('should return an failure reason if the Python script execution fails', async () => {
       const mockPythonShellRun = PythonShell.run as jest.Mock;
       mockPythonShellRun.mockRejectedValue(new Error('Test Error'));
 
+      const result = await pythonWrapper.runPython('testScript.py', 'testMethod', ['arg1']);
+
+      expect(result).toEqual({
+        pass: false,
+        score: 0,
+        reason: 'Failed to execute Python script: Test Error',
+      });
+    });
+
+    it('should handle Python script returning incorrect result type', async () => {
+      jest.spyOn(fs, 'writeFile').mockResolvedValue();
+      jest.spyOn(fs, 'unlink').mockResolvedValue();
+
+      const mockPythonShellRun = PythonShell.run as jest.Mock;
+      mockPythonShellRun.mockResolvedValue([
+        '{"type": "unexpected_result", "data": "test result"}',
+      ]);
+
       await expect(
         pythonWrapper.runPython('testScript.py', 'testMethod', ['arg1']),
-      ).rejects.toThrow('Test Error');
+      ).rejects.toThrow(
+        'The Python script `call_api` function must return a dict with an `output`',
+      );
     });
   });
 
@@ -68,16 +88,6 @@ describe('Python Wrapper', () => {
       await pythonWrapper.runPythonCode('print("cleanup test")', 'main', []);
 
       expect(fs.unlink).toHaveBeenCalledTimes(2);
-    });
-
-    it('should throw an error if Python code execution fails', async () => {
-      jest.spyOn(fs, 'writeFile').mockResolvedValue();
-      const mockPythonShellRun = PythonShell.run as jest.Mock;
-      mockPythonShellRun.mockRejectedValue(new Error('Execution Error'));
-
-      await expect(pythonWrapper.runPythonCode('print("error test")', 'main', [])).rejects.toThrow(
-        'Execution Error',
-      );
     });
   });
 });

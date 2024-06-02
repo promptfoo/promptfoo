@@ -13,7 +13,7 @@ import logger from './logger';
 import telemetry from './telemetry';
 import { runAssertions, runCompareAssertion } from './assertions';
 import { generatePrompts } from './suggestions';
-import { getNunjucksEngine, transformOutput, sha256 } from './util';
+import { getNunjucksEngine, transformOutput, sha256, renderVarsInObject } from './util';
 import { maybeEmitAzureOpenAiWarning } from './providers/azureopenaiUtil';
 import { runPython } from './python/wrapper';
 import { importModule } from './esm';
@@ -33,6 +33,7 @@ import type {
   RunEvalOptions,
   TestSuite,
   ProviderResponse,
+  Assertion,
 } from './types';
 export const DEFAULT_MAX_CONCURRENCY = 4;
 
@@ -185,6 +186,13 @@ export async function renderPrompt(
     }
   }
 
+  // Remove any trailing newlines from vars, as this tends to be a footgun for JSON prompts.
+  for (const key of Object.keys(vars)) {
+    if (typeof vars[key] === 'string') {
+      vars[key] = (vars[key] as string).replace(/\n$/, '');
+    }
+  }
+
   // Resolve variable mappings
   resolveVariables(vars);
 
@@ -196,11 +204,22 @@ export async function renderPrompt(
   } else if (prompt.raw.startsWith('langfuse://')) {
     const { getPrompt } = await import('./integrations/langfuse');
     const langfusePrompt = prompt.raw.slice('langfuse://'.length);
-    const [helper, version] = langfusePrompt.split(':');
-    const langfuseResult = await getPrompt(helper, Number(version));
+
+    // we default to "text" type.
+    const [helper, version, promptType = 'text'] = langfusePrompt.split(':');
+    if (promptType !== 'text' && promptType !== 'chat') {
+      throw new Error('Unknown promptfoo prompt type');
+    }
+
+    const langfuseResult = await getPrompt(
+      helper,
+      vars,
+      promptType,
+      version !== 'latest' ? Number(version) : undefined,
+    );
     return langfuseResult;
   }
-
+  
   // Render prompt
   try {
     if (process.env.PROMPTFOO_DISABLE_JSON_AUTOESCAPE) {
@@ -209,26 +228,9 @@ export async function renderPrompt(
 
     const parsed = JSON.parse(basePrompt);
 
-    // Remove any trailing newlines from vars
-    for (const key of Object.keys(vars)) {
-      if (typeof vars[key] === 'string') {
-        vars[key] = (vars[key] as string).replace(/\n$/, '');
-      }
-    }
-
     // The _raw_ prompt is valid JSON. That means that the user likely wants to substitute vars _within_ the JSON itself.
     // Recursively walk the JSON structure. If we find a string, render it with nunjucks.
-    const walk = (obj: any) => {
-      if (typeof obj === 'string') {
-        return nunjucks.renderString(obj, vars);
-      } else if (typeof obj === 'object') {
-        for (const key of Object.keys(obj)) {
-          obj[key] = walk(obj[key]);
-        }
-      }
-      return obj;
-    };
-    return JSON.stringify(walk(parsed), null, 2);
+    return JSON.stringify(renderVarsInObject(parsed, vars), null, 2);
   } catch (err) {
     return nunjucks.renderString(basePrompt, vars);
   }
@@ -242,6 +244,7 @@ class Evaluator {
     string,
     { prompt: string | object; input: string; output: string | object }[]
   >;
+  registers: Record<string, string | object>;
 
   constructor(testSuite: TestSuite, options: EvaluateOptions) {
     this.testSuite = testSuite;
@@ -257,6 +260,7 @@ class Evaluator {
       },
     };
     this.conversations = {};
+    this.registers = {};
   }
 
   async runEval({
@@ -267,8 +271,8 @@ class Evaluator {
     nunjucksFilters: filters,
     evaluateOptions,
   }: RunEvalOptions): Promise<EvaluateResult> {
-    // Use the original prompt to set the display, not renderedPrompt
-    let promptDisplay = prompt.display;
+    // Use the original prompt to set the label, not renderedPrompt
+    let promptLabel = prompt.label;
 
     // Set up the special _conversation variable
     const vars = test.vars || {};
@@ -281,6 +285,9 @@ class Evaluator {
     ) {
       vars._conversation = this.conversations[conversationKey] || [];
     }
+
+    // Overwrite vars with any saved register values
+    Object.assign(vars, this.registers);
 
     // Render the prompt
     const renderedPrompt = await renderPrompt(prompt, vars, filters, provider);
@@ -297,7 +304,7 @@ class Evaluator {
       },
       prompt: {
         raw: renderedPrompt,
-        display: promptDisplay,
+        label: promptLabel,
       },
       vars,
     };
@@ -320,6 +327,8 @@ class Evaluator {
           renderedPrompt,
           {
             vars,
+
+            // These are removed in python and script providers, but every Javascript provider gets them
             logger,
             fetchWithCache,
             getCache,
@@ -423,6 +432,11 @@ class Evaluator {
         this.stats.failures++;
       }
 
+      if (test.options?.storeOutputAs && ret.response?.output) {
+        // Save the output in a register for later use
+        this.registers[test.options.storeOutputAs] = ret.response.output;
+      }
+
       return ret;
     } catch (err) {
       this.stats.failures++;
@@ -467,7 +481,7 @@ class Evaluator {
             async (answer) => {
               rl.close();
               if (answer.toLowerCase().startsWith('y')) {
-                testSuite.prompts.push({ raw: prompt, display: prompt });
+                testSuite.prompts.push({ raw: prompt, label: prompt });
                 numAdded++;
               } else {
                 logger.info('Skipping this prompt.');
@@ -487,10 +501,10 @@ class Evaluator {
     // Split prompts by provider
     for (const prompt of testSuite.prompts) {
       for (const provider of testSuite.providers) {
-        // Check if providerPromptMap exists and if it contains the current prompt's display
+        // Check if providerPromptMap exists and if it contains the current prompt's label
         if (testSuite.providerPromptMap) {
           const allowedPrompts = testSuite.providerPromptMap[provider.id()];
-          if (allowedPrompts && !allowedPrompts.includes(prompt.display)) {
+          if (allowedPrompts && !allowedPrompts.includes(prompt.label)) {
             continue;
           }
         }
@@ -498,7 +512,7 @@ class Evaluator {
           ...prompt,
           id: sha256(typeof prompt.raw === 'object' ? JSON.stringify(prompt.raw) : prompt.raw),
           provider: provider.label || provider.id(),
-          display: prompt.display,
+          label: prompt.label,
           metrics: {
             score: 0,
             testPassCount: 0,
@@ -619,7 +633,7 @@ class Evaluator {
             for (const provider of testSuite.providers) {
               if (testSuite.providerPromptMap) {
                 const allowedPrompts = testSuite.providerPromptMap[provider.id()];
-                if (allowedPrompts && !allowedPrompts.includes(prompt.display)) {
+                if (allowedPrompts && !allowedPrompts.includes(prompt.label)) {
                   // This prompt should not be used with this provider.
                   continue;
                 }
@@ -659,12 +673,20 @@ class Evaluator {
 
     // Determine run parameters
     let concurrency = options.maxConcurrency || DEFAULT_MAX_CONCURRENCY;
-    const usesConversation = prompts.some((p) => p.raw.includes('_conversation'));
-    if (usesConversation && concurrency > 1) {
-      logger.info(
-        `Setting concurrency to 1 because the ${chalk.cyan('_conversation')} variable is used.`,
-      );
-      concurrency = 1;
+    if (concurrency > 1) {
+      const usesConversation = prompts.some((p) => p.raw.includes('_conversation'));
+      const usesStoreOutputAs = tests.some((t) => t.options?.storeOutputAs);
+      if (usesConversation) {
+        logger.info(
+          `Setting concurrency to 1 because the ${chalk.cyan('_conversation')} variable is used.`,
+        );
+        concurrency = 1;
+      } else if (usesStoreOutputAs) {
+        logger.info(
+          `Setting concurrency to 1 because storeOutputAs is used.`,
+        );
+        concurrency = 1;
+      }
     }
 
     // Actually run the eval
@@ -901,7 +923,7 @@ class Evaluator {
 
     for (let index = 0; index < table.body.length; index++) {
       const row = table.body[index];
-      const compareAssertion = row.test.assert?.find((a) => a.type === 'select-best');
+      const compareAssertion = row.test.assert?.find((a) => a.type === 'select-best') as Assertion;
       if (compareAssertion) {
         const outputs = row.outputs.map((o) => o.text);
         const gradingResults = await runCompareAssertion(row.test, compareAssertion, outputs);
@@ -979,7 +1001,7 @@ class Evaluator {
       hasAnyPass: results.some((r) => r.success),
     });
 
-    return { version: 2, results, stats: this.stats, table };
+    return { version: 2, timestamp: new Date().toISOString(), results, stats: this.stats, table };
   }
 }
 

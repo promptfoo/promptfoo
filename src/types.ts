@@ -1,5 +1,5 @@
-import type logger from "./logger";
-import type { fetchWithCache, getCache } from "./cache";
+import type logger from './logger';
+import type { fetchWithCache, getCache } from './cache';
 
 export type FilePath = string;
 
@@ -33,7 +33,7 @@ export interface CommandLineOptions {
   filterFailing?: string;
   filterFirstN?: string;
   filterPattern?: string;
-  var?: Record<string, string>
+  var?: Record<string, string>;
 
   generateSuggestions?: boolean;
   promptPrefix?: string;
@@ -72,6 +72,8 @@ export interface EnvOverrides {
   VERTEX_REGION?: string;
   VERTEX_PUBLISHER?: string;
   MISTRAL_API_KEY?: string;
+  CLOUDFLARE_API_KEY?: string;
+  CLOUDFLARE_ACCOUNT_ID?: string;
 }
 
 export interface ProviderOptions {
@@ -143,6 +145,10 @@ export interface ApiClassificationProvider extends ApiProvider {
   callClassificationApi: (prompt: string) => Promise<ProviderClassificationResponse>;
 }
 
+export interface ApiModerationProvider extends ApiProvider {
+  callModerationApi: (prompt: string, response: string) => Promise<ProviderModerationResponse>;
+}
+
 export interface TokenUsage {
   total: number;
   prompt: number;
@@ -176,15 +182,26 @@ export interface ProviderClassificationResponse {
   classification?: Record<string, number>;
 }
 
+export interface ModerationFlag {
+  code: string;
+  description: string;
+  confidence: number;
+}
+
+export interface ProviderModerationResponse {
+  error?: string;
+  flags?: ModerationFlag[];
+}
+
 export interface CsvRow {
   [key: string]: string;
 }
 
 export type VarMapping = Record<string, string>;
 
-export type ProviderTypeMap = Partial<
-  Record<'embedding' | 'classification' | 'text', string | ProviderOptions | ApiProvider>
->;
+export type ProviderType = 'embedding' | 'classification' | 'text' | 'moderation';
+
+export type ProviderTypeMap = Partial<Record<ProviderType, string | ProviderOptions | ApiProvider>>;
 
 export interface GradingConfig {
   rubricPrompt?: string | string[];
@@ -209,6 +226,9 @@ export interface OutputConfig {
    */
   postprocess?: string;
   transform?: string;
+
+  // The name of the variable to store the output of this test case
+  storeOutputAs?: string;
 }
 
 export interface RunEvalOptions {
@@ -245,7 +265,11 @@ export interface EvaluateOptions {
 export interface Prompt {
   id?: string;
   raw: string;
-  display: string;
+  /**
+   * @deprecated in > 0.59.0. Use `label` instead.
+   */
+  display?: string;
+  label: string;
   function?: (context: {
     vars: Record<string, string | object>;
     provider?: ApiProvider;
@@ -332,6 +356,7 @@ export interface EvaluateStats {
 
 export interface EvaluateSummary {
   version: number;
+  timestamp: string;
   results: EvaluateResult[];
   table: EvaluateTable;
   stats: EvaluateStats;
@@ -357,10 +382,27 @@ export interface GradingResult {
   componentResults?: GradingResult[];
 
   // The assertion that was evaluated
-  assertion: Assertion | null;
+  assertion?: Assertion | null;
 
   // User comment
   comment?: string;
+}
+
+export function isGradingResult(result: any): result is GradingResult {
+  return (
+    typeof result === 'object' &&
+    result !== null &&
+    typeof result.pass === 'boolean' &&
+    typeof result.score === 'number' &&
+    typeof result.reason === 'string' &&
+    (typeof result.namedScores === 'undefined' || typeof result.namedScores === 'object') &&
+    (typeof result.tokensUsed === 'undefined' || typeof result.tokensUsed === 'object') &&
+    (typeof result.componentResults === 'undefined' || Array.isArray(result.componentResults)) &&
+    (typeof result.assertion === 'undefined' ||
+      result.assertion === null ||
+      typeof result.assertion === 'object') &&
+    (typeof result.comment === 'undefined' || typeof result.comment === 'string')
+  );
 }
 
 type BaseAssertionTypes =
@@ -397,11 +439,28 @@ type BaseAssertionTypes =
   | 'perplexity'
   | 'perplexity-score'
   | 'cost'
-  | 'select-best';
+  | 'select-best'
+  | 'moderation';
 
 type NotPrefixed<T extends string> = `not-${T}`;
 
 export type AssertionType = BaseAssertionTypes | NotPrefixed<BaseAssertionTypes>;
+
+export interface AssertionSet {
+  type: 'assert-set';
+
+  // Sub assertions to be run for this assertion set
+  assert: Assertion[];
+
+  // The weight of this assertion compared to other assertions in the test case. Defaults to 1.
+  weight?: number;
+
+  // Tag this assertion result as a named metric
+  metric?: string;
+
+  // The required score for this assert set. If not provided, the test case is graded pass/fail.
+  threshold?: number;
+}
 
 // TODO(ian): maybe Assertion should support {type: config} to make the yaml cleaner
 export interface Assertion {
@@ -476,7 +535,7 @@ export interface TestCase<Vars = Record<string, string | string[] | object>> {
   providerOutput?: string | object;
 
   // Optional list of automatic checks to run on the LLM output
-  assert?: Assertion[];
+  assert?: (AssertionSet | Assertion)[];
 
   // Additional configuration settings for the prompt
   options?: PromptConfig &
@@ -568,7 +627,7 @@ export interface TestSuiteConfig {
   providers: ProviderId | ProviderFunction | (ProviderId | ProviderOptionsMap | ProviderOptions)[];
 
   // One or more prompt files to load
-  prompts: FilePath | FilePath[] | Record<FilePath, string>;
+  prompts: FilePath | (FilePath | Prompt)[] | Record<FilePath, string>;
 
   // Path to a test file, OR list of LLM prompt variations (aka "test case")
   tests: FilePath | (FilePath | TestCase)[];

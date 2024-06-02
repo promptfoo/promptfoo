@@ -78,7 +78,7 @@ class TokenUsage:
     completion: int
 
 class ProviderResponse:
-    output: Optional[str]
+    output: Optional[Union[str, Dict[str, Any]]]
     error: Optional[str]
     tokenUsage: Optional[TokenUsage]
     cost: Optional[float]

@@ -34,7 +34,12 @@ import { useStore as useMainStore } from '@/app/eval/store';
 
 import type { CellContext, ColumnDef, VisibilityState } from '@tanstack/table-core';
 
-import type { EvaluateTableRow, EvaluateTableOutput, FilterMode, EvaluateTable } from './types';
+import {
+  EvaluateTableRow,
+  EvaluateTableOutput,
+  FilterMode,
+  EvaluateTable,
+} from './types';
 
 import './ResultsTable.css';
 
@@ -197,19 +202,24 @@ function EvalOutputCell({
   let text = typeof output.text === 'string' ? output.text : JSON.stringify(output.text);
   let node: React.ReactNode | undefined;
   let chunks: string[] = [];
-  if (text.startsWith('[IMAGE]')) {
-    const url = text.slice('[IMAGE]'.length).trim();
-
-    node = (
-      <>
-        <img loading="lazy" src={url} alt={output.prompt} onClick={toggleLightbox} />
-        {lightboxOpen && (
-          <div className="lightbox" onClick={toggleLightbox}>
-            <img src={url} alt={output.prompt} />
-          </div>
-        )}
-      </>
-    );
+  let hasImageLightbox = false;
+  if (text.startsWith('![')) {
+    const imageUrlRegex = /^!\[.*?\]\((.*?)\)/;
+    const imageUrlMatch = text.match(imageUrlRegex);
+    if (imageUrlMatch) {
+      const url = imageUrlMatch[1];
+      node = (
+        <>
+          <img loading="lazy" src={url} alt={output.prompt} onClick={toggleLightbox} />
+          {lightboxOpen && (
+            <div className="lightbox" onClick={toggleLightbox}>
+              <img src={url} alt={output.prompt} />
+            </div>
+          )}
+        </>
+      );
+      hasImageLightbox = true;
+    }
   } else if (!output.pass && text.includes('---')) {
     // TODO(ian): Plumb through failure message instead of parsing it out.
     chunks = text.split('---');
@@ -298,7 +308,7 @@ function EvalOutputCell({
     } catch (error) {
       console.error('Invalid regular expression:', (error as Error).message);
     }
-  } else if (renderMarkdown) {
+  } else if (renderMarkdown && !hasImageLightbox) {
     node = <ReactMarkdown>{text}</ReactMarkdown>;
   } else if (prettifyJson) {
     try {
@@ -358,18 +368,35 @@ function EvalOutputCell({
       </span>
     );
   } else if (output.tokenUsage?.total) {
+    const promptTokens = Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
+      output.tokenUsage.prompt ?? 0,
+    );
+    const completionTokens = Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
+      output.tokenUsage.completion ?? 0,
+    );
+    const totalTokens = Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
+      output.tokenUsage.total,
+    );
+
     tokenUsageDisplay = (
-      <span>
-        {Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(output.tokenUsage.total)}
-      </span>
+      <Tooltip
+        title={`${promptTokens} prompt tokens + ${completionTokens} completion tokens = ${totalTokens} total`}
+      >
+        <span>
+          {totalTokens}
+          {(promptTokens !== '0' || completionTokens !== '0') &&
+            ` (${promptTokens}+${completionTokens})`}
+        </span>
+      </Tooltip>
     );
   }
 
-  const comment = output.gradingResult?.comment ? (
-    <div className="comment" onClick={handleCommentOpen}>
-      {output.gradingResult.comment}
-    </div>
-  ) : null;
+  const comment =
+    output.gradingResult?.comment && output.gradingResult.comment !== '!highlight' ? (
+      <div className="comment" onClick={handleCommentOpen}>
+        {output.gradingResult.comment}
+      </div>
+    ) : null;
 
   const detail = showStats ? (
     <div className="cell-detail">
@@ -439,8 +466,12 @@ function EvalOutputCell({
   );
 
   // TODO(ian): output.prompt check for backwards compatibility, remove after 0.17.0
+  const cellStyle: Record<string, string> = {};
+  if (output.gradingResult?.comment === '!highlight') {
+    cellStyle.backgroundColor = '#ffffeb';
+  }
   return (
-    <div className="cell">
+    <div className="cell" style={cellStyle}>
       {output.pass ? (
         <>
           <div className="status pass">
@@ -669,6 +700,10 @@ function ResultsTable({
     }
   }, [body, failureFilter, filterMode, searchText, columnVisibility, columnVisibilityIsSet]);
 
+  React.useEffect(() => {
+    setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+  }, [failureFilter, filterMode, searchText]);
+
   // TODO(ian): Switch this to use prompt.metrics field once most clients have updated.
   const numGoodTests = React.useMemo(
     () =>
@@ -711,6 +746,7 @@ function ResultsTable({
 
   const columnHelper = React.useMemo(() => createColumnHelper<EvaluateTableRow>(), []);
 
+  const { renderMarkdown } = useResultsViewStore();
   const variableColumns = React.useMemo(() => {
     if (head.vars.length > 0) {
       return [
@@ -723,9 +759,18 @@ function ResultsTable({
               header: () => (
                 <TableHeader text={varName} maxLength={maxTextLength} className="font-bold" />
               ),
-              cell: (info: CellContext<EvaluateTableRow, string>) => (
-                <MemoizedTruncatedText text={info.getValue()} maxLength={maxTextLength} />
-              ),
+              cell: (info: CellContext<EvaluateTableRow, string>) => {
+                const value = info.getValue();
+                return (
+                  <div className="cell">
+                    {renderMarkdown ? (
+                      <ReactMarkdown>{value}</ReactMarkdown>
+                    ) : (
+                      <MemoizedTruncatedText text={value} maxLength={maxTextLength} />
+                    )}
+                  </div>
+                );
+              },
               size: 50,
             }),
           ),
@@ -733,7 +778,7 @@ function ResultsTable({
       ];
     }
     return [];
-  }, [columnHelper, head.vars, maxTextLength]);
+  }, [columnHelper, head.vars, maxTextLength, renderMarkdown]);
 
   const getOutput = React.useCallback(
     (rowIndex: number, promptIndex: number) => {
@@ -822,9 +867,7 @@ function ResultsTable({
               return (
                 <div className="output-header">
                   <div className="pills">
-                    {prompt.provider ? (
-                      <div className="provider">{providerDisplay}</div>
-                    ) : null}
+                    {prompt.provider ? <div className="provider">{providerDisplay}</div> : null}
                     <div className="summary">
                       <div className={`highlight ${isHighestPassing ? 'success' : ''}`}>
                         <strong>{pct}% passing</strong> ({numGoodTests[idx]}/{body.length} cases)
@@ -838,7 +881,7 @@ function ResultsTable({
                   </div>
                   <TableHeader
                     className="prompt-container"
-                    text={prompt.display}
+                    text={prompt.label || prompt.display || prompt.raw}
                     expandedText={prompt.raw}
                     maxLength={maxTextLength}
                     resourceId={prompt.id}

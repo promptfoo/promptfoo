@@ -6,7 +6,7 @@ providers:
     config:
       apiBaseUrl: https://api.groq.com/openai/v1
       apiKeyEnvar: GROQ_API_KEY
-  - id: openai:chat:llama2-70b-4096
+  - id: openai:chat:llama3-8b-8192
     config:
       apiBaseUrl: https://api.groq.com/openai/v1
       apiKeyEnvar: GROQ_API_KEY
@@ -15,5 +15,5 @@ tests:
   - vars:
       question: What is the capital of France?
     assert:
-      - type: equals
+      - type: icontains
         value: Paris

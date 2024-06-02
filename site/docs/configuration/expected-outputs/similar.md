@@ -23,19 +23,23 @@ assert:
 
 By default `similar` will use OpenAI. To specify the model that creates the embeddings, do one of the following:
 
-1. Use `test.options` or `defaultTest.options` to override the provider across the entire test suite:
+1. Use `test.options` or `defaultTest.options` to override the provider across the entire test suite. For example:
 
    ```yaml
    defaultTest:
      options:
-       provider: azureopenai:embedding:text-embedding-ada-002
+       provider:
+         embedding:
+           id: azureopenai:embedding:text-embedding-ada-002
+           config:
+             apiHost: xxx.openai.azure.com
    tests:
      assert:
        - type: similar
          value: Hello world
    ```
 
-2. Set `assertion.provider` on a per-assertion basis:
+2. Set `assertion.provider` on a per-assertion basis. For example:
 
    ```yaml
    tests:
