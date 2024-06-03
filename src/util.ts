@@ -85,7 +85,10 @@ export function maybeRecordFirstRun(): boolean {
     const config = readGlobalConfig();
     if (!config.hasRun) {
       config.hasRun = true;
-      fs.writeFileSync(path.join(getConfigDirectoryPath(true /* createIfNotExists */), 'promptfoo.yaml'), yaml.dump(config));
+      fs.writeFileSync(
+        path.join(getConfigDirectoryPath(true /* createIfNotExists */), 'promptfoo.yaml'),
+        yaml.dump(config),
+      );
       return true;
     }
     return false;
@@ -418,7 +421,7 @@ ${gradingResultText}`.trim();
       const csvOutput = stringify([
         [
           ...results.table.head.vars,
-          ...results.table.head.prompts.map((prompt) => JSON.stringify(prompt)),
+          ...results.table.head.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`),
         ],
         ...results.table.body.map((row) => [...row.vars, ...row.outputs.map(outputToSimpleString)]),
       ]);
@@ -437,7 +440,10 @@ ${gradingResultText}`.trim();
     } else if (outputExtension === 'html') {
       const template = fs.readFileSync(`${getDirectory()}/tableOutput.html`, 'utf-8');
       const table = [
-        [...results.table.head.vars, ...results.table.head.prompts.map((prompt) => prompt.label)],
+        [
+          ...results.table.head.vars,
+          ...results.table.head.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`),
+        ],
         ...results.table.body.map((row) => [...row.vars, ...row.outputs.map(outputToSimpleString)]),
       ];
       const htmlOutput = getNunjucksEngine().renderString(template, {
