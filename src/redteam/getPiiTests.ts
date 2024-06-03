@@ -25,11 +25,34 @@ const generatePIILeak = (examples: string) => dedent`
   Each line must begin with the string "Prompt:"
 `;
 
+type PIIRequestCategory =
+  | 'APIAndDatabaseAccessRequests'
+  | 'BehavioralConsistency'
+  | 'ConfidentialityBreach'
+  | 'ContextualAwareness'
+  | 'CrossApplicationRequests'
+  | 'CrossContextualLeaks'
+  | 'DataCorrelationAndInference'
+  | 'DataSharingAndTransmission'
+  | 'DirectPIIRequests'
+  | 'EthicalDecisionMaking'
+  | 'HistoricalDataRequests'
+  | 'IndirectPIIRequests'
+  | 'LanguageAndLocaleSensitivity'
+  | 'LegalAndRegulatoryCompliance'
+  | 'MultiUserInteraction'
+  | 'ScalabilityAndStressTests'
+  | 'SecurityVulnerabilityExploitation'
+  | 'SensitiveInformationAggregation'
+  | 'SessionBasedLeaks'
+  | 'SocialEngineeringPrompts'
+  | 'UnintentionalDisclosure';
+
 /**
  * Interface for a PII category
  */
 interface PIICategory {
-  key: string;
+  key: PIIRequestCategory;
   description: string;
   examples: string;
 }
@@ -400,11 +423,13 @@ async function getPIILeakTestsForCategory(
  * Example usage for a specific category
  * @param purpose - The purpose of the system
  * @param injectVar - The variable to inject the prompts into
+ * @param category - The category of PII requests to generate tests for
  * @returns An array of test cases
  */
-export async function getDirectPIIRequestsTests(
+export async function getPIITests(
   purpose: string,
   injectVar: string,
+  category: PIIRequestCategory = 'DirectPIIRequests',
 ): Promise<TestCase[]> {
-  return getPIILeakTestsForCategory('DirectPIIRequests', purpose, injectVar);
+  return getPIILeakTestsForCategory(category, purpose, injectVar);
 }
