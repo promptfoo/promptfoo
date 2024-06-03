@@ -429,7 +429,16 @@ async function getPIILeakTestsForCategory(
 export async function getPIITests(
   purpose: string,
   injectVar: string,
-  category: PIIRequestCategory = 'DirectPIIRequests',
+  category?: PIIRequestCategory,
 ): Promise<TestCase[]> {
+  // run all if no category is specified
+  if (!category) {
+    const allTests: TestCase[] = [];
+    for (const cat of PII_CATEGORIES) {
+      const tests = await getPIILeakTestsForCategory(cat.key, purpose, injectVar);
+      allTests.push(...tests);
+    }
+    return allTests;
+  }
   return getPIILeakTestsForCategory(category, purpose, injectVar);
 }
