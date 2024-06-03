@@ -29,14 +29,14 @@ interface SynthesizeOptions {
 
 const ALL_PLUGINS = new Set(
   [
-    'harmful',
-    'prompt-injection',
-    'jailbreak',
-    'hijacking',
-    'hallucination',
     'excessive-agency',
+    'hallucination',
+    'harmful',
+    'hijacking',
+    'jailbreak',
     'overreliance',
     'pii',
+    'prompt-injection',
   ].concat(Object.keys(HARM_CATEGORIES)),
 );
 
@@ -122,60 +122,26 @@ export async function synthesize({
     logger.debug(`Added ${harmfulPrompts.length} harmful test cases`);
   }
 
-  if (plugins.includes('prompt-injection')) {
-    updateProgress();
-    logger.debug('Adding injections to adversarial prompts');
-    const injectedPrompts = await addInjections(adversarialPrompts, injectVar);
-    testCases.push(...injectedPrompts);
-    logger.debug(`Added ${injectedPrompts.length} injected test cases`);
-  }
+  const pluginActions: {
+    [key: string]: (purpose: string, injectVar: string) => Promise<TestCase[]>;
+  } = {
+    'excessive-agency': getOverconfidenceTests,
+    hallucination: getHallucinationTests,
+    hijacking: getHijackingTests,
+    jailbreak: addIterativeJailbreaks.bind(null, adversarialPrompts),
+    overreliance: getUnderconfidenceTests,
+    pii: getPIITests,
+    'prompt-injection': addInjections.bind(null, adversarialPrompts),
+  };
 
-  if (plugins.includes('jailbreak')) {
-    updateProgress();
-    logger.debug('Adding iterative jailbreaks to adversarial prompts');
-    const redTeamConversations = await addIterativeJailbreaks(adversarialPrompts, injectVar);
-    testCases.push(...redTeamConversations);
-    logger.debug(`Added ${redTeamConversations.length} iterative jailbreak test cases`);
-  }
-
-  if (plugins.includes('hijacking')) {
-    updateProgress();
-    logger.debug('Generating hijacking tests');
-    const hijackingTests = await getHijackingTests(purpose, injectVar);
-    testCases.push(...hijackingTests);
-    logger.debug(`Added ${hijackingTests.length} hijacking test cases`);
-  }
-
-  if (plugins.includes('hallucination')) {
-    updateProgress();
-    logger.debug('Generating hallucination tests');
-    const hallucinationTests = await getHallucinationTests(purpose, injectVar);
-    testCases.push(...hallucinationTests);
-    logger.debug(`Added ${hallucinationTests.length} hallucination test cases`);
-  }
-
-  if (plugins.includes('excessive-agency')) {
-    updateProgress();
-    logger.debug('Generating excessive agency/overconfidence tests');
-    const overconfidenceTests = await getOverconfidenceTests(purpose, injectVar);
-    testCases.push(...overconfidenceTests);
-    logger.debug(`Added ${overconfidenceTests.length} overconfidence test cases`);
-  }
-
-  if (plugins.includes('overreliance')) {
-    updateProgress();
-    logger.debug('Generating overreliance/underconfidence tests');
-    const underconfidenceTests = await getUnderconfidenceTests(purpose, injectVar);
-    testCases.push(...underconfidenceTests);
-    logger.debug(`Added ${underconfidenceTests.length} underconfidence test cases`);
-  }
-
-  if (plugins.includes('pii')) {
-    updateProgress();
-    logger.debug('Generating direct PII requests tests');
-    const piiTests = await getPIITests(purpose, injectVar);
-    testCases.push(...piiTests);
-    logger.debug(`Added ${piiTests.length} direct PII requests test cases`);
+  for (const plugin of plugins) {
+    if (pluginActions[plugin]) {
+      updateProgress();
+      logger.debug(`Generating ${plugin} tests`);
+      const pluginTests = await pluginActions[plugin](purpose, injectVar);
+      testCases.push(...pluginTests);
+      logger.debug(`Added ${pluginTests.length} ${plugin} test cases`);
+    }
   }
 
   // Finish progress bar
