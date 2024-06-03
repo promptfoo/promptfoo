@@ -624,7 +624,7 @@ export interface TestSuiteConfig {
   description?: string;
 
   // One or more LLM APIs to use, for example: openai:gpt-3.5-turbo, openai:gpt-4, localai:chat:vicuna
-  providers: ProviderId | ProviderFunction | (ProviderId | ProviderOptionsMap | ProviderOptions)[];
+  providers: ProviderId | ProviderFunction | (ProviderId | ProviderOptionsMap | ProviderOptions | ProviderFunction)[];
 
   // One or more prompt files to load
   prompts: FilePath | (FilePath | Prompt)[] | Record<FilePath, string>;
@@ -677,7 +677,7 @@ export type PromptFunction = (context: {
 export type EvaluateTestSuite = {
   prompts: (string | object | PromptFunction)[];
   writeLatestResults?: boolean;
-} & TestSuiteConfig;
+} & Omit<TestSuiteConfig, 'prompts'>;
 
 export interface SharedResults {
   data: ResultsFile;
