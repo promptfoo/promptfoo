@@ -314,6 +314,7 @@ export default function ResultsView({
                 <MenuItem value="all">Show all results</MenuItem>
                 <MenuItem value="failures">Show failures only</MenuItem>
                 <MenuItem value="different">Show different only</MenuItem>
+                <MenuItem value="highlights">Show highlights only</MenuItem>
               </Select>
             </FormControl>
           </Box>
