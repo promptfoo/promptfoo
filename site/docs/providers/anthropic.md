@@ -6,7 +6,7 @@ sidebar_position: 10
 
 This provider supports the [Anthropic Claude](https://www.anthropic.com/claude) series of models.
 
-## API Key
+## Setup
 
 To use Anthropic, you need to set the `ANTHROPIC_API_KEY` environment variable or specify the `apiKey` in the provider configuration.
 
@@ -17,6 +17,13 @@ Example of setting the environment variable:
 ```bash
 export ANTHROPIC_API_KEY=your_api_key_here
 ```
+
+### Supported parameters
+
+| Config Property | Environment Variable | Description                                    |
+| --------------- | -------------------- | ---------------------------------------------- |
+| apiKey          | ANTHROPIC_API_KEY    | Your API key from Anthropic                    |
+| apiBaseUrl      | ANTHROPIC_BASE_URL   | The base URL for requests to the Anthropic API |
 
 ## Latest API (Messages)
 
