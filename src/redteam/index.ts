@@ -15,6 +15,7 @@ import { getHijackingTests } from './getHijackingTests';
 import { getHallucinationTests } from './getHallucinationTests';
 import { getOverconfidenceTests } from './getOverconfidenceTests';
 import { getUnderconfidenceTests } from './getUnderconfidenceTests';
+import { getDirectPIIRequestsTests } from './getPiiTests';
 import { SYNTHESIS_MODEL } from './constants';
 
 import type { ApiProvider, TestCase, TestSuite } from '../types';
@@ -162,6 +163,14 @@ export async function synthesize({
     const underconfidenceTests = await getUnderconfidenceTests(purpose, injectVar);
     testCases.push(...underconfidenceTests);
     logger.debug(`Added ${underconfidenceTests.length} underconfidence test cases`);
+  }
+
+  if (plugins.includes('pii')) {
+    if (spinner) spinner.update(95, { speed: 'Generating direct PII requests tests' });
+    logger.debug('Generating direct PII requests tests');
+    const piiTests = await getDirectPIIRequestsTests(purpose, injectVar);
+    testCases.push(...piiTests);
+    logger.debug(`Added ${piiTests.length} direct PII requests test cases`);
   }
 
   if (spinner) {
