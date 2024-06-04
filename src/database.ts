@@ -156,11 +156,11 @@ export const llmOutputsRelations = relations(llmOutputs, ({ one }) => ({
 let dbInstance: ReturnType<typeof drizzle> | null = null;
 
 export function getDbPath() {
-  return path.resolve(getConfigDirectoryPath(), 'promptfoo.db');
+  return path.resolve(getConfigDirectoryPath(true /* createIfNotExists */), 'promptfoo.db');
 }
 
 export function getDbSignalPath() {
-  return path.resolve(getConfigDirectoryPath(), 'evalLastWritten');
+  return path.resolve(getConfigDirectoryPath(true /* createIfNotExists */), 'evalLastWritten');
 }
 
 export function getDb() {

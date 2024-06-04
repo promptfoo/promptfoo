@@ -226,3 +226,13 @@ Adversarial testing produces offensive, toxic, and harmful test inputs, and may 
 :::
 
 While in beta, this implementation requires `OPENAI_API_KEY` to be set.
+
+## ASCII-only outputs
+
+To disable terminal colors for printed outputs, set `FORCE_COLOR=0` (this is supported by the [chalk](https://github.com/chalk/chalk) library).
+
+For the `eval` command, you may also want to disable the progress bar and table as well, because they use special characters:
+
+```
+FORCE_COLOR=0 promptfoo eval --no-progress-bar --no-table
+```

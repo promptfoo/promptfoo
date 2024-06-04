@@ -4,9 +4,10 @@ import './CustomMetrics.css';
 
 interface CustomMetricsProps {
   lookup: Record<string, number>;
+  onSearchTextChange?: (searchText: string) => void;
 }
 
-const CustomMetrics: React.FC<CustomMetricsProps> = ({ lookup }) => {
+const CustomMetrics: React.FC<CustomMetricsProps> = ({ lookup, onSearchTextChange }) => {
   if (!lookup || !Object.keys(lookup).length) {
     return null;
   }
@@ -14,7 +15,11 @@ const CustomMetrics: React.FC<CustomMetricsProps> = ({ lookup }) => {
     <div className="custom-metric-container">
       {Object.entries(lookup).map(([metric, score]) =>
         metric && typeof score !== 'undefined' ? (
-          <span key={metric}>
+          <span
+            key={metric}
+            onClick={() => onSearchTextChange && onSearchTextChange(metric)}
+            className={onSearchTextChange ? 'clickable' : ''}
+          >
             {metric}: {score.toFixed(2)}
           </span>
         ) : null,

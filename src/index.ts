@@ -104,17 +104,18 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
   });
 
   const unifiedConfig = { ...testSuite, prompts: constructedTestSuite.prompts };
-  if (testSuite.outputPath) {
-    if (typeof testSuite.outputPath === 'string') {
-      await writeOutput(testSuite.outputPath, ret, unifiedConfig, null);
-    } else if (Array.isArray(testSuite.outputPath)) {
-      await writeMultipleOutputs(testSuite.outputPath, ret, unifiedConfig, null);
-    }
-  }
-
+  let evalId: string | null = null
   if (testSuite.writeLatestResults) {
     await migrateResultsFromFileSystemToDatabase();
-    await writeResultsToDatabase(ret, unifiedConfig);
+    evalId = await writeResultsToDatabase(ret, unifiedConfig);
+  }
+
+  if (testSuite.outputPath) {
+    if (typeof testSuite.outputPath === 'string') {
+      await writeOutput(testSuite.outputPath, evalId, ret, unifiedConfig, null);
+    } else if (Array.isArray(testSuite.outputPath)) {
+      await writeMultipleOutputs(testSuite.outputPath, evalId, ret, unifiedConfig, null);
+    }
   }
 
   await telemetry.send();

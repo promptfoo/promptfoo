@@ -85,7 +85,10 @@ export function maybeRecordFirstRun(): boolean {
     const config = readGlobalConfig();
     if (!config.hasRun) {
       config.hasRun = true;
-      fs.writeFileSync(path.join(getConfigDirectoryPath(), 'promptfoo.yaml'), yaml.dump(config));
+      fs.writeFileSync(
+        path.join(getConfigDirectoryPath(true /* createIfNotExists */), 'promptfoo.yaml'),
+        yaml.dump(config),
+      );
       return true;
     }
     return false;
@@ -359,17 +362,19 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
 
 export async function writeMultipleOutputs(
   outputPaths: string[],
+  evalId: string | null,
   results: EvaluateSummary,
   config: Partial<UnifiedConfig>,
   shareableUrl: string | null,
 ) {
   await Promise.all(
-    outputPaths.map((outputPath) => writeOutput(outputPath, results, config, shareableUrl)),
+    outputPaths.map((outputPath) => writeOutput(outputPath, evalId, results, config, shareableUrl)),
   );
 }
 
 export async function writeOutput(
   outputPath: string,
+  evalId: string | null,
   results: EvaluateSummary,
   config: Partial<UnifiedConfig>,
   shareableUrl: string | null,
@@ -418,7 +423,7 @@ ${gradingResultText}`.trim();
       const csvOutput = stringify([
         [
           ...results.table.head.vars,
-          ...results.table.head.prompts.map((prompt) => JSON.stringify(prompt)),
+          ...results.table.head.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`),
         ],
         ...results.table.body.map((row) => [...row.vars, ...row.outputs.map(outputToSimpleString)]),
       ]);
@@ -426,7 +431,7 @@ ${gradingResultText}`.trim();
     } else if (outputExtension === 'json') {
       fs.writeFileSync(
         outputPath,
-        JSON.stringify({ results, config, shareableUrl } satisfies OutputFile, null, 2),
+        JSON.stringify({ evalId, results, config, shareableUrl } satisfies OutputFile, null, 2),
       );
     } else if (
       outputExtension === 'yaml' ||
@@ -437,7 +442,10 @@ ${gradingResultText}`.trim();
     } else if (outputExtension === 'html') {
       const template = fs.readFileSync(`${getDirectory()}/tableOutput.html`, 'utf-8');
       const table = [
-        [...results.table.head.vars, ...results.table.head.prompts.map((prompt) => prompt.label)],
+        [
+          ...results.table.head.vars,
+          ...results.table.head.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`),
+        ],
         ...results.table.body.map((row) => [...row.vars, ...row.outputs.map(outputToSimpleString)]),
       ];
       const htmlOutput = getNunjucksEngine().renderString(template, {
@@ -467,8 +475,12 @@ export async function readOutput(outputPath: string): Promise<OutputFile> {
 
 let configDirectoryPath: string | undefined = process.env.PROMPTFOO_CONFIG_DIR;
 
-export function getConfigDirectoryPath(): string {
-  return configDirectoryPath || path.join(os.homedir(), '.promptfoo');
+export function getConfigDirectoryPath(createIfNotExists: boolean = false): string {
+  const p = configDirectoryPath || path.join(os.homedir(), '.promptfoo');
+  if (createIfNotExists && !fs.existsSync(p)) {
+    fs.mkdirSync(p, { recursive: true });
+  }
+  return p;
 }
 
 export function setConfigDirectoryPath(newPath: string): void {
@@ -675,7 +687,7 @@ export async function migrateResultsFromFileSystemToDatabase() {
   logger.info('This is a one-time operation and may take a minute...');
   attemptedMigration = true;
 
-  const outputDir = path.join(getConfigDirectoryPath(), 'output');
+  const outputDir = path.join(getConfigDirectoryPath(true /* createIfNotExists */), 'output');
   const backupDir = `${outputDir}-backup-${new Date()
     .toISOString()
     .slice(0, 10)

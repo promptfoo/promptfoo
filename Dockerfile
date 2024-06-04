@@ -12,7 +12,6 @@ ENV NEXT_TELEMETRY_DISABLED 1
 ARG NEXT_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL
 ENV NEXT_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL=${NEXT_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL}
 
-
 # Supabase opt-in
 ARG NEXT_PUBLIC_PROMPTFOO_USE_SUPABASE
 ENV NEXT_PUBLIC_PROMPTFOO_USE_SUPABASE=${NEXT_PUBLIC_PROMPTFOO_USE_SUPABASE}
@@ -31,6 +30,7 @@ RUN apk update && apk add python3 build-base --no-cache
 RUN echo "*** Building with env vars from .env.production"
 
 RUN npm install
+RUN npm run build
 
 WORKDIR /app/src/web/nextui
 RUN npm prune --production
@@ -44,7 +44,7 @@ WORKDIR /app
 
 COPY --from=builder /app/src/web/nextui/public ./public
 COPY --from=builder /app/src/web/nextui/.next/standalone ./
-COPY --from=builder /app/src/web/nextui/.next/static ./.next/static
+COPY --from=builder /app/src/web/nextui/.next/static ./src/web/nextui/.next/static
 COPY --from=builder /app/drizzle ./.next/server/drizzle
 
 RUN mkdir -p /root/.promptfoo/output
@@ -56,7 +56,7 @@ env > .env\n\
 echo "Loaded environment variables:"\n\
 cat .env\n\
 echo "Starting server..."\n\
-node server.js' > entrypoint.sh
+node src/web/nextui/server.js' > entrypoint.sh
 
 # Make the script executable
 RUN chmod +x entrypoint.sh
