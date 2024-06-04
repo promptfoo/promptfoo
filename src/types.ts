@@ -539,13 +539,13 @@ export interface TestCase<Vars = Record<string, string | string[] | object>> {
 
   // Additional configuration settings for the prompt
   options?: PromptConfig &
-  OutputConfig &
-  GradingConfig & {
-    // If true, do not expand arrays of variables into multiple eval cases.
-    disableVarExpansion?: boolean;
-    // If true, do not include an implicit `_conversation` variable in the prompt.
-    disableConversationVar?: boolean;
-  };
+    OutputConfig &
+    GradingConfig & {
+      // If true, do not expand arrays of variables into multiple eval cases.
+      disableVarExpansion?: boolean;
+      // If true, do not include an implicit `_conversation` variable in the prompt.
+      disableConversationVar?: boolean;
+    };
 
   // The required score for this test case.  If not provided, the test case is graded pass/fail.
   threshold?: number;
@@ -643,11 +643,11 @@ export interface TestSuiteConfig {
 
   // Determines whether or not sharing is enabled.
   sharing?:
-  | boolean
-  | {
-    apiBaseUrl?: string;
-    appBaseUrl?: string;
-  };
+    | boolean
+    | {
+        apiBaseUrl?: string;
+        appBaseUrl?: string;
+      };
 
   // Nunjucks filters
   nunjucksFilters?: Record<string, FilePath>;
@@ -678,6 +678,10 @@ export type EvaluateTestSuite = {
   prompts: (string | object | PromptFunction)[];
   writeLatestResults?: boolean;
 } & Omit<TestSuiteConfig, 'prompts'>;
+
+export type EvaluateTestSuiteWithEvaluateOptions = EvaluateTestSuite & {
+  evaluateOptions: EvaluateOptions;
+};
 
 export interface SharedResults {
   data: ResultsFile;
