@@ -612,6 +612,7 @@ interface ResultsTableProps {
   searchText: string;
   showStats: boolean;
   onFailureFilterToggle: (columnId: string, checked: boolean) => void;
+  onSearchTextChange: (text: string) => void;
 }
 
 interface ExtendedEvaluateTableOutput extends EvaluateTableOutput {
@@ -632,6 +633,7 @@ function ResultsTable({
   searchText,
   showStats,
   onFailureFilterToggle,
+  onSearchTextChange,
 }: ResultsTableProps) {
   const { evalId: filePath, table, setTable } = useMainStore();
 
@@ -702,21 +704,30 @@ function ResultsTable({
           })),
         }))
         .filter((row) => {
-          const outputsPassFilter =
-            filterMode === 'failures'
-              ? row.outputs.some((output, idx) => {
-                  const columnId = `Prompt ${idx + 1}`;
-                  return (
-                    failureFilter[columnId] &&
-                    !output.pass &&
-                    (!columnVisibilityIsSet || columnVisibility[columnId])
-                  );
-                })
-              : filterMode === 'different'
-              ? !row.outputs.every((output) => output.text === row.outputs[0].text)
-              : true;
+          let outputsPassFilter = true;
+          if (filterMode === 'failures') {
+            outputsPassFilter = row.outputs.some((output, idx) => {
+              const columnId = `Prompt ${idx + 1}`;
+              return (
+                failureFilter[columnId] &&
+                !output.pass &&
+                (!columnVisibilityIsSet || columnVisibility[columnId])
+              );
+            });
+          } else if (filterMode === 'different') {
+            outputsPassFilter = !row.outputs.every((output) => output.text === row.outputs[0].text);
+          } else if (filterMode === 'highlights') {
+            console.log(row.outputs[0].text);
+            outputsPassFilter = row.outputs.some((output) =>
+              output.gradingResult?.comment?.startsWith('!highlight'),
+            );
+          }
 
-          const outputsMatchSearch = searchText
+          if (!outputsPassFilter) {
+            return false;
+          }
+
+          return searchText
             ? row.outputs.some((output) => {
                 const stringifiedOutput = `${output.text} ${Object.keys(output.namedScores)} ${
                   output.gradingResult?.reason || ''
@@ -724,8 +735,6 @@ function ResultsTable({
                 return searchRegex.test(stringifiedOutput);
               })
             : true;
-
-          return outputsPassFilter && outputsMatchSearch;
         }) as ExtendedEvaluateTableRow[];
     } catch (err) {
       console.error('Invalid regular expression:', (err as Error).message);
@@ -908,7 +917,10 @@ function ResultsTable({
                     </div>
                     {prompt.metrics?.namedScores &&
                     Object.keys(prompt.metrics.namedScores).length > 0 ? (
-                      <CustomMetrics lookup={prompt.metrics.namedScores} />
+                      <CustomMetrics
+                        lookup={prompt.metrics.namedScores}
+                        onSearchTextChange={onSearchTextChange}
+                      />
                     ) : null}
                     {/* TODO(ian): Remove backwards compatibility for prompt.provider added 12/26/23 */}
                   </div>
@@ -982,6 +994,7 @@ function ResultsTable({
     getOutput,
     getFirstOutput,
     handleRating,
+    onSearchTextChange,
   ]);
 
   const descriptionColumn = React.useMemo(() => {
