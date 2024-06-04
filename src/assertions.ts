@@ -272,7 +272,6 @@ export async function runAssertion({
           valueFromScript = pythonScriptOutput;
           logger.debug(`Python script ${filePath} output: ${valueFromScript}`);
         } catch (error) {
-          // throw new Error(`Python script execution failed: ${error}`);
           return {
             pass: false,
             score: 0,
