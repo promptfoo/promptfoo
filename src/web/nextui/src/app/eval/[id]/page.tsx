@@ -7,7 +7,7 @@ import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
 import { getApiBaseUrl } from '@/api';
 import { IS_RUNNING_LOCALLY } from '@/constants';
 import { getResult } from '@/database';
-import { EvaluateSummary, EvaluateTestSuite, SharedResults } from '@/../../../types';
+import { EvaluateSummary, EvaluateTestSuite, SharedResults, UnifiedConfig } from '@/../../../types';
 import Eval from '../Eval';
 
 import './page.css';
@@ -59,7 +59,7 @@ export default async function Page({ params }: { params: { id: string } }) {
         version: result.version,
         createdAt: result.createdAt,
         results: result.results as unknown as EvaluateSummary,
-        config: result.config as unknown as EvaluateTestSuite,
+        config: result.config as unknown as UnifiedConfig,
       },
     };
 
