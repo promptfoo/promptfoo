@@ -20,6 +20,7 @@ import type {
   EvaluateTestSuite,
   ProviderOptions,
   PromptFunction,
+  Prompt,
 } from './types';
 import { readPrompts } from './prompts';
 
@@ -102,17 +103,18 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
     ...options,
   });
 
+  const unifiedConfig = { ...testSuite, prompts: constructedTestSuite.prompts };
   if (testSuite.outputPath) {
     if (typeof testSuite.outputPath === 'string') {
-      await writeOutput(testSuite.outputPath, ret, testSuite, null);
+      await writeOutput(testSuite.outputPath, ret, unifiedConfig, null);
     } else if (Array.isArray(testSuite.outputPath)) {
-      await writeMultipleOutputs(testSuite.outputPath, ret, testSuite, null);
+      await writeMultipleOutputs(testSuite.outputPath, ret, unifiedConfig, null);
     }
   }
 
   if (testSuite.writeLatestResults) {
     await migrateResultsFromFileSystemToDatabase();
-    await writeResultsToDatabase(ret, testSuite);
+    await writeResultsToDatabase(ret, unifiedConfig);
   }
 
   await telemetry.send();

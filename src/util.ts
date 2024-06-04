@@ -158,6 +158,7 @@ export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<Unifi
   if (Array.isArray(rawConfig.providers)) {
     rawConfig.providers.forEach((provider, providerIndex) => {
       if (typeof provider === 'string') return;
+      if (typeof provider === 'function') return;
       if (!provider.config) {
         // Handle when provider is a map
         provider = Object.values(provider)[0] as ProviderOptions;
@@ -182,6 +183,7 @@ export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<Unifi
   if (Array.isArray(config.providers)) {
     config.providers.forEach((provider, index) => {
       if (typeof provider === 'string') return;
+      if (typeof provider === 'function') return;
       if (!provider.config) {
         // Handle when provider is a map
         provider = Object.values(provider)[0] as ProviderOptions;
