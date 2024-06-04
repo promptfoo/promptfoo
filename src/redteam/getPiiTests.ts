@@ -165,7 +165,6 @@ async function getPiiLeakTestsForCategory(
   return prompts.map((prompt) => ({
     vars: {
       [injectVar]: prompt,
-      name,
     },
     assert: [
       {
