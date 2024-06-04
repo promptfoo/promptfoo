@@ -34,19 +34,7 @@ export async function runPython(
 
   try {
     await fs.writeFile(tempJsonPath, safeJsonStringify(args));
-
-    let results;
-    try {
-      results = await PythonShell.run('wrapper.py', pythonOptions);
-    } catch (error) {
-      return {
-        pass: false,
-        score: 0,
-        reason: `Failed to execute Python script: ${
-          error instanceof Error ? error.message : 'Unknown error'
-        }`,
-      };
-    }
+    const results = await PythonShell.run('wrapper.py', pythonOptions);
     logger.debug(`Python script ${absPath} returned: ${results.join('\n')}`);
     let result: { type: 'final_result'; data: any } | undefined;
     try {
