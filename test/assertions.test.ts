@@ -2026,6 +2026,33 @@ describe('runAssertion', () => {
     },
   );
 
+  it('should handle when python file assertions throw an error', async () => {
+    const output = 'Expected output';
+    const spy = jest.spyOn(pythonWrapper, 'runPython').mockRejectedValue(new Error('The Python script `call_api` function must return a dict with an `output`'));
+    const fileAssertion: Assertion = {
+      type: 'python',
+      value: 'file:///path/to/assert.py',
+    };
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt that includes "double quotes" and \'single quotes\'',
+      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      assertion: fileAssertion,
+      test: {} as AtomicTestCase,
+      output,
+    });
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({
+      assertion: {
+        type: 'python',
+        value: "file:///path/to/assert.py"
+      },
+      pass: false,
+      reason: "The Python script `call_api` function must return a dict with an `output`",
+      score: 0,
+    });
+  });
+
+
   describe('latency assertion', () => {
     it('should pass when the latency assertion passes', async () => {
       const output = 'Expected output';
