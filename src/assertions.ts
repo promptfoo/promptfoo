@@ -272,7 +272,12 @@ export async function runAssertion({
           valueFromScript = pythonScriptOutput;
           logger.debug(`Python script ${filePath} output: ${valueFromScript}`);
         } catch (error) {
-          throw new Error(`Python script execution failed: ${error}`);
+          return {
+            pass: false,
+            score: 0,
+            reason: (error as Error).message,
+            assertion,
+          };
         }
       } else if (filePath.endsWith('.json')) {
         renderedValue = JSON.parse(fs.readFileSync(path.resolve(basePath, filePath), 'utf8'));

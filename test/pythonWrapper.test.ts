@@ -34,17 +34,13 @@ describe('Python Wrapper', () => {
       expect(fs.unlink).toHaveBeenCalledTimes(1);
     });
 
-    it('should return an failure reason if the Python script execution fails', async () => {
+    it('should throw an error if the Python script execution fails', async () => {
       const mockPythonShellRun = PythonShell.run as jest.Mock;
       mockPythonShellRun.mockRejectedValue(new Error('Test Error'));
 
-      const result = await pythonWrapper.runPython('testScript.py', 'testMethod', ['arg1']);
-
-      expect(result).toEqual({
-        pass: false,
-        score: 0,
-        reason: 'Failed to execute Python script: Test Error',
-      });
+      await expect(pythonWrapper.runPython('testScript.py', 'testMethod', ['arg1'])).rejects.toThrow(
+        'Error running Python script: Test Error',
+      );
     });
 
     it('should handle Python script returning incorrect result type', async () => {
