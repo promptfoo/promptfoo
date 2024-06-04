@@ -5,22 +5,22 @@ import type { TsJestTransformerOptions } from 'ts-jest';
 const tsJestConfig: TsJestTransformerOptions & Record<string, unknown> = { useESM: true };
 
 const config: Config = {
-  transform: {
-    '^.+\\.js$': 'babel-jest',
-    '^.+\\.m?[tj]sx?$': ['ts-jest', tsJestConfig],
-  },
+  collectCoverage: true,
+  coverageDirectory: '.coverage',
+  coverageProvider: 'v8',
+  extensionsToTreatAsEsm: ['.ts'],
   /*
   moduleNameMapper: {
     '(.+)\\.js': '$1',
   },
   */
-  collectCoverage: true,
-  coverageDirectory: '.coverage',
-  coverageProvider: 'v8',
-  extensionsToTreatAsEsm: ['.ts'],
   modulePathIgnorePatterns: ['<rootDir>/examples', '<rootDir>/node_modules', '<rootDir>/dist'],
   setupFiles: ['<rootDir>/.jest/setEnvVars.js'],
   testPathIgnorePatterns: ['<rootDir>/examples', '<rootDir>/node_modules', '<rootDir>/dist'],
+  transform: {
+    '^.+\\.js$': 'babel-jest',
+    '^.+\\.m?[tj]sx?$': ['ts-jest', tsJestConfig],
+  },
 };
 
 export default config;
