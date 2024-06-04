@@ -800,7 +800,12 @@ class Evaluator {
     // Set up main progress bars
     let multibar: MultiBar | undefined;
     let multiProgressBars: SingleBar[] = [];
+    const originalProgressCallback = this.options.progressCallback;
     this.options.progressCallback = (completed, total, index, evalStep) => {
+      if (originalProgressCallback) {
+        originalProgressCallback(completed, total, index, evalStep);
+      }
+      
       if (multibar && evalStep) {
         const threadIndex = index % concurrency;
         const progressbar = multiProgressBars[threadIndex];
