@@ -15,7 +15,7 @@ import { getHijackingTests } from './getHijackingTests';
 import { getHallucinationTests } from './getHallucinationTests';
 import { getOverconfidenceTests } from './getOverconfidenceTests';
 import { getUnderconfidenceTests } from './getUnderconfidenceTests';
-import { getPIITests } from './getPiiTests';
+import { getPiiTests } from './getPiiTests';
 import { SYNTHESIS_MODEL } from './constants';
 
 import type { ApiProvider, TestCase, TestSuite } from '../types';
@@ -130,7 +130,7 @@ export async function synthesize({
     hijacking: getHijackingTests,
     jailbreak: addIterativeJailbreaks.bind(null, adversarialPrompts),
     overreliance: getUnderconfidenceTests,
-    pii: getPIITests,
+    pii: getPiiTests,
     'prompt-injection': addInjections.bind(null, adversarialPrompts),
   };
 
