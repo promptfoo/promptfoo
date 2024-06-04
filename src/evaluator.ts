@@ -804,7 +804,7 @@ class Evaluator {
     this.options.progressCallback = (completed, total, index, evalStep) => {
       if (originalProgressCallback) {
         originalProgressCallback(completed, total, index, evalStep);
-      };
+      }
       
       if (multibar && evalStep) {
         const threadIndex = index % concurrency;
