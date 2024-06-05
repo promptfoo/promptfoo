@@ -213,6 +213,15 @@ function EvalOutputCell({
 
   let text = typeof output.text === 'string' ? output.text : JSON.stringify(output.text);
   let node: React.ReactNode | undefined;
+  let chunks: string[] = [];
+
+  // Handle failure messages by splitting the text at '---'
+  if (!output.pass && text.includes('---')) {
+    chunks = text.split('---');
+    text = chunks.slice(1).join('---');
+  } else {
+    chunks = [text];
+  }
 
   if (showDiffs && firstOutput) {
     let firstOutputText =
@@ -516,7 +525,7 @@ function EvalOutputCell({
             </div>
             <CustomMetrics lookup={output.namedScores} />
             <span className="fail-reason">
-              {text
+              {chunks[0]
                 ?.trim()
                 .split('\n')
                 .map((line, index) => (
