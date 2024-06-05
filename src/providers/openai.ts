@@ -47,7 +47,7 @@ type OpenAiCompletionOptions = OpenAiSharedOptions & {
   stop?: string[];
   seed?: number;
   passthrough?: object;
-  
+
   /**
    * If set, automatically call these functions when the assistant activates
    * these function tools.
