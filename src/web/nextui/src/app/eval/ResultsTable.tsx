@@ -177,7 +177,11 @@ function EvalOutputCell({
   };
 
   const [lightboxOpen, setLightboxOpen] = React.useState(false);
-  const toggleLightbox = () => setLightboxOpen(!lightboxOpen);
+  const [lightboxImage, setLightboxImage] = React.useState<string | null>(null);
+  const toggleLightbox = (url?: string) => {
+    setLightboxImage(url || null);
+    setLightboxOpen(!lightboxOpen);
+  };
 
   const [commentDialogOpen, setCommentDialogOpen] = React.useState(false);
   const [commentText, setCommentText] = React.useState(output.gradingResult?.comment || '');
@@ -209,32 +213,6 @@ function EvalOutputCell({
 
   let text = typeof output.text === 'string' ? output.text : JSON.stringify(output.text);
   let node: React.ReactNode | undefined;
-  let chunks: string[] = [];
-  let hasImageLightbox = false;
-  if (text.startsWith('![')) {
-    const imageUrlRegex = /^!\[.*?\]\((.*?)\)/;
-    const imageUrlMatch = text.match(imageUrlRegex);
-    if (imageUrlMatch) {
-      const url = imageUrlMatch[1];
-      node = (
-        <>
-          <img loading="lazy" src={url} alt={output.prompt} onClick={toggleLightbox} />
-          {lightboxOpen && (
-            <div className="lightbox" onClick={toggleLightbox}>
-              <img src={url} alt={output.prompt} />
-            </div>
-          )}
-        </>
-      );
-      hasImageLightbox = true;
-    }
-  } else if (!output.pass && text.includes('---')) {
-    // TODO(ian): Plumb through failure message instead of parsing it out.
-    chunks = text.split('---');
-    text = chunks.slice(1).join('---');
-  } else {
-    chunks = [text];
-  }
 
   if (showDiffs && firstOutput) {
     let firstOutputText =
@@ -316,8 +294,24 @@ function EvalOutputCell({
     } catch (error) {
       console.error('Invalid regular expression:', (error as Error).message);
     }
-  } else if (renderMarkdown && !hasImageLightbox) {
-    node = <ReactMarkdown>{text}</ReactMarkdown>;
+  } else if (renderMarkdown) {
+    node = (
+      <ReactMarkdown
+        components={{
+          img: ({ src, alt }) => (
+            <img
+              loading="lazy"
+              src={src}
+              alt={alt}
+              onClick={() => toggleLightbox(src)}
+              style={{ cursor: 'pointer' }}
+            />
+          ),
+        }}
+      >
+        {text}
+      </ReactMarkdown>
+    );
   } else if (prettifyJson) {
     try {
       node = <pre>{JSON.stringify(JSON.parse(text), null, 2)}</pre>;
@@ -498,7 +492,6 @@ function EvalOutputCell({
     </div>
   );
 
-  // TODO(ian): output.prompt check for backwards compatibility, remove after 0.17.0
   const cellStyle: Record<string, string> = {};
   if (output.gradingResult?.comment === '!highlight') {
     cellStyle.backgroundColor = '#ffffeb';
@@ -523,7 +516,7 @@ function EvalOutputCell({
             </div>
             <CustomMetrics lookup={output.namedScores} />
             <span className="fail-reason">
-              {chunks[0]
+              {text
                 ?.trim()
                 .split('\n')
                 .map((line, index) => (
@@ -546,6 +539,11 @@ function EvalOutputCell({
       {comment}
       {detail}
       {actions}
+      {lightboxOpen && lightboxImage && (
+        <div className="lightbox" onClick={() => toggleLightbox()}>
+          <img src={lightboxImage} alt="Lightbox" />
+        </div>
+      )}
       <CommentDialog
         open={commentDialogOpen}
         contextText={output.text}
