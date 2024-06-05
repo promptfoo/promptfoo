@@ -103,6 +103,7 @@ const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'anthropic.claude-v2:1': BEDROCK_MODEL.CLAUDE_COMPLETION,
   'amazon.titan-text-lite-v1': BEDROCK_MODEL.TITAN_TEXT,
   'amazon.titan-text-express-v1': BEDROCK_MODEL.TITAN_TEXT,
+  'amazon.titan-text-premier-v1:0': BEDROCK_MODEL.TITAN_TEXT,
 };
 
 function getHandlerForModel(modelName: string) {
