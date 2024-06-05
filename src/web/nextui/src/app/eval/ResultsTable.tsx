@@ -34,14 +34,10 @@ import { useStore as useMainStore } from '@/app/eval/store';
 
 import type { CellContext, ColumnDef, VisibilityState } from '@tanstack/table-core';
 
-import {
-  EvaluateTableRow,
-  EvaluateTableOutput,
-  FilterMode,
-  EvaluateTable,
-} from './types';
+import { EvaluateTableRow, EvaluateTableOutput, FilterMode, EvaluateTable } from './types';
 
 import './ResultsTable.css';
+import { useShiftKey } from '../hooks/useShiftKey';
 
 function formatRowOutput(output: EvaluateTableOutput | string) {
   if (typeof output === 'string') {
@@ -199,6 +195,18 @@ function EvalOutputCell({
     setCommentDialogOpen(false);
   };
 
+  const handleToggleHighlight = () => {
+    let newCommentText;
+    if (commentText.startsWith('!highlight')) {
+      newCommentText = commentText.slice('!highlight'.length).trim();
+      onRating(undefined, undefined, newCommentText);
+    } else {
+      newCommentText = ('!highlight ' + commentText).trim();
+      onRating(undefined, undefined, newCommentText);
+    }
+    setCommentText(newCommentText);
+  };
+
   let text = typeof output.text === 'string' ? output.text : JSON.stringify(output.text);
   let node: React.ReactNode | undefined;
   let chunks: string[] = [];
@@ -337,6 +345,12 @@ function EvalOutputCell({
     }
   }, [onRating, output.score, output.gradingResult?.comment]);
 
+  const [copied, setCopied] = React.useState(false);
+  const handleCopy = React.useCallback(() => {
+    navigator.clipboard.writeText(output.text);
+    setCopied(true);
+  }, [output.text]);
+
   let tokenUsageDisplay;
   let latencyDisplay;
   let tokPerSecDisplay;
@@ -423,8 +437,27 @@ function EvalOutputCell({
     </div>
   ) : null;
 
+  const shiftKeyPressed = useShiftKey();
   const actions = (
     <div className="cell-actions">
+      {shiftKeyPressed && (
+        <>
+          <span className="action" onClick={handleCopy} onMouseDown={(e) => e.preventDefault()}>
+            <Tooltip title="Copy output to clipboard">
+              <span>{copied ? '✅' : '📋'}</span>
+            </Tooltip>
+          </span>
+          <span
+            className="action"
+            onClick={handleToggleHighlight}
+            onMouseDown={(e) => e.preventDefault()}
+          >
+            <Tooltip title="Toggle test highlight">
+              <span>🌟</span>
+            </Tooltip>
+          </span>
+        </>
+      )}
       {output.prompt && (
         <>
           <span className="action" onClick={handlePromptOpen}>
@@ -579,6 +612,7 @@ interface ResultsTableProps {
   searchText: string;
   showStats: boolean;
   onFailureFilterToggle: (columnId: string, checked: boolean) => void;
+  onSearchTextChange: (text: string) => void;
 }
 
 interface ExtendedEvaluateTableOutput extends EvaluateTableOutput {
@@ -599,6 +633,7 @@ function ResultsTable({
   searchText,
   showStats,
   onFailureFilterToggle,
+  onSearchTextChange,
 }: ResultsTableProps) {
   const { evalId: filePath, table, setTable } = useMainStore();
 
@@ -669,21 +704,30 @@ function ResultsTable({
           })),
         }))
         .filter((row) => {
-          const outputsPassFilter =
-            filterMode === 'failures'
-              ? row.outputs.some((output, idx) => {
-                  const columnId = `Prompt ${idx + 1}`;
-                  return (
-                    failureFilter[columnId] &&
-                    !output.pass &&
-                    (!columnVisibilityIsSet || columnVisibility[columnId])
-                  );
-                })
-              : filterMode === 'different'
-              ? !row.outputs.every((output) => output.text === row.outputs[0].text)
-              : true;
+          let outputsPassFilter = true;
+          if (filterMode === 'failures') {
+            outputsPassFilter = row.outputs.some((output, idx) => {
+              const columnId = `Prompt ${idx + 1}`;
+              return (
+                failureFilter[columnId] &&
+                !output.pass &&
+                (!columnVisibilityIsSet || columnVisibility[columnId])
+              );
+            });
+          } else if (filterMode === 'different') {
+            outputsPassFilter = !row.outputs.every((output) => output.text === row.outputs[0].text);
+          } else if (filterMode === 'highlights') {
+            console.log(row.outputs[0].text);
+            outputsPassFilter = row.outputs.some((output) =>
+              output.gradingResult?.comment?.startsWith('!highlight'),
+            );
+          }
 
-          const outputsMatchSearch = searchText
+          if (!outputsPassFilter) {
+            return false;
+          }
+
+          return searchText
             ? row.outputs.some((output) => {
                 const stringifiedOutput = `${output.text} ${Object.keys(output.namedScores)} ${
                   output.gradingResult?.reason || ''
@@ -691,14 +735,16 @@ function ResultsTable({
                 return searchRegex.test(stringifiedOutput);
               })
             : true;
-
-          return outputsPassFilter && outputsMatchSearch;
         }) as ExtendedEvaluateTableRow[];
     } catch (err) {
       console.error('Invalid regular expression:', (err as Error).message);
       return body as ExtendedEvaluateTableRow[];
     }
   }, [body, failureFilter, filterMode, searchText, columnVisibility, columnVisibilityIsSet]);
+
+  React.useEffect(() => {
+    setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+  }, [failureFilter, filterMode, searchText]);
 
   // TODO(ian): Switch this to use prompt.metrics field once most clients have updated.
   const numGoodTests = React.useMemo(
@@ -871,7 +917,10 @@ function ResultsTable({
                     </div>
                     {prompt.metrics?.namedScores &&
                     Object.keys(prompt.metrics.namedScores).length > 0 ? (
-                      <CustomMetrics lookup={prompt.metrics.namedScores} />
+                      <CustomMetrics
+                        lookup={prompt.metrics.namedScores}
+                        onSearchTextChange={onSearchTextChange}
+                      />
                     ) : null}
                     {/* TODO(ian): Remove backwards compatibility for prompt.provider added 12/26/23 */}
                   </div>
@@ -945,6 +994,7 @@ function ResultsTable({
     getOutput,
     getFirstOutput,
     handleRating,
+    onSearchTextChange,
   ]);
 
   const descriptionColumn = React.useMemo(() => {

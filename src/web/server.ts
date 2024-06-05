@@ -12,7 +12,7 @@ import compression from 'compression';
 import opener from 'opener';
 import { Server as SocketIOServer } from 'socket.io';
 import promptfoo, {
-  EvaluateTestSuite,
+  EvaluateTestSuiteWithEvaluateOptions,
   Job,
   Prompt,
   PromptWithMetadata,
@@ -43,7 +43,12 @@ const evalJobs = new Map<string, Job>();
 // Prompts cache
 let allPrompts: PromptWithMetadata[] | null = null;
 
-export async function startServer(port = 15500, apiBaseUrl = '', skipConfirmation = false, filterDescription?: string) {
+export async function startServer(
+  port = 15500,
+  apiBaseUrl = '',
+  skipConfirmation = false,
+  filterDescription?: string,
+) {
   const app = express();
 
   const staticDir = path.join(getDirectory(), 'web', 'nextui');
@@ -88,7 +93,7 @@ export async function startServer(port = 15500, apiBaseUrl = '', skipConfirmatio
   });
 
   app.post('/api/eval/job', (req, res) => {
-    const testSuite = req.body as EvaluateTestSuite;
+    const { evaluateOptions, ...testSuite } = req.body as EvaluateTestSuiteWithEvaluateOptions;
     const id = uuidv4();
     evalJobs.set(id, { status: 'in-progress', progress: 0, total: 0, result: null });
 
@@ -98,16 +103,16 @@ export async function startServer(port = 15500, apiBaseUrl = '', skipConfirmatio
           writeLatestResults: true,
           sharing: testSuite.sharing ?? true,
         }),
-        {
+        Object.assign({}, evaluateOptions, {
           eventSource: 'web',
-          progressCallback: (progress, total) => {
+          progressCallback: (progress: number, total: number) => {
             const job = evalJobs.get(id);
             invariant(job, 'Job not found');
             job.progress = progress;
             job.total = total;
             console.log(`[${id}] ${progress}/${total}`);
           },
-        },
+        }),
       )
       .then((result) => {
         const job = evalJobs.get(id);

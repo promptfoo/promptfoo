@@ -134,7 +134,7 @@ Then, view the results:
 npx promptfoo@latest view
 ```
 
-This will open a web viewer showing a side-by-side comparison of the models' performance.  It will look something like this (the exact appearance will vary based on your test cases and scoring mechanisms):
+This will open a web viewer showing a side-by-side comparison of the models' performance. It will look something like this (the exact appearance will vary based on your test cases and scoring mechanisms):
 
 ![phi vs llama](/img/docs/phi-vs-llama.png)
 

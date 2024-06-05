@@ -11,6 +11,7 @@ Next, edit the promptfoo configuration file to point to the Cohere provider.
 - `cohere:<model name>` - uses the specified Cohere model (e.g., `command`, `command-light`).
 
 The following models are confirmed supported. For an up-to-date list of supported models, see [Cohere Models](https://docs.cohere.com/docs/models).
+
 - command-light
 - command-light-nightly
 - command

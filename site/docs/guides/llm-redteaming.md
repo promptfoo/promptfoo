@@ -10,6 +10,7 @@ This guide shows you how to automatically generate adversarial tests specificall
 - Overreliance ([OWASP LLM09](https://genai.owasp.org/llmrisk/llm09-overreliance/))
 - Hijacking (when the LLM is used for unintended purposes)
 - Hallucination (when the LLM provides unfactual answers)
+- Personally Identifiable Information (PII) leaks (ensuring the model does not inadvertently disclose PII)
 - Safety risks from the [ML Commons Safety Working Group](https://arxiv.org/abs/2404.12241): violent crimes, non-violent crimes, sex crimes, child exploitation, specialized financial/legal/medical advice, privacy, intellectual property, indiscriminate weapons, hate, self-harm, sexual content.
 - Safety risks from the [HarmBench](https://www.harmbench.org/) framework: Cybercrime & Unauthorized Intrusion, Chemical & Biological Weapons, Illegal Drugs, Copyright Violations, Misinformation & Disinformation, Harassment & Bullying, Illegal Activities, Graphic & age-restricted content, Promotion of unsafe practices, Privacy violations & data exploitation.
 
@@ -19,11 +20,11 @@ The end result is a view that displays red team test results and vulnerabilities
 
 ## Prerequisites
 
-First, install make sure you’ve installed [Node 18 or later](https://nodejs.org/en/download/package-manager/).
+First, install [Node 18 or later](https://nodejs.org/en/download/package-manager/).
 
 Then create a new project for your red teaming needs:
 
-```
+```sh
 npx promptfoo@latest init my-redteam-project
 cd my-redteam-project
 ```
@@ -44,19 +45,19 @@ providers:
 
 Then create adversarial test cases:
 
-```yaml
+```sh
 npx promptfoo@latest generate redteam -w
 ```
 
 Run the eval:
 
-```yaml
+```sh
 npx promptfoo@latest eval
 ```
 
 And view the results:
 
-```yaml
+```sh
 npx promptfoo@latest view
 ```
 
@@ -225,7 +226,7 @@ For more information, see [Overriding the LLM grader](/docs/configuration/expect
 
 Now that you've configured everything, the next step is to generate the red teaming inputs. This is done by running the `promptfoo generate redteam` command:
 
-```
+```sh
 npx promptfoo@latest generate redteam -w
 ```
 
@@ -237,35 +238,36 @@ The adversarial tests include:
 - Jailbreaking ([OWASP LLM01](https://genai.owasp.org/llmrisk/llm01-prompt-injection/))
 - Excessive Agency ([OWASP LLM08](https://genai.owasp.org/llmrisk/llm08-excessive-agency/))
 - Overreliance ([OWASP LLM09](https://genai.owasp.org/llmrisk/llm09-overreliance/))
-- Hijacking (when the LLM is used for unintended purposes)
 - Hallucination (when the LLM provides unfactual answers)
+- Hijacking (when the LLM is used for unintended purposes)
+- PII leaks (ensuring the model does not inadvertently disclose PII)
 
 It also tests for a variety of harmful input and output scenarios from the [ML Commons Safety Working Group](https://arxiv.org/abs/2404.12241) and [HarmBench](https://www.harmbench.org/) framework:
 
 <details>
 <summary>View harmful categories</summary>
 
-- Violent crimes
-- Non-violent crimes
-- Sex crimes
-- Child exploitation
-- Specialized financial/legal/medical advice
-- Privacy
-- Intellectual property
-- Indiscriminate weapons
-- Hate
-- Self-harm
-- Sexual content
-- Cybercrime & unauthorized intrusion
 - Chemical & biological weapons
-- Illegal drugs
+- Child exploitation
 - Copyright violations
-- Misinformation & disinformation
-- Harassment & bullying
-- Illegal activities
+- Cybercrime & unauthorized intrusion
 - Graphic & age-restricted content
-- Promotion of unsafe practices
+- Harassment & bullying
+- Hate
+- Illegal activities
+- Illegal drugs
+- Indiscriminate weapons
+- Intellectual property
+- Misinformation & disinformation
+- Non-violent crimes
+- Privacy
 - Privacy violations & data exploitation
+- Promotion of unsafe practices
+- Self-harm
+- Sex crimes
+- Sexual content
+- Specialized financial/legal/medical advice
+- Violent crimes
 
 </details>
 
@@ -279,13 +281,14 @@ The following plugins are supported:
 
 | Plugin Name      | Description                                                                  |
 | ---------------- | ---------------------------------------------------------------------------- |
-| harmful          | Tests for the generation of harmful or offensive content.                    |
-| prompt-injection | Tests the model's susceptibility to prompt injection attacks.                |
-| jailbreak        | Tests if the model can be manipulated to bypass its safety mechanisms.       |
-| hijacking        | Tests the model's vulnerability to being used for unintended tasks.          |
-| hallucination    | Tests if the model generates false or misleading content.                    |
 | excessive-agency | Tests if the model exhibits too much autonomy or makes decisions on its own. |
+| hallucination    | Tests if the model generates false or misleading content.                    |
+| harmful          | Tests for the generation of harmful or offensive content.                    |
+| hijacking        | Tests the model's vulnerability to being used for unintended tasks.          |
+| jailbreak        | Tests if the model can be manipulated to bypass its safety mechanisms.       |
 | overreliance     | Tests for excessive trust in LLM output without oversight.                   |
+| pii              | Tests for inadvertent disclosure of personally identifiable information.     |
+| prompt-injection | Tests the model's susceptibility to prompt injection attacks.                |
 
 The adversarial test cases will be written to `promptfooconfig.yaml`.
 
@@ -293,7 +296,7 @@ The adversarial test cases will be written to `promptfooconfig.yaml`.
 
 Now that all the red team tests are ready, run the eval:
 
-```
+```sh
 npx promptfoo@latest eval
 ```
 

@@ -72,6 +72,8 @@ export interface EnvOverrides {
   VERTEX_REGION?: string;
   VERTEX_PUBLISHER?: string;
   MISTRAL_API_KEY?: string;
+  CLOUDFLARE_API_KEY?: string;
+  CLOUDFLARE_ACCOUNT_ID?: string;
 }
 
 export interface ProviderOptions {
@@ -622,7 +624,10 @@ export interface TestSuiteConfig {
   description?: string;
 
   // One or more LLM APIs to use, for example: openai:gpt-3.5-turbo, openai:gpt-4, localai:chat:vicuna
-  providers: ProviderId | ProviderFunction | (ProviderId | ProviderOptionsMap | ProviderOptions)[];
+  providers:
+    | ProviderId
+    | ProviderFunction
+    | (ProviderId | ProviderOptionsMap | ProviderOptions | ProviderFunction)[];
 
   // One or more prompt files to load
   prompts: FilePath | (FilePath | Prompt)[] | Record<FilePath, string>;
@@ -675,7 +680,11 @@ export type PromptFunction = (context: {
 export type EvaluateTestSuite = {
   prompts: (string | object | PromptFunction)[];
   writeLatestResults?: boolean;
-} & TestSuiteConfig;
+} & Omit<TestSuiteConfig, 'prompts'>;
+
+export type EvaluateTestSuiteWithEvaluateOptions = EvaluateTestSuite & {
+  evaluateOptions: EvaluateOptions;
+};
 
 export interface SharedResults {
   data: ResultsFile;
@@ -691,6 +700,7 @@ export interface ResultsFile {
 
 // File exported as --output option
 export interface OutputFile {
+  evalId: string | null;
   results: EvaluateSummary;
   config: Partial<UnifiedConfig>;
   shareableUrl: string | null;

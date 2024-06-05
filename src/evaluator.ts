@@ -219,7 +219,7 @@ export async function renderPrompt(
     );
     return langfuseResult;
   }
-  
+
   // Render prompt
   try {
     if (process.env.PROMPTFOO_DISABLE_JSON_AUTOESCAPE) {
@@ -682,9 +682,7 @@ class Evaluator {
         );
         concurrency = 1;
       } else if (usesStoreOutputAs) {
-        logger.info(
-          `Setting concurrency to 1 because storeOutputAs is used.`,
-        );
+        logger.info(`Setting concurrency to 1 because storeOutputAs is used.`);
         concurrency = 1;
       }
     }
@@ -800,7 +798,12 @@ class Evaluator {
     // Set up main progress bars
     let multibar: MultiBar | undefined;
     let multiProgressBars: SingleBar[] = [];
+    const originalProgressCallback = this.options.progressCallback;
     this.options.progressCallback = (completed, total, index, evalStep) => {
+      if (originalProgressCallback) {
+        originalProgressCallback(completed, total, index, evalStep);
+      }
+
       if (multibar && evalStep) {
         const threadIndex = index % concurrency;
         const progressbar = multiProgressBars[threadIndex];

@@ -361,6 +361,16 @@ Here are some of the available scripts:
 - `db:generate`: Generate new db migrations (and create the db if it doesn't already exist). Note that after generating a new migration, you'll have to `npm i` to copy the migrations into `dist/`.
 - `db:migrate`: Run existing db migrations (and create the db if it doesn't already exist)
 
+To run the CLI during development you can run a command like: `npm run local -- eval --config $(readlink -f ./examples/cloudflare-ai/chat_config.yaml)`, where any parts of the command after `--` are passed through to our CLI entrypoint. Since the Next dev server isn't supported in this mode, see the instructions above for running the web server.
+
 # [» View full documentation «](https://promptfoo.dev/docs/intro)
 
 [providers-docs]: https://promptfoo.dev/docs/providers
+
+### Adding a New Provider
+
+1. Create an implementation in `src/providers/SOME_PROVIDER_FILE`
+2. Update `loadApiProvider` in `src/providers.ts` to load your provider via string
+3. Add test cases in `test/providers.test.ts`
+   1. Test the actual provider implementation
+   2. Test loading the provider via a `loadApiProvider` test

@@ -1,24 +1,26 @@
 /** @type {import('ts-jest/dist/types').InitialOptionsTsJest} */
 import type { Config } from 'jest';
+import type { TsJestTransformerOptions } from 'ts-jest';
+
+const tsJestConfig: TsJestTransformerOptions & Record<string, unknown> = { useESM: true };
 
 const config: Config = {
-  transform: {
-    '\\.[jt]sx?$': 'ts-jest',
-  },
-  globals: {
-    'ts-jest': {
-      useESM: true,
-    },
-  },
+  collectCoverage: true,
+  coverageDirectory: '.coverage',
+  coverageProvider: 'v8',
+  extensionsToTreatAsEsm: ['.ts'],
   /*
   moduleNameMapper: {
     '(.+)\\.js': '$1',
   },
   */
-  extensionsToTreatAsEsm: ['.ts'],
+  modulePathIgnorePatterns: ['<rootDir>/examples', '<rootDir>/node_modules', '<rootDir>/dist'],
   setupFiles: ['<rootDir>/.jest/setEnvVars.js'],
   testPathIgnorePatterns: ['<rootDir>/examples', '<rootDir>/node_modules', '<rootDir>/dist'],
-  modulePathIgnorePatterns: ['<rootDir>/examples', '<rootDir>/node_modules', '<rootDir>/dist'],
+  transform: {
+    '^.+\\.js$': 'babel-jest',
+    '^.+\\.m?[tj]sx?$': ['ts-jest', tsJestConfig],
+  },
 };
 
 export default config;

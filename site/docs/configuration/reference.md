@@ -198,11 +198,11 @@ Also, see [this table here](/docs/configuration/scenarios#configuration) for des
 
 ### Prompt
 
-A `Prompt` is what it sounds like.  When specifying a prompt object in a static config, it should look like this:
+A `Prompt` is what it sounds like. When specifying a prompt object in a static config, it should look like this:
 
 ```typescript
 interface Prompt {
-  id: string;    // Path, usually prefixed with file://
+  id: string; // Path, usually prefixed with file://
   label: string; // How to display it in outputs and web UI
 }
 ```
@@ -212,9 +212,9 @@ When passing a `Prompt` object directly to the Javascript library:
 ```typescript
 interface Prompt {
   // The actual prompt
-  raw: string;  
+  raw: string;
   // How it should appear in the UI
-  label: string;  
+  label: string;
   // A function to generate a prompt on a per-input basis. Overrides the raw prompt.
   function?: (context: {
     vars: Record<string, string | object>;

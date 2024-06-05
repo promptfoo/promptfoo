@@ -76,8 +76,8 @@ export default function ResultsView({
 
   const [searchText, setSearchText] = React.useState('');
   const [debouncedSearchText] = useDebounce(searchText, 1000);
-  const handleSearchTextChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchText(event.target.value);
+  const handleSearchTextChange = (text: string) => {
+    setSearchText(text);
   };
 
   const [failureFilter, setFailureFilter] = React.useState<{ [key: string]: boolean }>({});
@@ -314,6 +314,7 @@ export default function ResultsView({
                 <MenuItem value="all">Show all results</MenuItem>
                 <MenuItem value="failures">Show failures only</MenuItem>
                 <MenuItem value="different">Show different only</MenuItem>
+                <MenuItem value="highlights">Show highlights only</MenuItem>
               </Select>
             </FormControl>
           </Box>
@@ -324,7 +325,7 @@ export default function ResultsView({
               label="Search"
               placeholder="Text or regex"
               value={searchText}
-              onChange={handleSearchTextChange}
+              onChange={(e) => handleSearchTextChange(e.target.value)}
             />
           </Box>
           <Box flexGrow={1} />
@@ -410,6 +411,7 @@ export default function ResultsView({
         failureFilter={failureFilter}
         searchText={debouncedSearchText}
         onFailureFilterToggle={handleFailureFilterToggle}
+        onSearchTextChange={handleSearchTextChange}
       />
       <ConfigModal open={configModalOpen} onClose={() => setConfigModalOpen(false)} />
       <ShareModal

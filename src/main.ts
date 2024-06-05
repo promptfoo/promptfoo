@@ -614,7 +614,10 @@ async function main() {
     .option('-a, --assertions <path>', 'Path to assertions file')
     .option('--model-outputs <path>', 'Path to JSON containing list of LLM output strings')
     .option('-t, --tests <path>', 'Path to CSV with test cases')
-    .option('-o, --output <paths...>', 'Path to output file (csv, txt, json, yaml, yml, html)')
+    .option(
+      '-o, --output <paths...>',
+      'Path to output file (csv, txt, json, yaml, yml, html), default is no output file',
+    )
     .option(
       '-j, --max-concurrency <number>',
       'Maximum number of concurrent API calls',
@@ -781,15 +784,26 @@ async function main() {
             const rowsLeft = summary.table.body.length - 25;
             logger.info(`... ${rowsLeft} more row${rowsLeft === 1 ? '' : 's'} not shown ...\n`);
           }
+        } else if (summary.stats.failures !== 0) {
+          logger.debug(
+            `At least one evaluation failure occurred. This might be caused by the underlying call to the provider, or a test failure. Context: \n${JSON.stringify(
+              summary.results,
+            )}`,
+          );
+        }
+
+        let evalId: string | null = null;
+        if (cmdObj.write) {
+          evalId = await writeResultsToDatabase(summary, config);
         }
 
         const { outputPath } = config;
         if (outputPath) {
           // Write output to file
           if (typeof outputPath === 'string') {
-            await writeOutput(outputPath, summary, config, shareableUrl);
+            await writeOutput(outputPath, evalId, summary, config, shareableUrl);
           } else if (Array.isArray(outputPath)) {
-            await writeMultipleOutputs(outputPath, summary, config, shareableUrl);
+            await writeMultipleOutputs(outputPath, evalId, summary, config, shareableUrl);
           }
           logger.info(chalk.yellow(`Writing output to ${outputPath}`));
         }
@@ -802,8 +816,6 @@ async function main() {
         if (!cmdObj.write) {
           logger.info(`${chalk.green('✔')} Evaluation complete`);
         } else {
-          await writeResultsToDatabase(summary, config);
-
           if (shareableUrl) {
             logger.info(`${chalk.green('✔')} Evaluation complete: ${shareableUrl}`);
           } else {

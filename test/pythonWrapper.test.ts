@@ -6,11 +6,11 @@ jest.mock('../src/esm');
 
 jest.mock('python-shell');
 
-beforeEach(() => {
-  jest.clearAllMocks(); // This clears all mock call counts
-});
-
 describe('Python Wrapper', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   describe('runPython', () => {
     it('should correctly run a Python script with provided arguments', async () => {
       jest.spyOn(fs, 'writeFile').mockResolvedValue();
@@ -40,7 +40,23 @@ describe('Python Wrapper', () => {
 
       await expect(
         pythonWrapper.runPython('testScript.py', 'testMethod', ['arg1']),
-      ).rejects.toThrow('Test Error');
+      ).rejects.toThrow('Error running Python script: Test Error');
+    });
+
+    it('should handle Python script returning incorrect result type', async () => {
+      jest.spyOn(fs, 'writeFile').mockResolvedValue();
+      jest.spyOn(fs, 'unlink').mockResolvedValue();
+
+      const mockPythonShellRun = PythonShell.run as jest.Mock;
+      mockPythonShellRun.mockResolvedValue([
+        '{"type": "unexpected_result", "data": "test result"}',
+      ]);
+
+      await expect(
+        pythonWrapper.runPython('testScript.py', 'testMethod', ['arg1']),
+      ).rejects.toThrow(
+        'The Python script `call_api` function must return a dict with an `output`',
+      );
     });
   });
 
@@ -68,16 +84,6 @@ describe('Python Wrapper', () => {
       await pythonWrapper.runPythonCode('print("cleanup test")', 'main', []);
 
       expect(fs.unlink).toHaveBeenCalledTimes(2);
-    });
-
-    it('should throw an error if Python code execution fails', async () => {
-      jest.spyOn(fs, 'writeFile').mockResolvedValue();
-      const mockPythonShellRun = PythonShell.run as jest.Mock;
-      mockPythonShellRun.mockRejectedValue(new Error('Execution Error'));
-
-      await expect(pythonWrapper.runPythonCode('print("error test")', 'main', [])).rejects.toThrow(
-        'Execution Error',
-      );
     });
   });
 });

@@ -477,7 +477,7 @@ describe('evaluator', () => {
     expect(summary.stats.failures).toBe(0);
     expect(summary.results[0].response?.output).toBe(123);
   });
-  
+
   test('evaluate with provider transform', async () => {
     const mockApiProviderWithTransform: ApiProvider = {
       id: jest.fn().mockReturnValue('test-provider-transform'),

@@ -1,7 +1,13 @@
 import chalk from 'chalk';
 import { Command } from 'commander';
 
-import { getEvalFromId, getPromptFromHash, getDatasetFromHash, printBorder, setupEnv } from '../util';
+import {
+  getEvalFromId,
+  getPromptFromHash,
+  getDatasetFromHash,
+  printBorder,
+  setupEnv,
+} from '../util';
 import { generateTable, wrapTable } from '../table';
 import logger from '../logger';
 import telemetry from '../telemetry';

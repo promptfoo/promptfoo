@@ -166,8 +166,9 @@ async function runRedteamConvo(
 
     redteamHistory.push({
       role: 'user',
-      content: `LANGUAGE MODEL OUTPUT: ${targetResponse}\n\nOBJECTIVE: ${goal}\n\nSCORE: ${score} ${isOnTopic ? '' : '(your prompt was off-topic)'
-        }`,
+      content: `LANGUAGE MODEL OUTPUT: ${targetResponse}\n\nOBJECTIVE: ${goal}\n\nSCORE: ${score} ${
+        isOnTopic ? '' : '(your prompt was off-topic)'
+      }`,
     });
   }
 

@@ -44,6 +44,7 @@ The schema of the `output.json` file is defined [here](https://github.com/prompt
 
 ```typescript
 interface OutputFile {
+  evalId?: string;
   results: EvaluateSummary;
   config: Partial<UnifiedConfig>;
   shareableUrl: string | null;

@@ -7,3 +7,7 @@ src/web/nextui/.next
 
 site/.docusaurus
 site/build
+
+examples/multiple-turn-conversation/prompt.json
+examples/openai-chat-history/prompt.json
+examples/simple-test/output.html
