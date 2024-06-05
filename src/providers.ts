@@ -85,7 +85,7 @@ export async function loadApiProviders(
           return loadApiProvider(provider, { basePath, env });
         } else if (typeof provider === 'function') {
           return {
-            id: () => `custom-function-${idx}`,
+            id: provider.label ? () => provider.label! : () => `custom-function-${idx}`,
             callApi: provider,
           };
         } else if (provider.id) {
@@ -382,6 +382,7 @@ export async function loadApiProvider(
     const modulePath = path.join(basePath || process.cwd(), providerPath);
     const CustomApiProvider = await importModule(modulePath);
     ret = new CustomApiProvider(options);
+    ret.label = ret.label || options.label;
   }
 
   ret.transform = options.transform;

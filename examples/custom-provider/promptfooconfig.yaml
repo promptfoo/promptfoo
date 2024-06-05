@@ -1,5 +1,10 @@
-prompts: [prompts.txt]
-providers: [customProvider.js]
+prompts:
+  - prompts.txt
+
+providers:
+  - id: customProvider.js
+    label: 'My custom provider'
+
 tests: vars.csv
 # To compare two of the same provider, you can do the following:
 #
