@@ -835,9 +835,7 @@
           }
         }
       ],
-      "vars": [
-        "body"
-      ]
+      "vars": ["body"]
     },
     "body": [
       {
@@ -1035,9 +1033,7 @@
           "assert": [],
           "options": {}
         },
-        "vars": [
-          "Hello world"
-        ]
+        "vars": ["Hello world"]
       },
       {
         "outputs": [
@@ -1334,9 +1330,7 @@
           ],
           "options": {}
         },
-        "vars": [
-          "I'm hungry"
-        ]
+        "vars": ["I'm hungry"]
       }
     ]
   }

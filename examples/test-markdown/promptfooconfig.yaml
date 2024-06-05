@@ -2,7 +2,7 @@
 description: 'Markdown test'
 
 prompts:
-  - "{{markdown}}"
+  - '{{markdown}}'
 
 providers:
   # Just repeats the markdown back to us
