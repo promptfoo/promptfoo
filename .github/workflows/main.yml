@@ -56,7 +56,7 @@ jobs:
 
   style-check:
     name: Style Check
-    runs-on: ubuntu-latest  # Specify the OS you want to use
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
