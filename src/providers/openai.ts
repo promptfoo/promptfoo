@@ -489,7 +489,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       );
 
       // Handle function tool callbacks
-      const functionCalls = message.function_call ? [message.function_call] || message.tool_calls;
+      const functionCalls = message.function_call ? [message.function_call] : message.tool_calls;
       if (functionCalls && this.config.functionToolCallbacks) {
         for (const functionCall of functionCalls) {
           const functionName = functionCall.name;
