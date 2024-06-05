@@ -614,7 +614,10 @@ async function main() {
     .option('-a, --assertions <path>', 'Path to assertions file')
     .option('--model-outputs <path>', 'Path to JSON containing list of LLM output strings')
     .option('-t, --tests <path>', 'Path to CSV with test cases')
-    .option('-o, --output <paths...>', 'Path to output file (csv, txt, json, yaml, yml, html), default is no output file')
+    .option(
+      '-o, --output <paths...>',
+      'Path to output file (csv, txt, json, yaml, yml, html), default is no output file',
+    )
     .option(
       '-j, --max-concurrency <number>',
       'Maximum number of concurrent API calls',
@@ -789,7 +792,7 @@ async function main() {
           );
         }
 
-        let evalId: string | null = null
+        let evalId: string | null = null;
         if (cmdObj.write) {
           evalId = await writeResultsToDatabase(summary, config);
         }

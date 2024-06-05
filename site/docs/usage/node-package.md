@@ -53,31 +53,31 @@ type AssertionFunction = (
 ) => Promise<GradingResult>;
 
 interface GradingResult {
-  // Whether the test passed or failed
-  pass: boolean;
+// Whether the test passed or failed
+pass: boolean;
 
-  // Test score, typically between 0 and 1
-  score: number;
+// Test score, typically between 0 and 1
+score: number;
 
-  // Plain text reason for the result
-  reason: string;
+// Plain text reason for the result
+reason: string;
 
-  // Map of labeled metrics to values
-  namedScores?: Record<string, number>;
+// Map of labeled metrics to values
+namedScores?: Record<string, number>;
 
-  // Record of tokens usage for this assertion
-  tokensUsed?: Partial<{
-    total: number;
-    prompt: number;
-    completion: number;
-    cached?: number;
-  }>;
+// Record of tokens usage for this assertion
+tokensUsed?: Partial<{
+total: number;
+prompt: number;
+completion: number;
+cached?: number;
+}>;
 
-  // List of results for each component of the assertion
-  componentResults?: GradingResult[];
+// List of results for each component of the assertion
+componentResults?: GradingResult[];
 
-  // The assertion that was evaluated
-  assertion: Assertion | null;
+// The assertion that was evaluated
+assertion: Assertion | null;
 }
 
 ````

@@ -1,21 +1,22 @@
-description: "HTTP provider test"
+description: 'HTTP provider test'
 
 prompts:
-  - "Write a tweet about {{topic}}"
-  - "Write a very concise, funny tweet about {{topic}}"
+  - 'Write a tweet about {{topic}}'
+  - 'Write a very concise, funny tweet about {{topic}}'
 
 providers:
   - id: https://webhook.site/3d47d2dd-d450-4869-b80d-41862e577e45
     config:
-      method: "POST"
+      method: 'POST'
       headers:
-        "Content-Type": "application/json"
+        'Content-Type': 'application/json'
       body:
-        "prompt": "{{prompt}}"
-        "model": "{{model}}"
+        'prompt': '{{prompt}}'
+        'model':
+          '{{model}}'
           #
       # Parse OpenAI response
-      responseParser: "json.choices[0].message.content"
+      responseParser: 'json.choices[0].message.content'
 
 tests:
   - vars:

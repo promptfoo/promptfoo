@@ -3,5 +3,5 @@ providers: [openai:chat:gpt-4-vision-preview]
 
 tests:
   - assert:
-    - type: contains
-      value: 'boardwalk'
+      - type: contains
+        value: 'boardwalk'

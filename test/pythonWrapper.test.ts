@@ -38,9 +38,9 @@ describe('Python Wrapper', () => {
       const mockPythonShellRun = PythonShell.run as jest.Mock;
       mockPythonShellRun.mockRejectedValue(new Error('Test Error'));
 
-      await expect(pythonWrapper.runPython('testScript.py', 'testMethod', ['arg1'])).rejects.toThrow(
-        'Error running Python script: Test Error',
-      );
+      await expect(
+        pythonWrapper.runPython('testScript.py', 'testMethod', ['arg1']),
+      ).rejects.toThrow('Error running Python script: Test Error');
     });
 
     it('should handle Python script returning incorrect result type', async () => {

@@ -13,7 +13,6 @@ export CLOUDFLARE_API_KEY=YOUR_API_KEY_HERE
 
 The Cloudflare account ID is not secret and therefore it is safe to put it in your `promptfoo` configuration file. The Cloudflare API key is secret, so while you can provide it in the config, this is **HIGHLY NOT RECOMMENDED** as it might lead to abuse. See below for an example safe configuration:
 
-
 ```yaml
 prompts:
   - Tell me a really funny joke about {{topic}}. The joke should contain the word {{topic}}
@@ -33,7 +32,7 @@ tests:
       topic: birds
     assert:
       - type: icontains
-        value: "{{topic}}"
+        value: '{{topic}}'
 ```
 
 In addition to `apiKeyEnvar` allowed environment variable redirection for the `CLOUDFLARE_API_KEY` value, the `accountIdEnvar` can be used to similarly redirect to a value for the `CLOUDFLARE_ACCOUNT_ID`.

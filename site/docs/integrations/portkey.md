@@ -30,7 +30,7 @@ Note that promptfoo does not follow the temperature, model, and other parameters
 
 ## Using Portkey gateway
 
-The Portkey AI gateway is directly supported by promptfoo.  See also [portkey's documentation on integrating promptfoo](https://portkey.ai/docs/welcome/integration-guides/promptfoo).
+The Portkey AI gateway is directly supported by promptfoo. See also [portkey's documentation on integrating promptfoo](https://portkey.ai/docs/welcome/integration-guides/promptfoo).
 
 Example:
 

@@ -93,7 +93,9 @@ export class OpenAiGenericProvider implements ApiProvider {
   }
 
   id(): string {
-    return this.config.apiHost || this.config.apiBaseUrl ? this.modelName : `openai:${this.modelName}`;
+    return this.config.apiHost || this.config.apiBaseUrl
+      ? this.modelName
+      : `openai:${this.modelName}`;
   }
 
   toString(): string {

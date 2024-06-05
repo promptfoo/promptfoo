@@ -104,7 +104,7 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
   });
 
   const unifiedConfig = { ...testSuite, prompts: constructedTestSuite.prompts };
-  let evalId: string | null = null
+  let evalId: string | null = null;
   if (testSuite.writeLatestResults) {
     await migrateResultsFromFileSystemToDatabase();
     evalId = await writeResultsToDatabase(ret, unifiedConfig);

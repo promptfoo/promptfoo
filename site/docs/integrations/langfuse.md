@@ -26,4 +26,4 @@ To reference prompts in Langfuse:
          # ...
    ```
 
-Variables from your promptfoo test cases will be automatically plugged into the Langfuse prompt as variables. 
+Variables from your promptfoo test cases will be automatically plugged into the Langfuse prompt as variables.

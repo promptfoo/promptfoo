@@ -1,5 +1,5 @@
-import {TestSuite} from "../../types";
-import {filterFailingTests} from "./filterFailingTests";
+import { TestSuite } from '../../types';
+import { filterFailingTests } from './filterFailingTests';
 
 interface Args {
   firstN?: string;
@@ -20,7 +20,7 @@ export async function filterTests(testSuite: TestSuite, args: Args): Promise<Tes
     return tests;
   }
 
-  const {firstN, pattern, failing} = args;
+  const { firstN, pattern, failing } = args;
   let newTests: NonNullable<Tests>;
 
   if (failing) {
@@ -29,7 +29,7 @@ export async function filterTests(testSuite: TestSuite, args: Args): Promise<Tes
     newTests = [...tests];
   }
 
-  if (pattern)  {
+  if (pattern) {
     newTests = newTests.filter((test) => test.description && test.description.match(pattern));
   }
 

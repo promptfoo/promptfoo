@@ -64,7 +64,9 @@ describe('filterFailingTests', () => {
   });
 
   it('returns empty array when no failing tests', async () => {
-    (readOutput as jest.Mock).mockResolvedValue({ results: { version: 2, results: [{ success: true }] }});
+    (readOutput as jest.Mock).mockResolvedValue({
+      results: { version: 2, results: [{ success: true }] },
+    });
 
     const result = await filterFailingTests(testSuite, outputPath);
 

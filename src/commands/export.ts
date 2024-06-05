@@ -34,9 +34,7 @@ export function exportCommand(program: Command) {
         const jsonData = JSON.stringify(result[0], null, 2);
         if (cmdObj.output) {
           fs.writeFileSync(cmdObj.output, jsonData);
-          logger.info(
-            `Eval with ID ${evalId} has been successfully exported to ${cmdObj.output}.`,
-          );
+          logger.info(`Eval with ID ${evalId} has been successfully exported to ${cmdObj.output}.`);
         } else {
           console.log(jsonData);
         }
