@@ -22,4 +22,4 @@ tests:
       topic: birds
     assert:
       - type: icontains
-        value: "{{topic}}"
+        value: '{{topic}}'

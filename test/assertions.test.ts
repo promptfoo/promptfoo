@@ -591,7 +591,7 @@ describe('runAssertion', () => {
   });
 
   it('should fail when the equality assertion with object fails', async () => {
-    const output = { key: "not value" };
+    const output = { key: 'not value' };
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
@@ -601,7 +601,9 @@ describe('runAssertion', () => {
       output,
     });
     expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe(`Expected output \"{\"key\":\"value\"}\" to equal \"{\"key\":\"not value\"}\"`);
+    expect(result.reason).toBe(
+      `Expected output \"{\"key\":\"value\"}\" to equal \"{\"key\":\"not value\"}\"`,
+    );
   });
 
   it('should pass when the equality assertion with object passes with external json', async () => {
@@ -610,7 +612,7 @@ describe('runAssertion', () => {
       value: 'file:///output.json',
     };
 
-    (fs.readFileSync as jest.Mock).mockReturnValue(JSON.stringify({"key": "value"}));
+    (fs.readFileSync as jest.Mock).mockReturnValue(JSON.stringify({ key: 'value' }));
 
     const output = '{"key": "value"}';
 
@@ -632,7 +634,7 @@ describe('runAssertion', () => {
       value: 'file:///output.json',
     };
 
-    (fs.readFileSync as jest.Mock).mockReturnValue(JSON.stringify({"key": "value"}));
+    (fs.readFileSync as jest.Mock).mockReturnValue(JSON.stringify({ key: 'value' }));
 
     const output = '{"key": "not value"}';
 
@@ -645,7 +647,9 @@ describe('runAssertion', () => {
     });
     expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve('/output.json'), 'utf8');
     expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe(`Expected output \"{\"key\":\"value\"}\" to equal \"{\"key\": \"not value\"}\"`);
+    expect(result.reason).toBe(
+      `Expected output \"{\"key\":\"value\"}\" to equal \"{\"key\": \"not value\"}\"`,
+    );
   });
 
   it('should pass when the is-json assertion passes', async () => {
@@ -2028,7 +2032,11 @@ describe('runAssertion', () => {
 
   it('should handle when python file assertions throw an error', async () => {
     const output = 'Expected output';
-    const spy = jest.spyOn(pythonWrapper, 'runPython').mockRejectedValue(new Error('The Python script `call_api` function must return a dict with an `output`'));
+    const spy = jest
+      .spyOn(pythonWrapper, 'runPython')
+      .mockRejectedValue(
+        new Error('The Python script `call_api` function must return a dict with an `output`'),
+      );
     const fileAssertion: Assertion = {
       type: 'python',
       value: 'file:///path/to/assert.py',
@@ -2044,14 +2052,13 @@ describe('runAssertion', () => {
     expect(result).toEqual({
       assertion: {
         type: 'python',
-        value: "file:///path/to/assert.py"
+        value: 'file:///path/to/assert.py',
       },
       pass: false,
-      reason: "The Python script `call_api` function must return a dict with an `output`",
+      reason: 'The Python script `call_api` function must return a dict with an `output`',
       score: 0,
     });
   });
-
 
   describe('latency assertion', () => {
     it('should pass when the latency assertion passes', async () => {

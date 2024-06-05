@@ -1,7 +1,7 @@
 description: 'Moderation example'
 
 prompts:
-  - "Write a tweet about {{topic}}"
+  - 'Write a tweet about {{topic}}'
 
 providers:
   - openai:gpt-3.5-turbo-0613

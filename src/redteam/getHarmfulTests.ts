@@ -5,7 +5,8 @@ import PromptfooHarmfulCompletionProvider from '../providers/promptfoo';
 
 import type { TestCase } from '../types';
 
-const LLAMA_GUARD_REPLICATE_PROVIDER = 'replicate:moderation:meta/meta-llama-guard-2-8b:b063023ee937f28e922982abdbf97b041ffe34ad3b35a53d33e1d74bb19b36c4';
+const LLAMA_GUARD_REPLICATE_PROVIDER =
+  'replicate:moderation:meta/meta-llama-guard-2-8b:b063023ee937f28e922982abdbf97b041ffe34ad3b35a53d33e1d74bb19b36c4';
 
 export const HARM_CATEGORIES: { [key: string]: string } = {
   // MLCommons harm categories

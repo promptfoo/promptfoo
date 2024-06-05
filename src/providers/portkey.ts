@@ -38,7 +38,10 @@ export class PortkeyChatCompletionProvider extends OpenAiChatCompletionProvider 
       ...providerOptions,
       config: {
         ...providerOptions.config,
-        apiBaseUrl: process.env.PORTKEY_API_BASE_URL || providerOptions.config?.portkeyApiBaseUrl || 'https://api.portkey.ai/v1',
+        apiBaseUrl:
+          process.env.PORTKEY_API_BASE_URL ||
+          providerOptions.config?.portkeyApiBaseUrl ||
+          'https://api.portkey.ai/v1',
         headers,
       },
     });

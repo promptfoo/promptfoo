@@ -1,6 +1,6 @@
-import {TestCase, TestSuite} from "../../../src/types";
+import { TestCase, TestSuite } from '../../../src/types';
 
-import {filterTests} from '../../../src/commands/eval/filterTests';
+import { filterTests } from '../../../src/commands/eval/filterTests';
 
 describe('filterTests', () => {
   const testNoDescription = {};
@@ -38,8 +38,9 @@ describe('filterTests', () => {
     });
 
     it('throws an exception when firstN is not a number', async () => {
-      await expect(() => filterTests(testSuite, { firstN: 'NOPE' }))
-        .rejects.toEqual(new Error('firstN must be a number, got: NOPE'));
+      await expect(() => filterTests(testSuite, { firstN: 'NOPE' })).rejects.toEqual(
+        new Error('firstN must be a number, got: NOPE'),
+      );
     });
   });
 

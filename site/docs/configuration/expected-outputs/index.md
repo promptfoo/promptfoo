@@ -81,13 +81,13 @@ tests:
 
 ## Assertion Set properties
 
-| Property     | Type               | Required | Description                                                                                                           |
-| ------------ | ------------------ | -------- | --------------------------------------------------------------------------------------------------------------------- |
-| type         | string             | Yes      | Must be assert-set                                                                                                    |
-| assert       | array of asserts   | Yes      | Assertions to be run for the set                                                                                      |
-| threshold    | number             | No       | Success threshold for the assert-set. Ex. 1 out of 4 equal weights assertions need to pass. Threshold should be 0.25  |
-| weight       | number             | No       | How heavily to weigh the assertion set within test assertions. Defaults to 1.0                                        |
-| metric       | string             | No       | Metric name for this assertion set within the test                                                                    |
+| Property  | Type             | Required | Description                                                                                                          |
+| --------- | ---------------- | -------- | -------------------------------------------------------------------------------------------------------------------- |
+| type      | string           | Yes      | Must be assert-set                                                                                                   |
+| assert    | array of asserts | Yes      | Assertions to be run for the set                                                                                     |
+| threshold | number           | No       | Success threshold for the assert-set. Ex. 1 out of 4 equal weights assertions need to pass. Threshold should be 0.25 |
+| weight    | number           | No       | How heavily to weigh the assertion set within test assertions. Defaults to 1.0                                       |
+| metric    | string           | No       | Metric name for this assertion set within the test                                                                   |
 
 ## Assertion types
 

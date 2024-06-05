@@ -3,5 +3,5 @@ providers: [anthropic:messages:claude-3-haiku-20240307]
 
 tests:
   - assert:
-    - type: contains
-      value: 'New York City'
+      - type: contains
+        value: 'New York City'

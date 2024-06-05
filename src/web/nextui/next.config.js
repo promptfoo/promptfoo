@@ -1,4 +1,6 @@
-const outputType = process.env.NEXT_PUBLIC_PROMPTFOO_BUILD_STANDALONE_SERVER ? 'standalone' : 'export';
+const outputType = process.env.NEXT_PUBLIC_PROMPTFOO_BUILD_STANDALONE_SERVER
+  ? 'standalone'
+  : 'export';
 console.log('**************************************************');
 console.log(`Building next.js in ${outputType} mode`);
 console.log('**************************************************');

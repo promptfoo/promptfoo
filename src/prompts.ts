@@ -123,16 +123,25 @@ export async function readPrompts(
       let rawPath: string;
       if (typeof pathOrGlob === 'object') {
         // Parse prompt config object {id, label}
-        invariant(pathOrGlob.label, `Prompt object requires label, but got ${JSON.stringify(pathOrGlob)}`);
+        invariant(
+          pathOrGlob.label,
+          `Prompt object requires label, but got ${JSON.stringify(pathOrGlob)}`,
+        );
         label = pathOrGlob.label;
-        invariant(pathOrGlob.id, `Prompt object requires id, but got ${JSON.stringify(pathOrGlob)}`);
+        invariant(
+          pathOrGlob.id,
+          `Prompt object requires id, but got ${JSON.stringify(pathOrGlob)}`,
+        );
         rawPath = pathOrGlob.id;
         inputType = PromptInputType.NAMED;
       } else {
         label = pathOrGlob;
         rawPath = pathOrGlob;
       }
-      invariant(typeof rawPath === 'string', `Prompt path must be a string, but got ${JSON.stringify(rawPath)}`);
+      invariant(
+        typeof rawPath === 'string',
+        `Prompt path must be a string, but got ${JSON.stringify(rawPath)}`,
+      );
       if (rawPath.startsWith('file://')) {
         rawPath = rawPath.slice('file://'.length);
         // This path is explicitly marked as a file, ensure that it's not used as a raw prompt.
@@ -144,9 +153,7 @@ export async function readPrompts(
         windowsPathsNoEscape: true,
       });
       logger.debug(
-        `Expanded prompt ${rawPath} to ${resolvedPath} and then to ${JSON.stringify(
-          globbedPaths,
-        )}`,
+        `Expanded prompt ${rawPath} to ${resolvedPath} and then to ${JSON.stringify(globbedPaths)}`,
       );
       if (globbedPaths.length > 0) {
         return globbedPaths.map((globbedPath) => ({ raw: rawPath, resolved: globbedPath }));

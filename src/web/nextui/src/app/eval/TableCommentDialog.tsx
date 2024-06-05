@@ -28,9 +28,7 @@ const CommentDialog: React.FC<CommentDialogProps> = ({
   <Dialog open={open} onClose={onClose} fullWidth={true} maxWidth="sm">
     <DialogTitle>Edit Comment</DialogTitle>
     <DialogContent>
-      <Box sx={{ backgroundColor: '#f0f0f0', padding: 2, marginBottom: 2 }}>
-        {contextText}
-      </Box>
+      <Box sx={{ backgroundColor: '#f0f0f0', padding: 2, marginBottom: 2 }}>{contextText}</Box>
       <TextField
         autoFocus
         margin="dense"
