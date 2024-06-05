@@ -9,12 +9,16 @@ import promptfoo from '@/../../../index';
 import { IS_RUNNING_LOCALLY, USE_SUPABASE } from '@/constants';
 import { createJob, createResult, updateJob } from '@/database';
 
-import type { EvaluateTestSuite } from '@/../../../types';
+import type { EvaluateOptions, EvaluateTestSuite } from '@/../../../types';
 import evalJobs from './evalJobsStore';
 
 export const dynamic = IS_RUNNING_LOCALLY ? 'auto' : 'force-dynamic';
 
-async function runWithDatabase(testSuite: EvaluateTestSuite) {
+interface EvaluateTestSuiteWithEvaluateOptions extends EvaluateTestSuite {
+  evaluateOptions?: EvaluateOptions
+}
+
+async function runWithDatabase(testSuite: EvaluateTestSuiteWithEvaluateOptions) {
   const supabase = createRouteHandlerClient({ cookies });
 
   const job = await createJob(supabase);
@@ -26,6 +30,7 @@ async function runWithDatabase(testSuite: EvaluateTestSuite) {
         eventSource: 'webui',
       }),
       {
+        ...testSuite.evaluateOptions,
         progressCallback: (progress, total) => {
           updateJob(supabase, job.id, progress, total);
           console.log(`[${job.id}] ${progress}/${total}`);
@@ -41,7 +46,7 @@ async function runWithDatabase(testSuite: EvaluateTestSuite) {
 }
 
 export async function POST(req: Request) {
-  const testSuite = (await req.json()) as EvaluateTestSuite;
+  const testSuite = (await req.json()) as EvaluateTestSuiteWithEvaluateOptions;
   if (IS_RUNNING_LOCALLY) {
     throw new Error('This route should only be used in hosted mode');
   } else if (USE_SUPABASE) {
@@ -57,6 +62,7 @@ export async function POST(req: Request) {
           sharing: testSuite.sharing ?? true,
         }),
         {
+          ...testSuite.evaluateOptions,
           eventSource: 'web',
           progressCallback: (progress, total) => {
             const job = evalJobs.get(id);
