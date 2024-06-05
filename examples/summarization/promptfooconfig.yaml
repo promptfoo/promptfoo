@@ -1,6 +1,6 @@
 prompts:
-  - "Summarize this article: {{article}}"
-  - "Summarize this article concisely: {{article}}"
+  - 'Summarize this article: {{article}}'
+  - 'Summarize this article concisely: {{article}}'
 
 providers:
   - openai:gpt-3.5-turbo
@@ -16,8 +16,3 @@ tests:
       # Prefer shorter summaries
       - type: javascript
         value: output.length < 500
-
-
-
-
-

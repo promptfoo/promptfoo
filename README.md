@@ -367,7 +367,6 @@ To run the CLI during development you can run a command like: `npm run local -- 
 
 [providers-docs]: https://promptfoo.dev/docs/providers
 
-
 ### Adding a New Provider
 
 1. Create an implementation in `src/providers/SOME_PROVIDER_FILE`

@@ -203,7 +203,7 @@ If your expected JSON is large, import it from a file:
 ```yaml
 assert:
   - type: equals
-    value: "file://path/to/expected.json"
+    value: 'file://path/to/expected.json'
 ```
 
 ### Is-JSON

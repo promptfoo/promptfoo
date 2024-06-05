@@ -8,6 +8,7 @@ ollama pull phi3
 Next, edit promptfooconfig.yaml.
 
 Then run:
+
 ```
 promptfoo eval
 ```

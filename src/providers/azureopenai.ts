@@ -358,7 +358,9 @@ export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvide
         this.config.presence_penalty ?? parseFloat(process.env.OPENAI_PRESENCE_PENALTY || '0'),
       frequency_penalty:
         this.config.frequency_penalty ?? parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0'),
-      ...(this.config.functions ? { functions: renderVarsInObject(this.config.functions, context?.vars) } : {}),
+      ...(this.config.functions
+        ? { functions: renderVarsInObject(this.config.functions, context?.vars) }
+        : {}),
       ...(this.config.function_call ? { function_call: this.config.function_call } : {}),
       ...(this.config.seed !== undefined ? { seed: this.config.seed } : {}),
       ...(this.config.tools ? { tools: renderVarsInObject(this.config.tools, context?.vars) } : {}),

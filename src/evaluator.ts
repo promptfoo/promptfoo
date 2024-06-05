@@ -219,7 +219,7 @@ export async function renderPrompt(
     );
     return langfuseResult;
   }
-  
+
   // Render prompt
   try {
     if (process.env.PROMPTFOO_DISABLE_JSON_AUTOESCAPE) {
@@ -682,9 +682,7 @@ class Evaluator {
         );
         concurrency = 1;
       } else if (usesStoreOutputAs) {
-        logger.info(
-          `Setting concurrency to 1 because storeOutputAs is used.`,
-        );
+        logger.info(`Setting concurrency to 1 because storeOutputAs is used.`);
         concurrency = 1;
       }
     }
@@ -805,7 +803,7 @@ class Evaluator {
       if (originalProgressCallback) {
         originalProgressCallback(completed, total, index, evalStep);
       }
-      
+
       if (multibar && evalStep) {
         const threadIndex = index % concurrency;
         const progressbar = multiProgressBars[threadIndex];

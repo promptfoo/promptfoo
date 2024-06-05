@@ -8,14 +8,12 @@ defaultTest:
         id: cloudflare-ai:embedding:@cf/baai/bge-base-en-v1.5
         config:
           # accountId: YOUR_ACCOUNT_ID_HERE
-          
-        
 
 providers:
   - id: cloudflare-ai:chat:@cf/meta/llama-3-8b-instruct
     config:
       # accountId: YOUR_ACCOUNT_ID_HERE
-      
+
       # ===============
       # It is not recommended to keep your API key on the config file since it is a secret value.
       # Use the CLOUDFLARE_API_KEY environment variable or set the apiKeyEnvar value

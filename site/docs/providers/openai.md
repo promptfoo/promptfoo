@@ -105,7 +105,11 @@ interface OpenAiConfig {
       parameters: any;
     };
   }[];
-  tool_choice?: 'none' | 'auto' | { type: 'function'; function?: { name: string } } | { type: 'file_search' };
+  tool_choice?:
+    | 'none'
+    | 'auto'
+    | { type: 'function'; function?: { name: string } }
+    | { type: 'file_search' };
   stop?: string[];
   response_format?: { type: string };
   seed?: number;
@@ -242,6 +246,7 @@ They can also include functions that dynamically reference vars:
   }
 }
 ```
+
 :::
 
 ### Using functions
@@ -353,16 +358,16 @@ config:
 
 These OpenAI-related environment variables are supported:
 
-| Variable                         | Description                                                                                                                                      |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `OPENAI_TEMPERATURE`             | Temperature model parameter, defaults to 0.                                                                                                      |
-| `OPENAI_MAX_TOKENS`              | Max_tokens model parameter, defaults to 1024.                                                                                                    |
-| `OPENAI_API_HOST`                | The hostname to use (useful if you're using an API proxy). Takes priority over `OPENAI_BASE_URL`.                                                |
-| `OPENAI_BASE_URL`                | The base URL (protocol + hostname + port) to use, this is a more general option than `OPENAI_API_HOST`.                                          |
-| `OPENAI_API_KEY`                 | OpenAI API key.                                                                                                                                  |
-| `OPENAI_ORGANIZATION`            | The OpenAI organization key to use.                                                                                                              |
-| `PROMPTFOO_DELAY_MS`             | Number of milliseconds to delay between API calls. Useful if you are hitting OpenAI rate limits (defaults to 0).                                 |
-| `PROMPTFOO_REQUEST_BACKOFF_MS`   | Base number of milliseconds to backoff and retry if a request fails (defaults to 5000).                                                          |
+| Variable                       | Description                                                                                                      |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| `OPENAI_TEMPERATURE`           | Temperature model parameter, defaults to 0.                                                                      |
+| `OPENAI_MAX_TOKENS`            | Max_tokens model parameter, defaults to 1024.                                                                    |
+| `OPENAI_API_HOST`              | The hostname to use (useful if you're using an API proxy). Takes priority over `OPENAI_BASE_URL`.                |
+| `OPENAI_BASE_URL`              | The base URL (protocol + hostname + port) to use, this is a more general option than `OPENAI_API_HOST`.          |
+| `OPENAI_API_KEY`               | OpenAI API key.                                                                                                  |
+| `OPENAI_ORGANIZATION`          | The OpenAI organization key to use.                                                                              |
+| `PROMPTFOO_DELAY_MS`           | Number of milliseconds to delay between API calls. Useful if you are hitting OpenAI rate limits (defaults to 0). |
+| `PROMPTFOO_REQUEST_BACKOFF_MS` | Base number of milliseconds to backoff and retry if a request fails (defaults to 5000).                          |
 
 ## Evaluating assistants
 

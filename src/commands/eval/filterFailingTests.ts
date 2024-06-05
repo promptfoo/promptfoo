@@ -1,5 +1,5 @@
-import {TestSuite} from "../../types";
-import {readOutput, resultIsForTestCase} from "../../util";
+import { TestSuite } from '../../types';
+import { readOutput, resultIsForTestCase } from '../../util';
 
 type Tests = NonNullable<TestSuite['tests']>;
 
@@ -8,7 +8,7 @@ export async function filterFailingTests(testSuite: TestSuite, outputPath: strin
     return [];
   }
 
-  const {results} = await readOutput(outputPath);
+  const { results } = await readOutput(outputPath);
   const failingResults = results.results.filter((result) => !result.success);
 
   if (failingResults.length === 0) {

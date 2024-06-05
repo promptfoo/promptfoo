@@ -43,11 +43,11 @@ If you prefer to run against locally hosted versions of these models, this can b
 
 ## Set up the prompts
 
-Setting up prompts is straightforward.  Just include one or more prompts with any `{{variables}}` you like:
+Setting up prompts is straightforward. Just include one or more prompts with any `{{variables}}` you like:
 
 ```yaml
 prompts:
-  - "Respond to this user input: {{message}}"
+  - 'Respond to this user input: {{message}}'
 ```
 
 <details>
@@ -72,9 +72,9 @@ Next, we'll put the slightly different Llama chat prompt in `prompts/llama_promp
 {{message}}<|eot_id|><|start_header_id|>assistant<|end_header_id|>
 ```
 
-Now, let's go back to `promptfooconfig.yaml` and add our prompts. We'll name them `mistral_prompt` and `llama_prompt` respectively.  For example:
+Now, let's go back to `promptfooconfig.yaml` and add our prompts. We'll name them `mistral_prompt` and `llama_prompt` respectively. For example:
 
-```yaml title=promptfooconfig.yaml
+````yaml title=promptfooconfig.yaml
 prompts:
   prompts/mistral_prompt.txt: mistral_prompt
   prompts/llama_prompt.txt: llama_prompt
@@ -94,7 +94,7 @@ providers:
   - id: replicate:meta/meta-llama-3-8b-instruct
     prompts:
       - llama_prompt
-```
+````
 
 :::tip
 These prompt files are [Nunjucks templates](https://mozilla.github.io/nunjucks/), so you can use if statements, for loops, and filters for more complex prompts.
