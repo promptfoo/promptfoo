@@ -9,14 +9,11 @@ import promptfoo from '@/../../../index';
 import { IS_RUNNING_LOCALLY, USE_SUPABASE } from '@/constants';
 import { createJob, createResult, updateJob } from '@/database';
 
-import type { EvaluateOptions, EvaluateTestSuite } from '@/../../../types';
 import evalJobs from './evalJobsStore';
 
-export const dynamic = IS_RUNNING_LOCALLY ? 'auto' : 'force-dynamic';
+import type { EvaluateTestSuiteWithEvaluateOptions } from '@/../../../types';
 
-interface EvaluateTestSuiteWithEvaluateOptions extends EvaluateTestSuite {
-  evaluateOptions?: EvaluateOptions
-}
+export const dynamic = IS_RUNNING_LOCALLY ? 'auto' : 'force-dynamic';
 
 async function runWithDatabase(testSuite: EvaluateTestSuiteWithEvaluateOptions) {
   const supabase = createRouteHandlerClient({ cookies });
