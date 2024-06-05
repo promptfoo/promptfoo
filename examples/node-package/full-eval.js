@@ -45,17 +45,21 @@ const prompts = [
   },
 ];
 
+const customFunction = (prompt, context) => {
+  // Call an LLM API in this function, or any other logic.
+  console.log(`Prompt: ${prompt}, vars: ${JSON.stringify(context.vars)}`);
+  return {
+    output: '<LLM output>',
+  };
+};
+customFunction.label = 'My custom function';
+
 const providers = [
   // Call the OpenAI API GPT 3.5
   'openai:gpt-3.5-turbo',
 
-  // Or use a custom function. Call an LLM API in this function, or any other logic.
-  (prompt, context) => {
-    console.log(`Prompt: ${prompt}, vars: ${JSON.stringify(context.vars)}`);
-    return {
-      output: '<LLM output>',
-    };
-  },
+  // Or use a custom function.
+  customFunction,
 ];
 
 const tests = [

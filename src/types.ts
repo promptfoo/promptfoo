@@ -102,16 +102,21 @@ export interface CallApiOptionsParams {
   originalProvider?: ApiProvider;
 }
 
+type CallApiFunction = {
+  (
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse>;
+  label?: string;
+};
+
 export interface ApiProvider {
   // Unique identifier for the provider
   id: () => string;
 
   // Text generation function
-  callApi: (
-    prompt: string,
-    context?: CallApiContextParams,
-    options?: CallApiOptionsParams,
-  ) => Promise<ProviderResponse>;
+  callApi: CallApiFunction;
 
   // Embedding function
   callEmbeddingApi?: (prompt: string) => Promise<ProviderEmbeddingResponse>;
