@@ -41,6 +41,7 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "format": "prettier -w .",
+    "format:check": "prettier --check .",
     "db:migrate": "npx tsx src/migrate.ts",
     "db:generate": "npx drizzle-kit generate:sqlite",
     "audit:fix": "npm audit fix && cd src/web/nextui && npm audit fix && cd ../../site && npm audit fix",

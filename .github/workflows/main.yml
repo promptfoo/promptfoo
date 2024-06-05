@@ -53,3 +53,24 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  style-check:
+    name: Style Check
+    runs-on: ubuntu-latest  # Specify the OS you want to use
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Use Node 18.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18.x'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: |
+          npm ci
+
+      - name: Run Style Check
+        run: |
+          npm run format:check
