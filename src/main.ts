@@ -34,7 +34,7 @@ import {
 import { DEFAULT_README, DEFAULT_YAML_CONFIG } from './onboarding';
 import { disableCache, clearCache } from './cache';
 import { getDirectory } from './esm';
-import { startServer } from './web/server';
+import { BrowserBehavior, startServer } from './web/server';
 import { checkForUpdates } from './updates';
 import { gatherFeedback } from './feedback';
 import { listCommand } from './commands/list';
@@ -285,6 +285,7 @@ async function main() {
     .description('Start browser ui')
     .option('-p, --port <number>', 'Port number', '15500')
     .option('-y, --yes', 'Skip confirmation and auto-open the URL')
+    .option('-n, --no', 'Skip confirmation and do not open the URL')
     .option('--api-base-url <url>', 'Base URL for viewer API calls')
     .option('--filter-description <pattern>', 'Filter evals by description using a regex pattern')
     .option('--env-file <path>', 'Path to .env file')
@@ -294,6 +295,7 @@ async function main() {
         cmdObj: {
           port: number;
           yes: boolean;
+          no: boolean;
           apiBaseUrl?: string;
           envFile?: string;
           filterDescription?: string;
@@ -310,7 +312,17 @@ async function main() {
           setConfigDirectoryPath(directory);
         }
         // Block indefinitely on server
-        await startServer(cmdObj.port, cmdObj.apiBaseUrl, cmdObj.yes, cmdObj.filterDescription);
+        const browserBehavior = cmdObj.yes
+          ? BrowserBehavior.OPEN
+          : cmdObj.no
+          ? BrowserBehavior.SKIP
+          : BrowserBehavior.ASK;
+        await startServer(
+          cmdObj.port,
+          cmdObj.apiBaseUrl,
+          browserBehavior,
+          cmdObj.filterDescription,
+        );
       },
     );
 
