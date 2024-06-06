@@ -792,6 +792,8 @@ async function main() {
           );
         }
 
+        await migrateResultsFromFileSystemToDatabase();
+
         let evalId: string | null = null;
         if (cmdObj.write) {
           evalId = await writeResultsToDatabase(summary, config);
@@ -809,8 +811,6 @@ async function main() {
         }
 
         telemetry.maybeShowNotice();
-
-        await migrateResultsFromFileSystemToDatabase();
 
         printBorder();
         if (!cmdObj.write) {
