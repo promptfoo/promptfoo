@@ -155,6 +155,7 @@ export class OllamaCompletionProvider implements ApiProvider {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            ...(process.env.OLLAMA_API_KEY ? { Authorization: `Bearer ${process.env.OLLAMA_API_KEY}` } : {})
           },
           body: JSON.stringify(params),
         },
@@ -241,6 +242,7 @@ export class OllamaChatProvider implements ApiProvider {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            ...(process.env.OLLAMA_API_KEY ? { Authorization: `Bearer ${process.env.OLLAMA_API_KEY}` } : {})
           },
           body: JSON.stringify(params),
         },
@@ -300,6 +302,7 @@ export class OllamaEmbeddingProvider extends OllamaCompletionProvider {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            ...(process.env.OLLAMA_API_KEY ? { Authorization: `Bearer ${process.env.OLLAMA_API_KEY}` } : {})
           },
           body: JSON.stringify(params),
         },
