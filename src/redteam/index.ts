@@ -16,6 +16,7 @@ import { getHallucinationTests } from './getHallucinationTests';
 import { getOverconfidenceTests } from './getOverconfidenceTests';
 import { getUnderconfidenceTests } from './getUnderconfidenceTests';
 import { getPiiTests } from './getPiiTests';
+import { getCompetitorTests } from './getCompetitorTests';
 import { SYNTHESIS_MODEL } from './constants';
 
 import type { ApiProvider, TestCase, TestSuite } from '../types';
@@ -28,6 +29,20 @@ interface SynthesizeOptions {
 }
 
 const ALL_PLUGINS = new Set(
+  [
+    'excessive-agency',
+    'hallucination',
+    'harmful',
+    'hijacking',
+    'jailbreak',
+    'overreliance',
+    'pii',
+    'prompt-injection',
+    'competitors',
+  ].concat(Object.keys(HARM_CATEGORIES)),
+);
+
+const DEFAULT_PLUGINS = new Set(
   [
     'excessive-agency',
     'hallucination',
@@ -57,7 +72,7 @@ export async function synthesizeFromTestSuite(
   return synthesize({
     ...options,
     plugins:
-      options.plugins && options.plugins.length > 0 ? options.plugins : Array.from(ALL_PLUGINS),
+      options.plugins && options.plugins.length > 0 ? options.plugins : Array.from(DEFAULT_PLUGINS),
     prompts: testSuite.prompts.map((prompt) => prompt.raw),
   });
 }
@@ -132,6 +147,7 @@ export async function synthesize({
     overreliance: getUnderconfidenceTests,
     pii: getPiiTests,
     'prompt-injection': addInjections.bind(null, adversarialPrompts),
+    competitors: getCompetitorTests,
   };
 
   for (const plugin of plugins) {
