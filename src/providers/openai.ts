@@ -42,7 +42,7 @@ type OpenAiCompletionOptions = OpenAiSharedOptions & {
   functions?: OpenAiFunction[];
   function_call?: 'none' | 'auto' | { name: string };
   tools?: OpenAiTool[];
-  tool_choice?: 'none' | 'auto' | { type: 'function'; function?: { name: string } };
+  tool_choice?: 'none' | 'auto' | 'required' | { type: 'function'; function?: { name: string } };
   response_format?: { type: 'json_object' };
   stop?: string[];
   seed?: number;
