@@ -6,7 +6,6 @@ import readline from 'readline';
 import chalk from 'chalk';
 import chokidar from 'chokidar';
 import yaml from 'js-yaml';
-import inquirer from 'inquirer';
 import { Command } from 'commander';
 
 import cliState from './cliState';
@@ -32,7 +31,7 @@ import {
   writeOutput,
   writeResultsToDatabase,
 } from './util';
-import { DEFAULT_README, DEFAULT_YAML_CONFIG } from './onboarding';
+import { createDummyFiles } from './onboarding';
 import { disableCache, clearCache } from './cache';
 import { getDirectory } from './esm';
 import { BrowserBehavior, startServer } from './web/server';
@@ -55,188 +54,7 @@ import { generateTable } from './table';
 import { createShareableUrl } from './share';
 import { filterTests } from './commands/eval/filterTests';
 import { validateAssertions } from './assertions/validateAssertions';
-
-async function createDummyFiles(directory: string | null) {
-  if (directory) {
-    // Make the directory if it doesn't exist
-    if (!fs.existsSync(directory)) {
-      fs.mkdirSync(directory);
-    }
-  }
-
-  if (directory) {
-    if (!fs.existsSync(directory)) {
-      logger.info(`Creating directory ${directory} ...`);
-      fs.mkdirSync(directory);
-    }
-  } else {
-    directory = '.';
-  }
-
-  // Choose use case
-  let { action } = await inquirer.prompt([
-    {
-      type: 'list',
-      name: 'action',
-      message: 'What would you like to do?',
-      choices: [
-        { name: 'Not sure yet', value: 'compare' },
-        { name: 'Improve prompt and model performance', value: 'compare' },
-        { name: 'Improve RAG performance', value: 'rag' },
-        { name: 'Improve agent/chain of thought performance', value: 'agent' },
-      ],
-    },
-  ]);
-
-  const prompts = [];
-  const providers = [];
-
-  if (action === 'compare') {
-    prompts.push(`Write a tweet about {{topic}}`);
-    prompts.push(`Write a concise, funny tweet about {{topic}}`);
-  } else if (action === 'rag') {
-    prompts.push(
-      'Write a customer service response to:\n\n{{inquiry}}\n\nUse these documents:\n\n{{context}}',
-    );
-  } else if (action === 'agent') {
-    prompts.push(`Fulfill this user request: {{request}}`);
-  }
-  const choices: { name: string; value: (string | object)[] }[] = [
-    { name: 'Choose later', value: ['openai:gpt-3.5-turbo', 'openai:gpt-4o'] },
-    {
-      name: 'Local Python script',
-      value: ['python:provider.py'],
-    },
-    {
-      name: 'Local Javascript script',
-      value: ['file://provider.js'],
-    },
-    {
-      name: 'Local executable',
-      value: ['exec:provider.sh'],
-    },
-    {
-      name: 'HTTP endpoint',
-      value: ['# https://promptfoo.dev/docs/providers/http\nhttps://example.com/api/generate'],
-    },
-    {
-      name: '[OpenAI] GPT 4o, GPT-3.5, ...',
-      value:
-        action === 'agent'
-          ? [
-              {
-                id: 'openai:gpt-4o',
-                config: {
-                  tools: [
-                    {
-                      type: 'function',
-                      function: {
-                        name: 'get_current_weather',
-                        description: 'Get the current weather in a given location',
-                        parameters: {
-                          type: 'object',
-                          properties: {
-                            location: {
-                              type: 'string',
-                              description: 'The city and state, e.g. San Francisco, CA',
-                            },
-                          },
-                          required: ['location'],
-                        },
-                      },
-                    },
-                  ],
-                },
-              },
-            ]
-          : ['openai:gpt-3.5-turbo', 'openai:gpt-4o'],
-    },
-    {
-      name: '[Anthropic] Claude Opus, Sonnet, Haiku, ...',
-      value: [
-        'anthropic:messages:claude-3-haiku-20240307',
-        'bedrock:anthropic.claude-3-opus-20240307',
-      ],
-    },
-    {
-      name: '[AWS Bedrock] Claude, Llama, Titan, ...',
-      value: [
-        'bedrock:anthropic.claude-3-haiku-20240307-v1:0',
-        'bedrock:anthropic.claude-3-opus-20240307-v1:0',
-      ],
-    },
-    {
-      name: '[Cohere] Command R, Command R+, ...',
-      value: ['cohere:command-r', 'cohere:command-r-plus'],
-    },
-    { name: '[Google] Gemini Pro, Gemini Ultra, ...', value: ['vertex:gemini-pro'] },
-    {
-      name: '[Ollama] Llama 3, Mixtral, ...',
-      value: ['ollama:chat:llama3', 'ollama:chat:mixtral:8x22b'],
-    },
-  ];
-  let { providerChoices } = (await inquirer.prompt([
-    {
-      type: 'checkbox',
-      name: 'providers',
-      message: 'Which model providers would you like to use? (press enter to skip)',
-      choices,
-    },
-  ])) as { providerChoices: (string | object)[] };
-
-  if (providerChoices) {
-    const flatProviders = providerChoices.flat();
-    if (flatProviders.length > 3) {
-      providers.push(
-        ...providerChoices.map((choice) => (Array.isArray(choice) ? choice[0] : choice)),
-      );
-    } else {
-      providers.push(...flatProviders);
-    }
-
-    if (
-      flatProviders.some((choice) => typeof choice === 'string' && choice.startsWith('file://'))
-    ) {
-      // Create dummy provider file
-    }
-    if (flatProviders.some((choice) => typeof choice === 'string' && choice.startsWith('exec:'))) {
-      // Create dummy provider file
-    }
-    if (
-      flatProviders.some((choice) => typeof choice === 'string' && choice.startsWith('python:'))
-    ) {
-      // Create dummy provider file
-    }
-    if (flatProviders.some((choice) => typeof choice === 'string' && choice.startsWith('http'))) {
-      // Create dummy provider file
-    }
-  }
-
-  fs.writeFileSync(
-    path.join(process.cwd(), directory, 'promptfooconfig.yaml'),
-    DEFAULT_YAML_CONFIG,
-  );
-  fs.writeFileSync(path.join(process.cwd(), directory, 'README.md'), DEFAULT_README);
-
-  const isNpx = process.env.npm_execpath?.includes('npx');
-  const runCommand = isNpx ? 'npx promptfoo@latest eval' : 'promptfoo eval';
-  if (directory === '.') {
-    logger.info(
-      chalk.green(
-        `✅ Wrote promptfooconfig.yaml. Run \`${chalk.bold(runCommand)}\` to get started!`,
-      ),
-    );
-  } else {
-    logger.info(`✅ Wrote promptfooconfig.yaml to ./${directory}`);
-    logger.info(
-      chalk.green(
-        `Run \`${chalk.bold(`cd ${directory}`)}\` and then \`${chalk.bold(
-          runCommand,
-        )}\` to get started!`,
-      ),
-    );
-  }
-}
+import dedent from 'dedent';
 
 async function resolveConfigs(
   cmdObj: Partial<CommandLineOptions>,
@@ -413,8 +231,9 @@ async function main() {
     .description('Initialize project with dummy files')
     .action(async (directory: string | null) => {
       telemetry.maybeShowNotice();
-      await createDummyFiles(directory);
+      const details = await createDummyFiles(directory);
       telemetry.record('command_used', {
+        ...details,
         name: 'init',
       });
       await telemetry.send();
