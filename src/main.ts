@@ -104,13 +104,20 @@ async function createDummyFiles(directory: string | null) {
   const choices: { name: string; value: (string | object)[] }[] = [
     { name: 'Choose later', value: ['openai:gpt-3.5-turbo', 'openai:gpt-4o'] },
     {
-      name: '[Local script] Python, Javascript, Bash, ...',
-      value: [
-        '# https://promptfoo.dev/docs/providers/python\npython:path/to/script.py',
-        '# https://promptfoo.dev/docs/providers/custom-script\nexec:path/to/script.sh',
-        '# https://promptfoo.dev/docs/providers/custom-api\nfile://path/to/script.js',
-        '# https://promptfoo.dev/docs/providers/http\nhttps://example.com/api/generate',
-      ],
+      name: 'Local Python script',
+      value: ['python:provider.py'],
+    },
+    {
+      name: 'Local Javascript script',
+      value: ['file://provider.js'],
+    },
+    {
+      name: 'Local executable',
+      value: ['exec:provider.sh'],
+    },
+    {
+      name: 'HTTP endpoint',
+      value: ['# https://promptfoo.dev/docs/providers/http\nhttps://example.com/api/generate'],
     },
     {
       name: '[OpenAI] GPT 4o, GPT-3.5, ...',
@@ -168,20 +175,40 @@ async function createDummyFiles(directory: string | null) {
       value: ['ollama:chat:llama3', 'ollama:chat:mixtral:8x22b'],
     },
   ];
-  let { providerChoices } = await inquirer.prompt([
+  let { providerChoices } = (await inquirer.prompt([
     {
       type: 'checkbox',
       name: 'providers',
       message: 'Which model providers would you like to use? (press enter to skip)',
       choices,
     },
-  ]);
+  ])) as { providerChoices: (string | object)[] };
 
   if (providerChoices) {
-    if (providerChoices.flat().length > 3) {
-      providers.push(...providerChoices.map((choice: string[]) => choice[0]));
+    const flatProviders = providerChoices.flat();
+    if (flatProviders.length > 3) {
+      providers.push(
+        ...providerChoices.map((choice) => (Array.isArray(choice) ? choice[0] : choice)),
+      );
     } else {
-      providers.push(...providerChoices.flat());
+      providers.push(...flatProviders);
+    }
+
+    if (
+      flatProviders.some((choice) => typeof choice === 'string' && choice.startsWith('file://'))
+    ) {
+      // Create dummy provider file
+    }
+    if (flatProviders.some((choice) => typeof choice === 'string' && choice.startsWith('exec:'))) {
+      // Create dummy provider file
+    }
+    if (
+      flatProviders.some((choice) => typeof choice === 'string' && choice.startsWith('python:'))
+    ) {
+      // Create dummy provider file
+    }
+    if (flatProviders.some((choice) => typeof choice === 'string' && choice.startsWith('http'))) {
+      // Create dummy provider file
     }
   }
 
