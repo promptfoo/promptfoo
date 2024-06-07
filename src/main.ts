@@ -31,7 +31,7 @@ import {
   writeOutput,
   writeResultsToDatabase,
 } from './util';
-import { DEFAULT_README, DEFAULT_YAML_CONFIG } from './onboarding';
+import { createDummyFiles } from './onboarding';
 import { disableCache, clearCache } from './cache';
 import { getDirectory } from './esm';
 import { BrowserBehavior, startServer } from './web/server';
@@ -54,49 +54,7 @@ import { generateTable } from './table';
 import { createShareableUrl } from './share';
 import { filterTests } from './commands/eval/filterTests';
 import { validateAssertions } from './assertions/validateAssertions';
-
-function createDummyFiles(directory: string | null) {
-  if (directory) {
-    // Make the directory if it doesn't exist
-    if (!fs.existsSync(directory)) {
-      fs.mkdirSync(directory);
-    }
-  }
-
-  if (directory) {
-    if (!fs.existsSync(directory)) {
-      logger.info(`Creating directory ${directory} ...`);
-      fs.mkdirSync(directory);
-    }
-  } else {
-    directory = '.';
-  }
-
-  fs.writeFileSync(
-    path.join(process.cwd(), directory, 'promptfooconfig.yaml'),
-    DEFAULT_YAML_CONFIG,
-  );
-  fs.writeFileSync(path.join(process.cwd(), directory, 'README.md'), DEFAULT_README);
-
-  const isNpx = process.env.npm_execpath?.includes('npx');
-  const runCommand = isNpx ? 'npx promptfoo@latest eval' : 'promptfoo eval';
-  if (directory === '.') {
-    logger.info(
-      chalk.green(
-        `✅ Wrote promptfooconfig.yaml. Run \`${chalk.bold(runCommand)}\` to get started!`,
-      ),
-    );
-  } else {
-    logger.info(`✅ Wrote promptfooconfig.yaml to ./${directory}`);
-    logger.info(
-      chalk.green(
-        `Run \`${chalk.bold(`cd ${directory}`)}\` and then \`${chalk.bold(
-          runCommand,
-        )}\` to get started!`,
-      ),
-    );
-  }
-}
+import dedent from 'dedent';
 
 async function resolveConfigs(
   cmdObj: Partial<CommandLineOptions>,
@@ -271,10 +229,12 @@ async function main() {
   program
     .command('init [directory]')
     .description('Initialize project with dummy files')
-    .action(async (directory: string | null) => {
+    .option('--no-interactive', 'Run in interactive mode')
+    .action(async (directory: string | null, cmdObj: { interactive: boolean }) => {
       telemetry.maybeShowNotice();
-      createDummyFiles(directory);
+      const details = await createDummyFiles(directory, cmdObj.interactive);
       telemetry.record('command_used', {
+        ...details,
         name: 'init',
       });
       await telemetry.send();
