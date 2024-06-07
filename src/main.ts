@@ -229,9 +229,10 @@ async function main() {
   program
     .command('init [directory]')
     .description('Initialize project with dummy files')
-    .action(async (directory: string | null) => {
+    .option('--no-interactive', 'Run in interactive mode')
+    .action(async (directory: string | null, cmdObj: { interactive: boolean }) => {
       telemetry.maybeShowNotice();
-      const details = await createDummyFiles(directory);
+      const details = await createDummyFiles(directory, cmdObj.interactive);
       telemetry.record('command_used', {
         ...details,
         name: 'init',
