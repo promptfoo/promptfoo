@@ -6,6 +6,7 @@ import readline from 'readline';
 import chalk from 'chalk';
 import chokidar from 'chokidar';
 import yaml from 'js-yaml';
+import inquirer from 'inquirer';
 import { Command } from 'commander';
 
 import cliState from './cliState';
@@ -55,7 +56,7 @@ import { createShareableUrl } from './share';
 import { filterTests } from './commands/eval/filterTests';
 import { validateAssertions } from './assertions/validateAssertions';
 
-function createDummyFiles(directory: string | null) {
+async function createDummyFiles(directory: string | null) {
   if (directory) {
     // Make the directory if it doesn't exist
     if (!fs.existsSync(directory)) {
@@ -70,6 +71,118 @@ function createDummyFiles(directory: string | null) {
     }
   } else {
     directory = '.';
+  }
+
+  // Choose use case
+  let { action } = await inquirer.prompt([
+    {
+      type: 'list',
+      name: 'action',
+      message: 'What would you like to do?',
+      choices: [
+        { name: 'Not sure yet', value: 'compare' },
+        { name: 'Improve prompt and model performance', value: 'compare' },
+        { name: 'Improve RAG performance', value: 'rag' },
+        { name: 'Improve agent/chain of thought performance', value: 'agent' },
+      ],
+    },
+  ]);
+
+  const prompts = [];
+  const providers = [];
+
+  if (action === 'compare') {
+    prompts.push(`Write a tweet about {{topic}}`);
+    prompts.push(`Write a concise, funny tweet about {{topic}}`);
+  } else if (action === 'rag') {
+    prompts.push(
+      'Write a customer service response to:\n\n{{inquiry}}\n\nUse these documents:\n\n{{context}}',
+    );
+  } else if (action === 'agent') {
+    prompts.push(`Fulfill this user request: {{request}}`);
+  }
+  const choices: { name: string; value: (string | object)[] }[] = [
+    { name: 'Choose later', value: ['openai:gpt-3.5-turbo', 'openai:gpt-4o'] },
+    {
+      name: '[Local script] Python, Javascript, Bash, ...',
+      value: [
+        '# https://promptfoo.dev/docs/providers/python\npython:path/to/script.py',
+        '# https://promptfoo.dev/docs/providers/custom-script\nexec:path/to/script.sh',
+        '# https://promptfoo.dev/docs/providers/custom-api\nfile://path/to/script.js',
+        '# https://promptfoo.dev/docs/providers/http\nhttps://example.com/api/generate',
+      ],
+    },
+    {
+      name: '[OpenAI] GPT 4o, GPT-3.5, ...',
+      value:
+        action === 'agent'
+          ? [
+              {
+                id: 'openai:gpt-4o',
+                config: {
+                  tools: [
+                    {
+                      type: 'function',
+                      function: {
+                        name: 'get_current_weather',
+                        description: 'Get the current weather in a given location',
+                        parameters: {
+                          type: 'object',
+                          properties: {
+                            location: {
+                              type: 'string',
+                              description: 'The city and state, e.g. San Francisco, CA',
+                            },
+                          },
+                          required: ['location'],
+                        },
+                      },
+                    },
+                  ],
+                },
+              },
+            ]
+          : ['openai:gpt-3.5-turbo', 'openai:gpt-4o'],
+    },
+    {
+      name: '[Anthropic] Claude Opus, Sonnet, Haiku, ...',
+      value: [
+        'anthropic:messages:claude-3-haiku-20240307',
+        'bedrock:anthropic.claude-3-opus-20240307',
+      ],
+    },
+    {
+      name: '[AWS Bedrock] Claude, Llama, Titan, ...',
+      value: [
+        'bedrock:anthropic.claude-3-haiku-20240307-v1:0',
+        'bedrock:anthropic.claude-3-opus-20240307-v1:0',
+      ],
+    },
+    {
+      name: '[Cohere] Command R, Command R+, ...',
+      value: ['cohere:command-r', 'cohere:command-r-plus'],
+    },
+    { name: '[Google] Gemini Pro, Gemini Ultra, ...', value: ['vertex:gemini-pro'] },
+    {
+      name: '[Ollama] Llama 3, Mixtral, ...',
+      value: ['ollama:chat:llama3', 'ollama:chat:mixtral:8x22b'],
+    },
+  ];
+  let { providerChoices } = await inquirer.prompt([
+    {
+      type: 'checkbox',
+      name: 'providers',
+      message: 'Which model providers would you like to use? (press enter to skip)',
+      choices,
+    },
+  ]);
+
+  if (providerChoices) {
+    if (providerChoices.flat().length > 3) {
+      providers.push(...providerChoices.map((choice: string[]) => choice[0]));
+    } else {
+      providers.push(...providerChoices.flat());
+    }
   }
 
   fs.writeFileSync(
@@ -273,7 +386,7 @@ async function main() {
     .description('Initialize project with dummy files')
     .action(async (directory: string | null) => {
       telemetry.maybeShowNotice();
-      createDummyFiles(directory);
+      await createDummyFiles(directory);
       telemetry.record('command_used', {
         name: 'init',
       });
