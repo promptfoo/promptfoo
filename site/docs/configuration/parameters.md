@@ -322,6 +322,7 @@ The tests file optionally supports several special columns:
 - `__prefix`: This string is prepended to each prompt before it's sent to the API
 - `__suffix`: This string is appended to each prompt before it's sent to the API
 - `__description`: The test description
+- `__metric`: The test metric
 
 :::tip
 You can load your tests from [Google Sheets](/docs/configuration/guide#loading-tests-from-csv).
