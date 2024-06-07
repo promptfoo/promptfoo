@@ -381,17 +381,17 @@ export async function createDummyFiles(directory: string | null) {
       flatProviders.some((choice) => typeof choice === 'string' && choice.startsWith('file://'))
     ) {
       fs.writeFileSync(path.join(process.cwd(), directory, 'provider.js'), JAVASCRIPT_PROVIDER);
-      logger.info(chalk.green('Wrote provider.js'));
+      logger.info('⌛ Wrote provider.js');
     }
     if (flatProviders.some((choice) => typeof choice === 'string' && choice.startsWith('exec:'))) {
       fs.writeFileSync(path.join(process.cwd(), directory, 'provider.sh'), BASH_PROVIDER);
-      logger.info(chalk.green('Wrote provider.sh'));
+      logger.info('⌛ Wrote provider.sh');
     }
     if (
       flatProviders.some((choice) => typeof choice === 'string' && choice.startsWith('python:'))
     ) {
       fs.writeFileSync(path.join(process.cwd(), directory, 'provider.py'), PYTHON_PROVIDER);
-      logger.info(chalk.green('Wrote provider.py'));
+      logger.info('⌛ Wrote provider.py');
     }
   } else {
     providers.push('openai:gpt-3.5-turbo');
@@ -401,10 +401,10 @@ export async function createDummyFiles(directory: string | null) {
   if (action === 'rag' || action === 'agent') {
     if (language === 'javascript') {
       fs.writeFileSync(path.join(process.cwd(), directory, 'context.js'), JAVASCRIPT_VAR);
-      logger.info(chalk.green('Wrote context.js'));
+      logger.info('⌛ Wrote context.js');
     } else {
       fs.writeFileSync(path.join(process.cwd(), directory, 'context.py'), PYTHON_VAR);
-      logger.info(chalk.green('Wrote context.py'));
+      logger.info('⌛ Wrote context.py');
     }
   }
 
