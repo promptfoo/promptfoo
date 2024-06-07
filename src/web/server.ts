@@ -43,10 +43,16 @@ const evalJobs = new Map<string, Job>();
 // Prompts cache
 let allPrompts: PromptWithMetadata[] | null = null;
 
+export enum BrowserBehavior {
+  ASK = 0,
+  OPEN = 1,
+  SKIP = 2,
+}
+
 export async function startServer(
   port = 15500,
   apiBaseUrl = '',
-  skipConfirmation = false,
+  browserBehavior = BrowserBehavior.ASK,
   filterDescription?: string,
 ) {
   const app = express();
@@ -236,9 +242,9 @@ export async function startServer(
       }
     };
 
-    if (skipConfirmation) {
+    if (browserBehavior === BrowserBehavior.OPEN) {
       openUrl();
-    } else {
+    } else if (browserBehavior === BrowserBehavior.ASK) {
       const rl = readline.createInterface({
         input: process.stdin,
         output: process.stdout,

@@ -33,6 +33,7 @@ We also support the `/api/embeddings` endpoint via `ollama:embeddings:<model nam
 Supported environment variables:
 
 - `OLLAMA_BASE_URL` - protocol, host name, and port (defaults to `http://localhost:11434`)
+- `OLLAMA_API_KEY` - (optional) api key that is passed as the Bearer token in the Authorization Header when calling the API
 - `REQUEST_TIMEOUT_MS` - request timeout in milliseconds
 
 To pass configuration options to Ollama, use the `config` key like so:

@@ -13,13 +13,10 @@ export function generateTable(summary: EvaluateSummary, tableCellMaxLength = 250
   const maxWidth = process.stdout.columns ? process.stdout.columns - 10 : 120;
   const head = summary.table.head;
   const headLength = head.prompts.length + head.vars.length;
-  const allProvidersSame = head.prompts.every((p) => p.provider === head.prompts[0].provider);
   const table = new Table({
     head: [
       ...head.vars,
-      ...head.prompts.map((prompt) =>
-        allProvidersSame ? prompt.label : `[${prompt.provider}] ${prompt.label}`,
-      ),
+      ...head.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`),
     ].map((h) => ellipsize(h, tableCellMaxLength)),
     colWidths: Array(headLength).fill(Math.floor(maxWidth / headLength)),
     wordWrap: true,
