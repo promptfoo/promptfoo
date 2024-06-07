@@ -588,7 +588,7 @@ type OpenAiAssistantOptions = OpenAiSharedOptions & {
     | 'none'
     | 'auto'
     | { type: 'function'; function?: { name: string } }
-    | { type: 'file_search' };
+    | { type: 'file_search'; file_search?: { max_num_results?: number } };
 };
 
 export class OpenAiAssistantProvider extends OpenAiGenericProvider {
