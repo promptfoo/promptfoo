@@ -5,7 +5,10 @@ import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
+import FormControl from '@mui/material/FormControl';
 import FormControlLabel from '@mui/material/FormControlLabel';
+import InputLabel from '@mui/material/InputLabel';
+import OutlinedInput from '@mui/material/OutlinedInput';
 import Slider from '@mui/material/Slider';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
@@ -31,6 +34,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ open, onClose }) => {
     setPrettifyJson,
     showPrompts,
     setShowPrompts,
+    jsonExtractField,
+    setJsonExtractField,
   } = useResultsViewStore();
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
@@ -70,6 +75,18 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ open, onClose }) => {
             }
             label="Prettify JSON outputs"
           />
+          <FormControl>
+            <InputLabel htmlFor="extract-field" size="small">
+              Extract field from JSON
+            </InputLabel>
+            <OutlinedInput
+              id="extract-field"
+              label="Extract field from JSON"
+              size="small"
+              value={jsonExtractField || ''}
+              onChange={(e) => setJsonExtractField(e.target.value)}
+            />
+          </FormControl>
         </Box>
         <Box>
           <Tooltip title="Show the final prompt that produced the output in each cell.">

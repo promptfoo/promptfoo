@@ -167,7 +167,7 @@ function EvalOutputCell({
   showDiffs: boolean;
   searchText: string;
 }) {
-  const { renderMarkdown, prettifyJson, showPrompts } = useResultsViewStore();
+  const { renderMarkdown, prettifyJson, jsonExtractField, showPrompts } = useResultsViewStore();
   const [openPrompt, setOpen] = React.useState(false);
   const handlePromptOpen = () => {
     setOpen(true);
@@ -303,29 +303,45 @@ function EvalOutputCell({
     } catch (error) {
       console.error('Invalid regular expression:', (error as Error).message);
     }
-  } else if (renderMarkdown) {
-    node = (
-      <ReactMarkdown
-        components={{
-          img: ({ src, alt }) => (
-            <img
-              loading="lazy"
-              src={src}
-              alt={alt}
-              onClick={() => toggleLightbox(src)}
-              style={{ cursor: 'pointer' }}
-            />
-          ),
-        }}
-      >
-        {text}
-      </ReactMarkdown>
-    );
-  } else if (prettifyJson) {
-    try {
-      node = <pre>{JSON.stringify(JSON.parse(text), null, 2)}</pre>;
-    } catch (error) {
-      // Ignore because it's probably not JSON.
+  } else {
+    if (prettifyJson) {
+      try {
+        let json = JSON.parse(text);
+        if (jsonExtractField) {
+          json = json[jsonExtractField];
+          if (!json) {
+            node = (
+              <em>
+                Field <code>{jsonExtractField}</code> is undefined
+              </em>
+            );
+          }
+        }
+        if (json) {
+          node = <pre>{JSON.stringify(json, null, 2)}</pre>;
+        }
+      } catch (error) {
+        console.log(error);
+        // Ignore because it's probably not JSON.
+      }
+    } else if (renderMarkdown) {
+      node = (
+        <ReactMarkdown
+          components={{
+            img: ({ src, alt }) => (
+              <img
+                loading="lazy"
+                src={src}
+                alt={alt}
+                onClick={() => toggleLightbox(src)}
+                style={{ cursor: 'pointer' }}
+              />
+            ),
+          }}
+        >
+          {text}
+        </ReactMarkdown>
+      );
     }
   }
 
