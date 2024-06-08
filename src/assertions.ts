@@ -1078,8 +1078,8 @@ ${
             ? 1
             : 0
           : inverse
-          ? 1 - jsonResponse.score
-          : jsonResponse.score;
+            ? 1 - jsonResponse.score
+            : jsonResponse.score;
 
       const reason =
         jsonResponse.reason ||
