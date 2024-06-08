@@ -200,7 +200,10 @@ export class VertexChatProvider extends VertexGenericProvider {
     'gemini-1.5-pro-latest',
     'gemini-1.5-pro-preview-0409',
     'gemini-1.5-pro-preview-0514',
+    'gemini-1.5-pro-001',
+    'gemini-1.0-pro-vision-001',
     'gemini-1.5-flash-preview-0514',
+    'gemini-1.5-flash-001',
     'aqa',
   ];
 
@@ -208,9 +211,6 @@ export class VertexChatProvider extends VertexGenericProvider {
     modelName: string,
     options: { config?: VertexCompletionOptions; id?: string; env?: EnvOverrides } = {},
   ) {
-    if (!VertexChatProvider.CHAT_MODELS.includes(modelName)) {
-      logger.warn(`Using unknown Google Vertex chat model: ${modelName}`);
-    }
     super(modelName, options);
   }
 
