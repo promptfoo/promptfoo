@@ -2,6 +2,7 @@
 
 import eslint from '@eslint/js';
 import tseslint from 'typescript-eslint';
+import globals from "globals";
 
 export default [
   ...tseslint.config(
@@ -10,8 +11,20 @@ export default [
   ),
   {
     ignores: [
-      "src/web/nextui/out/",
-      "src/web/nextui/.next/",
-    ]
-  }
+      "**/src/web/nextui/_next/**/*",
+      "**/src/web/nextui/.next/**/*",
+      "**/src/web/nextui/out/**/*",
+      "src/web/nextui/out/_next/static/chunks/**/*",
+    ],
+  },
+  {
+    languageOptions: {
+        ecmaVersion: 2022,
+        sourceType: "module",
+        globals: globals.node,
+    },
+    rules: {
+      '@typescript-eslint/no-explicit-any': 0,
+    },
+  },
 ];
