@@ -1,5 +1,4 @@
 name: CI
-run-name: CI from ${{ github.ref_name }} by @${{ github.actor }}
 on:
   pull_request:
   push:
