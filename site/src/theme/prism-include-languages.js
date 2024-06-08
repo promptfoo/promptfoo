@@ -16,7 +16,7 @@ export default function prismIncludeLanguages(PrismObject) {
       // eslint-disable-next-line global-require
       require('prismjs/components/prism-markup-templating.js');
     }
-    // eslint-disable-next-line global-require, import/no-dynamic-require
+    // eslint-disable-next-line global-require
     require(`prismjs/components/prism-${lang}`);
   });
   // delete globalThis.Prism;

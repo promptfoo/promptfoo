@@ -24,7 +24,22 @@ export default [
         globals: globals.node,
     },
     rules: {
+      '@typescript-eslint/ban-ts-comment': 0,
+      '@typescript-eslint/ban-types': 0,
       '@typescript-eslint/no-explicit-any': 0,
+      '@typescript-eslint/no-unused-vars': 0,
+      'no-case-declarations': 0,
+      'no-control-regex': 0,
+      'no-empty': 0,
+      'no-useless-escape': 0,
+      '@typescript-eslint/no-var-requires': 0,
     },
   },
+  {
+    files: ["examples/**"],
+    rules: {
+      '@typescript-eslint/no-namespace': 0,
+      '@typescript-eslint/no-var-requires': 0,
+    }
+  }
 ];
