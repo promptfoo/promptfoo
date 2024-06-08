@@ -10,11 +10,11 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
+  OPENAI_API_KEY: xxx
   ANTHROPIC_API_KEY: xxx
   AZURE_OPENAI_API_HOST: xxx
   NEXT_PUBLIC_SUPABASE_ANON_KEY: xxx
   NEXT_PUBLIC_SUPABASE_URL: https://placeholder.promptfoo.dev
-  OPENAI_API_KEY: xxx
 jobs:
   build:
     name: Build and test on Node ${{ matrix.node }} and ${{ matrix.os }}
