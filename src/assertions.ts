@@ -519,7 +519,7 @@ export async function runAssertion({
   }
   if (baseType === 'contains-json') {
     let errorMessage = 'Expected output to contain valid JSON';
-    let jsonOutputs = containsJSON(outputString);
+    const jsonOutputs = containsJSON(outputString);
     for (const jsonMatch of jsonOutputs) {
       pass = jsonMatch !== inverse;
       if (pass && renderedValue) {
@@ -928,7 +928,7 @@ ${
     // Assertion provider overrides test provider
     test.options = test.options || {};
     test.options.provider = assertion.provider || test.options.provider;
-    let input = typeof test.vars?.query === 'string' ? test.vars.query : prompt;
+    const input = typeof test.vars?.query === 'string' ? test.vars.query : prompt;
     return {
       assertion,
       ...(await matchesAnswerRelevance(input, output, assertion.threshold || 0, test.options)),
@@ -1242,7 +1242,7 @@ ${
 function containsJSON(str: string): any {
   // This will extract all json objects from a string
 
-  let jsonObjects = [];
+  const jsonObjects = [];
   let openBracket = str.indexOf('{');
   let closeBracket = str.indexOf('}', openBracket);
   // Iterate over the string until we find a valid JSON-like pattern

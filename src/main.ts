@@ -209,7 +209,7 @@ async function main() {
     }
   }
 
-  let evaluateOptions: EvaluateOptions = {};
+  const evaluateOptions: EvaluateOptions = {};
   if (defaultConfig.evaluateOptions) {
     evaluateOptions.generateSuggestions = defaultConfig.evaluateOptions.generateSuggestions;
     evaluateOptions.maxConcurrency = defaultConfig.evaluateOptions.maxConcurrency;

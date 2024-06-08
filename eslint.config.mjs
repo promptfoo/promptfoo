@@ -14,7 +14,7 @@ export default [
       "**/src/web/nextui/_next/**/*",
       "**/src/web/nextui/.next/**/*",
       "**/src/web/nextui/out/**/*",
-      "src/web/nextui/out/_next/static/chunks/**/*",
+      "dist/**/*",
     ],
   },
   {

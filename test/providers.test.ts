@@ -196,7 +196,7 @@ describe('call provider apis', () => {
     expect(fetch).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
-        body: expect.stringMatching(`temperature\":3.1415926`),
+        body: expect.stringMatching(`temperature":3.1415926`),
       }),
     );
     expect(provider.config.temperature).toBe(config.temperature);
@@ -658,7 +658,9 @@ describe('call provider apis', () => {
         const hydratedBody = JSON.parse(body);
         expect(hydratedBody.prompt).toBe(PROMPT);
 
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { accountId, apiKey, ...passThroughConfig } = cloudflareChatConfig;
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { prompt, ...bodyWithoutPrompt } = hydratedBody;
         expect(bodyWithoutPrompt).toEqual(passThroughConfig);
       });
