@@ -22,7 +22,10 @@ interface PythonProviderConfig {
 export class PythonProvider implements ApiProvider {
   private config: PythonProviderConfig;
 
-  constructor(private scriptPath: string, private options?: ProviderOptions) {
+  constructor(
+    private scriptPath: string,
+    private options?: ProviderOptions,
+  ) {
     this.id = () => options?.id ?? `python:${this.scriptPath}`;
     this.config = options?.config ?? {};
   }
