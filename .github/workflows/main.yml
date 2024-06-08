@@ -63,10 +63,10 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Use Node 18.x
+      - name: Use Node
         uses: actions/setup-node@v4
         with:
-          node-version: '18.x'
+          node-version-file: '.nvmrc'
           cache: 'npm'
 
       - name: Install Dependencies
