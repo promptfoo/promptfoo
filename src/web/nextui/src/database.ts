@@ -1,3 +1,5 @@
+import { NIL as NULL_UUID } from 'uuid';
+
 import { EvaluateSummary, EvaluateTestSuite } from '@/../../../types';
 
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -96,7 +98,6 @@ export async function createResult(
 
   if (error) throw error;
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { error: jobUpdateError } = await supabase
     .from('EvaluationJob')
     .update({

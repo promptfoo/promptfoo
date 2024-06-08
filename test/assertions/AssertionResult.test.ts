@@ -1,5 +1,7 @@
-import { AssertionSet } from '../../src/types';
+import { AssertionSet, TestCase } from '../../src/types';
+
 import { AssertionsResult } from '../../src/assertions/AssertionsResult';
+import { satisfies } from 'semver';
 
 describe('AssertionsResult', () => {
   const succeedingResult = {

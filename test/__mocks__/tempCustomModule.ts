@@ -3,7 +3,7 @@ class CustomApiProvider {
     return 'custom-api-provider';
   }
 
-  async callApi() {
+  async callApi(prompt) {
     return {
       output: 'Custom output',
       tokenUsage: { total: 10, prompt: 5, completion: 5 },

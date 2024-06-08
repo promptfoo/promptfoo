@@ -12,6 +12,8 @@ import {
   DefaultSuggestionsProvider as AnthropicSuggestionsProvider,
 } from './anthropic';
 
+import { DefaultModerationProvider as ReplicateModerationProvider } from './replicate';
+
 import { EnvOverrides } from '../types';
 
 export function getDefaultProviders(env?: EnvOverrides) {

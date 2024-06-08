@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 
-import { createClientComponentClient, User } from '@supabase/auth-helpers-nextjs';
+import { createClientComponentClient, User, Session } from '@supabase/auth-helpers-nextjs';
 
 import type { AuthTokenResponse, AuthError } from '@supabase/supabase-js';
 import type { Database } from '@/types/supabase';
@@ -40,7 +40,7 @@ export const AuthProvider = ({ children }: AuthProviderProps): JSX.Element => {
   const [loggedIn, setLoggedIn] = useState<boolean>(false);
 
   const fetchUser = useCallback(async () => {
-    const { data } = await supabase.auth.refreshSession();
+    const { data, error } = await supabase.auth.refreshSession();
     if (data) {
       setUser(data.user);
     }

@@ -35,7 +35,7 @@ import {
   deleteEval,
 } from '../util';
 import { synthesizeFromTestSuite } from '../testCases';
-import { getDbSignalPath } from '../database';
+import { getDbPath, getDbSignalPath } from '../database';
 
 // Running jobs
 const evalJobs = new Map<string, Job>();
@@ -212,7 +212,7 @@ export async function startServer(
     });
   });
 
-  app.post('/api/dataset/generate', async (req) => {
+  app.post('/api/dataset/generate', async (req, res) => {
     const testSuite: TestSuite = {
       prompts: req.body.prompts as Prompt[],
       tests: req.body.tests as TestCase[],

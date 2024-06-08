@@ -87,7 +87,7 @@ const BEDROCK_MODEL = {
     },
   },
   CLAUDE_MESSAGES: {
-    params: (config: BedrockClaudeMessagesCompletionOptions, prompt: string) => {
+    params: (config: BedrockClaudeMessagesCompletionOptions, prompt: string, stop: string[]) => {
       const { system, extractedMessages } = parseMessages(prompt);
       return {
         max_tokens: config?.max_tokens || parseInt(process.env.AWS_BEDROCK_MAX_TOKENS || '1024'),
@@ -121,7 +121,7 @@ const BEDROCK_MODEL = {
     },
   },
   LLAMA: {
-    params: (config: BedrockLlamaGenerationOptions, prompt: string) => ({
+    params: (config: BedrockLlamaGenerationOptions, prompt: string, stop: string[]) => ({
       prompt: prompt,
       temperature: config.temperature ?? parseFloat(process.env.AWS_BEDROCK_TEMPERATURE || '0'),
       top_p: config.top_p ?? parseFloat(process.env.AWS_BEDROCK_TOP_P || '1'),

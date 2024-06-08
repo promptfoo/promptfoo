@@ -770,7 +770,7 @@ describe('renderPrompt', () => {
 
     jest.doMock(
       path.resolve('/path/to/testFunction.js'),
-      () => (varName: any) => ({ output: `Dynamic value for ${varName}` }),
+      () => (varName: any, prompt: any, vars: any) => ({ output: `Dynamic value for ${varName}` }),
       { virtual: true },
     );
 

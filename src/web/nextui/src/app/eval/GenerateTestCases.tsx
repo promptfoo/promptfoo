@@ -9,7 +9,7 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogContentText from '@mui/material/DialogContentText';
 import DialogActions from '@mui/material/DialogActions';
 import useTheme from '@mui/material/styles/useTheme';
-// import { useStore } from './store';
+import { useStore } from './store';
 
 function GenerateTestCases() {
   /*

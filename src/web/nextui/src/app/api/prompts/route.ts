@@ -5,7 +5,7 @@ import { getPrompts } from '@/../../../util';
 
 export const dynamic = IS_RUNNING_LOCALLY ? 'auto' : 'force-dynamic';
 
-export async function GET() {
+export async function GET(req: Request) {
   if (USE_SUPABASE || IS_RUNNING_LOCALLY) {
     return NextResponse.json({ error: 'Not implemented' });
   }
