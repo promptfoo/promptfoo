@@ -1,7 +1,5 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import child_process from 'child_process';
-import Stream from 'stream';
 
 import { Response } from 'node-fetch';
 import { runAssertions, runAssertion } from '../src/assertions';
@@ -17,7 +15,6 @@ import type {
 } from '../src/types';
 import { OpenAiChatCompletionProvider } from '../src/providers/openai';
 import * as pythonWrapper from '../src/python/wrapper';
-import cliState from '../src/cliState';
 
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
@@ -110,8 +107,6 @@ describe('runAssertions', () => {
   });
 
   it('should fail when combined score is less than threshold', async () => {
-    const output = 'Different output';
-
     const result: GradingResult = await runAssertions({
       prompt: 'Some prompt',
       provider: new OpenAiChatCompletionProvider('gpt-4'),
@@ -137,8 +132,6 @@ describe('runAssertions', () => {
   });
 
   it('should pass when combined score is greater than threshold', async () => {
-    const output = 'Different output';
-
     const result: GradingResult = await runAssertions({
       prompt: 'Some prompt',
       provider: new OpenAiChatCompletionProvider('gpt-4'),
@@ -482,7 +475,7 @@ describe('runAssertion', () => {
 
   const javascriptFunctionAssertion: Assertion = {
     type: 'javascript',
-    value: async (output: string) => ({
+    value: async () => ({
       pass: true,
       score: 0.5,
       reason: 'Assertion passed',
@@ -492,7 +485,7 @@ describe('runAssertion', () => {
 
   const javascriptFunctionFailAssertion: Assertion = {
     type: 'javascript',
-    value: async (output: string) => ({
+    value: async () => ({
       pass: false,
       score: 0.5,
       reason: 'Assertion failed',
@@ -602,7 +595,7 @@ describe('runAssertion', () => {
     });
     expect(result.pass).toBeFalsy();
     expect(result.reason).toBe(
-      `Expected output \"{\"key\":\"value\"}\" to equal \"{\"key\":\"not value\"}\"`,
+      `Expected output "{"key":"value"}" to equal "{"key":"not value"}"`,
     );
   });
 
@@ -648,7 +641,7 @@ describe('runAssertion', () => {
     expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve('/output.json'), 'utf8');
     expect(result.pass).toBeFalsy();
     expect(result.reason).toBe(
-      `Expected output \"{\"key\":\"value\"}\" to equal \"{\"key\": \"not value\"}\"`,
+      `Expected output "{"key":"value"}" to equal "{"key": "not value"}"`,
     );
   });
 
@@ -1783,7 +1776,7 @@ describe('runAssertion', () => {
     ['number', jest.fn((output: string) => output.length), true, 'Assertion passed'],
     [
       'GradingResult',
-      jest.fn((output: string) => ({ pass: true, score: 1, reason: 'Custom reason' })),
+      jest.fn(() => ({ pass: true, score: 1, reason: 'Custom reason' })),
       true,
       'Custom reason',
     ],
@@ -1793,16 +1786,16 @@ describe('runAssertion', () => {
       false,
       'Custom function returned false',
     ],
-    ['number', jest.fn((output: string) => 0), false, 'Custom function returned false'],
+    ['number', jest.fn(() => 0), false, 'Custom function returned false'],
     [
       'GradingResult',
-      jest.fn((output: string) => ({ pass: false, score: 0.1, reason: 'Custom reason' })),
+      jest.fn(() => ({ pass: false, score: 0.1, reason: 'Custom reason' })),
       false,
       'Custom reason',
     ],
     [
       'boolean Promise',
-      jest.fn((output: string) => Promise.resolve(true)),
+      jest.fn(() => Promise.resolve(true)),
       true,
       'Assertion passed',
     ],

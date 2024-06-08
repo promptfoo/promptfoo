@@ -1,5 +1,3 @@
-import * as fs from 'fs';
-
 import { NextRequest, NextResponse } from 'next/server';
 import { validate as uuidValidate } from 'uuid';
 

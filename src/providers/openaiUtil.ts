@@ -1,5 +1,5 @@
 import Ajv from 'ajv';
-import { getNunjucksEngine, renderVarsInObject } from '../util';
+import { renderVarsInObject } from '../util';
 
 const ajv = new Ajv();
 

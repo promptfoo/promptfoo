@@ -1,5 +1,5 @@
 import { filterFailingTests } from '../../../src/commands/eval/filterFailingTests';
-import { EvaluateResult, EvaluateSummary, TestSuite } from '../../../src/types';
+import { EvaluateSummary, TestSuite } from '../../../src/types';
 import { readOutput } from '../../../src/util';
 
 jest.mock('../../../src/util', () => {

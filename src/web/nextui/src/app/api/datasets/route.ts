@@ -5,7 +5,7 @@ import { getTestCases } from '@/../../../util';
 
 export const dynamic = IS_RUNNING_LOCALLY ? 'auto' : 'force-dynamic';
 
-export async function GET(req: Request) {
+export async function GET() {
   if (USE_SUPABASE || IS_RUNNING_LOCALLY) {
     return NextResponse.json({ error: 'Not implemented' });
   }
