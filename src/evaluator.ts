@@ -539,12 +539,12 @@ class Evaluator {
       testSuite.tests && testSuite.tests.length > 0
         ? testSuite.tests
         : testSuite.scenarios
-        ? []
-        : [
-            {
-              // Dummy test for cases when we're only comparing raw prompts.
-            },
-          ];
+          ? []
+          : [
+              {
+                // Dummy test for cases when we're only comparing raw prompts.
+              },
+            ];
 
     // Build scenarios and add to tests
     if (testSuite.scenarios && testSuite.scenarios.length > 0) {

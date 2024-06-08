@@ -20,7 +20,10 @@ function stripText(text: string) {
 }
 
 export class ScriptCompletionProvider implements ApiProvider {
-  constructor(private scriptPath: string, private options?: ProviderOptions) {}
+  constructor(
+    private scriptPath: string,
+    private options?: ProviderOptions,
+  ) {}
 
   id() {
     return `exec:${this.scriptPath}`;

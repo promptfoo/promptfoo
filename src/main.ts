@@ -275,8 +275,8 @@ async function main() {
         const browserBehavior = cmdObj.yes
           ? BrowserBehavior.OPEN
           : cmdObj.no
-          ? BrowserBehavior.SKIP
-          : BrowserBehavior.ASK;
+            ? BrowserBehavior.SKIP
+            : BrowserBehavior.ASK;
         await startServer(
           cmdObj.port,
           cmdObj.apiBaseUrl,
