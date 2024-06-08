@@ -1,12 +1,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import child_process from 'child_process';
-import Stream from 'stream';
-
 import { Response } from 'node-fetch';
 import { runAssertions, runAssertion } from '../src/assertions';
 import { assertionFromString } from '../src/csv';
-// import * as fetch from '../src/fetch';
 
 import type {
   Assertion,
@@ -16,8 +12,6 @@ import type {
   GradingResult,
 } from '../src/types';
 import { OpenAiChatCompletionProvider } from '../src/providers/openai';
-// import * as pythonWrapper from '../src/python/wrapper';
-import cliState from '../src/cliState';
 import { runPythonCode, runPython } from '../src/python/wrapper';
 import { fetchWithRetries } from '../src/fetch';
 
@@ -370,7 +364,6 @@ describe('runAssertions', () => {
 
 describe('runAssertion', () => {
   beforeEach(() => {
-    jest.restoreAllMocks();
     jest.resetModules();
   });
 
@@ -1912,7 +1905,7 @@ describe('runAssertion', () => {
     expect(result.score).toBe(Number(expectedPythonValue));
     expect(result.pass).toBeTruthy();
 
-    jest.restoreAllMocks();
+    // jest.restoreAllMocks();
   });
 
   it.each([
@@ -1984,11 +1977,11 @@ describe('runAssertion', () => {
       expect(result.score).toBe(expectedScore);
       expect(result.pass).toBe(expectedPass);
 
-      jest.restoreAllMocks();
+      // jest.restoreAllMocks();
     },
   );
 
-  fit.each([
+  it.each([
     ['boolean', 'True', true, 'Assertion passed'],
     ['number', '0.5', true, 'Assertion passed'],
     ['boolean', true, true, 'Assertion passed'],
@@ -2026,7 +2019,7 @@ describe('runAssertion', () => {
         output,
       });
 
-      runPython.toHaveBeenCalledWith(path.resolve('/path/to/assert.py'), 'get_assert', [
+      expect(runPython).toHaveBeenCalledWith(path.resolve('/path/to/assert.py'), 'get_assert', [
         output,
         {
           prompt: 'Some prompt that includes "double quotes" and \'single quotes\'',
@@ -2038,8 +2031,6 @@ describe('runAssertion', () => {
       expect(result.pass).toBe(expectedPass);
       expect(result.reason).toContain(expectedReason);
       expect(runPython).toHaveBeenCalledTimes(1);
-
-      jest.restoreAllMocks();
     },
   );
 
