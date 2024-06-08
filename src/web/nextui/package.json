@@ -25,6 +25,7 @@
     "debounce": "^1.2.1",
     "drizzle-orm": "^0.29.3",
     "diff": "^5.2.0",
+    "encoding": "^0.1.13",
     "eslint": "8.47.0",
     "eslint-config-next": "13.4.13",
     "js-yaml": "^4.1.0",
