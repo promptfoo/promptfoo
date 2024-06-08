@@ -34,7 +34,13 @@ import { useStore as useMainStore } from '@/app/eval/store';
 
 import type { CellContext, ColumnDef, VisibilityState } from '@tanstack/table-core';
 
-import { EvaluateTableRow, EvaluateTableOutput, FilterMode, EvaluateTable } from './types';
+import {
+  EvaluateTableRow,
+  EvaluateTableOutput,
+  FilterMode,
+  EvaluateTable,
+  GradingResult,
+} from './types';
 
 import './ResultsTable.css';
 import { useShiftKey } from '../hooks/useShiftKey';
@@ -505,13 +511,57 @@ function EvalOutputCell({
   if (output.gradingResult?.comment === '!highlight') {
     cellStyle.backgroundColor = '#ffffeb';
   }
+
+  // Pass/fail badge creation
+  let passCount = 0;
+  let failCount = 0;
+  const gradingResult = output.gradingResult;
+
+  if (gradingResult) {
+    if (gradingResult.componentResults) {
+      gradingResult.componentResults.forEach((result) => {
+        if (result.pass) {
+          passCount++;
+        } else {
+          failCount++;
+        }
+      });
+    } else {
+      passCount = gradingResult.pass ? 1 : 0;
+      failCount = gradingResult.pass ? 0 : 1;
+    }
+  }
+
+  let passFailText;
+  if (failCount === 1 && passCount === 1) {
+    passFailText = (
+      <>
+        {`${failCount} FAIL`} {`${passCount} PASS`}
+      </>
+    );
+  } else {
+    const failText = failCount > 1 ? `${failCount} FAIL` : failCount === 1 ? 'FAIL' : '';
+    const passText =
+      passCount > 1 ? `${passCount} PASS` : passCount === 1 && failCount === 0 ? 'PASS' : '';
+    const separator = failText && passText ? ' ' : '';
+
+    passFailText = (
+      <>
+        {failText}
+        {separator}
+        {passText}
+      </>
+    );
+  }
+
   return (
     <div className="cell" style={cellStyle}>
       {output.pass ? (
         <>
           <div className="status pass">
             <div className="pill">
-              PASS <span className="score">{scoreToString(output.score)}</span>
+              {passFailText}
+              <span className="score"> {scoreToString(output.score)}</span>
             </div>
             <CustomMetrics lookup={output.namedScores} />
           </div>
@@ -520,8 +570,8 @@ function EvalOutputCell({
         <>
           <div className="status fail">
             <div className="pill">
-              FAIL{output.score > 0 ? ' ' : ''}
-              <span className="score">{scoreToString(output.score)}</span>
+              {passFailText}
+              <span className="score"> {scoreToString(output.score)}</span>
             </div>
             <CustomMetrics lookup={output.namedScores} />
             <span className="fail-reason">

@@ -31,10 +31,10 @@ import {
   writeOutput,
   writeResultsToDatabase,
 } from './util';
-import { DEFAULT_README, DEFAULT_YAML_CONFIG } from './onboarding';
+import { createDummyFiles } from './onboarding';
 import { disableCache, clearCache } from './cache';
 import { getDirectory } from './esm';
-import { startServer } from './web/server';
+import { BrowserBehavior, startServer } from './web/server';
 import { checkForUpdates } from './updates';
 import { gatherFeedback } from './feedback';
 import { listCommand } from './commands/list';
@@ -54,49 +54,7 @@ import { generateTable } from './table';
 import { createShareableUrl } from './share';
 import { filterTests } from './commands/eval/filterTests';
 import { validateAssertions } from './assertions/validateAssertions';
-
-function createDummyFiles(directory: string | null) {
-  if (directory) {
-    // Make the directory if it doesn't exist
-    if (!fs.existsSync(directory)) {
-      fs.mkdirSync(directory);
-    }
-  }
-
-  if (directory) {
-    if (!fs.existsSync(directory)) {
-      logger.info(`Creating directory ${directory} ...`);
-      fs.mkdirSync(directory);
-    }
-  } else {
-    directory = '.';
-  }
-
-  fs.writeFileSync(
-    path.join(process.cwd(), directory, 'promptfooconfig.yaml'),
-    DEFAULT_YAML_CONFIG,
-  );
-  fs.writeFileSync(path.join(process.cwd(), directory, 'README.md'), DEFAULT_README);
-
-  const isNpx = process.env.npm_execpath?.includes('npx');
-  const runCommand = isNpx ? 'npx promptfoo@latest eval' : 'promptfoo eval';
-  if (directory === '.') {
-    logger.info(
-      chalk.green(
-        `✅ Wrote promptfooconfig.yaml. Run \`${chalk.bold(runCommand)}\` to get started!`,
-      ),
-    );
-  } else {
-    logger.info(`✅ Wrote promptfooconfig.yaml to ./${directory}`);
-    logger.info(
-      chalk.green(
-        `Run \`${chalk.bold(`cd ${directory}`)}\` and then \`${chalk.bold(
-          runCommand,
-        )}\` to get started!`,
-      ),
-    );
-  }
-}
+import dedent from 'dedent';
 
 async function resolveConfigs(
   cmdObj: Partial<CommandLineOptions>,
@@ -271,10 +229,12 @@ async function main() {
   program
     .command('init [directory]')
     .description('Initialize project with dummy files')
-    .action(async (directory: string | null) => {
+    .option('--no-interactive', 'Run in interactive mode')
+    .action(async (directory: string | null, cmdObj: { interactive: boolean }) => {
       telemetry.maybeShowNotice();
-      createDummyFiles(directory);
+      const details = await createDummyFiles(directory, cmdObj.interactive);
       telemetry.record('command_used', {
+        ...details,
         name: 'init',
       });
       await telemetry.send();
@@ -285,6 +245,7 @@ async function main() {
     .description('Start browser ui')
     .option('-p, --port <number>', 'Port number', '15500')
     .option('-y, --yes', 'Skip confirmation and auto-open the URL')
+    .option('-n, --no', 'Skip confirmation and do not open the URL')
     .option('--api-base-url <url>', 'Base URL for viewer API calls')
     .option('--filter-description <pattern>', 'Filter evals by description using a regex pattern')
     .option('--env-file <path>', 'Path to .env file')
@@ -294,6 +255,7 @@ async function main() {
         cmdObj: {
           port: number;
           yes: boolean;
+          no: boolean;
           apiBaseUrl?: string;
           envFile?: string;
           filterDescription?: string;
@@ -310,7 +272,17 @@ async function main() {
           setConfigDirectoryPath(directory);
         }
         // Block indefinitely on server
-        await startServer(cmdObj.port, cmdObj.apiBaseUrl, cmdObj.yes, cmdObj.filterDescription);
+        const browserBehavior = cmdObj.yes
+          ? BrowserBehavior.OPEN
+          : cmdObj.no
+          ? BrowserBehavior.SKIP
+          : BrowserBehavior.ASK;
+        await startServer(
+          cmdObj.port,
+          cmdObj.apiBaseUrl,
+          browserBehavior,
+          cmdObj.filterDescription,
+        );
       },
     );
 
@@ -792,6 +764,8 @@ async function main() {
           );
         }
 
+        await migrateResultsFromFileSystemToDatabase();
+
         let evalId: string | null = null;
         if (cmdObj.write) {
           evalId = await writeResultsToDatabase(summary, config);
@@ -809,8 +783,6 @@ async function main() {
         }
 
         telemetry.maybeShowNotice();
-
-        await migrateResultsFromFileSystemToDatabase();
 
         printBorder();
         if (!cmdObj.write) {

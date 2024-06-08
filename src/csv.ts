@@ -10,6 +10,7 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
   const options: TestCase['options'] = {};
   let providerOutput: string | object | undefined;
   let description: string | undefined;
+  let metric: string | undefined;
   for (const [key, value] of Object.entries(row)) {
     if (key.startsWith('__expected')) {
       if (value.trim() !== '') {
@@ -23,6 +24,8 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
       description = value;
     } else if (key === '__providerOutput') {
       providerOutput = value;
+    } else if (key === '__metric') {
+      metric = value;
     } else {
       vars[key] = value;
     }
@@ -33,6 +36,7 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
     assert: asserts,
     options,
     ...(description ? { description } : {}),
+    ...(metric ? { metric } : {}),
   };
 }
 

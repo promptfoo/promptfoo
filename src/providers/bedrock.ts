@@ -42,6 +42,32 @@ interface BedrockClaudeMessagesCompletionOptions extends BedrockOptions {
   anthropic_version?: string;
 }
 
+interface BedrockLlamaGenerationOptions extends BedrockOptions {
+  temperature?: number;
+  top_p?: number;
+  max_gen_len?: number;
+}
+
+interface BedrockCohereGenerationOptions extends BedrockOptions {
+  temperature?: number;
+  p?: number;
+  k?: number;
+  max_tokens?: number;
+  stop_sequences?: Array<string>;
+  return_likelihoods?: string;
+  stream?: boolean;
+  num_generations?: number;
+  logit_bias?: Record<string, number>;
+  truncate?: string;
+}
+
+interface BedrockMistralGenerationOptions extends BedrockOptions {
+  max_tokens?: number;
+  temperature?: number;
+  top_p?: number;
+  top_k?: number;
+}
+
 interface IBedrockModel {
   params: (config: BedrockOptions, prompt: string, stop: string[]) => any;
   output: (responseJson: any) => any;
@@ -94,6 +120,50 @@ const BEDROCK_MODEL = {
       return responseJson?.results[0]?.outputText;
     },
   },
+  LLAMA: {
+    params: (config: BedrockLlamaGenerationOptions, prompt: string, stop: string[]) => ({
+      prompt: prompt,
+      temperature: config.temperature ?? parseFloat(process.env.AWS_BEDROCK_TEMPERATURE || '0'),
+      top_p: config.top_p ?? parseFloat(process.env.AWS_BEDROCK_TOP_P || '1'),
+      max_gen_len: config.max_gen_len ?? parseInt(process.env.AWS_BEDROCK_MAX_GEN_LEN || '1024'),
+    }),
+    output: (responseJson: any) => {
+      return responseJson?.generation;
+    },
+  },
+  COHERE: {
+    // https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-cohere-command.html
+    params: (config: BedrockCohereGenerationOptions, prompt: string, stop: string[]) => ({
+      prompt: prompt,
+      temperature: config.temperature ?? parseFloat(process.env.COHERE_TEMPERATURE || '0'),
+      p: config.p ?? parseFloat(process.env.COHERE_P || '1'),
+      k: config.k ?? parseInt(process.env.COHERE_K || '0'),
+      max_tokens: config.max_tokens ?? parseInt(process.env.COHERE_MAX_TOKENS || '1024'),
+      stop_sequences: stop,
+      return_likelihoods: config.return_likelihoods || 'NONE',
+      stream: config.stream || false,
+      num_generations: config.num_generations || 1,
+      logit_bias: config.logit_bias || {},
+      truncate: config.truncate || 'NONE',
+    }),
+    output: (responseJson: any) => {
+      return responseJson?.generations[0]?.text;
+    },
+  },
+  MISTRAL: {
+    // https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-mistral-text-completion.html
+    params: (config: BedrockMistralGenerationOptions, prompt: string, stop: string[]) => ({
+      prompt: prompt,
+      max_tokens: config.max_tokens ?? parseInt(process.env.MISTRAL_MAX_TOKENS || '1024'),
+      stop: stop,
+      temperature: config.temperature ?? parseFloat(process.env.MISTRAL_TEMPERATURE || '0'),
+      top_p: config.top_p ?? parseFloat(process.env.MISTRAL_TOP_P || '1'),
+      top_k: config.top_k ?? parseInt(process.env.MISTRAL_TOP_K || '0'),
+    }),
+    output: (responseJson: any) => {
+      return responseJson?.outputs[0]?.text;
+    },
+  },
 };
 
 const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
@@ -106,6 +176,7 @@ const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'amazon.titan-text-premier-v1:0': BEDROCK_MODEL.TITAN_TEXT,
 };
 
+// See https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html
 function getHandlerForModel(modelName: string) {
   const ret = AWS_BEDROCK_MODELS[modelName];
   if (ret) {
@@ -113,6 +184,15 @@ function getHandlerForModel(modelName: string) {
   }
   if (modelName.startsWith('anthropic.claude')) {
     return BEDROCK_MODEL.CLAUDE_MESSAGES;
+  }
+  if (modelName.startsWith('meta.llama')) {
+    return BEDROCK_MODEL.LLAMA;
+  }
+  if (modelName.startsWith('cohere.')) {
+    return BEDROCK_MODEL.COHERE;
+  }
+  if (modelName.startsWith('mistral.')) {
+    return BEDROCK_MODEL.MISTRAL;
   }
   throw new Error(`Unknown Amazon Bedrock model: ${modelName}`);
 }
