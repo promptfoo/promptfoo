@@ -79,7 +79,6 @@
     "@types/opener": "^1.4.0",
     "@types/semver": "^7.5.0",
     "@types/uuid": "^9.0.2",
-    "babel-jest": "^29.5.0",
     "check-dependency-version-consistency": "^4.1.0",
     "cloudflare": "^3.2.0",
     "drizzle-kit": "^0.20.13",
@@ -88,7 +87,6 @@
     "next": "13.4.13",
     "prettier": "^2.8.8",
     "shx": "^0.3.4",
-    "ts-jest": "^29.1.0",
     "ts-node": "^10.9.1",
     "typescript": "^5.1.6"
   },

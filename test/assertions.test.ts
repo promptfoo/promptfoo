@@ -1904,8 +1904,6 @@ describe('runAssertion', () => {
     expect(result.reason).toBe('Assertion passed');
     expect(result.score).toBe(Number(expectedPythonValue));
     expect(result.pass).toBeTruthy();
-
-    // jest.restoreAllMocks();
   });
 
   it.each([
@@ -1976,8 +1974,6 @@ describe('runAssertion', () => {
       expect(result.reason).toMatch(new RegExp(`^${expectedReason}`));
       expect(result.score).toBe(expectedScore);
       expect(result.pass).toBe(expectedPass);
-
-      // jest.restoreAllMocks();
     },
   );
 
