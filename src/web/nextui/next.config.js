@@ -9,13 +9,25 @@ console.log('**************************************************');
 const nextConfig = {
   output: outputType,
   trailingSlash: true,
-  webpack: (config, { buildId, dev, isServer, defaultLoaders, webpack }) => {
+  webpack: (config, { isServer }) => {
     config.externals.push({
       'utf-8-validate': 'commonjs utf-8-validate',
       bufferutil: 'commonjs bufferutil',
       fsevents: 'require("fsevents")',
       'better-sqlite3': 'commonjs better-sqlite3',
     });
+
+    if (!isServer) {
+      config.resolve.fallback = {
+        child_process: false,
+        fs: false,
+        module: false,
+        net: false,
+        os: false,
+        path: false,
+        tls: false,
+      };
+    }
 
     return config;
   },
