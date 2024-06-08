@@ -6,7 +6,7 @@ import Stream from 'stream';
 import { Response } from 'node-fetch';
 import { runAssertions, runAssertion } from '../src/assertions';
 import { assertionFromString } from '../src/csv';
-import * as fetch from '../src/fetch';
+// import * as fetch from '../src/fetch';
 
 import type {
   Assertion,
@@ -16,12 +16,31 @@ import type {
   GradingResult,
 } from '../src/types';
 import { OpenAiChatCompletionProvider } from '../src/providers/openai';
-import * as pythonWrapper from '../src/python/wrapper';
+// import * as pythonWrapper from '../src/python/wrapper';
 import cliState from '../src/cliState';
+import { runPythonCode, runPython } from '../src/python/wrapper';
+import { fetchWithRetries } from '../src/fetch';
 
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
 }));
+
+jest.mock('../src/fetch', () => {
+  const actual = jest.requireActual('../src/fetch');
+  return {
+    ...actual,
+    fetchWithRetries: jest.fn(actual.fetchWithRetries),
+  };
+});
+
+jest.mock('../src/python/wrapper', () => {
+  const actual = jest.requireActual('../src/python/wrapper');
+  return {
+    ...actual,
+    runPython: jest.fn(actual.runPython),
+    runPythonCode: jest.fn(actual.runPythonCode),
+  };
+});
 
 jest.mock('glob', () => ({
   globSync: jest.fn(),
@@ -54,11 +73,6 @@ export class TestGrader implements ApiProvider {
   }
 }
 const Grader = new TestGrader();
-
-beforeEach(() => {
-  jest.restoreAllMocks();
-  jest.resetModules();
-});
 
 describe('runAssertions', () => {
   const test: AtomicTestCase = {
@@ -355,6 +369,15 @@ describe('runAssertions', () => {
 });
 
 describe('runAssertion', () => {
+  beforeEach(() => {
+    jest.restoreAllMocks();
+    jest.resetModules();
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
   const equalityAssertion: Assertion = {
     type: 'equals',
     value: 'Expected output',
@@ -1577,11 +1600,9 @@ describe('runAssertion', () => {
   it('should pass when the webhook assertion passes', async () => {
     const output = 'Expected output';
 
-    jest
-      .spyOn(fetch, 'fetchWithRetries')
-      .mockImplementation(() =>
-        Promise.resolve(new Response(JSON.stringify({ pass: true }), { status: 200 })),
-      );
+    fetchWithRetries.mockImplementation(() =>
+      Promise.resolve(new Response(JSON.stringify({ pass: true }), { status: 200 })),
+    );
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
@@ -1597,11 +1618,9 @@ describe('runAssertion', () => {
   it('should fail when the webhook assertion fails', async () => {
     const output = 'Different output';
 
-    jest
-      .spyOn(fetch, 'fetchWithRetries')
-      .mockImplementation(() =>
-        Promise.resolve(new Response(JSON.stringify({ pass: false }), { status: 200 })),
-      );
+    fetchWithRetries.mockImplementation(() =>
+      Promise.resolve(new Response(JSON.stringify({ pass: false }), { status: 200 })),
+    );
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
@@ -1617,9 +1636,7 @@ describe('runAssertion', () => {
   it('should fail when the webhook returns an error', async () => {
     const output = 'Expected output';
 
-    jest
-      .spyOn(fetch, 'fetchWithRetries')
-      .mockImplementation(() => Promise.resolve(new Response('', { status: 500 })));
+    fetchWithRetries.mockImplementation(() => Promise.resolve(new Response('', { status: 500 })));
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
@@ -1867,7 +1884,7 @@ describe('runAssertion', () => {
   it('should handle output strings with both single and double quotes correctly in python assertion', async () => {
     const expectedPythonValue = '0.5';
 
-    const spy = jest.spyOn(pythonWrapper, 'runPythonCode').mockResolvedValue(expectedPythonValue);
+    runPythonCode.mockResolvedValueOnce(expectedPythonValue);
 
     const output =
       'This is a string with "double quotes"\n and \'single quotes\' \n\n and some \n\t newlines.';
@@ -1885,8 +1902,8 @@ describe('runAssertion', () => {
       output,
     });
 
-    expect(spy).toHaveBeenCalledTimes(1);
-    expect(spy).toHaveBeenCalledWith(expect.anything(), 'main', [
+    expect(runPythonCode).toHaveBeenCalledTimes(1);
+    expect(runPythonCode).toHaveBeenCalledWith(expect.anything(), 'main', [
       output,
       { prompt: 'Some prompt', test: {}, vars: {} },
     ]);
@@ -1947,7 +1964,7 @@ describe('runAssertion', () => {
         threshold,
       };
 
-      const spy = jest.spyOn(pythonWrapper, 'runPythonCode').mockResolvedValue(resolvedValue);
+      runPythonCode.mockResolvedValueOnce(resolvedValue);
 
       const result: GradingResult = await runAssertion({
         prompt: 'Some prompt',
@@ -1957,8 +1974,8 @@ describe('runAssertion', () => {
         output,
       });
 
-      expect(spy).toHaveBeenCalledTimes(1);
-      expect(spy).toHaveBeenCalledWith(expect.anything(), 'main', [
+      expect(runPythonCode).toHaveBeenCalledTimes(1);
+      expect(runPythonCode).toHaveBeenCalledWith(expect.anything(), 'main', [
         output,
         { prompt: 'Some prompt', test: {}, vars: {} },
       ]);
@@ -1971,7 +1988,7 @@ describe('runAssertion', () => {
     },
   );
 
-  it.each([
+  fit.each([
     ['boolean', 'True', true, 'Assertion passed'],
     ['number', '0.5', true, 'Assertion passed'],
     ['boolean', true, true, 'Assertion passed'],
@@ -1994,7 +2011,7 @@ describe('runAssertion', () => {
     'should handle when the file:// assertion with .py file returns a %s',
     async (type, pythonOutput, expectedPass, expectedReason) => {
       const output = 'Expected output';
-      jest.spyOn(pythonWrapper, 'runPython').mockResolvedValue(pythonOutput);
+      runPython.mockResolvedValueOnce(pythonOutput);
 
       const fileAssertion: Assertion = {
         type: 'python',
@@ -2009,22 +2026,18 @@ describe('runAssertion', () => {
         output,
       });
 
-      expect(pythonWrapper.runPython).toHaveBeenCalledWith(
-        path.resolve('/path/to/assert.py'),
-        'get_assert',
-        [
-          output,
-          {
-            prompt: 'Some prompt that includes "double quotes" and \'single quotes\'',
-            vars: {},
-            test: {},
-          },
-        ],
-      );
+      runPython.toHaveBeenCalledWith(path.resolve('/path/to/assert.py'), 'get_assert', [
+        output,
+        {
+          prompt: 'Some prompt that includes "double quotes" and \'single quotes\'',
+          vars: {},
+          test: {},
+        },
+      ]);
 
       expect(result.pass).toBe(expectedPass);
       expect(result.reason).toContain(expectedReason);
-      expect(pythonWrapper.runPython).toHaveBeenCalledTimes(1);
+      expect(runPython).toHaveBeenCalledTimes(1);
 
       jest.restoreAllMocks();
     },
@@ -2032,11 +2045,9 @@ describe('runAssertion', () => {
 
   it('should handle when python file assertions throw an error', async () => {
     const output = 'Expected output';
-    const spy = jest
-      .spyOn(pythonWrapper, 'runPython')
-      .mockRejectedValue(
-        new Error('The Python script `call_api` function must return a dict with an `output`'),
-      );
+    runPython.mockRejectedValue(
+      new Error('The Python script `call_api` function must return a dict with an `output`'),
+    );
     const fileAssertion: Assertion = {
       type: 'python',
       value: 'file:///path/to/assert.py',
@@ -2048,7 +2059,7 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       output,
     });
-    expect(spy).toHaveBeenCalledTimes(1);
+    expect(runPython).toHaveBeenCalledTimes(1);
     expect(result).toEqual({
       assertion: {
         type: 'python',

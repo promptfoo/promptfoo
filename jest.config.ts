@@ -18,7 +18,8 @@ const config: Config = {
   setupFiles: ['<rootDir>/.jest/setEnvVars.js'],
   testPathIgnorePatterns: ['<rootDir>/examples', '<rootDir>/node_modules', '<rootDir>/dist'],
   transform: {
-    '^.+\\.js$': 'babel-jest',
+    '^.+\\.(t|j)sx?$': '@swc/jest',
+    // '^.+\\.js$': 'babel-jest',
     '^.+\\.m?[tj]sx?$': ['ts-jest', tsJestConfig],
   },
 };

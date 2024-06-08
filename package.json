@@ -59,6 +59,8 @@
   "devDependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.458.0",
     "@azure/identity": "^4.0.0",
+    "@swc/core": "^1.5.25",
+    "@swc/jest": "^0.2.36",
     "@types/async": "^3.2.20",
     "@types/better-sqlite3": "^7.6.10",
     "@types/cache-manager": "^4.0.2",
@@ -81,7 +83,7 @@
     "check-dependency-version-consistency": "^4.1.0",
     "cloudflare": "^3.2.0",
     "drizzle-kit": "^0.20.13",
-    "jest": "^29.5.0",
+    "jest": "^29.7.0",
     "jest-watch-typeahead": "^2.2.2",
     "next": "13.4.13",
     "prettier": "^2.8.8",
