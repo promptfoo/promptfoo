@@ -59,6 +59,7 @@
   "devDependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.592.0",
     "@azure/identity": "^4.2.0",
+    "@eslint/js": "^9.4.0",
     "@types/async": "^3.2.24",
     "@types/better-sqlite3": "^7.6.10",
     "@types/cache-manager": "^4.0.6",
@@ -67,6 +68,7 @@
     "@types/compression": "^1.7.5",
     "@types/cors": "^2.8.17",
     "@types/debounce": "^1.2.4",
+    "@types/eslint__js": "^8.42.3",
     "@types/express": "^4.17.21",
     "@types/glob": "^8.1.0",
     "@types/inquirer": "^9.0.7",
@@ -81,6 +83,7 @@
     "check-dependency-version-consistency": "^4.1.0",
     "cloudflare": "^3.2.0",
     "drizzle-kit": "^0.20.13",
+    "eslint": "^8.57.0",
     "jest": "^29.7.0",
     "jest-watch-typeahead": "^2.2.2",
     "next": "13.4.13",
@@ -88,7 +91,8 @@
     "shx": "^0.3.4",
     "ts-jest": "^29.1.4",
     "ts-node": "^10.9.2",
-    "typescript": "^5.4.5"
+    "typescript": "^5.4.5",
+    "typescript-eslint": "^7.12.0"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.20.1",
