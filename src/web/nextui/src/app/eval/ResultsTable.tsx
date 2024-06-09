@@ -365,12 +365,15 @@ function EvalOutputCell({
   let tokPerSecDisplay;
   let costDisplay;
 
-  if (output.tokenUsage?.completion) {
+  if (output.latencyMs) {
     latencyDisplay = (
       <span>
         {Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(output.latencyMs)} ms
       </span>
     );
+  }
+
+  if (output.tokenUsage?.completion) {
     const tokPerSec = output.tokenUsage.completion / (output.latencyMs / 1000);
     tokPerSecDisplay = (
       <span>{Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(tokPerSec)}</span>
