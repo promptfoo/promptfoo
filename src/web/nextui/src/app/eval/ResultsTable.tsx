@@ -533,6 +533,10 @@ function EvalOutputCell({
       passCount = gradingResult.pass ? 1 : 0;
       failCount = gradingResult.pass ? 0 : 1;
     }
+  } else if (output.pass) {
+    passCount = 1;
+  } else if (!output.pass) {
+    failCount = 1;
   }
 
   let passFailText;
@@ -567,6 +571,7 @@ function EvalOutputCell({
     );
   }
 
+  const scoreString = scoreToString(output.score);
   return (
     <div className="cell" style={cellStyle}>
       {output.pass ? (
@@ -574,7 +579,7 @@ function EvalOutputCell({
           <div className="status pass">
             <div className="pill">
               {passFailText}
-              <span className="score"> {scoreToString(output.score)}</span>
+              {scoreString && <span className="score"> {scoreString}</span>}
             </div>
             <CustomMetrics lookup={output.namedScores} />
           </div>
@@ -584,7 +589,7 @@ function EvalOutputCell({
           <div className="status fail">
             <div className="pill">
               {passFailText}
-              <span className="score"> {scoreToString(output.score)}</span>
+              {scoreString && <span className="score"> {scoreString}</span>}
             </div>
             <CustomMetrics lookup={output.namedScores} />
             <span className="fail-reason">
