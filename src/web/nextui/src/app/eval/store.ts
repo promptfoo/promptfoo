@@ -1,7 +1,8 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
+import { persist, createJSONStorage, StateStorage } from 'zustand/middleware';
+import { get, set, del } from 'idb-keyval';
 
-import type { EvaluateTable, FilePath, UnifiedConfig } from './types';
+import type { EvaluateTable, UnifiedConfig } from './types';
 
 interface TableState {
   evalId: string | null;
@@ -26,6 +27,18 @@ interface TableState {
   showPrompts: boolean;
   setShowPrompts: (showPrompts: boolean) => void;
 }
+
+const storage: StateStorage = {
+  getItem: async (name: string): Promise<string | null> => {
+    return (await get(name)) || null;
+  },
+  setItem: async (name: string, value: string): Promise<void> => {
+    await set(name, value);
+  },
+  removeItem: async (name: string): Promise<void> => {
+    await del(name);
+  },
+};
 
 export const useStore = create<TableState>()(
   persist(
@@ -54,7 +67,7 @@ export const useStore = create<TableState>()(
     }),
     {
       name: 'ResultsViewStorage',
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(() => storage),
     },
   ),
 );
