@@ -243,9 +243,9 @@ export class VertexChatProvider extends VertexGenericProvider {
       contents = updatedContents;
     }
 
-    let systemInstruction = JSON.parse(JSON.stringify(this.config.systemInstruction));
+    const systemInstruction = JSON.parse(JSON.stringify(this.config.systemInstruction));
     if (systemInstruction && context?.vars) {
-      for (let part of systemInstruction.parts) {
+      for (const part of systemInstruction.parts) {
         if (part.text) {
           part.text = nunjucks.renderString(part.text, context.vars);
         }
