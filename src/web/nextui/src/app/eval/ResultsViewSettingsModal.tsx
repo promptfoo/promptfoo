@@ -37,7 +37,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ open, onClose }) => {
       <DialogTitle>Table View Settings</DialogTitle>
       <DialogContent>
         <Box>
-          <Tooltip title="Forcing line breaks makes it easier to adjust column widths to your liking">
+          <Tooltip
+            title="Forcing line breaks makes it easier to adjust column widths to your liking"
+            placement="right"
+          >
             <FormControlLabel
               control={
                 <Checkbox
@@ -72,7 +75,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ open, onClose }) => {
           />
         </Box>
         <Box>
-          <Tooltip title="Show the final prompt that produced the output in each cell.">
+          <Tooltip
+            title="Show the final prompt that produced the output in each cell."
+            placement="right"
+          >
             <FormControlLabel
               control={
                 <Checkbox
@@ -85,7 +91,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ open, onClose }) => {
           </Tooltip>
         </Box>
         <Box>
-          <Tooltip title="Show detailed inference statistics such as latency, tokens used, cost, etc.">
+          <Tooltip
+            title="Show detailed inference statistics such as latency, tokens used, cost, etc."
+            placement="right"
+          >
             <FormControlLabel
               control={
                 <Checkbox
