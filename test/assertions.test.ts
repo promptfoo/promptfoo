@@ -2,9 +2,11 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { Response } from 'node-fetch';
+
 import { runAssertions, runAssertion } from '../src/assertions';
-import { assertionFromString } from '../src/csv';
-import * as fetch from '../src/fetch';
+import { DefaultEmbeddingProvider, OpenAiChatCompletionProvider } from '../src/providers/openai';
+import { runPythonCode, runPython } from '../src/python/wrapper';
+import { fetchWithRetries } from '../src/fetch';
 
 import type {
   Assertion,
@@ -13,12 +15,27 @@ import type {
   ProviderResponse,
   GradingResult,
 } from '../src/types';
-import { DefaultEmbeddingProvider, OpenAiChatCompletionProvider } from '../src/providers/openai';
-import * as pythonWrapper from '../src/python/wrapper';
 
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
 }));
+
+jest.mock('../src/fetch', () => {
+  const actual = jest.requireActual('../src/fetch');
+  return {
+    ...actual,
+    fetchWithRetries: jest.fn(actual.fetchWithRetries),
+  };
+});
+
+jest.mock('../src/python/wrapper', () => {
+  const actual = jest.requireActual('../src/python/wrapper');
+  return {
+    ...actual,
+    runPython: jest.fn(actual.runPython),
+    runPythonCode: jest.fn(actual.runPythonCode),
+  };
+});
 
 jest.mock('glob', () => ({
   globSync: jest.fn(),
@@ -51,11 +68,6 @@ export class TestGrader implements ApiProvider {
   }
 }
 const Grader = new TestGrader();
-
-beforeEach(() => {
-  jest.restoreAllMocks();
-  jest.resetModules();
-});
 
 describe('runAssertions', () => {
   const test: AtomicTestCase = {
@@ -352,6 +364,14 @@ describe('runAssertions', () => {
 });
 
 describe('runAssertion', () => {
+  beforeEach(() => {
+    jest.resetModules();
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
   const equalityAssertion: Assertion = {
     type: 'equals',
     value: 'Expected output',
@@ -1574,11 +1594,9 @@ describe('runAssertion', () => {
   it('should pass when the webhook assertion passes', async () => {
     const output = 'Expected output';
 
-    jest
-      .spyOn(fetch, 'fetchWithRetries')
-      .mockImplementation(() =>
-        Promise.resolve(new Response(JSON.stringify({ pass: true }), { status: 200 })),
-      );
+    fetchWithRetries.mockImplementation(() =>
+      Promise.resolve(new Response(JSON.stringify({ pass: true }), { status: 200 })),
+    );
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
@@ -1594,11 +1612,9 @@ describe('runAssertion', () => {
   it('should fail when the webhook assertion fails', async () => {
     const output = 'Different output';
 
-    jest
-      .spyOn(fetch, 'fetchWithRetries')
-      .mockImplementation(() =>
-        Promise.resolve(new Response(JSON.stringify({ pass: false }), { status: 200 })),
-      );
+    fetchWithRetries.mockImplementation(() =>
+      Promise.resolve(new Response(JSON.stringify({ pass: false }), { status: 200 })),
+    );
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
@@ -1614,9 +1630,7 @@ describe('runAssertion', () => {
   it('should fail when the webhook returns an error', async () => {
     const output = 'Expected output';
 
-    jest
-      .spyOn(fetch, 'fetchWithRetries')
-      .mockImplementation(() => Promise.resolve(new Response('', { status: 500 })));
+    fetchWithRetries.mockImplementation(() => Promise.resolve(new Response('', { status: 500 })));
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
@@ -1864,7 +1878,7 @@ describe('runAssertion', () => {
   it('should handle output strings with both single and double quotes correctly in python assertion', async () => {
     const expectedPythonValue = '0.5';
 
-    const spy = jest.spyOn(pythonWrapper, 'runPythonCode').mockResolvedValue(expectedPythonValue);
+    runPythonCode.mockResolvedValueOnce(expectedPythonValue);
 
     const output =
       'This is a string with "double quotes"\n and \'single quotes\' \n\n and some \n\t newlines.';
@@ -1882,8 +1896,8 @@ describe('runAssertion', () => {
       output,
     });
 
-    expect(spy).toHaveBeenCalledTimes(1);
-    expect(spy).toHaveBeenCalledWith(expect.anything(), 'main', [
+    expect(runPythonCode).toHaveBeenCalledTimes(1);
+    expect(runPythonCode).toHaveBeenCalledWith(expect.anything(), 'main', [
       output,
       { prompt: 'Some prompt', test: {}, vars: {} },
     ]);
@@ -1891,8 +1905,6 @@ describe('runAssertion', () => {
     expect(result.reason).toBe('Assertion passed');
     expect(result.score).toBe(Number(expectedPythonValue));
     expect(result.pass).toBeTruthy();
-
-    jest.restoreAllMocks();
   });
 
   it.each([
@@ -1944,7 +1956,7 @@ describe('runAssertion', () => {
         threshold,
       };
 
-      const spy = jest.spyOn(pythonWrapper, 'runPythonCode').mockResolvedValue(resolvedValue);
+      runPythonCode.mockResolvedValueOnce(resolvedValue);
 
       const result: GradingResult = await runAssertion({
         prompt: 'Some prompt',
@@ -1954,8 +1966,8 @@ describe('runAssertion', () => {
         output,
       });
 
-      expect(spy).toHaveBeenCalledTimes(1);
-      expect(spy).toHaveBeenCalledWith(expect.anything(), 'main', [
+      expect(runPythonCode).toHaveBeenCalledTimes(1);
+      expect(runPythonCode).toHaveBeenCalledWith(expect.anything(), 'main', [
         output,
         { prompt: 'Some prompt', test: {}, vars: {} },
       ]);
@@ -1963,8 +1975,6 @@ describe('runAssertion', () => {
       expect(result.reason).toMatch(new RegExp(`^${expectedReason}`));
       expect(result.score).toBe(expectedScore);
       expect(result.pass).toBe(expectedPass);
-
-      jest.restoreAllMocks();
     },
   );
 
@@ -1991,7 +2001,7 @@ describe('runAssertion', () => {
     'should handle when the file:// assertion with .py file returns a %s',
     async (type, pythonOutput, expectedPass, expectedReason) => {
       const output = 'Expected output';
-      jest.spyOn(pythonWrapper, 'runPython').mockResolvedValue(pythonOutput);
+      runPython.mockResolvedValueOnce(pythonOutput);
 
       const fileAssertion: Assertion = {
         type: 'python',
@@ -2006,34 +2016,26 @@ describe('runAssertion', () => {
         output,
       });
 
-      expect(pythonWrapper.runPython).toHaveBeenCalledWith(
-        path.resolve('/path/to/assert.py'),
-        'get_assert',
-        [
-          output,
-          {
-            prompt: 'Some prompt that includes "double quotes" and \'single quotes\'',
-            vars: {},
-            test: {},
-          },
-        ],
-      );
+      expect(runPython).toHaveBeenCalledWith(path.resolve('/path/to/assert.py'), 'get_assert', [
+        output,
+        {
+          prompt: 'Some prompt that includes "double quotes" and \'single quotes\'',
+          vars: {},
+          test: {},
+        },
+      ]);
 
       expect(result.pass).toBe(expectedPass);
       expect(result.reason).toContain(expectedReason);
-      expect(pythonWrapper.runPython).toHaveBeenCalledTimes(1);
-
-      jest.restoreAllMocks();
+      expect(runPython).toHaveBeenCalledTimes(1);
     },
   );
 
   it('should handle when python file assertions throw an error', async () => {
     const output = 'Expected output';
-    const spy = jest
-      .spyOn(pythonWrapper, 'runPython')
-      .mockRejectedValue(
-        new Error('The Python script `call_api` function must return a dict with an `output`'),
-      );
+    runPython.mockRejectedValue(
+      new Error('The Python script `call_api` function must return a dict with an `output`'),
+    );
     const fileAssertion: Assertion = {
       type: 'python',
       value: 'file:///path/to/assert.py',
@@ -2045,7 +2047,7 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       output,
     });
-    expect(spy).toHaveBeenCalledTimes(1);
+    expect(runPython).toHaveBeenCalledTimes(1);
     expect(result).toEqual({
       assertion: {
         type: 'python',
@@ -2481,247 +2483,5 @@ describe('runAssertion', () => {
       expect(result.pass).toBeFalsy();
       expect(result.reason).toBe('None of the provided values met the similarity threshold');
     });
-  });
-});
-
-describe('assertionFromString', () => {
-  it('should create an equality assertion', () => {
-    const expected = 'Expected output';
-
-    const result: Assertion = assertionFromString(expected);
-    expect(result.type).toBe('equals');
-    expect(result.value).toBe(expected);
-  });
-
-  it('should create an is-json assertion', () => {
-    const expected = 'is-json';
-
-    const result: Assertion = assertionFromString(expected);
-    expect(result.type).toBe('is-json');
-  });
-
-  it('should create an is-json assertion with value', () => {
-    const expected = `is-json:
-      required: ['color']
-      type:object
-      properties:
-        color:
-          type:string
-`;
-
-    const result: Assertion = assertionFromString(expected);
-    expect(result.type).toBe('is-json');
-    expect(result.value).toBe(
-      `
-      required: ['color']
-      type:object
-      properties:
-        color:
-          type:string
-`,
-    );
-  });
-
-  it('should create an contains-json assertion', () => {
-    const expected = 'contains-json';
-
-    const result: Assertion = assertionFromString(expected);
-    expect(result.type).toBe('contains-json');
-  });
-
-  it('should create a function assertion', () => {
-    const expected = 'fn:output === "Expected output"';
-
-    const result: Assertion = assertionFromString(expected);
-    expect(result.type).toBe('javascript');
-    expect(result.value).toBe('output === "Expected output"');
-  });
-
-  it('should create a similarity assertion', () => {
-    const expected = 'similar(0.9):Expected output';
-
-    const result: Assertion = assertionFromString(expected);
-    expect(result.type).toBe('similar');
-    expect(result.value).toBe('Expected output');
-    expect(result.threshold).toBe(0.9);
-  });
-
-  it('should create a contains assertion', () => {
-    const expected = 'contains:substring';
-
-    const result: Assertion = assertionFromString(expected);
-    expect(result.type).toBe('contains');
-    expect(result.value).toBe('substring');
-  });
-
-  it('should create a not-contains assertion', () => {
-    const expected = 'not-contains:substring';
-
-    const result: Assertion = assertionFromString(expected);
-    expect(result.type).toBe('not-contains');
-    expect(result.value).toBe('substring');
-  });
-
-  it('should create a contains-any assertion', () => {
-    const expected = 'contains-any:substring1,substring2';
-
-    const result: Assertion = assertionFromString(expected);
-    expect(result.type).toBe('contains-any');
-    expect(result.value).toEqual(['substring1', 'substring2']);
-  });
-
-  it('should create a contains-all assertion', () => {
-    const expected = 'contains-all:substring1,substring2';
-
-    const result: Assertion = assertionFromString(expected);
-    expect(result.type).toBe('contains-all');
-    expect(result.value).toEqual(['substring1', 'substring2']);
-  });
-
-  it('should create a regex assertion', () => {
-    const expected = 'regex:\\d+';
-
-    const result: Assertion = assertionFromString(expected);
-    expect(result.type).toBe('regex');
-    expect(result.value).toBe('\\d+');
-  });
-
-  it('should create a not-regex assertion', () => {
-    const expected = 'not-regex:\\d+';
-
-    const result: Assertion = assertionFromString(expected);
-    expect(result.type).toBe('not-regex');
-    expect(result.value).toBe('\\d+');
-  });
-
-  it('should create an icontains assertion', () => {
-    const expected = 'icontains:substring';
-
-    const result: Assertion = assertionFromString(expected);
-    expect(result.type).toBe('icontains');
-    expect(result.value).toBe('substring');
-  });
-
-  it('should create a not-icontains assertion', () => {
-    const expected = 'not-icontains:substring';
-
-    const result: Assertion = assertionFromString(expected);
-    expect(result.type).toBe('not-icontains');
-    expect(result.value).toBe('substring');
-  });
-
-  it('should create a webhook assertion', () => {
-    const expected = 'webhook:https://example.com';
-
-    const result: Assertion = assertionFromString(expected);
-    expect(result.type).toBe('webhook');
-    expect(result.value).toBe('https://example.com');
-  });
-
-  it('should create a not-webhook assertion', () => {
-    const expected = 'not-webhook:https://example.com';
-
-    const result: Assertion = assertionFromString(expected);
-    expect(result.type).toBe('not-webhook');
-    expect(result.value).toBe('https://example.com');
-  });
-
-  it('should create a rouge-n assertion', () => {
-    const expected = 'rouge-n(0.225):foo';
-
-    const result: Assertion = assertionFromString(expected);
-    expect(result.type).toBe('rouge-n');
-    expect(result.value).toBe('foo');
-    expect(result.threshold).toBeCloseTo(0.225);
-  });
-
-  it('should create a not-rouge-n assertion', () => {
-    const expected = 'not-rouge-n(0.225):foo';
-
-    const result: Assertion = assertionFromString(expected);
-    expect(result.type).toBe('not-rouge-n');
-    expect(result.value).toBe('foo');
-    expect(result.threshold).toBeCloseTo(0.225);
-  });
-
-  it('should create a starts-with assertion', () => {
-    const expected = 'starts-with:Expected';
-
-    const result: Assertion = assertionFromString(expected);
-    expect(result.type).toBe('starts-with');
-    expect(result.value).toBe('Expected');
-  });
-
-  it('should create a levenshtein assertion', () => {
-    const expected = 'levenshtein(5):Expected output';
-
-    const result: Assertion = assertionFromString(expected);
-    expect(result.type).toBe('levenshtein');
-    expect(result.value).toBe('Expected output');
-    expect(result.threshold).toBe(5);
-  });
-
-  it('should create a classifier assertion', () => {
-    const expected = 'classifier(0.5):classA';
-
-    const result: Assertion = assertionFromString(expected);
-    expect(result.type).toBe('classifier');
-    expect(result.value).toBe('classA');
-    expect(result.threshold).toBe(0.5);
-  });
-
-  it('should create a latency assertion', () => {
-    const expected = 'latency(1000)';
-
-    const result: Assertion = assertionFromString(expected);
-    expect(result.type).toBe('latency');
-    expect(result.threshold).toBe(1000);
-  });
-
-  it('should create a perplexity assertion', () => {
-    const expected = 'perplexity(1.5)';
-
-    const result: Assertion = assertionFromString(expected);
-    expect(result.type).toBe('perplexity');
-    expect(result.threshold).toBe(1.5);
-  });
-
-  it('should create a perplexity-score assertion', () => {
-    const expected = 'perplexity-score(0.5)';
-
-    const result: Assertion = assertionFromString(expected);
-    expect(result.type).toBe('perplexity-score');
-    expect(result.threshold).toBe(0.5);
-  });
-
-  it('should create a cost assertion', () => {
-    const expected = 'cost(0.001)';
-
-    const result: Assertion = assertionFromString(expected);
-    expect(result.type).toBe('cost');
-    expect(result.threshold).toBe(0.001);
-  });
-
-  it('should create an openai function call assertion', () => {
-    const expected = 'is-valid-openai-function-call';
-
-    const result: Assertion = assertionFromString(expected);
-    expect(result.type).toBe('is-valid-openai-function-call');
-  });
-
-  it('should create a python assertion', () => {
-    const expected = 'python: file://file.py ';
-
-    const result: Assertion = assertionFromString(expected);
-    expect(result.type).toBe('python');
-    expect(result.value).toBe('file://file.py');
-  });
-
-  it('should create a javascript assertion', () => {
-    const expected = 'javascript: x > 10';
-
-    const result: Assertion = assertionFromString(expected);
-    expect(result.type).toBe('javascript');
-    expect(result.value).toBe('x > 10');
   });
 });

@@ -20,7 +20,7 @@ let enabled =
       process.env.PROMPTFOO_CACHE_ENABLED === 'true' ||
       process.env.PROMPTFOO_CACHE_ENABLED === 'yes';
 
-let cacheType =
+const cacheType =
   process.env.PROMPTFOO_CACHE_TYPE || (process.env.NODE_ENV === 'test' ? 'memory' : 'disk');
 
 export function getCache() {

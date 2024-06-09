@@ -123,7 +123,7 @@ export async function getAndCheckProvider(
   defaultProvider: ApiProvider | null,
   checkName: string,
 ): Promise<ApiProvider> {
-  let matchedProvider = await getGradingProvider(type, provider, defaultProvider);
+  const matchedProvider = await getGradingProvider(type, provider, defaultProvider);
   if (!matchedProvider) {
     if (defaultProvider) {
       logger.warn(`No provider of type ${type} found for '${checkName}', falling back to default`);
@@ -179,7 +179,7 @@ export async function matchesSimilarity(
   inverse: boolean = false,
   grading?: GradingConfig,
 ): Promise<Omit<GradingResult, 'assertion'>> {
-  let finalProvider = (await getAndCheckProvider(
+  const finalProvider = (await getAndCheckProvider(
     'embedding',
     grading?.provider,
     getDefaultProviders().embeddingProvider,
@@ -269,7 +269,7 @@ export async function matchesClassification(
   threshold: number,
   grading?: GradingConfig,
 ): Promise<Omit<GradingResult, 'assertion'>> {
-  let finalProvider = (await getAndCheckProvider(
+  const finalProvider = (await getAndCheckProvider(
     'classification',
     grading?.provider,
     null,
@@ -318,7 +318,7 @@ export async function matchesLlmRubric(
     );
   }
 
-  let rubricPrompt = grading?.rubricPrompt || DEFAULT_GRADING_PROMPT;
+  const rubricPrompt = grading?.rubricPrompt || DEFAULT_GRADING_PROMPT;
   invariant(typeof rubricPrompt === 'string', 'rubricPrompt must be a string');
   const prompt = nunjucks.renderString(rubricPrompt, {
     output: JSON.stringify(output).slice(1, -1),
@@ -326,7 +326,7 @@ export async function matchesLlmRubric(
     ...fromVars(vars),
   });
 
-  let finalProvider = await getAndCheckProvider(
+  const finalProvider = await getAndCheckProvider(
     'text',
     grading.provider,
     getDefaultProviders().gradingJsonProvider,
@@ -381,7 +381,7 @@ export async function matchesFactuality(
     ...fromVars(vars),
   });
 
-  let finalProvider = await getAndCheckProvider(
+  const finalProvider = await getAndCheckProvider(
     'text',
     grading.provider,
     getDefaultProviders().gradingProvider,
@@ -476,7 +476,7 @@ export async function matchesClosedQa(
     ...fromVars(vars),
   });
 
-  let finalProvider = await getAndCheckProvider(
+  const finalProvider = await getAndCheckProvider(
     'text',
     grading.provider,
     getDefaultProviders().gradingProvider,
@@ -519,13 +519,13 @@ export async function matchesAnswerRelevance(
   threshold: number,
   grading?: GradingConfig,
 ): Promise<Omit<GradingResult, 'assertion'>> {
-  let embeddingProvider = await getAndCheckProvider(
+  const embeddingProvider = await getAndCheckProvider(
     'embedding',
     grading?.provider,
     getDefaultProviders().embeddingProvider,
     'answer relevancy check',
   );
-  let textProvider = await getAndCheckProvider(
+  const textProvider = await getAndCheckProvider(
     'text',
     grading?.provider,
     getDefaultProviders().gradingProvider,
@@ -616,7 +616,7 @@ export async function matchesContextRecall(
   grading?: GradingConfig,
   vars?: Record<string, string | object>,
 ): Promise<Omit<GradingResult, 'assertion'>> {
-  let textProvider = await getAndCheckProvider(
+  const textProvider = await getAndCheckProvider(
     'text',
     grading?.provider,
     getDefaultProviders().gradingProvider,
@@ -664,7 +664,7 @@ export async function matchesContextRelevance(
   threshold: number,
   grading?: GradingConfig,
 ): Promise<Omit<GradingResult, 'assertion'>> {
-  let textProvider = await getAndCheckProvider(
+  const textProvider = await getAndCheckProvider(
     'text',
     grading?.provider,
     getDefaultProviders().gradingProvider,
@@ -713,7 +713,7 @@ export async function matchesContextFaithfulness(
   grading?: GradingConfig,
   vars?: Record<string, string | object>,
 ): Promise<Omit<GradingResult, 'assertion'>> {
-  let textProvider = await getAndCheckProvider(
+  const textProvider = await getAndCheckProvider(
     'text',
     grading?.provider,
     getDefaultProviders().gradingProvider,
@@ -739,7 +739,7 @@ export async function matchesContextFaithfulness(
 
   invariant(typeof resp.output === 'string', 'context-faithfulness produced malformed response');
 
-  let statements = resp.output.split('\n');
+  const statements = resp.output.split('\n');
   promptText = nunjucks.renderString(nliPrompt, {
     context: JSON.stringify(context).slice(1, -1),
     statements: JSON.stringify(statements.join('\n')).slice(1, -1),
@@ -766,7 +766,7 @@ export async function matchesContextFaithfulness(
     score = (verdicts.split('verdict: no').length - 1) / statements.length;
   }
   score = 1 - score;
-  let pass = score >= threshold;
+  const pass = score >= threshold;
   return {
     pass,
     score,
@@ -791,7 +791,7 @@ export async function matchesSelectBest(
     outputs.length >= 2,
     'select-best assertion must have at least two outputs to compare between',
   );
-  let textProvider = await getAndCheckProvider(
+  const textProvider = await getAndCheckProvider(
     'text',
     grading?.provider,
     getDefaultProviders().gradingProvider,
@@ -800,13 +800,13 @@ export async function matchesSelectBest(
 
   const rubricPrompt = grading?.rubricPrompt || SELECT_BEST_PROMPT;
   invariant(typeof rubricPrompt === 'string', 'rubricPrompt must be a string');
-  let promptText = nunjucks.renderString(rubricPrompt, {
+  const promptText = nunjucks.renderString(rubricPrompt, {
     criteria: JSON.stringify(criteria).slice(1, -1),
     outputs: outputs.map((output) => JSON.stringify(output).slice(1, -1)),
     ...fromVars(vars),
   });
 
-  let resp = await textProvider.callApi(promptText);
+  const resp = await textProvider.callApi(promptText);
   if (resp.error || !resp.output) {
     return new Array(outputs.length).fill(fail(resp.error || 'No output', resp.tokenUsage));
   }

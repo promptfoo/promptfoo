@@ -45,7 +45,7 @@ WORKDIR /app
 COPY --from=builder /app/src/web/nextui/public ./public
 COPY --from=builder /app/src/web/nextui/.next/standalone ./
 COPY --from=builder /app/src/web/nextui/.next/static ./src/web/nextui/.next/static
-COPY --from=builder /app/drizzle ./.next/server/drizzle
+COPY --from=builder /app/drizzle ./src/web/nextui/.next/server/drizzle
 
 RUN mkdir -p /root/.promptfoo/output
 

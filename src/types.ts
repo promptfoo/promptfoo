@@ -411,6 +411,7 @@ export function isGradingResult(result: any): result is GradingResult {
 }
 
 type BaseAssertionTypes =
+  | 'human'
   | 'equals'
   | 'contains'
   | 'icontains'

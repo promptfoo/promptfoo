@@ -363,7 +363,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
         value: ['ollama:chat:llama3', 'ollama:chat:mixtral:8x22b'],
       },
     ];
-    let { providerChoices } = (await inquirer.prompt([
+    const { providerChoices } = (await inquirer.prompt([
       {
         type: 'checkbox',
         name: 'providerChoices',

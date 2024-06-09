@@ -47,6 +47,9 @@ async function getDataForId(
 }
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+  if (IS_RUNNING_LOCALLY) {
+    return NextResponse.json({ error: 'Not implemented' });
+  }
   try {
     const resp = await getDataForId(params.id);
     if (!resp) {

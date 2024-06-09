@@ -71,13 +71,18 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
   }
 
   getConfig() {
-    return Object.keys(this.config).reduce((options, key) => {
-      const optionName = key as keyof HuggingfaceTextGenerationOptions;
-      if (HuggingFaceTextGenerationKeys.has(optionName)) {
-        options[optionName] = this.config[optionName];
-      }
-      return options;
-    }, {} as Partial<Record<keyof HuggingfaceTextGenerationOptions, number | boolean | string | undefined>>);
+    return Object.keys(this.config).reduce(
+      (options, key) => {
+        const optionName = key as keyof HuggingfaceTextGenerationOptions;
+        if (HuggingFaceTextGenerationKeys.has(optionName)) {
+          options[optionName] = this.config[optionName];
+        }
+        return options;
+      },
+      {} as Partial<
+        Record<keyof HuggingfaceTextGenerationOptions, number | boolean | string | undefined>
+      >,
+    );
   }
 
   async callApi(prompt: string): Promise<ProviderResponse> {

@@ -209,7 +209,7 @@ async function main() {
     }
   }
 
-  let evaluateOptions: EvaluateOptions = {};
+  const evaluateOptions: EvaluateOptions = {};
   if (defaultConfig.evaluateOptions) {
     evaluateOptions.generateSuggestions = defaultConfig.evaluateOptions.generateSuggestions;
     evaluateOptions.maxConcurrency = defaultConfig.evaluateOptions.maxConcurrency;
@@ -275,8 +275,8 @@ async function main() {
         const browserBehavior = cmdObj.yes
           ? BrowserBehavior.OPEN
           : cmdObj.no
-          ? BrowserBehavior.SKIP
-          : BrowserBehavior.ASK;
+            ? BrowserBehavior.SKIP
+            : BrowserBehavior.ASK;
         await startServer(
           cmdObj.port,
           cmdObj.apiBaseUrl,

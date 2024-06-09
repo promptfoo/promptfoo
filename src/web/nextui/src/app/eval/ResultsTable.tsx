@@ -540,9 +540,19 @@ function EvalOutputCell({
       </>
     );
   } else {
-    const failText = failCount > 1 ? `${failCount} FAIL` : failCount === 1 ? 'FAIL' : '';
-    const passText =
-      passCount > 1 ? `${passCount} PASS` : passCount === 1 && failCount === 0 ? 'PASS' : '';
+    let failText = '';
+    if (failCount > 1 || (passCount > 1 && failCount > 0)) {
+      failText = `${failCount} FAIL`;
+    } else if (failCount === 1) {
+      failText = 'FAIL';
+    }
+
+    let passText = '';
+    if (passCount > 1 || (failCount > 1 && passCount > 0)) {
+      passText = `${passCount} PASS`;
+    } else if (passCount === 1 && failCount === 0) {
+      passText = 'PASS';
+    }
     const separator = failText && passText ? ' ' : '';
 
     passFailText = (
@@ -713,6 +723,28 @@ function ResultsTable({
       updatedOutputs[promptIndex].pass = finalPass;
       updatedOutputs[promptIndex].score = finalScore;
 
+      const componentResults = updatedOutputs[promptIndex].gradingResult?.componentResults || [];
+      if (typeof isPass !== 'undefined') {
+        // Add component result for manual grading
+        const humanResultIndex = componentResults.findIndex(
+          (result) => result.assertion?.type === 'human',
+        );
+
+        const newResult = {
+          pass: finalPass,
+          score: finalScore,
+          reason: 'Manual result (overrides all other grading results)',
+          comment,
+          assertion: { type: 'human' as const },
+        };
+
+        if (humanResultIndex !== -1) {
+          componentResults[humanResultIndex] = newResult;
+        } else {
+          componentResults.push(newResult);
+        }
+      }
+
       const gradingResult = {
         ...(updatedOutputs[promptIndex].gradingResult || {}),
         pass: finalPass,
@@ -720,6 +752,7 @@ function ResultsTable({
         reason: 'Manual result (overrides all other grading results)',
         comment,
         assertion: updatedOutputs[promptIndex].gradingResult?.assertion || null,
+        componentResults,
       };
       updatedOutputs[promptIndex].gradingResult = gradingResult;
       updatedRow.outputs = updatedOutputs;
