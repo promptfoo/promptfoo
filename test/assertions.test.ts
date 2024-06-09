@@ -1,7 +1,12 @@
 import * as fs from 'fs';
 import * as path from 'path';
+
 import { Response } from 'node-fetch';
+
 import { runAssertions, runAssertion } from '../src/assertions';
+import { DefaultEmbeddingProvider, OpenAiChatCompletionProvider } from '../src/providers/openai';
+import { runPythonCode, runPython } from '../src/python/wrapper';
+import { fetchWithRetries } from '../src/fetch';
 
 import type {
   Assertion,
@@ -10,9 +15,6 @@ import type {
   ProviderResponse,
   GradingResult,
 } from '../src/types';
-import { OpenAiChatCompletionProvider } from '../src/providers/openai';
-import { runPythonCode, runPython } from '../src/python/wrapper';
-import { fetchWithRetries } from '../src/fetch';
 
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
@@ -2389,6 +2391,97 @@ describe('runAssertion', () => {
 
       expect(result.pass).toBeFalsy();
       expect(result.reason).toContain('Call to "add" does not match schema');
+    });
+  });
+
+  describe('Similarity assertion', () => {
+    beforeEach(() => {
+      jest.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockImplementation((text) => {
+        if (text === 'Test output' || text.startsWith('Similar output')) {
+          return Promise.resolve({
+            embedding: [1, 0, 0],
+            tokenUsage: { total: 5, prompt: 2, completion: 3 },
+          });
+        } else if (text.startsWith('Different output')) {
+          return Promise.resolve({
+            embedding: [0, 1, 0],
+            tokenUsage: { total: 5, prompt: 2, completion: 3 },
+          });
+        }
+        return Promise.reject(new Error('Unexpected input'));
+      });
+    });
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it('should pass for a similar assertion with a string value', async () => {
+      const output = 'Test output';
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        assertion: {
+          type: 'similar',
+          value: 'Similar output',
+        },
+        test: {} as AtomicTestCase,
+        output,
+      });
+
+      expect(result.pass).toBeTruthy();
+      expect(result.reason).toBe('Similarity 1.00 is greater than threshold 0.75');
+    });
+
+    it('should fail for a similar assertion with a string value', async () => {
+      const output = 'Test output';
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        assertion: {
+          type: 'similar',
+          value: 'Different output',
+        },
+        test: {} as AtomicTestCase,
+        output,
+      });
+
+      expect(result.pass).toBeFalsy();
+      expect(result.reason).toBe('Similarity 0.00 is less than threshold 0.75');
+    });
+
+    it('should pass for a similar assertion with an array of string values', async () => {
+      const output = 'Test output';
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        assertion: {
+          type: 'similar',
+          value: ['Similar output 1', 'Different output 1'],
+        },
+        test: {} as AtomicTestCase,
+        output,
+      });
+
+      expect(result.pass).toBeTruthy();
+      expect(result.reason).toBe('Similarity 1.00 is greater than threshold 0.75');
+    });
+
+    it('should fail for a similar assertion with an array of string values', async () => {
+      const output = 'Test output';
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        assertion: {
+          type: 'similar',
+          value: ['Different output 1', 'Different output 2'],
+        },
+        test: {} as AtomicTestCase,
+        output,
+      });
+
+      expect(result.pass).toBeFalsy();
+      expect(result.reason).toBe('None of the provided values met the similarity threshold');
     });
   });
 });

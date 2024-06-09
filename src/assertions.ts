@@ -827,22 +827,51 @@ ${
 
   if (baseType === 'similar') {
     invariant(
-      typeof renderedValue === 'string',
-      'Similarity assertion type must have a string value',
+      typeof renderedValue === 'string' || Array.isArray(renderedValue),
+      'Similarity assertion type must have a string or array of strings value',
     );
     // Assertion provider overrides test provider
     test.options = test.options || {};
     test.options.provider = assertion.provider || test.options.provider;
-    return {
-      assertion,
-      ...(await matchesSimilarity(
-        renderedValue,
-        outputString,
-        assertion.threshold || 0.75,
-        inverse,
-        test.options,
-      )),
-    };
+
+    if (Array.isArray(renderedValue)) {
+      let minScore = Infinity;
+      for (const value of renderedValue) {
+        const result = await matchesSimilarity(
+          value,
+          outputString,
+          assertion.threshold || 0.75,
+          inverse,
+          test.options,
+        );
+        if (result.pass) {
+          return {
+            assertion,
+            ...result,
+          };
+        }
+        if (result.score < minScore) {
+          minScore = result.score;
+        }
+      }
+      return {
+        assertion,
+        pass: false,
+        score: minScore,
+        reason: `None of the provided values met the similarity threshold`,
+      };
+    } else {
+      return {
+        assertion,
+        ...(await matchesSimilarity(
+          renderedValue,
+          outputString,
+          assertion.threshold || 0.75,
+          inverse,
+          test.options,
+        )),
+      };
+    }
   }
 
   if (baseType === 'llm-rubric') {
