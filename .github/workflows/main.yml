@@ -28,6 +28,10 @@ jobs:
         node: ['18.x', '20.x', '22.x']
         python: ['3.9']
         os: [ubuntu-latest, windows-latest, macOS-latest]
+        exclude:
+          # Remove when https://github.com/nodejs/node/issues/51766 is resolved
+          - node: '22.x'
+            os: windows-latest
 
     steps:
       - name: Checkout repo
