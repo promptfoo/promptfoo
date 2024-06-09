@@ -20,8 +20,6 @@ import type {
   TokenUsage,
 } from '../types.js';
 
-const nunjucks = getNunjucksEngine();
-
 let cachedAuth: GoogleAuth | undefined;
 async function getGoogleClient() {
   if (!cachedAuth) {
@@ -245,6 +243,7 @@ export class VertexChatProvider extends VertexGenericProvider {
 
     const systemInstruction = JSON.parse(JSON.stringify(this.config.systemInstruction));
     if (systemInstruction && context?.vars) {
+      const nunjucks = getNunjucksEngine();
       for (const part of systemInstruction.parts) {
         if (part.text) {
           part.text = nunjucks.renderString(part.text, context.vars);
