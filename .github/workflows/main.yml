@@ -16,6 +16,7 @@ env:
   AZURE_OPENAI_API_HOST: xxx
   NEXT_PUBLIC_SUPABASE_ANON_KEY: xxx
   NEXT_PUBLIC_SUPABASE_URL: https://placeholder.promptfoo.dev
+  NEXT_TELEMETRY_DISABLED: 1
 jobs:
   build:
     name: Build and test on Node ${{ matrix.node }} and ${{ matrix.os }}

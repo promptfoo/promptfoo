@@ -4,6 +4,8 @@ import { cookies } from 'next/headers';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { v4 as uuidv4 } from 'uuid';
 
+import promptfoo from '@/../../../index';
+
 import { IS_RUNNING_LOCALLY, USE_SUPABASE } from '@/constants';
 import { createJob, createResult, updateJob } from '@/database';
 
@@ -18,7 +20,6 @@ async function runWithDatabase(testSuite: EvaluateTestSuiteWithEvaluateOptions) 
 
   const job = await createJob(supabase);
 
-  const promptfoo = await import('@/../../../index');
   promptfoo
     .evaluate(
       Object.assign({}, testSuite, {
@@ -51,7 +52,6 @@ export async function POST(req: Request) {
     const id = uuidv4();
     evalJobs.set(id, { status: 'in-progress', progress: 0, total: 0, result: null });
 
-    const promptfoo = await import('@/../../../index');
     promptfoo
       .evaluate(
         Object.assign({}, testSuite, {
