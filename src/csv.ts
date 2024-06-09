@@ -27,18 +27,22 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
       providerOutput = value;
     } else if (key === '__metric') {
       metric = value;
-    } else if (key === '__metric') {
+    } else if (key === '__threshold') {
       threshold = parseFloat(value);
     } else {
       vars[key] = value;
     }
   }
+
+  for (const assert of asserts) {
+    assert.metric = metric;
+  }
+
   return {
     vars,
     assert: asserts,
     options,
     ...(description ? { description } : {}),
-    ...(metric ? { metric } : {}),
     ...(providerOutput ? { providerOutput } : {}),
     ...(threshold ? { threshold } : {}),
   };
