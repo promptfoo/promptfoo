@@ -8,7 +8,7 @@ The `similar` assertion checks if an embedding of the LLM's output
 is semantically similar to the expected value,
 using a cosine similarity threshold.
 
-By default, embeddings are computed via OpenAI's `text-embedding-ada-002` model.
+By default, embeddings are computed via OpenAI's `text-embedding-3-large` model.
 
 Example:
 
@@ -16,6 +16,18 @@ Example:
 assert:
   - type: similar
     value: 'The expected output'
+    threshold: 0.8
+```
+
+If you provide an array of values, the test will pass if it is similar to at least one of them:
+
+```yaml
+assert:
+  - type: similar
+    value:
+      - The expected output
+      - Expected output
+      - Expected... output
     threshold: 0.8
 ```
 
