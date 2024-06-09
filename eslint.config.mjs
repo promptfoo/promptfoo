@@ -2,26 +2,23 @@
 
 import eslint from '@eslint/js';
 import tseslint from 'typescript-eslint';
-import globals from "globals";
+import globals from 'globals';
 
 export default [
-  ...tseslint.config(
-    eslint.configs.recommended,
-    ...tseslint.configs.recommended,
-  ),
+  ...tseslint.config(eslint.configs.recommended, ...tseslint.configs.recommended),
   {
     ignores: [
-      "**/src/web/nextui/_next/**/*",
-      "**/src/web/nextui/.next/**/*",
-      "**/src/web/nextui/out/**/*",
-      "dist/**/*",
+      '**/src/web/nextui/_next/**/*',
+      '**/src/web/nextui/.next/**/*',
+      '**/src/web/nextui/out/**/*',
+      'dist/**/*',
     ],
   },
   {
     languageOptions: {
-        ecmaVersion: 2022,
-        sourceType: "module",
-        globals: globals.node,
+      ecmaVersion: 2022,
+      sourceType: 'module',
+      globals: globals.node,
     },
     rules: {
       '@typescript-eslint/ban-ts-comment': 0,
@@ -36,10 +33,10 @@ export default [
     },
   },
   {
-    files: ["examples/**"],
+    files: ['examples/**'],
     rules: {
       '@typescript-eslint/no-namespace': 0,
       '@typescript-eslint/no-var-requires': 0,
-    }
-  }
+    },
+  },
 ];

@@ -31,7 +31,7 @@
   "scripts": {
     "bin": "dist/src/main.js",
     "tsc": "tsc",
-    "lint": "eslint .",
+    "lint": "eslint . --max-warnings=0",
     "local": "ts-node --cwdMode --transpileOnly src/main.ts",
     "local:web": "npm run dev --prefix src/web/nextui",
     "install:nextui": "npm install --prefix src/web/nextui",
