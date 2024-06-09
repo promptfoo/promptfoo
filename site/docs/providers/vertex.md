@@ -8,16 +8,34 @@ The `vertex` provider is compatible with Google's [Vertex AI](https://cloud.goog
 
 You can use it by specifying any of the available stable or latest [model versions](https://cloud.google.com/vertex-ai/docs/generative-ai/learn/model-versioning) offered by Vertex AI. These include:
 
-- `vertex:gemini-pro`
-- `vertex:gemini-ultra`
 - `vertex:chat-bison`
 - `vertex:chat-bison@001`
+- `vertex:chat-bison@002`
 - `vertex:chat-bison-32k`
 - `vertex:chat-bison-32k@001`
+- `vertex:chat-bison-32k@002`
 - `vertex:codechat-bison`
 - `vertex:codechat-bison@001`
+- `vertex:codechat-bison@002`
 - `vertex:codechat-bison-32k`
 - `vertex:codechat-bison-32k@001`
+- `vertex:codechat-bison-32k@002`
+- `vertex:gemini-pro`
+- `vertex:gemini-ultra`
+- `vertex:gemini-1.0-pro-vision`
+- `vertex:gemini-1.0-pro-vision-001`
+- `vertex:gemini-1.0-pro`
+- `vertex:gemini-1.0-pro-001`
+- `vertex:gemini-1.0-pro-002`
+- `vertex:gemini-pro-vision`
+- `vertex:gemini-1.5-pro-latest`
+- `vertex:gemini-1.5-pro-preview-0409`
+- `vertex:gemini-1.5-pro-preview-0514`
+- `vertex:gemini-1.5-pro-001`
+- `vertex:gemini-1.0-pro-vision-001`
+- `vertex:gemini-1.5-flash-preview-0514`
+- `vertex:gemini-1.5-flash-001`
+- `vertex:aqa`
 
 :::tip
 If you are using Google AI Studio, see the [`google` provider](/docs/providers/palm).
@@ -95,5 +113,7 @@ See more details on Google's SafetySetting API [here](https://ai.google.dev/api/
 | `generationConfig.topP`            | Nucleus sampling: higher values cause the model to consider more candidates.                    | None                                 |
 | `generationConfig.topK`            | Controls diversity via random sampling: lower values make sampling more deterministic.          | None                                 |
 | `generationConfig.stopSequences`   | Set of string outputs that will stop output generation.                                         | []                                   |
+| `toolConfig`                       | Configuration for tool usage                                                                    | None                                 |
+| `systemInstruction`                | System prompt. Nunjucks template variables `{{var}}` are supported                              | None                                 |
 
 Note that not all models support all parameters. Please consult the [Google documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/overview) on how to use and format parameters.

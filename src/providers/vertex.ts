@@ -1,7 +1,7 @@
 import logger from '../logger';
 import { parseChatPrompt } from './shared';
 import { getCache, isCacheEnabled } from '../cache';
-
+import { getNunjucksEngine } from '../util';
 import {
   maybeCoerceToGeminiFormat,
   type GeminiApiResponse,
@@ -12,7 +12,15 @@ import {
 
 import type { GoogleAuth } from 'google-auth-library';
 
-import type { ApiProvider, EnvOverrides, ProviderResponse, TokenUsage } from '../types.js';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  EnvOverrides,
+  ProviderResponse,
+  TokenUsage,
+} from '../types.js';
+
+const nunjucks = getNunjucksEngine();
 
 let cachedAuth: GoogleAuth | undefined;
 async function getGoogleClient() {
@@ -214,14 +222,14 @@ export class VertexChatProvider extends VertexGenericProvider {
     super(modelName, options);
   }
 
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     if (this.modelName.includes('gemini')) {
-      return this.callGeminiApi(prompt);
+      return this.callGeminiApi(prompt, context);
     }
     return this.callPalm2Api(prompt);
   }
 
-  async callGeminiApi(prompt: string): Promise<ProviderResponse> {
+  async callGeminiApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // https://cloud.google.com/vertex-ai/docs/generative-ai/model-reference/gemini#gemini-pro
     let contents = parseChatPrompt(prompt, {
       role: 'user',
@@ -233,6 +241,15 @@ export class VertexChatProvider extends VertexGenericProvider {
     if (coerced) {
       logger.debug(`Coerced JSON prompt to Gemini format: ${JSON.stringify(contents)}`);
       contents = updatedContents;
+    }
+
+    const systemInstruction = JSON.parse(JSON.stringify(this.config.systemInstruction));
+    if (systemInstruction && context?.vars) {
+      for (const part of systemInstruction.parts) {
+        if (part.text) {
+          part.text = nunjucks.renderString(part.text, context.vars);
+        }
+      }
     }
 
     // https://ai.google.dev/api/rest/v1/models/streamGenerateContent
@@ -250,9 +267,7 @@ export class VertexChatProvider extends VertexGenericProvider {
       },
       ...(this.config.safetySettings ? { safetySettings: this.config.safetySettings } : {}),
       ...(this.config.toolConfig ? { toolConfig: this.config.toolConfig } : {}),
-      ...(this.config.systemInstruction
-        ? { systemInstruction: this.config.systemInstruction }
-        : {}),
+      ...(systemInstruction ? { systemInstruction } : {}),
     };
     logger.debug(`Preparing to call Google Vertex API (Gemini) with body: ${JSON.stringify(body)}`);
 
