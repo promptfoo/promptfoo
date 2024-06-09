@@ -272,7 +272,7 @@ class Evaluator {
     evaluateOptions,
   }: RunEvalOptions): Promise<EvaluateResult> {
     // Use the original prompt to set the label, not renderedPrompt
-    let promptLabel = prompt.label;
+    const promptLabel = prompt.label;
 
     // Set up the special _conversation variable
     const vars = test.vars || {};
@@ -379,7 +379,7 @@ class Evaluator {
         ret.error = response.error;
       } else if (response.output) {
         // Create a copy of response so we can potentially mutate it.
-        let processedResponse = { ...response };
+        const processedResponse = { ...response };
         const transform =
           test.options?.transform || test.options?.postprocess || provider.transform;
         if (transform) {

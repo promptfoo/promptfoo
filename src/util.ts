@@ -155,8 +155,8 @@ export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<Unifi
     });
   };
 
-  let functionsParametersList: { parameters?: object }[][] = [];
-  let toolsParametersList: { parameters?: object }[][] = [];
+  const functionsParametersList: { parameters?: object }[][] = [];
+  const toolsParametersList: { parameters?: object }[][] = [];
 
   if (Array.isArray(rawConfig.providers)) {
     rawConfig.providers.forEach((provider, providerIndex) => {
@@ -212,7 +212,7 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
     case '.json':
     case '.yaml':
     case '.yml':
-      let rawConfig = yaml.load(fs.readFileSync(configPath, 'utf-8')) as UnifiedConfig;
+      const rawConfig = yaml.load(fs.readFileSync(configPath, 'utf-8')) as UnifiedConfig;
       return dereferenceConfig(rawConfig);
     case '.js':
     case '.cjs':

@@ -74,6 +74,15 @@ jobs:
         run: |
           npm ci
 
+      - name: Lint Project
+        run: |
+          npm run lint
+
+      - name: Lint UI
+        working-directory: src/web/nextui
+        run: |
+          npm run lint
+
       - name: Run Style Check
         run: |
           npm run format:check
