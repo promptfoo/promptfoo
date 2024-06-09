@@ -20,7 +20,6 @@ import type {
   EvaluateTestSuite,
   ProviderOptions,
   PromptFunction,
-  Prompt,
 } from './types';
 import { readPrompts } from './prompts';
 

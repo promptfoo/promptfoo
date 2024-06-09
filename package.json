@@ -36,7 +36,7 @@
     "local:web": "npm run dev --prefix src/web/nextui",
     "install:nextui": "npm install --prefix src/web/nextui",
     "build:clean": "shx rm -rf dist",
-    "build:nextui": "shx mkdir -p dist/src/web/nextui && npm run build --prefix src/web/nextui && node -e \"if (!process.env.NEXT_PUBLIC_PROMPTFOO_BUILD_STANDALONE_SERVER) require('child_process').execSync('shx cp -r src/web/nextui/out/* dist/src/web/nextui', {stdio: 'inherit'})\"",
+    "build:nextui": "sh src/web/nextui/build.sh",
     "build:watch": "tsc --watch",
     "build": "tsc && shx cp src/*.html dist/src && shx cp src/python/wrapper.py dist/src/python && shx rm -rf dist/drizzle && shx cp -r drizzle dist/drizzle && npm run build:nextui && shx chmod +x dist/src/main.js",
     "test": "jest",
