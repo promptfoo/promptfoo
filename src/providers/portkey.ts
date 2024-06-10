@@ -16,6 +16,15 @@ interface PortkeyProviderOptions extends ProviderOptions {
     portkeyForwardHeaders?: string;
     portkeyTraceId?: string;
     portkeyApiBaseUrl?: string;
+    portkeyAzureResourceName?: string;
+    portkeyAzureDeploymentId?: string;
+    portkeyAzureApiVersion?: string;
+    portkeyVertexProjectId?: string;
+    portkeyVertexRegion?: string;
+    portkeyAwsSessionToken?: string;
+    portkeyAwsSecretAccessKey?: string;
+    portkeyAwsRegion?: string;
+    portkeyAwsSessionToken?: string;
     [key: string]: any;
   };
 }
