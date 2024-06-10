@@ -241,12 +241,16 @@ export class VertexChatProvider extends VertexGenericProvider {
       contents = updatedContents;
     }
 
-    const systemInstruction = JSON.parse(JSON.stringify(this.config.systemInstruction));
-    if (systemInstruction && context?.vars) {
-      const nunjucks = getNunjucksEngine();
-      for (const part of systemInstruction.parts) {
-        if (part.text) {
-          part.text = nunjucks.renderString(part.text, context.vars);
+    let systemInstruction: Content | undefined;
+    if (this.config.systemInstruction) {
+      // Make a copy
+      systemInstruction = JSON.parse(JSON.stringify(this.config.systemInstruction));
+      if (systemInstruction && context?.vars) {
+        const nunjucks = getNunjucksEngine();
+        for (const part of systemInstruction.parts) {
+          if (part.text) {
+            part.text = nunjucks.renderString(part.text, context.vars);
+          }
         }
       }
     }
