@@ -16,16 +16,18 @@ interface PortkeyProviderOptions extends ProviderOptions {
     portkeyForwardHeaders?: string;
     portkeyTraceId?: string;
     portkeyApiBaseUrl?: string;
+    [key: string]: any;
   };
 }
 
 export class PortkeyChatCompletionProvider extends OpenAiChatCompletionProvider {
   constructor(modelName: string, providerOptions: PortkeyProviderOptions) {
-    const portkeyHeaders = Object.entries(providerOptions.config || {})
-      .filter(([key]) => key.startsWith('portkey'))
-      .reduce((acc: Record<string, string>, [key, value]) => {
+    const headers = Object.entries(providerOptions.config || {}).reduce(
+      (acc: Record<string, string>, [key, value]) => {
         if (value) {
-          const headerKey = `x-${key.replace(/^portkey/, 'portkey-').toLowerCase()}`;
+          const headerKey = key.startsWith('portkey')
+            ? `x-${key.replace(/^portkey/, 'portkey-').toLowerCase()}`
+            : key;
           acc[headerKey] = typeof value === 'object' ? JSON.stringify(value) : value;
         }
         return acc;
@@ -39,7 +41,7 @@ export class PortkeyChatCompletionProvider extends OpenAiChatCompletionProvider 
           process.env.PORTKEY_API_BASE_URL ||
           providerOptions.config?.portkeyApiBaseUrl ||
           'https://api.portkey.ai/v1',
-        headers: portkeyHeaders,
+        headers,
       },
     });
   }
