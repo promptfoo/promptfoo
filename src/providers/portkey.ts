@@ -39,8 +39,10 @@ export class PortkeyChatCompletionProvider extends OpenAiChatCompletionProvider 
           acc[headerKey] = typeof value === 'object' ? JSON.stringify(value) : value;
         }
         return acc;
-      }, {});
-    
+      },
+      {},
+    );
+
     super(modelName, {
       ...providerOptions,
       config: {
