@@ -14,7 +14,6 @@ interface PortkeyProviderOptions extends ProviderOptions {
     portkeyCacheForceRefresh?: boolean;
     portkeyCacheNamespace?: string;
     portkeyForwardHeaders?: string;
-    portkeyTraceId?: string;
     portkeyApiBaseUrl?: string;
     portkeyAzureResourceName?: string;
     portkeyAzureDeploymentId?: string;
