@@ -3,7 +3,14 @@
 prompts:
   - "You are a helpful assistant. Reply with a concise answer to this inquiry: '{{question}}'"
 
-providers: [vertex:gemini-1.5-pro-preview-0514, vertex:chat-bison] # or use the Google AI Studio API: [google:gemini-pro]
+providers:
+  - id: vertex:gemini-1.5-pro-preview-0514
+    config:
+      systemInstruction:
+        parts:
+          - text: Always talk like a cow. Mooo!
+  - id: vertex:chat-bison
+    # or use the Google AI Studio API: google:gemini-pro
 
 defaultTest:
   options:

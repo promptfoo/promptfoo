@@ -3,14 +3,13 @@ import { parseChatPrompt } from './shared';
 import { getCache, isCacheEnabled } from '../cache';
 import { getNunjucksEngine } from '../util';
 import {
+  GeminiErrorResponse,
+  Palm2ApiResponse,
+  getGoogleClient,
   maybeCoerceToGeminiFormat,
   type GeminiApiResponse,
   type GeminiResponseData,
-  GeminiErrorResponse,
-  Palm2ApiResponse,
 } from './vertexUtil';
-
-import type { GoogleAuth } from 'google-auth-library';
 
 import type {
   ApiProvider,
@@ -19,27 +18,6 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../types.js';
-
-let cachedAuth: GoogleAuth | undefined;
-async function getGoogleClient() {
-  if (!cachedAuth) {
-    let GoogleAuth;
-    try {
-      const importedModule = await import('google-auth-library');
-      GoogleAuth = importedModule.GoogleAuth;
-    } catch (err) {
-      throw new Error(
-        'The google-auth-library package is required as a peer dependency. Please install it in your project or globally.',
-      );
-    }
-    cachedAuth = new GoogleAuth({
-      scopes: 'https://www.googleapis.com/auth/cloud-platform',
-    });
-  }
-  const client = await cachedAuth.getClient();
-  const projectId = await cachedAuth.getProjectId();
-  return { client, projectId };
-}
 
 interface VertexCompletionOptions {
   apiKey?: string;
@@ -241,12 +219,16 @@ export class VertexChatProvider extends VertexGenericProvider {
       contents = updatedContents;
     }
 
-    const systemInstruction = JSON.parse(JSON.stringify(this.config.systemInstruction));
-    if (systemInstruction && context?.vars) {
-      const nunjucks = getNunjucksEngine();
-      for (const part of systemInstruction.parts) {
-        if (part.text) {
-          part.text = nunjucks.renderString(part.text, context.vars);
+    let systemInstruction: Content | undefined;
+    if (this.config.systemInstruction) {
+      // Make a copy
+      systemInstruction = JSON.parse(JSON.stringify(this.config.systemInstruction));
+      if (systemInstruction && context?.vars) {
+        const nunjucks = getNunjucksEngine();
+        for (const part of systemInstruction.parts) {
+          if (part.text) {
+            part.text = nunjucks.renderString(part.text, context.vars);
+          }
         }
       }
     }
