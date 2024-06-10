@@ -168,14 +168,14 @@ interface IBedrockModel {
   output: (responseJson: any) => any;
 }
 
-function addConfigParam(
+export function addConfigParam(
   params: any,
   key: string,
   configValue: any,
   envValue?: string | undefined,
   defaultValue?: any,
 ) {
-  if (configValue !== undefined || envValue !== undefined) {
+  if (configValue !== undefined || envValue !== undefined || defaultValue !== undefined) {
     params[key] =
       configValue ?? (envValue !== undefined ? parseValue(envValue, defaultValue) : defaultValue);
   }
