@@ -64,7 +64,7 @@ interface BedrockCohereCommandGenerationOptions extends BedrockOptions {
 }
 
 interface BedrockCohereCommandRGenerationOptions extends BedrockOptions {
-  message: string;
+  message?: string;
   chat_history?: Array<{
     role: 'USER' | 'CHATBOT';
     message: string;
