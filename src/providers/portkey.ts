@@ -23,6 +23,7 @@ interface PortkeyProviderOptions extends ProviderOptions {
     portkeyAwsSecretAccessKey?: string;
     portkeyAwsRegion?: string;
     portkeyAwsSessionToken?: string;
+    portkeyAwsAccessKeyId?: string;
     [key: string]: any;
   };
 }
