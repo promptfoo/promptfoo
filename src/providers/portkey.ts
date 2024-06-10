@@ -20,7 +20,6 @@ interface PortkeyProviderOptions extends ProviderOptions {
     portkeyAzureApiVersion?: string;
     portkeyVertexProjectId?: string;
     portkeyVertexRegion?: string;
-    portkeyAwsSessionToken?: string;
     portkeyAwsSecretAccessKey?: string;
     portkeyAwsRegion?: string;
     portkeyAwsSessionToken?: string;
