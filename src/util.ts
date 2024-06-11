@@ -354,6 +354,7 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
       (prev, curr) => ({ ...prev, ...curr.commandLineOptions }),
       {},
     ),
+    metadata: configs.reduce((prev, curr) => ({ ...prev, ...curr.metadata }), {}),
     sharing: !configs.some((config) => config.sharing === false),
   };
 

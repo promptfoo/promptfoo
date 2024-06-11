@@ -54,7 +54,6 @@ import { generateTable } from './table';
 import { createShareableUrl } from './share';
 import { filterTests } from './commands/eval/filterTests';
 import { validateAssertions } from './assertions/validateAssertions';
-import dedent from 'dedent';
 
 async function resolveConfigs(
   cmdObj: Partial<CommandLineOptions>,
@@ -115,6 +114,7 @@ async function resolveConfigs(
         : fileConfig.sharing ?? defaultConfig.sharing ?? true,
     defaultTest: defaultTestRaw ? await readTest(defaultTestRaw, basePath) : undefined,
     outputPath: cmdObj.output || fileConfig.outputPath || defaultConfig.outputPath,
+    metadata: fileConfig.metadata || defaultConfig.metadata,
   };
 
   // Validation
@@ -534,10 +534,16 @@ async function main() {
         });
 
         if (output) {
-          const existingYaml = yaml.load(fs.readFileSync(configPath, 'utf8')) as object;
+          const existingYaml = yaml.load(
+            fs.readFileSync(configPath, 'utf8'),
+          ) as Partial<UnifiedConfig>;
           const updatedYaml = {
             ...existingYaml,
             tests: redteamTests,
+            metadata: {
+              ...existingYaml.metadata,
+              redteam: true,
+            },
           };
           fs.writeFileSync(output, yaml.dump(updatedYaml, { skipInvalid: true }));
           printBorder();

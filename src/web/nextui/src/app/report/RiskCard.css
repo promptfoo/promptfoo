@@ -1,0 +1,30 @@
+.risk-card-container {
+  padding-top: 3rem;
+  padding-bottom: 3rem;
+}
+
+.risk-card-title {
+  font-weight: bold;
+}
+
+.risk-card-progress {
+  margin-bottom: 1rem;
+}
+
+.risk-card-issues {
+  color: red;
+}
+
+.risk-card-list-item {
+  padding: 0;
+}
+
+.risk-card-icon-passed {
+  color: green;
+  font-size: 16px;
+}
+
+.risk-card-icon-failed {
+  color: red;
+  font-size: 16px;
+}

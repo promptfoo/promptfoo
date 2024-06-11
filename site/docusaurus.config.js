@@ -85,6 +85,11 @@ const config = {
           */
           { to: '/docs/intro', label: 'Docs', position: 'right' },
           {
+            to: '/llm-vulnerability-scanner',
+            label: 'LLM Vulnerability Scanner',
+            position: 'right',
+          },
+          {
             href: 'https://github.com/typpo/promptfoo',
             label: 'GitHub',
             position: 'right',
@@ -139,6 +144,10 @@ const config = {
                 label: 'Minimizing hallucinations',
                 to: '/docs/guides/prevent-llm-hallucations',
               },
+              {
+                label: 'LLM red teaming',
+                to: '/docs/guides/llm-redteaming',
+              },
             ],
           },
           {
@@ -151,6 +160,10 @@ const config = {
               {
                 label: 'Discord',
                 href: 'https://discord.gg/gHPS9jjfbs',
+              },
+              {
+                label: 'Contact Us',
+                href: 'mailto:inquiries@promptfoo.dev',
               },
             ],
           },

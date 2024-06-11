@@ -10,6 +10,7 @@ import Checkbox from '@mui/material/Checkbox';
 import CircularProgress from '@mui/material/CircularProgress';
 import DeleteIcon from '@mui/icons-material/Delete';
 import DownloadIcon from '@mui/icons-material/Download';
+import EyeIcon from '@mui/icons-material/Visibility';
 import EditIcon from '@mui/icons-material/Edit';
 import FormControl from '@mui/material/FormControl';
 import Heading from '@mui/material/Typography';
@@ -397,6 +398,17 @@ export default function ResultsView({
                   Table Settings
                 </Button>
               </Tooltip>
+              {config?.metadata?.redteam && (
+                <Tooltip title="View vulnerability scan report" placement="bottom">
+                  <Button
+                    color="primary"
+                    startIcon={<EyeIcon />}
+                    onClick={() => router.push(`/report/?evalId=${evalId}`)}
+                  >
+                    Vulnerability Report
+                  </Button>
+                </Tooltip>
+              )}
             </ResponsiveStack>
           </Box>
         </ResponsiveStack>
