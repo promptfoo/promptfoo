@@ -37,6 +37,19 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
+      - name: Node and Next.js caching
+        # https://nextjs.org/docs/pages/building-your-application/deploying/ci-build-caching#github-actions
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.npm
+            ${{ github.workspace }}/.next/cache
+          # Generate a new cache whenever packages or source files change.
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}-${{ hashFiles('**/*.js', '**/*.jsx', '**/*.ts', '**/*.tsx') }}
+          # If source files changed but packages didn't, rebuild from a prior cache.
+          restore-keys: |
+            ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}-
+
       - name: Use Node ${{ matrix.node }}
         uses: actions/setup-node@v4
         with:

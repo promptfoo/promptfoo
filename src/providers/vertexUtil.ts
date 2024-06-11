@@ -1,3 +1,5 @@
+import type { GoogleAuth } from 'google-auth-library';
+
 type Probability = 'NEGLIGIBLE' | 'LOW' | 'MEDIUM' | 'HIGH';
 
 interface SafetyRating {
@@ -83,4 +85,25 @@ export function maybeCoerceToGeminiFormat(contents: any) {
     coerced = true;
   }
   return { contents, coerced };
+}
+
+let cachedAuth: GoogleAuth | undefined;
+export async function getGoogleClient() {
+  if (!cachedAuth) {
+    let GoogleAuth;
+    try {
+      const importedModule = await import('google-auth-library');
+      GoogleAuth = importedModule.GoogleAuth;
+    } catch (err) {
+      throw new Error(
+        'The google-auth-library package is required as a peer dependency. Please install it in your project or globally.',
+      );
+    }
+    cachedAuth = new GoogleAuth({
+      scopes: 'https://www.googleapis.com/auth/cloud-platform',
+    });
+  }
+  const client = await cachedAuth.getClient();
+  const projectId = await cachedAuth.getProjectId();
+  return { client, projectId };
 }

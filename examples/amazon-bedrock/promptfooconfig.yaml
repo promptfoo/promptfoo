@@ -1,6 +1,10 @@
 prompts: [prompts.txt]
 
-providers: [bedrock:anthropic.claude-v2]
+providers:
+  - bedrock:anthropic.claude-v2
+  - bedrock:meta.llama3-70b-instruct-v1:0
+  - bedrock:mistral.mixtral-8x7b-instruct-v0:1
+  - bedrock:cohere.command-r-plus-v1:0
 
 defaultTest:
   options:

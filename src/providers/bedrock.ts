@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
+import dedent from 'dedent';
 
 import logger from '../logger';
 import { getCache, isCacheEnabled } from '../cache';
@@ -13,6 +14,7 @@ import type {
   ProviderResponse,
   ProviderEmbeddingResponse,
 } from '../types.js';
+import { parseChatPrompt } from './shared';
 
 interface BedrockOptions {
   region?: string;
@@ -48,7 +50,7 @@ interface BedrockLlamaGenerationOptions extends BedrockOptions {
   max_gen_len?: number;
 }
 
-interface BedrockCohereGenerationOptions extends BedrockOptions {
+interface BedrockCohereCommandGenerationOptions extends BedrockOptions {
   temperature?: number;
   p?: number;
   k?: number;
@@ -59,6 +61,99 @@ interface BedrockCohereGenerationOptions extends BedrockOptions {
   num_generations?: number;
   logit_bias?: Record<string, number>;
   truncate?: string;
+}
+
+interface BedrockCohereCommandRGenerationOptions extends BedrockOptions {
+  message?: string;
+  chat_history?: Array<{
+    role: 'USER' | 'CHATBOT';
+    message: string;
+  }>;
+  documents?: Array<{
+    title: string;
+    snippet: string;
+  }>;
+  search_queries_only?: boolean;
+  preamble?: string;
+  max_tokens?: number;
+  temperature?: number;
+  p?: number;
+  k?: number;
+  prompt_truncation?: string;
+  frequency_penalty?: number;
+  presence_penalty?: number;
+  seed?: number;
+  return_prompt?: boolean;
+  tools?: Array<{
+    name: string;
+    description: string;
+    parameter_definitions: Record<
+      string,
+      {
+        description: string;
+        type: string;
+        required: boolean;
+      }
+    >;
+  }>;
+  tool_results?: Array<{
+    call: {
+      name: string;
+      parameters: Record<string, string>;
+    };
+    outputs: Array<{
+      text: string;
+    }>;
+  }>;
+  stop_sequences?: Array<string>;
+  raw_prompting?: boolean;
+}
+
+interface CohereCommandRRequestParams {
+  message: string;
+  chat_history: {
+    role: 'USER' | 'CHATBOT';
+    message: string;
+  }[];
+  documents?: {
+    title: string;
+    snippet: string;
+  }[];
+  search_queries_only?: boolean;
+  preamble?: string;
+  max_tokens?: number;
+  temperature?: number;
+  p?: number;
+  k?: number;
+  prompt_truncation?: string;
+  frequency_penalty?: number;
+  presence_penalty?: number;
+  seed?: number;
+  return_prompt?: boolean;
+  tools?: {
+    name: string;
+    description: string;
+    parameter_definitions: {
+      [parameterName: string]: {
+        description: string;
+        type: string;
+        required: boolean;
+      };
+    };
+  }[];
+  tool_results?: {
+    call: {
+      name: string;
+      parameters: {
+        [parameterName: string]: string;
+      };
+    };
+    outputs: {
+      text: string;
+    }[];
+  }[];
+  stop_sequences?: string[];
+  raw_prompting?: boolean;
 }
 
 interface BedrockMistralGenerationOptions extends BedrockOptions {
@@ -73,96 +168,225 @@ interface IBedrockModel {
   output: (responseJson: any) => any;
 }
 
+export function addConfigParam(
+  params: any,
+  key: string,
+  configValue: any,
+  envValue?: string | undefined,
+  defaultValue?: any,
+) {
+  if (configValue !== undefined || envValue !== undefined || defaultValue !== undefined) {
+    params[key] =
+      configValue ?? (envValue !== undefined ? parseValue(envValue, defaultValue) : defaultValue);
+  }
+}
+
+function parseValue(value: string, defaultValue: any) {
+  if (typeof defaultValue === 'number') {
+    return parseFloat(value);
+  }
+  return value;
+}
+
 const BEDROCK_MODEL = {
   CLAUDE_COMPLETION: {
-    params: (config: BedrockClaudeLegacyCompletionOptions, prompt: string, stop: string[]) => ({
-      prompt: `${Anthropic.HUMAN_PROMPT} ${prompt} ${Anthropic.AI_PROMPT}`,
-      max_tokens_to_sample:
-        config?.max_tokens_to_sample || parseInt(process.env.AWS_BEDROCK_MAX_TOKENS || '1024'),
-      temperature: config.temperature ?? parseFloat(process.env.AWS_BEDROCK_TEMPERATURE || '0'),
-      stop_sequences: stop,
-    }),
-    output: (responseJson: any) => {
-      return responseJson?.completion;
+    params: (config: BedrockClaudeLegacyCompletionOptions, prompt: string, stop: string[]) => {
+      const params: any = {
+        prompt: `${Anthropic.HUMAN_PROMPT} ${prompt} ${Anthropic.AI_PROMPT}`,
+        stop_sequences: stop,
+      };
+      addConfigParam(
+        params,
+        'max_tokens_to_sample',
+        config?.max_tokens_to_sample,
+        process.env.AWS_BEDROCK_MAX_TOKENS,
+        1024,
+      );
+      addConfigParam(
+        params,
+        'temperature',
+        config?.temperature,
+        process.env.AWS_BEDROCK_TEMPERATURE,
+        0,
+      );
+      return params;
     },
+    output: (responseJson: any) => responseJson?.completion,
   },
   CLAUDE_MESSAGES: {
-    params: (config: BedrockClaudeMessagesCompletionOptions, prompt: string, stop: string[]) => {
+    params: (config: BedrockClaudeMessagesCompletionOptions, prompt: string) => {
       const { system, extractedMessages } = parseMessages(prompt);
-      return {
-        max_tokens: config?.max_tokens || parseInt(process.env.AWS_BEDROCK_MAX_TOKENS || '1024'),
-        temperature: config.temperature || 0,
-        anthropic_version: config.anthropic_version || 'bedrock-2023-05-31',
-        messages: extractedMessages,
-        ...(system ? { system } : {}),
-      };
+      const params: any = { messages: extractedMessages };
+      addConfigParam(
+        params,
+        'max_tokens',
+        config?.max_tokens,
+        process.env.AWS_BEDROCK_MAX_TOKENS,
+        1024,
+      );
+      addConfigParam(params, 'temperature', config?.temperature, undefined, 0);
+      addConfigParam(
+        params,
+        'anthropic_version',
+        config?.anthropic_version,
+        undefined,
+        'bedrock-2023-05-31',
+      );
+      addConfigParam(params, 'system', system, undefined, undefined);
+      return params;
     },
-    output: (responseJson: any) => {
-      return responseJson?.content[0].text;
-    },
+    output: (responseJson: any) => responseJson?.content[0].text,
   },
   TITAN_TEXT: {
-    params: (config: BedrockTextGenerationOptions, prompt: string, stop: string[]) => ({
-      inputText: prompt,
-      textGenerationConfig: {
-        maxTokenCount:
-          config?.textGenerationConfig?.maxTokenCount ||
-          parseInt(process.env.AWS_BEDROCK_MAX_TOKENS || '1024'),
-        temperature:
-          config?.textGenerationConfig?.temperature ||
-          parseFloat(process.env.AWS_BEDROCK_TEMPERATURE || '0'),
-        topP:
-          config?.textGenerationConfig?.topP || parseFloat(process.env.AWS_BEDROCK_TOP_P || '1'),
-        stopSequences: config?.textGenerationConfig?.stopSequences || stop,
-      },
-    }),
-    output: (responseJson: any) => {
-      return responseJson?.results[0]?.outputText;
+    params: (config: BedrockTextGenerationOptions, prompt: string, stop: string[]) => {
+      const textGenerationConfig: any = {};
+      addConfigParam(
+        textGenerationConfig,
+        'maxTokenCount',
+        config?.textGenerationConfig?.maxTokenCount,
+        process.env.AWS_BEDROCK_MAX_TOKENS,
+        1024,
+      );
+      addConfigParam(
+        textGenerationConfig,
+        'temperature',
+        config?.textGenerationConfig?.temperature,
+        process.env.AWS_BEDROCK_TEMPERATURE,
+        0,
+      );
+      addConfigParam(
+        textGenerationConfig,
+        'topP',
+        config?.textGenerationConfig?.topP,
+        process.env.AWS_BEDROCK_TOP_P,
+        1,
+      );
+      addConfigParam(
+        textGenerationConfig,
+        'stopSequences',
+        config?.textGenerationConfig?.stopSequences,
+        undefined,
+        stop,
+      );
+      return { inputText: prompt, textGenerationConfig };
     },
+    output: (responseJson: any) => responseJson?.results[0]?.outputText,
   },
   LLAMA: {
-    params: (config: BedrockLlamaGenerationOptions, prompt: string, stop: string[]) => ({
-      prompt: prompt,
-      temperature: config.temperature ?? parseFloat(process.env.AWS_BEDROCK_TEMPERATURE || '0'),
-      top_p: config.top_p ?? parseFloat(process.env.AWS_BEDROCK_TOP_P || '1'),
-      max_gen_len: config.max_gen_len ?? parseInt(process.env.AWS_BEDROCK_MAX_GEN_LEN || '1024'),
-    }),
-    output: (responseJson: any) => {
-      return responseJson?.generation;
+    params: (config: BedrockLlamaGenerationOptions, prompt: string) => {
+      const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
+      let finalPrompt: string;
+      if (messages.length > 0 && messages[0].role === 'system') {
+        const userMessages = messages
+          .slice(1)
+          .map((m) => `${m.content}`)
+          .join('\n');
+        finalPrompt = dedent`
+          <s>[INST] <<SYS>>
+          ${messages[0].content}
+          <</SYS>>
+
+          ${userMessages} [/INST]
+        `;
+      } else {
+        finalPrompt = `<s>[INST] ${messages.map((m) => `${m.content}`).join('\n')} [/INST]`;
+      }
+
+      const params: { prompt: string; temperature?: number; top_p?: number; max_gen_len?: number } =
+        { prompt: finalPrompt };
+      addConfigParam(
+        params,
+        'temperature',
+        config?.temperature,
+        process.env.AWS_BEDROCK_TEMPERATURE,
+        0.01,
+      );
+      addConfigParam(params, 'top_p', config?.top_p, process.env.AWS_BEDROCK_TOP_P, 1);
+      addConfigParam(
+        params,
+        'max_gen_len',
+        config?.max_gen_len,
+        process.env.AWS_BEDROCK_MAX_GEN_LEN,
+        1024,
+      );
+      return params;
     },
+    output: (responseJson: any) => responseJson?.generation,
   },
-  COHERE: {
-    // https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-cohere-command.html
-    params: (config: BedrockCohereGenerationOptions, prompt: string, stop: string[]) => ({
-      prompt: prompt,
-      temperature: config.temperature ?? parseFloat(process.env.COHERE_TEMPERATURE || '0'),
-      p: config.p ?? parseFloat(process.env.COHERE_P || '1'),
-      k: config.k ?? parseInt(process.env.COHERE_K || '0'),
-      max_tokens: config.max_tokens ?? parseInt(process.env.COHERE_MAX_TOKENS || '1024'),
-      stop_sequences: stop,
-      return_likelihoods: config.return_likelihoods || 'NONE',
-      stream: config.stream || false,
-      num_generations: config.num_generations || 1,
-      logit_bias: config.logit_bias || {},
-      truncate: config.truncate || 'NONE',
-    }),
-    output: (responseJson: any) => {
-      return responseJson?.generations[0]?.text;
+  COHERE_COMMAND: {
+    params: (config: BedrockCohereCommandGenerationOptions, prompt: string, stop: string[]) => {
+      const params: any = { prompt: prompt };
+      addConfigParam(params, 'temperature', config?.temperature, process.env.COHERE_TEMPERATURE, 0);
+      addConfigParam(params, 'p', config?.p, process.env.COHERE_P, 1);
+      addConfigParam(params, 'k', config?.k, process.env.COHERE_K, 0);
+      addConfigParam(params, 'max_tokens', config?.max_tokens, process.env.COHERE_MAX_TOKENS, 1024);
+      addConfigParam(params, 'return_likelihoods', config?.return_likelihoods, undefined, 'NONE');
+      addConfigParam(params, 'stream', config?.stream, undefined, false);
+      addConfigParam(params, 'num_generations', config?.num_generations, undefined, 1);
+      addConfigParam(params, 'logit_bias', config?.logit_bias, undefined, {});
+      addConfigParam(params, 'truncate', config?.truncate, undefined, 'NONE');
+      addConfigParam(params, 'stop_sequences', stop, undefined, undefined);
+      return params;
     },
+    output: (responseJson: any) => responseJson?.generations[0]?.text,
+  },
+
+  COHERE_COMMAND_R: {
+    params: (config: BedrockCohereCommandRGenerationOptions, prompt: string, stop: string[]) => {
+      const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
+      const lastMessage = messages[messages.length - 1].content;
+      if (!messages.every((m) => typeof m.content === 'string')) {
+        throw new Error(`Message content must be a string, but got: ${JSON.stringify(messages)}`);
+      }
+      const params: CohereCommandRRequestParams = {
+        message: lastMessage as string,
+        chat_history: messages.slice(0, messages.length - 1).map((m) => ({
+          role: m.role === 'assistant' ? 'CHATBOT' : 'USER',
+          message: m.content as string,
+        })),
+      };
+      addConfigParam(params, 'documents', config?.documents);
+      addConfigParam(params, 'search_queries_only', config?.search_queries_only);
+      addConfigParam(params, 'preamble', config?.preamble);
+      addConfigParam(params, 'max_tokens', config?.max_tokens);
+      addConfigParam(params, 'temperature', config?.temperature);
+      addConfigParam(params, 'p', config?.p);
+      addConfigParam(params, 'k', config?.k);
+      addConfigParam(params, 'prompt_truncation', config?.prompt_truncation);
+      addConfigParam(params, 'frequency_penalty', config?.frequency_penalty);
+      addConfigParam(params, 'presence_penalty', config?.presence_penalty);
+      addConfigParam(params, 'seed', config?.seed);
+      addConfigParam(params, 'return_prompt', config?.return_prompt);
+      addConfigParam(params, 'tools', config?.tools);
+      addConfigParam(params, 'tool_results', config?.tool_results);
+      addConfigParam(params, 'stop_sequences', stop);
+      addConfigParam(params, 'raw_prompting', config?.raw_prompting);
+      return params;
+    },
+    output: (responseJson: any) => responseJson?.text,
   },
   MISTRAL: {
-    // https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-mistral-text-completion.html
-    params: (config: BedrockMistralGenerationOptions, prompt: string, stop: string[]) => ({
-      prompt: prompt,
-      max_tokens: config.max_tokens ?? parseInt(process.env.MISTRAL_MAX_TOKENS || '1024'),
-      stop: stop,
-      temperature: config.temperature ?? parseFloat(process.env.MISTRAL_TEMPERATURE || '0'),
-      top_p: config.top_p ?? parseFloat(process.env.MISTRAL_TOP_P || '1'),
-      top_k: config.top_k ?? parseInt(process.env.MISTRAL_TOP_K || '0'),
-    }),
-    output: (responseJson: any) => {
-      return responseJson?.outputs[0]?.text;
+    params: (config: BedrockMistralGenerationOptions, prompt: string, stop: string[]) => {
+      const params: any = { prompt: prompt, stop: stop };
+      addConfigParam(
+        params,
+        'max_tokens',
+        config?.max_tokens,
+        process.env.MISTRAL_MAX_TOKENS,
+        1024,
+      );
+      addConfigParam(
+        params,
+        'temperature',
+        config?.temperature,
+        process.env.MISTRAL_TEMPERATURE,
+        0,
+      );
+      addConfigParam(params, 'top_p', config?.top_p, process.env.MISTRAL_TOP_P, 1);
+      addConfigParam(params, 'top_k', config?.top_k, process.env.MISTRAL_TOP_K, 0);
+      return params;
     },
+    output: (responseJson: any) => responseJson?.outputs[0]?.text,
   },
 };
 
@@ -188,8 +412,11 @@ function getHandlerForModel(modelName: string) {
   if (modelName.startsWith('meta.llama')) {
     return BEDROCK_MODEL.LLAMA;
   }
-  if (modelName.startsWith('cohere.')) {
-    return BEDROCK_MODEL.COHERE;
+  if (modelName.startsWith('cohere.command-r')) {
+    return BEDROCK_MODEL.COHERE_COMMAND_R;
+  }
+  if (modelName.startsWith('cohere.command')) {
+    return BEDROCK_MODEL.COHERE_COMMAND;
   }
   if (modelName.startsWith('mistral.')) {
     return BEDROCK_MODEL.MISTRAL;
@@ -252,9 +479,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
   async callApi(prompt: string): Promise<ProviderResponse> {
     let stop: string[];
     try {
-      stop = process.env.AWS_BEDROCK_STOP
-        ? JSON.parse(process.env.AWS_BEDROCK_STOP)
-        : ['<|im_end|>', '<|endoftext|>'];
+      stop = process.env.AWS_BEDROCK_STOP ? JSON.parse(process.env.AWS_BEDROCK_STOP) : [];
     } catch (err) {
       throw new Error(`BEDROCK_STOP is not a valid JSON string: ${err}`);
     }
@@ -299,7 +524,9 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
         error: `API call error: ${String(err)}`,
       };
     }
-    logger.debug(`\tAmazon Bedrock API response: ${JSON.parse(response.body.transformToString())}`);
+    logger.debug(
+      `\tAmazon Bedrock API response: ${JSON.stringify(JSON.parse(response.body.transformToString()))}`,
+    );
     if (isCacheEnabled()) {
       try {
         await cache.set(cacheKey, response.body.transformToString());
