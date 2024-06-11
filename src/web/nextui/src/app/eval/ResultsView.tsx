@@ -10,22 +10,31 @@ import Checkbox from '@mui/material/Checkbox';
 import CircularProgress from '@mui/material/CircularProgress';
 import DeleteIcon from '@mui/icons-material/Delete';
 import DownloadIcon from '@mui/icons-material/Download';
+import ClearIcon from '@mui/icons-material/Clear';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
 import EditIcon from '@mui/icons-material/Edit';
 import FormControl from '@mui/material/FormControl';
 import Heading from '@mui/material/Typography';
 import InputLabel from '@mui/material/InputLabel';
-import ListItemText from '@mui/material/ListItemText';
+import List from '@mui/material/List';
+import ListItem from '@mui/material/ListItem';
+import ListItemButton from '@mui/material/ListItemButton';
 import ListItemIcon from '@mui/material/ListItemIcon';
+import ListItemText from '@mui/material/ListItemText';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import OutlinedInput from '@mui/material/OutlinedInput';
 import Paper from '@mui/material/Box';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import Select, { SelectChangeEvent } from '@mui/material/Select';
 import SettingsIcon from '@mui/icons-material/Settings';
 import ShareIcon from '@mui/icons-material/Share';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
+import ViewColumnIcon from '@mui/icons-material/ViewColumn';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import { styled } from '@mui/system';
 import { useRouter } from 'next/navigation';
@@ -141,24 +150,46 @@ export default function ResultsView({
 
   invariant(table, 'Table data must be loaded before rendering ResultsView');
   const { head } = table;
+  const allColumns = [
+    ...head.vars.map((_, idx) => `Variable ${idx + 1}`),
+    ...head.prompts.map((_, idx) => `Prompt ${idx + 1}`),
+  ];
 
-  const handleChange = (event: SelectChangeEvent<typeof selectedColumns>) => {
-    const {
-      target: { value },
-    } = event;
-    setSelectedColumns(typeof value === 'string' ? value.split(',') : value);
+  const [columnDialogOpen, setColumnDialogOpen] = React.useState(false);
+  const handleColumnDialogOpen = () => {
+    setColumnDialogOpen(true);
+  };
+  const handleColumnDialogClose = () => {
+    setColumnDialogOpen(false);
+  };
+  const toggleColumnVisibility = (column: {value: string; label: string; group: string}) => {
+    const target = column.value;
+    const updatedSelectedColumns: string [] = selectedColumns.includes(target) ? selectedColumns.filter((col) => col !== target) : [...selectedColumns, target];
+    setSelectedColumns(updatedSelectedColumns);
 
-    const allColumns = [
-      ...head.vars.map((_, idx) => `Variable ${idx + 1}`),
-      ...head.prompts.map((_, idx) => `Prompt ${idx + 1}`),
-    ];
     const newColumnVisibility: VisibilityState = {};
     allColumns.forEach((col) => {
-      newColumnVisibility[col] = (typeof value === 'string' ? value.split(',') : value).includes(
-        col,
-      );
+      newColumnVisibility[col] = updatedSelectedColumns.includes(col);
     });
     setColumnVisibility(newColumnVisibility);
+  };
+
+  const [variablesVisible, setVariablesVisible] = React.useState(true);
+  const handleClearAllVariables = () => {
+    const newColumnVisibility: VisibilityState = {};
+    if (variablesVisible) {
+      allColumns.forEach((col) => {
+        newColumnVisibility[col] = !col.startsWith("Variable");
+      });
+      setSelectedColumns(allColumns.filter((col) => !col.startsWith("Variable")));
+    } else {
+      allColumns.forEach((col) => {
+        newColumnVisibility[col] = true;
+      });
+      setSelectedColumns(allColumns);
+    }
+    setColumnVisibility(newColumnVisibility);
+    setVariablesVisible(!variablesVisible);
   };
 
   const handleDescriptionClick = async () => {
@@ -281,25 +312,53 @@ export default function ResultsView({
             )}
           </Box>
           <Box>
-            <FormControl sx={{ m: 1, minWidth: 200, maxWidth: 350 }} size="small">
-              <InputLabel id="visible-columns-label">Columns</InputLabel>
-              <Select
-                labelId="visible-columns-label"
-                id="visible-columns"
-                multiple
-                value={selectedColumns}
-                onChange={handleChange}
-                input={<OutlinedInput label="Visible columns" />}
-                renderValue={(selected: string[]) => selected.join(', ')}
+            <Button
+              color="primary"
+              onClick={handleColumnDialogOpen}
+              startIcon={<ViewColumnIcon />}
+            >
+              Open Column Dialog
+            </Button>
+            <Dialog
+              open={columnDialogOpen}
+              onClose={handleColumnDialogClose}
+            >
+              <DialogTitle>Select Columns to Show</DialogTitle>
+              <Button
+                color="primary"
+                onClick={handleClearAllVariables}
+                startIcon={variablesVisible ? <ClearIcon /> : <RestartAltIcon />}
               >
-                {columnData.map((column) => (
-                  <MenuItem dense key={column.value} value={column.value}>
-                    <Checkbox checked={selectedColumns.indexOf(column.value) > -1} />
-                    <ListItemText primary={column.label} />
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+                {variablesVisible ? "Clear All Variables" : "Reset All Variables"}
+              </Button>
+
+              <DialogContent>
+                <List sx={{ m: 1, minWidth: 200, maxWidth: 350 }}>
+                  {columnData.map((column) => (
+                    <ListItem
+                      key={column.value}
+                      value={column.value}
+                      disablePadding
+                    >
+                      <ListItemButton
+                        role={undefined}
+                        onClick={(_event) => toggleColumnVisibility(column)}
+                        dense
+                      >
+                        <ListItemIcon>
+                          <Checkbox
+                            checked={selectedColumns.indexOf(column.value) > -1}
+                            tabIndex={-1}
+                            disableRipple
+                          />
+                        </ListItemIcon>
+                        <ListItemText primary={column.label} />
+                      </ListItemButton>
+                    </ListItem>
+                  ))}
+                </List>
+              </DialogContent>
+            </Dialog>
           </Box>
           <Box>
             <FormControl sx={{ minWidth: 180 }} size="small">
