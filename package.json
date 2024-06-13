@@ -55,7 +55,8 @@
     "@ibm-generative-ai/node-sdk": "^2.0.6",
     "google-auth-library": "^9.7.0",
     "googleapis": "^134.0.0",
-    "langfuse": "^3.7.0"
+    "langfuse": "^3.7.0",
+    "node-sql-parser": "^5.2.0"
   },
   "devDependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.592.0",

@@ -10,6 +10,7 @@ import yaml from 'js-yaml';
 import Ajv, { ValidateFunction } from 'ajv';
 import addFormats from 'ajv-formats';
 import { distance as levenshtein } from 'fastest-levenshtein';
+import { Parser } from 'node-sql-parser';
 
 import cliState from './cliState';
 import telemetry from './telemetry';
@@ -63,6 +64,8 @@ const ajv = new Ajv();
 addFormats(ajv);
 
 const nunjucks = getNunjucksEngine();
+
+const sqlParser = new Parser();
 
 function coerceString(value: string | object): string {
   if (typeof value === 'string') {
@@ -362,6 +365,82 @@ export async function runAssertion({
       pass,
       score: pass ? 1 : 0,
       reason: pass ? 'Assertion passed' : 'Expected output to be valid JSON',
+      assertion,
+    };
+  }
+
+  if (baseType === 'is-sql') {
+    let parsedSQL;
+    let databaseType: string | undefined = 'MySQL';
+    let whiteTableList: string[] | undefined;
+    let whiteColumnList : string[] | undefined;
+
+    interface sqlParserOption {
+      database: string | undefined;
+      type?: string; // 'type' is optional
+    }
+
+    if (renderedValue) {
+      if (typeof renderedValue === 'object') {
+        const value = renderedValue as {
+          database?: string;
+          whiteTableList?: string[];
+          whiteColumnList?: string[];
+        };
+
+        databaseType = value.database || 'MySQL';
+        whiteTableList = value.whiteTableList;
+        whiteColumnList  = value.whiteColumnList ;
+
+      } else {
+        throw new Error('is-sql assertion must have a object value.')
+      }
+    }
+
+    let opt: sqlParserOption = { database: databaseType };
+    let failed_reason = '';
+    try {
+      parsedSQL = sqlParser.astify(outputString, opt); // mysql sql grammer parsed by default
+      pass = !inverse;
+    } catch (err) {
+      pass = inverse;
+      failed_reason = `SQL statement does not conform to the provided ${databaseType} database syntax.`;
+    }
+
+    if (whiteTableList) {
+      opt = {
+        database: databaseType,
+        type: 'table',
+      }  
+      try {
+        sqlParser.whiteListCheck(outputString, whiteTableList, opt);
+      } catch (err) {
+        pass = inverse;
+        failed_reason += ' It failed the provided authority table list check.'
+      }
+    }
+
+    if (whiteColumnList) {
+      opt = {
+        database: databaseType,
+        type: 'column',
+      }
+      try {
+        sqlParser.whiteListCheck(outputString, whiteColumnList, opt);
+      } catch (err) {
+        pass = inverse;
+        failed_reason += ' It failed the provided authority column list check.'
+      }
+    }
+
+    if ( inverse && pass === false && !failed_reason ) {
+      failed_reason = 'The output SQL statement is valid';
+    }
+
+    return {
+      pass,
+      score: pass ? 1 : 0,
+      reason: pass ? 'Assertion passed' : failed_reason,
       assertion,
     };
   }
