@@ -1,4 +1,4 @@
-# How to red team LLMs
+# How to red team LLM applications
 
 Promptfoo is a popular open source evaluation framework that includes LLM red team and penetration testing capabilities.
 

@@ -1,0 +1,17 @@
+.report-header {
+  margin-bottom: 20px;
+}
+
+.report-header strong {
+  font-weight: 500;
+}
+
+.report-details {
+  display: flex;
+  flex-direction: row;
+  gap: 10px;
+}
+
+.report-details strong {
+  font-weight: 500;
+}

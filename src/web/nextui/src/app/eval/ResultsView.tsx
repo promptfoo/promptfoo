@@ -9,7 +9,7 @@ import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
 import CircularProgress from '@mui/material/CircularProgress';
 import DeleteIcon from '@mui/icons-material/Delete';
-import DownloadIcon from '@mui/icons-material/Download';
+import EyeIcon from '@mui/icons-material/Visibility';
 import EditIcon from '@mui/icons-material/Edit';
 import FormControl from '@mui/material/FormControl';
 import Heading from '@mui/material/Typography';
@@ -28,7 +28,7 @@ import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import { styled } from '@mui/system';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useDebounce } from 'use-debounce';
 
 import DownloadMenu from './DownloadMenu';
@@ -70,11 +70,12 @@ export default function ResultsView({
   defaultEvalId,
 }: ResultsViewProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { table, config, setConfig, maxTextLength, wordBreak, showInferenceDetails, evalId } =
     useResultsViewStore();
   const { setStateFromConfig } = useMainStore();
 
-  const [searchText, setSearchText] = React.useState('');
+  const [searchText, setSearchText] = React.useState(searchParams.get('search') || '');
   const [debouncedSearchText] = useDebounce(searchText, 1000);
   const handleSearchTextChange = (text: string) => {
     setSearchText(text);
@@ -397,6 +398,17 @@ export default function ResultsView({
                   Table Settings
                 </Button>
               </Tooltip>
+              {config?.metadata?.redteam && (
+                <Tooltip title="View vulnerability scan report" placement="bottom">
+                  <Button
+                    color="primary"
+                    startIcon={<EyeIcon />}
+                    onClick={() => router.push(`/report/?evalId=${evalId}`)}
+                  >
+                    Vulnerability Report
+                  </Button>
+                </Tooltip>
+              )}
             </ResponsiveStack>
           </Box>
         </ResponsiveStack>

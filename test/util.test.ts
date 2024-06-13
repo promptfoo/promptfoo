@@ -506,6 +506,7 @@ describe('util', () => {
         env: { envVar1: 'envValue1' },
         evaluateOptions: { maxConcurrency: 1 },
         commandLineOptions: { verbose: true },
+        metadata: {},
         sharing: false,
       });
 
@@ -526,6 +527,7 @@ describe('util', () => {
         env: { envVar2: 'envValue2' },
         evaluateOptions: { maxConcurrency: 2 },
         commandLineOptions: { verbose: false },
+        metadata: {},
         sharing: true,
       });
 
@@ -551,6 +553,7 @@ describe('util', () => {
         env: { envVar1: 'envValue1', envVar2: 'envValue2' },
         evaluateOptions: { maxConcurrency: 2 },
         commandLineOptions: { verbose: false },
+        metadata: {},
         sharing: false,
       });
     });

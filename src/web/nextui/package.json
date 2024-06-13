@@ -11,8 +11,9 @@
   "dependencies": {
     "@emotion/react": "^11.11.4",
     "@emotion/styled": "^11.11.5",
-    "@mui/icons-material": "^5.15.19",
+    "@mui/icons-material": "^5.15.20",
     "@mui/material": "^5.15.19",
+    "@mui/x-charts": "^7.6.2",
     "@supabase/auth-helpers-nextjs": "^0.7.4",
     "@supabase/supabase-js": "^2.43.4",
     "@tanstack/react-table": "^8.17.3",

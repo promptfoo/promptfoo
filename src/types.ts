@@ -663,6 +663,9 @@ export interface TestSuiteConfig {
 
   // Envar overrides
   env?: EnvOverrides;
+
+  // Any other information about this configuration.
+  metadata?: Record<string, any>;
 }
 
 export type UnifiedConfig = TestSuiteConfig & {
