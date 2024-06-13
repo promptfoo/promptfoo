@@ -832,7 +832,7 @@ function ResultsTable({
             return false;
           }
 
-          return searchText
+          return searchText && searchRegex
             ? row.outputs.some((output) => {
                 const vars = row.vars.map((v) => `var=${v}`).join(' ');
                 const stringifiedOutput = `${output.text} ${Object.keys(output.namedScores)

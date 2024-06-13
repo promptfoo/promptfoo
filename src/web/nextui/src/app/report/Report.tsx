@@ -37,7 +37,7 @@ const App: React.FC = () => {
     }
   }, []);
 
-  if (!evalData) {
+  if (!evalData || !evalId) {
     return <div>Loading...</div>;
   }
 
