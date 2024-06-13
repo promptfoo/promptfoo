@@ -1,7 +1,10 @@
 'use client';
 
 import React from 'react';
-import { Container, Typography, Grid, Chip } from '@mui/material';
+import Container from '@mui/material/Container';
+import Typography from '@mui/material/Typography';
+import Grid from '@mui/material/Grid';
+import Chip from '@mui/material/Chip';
 
 import RiskCategories from './RiskCategories';
 import Overview from './Overview';
@@ -119,7 +122,7 @@ const App: React.FC = () => {
           <RiskCategories categoryStats={categoryStats} />
         </Grid>
         <Grid item>
-          <TestSuites categoryStats={categoryStats} />
+          <TestSuites evalId={evalId} categoryStats={categoryStats} />
         </Grid>
         {/*
         <Grid item>

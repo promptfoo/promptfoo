@@ -789,9 +789,16 @@ function ResultsTable({
   );
 
   const columnVisibilityIsSet = Object.keys(columnVisibility).length > 0;
+  const searchRegex = React.useMemo(() => {
+    try {
+      return new RegExp(searchText, 'i');
+    } catch (err) {
+      console.error('Invalid regular expression:', (err as Error).message);
+      return null;
+    }
+  }, [searchText]);
   const filteredBody = React.useMemo(() => {
     try {
-      const searchRegex = new RegExp(searchText, 'i');
       return body
         .map((row, rowIndex) => ({
           ...row,
@@ -827,10 +834,13 @@ function ResultsTable({
 
           return searchText
             ? row.outputs.some((output) => {
-                const stringifiedOutput = `${output.text} ${Object.keys(output.namedScores)} ${
+                const vars = row.vars.map((v) => `var=${v}`).join(' ');
+                const stringifiedOutput = `${output.text} ${Object.keys(output.namedScores)
+                  .map((k) => `metric=${k}`)
+                  .join(' ')} ${
                   output.gradingResult?.reason || ''
                 } ${output.gradingResult?.comment || ''}`;
-                return searchRegex.test(stringifiedOutput);
+                return searchRegex.test(`${vars} ${stringifiedOutput}`);
               })
             : true;
         }) as ExtendedEvaluateTableRow[];
@@ -838,7 +848,15 @@ function ResultsTable({
       console.error('Invalid regular expression:', (err as Error).message);
       return body as ExtendedEvaluateTableRow[];
     }
-  }, [body, failureFilter, filterMode, searchText, columnVisibility, columnVisibilityIsSet]);
+  }, [
+    body,
+    failureFilter,
+    filterMode,
+    searchText,
+    columnVisibility,
+    columnVisibilityIsSet,
+    searchRegex,
+  ]);
 
   React.useEffect(() => {
     setPagination((prev) => ({ ...prev, pageIndex: 0 }));

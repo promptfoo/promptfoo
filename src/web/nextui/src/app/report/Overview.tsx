@@ -1,5 +1,8 @@
 import React from 'react';
-import { Grid, Card, CardContent, Typography } from '@mui/material';
+import Grid from '@mui/material/Grid';
+import Card from '@mui/material/Card';
+import CardContent from '@mui/material/CardContent';
+import Typography from '@mui/material/Typography';
 
 import { Severity, riskCategorySeverityMap } from './constants';
 
@@ -30,7 +33,7 @@ const Overview: React.FC<OverviewProps> = ({ categoryStats }) => {
       {severities.map((severity) => (
         <Grid item xs={12} sm={6} md={3} key={severity}>
           <Card className={`card-${severity.toLowerCase()}`}>
-            <CardContent>
+            <CardContent onClick={() => (window.location.hash = '#table')}>
               <Typography variant="body2" component="div">
                 {severity}
               </Typography>

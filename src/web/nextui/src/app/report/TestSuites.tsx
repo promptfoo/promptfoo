@@ -1,18 +1,17 @@
 import React from 'react';
-import {
-  Box,
-  Button,
-  Typography,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  TablePagination,
-  TableSortLabel,
-  Paper,
-} from '@mui/material';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Paper from '@mui/material/Paper';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableContainer from '@mui/material/TableContainer';
+import TableHead from '@mui/material/TableHead';
+import TablePagination from '@mui/material/TablePagination';
+import TableRow from '@mui/material/TableRow';
+import TableSortLabel from '@mui/material/TableSortLabel';
+import Tooltip from '@mui/material/Tooltip';
+import Typography from '@mui/material/Typography';
 
 import {
   riskCategories,
@@ -21,6 +20,7 @@ import {
   riskCategorySeverityMap,
 } from './constants';
 import './TestSuites.css';
+import { useRouter } from 'next/navigation';
 
 const getSubCategoryStats = (categoryStats: Record<string, { pass: number; total: number }>) => {
   const subCategoryStats = [];
@@ -51,9 +51,11 @@ const getSubCategoryStats = (categoryStats: Record<string, { pass: number; total
   );
 };
 
-const TestSuites: React.FC<{ categoryStats: Record<string, { pass: number; total: number }> }> = ({
-  categoryStats,
-}) => {
+const TestSuites: React.FC<{
+  evalId: string;
+  categoryStats: Record<string, { pass: number; total: number }>;
+}> = ({ evalId, categoryStats }) => {
+  const router = useRouter();
   const subCategoryStats = getSubCategoryStats(categoryStats).filter(
     (subCategory) => subCategory.passRate !== 'N/A',
   );
@@ -79,7 +81,7 @@ const TestSuites: React.FC<{ categoryStats: Record<string, { pass: number; total
 
   return (
     <Box>
-      <Typography variant="h6" gutterBottom>
+      <Typography variant="h6" gutterBottom id="table">
         Vulnerabilities and Mitigations
       </Typography>
       <TableContainer component={Paper}>
@@ -167,12 +169,31 @@ const TestSuites: React.FC<{ categoryStats: Record<string, { pass: number; total
                       {subCategory.severity}
                     </TableCell>
                     <TableCell>
-                      <Button variant="contained" size="small">
+                      <Button
+                        variant="contained"
+                        size="small"
+                        onClick={() => {
+                          const searchParams = new URLSearchParams(window.location.search);
+                          const evalId = searchParams.get('evalId');
+                          window.location.href = `/eval/?evalId=${evalId}&search=${encodeURIComponent(`(var=${subCategory.type}|metric=${subCategory.type}`)}`;
+                        }}
+                      >
                         View logs
                       </Button>
-                      <Button variant="contained" size="small" style={{ marginLeft: 8 }}>
-                        Apply mitigation
-                      </Button>
+                      <Tooltip title="Temporarily disabled while in beta, click to contact us to enable">
+                        <Button
+                          variant="contained"
+                          size="small"
+                          color="inherit"
+                          style={{ marginLeft: 8 }}
+                          onClick={() => {
+                            window.location.href =
+                              'mailto:inquiries@promptfoo.dev?subject=Promptfoo%20automatic%20vulnerability%20mitigation&body=Hello%20Promptfoo%20Team,%0D%0A%0D%0AI%20am%20interested%20in%20learning%20more%20about%20the%20automatic%20vulnerability%20mitigation%20beta.%20Please%20provide%20me%20with%20more%20details.%0D%0A%0D%0A';
+                          }}
+                        >
+                          Apply mitigation
+                        </Button>
+                      </Tooltip>
                     </TableCell>
                   </TableRow>
                 );
