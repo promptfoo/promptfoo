@@ -3,7 +3,7 @@ import invariant from 'tiny-invariant';
 import assertions from './assertions';
 import providers, { loadApiProvider } from './providers';
 import telemetry from './telemetry';
-import cache from './cache';
+import * as cache from './cache';
 import { evaluate as doEvaluate } from './evaluator';
 import { loadApiProviders } from './providers';
 import { readTests } from './testCases';
