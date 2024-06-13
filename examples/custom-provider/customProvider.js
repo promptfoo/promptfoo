@@ -37,7 +37,7 @@ class CustomApiProvider {
         },
         body: JSON.stringify(body),
       },
-      10_000 /* timeout */,
+      10_000 /* 10 second timeout */,
     );
 
     const ret = {
