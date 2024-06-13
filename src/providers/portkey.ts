@@ -2,37 +2,46 @@ import { OpenAiChatCompletionProvider } from './openai';
 
 import type { ProviderOptions } from '../types';
 
+interface PortkeyProviderOptions extends ProviderOptions {
+  config?: {
+    portkeyApiKey?: string;
+    portkeyVirtualKey?: string;
+    portkeyMetadata?: Record<string, any>;
+    portkeyConfig?: string;
+    portkeyProvider?: string;
+    portkeyCustomHost?: string;
+    portkeyTraceId?: string;
+    portkeyCacheForceRefresh?: boolean;
+    portkeyCacheNamespace?: string;
+    portkeyForwardHeaders?: string[];
+    portkeyApiBaseUrl?: string;
+    portkeyAzureResourceName?: string;
+    portkeyAzureDeploymentId?: string;
+    portkeyAzureApiVersion?: string;
+    portkeyVertexProjectId?: string;
+    portkeyVertexRegion?: string;
+    portkeyAwsSecretAccessKey?: string;
+    portkeyAwsRegion?: string;
+    portkeyAwsSessionToken?: string;
+    portkeyAwsAccessKeyId?: string;
+    [key: string]: any;
+  };
+}
+
 export class PortkeyChatCompletionProvider extends OpenAiChatCompletionProvider {
-  constructor(modelName: string, providerOptions: ProviderOptions) {
-    const headers = [
-      {
-        key: 'x-portkey-api-key',
-        value: process.env.PORTKEY_API_KEY || providerOptions.config?.portkeyApiKey,
+  constructor(modelName: string, providerOptions: PortkeyProviderOptions) {
+    const headers = Object.entries(providerOptions.config || {}).reduce(
+      (acc: Record<string, string>, [key, value]) => {
+        if (value) {
+          const headerKey = key.startsWith('portkey')
+            ? `x-${key.replace(/^portkey/, 'portkey-').toLowerCase()}`
+            : key;
+          acc[headerKey] = typeof value === 'object' ? JSON.stringify(value) : value;
+        }
+        return acc;
       },
-      {
-        key: 'x-portkey-virtual-key',
-        value: process.env.PORTKEY_VIRTUAL_KEY || providerOptions.config?.portkeyVirtualKey,
-      },
-      {
-        key: 'x-portkey-metadata',
-        value:
-          process.env.PORTKEY_METADATA ||
-          (providerOptions.config?.portkeyMetadata
-            ? JSON.stringify(providerOptions.config?.portkeyMetadata)
-            : undefined),
-      },
-      {
-        key: 'x-portkey-config',
-        value: process.env.PORTKEY_CONFIG || providerOptions.config?.portkeyConfig,
-      },
-      {
-        key: 'x-portkey-provider',
-        value: process.env.PORTKEY_PROVIDER || providerOptions.config?.portkeyProvider,
-      },
-    ].reduce((acc: Record<string, string>, { key, value }) => {
-      if (value) acc[key] = value;
-      return acc;
-    }, {});
+      {},
+    );
 
     super(modelName, {
       ...providerOptions,
