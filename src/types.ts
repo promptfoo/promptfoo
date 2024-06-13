@@ -422,6 +422,7 @@ type BaseAssertionTypes =
   | 'starts-with'
   | 'regex'
   | 'is-json'
+  | 'is-sql'
   | 'contains-json'
   | 'javascript'
   | 'python'
