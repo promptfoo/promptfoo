@@ -93,7 +93,7 @@ const sidebars = {
         type: 'generated-index',
       },
       items: [
-        { type: 'doc', id: 'red-team/intro' },
+        { type: 'doc', id: 'red-team/index' },
         { type: 'doc', id: 'guides/llm-redteaming' },
       ],
     },

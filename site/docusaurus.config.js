@@ -115,6 +115,11 @@ const config = {
             position: 'right',
           },
           {
+            to: '/docs/red-team',
+            label: 'LLM Red Teaming',
+            position: 'right',
+          },
+          {
             href: 'https://github.com/promptfoo/promptfoo',
             label: 'GitHub',
             position: 'right',
@@ -171,7 +176,7 @@ const config = {
               },
               {
                 label: 'LLM red teaming',
-                to: '/docs/red-team/intro',
+                to: '/docs/red-team',
               },
             ],
           },
