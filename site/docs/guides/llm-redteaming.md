@@ -15,9 +15,13 @@ This guide shows you how to automatically generate adversarial tests specificall
 - Safety risks from the [ML Commons Safety Working Group](https://arxiv.org/abs/2404.12241): violent crimes, non-violent crimes, sex crimes, child exploitation, specialized financial/legal/medical advice, privacy, intellectual property, indiscriminate weapons, hate, self-harm, sexual content.
 - Safety risks from the [HarmBench](https://www.harmbench.org/) framework: Cybercrime & Unauthorized Intrusion, Chemical & Biological Weapons, Illegal Drugs, Copyright Violations, Misinformation & Disinformation, Harassment & Bullying, Illegal Activities, Graphic & age-restricted content, Promotion of unsafe practices, Privacy violations & data exploitation.
 
-The end result is a view that displays red team test results and vulnerabilities:
+The end result is a view that summarizes your LLM app's vulnerabilities:
 
-![llm redteaming](/img/docs/redteam-results.png)
+![llm red team report](/img/riskreport-1@2x.png)
+
+You can also dig into specific red team failure cases:
+
+![llm red team evals](/img/docs/redteam-results.png)
 
 ## Prerequisites
 

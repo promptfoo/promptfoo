@@ -88,6 +88,17 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Red teaming',
+      link: {
+        type: 'generated-index',
+      },
+      items: [
+        { type: 'doc', id: 'red-team/intro' },
+        { type: 'doc', id: 'guides/llm-redteaming' },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Guides',
       link: {
         type: 'generated-index',
