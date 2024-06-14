@@ -132,6 +132,7 @@
     "proxy-agent": "^6.4.0",
     "python-shell": "^5.0.0",
     "replicate": "^0.30.1",
+    "rfdc": "^1.4.1",
     "rouge": "git+https://github.com/kenlimmj/rouge.git#f35111b599aca55f1d4dc1d4a3d15e28e7f7c55f",
     "semver": "^7.6.2",
     "socket.io": "^4.7.5",
