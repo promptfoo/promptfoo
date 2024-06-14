@@ -316,38 +316,65 @@ describe('call provider apis', () => {
 
   describe('Anthropic', () => {
     describe('outputFromMessage', () => {
-      test('should handle empty content array', () => {
-        const message = {
+      test('should return an empty string for empty content array', () => {
+        const message: Anthropic.Messages.Message = {
           content: [],
-        } as unknown as Anthropic.Messages.Message;
+          id: '',
+          model: '',
+          role: 'assistant',
+          stop_reason: null,
+          stop_sequence: null,
+          type: 'message',
+          usage: undefined,
+        };
 
         const result = outputFromMessage(message);
         expect(result).toBe('');
       });
 
-      test('should handle text blocks', () => {
-        const message = {
+      test('should return text from a single text block', () => {
+        const message: Anthropic.Messages.Message = {
           content: [{ type: 'text', text: 'Hello' }],
-        } as unknown as Anthropic.Messages.Message;
+          id: '',
+          model: '',
+          role: 'assistant',
+          stop_reason: null,
+          stop_sequence: null,
+          type: 'message',
+          usage: {
+            input_tokens: 0,
+            output_tokens: 0,
+          },
+        };
 
         const result = outputFromMessage(message);
         expect(result).toBe('Hello');
       });
 
-      test('should return concatenated text blocks when no tool_use blocks are present', () => {
-        const message = {
+      test('should concatenate text blocks without tool_use blocks', () => {
+        const message: Anthropic.Messages.Message = {
           content: [
             { type: 'text', text: 'Hello' },
             { type: 'text', text: 'World' },
           ],
-        } as Anthropic.Messages.Message;
+          id: '',
+          model: '',
+          role: 'assistant',
+          stop_reason: null,
+          stop_sequence: null,
+          type: 'message',
+          usage: {
+            input_tokens: 0,
+            output_tokens: 0,
+          },
+        };
 
         const result = outputFromMessage(message);
         expect(result).toBe('Hello\n\nWorld');
       });
 
       test('should handle content with tool_use blocks', () => {
-        const message = {
+        const message: Anthropic.Messages.Message = {
           content: [
             {
               type: 'tool_use',
@@ -362,7 +389,17 @@ describe('call provider apis', () => {
               input: { location: 'New York, NY' },
             },
           ],
-        } as Anthropic.Messages.Message;
+          id: '',
+          model: '',
+          role: 'assistant',
+          stop_reason: null,
+          stop_sequence: null,
+          type: 'message',
+          usage: {
+            input_tokens: 0,
+            output_tokens: 0,
+          },
+        };
 
         const result = outputFromMessage(message);
         expect(result).toBe(
@@ -370,8 +407,8 @@ describe('call provider apis', () => {
         );
       });
 
-      test('should return concatenated text and tool_use blocks as JSON strings', () => {
-        const message = {
+      test('should concatenate text and tool_use blocks as JSON strings', () => {
+        const message: Anthropic.Messages.Message = {
           content: [
             { type: 'text', text: 'Hello' },
             {
@@ -382,7 +419,17 @@ describe('call provider apis', () => {
             },
             { type: 'text', text: 'World' },
           ],
-        } as Anthropic.Messages.Message;
+          id: '',
+          model: '',
+          role: 'assistant',
+          stop_reason: null,
+          stop_sequence: null,
+          type: 'message',
+          usage: {
+            input_tokens: 0,
+            output_tokens: 0,
+          },
+        };
 
         const result = outputFromMessage(message);
         expect(result).toBe(
@@ -392,21 +439,20 @@ describe('call provider apis', () => {
     });
 
     describe('AnthropicMessagesProvider callApi', () => {
-      test('ToolUse default cache behavior', async () => {
+      test('should use cache by default for ToolUse requests', async () => {
         const provider = new AnthropicMessagesProvider('claude-3-opus-20240229');
         provider.anthropic.messages.create = jest.fn().mockResolvedValue({
           content: [
             {
               type: 'text',
               text: '<thinking>I need to use the get_weather, and the user wants SF, which is likely San Francisco, CA.</thinking>',
-            } as TextBlock,
+            },
             {
               type: 'tool_use',
               id: 'toolu_01A09q90qw90lq917835lq9',
-              toolUseId: 'toolu_01A09q90qw90lq917835lq9',
               name: 'get_weather',
               input: { location: 'San Francisco, CA', unit: 'celsius' },
-            } as ToolUseBlock,
+            },
           ],
         } as Anthropic.Messages.Message);
 
@@ -416,8 +462,8 @@ describe('call provider apis', () => {
         expect(result).toMatchObject({
           cost: undefined,
           output: dedent`<thinking>I need to use the get_weather, and the user wants SF, which is likely San Francisco, CA.</thinking>
-
-        {"type":"tool_use","id":"toolu_01A09q90qw90lq917835lq9","toolUseId":"toolu_01A09q90qw90lq917835lq9","name":"get_weather","input":{"location":"San Francisco, CA","unit":"celsius"}}`,
+  
+          {"type":"tool_use","id":"toolu_01A09q90qw90lq917835lq9","name":"get_weather","input":{"location":"San Francisco, CA","unit":"celsius"}}`,
           tokenUsage: {},
         });
 
@@ -426,7 +472,7 @@ describe('call provider apis', () => {
         expect(result).toMatchObject(resultFromCache);
       });
 
-      test('ToolUse with caching disabled', async () => {
+      test('should not use cache if caching is disabled for ToolUse requests', async () => {
         const provider = new AnthropicMessagesProvider('claude-3-opus-20240229');
         provider.anthropic.messages.create = jest.fn().mockResolvedValue({
           content: [
@@ -450,8 +496,8 @@ describe('call provider apis', () => {
 
         expect(result).toMatchObject({
           output: dedent`<thinking>I need to use the get_weather, and the user wants SF, which is likely San Francisco, CA.</thinking>
-
-        {"type":"tool_use","id":"toolu_01A09q90qw90lq917835lq9","name":"get_weather","input":{"location":"San Francisco, CA","unit":"celsius"}}`,
+  
+          {"type":"tool_use","id":"toolu_01A09q90qw90lq917835lq9","name":"get_weather","input":{"location":"San Francisco, CA","unit":"celsius"}}`,
           tokenUsage: {},
         });
 
@@ -460,7 +506,7 @@ describe('call provider apis', () => {
         enableCache();
       });
 
-      test('legacy caching behavior', async () => {
+      test('should return cached response for legacy caching behavior', async () => {
         const provider = new AnthropicMessagesProvider('claude-3-opus-20240229');
         provider.anthropic.messages.create = jest.fn().mockResolvedValue({
           content: [],
@@ -479,7 +525,7 @@ describe('call provider apis', () => {
     });
 
     describe('AnthropicCompletionProvider callApi', () => {
-      test('default behavior', async () => {
+      test('should return output for default behavior', async () => {
         const provider = new AnthropicCompletionProvider('claude-1');
         provider.anthropic.completions.create = jest.fn().mockResolvedValue({
           completion: 'Test output',
@@ -487,11 +533,13 @@ describe('call provider apis', () => {
         const result = await provider.callApi('Test prompt');
 
         expect(provider.anthropic.completions.create).toHaveBeenCalledTimes(1);
-        expect(result.output).toBe('Test output');
-        expect(result.tokenUsage).toEqual({});
+        expect(result).toMatchObject({
+          output: 'Test output',
+          tokenUsage: {},
+        });
       });
 
-      test('with caching enabled', async () => {
+      test('should return cached output with caching enabled', async () => {
         const provider = new AnthropicCompletionProvider('claude-1');
         provider.anthropic.completions.create = jest.fn().mockResolvedValue({
           completion: 'Test output',
@@ -499,18 +547,22 @@ describe('call provider apis', () => {
         const result = await provider.callApi('Test prompt');
 
         expect(provider.anthropic.completions.create).toHaveBeenCalledTimes(1);
-        expect(result.output).toBe('Test output');
-        expect(result.tokenUsage).toEqual({});
+        expect(result).toMatchObject({
+          output: 'Test output',
+          tokenUsage: {},
+        });
 
         (provider.anthropic.completions.create as jest.Mock).mockClear();
-        const result2 = await provider.callApi('Test prompt');
+        const cachedResult = await provider.callApi('Test prompt');
 
         expect(provider.anthropic.completions.create).toHaveBeenCalledTimes(0);
-        expect(result2.output).toBe('Test output');
-        expect(result2.tokenUsage).toEqual({});
+        expect(cachedResult).toMatchObject({
+          output: 'Test output',
+          tokenUsage: {},
+        });
       });
 
-      test('with caching disabled', async () => {
+      test('should return fresh output with caching disabled', async () => {
         const provider = new AnthropicCompletionProvider('claude-1');
         provider.anthropic.completions.create = jest.fn().mockResolvedValue({
           completion: 'Test output',
@@ -518,18 +570,22 @@ describe('call provider apis', () => {
         const result = await provider.callApi('Test prompt');
 
         expect(provider.anthropic.completions.create).toHaveBeenCalledTimes(1);
-        expect(result.output).toBe('Test output');
-        expect(result.tokenUsage).toEqual({});
+        expect(result).toMatchObject({
+          output: 'Test output',
+          tokenUsage: {},
+        });
 
         (provider.anthropic.completions.create as jest.Mock).mockClear();
 
         disableCache();
 
-        const result2 = await provider.callApi('Test prompt');
+        const freshResult = await provider.callApi('Test prompt');
 
         expect(provider.anthropic.completions.create).toHaveBeenCalledTimes(1);
-        expect(result2.output).toBe('Test output');
-        expect(result2.tokenUsage).toEqual({});
+        expect(freshResult).toMatchObject({
+          output: 'Test output',
+          tokenUsage: {},
+        });
       });
     });
   });
