@@ -1,6 +1,5 @@
 import fs from 'fs';
 import path from 'path';
-import { execFile, spawn } from 'child_process';
 import util from 'node:util';
 
 import async from 'async';
@@ -9,6 +8,7 @@ import invariant from 'tiny-invariant';
 import yaml from 'js-yaml';
 import Ajv, { ValidateFunction } from 'ajv';
 import addFormats from 'ajv-formats';
+import Clone from 'rfdc';
 import { distance as levenshtein } from 'fastest-levenshtein';
 
 import cliState from './cliState';
@@ -63,6 +63,19 @@ const ajv = new Ajv();
 addFormats(ajv);
 
 const nunjucks = getNunjucksEngine();
+
+const clone = Clone();
+
+function getFinalTest(test: TestCase, assertion: Assertion) {
+  // Deep copy
+  const ret = clone(test);
+
+  // Assertion provider overrides test provider
+  ret.options = ret.options || {};
+  ret.options.provider = assertion.provider || ret.options.provider;
+  ret.options.rubricPrompt = assertion.rubricPrompt || ret.options.rubricPrompt;
+  return Object.freeze(ret);
+}
 
 function coerceString(value: string | object): string {
   if (typeof value === 'string') {
@@ -299,6 +312,9 @@ export async function runAssertion({
     // Unpack the array
     renderedValue = renderedValue.map((v) => nunjucks.renderString(String(v), test.vars || {}));
   }
+
+  // Transform test
+  test = getFinalTest(test, assertion);
 
   if (baseType === 'equals') {
     if (typeof renderedValue === 'object') {
@@ -830,9 +846,6 @@ ${
       typeof renderedValue === 'string' || Array.isArray(renderedValue),
       'Similarity assertion type must have a string or array of strings value',
     );
-    // Assertion provider overrides test provider
-    test.options = test.options || {};
-    test.options.provider = assertion.provider || test.options.provider;
 
     if (Array.isArray(renderedValue)) {
       let minScore = Infinity;
@@ -880,19 +893,14 @@ ${
       '"llm-rubric" assertion type must have a string value',
     );
 
-    // Assertion provider overrides test provider
-    test.options = test.options || {};
-    test.options.provider = assertion.provider || test.options.provider;
-    test.options.rubricPrompt = assertion.rubricPrompt || test.options.rubricPrompt;
-
-    if (test.options.rubricPrompt) {
+    if (test.options?.rubricPrompt) {
       if (typeof test.options.rubricPrompt === 'object') {
         test.options.rubricPrompt = JSON.stringify(test.options.rubricPrompt);
       }
     }
 
     // Update the assertion value. This allows the web view to display the prompt.
-    assertion.value = assertion.value || test.options.rubricPrompt;
+    assertion.value = assertion.value || test.options?.rubricPrompt;
     return {
       assertion,
       ...(await matchesLlmRubric(renderedValue || '', outputString, test.options, test.vars)),
@@ -906,12 +914,7 @@ ${
     );
     invariant(prompt, 'factuality assertion type must have a prompt');
 
-    // Assertion provider overrides test provider
-    test.options = test.options || {};
-    test.options.provider = assertion.provider || test.options.provider;
-    test.options.rubricPrompt = assertion.rubricPrompt || test.options.rubricPrompt;
-
-    if (test.options.rubricPrompt) {
+    if (test.options?.rubricPrompt) {
       // Substitute vars in prompt
       invariant(typeof test.options.rubricPrompt === 'string', 'rubricPrompt must be a string');
       test.options.rubricPrompt = nunjucks.renderString(test.options.rubricPrompt, test.vars || {});
@@ -930,12 +933,7 @@ ${
     );
     invariant(prompt, 'model-graded-closedqa assertion type must have a prompt');
 
-    // Assertion provider overrides test provider
-    test.options = test.options || {};
-    test.options.provider = assertion.provider || test.options.provider;
-    test.options.rubricPrompt = assertion.rubricPrompt || test.options.rubricPrompt;
-
-    if (test.options.rubricPrompt) {
+    if (test.options?.rubricPrompt) {
       // Substitute vars in prompt
       invariant(typeof test.options.rubricPrompt === 'string', 'rubricPrompt must be a string');
       test.options.rubricPrompt = nunjucks.renderString(test.options.rubricPrompt, test.vars || {});
@@ -954,9 +952,6 @@ ${
     );
     invariant(prompt, 'answer-relevance assertion type must have a prompt');
 
-    // Assertion provider overrides test provider
-    test.options = test.options || {};
-    test.options.provider = assertion.provider || test.options.provider;
     const input = typeof test.vars?.query === 'string' ? test.vars.query : prompt;
     return {
       assertion,
@@ -971,10 +966,6 @@ ${
     );
     invariant(prompt, 'context-recall assertion type must have a prompt');
 
-    // Assertion provider overrides test provider
-    test.options = test.options || {};
-    test.options.provider = assertion.provider || test.options.provider;
-
     return {
       assertion,
       ...(await matchesContextRecall(
@@ -988,10 +979,6 @@ ${
   }
 
   if (baseType === 'context-relevance') {
-    // Assertion provider overrides test provider
-    test.options = test.options || {};
-    test.options.provider = assertion.provider || test.options.provider;
-
     invariant(test.vars, 'context-relevance assertion type must have a vars object');
     invariant(
       typeof test.vars.query === 'string',
@@ -1014,10 +1001,6 @@ ${
   }
 
   if (baseType === 'context-faithfulness') {
-    // Assertion provider overrides test provider
-    test.options = test.options || {};
-    test.options.provider = assertion.provider || test.options.provider;
-
     invariant(test.vars, 'context-faithfulness assertion type must have a vars object');
     invariant(
       typeof test.vars.query === 'string',
@@ -1045,10 +1028,6 @@ ${
   }
 
   if (baseType === 'moderation') {
-    // Assertion provider overrides test provider
-    test.options = test.options || {};
-    test.options.provider = assertion.provider || test.options.provider;
-
     invariant(prompt, 'moderation assertion type must have a prompt');
     invariant(typeof output === 'string', 'moderation assertion type must have a string output');
     invariant(
