@@ -232,13 +232,12 @@ export class AnthropicMessagesProvider implements ApiProvider {
       logger.debug(`Anthropic Messages API response: ${JSON.stringify(response)}`);
       if (isCacheEnabled()) {
         try {
-          await cache.set(cacheKey, JSON.stringify(response.content));
+          await cache.set(cacheKey, JSON.stringify(response));
         } catch (err) {
           logger.error(`Failed to cache response: ${String(err)}`);
         }
       }
 
-      console.error('response', response);
       return {
         output: outputFromMessage(response),
         tokenUsage: getTokenUsage(response, false),

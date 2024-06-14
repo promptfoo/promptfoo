@@ -385,52 +385,72 @@ describe('call provider apis', () => {
     });
   });
 
-  const testAnthropicMessagesProvider = async (withCache: boolean) => {
-    const provider = new AnthropicMessagesProvider('claude-3-opus-20240229');
-    provider.anthropic.messages.create = jest.fn().mockResolvedValue({
-      content: [
-        {
-          type: 'text',
-          text: '<thinking>I need to use the get_weather, and the user wants SF, which is likely San Francisco, CA.</thinking>',
-        },
-        {
-          type: 'tool_use',
-          id: 'toolu_01A09q90qw90lq917835lq9',
-          name: 'get_weather',
-          input: { location: 'San Francisco, CA', unit: 'celsius' },
-        },
-      ],
-    } as Anthropic.Messages.Message);
+  describe.only('AnthropicMessagesProvider callApi', () => {
+    test('AnthropicMessagesProvider callApi for ToolUse with default cache behavior', async () => {
+      const provider = new AnthropicMessagesProvider('claude-3-opus-20240229');
+      provider.anthropic.messages.create = jest.fn().mockResolvedValue({
+        content: [
+          {
+            type: 'text',
+            text: '<thinking>I need to use the get_weather, and the user wants SF, which is likely San Francisco, CA.</thinking>',
+          },
+          {
+            type: 'tool_use',
+            id: 'toolu_01A09q90qw90lq917835lq9',
+            name: 'get_weather',
+            input: { location: 'San Francisco, CA', unit: 'celsius' },
+          },
+        ],
+      } as Anthropic.Messages.Message);
 
-    if (withCache) {
-      enableCache();
-    } else {
-      disableCache();
-    }
+      const result = await provider.callApi('What is the forecast in San Francisco?');
+      expect(provider.anthropic.messages.create).toHaveBeenCalledTimes(1);
 
-    const result = await provider.callApi('What is the forecast in San Francisco?');
-    expect(provider.anthropic.messages.create).toHaveBeenCalledTimes(1);
-
-    expect(result).toMatchObject({
-      output: dedent`<thinking>I need to use the get_weather, and the user wants SF, which is likely San Francisco, CA.</thinking>
+      expect(result).toMatchObject({
+        output: dedent`<thinking>I need to use the get_weather, and the user wants SF, which is likely San Francisco, CA.</thinking>
 
         {"type":"tool_use","id":"toolu_01A09q90qw90lq917835lq9","name":"get_weather","input":{"location":"San Francisco, CA","unit":"celsius"}}`,
-      tokenUsage: {},
+        tokenUsage: {},
+      });
+
+      const result2 = await provider.callApi('What is the forecast in San Francisco?');
+      expect(provider.anthropic.messages.create).toHaveBeenCalledTimes(1);
+      expect(result).toMatchObject(result2);
     });
 
-    if (withCache) {
+    test('AnthropicMessagesProvider callApi for ToolUse with caching disabled', async () => {
+      const provider = new AnthropicMessagesProvider('claude-3-opus-20240229');
+      provider.anthropic.messages.create = jest.fn().mockResolvedValue({
+        content: [
+          {
+            type: 'text',
+            text: '<thinking>I need to use the get_weather, and the user wants SF, which is likely San Francisco, CA.</thinking>',
+          },
+          {
+            type: 'tool_use',
+            id: 'toolu_01A09q90qw90lq917835lq9',
+            name: 'get_weather',
+            input: { location: 'San Francisco, CA', unit: 'celsius' },
+          },
+        ],
+      } as Anthropic.Messages.Message);
+
       disableCache();
-    } else {
+
+      const result = await provider.callApi('What is the forecast in San Francisco?');
+      expect(provider.anthropic.messages.create).toHaveBeenCalledTimes(1);
+
+      expect(result).toMatchObject({
+        output: dedent`<thinking>I need to use the get_weather, and the user wants SF, which is likely San Francisco, CA.</thinking>
+
+        {"type":"tool_use","id":"toolu_01A09q90qw90lq917835lq9","name":"get_weather","input":{"location":"San Francisco, CA","unit":"celsius"}}`,
+        tokenUsage: {},
+      });
+
+      await provider.callApi('What is the forecast in San Francisco?');
+      expect(provider.anthropic.messages.create).toHaveBeenCalledTimes(2);
       enableCache();
-    }
-  };
-
-  test.only('AnthropicMessagesProvider callApi for ToolUse with caching disabled', async () => {
-    await testAnthropicMessagesProvider(false);
-  });
-
-  test('AnthropicMessagesProvider callApi for ToolUse with caching enabled', async () => {
-    await testAnthropicMessagesProvider(true);
+    });
   });
 
   test('AnthropicCompletionProvider callApi', async () => {
