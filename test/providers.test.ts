@@ -15,7 +15,7 @@ import {
 } from '../src/providers/anthropic';
 import { LlamaProvider } from '../src/providers/llama';
 
-import { clearCache, disableCache, enableCache } from '../src/cache';
+import { clearCache, disableCache, enableCache, getCache } from '../src/cache';
 import { loadApiProvider, loadApiProviders } from '../src/providers';
 import {
   AzureOpenAiChatCompletionProvider,
@@ -407,15 +407,16 @@ describe('call provider apis', () => {
       expect(provider.anthropic.messages.create).toHaveBeenCalledTimes(1);
 
       expect(result).toMatchObject({
+        cost: undefined,
         output: dedent`<thinking>I need to use the get_weather, and the user wants SF, which is likely San Francisco, CA.</thinking>
 
         {"type":"tool_use","id":"toolu_01A09q90qw90lq917835lq9","name":"get_weather","input":{"location":"San Francisco, CA","unit":"celsius"}}`,
         tokenUsage: {},
       });
 
-      const result2 = await provider.callApi('What is the forecast in San Francisco?');
+      const resultFromCache = await provider.callApi('What is the forecast in San Francisco?');
       expect(provider.anthropic.messages.create).toHaveBeenCalledTimes(1);
-      expect(result).toMatchObject(result2);
+      expect(result).toMatchObject(resultFromCache);
     });
 
     test('AnthropicMessagesProvider callApi for ToolUse with caching disabled', async () => {
@@ -450,6 +451,23 @@ describe('call provider apis', () => {
       await provider.callApi('What is the forecast in San Francisco?');
       expect(provider.anthropic.messages.create).toHaveBeenCalledTimes(2);
       enableCache();
+    });
+
+    test('AnthropicMessagesProvider callApi should preserve legacy caching behavior', async () => {
+      const provider = new AnthropicMessagesProvider('claude-3-opus-20240229');
+      provider.anthropic.messages.create = jest.fn().mockResolvedValue({
+        content: [],
+      } as unknown as Anthropic.Messages.Message);
+      getCache().set(
+        'anthropic:{"model":"claude-3-opus-20240229","messages":[{"role":"user","content":[{"type":"text","text":"What is the forecast in San Francisco?"}]}],"max_tokens":1024,"temperature":0,"stream":false}',
+        'Test output',
+      );
+      const result = await provider.callApi('What is the forecast in San Francisco?');
+      expect(result).toMatchObject({
+        output: 'Test output',
+        tokenUsage: {},
+      });
+      expect(provider.anthropic.messages.create).toHaveBeenCalledTimes(0);
     });
   });
 
