@@ -386,7 +386,7 @@ describe('call provider apis', () => {
   });
 
   describe.only('AnthropicMessagesProvider callApi', () => {
-    test('for ToolUse with default cache behavior', async () => {
+    test('ToolUse default cache behavior', async () => {
       const provider = new AnthropicMessagesProvider('claude-3-opus-20240229');
       provider.anthropic.messages.create = jest.fn().mockResolvedValue({
         content: [
@@ -420,7 +420,7 @@ describe('call provider apis', () => {
       expect(result).toMatchObject(resultFromCache);
     });
 
-    test('for ToolUse with caching disabled', async () => {
+    test('ToolUse with caching disabled', async () => {
       const provider = new AnthropicMessagesProvider('claude-3-opus-20240229');
       provider.anthropic.messages.create = jest.fn().mockResolvedValue({
         content: [
@@ -454,7 +454,7 @@ describe('call provider apis', () => {
       enableCache();
     });
 
-    test('should preserve legacy caching behavior', async () => {
+    test('legacy caching behavior', async () => {
       const provider = new AnthropicMessagesProvider('claude-3-opus-20240229');
       provider.anthropic.messages.create = jest.fn().mockResolvedValue({
         content: [],
@@ -472,57 +472,59 @@ describe('call provider apis', () => {
     });
   });
 
-  test('AnthropicCompletionProvider callApi', async () => {
-    const provider = new AnthropicCompletionProvider('claude-1');
-    provider.anthropic.completions.create = jest.fn().mockResolvedValue({
-      completion: 'Test output',
+  describe('AnthropicCompletionProvider callApi', () => {
+    test('default behavior', async () => {
+      const provider = new AnthropicCompletionProvider('claude-1');
+      provider.anthropic.completions.create = jest.fn().mockResolvedValue({
+        completion: 'Test output',
+      });
+      const result = await provider.callApi('Test prompt');
+
+      expect(provider.anthropic.completions.create).toHaveBeenCalledTimes(1);
+      expect(result.output).toBe('Test output');
+      expect(result.tokenUsage).toEqual({});
     });
-    const result = await provider.callApi('Test prompt');
 
-    expect(provider.anthropic.completions.create).toHaveBeenCalledTimes(1);
-    expect(result.output).toBe('Test output');
-    expect(result.tokenUsage).toEqual({});
-  });
+    test('with caching enabled', async () => {
+      const provider = new AnthropicCompletionProvider('claude-1');
+      provider.anthropic.completions.create = jest.fn().mockResolvedValue({
+        completion: 'Test output',
+      });
+      const result = await provider.callApi('Test prompt');
 
-  test('AnthropicCompletionProvider callApi with caching', async () => {
-    const provider = new AnthropicCompletionProvider('claude-1');
-    provider.anthropic.completions.create = jest.fn().mockResolvedValue({
-      completion: 'Test output',
+      expect(provider.anthropic.completions.create).toHaveBeenCalledTimes(1);
+      expect(result.output).toBe('Test output');
+      expect(result.tokenUsage).toEqual({});
+
+      (provider.anthropic.completions.create as jest.Mock).mockClear();
+      const result2 = await provider.callApi('Test prompt');
+
+      expect(provider.anthropic.completions.create).toHaveBeenCalledTimes(0);
+      expect(result2.output).toBe('Test output');
+      expect(result2.tokenUsage).toEqual({});
     });
-    const result = await provider.callApi('Test prompt');
 
-    expect(provider.anthropic.completions.create).toHaveBeenCalledTimes(1);
-    expect(result.output).toBe('Test output');
-    expect(result.tokenUsage).toEqual({});
+    test('with caching disabled', async () => {
+      const provider = new AnthropicCompletionProvider('claude-1');
+      provider.anthropic.completions.create = jest.fn().mockResolvedValue({
+        completion: 'Test output',
+      });
+      const result = await provider.callApi('Test prompt');
 
-    (provider.anthropic.completions.create as jest.Mock).mockClear();
-    const result2 = await provider.callApi('Test prompt');
+      expect(provider.anthropic.completions.create).toHaveBeenCalledTimes(1);
+      expect(result.output).toBe('Test output');
+      expect(result.tokenUsage).toEqual({});
 
-    expect(provider.anthropic.completions.create).toHaveBeenCalledTimes(0);
-    expect(result2.output).toBe('Test output');
-    expect(result2.tokenUsage).toEqual({});
-  });
+      (provider.anthropic.completions.create as jest.Mock).mockClear();
 
-  test('AnthropicCompletionProvider callApi with caching disabled', async () => {
-    const provider = new AnthropicCompletionProvider('claude-1');
-    provider.anthropic.completions.create = jest.fn().mockResolvedValue({
-      completion: 'Test output',
+      disableCache();
+
+      const result2 = await provider.callApi('Test prompt');
+
+      expect(provider.anthropic.completions.create).toHaveBeenCalledTimes(1);
+      expect(result2.output).toBe('Test output');
+      expect(result2.tokenUsage).toEqual({});
     });
-    const result = await provider.callApi('Test prompt');
-
-    expect(provider.anthropic.completions.create).toHaveBeenCalledTimes(1);
-    expect(result.output).toBe('Test output');
-    expect(result.tokenUsage).toEqual({});
-
-    (provider.anthropic.completions.create as jest.Mock).mockClear();
-
-    disableCache();
-
-    const result2 = await provider.callApi('Test prompt');
-
-    expect(provider.anthropic.completions.create).toHaveBeenCalledTimes(1);
-    expect(result2.output).toBe('Test output');
-    expect(result2.tokenUsage).toEqual({});
   });
 
   test('LlamaProvider callApi', async () => {
