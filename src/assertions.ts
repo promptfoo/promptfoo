@@ -41,8 +41,11 @@ import {
   type AtomicTestCase,
   type ApiProvider,
   isGradingResult,
+  TestCase,
+  isApiProvider,
 } from './types';
 import { AssertionsResult } from './assertions/AssertionsResult';
+import { parseChatPrompt } from './providers/shared';
 
 const ASSERTIONS_MAX_CONCURRENCY = process.env.PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY
   ? parseInt(process.env.PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY, 10)
@@ -1056,6 +1059,22 @@ ${
         (Array.isArray(assertion.value) && typeof assertion.value[0] === 'string'),
       'moderation assertion value must be a string array if set',
     );
+
+    if (prompt[0] === '[' || prompt[0] === '{') {
+      // Try to extract the last user message from OpenAI-style prompts.
+      try {
+        const parsedPrompt = parseChatPrompt<null | { role: string; content: string }[]>(
+          prompt,
+          null,
+        );
+        if (parsedPrompt && parsedPrompt.length > 0) {
+          prompt = parsedPrompt[parsedPrompt.length - 1].content;
+        }
+      } catch (err) {
+        // Ignore error
+      }
+    }
+
     const moderationResult = await matchesModeration(
       {
         userPrompt: prompt,
