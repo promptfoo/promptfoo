@@ -1,7 +1,7 @@
 description: 'Similarity assertions with Voyage AI'
 
 prompts:
-  - "Output the color of {{item}}"
+  - 'Output the color of {{item}}'
 
 providers:
   - 'anthropic:messages:claude-3-haiku-20240307'
