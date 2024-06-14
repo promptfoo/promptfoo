@@ -425,7 +425,7 @@ describe('runAssertion', () => {
 
   // is-sql assertions:
   const isSQLAssertion: Assertion = {
-    type: 'is-sql',    
+    type: 'is-sql',
   };
 
   const isSQLAssertionWithDatabase: Assertion = {
@@ -439,7 +439,7 @@ describe('runAssertion', () => {
     type: 'is-sql',
     value: {
       databaseType: 'MySQL',
-      whiteTableList: ["(select|update|insert|delete)::null::departments"],
+      whiteTableList: ['(select|update|insert|delete)::null::departments'],
     },
   };
 
@@ -455,10 +455,10 @@ describe('runAssertion', () => {
     type: 'is-sql',
     value: {
       databaseType: 'MySQL',
-      whiteTableList: ["(select|update|insert|delete)::null::departments"],
+      whiteTableList: ['(select|update|insert|delete)::null::departments'],
       whiteColumnList: ['select::null::name', 'update::null::id'],
     },
-  }
+  };
 
   const containsJsonAssertion: Assertion = {
     type: 'contains-json',
@@ -952,7 +952,9 @@ describe('runAssertion', () => {
       output,
     });
     expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe('SQL statement does not conform to the provided MySQL database syntax.');
+    expect(result.reason).toBe(
+      'SQL statement does not conform to the provided MySQL database syntax.',
+    );
   });
 
   it('should pass when the is-sql assertion passes given MySQL Database syntax', async () => {
@@ -980,7 +982,9 @@ describe('runAssertion', () => {
       output,
     });
     expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe('SQL statement does not conform to the provided MySQL database syntax.');
+    expect(result.reason).toBe(
+      'SQL statement does not conform to the provided MySQL database syntax.',
+    );
   });
 
   it('should pass when the is-sql assertion passes given MySQL Database syntax and whiteTableList', async () => {
@@ -1092,7 +1096,9 @@ describe('runAssertion', () => {
       output,
     });
     expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe(' It failed the provided authority table list check. It failed the provided authority column list check.');
+    expect(result.reason).toBe(
+      ' It failed the provided authority table list check. It failed the provided authority column list check.',
+    );
   });
 
   it('should pass when the contains-json assertion passes', async () => {
