@@ -2,14 +2,17 @@ import * as fs from 'fs';
 import fetch from 'node-fetch';
 import child_process from 'child_process';
 import Stream from 'stream';
-
 import { AwsBedrockCompletionProvider } from '../src/providers/bedrock';
 import {
   OpenAiAssistantProvider,
   OpenAiCompletionProvider,
   OpenAiChatCompletionProvider,
 } from '../src/providers/openai';
-import { AnthropicCompletionProvider } from '../src/providers/anthropic';
+import {
+  AnthropicCompletionProvider,
+  AnthropicMessagesProvider,
+  outputFromMessage,
+} from '../src/providers/anthropic';
 import { LlamaProvider } from '../src/providers/llama';
 
 import { clearCache, disableCache, enableCache } from '../src/cache';
@@ -37,6 +40,10 @@ import {
 } from '../src/providers/cloudflare-ai';
 
 import type { ProviderOptionsMap, ProviderFunction } from '../src/types';
+import { ToolUseBlock } from '@aws-sdk/client-bedrock-runtime';
+import { TextBlock } from '@anthropic-ai/sdk/resources/index.mjs';
+import Anthropic from '@anthropic-ai/sdk';
+import dedent from 'dedent';
 
 jest.mock('fs', () => ({
   readFileSync: jest.fn(),
@@ -305,6 +312,125 @@ describe('call provider apis', () => {
     expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
 
     enableCache();
+  });
+
+  describe('outputFromMessage', () => {
+    test('should handle empty content array', () => {
+      const message = {
+        content: [],
+      } as unknown as Anthropic.Messages.Message;
+
+      const result = outputFromMessage(message);
+      expect(result).toBe('');
+    });
+
+    test('should handle text blocks', () => {
+      const message = {
+        content: [{ type: 'text', text: 'Hello' }],
+      } as unknown as Anthropic.Messages.Message;
+
+      const result = outputFromMessage(message);
+      expect(result).toBe('Hello');
+    });
+
+    test('should return concatenated text blocks when no tool_use blocks are present', () => {
+      const message = {
+        content: [
+          { type: 'text', text: 'Hello' },
+          { type: 'text', text: 'World' },
+        ],
+      } as Anthropic.Messages.Message;
+
+      const result = outputFromMessage(message);
+      expect(result).toBe('Hello\n\nWorld');
+    });
+
+    test('should handle content with tool_use blocks', () => {
+      const message = {
+        content: [
+          {
+            type: 'tool_use',
+            id: 'tool1',
+            name: 'get_weather',
+            input: { location: 'San Francisco, CA' },
+          },
+          { type: 'tool_use', id: 'tool2', name: 'get_time', input: { location: 'New York, NY' } },
+        ],
+      } as Anthropic.Messages.Message;
+
+      const result = outputFromMessage(message);
+      expect(result).toBe(
+        '{"type":"tool_use","id":"tool1","name":"get_weather","input":{"location":"San Francisco, CA"}}\n\n{"type":"tool_use","id":"tool2","name":"get_time","input":{"location":"New York, NY"}}',
+      );
+    });
+
+    test('should return concatenated text and tool_use blocks as JSON strings', () => {
+      const message = {
+        content: [
+          { type: 'text', text: 'Hello' },
+          {
+            type: 'tool_use',
+            id: 'tool1',
+            name: 'get_weather',
+            input: { location: 'San Francisco, CA' },
+          },
+          { type: 'text', text: 'World' },
+        ],
+      } as Anthropic.Messages.Message;
+
+      const result = outputFromMessage(message);
+      expect(result).toBe(
+        'Hello\n\n{"type":"tool_use","id":"tool1","name":"get_weather","input":{"location":"San Francisco, CA"}}\n\nWorld',
+      );
+    });
+  });
+
+  const testAnthropicMessagesProvider = async (withCache: boolean) => {
+    const provider = new AnthropicMessagesProvider('claude-3-opus-20240229');
+    provider.anthropic.messages.create = jest.fn().mockResolvedValue({
+      content: [
+        {
+          type: 'text',
+          text: '<thinking>I need to use the get_weather, and the user wants SF, which is likely San Francisco, CA.</thinking>',
+        },
+        {
+          type: 'tool_use',
+          id: 'toolu_01A09q90qw90lq917835lq9',
+          name: 'get_weather',
+          input: { location: 'San Francisco, CA', unit: 'celsius' },
+        },
+      ],
+    } as Anthropic.Messages.Message);
+
+    if (withCache) {
+      enableCache();
+    } else {
+      disableCache();
+    }
+
+    const result = await provider.callApi('What is the forecast in San Francisco?');
+    expect(provider.anthropic.messages.create).toHaveBeenCalledTimes(1);
+
+    expect(result).toMatchObject({
+      output: dedent`<thinking>I need to use the get_weather, and the user wants SF, which is likely San Francisco, CA.</thinking>
+
+        {"type":"tool_use","id":"toolu_01A09q90qw90lq917835lq9","name":"get_weather","input":{"location":"San Francisco, CA","unit":"celsius"}}`,
+      tokenUsage: {},
+    });
+
+    if (withCache) {
+      disableCache();
+    } else {
+      enableCache();
+    }
+  };
+
+  test.only('AnthropicMessagesProvider callApi for ToolUse with caching disabled', async () => {
+    await testAnthropicMessagesProvider(false);
+  });
+
+  test('AnthropicMessagesProvider callApi for ToolUse with caching enabled', async () => {
+    await testAnthropicMessagesProvider(true);
   });
 
   test('AnthropicCompletionProvider callApi', async () => {

@@ -5,6 +5,7 @@ import type { ApiProvider, EnvOverrides, ProviderResponse, TokenUsage } from '..
 
 import { getCache, isCacheEnabled } from '../cache';
 import { parseChatPrompt } from './shared';
+import { ContentBlock, TextBlock, ToolUseBlock } from '@anthropic-ai/sdk/resources';
 
 interface AnthropicMessageOptions {
   apiKey?: string;
@@ -31,6 +32,25 @@ function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
     }
   }
   return {};
+}
+
+export function outputFromMessage(message: Anthropic.Messages.Message) {
+  const hasToolUse = message.content.some((block) => block.type === 'tool_use');
+  if (hasToolUse) {
+    return message.content
+      .map((block) => {
+        if (block.type === 'text') {
+          return block.text;
+        }
+        return JSON.stringify(block);
+      })
+      .join('\n\n');
+  }
+  return message.content
+    .map((block) => {
+      return (block as Anthropic.Messages.TextBlock).text;
+    })
+    .join('\n\n');
 }
 
 function calculateCost(
@@ -188,31 +208,39 @@ export class AnthropicMessagesProvider implements ApiProvider {
 
     if (isCacheEnabled()) {
       // Try to get the cached response
-      const cachedResponse = await cache.get(cacheKey);
+      const cachedResponse = await cache.get<string | undefined>(cacheKey);
       if (cachedResponse) {
         logger.debug(`Returning cached response for ${prompt}: ${cachedResponse}`);
-        return {
-          output: JSON.parse(cachedResponse as string),
-          tokenUsage: {},
-        };
+        try {
+          const parsedCachedResponse = JSON.parse(cachedResponse) as Anthropic.Messages.Message;
+          return {
+            output: outputFromMessage(parsedCachedResponse),
+            tokenUsage: {},
+          };
+        } catch (err) {
+          // Could be an old cache item, which was just the text content.
+          return {
+            output: cachedResponse,
+            tokenUsage: {},
+          };
+        }
       }
     }
 
     try {
       const response = await this.anthropic.messages.create(params);
-
       logger.debug(`Anthropic Messages API response: ${JSON.stringify(response)}`);
-
       if (isCacheEnabled()) {
         try {
-          await cache.set(cacheKey, JSON.stringify(response.content[0].text));
+          await cache.set(cacheKey, JSON.stringify(response.content));
         } catch (err) {
           logger.error(`Failed to cache response: ${String(err)}`);
         }
       }
 
+      console.error('response', response);
       return {
-        output: response.content[0].text,
+        output: outputFromMessage(response),
         tokenUsage: getTokenUsage(response, false),
         cost: calculateCost(
           this.modelName,
