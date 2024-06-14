@@ -26,9 +26,8 @@ const testFunction = (renderedValue: any, outputString: string, inverse: boolean
       databaseType = value.database || 'MySQL';
       whiteTableList = value.whiteTableList;
       whiteColumnList = value.whiteColumnList;
-
     } else {
-      throw new Error('is-sql assertion must have an object value.')
+      throw new Error('is-sql assertion must have an object value.');
     }
   }
 
@@ -46,12 +45,12 @@ const testFunction = (renderedValue: any, outputString: string, inverse: boolean
     opt = {
       database: databaseType,
       type: 'table',
-    }
+    };
     try {
       sqlParser.whiteListCheck(outputString, whiteTableList, opt);
     } catch (err) {
       pass = inverse;
-      failed_reason += ' It failed the provided authority table list check.'
+      failed_reason += ' It failed the provided authority table list check.';
     }
   }
 
@@ -59,16 +58,16 @@ const testFunction = (renderedValue: any, outputString: string, inverse: boolean
     opt = {
       database: databaseType,
       type: 'column',
-    }
+    };
     try {
       sqlParser.whiteListCheck(outputString, whiteColumnList, opt);
     } catch (err) {
       pass = inverse;
-      failed_reason += ' It failed the provided authority column list check.'
+      failed_reason += ' It failed the provided authority column list check.';
     }
   }
-  
-  if ( inverse && pass === false && !failed_reason ) {
+
+  if (inverse && pass === false && !failed_reason) {
     failed_reason = 'The output SQL statement is valid';
   }
 
@@ -81,7 +80,7 @@ const testFunction = (renderedValue: any, outputString: string, inverse: boolean
 };
 
 // -------------------------------------------------- Basic Tests ------------------------------------------------------ //
-describe('Basic tests', () => {  
+describe('Basic tests', () => {
   it('should pass when the output string is a valid SQL statement', () => {
     const renderedValue = undefined;
     const outputString = 'SELECT id, name FROM users';
@@ -95,7 +94,9 @@ describe('Basic tests', () => {
     const outputString = 'SELECT * FROM orders ORDERY BY order_date';
     const result = testFunction(renderedValue, outputString, false);
     expect(result.pass).toBe(false);
-    expect(result.reason).toBe('SQL statement does not conform to the provided MySQL database syntax.');
+    expect(result.reason).toBe(
+      'SQL statement does not conform to the provided MySQL database syntax.',
+    );
   });
 
   it('should fail when the output string is an invalid SQL statement', () => {
@@ -103,7 +104,9 @@ describe('Basic tests', () => {
     const outputString = 'SELECT * FROM select WHERE id = 1';
     const result = testFunction(renderedValue, outputString, false);
     expect(result.pass).toBe(false);
-    expect(result.reason).toBe('SQL statement does not conform to the provided MySQL database syntax.');
+    expect(result.reason).toBe(
+      'SQL statement does not conform to the provided MySQL database syntax.',
+    );
   });
 
   it('should fail when the output string is an invalid SQL statement', () => {
@@ -111,7 +114,9 @@ describe('Basic tests', () => {
     const outputString = 'DELETE employees WHERE id = 1';
     const result = testFunction(renderedValue, outputString, false);
     expect(result.pass).toBe(false);
-    expect(result.reason).toBe('SQL statement does not conform to the provided MySQL database syntax.');
+    expect(result.reason).toBe(
+      'SQL statement does not conform to the provided MySQL database syntax.',
+    );
   });
 
   /**
@@ -137,7 +142,6 @@ describe('Basic tests', () => {
   //   expect(result.pass).toBe(false);
   //   expect(result.reason).toBe('SQL statement does not conform to the provided MySQL database syntax.');
   // });
-
 });
 
 // ------------------------------------------ Database Specific Syntax Tests ------------------------------------------- //
@@ -145,12 +149,14 @@ describe('Database Specific Syntax Tests', () => {
   it('should fail if the output SQL statement conforms to MySQL but not PostgreSQL', () => {
     const renderedValue = {
       database: 'PostgreSQL',
-    };    
+    };
     const outputString = `SELECT * FROM employees WHERE id = 1 LOCK IN SHARE MODE`;
     const result = testFunction(renderedValue, outputString, false);
     expect(result.pass).toBe(false);
-    expect(result.reason).toBe('SQL statement does not conform to the provided PostgreSQL database syntax.');
-  });  
+    expect(result.reason).toBe(
+      'SQL statement does not conform to the provided PostgreSQL database syntax.',
+    );
+  });
 
   it('should fail if the output SQL statement conforms to PostgreSQL but not MySQL', () => {
     const renderedValue = {
@@ -159,7 +165,9 @@ describe('Database Specific Syntax Tests', () => {
     const outputString = `SELECT first_name, last_name FROM employees WHERE first_name ILIKE 'john%'`;
     const result = testFunction(renderedValue, outputString, false);
     expect(result.pass).toBe(false);
-    expect(result.reason).toBe('SQL statement does not conform to the provided MySQL database syntax.');
+    expect(result.reason).toBe(
+      'SQL statement does not conform to the provided MySQL database syntax.',
+    );
   });
 
   it('should pass if the output SQL statement conforms to PostgreSQL but not MySQL', () => {
@@ -185,7 +193,6 @@ describe('Database Specific Syntax Tests', () => {
   //   expect(result.pass).toBe(false);
   //   expect(result.reason).toBe('SQL statement does not conform to the provided MySQL database syntax.');
   // });
-
 });
 
 // ------------------------------------------- White Table/Column List Tests ------------------------------------------- //
@@ -221,7 +228,7 @@ describe('White Table/Column List Tests', () => {
     const result = testFunction(renderedValue, outputString, false);
     expect(result.pass).toBe(false);
     expect(result.reason).toBe(' It failed the provided authority column list check.');
-  });  
+  });
 
   it('should pass if the output SQL statement does not violate whiteColumnList', () => {
     const renderedValue = {
@@ -250,7 +257,7 @@ describe('White Table/Column List Tests', () => {
   //   const result = testFunction(renderedValue, outputString, false);
   //   expect(result.pass).toBe(true);
   //   expect(result.reason).toBe('Assertion passed');
-  // });  
+  // });
 
   /**
    * Similar issue: the error message is Error: authority = 'select::null::id' is required
@@ -266,6 +273,4 @@ describe('White Table/Column List Tests', () => {
   //   expect(result.pass).toBe(true);
   //   expect(result.reason).toBe('Assertion passed');
   // });
-
 });
-

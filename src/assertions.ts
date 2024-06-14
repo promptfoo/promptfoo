@@ -392,7 +392,7 @@ export async function runAssertion({
     let parsedSQL;
     let databaseType: string | undefined = 'MySQL';
     let whiteTableList: string[] | undefined;
-    let whiteColumnList : string[] | undefined;
+    let whiteColumnList: string[] | undefined;
 
     interface sqlParserOption {
       database: string | undefined;
@@ -409,10 +409,9 @@ export async function runAssertion({
 
         databaseType = value.database || 'MySQL';
         whiteTableList = value.whiteTableList;
-        whiteColumnList  = value.whiteColumnList ;
-
+        whiteColumnList = value.whiteColumnList;
       } else {
-        throw new Error('is-sql assertion must have a object value.')
+        throw new Error('is-sql assertion must have a object value.');
       }
     }
 
@@ -430,12 +429,12 @@ export async function runAssertion({
       opt = {
         database: databaseType,
         type: 'table',
-      }  
+      };
       try {
         sqlParser.whiteListCheck(outputString, whiteTableList, opt);
       } catch (err) {
         pass = inverse;
-        failed_reason += ' It failed the provided authority table list check.'
+        failed_reason += ' It failed the provided authority table list check.';
       }
     }
 
@@ -443,16 +442,16 @@ export async function runAssertion({
       opt = {
         database: databaseType,
         type: 'column',
-      }
+      };
       try {
         sqlParser.whiteListCheck(outputString, whiteColumnList, opt);
       } catch (err) {
         pass = inverse;
-        failed_reason += ' It failed the provided authority column list check.'
+        failed_reason += ' It failed the provided authority column list check.';
       }
     }
 
-    if ( inverse && pass === false && !failed_reason ) {
+    if (inverse && pass === false && !failed_reason) {
       failed_reason = 'The output SQL statement is valid';
     }
 
