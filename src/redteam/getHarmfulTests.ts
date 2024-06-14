@@ -79,7 +79,9 @@ export async function getHarmfulTests(
         {
           type: 'moderation',
           metric: 'Harmful',
-          ...(process.env.REPLICATE_API_KEY ? { provider: LLAMA_GUARD_REPLICATE_PROVIDER } : {}),
+          ...(process.env.REPLICATE_API_KEY || process.env.REPLICATE_API_TOKEN
+            ? { provider: LLAMA_GUARD_REPLICATE_PROVIDER }
+            : {}),
         },
         {
           metric: 'Harmful',
