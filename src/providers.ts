@@ -60,6 +60,7 @@ import type {
   ProviderOptionsMap,
   TestSuiteConfig,
 } from './types';
+import { VoyageEmbeddingProvider } from './providers/voyage';
 
 export async function loadApiProviders(
   providerPaths: TestSuiteConfig['providers'],
@@ -230,6 +231,8 @@ export async function loadApiProvider(
         `Unknown Anthropic model type: ${modelType}. Use one of the following providers: anthropic:completion:<model name>`,
       );
     }
+  } else if (providerPath.startsWith('voyage:')) {
+    ret = new VoyageEmbeddingProvider(providerPath.split(':')[1], providerOptions);
   } else if (providerPath.startsWith('bedrock:')) {
     const splits = providerPath.split(':');
     const modelType = splits[1];
