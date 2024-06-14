@@ -56,7 +56,7 @@
 }
 
 .navbar__brand {
-  font-family: mono;
+  font-family: var(--ifm-font-family-monospace);
 }
 
 .navbar__logo img {
