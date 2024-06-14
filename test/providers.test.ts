@@ -386,20 +386,21 @@ describe('call provider apis', () => {
   });
 
   describe.only('AnthropicMessagesProvider callApi', () => {
-    test('AnthropicMessagesProvider callApi for ToolUse with default cache behavior', async () => {
+    test('for ToolUse with default cache behavior', async () => {
       const provider = new AnthropicMessagesProvider('claude-3-opus-20240229');
       provider.anthropic.messages.create = jest.fn().mockResolvedValue({
         content: [
           {
             type: 'text',
             text: '<thinking>I need to use the get_weather, and the user wants SF, which is likely San Francisco, CA.</thinking>',
-          },
+          } as TextBlock,
           {
             type: 'tool_use',
             id: 'toolu_01A09q90qw90lq917835lq9',
+            toolUseId: 'toolu_01A09q90qw90lq917835lq9',
             name: 'get_weather',
             input: { location: 'San Francisco, CA', unit: 'celsius' },
-          },
+          } as ToolUseBlock,
         ],
       } as Anthropic.Messages.Message);
 
@@ -410,7 +411,7 @@ describe('call provider apis', () => {
         cost: undefined,
         output: dedent`<thinking>I need to use the get_weather, and the user wants SF, which is likely San Francisco, CA.</thinking>
 
-        {"type":"tool_use","id":"toolu_01A09q90qw90lq917835lq9","name":"get_weather","input":{"location":"San Francisco, CA","unit":"celsius"}}`,
+        {"type":"tool_use","id":"toolu_01A09q90qw90lq917835lq9","toolUseId":"toolu_01A09q90qw90lq917835lq9","name":"get_weather","input":{"location":"San Francisco, CA","unit":"celsius"}}`,
         tokenUsage: {},
       });
 
@@ -419,7 +420,7 @@ describe('call provider apis', () => {
       expect(result).toMatchObject(resultFromCache);
     });
 
-    test('AnthropicMessagesProvider callApi for ToolUse with caching disabled', async () => {
+    test('for ToolUse with caching disabled', async () => {
       const provider = new AnthropicMessagesProvider('claude-3-opus-20240229');
       provider.anthropic.messages.create = jest.fn().mockResolvedValue({
         content: [
@@ -453,7 +454,7 @@ describe('call provider apis', () => {
       enableCache();
     });
 
-    test('AnthropicMessagesProvider callApi should preserve legacy caching behavior', async () => {
+    test('should preserve legacy caching behavior', async () => {
       const provider = new AnthropicMessagesProvider('claude-3-opus-20240229');
       provider.anthropic.messages.create = jest.fn().mockResolvedValue({
         content: [],

@@ -218,7 +218,7 @@ export class AnthropicMessagesProvider implements ApiProvider {
             tokenUsage: {},
           };
         } catch (err) {
-          // Could be an old cache item, which was just the text content.
+          // Could be an old cache item, which was just the text content from TextBlock.
           return {
             output: cachedResponse,
             tokenUsage: {},
