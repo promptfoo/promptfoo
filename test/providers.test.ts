@@ -314,216 +314,223 @@ describe('call provider apis', () => {
     enableCache();
   });
 
-  describe('outputFromMessage', () => {
-    test('should handle empty content array', () => {
-      const message = {
-        content: [],
-      } as unknown as Anthropic.Messages.Message;
+  describe('Anthropic', () => {
+    describe('outputFromMessage', () => {
+      test('should handle empty content array', () => {
+        const message = {
+          content: [],
+        } as unknown as Anthropic.Messages.Message;
 
-      const result = outputFromMessage(message);
-      expect(result).toBe('');
+        const result = outputFromMessage(message);
+        expect(result).toBe('');
+      });
+
+      test('should handle text blocks', () => {
+        const message = {
+          content: [{ type: 'text', text: 'Hello' }],
+        } as unknown as Anthropic.Messages.Message;
+
+        const result = outputFromMessage(message);
+        expect(result).toBe('Hello');
+      });
+
+      test('should return concatenated text blocks when no tool_use blocks are present', () => {
+        const message = {
+          content: [
+            { type: 'text', text: 'Hello' },
+            { type: 'text', text: 'World' },
+          ],
+        } as Anthropic.Messages.Message;
+
+        const result = outputFromMessage(message);
+        expect(result).toBe('Hello\n\nWorld');
+      });
+
+      test('should handle content with tool_use blocks', () => {
+        const message = {
+          content: [
+            {
+              type: 'tool_use',
+              id: 'tool1',
+              name: 'get_weather',
+              input: { location: 'San Francisco, CA' },
+            },
+            {
+              type: 'tool_use',
+              id: 'tool2',
+              name: 'get_time',
+              input: { location: 'New York, NY' },
+            },
+          ],
+        } as Anthropic.Messages.Message;
+
+        const result = outputFromMessage(message);
+        expect(result).toBe(
+          '{"type":"tool_use","id":"tool1","name":"get_weather","input":{"location":"San Francisco, CA"}}\n\n{"type":"tool_use","id":"tool2","name":"get_time","input":{"location":"New York, NY"}}',
+        );
+      });
+
+      test('should return concatenated text and tool_use blocks as JSON strings', () => {
+        const message = {
+          content: [
+            { type: 'text', text: 'Hello' },
+            {
+              type: 'tool_use',
+              id: 'tool1',
+              name: 'get_weather',
+              input: { location: 'San Francisco, CA' },
+            },
+            { type: 'text', text: 'World' },
+          ],
+        } as Anthropic.Messages.Message;
+
+        const result = outputFromMessage(message);
+        expect(result).toBe(
+          'Hello\n\n{"type":"tool_use","id":"tool1","name":"get_weather","input":{"location":"San Francisco, CA"}}\n\nWorld',
+        );
+      });
     });
 
-    test('should handle text blocks', () => {
-      const message = {
-        content: [{ type: 'text', text: 'Hello' }],
-      } as unknown as Anthropic.Messages.Message;
+    describe('AnthropicMessagesProvider callApi', () => {
+      test('ToolUse default cache behavior', async () => {
+        const provider = new AnthropicMessagesProvider('claude-3-opus-20240229');
+        provider.anthropic.messages.create = jest.fn().mockResolvedValue({
+          content: [
+            {
+              type: 'text',
+              text: '<thinking>I need to use the get_weather, and the user wants SF, which is likely San Francisco, CA.</thinking>',
+            } as TextBlock,
+            {
+              type: 'tool_use',
+              id: 'toolu_01A09q90qw90lq917835lq9',
+              toolUseId: 'toolu_01A09q90qw90lq917835lq9',
+              name: 'get_weather',
+              input: { location: 'San Francisco, CA', unit: 'celsius' },
+            } as ToolUseBlock,
+          ],
+        } as Anthropic.Messages.Message);
 
-      const result = outputFromMessage(message);
-      expect(result).toBe('Hello');
-    });
+        const result = await provider.callApi('What is the forecast in San Francisco?');
+        expect(provider.anthropic.messages.create).toHaveBeenCalledTimes(1);
 
-    test('should return concatenated text blocks when no tool_use blocks are present', () => {
-      const message = {
-        content: [
-          { type: 'text', text: 'Hello' },
-          { type: 'text', text: 'World' },
-        ],
-      } as Anthropic.Messages.Message;
-
-      const result = outputFromMessage(message);
-      expect(result).toBe('Hello\n\nWorld');
-    });
-
-    test('should handle content with tool_use blocks', () => {
-      const message = {
-        content: [
-          {
-            type: 'tool_use',
-            id: 'tool1',
-            name: 'get_weather',
-            input: { location: 'San Francisco, CA' },
-          },
-          { type: 'tool_use', id: 'tool2', name: 'get_time', input: { location: 'New York, NY' } },
-        ],
-      } as Anthropic.Messages.Message;
-
-      const result = outputFromMessage(message);
-      expect(result).toBe(
-        '{"type":"tool_use","id":"tool1","name":"get_weather","input":{"location":"San Francisco, CA"}}\n\n{"type":"tool_use","id":"tool2","name":"get_time","input":{"location":"New York, NY"}}',
-      );
-    });
-
-    test('should return concatenated text and tool_use blocks as JSON strings', () => {
-      const message = {
-        content: [
-          { type: 'text', text: 'Hello' },
-          {
-            type: 'tool_use',
-            id: 'tool1',
-            name: 'get_weather',
-            input: { location: 'San Francisco, CA' },
-          },
-          { type: 'text', text: 'World' },
-        ],
-      } as Anthropic.Messages.Message;
-
-      const result = outputFromMessage(message);
-      expect(result).toBe(
-        'Hello\n\n{"type":"tool_use","id":"tool1","name":"get_weather","input":{"location":"San Francisco, CA"}}\n\nWorld',
-      );
-    });
-  });
-
-  describe.only('AnthropicMessagesProvider callApi', () => {
-    test('ToolUse default cache behavior', async () => {
-      const provider = new AnthropicMessagesProvider('claude-3-opus-20240229');
-      provider.anthropic.messages.create = jest.fn().mockResolvedValue({
-        content: [
-          {
-            type: 'text',
-            text: '<thinking>I need to use the get_weather, and the user wants SF, which is likely San Francisco, CA.</thinking>',
-          } as TextBlock,
-          {
-            type: 'tool_use',
-            id: 'toolu_01A09q90qw90lq917835lq9',
-            toolUseId: 'toolu_01A09q90qw90lq917835lq9',
-            name: 'get_weather',
-            input: { location: 'San Francisco, CA', unit: 'celsius' },
-          } as ToolUseBlock,
-        ],
-      } as Anthropic.Messages.Message);
-
-      const result = await provider.callApi('What is the forecast in San Francisco?');
-      expect(provider.anthropic.messages.create).toHaveBeenCalledTimes(1);
-
-      expect(result).toMatchObject({
-        cost: undefined,
-        output: dedent`<thinking>I need to use the get_weather, and the user wants SF, which is likely San Francisco, CA.</thinking>
+        expect(result).toMatchObject({
+          cost: undefined,
+          output: dedent`<thinking>I need to use the get_weather, and the user wants SF, which is likely San Francisco, CA.</thinking>
 
         {"type":"tool_use","id":"toolu_01A09q90qw90lq917835lq9","toolUseId":"toolu_01A09q90qw90lq917835lq9","name":"get_weather","input":{"location":"San Francisco, CA","unit":"celsius"}}`,
-        tokenUsage: {},
+          tokenUsage: {},
+        });
+
+        const resultFromCache = await provider.callApi('What is the forecast in San Francisco?');
+        expect(provider.anthropic.messages.create).toHaveBeenCalledTimes(1);
+        expect(result).toMatchObject(resultFromCache);
       });
 
-      const resultFromCache = await provider.callApi('What is the forecast in San Francisco?');
-      expect(provider.anthropic.messages.create).toHaveBeenCalledTimes(1);
-      expect(result).toMatchObject(resultFromCache);
-    });
+      test('ToolUse with caching disabled', async () => {
+        const provider = new AnthropicMessagesProvider('claude-3-opus-20240229');
+        provider.anthropic.messages.create = jest.fn().mockResolvedValue({
+          content: [
+            {
+              type: 'text',
+              text: '<thinking>I need to use the get_weather, and the user wants SF, which is likely San Francisco, CA.</thinking>',
+            },
+            {
+              type: 'tool_use',
+              id: 'toolu_01A09q90qw90lq917835lq9',
+              name: 'get_weather',
+              input: { location: 'San Francisco, CA', unit: 'celsius' },
+            },
+          ],
+        } as Anthropic.Messages.Message);
 
-    test('ToolUse with caching disabled', async () => {
-      const provider = new AnthropicMessagesProvider('claude-3-opus-20240229');
-      provider.anthropic.messages.create = jest.fn().mockResolvedValue({
-        content: [
-          {
-            type: 'text',
-            text: '<thinking>I need to use the get_weather, and the user wants SF, which is likely San Francisco, CA.</thinking>',
-          },
-          {
-            type: 'tool_use',
-            id: 'toolu_01A09q90qw90lq917835lq9',
-            name: 'get_weather',
-            input: { location: 'San Francisco, CA', unit: 'celsius' },
-          },
-        ],
-      } as Anthropic.Messages.Message);
+        disableCache();
 
-      disableCache();
+        const result = await provider.callApi('What is the forecast in San Francisco?');
+        expect(provider.anthropic.messages.create).toHaveBeenCalledTimes(1);
 
-      const result = await provider.callApi('What is the forecast in San Francisco?');
-      expect(provider.anthropic.messages.create).toHaveBeenCalledTimes(1);
-
-      expect(result).toMatchObject({
-        output: dedent`<thinking>I need to use the get_weather, and the user wants SF, which is likely San Francisco, CA.</thinking>
+        expect(result).toMatchObject({
+          output: dedent`<thinking>I need to use the get_weather, and the user wants SF, which is likely San Francisco, CA.</thinking>
 
         {"type":"tool_use","id":"toolu_01A09q90qw90lq917835lq9","name":"get_weather","input":{"location":"San Francisco, CA","unit":"celsius"}}`,
-        tokenUsage: {},
+          tokenUsage: {},
+        });
+
+        await provider.callApi('What is the forecast in San Francisco?');
+        expect(provider.anthropic.messages.create).toHaveBeenCalledTimes(2);
+        enableCache();
       });
 
-      await provider.callApi('What is the forecast in San Francisco?');
-      expect(provider.anthropic.messages.create).toHaveBeenCalledTimes(2);
-      enableCache();
+      test('legacy caching behavior', async () => {
+        const provider = new AnthropicMessagesProvider('claude-3-opus-20240229');
+        provider.anthropic.messages.create = jest.fn().mockResolvedValue({
+          content: [],
+        } as unknown as Anthropic.Messages.Message);
+        getCache().set(
+          'anthropic:{"model":"claude-3-opus-20240229","messages":[{"role":"user","content":[{"type":"text","text":"What is the forecast in San Francisco?"}]}],"max_tokens":1024,"temperature":0,"stream":false}',
+          'Test output',
+        );
+        const result = await provider.callApi('What is the forecast in San Francisco?');
+        expect(result).toMatchObject({
+          output: 'Test output',
+          tokenUsage: {},
+        });
+        expect(provider.anthropic.messages.create).toHaveBeenCalledTimes(0);
+      });
     });
 
-    test('legacy caching behavior', async () => {
-      const provider = new AnthropicMessagesProvider('claude-3-opus-20240229');
-      provider.anthropic.messages.create = jest.fn().mockResolvedValue({
-        content: [],
-      } as unknown as Anthropic.Messages.Message);
-      getCache().set(
-        'anthropic:{"model":"claude-3-opus-20240229","messages":[{"role":"user","content":[{"type":"text","text":"What is the forecast in San Francisco?"}]}],"max_tokens":1024,"temperature":0,"stream":false}',
-        'Test output',
-      );
-      const result = await provider.callApi('What is the forecast in San Francisco?');
-      expect(result).toMatchObject({
-        output: 'Test output',
-        tokenUsage: {},
+    describe('AnthropicCompletionProvider callApi', () => {
+      test('default behavior', async () => {
+        const provider = new AnthropicCompletionProvider('claude-1');
+        provider.anthropic.completions.create = jest.fn().mockResolvedValue({
+          completion: 'Test output',
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(provider.anthropic.completions.create).toHaveBeenCalledTimes(1);
+        expect(result.output).toBe('Test output');
+        expect(result.tokenUsage).toEqual({});
       });
-      expect(provider.anthropic.messages.create).toHaveBeenCalledTimes(0);
-    });
-  });
 
-  describe('AnthropicCompletionProvider callApi', () => {
-    test('default behavior', async () => {
-      const provider = new AnthropicCompletionProvider('claude-1');
-      provider.anthropic.completions.create = jest.fn().mockResolvedValue({
-        completion: 'Test output',
+      test('with caching enabled', async () => {
+        const provider = new AnthropicCompletionProvider('claude-1');
+        provider.anthropic.completions.create = jest.fn().mockResolvedValue({
+          completion: 'Test output',
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(provider.anthropic.completions.create).toHaveBeenCalledTimes(1);
+        expect(result.output).toBe('Test output');
+        expect(result.tokenUsage).toEqual({});
+
+        (provider.anthropic.completions.create as jest.Mock).mockClear();
+        const result2 = await provider.callApi('Test prompt');
+
+        expect(provider.anthropic.completions.create).toHaveBeenCalledTimes(0);
+        expect(result2.output).toBe('Test output');
+        expect(result2.tokenUsage).toEqual({});
       });
-      const result = await provider.callApi('Test prompt');
 
-      expect(provider.anthropic.completions.create).toHaveBeenCalledTimes(1);
-      expect(result.output).toBe('Test output');
-      expect(result.tokenUsage).toEqual({});
-    });
+      test('with caching disabled', async () => {
+        const provider = new AnthropicCompletionProvider('claude-1');
+        provider.anthropic.completions.create = jest.fn().mockResolvedValue({
+          completion: 'Test output',
+        });
+        const result = await provider.callApi('Test prompt');
 
-    test('with caching enabled', async () => {
-      const provider = new AnthropicCompletionProvider('claude-1');
-      provider.anthropic.completions.create = jest.fn().mockResolvedValue({
-        completion: 'Test output',
+        expect(provider.anthropic.completions.create).toHaveBeenCalledTimes(1);
+        expect(result.output).toBe('Test output');
+        expect(result.tokenUsage).toEqual({});
+
+        (provider.anthropic.completions.create as jest.Mock).mockClear();
+
+        disableCache();
+
+        const result2 = await provider.callApi('Test prompt');
+
+        expect(provider.anthropic.completions.create).toHaveBeenCalledTimes(1);
+        expect(result2.output).toBe('Test output');
+        expect(result2.tokenUsage).toEqual({});
       });
-      const result = await provider.callApi('Test prompt');
-
-      expect(provider.anthropic.completions.create).toHaveBeenCalledTimes(1);
-      expect(result.output).toBe('Test output');
-      expect(result.tokenUsage).toEqual({});
-
-      (provider.anthropic.completions.create as jest.Mock).mockClear();
-      const result2 = await provider.callApi('Test prompt');
-
-      expect(provider.anthropic.completions.create).toHaveBeenCalledTimes(0);
-      expect(result2.output).toBe('Test output');
-      expect(result2.tokenUsage).toEqual({});
-    });
-
-    test('with caching disabled', async () => {
-      const provider = new AnthropicCompletionProvider('claude-1');
-      provider.anthropic.completions.create = jest.fn().mockResolvedValue({
-        completion: 'Test output',
-      });
-      const result = await provider.callApi('Test prompt');
-
-      expect(provider.anthropic.completions.create).toHaveBeenCalledTimes(1);
-      expect(result.output).toBe('Test output');
-      expect(result.tokenUsage).toEqual({});
-
-      (provider.anthropic.completions.create as jest.Mock).mockClear();
-
-      disableCache();
-
-      const result2 = await provider.callApi('Test prompt');
-
-      expect(provider.anthropic.completions.create).toHaveBeenCalledTimes(1);
-      expect(result2.output).toBe('Test output');
-      expect(result2.tokenUsage).toEqual({});
     });
   });
 
