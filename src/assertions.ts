@@ -35,11 +35,12 @@ import { runPython, runPythonCode } from './python/wrapper';
 import { importModule } from './esm';
 
 import {
+  type ApiProvider,
   type Assertion,
   type AssertionType,
-  type GradingResult,
   type AtomicTestCase,
-  type ApiProvider,
+  type GradingResult,
+  type TestCase,
   isGradingResult,
 } from './types';
 import { AssertionsResult } from './assertions/AssertionsResult';
