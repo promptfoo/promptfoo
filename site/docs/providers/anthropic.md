@@ -58,7 +58,7 @@ Example: `prompt.json`
 ```
 
 If the role `system` is specified, then it will be automatically added to the API request.
-All `user` or `assistant` roles will automatically converted into the right format for the API request.
+All `user` or `assistant` roles will automatically be converted into the right format for the API request.
 Currently, only type `text` is supported.
 
 The `system_message` and `question` are example variables that can be set with the `var` directive.
@@ -71,6 +71,7 @@ The Anthropic provider supports several options to customize the behavior of the
 - `max_tokens`: The maximum length of the generated text.
 - `top_p`: Controls nucleus sampling, affecting the randomness of the output.
 - `top_k`: Only sample from the top K options for each subsequent token.
+- `tools`: An array of tool or function definitions for the model to call.
 
 Example configuration with options and prompts:
 
@@ -82,6 +83,34 @@ providers:
       max_tokens: 512
 prompts: [prompt.json]
 ```
+
+### Tool Use
+
+The Anthropic provider supports tool use (or function calling). Here's an example configuration for defining tools:
+
+```yaml
+providers:
+  - id: anthropic:messages:claude-3-opus-20240229
+    config:
+      tools:
+        - name: get_weather
+          description: Get the current weather in a given location
+          input_schema:
+            type: object
+            properties:
+              location:
+                type: string
+                description: The city and state, e.g. San Francisco, CA
+              unit:
+                type: string
+                enum:
+                  - celsius
+                  - fahrenheit
+            required:
+              - location
+```
+
+See the [Anthropic Tool Use Guide](https://docs.anthropic.com/en/docs/tool-use) for more information on how to define tools and the tool use example [here](https://github.com/promptfoo/promptfoo/tree/main/examples/tool-use).
 
 ### Images / Vision
 
