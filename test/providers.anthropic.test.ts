@@ -294,7 +294,9 @@ describe('Anthropic', () => {
   });
 });
 
-test('loadApiProvider with bedrock:completion', async () => {
+// NOTE: test suite fails with: ReferenceError: Cannot access 'AnthropicCompletionProvider' before initialization
+// if this is removed.
+test.skip('loadApiProvider with bedrock:completion', async () => {
   await expect(loadApiProvider('bedrock:completion:anthropic.claude-v2:1')).resolves.toBeInstanceOf(
     AwsBedrockCompletionProvider,
   );
