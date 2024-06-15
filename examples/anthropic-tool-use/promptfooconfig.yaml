@@ -1,5 +1,5 @@
 providers:
-  - id: 'anthropic:messages:claude-3-opus-20240229'
+  - id: anthropic:messages:claude-3-opus-20240229
     config:
       tools:
         - name: 'get_weather'
@@ -11,7 +11,10 @@ providers:
                 type: 'string'
                 description: 'The city and state, e.g. San Francisco, CA'
             required: ['location']
-prompts: 'Tell me about the weather in {{city}}.'
+
+prompts:
+  - 'Tell me about the weather in {{city}}.'
+
 tests:
   - vars:
       city: Boston
