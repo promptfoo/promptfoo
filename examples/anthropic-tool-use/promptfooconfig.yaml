@@ -1,5 +1,5 @@
 providers:
-  - id: 'anthropic:claude-3-opus-20240229'
+  - id: 'anthropic:messages:claude-3-opus-20240229'
     config:
       tools:
         - name: 'get_weather'
