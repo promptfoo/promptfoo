@@ -5,7 +5,6 @@ import type { ApiProvider, EnvOverrides, ProviderResponse, TokenUsage } from '..
 
 import { getCache, isCacheEnabled } from '../cache';
 import { parseChatPrompt } from './shared';
-import { ContentBlock, TextBlock, ToolUseBlock } from '@anthropic-ai/sdk/resources';
 
 interface AnthropicMessageOptions {
   apiKey?: string;
