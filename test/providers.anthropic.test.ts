@@ -482,8 +482,8 @@ describe('Anthropic', () => {
 });
 
 // NOTE: test suite fails with: ReferenceError: Cannot access 'AnthropicCompletionProvider' before initialization
-// if this is removed.
-test.skip('loadApiProvider with bedrock:completion', async () => {
+// if this is removed. The test can even be skipped. This is likely due to a circular dependency.
+test('loadApiProvider with bedrock:completion', async () => {
   await expect(loadApiProvider('bedrock:completion:anthropic.claude-v2:1')).resolves.toBeInstanceOf(
     AwsBedrockCompletionProvider,
   );
