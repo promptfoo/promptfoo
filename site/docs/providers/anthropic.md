@@ -18,7 +18,7 @@ Example of setting the environment variable:
 export ANTHROPIC_API_KEY=your_api_key_here
 ```
 
-### Supported parameters
+### Supported Parameters
 
 | Config Property | Environment Variable | Description                                    |
 | --------------- | -------------------- | ---------------------------------------------- |
@@ -40,7 +40,7 @@ The `anthropic` provider supports the following models via the messages API:
 
 ### Prompt Template
 
-To allow for compatibility with the OpenAI prompt template, the following format is supported.
+To allow for compatibility with the OpenAI prompt template, the following format is supported:
 
 Example: `prompt.json`
 
@@ -57,8 +57,8 @@ Example: `prompt.json`
 ]
 ```
 
-If the role `system` is specified, then it will be automatically added to the API request.
-All `user` or `assistant` roles will automatically be converted into the right format for the API request.
+If the role `system` is specified, it will be automatically added to the API request.
+All `user` or `assistant` roles will be automatically converted into the right format for the API request.
 Currently, only type `text` is supported.
 
 The `system_message` and `question` are example variables that can be set with the `var` directive.
@@ -100,7 +100,7 @@ providers:
             properties:
               location:
                 type: string
-                description: The city and state, e.g. San Francisco, CA
+                description: The city and state, e.g., San Francisco, CA
               unit:
                 type: string
                 enum:
@@ -119,11 +119,9 @@ You can include images in the prompts in Claude 3 models.
 See the [Claude vision example](https://github.com/typpo/promptfoo/tree/main/examples/claude-vision).
 
 One important note: The Claude API only supports base64 representations of images.
-This is different from how OpenAI's vision works, in that it supports grabbing images
-from a URL. As a result, if you are trying to compare Claude 3 and OpenAI vision capabilities,
-you will need to have separate prompts for each.
+This is different from how OpenAI's vision works, as it supports grabbing images from a URL. As a result, if you are trying to compare Claude 3 and OpenAI vision capabilities, you will need to have separate prompts for each.
 
-See the [OpenAI vision example](https://github.com/typpo/promptfoo/tree/main/examples/openai-vision) to see where there are differences here.
+See the [OpenAI vision example](https://github.com/typpo/promptfoo/tree/main/examples/openai-vision) to understand the differences.
 
 ### Additional Capabilities
 
@@ -133,7 +131,7 @@ See the [OpenAI vision example](https://github.com/typpo/promptfoo/tree/main/exa
 
 ## Deprecated API (Completions)
 
-> The completions API is deprecated, see the migration guide [here](https://docs.anthropic.com/claude/reference/migrating-from-text-completions-to-messages).
+> The completions API is deprecated. See the migration guide [here](https://docs.anthropic.com/claude/reference/migrating-from-text-completions-to-messages).
 
 The `anthropic` provider supports the following models:
 
@@ -150,7 +148,7 @@ Supported environment variables:
 - `ANTHROPIC_MAX_TOKENS` - maximum number of tokens to sample, defaults to 1024
 - `ANTHROPIC_TEMPERATURE` - temperature
 
-Config parameters may also be passed like so:
+Config parameters may also be passed like this:
 
 ```yaml
 providers:
@@ -160,9 +158,9 @@ providers:
       temperature: 0
 ```
 
-## Model-graded tests
+## Model-Graded Tests
 
-[Model-graded assertions](/docs/configuration/expected-outputs/model-graded/) such as `factuality` or `llm-rubric` use OpenAI by default and expect `OPENAI_API_KEY` as an environment variable. If you are using Anthropic, you may override the grader to point a different provider.
+[Model-graded assertions](/docs/configuration/expected-outputs/model-graded/) such as `factuality` or `llm-rubric` use OpenAI by default and expect `OPENAI_API_KEY` as an environment variable. If you are using Anthropic, you may override the grader to point to a different provider.
 
 Because of how model-graded evals are implemented, **the model must support chat-formatted prompts** (except for embedding or classification models).
 
