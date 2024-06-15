@@ -15,6 +15,7 @@ interface AnthropicMessageOptions {
   top_k?: number;
   model?: string;
   cost?: number;
+  tools?: Anthropic.Tool[];
 }
 
 function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
@@ -194,10 +195,11 @@ export class AnthropicMessagesProvider implements ApiProvider {
     const params: Anthropic.MessageCreateParams = {
       model: this.modelName,
       ...(system ? { system } : {}),
-      messages: extractedMessages,
       max_tokens: this.config?.max_tokens || 1024,
-      temperature: this.config.temperature || 0,
+      messages: extractedMessages,
       stream: false,
+      temperature: this.config.temperature || 0,
+      tools: this.config.tools || [],
     };
 
     logger.debug(`Calling Anthropic Messages API: ${JSON.stringify(params)}`);
