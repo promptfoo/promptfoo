@@ -199,7 +199,7 @@ export class AnthropicMessagesProvider implements ApiProvider {
       messages: extractedMessages,
       stream: false,
       temperature: this.config.temperature || 0,
-      tools: this.config.tools || [],
+      ...(this.config.tools ? { tools: this.config.tools } : {}),
     };
 
     logger.debug(`Calling Anthropic Messages API: ${JSON.stringify(params)}`);

@@ -22,8 +22,32 @@ describe('Anthropic', () => {
   });
 
   describe('AnthropicMessagesProvider callApi', () => {
+    const tools: Anthropic.Tool[] = [
+      {
+        name: 'get_weather',
+        description: 'Get the current weather in a given location',
+        input_schema: {
+          type: 'object',
+          properties: {
+            location: {
+              type: 'string',
+              description: 'The city and state, e.g. San Francisco, CA',
+            },
+            unit: {
+              type: 'string',
+              enum: ['celsius', 'fahrenheit'],
+            },
+          },
+          required: ['location'],
+        },
+      },
+    ];
+
+    const provider = new AnthropicMessagesProvider('claude-3-opus-20240229', {
+      config: { tools },
+    });
+
     test('should use cache by default for ToolUse requests', async () => {
-      const provider = new AnthropicMessagesProvider('claude-3-opus-20240229');
       provider.anthropic.messages.create = jest.fn().mockResolvedValue({
         content: [
           {
@@ -41,6 +65,24 @@ describe('Anthropic', () => {
 
       const result = await provider.callApi('What is the forecast in San Francisco?');
       expect(provider.anthropic.messages.create).toHaveBeenCalledTimes(1);
+      expect(provider.anthropic.messages.create).toHaveBeenNthCalledWith(1, {
+        model: 'claude-3-opus-20240229',
+        max_tokens: 1024,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                text: 'What is the forecast in San Francisco?',
+                type: 'text',
+              },
+            ],
+          },
+        ],
+        tools,
+        temperature: 0,
+        stream: false,
+      });
 
       expect(result).toMatchObject({
         cost: undefined,
@@ -56,7 +98,6 @@ describe('Anthropic', () => {
     });
 
     test('should not use cache if caching is disabled for ToolUse requests', async () => {
-      const provider = new AnthropicMessagesProvider('claude-3-opus-20240229');
       provider.anthropic.messages.create = jest.fn().mockResolvedValue({
         content: [
           {
@@ -90,12 +131,11 @@ describe('Anthropic', () => {
     });
 
     test('should return cached response for legacy caching behavior', async () => {
-      const provider = new AnthropicMessagesProvider('claude-3-opus-20240229');
       provider.anthropic.messages.create = jest.fn().mockResolvedValue({
         content: [],
       } as unknown as Anthropic.Messages.Message);
       getCache().set(
-        'anthropic:{"model":"claude-3-opus-20240229","messages":[{"role":"user","content":[{"type":"text","text":"What is the forecast in San Francisco?"}]}],"max_tokens":1024,"temperature":0,"stream":false}',
+        'anthropic:{"model":"claude-3-opus-20240229","max_tokens":1024,"messages":[{"role":"user","content":[{"type":"text","text":"What is the forecast in San Francisco?"}]}],"stream":false,"temperature":0,"tools":[{"name":"get_weather","description":"Get the current weather in a given location","input_schema":{"type":"object","properties":{"location":{"type":"string","description":"The city and state, e.g. San Francisco, CA"},"unit":{"type":"string","enum":["celsius","fahrenheit"]}},"required":["location"]}}]}',
         'Test output',
       );
       const result = await provider.callApi('What is the forecast in San Francisco?');
