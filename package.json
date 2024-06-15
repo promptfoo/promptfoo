@@ -124,7 +124,7 @@
     "glob": "^10.4.1",
     "inquirer": "^8.2.6",
     "js-yaml": "^4.1.0",
-    "mathjs": "^12.4.1",
+    "mathjs": "^13.0.0",
     "node-fetch": "^2.6.7",
     "nunjucks": "^3.2.4",
     "openai": "^4.51.0",
