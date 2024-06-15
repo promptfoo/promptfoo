@@ -38,6 +38,7 @@ import {
   type ICloudflareEmbeddingResponse,
   type ICloudflareProviderConfig,
 } from '../src/providers/cloudflare-ai';
+import { VoyageEmbeddingProvider } from '../src/providers/voyage';
 
 import type { ProviderOptionsMap, ProviderFunction } from '../src/types';
 import Anthropic from '@anthropic-ai/sdk';
@@ -862,6 +863,12 @@ config:
     expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
     // Intentionally openai, because it's just a wrapper around openai
     expect(provider.id()).toBe('mistralai/mistral-medium');
+  });
+
+  test('loadApiProvider with voyage', async () => {
+    const provider = await loadApiProvider('voyage:voyage-2');
+    expect(provider).toBeInstanceOf(VoyageEmbeddingProvider);
+    expect(provider.id()).toBe('voyage:voyage-2');
   });
 
   test('loadApiProvider with cloudflare-ai', async () => {

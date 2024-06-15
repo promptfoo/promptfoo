@@ -556,9 +556,13 @@ export class AwsBedrockEmbeddingProvider
   }
 
   async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
-    const params = {
-      inputText: text,
-    };
+    const params = this.modelName.includes('cohere.embed')
+      ? {
+          texts: [text],
+        }
+      : {
+          inputText: text,
+        };
 
     logger.debug(`Calling AWS Bedrock API for embeddings: ${JSON.stringify(params)}`);
     let response;
@@ -583,7 +587,9 @@ export class AwsBedrockEmbeddingProvider
 
     try {
       const data = JSON.parse(response.body.transformToString());
-      const embedding = data?.embedding;
+      // Titan Text API returns embeddings in the `embedding` field
+      // Cohere API returns embeddings in the `embeddings` field
+      const embedding = data?.embedding || data?.embeddings;
       if (!embedding) {
         throw new Error('No embedding found in AWS Bedrock API response');
       }

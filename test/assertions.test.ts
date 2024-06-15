@@ -4,7 +4,12 @@ import * as path from 'path';
 import { Response } from 'node-fetch';
 
 import { runAssertions, runAssertion } from '../src/assertions';
-import { DefaultEmbeddingProvider, OpenAiChatCompletionProvider } from '../src/providers/openai';
+import {
+  DefaultGradingJsonProvider,
+  DefaultEmbeddingProvider,
+  OpenAiChatCompletionProvider,
+} from '../src/providers/openai';
+import { ReplicateModerationProvider } from '../src/providers/replicate';
 import { runPythonCode, runPython } from '../src/python/wrapper';
 import { fetchWithRetries } from '../src/fetch';
 
@@ -78,6 +83,14 @@ describe('runAssertions', () => {
       },
     ],
   };
+
+  beforeEach(() => {
+    jest.resetModules();
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
 
   it('should pass when all assertions pass', async () => {
     const output = 'Expected output';
@@ -360,6 +373,41 @@ describe('runAssertions', () => {
       });
       expect(result.score).toStrictEqual(0.9);
     });
+  });
+
+  it('preserves default provider', async () => {
+    const provider = new OpenAiChatCompletionProvider('gpt-3.5-turbo');
+    const output = 'Expected output';
+    const test: AtomicTestCase = {
+      assert: [
+        {
+          type: 'moderation',
+          provider: 'replicate:moderation:foo/bar',
+        },
+        {
+          type: 'llm-rubric',
+          value: 'insert rubric here',
+        },
+      ],
+    };
+
+    const callApiSpy = jest.spyOn(DefaultGradingJsonProvider, 'callApi').mockResolvedValue({
+      output: JSON.stringify({ pass: true, score: 1.0, reason: 'I love you' }),
+    });
+    const callModerationApiSpy = jest
+      .spyOn(ReplicateModerationProvider.prototype, 'callModerationApi')
+      .mockResolvedValue({ flags: [] });
+
+    const result: GradingResult = await runAssertions({
+      prompt: 'foobar',
+      provider,
+      test,
+      output,
+    });
+
+    expect(result.pass).toBeTruthy();
+    expect(callApiSpy).toHaveBeenCalledTimes(1);
+    expect(callModerationApiSpy).toHaveBeenCalledTimes(1);
   });
 });
 
