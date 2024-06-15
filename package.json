@@ -58,8 +58,8 @@
     "langfuse": "^3.7.0"
   },
   "devDependencies": {
-    "@aws-sdk/client-bedrock-runtime": "^3.592.0",
-    "@azure/identity": "^4.2.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.598.0",
+    "@azure/identity": "^4.2.1",
     "@eslint/js": "^9.4.0",
     "@swc/cli": "^0.3.12",
     "@swc/core": "^1.5.27",
@@ -97,7 +97,7 @@
     "typescript-eslint": "^7.12.0"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.22.0",
+    "@anthropic-ai/sdk": "^0.23.0",
     "@apidevtools/json-schema-ref-parser": "^11.6.4",
     "ajv": "^8.16.0",
     "ajv-formats": "^2.1.1",
@@ -127,11 +127,11 @@
     "mathjs": "^12.4.1",
     "node-fetch": "^2.6.7",
     "nunjucks": "^3.2.4",
-    "openai": "^4.49.1",
+    "openai": "^4.51.0",
     "opener": "^1.5.2",
     "proxy-agent": "^6.4.0",
     "python-shell": "^5.0.0",
-    "replicate": "^0.30.1",
+    "replicate": "^0.30.2",
     "rfdc": "^1.4.1",
     "rouge": "git+https://github.com/kenlimmj/rouge.git#f35111b599aca55f1d4dc1d4a3d15e28e7f7c55f",
     "semver": "^7.6.2",
