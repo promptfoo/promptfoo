@@ -102,7 +102,7 @@
     "ajv": "^8.16.0",
     "ajv-formats": "^2.1.1",
     "async": "^3.2.5",
-    "better-sqlite3": "^10.1.0",
+    "better-sqlite3": "^11.0.0",
     "cache-manager": "^4.1.0",
     "cache-manager-fs-hash": "^1.0.0",
     "chalk": "^4.1.2",
