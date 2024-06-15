@@ -4,7 +4,7 @@ sidebar_position: 99
 
 # HuggingFace
 
-promptfoo includes support for the [HuggingFace Inference API](https://huggingface.co/inference-api), specifically **text generation** and **feature extraction** tasks.
+promptfoo includes support for the [HuggingFace Inference API](https://huggingface.co/inference-api), for text generation, classification, and embeddings related tasks.
 
 To run a model, specify the task type and model name. Supported models include:
 
