@@ -344,7 +344,7 @@ tests:
 
 prompt.txt:
 
-```
+```liquid
 User Profile:
 - Name: {{ user_profile.name }}
 - Interests: {{ user_profile.interests | join(', ') }}
@@ -438,11 +438,9 @@ tests:
       topic: 'theoretical quantum physics in alternate dimensions'
 ```
 
-## Tools and functions
+## Tools and Functions
 
-promptfoo supports OpenAI tools, functions, and other provider-specific configurations like temperature, number of tokens, and so on.
-
-To use, override the `config` key of the provider. See example [here](/docs/providers/openai#using-tools).
+promptfoo supports tool use and function calling with OpenAI and Anthropic models, as well as other provider-specific configurations like temperature and number of tokens. For more information on defining functions and tools, see the [OpenAI provider docs](/docs/providers/openai#using-tools) and the [Anthropic provider docs](/docs/providers/anthropic#tool-use).
 
 ## Transforming outputs
 
@@ -450,7 +448,7 @@ The `TestCase.options.transform` field is a Javascript snippet that modifies the
 
 It is a function that takes a string output and a context object:
 
-```
+```typescript
 transformFn: (output: string, context: {
   prompt: {
     // ID of the prompt, if assigned
@@ -550,25 +548,25 @@ For detailed information on the config structure, see [Configuration Reference](
 
 If you have multiple sets of tests, it helps to split them into multiple config files. Use the `--config` or `-c` parameter to run each individual config:
 
-```
+```sh
 promptfoo eval -c usecase1.yaml
 ```
 
 and
 
-```
+```sh
 promptfoo eval -c usecase2.yaml
 ```
 
 You can run multiple configs at the same time, which will combine them into a single eval. For example:
 
-```
+```sh
 promptfoo eval -c my_configs/*
 ```
 
 or
 
-```
+```sh
 promptfoo eval -c config1.yaml -c config2.yaml -c config3.yaml
 ```
 
