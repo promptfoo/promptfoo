@@ -2,7 +2,6 @@ import * as fs from 'fs';
 import fetch from 'node-fetch';
 import child_process from 'child_process';
 import Stream from 'stream';
-
 import { AwsBedrockCompletionProvider } from '../src/providers/bedrock';
 import {
   OpenAiAssistantProvider,
@@ -306,59 +305,6 @@ describe('call provider apis', () => {
     expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
 
     enableCache();
-  });
-
-  test('AnthropicCompletionProvider callApi', async () => {
-    const provider = new AnthropicCompletionProvider('claude-1');
-    provider.anthropic.completions.create = jest.fn().mockResolvedValue({
-      completion: 'Test output',
-    });
-    const result = await provider.callApi('Test prompt');
-
-    expect(provider.anthropic.completions.create).toHaveBeenCalledTimes(1);
-    expect(result.output).toBe('Test output');
-    expect(result.tokenUsage).toEqual({});
-  });
-
-  test('AnthropicCompletionProvider callApi with caching', async () => {
-    const provider = new AnthropicCompletionProvider('claude-1');
-    provider.anthropic.completions.create = jest.fn().mockResolvedValue({
-      completion: 'Test output',
-    });
-    const result = await provider.callApi('Test prompt');
-
-    expect(provider.anthropic.completions.create).toHaveBeenCalledTimes(1);
-    expect(result.output).toBe('Test output');
-    expect(result.tokenUsage).toEqual({});
-
-    (provider.anthropic.completions.create as jest.Mock).mockClear();
-    const result2 = await provider.callApi('Test prompt');
-
-    expect(provider.anthropic.completions.create).toHaveBeenCalledTimes(0);
-    expect(result2.output).toBe('Test output');
-    expect(result2.tokenUsage).toEqual({});
-  });
-
-  test('AnthropicCompletionProvider callApi with caching disabled', async () => {
-    const provider = new AnthropicCompletionProvider('claude-1');
-    provider.anthropic.completions.create = jest.fn().mockResolvedValue({
-      completion: 'Test output',
-    });
-    const result = await provider.callApi('Test prompt');
-
-    expect(provider.anthropic.completions.create).toHaveBeenCalledTimes(1);
-    expect(result.output).toBe('Test output');
-    expect(result.tokenUsage).toEqual({});
-
-    (provider.anthropic.completions.create as jest.Mock).mockClear();
-
-    disableCache();
-
-    const result2 = await provider.callApi('Test prompt');
-
-    expect(provider.anthropic.completions.create).toHaveBeenCalledTimes(1);
-    expect(result2.output).toBe('Test output');
-    expect(result2.tokenUsage).toEqual({});
   });
 
   test('LlamaProvider callApi', async () => {
