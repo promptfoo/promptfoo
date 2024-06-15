@@ -10,12 +10,10 @@ import {
 } from '../src/providers/openai';
 import {
   AnthropicCompletionProvider,
-  AnthropicMessagesProvider,
-  outputFromMessage,
 } from '../src/providers/anthropic';
 import { LlamaProvider } from '../src/providers/llama';
 
-import { clearCache, disableCache, enableCache, getCache } from '../src/cache';
+import { clearCache, disableCache, enableCache } from '../src/cache';
 import { loadApiProvider, loadApiProviders } from '../src/providers';
 import {
   AzureOpenAiChatCompletionProvider,
@@ -41,8 +39,6 @@ import {
 import { VoyageEmbeddingProvider } from '../src/providers/voyage';
 
 import type { ProviderOptionsMap, ProviderFunction } from '../src/types';
-import Anthropic from '@anthropic-ai/sdk';
-import dedent from 'dedent';
 
 jest.mock('fs', () => ({
   readFileSync: jest.fn(),
