@@ -29,7 +29,10 @@ describe('Anthropic', () => {
         stop_reason: null,
         stop_sequence: null,
         type: 'message',
-        usage: undefined,
+        usage: {
+          input_tokens: 0,
+          output_tokens: 0,
+        },
       };
 
       const result = outputFromMessage(message);
