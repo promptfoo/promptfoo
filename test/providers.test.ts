@@ -8,9 +8,7 @@ import {
   OpenAiCompletionProvider,
   OpenAiChatCompletionProvider,
 } from '../src/providers/openai';
-import {
-  AnthropicCompletionProvider,
-} from '../src/providers/anthropic';
+import { AnthropicCompletionProvider } from '../src/providers/anthropic';
 import { LlamaProvider } from '../src/providers/llama';
 
 import { clearCache, disableCache, enableCache } from '../src/cache';
