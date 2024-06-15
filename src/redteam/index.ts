@@ -18,7 +18,7 @@ import { getUnderconfidenceTests } from './getUnderconfidenceTests';
 import { getPiiTests } from './getPiiTests';
 import { getCompetitorTests } from './getCompetitorTests';
 import { SYNTHESIS_MODEL } from './constants';
-
+import { getContractTests } from './getUnintendedContracts';
 import type { ApiProvider, TestCase, TestSuite } from '../types';
 
 interface SynthesizeOptions {
@@ -30,6 +30,8 @@ interface SynthesizeOptions {
 
 const ALL_PLUGINS = new Set(
   [
+    'competitors',
+    'contracts',
     'excessive-agency',
     'hallucination',
     'harmful',
@@ -38,12 +40,12 @@ const ALL_PLUGINS = new Set(
     'overreliance',
     'pii',
     'prompt-injection',
-    'competitors',
   ].concat(Object.keys(HARM_CATEGORIES)),
 );
 
 const DEFAULT_PLUGINS = new Set(
   [
+    'contracts',
     'excessive-agency',
     'hallucination',
     'harmful',
@@ -140,6 +142,8 @@ export async function synthesize({
   const pluginActions: {
     [key: string]: (purpose: string, injectVar: string) => Promise<TestCase[]>;
   } = {
+    competitors: getCompetitorTests,
+    contracts: getContractTests,
     'excessive-agency': getOverconfidenceTests,
     hallucination: getHallucinationTests,
     hijacking: getHijackingTests,
@@ -147,7 +151,6 @@ export async function synthesize({
     overreliance: getUnderconfidenceTests,
     pii: getPiiTests,
     'prompt-injection': addInjections.bind(null, adversarialPrompts),
-    competitors: getCompetitorTests,
   };
 
   for (const plugin of plugins) {
