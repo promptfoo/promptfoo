@@ -1,0 +1,23 @@
+providers:
+  - id: 'anthropic:claude-3-opus-20240229'
+    config:
+      tools:
+        - name: 'get_weather'
+          description: 'Get the weather for a specific location'
+          input_schema:
+            type: 'object'
+            properties:
+              location:
+                type: 'string'
+                description: 'The city and state, e.g. San Francisco, CA'
+            required: ['location']
+prompts: 'Tell me about the weather in {{city}}.'
+tests:
+  - vars:
+      city: Boston
+  - vars:
+      city: New York
+  - vars:
+      city: Paris
+  - vars:
+      city: Mars
