@@ -230,7 +230,9 @@ export class AnthropicMessagesProvider implements ApiProvider {
 
     try {
       const response = await this.anthropic.messages.create(params);
+
       logger.debug(`Anthropic Messages API response: ${JSON.stringify(response)}`);
+
       if (isCacheEnabled()) {
         try {
           await cache.set(cacheKey, JSON.stringify(response));
