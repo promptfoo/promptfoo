@@ -22,7 +22,9 @@ import {
 import './TestSuites.css';
 import { useRouter } from 'next/navigation';
 
-const getSubCategoryStats = (categoryStats: Record<string, { pass: number; total: number }>) => {
+const getSubCategoryStats = (
+  categoryStats: Record<string, { pass: number; total: number; passWithFilter: number }>,
+) => {
   const subCategoryStats = [];
   for (const [category, subCategories] of Object.entries(riskCategories)) {
     for (const subCategory of subCategories) {
@@ -34,6 +36,12 @@ const getSubCategoryStats = (categoryStats: Record<string, { pass: number; total
           ? ((categoryStats[subCategory].pass / categoryStats[subCategory].total) * 100).toFixed(
               1,
             ) + '%'
+          : 'N/A',
+        passRateWithFilter: categoryStats[subCategory]
+          ? (
+              (categoryStats[subCategory].passWithFilter / categoryStats[subCategory].total) *
+              100
+            ).toFixed(1) + '%'
           : 'N/A',
         severity:
           riskCategorySeverityMap[subCategory as keyof typeof riskCategorySeverityMap] || 'Unknown',
@@ -53,7 +61,7 @@ const getSubCategoryStats = (categoryStats: Record<string, { pass: number; total
 
 const TestSuites: React.FC<{
   evalId: string;
-  categoryStats: Record<string, { pass: number; total: number }>;
+  categoryStats: Record<string, { pass: number; total: number; passWithFilter: number }>;
 }> = ({ evalId, categoryStats }) => {
   const router = useRouter();
   const subCategoryStats = getSubCategoryStats(categoryStats).filter(
@@ -164,7 +172,17 @@ const TestSuites: React.FC<{
                   <TableRow key={index}>
                     <TableCell>{subCategory.type}</TableCell>
                     <TableCell>{subCategory.description}</TableCell>
-                    <TableCell className={passRateClass}>{subCategory.passRate}</TableCell>
+                    <TableCell className={passRateClass}>
+                      {subCategory.passRate} (
+                      {subCategory.passRateWithFilter !== subCategory.passRate ? (
+                        <>
+                          <strong>{subCategory.passRateWithFilter} with filter</strong>
+                        </>
+                      ) : (
+                        subCategory.passRateWithFilter
+                      )}
+                      )
+                    </TableCell>
                     <TableCell className={`vuln-${subCategory.severity.toLowerCase()}`}>
                       {subCategory.severity}
                     </TableCell>

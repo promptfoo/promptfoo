@@ -3,7 +3,7 @@
 }
 
 .pass-medium {
-  color: orange;
+  color: rgb(203, 133, 3);
 }
 
 .pass-low {
@@ -20,7 +20,7 @@
 }
 
 .vuln-medium {
-  color: orange;
+  color: rgb(203, 133, 3);
 }
 
 .vuln-low {
