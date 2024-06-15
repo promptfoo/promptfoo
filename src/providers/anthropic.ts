@@ -52,7 +52,7 @@ export function outputFromMessage(message: Anthropic.Messages.Message) {
     .join('\n\n');
 }
 
-function calculateCost(
+export function calculateCost(
   modelName: string,
   config: AnthropicMessageOptions,
   promptTokens?: number,
