@@ -83,7 +83,6 @@ const App: React.FC = () => {
     },
     {} as Record<string, { pass: number; total: number; passWithFilter: number }>,
   );
-  console.log('categoryStats', categoryStats);
 
   return (
     <Container>
