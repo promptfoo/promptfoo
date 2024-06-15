@@ -47,7 +47,7 @@
     "tiny-invariant": "^1.3.3",
     "typescript": "^5.4.5",
     "use-debounce": "^10.0.1",
-    "uuid": "^9.0.1",
+    "uuid": "^10.0.0",
     "zustand": "^4.5.2"
   },
   "devDependencies": {
