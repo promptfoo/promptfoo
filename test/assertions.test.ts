@@ -20,6 +20,7 @@ import type {
   ProviderResponse,
   GradingResult,
 } from '../src/types';
+import { except } from 'drizzle-orm/mysql-core';
 
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
@@ -471,19 +472,22 @@ describe('runAssertion', () => {
 `,
   };
 
-  // is-sql assertions:
-  const isSQLAssertion: Assertion = {
+  const isSqlAssertion: Assertion = {
     type: 'is-sql',
   };
 
-  const isSQLAssertionWithDatabase: Assertion = {
+  const notIsSqlAssertion: Assertion = {
+    type: 'not-is-sql',
+  };
+
+  const isSqlAssertionWithDatabase: Assertion = {
     type: 'is-sql',
     value: {
       databaseType: 'MySQL',
     },
   };
 
-  const isSQLAssertionWithDatabaseAndWhiteTableList: Assertion = {
+  const isSqlAssertionWithDatabaseAndWhiteTableList: Assertion = {
     type: 'is-sql',
     value: {
       databaseType: 'MySQL',
@@ -491,7 +495,7 @@ describe('runAssertion', () => {
     },
   };
 
-  const isSQLAssertionWithDatabaseAndWhiteColumnList: Assertion = {
+  const isSqlAssertionWithDatabaseAndWhiteColumnList: Assertion = {
     type: 'is-sql',
     value: {
       databaseType: 'MySQL',
@@ -499,7 +503,7 @@ describe('runAssertion', () => {
     },
   };
 
-  const isSQLAssertionWithDatabaseAndBothList: Assertion = {
+  const isSqlAssertionWithDatabaseAndBothList: Assertion = {
     type: 'is-sql',
     value: {
       databaseType: 'MySQL',
@@ -974,14 +978,13 @@ describe('runAssertion', () => {
     );
   });
 
-  // is-sql test cases:
   it('should pass when the is-sql assertion passes', async () => {
     const output = 'SELECT id, name FROM users';
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
       provider: new OpenAiChatCompletionProvider('gpt-4'),
-      assertion: isSQLAssertion,
+      assertion: isSqlAssertion,
       test: {} as AtomicTestCase,
       output,
     });
@@ -995,7 +998,7 @@ describe('runAssertion', () => {
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
       provider: new OpenAiChatCompletionProvider('gpt-4'),
-      assertion: isSQLAssertion,
+      assertion: isSqlAssertion,
       test: {} as AtomicTestCase,
       output,
     });
@@ -1005,13 +1008,41 @@ describe('runAssertion', () => {
     );
   });
 
+  it('should pass when the not-is-sql assertion passes', async () => {
+    const output = 'SELECT * FROM orders ORDERY BY order_date';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      assertion: notIsSqlAssertion,
+      test: {} as AtomicTestCase,
+      output,
+    });
+    expect(result.pass).toBeTruthy();
+    expect(result.reason).toBe('Assertion passed');
+  });
+
+  it('should fail when the not-is-sql assertion fails', async () => {
+    const output = 'SELECT id, name FROM users';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      assertion: notIsSqlAssertion,
+      test: {} as AtomicTestCase,
+      output,
+    });
+    expect(result.pass).toBeFalsy;
+    expect(result.reason).toBe('The output SQL statement is valid');
+  });
+
   it('should pass when the is-sql assertion passes given MySQL Database syntax', async () => {
     const output = 'SELECT id, name FROM users';
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
       provider: new OpenAiChatCompletionProvider('gpt-4'),
-      assertion: isSQLAssertionWithDatabase,
+      assertion: isSqlAssertionWithDatabase,
       test: {} as AtomicTestCase,
       output,
     });
@@ -1025,7 +1056,7 @@ describe('runAssertion', () => {
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
       provider: new OpenAiChatCompletionProvider('gpt-4'),
-      assertion: isSQLAssertionWithDatabase,
+      assertion: isSqlAssertionWithDatabase,
       test: {} as AtomicTestCase,
       output,
     });
@@ -1041,7 +1072,7 @@ describe('runAssertion', () => {
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
       provider: new OpenAiChatCompletionProvider('gpt-4'),
-      assertion: isSQLAssertionWithDatabaseAndWhiteTableList,
+      assertion: isSqlAssertionWithDatabaseAndWhiteTableList,
       test: {} as AtomicTestCase,
       output,
     });
@@ -1055,12 +1086,12 @@ describe('runAssertion', () => {
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
       provider: new OpenAiChatCompletionProvider('gpt-4'),
-      assertion: isSQLAssertionWithDatabaseAndWhiteTableList,
+      assertion: isSqlAssertionWithDatabaseAndWhiteTableList,
       test: {} as AtomicTestCase,
       output,
     });
     expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe(' It failed the provided authority table list check.');
+    expect(result.reason).toBe('It failed the provided authority table list check.');
   });
 
   it('should pass when the is-sql assertion passes given MySQL Database syntax and whiteColumnList', async () => {
@@ -1069,7 +1100,7 @@ describe('runAssertion', () => {
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
       provider: new OpenAiChatCompletionProvider('gpt-4'),
-      assertion: isSQLAssertionWithDatabaseAndWhiteColumnList,
+      assertion: isSqlAssertionWithDatabaseAndWhiteColumnList,
       test: {} as AtomicTestCase,
       output,
     });
@@ -1083,12 +1114,12 @@ describe('runAssertion', () => {
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
       provider: new OpenAiChatCompletionProvider('gpt-4'),
-      assertion: isSQLAssertionWithDatabaseAndWhiteColumnList,
+      assertion: isSqlAssertionWithDatabaseAndWhiteColumnList,
       test: {} as AtomicTestCase,
       output,
     });
     expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe(' It failed the provided authority column list check.');
+    expect(result.reason).toBe('It failed the provided authority column list check.');
   });
 
   it('should pass when the is-sql assertion passes given MySQL Database syntax, whiteTableList, and whiteColumnList', async () => {
@@ -1097,7 +1128,7 @@ describe('runAssertion', () => {
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
       provider: new OpenAiChatCompletionProvider('gpt-4'),
-      assertion: isSQLAssertionWithDatabaseAndBothList,
+      assertion: isSqlAssertionWithDatabaseAndBothList,
       test: {} as AtomicTestCase,
       output,
     });
@@ -1111,12 +1142,12 @@ describe('runAssertion', () => {
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
       provider: new OpenAiChatCompletionProvider('gpt-4'),
-      assertion: isSQLAssertionWithDatabaseAndBothList,
+      assertion: isSqlAssertionWithDatabaseAndBothList,
       test: {} as AtomicTestCase,
       output,
     });
     expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe(' It failed the provided authority column list check.');
+    expect(result.reason).toBe('It failed the provided authority column list check.');
   });
 
   it('should fail when the is-sql assertion fails given MySQL Database syntax, whiteTableList, and whiteColumnList', async () => {
@@ -1125,12 +1156,12 @@ describe('runAssertion', () => {
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
       provider: new OpenAiChatCompletionProvider('gpt-4'),
-      assertion: isSQLAssertionWithDatabaseAndBothList,
+      assertion: isSqlAssertionWithDatabaseAndBothList,
       test: {} as AtomicTestCase,
       output,
     });
     expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe(' It failed the provided authority table list check.');
+    expect(result.reason).toBe('It failed the provided authority table list check.');
   });
 
   it('should fail when the is-sql assertion fails given MySQL Database syntax, whiteTableList, and whiteColumnList', async () => {
@@ -1139,13 +1170,13 @@ describe('runAssertion', () => {
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
       provider: new OpenAiChatCompletionProvider('gpt-4'),
-      assertion: isSQLAssertionWithDatabaseAndBothList,
+      assertion: isSqlAssertionWithDatabaseAndBothList,
       test: {} as AtomicTestCase,
       output,
     });
     expect(result.pass).toBeFalsy();
     expect(result.reason).toBe(
-      ' It failed the provided authority table list check. It failed the provided authority column list check.',
+      'It failed the provided authority table list check. It failed the provided authority column list check.',
     );
   });
 

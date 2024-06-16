@@ -273,29 +273,30 @@ assert:
   - type: is-sql
 ```
 
-You can optionally set a `databaseType` in the `value` to determine the specific database syntax that your LLM output will be validated against. The default database syntax is MySQL.  
+You can optionally set a `databaseType` in the `value` to determine the specific database syntax that your LLM output will be validated against. The default database syntax is MySQL. For a complete and up-to-date list of supported database syntaxes, please refer to the [node-sql-parser documentation](https://github.com/taozhi8833998/node-sql-parser?tab=readme-ov-file#supported-database-sql-syntax).  
 The supported database syntax list:
 
 - Athena
 - BigQuery
 - DB2
+- FlinkSQL
 - Hive
 - MariaDB
 - MySQL
+- Noql
 - PostgresQL
 - Redshift
+- Snowflake(alpha)
 - Sqlite
 - TransactSQL
-- FlinkSQL
-- Snowflake(alpha)
-- Noql
 
 Example:
 
 ```yaml
 assert:
   - type: is-sql
-    value: { databaseType: 'MySQL' }
+    value:
+      databaseType: 'MySQL'
 ```
 
 You can also optionally set a `whiteTableList`/`whiteColumnList` in the `value` to determine the SQL authority list that your LLM output will be validated against.  
@@ -319,11 +320,12 @@ Example:
 assert:
   - type: is-sql
     value:
-      {
-        databaseType: 'MySQL',
-        whiteTableList: ['(select|update|insert|delete)::null::departments'],
-        whiteColumnList: ['select::null::name', 'update::null::id'],
-      }
+      databaseType: 'MySQL'
+      whiteTableList:
+        - '(select|update|insert|delete)::null::departments'
+      whiteColumnList:
+        - 'select::null::name'
+        - 'update::null::id'
 ```
 
 ### is-valid-openai-function-call
