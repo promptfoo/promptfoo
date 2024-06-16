@@ -6,30 +6,31 @@ sidebar_position: 6
 
 These metrics are created by logical tests that are run on LLM output.
 
-| Assertion Type                                                  | Returns true if...                                               |
-| --------------------------------------------------------------- | ---------------------------------------------------------------- |
-| [contains](#contains)                                           | output contains substring                                        |
-| [contains-all](#contains-all)                                   | output contains all list of substrings                           |
-| [contains-any](#contains-any)                                   | output contains any of the listed substrings                     |
-| [contains-json](#contains-json)                                 | output contains valid json (optional json schema validation)     |
-| [cost](#cost)                                                   | Inference cost is below a threshold                              |
-| [equals](#equality)                                             | output matches exactly                                           |
-| [icontains](#contains)                                          | output contains substring, case insensitive                      |
-| [icontains-all](#contains-all)                                  | output contains all list of substrings, case insensitive         |
-| [icontains-any](#contains-any)                                  | output contains any of the listed substrings, case insensitive   |
-| [is-json](#is-json)                                             | output is valid json (optional json schema validation)           |
-| [is-valid-openai-function-call](#is-valid-openai-function-call) | Ensure that the function call matches the function's JSON schema |
-| [is-valid-openai-tools-call](#is-valid-openai-tools-call)       | Ensure all tool calls match the tools JSON schema                |
-| [javascript](/docs/configuration/expected-outputs/javascript)   | provided Javascript function validates the output                |
-| [latency](#latency)                                             | Latency is below a threshold (milliseconds)                      |
-| [levenshtein](#levenshtein-distance)                            | Levenshtein distance is below a threshold                        |
-| [perplexity-score](#perplexity-score)                           | Normalized perplexity                                            |
-| [perplexity](#perplexity)                                       | Perplexity is below a threshold                                  |
-| [python](/docs/configuration/expected-outputs/python)           | provided Python function validates the output                    |
-| [regex](#regex)                                                 | output matches regex                                             |
-| rouge-n                                                         | Rouge-N score is above a given threshold                         |
-| [starts-with](#starts-with)                                     | output starts with string                                        |
-| [webhook](#webhook)                                             | provided webhook returns \{pass: true\}                          |
+| Assertion Type                                                  | Returns true if...                                                 |
+| --------------------------------------------------------------- | ------------------------------------------------------------------ |
+| [contains](#contains)                                           | output contains substring                                          |
+| [contains-all](#contains-all)                                   | output contains all list of substrings                             |
+| [contains-any](#contains-any)                                   | output contains any of the listed substrings                       |
+| [contains-json](#contains-json)                                 | output contains valid json (optional json schema validation)       |
+| [cost](#cost)                                                   | Inference cost is below a threshold                                |
+| [equals](#equality)                                             | output matches exactly                                             |
+| [icontains](#contains)                                          | output contains substring, case insensitive                        |
+| [icontains-all](#contains-all)                                  | output contains all list of substrings, case insensitive           |
+| [icontains-any](#contains-any)                                  | output contains any of the listed substrings, case insensitive     |
+| [is-json](#is-json)                                             | output is valid json (optional json schema validation)             |
+| [is-sql](#is-sql)                                               | output is valid SQL statement (optional authority list validation) |
+| [is-valid-openai-function-call](#is-valid-openai-function-call) | Ensure that the function call matches the function's JSON schema   |
+| [is-valid-openai-tools-call](#is-valid-openai-tools-call)       | Ensure all tool calls match the tools JSON schema                  |
+| [javascript](/docs/configuration/expected-outputs/javascript)   | provided Javascript function validates the output                  |
+| [latency](#latency)                                             | Latency is below a threshold (milliseconds)                        |
+| [levenshtein](#levenshtein-distance)                            | Levenshtein distance is below a threshold                          |
+| [perplexity-score](#perplexity-score)                           | Normalized perplexity                                              |
+| [perplexity](#perplexity)                                       | Perplexity is below a threshold                                    |
+| [python](/docs/configuration/expected-outputs/python)           | provided Python function validates the output                      |
+| [regex](#regex)                                                 | output matches regex                                               |
+| rouge-n                                                         | Rouge-N score is above a given threshold                           |
+| [starts-with](#starts-with)                                     | output starts with string                                          |
+| [webhook](#webhook)                                             | provided webhook returns \{pass: true\}                            |
 
 :::tip
 Every test type can be negated by prepending `not-`. For example, `not-equals` or `not-regex`.
@@ -259,6 +260,72 @@ If your JSON schema is large, import it from a file:
 assert:
   - type: is-json
     value: file://./path/to/schema.json
+```
+
+### Is-SQL
+
+The `is-sql` assertion checks if the LLM output is a valid SQL statement.
+
+Example:
+
+```yaml
+assert:
+  - type: is-sql
+```
+
+You can optionally set a `databaseType` in the `value` to determine the specific database syntax that your LLM output will be validated against. The default database syntax is MySQL. For a complete and up-to-date list of supported database syntaxes, please refer to the [node-sql-parser documentation](https://github.com/taozhi8833998/node-sql-parser?tab=readme-ov-file#supported-database-sql-syntax).  
+The supported database syntax list:
+
+- Athena
+- BigQuery
+- DB2
+- FlinkSQL
+- Hive
+- MariaDB
+- MySQL
+- Noql
+- PostgresQL
+- Redshift
+- Snowflake(alpha)
+- Sqlite
+- TransactSQL
+
+Example:
+
+```yaml
+assert:
+  - type: is-sql
+    value:
+      databaseType: 'MySQL'
+```
+
+You can also optionally set a `whiteTableList`/`whiteColumnList` in the `value` to determine the SQL authority list that your LLM output will be validated against.  
+The format of whiteTableList:
+
+```md
+{type}::{dbName}::{tableName} // type could be select, update, delete or insert
+```
+
+The format of whiteColumnList:
+
+```md
+{type}::{tableName}::{columnName} // type could be select, update, delete or insert
+```
+
+For `SELECT *`, `DELETE`, and `INSERT INTO tableName VALUES()` without specified columns, the `.*` column authority regex is required.
+
+Example:
+
+```yaml
+assert:
+  - type: is-sql
+    value:
+      databaseType: 'MySQL'
+      whiteTableList:
+        - '(select|update|insert|delete)::null::departments'
+      whiteColumnList:
+        - 'select::null::name'
+        - 'update::null::id'
 ```
 
 ### is-valid-openai-function-call

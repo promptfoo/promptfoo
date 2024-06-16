@@ -42,10 +42,13 @@ import {
   type GradingResult,
   type TestCase,
   isGradingResult,
+
   isApiProvider,
+  AssertionValue,
 } from './types';
 import { AssertionsResult } from './assertions/AssertionsResult';
 import { parseChatPrompt } from './providers/shared';
+import { type Option as sqlParserOption } from 'node-sql-parser';
 
 const ASSERTIONS_MAX_CONCURRENCY = process.env.PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY
   ? parseInt(process.env.PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY, 10)
@@ -383,6 +386,13 @@ export async function runAssertion({
       reason: pass ? 'Assertion passed' : 'Expected output to be valid JSON',
       assertion,
     };
+  }
+
+  if (baseType === 'is-sql') {
+    const result = await isSql(outputString, renderedValue, inverse, assertion).catch((err) => {
+      throw new Error(err);
+    });
+    return result;
   }
 
   if (baseType === 'contains') {
@@ -1294,6 +1304,88 @@ function containsJSON(str: string): any {
     }
   }
   return jsonObjects;
+}
+
+export async function isSql(
+  outputString: string,
+  renderedValue: AssertionValue | undefined,
+  inverse: boolean,
+  assertion: Assertion,
+): Promise<GradingResult> {
+  let pass: boolean = false;
+  let score: number = 0.0;
+  let sqlParser;
+  let parsedSql;
+  let databaseType: string = 'MySQL';
+  let whiteTableList: string[] | undefined;
+  let whiteColumnList: string[] | undefined;
+
+  if (renderedValue && typeof renderedValue === 'object') {
+    const value = renderedValue as {
+      database?: string;
+      whiteTableList?: string[];
+      whiteColumnList?: string[];
+    };
+
+    databaseType = value.database || 'MySQL';
+    whiteTableList = value.whiteTableList;
+    whiteColumnList = value.whiteColumnList;
+  }
+
+  if (renderedValue && typeof renderedValue !== 'object') {
+    throw new Error('is-sql assertion must have a object value.');
+  }
+
+  const { Parser: SqlParser } = await import('node-sql-parser').catch(() => {
+    throw new Error('node-sql-parser is not installed. Please install it first');
+  });
+
+  sqlParser = new SqlParser();
+
+  let opt: sqlParserOption = { database: databaseType };
+
+  const failureReasons: string[] = [];
+
+  try {
+    parsedSql = sqlParser.astify(outputString, opt);
+    pass = !inverse;
+  } catch (err) {
+    pass = inverse;
+    failureReasons.push(
+      `SQL statement does not conform to the provided ${databaseType} database syntax.`,
+    );
+  }
+
+  if (whiteTableList) {
+    opt.type = 'table';
+    try {
+      sqlParser.whiteListCheck(outputString, whiteTableList, opt);
+    } catch (err) {
+      pass = inverse;
+      failureReasons.push('It failed the provided authority table list check.');
+    }
+  }
+
+  if (whiteColumnList) {
+    opt.type = 'column';
+    try {
+      sqlParser.whiteListCheck(outputString, whiteColumnList, opt);
+    } catch (err) {
+      pass = inverse;
+      failureReasons.push('It failed the provided authority column list check.');
+    }
+  }
+
+  if (inverse && pass === false && failureReasons.length === 0) {
+    failureReasons.push('The output SQL statement is valid');
+  }
+
+  return {
+    pass,
+    score: pass ? 1 : 0,
+    reason: pass ? 'Assertion passed' : failureReasons.join(' '),
+    assertion,
+  };
 }
 
 export async function runCompareAssertion(
