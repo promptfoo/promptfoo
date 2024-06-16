@@ -26,6 +26,8 @@ interface TableState {
   setPrettifyJson: (prettifyJson: boolean) => void;
   showPrompts: boolean;
   setShowPrompts: (showPrompts: boolean) => void;
+  jsonExtractField: string | null;
+  setJsonExtractField: (jsonExtractField: string) => void;
 }
 
 const storage: StateStorage = {
@@ -64,6 +66,8 @@ export const useStore = create<TableState>()(
       setPrettifyJson: (prettifyJson: boolean) => set(() => ({ prettifyJson })),
       showPrompts: false,
       setShowPrompts: (showPrompts: boolean) => set(() => ({ showPrompts })),
+      jsonExtractField: null,
+      setJsonExtractField: (jsonExtractField: string) => set(() => ({ jsonExtractField })),
     }),
     {
       name: 'ResultsViewStorage',
