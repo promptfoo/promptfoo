@@ -27,6 +27,7 @@ import Link from 'next/link';
 import CommentDialog from '@/app/eval/TableCommentDialog';
 import CustomMetrics from '@/app/eval/CustomMetrics';
 import EvalOutputPromptDialog from '@/app/eval/EvalOutputPromptDialog';
+import FailReasonCarousel from '@/app/eval/FailReasonCarousel';
 import GenerateTestCases from '@/app/eval/GenerateTestCases';
 import { getApiBaseUrl } from '@/api';
 import { useStore as useResultsViewStore } from './store';
@@ -219,14 +220,14 @@ function EvalOutputCell({
 
   let text = typeof output.text === 'string' ? output.text : JSON.stringify(output.text);
   let node: React.ReactNode | undefined;
-  let chunks: string[] = [];
+  let failReasons: string[] = [];
 
   // Handle failure messages by splitting the text at '---'
   if (!output.pass && text.includes('---')) {
-    chunks = text.split('---');
-    text = chunks.slice(1).join('---');
-  } else {
-    chunks = [text];
+    failReasons = (output.gradingResult?.componentResults || [])
+      .filter((result) => !result.pass)
+      .map((result) => result.reason);
+    text = text.split('---').slice(1).join('---');
   }
 
   if (showDiffs && firstOutput) {
@@ -595,15 +596,7 @@ function EvalOutputCell({
                 </div>
                 <CustomMetrics lookup={output.namedScores} />
                 <span className="fail-reason">
-                  {chunks[0]
-                    ?.trim()
-                    .split('\n')
-                    .map((line, index) => (
-                      <React.Fragment key={index}>
-                        {line}
-                        <br />
-                      </React.Fragment>
-                    ))}
+                  <FailReasonCarousel failReasons={failReasons} />
                 </span>
               </div>
             </>
