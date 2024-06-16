@@ -4,13 +4,13 @@ sidebar_position: 1
 
 # Intro
 
-`promptfoo` is a CLI and library for evaluating LLM output quality.
+`promptfoo` is a CLI and library for evaluating LLM apps.
 
 With promptfoo, you can:
 
 - **Build reliable prompts, models, and RAGs** with benchmarks specific to your use-case
 - **Speed up evaluations** with caching, concurrency, and live reloading
-- **Score outputs automatically** by defining [metrics](/docs/configuration/expected-outputs)
+- **Score outputs automatically** by defining [metrics](/docs/configuration/expected-outputs) and perform automated [red teaming](/docs/red-team)
 - Use as a [CLI](/docs/usage/command-line), [library](/docs/usage/node-package), or in [CI/CD](/docs/integrations/github-action)
 - Use OpenAI, Anthropic, Azure, Google, HuggingFace, open-source models like Llama, or integrate custom API providers for [any LLM API](/docs/providers)
 

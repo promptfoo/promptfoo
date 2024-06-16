@@ -6,15 +6,15 @@
 ![MIT license](https://img.shields.io/github/license/typpo/promptfoo)
 [![Discord](https://dcbadge.vercel.app/api/server/gHPS9jjfbs?style=flat&compact=true)](https://discord.gg/gHPS9jjfbs)
 
-`promptfoo` is a tool for testing and evaluating LLM output quality.
+`promptfoo` is a tool for testing and evaluating LLM apps.
 
 With promptfoo, you can:
 
 - **Build reliable prompts, models, and RAGs** with benchmarks specific to your use-case
 - **Speed up evaluations** with caching, concurrency, and live reloading
-- **Score outputs automatically** by defining [metrics](https://promptfoo.dev/docs/configuration/expected-outputs)
-- Use as a [CLI](https://promptfoo.dev/docs/usage/command-line), [library](https://promptfoo.dev/docs/usage/node-package), or in [CI/CD](https://promptfoo.dev/docs/integrations/github-action)
-- Use OpenAI, Anthropic, Azure, Google, HuggingFace, open-source models like Llama, or integrate custom API providers for [any LLM API](https://promptfoo.dev/docs/providers)
+- **Score outputs automatically** by defining [metrics](https://www.promptfoo.dev/docs/configuration/expected-outputs) and perform automated [red teaming](https://www.promptfoo.dev/docs/red-team/)
+- Use as a [CLI](https://www.promptfoo.dev/docs/usage/command-line), [library](https://www.promptfoo.dev/docs/usage/node-package), or in [CI/CD](https://www.promptfoo.dev/docs/integrations/github-action)
+- Use OpenAI, Anthropic, Azure, Google, HuggingFace, open-source models like Llama, or integrate custom API providers for [any LLM API](https://www.promptfoo.dev/docs/providers)
 
 The goal: **test-driven LLM development** instead of trial-and-error.
 
@@ -22,7 +22,7 @@ The goal: **test-driven LLM development** instead of trial-and-error.
 npx promptfoo@latest init
 ```
 
-# [» View full documentation «](https://promptfoo.dev/docs/intro)
+# [» View full documentation «](https://www.promptfoo.dev/docs/intro)
 
 promptfoo produces matrix views that let you quickly evaluate outputs across many prompts and inputs:
 
@@ -103,7 +103,7 @@ tests:
 
 ### Supported assertion types
 
-See [Test assertions](https://promptfoo.dev/docs/configuration/expected-outputs) for full details.
+See [Test assertions](https://www.promptfoo.dev/docs/configuration/expected-outputs) for full details.
 
 Deterministic eval metrics
 
@@ -133,19 +133,19 @@ Deterministic eval metrics
 
 Model-assisted eval metrics
 
-| Assertion Type                                                                                  | Method                                                                          |
-| ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| [similar](https://promptfoo.dev/docs/configuration/expected-outputs/similar)                    | Embeddings and cosine similarity are above a threshold                          |
-| [classifier](https://promptfoo.dev/docs/configuration/expected-outputs/classifier)              | Run LLM output through a classifier                                             |
-| [llm-rubric](https://promptfoo.dev/docs/configuration/expected-outputs/model-graded)            | LLM output matches a given rubric, using a Language Model to grade output       |
-| [answer-relevance](https://promptfoo.dev/docs/configuration/expected-outputs/model-graded)      | Ensure that LLM output is related to original query                             |
-| [context-faithfulness](https://promptfoo.dev/docs/configuration/expected-outputs/model-graded)  | Ensure that LLM output uses the context                                         |
-| [context-recall](https://promptfoo.dev/docs/configuration/expected-outputs/model-graded)        | Ensure that ground truth appears in context                                     |
-| [context-relevance](https://promptfoo.dev/docs/configuration/expected-outputs/model-graded)     | Ensure that context is relevant to original query                               |
-| [factuality](https://promptfoo.dev/docs/configuration/expected-outputs/model-graded)            | LLM output adheres to the given facts, using Factuality method from OpenAI eval |
-| [model-graded-closedqa](https://promptfoo.dev/docs/configuration/expected-outputs/model-graded) | LLM output adheres to given criteria, using Closed QA method from OpenAI eval   |
-| [moderation](https://promptfoo.dev/docs/configuration/expected-outputs/moderation)              | Make sure outputs are safe                                                      |
-| [select-best](https://promptfoo.dev/docs/configuration/expected-outputs/model-graded)           | Compare multiple outputs for a test case and pick the best one                  |
+| Assertion Type                                                                                      | Method                                                                          |
+| --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| [similar](https://www.promptfoo.dev/docs/configuration/expected-outputs/similar)                    | Embeddings and cosine similarity are above a threshold                          |
+| [classifier](https://www.promptfoo.dev/docs/configuration/expected-outputs/classifier)              | Run LLM output through a classifier                                             |
+| [llm-rubric](https://www.promptfoo.dev/docs/configuration/expected-outputs/model-graded)            | LLM output matches a given rubric, using a Language Model to grade output       |
+| [answer-relevance](https://www.promptfoo.dev/docs/configuration/expected-outputs/model-graded)      | Ensure that LLM output is related to original query                             |
+| [context-faithfulness](https://www.promptfoo.dev/docs/configuration/expected-outputs/model-graded)  | Ensure that LLM output uses the context                                         |
+| [context-recall](https://www.promptfoo.dev/docs/configuration/expected-outputs/model-graded)        | Ensure that ground truth appears in context                                     |
+| [context-relevance](https://www.promptfoo.dev/docs/configuration/expected-outputs/model-graded)     | Ensure that context is relevant to original query                               |
+| [factuality](https://www.promptfoo.dev/docs/configuration/expected-outputs/model-graded)            | LLM output adheres to the given facts, using Factuality method from OpenAI eval |
+| [model-graded-closedqa](https://www.promptfoo.dev/docs/configuration/expected-outputs/model-graded) | LLM output adheres to given criteria, using Closed QA method from OpenAI eval   |
+| [moderation](https://www.promptfoo.dev/docs/configuration/expected-outputs/moderation)              | Make sure outputs are safe                                                      |
+| [select-best](https://www.promptfoo.dev/docs/configuration/expected-outputs/model-graded)           | Compare multiple outputs for a test case and pick the best one                  |
 
 Every test type can be negated by prepending `not-`. For example, `not-equals` or `not-regex`.
 
@@ -165,18 +165,18 @@ See [example CSV](https://github.com/typpo/promptfoo/blob/main/examples/simple-t
 
 If you're looking to customize your usage, you have a wide set of parameters at your disposal.
 
-| Option                              | Description                                                                                                                                                                        |
-| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `-p, --prompts <paths...>`          | Paths to [prompt files](https://promptfoo.dev/docs/configuration/parameters#prompt-files), directory, or glob                                                                      |
-| `-r, --providers <name or path...>` | One of: openai:chat, openai:completion, openai:model-name, localai:chat:model-name, localai:completion:model-name. See [API providers][providers-docs]                             |
-| `-o, --output <path>`               | Path to [output file](https://promptfoo.dev/docs/configuration/parameters#output-file) (csv, json, yaml, html)                                                                     |
-| `--tests <path>`                    | Path to [external test file](https://promptfoo.dev/docs/configurationexpected-outputsassertions#load-an-external-tests-file)                                                       |
-| `-c, --config <paths>`              | Path to one or more [configuration files](https://promptfoo.dev/docs/configuration/guide). `promptfooconfig.js/json/yaml` is automatically loaded if present                       |
-| `-j, --max-concurrency <number>`    | Maximum number of concurrent API calls                                                                                                                                             |
-| `--table-cell-max-length <number>`  | Truncate console table cells to this length                                                                                                                                        |
-| `--prompt-prefix <path>`            | This prefix is prepended to every prompt                                                                                                                                           |
-| `--prompt-suffix <path>`            | This suffix is append to every prompt                                                                                                                                              |
-| `--grader`                          | [Provider][providers-docs] that will conduct the evaluation, if you are [using LLM to grade your output](https://promptfoo.dev/docs/configuration/expected-outputs#llm-evaluation) |
+| Option                              | Description                                                                                                                                                                            |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `-p, --prompts <paths...>`          | Paths to [prompt files](https://www.promptfoo.dev/docs/configuration/parameters#prompt-files), directory, or glob                                                                      |
+| `-r, --providers <name or path...>` | One of: openai:chat, openai:completion, openai:model-name, localai:chat:model-name, localai:completion:model-name. See [API providers][providers-docs]                                 |
+| `-o, --output <path>`               | Path to [output file](https://www.promptfoo.dev/docs/configuration/parameters#output-file) (csv, json, yaml, html)                                                                     |
+| `--tests <path>`                    | Path to [external test file](https://www.promptfoo.dev/docs/configurationexpected-outputsassertions#load-an-external-tests-file)                                                       |
+| `-c, --config <paths>`              | Path to one or more [configuration files](https://www.promptfoo.dev/docs/configuration/guide). `promptfooconfig.js/json/yaml` is automatically loaded if present                       |
+| `-j, --max-concurrency <number>`    | Maximum number of concurrent API calls                                                                                                                                                 |
+| `--table-cell-max-length <number>`  | Truncate console table cells to this length                                                                                                                                            |
+| `--prompt-prefix <path>`            | This prefix is prepended to every prompt                                                                                                                                               |
+| `--prompt-suffix <path>`            | This suffix is append to every prompt                                                                                                                                                  |
+| `--grader`                          | [Provider][providers-docs] that will conduct the evaluation, if you are [using LLM to grade your output](https://www.promptfoo.dev/docs/configuration/expected-outputs#llm-evaluation) |
 
 After running an eval, you may optionally use the `view` command to open the web viewer:
 
@@ -304,12 +304,12 @@ See the full example [here](https://github.com/typpo/promptfoo/tree/main/example
 
 ## Configuration
 
-- **[Main guide](https://promptfoo.dev/docs/configuration/guide)**: Learn about how to configure your YAML file, setup prompt files, etc.
-- **[Configuring test cases](https://promptfoo.dev/docs/configuration/expected-outputs)**: Learn more about how to configure expected outputs and test assertions.
+- **[Main guide](https://www.promptfoo.dev/docs/configuration/guide)**: Learn about how to configure your YAML file, setup prompt files, etc.
+- **[Configuring test cases](https://www.promptfoo.dev/docs/configuration/expected-outputs)**: Learn more about how to configure expected outputs and test assertions.
 
 ## Installation
 
-See **[installation docs](https://promptfoo.dev/docs/installation)**
+See **[installation docs](https://www.promptfoo.dev/docs/installation)**
 
 ## API Providers
 
@@ -366,9 +366,9 @@ Here are some of the available scripts:
 
 To run the CLI during development you can run a command like: `npm run local -- eval --config $(readlink -f ./examples/cloudflare-ai/chat_config.yaml)`, where any parts of the command after `--` are passed through to our CLI entrypoint. Since the Next dev server isn't supported in this mode, see the instructions above for running the web server.
 
-# [» View full documentation «](https://promptfoo.dev/docs/intro)
+# [» View full documentation «](https://www.promptfoo.dev/docs/intro)
 
-[providers-docs]: https://promptfoo.dev/docs/providers
+[providers-docs]: https://www.promptfoo.dev/docs/providers
 
 ### Adding a New Provider
 
