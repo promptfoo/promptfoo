@@ -840,11 +840,13 @@ function ResultsTable({
             ? row.outputs.some((output) => {
                 const vars = row.vars.map((v) => `var=${v}`).join(' ');
                 const stringifiedOutput = `${output.text} ${Object.keys(output.namedScores)
-                  .map((k) => `metric=${k}`)
+                  .map((k) => `metric=${k}:${output.namedScores[k]}`)
                   .join(' ')} ${
                   output.gradingResult?.reason || ''
                 } ${output.gradingResult?.comment || ''}`;
-                return searchRegex.test(`${vars} ${stringifiedOutput}`);
+
+                const searchString = `${vars} ${stringifiedOutput}`;
+                return searchRegex.test(searchString);
               })
             : true;
         }) as ExtendedEvaluateTableRow[];
