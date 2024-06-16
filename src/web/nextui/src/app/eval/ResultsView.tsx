@@ -75,7 +75,7 @@ export default function ResultsView({
     useResultsViewStore();
   const { setStateFromConfig } = useMainStore();
 
-  const [searchText, setSearchText] = React.useState(searchParams.get('search') || '');
+  const [searchText, setSearchText] = React.useState(searchParams?.get('search') || '');
   const [debouncedSearchText] = useDebounce(searchText, 1000);
   const handleSearchTextChange = (text: string) => {
     setSearchText(text);
