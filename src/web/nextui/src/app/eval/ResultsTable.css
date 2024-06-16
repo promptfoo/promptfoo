@@ -242,6 +242,9 @@ table.results-table,
 }
 
 .results-table .status {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
   font-weight: bold;
   margin-bottom: 0.5rem;
 }
@@ -251,6 +254,7 @@ table.results-table,
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
   margin-right: 0.25rem;
+  align-self: flex-start; /* prevents it from stretching to fill width */
 }
 
 .results-table .pass .pill {
