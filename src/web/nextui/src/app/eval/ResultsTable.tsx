@@ -173,7 +173,7 @@ function EvalOutputCell({
   showDiffs: boolean;
   searchText: string;
 }) {
-  const { renderMarkdown, prettifyJson, showPrompts } = useResultsViewStore();
+  const { renderMarkdown, prettifyJson, showPrompts, showPassFail } = useResultsViewStore();
   const [openPrompt, setOpen] = React.useState(false);
   const handlePromptOpen = () => {
     setOpen(true);
@@ -574,36 +574,40 @@ function EvalOutputCell({
   const scoreString = scoreToString(output.score);
   return (
     <div className="cell" style={cellStyle}>
-      {output.pass ? (
+      {showPassFail && (
         <>
-          <div className="status pass">
-            <div className="pill">
-              {passFailText}
-              {scoreString && <span className="score"> {scoreString}</span>}
-            </div>
-            <CustomMetrics lookup={output.namedScores} />
-          </div>
-        </>
-      ) : (
-        <>
-          <div className="status fail">
-            <div className="pill">
-              {passFailText}
-              {scoreString && <span className="score"> {scoreString}</span>}
-            </div>
-            <CustomMetrics lookup={output.namedScores} />
-            <span className="fail-reason">
-              {chunks[0]
-                ?.trim()
-                .split('\n')
-                .map((line, index) => (
-                  <React.Fragment key={index}>
-                    {line}
-                    <br />
-                  </React.Fragment>
-                ))}
-            </span>
-          </div>
+          {output.pass ? (
+            <>
+              <div className="status pass">
+                <div className="pill">
+                  {passFailText}
+                  {scoreString && <span className="score"> {scoreString}</span>}
+                </div>
+                <CustomMetrics lookup={output.namedScores} />
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="status fail">
+                <div className="pill">
+                  {passFailText}
+                  {scoreString && <span className="score"> {scoreString}</span>}
+                </div>
+                <CustomMetrics lookup={output.namedScores} />
+                <span className="fail-reason">
+                  {chunks[0]
+                    ?.trim()
+                    .split('\n')
+                    .map((line, index) => (
+                      <React.Fragment key={index}>
+                        {line}
+                        <br />
+                      </React.Fragment>
+                    ))}
+                </span>
+              </div>
+            </>
+          )}
         </>
       )}
       {showPrompts && firstOutput.prompt && (

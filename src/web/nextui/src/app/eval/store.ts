@@ -4,6 +4,18 @@ import { get, set, del } from 'idb-keyval';
 
 import type { EvaluateTable, UnifiedConfig } from './types';
 
+const storage: StateStorage = {
+  getItem: async (name: string): Promise<string | null> => {
+    return (await get(name)) || null;
+  },
+  setItem: async (name: string, value: string): Promise<void> => {
+    await set(name, value);
+  },
+  removeItem: async (name: string): Promise<void> => {
+    await del(name);
+  },
+};
+
 interface TableState {
   evalId: string | null;
   setEvalId: (evalId: string) => void;
@@ -26,19 +38,9 @@ interface TableState {
   setPrettifyJson: (prettifyJson: boolean) => void;
   showPrompts: boolean;
   setShowPrompts: (showPrompts: boolean) => void;
+  showPassFail: boolean;
+  setShowPassFail: (showPassFail: boolean) => void;
 }
-
-const storage: StateStorage = {
-  getItem: async (name: string): Promise<string | null> => {
-    return (await get(name)) || null;
-  },
-  setItem: async (name: string, value: string): Promise<void> => {
-    await set(name, value);
-  },
-  removeItem: async (name: string): Promise<void> => {
-    await del(name);
-  },
-};
 
 export const useStore = create<TableState>()(
   persist(
@@ -64,6 +66,8 @@ export const useStore = create<TableState>()(
       setPrettifyJson: (prettifyJson: boolean) => set(() => ({ prettifyJson })),
       showPrompts: false,
       setShowPrompts: (showPrompts: boolean) => set(() => ({ showPrompts })),
+      showPassFail: true,
+      setShowPassFail: (showPassFail: boolean) => set(() => ({ showPassFail })),
     }),
     {
       name: 'ResultsViewStorage',
