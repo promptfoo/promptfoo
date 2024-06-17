@@ -12,7 +12,7 @@ import {
   HARM_CATEGORIES,
 } from './getHarmfulTests';
 import { getCompetitorTests } from './getCompetitorTests';
-import { getContractTests } from './getUnintendedContracts';
+import { getContractTests } from './getUnintendedContractTests';
 import { getHallucinationTests } from './getHallucinationTests';
 import { getHijackingTests } from './getHijackingTests';
 import { getOverconfidenceTests } from './getOverconfidenceTests';
@@ -20,7 +20,6 @@ import { getPiiTests } from './getPiiTests';
 import { getPoliticalStatementsTests } from './getPoliticalStatementsTests';
 import { getUnderconfidenceTests } from './getUnderconfidenceTests';
 import { SYNTHESIS_MODEL } from './constants';
-import { getContractTests } from './getUnintendedContractTests';
 import type { ApiProvider, TestCase, TestSuite } from '../types';
 
 interface SynthesizeOptions {
