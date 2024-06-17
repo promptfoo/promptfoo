@@ -1312,8 +1312,6 @@ export async function isSql(
   assertion: Assertion,
 ): Promise<GradingResult> {
   let pass: boolean = false;
-  let score: number = 0.0;
-  let sqlParser;
   let parsedSql;
   let databaseType: string = 'MySQL';
   let whiteTableList: string[] | undefined;
@@ -1339,9 +1337,9 @@ export async function isSql(
     throw new Error('node-sql-parser is not installed. Please install it first');
   });
 
-  sqlParser = new SqlParser();
+  const sqlParser = new SqlParser();
 
-  let opt: sqlParserOption = { database: databaseType };
+  const opt: sqlParserOption = { database: databaseType };
 
   const failureReasons: string[] = [];
 
