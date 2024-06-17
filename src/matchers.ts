@@ -53,7 +53,7 @@ function fromVars(vars?: Record<string, string | object>) {
     if (typeof value === 'object') {
       ret[key] = JSON.stringify(value);
     } else {
-      ret[key] = value;
+      ret[key] = JSON.stringify(value).slice(1, -1);
     }
   }
 
