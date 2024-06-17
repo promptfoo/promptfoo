@@ -1311,7 +1311,7 @@ export async function isSql(
   inverse: boolean,
   assertion: Assertion,
 ): Promise<GradingResult> {
-  let pass: boolean = false;
+  let pass = false;
   let parsedSql;
   let databaseType: string = 'MySQL';
   let whiteTableList: string[] | undefined;

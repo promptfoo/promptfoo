@@ -273,6 +273,12 @@ assert:
   - type: is-sql
 ```
 
+To use this assertion, you need to install the `node-sql-parser` package. You can install it using npm:
+
+```
+npm install node-sql-parser
+```
+
 You can optionally set a `databaseType` in the `value` to determine the specific database syntax that your LLM output will be validated against. The default database syntax is MySQL. For a complete and up-to-date list of supported database syntaxes, please refer to the [node-sql-parser documentation](https://github.com/taozhi8833998/node-sql-parser?tab=readme-ov-file#supported-database-sql-syntax).  
 The supported database syntax list:
 
@@ -302,13 +308,13 @@ assert:
 You can also optionally set a `whiteTableList`/`whiteColumnList` in the `value` to determine the SQL authority list that your LLM output will be validated against.  
 The format of whiteTableList:
 
-```md
+```
 {type}::{dbName}::{tableName} // type could be select, update, delete or insert
 ```
 
 The format of whiteColumnList:
 
-```md
+```
 {type}::{tableName}::{columnName} // type could be select, update, delete or insert
 ```
 
