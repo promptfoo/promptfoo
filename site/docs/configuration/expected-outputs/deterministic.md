@@ -305,14 +305,14 @@ assert:
       databaseType: 'MySQL'
 ```
 
-You can also optionally set a `whiteTableList`/`whiteColumnList` in the `value` to determine the SQL authority list that your LLM output will be validated against.  
-The format of whiteTableList:
+You can also optionally set a `allowedTables`/`allowedColumns` in the `value` to determine the SQL authority list that your LLM output will be validated against.  
+The format of allowedTables:
 
 ```
 {type}::{dbName}::{tableName} // type could be select, update, delete or insert
 ```
 
-The format of whiteColumnList:
+The format of allowedColumns:
 
 ```
 {type}::{tableName}::{columnName} // type could be select, update, delete or insert
@@ -327,9 +327,9 @@ assert:
   - type: is-sql
     value:
       databaseType: 'MySQL'
-      whiteTableList:
+      allowedTables:
         - '(select|update|insert|delete)::null::departments'
-      whiteColumnList:
+      allowedColumns:
         - 'select::null::name'
         - 'update::null::id'
 ```

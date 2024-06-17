@@ -490,7 +490,7 @@ describe('runAssertion', () => {
     type: 'is-sql',
     value: {
       databaseType: 'MySQL',
-      whiteTableList: ['(select|update|insert|delete)::null::departments'],
+      allowedTables: ['(select|update|insert|delete)::null::departments'],
     },
   };
 
@@ -498,7 +498,7 @@ describe('runAssertion', () => {
     type: 'is-sql',
     value: {
       databaseType: 'MySQL',
-      whiteColumnList: ['select::null::name', 'update::null::id'],
+      allowedColumns: ['select::null::name', 'update::null::id'],
     },
   };
 
@@ -506,8 +506,8 @@ describe('runAssertion', () => {
     type: 'is-sql',
     value: {
       databaseType: 'MySQL',
-      whiteTableList: ['(select|update|insert|delete)::null::departments'],
-      whiteColumnList: ['select::null::name', 'update::null::id'],
+      allowedTables: ['(select|update|insert|delete)::null::departments'],
+      allowedColumns: ['select::null::name', 'update::null::id'],
     },
   };
 
@@ -1065,7 +1065,7 @@ describe('runAssertion', () => {
     );
   });
 
-  it('should pass when the is-sql assertion passes given MySQL Database syntax and whiteTableList', async () => {
+  it('should pass when the is-sql assertion passes given MySQL Database syntax and allowedTables', async () => {
     const output = 'SELECT * FROM departments WHERE department_id = 1';
 
     const result: GradingResult = await runAssertion({
@@ -1079,7 +1079,7 @@ describe('runAssertion', () => {
     expect(result.reason).toBe('Assertion passed');
   });
 
-  it('should fail when the is-sql assertion fails given MySQL Database syntax and whiteTableList', async () => {
+  it('should fail when the is-sql assertion fails given MySQL Database syntax and allowedTables', async () => {
     const output = 'UPDATE employees SET department_id = 2 WHERE employee_id = 1';
 
     const result: GradingResult = await runAssertion({
@@ -1093,7 +1093,7 @@ describe('runAssertion', () => {
     expect(result.reason).toBe('It failed the provided authority table list check.');
   });
 
-  it('should pass when the is-sql assertion passes given MySQL Database syntax and whiteColumnList', async () => {
+  it('should pass when the is-sql assertion passes given MySQL Database syntax and allowedColumns', async () => {
     const output = 'SELECT name FROM t';
 
     const result: GradingResult = await runAssertion({
@@ -1107,7 +1107,7 @@ describe('runAssertion', () => {
     expect(result.reason).toBe('Assertion passed');
   });
 
-  it('should fail when the is-sql assertion fails given MySQL Database syntax and whiteColumnList', async () => {
+  it('should fail when the is-sql assertion fails given MySQL Database syntax and allowedColumns', async () => {
     const output = 'SELECT age FROM a WHERE id = 1';
 
     const result: GradingResult = await runAssertion({
@@ -1121,7 +1121,7 @@ describe('runAssertion', () => {
     expect(result.reason).toBe('It failed the provided authority column list check.');
   });
 
-  it('should pass when the is-sql assertion passes given MySQL Database syntax, whiteTableList, and whiteColumnList', async () => {
+  it('should pass when the is-sql assertion passes given MySQL Database syntax, allowedTables, and allowedColumns', async () => {
     const output = 'SELECT name FROM departments';
 
     const result: GradingResult = await runAssertion({
@@ -1135,7 +1135,7 @@ describe('runAssertion', () => {
     expect(result.reason).toBe('Assertion passed');
   });
 
-  it('should fail when the is-sql assertion fails given MySQL Database syntax, whiteTableList, and whiteColumnList', async () => {
+  it('should fail when the is-sql assertion fails given MySQL Database syntax, allowedTables, and allowedColumns', async () => {
     const output = `INSERT INTO departments (name) VALUES ('HR')`;
 
     const result: GradingResult = await runAssertion({
@@ -1149,7 +1149,7 @@ describe('runAssertion', () => {
     expect(result.reason).toBe('It failed the provided authority column list check.');
   });
 
-  it('should fail when the is-sql assertion fails given MySQL Database syntax, whiteTableList, and whiteColumnList', async () => {
+  it('should fail when the is-sql assertion fails given MySQL Database syntax, allowedTables, and allowedColumns', async () => {
     const output = 'UPDATE a SET id = 1';
 
     const result: GradingResult = await runAssertion({
@@ -1163,7 +1163,7 @@ describe('runAssertion', () => {
     expect(result.reason).toBe('It failed the provided authority table list check.');
   });
 
-  it('should fail when the is-sql assertion fails given MySQL Database syntax, whiteTableList, and whiteColumnList', async () => {
+  it('should fail when the is-sql assertion fails given MySQL Database syntax, allowedTables, and allowedColumns', async () => {
     const output = `DELETE FROM employees;`;
 
     const result: GradingResult = await runAssertion({

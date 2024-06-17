@@ -123,10 +123,10 @@ describe('Database Specific Syntax Tests', () => {
 
 // ------------------------------------------- White Table/Column List Tests ------------------------------------------- //
 describe('White Table/Column List Tests', () => {
-  it('should fail if the output SQL statement violate whiteTableList', async () => {
+  it('should fail if the output SQL statement violate allowedTables', async () => {
     const renderedValue = {
       database: 'MySQL',
-      whiteTableList: ['(select|update|insert|delete)::null::departments'],
+      allowedTables: ['(select|update|insert|delete)::null::departments'],
     };
     const outputString = `SELECT * FROM employees`;
     const result: GradingResult = await isSql(outputString, renderedValue, false, assertion);
@@ -134,10 +134,10 @@ describe('White Table/Column List Tests', () => {
     expect(result.reason).toBe('It failed the provided authority table list check.');
   });
 
-  it('should pass if the output SQL statement does not violate whiteTableList', async () => {
+  it('should pass if the output SQL statement does not violate allowedTables', async () => {
     const renderedValue = {
       database: 'MySQL',
-      whiteTableList: ['(select|update|insert|delete)::null::departments'],
+      allowedTables: ['(select|update|insert|delete)::null::departments'],
     };
     const outputString = `SELECT * FROM departments`;
     const result: GradingResult = await isSql(outputString, renderedValue, false, assertion);
@@ -145,10 +145,10 @@ describe('White Table/Column List Tests', () => {
     expect(result.reason).toBe('Assertion passed');
   });
 
-  it('should fail if the output SQL statement violate whiteColumnList', async () => {
+  it('should fail if the output SQL statement violate allowedColumns', async () => {
     const renderedValue = {
       database: 'MySQL',
-      whiteColumnList: ['select::null::name', 'update::null::id'],
+      allowedColumns: ['select::null::name', 'update::null::id'],
     };
     const outputString = `SELECT id FROM t`;
     const result: GradingResult = await isSql(outputString, renderedValue, false, assertion);
@@ -156,10 +156,10 @@ describe('White Table/Column List Tests', () => {
     expect(result.reason).toBe('It failed the provided authority column list check.');
   });
 
-  it('should pass if the output SQL statement does not violate whiteColumnList', async () => {
+  it('should pass if the output SQL statement does not violate allowedColumns', async () => {
     const renderedValue = {
       database: 'MySQL',
-      whiteColumnList: ['insert::department::dept_name', 'insert::department::location'],
+      allowedColumns: ['insert::department::dept_name', 'insert::department::location'],
     };
     const outputString = `INSERT INTO department (dept_name, location) VALUES ('Sales', 'New York')`;
     const result: GradingResult = await isSql(outputString, renderedValue, false, assertion);
@@ -174,10 +174,10 @@ describe('White Table/Column List Tests', () => {
    * in the whitelist to allow SQL statement like `UPDATE a SET id = 1`, despite the presence
    * of rule `update::a::id`
    */
-  // it('should pass if the output SQL statement does not violate whiteColumnList', () => {
+  // it('should pass if the output SQL statement does not violate allowedColumns', () => {
   //   const renderedValue = {
   //     database: 'MySQL',
-  //     whiteColumnList: ['update::a::id'],
+  //     allowedColumns: ['update::a::id'],
   //   };
   //   const outputString = `UPDATE a SET id = 1`;
   //   const result = testFunction(renderedValue, outputString, false);
@@ -189,10 +189,10 @@ describe('White Table/Column List Tests', () => {
    * Similar issue: the error message is Error: authority = 'select::null::id' is required
    * in column whiteList to execute SQL = 'UPDATE employee SET salary = 50000 WHERE id = 1'
    */
-  // it('should pass if the output SQL statement does not violate whiteColumnList', () => {
+  // it('should pass if the output SQL statement does not violate allowedColumns', () => {
   //   const renderedValue = {
   //     database: 'MySQL',
-  //     whiteColumnList: ['update::employee::salary','select::employee::id'],
+  //     allowedColumns: ['update::employee::salary','select::employee::id'],
   //   };
   //   const outputString = `UPDATE employee SET salary = 50000 WHERE id = 1`;
   //   const result = testFunction(renderedValue, outputString, false);

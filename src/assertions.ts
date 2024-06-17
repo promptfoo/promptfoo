@@ -1320,13 +1320,13 @@ export async function isSql(
   if (renderedValue && typeof renderedValue === 'object') {
     const value = renderedValue as {
       database?: string;
-      whiteTableList?: string[];
-      whiteColumnList?: string[];
+      allowedTables?: string[];
+      allowedColumns?: string[];
     };
 
     databaseType = value.database || 'MySQL';
-    whiteTableList = value.whiteTableList;
-    whiteColumnList = value.whiteColumnList;
+    whiteTableList = value.allowedTables;
+    whiteColumnList = value.allowedColumns;
   }
 
   if (renderedValue && typeof renderedValue !== 'object') {
