@@ -82,8 +82,6 @@ function getFinalTest(test: TestCase, assertion: Assertion) {
   return Object.freeze(ret);
 }
 
-const sqlParser = new Parser();
-
 function coerceString(value: string | object): string {
   if (typeof value === 'string') {
     return value;
