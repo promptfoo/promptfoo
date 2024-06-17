@@ -18,7 +18,7 @@ import { getUnderconfidenceTests } from './getUnderconfidenceTests';
 import { getPiiTests } from './getPiiTests';
 import { getCompetitorTests } from './getCompetitorTests';
 import { SYNTHESIS_MODEL } from './constants';
-import { getContractTests } from './getUnintendedContracts';
+import { getContractTests } from './getUnintendedContractTests';
 import type { ApiProvider, TestCase, TestSuite } from '../types';
 
 interface SynthesizeOptions {
