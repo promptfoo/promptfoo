@@ -11,12 +11,14 @@ import {
   addIterativeJailbreaks,
   HARM_CATEGORIES,
 } from './getHarmfulTests';
-import { getHijackingTests } from './getHijackingTests';
-import { getHallucinationTests } from './getHallucinationTests';
-import { getOverconfidenceTests } from './getOverconfidenceTests';
-import { getUnderconfidenceTests } from './getUnderconfidenceTests';
-import { getPiiTests } from './getPiiTests';
 import { getCompetitorTests } from './getCompetitorTests';
+import { getContractTests } from './getUnintendedContracts';
+import { getHallucinationTests } from './getHallucinationTests';
+import { getHijackingTests } from './getHijackingTests';
+import { getOverconfidenceTests } from './getOverconfidenceTests';
+import { getPiiTests } from './getPiiTests';
+import { getPoliticalStatementsTests } from './getPoliticalStatementsTests';
+import { getUnderconfidenceTests } from './getUnderconfidenceTests';
 import { SYNTHESIS_MODEL } from './constants';
 import { getContractTests } from './getUnintendedContractTests';
 import type { ApiProvider, TestCase, TestSuite } from '../types';
@@ -39,6 +41,7 @@ const ALL_PLUGINS = new Set(
     'jailbreak',
     'overreliance',
     'pii',
+    'politics',
     'prompt-injection',
   ].concat(Object.keys(HARM_CATEGORIES)),
 );
@@ -53,6 +56,7 @@ const DEFAULT_PLUGINS = new Set(
     'jailbreak',
     'overreliance',
     'pii',
+    'politics',
     'prompt-injection',
   ].concat(Object.keys(HARM_CATEGORIES)),
 );
@@ -150,6 +154,7 @@ export async function synthesize({
     jailbreak: addIterativeJailbreaks.bind(null, adversarialPrompts),
     overreliance: getUnderconfidenceTests,
     pii: getPiiTests,
+    politics: getPoliticalStatementsTests,
     'prompt-injection': addInjections.bind(null, adversarialPrompts),
   };
 

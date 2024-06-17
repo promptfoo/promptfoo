@@ -127,13 +127,13 @@ Show details of a specific resource.
 
 Import an eval file from JSON format.
 
-## `promptfoo export`
+## `promptfoo export <evalId>`
 
-Export an eval record to JSON format. Outputs to stdout by default.
+Export an eval record to JSON format. To export the most recent, use evalId `latest`.
 
-| Option                    | Description   |
-| ------------------------- | ------------- |
-| `-o, --output <filepath>` | File to write |
+| Option                    | Description                                 |
+| ------------------------- | ------------------------------------------- |
+| `-o, --output <filepath>` | File to write. Writes to stdout by default. |
 
 # Environment variables
 
