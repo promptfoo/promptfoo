@@ -212,7 +212,7 @@ module.exports = function (varName, prompt, otherVars) {
 };
 `;
 
-export const DEFAULT_README = `To get started, set your OPENAI_API_KEY environment variable.
+export const DEFAULT_README = `To get started, set your OPENAI_API_KEY environment variable, or other required keys for the providers you selected.
 
 Next, edit promptfooconfig.yaml.
 
@@ -279,16 +279,6 @@ export async function createDummyFiles(directory: string | null, interactive: bo
       language = resp.language;
     }
 
-    if (action === 'compare') {
-      prompts.push(`Write a tweet about {{topic}}`);
-      prompts.push(`Write a concise, funny tweet about {{topic}}`);
-    } else if (action === 'rag') {
-      prompts.push(
-        'Write a customer service response to:\n\n{{inquiry}}\n\nUse these documents:\n\n{{context}}',
-      );
-    } else if (action === 'agent') {
-      prompts.push(`Fulfill this user helpdesk ticket: {{inquiry}}`);
-    }
     const choices: { name: string; value: (string | object)[] }[] = [
       { name: 'Choose later', value: ['openai:gpt-3.5-turbo', 'openai:gpt-4o'] },
       {
@@ -328,6 +318,14 @@ export async function createDummyFiles(directory: string | null, interactive: bo
         value: [
           'anthropic:messages:claude-3-haiku-20240307',
           'anthropic:messages:claude-3-opus-20240307',
+        ],
+      },
+      {
+        name: '[HuggingFace] Llama, Phi, Gemma, ...',
+        value: [
+          'huggingface:text-generation:meta-llama/Meta-Llama-3-8B-Instruct',
+          'huggingface:text-generation:microsoft/Phi-3-mini-4k-instruct',
+          'huggingface:text-generation:google/gemma-2b-it',
         ],
       },
       {
@@ -372,7 +370,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
       },
     ])) as { providerChoices: (string | object)[] };
 
-    if (providerChoices && providerChoices.length > 0) {
+    if (providerChoices.length > 0) {
       const flatProviders = providerChoices.flat();
       if (flatProviders.length > 3) {
         providers.push(
@@ -403,6 +401,19 @@ export async function createDummyFiles(directory: string | null, interactive: bo
     } else {
       providers.push('openai:gpt-3.5-turbo');
       providers.push('openai:gpt-4o');
+    }
+
+    if (action === 'compare') {
+      prompts.push(`Write a tweet about {{topic}}`);
+      if (providers.length < 3) {
+        prompts.push(`Write a concise, funny tweet about {{topic}}`);
+      }
+    } else if (action === 'rag') {
+      prompts.push(
+        'Write a customer service response to:\n\n{{inquiry}}\n\nUse these documents:\n\n{{context}}',
+      );
+    } else if (action === 'agent') {
+      prompts.push(`Fulfill this user helpdesk ticket: {{inquiry}}`);
     }
 
     if (action === 'rag' || action === 'agent') {
