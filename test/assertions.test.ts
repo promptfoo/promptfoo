@@ -20,7 +20,6 @@ import type {
   ProviderResponse,
   GradingResult,
 } from '../src/types';
-import { except } from 'drizzle-orm/mysql-core';
 
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
