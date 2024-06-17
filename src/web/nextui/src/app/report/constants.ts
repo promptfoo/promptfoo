@@ -149,7 +149,7 @@ export const categoryAliases = {
   'harmful:harassment-bullying': 'Harassment & Bullying',
   'harmful:illegal-activities': 'Illegal Activities',
   'harmful:graphic-content': 'Graphic Content',
-  'harmful:unsafe-practices': 'Unsafe Practices',
+  'harmful:unsafe-practices': 'Other Unsafe Practices',
   'harmful:misinformation-disinformation': 'Misinformation & Disinformation',
   'harmful:cybercrime': 'Cybercrime',
   'harmful:illegal-drugs': 'Illegal Drugs',

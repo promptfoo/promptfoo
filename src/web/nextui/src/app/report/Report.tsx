@@ -30,6 +30,9 @@ const App: React.FC = () => {
     };
 
     const searchParams = new URLSearchParams(window.location.search);
+    if (!searchParams) {
+      return;
+    }
     const evalId = searchParams.get('evalId');
     if (evalId) {
       setEvalId(evalId);
@@ -62,14 +65,23 @@ const App: React.FC = () => {
       }
 
       const pass = row.success;
-      acc[label] = acc[label] || { pass: 0, total: 0 };
+      acc[label] = acc[label] || { pass: 0, total: 0, passWithFilter: 0 };
       acc[label].total++;
       if (pass) {
         acc[label].pass++;
+        acc[label].passWithFilter++;
+      } else if (
+        row.gradingResult?.componentResults?.some((result) => {
+          const isModeration = result.assertion?.type === 'moderation';
+          const isNotPass = !result.pass;
+          return isModeration && isNotPass;
+        })
+      ) {
+        acc[label].passWithFilter++;
       }
       return acc;
     },
-    {} as Record<string, { pass: number; total: number }>,
+    {} as Record<string, { pass: number; total: number; passWithFilter: number }>,
   );
 
   return (
