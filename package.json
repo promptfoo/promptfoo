@@ -55,6 +55,7 @@
     "@ibm-generative-ai/node-sdk": "^2.0.6",
     "google-auth-library": "^9.7.0",
     "googleapis": "^134.0.0",
+    "node-sql-parser": "^5.2.0",
     "langfuse": "^3.7.0"
   },
   "devDependencies": {
