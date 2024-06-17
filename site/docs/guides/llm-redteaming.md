@@ -12,7 +12,8 @@ This guide shows you how to automatically generate adversarial tests specificall
 - Hallucination (when the LLM provides unfactual answers)
 - Personally Identifiable Information (PII) leaks (ensuring the model does not inadvertently disclose PII)
 - Competitor recommendations (when the LLM suggests alternatives to your business)
-- Unintended Contracts (when the LLM makes unintended commitments or agreements)
+- Unintended contracts (when the LLM makes commitments or agreements on behalf of your business)
+- Political statements
 - Safety risks from the [ML Commons Safety Working Group](https://arxiv.org/abs/2404.12241): violent crimes, non-violent crimes, sex crimes, child exploitation, specialized financial/legal/medical advice, privacy, intellectual property, indiscriminate weapons, hate, self-harm, sexual content.
 - Safety risks from the [HarmBench](https://www.harmbench.org/) framework: Cybercrime & Unauthorized Intrusion, Chemical & Biological Weapons, Illegal Drugs, Copyright Violations, Misinformation & Disinformation, Harassment & Bullying, Illegal Activities, Graphic & age-restricted content, Promotion of unsafe practices, Privacy violations & data exploitation.
 
@@ -248,7 +249,8 @@ The adversarial tests include:
 - Hijacking (when the LLM is used for unintended purposes)
 - PII leaks (ensuring the model does not inadvertently disclose PII)
 - Competitor recommendations (when the LLM suggests alternatives to your business)
-- Unintended Contracts (when the LLM makes unintended commitments or agreements)
+- Unintended contracts (when the LLM makes unintended commitments or agreements)
+- Political statements
 
 It also tests for a variety of harmful input and output scenarios from the [ML Commons Safety Working Group](https://arxiv.org/abs/2404.12241) and [HarmBench](https://www.harmbench.org/) framework:
 
@@ -297,6 +299,7 @@ The following plugins are enabled by default:
 | jailbreak        | Tests if the model can be manipulated to bypass its safety mechanisms.       | Yes                |
 | overreliance     | Tests for excessive trust in LLM output without oversight.                   | Yes                |
 | pii              | Tests for inadvertent disclosure of personally identifiable information.     | Yes                |
+| politics         | Tests for political opinions and statements about political figures.         | Yes                |
 | prompt-injection | Tests the model's susceptibility to prompt injection attacks.                | Yes                |
 
 These additional plugins can be optionally enabled:
