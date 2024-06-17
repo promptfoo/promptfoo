@@ -131,7 +131,9 @@ describe('White Table/Column List Tests', () => {
     const outputString = `SELECT * FROM employees`;
     const result: GradingResult = await isSql(outputString, renderedValue, false, assertion);
     expect(result.pass).toBe(false);
-    expect(result.reason).toBe('It failed the provided authority table list check.');
+    expect(result.reason).toBe(
+      `SQL validation failed: authority = 'select::null::employees' is required in table whiteList to execute SQL = 'SELECT * FROM employees'.`,
+    );
   });
 
   it('should pass if the output SQL statement does not violate allowedTables', async () => {
@@ -153,7 +155,9 @@ describe('White Table/Column List Tests', () => {
     const outputString = `SELECT id FROM t`;
     const result: GradingResult = await isSql(outputString, renderedValue, false, assertion);
     expect(result.pass).toBe(false);
-    expect(result.reason).toBe('It failed the provided authority column list check.');
+    expect(result.reason).toBe(
+      `SQL validation failed: authority = 'select::null::id' is required in column whiteList to execute SQL = 'SELECT id FROM t'.`,
+    );
   });
 
   it('should pass if the output SQL statement does not violate allowedColumns', async () => {

@@ -1359,7 +1359,8 @@ export async function isSql(
       sqlParser.whiteListCheck(outputString, whiteTableList, opt);
     } catch (err) {
       pass = inverse;
-      failureReasons.push('It failed the provided authority table list check.');
+      const error = err as Error;
+      failureReasons.push(`SQL validation failed: ${error.message}.`);
     }
   }
 
@@ -1369,7 +1370,8 @@ export async function isSql(
       sqlParser.whiteListCheck(outputString, whiteColumnList, opt);
     } catch (err) {
       pass = inverse;
-      failureReasons.push('It failed the provided authority column list check.');
+      const error = err as Error;
+      failureReasons.push(`SQL validation failed: ${error.message}.`);
     }
   }
 
