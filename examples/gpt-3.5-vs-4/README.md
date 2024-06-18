@@ -2,12 +2,12 @@ This example shows how you can use promptfoo to generate a side-by-side eval of 
 
 Configure in `promptfooconfig.yaml`. Run with:
 
-```
+```sh
 promptfoo eval
 ```
 
 Full command-line equivalent:
 
-```
+```sh
 promptfoo eval --prompts prompts.txt --providers openai:gpt-3.5-turbo openai:gpt-4
 ```

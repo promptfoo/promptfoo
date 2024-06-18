@@ -38,7 +38,7 @@ Dataset generation uses your prompts and any existing test cases to generate new
 
 Run the command in the same directory as your config:
 
-```
+```sh
 promptfoo generate dataset
 ```
 
@@ -46,13 +46,13 @@ This will output the `tests` YAML to your terminal.
 
 If you want to write the new dataset to a file:
 
-```
+```sh
 promptfoo generate dataset -o tests.yaml
 ```
 
 Or if you want to edit the existing config in-place:
 
-```
+```sh
 promptfoo generate dataset -w
 ```
 
@@ -71,6 +71,6 @@ You can customize the dataset generation process by providing additional options
 
 For example:
 
-```bash
+```sh
 promptfoo generate dataset --config path_to_config.yaml --output path_to_output.yaml --instructions "Consider edge cases related to international travel"
 ```

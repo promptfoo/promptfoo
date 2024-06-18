@@ -4,7 +4,7 @@ Next, have a look at the custom prompt in promptfooconfig.yaml.
 
 Then run:
 
-```
+```sh
 promptfoo eval
 ```
 

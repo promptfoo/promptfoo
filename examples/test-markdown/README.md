@@ -2,7 +2,7 @@ To get started, edit promptfooconfig.yaml.
 
 Then run:
 
-```
+```sh
 promptfoo eval
 ```
 

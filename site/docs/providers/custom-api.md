@@ -139,7 +139,7 @@ providers: ['file://relative/path/to/customApiProvider.js']
 
 Alternatively, you can pass the path to the custom API provider directly in the CLI:
 
-```bash
+```sh
 promptfoo eval -p prompt1.txt prompt2.txt -o results.csv  -v vars.csv -r ./customApiProvider.js
 ```
 

@@ -25,7 +25,7 @@ providers: ['exec: python chain.py']
 
 Or in the CLI:
 
-```bash
+```sh
 promptfoo eval -p prompt1.txt prompt2.txt -o results.csv  -v vars.csv -r 'exec: python chain.py'
 ```
 

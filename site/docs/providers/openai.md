@@ -8,7 +8,7 @@ To use the OpenAI API, set the `OPENAI_API_KEY` environment variable, specify vi
 
 Example:
 
-```bash
+```sh
 export OPENAI_API_KEY=your_api_key_here
 ```
 

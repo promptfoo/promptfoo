@@ -187,7 +187,7 @@ tests:
 
 With your configuration and test cases set up, you're ready to run the comparison. Use the following command to start the evaluation:
 
-```bash
+```sh
 npx promptfoo@latest eval
 ```
 
@@ -195,7 +195,7 @@ This command will process each test case through both Gemma and Llama, allowing 
 
 Then open the viewer:
 
-```bash
+```sh
 npx promptfoo@latest view
 ```
 

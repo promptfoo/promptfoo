@@ -20,7 +20,7 @@ This guide assumes you have installed both promptfoo and Ollama.
 
 Run this on the command line to download the Llama2 base model:
 
-```
+```sh
 ollama pull llama2
 ollama pull llama2-uncensored
 ```
@@ -29,7 +29,7 @@ ollama pull llama2-uncensored
 
 Initialize a new directory `llama-gpt-comparison` that will contain our prompts and test cases:
 
-```
+```sh
 npx promptfoo@latest init llama-gpt-comparison
 ```
 
@@ -196,7 +196,7 @@ Learn more about various test assertions [here](/docs/configuration/expected-out
 
 Once your config file is set up, you can run the comparison using the `promptfoo eval` command:
 
-```
+```sh
 npx promptfoo@latest eval
 ```
 
@@ -206,7 +206,7 @@ Then, to open the web viewer, run `npx promptfoo@latest view`.
 
 You can also output a CSV:
 
-```
+```sh
 npx promptfoo@latest eval -o output.csv
 ```
 

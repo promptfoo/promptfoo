@@ -46,7 +46,7 @@ tests:
 
 Now that we've set up the config, run the eval on your command line:
 
-```
+```sh
 npx promptfoo@latest eval
 ```
 

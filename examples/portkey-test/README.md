@@ -5,7 +5,7 @@ There are two examples:
 
 Then run:
 
-```
+```sh
 promptfoo eval
 ```
 

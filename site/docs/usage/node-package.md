@@ -9,7 +9,7 @@ sidebar_label: Node package
 
 promptfoo is available as a node package [on npm](https://www.npmjs.com/package/promptfoo):
 
-```
+```sh
 npm install promptfoo
 ```
 

@@ -333,7 +333,7 @@ You can load your tests from [Google Sheets](/docs/configuration/guide#loading-t
 
 The results of the evaluation are written to this file. For example:
 
-```
+```sh
 promptfoo eval --output filepath.json
 ```
 

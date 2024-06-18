@@ -23,7 +23,7 @@ The end result is a side-by-side comparison view that looks like this:
 
 Create a new promptfoo project:
 
-```bash
+```sh
 npx promptfoo@latest init cohere-benchmark
 cd cohere-benchmark
 ```
@@ -41,7 +41,7 @@ providers:
 
 Set the API keys:
 
-```bash
+```sh
 export COHERE_API_KEY=your_cohere_key
 export OPENAI_API_KEY=your_openai_key
 export ANTHROPIC_API_KEY=your_anthropic_key
@@ -109,13 +109,13 @@ tests:
 
 Run the benchmark:
 
-```bash
+```sh
 npx promptfoo@latest eval
 ```
 
 And view the results:
 
-```bash
+```sh
 npx promptfoo@latest view
 ```
 

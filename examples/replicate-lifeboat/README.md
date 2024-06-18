@@ -4,7 +4,7 @@ Then, add your test cases.
 
 Then run:
 
-```
+```sh
 promptfoo eval
 ```
 

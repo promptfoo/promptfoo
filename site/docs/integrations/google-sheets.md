@@ -38,7 +38,7 @@ For sheets that are not publicly accessible, you can use authenticated access. T
 
 1. **Configure Environment**: Set the `GOOGLE_APPLICATION_CREDENTIALS` environment variable to the path of the JSON key file:
 
-```bash
+```sh
 export GOOGLE_APPLICATION_CREDENTIALS="/path/to/your/service-account-file.json"
 ```
 

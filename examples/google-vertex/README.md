@@ -1,12 +1,12 @@
 To call Vertex AI models in Node, you'll need to install Google's official auth client as a peer dependency:
 
-```
+```sh
 npm i google-auth-library
 ```
 
 Make sure the Vertex AI API is enabled for the relevant project in Google Cloud. Then, ensure that you've selected that project in the gcloud cli:
 
-```
+```sh
 gcloud config set project PROJECT_ID
 ```
 
@@ -20,7 +20,7 @@ Then, edit promptfooconfig.yaml
 
 Then run:
 
-```
+```sh
 promptfoo eval
 ```
 

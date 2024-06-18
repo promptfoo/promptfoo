@@ -5,7 +5,7 @@ Next, duplicate the Google Sheet in promptfooconfig.yaml and replace the URL.
 
 Then run:
 
-```
+```sh
 promptfoo eval
 ```
 

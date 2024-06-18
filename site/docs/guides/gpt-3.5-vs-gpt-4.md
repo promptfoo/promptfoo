@@ -23,7 +23,7 @@ Before we dive in, ensure you have the following ready:
 
 Create a dedicated directory for your comparison project:
 
-```bash
+```sh
 npx promptfoo@latest init gpt-comparison
 ```
 
@@ -64,13 +64,13 @@ tests:
 
 Execute the comparison with the following command:
 
-```bash
+```sh
 npx promptfoo@latest eval
 ```
 
 This will process the riddles against both GPT-3.5 and GPT-4, providing you with side-by-side results in your command line interface:
 
-```bash
+```sh
 npx promptfoo@latest view
 ```
 

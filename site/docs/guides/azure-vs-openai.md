@@ -28,7 +28,7 @@ Before we get started, you need the following:
 
 Additionally, make sure you have the following environment variables set:
 
-```bash
+```sh
 OPENAI_API_KEY='...'
 AZURE_OPENAI_API_KEY='...'
 ```
@@ -37,7 +37,7 @@ AZURE_OPENAI_API_KEY='...'
 
 Create a new directory for your comparison project and initialize it:
 
-```bash
+```sh
 npx promptfoo@latest init openai-azure-comparison
 ```
 
@@ -91,7 +91,7 @@ tests:
 
 Execute the comparison using the `promptfoo eval` command:
 
-```bash
+```sh
 npx promptfoo@latest eval --no-cache
 ```
 
