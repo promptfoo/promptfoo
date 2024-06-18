@@ -124,7 +124,7 @@ npx promptfoo@latest view
 
 ## Evaluating randomness
 
-LLMs are inherently nondeterminstic, which means their outputs will vary with each call at nonzero temperatures (and sometimes even at zero temperature). OpenAI introduced the `seed` variable to improve reproducibility of outputs, and other providers will probably follow suit.
+LLMs are inherently nondeterministic, which means their outputs will vary with each call at nonzero temperatures (and sometimes even at zero temperature). OpenAI introduced the `seed` variable to improve reproducibility of outputs, and other providers will probably follow suit.
 
 Set a constant seed in the provider config:
 

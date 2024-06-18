@@ -10,7 +10,7 @@
 - voyage-large-2
 - voyage-2
 
-To use it, set the `VOYAGE_API_KEY` enviornment variable.
+To use it, set the `VOYAGE_API_KEY` environment variable.
 
 Use it like so:
 

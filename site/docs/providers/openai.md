@@ -434,7 +434,7 @@ tests:
 You can specify JavaScript callbacks that are automatically called to create
 the output of a function tool call.
 
-This requires definining your config in a JavaScript file instead of YAML.
+This requires defining your config in a JavaScript file instead of YAML.
 
 ```js
 module.exports = /** @type {import('promptfoo').TestSuiteConfig} */ ({

@@ -168,7 +168,7 @@ In the end, you will see a result like this:
 
 ![gpt 3.5 vs gpt 4](/img/docs/gpt-3.5-vs-gpt-4.png)
 
-In this particular eval, it looks like GPT-3.5 got all the riddles correct except for one (it misinterets the meaning of "single"!). But, GPT-4 failed to meet our cost requirements so it scored lower overall.
+In this particular eval, it looks like GPT-3.5 got all the riddles correct except for one (it misinterprets the meaning of "single"!). But, GPT-4 failed to meet our cost requirements so it scored lower overall.
 
 The tradeoff between cost, latency, and accuracy is going to be tailored for each application. That's why it's important to run your own eval.
 
