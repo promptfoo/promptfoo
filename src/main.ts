@@ -223,7 +223,7 @@ async function main() {
     const packageJson = JSON.parse(
       fs.readFileSync(path.join(getDirectory(), '../package.json'), 'utf8'),
     );
-    console.info(packageJson.version);
+    logger.info(packageJson.version);
     process.exit(0);
   });
 
