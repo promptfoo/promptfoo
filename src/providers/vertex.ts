@@ -1,3 +1,5 @@
+import Clone from 'rfdc';
+
 import logger from '../logger';
 import { parseChatPrompt } from './shared';
 import { getCache, isCacheEnabled } from '../cache';
@@ -88,6 +90,8 @@ interface FileData {
   mimeType?: string;
   fileUri: string;
 }
+
+const clone = Clone();
 
 class VertexGenericProvider implements ApiProvider {
   modelName: string;
@@ -222,7 +226,7 @@ export class VertexChatProvider extends VertexGenericProvider {
     let systemInstruction: Content | undefined;
     if (this.config.systemInstruction) {
       // Make a copy
-      systemInstruction = JSON.parse(JSON.stringify(this.config.systemInstruction));
+      systemInstruction = clone(this.config.systemInstruction);
       if (systemInstruction && context?.vars) {
         const nunjucks = getNunjucksEngine();
         for (const part of systemInstruction.parts) {

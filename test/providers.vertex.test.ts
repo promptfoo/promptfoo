@@ -1,6 +1,5 @@
 import { VertexChatProvider } from '../src/providers/vertex';
 import { getCache, isCacheEnabled } from '../src/cache';
-import * as vertexModule from '../src/providers/vertex';
 import * as vertexUtil from '../src/providers/vertexUtil';
 
 import type { JSONClient } from 'google-auth-library/build/src/auth/googleauth';

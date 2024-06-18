@@ -1,4 +1,4 @@
-import { TestCase, TestSuite } from '../../../src/types';
+import { TestSuite } from '../../../src/types';
 
 import { filterTests } from '../../../src/commands/eval/filterTests';
 

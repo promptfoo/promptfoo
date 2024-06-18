@@ -7,7 +7,7 @@ import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
 import { getApiBaseUrl } from '@/api';
 import { IS_RUNNING_LOCALLY } from '@/constants';
 import { getResult } from '@/database';
-import { EvaluateSummary, EvaluateTestSuite, SharedResults, UnifiedConfig } from '@/../../../types';
+import { EvaluateSummary, SharedResults, UnifiedConfig } from '@/../../../types';
 import Eval from '../Eval';
 
 import './page.css';
