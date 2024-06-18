@@ -96,7 +96,7 @@ function EvalOutputCell({
   // Handle failure messages by splitting the text at '---'
   if (!output.pass && text.includes('---')) {
     failReasons = (output.gradingResult?.componentResults || [])
-      .filter((result) => !result.pass)
+      .filter((result) => (result ? !result.pass : false))
       .map((result) => result.reason);
     text = text.split('---').slice(1).join('---');
   }
@@ -395,7 +395,7 @@ function EvalOutputCell({
   if (gradingResult) {
     if (gradingResult.componentResults) {
       gradingResult.componentResults.forEach((result) => {
-        if (result.pass) {
+        if (result?.pass) {
           passCount++;
         } else {
           failCount++;
