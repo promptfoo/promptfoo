@@ -50,7 +50,8 @@ describe('prompts', () => {
   });
 
   it('readPrompts with multiple prompt files', async () => {
-    jest.mocked(fs.readFileSync)
+    jest
+      .mocked(fs.readFileSync)
       .mockReturnValueOnce('Test prompt 1')
       .mockReturnValueOnce('Test prompt 2');
     jest.mocked(fs.statSync).mockReturnValue({ isDirectory: () => false });

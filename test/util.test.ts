@@ -476,7 +476,8 @@ describe('util', () => {
       };
 
       jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob]);
-      jest.mocked(fs.readFileSync)
+      jest
+        .mocked(fs.readFileSync)
         .mockReturnValueOnce(JSON.stringify(config1))
         .mockReturnValueOnce(JSON.stringify(config2))
         .mockReturnValueOnce(JSON.stringify(config1))

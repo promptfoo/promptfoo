@@ -405,9 +405,9 @@ describe('getGradingProvider', () => {
 
 describe('getAndCheckProvider', () => {
   it('should return the default provider when provider is not defined', async () => {
-    await expect(getAndCheckProvider('text', undefined, DefaultGradingProvider, 'test check')).resolves.toBe(
-      DefaultGradingProvider,
-    );
+    await expect(
+      getAndCheckProvider('text', undefined, DefaultGradingProvider, 'test check'),
+    ).resolves.toBe(DefaultGradingProvider);
   });
 
   it('should return the default provider when provider does not support type', async () => {
