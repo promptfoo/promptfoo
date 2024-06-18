@@ -23,7 +23,7 @@ Although the configuration below uses Replicate, it wouldn't take much modificat
 
 Let's start by creating a new directory for our eval:
 
-```
+```sh
 npx promptfoo@latest init gemma-vs-llama
 ```
 

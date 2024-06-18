@@ -18,7 +18,7 @@ With promptfoo, you can:
 
 The goal: **test-driven LLM development** instead of trial-and-error.
 
-```
+```sh
 npx promptfoo@latest init
 ```
 
@@ -58,7 +58,7 @@ As you collect more examples and establish a user feedback loop, continue to bui
 
 To get started, run this command:
 
-```
+```sh
 npx promptfoo@latest init
 ```
 

@@ -20,7 +20,7 @@ Promptfoo is a command-line tool that can help you run benchmarks across differe
 
 First, we'll initialize the project directory for the eval.
 
-```
+```sh
 npx promptfoo@latest init replicate-lifeboat-eval
 ```
 

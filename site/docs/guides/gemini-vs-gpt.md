@@ -27,7 +27,7 @@ Before starting, ensure you have the following:
 
 Create a new directory for your benchmarking project:
 
-```
+```sh
 npx promptfoo@latest init gemini-gpt-comparison
 ```
 

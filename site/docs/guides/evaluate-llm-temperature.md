@@ -24,7 +24,7 @@ By running a temperature eval, you can make data-driven decisions that balance t
 
 Before setting up an evaluation to compare the performance of your LLM at different temperatures, you'll need to initialize a configuration file. Run the following command to create a `promptfooconfig.yaml` file:
 
-```
+```sh
 npx promptfoo@latest init
 ```
 

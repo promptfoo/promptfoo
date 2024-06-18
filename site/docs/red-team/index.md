@@ -156,7 +156,7 @@ You can begin red teaming your application in less than 5 minutes.
 
 ### Initialize the project
 
-```
+```sh
 npx promptfoo@latest init --no-interactive my-project
 cd my-project
 ```

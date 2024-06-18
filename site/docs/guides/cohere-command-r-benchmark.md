@@ -23,7 +23,7 @@ The end result is a side-by-side comparison view that looks like this:
 
 Create a new promptfoo project:
 
-```
+```sh
 npx promptfoo@latest init cohere-benchmark
 cd cohere-benchmark
 ```

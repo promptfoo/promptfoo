@@ -31,7 +31,7 @@ First, install [Node 18 or later](https://nodejs.org/en/download/package-manager
 
 Then create a new project for your red teaming needs:
 
-```
+```sh
 npx promptfoo@latest init my-redteam-project
 cd my-redteam-project
 ```

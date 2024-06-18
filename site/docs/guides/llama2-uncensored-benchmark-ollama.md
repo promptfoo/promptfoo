@@ -29,7 +29,7 @@ ollama pull llama2-uncensored
 
 Initialize a new directory `llama-gpt-comparison` that will contain our prompts and test cases:
 
-```
+```sh
 npx promptfoo@latest init llama-gpt-comparison
 ```
 

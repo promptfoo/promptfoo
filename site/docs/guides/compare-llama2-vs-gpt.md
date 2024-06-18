@@ -22,7 +22,7 @@ This guide assumes that you have promptfoo [installed](/docs/installation). It a
 
 Initialize a new directory `llama-gpt-comparison` that will contain our prompts and test cases:
 
-```
+```sh
 npx promptfoo@latest init llama-gpt-comparison
 ```
 

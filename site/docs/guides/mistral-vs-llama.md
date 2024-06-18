@@ -22,7 +22,7 @@ This guide assumes that you have promptfoo [installed](/docs/installation). It a
 
 Initialize a new directory `mistral-llama-comparison` that will contain our prompts and test cases:
 
-```
+```sh
 npx promptfoo@latest init mistral-llama-comparison
 ```
 

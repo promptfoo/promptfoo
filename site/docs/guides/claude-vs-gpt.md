@@ -23,7 +23,7 @@ Before getting started, make sure you have:
 
 Create a new directory for your comparison project:
 
-```
+```sh
 npx promptfoo@latest init claude3-vs-gpt4
 cd claude3-vs-gpt4
 ```

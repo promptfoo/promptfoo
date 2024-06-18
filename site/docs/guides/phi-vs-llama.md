@@ -24,7 +24,7 @@ Before starting, ensure you have the following:
 
 First, create a new directory for your benchmark:
 
-```
+```sh
 npx promptfoo@latest init phi-vs-llama
 cd phi-vs-llama
 ```

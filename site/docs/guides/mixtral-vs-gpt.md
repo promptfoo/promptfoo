@@ -19,7 +19,7 @@ In this guide, we'll walk through the steps to compare three large language mode
 
 Create a new directory for your comparison project and initialize it with `promptfoo init`.
 
-```
+```sh
 npx promptfoo@latest init mixtral-gpt-comparison
 ```
 

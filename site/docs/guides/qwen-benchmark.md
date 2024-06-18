@@ -26,7 +26,7 @@ The chatbot should provide accurate information, respond quickly, and handle com
 
 Create a new directory for your comparison project and initialize it with `promptfoo init`.
 
-```
+```sh
 npx promptfoo@latest init --no-interactive qwen-benchmark
 ```
 

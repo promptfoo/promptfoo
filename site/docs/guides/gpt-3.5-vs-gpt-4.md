@@ -23,7 +23,7 @@ Before we dive in, ensure you have the following ready:
 
 Create a dedicated directory for your comparison project:
 
-```
+```sh
 npx promptfoo@latest init gpt-comparison
 ```
 

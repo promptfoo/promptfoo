@@ -23,7 +23,7 @@ While this guide focuses on using Replicate, this method supports many other pro
 
 Begin by creating a directory for your evaluation:
 
-```
+```sh
 npx promptfoo@latest init gemma-vs-mistral
 ```
 

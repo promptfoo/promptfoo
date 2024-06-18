@@ -24,7 +24,7 @@ The end result will be a custom benchmark that looks similar to this:
 
 Create a new directory for your comparison project and initialize it with `promptfoo init`.
 
-```
+```sh
 npx promptfoo@latest init dbrx-benchmark
 ```
 
