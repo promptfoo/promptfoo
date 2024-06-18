@@ -34,10 +34,6 @@ jest.mock('fs', () => ({
 jest.mock('../src/esm');
 jest.mock('../src/database');
 
-beforeEach(() => {
-  jest.clearAllMocks();
-});
-
 const mockApiProvider: ApiProvider = {
   id: jest.fn().mockReturnValue('test-provider'),
   callApi: jest.fn().mockResolvedValue({
@@ -67,7 +63,7 @@ function toPrompt(text: string): Prompt {
 }
 
 describe('evaluator', () => {
-  afterEach(() => {
+  beforeEach(() => {
     jest.clearAllMocks();
   });
 
@@ -686,31 +682,35 @@ describe('evaluator', () => {
     expect(summary.results[0].response?.output).toBe('First run ');
     expect(summary.results[1].response?.output).toBe('Second run First run ');
   });
-});
 
-test('should use the options from the test if they exist', async () => {
-  const testSuite: TestSuite = {
-    providers: [mockApiProvider],
-    prompts: [toPrompt('Test prompt')],
-    tests: [
-      {
-        vars: { var1: 'value1', var2: 'value2' },
-        options: {
-          transform: 'output + " postprocessed"',
+  it('should use the options from the test if they exist', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          vars: { var1: 'value1', var2: 'value2' },
+          options: {
+            transform: 'output + " postprocessed"',
+          },
         },
-      },
-    ],
-  };
+      ],
+    };
 
-  const summary = await evaluate(testSuite, {});
+    const summary = await evaluate(testSuite, {});
 
-  expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
-  expect(summary.stats.successes).toBe(1);
-  expect(summary.stats.failures).toBe(0);
-  expect(summary.results[0].response?.output).toBe('Test output postprocessed');
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
+    expect(summary.stats.successes).toBe(1);
+    expect(summary.stats.failures).toBe(0);
+    expect(summary.results[0].response?.output).toBe('Test output postprocessed');
+  });
 });
 
 describe('renderPrompt', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   it('should render a prompt with a single variable', async () => {
     const prompt = toPrompt('Test prompt {{ var1 }}');
     const renderedPrompt = await renderPrompt(prompt, { var1: 'value1' }, {});
@@ -806,6 +806,10 @@ describe('renderPrompt', () => {
 });
 
 describe('resolveVariables', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   it('should replace placeholders with corresponding variable values', () => {
     const variables = { final: '{{ my_greeting }}, {{name}}!', my_greeting: 'Hello', name: 'John' };
     const expected = { final: 'Hello, John!', my_greeting: 'Hello', name: 'John' };
@@ -839,6 +843,10 @@ describe('resolveVariables', () => {
 });
 
 describe('generateVarCombinations', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   it('should generate combinations for simple variables', () => {
     const vars = { language: 'English', greeting: 'Hello' };
     const expected = [{ language: 'English', greeting: 'Hello' }];

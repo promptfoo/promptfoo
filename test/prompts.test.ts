@@ -32,11 +32,10 @@ function toPrompt(text: string): Prompt {
   return { raw: text, label: text };
 }
 
-beforeEach(() => {
-  jest.clearAllMocks();
-});
-
 describe('prompts', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
   it('readPrompts with single prompt file', async () => {
     jest.mocked(fs.readFileSync).mockReturnValue('Test prompt 1\n---\nTest prompt 2');
     jest.mocked(fs.statSync).mockReturnValue({ isDirectory: () => false });

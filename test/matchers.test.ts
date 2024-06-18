@@ -116,7 +116,8 @@ describe('matchesSimilarity', () => {
     const result = await matchesSimilarity(expected, output, threshold, false, grading);
     expect(result.pass).toBeTruthy();
     expect(result.reason).toBe('Similarity 1.00 is greater than threshold 0.5');
-    expect(mockCallApi).toHaveBeenCalled();
+    expect(mockCallApi).toHaveBeenNthCalledWith(1, expected);
+    expect(mockCallApi).toHaveBeenNthCalledWith(2, output);
 
     mockCallApi.mockRestore();
   });
@@ -203,7 +204,7 @@ describe('matchesLlmRubric', () => {
     const result = await matchesLlmRubric(expected, output, options);
     expect(result.reason).toBe('Grading passed');
     expect(result.pass).toBeTruthy();
-    expect(mockCallApi).toHaveBeenCalled();
+    expect(mockCallApi).toHaveBeenCalledWith('Grading prompt');
 
     mockCallApi.mockRestore();
   });
