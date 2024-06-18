@@ -12,7 +12,6 @@ import {
   Tooltip,
   Colors,
   type TooltipItem,
-  type ChartData,
 } from 'chart.js';
 import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';

@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 
-import { createClientComponentClient, User, Session } from '@supabase/auth-helpers-nextjs';
+import { createClientComponentClient, User } from '@supabase/auth-helpers-nextjs';
 
 import type { AuthTokenResponse, AuthError } from '@supabase/supabase-js';
 import type { Database } from '@/types/supabase';
