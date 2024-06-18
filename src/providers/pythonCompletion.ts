@@ -76,7 +76,7 @@ export class PythonProvider implements ApiProvider {
           result = (await runPython(absPath, apiType, args, {
             pythonExecutable: this.config.pythonExecutable,
           })) as ProviderResponse;
-          if (!('output' in result) && !('error' in result)) {
+          if (!result || (!('output' in result) && !('error' in result))) {
             throw new Error(
               `The Python script \`${apiType}\` function must return a dict with an \`output\` string/object or \`error\` string, instead got: ${JSON.stringify(
                 result,
@@ -88,7 +88,7 @@ export class PythonProvider implements ApiProvider {
           result = (await runPython(absPath, apiType, args, {
             pythonExecutable: this.config.pythonExecutable,
           })) as ProviderEmbeddingResponse;
-          if (!('embedding' in result) && !('error' in result)) {
+          if (!result || (!('embedding' in result) && !('error' in result))) {
             throw new Error(
               `The Python script \`${apiType}\` function must return a dict with an \`embedding\` array or \`error\` string, instead got ${JSON.stringify(
                 result,
@@ -100,7 +100,7 @@ export class PythonProvider implements ApiProvider {
           result = (await runPython(absPath, apiType, args, {
             pythonExecutable: this.config.pythonExecutable,
           })) as ProviderClassificationResponse;
-          if (!('classification' in result) && !('error' in result)) {
+          if (!result || (!('classification' in result) && !('error' in result))) {
             throw new Error(
               `The Python script \`${apiType}\` function must return a dict with a \`classification\` object or \`error\` string, instead of ${JSON.stringify(
                 result,

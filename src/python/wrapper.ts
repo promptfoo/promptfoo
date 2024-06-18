@@ -34,6 +34,7 @@ export async function runPython(
 
   try {
     await fs.writeFile(tempJsonPath, safeJsonStringify(args));
+    logger.debug(`Running Python wrapper with args: ${safeJsonStringify(args)}`);
     const results = await PythonShell.run('wrapper.py', pythonOptions);
     logger.debug(`Python script ${absPath} returned: ${results.join('\n')}`);
     let result: { type: 'final_result'; data: any } | undefined;
