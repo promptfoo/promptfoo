@@ -405,7 +405,7 @@ describe('getGradingProvider', () => {
 
 describe('getAndCheckProvider', () => {
   it('should return the default provider when provider is not defined', async () => {
-    expect(await getAndCheckProvider('text', undefined, DefaultGradingProvider, 'test check')).toBe(
+    await expect(getAndCheckProvider('text', undefined, DefaultGradingProvider, 'test check')).resolves.toBe(
       DefaultGradingProvider,
     );
   });
@@ -415,9 +415,9 @@ describe('getAndCheckProvider', () => {
       id: () => 'test-provider',
       callApi: () => Promise.resolve({ output: 'test' }),
     };
-    expect(
-      await getAndCheckProvider('embedding', provider, DefaultEmbeddingProvider, 'test check'),
-    ).toBe(DefaultEmbeddingProvider);
+    await expect(
+      getAndCheckProvider('embedding', provider, DefaultEmbeddingProvider, 'test check'),
+    ).resolves.toBe(DefaultEmbeddingProvider);
   });
 
   it('should return the provider if it implements the required method', async () => {

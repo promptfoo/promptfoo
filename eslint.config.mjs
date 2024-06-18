@@ -15,6 +15,9 @@ export default [
     rules: {
       ...jest.configs['flat/recommended'].rules,
       'jest/consistent-test-it': 'error',
+      'jest/expect-expect': 'error',
+      'jest/prefer-expect-resolves': 'error',
+      // 'jest/prefer-jest-mocked': 'error',
     },
   },
   {
