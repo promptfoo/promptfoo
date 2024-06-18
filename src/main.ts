@@ -16,7 +16,10 @@ import { loadApiProvider, loadApiProviders } from './providers';
 import { evaluate, DEFAULT_MAX_CONCURRENCY } from './evaluator';
 import { readPrompts, readProviderPromptMap } from './prompts';
 import { readTest, readTests, synthesizeFromTestSuite } from './testCases';
-import { synthesizeFromTestSuite as redteamSynthesizeFromTestSuite } from './redteam';
+import {
+  DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
+  synthesizeFromTestSuite as redteamSynthesizeFromTestSuite,
+} from './redteam';
 import {
   cleanupOldFileResults,
   maybeReadConfig,
@@ -471,6 +474,7 @@ async function main() {
     purpose?: string;
     injectVar?: string;
     plugins?: string[];
+    addPlugins?: string[];
   }
 
   generateCommand
@@ -490,6 +494,11 @@ async function main() {
     .option('--plugins <plugins>', 'Comma-separated list of plugins to use', (val) =>
       val.split(',').map((x) => x.trim()),
     )
+    .option(
+      '--add-plugins <plugins>',
+      'Comma-separated list of plugins to add to default plugins',
+      (val) => val.split(',').map((x) => x.trim()),
+    )
     .option('--no-cache', 'Do not read or write results to disk cache', false)
     .option('--env-file <path>', 'Path to .env file')
     .action(
@@ -502,6 +511,7 @@ async function main() {
         purpose,
         injectVar,
         plugins,
+        addPlugins,
       }: RedteamCommandOptions) => {
         setupEnv(envFile);
         if (!cache) {
@@ -534,7 +544,10 @@ async function main() {
         const redteamTests = await redteamSynthesizeFromTestSuite(testSuite, {
           purpose,
           injectVar,
-          plugins,
+          plugins:
+            addPlugins && addPlugins.length > 0
+              ? Array.from(REDTEAM_DEFAULT_PLUGINS).concat(addPlugins)
+              : plugins,
         });
 
         if (output) {

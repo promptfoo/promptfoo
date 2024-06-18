@@ -45,7 +45,7 @@ const ALL_PLUGINS = new Set(
   ].concat(Object.keys(HARM_CATEGORIES)),
 );
 
-const DEFAULT_PLUGINS = new Set(
+export const DEFAULT_PLUGINS = new Set(
   [
     'contracts',
     'excessive-agency',
