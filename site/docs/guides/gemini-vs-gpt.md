@@ -96,7 +96,7 @@ This will run the test cases against Gemini, GPT 3.5, and GPT 4 and output the r
 
 Then, use the `promptfoo view` command to open the viewer and compare the results visually:
 
-```
+```sh
 npx promptfoo@latest view
 ```
 

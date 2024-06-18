@@ -131,7 +131,7 @@ This will run each test case against both Claude 3 and GPT-4 and record the resu
 
 To view the results, start up the `promptfoo` viewer:
 
-```
+```sh
 npx promptfoo@latest view
 ```
 

@@ -206,7 +206,7 @@ npx promptfoo@latest eval
 
 ### View the results
 
-```
+```sh
 npx promptfoo@latest view
 ```
 

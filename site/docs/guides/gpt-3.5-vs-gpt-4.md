@@ -70,7 +70,7 @@ npx promptfoo@latest eval
 
 This will process the riddles against both GPT-3.5 and GPT-4, providing you with side-by-side results in your command line interface:
 
-```
+```sh
 npx promptfoo@latest view
 ```
 

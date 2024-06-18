@@ -99,7 +99,7 @@ npx promptfoo@latest eval
 
 Then view the results in the web interface:
 
-```
+```sh
 npx promptfoo@latest view
 ```
 

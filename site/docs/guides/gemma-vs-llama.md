@@ -195,7 +195,7 @@ This command will process each test case through both Gemma and Llama, allowing 
 
 Then open the viewer:
 
-```
+```sh
 npx promptfoo@latest view
 ```
 

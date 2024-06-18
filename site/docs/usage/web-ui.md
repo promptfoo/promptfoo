@@ -9,7 +9,7 @@ The web viewer is an experimental, work-in-progress UI for viewing prompt output
 
 To start it, run:
 
-```
+```sh
 npx promptfoo@latest view
 ```
 

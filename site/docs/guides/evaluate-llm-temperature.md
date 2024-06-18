@@ -118,7 +118,7 @@ It's worth spending a few minutes to set up these automated checks. They help st
 
 After the evaluation is complete, you can use the web viewer to review the outputs and compare the performance at different temperatures:
 
-```
+```sh
 npx promptfoo@latest view
 ```
 

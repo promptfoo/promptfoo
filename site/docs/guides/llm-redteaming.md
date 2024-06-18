@@ -64,7 +64,7 @@ npx promptfoo@latest eval
 
 And view the results:
 
-```
+```sh
 npx promptfoo@latest view
 ```
 
@@ -324,7 +324,7 @@ This will take a while, usually ~15 minutes or so depending on how many plugins 
 
 Use the web viewer to review the flagged outputs and understand the failure cases.
 
-```
+```sh
 npx promptfoo@latest view
 ```
 

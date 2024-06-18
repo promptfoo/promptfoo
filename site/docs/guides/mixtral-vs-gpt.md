@@ -144,7 +144,7 @@ This command will execute each test case against each configured model and recor
 
 To visualize the results, use the `promptfoo` viewer:
 
-```
+```sh
 npx promptfoo@latest view
 ```
 
