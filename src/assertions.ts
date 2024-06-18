@@ -388,10 +388,7 @@ export async function runAssertion({
   }
 
   if (baseType === 'is-sql') {
-    const result = await isSql(outputString, renderedValue, inverse, assertion).catch((err) => {
-      throw new Error(err);
-    });
-    return result;
+    return isSql(outputString, renderedValue, inverse, assertion);
   }
 
   if (baseType === 'contains') {
