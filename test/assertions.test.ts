@@ -20,6 +20,7 @@ import type {
   ProviderResponse,
   GradingResult,
 } from '../src/types';
+import { TestGrader } from './utils';
 
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
@@ -60,18 +61,6 @@ jest.mock('../src/cliState', () => ({
   basePath: '/config_path',
 }));
 
-export class TestGrader implements ApiProvider {
-  async callApi(): Promise<ProviderResponse> {
-    return {
-      output: JSON.stringify({ pass: true, reason: 'Test grading output' }),
-      tokenUsage: { total: 10, prompt: 5, completion: 5 },
-    };
-  }
-
-  id(): string {
-    return 'TestGradingProvider';
-  }
-}
 const Grader = new TestGrader();
 
 describe('runAssertions', () => {
@@ -101,8 +90,10 @@ describe('runAssertions', () => {
       test,
       output,
     });
-    expect(result.pass).toBeTruthy();
-    expect(result.reason).toBe('All assertions passed');
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'All assertions passed',
+    });
   });
 
   it('should fail when any assertion fails', async () => {
@@ -114,8 +105,10 @@ describe('runAssertions', () => {
       test,
       output,
     });
-    expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe('Expected output "Expected output" to equal "Different output"');
+    expect(result).toMatchObject({
+      pass: false,
+      reason: 'Expected output "Expected output" to equal "Different output"',
+    });
   });
 
   it('should handle output as an object', async () => {
@@ -127,13 +120,13 @@ describe('runAssertions', () => {
       test,
       output,
     });
-    expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe('Expected output "Expected output" to equal "{"key":"value"}"');
+    expect(result).toMatchObject({
+      pass: false,
+      reason: 'Expected output "Expected output" to equal "{"key":"value"}"',
+    });
   });
 
   it('should fail when combined score is less than threshold', async () => {
-    const output = 'Different output';
-
     const result: GradingResult = await runAssertions({
       prompt: 'Some prompt',
       provider: new OpenAiChatCompletionProvider('gpt-4'),
@@ -154,13 +147,13 @@ describe('runAssertions', () => {
       },
       output: 'Hi there world',
     });
-    expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe('Aggregate score 0.33 < 0.5 threshold');
+    expect(result).toMatchObject({
+      pass: false,
+      reason: 'Aggregate score 0.33 < 0.5 threshold',
+    });
   });
 
   it('should pass when combined score is greater than threshold', async () => {
-    const output = 'Different output';
-
     const result: GradingResult = await runAssertions({
       prompt: 'Some prompt',
       provider: new OpenAiChatCompletionProvider('gpt-4'),
@@ -181,8 +174,10 @@ describe('runAssertions', () => {
       },
       output: 'Hi there world',
     });
-    expect(result.pass).toBeTruthy();
-    expect(result.reason).toBe('Aggregate score 0.33 ≥ 0.25 threshold');
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Aggregate score 0.33 ≥ 0.25 threshold',
+    });
   });
 
   describe('assert-set', () => {
@@ -211,8 +206,10 @@ describe('runAssertions', () => {
         test,
         output,
       });
-      expect(result.pass).toBeTruthy();
-      expect(result.reason).toBe('All assertions passed');
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'All assertions passed',
+      });
     });
 
     it('assert-set failure', async () => {
@@ -237,10 +234,10 @@ describe('runAssertions', () => {
         test,
         output,
       });
-      expect(result.pass).toStrictEqual(false);
-      expect(result.reason).toBe(
-        'Expected output "Something different" to equal "Expected output"',
-      );
+      expect(result).toMatchObject({
+        pass: false,
+        reason: 'Expected output "Something different" to equal "Expected output"',
+      });
     });
 
     it('assert-set threshold success', async () => {
@@ -272,8 +269,10 @@ describe('runAssertions', () => {
         test,
         output,
       });
-      expect(result.pass).toStrictEqual(true);
-      expect(result.reason).toBe('All assertions passed');
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'All assertions passed',
+      });
     });
 
     it('assert-set threshold failure', async () => {
@@ -305,8 +304,10 @@ describe('runAssertions', () => {
         test,
         output,
       });
-      expect(result.pass).toStrictEqual(false);
-      expect(result.reason).toBe('Aggregate score 0.33 < 0.5 threshold');
+      expect(result).toMatchObject({
+        pass: false,
+        reason: 'Aggregate score 0.33 < 0.5 threshold',
+      });
     });
 
     it('assert-set with metric', async () => {
@@ -371,7 +372,7 @@ describe('runAssertions', () => {
         test,
         output,
       });
-      expect(result.score).toStrictEqual(0.9);
+      expect(result.score).toBe(0.9);
     });
   });
 
@@ -535,23 +536,6 @@ describe('runAssertion', () => {
     },
   };
 
-  const containsJsonAssertionWithSchemaYamlString: Assertion = {
-    type: 'contains-json',
-    value: `
-          required: ["latitude", "longitude"]
-          type: object
-          properties:
-            latitude:
-              type: number
-              minimum: -90
-              maximum: 90
-            longitude:
-              type: number
-              minimum: -180
-              maximum: 180
-`,
-  };
-
   const javascriptStringAssertion: Assertion = {
     type: 'javascript',
     value: 'output === "Expected output"',
@@ -615,8 +599,10 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       output,
     });
-    expect(result.pass).toBeTruthy();
-    expect(result.reason).toBe('Assertion passed');
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+    });
   });
 
   it('should fail when the equality assertion fails', async () => {
@@ -629,8 +615,10 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       output,
     });
-    expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe('Expected output "Expected output" to equal "Different output"');
+    expect(result).toMatchObject({
+      pass: false,
+      reason: 'Expected output "Expected output" to equal "Different output"',
+    });
   });
 
   const notEqualsAssertion: Assertion = {
@@ -648,8 +636,10 @@ describe('runAssertion', () => {
       output,
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
-    expect(result.pass).toBeTruthy();
-    expect(result.reason).toBe('Assertion passed');
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+    });
   });
 
   it('should fail when the not-equals assertion fails', async () => {
@@ -662,10 +652,10 @@ describe('runAssertion', () => {
       output,
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
-    expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe(
-      'Expected output "Unexpected output" to not equal "Unexpected output"',
-    );
+    expect(result).toMatchObject({
+      pass: false,
+      reason: 'Expected output "Unexpected output" to not equal "Unexpected output"',
+    });
   });
 
   it('should handle output as an object', async () => {
@@ -677,8 +667,10 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       output,
     });
-    expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe('Expected output "Expected output" to equal "{"key":"value"}"');
+    expect(result).toMatchObject({
+      pass: false,
+      reason: 'Expected output "Expected output" to equal "{"key":"value"}"',
+    });
   });
 
   it('should pass when the equality assertion with object passes', async () => {
@@ -691,8 +683,10 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       output,
     });
-    expect(result.pass).toBeTruthy();
-    expect(result.reason).toBe('Assertion passed');
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+    });
   });
 
   it('should fail when the equality assertion with object fails', async () => {
@@ -705,10 +699,10 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       output,
     });
-    expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe(
-      `Expected output \"{\"key\":\"value\"}\" to equal \"{\"key\":\"not value\"}\"`,
-    );
+    expect(result).toMatchObject({
+      pass: false,
+      reason: 'Expected output "{"key":"value"}" to equal "{"key":"not value"}"',
+    });
   });
 
   it('should pass when the equality assertion with object passes with external json', async () => {
@@ -717,7 +711,7 @@ describe('runAssertion', () => {
       value: 'file:///output.json',
     };
 
-    (fs.readFileSync as jest.Mock).mockReturnValue(JSON.stringify({ key: 'value' }));
+    jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ key: 'value' }));
 
     const output = '{"key": "value"}';
 
@@ -729,8 +723,10 @@ describe('runAssertion', () => {
       output,
     });
     expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve('/output.json'), 'utf8');
-    expect(result.pass).toBeTruthy();
-    expect(result.reason).toBe('Assertion passed');
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+    });
   });
 
   it('should fail when the equality assertion with object fails with external object', async () => {
@@ -739,7 +735,7 @@ describe('runAssertion', () => {
       value: 'file:///output.json',
     };
 
-    (fs.readFileSync as jest.Mock).mockReturnValue(JSON.stringify({ key: 'value' }));
+    jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ key: 'value' }));
 
     const output = '{"key": "not value"}';
 
@@ -751,10 +747,10 @@ describe('runAssertion', () => {
       output,
     });
     expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve('/output.json'), 'utf8');
-    expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe(
-      `Expected output \"{\"key\":\"value\"}\" to equal \"{\"key\": \"not value\"}\"`,
-    );
+    expect(result).toMatchObject({
+      pass: false,
+      reason: 'Expected output "{"key":"value"}" to equal "{"key": "not value"}"',
+    });
   });
 
   it('should pass when the is-json assertion passes', async () => {
@@ -767,8 +763,10 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       output,
     });
-    expect(result.pass).toBeTruthy();
-    expect(result.reason).toBe('Assertion passed');
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+    });
   });
 
   it('should fail when the is-json assertion fails', async () => {
@@ -781,8 +779,10 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       output,
     });
-    expect(result.pass).toBeFalsy();
-    expect(result.reason).toContain('Expected output to be valid JSON');
+    expect(result).toMatchObject({
+      pass: false,
+      reason: 'Expected output to be valid JSON',
+    });
   });
 
   it('should pass when the is-json assertion passes with schema', async () => {
@@ -795,8 +795,10 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       output,
     });
-    expect(result.pass).toBeTruthy();
-    expect(result.reason).toBe('Assertion passed');
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+    });
   });
 
   it('should fail when the is-json assertion fails with schema', async () => {
@@ -809,10 +811,10 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       output,
     });
-    expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe(
-      'JSON does not conform to the provided schema. Errors: data/latitude must be number',
-    );
+    expect(result).toMatchObject({
+      pass: false,
+      reason: 'JSON does not conform to the provided schema. Errors: data/latitude must be number',
+    });
   });
 
   it('should pass when the is-json assertion passes with schema YAML string', async () => {
@@ -825,8 +827,10 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       output,
     });
-    expect(result.pass).toBeTruthy();
-    expect(result.reason).toBe('Assertion passed');
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+    });
   });
 
   it('should fail when the is-json assertion fails with schema YAML string', async () => {
@@ -839,10 +843,10 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       output,
     });
-    expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe(
-      'JSON does not conform to the provided schema. Errors: data/latitude must be number',
-    );
+    expect(result).toMatchObject({
+      pass: false,
+      reason: 'JSON does not conform to the provided schema. Errors: data/latitude must be number',
+    });
   });
 
   it('should validate JSON with formats using ajv-formats', async () => {
@@ -866,8 +870,10 @@ describe('runAssertion', () => {
       output,
     });
 
-    expect(result.pass).toBeTruthy();
-    expect(result.reason).toBe('Assertion passed');
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+    });
   });
 
   it('should validate JSON with formats using ajv-formats - failure', async () => {
@@ -891,10 +897,11 @@ describe('runAssertion', () => {
       output,
     });
 
-    expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe(
-      'JSON does not conform to the provided schema. Errors: data/date must match format "date"',
-    );
+    expect(result).toMatchObject({
+      pass: false,
+      reason:
+        'JSON does not conform to the provided schema. Errors: data/date must match format "date"',
+    });
   });
 
   it('should pass when the is-json assertion passes with external schema', async () => {
@@ -903,7 +910,7 @@ describe('runAssertion', () => {
       value: 'file:///schema.json',
     };
 
-    (fs.readFileSync as jest.Mock).mockReturnValue(
+    jest.mocked(fs.readFileSync).mockReturnValue(
       JSON.stringify({
         required: ['latitude', 'longitude'],
         type: 'object',
@@ -932,8 +939,10 @@ describe('runAssertion', () => {
       output,
     });
     expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve('/schema.json'), 'utf8');
-    expect(result.pass).toBeTruthy();
-    expect(result.reason).toBe('Assertion passed');
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+    });
   });
 
   it('should fail when the is-json assertion fails with external schema', async () => {
@@ -942,7 +951,7 @@ describe('runAssertion', () => {
       value: 'file:///schema.json',
     };
 
-    (fs.readFileSync as jest.Mock).mockReturnValue(
+    jest.mocked(fs.readFileSync).mockReturnValue(
       JSON.stringify({
         required: ['latitude', 'longitude'],
         type: 'object',
@@ -971,10 +980,10 @@ describe('runAssertion', () => {
       output,
     });
     expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve('/schema.json'), 'utf8');
-    expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe(
-      'JSON does not conform to the provided schema. Errors: data/latitude must be number',
-    );
+    expect(result).toMatchObject({
+      pass: false,
+      reason: 'JSON does not conform to the provided schema. Errors: data/latitude must be number',
+    });
   });
 
   it('should pass when the is-sql assertion passes', async () => {
@@ -1198,8 +1207,10 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       output,
     });
-    expect(result.pass).toBeTruthy();
-    expect(result.reason).toBe('Assertion passed');
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+    });
   });
 
   it('should pass when the contains-json assertion passes with multiple json values', async () => {
@@ -1213,8 +1224,10 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       output,
     });
-    expect(result.pass).toBeTruthy();
-    expect(result.reason).toBe('Assertion passed');
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+    });
   });
 
   it('should pass when the contains-json assertion passes with valid and invalid json', async () => {
@@ -1227,8 +1240,10 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       output,
     });
-    expect(result.pass).toBeTruthy();
-    expect(result.reason).toBe('Assertion passed');
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+    });
   });
 
   it('should fail when the contains-json assertion fails', async () => {
@@ -1241,8 +1256,10 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       output,
     });
-    expect(result.pass).toBeFalsy();
-    expect(result.reason).toContain('Expected output to contain valid JSON');
+    expect(result).toMatchObject({
+      pass: false,
+      reason: 'Expected output to contain valid JSON',
+    });
   });
 
   it('should pass when the contains-json assertion passes with schema', async () => {
@@ -1255,8 +1272,10 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       output,
     });
-    expect(result.pass).toBeTruthy();
-    expect(result.reason).toBe('Assertion passed');
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+    });
   });
 
   it('should pass when the contains-json assertion passes with schema with YAML string', async () => {
@@ -1269,8 +1288,10 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       output,
     });
-    expect(result.pass).toBeTruthy();
-    expect(result.reason).toBe('Assertion passed');
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+    });
   });
 
   it('should pass when the contains-json assertion passes with external schema', async () => {
@@ -1279,7 +1300,7 @@ describe('runAssertion', () => {
       value: 'file:///schema.json',
     };
 
-    (fs.readFileSync as jest.Mock).mockReturnValue(
+    jest.mocked(fs.readFileSync).mockReturnValue(
       JSON.stringify({
         required: ['latitude', 'longitude'],
         type: 'object',
@@ -1308,17 +1329,19 @@ describe('runAssertion', () => {
       output,
     });
     expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve('/schema.json'), 'utf8');
-    expect(result.pass).toBeTruthy();
-    expect(result.reason).toBe('Assertion passed');
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+    });
   });
 
-  it('should fail when the contains-json assertion fails with external schema', async () => {
+  it('should fail contains-json assertion with invalid data against external schema', async () => {
     const assertion: Assertion = {
       type: 'contains-json',
       value: 'file:///schema.json',
     };
 
-    (fs.readFileSync as jest.Mock).mockReturnValue(
+    jest.mocked(fs.readFileSync).mockReturnValue(
       JSON.stringify({
         required: ['latitude', 'longitude'],
         type: 'object',
@@ -1347,13 +1370,13 @@ describe('runAssertion', () => {
       output,
     });
     expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve('/schema.json'), 'utf8');
-    expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe(
-      'JSON does not conform to the provided schema. Errors: data/latitude must be number',
-    );
+    expect(result).toMatchObject({
+      pass: false,
+      reason: 'JSON does not conform to the provided schema. Errors: data/latitude must be number',
+    });
   });
 
-  it('should fail when the contains-json assertion fails with external schema', async () => {
+  it('should fail contains-json assertion with predefined schema and invalid data', async () => {
     const output = 'here is the answer\n\n```{"latitude": "medium", "longitude": -1}```';
 
     const result: GradingResult = await runAssertion({
@@ -1363,9 +1386,12 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       output,
     });
-    expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe(
-      'JSON does not conform to the provided schema. Errors: data/latitude must be number',
+    expect(result).toEqual(
+      expect.objectContaining({
+        pass: false,
+        reason:
+          'JSON does not conform to the provided schema. Errors: data/latitude must be number',
+      }),
     );
   });
 
@@ -1379,8 +1405,10 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       output,
     });
-    expect(result.pass).toBeTruthy();
-    expect(result.reason).toBe('Assertion passed');
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+    });
   });
 
   it('should pass a score through when the javascript returns a number', async () => {
@@ -1393,9 +1421,11 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       output,
     });
-    expect(result.pass).toBeTruthy();
-    expect(result.score).toBe(output.length * 10);
-    expect(result.reason).toBe('Assertion passed');
+    expect(result).toMatchObject({
+      pass: true,
+      score: output.length * 10,
+      reason: 'Assertion passed',
+    });
   });
 
   it('should pass when javascript returns a number above threshold', async () => {
@@ -1408,9 +1438,11 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       output,
     });
-    expect(result.pass).toBeTruthy();
-    expect(result.score).toBe(output.length * 10);
-    expect(result.reason).toBe('Assertion passed');
+    expect(result).toMatchObject({
+      pass: true,
+      score: output.length * 10,
+      reason: 'Assertion passed',
+    });
   });
 
   it('should fail when javascript returns a number below threshold', async () => {
@@ -1423,9 +1455,11 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       output,
     });
-    expect(result.pass).toBeFalsy();
-    expect(result.score).toBe(output.length * 10);
-    expect(result.reason).toMatch('Custom function returned false');
+    expect(result).toMatchObject({
+      pass: false,
+      score: output.length * 10,
+      reason: expect.stringContaining('Custom function returned false'),
+    });
   });
 
   it('should set score when javascript returns false', async () => {
@@ -1443,9 +1477,11 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       output,
     });
-    expect(result.pass).toBeFalsy();
-    expect(result.score).toBe(0);
-    expect(result.reason).toMatch('Custom function returned false');
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: expect.stringContaining('Custom function returned false'),
+    });
   });
 
   it('should fail when the javascript assertion fails', async () => {
@@ -1458,8 +1494,10 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       output,
     });
-    expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe('Custom function returned false\noutput === "Expected output"');
+    expect(result).toMatchObject({
+      pass: false,
+      reason: 'Custom function returned false\noutput === "Expected output"',
+    });
   });
 
   it('should pass when assertion passes - with vars', async () => {
@@ -1476,8 +1514,10 @@ describe('runAssertion', () => {
       test: { vars: { foo: 'Expected output' } } as AtomicTestCase,
       output,
     });
-    expect(result.pass).toBeTruthy();
-    expect(result.reason).toBe('Assertion passed');
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+    });
   });
 
   it('should pass when javascript function assertion passes - with vars', async () => {
@@ -1494,8 +1534,10 @@ describe('runAssertion', () => {
       test: { vars: { foo: 'bar' } } as AtomicTestCase,
       output,
     });
-    expect(result.pass).toBeTruthy();
-    expect(result.reason).toBe('Assertion passed');
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+    });
   });
 
   it('should fail when the javascript does not match vars', async () => {
@@ -1512,10 +1554,11 @@ describe('runAssertion', () => {
       test: { vars: { foo: 'bar' } } as AtomicTestCase,
       output,
     });
-    expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe(
-      'Custom function returned false\noutput === "Expected output" && context.vars.foo === "something else"',
-    );
+    expect(result).toMatchObject({
+      pass: false,
+      reason:
+        'Custom function returned false\noutput === "Expected output" && context.vars.foo === "something else"',
+    });
   });
 
   it('should pass when the function returns pass', async () => {
@@ -1528,9 +1571,11 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       output,
     });
-    expect(result.pass).toBeTruthy();
-    expect(result.score).toBe(0.5);
-    expect(result.reason).toBe('Assertion passed');
+    expect(result).toMatchObject({
+      pass: true,
+      score: 0.5,
+      reason: 'Assertion passed',
+    });
   });
 
   it('should fail when the function returns fail', async () => {
@@ -1543,9 +1588,11 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       output,
     });
-    expect(result.pass).toBeFalsy();
-    expect(result.score).toBe(0.5);
-    expect(result.reason).toBe('Assertion failed');
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0.5,
+      reason: 'Assertion failed',
+    });
   });
 
   it('should pass when the multiline javascript assertion passes', async () => {
@@ -1558,8 +1605,10 @@ describe('runAssertion', () => {
       output,
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
-    expect(result.pass).toBeTruthy();
-    expect(result.reason).toBe('Assertion passed');
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+    });
   });
 
   it('should pass when the multiline javascript assertion fails', async () => {
@@ -1572,8 +1621,10 @@ describe('runAssertion', () => {
       output,
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
-    expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe('Assertion failed');
+    expect(result).toMatchObject({
+      pass: false,
+      reason: 'Assertion failed',
+    });
   });
 
   const notContainsAssertion: Assertion = {
@@ -1591,8 +1642,10 @@ describe('runAssertion', () => {
       output,
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
-    expect(result.pass).toBeTruthy();
-    expect(result.reason).toBe('Assertion passed');
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+    });
   });
 
   it('should fail when the not-contains assertion fails', async () => {
@@ -1605,8 +1658,10 @@ describe('runAssertion', () => {
       output,
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
-    expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe('Expected output to not contain "Unexpected output"');
+    expect(result).toMatchObject({
+      pass: false,
+      reason: 'Expected output to not contain "Unexpected output"',
+    });
   });
 
   // Test for icontains assertion
@@ -1625,8 +1680,10 @@ describe('runAssertion', () => {
       output,
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
-    expect(result.pass).toBeTruthy();
-    expect(result.reason).toBe('Assertion passed');
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+    });
   });
 
   it('should fail when the icontains assertion fails', async () => {
@@ -1639,8 +1696,10 @@ describe('runAssertion', () => {
       output,
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
-    expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe('Expected output to contain "expected output"');
+    expect(result).toMatchObject({
+      pass: false,
+      reason: 'Expected output to contain "expected output"',
+    });
   });
 
   // Test for not-icontains assertion
@@ -1659,8 +1718,10 @@ describe('runAssertion', () => {
       output,
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
-    expect(result.pass).toBeTruthy();
-    expect(result.reason).toBe('Assertion passed');
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+    });
   });
 
   it('should fail when the not-icontains assertion fails', async () => {
@@ -1673,8 +1734,10 @@ describe('runAssertion', () => {
       output,
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
-    expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe('Expected output to not contain "unexpected output"');
+    expect(result).toMatchObject({
+      pass: false,
+      reason: 'Expected output to not contain "unexpected output"',
+    });
   });
 
   // Test for contains-any assertion
@@ -1693,8 +1756,10 @@ describe('runAssertion', () => {
       output,
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
-    expect(result.pass).toBeTruthy();
-    expect(result.reason).toBe('Assertion passed');
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+    });
   });
 
   it('should fail when the contains-any assertion fails', async () => {
@@ -1707,8 +1772,10 @@ describe('runAssertion', () => {
       output,
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
-    expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe('Expected output to contain one of "option1, option2, option3"');
+    expect(result).toMatchObject({
+      pass: false,
+      reason: 'Expected output to contain one of "option1, option2, option3"',
+    });
   });
 
   it('should pass when the icontains-any assertion passes', async () => {
@@ -1724,8 +1791,10 @@ describe('runAssertion', () => {
       output,
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
-    expect(result.pass).toBeTruthy();
-    expect(result.reason).toBe('Assertion passed');
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+    });
   });
 
   it('should fail when the icontains-any assertion fails', async () => {
@@ -1741,8 +1810,10 @@ describe('runAssertion', () => {
       output,
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
-    expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe('Expected output to contain one of "option1, option2, option3"');
+    expect(result).toMatchObject({
+      pass: false,
+      reason: 'Expected output to contain one of "option1, option2, option3"',
+    });
   });
 
   // Test for contains-all assertion
@@ -1761,8 +1832,10 @@ describe('runAssertion', () => {
       output,
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
-    expect(result.pass).toBeTruthy();
-    expect(result.reason).toBe('Assertion passed');
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+    });
   });
 
   it('should fail when the contains-all assertion fails', async () => {
@@ -1775,8 +1848,10 @@ describe('runAssertion', () => {
       output,
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
-    expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe('Expected output to contain all of "option1, option2, option3"');
+    expect(result).toMatchObject({
+      pass: false,
+      reason: 'Expected output to contain all of "option1, option2, option3"',
+    });
   });
 
   it('should pass when the icontains-all assertion passes', async () => {
@@ -1792,8 +1867,10 @@ describe('runAssertion', () => {
       output,
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
-    expect(result.pass).toBeTruthy();
-    expect(result.reason).toBe('Assertion passed');
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+    });
   });
 
   it('should fail when the icontains-all assertion fails', async () => {
@@ -1809,10 +1886,10 @@ describe('runAssertion', () => {
       output,
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
-    expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe(
-      'Expected output to contain all of "option1, option2, option3, option4"',
-    );
+    expect(result).toMatchObject({
+      pass: false,
+      reason: 'Expected output to contain all of "option1, option2, option3, option4"',
+    });
   });
 
   // Test for regex assertion
@@ -1831,8 +1908,10 @@ describe('runAssertion', () => {
       output,
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
-    expect(result.pass).toBeTruthy();
-    expect(result.reason).toBe('Assertion passed');
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+    });
   });
 
   it('should fail when the regex assertion fails', async () => {
@@ -1845,8 +1924,10 @@ describe('runAssertion', () => {
       output,
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
-    expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe('Expected output to match regex "\\d{3}-\\d{2}-\\d{4}"');
+    expect(result).toMatchObject({
+      pass: false,
+      reason: 'Expected output to match regex "\\d{3}-\\d{2}-\\d{4}"',
+    });
   });
 
   // Test for not-regex assertion
@@ -1865,8 +1946,10 @@ describe('runAssertion', () => {
       output,
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
-    expect(result.pass).toBeTruthy();
-    expect(result.reason).toBe('Assertion passed');
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+    });
   });
 
   it('should fail when the not-regex assertion fails', async () => {
@@ -1879,8 +1962,10 @@ describe('runAssertion', () => {
       output,
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
-    expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe('Expected output to not match regex "\\d{3}-\\d{2}-\\d{4}"');
+    expect(result).toMatchObject({
+      pass: false,
+      reason: 'Expected output to not match regex "\\d{3}-\\d{2}-\\d{4}"',
+    });
   });
 
   // Tests for webhook assertion
@@ -1903,8 +1988,10 @@ describe('runAssertion', () => {
       output,
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
-    expect(result.pass).toBeTruthy();
-    expect(result.reason).toBe('Assertion passed');
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+    });
   });
 
   it('should fail when the webhook assertion fails', async () => {
@@ -1921,8 +2008,10 @@ describe('runAssertion', () => {
       output,
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
-    expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe('Webhook returned false');
+    expect(result).toMatchObject({
+      pass: false,
+      reason: 'Webhook returned false',
+    });
   });
 
   it('should fail when the webhook returns an error', async () => {
@@ -1937,8 +2026,10 @@ describe('runAssertion', () => {
       output,
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
-    expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe('Webhook error: Webhook response status: 500');
+    expect(result).toMatchObject({
+      pass: false,
+      reason: 'Webhook error: Webhook response status: 500',
+    });
   });
 
   // Test for rouge-n assertion
@@ -1958,8 +2049,10 @@ describe('runAssertion', () => {
       output,
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
-    expect(result.pass).toBeTruthy();
-    expect(result.reason).toBe('ROUGE-N score 1.00 is greater than or equal to threshold 0.75');
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'ROUGE-N score 1.00 is greater than or equal to threshold 0.75',
+    });
   });
 
   it('should fail when the rouge-n assertion fails', async () => {
@@ -1972,8 +2065,10 @@ describe('runAssertion', () => {
       output,
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
-    expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe('ROUGE-N score 0.17 is less than threshold 0.75');
+    expect(result).toMatchObject({
+      pass: false,
+      reason: 'ROUGE-N score 0.17 is less than threshold 0.75',
+    });
   });
 
   // Test for starts-with assertion
@@ -1992,8 +2087,10 @@ describe('runAssertion', () => {
       output,
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
-    expect(result.pass).toBeTruthy();
-    expect(result.reason).toBe('Assertion passed');
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+    });
   });
 
   it('should fail when the starts-with assertion fails', async () => {
@@ -2006,8 +2103,10 @@ describe('runAssertion', () => {
       output,
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
-    expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe('Expected output to start with "Expected"');
+    expect(result).toMatchObject({
+      pass: false,
+      reason: 'Expected output to start with "Expected"',
+    });
   });
 
   it('should use the provider from the assertion if it exists', async () => {
@@ -2043,8 +2142,10 @@ describe('runAssertion', () => {
       output: output,
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
-    expect(result.pass).toBeTruthy();
-    expect(result.reason).toBe('Test grading output');
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Test grading output',
+    });
   });
 
   // Test for levenshtein assertion
@@ -2064,8 +2165,10 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       output,
     });
-    expect(result.pass).toBeTruthy();
-    expect(result.reason).toBe('Assertion passed');
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+    });
   });
 
   it('should fail when the levenshtein assertion fails', async () => {
@@ -2078,8 +2181,10 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       output,
     });
-    expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe('Levenshtein distance 8 is greater than threshold 5');
+    expect(result).toMatchObject({
+      pass: false,
+      reason: 'Levenshtein distance 8 is greater than threshold 5',
+    });
   });
 
   it.each([
@@ -2140,8 +2245,10 @@ describe('runAssertion', () => {
         vars: {},
         test: {},
       });
-      expect(result.pass).toBe(expectedPass);
-      expect(result.reason).toContain(expectedReason);
+      expect(result).toMatchObject({
+        pass: expectedPass,
+        reason: expect.stringContaining(expectedReason),
+      });
     },
   );
 
@@ -2169,8 +2276,10 @@ describe('runAssertion', () => {
       vars: {},
       test: {},
     });
-    expect(result.pass).toBe(true);
-    expect(result.reason).toContain('Assertion passed');
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+    });
   });
 
   it('should handle output strings with both single and double quotes correctly in python assertion', async () => {
@@ -2200,9 +2309,11 @@ describe('runAssertion', () => {
       { prompt: 'Some prompt', test: {}, vars: {} },
     ]);
 
-    expect(result.reason).toBe('Assertion passed');
-    expect(result.score).toBe(Number(expectedPythonValue));
-    expect(result.pass).toBeTruthy();
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+      score: Number(expectedPythonValue),
+    });
   });
 
   it.each([
@@ -2270,9 +2381,11 @@ describe('runAssertion', () => {
         { prompt: 'Some prompt', test: {}, vars: {} },
       ]);
 
-      expect(result.reason).toMatch(new RegExp(`^${expectedReason}`));
-      expect(result.score).toBe(expectedScore);
-      expect(result.pass).toBe(expectedPass);
+      expect(result).toMatchObject({
+        pass: expectedPass,
+        reason: expect.stringMatching(expectedReason),
+        score: expectedScore,
+      });
     },
   );
 
@@ -2323,8 +2436,10 @@ describe('runAssertion', () => {
         },
       ]);
 
-      expect(result.pass).toBe(expectedPass);
-      expect(result.reason).toContain(expectedReason);
+      expect(result).toMatchObject({
+        pass: expectedPass,
+        reason: expect.stringContaining(expectedReason),
+      });
       expect(runPython).toHaveBeenCalledTimes(1);
     },
   );
@@ -2372,8 +2487,10 @@ describe('runAssertion', () => {
         test: {} as AtomicTestCase,
         output,
       });
-      expect(result.pass).toBeTruthy();
-      expect(result.reason).toBe('Assertion passed');
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
     });
 
     it('should fail when the latency assertion fails', async () => {
@@ -2390,8 +2507,10 @@ describe('runAssertion', () => {
         test: {} as AtomicTestCase,
         output,
       });
-      expect(result.pass).toBeFalsy();
-      expect(result.reason).toBe('Latency 1000ms is greater than threshold 100ms');
+      expect(result).toMatchObject({
+        pass: false,
+        reason: 'Latency 1000ms is greater than threshold 100ms',
+      });
     });
 
     it('should throw an error when grading result is missing latencyMs', async () => {
@@ -2432,8 +2551,10 @@ describe('runAssertion', () => {
         output: 'Some output',
         logProbs,
       });
-      expect(result.pass).toBeTruthy();
-      expect(result.reason).toBe('Assertion passed');
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
     });
 
     it('should fail when the perplexity assertion fails', async () => {
@@ -2453,8 +2574,10 @@ describe('runAssertion', () => {
         output: 'Some output',
         logProbs,
       });
-      expect(result.pass).toBeFalsy();
-      expect(result.reason).toBe('Perplexity 1.28 is greater than threshold 0.2');
+      expect(result).toMatchObject({
+        pass: false,
+        reason: 'Perplexity 1.28 is greater than threshold 0.2',
+      });
     });
   });
 
@@ -2476,8 +2599,10 @@ describe('runAssertion', () => {
         output: 'Some output',
         logProbs,
       });
-      expect(result.pass).toBeTruthy();
-      expect(result.reason).toBe('Assertion passed');
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
     });
 
     it('should fail when the perplexity-score assertion fails', async () => {
@@ -2497,8 +2622,10 @@ describe('runAssertion', () => {
         output: 'Some output',
         logProbs,
       });
-      expect(result.pass).toBeFalsy();
-      expect(result.reason).toBe('Perplexity score 0.44 is less than threshold 0.5');
+      expect(result).toMatchObject({
+        pass: false,
+        reason: 'Perplexity score 0.44 is less than threshold 0.5',
+      });
     });
   });
 
@@ -2520,8 +2647,10 @@ describe('runAssertion', () => {
         output: 'Some output',
         cost,
       });
-      expect(result.pass).toBeTruthy();
-      expect(result.reason).toBe('Assertion passed');
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
     });
 
     it('should fail when the cost exceeds the threshold', async () => {
@@ -2541,8 +2670,10 @@ describe('runAssertion', () => {
         output: 'Some output',
         cost,
       });
-      expect(result.pass).toBeFalsy();
-      expect(result.reason).toBe('Cost 0.0020 is greater than threshold 0.001');
+      expect(result).toMatchObject({
+        pass: false,
+        reason: 'Cost 0.0020 is greater than threshold 0.001',
+      });
     });
   });
 
@@ -2576,8 +2707,10 @@ describe('runAssertion', () => {
         output,
       });
 
-      expect(result.pass).toBeTruthy();
-      expect(result.reason).toBe('Assertion passed');
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
     });
 
     it('should fail for an invalid function call with incorrect arguments', async () => {
@@ -2609,8 +2742,10 @@ describe('runAssertion', () => {
         output,
       });
 
-      expect(result.pass).toBeFalsy();
-      expect(result.reason).toContain('Call to "add" does not match schema');
+      expect(result).toMatchObject({
+        pass: false,
+        reason: expect.stringContaining('Call to "add" does not match schema'),
+      });
     });
   });
 
@@ -2649,8 +2784,10 @@ describe('runAssertion', () => {
         output,
       });
 
-      expect(result.pass).toBeTruthy();
-      expect(result.reason).toBe('Assertion passed');
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
     });
 
     it('should fail for an invalid tools call with incorrect arguments', async () => {
@@ -2687,8 +2824,10 @@ describe('runAssertion', () => {
         output,
       });
 
-      expect(result.pass).toBeFalsy();
-      expect(result.reason).toContain('Call to "add" does not match schema');
+      expect(result).toMatchObject({
+        pass: false,
+        reason: expect.stringContaining('Call to "add" does not match schema'),
+      });
     });
   });
 
@@ -2727,8 +2866,10 @@ describe('runAssertion', () => {
         output,
       });
 
-      expect(result.pass).toBeTruthy();
-      expect(result.reason).toBe('Similarity 1.00 is greater than threshold 0.75');
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Similarity 1.00 is greater than threshold 0.75',
+      });
     });
 
     it('should fail for a similar assertion with a string value', async () => {
@@ -2744,8 +2885,10 @@ describe('runAssertion', () => {
         output,
       });
 
-      expect(result.pass).toBeFalsy();
-      expect(result.reason).toBe('Similarity 0.00 is less than threshold 0.75');
+      expect(result).toMatchObject({
+        pass: false,
+        reason: 'Similarity 0.00 is less than threshold 0.75',
+      });
     });
 
     it('should pass for a similar assertion with an array of string values', async () => {
@@ -2761,8 +2904,10 @@ describe('runAssertion', () => {
         output,
       });
 
-      expect(result.pass).toBeTruthy();
-      expect(result.reason).toBe('Similarity 1.00 is greater than threshold 0.75');
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Similarity 1.00 is greater than threshold 0.75',
+      });
     });
 
     it('should fail for a similar assertion with an array of string values', async () => {
@@ -2777,9 +2922,10 @@ describe('runAssertion', () => {
         test: {} as AtomicTestCase,
         output,
       });
-
-      expect(result.pass).toBeFalsy();
-      expect(result.reason).toBe('None of the provided values met the similarity threshold');
+      expect(result).toMatchObject({
+        pass: false,
+        reason: 'None of the provided values met the similarity threshold',
+      });
     });
   });
 });

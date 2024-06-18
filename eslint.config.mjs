@@ -5,9 +5,22 @@ import tseslint from 'typescript-eslint';
 import globals from 'globals';
 
 import unusedImports from 'eslint-plugin-unused-imports';
+import jest from 'eslint-plugin-jest';
 
 export default [
   ...tseslint.config(eslint.configs.recommended, ...tseslint.configs.recommended),
+  {
+    ...jest.configs['flat/recommended'],
+    rules: {
+      ...jest.configs['flat/recommended'].rules,
+      ...jest.configs['flat/style'].rules,
+      'jest/consistent-test-it': 'error',
+      'jest/expect-expect': 'error',
+      'jest/prefer-expect-resolves': 'error',
+      'jest/prefer-jest-mocked': 'error',
+      'jest/require-to-throw-message': 'error',
+    },
+  },
   {
     ignores: [
       '**/src/web/nextui/_next/**/*',
