@@ -39,7 +39,7 @@ export class ScriptCompletionProvider implements ApiProvider {
     }
 
     if (cachedResult) {
-      logger.debug(`Returning cached result for script ${this.scriptPath}`);
+      logger.debug(`Returning cached result for script ${this.scriptPath}: ${cachedResult}`);
       return JSON.parse(cachedResult as string);
     } else {
       return new Promise<ProviderResponse>((resolve, reject) => {
