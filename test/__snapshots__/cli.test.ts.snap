@@ -1,0 +1,29 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`CLI Tool --help and --version should display help menu 1`] = `
+"
+> promptfoo@0.65.0 local
+> ts-node --cwdMode --transpileOnly src/main.ts --help
+
+Usage: main [options] [command]
+
+Options:
+  --version                   Print version
+  -h, --help                  display help for command
+
+Commands:
+  init [options] [directory]  Initialize project with dummy files
+  view [options] [directory]  Start browser ui
+  share [options]             Create a shareable URL of your most recent eval
+  cache                       Manage cache
+  feedback [message]          Send feedback to the promptfoo developers
+  generate                    Generate synthetic data
+  eval [options]              Evaluate prompts
+  list                        List various resources
+  show [options] <id>         Show details of a specific resource
+  delete [options] <id>       Delete various resources
+  import <file>               Import an eval record from a JSON file
+  export [options] <evalId>   Export an eval record to a JSON file
+  help [command]              display help for command
+"
+`;
