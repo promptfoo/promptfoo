@@ -33,8 +33,9 @@ describe('CLI Tool', () => {
   describe('--help and --version', () => {
     it('should display help menu', async () => {
       const { stdout } = await runCliCommand(['--help']);
+      const subset = stdout.split('ts-node --cwdMode --transpileOnly src/main.ts --help')[1];
+      expect(subset).toMatchSnapshot();
       expect(stdout).toContain('Usage: main [options] [command]');
-      expect(stdout).toMatchSnapshot();
     });
 
     it('should display version', async () => {

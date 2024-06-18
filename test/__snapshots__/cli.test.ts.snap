@@ -2,8 +2,6 @@
 
 exports[`CLI Tool --help and --version should display help menu 1`] = `
 "
-> promptfoo@0.65.0 local
-> ts-node --cwdMode --transpileOnly src/main.ts --help
 
 Usage: main [options] [command]
 
