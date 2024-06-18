@@ -180,7 +180,7 @@ If you're looking to customize your usage, you have a wide set of parameters at 
 
 After running an eval, you may optionally use the `view` command to open the web viewer:
 
-```
+```sh
 npx promptfoo view
 ```
 
