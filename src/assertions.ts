@@ -42,7 +42,6 @@ import {
   type GradingResult,
   type TestCase,
   isGradingResult,
-  isApiProvider,
   AssertionValue,
 } from './types';
 import { AssertionsResult } from './assertions/AssertionsResult';

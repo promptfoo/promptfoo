@@ -4,6 +4,8 @@ import eslint from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import globals from 'globals';
 
+import unusedImports from 'eslint-plugin-unused-imports';
+
 export default [
   ...tseslint.config(eslint.configs.recommended, ...tseslint.configs.recommended),
   {
@@ -20,6 +22,9 @@ export default [
       sourceType: 'module',
       globals: globals.node,
     },
+    plugins: {
+      'unused-imports': unusedImports,
+    },
     rules: {
       '@typescript-eslint/ban-ts-comment': 0,
       '@typescript-eslint/ban-types': 0,
@@ -30,6 +35,7 @@ export default [
       'no-control-regex': 0,
       'no-empty': 0,
       'no-useless-escape': 0,
+      'unused-imports/no-unused-imports': 'error',
     },
   },
   {
