@@ -52,7 +52,7 @@ providers:
 
 Then create adversarial test cases:
 
-```
+```sh
 npx promptfoo@latest generate redteam -w
 ```
 
@@ -233,7 +233,7 @@ For more information, see [Overriding the LLM grader](/docs/configuration/expect
 
 Now that you've configured everything, the next step is to generate the red teaming inputs. This is done by running the `promptfoo generate redteam` command:
 
-```
+```sh
 npx promptfoo@latest generate redteam -w
 ```
 

@@ -186,7 +186,7 @@ providers:
 
 ### Generate adversarial test cases
 
-```
+```sh
 npx promptfoo@latest generate redteam -w
 ```
 
@@ -194,7 +194,7 @@ This will generate several hundred adversarial inputs across many categories of 
 
 You can reduce the number of test cases by setting the specific [plugins](/docs/guides/llm-redteaming#step-3-generate-adversarial-test-cases) you want to run. For example, to only generate basic harmful inputs:
 
-```
+```sh
 npx promptfoo@latest generate redteam -w --plugins harmful
 ```
 
