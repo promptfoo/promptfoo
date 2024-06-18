@@ -224,6 +224,7 @@ async function main() {
       fs.readFileSync(path.join(getDirectory(), '../package.json'), 'utf8'),
     );
     logger.info(packageJson.version);
+    process.exit(0);
   });
 
   program
