@@ -47,7 +47,7 @@ describe('Anthropic', () => {
       config: { tools },
     });
 
-    test('should use cache by default for ToolUse requests', async () => {
+    it('should use cache by default for ToolUse requests', async () => {
       provider.anthropic.messages.create = jest.fn().mockResolvedValue({
         content: [
           {
@@ -97,7 +97,7 @@ describe('Anthropic', () => {
       expect(result).toMatchObject(resultFromCache);
     });
 
-    test('should not use cache if caching is disabled for ToolUse requests', async () => {
+    it('should not use cache if caching is disabled for ToolUse requests', async () => {
       provider.anthropic.messages.create = jest.fn().mockResolvedValue({
         content: [
           {
@@ -130,7 +130,7 @@ describe('Anthropic', () => {
       enableCache();
     });
 
-    test('should return cached response for legacy caching behavior', async () => {
+    it('should return cached response for legacy caching behavior', async () => {
       provider.anthropic.messages.create = jest.fn().mockResolvedValue({
         content: [],
       } as unknown as Anthropic.Messages.Message);
@@ -146,7 +146,7 @@ describe('Anthropic', () => {
       expect(provider.anthropic.messages.create).toHaveBeenCalledTimes(0);
     });
 
-    test('should handle missing apiKey', async () => {
+    it('should handle missing apiKey', async () => {
       const provider = new AnthropicMessagesProvider('claude-3-opus-20240229', {
         config: { apiKey: undefined },
       });
@@ -156,7 +156,7 @@ describe('Anthropic', () => {
       });
     });
 
-    test('should handle API call error', async () => {
+    it('should handle API call error', async () => {
       const provider = new AnthropicMessagesProvider('claude-3-opus-20240229');
       provider.anthropic.messages.create = jest
         .fn()
@@ -168,7 +168,7 @@ describe('Anthropic', () => {
       });
     });
 
-    test('should return token usage and cost', async () => {
+    it('should return token usage and cost', async () => {
       const provider = new AnthropicMessagesProvider('claude-3-opus-20240229', {
         config: { max_tokens: 100, temperature: 0.5, cost: 0.015 },
       });
@@ -187,7 +187,7 @@ describe('Anthropic', () => {
   });
 
   describe('AnthropicCompletionProvider callApi', () => {
-    test('should return output for default behavior', async () => {
+    it('should return output for default behavior', async () => {
       const provider = new AnthropicCompletionProvider('claude-1');
       provider.anthropic.completions.create = jest.fn().mockResolvedValue({
         completion: 'Test output',
@@ -201,7 +201,7 @@ describe('Anthropic', () => {
       });
     });
 
-    test('should return cached output with caching enabled', async () => {
+    it('should return cached output with caching enabled', async () => {
       const provider = new AnthropicCompletionProvider('claude-1');
       provider.anthropic.completions.create = jest.fn().mockResolvedValue({
         completion: 'Test output',
@@ -224,7 +224,7 @@ describe('Anthropic', () => {
       });
     });
 
-    test('should return fresh output with caching disabled', async () => {
+    it('should return fresh output with caching disabled', async () => {
       const provider = new AnthropicCompletionProvider('claude-1');
       provider.anthropic.completions.create = jest.fn().mockResolvedValue({
         completion: 'Test output',
@@ -250,7 +250,7 @@ describe('Anthropic', () => {
       });
     });
 
-    test('should handle missing apiKey', async () => {
+    it('should handle missing apiKey', async () => {
       const provider = new AnthropicCompletionProvider('claude-1', {
         config: { apiKey: undefined },
       });
@@ -261,7 +261,7 @@ describe('Anthropic', () => {
       });
     });
 
-    test('should handle API call error', async () => {
+    it('should handle API call error', async () => {
       const provider = new AnthropicCompletionProvider('claude-1');
       provider.anthropic.completions.create = jest
         .fn()
@@ -275,19 +275,19 @@ describe('Anthropic', () => {
   });
 
   describe('calculateCost', () => {
-    test('should calculate cost for valid input and output tokens', () => {
+    it('should calculate cost for valid input and output tokens', () => {
       const cost = calculateCost('claude-3-opus-20240229', { cost: 0.015 }, 100, 200);
 
       expect(cost).toBe(4.5); // (0.015 * 100) + (0.075 * 200)
     });
 
-    test('should return undefined for missing model', () => {
+    it('should return undefined for missing model', () => {
       const cost = calculateCost('non-existent-model', { cost: 0.015 });
 
       expect(cost).toBeUndefined();
     });
 
-    test('should return undefined for missing tokens', () => {
+    it('should return undefined for missing tokens', () => {
       const cost = calculateCost('claude-3-opus-20240229', { cost: 0.015 });
 
       expect(cost).toBeUndefined();
@@ -295,7 +295,7 @@ describe('Anthropic', () => {
   });
 
   describe('outputFromMessage', () => {
-    test('should return an empty string for empty content array', () => {
+    it('should return an empty string for empty content array', () => {
       const message: Anthropic.Messages.Message = {
         content: [],
         id: '',
@@ -314,7 +314,7 @@ describe('Anthropic', () => {
       expect(result).toBe('');
     });
 
-    test('should return text from a single text block', () => {
+    it('should return text from a single text block', () => {
       const message: Anthropic.Messages.Message = {
         content: [{ type: 'text', text: 'Hello' }],
         id: '',
@@ -333,7 +333,7 @@ describe('Anthropic', () => {
       expect(result).toBe('Hello');
     });
 
-    test('should concatenate text blocks without tool_use blocks', () => {
+    it('should concatenate text blocks without tool_use blocks', () => {
       const message: Anthropic.Messages.Message = {
         content: [
           { type: 'text', text: 'Hello' },
@@ -355,7 +355,7 @@ describe('Anthropic', () => {
       expect(result).toBe('Hello\n\nWorld');
     });
 
-    test('should handle content with tool_use blocks', () => {
+    it('should handle content with tool_use blocks', () => {
       const message: Anthropic.Messages.Message = {
         content: [
           {
@@ -389,7 +389,7 @@ describe('Anthropic', () => {
       );
     });
 
-    test('should concatenate text and tool_use blocks as JSON strings', () => {
+    it('should concatenate text and tool_use blocks as JSON strings', () => {
       const message: Anthropic.Messages.Message = {
         content: [
           { type: 'text', text: 'Hello' },
@@ -421,7 +421,7 @@ describe('Anthropic', () => {
   });
 
   describe('parseMessages', () => {
-    test('should parse messages with user and assistant roles', () => {
+    it('should parse messages with user and assistant roles', () => {
       const inputMessages = dedent`user: What is the weather?
           assistant: The weather is sunny.`;
 
@@ -442,7 +442,7 @@ describe('Anthropic', () => {
       ]);
     });
 
-    test('should handle system messages', () => {
+    it('should handle system messages', () => {
       const inputMessages = dedent`system: This is a system message.
         user: What is the weather?
         assistant: The weather is sunny.`;
@@ -465,7 +465,7 @@ describe('Anthropic', () => {
       ]);
     });
 
-    test('should handle empty input', () => {
+    it('should handle empty input', () => {
       const inputMessages = '';
 
       const { system, extractedMessages } = parseMessages(inputMessages);

@@ -45,7 +45,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
     jest.clearAllMocks();
   });
 
-  test('should call the Gemini API and return the response', async () => {
+  it('should call the Gemini API and return the response', async () => {
     const mockResponse = {
       data: [
         {
@@ -79,7 +79,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
     });
   });
 
-  test('should return cached response if available', async () => {
+  it('should return cached response if available', async () => {
     const mockCachedResponse = {
       cached: true,
       output: 'cached response text',
@@ -103,7 +103,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
     });
   });
 
-  test('should handle API call errors', async () => {
+  it('should handle API call errors', async () => {
     const mockError = new Error('API call error');
     jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
       client: {
@@ -119,7 +119,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
     });
   });
 
-  test('should handle API response errors', async () => {
+  it('should handle API response errors', async () => {
     const mockResponse = {
       data: [
         {

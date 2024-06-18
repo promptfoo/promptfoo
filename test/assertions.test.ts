@@ -20,6 +20,7 @@ import type {
   ProviderResponse,
   GradingResult,
 } from '../src/types';
+import { TestGrader } from './utils';
 
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
@@ -60,18 +61,6 @@ jest.mock('../src/cliState', () => ({
   basePath: '/config_path',
 }));
 
-export class TestGrader implements ApiProvider {
-  async callApi(): Promise<ProviderResponse> {
-    return {
-      output: JSON.stringify({ pass: true, reason: 'Test grading output' }),
-      tokenUsage: { total: 10, prompt: 5, completion: 5 },
-    };
-  }
-
-  id(): string {
-    return 'TestGradingProvider';
-  }
-}
 const Grader = new TestGrader();
 
 describe('runAssertions', () => {
@@ -1062,7 +1051,7 @@ describe('runAssertion', () => {
     expect(result.reason).toBe('Assertion passed');
   });
 
-  it('should fail when the contains-json assertion fails with external schema', async () => {
+  it('should fail contains-json assertion with invalid data against external schema', async () => {
     const assertion: Assertion = {
       type: 'contains-json',
       value: 'file:///schema.json',
@@ -1103,7 +1092,7 @@ describe('runAssertion', () => {
     );
   });
 
-  it('should fail when the contains-json assertion fails with external schema', async () => {
+  it('should fail contains-json assertion with predefined schema and invalid data', async () => {
     const output = 'here is the answer\n\n```{"latitude": "medium", "longitude": -1}```';
 
     const result: GradingResult = await runAssertion({

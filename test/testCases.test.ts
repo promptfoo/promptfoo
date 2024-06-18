@@ -35,7 +35,7 @@ beforeEach(() => {
 });
 
 describe('readStandaloneTestsFile', () => {
-  test('readStandaloneTestsFile with CSV input', async () => {
+  it('readStandaloneTestsFile with CSV input', async () => {
     (fs.readFileSync as jest.Mock).mockReturnValue('var1,var2\nvalue1,value2\nvalue3,value4');
     const varsPath = 'vars.csv';
 
@@ -47,7 +47,7 @@ describe('readStandaloneTestsFile', () => {
     expect(result[1].vars).toEqual({ var1: 'value3', var2: 'value4' });
   });
 
-  test('readStandaloneTestsFile with JSON input', async () => {
+  it('readStandaloneTestsFile with JSON input', async () => {
     (fs.readFileSync as jest.Mock).mockReturnValue(
       '[{"var1": "value1", "var2": "value2"}, {"var3": "value3", "var4": "value4"}]',
     );
@@ -61,7 +61,7 @@ describe('readStandaloneTestsFile', () => {
     expect(result[1].vars).toEqual({ var3: 'value3', var4: 'value4' });
   });
 
-  test('readStandaloneTestsFile with YAML input', async () => {
+  it('readStandaloneTestsFile with YAML input', async () => {
     (fs.readFileSync as jest.Mock).mockReturnValue(
       '- var1: value1\n  var2: value2\n- var3: value3\n  var4: value4',
     );
@@ -77,7 +77,7 @@ describe('readStandaloneTestsFile', () => {
 });
 
 describe('readTest', () => {
-  test('readTest with string input (path to test config)', async () => {
+  it('readTest with string input (path to test config)', async () => {
     const testPath = 'test1.yaml';
     const testContent = {
       description: 'Test 1',
@@ -92,7 +92,7 @@ describe('readTest', () => {
     expect(result).toEqual(testContent);
   });
 
-  test('readTest with TestCase input', async () => {
+  it('readTest with TestCase input', async () => {
     const input: TestCase = {
       description: 'Test 1',
       vars: { var1: 'value1', var2: 'value2' },
@@ -104,13 +104,13 @@ describe('readTest', () => {
     expect(result).toEqual(input);
   });
 
-  test('readTest with invalid input', async () => {
+  it('readTest with invalid input', async () => {
     const input: any = 123;
 
     await expect(readTest(input)).rejects.toThrow();
   });
 
-  test('readTest with TestCase that contains a vars glob input', async () => {
+  it('readTest with TestCase that contains a vars glob input', async () => {
     const input = {
       description: 'Test 1',
       vars: 'vars/*.yaml',
@@ -140,7 +140,7 @@ describe('readTests', () => {
     jest.resetAllMocks();
   });
 
-  test('readTests with string input (CSV file path)', async () => {
+  it('readTests with string input (CSV file path)', async () => {
     (fs.readFileSync as jest.Mock).mockReturnValue(
       'var1,var2,__expected\nvalue1,value2,value1\nvalue3,value4,fn:value5',
     );
@@ -165,7 +165,7 @@ describe('readTests', () => {
     ]);
   });
 
-  test('readTests with multiple __expected in CSV', async () => {
+  it('readTests with multiple __expected in CSV', async () => {
     (fs.readFileSync as jest.Mock).mockReturnValue(
       'var1,var2,__expected1,__expected2,__expected3\nvalue1,value2,value1,value1.2,value1.3\nvalue3,value4,fn:value5,fn:value5.2,fn:value5.3',
     );
@@ -198,7 +198,7 @@ describe('readTests', () => {
     ]);
   });
 
-  test('readTests with array input (TestCase[])', async () => {
+  it('readTests with array input (TestCase[])', async () => {
     const input: TestCase[] = [
       {
         description: 'Test 1',
@@ -217,7 +217,7 @@ describe('readTests', () => {
     expect(result).toEqual(input);
   });
 
-  test('readTests with string array input (paths to test configs)', async () => {
+  it('readTests with string array input (paths to test configs)', async () => {
     const testsPaths = ['test1.yaml', 'test2.yaml'];
     const test1Content = [
       {
@@ -244,7 +244,7 @@ describe('readTests', () => {
     expect(result).toEqual([...test1Content, ...test2Content]);
   });
 
-  test('readTests with vars glob input (paths to vars configs)', async () => {
+  it('readTests with vars glob input (paths to vars configs)', async () => {
     const testsPaths = ['test1.yaml'];
     const test1Content = [
       {
@@ -270,7 +270,7 @@ describe('readTests', () => {
 });
 
 describe('testCaseFromCsvRow', () => {
-  test('should convert a CSV row to a TestCase object', () => {
+  it('should convert a CSV row to a TestCase object', () => {
     const csvRow = {
       var1: 'value1',
       var2: 'value2',

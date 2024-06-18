@@ -12,7 +12,7 @@ import {
 } from '../src/matchers';
 import { DefaultEmbeddingProvider, DefaultGradingProvider } from '../src/providers/openai';
 
-import { TestGrader } from './assertions.test';
+import { TestGrader } from './utils';
 
 import type {
   GradingConfig,
@@ -434,9 +434,7 @@ describe('getAndCheckProvider', () => {
     );
     expect(result).toBe(provider);
   });
-});
 
-describe('getGradingProvider', () => {
   it('should return the default provider when no provider is specified', async () => {
     const provider = await getGradingProvider('text', undefined, DefaultGradingProvider);
     expect(provider).toBe(DefaultGradingProvider);

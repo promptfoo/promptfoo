@@ -55,7 +55,7 @@ beforeEach(() => {
 
 describe('util', () => {
   describe('writeOutput', () => {
-    test('writeOutput with CSV output', () => {
+    it('writeOutput with CSV output', () => {
       const outputPath = 'output.csv';
       const results: EvaluateResult[] = [
         {
@@ -127,7 +127,7 @@ describe('util', () => {
       expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
     });
 
-    test('writeOutput with JSON output', () => {
+    it('writeOutput with JSON output', () => {
       const outputPath = 'output.json';
       const results: EvaluateResult[] = [
         {
@@ -199,7 +199,7 @@ describe('util', () => {
       expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
     });
 
-    test('writeOutput with YAML output', () => {
+    it('writeOutput with YAML output', () => {
       const outputPath = 'output.yaml';
       const results: EvaluateResult[] = [
         {
@@ -271,7 +271,7 @@ describe('util', () => {
       expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
     });
 
-    test('writeOutput with json and txt output', () => {
+    it('writeOutput with json and txt output', () => {
       const outputPath = ['output.json', 'output.txt'];
       const results: EvaluateResult[] = [
         {
@@ -375,7 +375,7 @@ describe('util', () => {
       resetGlobalConfig();
     });
 
-    test('reads from existing config', () => {
+    it('reads from existing config', () => {
       const config = { hasRun: false };
       (fs.existsSync as jest.Mock).mockReturnValue(true);
       (fs.readFileSync as jest.Mock).mockReturnValue(yaml.dump(config));
@@ -387,7 +387,7 @@ describe('util', () => {
       expect(result).toEqual(config);
     });
 
-    test('creates new config if none exists', () => {
+    it('creates new config if none exists', () => {
       (fs.existsSync as jest.Mock).mockReturnValue(false);
       (fs.writeFileSync as jest.Mock).mockImplementation();
 
@@ -405,7 +405,7 @@ describe('util', () => {
       jest.clearAllMocks();
     });
 
-    test('returns true if it is the first run', () => {
+    it('returns true if it is the first run', () => {
       (fs.existsSync as jest.Mock).mockReturnValue(false);
       (fs.writeFileSync as jest.Mock).mockImplementation();
 
@@ -415,7 +415,7 @@ describe('util', () => {
       expect(result).toBe(true);
     });
 
-    test('returns false if it is not the first run', () => {
+    it('returns false if it is not the first run', () => {
       const config = { hasRun: true };
       (fs.existsSync as jest.Mock).mockReturnValue(true);
       (fs.readFileSync as jest.Mock).mockReturnValue(yaml.dump(config));
@@ -427,7 +427,7 @@ describe('util', () => {
     });
   });
 
-  test('readFilters', async () => {
+  it('readFilters', async () => {
     const mockFilter = jest.fn();
     jest.doMock(path.resolve('filter.js'), () => mockFilter, { virtual: true });
 
@@ -439,7 +439,7 @@ describe('util', () => {
   });
 
   describe('readConfigs', () => {
-    test('reads from existing configs', async () => {
+    it('reads from existing configs', async () => {
       const config1 = {
         description: 'test1',
         providers: ['provider1'],
@@ -558,7 +558,7 @@ describe('util', () => {
       });
     });
 
-    test('throws error for unsupported configuration file format', async () => {
+    it('throws error for unsupported configuration file format', async () => {
       (fs.existsSync as jest.Mock).mockReturnValue(true);
 
       await expect(readConfigs(['config1.unsupported'])).rejects.toThrow(
@@ -566,7 +566,7 @@ describe('util', () => {
       );
     });
 
-    test('makeAbsolute should resolve file:// syntax and plaintext prompts', async () => {
+    it('makeAbsolute should resolve file:// syntax and plaintext prompts', async () => {
       (fs.existsSync as jest.Mock).mockReturnValue(true);
       (fs.readFileSync as jest.Mock).mockImplementation((path: string) => {
         if (path === 'config1.json') {
@@ -594,7 +594,7 @@ describe('util', () => {
       ]);
     });
 
-    test('dedupes prompts when reading configs', async () => {
+    it('dedupes prompts when reading configs', async () => {
       (fs.existsSync as jest.Mock).mockReturnValue(true);
       (fs.readFileSync as jest.Mock).mockImplementation((path: string) => {
         if (path === 'config1.json') {
@@ -624,7 +624,7 @@ describe('util', () => {
   });
 
   describe('dereferenceConfig', () => {
-    test('should dereference a config with no $refs', async () => {
+    it('should dereference a config with no $refs', async () => {
       const rawConfig = {
         prompts: ['Hello world'],
         description: 'Test config',
@@ -637,7 +637,7 @@ describe('util', () => {
       expect(dereferencedConfig).toEqual(rawConfig);
     });
 
-    test('should dereference a config with $refs', async () => {
+    it('should dereference a config with $refs', async () => {
       const rawConfig = {
         prompts: [],
         tests: [],
@@ -668,7 +668,7 @@ describe('util', () => {
       expect(dereferencedConfig).toEqual(expectedConfig);
     });
 
-    test('should preserve regular functions when dereferencing', async () => {
+    it('should preserve regular functions when dereferencing', async () => {
       const rawConfig = {
         description: 'Test config with function parameters',
         prompts: [],
@@ -701,7 +701,7 @@ describe('util', () => {
       expect(dereferencedConfig).toEqual(rawConfig);
     });
 
-    test('should preserve tools with references and definitions when dereferencing', async () => {
+    it('should preserve tools with references and definitions when dereferencing', async () => {
       const rawConfig = {
         prompts: [{ $ref: '#/definitions/prompt' }],
         tests: [],
@@ -803,7 +803,7 @@ describe('util', () => {
       jest.resetModules();
     });
 
-    test('transforms output using a direct function', async () => {
+    it('transforms output using a direct function', async () => {
       const output = 'original output';
       const context = { vars: { key: 'value' }, prompt: { id: '123' } };
       const transformFunction = 'output.toUpperCase()';
@@ -811,7 +811,7 @@ describe('util', () => {
       expect(transformedOutput).toEqual('ORIGINAL OUTPUT');
     });
 
-    test('transforms output using an imported function from a file', async () => {
+    it('transforms output using an imported function from a file', async () => {
       const output = 'hello';
       const context = { vars: { key: 'value' }, prompt: { id: '123' } };
       jest.doMock(path.resolve('transform.js'), () => (output: string) => output.toUpperCase(), {
@@ -822,7 +822,7 @@ describe('util', () => {
       expect(transformedOutput).toEqual('HELLO');
     });
 
-    test('throws error if transform function does not return a value', async () => {
+    it('throws error if transform function does not return a value', async () => {
       const output = 'test';
       const context = { vars: {}, prompt: {} };
       const transformFunction = ''; // Empty function, returns undefined
@@ -831,7 +831,7 @@ describe('util', () => {
       );
     });
 
-    test('throws error if file does not export a function', async () => {
+    it('throws error if file does not export a function', async () => {
       const output = 'test';
       const context = { vars: {}, prompt: {} };
       jest.doMock(path.resolve('transform.js'), () => 'banana', { virtual: true });
