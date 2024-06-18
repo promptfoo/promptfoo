@@ -14,10 +14,13 @@ export default [
     ...jest.configs['flat/recommended'],
     rules: {
       ...jest.configs['flat/recommended'].rules,
+      ...jest.configs['flat/style'].rules,
       'jest/consistent-test-it': 'error',
       'jest/expect-expect': 'error',
       'jest/prefer-expect-resolves': 'error',
       'jest/prefer-jest-mocked': 'error',
+      'jest/require-to-throw-message': 'error',
+      // 'jest/prefer-expect-assertions': 'error',
     },
   },
   {

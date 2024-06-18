@@ -226,7 +226,7 @@ describe('runAssertions', () => {
         test,
         output,
       });
-      expect(result.pass).toStrictEqual(false);
+      expect(result.pass).toBe(false);
       expect(result.reason).toBe(
         'Expected output "Something different" to equal "Expected output"',
       );
@@ -261,7 +261,7 @@ describe('runAssertions', () => {
         test,
         output,
       });
-      expect(result.pass).toStrictEqual(true);
+      expect(result.pass).toBe(true);
       expect(result.reason).toBe('All assertions passed');
     });
 
@@ -294,7 +294,7 @@ describe('runAssertions', () => {
         test,
         output,
       });
-      expect(result.pass).toStrictEqual(false);
+      expect(result.pass).toBe(false);
       expect(result.reason).toBe('Aggregate score 0.33 < 0.5 threshold');
     });
 
@@ -360,7 +360,7 @@ describe('runAssertions', () => {
         test,
         output,
       });
-      expect(result.score).toStrictEqual(0.9);
+      expect(result.score).toBe(0.9);
     });
   });
 

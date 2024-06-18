@@ -808,7 +808,7 @@ describe('util', () => {
       const context = { vars: { key: 'value' }, prompt: { id: '123' } };
       const transformFunction = 'output.toUpperCase()';
       const transformedOutput = await transformOutput(transformFunction, output, context);
-      expect(transformedOutput).toEqual('ORIGINAL OUTPUT');
+      expect(transformedOutput).toBe('ORIGINAL OUTPUT');
     });
 
     it('transforms output using an imported function from a file', async () => {
@@ -819,7 +819,7 @@ describe('util', () => {
       });
       const transformFunctionPath = 'file://transform.js';
       const transformedOutput = await transformOutput(transformFunctionPath, output, context);
-      expect(transformedOutput).toEqual('HELLO');
+      expect(transformedOutput).toBe('HELLO');
     });
 
     it('throws error if transform function does not return a value', async () => {
@@ -850,7 +850,7 @@ describe('util', () => {
     });
 
     it('works with provider id undefined', () => {
-      expect(providerToIdentifier(undefined)).toStrictEqual(undefined);
+      expect(providerToIdentifier(undefined)).toBeUndefined();
     });
 
     it('works with ApiProvider', () => {
@@ -876,12 +876,12 @@ describe('util', () => {
 
   describe('varsMatch', () => {
     it('true with both undefined', () => {
-      expect(varsMatch(undefined, undefined)).toStrictEqual(true);
+      expect(varsMatch(undefined, undefined)).toBe(true);
     });
 
     it('false with one undefined', () => {
-      expect(varsMatch(undefined, {})).toStrictEqual(false);
-      expect(varsMatch({}, undefined)).toStrictEqual(false);
+      expect(varsMatch(undefined, {})).toBe(false);
+      expect(varsMatch({}, undefined)).toBe(false);
     });
   });
 
@@ -900,7 +900,7 @@ describe('util', () => {
     } as any as EvaluateResult;
 
     it('is true', () => {
-      expect(resultIsForTestCase(result, testCase)).toStrictEqual(true);
+      expect(resultIsForTestCase(result, testCase)).toBe(true);
     });
 
     it('is false if provider is different', () => {
@@ -911,7 +911,7 @@ describe('util', () => {
         },
       };
 
-      expect(resultIsForTestCase(result, nonMatchTestCase)).toStrictEqual(false);
+      expect(resultIsForTestCase(result, nonMatchTestCase)).toBe(false);
     });
 
     it('is false if vars are different', () => {
@@ -922,7 +922,7 @@ describe('util', () => {
         },
       };
 
-      expect(resultIsForTestCase(result, nonMatchTestCase)).toStrictEqual(false);
+      expect(resultIsForTestCase(result, nonMatchTestCase)).toBe(false);
     });
   });
 });

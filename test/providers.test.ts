@@ -597,7 +597,7 @@ describe('call provider apis', () => {
         await cfProvider.callApi(PROMPT);
 
         expect(fetchMock).toHaveBeenCalledTimes(1);
-        expect(fetchMock.mock.calls.length).toBe(1);
+        expect(fetchMock.mock.calls).toHaveLength(1);
         const [url, { body, headers, method }] = fetchMock.mock.calls[0];
         expect(url).toContain(cloudflareChatConfig.accountId);
         expect(method).toBe('POST');

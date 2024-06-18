@@ -24,7 +24,7 @@ describe('Python Wrapper', () => {
         { key: 'value' },
       ]);
 
-      expect(result).toEqual('test result');
+      expect(result).toBe('test result');
       expect(mockPythonShellRun).toHaveBeenCalledWith('wrapper.py', expect.any(Object));
       expect(mockPythonShellRun.mock.calls[0][1].args).toEqual([
         expect.stringContaining('testScript.py'),
@@ -72,7 +72,7 @@ describe('Python Wrapper', () => {
       const code = 'print("Hello, world!")';
       const result = await pythonWrapper.runPythonCode(code, 'main', []);
 
-      expect(result).toEqual('execution result');
+      expect(result).toBe('execution result');
       expect(mockPythonShellRun).toHaveBeenCalledWith('wrapper.py', expect.any(Object));
       expect(fs.writeFile).toHaveBeenCalledWith(expect.stringContaining('.py'), code);
     });

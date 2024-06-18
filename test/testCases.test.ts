@@ -42,7 +42,7 @@ describe('readStandaloneTestsFile', () => {
     const result = await readStandaloneTestsFile(varsPath);
 
     expect(fs.readFileSync).toHaveBeenCalledTimes(1);
-    expect(result.length).toBe(2);
+    expect(result).toHaveLength(2);
     expect(result[0].vars).toEqual({ var1: 'value1', var2: 'value2' });
     expect(result[1].vars).toEqual({ var1: 'value3', var2: 'value4' });
   });
@@ -56,7 +56,7 @@ describe('readStandaloneTestsFile', () => {
     const result = await readStandaloneTestsFile(varsPath);
 
     expect(fs.readFileSync).toHaveBeenCalledTimes(1);
-    expect(result.length).toBe(2);
+    expect(result).toHaveLength(2);
     expect(result[0].vars).toEqual({ var1: 'value1', var2: 'value2' });
     expect(result[1].vars).toEqual({ var3: 'value3', var4: 'value4' });
   });
@@ -70,7 +70,7 @@ describe('readStandaloneTestsFile', () => {
     const result = await readStandaloneTestsFile(varsPath);
 
     expect(fs.readFileSync).toHaveBeenCalledTimes(1);
-    expect(result.length).toBe(2);
+    expect(result).toHaveLength(2);
     expect(result[0].vars).toEqual({ var1: 'value1', var2: 'value2' });
     expect(result[1].vars).toEqual({ var3: 'value3', var4: 'value4' });
   });
@@ -107,7 +107,7 @@ describe('readTest', () => {
   it('readTest with invalid input', async () => {
     const input: any = 123;
 
-    await expect(readTest(input)).rejects.toThrow();
+    await expect(readTest(input)).rejects.toThrow('Test case must have either assert, vars, or options property. Instead got {}');
   });
 
   it('readTest with TestCase that contains a vars glob input', async () => {
