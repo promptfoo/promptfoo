@@ -27,7 +27,7 @@ describe('filterTests', () => {
   it('handles no tests', async () => {
     const result = await filterTests({} as TestSuite, {});
 
-    expect(result).toBe(undefined);
+    expect(result).toBeUndefined();
   });
 
   describe('firstN', () => {

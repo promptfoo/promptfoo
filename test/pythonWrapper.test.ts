@@ -16,7 +16,7 @@ describe('Python Wrapper', () => {
       jest.spyOn(fs, 'writeFile').mockResolvedValue();
       jest.spyOn(fs, 'unlink').mockResolvedValue();
 
-      const mockPythonShellRun = PythonShell.run as jest.Mock;
+      const mockPythonShellRun = jest.mocked(PythonShell.run);
       mockPythonShellRun.mockResolvedValue(['{"type": "final_result", "data": "test result"}']);
 
       const result = await pythonWrapper.runPython('testScript.py', 'testMethod', [
@@ -24,7 +24,7 @@ describe('Python Wrapper', () => {
         { key: 'value' },
       ]);
 
-      expect(result).toEqual('test result');
+      expect(result).toBe('test result');
       expect(mockPythonShellRun).toHaveBeenCalledWith('wrapper.py', expect.any(Object));
       expect(mockPythonShellRun.mock.calls[0][1].args).toEqual([
         expect.stringContaining('testScript.py'),
@@ -35,7 +35,7 @@ describe('Python Wrapper', () => {
     });
 
     it('should throw an error if the Python script execution fails', async () => {
-      const mockPythonShellRun = PythonShell.run as jest.Mock;
+      const mockPythonShellRun = jest.mocked(PythonShell.run);
       mockPythonShellRun.mockRejectedValue(new Error('Test Error'));
 
       await expect(
@@ -47,7 +47,7 @@ describe('Python Wrapper', () => {
       jest.spyOn(fs, 'writeFile').mockResolvedValue();
       jest.spyOn(fs, 'unlink').mockResolvedValue();
 
-      const mockPythonShellRun = PythonShell.run as jest.Mock;
+      const mockPythonShellRun = jest.mocked(PythonShell.run);
       mockPythonShellRun.mockResolvedValue([
         '{"type": "unexpected_result", "data": "test result"}',
       ]);
@@ -62,7 +62,7 @@ describe('Python Wrapper', () => {
 
   describe('runPythonCode', () => {
     it('should execute Python code from a string', async () => {
-      const mockPythonShellRun = PythonShell.run as jest.Mock;
+      const mockPythonShellRun = jest.mocked(PythonShell.run);
       mockPythonShellRun.mockResolvedValue([
         '{"type": "final_result", "data": "execution result"}',
       ]);
@@ -72,7 +72,7 @@ describe('Python Wrapper', () => {
       const code = 'print("Hello, world!")';
       const result = await pythonWrapper.runPythonCode(code, 'main', []);
 
-      expect(result).toEqual('execution result');
+      expect(result).toBe('execution result');
       expect(mockPythonShellRun).toHaveBeenCalledWith('wrapper.py', expect.any(Object));
       expect(fs.writeFile).toHaveBeenCalledWith(expect.stringContaining('.py'), code);
     });

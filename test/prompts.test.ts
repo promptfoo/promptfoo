@@ -37,11 +37,11 @@ beforeEach(() => {
 });
 
 describe('prompts', () => {
-  test('readPrompts with single prompt file', async () => {
-    (fs.readFileSync as jest.Mock).mockReturnValue('Test prompt 1\n---\nTest prompt 2');
-    (fs.statSync as jest.Mock).mockReturnValue({ isDirectory: () => false });
+  it('readPrompts with single prompt file', async () => {
+    jest.mocked(fs.readFileSync).mockReturnValue('Test prompt 1\n---\nTest prompt 2');
+    jest.mocked(fs.statSync).mockReturnValue({ isDirectory: () => false });
     const promptPaths = ['prompts.txt'];
-    (globSync as jest.Mock).mockImplementation((pathOrGlob) => [pathOrGlob]);
+    jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob]);
 
     const result = await readPrompts(promptPaths);
 
@@ -49,13 +49,14 @@ describe('prompts', () => {
     expect(result).toEqual([toPrompt('Test prompt 1'), toPrompt('Test prompt 2')]);
   });
 
-  test('readPrompts with multiple prompt files', async () => {
-    (fs.readFileSync as jest.Mock)
+  it('readPrompts with multiple prompt files', async () => {
+    jest
+      .mocked(fs.readFileSync)
       .mockReturnValueOnce('Test prompt 1')
       .mockReturnValueOnce('Test prompt 2');
-    (fs.statSync as jest.Mock).mockReturnValue({ isDirectory: () => false });
+    jest.mocked(fs.statSync).mockReturnValue({ isDirectory: () => false });
     const promptPaths = ['prompt1.txt', 'prompt2.txt'];
-    (globSync as jest.Mock).mockImplementation((pathOrGlob) => [pathOrGlob]);
+    jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob]);
 
     const result = await readPrompts(promptPaths);
 
@@ -63,11 +64,11 @@ describe('prompts', () => {
     expect(result).toEqual([toPrompt('Test prompt 1'), toPrompt('Test prompt 2')]);
   });
 
-  test('readPrompts with directory', async () => {
-    (fs.statSync as jest.Mock).mockReturnValue({ isDirectory: () => true });
-    (globSync as jest.Mock).mockImplementation((pathOrGlob) => [pathOrGlob]);
-    (fs.readdirSync as jest.Mock).mockReturnValue(['prompt1.txt', 'prompt2.txt']);
-    (fs.readFileSync as jest.Mock).mockImplementation((filePath) => {
+  it('readPrompts with directory', async () => {
+    jest.mocked(fs.statSync).mockReturnValue({ isDirectory: () => true });
+    jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob]);
+    jest.mocked(fs.readdirSync).mockReturnValue(['prompt1.txt', 'prompt2.txt']);
+    jest.mocked(fs.readFileSync).mockImplementation((filePath) => {
       if (filePath.endsWith(path.join('prompts', 'prompt1.txt'))) {
         return 'Test prompt 1';
       } else if (filePath.endsWith(path.join('prompts', 'prompt2.txt'))) {
@@ -84,9 +85,9 @@ describe('prompts', () => {
     expect(result).toEqual([toPrompt('Test prompt 1'), toPrompt('Test prompt 2')]);
   });
 
-  test('readPrompts with empty input', async () => {
-    (fs.readFileSync as jest.Mock).mockReturnValue('');
-    (fs.statSync as jest.Mock).mockReturnValue({ isDirectory: () => false });
+  it('readPrompts with empty input', async () => {
+    jest.mocked(fs.readFileSync).mockReturnValue('');
+    jest.mocked(fs.statSync).mockReturnValue({ isDirectory: () => false });
     const promptPaths = ['prompts.txt'];
 
     const result = await readPrompts(promptPaths);
@@ -95,9 +96,9 @@ describe('prompts', () => {
     expect(result).toEqual([toPrompt('')]);
   });
 
-  test('readPrompts with map input', async () => {
-    (fs.readFileSync as jest.Mock).mockReturnValue('some raw text');
-    (fs.statSync as jest.Mock).mockReturnValue({ isDirectory: () => false });
+  it('readPrompts with map input', async () => {
+    jest.mocked(fs.readFileSync).mockReturnValue('some raw text');
+    jest.mocked(fs.statSync).mockReturnValue({ isDirectory: () => false });
 
     const result = await readPrompts({
       'prompts.txt': 'foo1',
@@ -110,7 +111,7 @@ describe('prompts', () => {
     expect(result[1]).toEqual(expect.objectContaining({ raw: 'some raw text', label: 'foo2' }));
   });
 
-  test('readPrompts with JSONL file', async () => {
+  it('readPrompts with JSONL file', async () => {
     const data = [
       [
         { role: 'system', content: 'You are a helpful assistant.' },
@@ -122,8 +123,8 @@ describe('prompts', () => {
       ],
     ];
 
-    (fs.readFileSync as jest.Mock).mockReturnValue(data.map((o) => JSON.stringify(o)).join('\n'));
-    (fs.statSync as jest.Mock).mockReturnValue({ isDirectory: () => false });
+    jest.mocked(fs.readFileSync).mockReturnValue(data.map((o) => JSON.stringify(o)).join('\n'));
+    jest.mocked(fs.statSync).mockReturnValue({ isDirectory: () => false });
     const promptPaths = ['prompts.jsonl'];
 
     const result = await readPrompts(promptPaths);
@@ -132,9 +133,9 @@ describe('prompts', () => {
     expect(result).toEqual([toPrompt(JSON.stringify(data[0])), toPrompt(JSON.stringify(data[1]))]);
   });
 
-  test('readPrompts with .py file', async () => {
+  it('readPrompts with .py file', async () => {
     const code = `print('dummy prompt')`;
-    (fs.readFileSync as jest.Mock).mockReturnValue(code);
+    jest.mocked(fs.readFileSync).mockReturnValue(code);
     const result = await readPrompts('prompt.py');
     expect(fs.readFileSync).toHaveBeenCalledTimes(1);
     expect(result[0].raw).toEqual(code);
@@ -142,7 +143,7 @@ describe('prompts', () => {
     expect(result[0].function).toBeDefined();
   });
 
-  test('readPrompts with Prompt object array', async () => {
+  it('readPrompts with Prompt object array', async () => {
     const prompts = [
       { id: 'prompts.py:prompt1', label: 'First prompt' },
       { id: 'prompts.py:prompt2', label: 'Second prompt' },
@@ -152,7 +153,7 @@ describe('prompts', () => {
   return 'First prompt'
 def prompt2:
   return 'Second prompt'`;
-    (fs.readFileSync as jest.Mock).mockReturnValue(code);
+    jest.mocked(fs.readFileSync).mockReturnValue(code);
 
     const result = await readPrompts(prompts);
 
@@ -170,7 +171,7 @@ def prompt2:
     });
   });
 
-  test('readPrompts with .js file', async () => {
+  it('readPrompts with .js file', async () => {
     jest.doMock(
       path.resolve('prompt.js'),
       () => {
@@ -182,13 +183,13 @@ def prompt2:
     expect(result[0].function).toBeDefined();
   });
 
-  test('readPrompts with glob pattern for .txt files', async () => {
+  it('readPrompts with glob pattern for .txt files', async () => {
     const fileContents: Record<string, string> = {
       '1.txt': 'First text file content',
       '2.txt': 'Second text file content',
     };
 
-    (fs.readFileSync as jest.Mock).mockImplementation((path: string) => {
+    jest.mocked(fs.readFileSync).mockImplementation((path: string) => {
       if (path.includes('1.txt')) {
         return fileContents['1.txt'];
       } else if (path.includes('2.txt')) {
@@ -196,10 +197,10 @@ def prompt2:
       }
       throw new Error('Unexpected file path in test');
     });
-    (fs.statSync as jest.Mock).mockImplementation((path: string) => ({
+    jest.mocked(fs.statSync).mockImplementation((path: string) => ({
       isDirectory: () => path.includes('prompts'),
     }));
-    (fs.readdirSync as jest.Mock).mockImplementation((path: string) => {
+    jest.mocked(fs.readdirSync).mockImplementation((path: string) => {
       if (path.includes('prompts')) {
         return ['prompt1.txt', 'prompt2.txt'];
       }
