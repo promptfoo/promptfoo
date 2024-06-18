@@ -18,6 +18,7 @@ The `promptfoo` command line utility supports the following subcommands:
   - `list prompts`
   - `list datasets`
 - `show <id>` - Show details of a specific resource (evaluation, prompt, dataset).
+- `delete <id>` - Delete a resource by its ID (currently, just evaluations)
 - `feedback <message>` - Send feedback to the Promptfoo developers.
 
 ## `promptfoo eval`
@@ -122,6 +123,14 @@ Show details of a specific resource.
 | `eval <id>`    | Show details of a specific evaluation |
 | `prompt <id>`  | Show details of a specific prompt     |
 | `dataset <id>` | Show details of a specific dataset    |
+
+## `promptfoo delete <id>`
+
+Deletes a specific resource.
+
+| Option      | Description                |
+| ----------- | -------------------------- |
+| `eval <id>` | Delete an evaluation by id |
 
 ## `promptfoo import <filepath>`
 
