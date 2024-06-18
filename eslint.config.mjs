@@ -5,7 +5,6 @@ import tseslint from 'typescript-eslint';
 import globals from 'globals';
 
 import unusedImports from 'eslint-plugin-unused-imports';
-// const jest = require('eslint-plugin-jest');
 import jest from 'eslint-plugin-jest';
 
 export default [
@@ -20,7 +19,6 @@ export default [
       'jest/prefer-expect-resolves': 'error',
       'jest/prefer-jest-mocked': 'error',
       'jest/require-to-throw-message': 'error',
-      // 'jest/prefer-expect-assertions': 'error',
     },
   },
   {
