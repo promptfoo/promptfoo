@@ -20,6 +20,10 @@ const FailReasonCarousel: React.FC<FailReasonCarouselProps> = ({ failReasons }) 
     setCurrentIndex((prevIndex) => (prevIndex < failReasons.length - 1 ? prevIndex + 1 : 0));
   };
 
+  if (failReasons.length < 1) {
+    return null;
+  }
+
   return (
     <div className="fail-reason">
       {failReasons.length > 1 && (

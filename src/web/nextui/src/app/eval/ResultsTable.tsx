@@ -310,7 +310,7 @@ function ResultsTable({
       head.prompts.map((_, idx) =>
         body.reduce((acc, row) => {
           const componentResults = row.outputs[idx].gradingResult?.componentResults;
-          return acc + (componentResults ? componentResults.filter((r) => r.pass).length : 0);
+          return acc + (componentResults ? componentResults.filter((r) => r?.pass).length : 0);
         }, 0),
       ),
     [head.prompts, body],

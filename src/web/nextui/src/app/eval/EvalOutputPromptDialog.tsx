@@ -48,17 +48,20 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
             </TableRow>
           </TableHead>
           <TableBody>
-            {gradingResults.map((result, i) => (
-              <TableRow key={i}>
-                <TableCell>{result.pass ? '✅' : '❌'}</TableCell>
-                <TableCell>{result.score.toFixed(2)}</TableCell>
-                <TableCell>{result.assertion?.type || ''}</TableCell>
-                <TableCell style={{ whiteSpace: 'pre-wrap' }}>
-                  {result.assertion?.value ? String(result.assertion.value) : '-'}
-                </TableCell>
-                <TableCell style={{ whiteSpace: 'pre-wrap' }}>{result.reason}</TableCell>
-              </TableRow>
-            ))}
+            {gradingResults.map((result, i) => {
+              if (!result) return null;
+              return (
+                <TableRow key={i}>
+                  <TableCell>{result.pass ? '✅' : '❌'}</TableCell>
+                  <TableCell>{result.score.toFixed(2)}</TableCell>
+                  <TableCell>{result.assertion?.type || ''}</TableCell>
+                  <TableCell style={{ whiteSpace: 'pre-wrap' }}>
+                    {result.assertion?.value ? String(result.assertion.value) : '-'}
+                  </TableCell>
+                  <TableCell style={{ whiteSpace: 'pre-wrap' }}>{result.reason}</TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </TableContainer>
