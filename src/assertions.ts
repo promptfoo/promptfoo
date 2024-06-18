@@ -42,7 +42,6 @@ import {
   type GradingResult,
   type TestCase,
   isGradingResult,
-  isApiProvider,
 } from './types';
 import { AssertionsResult } from './assertions/AssertionsResult';
 import { parseChatPrompt } from './providers/shared';

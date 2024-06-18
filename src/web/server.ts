@@ -35,7 +35,7 @@ import {
   deleteEval,
 } from '../util';
 import { synthesizeFromTestSuite } from '../testCases';
-import { getDbPath, getDbSignalPath } from '../database';
+import { getDbSignalPath } from '../database';
 
 // Running jobs
 const evalJobs = new Map<string, Job>();

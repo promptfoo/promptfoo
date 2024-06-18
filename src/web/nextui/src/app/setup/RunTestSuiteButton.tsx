@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Button, CircularProgress } from '@mui/material';
 
 import { useStore } from '@/state/evalConfig';
-import { IS_RUNNING_LOCALLY, NEXTJS_BASE_URL, USE_SUPABASE } from '@/constants';
+import { NEXTJS_BASE_URL, USE_SUPABASE } from '@/constants';
 
 const RunTestSuiteButton: React.FC = () => {
   const router = useRouter();
