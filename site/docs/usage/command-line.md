@@ -128,9 +128,9 @@ Show details of a specific resource.
 
 Deletes a specific resource.
 
-| Option         | Description                           |
-| -------------- | ------------------------------------- |
-| `eval <id>`    | Delete an evaluation by id            |
+| Option      | Description                |
+| ----------- | -------------------------- |
+| `eval <id>` | Delete an evaluation by id |
 
 ## `promptfoo import <filepath>`
 
