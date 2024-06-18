@@ -12,7 +12,7 @@ Next, install `@aws-sdk/client-bedrock-runtime`:
 npm install -g @aws-sdk/client-bedrock-runtime
 ```
 
-The AWS SDK will automatically pull credentails from the following locations:
+The AWS SDK will automatically pull credentials from the following locations:
 
 - IAM roles on EC2
 - `~/.aws/credentials`

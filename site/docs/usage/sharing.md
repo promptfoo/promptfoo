@@ -10,7 +10,7 @@ The command creates a URL which can be used to view the results. The URL is vali
 
 Here's how to use it:
 
-```bash
+```sh
 promptfoo share
 ```
 
@@ -20,7 +20,7 @@ When you run `promptfoo share`, it will ask for a confirmation to create a URL.
 
 If you want to skip this confirmation, you can use the `-y` or `--yes` option like this:
 
-```bash
+```sh
 promptfoo share -y
 ```
 
@@ -28,7 +28,7 @@ promptfoo share -y
 
 Here's an example of how the `share` command works:
 
-```bash
+```sh
 $ promptfoo share
 Are you sure you want to create a shareable URL? [y/N] y
 View results: https://app.promptfoo.dev/f:abc123

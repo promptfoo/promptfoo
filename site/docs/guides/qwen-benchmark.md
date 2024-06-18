@@ -26,7 +26,7 @@ The chatbot should provide accurate information, respond quickly, and handle com
 
 Create a new directory for your comparison project and initialize it with `promptfoo init`.
 
-```bash
+```sh
 npx promptfoo@latest init --no-interactive qwen-benchmark
 ```
 
@@ -43,7 +43,7 @@ providers:
 
 Set your API keys as environment variables:
 
-```bash
+```sh
 export OPENROUTER_API_KEY=your_openrouter_api_key
 export OPENAI_API_KEY=your_openai_api_key
 ```
@@ -155,7 +155,7 @@ To learn more, see [assertions and metrics](/docs/configuration/expected-outputs
 
 With everything configured, run the evaluation using the `promptfoo` CLI:
 
-```bash
+```
 npx promptfoo@latest eval
 ```
 
@@ -165,7 +165,7 @@ This command will execute each test case against each configured model and recor
 
 To visualize the results, use the `promptfoo` viewer:
 
-```bash
+```sh
 npx promptfoo@latest view
 ```
 
@@ -175,7 +175,7 @@ It will show results like so:
 
 You can also output the results to a file in various formats, such as JSON, YAML, or CSV:
 
-```bash
+```
 npx promptfoo@latest eval -o results.csv
 ```
 

@@ -20,7 +20,7 @@ This guide assumes you have installed both promptfoo and Ollama.
 
 Run this on the command line to download the Llama2 base model:
 
-```
+```sh
 ollama pull llama2
 ollama pull llama2-uncensored
 ```
@@ -29,7 +29,7 @@ ollama pull llama2-uncensored
 
 Initialize a new directory `llama-gpt-comparison` that will contain our prompts and test cases:
 
-```
+```sh
 npx promptfoo@latest init llama-gpt-comparison
 ```
 

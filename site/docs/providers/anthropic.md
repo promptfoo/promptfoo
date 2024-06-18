@@ -14,7 +14,7 @@ Create Anthropic API keys [here](https://console.anthropic.com/settings/keys).
 
 Example of setting the environment variable:
 
-```bash
+```sh
 export ANTHROPIC_API_KEY=your_api_key_here
 ```
 

@@ -4,7 +4,7 @@ promptfoo can run evals on oobabooga's [text-generation-webui](https://github.co
 
 The text-gen-webui extension can be activated from with the UI or via command line. Here is an example of command line usage.
 
-```
+```sh
 python server.py --loader <LOADER-NAME> --model <MODEL-NAME> --api
 # Replace `python server.py` with ./start_linux if simple installer is used
 ```

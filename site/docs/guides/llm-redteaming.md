@@ -58,7 +58,7 @@ npx promptfoo@latest generate redteam -w
 
 Run the eval:
 
-```sh
+```
 npx promptfoo@latest eval
 ```
 
@@ -314,7 +314,7 @@ The adversarial test cases will be written to `promptfooconfig.yaml`.
 
 Now that all the red team tests are ready, run the eval:
 
-```sh
+```
 npx promptfoo@latest eval
 ```
 

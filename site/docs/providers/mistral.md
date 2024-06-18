@@ -8,7 +8,7 @@ To use Mistral AI, you need to set the `MISTRAL_API_KEY` environment variable, o
 
 Example of setting the environment variable:
 
-```bash
+```sh
 export MISTRAL_API_KEY=your_api_key_here
 ```
 

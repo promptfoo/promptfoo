@@ -124,7 +124,7 @@ tests:
 
 Execute the comparison using the following command:
 
-```sh
+```
 npx promptfoo@latest eval
 ```
 

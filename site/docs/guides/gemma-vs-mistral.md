@@ -212,13 +212,13 @@ tests:
 
 Execute the comparison with:
 
-```bash
+```
 npx promptfoo@latest eval
 ```
 
 Then, view the results:
 
-```bash
+```sh
 npx promptfoo@latest view
 ```
 

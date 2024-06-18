@@ -8,7 +8,7 @@ To use the OpenAI API, set the `OPENAI_API_KEY` environment variable, specify vi
 
 Example:
 
-```bash
+```sh
 export OPENAI_API_KEY=your_api_key_here
 ```
 
@@ -434,7 +434,7 @@ tests:
 You can specify JavaScript callbacks that are automatically called to create
 the output of a function tool call.
 
-This requires definining your config in a JavaScript file instead of YAML.
+This requires defining your config in a JavaScript file instead of YAML.
 
 ```js
 module.exports = /** @type {import('promptfoo').TestSuiteConfig} */ ({

@@ -10,7 +10,7 @@ Note that the function and tool syntax differ slightly between the two providers
 
 The configuration for this example is specified in `promptfooconfig.yaml`. To run the example, execute the following command in your terminal:
 
-```sh
+```
 promptfoo eval
 ```
 

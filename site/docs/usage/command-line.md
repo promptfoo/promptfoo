@@ -169,13 +169,13 @@ BETA: Generate synthetic test cases based on existing prompts and variables.
 
 For example, this command will modify your default config file (usually `promptfooconfig.yaml`) with new test cases:
 
-```
+```sh
 promptfoo generate dataset -w
 ```
 
 This command will generate test cases for a specific config and write them to a file, while following special instructions:
 
-```
+```sh
 promptfoo generate dataset -c my_config.yaml -o new_tests.yaml -i 'All test cases for {{location}} must be European cities'
 ```
 
@@ -211,13 +211,13 @@ providers:
 
 This command will generate adversarial test cases and write them to the file:
 
-```
+```sh
 promptfoo generate redteam -w
 ```
 
 This command overrides the system purpose and the variable to inject adversarial user input:
 
-```
+```sh
 promptfoo generate redteam -w --purpose 'Travel agent that helps users plan trips' --injectVar 'message'
 ```
 
@@ -233,6 +233,6 @@ To disable terminal colors for printed outputs, set `FORCE_COLOR=0` (this is sup
 
 For the `eval` command, you may also want to disable the progress bar and table as well, because they use special characters:
 
-```
+```sh
 FORCE_COLOR=0 promptfoo eval --no-progress-bar --no-table
 ```
