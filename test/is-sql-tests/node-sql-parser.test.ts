@@ -1,3 +1,4 @@
+/* eslint-disable jest/no-commented-out-tests */
 import { isSql } from '../../src/assertions';
 import { Assertion, GradingResult } from '../../src/types';
 
@@ -15,7 +16,7 @@ describe('Basic tests', () => {
     expect(result.reason).toBe('Assertion passed');
   });
 
-  it('should fail when the output string is an invalid SQL statement', async () => {
+  it('should fail when the SQL statement contains a syntax error in the ORDER BY clause', async () => {
     const renderedValue = undefined;
     const outputString = 'SELECT * FROM orders ORDERY BY order_date';
     const result: GradingResult = await isSql(outputString, renderedValue, false, assertion);
@@ -25,7 +26,7 @@ describe('Basic tests', () => {
     );
   });
 
-  it('should fail when the output string is an invalid SQL statement', async () => {
+  it('should fail when the SQL statement uses a reserved keyword as a table name', async () => {
     const renderedValue = undefined;
     const outputString = 'SELECT * FROM select WHERE id = 1';
     const result: GradingResult = await isSql(outputString, renderedValue, false, assertion);
@@ -35,7 +36,7 @@ describe('Basic tests', () => {
     );
   });
 
-  it('should fail when the output string is an invalid SQL statement', async () => {
+  it('should fail when the SQL statement has an incorrect DELETE syntax', async () => {
     const renderedValue = undefined;
     const outputString = 'DELETE employees WHERE id = 1';
     const result: GradingResult = await isSql(outputString, renderedValue, false, assertion);
@@ -47,7 +48,7 @@ describe('Basic tests', () => {
 
   /**
    * Catches an incorrect output from node-sql-parser package
-   * The paser cannot identify the syntax error: missing comma between column names
+   * The parser cannot identify the syntax error: missing comma between column names
    */
   // it('should fail when the output string is an invalid SQL statement', () => {
   //   const renderedValue = undefined;
@@ -59,7 +60,7 @@ describe('Basic tests', () => {
 
   /**
    * Catches an incorrect output from node-sql-parser package
-   * The paser cannot identify the syntax error: misuse of backticks (`)
+   * The parser cannot identify the syntax error: misuse of backticks (`)
    */
   // it('should fail when the output string is an invalid SQL statement', () => {
   //   const renderedValue = undefined;
@@ -204,3 +205,5 @@ describe('White Table/Column List Tests', () => {
   //   expect(result.reason).toBe('Assertion passed');
   // });
 });
+
+/* eslint-enable jest/no-commented-out-tests */

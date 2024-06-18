@@ -996,8 +996,10 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       output,
     });
-    expect(result.pass).toBeTruthy();
-    expect(result.reason).toBe('Assertion passed');
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+    });
   });
 
   it('should fail when the is-sql assertion fails', async () => {
@@ -1010,10 +1012,10 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       output,
     });
-    expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe(
-      'SQL statement does not conform to the provided MySQL database syntax.',
-    );
+    expect(result).toMatchObject({
+      pass: false,
+      reason: 'SQL statement does not conform to the provided MySQL database syntax.',
+    });
   });
 
   it('should pass when the not-is-sql assertion passes', async () => {
@@ -1026,8 +1028,10 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       output,
     });
-    expect(result.pass).toBeTruthy();
-    expect(result.reason).toBe('Assertion passed');
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+    });
   });
 
   it('should fail when the not-is-sql assertion fails', async () => {
@@ -1040,8 +1044,10 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       output,
     });
-    expect(result.pass).toBeFalsy;
-    expect(result.reason).toBe('The output SQL statement is valid');
+    expect(result).toMatchObject({
+      pass: false,
+      reason: 'The output SQL statement is valid',
+    });
   });
 
   it('should pass when the is-sql assertion passes given MySQL Database syntax', async () => {
@@ -1054,8 +1060,10 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       output,
     });
-    expect(result.pass).toBeTruthy();
-    expect(result.reason).toBe('Assertion passed');
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+    });
   });
 
   it('should fail when the is-sql assertion fails given MySQL Database syntax', async () => {
@@ -1068,10 +1076,10 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       output,
     });
-    expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe(
-      'SQL statement does not conform to the provided MySQL database syntax.',
-    );
+    expect(result).toMatchObject({
+      pass: false,
+      reason: 'SQL statement does not conform to the provided MySQL database syntax.',
+    });
   });
 
   it('should pass when the is-sql assertion passes given MySQL Database syntax and allowedTables', async () => {
@@ -1084,8 +1092,10 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       output,
     });
-    expect(result.pass).toBeTruthy();
-    expect(result.reason).toBe('Assertion passed');
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+    });
   });
 
   it('should fail when the is-sql assertion fails given MySQL Database syntax and allowedTables', async () => {
@@ -1098,10 +1108,10 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       output,
     });
-    expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe(
-      `SQL validation failed: authority = 'update::null::employees' is required in table whiteList to execute SQL = 'UPDATE employees SET department_id = 2 WHERE employee_id = 1'.`,
-    );
+    expect(result).toMatchObject({
+      pass: false,
+      reason: `SQL validation failed: authority = 'update::null::employees' is required in table whiteList to execute SQL = 'UPDATE employees SET department_id = 2 WHERE employee_id = 1'.`,
+    });
   });
 
   it('should pass when the is-sql assertion passes given MySQL Database syntax and allowedColumns', async () => {
@@ -1114,8 +1124,10 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       output,
     });
-    expect(result.pass).toBeTruthy();
-    expect(result.reason).toBe('Assertion passed');
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+    });
   });
 
   it('should fail when the is-sql assertion fails given MySQL Database syntax and allowedColumns', async () => {
@@ -1128,10 +1140,10 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       output,
     });
-    expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe(
-      `SQL validation failed: authority = 'select::null::age' is required in column whiteList to execute SQL = 'SELECT age FROM a WHERE id = 1'.`,
-    );
+    expect(result).toMatchObject({
+      pass: false,
+      reason: `SQL validation failed: authority = 'select::null::age' is required in column whiteList to execute SQL = 'SELECT age FROM a WHERE id = 1'.`,
+    });
   });
 
   it('should pass when the is-sql assertion passes given MySQL Database syntax, allowedTables, and allowedColumns', async () => {
@@ -1144,8 +1156,10 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       output,
     });
-    expect(result.pass).toBeTruthy();
-    expect(result.reason).toBe('Assertion passed');
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+    });
   });
 
   it('should fail when the is-sql assertion fails given MySQL Database syntax, allowedTables, and allowedColumns', async () => {
@@ -1158,13 +1172,13 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       output,
     });
-    expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe(
-      `SQL validation failed: authority = 'insert::departments::name' is required in column whiteList to execute SQL = 'INSERT INTO departments (name) VALUES ('HR')'.`,
-    );
+    expect(result).toMatchObject({
+      pass: false,
+      reason: `SQL validation failed: authority = 'insert::departments::name' is required in column whiteList to execute SQL = 'INSERT INTO departments (name) VALUES ('HR')'.`,
+    });
   });
 
-  it('should fail when the is-sql assertion fails given MySQL Database syntax, allowedTables, and allowedColumns', async () => {
+  it('should fail when the is-sql assertion fails due to missing table authority for MySQL Database syntax', async () => {
     const output = 'UPDATE a SET id = 1';
 
     const result: GradingResult = await runAssertion({
@@ -1174,13 +1188,13 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       output,
     });
-    expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe(
-      `SQL validation failed: authority = 'update::null::a' is required in table whiteList to execute SQL = 'UPDATE a SET id = 1'.`,
-    );
+    expect(result).toMatchObject({
+      pass: false,
+      reason: `SQL validation failed: authority = 'update::null::a' is required in table whiteList to execute SQL = 'UPDATE a SET id = 1'.`,
+    });
   });
 
-  it('should fail when the is-sql assertion fails given MySQL Database syntax, allowedTables, and allowedColumns', async () => {
+  it('should fail when the is-sql assertion fails due to missing authorities for DELETE statement in MySQL Database syntax', async () => {
     const output = `DELETE FROM employees;`;
 
     const result: GradingResult = await runAssertion({
@@ -1190,10 +1204,10 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       output,
     });
-    expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe(
-      `SQL validation failed: authority = 'delete::null::employees' is required in table whiteList to execute SQL = 'DELETE FROM employees;'. SQL validation failed: authority = 'delete::employees::(.*)' is required in column whiteList to execute SQL = 'DELETE FROM employees;'.`,
-    );
+    expect(result).toMatchObject({
+      pass: false,
+      reason: `SQL validation failed: authority = 'delete::null::employees' is required in table whiteList to execute SQL = 'DELETE FROM employees;'. SQL validation failed: authority = 'delete::employees::(.*)' is required in column whiteList to execute SQL = 'DELETE FROM employees;'.`,
+    });
   });
 
   it('should pass when the contains-json assertion passes', async () => {
