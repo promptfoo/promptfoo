@@ -27,7 +27,7 @@ Before starting, ensure you have the following:
 
 Create a new directory for your benchmarking project:
 
-```sh
+```
 npx promptfoo@latest init gemini-gpt-comparison
 ```
 
@@ -86,7 +86,7 @@ In this case, I just took some examples from a [Hacker News thread](https://news
 
 Execute the comparison using the `promptfoo eval` command:
 
-```sh
+```
 npx promptfoo@latest eval
 ```
 
@@ -96,7 +96,7 @@ This will run the test cases against Gemini, GPT 3.5, and GPT 4 and output the r
 
 Then, use the `promptfoo view` command to open the viewer and compare the results visually:
 
-```sh
+```
 npx promptfoo@latest view
 ```
 

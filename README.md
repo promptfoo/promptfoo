@@ -18,7 +18,7 @@ With promptfoo, you can:
 
 The goal: **test-driven LLM development** instead of trial-and-error.
 
-```sh
+```
 npx promptfoo@latest init
 ```
 
@@ -58,7 +58,7 @@ As you collect more examples and establish a user feedback loop, continue to bui
 
 To get started, run this command:
 
-```sh
+```
 npx promptfoo@latest init
 ```
 
@@ -66,7 +66,7 @@ This will create some placeholders in your current directory: `prompts.txt` and 
 
 After editing the prompts and variables to your liking, run the eval command to kick off an evaluation:
 
-```sh
+```
 npx promptfoo@latest eval
 ```
 
@@ -180,7 +180,7 @@ If you're looking to customize your usage, you have a wide set of parameters at 
 
 After running an eval, you may optionally use the `view` command to open the web viewer:
 
-```sh
+```
 npx promptfoo view
 ```
 
@@ -190,7 +190,7 @@ npx promptfoo view
 
 In [this example](https://github.com/typpo/promptfoo/tree/main/examples/assistant-cli), we evaluate whether adding adjectives to the personality of an assistant bot affects the responses:
 
-```sh
+```
 npx promptfoo eval -p prompts.txt -r openai:gpt-3.5-turbo -t tests.csv
 ```
 
@@ -210,7 +210,7 @@ You can also output a nice [spreadsheet](https://docs.google.com/spreadsheets/d/
 
 In the [next example](https://github.com/typpo/promptfoo/tree/main/examples/gpt-3.5-vs-4), we evaluate the difference between GPT 3 and GPT 4 outputs for a given prompt:
 
-```sh
+```
 npx promptfoo eval -p prompts.txt -r openai:gpt-3.5-turbo openai:gpt-4 -o output.html
 ```
 

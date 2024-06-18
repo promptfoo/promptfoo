@@ -426,7 +426,7 @@ And create a list of assertions (`asserts.yaml`):
 
 Then run the eval command:
 
-```sh
+```
 promptfoo eval --assertions asserts.yaml --model-outputs outputs.json
 ```
 

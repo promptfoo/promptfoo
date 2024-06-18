@@ -23,7 +23,7 @@ Before getting started, make sure you have:
 
 Create a new directory for your comparison project:
 
-```sh
+```
 npx promptfoo@latest init claude3-vs-gpt4
 cd claude3-vs-gpt4
 ```
@@ -123,7 +123,7 @@ The `assert` blocks allow you to automatically check the model outputs for expec
 
 With your configuration complete, you can kick off the evaluation:
 
-```sh
+```
 npx promptfoo@latest eval
 ```
 
@@ -131,7 +131,7 @@ This will run each test case against both Claude 3 and GPT-4 and record the resu
 
 To view the results, start up the `promptfoo` viewer:
 
-```sh
+```
 npx promptfoo@latest view
 ```
 
@@ -141,7 +141,7 @@ This will display a comparison view showing how Claude 3 and GPT-4 performed on 
 
 You can also output the raw results data to a file:
 
-```sh
+```
 npx promptfoo@latest eval -o results.json
 ```
 

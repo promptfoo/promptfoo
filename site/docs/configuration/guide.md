@@ -548,25 +548,25 @@ For detailed information on the config structure, see [Configuration Reference](
 
 If you have multiple sets of tests, it helps to split them into multiple config files. Use the `--config` or `-c` parameter to run each individual config:
 
-```sh
+```
 promptfoo eval -c usecase1.yaml
 ```
 
 and
 
-```sh
+```
 promptfoo eval -c usecase2.yaml
 ```
 
 You can run multiple configs at the same time, which will combine them into a single eval. For example:
 
-```sh
+```
 promptfoo eval -c my_configs/*
 ```
 
 or
 
-```sh
+```
 promptfoo eval -c config1.yaml -c config2.yaml -c config3.yaml
 ```
 

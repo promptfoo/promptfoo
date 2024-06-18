@@ -37,7 +37,7 @@ AZURE_OPENAI_API_KEY='...'
 
 Create a new directory for your comparison project and initialize it:
 
-```sh
+```
 npx promptfoo@latest init openai-azure-comparison
 ```
 
@@ -91,7 +91,7 @@ tests:
 
 Execute the comparison using the `promptfoo eval` command:
 
-```sh
+```
 npx promptfoo@latest eval --no-cache
 ```
 

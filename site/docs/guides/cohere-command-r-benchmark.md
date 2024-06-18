@@ -23,7 +23,7 @@ The end result is a side-by-side comparison view that looks like this:
 
 Create a new promptfoo project:
 
-```sh
+```
 npx promptfoo@latest init cohere-benchmark
 cd cohere-benchmark
 ```
@@ -109,13 +109,13 @@ tests:
 
 Run the benchmark:
 
-```sh
+```
 npx promptfoo@latest eval
 ```
 
 And view the results:
 
-```sh
+```
 npx promptfoo@latest view
 ```
 

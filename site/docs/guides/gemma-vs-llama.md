@@ -23,7 +23,7 @@ Although the configuration below uses Replicate, it wouldn't take much modificat
 
 Let's start by creating a new directory for our eval:
 
-```sh
+```
 npx promptfoo@latest init gemma-vs-llama
 ```
 
@@ -187,7 +187,7 @@ tests:
 
 With your configuration and test cases set up, you're ready to run the comparison. Use the following command to start the evaluation:
 
-```sh
+```
 npx promptfoo@latest eval
 ```
 
@@ -195,7 +195,7 @@ This command will process each test case through both Gemma and Llama, allowing 
 
 Then open the viewer:
 
-```sh
+```
 npx promptfoo@latest view
 ```
 

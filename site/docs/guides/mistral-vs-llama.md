@@ -22,7 +22,7 @@ This guide assumes that you have promptfoo [installed](/docs/installation). It a
 
 Initialize a new directory `mistral-llama-comparison` that will contain our prompts and test cases:
 
-```sh
+```
 npx promptfoo@latest init mistral-llama-comparison
 ```
 
@@ -207,7 +207,7 @@ Learn more about setting up test assertions [here](/docs/configuration/expected-
 
 Once your config file is set up, you can run the comparison using the `promptfoo eval` command:
 
-```sh
+```
 npx promptfoo@latest eval
 ```
 
@@ -219,7 +219,7 @@ Then, to open the web viewer, run `npx promptfoo@latest view`. We'll this compar
 
 You can also output a JSON, YAML, or CSV by specifying an output file:
 
-```sh
+```
 npx promptfoo@latest eval -o output.csv
 ```
 

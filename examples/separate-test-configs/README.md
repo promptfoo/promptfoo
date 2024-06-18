@@ -2,6 +2,6 @@ This example shows how you can use paths and wildcards to simplify for `promptfo
 
 Run:
 
-```sh
+```
 promptfoo eval
 ```

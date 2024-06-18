@@ -24,7 +24,7 @@ By running a temperature eval, you can make data-driven decisions that balance t
 
 Before setting up an evaluation to compare the performance of your LLM at different temperatures, you'll need to initialize a configuration file. Run the following command to create a `promptfooconfig.yaml` file:
 
-```sh
+```
 npx promptfoo@latest init
 ```
 
@@ -67,7 +67,7 @@ The `tests` section includes our test cases that will be run against both temper
 
 To run the evaluation, use the following command:
 
-```sh
+```
 npx promptfoo@latest eval
 ```
 
@@ -118,7 +118,7 @@ It's worth spending a few minutes to set up these automated checks. They help st
 
 After the evaluation is complete, you can use the web viewer to review the outputs and compare the performance at different temperatures:
 
-```sh
+```
 npx promptfoo@latest view
 ```
 
@@ -146,7 +146,7 @@ providers:
 
 The `eval` command also has a parameter, `repeat`, which runs each test multiple times:
 
-```sh
+```
 promptfoo eval --repeat 3
 ```
 

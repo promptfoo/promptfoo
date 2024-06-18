@@ -31,7 +31,7 @@ First, install [Node 18 or later](https://nodejs.org/en/download/package-manager
 
 Then create a new project for your red teaming needs:
 
-```sh
+```
 npx promptfoo@latest init my-redteam-project
 cd my-redteam-project
 ```
@@ -52,19 +52,19 @@ providers:
 
 Then create adversarial test cases:
 
-```sh
+```
 npx promptfoo@latest generate redteam -w
 ```
 
 Run the eval:
 
-```sh
+```
 npx promptfoo@latest eval
 ```
 
 And view the results:
 
-```sh
+```
 npx promptfoo@latest view
 ```
 
@@ -233,7 +233,7 @@ For more information, see [Overriding the LLM grader](/docs/configuration/expect
 
 Now that you've configured everything, the next step is to generate the red teaming inputs. This is done by running the `promptfoo generate redteam` command:
 
-```sh
+```
 npx promptfoo@latest generate redteam -w
 ```
 
@@ -314,7 +314,7 @@ The adversarial test cases will be written to `promptfooconfig.yaml`.
 
 Now that all the red team tests are ready, run the eval:
 
-```sh
+```
 npx promptfoo@latest eval
 ```
 
@@ -324,7 +324,7 @@ This will take a while, usually ~15 minutes or so depending on how many plugins 
 
 Use the web viewer to review the flagged outputs and understand the failure cases.
 
-```sh
+```
 npx promptfoo@latest view
 ```
 

@@ -4,7 +4,7 @@ Next, change a few of the text files in prompts/ and edit promptfooconfig.yaml.
 
 Then run:
 
-```sh
+```
 promptfoo eval
 ```
 

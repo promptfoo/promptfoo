@@ -20,7 +20,7 @@ Promptfoo is a command-line tool that can help you run benchmarks across differe
 
 First, we'll initialize the project directory for the eval.
 
-```sh
+```
 npx promptfoo@latest init replicate-lifeboat-eval
 ```
 
@@ -93,13 +93,13 @@ Learn more about how to set up [assertions](/docs/configuration/expected-outputs
 
 Execute the comparison using the `promptfoo eval` command, which will run your test cases against each model and produce results.
 
-```sh
+```
 npx promptfoo@latest eval
 ```
 
 Then view the results in the web interface:
 
-```sh
+```
 npx promptfoo@latest view
 ```
 
@@ -109,7 +109,7 @@ Which produces a nice browser side-by-side view like this:
 
 Or export them to a file:
 
-```sh
+```
 npx promptfoo@latest eval -o results.csv
 ```
 

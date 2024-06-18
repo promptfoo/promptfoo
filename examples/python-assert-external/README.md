@@ -4,7 +4,7 @@ Next, edit assert.py and promptfooconfig.yaml.
 
 Then run:
 
-```sh
+```
 promptfoo eval
 ```
 

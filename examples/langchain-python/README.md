@@ -12,6 +12,6 @@ pip install -r requirements.txt
 
 Then run the eval:
 
-```sh
+```
 npx promptfoo eval
 ```

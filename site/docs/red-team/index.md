@@ -156,7 +156,7 @@ You can begin red teaming your application in less than 5 minutes.
 
 ### Initialize the project
 
-```sh
+```
 npx promptfoo@latest init --no-interactive my-project
 cd my-project
 ```
@@ -186,7 +186,7 @@ providers:
 
 ### Generate adversarial test cases
 
-```sh
+```
 npx promptfoo@latest generate redteam -w
 ```
 
@@ -194,19 +194,19 @@ This will generate several hundred adversarial inputs across many categories of 
 
 You can reduce the number of test cases by setting the specific [plugins](/docs/guides/llm-redteaming#step-3-generate-adversarial-test-cases) you want to run. For example, to only generate basic harmful inputs:
 
-```sh
+```
 npx promptfoo@latest generate redteam -w --plugins harmful
 ```
 
 ### Run the eval
 
-```sh
+```
 npx promptfoo@latest eval
 ```
 
 ### View the results
 
-```sh
+```
 npx promptfoo@latest view
 ```
 

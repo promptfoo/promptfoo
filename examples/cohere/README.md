@@ -4,7 +4,7 @@ Next, edit promptfooconfig.yaml.
 
 Then run:
 
-```sh
+```
 promptfoo eval -c simple_config.yaml
 ```
 

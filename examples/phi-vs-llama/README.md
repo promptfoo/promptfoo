@@ -9,7 +9,7 @@ Next, edit promptfooconfig.yaml.
 
 Then run:
 
-```sh
+```
 promptfoo eval
 ```
 

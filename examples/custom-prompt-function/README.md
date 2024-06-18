@@ -4,7 +4,7 @@ Next, have a look at the various prompt .js files. These prompts are constructed
 
 Then run:
 
-```sh
+```
 promptfoo eval
 ```
 

@@ -6,6 +6,6 @@ See https://promptfoo.dev/docs/providers/azure/ for more Azure setup information
 
 Edit configuration in `promptfooconfig.yaml`. Run with:
 
-```sh
+```
 promptfoo eval
 ```

@@ -4,7 +4,7 @@ Next, have a look at prompt.json and edit promptfooconfig.yaml.
 
 Then run:
 
-```sh
+```
 promptfoo eval
 ```
 

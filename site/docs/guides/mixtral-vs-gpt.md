@@ -19,7 +19,7 @@ In this guide, we'll walk through the steps to compare three large language mode
 
 Create a new directory for your comparison project and initialize it with `promptfoo init`.
 
-```sh
+```
 npx promptfoo@latest init mixtral-gpt-comparison
 ```
 
@@ -136,7 +136,7 @@ Optionally, you can set up assertions to automatically assess the output for cor
 
 With everything configured, run the evaluation using the `promptfoo` CLI:
 
-```sh
+```
 npx promptfoo@latest eval
 ```
 
@@ -144,7 +144,7 @@ This command will execute each test case against each configured model and recor
 
 To visualize the results, use the `promptfoo` viewer:
 
-```sh
+```
 npx promptfoo@latest view
 ```
 
@@ -154,7 +154,7 @@ It will show results like so:
 
 You can also output the results to a file in various formats, such as JSON, YAML, or CSV:
 
-```sh
+```
 npx promptfoo@latest eval -o results.csv
 ```
 

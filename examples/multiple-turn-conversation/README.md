@@ -20,7 +20,7 @@ Use `completion.output` to get the assistant's response to that message.
 
 Then run:
 
-```sh
+```
 promptfoo eval
 ```
 

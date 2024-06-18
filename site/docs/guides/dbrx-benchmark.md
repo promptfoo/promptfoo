@@ -24,7 +24,7 @@ The end result will be a custom benchmark that looks similar to this:
 
 Create a new directory for your comparison project and initialize it with `promptfoo init`.
 
-```sh
+```
 npx promptfoo@latest init dbrx-benchmark
 ```
 
@@ -179,7 +179,7 @@ Many types of assertions are supported, both deterministic and LLM-graded. See [
 
 With everything configured, run the evaluation using the `promptfoo` CLI:
 
-```sh
+```
 npx promptfoo@latest eval
 ```
 
@@ -187,7 +187,7 @@ This command will execute each test case against each configured model and recor
 
 To visualize the results, use the `promptfoo` viewer:
 
-```sh
+```
 npx promptfoo@latest view
 ```
 
@@ -201,7 +201,7 @@ Clicking into a specific output will show details on the assertions:
 
 You can also output the results to a file in various formats, such as JSON, YAML, or CSV:
 
-```sh
+```
 npx promptfoo@latest eval -o results.csv
 ```
 
