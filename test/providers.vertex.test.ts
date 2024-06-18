@@ -33,12 +33,12 @@ describe('VertexChatProvider.callGeminiApi', () => {
       },
     });
 
-    (getCache as jest.Mock).mockReturnValue({
+    jest.mocked(getCache).mockReturnValue({
       get: jest.fn(),
       set: jest.fn(),
     });
 
-    (isCacheEnabled as jest.Mock).mockReturnValue(true);
+    jest.mocked(isCacheEnabled).mockReturnValue(true);
   });
 
   afterEach(() => {
@@ -90,7 +90,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
       },
     };
 
-    (getCache().get as jest.Mock).mockResolvedValue(JSON.stringify(mockCachedResponse));
+    jest.mocked(getCache().get).mockResolvedValue(JSON.stringify(mockCachedResponse));
 
     const response = await provider.callGeminiApi('test prompt');
 

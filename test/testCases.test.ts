@@ -36,7 +36,7 @@ beforeEach(() => {
 
 describe('readStandaloneTestsFile', () => {
   it('readStandaloneTestsFile with CSV input', async () => {
-    (fs.readFileSync as jest.Mock).mockReturnValue('var1,var2\nvalue1,value2\nvalue3,value4');
+    jest.mocked(fs.readFileSync).mockReturnValue('var1,var2\nvalue1,value2\nvalue3,value4');
     const varsPath = 'vars.csv';
 
     const result = await readStandaloneTestsFile(varsPath);
@@ -48,7 +48,7 @@ describe('readStandaloneTestsFile', () => {
   });
 
   it('readStandaloneTestsFile with JSON input', async () => {
-    (fs.readFileSync as jest.Mock).mockReturnValue(
+    jest.mocked(fs.readFileSync).mockReturnValue(
       '[{"var1": "value1", "var2": "value2"}, {"var3": "value3", "var4": "value4"}]',
     );
     const varsPath = 'vars.json';
@@ -62,7 +62,7 @@ describe('readStandaloneTestsFile', () => {
   });
 
   it('readStandaloneTestsFile with YAML input', async () => {
-    (fs.readFileSync as jest.Mock).mockReturnValue(
+    jest.mocked(fs.readFileSync).mockReturnValue(
       '- var1: value1\n  var2: value2\n- var3: value3\n  var4: value4',
     );
     const varsPath = 'vars.yaml';
@@ -84,7 +84,7 @@ describe('readTest', () => {
       vars: { var1: 'value1', var2: 'value2' },
       assert: [{ type: 'equals', value: 'value1' }],
     };
-    (fs.readFileSync as jest.Mock).mockReturnValueOnce(yaml.dump(testContent));
+    jest.mocked(fs.readFileSync).mockReturnValueOnce(yaml.dump(testContent));
 
     const result = await readTest(testPath);
 
@@ -118,8 +118,8 @@ describe('readTest', () => {
     };
     const varsContent1 = { var1: 'value1' };
     const varsContent2 = { var2: 'value2' };
-    (globSync as jest.Mock).mockReturnValueOnce(['vars/vars1.yaml', 'vars/vars2.yaml']);
-    (fs.readFileSync as jest.Mock)
+    jest.mocked(globSync).mockReturnValueOnce(['vars/vars1.yaml', 'vars/vars2.yaml']);
+    jest.mocked(fs.readFileSync)
       .mockReturnValueOnce(yaml.dump(varsContent1))
       .mockReturnValueOnce(yaml.dump(varsContent2));
 
@@ -141,7 +141,7 @@ describe('readTests', () => {
   });
 
   it('readTests with string input (CSV file path)', async () => {
-    (fs.readFileSync as jest.Mock).mockReturnValue(
+    jest.mocked(fs.readFileSync).mockReturnValue(
       'var1,var2,__expected\nvalue1,value2,value1\nvalue3,value4,fn:value5',
     );
     const testsPath = 'tests.csv';
@@ -166,7 +166,7 @@ describe('readTests', () => {
   });
 
   it('readTests with multiple __expected in CSV', async () => {
-    (fs.readFileSync as jest.Mock).mockReturnValue(
+    jest.mocked(fs.readFileSync).mockReturnValue(
       'var1,var2,__expected1,__expected2,__expected3\nvalue1,value2,value1,value1.2,value1.3\nvalue3,value4,fn:value5,fn:value5.2,fn:value5.3',
     );
     const testsPath = 'tests.csv';
@@ -233,10 +233,10 @@ describe('readTests', () => {
         assert: [{ type: 'contains-json', value: 'value3' }],
       },
     ];
-    (fs.readFileSync as jest.Mock)
+    jest.mocked(fs.readFileSync)
       .mockReturnValueOnce(yaml.dump(test1Content))
       .mockReturnValueOnce(yaml.dump(test2Content));
-    (globSync as jest.Mock).mockImplementation((pathOrGlob) => [pathOrGlob]);
+    jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob]);
 
     const result = await readTests(testsPaths);
 
@@ -257,10 +257,10 @@ describe('readTests', () => {
       var1: 'value1',
       var2: 'value2',
     };
-    (fs.readFileSync as jest.Mock)
+    jest.mocked(fs.readFileSync)
       .mockReturnValueOnce(yaml.dump(test1Content))
       .mockReturnValueOnce(yaml.dump(vars1Content));
-    (globSync as jest.Mock).mockImplementation((pathOrGlob) => [pathOrGlob]);
+    jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob]);
 
     const result = await readTests(testsPaths);
 

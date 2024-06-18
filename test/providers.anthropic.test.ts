@@ -214,7 +214,7 @@ describe('Anthropic', () => {
         tokenUsage: {},
       });
 
-      (provider.anthropic.completions.create as jest.Mock).mockClear();
+      jest.mocked(provider.anthropic.completions.create).mockClear();
       const cachedResult = await provider.callApi('Test prompt');
 
       expect(provider.anthropic.completions.create).toHaveBeenCalledTimes(0);
@@ -237,7 +237,7 @@ describe('Anthropic', () => {
         tokenUsage: {},
       });
 
-      (provider.anthropic.completions.create as jest.Mock).mockClear();
+      jest.mocked(provider.anthropic.completions.create).mockClear();
 
       disableCache();
 

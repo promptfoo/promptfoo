@@ -17,7 +17,7 @@ export default [
       'jest/consistent-test-it': 'error',
       'jest/expect-expect': 'error',
       'jest/prefer-expect-resolves': 'error',
-      // 'jest/prefer-jest-mocked': 'error',
+      'jest/prefer-jest-mocked': 'error',
     },
   },
   {

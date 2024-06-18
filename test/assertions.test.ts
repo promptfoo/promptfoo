@@ -666,7 +666,7 @@ describe('runAssertion', () => {
       value: 'file:///output.json',
     };
 
-    (fs.readFileSync as jest.Mock).mockReturnValue(JSON.stringify({ key: 'value' }));
+    jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ key: 'value' }));
 
     const output = '{"key": "value"}';
 
@@ -688,7 +688,7 @@ describe('runAssertion', () => {
       value: 'file:///output.json',
     };
 
-    (fs.readFileSync as jest.Mock).mockReturnValue(JSON.stringify({ key: 'value' }));
+    jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ key: 'value' }));
 
     const output = '{"key": "not value"}';
 
@@ -852,7 +852,7 @@ describe('runAssertion', () => {
       value: 'file:///schema.json',
     };
 
-    (fs.readFileSync as jest.Mock).mockReturnValue(
+    jest.mocked(fs.readFileSync).mockReturnValue(
       JSON.stringify({
         required: ['latitude', 'longitude'],
         type: 'object',
@@ -891,7 +891,7 @@ describe('runAssertion', () => {
       value: 'file:///schema.json',
     };
 
-    (fs.readFileSync as jest.Mock).mockReturnValue(
+    jest.mocked(fs.readFileSync).mockReturnValue(
       JSON.stringify({
         required: ['latitude', 'longitude'],
         type: 'object',
@@ -1018,7 +1018,7 @@ describe('runAssertion', () => {
       value: 'file:///schema.json',
     };
 
-    (fs.readFileSync as jest.Mock).mockReturnValue(
+    jest.mocked(fs.readFileSync).mockReturnValue(
       JSON.stringify({
         required: ['latitude', 'longitude'],
         type: 'object',
@@ -1057,7 +1057,7 @@ describe('runAssertion', () => {
       value: 'file:///schema.json',
     };
 
-    (fs.readFileSync as jest.Mock).mockReturnValue(
+    jest.mocked(fs.readFileSync).mockReturnValue(
       JSON.stringify({
         required: ['latitude', 'longitude'],
         type: 'object',

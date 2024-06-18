@@ -347,7 +347,7 @@ describe('util', () => {
   describe('readOutput', () => {
     it('reads JSON output', async () => {
       const outputPath = 'output.json';
-      (fs.readFileSync as jest.Mock).mockReturnValue('{}');
+      jest.mocked(fs.readFileSync).mockReturnValue('{}');
       const output = await readOutput(outputPath);
       expect(output).toEqual({});
     });
@@ -377,8 +377,8 @@ describe('util', () => {
 
     it('reads from existing config', () => {
       const config = { hasRun: false };
-      (fs.existsSync as jest.Mock).mockReturnValue(true);
-      (fs.readFileSync as jest.Mock).mockReturnValue(yaml.dump(config));
+      jest.mocked(fs.existsSync).mockReturnValue(true);
+      jest.mocked(fs.readFileSync).mockReturnValue(yaml.dump(config));
 
       const result = readGlobalConfig();
 
@@ -388,8 +388,8 @@ describe('util', () => {
     });
 
     it('creates new config if none exists', () => {
-      (fs.existsSync as jest.Mock).mockReturnValue(false);
-      (fs.writeFileSync as jest.Mock).mockImplementation();
+      jest.mocked(fs.existsSync).mockReturnValue(false);
+      jest.mocked(fs.writeFileSync).mockImplementation();
 
       const result = readGlobalConfig();
 
@@ -406,8 +406,8 @@ describe('util', () => {
     });
 
     it('returns true if it is the first run', () => {
-      (fs.existsSync as jest.Mock).mockReturnValue(false);
-      (fs.writeFileSync as jest.Mock).mockImplementation();
+      jest.mocked(fs.existsSync).mockReturnValue(false);
+      jest.mocked(fs.writeFileSync).mockImplementation();
 
       const result = maybeRecordFirstRun();
 
@@ -417,8 +417,8 @@ describe('util', () => {
 
     it('returns false if it is not the first run', () => {
       const config = { hasRun: true };
-      (fs.existsSync as jest.Mock).mockReturnValue(true);
-      (fs.readFileSync as jest.Mock).mockReturnValue(yaml.dump(config));
+      jest.mocked(fs.existsSync).mockReturnValue(true);
+      jest.mocked(fs.readFileSync).mockReturnValue(yaml.dump(config));
 
       const result = maybeRecordFirstRun();
 
@@ -431,7 +431,7 @@ describe('util', () => {
     const mockFilter = jest.fn();
     jest.doMock(path.resolve('filter.js'), () => mockFilter, { virtual: true });
 
-    (globSync as jest.Mock).mockImplementation((pathOrGlob) => [pathOrGlob]);
+    jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob]);
 
     const filters = await readFilters({ testFilter: 'filter.js' });
 
@@ -475,8 +475,8 @@ describe('util', () => {
         sharing: true,
       };
 
-      (globSync as jest.Mock).mockImplementation((pathOrGlob) => [pathOrGlob]);
-      (fs.readFileSync as jest.Mock)
+      jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob]);
+      jest.mocked(fs.readFileSync)
         .mockReturnValueOnce(JSON.stringify(config1))
         .mockReturnValueOnce(JSON.stringify(config2))
         .mockReturnValueOnce(JSON.stringify(config1))
@@ -484,8 +484,8 @@ describe('util', () => {
         .mockReturnValue('you should not see this');
 
       // Mocks for prompt loading
-      (fs.readdirSync as jest.Mock).mockReturnValue([]);
-      (fs.statSync as jest.Mock).mockImplementation(() => {
+      jest.mocked(fs.readdirSync).mockReturnValue([]);
+      jest.mocked(fs.statSync).mockImplementation(() => {
         throw new Error('File does not exist');
       });
 
@@ -559,7 +559,7 @@ describe('util', () => {
     });
 
     it('throws error for unsupported configuration file format', async () => {
-      (fs.existsSync as jest.Mock).mockReturnValue(true);
+      jest.mocked(fs.existsSync).mockReturnValue(true);
 
       await expect(readConfigs(['config1.unsupported'])).rejects.toThrow(
         'Unsupported configuration file format: .unsupported',
@@ -567,8 +567,8 @@ describe('util', () => {
     });
 
     it('makeAbsolute should resolve file:// syntax and plaintext prompts', async () => {
-      (fs.existsSync as jest.Mock).mockReturnValue(true);
-      (fs.readFileSync as jest.Mock).mockImplementation((path: string) => {
+      jest.mocked(fs.existsSync).mockReturnValue(true);
+      jest.mocked(fs.readFileSync).mockImplementation((path: string) => {
         if (path === 'config1.json') {
           return JSON.stringify({
             description: 'test1',
@@ -595,8 +595,8 @@ describe('util', () => {
     });
 
     it('dedupes prompts when reading configs', async () => {
-      (fs.existsSync as jest.Mock).mockReturnValue(true);
-      (fs.readFileSync as jest.Mock).mockImplementation((path: string) => {
+      jest.mocked(fs.existsSync).mockReturnValue(true);
+      jest.mocked(fs.readFileSync).mockImplementation((path: string) => {
         if (path === 'config1.json') {
           return JSON.stringify({
             description: 'test1',

@@ -16,7 +16,7 @@ describe('Python Wrapper', () => {
       jest.spyOn(fs, 'writeFile').mockResolvedValue();
       jest.spyOn(fs, 'unlink').mockResolvedValue();
 
-      const mockPythonShellRun = PythonShell.run as jest.Mock;
+      const mockPythonShellRun = jest.mocked(PythonShell.run);
       mockPythonShellRun.mockResolvedValue(['{"type": "final_result", "data": "test result"}']);
 
       const result = await pythonWrapper.runPython('testScript.py', 'testMethod', [
@@ -35,7 +35,7 @@ describe('Python Wrapper', () => {
     });
 
     it('should throw an error if the Python script execution fails', async () => {
-      const mockPythonShellRun = PythonShell.run as jest.Mock;
+      const mockPythonShellRun = jest.mocked(PythonShell.run);
       mockPythonShellRun.mockRejectedValue(new Error('Test Error'));
 
       await expect(
@@ -47,7 +47,7 @@ describe('Python Wrapper', () => {
       jest.spyOn(fs, 'writeFile').mockResolvedValue();
       jest.spyOn(fs, 'unlink').mockResolvedValue();
 
-      const mockPythonShellRun = PythonShell.run as jest.Mock;
+      const mockPythonShellRun = jest.mocked(PythonShell.run);
       mockPythonShellRun.mockResolvedValue([
         '{"type": "unexpected_result", "data": "test result"}',
       ]);
@@ -62,7 +62,7 @@ describe('Python Wrapper', () => {
 
   describe('runPythonCode', () => {
     it('should execute Python code from a string', async () => {
-      const mockPythonShellRun = PythonShell.run as jest.Mock;
+      const mockPythonShellRun = jest.mocked(PythonShell.run);
       mockPythonShellRun.mockResolvedValue([
         '{"type": "final_result", "data": "execution result"}',
       ]);
