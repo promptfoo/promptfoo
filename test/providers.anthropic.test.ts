@@ -48,7 +48,7 @@ describe('Anthropic', () => {
     });
 
     it('should use cache by default for ToolUse requests', async () => {
-      provider.anthropic.messages.create = jest.fn().mockResolvedValue({
+      jest.spyOn(provider.anthropic.messages, 'create').mockImplementation().mockResolvedValue({
         content: [
           {
             type: 'text',
@@ -98,7 +98,7 @@ describe('Anthropic', () => {
     });
 
     it('should not use cache if caching is disabled for ToolUse requests', async () => {
-      provider.anthropic.messages.create = jest.fn().mockResolvedValue({
+      jest.spyOn(provider.anthropic.messages, 'create').mockImplementation().mockResolvedValue({
         content: [
           {
             type: 'text',
@@ -131,7 +131,7 @@ describe('Anthropic', () => {
     });
 
     it('should return cached response for legacy caching behavior', async () => {
-      provider.anthropic.messages.create = jest.fn().mockResolvedValue({
+      jest.spyOn(provider.anthropic.messages, 'create').mockImplementation().mockResolvedValue({
         content: [],
       } as unknown as Anthropic.Messages.Message);
       getCache().set(
@@ -158,8 +158,7 @@ describe('Anthropic', () => {
 
     it('should handle API call error', async () => {
       const provider = new AnthropicMessagesProvider('claude-3-opus-20240229');
-      provider.anthropic.messages.create = jest
-        .fn()
+      jest.spyOn(provider.anthropic.messages, 'create').mockImplementation()
         .mockRejectedValue(new Error('API call failed'));
 
       const result = await provider.callApi('What is the forecast in San Francisco?');
@@ -172,7 +171,7 @@ describe('Anthropic', () => {
       const provider = new AnthropicMessagesProvider('claude-3-opus-20240229', {
         config: { max_tokens: 100, temperature: 0.5, cost: 0.015 },
       });
-      provider.anthropic.messages.create = jest.fn().mockResolvedValue({
+      jest.spyOn(provider.anthropic.messages, 'create').mockImplementation().mockResolvedValue({
         content: [{ type: 'text', text: 'Test output' }],
         usage: { input_tokens: 50, output_tokens: 50 },
       } as Anthropic.Messages.Message);
@@ -189,7 +188,7 @@ describe('Anthropic', () => {
   describe('AnthropicCompletionProvider callApi', () => {
     it('should return output for default behavior', async () => {
       const provider = new AnthropicCompletionProvider('claude-1');
-      provider.anthropic.completions.create = jest.fn().mockResolvedValue({
+      jest.spyOn(provider.anthropic.completions, 'create').mockImplementation().mockResolvedValue({
         completion: 'Test output',
       });
       const result = await provider.callApi('Test prompt');
@@ -203,7 +202,7 @@ describe('Anthropic', () => {
 
     it('should return cached output with caching enabled', async () => {
       const provider = new AnthropicCompletionProvider('claude-1');
-      provider.anthropic.completions.create = jest.fn().mockResolvedValue({
+      jest.spyOn(provider.anthropic.completions, 'create').mockImplementation().mockResolvedValue({
         completion: 'Test output',
       });
       const result = await provider.callApi('Test prompt');
@@ -226,7 +225,7 @@ describe('Anthropic', () => {
 
     it('should return fresh output with caching disabled', async () => {
       const provider = new AnthropicCompletionProvider('claude-1');
-      provider.anthropic.completions.create = jest.fn().mockResolvedValue({
+      jest.spyOn(provider.anthropic.completions, 'create').mockImplementation().mockResolvedValue({
         completion: 'Test output',
       });
       const result = await provider.callApi('Test prompt');
@@ -263,8 +262,7 @@ describe('Anthropic', () => {
 
     it('should handle API call error', async () => {
       const provider = new AnthropicCompletionProvider('claude-1');
-      provider.anthropic.completions.create = jest
-        .fn()
+      jest.spyOn(provider.anthropic.completions, 'create').mockImplementation()
         .mockRejectedValue(new Error('API call failed'));
 
       const result = await provider.callApi('Test prompt');
