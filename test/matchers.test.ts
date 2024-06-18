@@ -89,7 +89,7 @@ describe('matchesSimilarity', () => {
     expect(result.reason).toBe('Similarity 0.00 is less than threshold 0.9');
   });
 
-  it('should use the overridden simmilarity grading config', async () => {
+  it('should use the overridden similarity grading config', async () => {
     const expected = 'Expected output';
     const output = 'Sample output';
     const threshold = 0.5;

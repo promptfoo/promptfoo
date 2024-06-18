@@ -240,7 +240,7 @@ Add the following line to the `scripts` section in your `package.json`:
 
 Now, you can run the tests with the following command:
 
-```bash
+```sh
 npm test
 ```
 

@@ -123,7 +123,7 @@ The `assert` blocks allow you to automatically check the model outputs for expec
 
 With your configuration complete, you can kick off the evaluation:
 
-```sh
+```
 npx promptfoo@latest eval
 ```
 
@@ -141,7 +141,7 @@ This will display a comparison view showing how Claude 3 and GPT-4 performed on 
 
 You can also output the raw results data to a file:
 
-```sh
+```
 npx promptfoo@latest eval -o results.json
 ```
 

@@ -22,7 +22,7 @@ This guide assumes that you have promptfoo [installed](/docs/installation). It a
 
 Initialize a new directory `llama-gpt-comparison` that will contain our prompts and test cases:
 
-```
+```sh
 npx promptfoo@latest init llama-gpt-comparison
 ```
 
@@ -202,7 +202,7 @@ These settings will apply to all test cases run against these models.
 
 To configure OpenAI and Replicate (Llama) providers, be sure to set the following environment variables:
 
-```bash
+```sh
 OPENAI_API_KEY=sk-abc123
 REPLICATE_API_TOKEN=abc123
 ```

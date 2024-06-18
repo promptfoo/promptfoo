@@ -68,7 +68,7 @@ To investigate and fix this issue, there's a few possible solutions:
 
 Many users don't have enough RAM to run all the models. The eval command includes an `--interactive-providers` option that runs evals on only 1 provider at a time:
 
-```sh
+```
 promptfoo eval --interactive-providers
 ```
 

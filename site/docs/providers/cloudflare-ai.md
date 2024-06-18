@@ -6,7 +6,7 @@ This provider supports the [models](https://developers.cloudflare.com/workers-ai
 
 Calling the Workers AI requires the user to supply a Cloudflare account ID and API key with sufficient permissions to invoke the Workers AI REST endpoints.
 
-```bash
+```sh
 export CLOUDFLARE_ACCOUNT_ID=YOUR_ACCOUNT_ID_HERE
 export CLOUDFLARE_API_KEY=YOUR_API_KEY_HERE
 ```

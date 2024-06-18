@@ -46,7 +46,7 @@ This will create a `promptfooconfig.yaml` file in your current directory.
 
    - **OpenAI**: if testing with an OpenAI model, you'll need to set the `OPENAI_API_KEY` environment variable (see [OpenAI provider docs](/docs/providers/openai) for more info):
 
-     ```bash
+     ```sh
      export OPENAI_API_KEY=sk-abc123
      ```
 
@@ -195,7 +195,7 @@ Have a look at the setup and full output [here](https://github.com/promptfoo/pro
 
 You can also output a nice [spreadsheet](https://docs.google.com/spreadsheets/d/1nanoj3_TniWrDl1Sj-qYqIMD6jwm5FBy15xPFdUTsmI/edit?usp=sharing), [JSON](https://github.com/typpo/promptfoo/blob/main/examples/simple-cli/output.json), YAML, or an HTML file:
 
-```bash
+```
 npx promptfoo@latest eval -o output.html
 ```
 
@@ -214,7 +214,7 @@ providers: [openai:gpt-3.5-turbo, openai:gpt-4]
 
 A simple `npx promptfoo@latest eval` will run the example. Also note that you can override parameters directly from the command line. For example, this command:
 
-```bash
+```
 npx promptfoo@latest eval -p prompts.txt -r openai:gpt-3.5-turbo openai:gpt-4 -o output.html
 ```
 

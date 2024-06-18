@@ -18,7 +18,7 @@ npm install -g promptfoo
 
 Or use `npx` to run `promptfoo` directly:
 
-```sh
+```
 npx promptfoo@latest
 ```
 

@@ -200,7 +200,7 @@ npx promptfoo@latest generate redteam -w --plugins harmful
 
 ### Run the eval
 
-```sh
+```
 npx promptfoo@latest eval
 ```
 

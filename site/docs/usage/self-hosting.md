@@ -16,7 +16,7 @@ The self-hosted app consists of:
 
 Clone the repository and see the provided [Dockerfile](https://github.com/promptfoo/promptfoo/blob/main/Dockerfile). Here's an example Docker command to build and run the container:
 
-```bash
+```sh
 docker build --build-arg NEXT_PUBLIC_PROMPTFOO_BASE_URL=http://localhost:3000 -t promptfoo-ui .
 docker run -p 3000:3000 -v /path/to/local_promptfoo:/root/.promptfoo promptfoo-ui
 ```
@@ -26,7 +26,7 @@ docker run -p 3000:3000 -v /path/to/local_promptfoo:/root/.promptfoo promptfoo-u
 
 You can also set API credentials on the running Docker instance so that evals can be run on the server. For example, we'll set the OpenAI API key so users can run evals directly from the web ui:
 
-```bash
+```sh
 docker run -p 3000:3000 -e -e OPENAI_API_KEY=sk-abc123 promptfoo-ui
 ```
 
@@ -52,7 +52,7 @@ By default, the application uses an in-memory store for shared results. However,
 
 When self-hosting, you need to set the environment variables so that the `promptfoo share` command knows how to reach your hosted application. Here's an example:
 
-```bash
+```sh
 PROMPTFOO_REMOTE_API_BASE_URL=http://localhost:3000 PROMPTFOO_REMOTE_APP_BASE_URL=http://localhost:3000 promptfoo share -y
 ```
 

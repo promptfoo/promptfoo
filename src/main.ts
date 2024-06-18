@@ -484,7 +484,7 @@ async function main() {
     )
     .option(
       '--injectVar <varname>',
-      'Override the variable to inject user input into the prompt. If not set, the variable will defalt to {{query}}',
+      'Override the variable to inject user input into the prompt. If not set, the variable will default to {{query}}',
     )
     .option('--plugins <plugins>', 'Comma-separated list of plugins to use', (val) =>
       val.split(',').map((x) => x.trim()),

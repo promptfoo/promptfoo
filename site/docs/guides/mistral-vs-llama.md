@@ -22,7 +22,7 @@ This guide assumes that you have promptfoo [installed](/docs/installation). It a
 
 Initialize a new directory `mistral-llama-comparison` that will contain our prompts and test cases:
 
-```
+```sh
 npx promptfoo@latest init mistral-llama-comparison
 ```
 
@@ -131,7 +131,7 @@ These settings will apply to all test cases run against these models.
 
 To configure the OpenRouter provider, be sure to set the environment variable:
 
-```bash
+```sh
 OPENROUTER_API_KEY=your_openrouter_api_key
 ```
 

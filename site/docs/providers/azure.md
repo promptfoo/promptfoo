@@ -69,7 +69,7 @@ The `azureAuthorityHost` defaults to 'https://login.microsoftonline.com' if not 
 
 You must also install a peer dependency from Azure:
 
-```
+```sh
 npm i @azure/identity
 ```
 
