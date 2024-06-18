@@ -1,5 +1,3 @@
-import { NIL as NULL_UUID } from 'uuid';
-
 import { EvaluateSummary, EvaluateTestSuite } from '@/../../../types';
 
 import type { SupabaseClient } from '@supabase/supabase-js';

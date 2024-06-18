@@ -1,7 +1,7 @@
 import path from 'node:path';
 
 import { relations, sql } from 'drizzle-orm';
-import { text, integer, real, sqliteTable, primaryKey } from 'drizzle-orm/sqlite-core';
+import { text, integer, sqliteTable, primaryKey } from 'drizzle-orm/sqlite-core';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import Database from 'better-sqlite3';
 

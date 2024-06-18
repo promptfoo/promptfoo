@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { StandaloneEval, getStandaloneEvals, listPreviousResults } from '../../../../../../util';
+import { StandaloneEval, getStandaloneEvals } from '../../../../../../util';
 import { IS_RUNNING_LOCALLY, USE_SUPABASE } from '@/constants';
 
 export const dynamic = IS_RUNNING_LOCALLY ? 'auto' : 'force-dynamic';
