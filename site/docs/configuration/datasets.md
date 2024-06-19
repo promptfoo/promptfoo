@@ -20,7 +20,7 @@ Before generating a dataset, you need to have your `prompts` ready, and _optiona
 prompts:
   - 'Act as a travel guide for {{location}}'
   - 'I want you to act as a travel guide. I will write you my location and you will suggest a place to visit near my location. In some cases, I will also give you the type of places I will visit. You will also suggest me places of similar type that are close to my first location. My current location is {{location}}'
-  
+
 tests:
   - vars:
       location: 'San Francisco'
@@ -38,7 +38,7 @@ Dataset generation uses your prompts and any existing test cases to generate new
 
 Run the command in the same directory as your config:
 
-```
+```sh
 promptfoo generate dataset
 ```
 
@@ -46,13 +46,13 @@ This will output the `tests` YAML to your terminal.
 
 If you want to write the new dataset to a file:
 
-```
+```sh
 promptfoo generate dataset -o tests.yaml
 ```
 
 Or if you want to edit the existing config in-place:
 
-```
+```sh
 promptfoo generate dataset -w
 ```
 
@@ -71,6 +71,6 @@ You can customize the dataset generation process by providing additional options
 
 For example:
 
-```bash
+```sh
 promptfoo generate dataset --config path_to_config.yaml --output path_to_output.yaml --instructions "Consider edge cases related to international travel"
 ```

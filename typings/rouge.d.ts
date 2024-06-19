@@ -1,10 +1,32 @@
 declare module 'rouge' {
   function n(
-    candidate: string,
-    reference: string | string[],
-    n?: number,
-    jackknife?: boolean,
+    cand: string,
+    ref: string,
+    opts?: {
+      n: number;
+      nGram: (tokens: Array<string>, n: number) => Array<string>;
+      tokenizer: (input: string) => Array<string>;
+    },
   ): number;
-  function l(candidate: string, reference: string | string[], jackknife?: boolean): number;
-  function s(candidate: string, reference: string | string[], jackknife?: boolean): number;
+
+  function l(
+    cand: string,
+    ref: string,
+    opts?: {
+      beta: number;
+      lcs: (a: Array<string>, b: Array<string>) => Array<string>;
+      segmenter: (input: string) => Array<string>;
+      tokenizer: (input: string) => Array<string>;
+    },
+  ): number;
+
+  function s(
+    cand: string,
+    ref: string,
+    opts?: {
+      beta: number;
+      skipBigram: (tokens: Array<string>) => Array<string>;
+      tokenizer: (input: string) => Array<string>;
+    },
+  ): number;
 }

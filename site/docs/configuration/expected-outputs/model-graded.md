@@ -13,6 +13,7 @@ Output-based:
 - `factuality` - a factual consistency eval which, given a completion `A` and reference answer `B` evaluates whether A is a subset of B, A is a superset of B, A and B are equivalent, A and B disagree, or A and B differ, but difference don't matter from the perspective of factuality. Uses the prompt from OpenAI's public evals.
 - `answer-relevance` - ensure that LLM output is related to original query
 - `classifier` - see [classifier grading docs](/docs/configuration/expected-outputs/classifier).
+- `moderation` - see [moderation grading docs](/docs/configuration/expected-outputs/moderation).
 - `select-best` - compare outputs from multiple test cases and choose a winner
 
 RAG-based (requires `query` and/or `context` vars):
@@ -115,14 +116,14 @@ tests:
 
 ## Examples (comparison)
 
-The `select-best` assertion type is used to compare multiple outputs in the same TestCase row and select the one that best meets a specified criterion. 
+The `select-best` assertion type is used to compare multiple outputs in the same TestCase row and select the one that best meets a specified criterion.
 
 Here's an example of how to use `select-best` in a configuration file:
 
 ```yaml
 prompts:
-  - "Write a tweet about {{topic}}"
-  - "Write a very concise, funny tweet about {{topic}}"
+  - 'Write a tweet about {{topic}}'
+  - 'Write a very concise, funny tweet about {{topic}}'
 
 providers: [openai:gpt-4]
 
@@ -185,6 +186,26 @@ provider:
 
 Also note that [custom providers](/docs/providers/custom-api) are supported as well.
 
+### Multiple graders
+
+Some assertions (such as `answer-relevance`) use multiple types of providers. To override both the embedding and text providers separately, you can do something like this:
+
+```yaml
+defaultTest:
+  options:
+    provider:
+      text:
+        id: azureopenai:chat:gpt-4-deployment
+        config:
+          apiHost: xxx.openai.azure.com
+      embedding:
+        id: azureopenai:embeddings:text-embedding-ada-002-deployment
+        config:
+          apiHost: xxx.openai.azure.com
+```
+
+If you are implementing a custom provider, `text` providers require a `callApi` function that returns a [`ProviderResponse`](/docs/configuration/reference/#providerresponse), whereas embedding providers require a `callEmbeddingApi` function that returns a [`ProviderEmbeddingResponse`](/docs/configuration/reference/#providerembeddingresponse).
+
 ## Overriding the rubric prompt
 
 For the greatest control over the output of `llm-rubric`, you may set a custom prompt using the `rubricPrompt` property of `TestCase` or `Assertion`.
@@ -199,26 +220,24 @@ In this example, we set `rubricPrompt` under `defaultTest`, which applies it to 
 ```yaml
 defaultTest:
   options:
-    rubricPrompt:
-      - role: system
-        content: >-
-          Grade the output by the following specifications, keeping track of the points scored:
-
-          Did the output mention {{x}}? +1 point
-          Did the output describe {{y}}? + 1 point
-          Did the output ask to clarify {{z}}? +1 point
-
-          Calculate the score but always pass the test. Output your response in the following JSON format:
-          {pass: true, score: number, reason: string}
-      - role: user
-        content: 'Output: {{ output }}'
+    rubricPrompt: >
+      [
+        {
+          "role": "system",
+          "content": "Grade the output by the following specifications, keeping track of the points scored:\n\nDid the output mention {{x}}? +1 point\nDid the output describe {{y}}? +1 point\nDid the output ask to clarify {{z}}? +1 point\n\nCalculate the score but always pass the test. Output your response in the following JSON format:\n{pass: true, score: number, reason: string}"
+        },
+        {
+          "role": "user",
+          "content": "Output: {{ output }}"
+        }
+      ]
 ```
 
 See the [full example](https://github.com/promptfoo/promptfoo/blob/main/examples/custom-grading-prompt/promptfooconfig.yaml).
 
 #### select-best rubric prompt
 
-For control over the `select-best` rubric prompt, you may use the variables `{{outputs}}` (list of strings) and `{{criteria}}` (string).  It expects the LLM output to contain the index of the winning output.
+For control over the `select-best` rubric prompt, you may use the variables `{{outputs}}` (list of strings) and `{{criteria}}` (string). It expects the LLM output to contain the index of the winning output.
 
 ## Classifers
 

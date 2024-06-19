@@ -7,6 +7,9 @@ import { globSync } from 'glob';
 import { PythonShell, Options as PythonShellOptions } from 'python-shell';
 
 import logger from './logger';
+import { runPython } from './python/wrapper';
+import { importModule } from './esm';
+import { safeJsonStringify } from './util';
 
 import type {
   UnifiedConfig,
@@ -14,6 +17,7 @@ import type {
   ProviderOptionsMap,
   TestSuite,
   ProviderOptions,
+  ApiProvider,
 } from './types';
 
 export * from './external/ragas';
@@ -32,7 +36,7 @@ export function readProviderPromptMap(
 
   const allPrompts = [];
   for (const prompt of parsedPrompts) {
-    allPrompts.push(prompt.display);
+    allPrompts.push(prompt.label);
   }
 
   if (typeof config.providers === 'string') {
@@ -53,6 +57,9 @@ export function readProviderPromptMap(
           'You must specify an `id` on the Provider when you override options.prompts',
         );
         ret[rawProvider.id] = rawProvider.prompts || allPrompts;
+        if (rawProvider.label) {
+          ret[rawProvider.label] = rawProvider.prompts || allPrompts;
+        }
       } else {
         const rawProvider = provider as ProviderOptionsMap;
         const originalId = Object.keys(rawProvider)[0];
@@ -69,6 +76,8 @@ export function readProviderPromptMap(
 function maybeFilepath(str: string): boolean {
   return (
     !str.includes('\n') &&
+    !str.includes('portkey://') &&
+    !str.includes('langfuse://') &&
     (str.includes('/') ||
       str.includes('\\') ||
       str.includes('*') ||
@@ -83,10 +92,11 @@ enum PromptInputType {
   NAMED = 3,
 }
 
-export function readPrompts(
-  promptPathOrGlobs: string | string[] | Record<string, string>,
+export async function readPrompts(
+  promptPathOrGlobs: string | (string | Partial<Prompt>)[] | Record<string, string>,
   basePath: string = '',
-): Prompt[] {
+): Promise<Prompt[]> {
+  logger.debug(`Reading prompts from ${JSON.stringify(promptPathOrGlobs)}`);
   let promptPathInfos: { raw: string; resolved: string }[] = [];
   let promptContents: Prompt[] = [];
 
@@ -107,22 +117,50 @@ export function readPrompts(
     inputType = PromptInputType.STRING;
   } else if (Array.isArray(promptPathOrGlobs)) {
     // TODO(ian): Handle object array, such as OpenAI messages
+    inputType = PromptInputType.ARRAY;
     promptPathInfos = promptPathOrGlobs.flatMap((pathOrGlob) => {
-      if (pathOrGlob.startsWith('file://')) {
-        pathOrGlob = pathOrGlob.slice('file://'.length);
-        // This path is explicitly marked as a file, ensure that it's not used as a raw prompt.
-        forceLoadFromFile.add(pathOrGlob);
+      let label;
+      let rawPath: string;
+      if (typeof pathOrGlob === 'object') {
+        // Parse prompt config object {id, label}
+        invariant(
+          pathOrGlob.label,
+          `Prompt object requires label, but got ${JSON.stringify(pathOrGlob)}`,
+        );
+        label = pathOrGlob.label;
+        invariant(
+          pathOrGlob.id,
+          `Prompt object requires id, but got ${JSON.stringify(pathOrGlob)}`,
+        );
+        rawPath = pathOrGlob.id;
+        inputType = PromptInputType.NAMED;
+      } else {
+        label = pathOrGlob;
+        rawPath = pathOrGlob;
       }
-      resolvedPath = path.resolve(basePath, pathOrGlob);
-      resolvedPathToDisplay.set(resolvedPath, pathOrGlob);
-      const globbedPaths = globSync(resolvedPath);
+      invariant(
+        typeof rawPath === 'string',
+        `Prompt path must be a string, but got ${JSON.stringify(rawPath)}`,
+      );
+      if (rawPath.startsWith('file://')) {
+        rawPath = rawPath.slice('file://'.length);
+        // This path is explicitly marked as a file, ensure that it's not used as a raw prompt.
+        forceLoadFromFile.add(rawPath);
+      }
+      resolvedPath = path.resolve(basePath, rawPath);
+      resolvedPathToDisplay.set(resolvedPath, label);
+      const globbedPaths = globSync(resolvedPath.replace(/\\/g, '/'), {
+        windowsPathsNoEscape: true,
+      });
+      logger.debug(
+        `Expanded prompt ${rawPath} to ${resolvedPath} and then to ${JSON.stringify(globbedPaths)}`,
+      );
       if (globbedPaths.length > 0) {
-        return globbedPaths.map((globbedPath) => ({ raw: pathOrGlob, resolved: globbedPath }));
+        return globbedPaths.map((globbedPath) => ({ raw: rawPath, resolved: globbedPath }));
       }
       // globSync will return empty if no files match, which is the case when the path includes a function name like: file.js:func
-      return [{ raw: pathOrGlob, resolved: resolvedPath }];
+      return [{ raw: rawPath, resolved: resolvedPath }];
     });
-    inputType = PromptInputType.ARRAY;
   } else if (typeof promptPathOrGlobs === 'object') {
     // Display/contents mapping
     promptPathInfos = Object.keys(promptPathOrGlobs).map((key) => {
@@ -133,13 +171,21 @@ export function readPrompts(
     inputType = PromptInputType.NAMED;
   }
 
+  logger.debug(`Resolved prompt paths: ${JSON.stringify(promptPathInfos)}`);
+
   for (const promptPathInfo of promptPathInfos) {
     const parsedPath = path.parse(promptPathInfo.resolved);
     let filename = parsedPath.base;
-    let functionName;
+    let functionName: string | undefined;
     if (parsedPath.base.includes(':')) {
       const splits = parsedPath.base.split(':');
-      if (splits[0] && (splits[0].endsWith('.js') || splits[0].endsWith('.cjs'))) {
+      if (
+        splits[0] &&
+        (splits[0].endsWith('.js') ||
+          splits[0].endsWith('.cjs') ||
+          splits[0].endsWith('.mjs') ||
+          splits[0].endsWith('.py'))
+      ) {
         [filename, functionName] = splits;
       }
     }
@@ -153,7 +199,7 @@ export function readPrompts(
         throw err;
       }
       // If the path doesn't exist, it's probably a raw prompt
-      promptContents.push({ raw: promptPathInfo.raw, display: promptPathInfo.raw });
+      promptContents.push({ raw: promptPathInfo.raw, label: promptPathInfo.raw });
       usedRaw = true;
     }
     if (usedRaw) {
@@ -172,64 +218,75 @@ export function readPrompts(
         resolvedPathToDisplay.set(resolvedPath, joinedPath);
         return fs.readFileSync(resolvedPath, 'utf-8');
       });
-      promptContents.push(...fileContents.map((content) => ({ raw: content, display: content })));
+      promptContents.push(...fileContents.map((content) => ({ raw: content, label: content })));
     } else {
       const ext = path.parse(promptPath).ext;
-      if (ext === '.js' || ext === '.cjs') {
-        const importedModule = require(promptPath);
-        let promptFunction;
-        if (functionName) {
-          promptFunction = importedModule[functionName];
-        } else {
-          promptFunction = importedModule.default || importedModule;
-        }
+      if (ext === '.js' || ext === '.cjs' || ext === '.mjs') {
+        const promptFunction = await importModule(promptPath, functionName);
         promptContents.push({
           raw: String(promptFunction),
-          display: String(promptFunction),
+          label: String(promptFunction),
           function: promptFunction,
         });
       } else if (ext === '.py') {
         const fileContent = fs.readFileSync(promptPath, 'utf-8');
-        const promptFunction = async (context: { vars: Record<string, string | object> }) => {
-          const options: PythonShellOptions = {
-            mode: 'text',
-            pythonPath: process.env.PROMPTFOO_PYTHON || 'python',
-            args: [JSON.stringify(context)],
-          };
-          logger.debug(`Executing python prompt script ${promptPath}`);
-          const results = (await PythonShell.run(promptPath, options)).join('\n');
-          logger.debug(`Python prompt script ${promptPath} returned: ${results}`);
-          return results;
+        const promptFunction = async (context: {
+          vars: Record<string, string | object>;
+          provider?: ApiProvider;
+        }) => {
+          if (functionName) {
+            return runPython(promptPath, functionName, [
+              {
+                ...context,
+                provider: {
+                  id: context.provider?.id,
+                  label: context.provider?.label,
+                },
+              },
+            ]);
+          } else {
+            // Legacy: run the whole file
+            const options: PythonShellOptions = {
+              mode: 'text',
+              pythonPath: process.env.PROMPTFOO_PYTHON || 'python',
+              args: [safeJsonStringify(context)],
+            };
+            logger.debug(`Executing python prompt script ${promptPath}`);
+            const results = (await PythonShell.run(promptPath, options)).join('\n');
+            logger.debug(`Python prompt script ${promptPath} returned: ${results}`);
+            return results;
+          }
         };
-        let display = fileContent;
+        let label = fileContent;
         if (inputType === PromptInputType.NAMED) {
-          display = resolvedPathToDisplay.get(promptPath) || promptPath;
+          const resolvedPathLookup = functionName ? `${promptPath}:${functionName}` : promptPath;
+          label = resolvedPathToDisplay.get(resolvedPathLookup) || resolvedPathLookup;
         }
 
         promptContents.push({
           raw: fileContent,
-          display,
+          label,
           function: promptFunction,
         });
       } else {
         const fileContent = fs.readFileSync(promptPath, 'utf-8');
-        let display: string | undefined;
+        let label: string | undefined;
         if (inputType === PromptInputType.NAMED) {
-          display = resolvedPathToDisplay.get(promptPath) || promptPath;
+          label = resolvedPathToDisplay.get(promptPath) || promptPath;
         } else {
-          display = fileContent.length > 200 ? promptPath : fileContent;
+          label = fileContent.length > 200 ? promptPath : fileContent;
 
           const ext = path.parse(promptPath).ext;
           if (ext === '.jsonl') {
             // Special case for JSONL file
             const jsonLines = fileContent.split(/\r?\n/).filter((line) => line.length > 0);
             for (const json of jsonLines) {
-              promptContents.push({ raw: json, display: json });
+              promptContents.push({ raw: json, label: json });
             }
             continue;
           }
         }
-        promptContents.push({ raw: fileContent, display });
+        promptContents.push({ raw: fileContent, label });
       }
     }
   }
@@ -243,7 +300,7 @@ export function readPrompts(
     const content = promptContents[0].raw;
     promptContents = content
       .split(PROMPT_DELIMITER)
-      .map((p) => ({ raw: p.trim(), display: p.trim() }));
+      .map((p) => ({ raw: p.trim(), label: p.trim() }));
   }
   if (promptContents.length === 0) {
     throw new Error(`There are no prompts in ${JSON.stringify(promptPathOrGlobs)}`);
@@ -335,9 +392,10 @@ export const AI_SELF_REFERENCE_PROMPT_SYSTEM_MESSAGE = {
   content: `In this task, you will be given a string of text produced by a large language model. Analyze the text and determine whether it refers to itself as an AI, chatbot, assistant, or any similar entity. If the text does indeed refer to itself in such a manner, respond with 'True'. Otherwise, respond with 'False'.`,
 };
 
-export const SELECT_BEST_PROMPT = JSON.stringify([{
-  role: 'system',
-  content: `You are comparing multiple pieces of text to see which best fits the following criteria: {{criteria}}
+export const SELECT_BEST_PROMPT = JSON.stringify([
+  {
+    role: 'system',
+    content: `You are comparing multiple pieces of text to see which best fits the following criteria: {{criteria}}
 
 Here are the pieces of text:
 
@@ -348,4 +406,5 @@ Here are the pieces of text:
 {% endfor %}
 
 Output the index of the text that best fits the criteria. You must output a single integer.`,
-}]);
+  },
+]);

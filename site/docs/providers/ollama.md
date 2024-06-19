@@ -4,32 +4,36 @@ sidebar_position: 41
 
 # Ollama
 
-The `ollama` provider is compatible with [Ollama](https://github.com/jmorganca/ollama),
-which enables access to Mixtral, Mistal, Llama2, Codellama, Orca, Vicuna, and more.
+The `ollama` provider is compatible with [Ollama](https://github.com/jmorganca/ollama), which enables access to Llama, Mixtral, Mistral, and more.
 
-You can use its `/api/generate` endpoint
-by specifying any of the following providers from the [Ollama library](https://ollama.ai/library):
+You can use its `/api/generate` endpoint by specifying any of the following providers from the [Ollama library](https://ollama.ai/library):
 
-- `ollama:completion:llama2`
-- `ollama:completion:llama2:13b`
-- `ollama:completion:llama2:70b`
+- `ollama:completion:llama3:text`
+- `ollama:completion:llama2:text`
 - `ollama:completion:llama2-uncensored`
 - `ollama:completion:codellama`
 - `ollama:completion:orca-mini`
-- `ollama:completion:mixtral:8x7b`
 - ...
 
 Or, use the `/api/chat` endpoint for chat-formatted prompts:
 
-- `ollama:chat:llama2:7b-chat`
-- `ollama:chat:llama2:70b-chat`
+- `ollama:chat:llama3`
+- `ollama:chat:llama3:8b`
+- `ollama:chat:llama3:70b`
+- `ollama:chat:llama2`
+- `ollama:chat:llama2:7b`
+- `ollama:chat:llama2:13b`
+- `ollama:chat:llama2:70b`
+- `ollama:chat:mixtral:8x7b`
+- `ollama:chat:mixtral:8x22b`
 - ...
 
-Also supported is the `/api/embeddings` endpoint via `ollama:embeddings:<model name>`.
+We also support the `/api/embeddings` endpoint via `ollama:embeddings:<model name>` for model-graded assertions such as [similarity](/docs/configuration/expected-outputs/similar/).
 
 Supported environment variables:
 
 - `OLLAMA_BASE_URL` - protocol, host name, and port (defaults to `http://localhost:11434`)
+- `OLLAMA_API_KEY` - (optional) api key that is passed as the Bearer token in the Authorization Header when calling the API
 - `REQUEST_TIMEOUT_MS` - request timeout in milliseconds
 
 To pass configuration options to Ollama, use the `config` key like so:
@@ -59,3 +63,15 @@ To investigate and fix this issue, there's a few possible solutions:
    `export OLLAMA_BASE_URL="http://127.0.0.1:11434"`.
 3. Update your OS's [`hosts`](<https://en.wikipedia.org/wiki/Hosts_(file)>) file
    to bind `localhost` to IPv4.
+
+## Evaluating models in serial
+
+Many users don't have enough RAM to run all the models. The eval command includes an `--interactive-providers` option that runs evals on only 1 provider at a time:
+
+```
+promptfoo eval --interactive-providers
+```
+
+When you include this argument, the eval will prompt you when it's time to swap out the currently running model:
+
+![ollama eval model swap](/img/docs/interactive-providers.png)

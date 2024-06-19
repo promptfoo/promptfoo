@@ -8,33 +8,43 @@ import chokidar from 'chokidar';
 import yaml from 'js-yaml';
 import { Command } from 'commander';
 
+import cliState from './cliState';
 import telemetry from './telemetry';
 import logger, { getLogLevel, setLogLevel } from './logger';
 import { readAssertions } from './assertions';
 import { loadApiProvider, loadApiProviders } from './providers';
 import { evaluate, DEFAULT_MAX_CONCURRENCY } from './evaluator';
 import { readPrompts, readProviderPromptMap } from './prompts';
-import { readTest, readTests, synthesize, synthesizeFromTestSuite } from './testCases';
+import { readTest, readTests, synthesizeFromTestSuite } from './testCases';
 import {
-  cleanupOldResults,
+  DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
+  synthesizeFromTestSuite as redteamSynthesizeFromTestSuite,
+} from './redteam';
+import {
+  cleanupOldFileResults,
   maybeReadConfig,
+  migrateResultsFromFileSystemToDatabase,
   printBorder,
   readConfigs,
   readFilters,
   readLatestResults,
   setConfigDirectoryPath,
-  writeLatestResults,
+  setupEnv,
   writeMultipleOutputs,
   writeOutput,
+  writeResultsToDatabase,
 } from './util';
-import { DEFAULT_README, DEFAULT_YAML_CONFIG } from './onboarding';
+import { createDummyFiles } from './onboarding';
 import { disableCache, clearCache } from './cache';
 import { getDirectory } from './esm';
-import { startServer } from './web/server';
+import { BrowserBehavior, startServer } from './web/server';
 import { checkForUpdates } from './updates';
 import { gatherFeedback } from './feedback';
 import { listCommand } from './commands/list';
 import { showCommand } from './commands/show';
+import { deleteCommand } from './commands/delete';
+import { importCommand } from './commands/import';
+import { exportCommand } from './commands/export';
 
 import type {
   CommandLineOptions,
@@ -45,54 +55,13 @@ import type {
 } from './types';
 import { generateTable } from './table';
 import { createShareableUrl } from './share';
-
-function createDummyFiles(directory: string | null) {
-  if (directory) {
-    // Make the directory if it doesn't exist
-    if (!fs.existsSync(directory)) {
-      fs.mkdirSync(directory);
-    }
-  }
-
-  if (directory) {
-    if (!fs.existsSync(directory)) {
-      logger.info(`Creating directory ${directory} ...`);
-      fs.mkdirSync(directory);
-    }
-  } else {
-    directory = '.';
-  }
-
-  fs.writeFileSync(
-    path.join(process.cwd(), directory, 'promptfooconfig.yaml'),
-    DEFAULT_YAML_CONFIG,
-  );
-  fs.writeFileSync(path.join(process.cwd(), directory, 'README.md'), DEFAULT_README);
-
-  const isNpx = process.env.npm_execpath?.includes('npx');
-  const runCommand = isNpx ? 'npx promptfoo@latest eval' : 'promptfoo eval';
-  if (directory === '.') {
-    logger.info(
-      chalk.green(
-        `✅ Wrote promptfooconfig.yaml. Run \`${chalk.bold(runCommand)}\` to get started!`,
-      ),
-    );
-  } else {
-    logger.info(`✅ Wrote promptfooconfig.yaml to ./${directory}`);
-    logger.info(
-      chalk.green(
-        `Run \`${chalk.bold(`cd ${directory}`)}\` and then \`${chalk.bold(
-          runCommand,
-        )}\` to get started!`,
-      ),
-    );
-  }
-}
+import { filterTests } from './commands/eval/filterTests';
+import { validateAssertions } from './assertions/validateAssertions';
 
 async function resolveConfigs(
   cmdObj: Partial<CommandLineOptions>,
   defaultConfig: Partial<UnifiedConfig>,
-): Promise<{ testSuite: TestSuite; config: Partial<UnifiedConfig> }> {
+): Promise<{ testSuite: TestSuite; config: Partial<UnifiedConfig>; basePath: string }> {
   // Config parsing
   let fileConfig: Partial<UnifiedConfig> = {};
   const configPaths = cmdObj.config;
@@ -108,16 +77,27 @@ async function resolveConfigs(
     }
     const modelOutputs = JSON.parse(
       fs.readFileSync(path.join(process.cwd(), cmdObj.modelOutputs), 'utf8'),
-    ) as string[];
+    ) as string[] | { output: string; tags?: string[] }[];
     const assertions = await readAssertions(cmdObj.assertions);
     fileConfig.prompts = ['{{output}}'];
     fileConfig.providers = ['echo'];
-    fileConfig.tests = modelOutputs.map((output) => ({
-      vars: {
-        output,
-      },
-      assert: assertions,
-    }));
+    fileConfig.tests = modelOutputs.map((output) => {
+      if (typeof output === 'string') {
+        return {
+          vars: {
+            output,
+          },
+          assert: assertions,
+        };
+      }
+      return {
+        vars: {
+          output: output.output,
+          ...(output.tags === undefined ? {} : { tags: output.tags.join(', ') }),
+        },
+        assert: assertions,
+      };
+    });
   }
 
   // Use basepath in cases where path was supplied in the config file
@@ -137,6 +117,7 @@ async function resolveConfigs(
         : fileConfig.sharing ?? defaultConfig.sharing ?? true,
     defaultTest: defaultTestRaw ? await readTest(defaultTestRaw, basePath) : undefined,
     outputPath: cmdObj.output || fileConfig.outputPath || defaultConfig.outputPath,
+    metadata: fileConfig.metadata || defaultConfig.metadata,
   };
 
   // Validation
@@ -152,7 +133,7 @@ async function resolveConfigs(
   }
 
   // Parse prompts, providers, and tests
-  const parsedPrompts = readPrompts(config.prompts, cmdObj.prompts ? undefined : basePath);
+  const parsedPrompts = await readPrompts(config.prompts, cmdObj.prompts ? undefined : basePath);
   const parsedProviders = await loadApiProviders(config.providers, {
     env: config.env,
     basePath,
@@ -199,12 +180,16 @@ async function resolveConfigs(
     tests: parsedTests,
     scenarios: config.scenarios,
     defaultTest,
-    nunjucksFilters: readFilters(
+    nunjucksFilters: await readFilters(
       fileConfig.nunjucksFilters || defaultConfig.nunjucksFilters || {},
-      basePath,
     ),
   };
-  return { config, testSuite };
+
+  if (testSuite.tests) {
+    validateAssertions(testSuite.tests);
+  }
+
+  return { config, testSuite, basePath };
 }
 
 async function main() {
@@ -218,20 +203,21 @@ async function main() {
   ];
   let defaultConfig: Partial<UnifiedConfig> = {};
   let defaultConfigPath: string | undefined;
-  for (const path of potentialPaths) {
-    const maybeConfig = await maybeReadConfig(path);
+  for (const _path of potentialPaths) {
+    const maybeConfig = await maybeReadConfig(_path);
     if (maybeConfig) {
       defaultConfig = maybeConfig;
-      defaultConfigPath = path;
+      defaultConfigPath = _path;
       break;
     }
   }
 
-  let evaluateOptions: EvaluateOptions = {};
+  const evaluateOptions: EvaluateOptions = {};
   if (defaultConfig.evaluateOptions) {
     evaluateOptions.generateSuggestions = defaultConfig.evaluateOptions.generateSuggestions;
     evaluateOptions.maxConcurrency = defaultConfig.evaluateOptions.maxConcurrency;
     evaluateOptions.showProgressBar = defaultConfig.evaluateOptions.showProgressBar;
+    evaluateOptions.interactiveProviders = defaultConfig.evaluateOptions.interactiveProviders;
   }
 
   const program = new Command();
@@ -241,15 +227,21 @@ async function main() {
       fs.readFileSync(path.join(getDirectory(), '../package.json'), 'utf8'),
     );
     logger.info(packageJson.version);
+    process.exit(0);
   });
 
   program
     .command('init [directory]')
     .description('Initialize project with dummy files')
-    .action(async (directory: string | null) => {
+    .option('--no-interactive', 'Run in interactive mode')
+    .action(async (directory: string | null, cmdObj: { interactive: boolean }) => {
       telemetry.maybeShowNotice();
-      createDummyFiles(directory);
       telemetry.record('command_used', {
+        name: 'init - started',
+      });
+      const details = await createDummyFiles(directory, cmdObj.interactive);
+      telemetry.record('command_used', {
+        ...details,
         name: 'init',
       });
       await telemetry.send();
@@ -260,12 +252,23 @@ async function main() {
     .description('Start browser ui')
     .option('-p, --port <number>', 'Port number', '15500')
     .option('-y, --yes', 'Skip confirmation and auto-open the URL')
+    .option('-n, --no', 'Skip confirmation and do not open the URL')
     .option('--api-base-url <url>', 'Base URL for viewer API calls')
+    .option('--filter-description <pattern>', 'Filter evals by description using a regex pattern')
+    .option('--env-file <path>', 'Path to .env file')
     .action(
       async (
         directory: string | undefined,
-        cmdObj: { port: number; yes: boolean; apiBaseUrl?: string } & Command,
+        cmdObj: {
+          port: number;
+          yes: boolean;
+          no: boolean;
+          apiBaseUrl?: string;
+          envFile?: string;
+          filterDescription?: string;
+        } & Command,
       ) => {
+        setupEnv(cmdObj.envFile);
         telemetry.maybeShowNotice();
         telemetry.record('command_used', {
           name: 'view',
@@ -275,7 +278,18 @@ async function main() {
         if (directory) {
           setConfigDirectoryPath(directory);
         }
-        startServer(cmdObj.port, cmdObj.apiBaseUrl, cmdObj.yes);
+        // Block indefinitely on server
+        const browserBehavior = cmdObj.yes
+          ? BrowserBehavior.OPEN
+          : cmdObj.no
+            ? BrowserBehavior.SKIP
+            : BrowserBehavior.ASK;
+        await startServer(
+          cmdObj.port,
+          cmdObj.apiBaseUrl,
+          browserBehavior,
+          cmdObj.filterDescription,
+        );
       },
     );
 
@@ -283,7 +297,9 @@ async function main() {
     .command('share')
     .description('Create a shareable URL of your most recent eval')
     .option('-y, --yes', 'Skip confirmation')
-    .action(async (cmdObj: { yes: boolean } & Command) => {
+    .option('--env-file <path>', 'Path to .env file')
+    .action(async (cmdObj: { yes: boolean; envFile?: string } & Command) => {
+      setupEnv(cmdObj.envFile);
       telemetry.maybeShowNotice();
       telemetry.record('command_used', {
         name: 'share',
@@ -291,7 +307,7 @@ async function main() {
       await telemetry.send();
 
       const createPublicUrl = async () => {
-        const latestResults = readLatestResults();
+        const latestResults = await readLatestResults();
         if (!latestResults) {
           logger.error('Could not load results. Do you need to run `promptfoo eval` first?');
           process.exit(1);
@@ -328,11 +344,13 @@ async function main() {
     .description('Manage cache')
     .command('clear')
     .description('Clear cache')
-    .action(async () => {
+    .option('--env-file <path>', 'Path to .env file')
+    .action(async (cmdObj: { envFile?: string }) => {
+      setupEnv(cmdObj.envFile);
       telemetry.maybeShowNotice();
       logger.info('Clearing cache...');
       await clearCache();
-      cleanupOldResults(0);
+      cleanupOldFileResults(0);
       telemetry.record('command_used', {
         name: 'cache_clear',
       });
@@ -346,39 +364,45 @@ async function main() {
       gatherFeedback(message);
     });
 
-  program
-    .command('generate dataset')
-    .description('Generate test cases for a given prompt')
+  const generateCommand = program.command('generate').description('Generate synthetic data');
+
+  generateCommand
+    .command('dataset')
+    .description('Generate test cases')
     .option(
       '-i, --instructions [instructions]',
       'Additional instructions to follow while generating test cases',
     )
-    .option(
-      '-c, --config [path]',
-      'Path to configuration file. Defaults to promptfooconfig.yaml',
-      defaultConfigPath,
-    )
+    .option('-c, --config [path]', 'Path to configuration file. Defaults to promptfooconfig.yaml')
     .option('-o, --output [path]', 'Path to output file')
     .option('-w, --write', 'Write results to promptfoo configuration file')
     .option('--numPersonas <number>', 'Number of personas to generate', '5')
     .option('--numTestCasesPerPersona <number>', 'Number of test cases per persona', '3')
+    .option('--no-cache', 'Do not read or write results to disk cache', false)
+    .option('--env-file <path>', 'Path to .env file')
     .action(
-      async (
-        _,
-        options: {
-          config?: string;
-          instructions?: string;
-          output?: string;
-          numPersonas: string;
-          numTestCasesPerPersona: string;
-          write: boolean;
-        },
-      ) => {
+      async (options: {
+        config?: string;
+        instructions?: string;
+        output?: string;
+        numPersonas: string;
+        numTestCasesPerPersona: string;
+        write: boolean;
+        cache: boolean;
+        envFile?: string;
+      }) => {
+        setupEnv(options.envFile);
+        if (!options.cache) {
+          logger.info('Cache is disabled.');
+          disableCache();
+        }
+
         let testSuite: TestSuite;
-        if (options.config) {
+        const configPath = options.config || defaultConfigPath;
+        if (configPath) {
           const resolved = await resolveConfigs(
             {
-              config: [options.config],
+              config: [configPath],
             },
             defaultConfig,
           );
@@ -386,6 +410,14 @@ async function main() {
         } else {
           throw new Error('Could not find config file. Please use `--config`');
         }
+
+        const startTime = Date.now();
+        telemetry.record('command_used', {
+          name: 'generate_dataset - started',
+          numPrompts: testSuite.prompts.length,
+          numTestsExisting: (testSuite.tests || []).length,
+        });
+        await telemetry.send();
 
         const results = await synthesizeFromTestSuite(testSuite, {
           instructions: options.instructions,
@@ -407,7 +439,6 @@ async function main() {
         }
 
         printBorder();
-        const configPath = options.config;
         if (options.write && configPath) {
           const existingConfig = yaml.load(
             fs.readFileSync(configPath, 'utf8'),
@@ -428,6 +459,130 @@ async function main() {
           numPrompts: testSuite.prompts.length,
           numTestsExisting: (testSuite.tests || []).length,
           numTestsGenerated: results.length,
+          duration: Math.round((Date.now() - startTime) / 1000),
+        });
+        await telemetry.send();
+      },
+    );
+
+  interface RedteamCommandOptions {
+    config?: string;
+    output?: string;
+    write: boolean;
+    cache: boolean;
+    envFile?: string;
+    purpose?: string;
+    injectVar?: string;
+    plugins?: string[];
+    addPlugins?: string[];
+  }
+
+  generateCommand
+    .command('redteam')
+    .description('Generate adversarial test cases')
+    .option('-c, --config [path]', 'Path to configuration file. Defaults to promptfooconfig.yaml')
+    .option('-o, --output [path]', 'Path to output file')
+    .option('-w, --write', 'Write results to promptfoo configuration file')
+    .option(
+      '--purpose <purpose>',
+      'Set the system purpose. If not set, the system purpose will be inferred from the config file',
+    )
+    .option(
+      '--injectVar <varname>',
+      'Override the variable to inject user input into the prompt. If not set, the variable will default to {{query}}',
+    )
+    .option('--plugins <plugins>', 'Comma-separated list of plugins to use', (val) =>
+      val.split(',').map((x) => x.trim()),
+    )
+    .option(
+      '--add-plugins <plugins>',
+      'Comma-separated list of plugins to add to default plugins',
+      (val) => val.split(',').map((x) => x.trim()),
+    )
+    .option('--no-cache', 'Do not read or write results to disk cache', false)
+    .option('--env-file <path>', 'Path to .env file')
+    .action(
+      async ({
+        config,
+        output,
+        write,
+        cache,
+        envFile,
+        purpose,
+        injectVar,
+        plugins,
+        addPlugins,
+      }: RedteamCommandOptions) => {
+        setupEnv(envFile);
+        if (!cache) {
+          logger.info('Cache is disabled.');
+          disableCache();
+        }
+
+        let testSuite: TestSuite;
+        const configPath = config || defaultConfigPath;
+        if (configPath) {
+          const resolved = await resolveConfigs(
+            {
+              config: [configPath],
+            },
+            defaultConfig,
+          );
+          testSuite = resolved.testSuite;
+        } else {
+          throw new Error('Could not find config file. Please use `--config`');
+        }
+
+        const startTime = Date.now();
+        telemetry.record('command_used', {
+          name: 'generate redteam - started',
+          numPrompts: testSuite.prompts.length,
+          numTestsExisting: (testSuite.tests || []).length,
+        });
+        await telemetry.send();
+
+        const redteamTests = await redteamSynthesizeFromTestSuite(testSuite, {
+          purpose,
+          injectVar,
+          plugins:
+            addPlugins && addPlugins.length > 0
+              ? Array.from(REDTEAM_DEFAULT_PLUGINS).concat(addPlugins)
+              : plugins,
+        });
+
+        if (output) {
+          const existingYaml = yaml.load(
+            fs.readFileSync(configPath, 'utf8'),
+          ) as Partial<UnifiedConfig>;
+          const updatedYaml = {
+            ...existingYaml,
+            tests: redteamTests,
+            metadata: {
+              ...existingYaml.metadata,
+              redteam: true,
+            },
+          };
+          fs.writeFileSync(output, yaml.dump(updatedYaml, { skipInvalid: true }));
+          printBorder();
+          logger.info(`Wrote ${redteamTests.length} new test cases to ${output}`);
+          printBorder();
+        } else if (write && configPath) {
+          const existingConfig = yaml.load(
+            fs.readFileSync(configPath, 'utf8'),
+          ) as Partial<UnifiedConfig>;
+          existingConfig.tests = [...(existingConfig.tests || []), ...redteamTests];
+          fs.writeFileSync(configPath, yaml.dump(existingConfig));
+          logger.info(`Wrote ${redteamTests.length} new test cases to ${configPath}`);
+        } else {
+          logger.info(yaml.dump(redteamTests, { skipInvalid: true }));
+        }
+
+        telemetry.record('command_used', {
+          name: 'generate redteam',
+          numPrompts: testSuite.prompts.length,
+          numTestsExisting: (testSuite.tests || []).length,
+          numTestsGenerated: redteamTests.length,
+          duration: Math.round((Date.now() - startTime) / 1000),
         });
         await telemetry.send();
       },
@@ -454,7 +609,10 @@ async function main() {
     .option('-a, --assertions <path>', 'Path to assertions file')
     .option('--model-outputs <path>', 'Path to JSON containing list of LLM output strings')
     .option('-t, --tests <path>', 'Path to CSV with test cases')
-    .option('-o, --output <paths...>', 'Path to output file (csv, txt, json, yaml, yml, html)')
+    .option(
+      '-o, --output <paths...>',
+      'Path to output file (csv, txt, json, yaml, yml, html), default is no output file',
+    )
     .option(
       '-j, --max-concurrency <number>',
       'Maximum number of concurrent API calls',
@@ -513,10 +671,45 @@ async function main() {
     )
     .option('--verbose', 'Show debug logs', defaultConfig?.commandLineOptions?.verbose)
     .option('-w, --watch', 'Watch for changes in config and re-run')
+    .option('--env-file <path>', 'Path to .env file')
+    .option(
+      '--interactive-providers',
+      'Run providers interactively, one at a time',
+      defaultConfig?.evaluateOptions?.interactiveProviders,
+    )
+    .option('-n, --filter-first-n <number>', 'Only run the first N tests')
+    .option(
+      '--filter-pattern <pattern>',
+      'Only run tests whose description matches the regular expression pattern',
+    )
+    .option('--filter-failing <path>', 'Path to json output file')
+    .option(
+      '--var <key=value>',
+      'Set a variable in key=value format',
+      (value, previous: Record<string, string> = {}) => {
+        const [key, val] = value.split('=');
+        if (!key || val === undefined) {
+          throw new Error('--var must be specified in key=value format.');
+        }
+        previous[key] = val;
+        return previous;
+      },
+      {},
+    )
     .action(async (cmdObj: CommandLineOptions & Command) => {
+      setupEnv(cmdObj.envFile);
       let config: Partial<UnifiedConfig> | undefined = undefined;
       let testSuite: TestSuite | undefined = undefined;
+      let basePath: string | undefined = undefined;
+
       const runEvaluation = async (initialization?: boolean) => {
+        const startTime = Date.now();
+        telemetry.record('command_used', {
+          name: 'eval - started',
+          watch: Boolean(cmdObj.watch),
+        });
+        await telemetry.send();
+
         // Misc settings
         if (cmdObj.verbose) {
           setLogLevel('debug');
@@ -528,7 +721,8 @@ async function main() {
           disableCache();
         }
 
-        ({ config, testSuite } = await resolveConfigs(cmdObj, defaultConfig));
+        ({ config, testSuite, basePath } = await resolveConfigs(cmdObj, defaultConfig));
+        cliState.basePath = basePath;
 
         let maxConcurrency = parseInt(cmdObj.maxConcurrency || '', 10);
         const delay = parseInt(cmdObj.delay || '', 0);
@@ -540,17 +734,29 @@ async function main() {
           );
         }
 
+        testSuite.tests = await filterTests(testSuite, {
+          firstN: cmdObj.filterFirstN,
+          pattern: cmdObj.filterPattern,
+          failing: cmdObj.filterFailing,
+        });
+
         const options: EvaluateOptions = {
           showProgressBar: getLogLevel() === 'debug' ? false : cmdObj.progressBar,
           maxConcurrency: !isNaN(maxConcurrency) && maxConcurrency > 0 ? maxConcurrency : undefined,
           repeat,
           delay: !isNaN(delay) && delay > 0 ? delay : undefined,
+          interactiveProviders: cmdObj.interactiveProviders,
           ...evaluateOptions,
         };
 
-        if (cmdObj.grader && testSuite.defaultTest) {
+        if (cmdObj.grader) {
+          testSuite.defaultTest = testSuite.defaultTest || {};
           testSuite.defaultTest.options = testSuite.defaultTest.options || {};
           testSuite.defaultTest.options.provider = await loadApiProvider(cmdObj.grader);
+        }
+        if (cmdObj.var) {
+          testSuite.defaultTest = testSuite.defaultTest || {};
+          testSuite.defaultTest.vars = { ...testSuite.defaultTest.vars, ...cmdObj.var };
         }
         if (cmdObj.generateSuggestions) {
           options.generateSuggestions = true;
@@ -573,15 +779,28 @@ async function main() {
             const rowsLeft = summary.table.body.length - 25;
             logger.info(`... ${rowsLeft} more row${rowsLeft === 1 ? '' : 's'} not shown ...\n`);
           }
+        } else if (summary.stats.failures !== 0) {
+          logger.debug(
+            `At least one evaluation failure occurred. This might be caused by the underlying call to the provider, or a test failure. Context: \n${JSON.stringify(
+              summary.results,
+            )}`,
+          );
+        }
+
+        await migrateResultsFromFileSystemToDatabase();
+
+        let evalId: string | null = null;
+        if (cmdObj.write) {
+          evalId = await writeResultsToDatabase(summary, config);
         }
 
         const { outputPath } = config;
         if (outputPath) {
           // Write output to file
           if (typeof outputPath === 'string') {
-            writeOutput(outputPath, summary, config, shareableUrl);
+            await writeOutput(outputPath, evalId, summary, config, shareableUrl);
           } else if (Array.isArray(outputPath)) {
-            writeMultipleOutputs(outputPath, summary, config, shareableUrl);
+            await writeMultipleOutputs(outputPath, evalId, summary, config, shareableUrl);
           }
           logger.info(chalk.yellow(`Writing output to ${outputPath}`));
         }
@@ -592,15 +811,21 @@ async function main() {
         if (!cmdObj.write) {
           logger.info(`${chalk.green('✔')} Evaluation complete`);
         } else {
-          writeLatestResults(summary, config);
-
           if (shareableUrl) {
             logger.info(`${chalk.green('✔')} Evaluation complete: ${shareableUrl}`);
           } else {
             logger.info(`${chalk.green('✔')} Evaluation complete.\n`);
-            logger.info(`» Run ${chalk.greenBright.bold('promptfoo view')} to use the local web viewer`);
-            logger.info(`» Run ${chalk.greenBright.bold('promptfoo share')} to create a shareable URL`);
-            logger.info(`» This project needs your feedback. What's one thing we can improve? ${chalk.greenBright.bold('https://forms.gle/YFLgTe1dKJKNSCsU7')}`);
+            logger.info(
+              `» Run ${chalk.greenBright.bold('promptfoo view')} to use the local web viewer`,
+            );
+            logger.info(
+              `» Run ${chalk.greenBright.bold('promptfoo share')} to create a shareable URL`,
+            );
+            logger.info(
+              `» This project needs your feedback. What's one thing we can improve? ${chalk.greenBright.bold(
+                'https://forms.gle/YFLgTe1dKJKNSCsU7',
+              )}`,
+            );
           }
         }
         printBorder();
@@ -613,6 +838,7 @@ async function main() {
         telemetry.record('command_used', {
           name: 'eval',
           watch: Boolean(cmdObj.watch),
+          duration: Math.round((Date.now() - startTime) / 1000),
         });
         await telemetry.send();
 
@@ -626,14 +852,45 @@ async function main() {
             const basePath = path.dirname(configPaths[0]);
             const promptPaths = Array.isArray(config.prompts)
               ? (config.prompts
+                  .map((p) => {
+                    if (typeof p === 'string' && p.startsWith('file://')) {
+                      return path.resolve(basePath, p.slice('file://'.length));
+                    } else if (typeof p === 'object' && p.id && p.id.startsWith('file://')) {
+                      return path.resolve(basePath, p.id.slice('file://'.length));
+                    }
+                    return null;
+                  })
+                  .filter(Boolean) as string[])
+              : [];
+            const providerPaths = Array.isArray(config.providers)
+              ? (config.providers
                   .map((p) =>
-                    p.startsWith('file://')
+                    typeof p === 'string' && p.startsWith('file://')
                       ? path.resolve(basePath, p.slice('file://'.length))
                       : null,
                   )
                   .filter(Boolean) as string[])
               : [];
-            const watchPaths = Array.from(new Set([...configPaths, ...promptPaths]));
+            const varPaths = Array.isArray(config.tests)
+              ? config.tests
+                  .flatMap((t) => {
+                    if (typeof t === 'string' && t.startsWith('file://')) {
+                      return path.resolve(basePath, t.slice('file://'.length));
+                    } else if (typeof t !== 'string' && t.vars) {
+                      return Object.values(t.vars).flatMap((v) => {
+                        if (typeof v === 'string' && v.startsWith('file://')) {
+                          return path.resolve(basePath, v.slice('file://'.length));
+                        }
+                        return [];
+                      });
+                    }
+                    return [];
+                  })
+                  .filter(Boolean)
+              : [];
+            const watchPaths = Array.from(
+              new Set([...configPaths, ...promptPaths, ...providerPaths, ...varPaths]),
+            );
             const watcher = chokidar.watch(watchPaths, { ignored: /^\./, persistent: true });
 
             watcher
@@ -654,7 +911,8 @@ async function main() {
           logger.info('Done.');
 
           if (summary.stats.failures > 0) {
-            process.exit(100);
+            const exitCode = Number(process.env.PROMPTFOO_FAILED_TEST_EXIT_CODE);
+            process.exit(isNaN(exitCode) ? 100 : exitCode);
           }
         }
       };
@@ -664,6 +922,9 @@ async function main() {
 
   listCommand(program);
   showCommand(program);
+  deleteCommand(program);
+  importCommand(program);
+  exportCommand(program);
 
   program.parse(process.argv);
 

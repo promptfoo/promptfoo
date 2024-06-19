@@ -30,7 +30,7 @@ export function gatherFeedback(message?: string) {
 }
 
 export async function sendFeedback(feedback: string) {
-  const resp = await fetchWithProxy(`${REMOTE_API_BASE_URL}/feedback`, {
+  const resp = await fetchWithProxy(`${REMOTE_API_BASE_URL}/api/feedback`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

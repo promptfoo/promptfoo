@@ -20,7 +20,7 @@ This guide assumes you have installed both promptfoo and Ollama.
 
 Run this on the command line to download the Llama2 base model:
 
-```
+```sh
 ollama pull llama2
 ollama pull llama2-uncensored
 ```
@@ -29,7 +29,7 @@ ollama pull llama2-uncensored
 
 Initialize a new directory `llama-gpt-comparison` that will contain our prompts and test cases:
 
-```
+```sh
 npx promptfoo@latest init llama-gpt-comparison
 ```
 
@@ -76,12 +76,15 @@ prompts:
   prompts/llama_prompt.txt: llama_prompt
 
 providers:
-  - ollama:llama2:
-      prompts: llama_prompt
-  - ollama:llama2-uncensored:
-      prompts: llama_prompt
-  - openai:gpt-3.5-turbo:
-      prompts: openai_prompt
+  - id: ollama:llama2
+    prompts:
+      - llama_prompt
+  - id: ollama:llama2-uncensored
+    prompts:
+      - llama_prompt
+  - id: openai:gpt-3.5-turbo
+    prompts:
+      - openai_prompt
 ```
 
 ## Add test cases
@@ -120,12 +123,15 @@ prompts:
   prompts/llama_prompt.txt: llama_prompt
 
 providers:
-  - ollama:llama2:
-      prompts: llama_prompt
-  - ollama:llama2-uncensored:
-      prompts: llama_prompt
-  - openai:gpt-3.5-turbo:
-      prompts: openai_prompt
+  - id: ollama:llama2
+    prompts:
+    - llama_prompt
+  - id: ollama:llama2-uncensored
+    prompts:
+    - llama_prompt
+  - id: openai:gpt-3.5-turbo
+    prompts:
+    - openai_prompt
 ```
 
 Let's set up a few assertions to automatically assess the output for correctness. The `defaultTest` block is a shorthand that adds the `assert` to every test:
@@ -171,13 +177,15 @@ prompts:
   llama_prompt.txt: llama_prompt
 
 providers:
-  - ollama:llama2:
-      prompts: llama_prompt
-  - ollama:llama2-uncensored:
-      prompts: llama_prompt
-  - openai:gpt-3.5-turbo:
-      prompts: openai_prompt
-
+  - id: ollama:llama2
+    prompts:
+    - llama_prompt
+  - id: ollama:llama2-uncensored
+    prompts:
+    - llama_prompt
+  - id: openai:gpt-3.5-turbo
+    prompts:
+    - openai_prompt
 ```
 
 :::info

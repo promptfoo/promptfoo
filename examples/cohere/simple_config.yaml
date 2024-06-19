@@ -1,5 +1,5 @@
 prompts:
-  - "Write a tweet about {{topic}}"
+  - 'Write a tweet about {{topic}}'
 
 providers:
   - id: cohere:command

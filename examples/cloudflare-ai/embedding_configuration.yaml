@@ -1,0 +1,33 @@
+prompts:
+  - This prompt will be evaluated for embedding similarity
+
+defaultTest:
+  options:
+    provider:
+      embedding:
+        id: cloudflare-ai:embedding:@cf/baai/bge-base-en-v1.5
+        config:
+          # accountId: YOUR_ACCOUNT_ID_HERE
+
+providers:
+  - id: cloudflare-ai:chat:@cf/meta/llama-3-8b-instruct
+    config:
+      # accountId: YOUR_ACCOUNT_ID_HERE
+
+      # ===============
+      # It is not recommended to keep your API key on the config file since it is a secret value.
+      # Use the CLOUDFLARE_API_KEY environment variable or set the apiKeyEnvar value
+      # in the config
+      # apiKey: YOUR_API_KEY_HERE
+      # apiKeyEnvar: SOME_ENV_HAR_CONTAINING_THE_API_KEY
+      # ===============
+      # Additional model parameters that are passed through in the HTTP request body to the Cloudflare REST API call
+      # to run the model
+      # max_tokens: 800
+      # seed: 1
+
+tests:
+  - assert:
+      - type: similar
+        value: embedding similarity
+        threshold: 0.6

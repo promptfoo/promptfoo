@@ -1,14 +1,17 @@
 import fs from 'fs';
 import path from 'path';
-import { execFile, spawn } from 'child_process';
+import util from 'node:util';
 
+import async from 'async';
 import rouge from 'rouge';
 import invariant from 'tiny-invariant';
 import yaml from 'js-yaml';
 import Ajv, { ValidateFunction } from 'ajv';
 import addFormats from 'ajv-formats';
+import Clone from 'rfdc';
 import { distance as levenshtein } from 'fastest-levenshtein';
 
+import cliState from './cliState';
 import telemetry from './telemetry';
 import logger from './logger';
 import { fetchWithRetries } from './fetch';
@@ -24,12 +27,30 @@ import {
   matchesContextRelevance,
   matchesContextFaithfulness,
   matchesSelectBest,
+  matchesModeration,
 } from './matchers';
-
 import { validateFunctionCall } from './providers/openaiUtil';
 import { OpenAiChatCompletionProvider } from './providers/openai';
+import { runPython, runPythonCode } from './python/wrapper';
+import { importModule } from './esm';
 
-import type { Assertion, AssertionType, GradingResult, AtomicTestCase, ApiProvider } from './types';
+import {
+  type ApiProvider,
+  type Assertion,
+  type AssertionType,
+  type AtomicTestCase,
+  type GradingResult,
+  type TestCase,
+  isGradingResult,
+  AssertionValue,
+} from './types';
+import { AssertionsResult } from './assertions/AssertionsResult';
+import { parseChatPrompt } from './providers/shared';
+import { type Option as sqlParserOption } from 'node-sql-parser';
+
+const ASSERTIONS_MAX_CONCURRENCY = process.env.PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY
+  ? parseInt(process.env.PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY, 10)
+  : 3;
 
 export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
   'answer-relevance',
@@ -47,6 +68,19 @@ addFormats(ajv);
 
 const nunjucks = getNunjucksEngine();
 
+const clone = Clone();
+
+function getFinalTest(test: TestCase, assertion: Assertion) {
+  // Deep copy
+  const ret = clone(test);
+
+  // Assertion provider overrides test provider
+  ret.options = ret.options || {};
+  ret.options.provider = assertion.provider || ret.options.provider;
+  ret.options.rubricPrompt = assertion.rubricPrompt || ret.options.rubricPrompt;
+  return Object.freeze(ret);
+}
+
 function coerceString(value: string | object): string {
   if (typeof value === 'string') {
     return value;
@@ -57,7 +91,7 @@ function coerceString(value: string | object): string {
 function handleRougeScore(
   baseType: 'rouge-n',
   assertion: Assertion,
-  expected: string | string[],
+  expected: string,
   output: string,
   inverted: boolean,
 ): GradingResult {
@@ -70,10 +104,10 @@ function handleRougeScore(
     pass,
     score: inverted ? 1 - score : score,
     reason: pass
-      ? `${baseType.toUpperCase()} score ${score} is greater than or equal to threshold ${
-          assertion.threshold || 0.75
-        }`
-      : `${baseType.toUpperCase()} score ${score} is less than threshold ${
+      ? `${baseType.toUpperCase()} score ${score.toFixed(
+          2,
+        )} is greater than or equal to threshold ${assertion.threshold || 0.75}`
+      : `${baseType.toUpperCase()} score ${score.toFixed(2)} is less than threshold ${
           assertion.threshold || 0.75
         }`,
     assertion,
@@ -97,83 +131,89 @@ export async function runAssertions({
   logProbs?: number[];
   cost?: number;
 }): Promise<GradingResult> {
-  const tokensUsed = {
-    total: 0,
-    prompt: 0,
-    completion: 0,
-  };
-
   if (!test.assert || test.assert.length < 1) {
-    return { pass: true, score: 1, reason: 'No assertions', tokensUsed, assertion: null };
+    return AssertionsResult.noAssertsResult();
   }
 
-  let totalScore = 0;
-  let totalWeight = 0;
-  let allPass = true;
-  let failedReason = '';
-  const componentResults: GradingResult[] = [];
-  const namedScores: Record<string, number> = {};
-  for (const assertion of test.assert) {
-    if (assertion.type.startsWith('select-')) {
-      // Select-type assertions are handled separately because they depend on multiple outputs.
-      continue;
-    }
-    const weight = assertion.weight || 1;
-    totalWeight += weight;
+  const mainAssertResult = new AssertionsResult({
+    threshold: test.threshold,
+  });
+  const subAssertResults: AssertionsResult[] = [];
+  const asserts: {
+    assertion: Assertion;
+    assertResult: AssertionsResult;
+    index: number;
+  }[] = test.assert
+    .map((assertion, i) => {
+      if (assertion.type === 'assert-set') {
+        const subAssertResult = new AssertionsResult({
+          threshold: assertion.threshold,
+          parentAssertionSet: {
+            assertionSet: assertion,
+            index: i,
+          },
+        });
 
-    const result = await runAssertion({
-      prompt,
-      provider,
-      assertion,
-      test,
-      output,
-      latencyMs,
-      logProbs,
-      cost,
-    });
-    totalScore += result.score * weight;
-    componentResults.push(result);
+        subAssertResults.push(subAssertResult);
 
-    if (assertion.metric) {
-      namedScores[assertion.metric] = (namedScores[assertion.metric] || 0) + result.score;
-    }
-
-    if (result.tokensUsed) {
-      tokensUsed.total += result.tokensUsed.total;
-      tokensUsed.prompt += result.tokensUsed.prompt;
-      tokensUsed.completion += result.tokensUsed.completion;
-    }
-
-    if (!result.pass) {
-      allPass = false;
-      failedReason = result.reason;
-      if (process.env.PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES) {
-        return result;
+        return assertion.assert.map((subAssert, j) => {
+          return {
+            assertion: subAssert,
+            assertResult: subAssertResult,
+            index: j,
+          };
+        });
       }
-    }
-  }
 
-  const finalScore = totalScore / totalWeight;
-  let finalReason = allPass ? 'All assertions passed' : failedReason;
-  if (test.threshold) {
-    // Existence of a test threshold overrides the pass/fail status of individual assertions
-    allPass = finalScore >= test.threshold;
-    if (allPass) {
-      finalReason = `Aggregate score ${finalScore.toFixed(2)} ≥ ${test.threshold} threshold`;
-    } else {
-      finalReason = `Aggregate score ${finalScore.toFixed(2)} < ${test.threshold} threshold`;
-    }
-  }
+      return { assertion, assertResult: mainAssertResult, index: i };
+    })
+    .flat();
 
-  return {
-    pass: allPass,
-    score: finalScore,
-    namedScores: namedScores,
-    reason: finalReason,
-    tokensUsed,
-    componentResults,
-    assertion: null,
-  };
+  await async.forEachOfLimit(
+    asserts,
+    ASSERTIONS_MAX_CONCURRENCY,
+    async ({ assertion, assertResult, index }) => {
+      if (assertion.type.startsWith('select-')) {
+        // Select-type assertions are handled separately because they depend on multiple outputs.
+        return;
+      }
+
+      const result = await runAssertion({
+        prompt,
+        provider,
+        assertion,
+        test,
+        output,
+        latencyMs,
+        logProbs,
+        cost,
+      });
+
+      assertResult.addResult({
+        index,
+        result,
+        metric: assertion.metric,
+        weight: assertion.weight,
+      });
+    },
+  );
+
+  subAssertResults.forEach((subAssertResult) => {
+    const result = subAssertResult.testResult();
+    const {
+      index,
+      assertionSet: { metric, weight },
+    } = subAssertResult.parentAssertionSet!;
+
+    mainAssertResult.addResult({
+      index,
+      result,
+      metric,
+      weight,
+    });
+  });
+
+  return mainAssertResult.testResult();
 }
 
 export async function runAssertion({
@@ -208,9 +248,9 @@ export async function runAssertion({
   });
 
   if (assertion.transform) {
-    output = transformOutput(assertion.transform, output, {
+    output = await transformOutput(assertion.transform, output, {
       vars: test.vars,
-      prompt: { display: prompt },
+      prompt: { label: prompt },
     });
   }
 
@@ -220,6 +260,7 @@ export async function runAssertion({
     prompt,
     vars: test.vars || {},
     test,
+    logProbs,
   };
 
   // Render assertion values
@@ -227,10 +268,11 @@ export async function runAssertion({
   let valueFromScript: string | boolean | number | GradingResult | object | undefined;
   if (typeof renderedValue === 'string') {
     if (renderedValue.startsWith('file://')) {
-      // Load the file
-      const filePath = renderedValue.slice('file://'.length);
-      if (filePath.endsWith('.js') || filePath.endsWith('.cjs')) {
-        const requiredModule = require(path.resolve(filePath));
+      const basePath = cliState.basePath || '';
+      const filePath = path.resolve(basePath, renderedValue.slice('file://'.length));
+
+      if (filePath.endsWith('.js') || filePath.endsWith('.cjs') || filePath.endsWith('.mjs')) {
+        const requiredModule = await importModule(filePath);
         if (typeof requiredModule === 'function') {
           valueFromScript = await Promise.resolve(requiredModule(output, context));
         } else if (requiredModule.default && typeof requiredModule.default === 'function') {
@@ -242,38 +284,29 @@ export async function runAssertion({
         }
         logger.debug(`Javascript script ${filePath} output: ${valueFromScript}`);
       } else if (filePath.endsWith('.py')) {
-        const args = [
-          filePath,
-          typeof output === 'string' ? output : JSON.stringify(output),
-          JSON.stringify(context),
-        ];
-        const pythonScriptOutput = await new Promise<string>((resolve, reject) => {
-          execFile(
-            process.env.PROMPTFOO_PYTHON || 'python',
-            args,
-            null,
-            (error, stdout, stderr) => {
-              if (error) {
-                reject(error);
-                return;
-              }
-              const stringErr = String(stderr);
-              if (stringErr) {
-                reject(new Error(stringErr));
-              } else {
-                resolve(String(stdout));
-              }
-            },
-          );
-        });
-        valueFromScript = pythonScriptOutput.trim();
-        logger.debug(`Python script ${filePath} output: ${valueFromScript}`);
+        try {
+          const pythonScriptOutput = await runPython(filePath, 'get_assert', [output, context]);
+          valueFromScript = pythonScriptOutput;
+          logger.debug(`Python script ${filePath} output: ${valueFromScript}`);
+        } catch (error) {
+          return {
+            pass: false,
+            score: 0,
+            reason: (error as Error).message,
+            assertion,
+          };
+        }
       } else if (filePath.endsWith('.json')) {
-        valueFromScript = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+        renderedValue = JSON.parse(fs.readFileSync(path.resolve(basePath, filePath), 'utf8'));
       } else if (filePath.endsWith('.yaml') || filePath.endsWith('.yml')) {
-        valueFromScript = yaml.load(fs.readFileSync(filePath, 'utf8')) as object;
+        renderedValue = yaml.load(
+          fs.readFileSync(path.resolve(basePath, filePath), 'utf8'),
+        ) as object;
+      } else if (filePath.endsWith('.txt')) {
+        // Trim to remove trailing newline
+        renderedValue = fs.readFileSync(path.resolve(basePath, filePath), 'utf8').trim();
       } else {
-        throw new Error(`Assertion malformed: ${filePath} must end in .js or .py`);
+        throw new Error(`Unsupported file type: ${filePath}`);
       }
     } else {
       // It's a normal string value
@@ -284,14 +317,23 @@ export async function runAssertion({
     renderedValue = renderedValue.map((v) => nunjucks.renderString(String(v), test.vars || {}));
   }
 
+  // Transform test
+  test = getFinalTest(test, assertion);
+
   if (baseType === 'equals') {
-    pass = renderedValue == outputString;
+    if (typeof renderedValue === 'object') {
+      pass = util.isDeepStrictEqual(renderedValue, JSON.parse(outputString)) !== inverse;
+      renderedValue = JSON.stringify(renderedValue);
+    } else {
+      pass = (renderedValue == outputString) !== inverse;
+    }
+
     return {
       pass,
       score: pass ? 1 : 0,
       reason: pass
         ? 'Assertion passed'
-        : `Expected output "${renderedValue}" but got "${outputString}"`,
+        : `Expected output "${renderedValue}" to ${inverse ? 'not ' : ''}equal "${outputString}"`,
       assertion,
     };
   }
@@ -307,11 +349,16 @@ export async function runAssertion({
 
     if (pass && renderedValue) {
       let validate: ValidateFunction;
-      if (typeof renderedValue === 'string' && renderedValue.startsWith('file://')) {
-        // Reference the JSON schema from external file
-        const schema = valueFromScript;
-        invariant(schema, 'is-json references a file that does not export a JSON schema');
-        validate = ajv.compile(schema as object);
+      if (typeof renderedValue === 'string') {
+        if (renderedValue.startsWith('file://')) {
+          // Reference the JSON schema from external file
+          const schema = valueFromScript;
+          invariant(schema, 'is-json references a file that does not export a JSON schema');
+          validate = ajv.compile(schema as object);
+        } else {
+          const scheme = yaml.load(renderedValue) as object;
+          validate = ajv.compile(scheme);
+        }
       } else if (typeof renderedValue === 'object') {
         // Value is JSON schema
         validate = ajv.compile(renderedValue);
@@ -339,6 +386,10 @@ export async function runAssertion({
     };
   }
 
+  if (baseType === 'is-sql') {
+    return isSql(outputString, renderedValue, inverse, assertion);
+  }
+
   if (baseType === 'contains') {
     invariant(renderedValue, '"contains" assertion type must have a string or number value');
     invariant(
@@ -358,6 +409,9 @@ export async function runAssertion({
 
   if (baseType === 'contains-any') {
     invariant(renderedValue, '"contains-any" assertion type must have a value');
+    if (typeof renderedValue === 'string') {
+      renderedValue = renderedValue.split(',').map((v) => v.trim());
+    }
     invariant(
       Array.isArray(renderedValue),
       '"contains-any" assertion type must have an array value',
@@ -375,6 +429,9 @@ export async function runAssertion({
 
   if (baseType === 'icontains-any') {
     invariant(renderedValue, '"icontains-any" assertion type must have a value');
+    if (typeof renderedValue === 'string') {
+      renderedValue = renderedValue.split(',').map((v) => v.trim());
+    }
     invariant(
       Array.isArray(renderedValue),
       '"icontains-any" assertion type must have an array value',
@@ -395,6 +452,9 @@ export async function runAssertion({
 
   if (baseType === 'contains-all') {
     invariant(renderedValue, '"contains-all" assertion type must have a value');
+    if (typeof renderedValue === 'string') {
+      renderedValue = renderedValue.split(',').map((v) => v.trim());
+    }
     invariant(
       Array.isArray(renderedValue),
       '"contains-all" assertion type must have an array value',
@@ -412,6 +472,9 @@ export async function runAssertion({
 
   if (baseType === 'icontains-all') {
     invariant(renderedValue, '"icontains-all" assertion type must have a value');
+    if (typeof renderedValue === 'string') {
+      renderedValue = renderedValue.split(',').map((v) => v.trim());
+    }
     invariant(
       Array.isArray(renderedValue),
       '"icontains-all" assertion type must have an array value',
@@ -480,21 +543,26 @@ export async function runAssertion({
   }
   if (baseType === 'contains-json') {
     let errorMessage = 'Expected output to contain valid JSON';
-    let jsonOutputs = containsJSON(outputString);
+    const jsonOutputs = containsJSON(outputString);
     for (const jsonMatch of jsonOutputs) {
       pass = jsonMatch !== inverse;
       if (pass && renderedValue) {
         let validate: ValidateFunction;
-        if (typeof renderedValue === 'string' && renderedValue.startsWith('file://')) {
-          // Reference the JSON schema from external file
-          const schema = valueFromScript;
-          invariant(schema, 'is-json references a file that does not export a JSON schema');
-          validate = ajv.compile(schema as object);
+        if (typeof renderedValue === 'string') {
+          if (renderedValue.startsWith('file://')) {
+            // Reference the JSON schema from external file
+            const schema = valueFromScript;
+            invariant(schema, 'contains-json references a file that does not export a JSON schema');
+            validate = ajv.compile(schema as object);
+          } else {
+            const scheme = yaml.load(renderedValue) as object;
+            validate = ajv.compile(scheme);
+          }
         } else if (typeof renderedValue === 'object') {
           // Value is JSON schema
           validate = ajv.compile(renderedValue);
         } else {
-          throw new Error('is-json assertion must have a string or object value');
+          throw new Error('contains-json assertion must have a string or object value');
         }
         pass = validate(jsonMatch);
         if (pass) {
@@ -519,22 +587,28 @@ export async function runAssertion({
       type: 'function';
       function: { arguments: string; name: string };
     }[];
-    invariant(Array.isArray(toolsOutput), 'is-valid-tools assertion must evaluate an array');
-    invariant(toolsOutput.length > 0, 'is-valid-tools assertion must evaluate a non-empty array');
-    invariant(
-      typeof toolsOutput[0].function.name === 'string',
-      'is-valid-tools assertion must evaluate an array of objects with string name properties',
-    );
-    invariant(
-      typeof toolsOutput[0].function.arguments === 'string',
-      'is-valid-tools assertion must evaluate an array of objects with string arguments properties',
-    );
+    if (
+      !Array.isArray(toolsOutput) ||
+      toolsOutput.length === 0 ||
+      typeof toolsOutput[0].function.name !== 'string' ||
+      typeof toolsOutput[0].function.arguments !== 'string'
+    ) {
+      return {
+        pass: false,
+        score: 0,
+        reason: `OpenAI did not return a valid-looking tools response: ${JSON.stringify(
+          toolsOutput,
+        )}`,
+        assertion,
+      };
+    }
 
     try {
       toolsOutput.forEach((toolOutput) =>
         validateFunctionCall(
           toolOutput.function,
           (provider as OpenAiChatCompletionProvider).config.tools?.map((tool) => tool.function),
+          test.vars,
         ),
       );
       return {
@@ -555,16 +629,25 @@ export async function runAssertion({
 
   if (baseType === 'is-valid-openai-function-call') {
     const functionOutput = output as { arguments: string; name: string };
-    invariant(
-      typeof functionOutput === 'object' &&
-        typeof functionOutput.name === 'string' &&
-        typeof functionOutput.arguments === 'string',
-      'is-valid-function assertion must evaluate an object with string name and arguments properties',
-    );
+    if (
+      typeof functionOutput !== 'object' ||
+      typeof functionOutput.name !== 'string' ||
+      typeof functionOutput.arguments !== 'string'
+    ) {
+      return {
+        pass: false,
+        score: 0,
+        reason: `OpenAI did not return a valid-looking function call: ${JSON.stringify(
+          functionOutput,
+        )}`,
+        assertion,
+      };
+    }
     try {
       validateFunctionCall(
         functionOutput,
         (provider as OpenAiChatCompletionProvider).config.functions,
+        test.vars,
       );
       return {
         pass: true,
@@ -584,9 +667,23 @@ export async function runAssertion({
 
   if (baseType === 'javascript') {
     try {
+      const validateResult = async (result: any): Promise<boolean | number | GradingResult> => {
+        result = await Promise.resolve(result);
+        if (typeof result === 'boolean' || typeof result === 'number' || isGradingResult(result)) {
+          return result;
+        } else {
+          throw new Error(
+            `Custom function must return a boolean, number, or GradingResult object. Got type ${typeof result}: ${JSON.stringify(
+              result,
+            )}`,
+          );
+        }
+      };
+
       if (typeof assertion.value === 'function') {
-        const ret = assertion.value(outputString, test, assertion);
-        if (ret && !ret.assertion) {
+        let ret = assertion.value(outputString, context);
+        ret = await validateResult(ret);
+        if (!ret.assertion) {
           // Populate the assertion object if the custom function didn't return it.
           const functionString = assertion.value.toString();
           ret.assertion = {
@@ -606,13 +703,13 @@ export async function runAssertion({
             typeof valueFromScript === 'object',
           `Javascript assertion script must return a boolean, number, or object (${assertion.value})`,
         );
-        result = valueFromScript as boolean | number | GradingResult;
+        result = await validateResult(valueFromScript);
       } else {
         const functionBody = renderedValue.includes('\n')
           ? renderedValue
           : `return ${renderedValue}`;
         const customFunction = new Function('output', 'context', functionBody);
-        result = customFunction(output, context) as boolean | number | GradingResult;
+        result = await validateResult(customFunction(output, context));
       }
       if (typeof result === 'boolean') {
         pass = result !== inverse;
@@ -630,6 +727,7 @@ export async function runAssertion({
         pass: false,
         score: 0,
         reason: `Custom function threw error: ${(err as Error).message}
+Stack Trace: ${(err as Error).stack}
 ${renderedValue}`,
         assertion,
       };
@@ -648,78 +746,85 @@ ${renderedValue}`,
   if (baseType === 'python') {
     invariant(typeof renderedValue === 'string', 'python assertion must have a string value');
     try {
-      let result: string;
+      let result: string | number | boolean | object | GradingResult | undefined;
       if (typeof valueFromScript !== 'undefined') {
-        invariant(
-          typeof valueFromScript === 'string',
-          `Python assertion script must return a string (${assertion.value})`,
-        );
         result = valueFromScript;
       } else {
         const isMultiline = renderedValue.includes('\n');
-        let pythonScript = `import json
-import sys
-data = json.load(sys.stdin)
-output = data['output']
-context = data['context']
-value = data['value']
-${isMultiline ? 'exec(value)' : 'print(json.dumps(eval(value)))'}`;
-        const pythonProcessInput = JSON.stringify({ output, context, value: renderedValue });
-        const child = spawn(process.env.PROMPTFOO_PYTHON || 'python', ['-u', '-c', pythonScript]);
-        child.stdin.write(pythonProcessInput);
-        child.stdin.end();
-        let childStdout = '';
-        let childStderr = '';
-        await new Promise<void>((resolve, reject) => {
-          // Collect output and wait for process to exit
-          child.stdout.on('data', (data) => {
-            childStdout += data;
-          });
-
-          // Listen for errors on the child process
-          child.on('error', (error) => {
-            reject(error);
-          });
-
-          child.stderr.on('data', (data) => {
-            childStderr += data;
-          });
-
-          // Listen for the process to close, which may happen after 'end'
-          child.on('close', (code) => {
-            if (code !== 0) {
-              reject(new Error(`Child process exited with code ${code}`));
-            } else {
-              resolve();
-            }
-          });
-        });
-        if (childStderr) {
-          throw new Error(childStderr);
+        let indentStyle = '    ';
+        if (isMultiline) {
+          // Detect the indentation style of the first indented line
+          const match = renderedValue.match(/^(?!\s*$)\s+/m);
+          if (match) {
+            indentStyle = match[0];
+          }
         }
-        result = childStdout.trim();
+
+        const pythonScript = `import json
+
+def main(output, context):
+${
+  isMultiline
+    ? renderedValue
+        .split('\n')
+        .map((line) => `${indentStyle}${line}`)
+        .join('\n')
+    : `    return ${renderedValue}`
+}
+`;
+        result = await runPythonCode(pythonScript, 'main', [output, context]);
       }
 
-      if (result.toLowerCase() === 'true') {
+      if (
+        (typeof result === 'boolean' && result) ||
+        (typeof result === 'string' && result.toLowerCase() === 'true')
+      ) {
         pass = true;
         score = 1.0;
-      } else if (result.toLowerCase() === 'false') {
+      } else if (
+        (typeof result === 'boolean' && !result) ||
+        (typeof result === 'string' && result.toLowerCase() === 'false')
+      ) {
         pass = false;
         score = 0.0;
-      } else if (result.startsWith('{')) {
-        const parsed = JSON.parse(result);
-        if (!parsed.hasOwnProperty('pass') || !parsed.hasOwnProperty('score')) {
+      } else if (typeof result === 'string' && result.startsWith('{')) {
+        let parsed;
+        try {
+          parsed = JSON.parse(result);
+        } catch (err) {
+          throw new Error(`Invalid JSON: ${err} when parsing result: ${result}`);
+        }
+        if (!isGradingResult(parsed)) {
           throw new Error(
-            'Python assertion must return a boolean, number, or {pass, score, reason} object',
+            `Python assertion must return a boolean, number, or {pass, score, reason} object. Got instead: ${result}`,
           );
         }
         return parsed;
+      } else if (typeof result === 'object') {
+        if (!isGradingResult(result)) {
+          throw new Error(
+            `Python assertion must return a boolean, number, or {pass, score, reason} object. Got instead:\n${JSON.stringify(
+              result,
+              null,
+              2,
+            )}`,
+          );
+        }
+        const pythonGradingResult = result as Omit<GradingResult, 'assertion'>;
+        if (assertion.threshold && pythonGradingResult.score < assertion.threshold) {
+          pythonGradingResult.pass = false;
+          pythonGradingResult.reason = `Python score ${pythonGradingResult.score} is less than threshold ${assertion.threshold}`;
+        }
+        return {
+          ...pythonGradingResult,
+          assertion,
+        };
       } else {
-        score = parseFloat(result);
+        score = parseFloat(String(result));
         pass = assertion.threshold ? score >= assertion.threshold : score > 0;
         if (isNaN(score)) {
           throw new Error(
-            'Python assertion must return a boolean, number, or {pass, score, reason} object',
+            `Python assertion must return a boolean, number, or {pass, score, reason} object. Instead got:\n${result}`,
           );
         }
         if (typeof assertion.threshold !== 'undefined' && score < assertion.threshold) {
@@ -739,30 +844,55 @@ ${isMultiline ? 'exec(value)' : 'print(json.dumps(eval(value)))'}`;
       score,
       reason: pass
         ? 'Assertion passed'
-        : `Python code returned ${pass ? 'true' : 'false'}
-${assertion.value}`,
+        : `Python code returned ${pass ? 'true' : 'false'}\n${assertion.value}`,
       assertion,
     };
   }
 
   if (baseType === 'similar') {
     invariant(
-      typeof renderedValue === 'string',
-      'Similarity assertion type must have a string value',
+      typeof renderedValue === 'string' || Array.isArray(renderedValue),
+      'Similarity assertion type must have a string or array of strings value',
     );
-    // Assertion provider overrides test provider
-    test.options = test.options || {};
-    test.options.provider = assertion.provider || test.options.provider;
-    return {
-      assertion,
-      ...(await matchesSimilarity(
-        renderedValue,
-        outputString,
-        assertion.threshold || 0.75,
-        inverse,
-        test.options,
-      )),
-    };
+
+    if (Array.isArray(renderedValue)) {
+      let minScore = Infinity;
+      for (const value of renderedValue) {
+        const result = await matchesSimilarity(
+          value,
+          outputString,
+          assertion.threshold || 0.75,
+          inverse,
+          test.options,
+        );
+        if (result.pass) {
+          return {
+            assertion,
+            ...result,
+          };
+        }
+        if (result.score < minScore) {
+          minScore = result.score;
+        }
+      }
+      return {
+        assertion,
+        pass: false,
+        score: minScore,
+        reason: `None of the provided values met the similarity threshold`,
+      };
+    } else {
+      return {
+        assertion,
+        ...(await matchesSimilarity(
+          renderedValue,
+          outputString,
+          assertion.threshold || 0.75,
+          inverse,
+          test.options,
+        )),
+      };
+    }
   }
 
   if (baseType === 'llm-rubric') {
@@ -771,19 +901,14 @@ ${assertion.value}`,
       '"llm-rubric" assertion type must have a string value',
     );
 
-    // Assertion provider overrides test provider
-    test.options = test.options || {};
-    test.options.provider = assertion.provider || test.options.provider;
-    test.options.rubricPrompt = assertion.rubricPrompt || test.options.rubricPrompt;
-
-    if (test.options.rubricPrompt) {
+    if (test.options?.rubricPrompt) {
       if (typeof test.options.rubricPrompt === 'object') {
         test.options.rubricPrompt = JSON.stringify(test.options.rubricPrompt);
       }
     }
 
     // Update the assertion value. This allows the web view to display the prompt.
-    assertion.value = assertion.value || test.options.rubricPrompt;
+    assertion.value = assertion.value || test.options?.rubricPrompt;
     return {
       assertion,
       ...(await matchesLlmRubric(renderedValue || '', outputString, test.options, test.vars)),
@@ -797,13 +922,9 @@ ${assertion.value}`,
     );
     invariant(prompt, 'factuality assertion type must have a prompt');
 
-    // Assertion provider overrides test provider
-    test.options = test.options || {};
-    test.options.provider = assertion.provider || test.options.provider;
-    test.options.rubricPrompt = assertion.rubricPrompt || test.options.rubricPrompt;
-
-    if (test.options.rubricPrompt) {
+    if (test.options?.rubricPrompt) {
       // Substitute vars in prompt
+      invariant(typeof test.options.rubricPrompt === 'string', 'rubricPrompt must be a string');
       test.options.rubricPrompt = nunjucks.renderString(test.options.rubricPrompt, test.vars || {});
     }
 
@@ -820,13 +941,9 @@ ${assertion.value}`,
     );
     invariant(prompt, 'model-graded-closedqa assertion type must have a prompt');
 
-    // Assertion provider overrides test provider
-    test.options = test.options || {};
-    test.options.provider = assertion.provider || test.options.provider;
-    test.options.rubricPrompt = assertion.rubricPrompt || test.options.rubricPrompt;
-
-    if (test.options.rubricPrompt) {
+    if (test.options?.rubricPrompt) {
       // Substitute vars in prompt
+      invariant(typeof test.options.rubricPrompt === 'string', 'rubricPrompt must be a string');
       test.options.rubricPrompt = nunjucks.renderString(test.options.rubricPrompt, test.vars || {});
     }
 
@@ -843,13 +960,10 @@ ${assertion.value}`,
     );
     invariant(prompt, 'answer-relevance assertion type must have a prompt');
 
-    // Assertion provider overrides test provider
-    test.options = test.options || {};
-    test.options.provider = assertion.provider || test.options.provider;
-
+    const input = typeof test.vars?.query === 'string' ? test.vars.query : prompt;
     return {
       assertion,
-      ...(await matchesAnswerRelevance(prompt, output, assertion.threshold || 0, test.options)),
+      ...(await matchesAnswerRelevance(input, output, assertion.threshold || 0, test.options)),
     };
   }
 
@@ -859,10 +973,6 @@ ${assertion.value}`,
       'context-recall assertion type must have a string value',
     );
     invariant(prompt, 'context-recall assertion type must have a prompt');
-
-    // Assertion provider overrides test provider
-    test.options = test.options || {};
-    test.options.provider = assertion.provider || test.options.provider;
 
     return {
       assertion,
@@ -877,10 +987,6 @@ ${assertion.value}`,
   }
 
   if (baseType === 'context-relevance') {
-    // Assertion provider overrides test provider
-    test.options = test.options || {};
-    test.options.provider = assertion.provider || test.options.provider;
-
     invariant(test.vars, 'context-relevance assertion type must have a vars object');
     invariant(
       typeof test.vars.query === 'string',
@@ -903,10 +1009,6 @@ ${assertion.value}`,
   }
 
   if (baseType === 'context-faithfulness') {
-    // Assertion provider overrides test provider
-    test.options = test.options || {};
-    test.options.provider = assertion.provider || test.options.provider;
-
     invariant(test.vars, 'context-faithfulness assertion type must have a vars object');
     invariant(
       typeof test.vars.query === 'string',
@@ -930,6 +1032,48 @@ ${assertion.value}`,
         assertion.threshold || 0,
         test.options,
       )),
+    };
+  }
+
+  if (baseType === 'moderation') {
+    invariant(prompt, 'moderation assertion type must have a prompt');
+    invariant(typeof output === 'string', 'moderation assertion type must have a string output');
+    invariant(
+      !assertion.value ||
+        (Array.isArray(assertion.value) && typeof assertion.value[0] === 'string'),
+      'moderation assertion value must be a string array if set',
+    );
+
+    if (prompt[0] === '[' || prompt[0] === '{') {
+      // Try to extract the last user message from OpenAI-style prompts.
+      try {
+        const parsedPrompt = parseChatPrompt<null | { role: string; content: string }[]>(
+          prompt,
+          null,
+        );
+        if (parsedPrompt && parsedPrompt.length > 0) {
+          prompt = parsedPrompt[parsedPrompt.length - 1].content;
+        }
+      } catch (err) {
+        // Ignore error
+      }
+    }
+
+    const moderationResult = await matchesModeration(
+      {
+        userPrompt: prompt,
+        assistantResponse: output,
+        categories: Array.isArray(assertion.value) ? assertion.value : [],
+      },
+      test.options,
+    );
+
+    pass = moderationResult.pass;
+    return {
+      pass,
+      score: moderationResult.score,
+      reason: moderationResult.reason,
+      assertion,
     };
   }
 
@@ -966,8 +1110,8 @@ ${assertion.value}`,
             ? 1
             : 0
           : inverse
-          ? 1 - jsonResponse.score
-          : jsonResponse.score;
+            ? 1 - jsonResponse.score
+            : jsonResponse.score;
 
       const reason =
         jsonResponse.reason ||
@@ -990,10 +1134,7 @@ ${assertion.value}`,
   }
 
   if (baseType === 'rouge-n') {
-    invariant(
-      typeof renderedValue === 'string' || Array.isArray(renderedValue),
-      '"rouge" assertion type must be a value (string or string array)',
-    );
+    invariant(typeof renderedValue === 'string', '"rouge" assertion type must be a string value');
     return handleRougeScore(baseType, assertion, renderedValue, outputString, inverse);
   }
 
@@ -1018,21 +1159,28 @@ ${assertion.value}`,
 
   if (baseType === 'classifier') {
     invariant(
-      typeof renderedValue === 'string',
-      '"classifier" assertion type must have a string value',
+      typeof renderedValue === 'string' || typeof renderedValue === 'undefined',
+      '"classifier" assertion type must have a string value or be undefined',
     );
 
     // Assertion provider overrides test provider
     test.options = test.options || {};
     test.options.provider = assertion.provider || test.options.provider;
+    const classificationResult = await matchesClassification(
+      renderedValue,
+      outputString,
+      assertion.threshold ?? 1,
+      test.options,
+    );
+
+    if (inverse) {
+      classificationResult.pass = !classificationResult.pass;
+      classificationResult.score = 1 - classificationResult.score;
+    }
+
     return {
       assertion,
-      ...(await matchesClassification(
-        renderedValue,
-        outputString,
-        assertion.threshold ?? 1,
-        test.options,
-      )),
+      ...classificationResult,
     };
   }
 
@@ -1126,7 +1274,7 @@ ${assertion.value}`,
 function containsJSON(str: string): any {
   // This will extract all json objects from a string
 
-  let jsonObjects = [];
+  const jsonObjects = [];
   let openBracket = str.indexOf('{');
   let closeBracket = str.indexOf('}', openBracket);
   // Iterate over the string until we find a valid JSON-like pattern
@@ -1151,6 +1299,88 @@ function containsJSON(str: string): any {
     }
   }
   return jsonObjects;
+}
+
+export async function isSql(
+  outputString: string,
+  renderedValue: AssertionValue | undefined,
+  inverse: boolean,
+  assertion: Assertion,
+): Promise<GradingResult> {
+  let pass = false;
+  let parsedSql;
+  let databaseType: string = 'MySQL';
+  let whiteTableList: string[] | undefined;
+  let whiteColumnList: string[] | undefined;
+
+  if (renderedValue && typeof renderedValue === 'object') {
+    const value = renderedValue as {
+      database?: string;
+      allowedTables?: string[];
+      allowedColumns?: string[];
+    };
+
+    databaseType = value.database || 'MySQL';
+    whiteTableList = value.allowedTables;
+    whiteColumnList = value.allowedColumns;
+  }
+
+  if (renderedValue && typeof renderedValue !== 'object') {
+    throw new Error('is-sql assertion must have a object value.');
+  }
+
+  const { Parser: SqlParser } = await import('node-sql-parser').catch(() => {
+    throw new Error('node-sql-parser is not installed. Please install it first');
+  });
+
+  const sqlParser = new SqlParser();
+
+  const opt: sqlParserOption = { database: databaseType };
+
+  const failureReasons: string[] = [];
+
+  try {
+    parsedSql = sqlParser.astify(outputString, opt);
+    pass = !inverse;
+  } catch (err) {
+    pass = inverse;
+    failureReasons.push(
+      `SQL statement does not conform to the provided ${databaseType} database syntax.`,
+    );
+  }
+
+  if (whiteTableList) {
+    opt.type = 'table';
+    try {
+      sqlParser.whiteListCheck(outputString, whiteTableList, opt);
+    } catch (err) {
+      pass = inverse;
+      const error = err as Error;
+      failureReasons.push(`SQL validation failed: ${error.message}.`);
+    }
+  }
+
+  if (whiteColumnList) {
+    opt.type = 'column';
+    try {
+      sqlParser.whiteListCheck(outputString, whiteColumnList, opt);
+    } catch (err) {
+      pass = inverse;
+      const error = err as Error;
+      failureReasons.push(`SQL validation failed: ${error.message}.`);
+    }
+  }
+
+  if (inverse && pass === false && failureReasons.length === 0) {
+    failureReasons.push('The output SQL statement is valid');
+  }
+
+  return {
+    pass,
+    score: pass ? 1 : 0,
+    reason: pass ? 'Assertion passed' : failureReasons.join(' '),
+    assertion,
+  };
 }
 
 export async function runCompareAssertion(
@@ -1198,4 +1428,5 @@ export default {
   matchesContextRelevance,
   matchesContextFaithfulness,
   matchesComparisonBoolean: matchesSelectBest,
+  matchesModeration,
 };

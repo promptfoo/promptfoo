@@ -19,7 +19,7 @@ export async function createShareableUrl(
 
   const apiBaseUrl =
     typeof config.sharing === 'object' ? config.sharing.apiBaseUrl : REMOTE_API_BASE_URL;
-  const response = await fetchWithProxy(`${apiBaseUrl}/eval`, {
+  const response = await fetchWithProxy(`${apiBaseUrl}/api/eval`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -27,8 +27,11 @@ export async function createShareableUrl(
     body: JSON.stringify(sharedResults),
   });
 
-  const { id } = (await response.json()) as { id: string };
+  const responseJson = (await response.json()) as { id?: string; error?: string };
+  if (responseJson.error) {
+    throw new Error(`Failed to create shareable URL: ${responseJson.error}`);
+  }
   const appBaseUrl =
     typeof config.sharing === 'object' ? config.sharing.appBaseUrl : REMOTE_APP_BASE_URL;
-  return `${REMOTE_APP_BASE_URL}/eval/${id}`;
+  return `${appBaseUrl}/eval/${responseJson.id}`;
 }

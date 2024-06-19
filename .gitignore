@@ -5,3 +5,8 @@ scratch
 node_modules
 dist
 .aider*
+
+__pycache__
+
+# jest
+.coverage

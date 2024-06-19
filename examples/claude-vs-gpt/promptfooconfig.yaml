@@ -1,0 +1,111 @@
+description: 'Claude 3 vs GPT 4'
+
+prompts:
+  - file://prompt.yaml
+
+providers:
+  - anthropic:messages:claude-3-opus-20240229
+  - openai:chat:gpt-4-0125-preview
+
+defaultTest:
+  assert:
+    - type: cost
+      threshold: 0.01
+    - type: latency
+      threshold: 3000
+    - type: javascript
+      value: 'output.length <= 100 ? 1 : output.length > 1000 ? 0 : 1 - (output.length - 100) / 900'
+
+tests:
+  - vars:
+      riddle: 'I speak without a mouth and hear without ears. I have no body, but I come alive with wind. What am I?'
+    assert:
+      # Make sure the LLM output contains this word
+      - type: icontains
+        value: echo
+      # Use model-graded assertions to enforce free-form instructions
+      - type: llm-rubric
+        value: Do not apologize
+  - vars:
+      riddle: 'You see a boat filled with people. It has not sunk, but when you look again you don’t see a single person on the boat. Why?'
+    assert:
+      - type: llm-rubric
+        value: explains that the people are below deck, or they are all in a relationship
+  - vars:
+      riddle: 'The more of this there is, the less you see. What is it?'
+    assert:
+      - type: icontains
+        value: darkness
+  - vars:
+      riddle: >-
+        I have keys but no locks. I have space but no room. You can enter, but
+        can’t go outside. What am I?
+    assert:
+      - type: icontains
+        value: keyboard
+  - vars:
+      riddle: >-
+        I am not alive, but I grow; I don't have lungs, but I need air; I don't
+        have a mouth, but water kills me. What am I?
+    assert:
+      - type: icontains-any
+        value: [fire, flame]
+  - vars:
+      riddle: What can travel around the world while staying in a corner?
+    assert:
+      - type: icontains
+        value: stamp
+  - vars:
+      riddle: Forward I am heavy, but backward I am not. What am I?
+    assert:
+      - type: icontains
+        value: ton
+  - vars:
+      riddle: >-
+        The person who makes it, sells it. The person who buys it, never uses
+        it. The person who uses it, doesn't know they're using it. What is it?
+    assert:
+      - type: icontains
+        value: coffin
+  - vars:
+      riddle: I can be cracked, made, told, and played. What am I?
+    assert:
+      - type: icontains
+        value: joke
+  - vars:
+      riddle: What has keys but can't open locks?
+    assert:
+      - type: icontains
+        value: piano
+  - vars:
+      riddle: >-
+        I'm light as a feather, yet the strongest person can't hold me for much
+        more than a minute. What am I?
+    assert:
+      - type: icontains
+        value: breath
+  - vars:
+      riddle: >-
+        I can fly without wings, I can cry without eyes. Whenever I go, darkness
+        follows me. What am I?
+    assert:
+      - type: icontains
+        value: cloud
+  - vars:
+      riddle: >-
+        I am taken from a mine, and shut up in a wooden case, from which I am
+        never released, and yet I am used by almost every person. What am I?
+  - vars:
+      riddle: >-
+        David's father has three sons: Snap, Crackle, and _____? What is the
+        name of the third son?
+    assert:
+      - type: contains
+        value: David
+  - vars:
+      riddle: >-
+        I am light as a feather, but even the world's strongest man couldn’t
+        hold me for much longer than a minute. What am I?
+    assert:
+      - type: icontains
+        value: breath

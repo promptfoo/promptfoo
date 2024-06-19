@@ -14,6 +14,9 @@
   --ifm-color-primary-lighter: #70a1b1;
   --ifm-color-primary-lightest: #92b7c3;
   --ifm-code-font-size: 95%;
+  --ifm-font-family-base: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell,
+    Noto Sans, sans-serif, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif,
+    'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol';
   --docusaurus-highlighted-code-line-bg: #fffbdc;
 }
 
@@ -42,4 +45,24 @@
 
 .hero__title {
   font-size: 4rem;
+}
+
+.theme-doc-sidebar-item-category-level-1 > div {
+  font-weight: bold;
+}
+
+.theme-doc-sidebar-item-link-level-1.menu__list-item {
+  font-weight: bold;
+}
+
+.navbar__brand {
+  font-family: var(--ifm-font-family-monospace);
+}
+
+.navbar__logo img {
+  filter: invert(0);
+}
+
+[data-theme='dark'] .navbar__logo img {
+  filter: invert(0.7);
 }

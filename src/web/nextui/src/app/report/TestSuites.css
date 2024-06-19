@@ -1,0 +1,28 @@
+.pass-high {
+  color: green;
+}
+
+.pass-medium {
+  color: rgb(203, 133, 3);
+}
+
+.pass-low {
+  color: red;
+}
+
+.vuln-critical {
+  color: red;
+  font-weight: bold;
+}
+
+.vuln-high {
+  color: red;
+}
+
+.vuln-medium {
+  color: rgb(203, 133, 3);
+}
+
+.vuln-low {
+  color: green;
+}

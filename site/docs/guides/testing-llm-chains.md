@@ -52,7 +52,7 @@ llm_math.run(prompt)
 
 This script is set up so that we can run it like this:
 
-```bash
+```sh
 python langchain_example.py "What is 2+2?"
 ```
 

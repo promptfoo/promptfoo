@@ -1,18 +1,16 @@
-import { NIL as NULL_UUID } from 'uuid';
-
 import { EvaluateSummary, EvaluateTestSuite } from '@/../../../types';
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/types/supabase';
 
-export type EvaluationJob = Database['public']['Tables']['EvaluationJob']['Row'];
-export type EvaluationResult = Database['public']['Tables']['EvaluationResult']['Row'];
-export enum JobStatus {
+export type SupabaseEvaluationJob = Database['public']['Tables']['EvaluationJob']['Row'];
+export type SupabaseEvaluationResult = Database['public']['Tables']['EvaluationResult']['Row'];
+export enum SupabaseJobStatus {
   IN_PROGRESS = 'IN_PROGRESS',
   COMPLETE = 'COMPLETE',
 }
 
-export async function createJob(supabase: SupabaseClient): Promise<EvaluationJob> {
+export async function createJob(supabase: SupabaseClient): Promise<SupabaseEvaluationJob> {
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -21,7 +19,7 @@ export async function createJob(supabase: SupabaseClient): Promise<EvaluationJob
     .insert([
       {
         user_id: user?.id,
-        status: JobStatus.IN_PROGRESS,
+        status: SupabaseJobStatus.IN_PROGRESS,
         progress: 0,
         total: 0,
       },
@@ -50,14 +48,17 @@ export async function updateJob(
   if (error) throw error;
 }
 
-export async function getJob(supabase: SupabaseClient, id: string): Promise<EvaluationJob> {
+export async function getJob(supabase: SupabaseClient, id: string): Promise<SupabaseEvaluationJob> {
   const { data: job, error } = await supabase.from('EvaluationJob').select().eq('id', id).single();
 
   if (error) throw error;
   return job;
 }
 
-export async function getResult(supabase: SupabaseClient, id: string): Promise<EvaluationResult> {
+export async function getResult(
+  supabase: SupabaseClient,
+  id: string,
+): Promise<SupabaseEvaluationResult> {
   const { data: result, error } = await supabase
     .from('EvaluationResult')
     .select()
@@ -73,7 +74,7 @@ export async function createResult(
   jobId: string,
   config: EvaluateTestSuite,
   results: EvaluateSummary,
-): Promise<EvaluationResult> {
+): Promise<SupabaseEvaluationResult> {
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -98,7 +99,7 @@ export async function createResult(
   const { error: jobUpdateError } = await supabase
     .from('EvaluationJob')
     .update({
-      status: JobStatus.COMPLETE,
+      status: SupabaseJobStatus.COMPLETE,
       evaluationResultId: jobId,
     })
     .eq('id', jobId);

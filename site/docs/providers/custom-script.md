@@ -1,6 +1,6 @@
 ---
 sidebar_label: Custom scripts
-sidebar_position: 50
+sidebar_position: 52
 ---
 
 # Custom scripts
@@ -25,7 +25,7 @@ providers: ['exec: python chain.py']
 
 Or in the CLI:
 
-```bash
+```
 promptfoo eval -p prompt1.txt prompt2.txt -o results.csv  -v vars.csv -r 'exec: python chain.py'
 ```
 

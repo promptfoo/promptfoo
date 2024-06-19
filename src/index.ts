@@ -3,12 +3,25 @@ import invariant from 'tiny-invariant';
 import assertions from './assertions';
 import providers, { loadApiProvider } from './providers';
 import telemetry from './telemetry';
-import { disableCache } from './cache';
+import * as cache from './cache';
 import { evaluate as doEvaluate } from './evaluator';
 import { loadApiProviders } from './providers';
 import { readTests } from './testCases';
-import { readFilters, writeLatestResults, writeMultipleOutputs, writeOutput } from './util';
-import type { EvaluateOptions, TestSuite, EvaluateTestSuite, ProviderOptions, PromptFunction } from './types';
+import {
+  readFilters,
+  writeResultsToDatabase,
+  writeMultipleOutputs,
+  writeOutput,
+  migrateResultsFromFileSystemToDatabase,
+} from './util';
+import type {
+  EvaluateOptions,
+  TestSuite,
+  EvaluateTestSuite,
+  ProviderOptions,
+  PromptFunction,
+} from './types';
+import { readPrompts } from './prompts';
 
 export * from './types';
 
@@ -22,28 +35,33 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
     }),
     tests: await readTests(testSuite.tests),
 
-    nunjucksFilters: readFilters(testSuite.nunjucksFilters || {}),
+    nunjucksFilters: await readFilters(testSuite.nunjucksFilters || {}),
 
     // Full prompts expected (not filepaths)
-    prompts: testSuite.prompts.map((promptInput) => {
-      if (typeof promptInput === 'function') {
-        return {
-          raw: promptInput.toString(),
-          display: promptInput.toString(),
-          function: promptInput as PromptFunction,
-        };
-      } else if (typeof promptInput === 'string') {
-        return {
-          raw: promptInput,
-          display: promptInput,
-        };
-      } else {
-        return {
-          raw: JSON.stringify(promptInput),
-          display: JSON.stringify(promptInput),
-        };
-      }
-    }),
+    prompts: (
+      await Promise.all(
+        testSuite.prompts.map(async (promptInput) => {
+          if (typeof promptInput === 'function') {
+            return {
+              raw: promptInput.toString(),
+              label: promptInput.toString(),
+              function: promptInput as PromptFunction,
+            };
+          } else if (typeof promptInput === 'string') {
+            const prompts = await readPrompts(promptInput);
+            return prompts.map((p) => ({
+              raw: p.raw,
+              label: p.label,
+            }));
+          } else {
+            return {
+              raw: JSON.stringify(promptInput),
+              label: JSON.stringify(promptInput),
+            };
+          }
+        }),
+      )
+    ).flat(),
   };
 
   // Resolve nested providers
@@ -53,6 +71,10 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
     }
     if (test.assert) {
       for (const assertion of test.assert) {
+        if (assertion.type === 'assert-set' || typeof assertion.provider === 'function') {
+          continue;
+        }
+
         if (assertion.provider) {
           if (typeof assertion.provider === 'object') {
             const casted = assertion.provider as ProviderOptions;
@@ -61,7 +83,7 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
           } else if (typeof assertion.provider === 'string') {
             assertion.provider = await loadApiProvider(assertion.provider);
           } else {
-            // It's a function, no need to do anything
+            throw new Error('Invalid provider type');
           }
         }
       }
@@ -70,7 +92,7 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
 
   // Other settings
   if (options.cache === false || (options.repeat && options.repeat > 1)) {
-    disableCache();
+    cache.disableCache();
   }
   telemetry.maybeShowNotice();
 
@@ -80,16 +102,19 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
     ...options,
   });
 
-  if (testSuite.outputPath) {
-    if (typeof testSuite.outputPath === 'string') {
-      writeOutput(testSuite.outputPath, ret, testSuite, null);
-    } else if (Array.isArray(testSuite.outputPath)) {
-      writeMultipleOutputs(testSuite.outputPath, ret, testSuite, null);
-    }
+  const unifiedConfig = { ...testSuite, prompts: constructedTestSuite.prompts };
+  let evalId: string | null = null;
+  if (testSuite.writeLatestResults) {
+    await migrateResultsFromFileSystemToDatabase();
+    evalId = await writeResultsToDatabase(ret, unifiedConfig);
   }
 
-  if (testSuite.writeLatestResults) {
-    writeLatestResults(ret, testSuite);
+  if (testSuite.outputPath) {
+    if (typeof testSuite.outputPath === 'string') {
+      await writeOutput(testSuite.outputPath, evalId, ret, unifiedConfig, null);
+    } else if (Array.isArray(testSuite.outputPath)) {
+      await writeMultipleOutputs(testSuite.outputPath, evalId, ret, unifiedConfig, null);
+    }
   }
 
   await telemetry.send();
@@ -102,4 +127,5 @@ export default {
   evaluate,
   assertions,
   providers,
+  cache,
 };

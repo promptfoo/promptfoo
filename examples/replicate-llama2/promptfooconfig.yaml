@@ -1,6 +1,6 @@
 prompts: [prompts.txt]
 providers:
-  - replicate:replicate/llama70b-v2-chat:e951f18578850b652510200860fc4ea62b3b16fac280f83ff32282f87bbd2e48
+  - replicate:meta/llama-2-70b-chat:2d19859030ff705a87c746f7e96eea03aefb71f166725aee39692f1476566d48
 tests:
   - vars:
       topic: bananas

@@ -1,3 +1,5 @@
+import type { GoogleAuth } from 'google-auth-library';
+
 type Probability = 'NEGLIGIBLE' | 'LOW' | 'MEDIUM' | 'HIGH';
 
 interface SafetyRating {
@@ -33,13 +35,13 @@ interface Candidate {
   safetyRatings: SafetyRating[];
 }
 
-interface UsageMetadata {
+interface GeminiUsageMetadata {
   promptTokenCount: number;
   candidatesTokenCount?: number;
   totalTokenCount: number;
 }
 
-interface ErrorResponse {
+export interface GeminiErrorResponse {
   error: {
     code: number;
     message: string;
@@ -47,12 +49,28 @@ interface ErrorResponse {
   };
 }
 
-export interface ResponseData {
+export interface GeminiResponseData {
   candidates: Candidate[];
-  usageMetadata?: UsageMetadata;
+  usageMetadata?: GeminiUsageMetadata;
 }
 
-export type GeminiApiResponse = (ResponseData | ErrorResponse)[];
+export type GeminiApiResponse = (GeminiResponseData | GeminiErrorResponse)[];
+
+export interface Palm2ApiResponse {
+  error?: {
+    code: string;
+    message: string;
+  };
+  predictions?: [
+    {
+      candidates: [
+        {
+          content: string;
+        },
+      ];
+    },
+  ];
+}
 
 export function maybeCoerceToGeminiFormat(contents: any) {
   let coerced = false;
@@ -67,4 +85,25 @@ export function maybeCoerceToGeminiFormat(contents: any) {
     coerced = true;
   }
   return { contents, coerced };
+}
+
+let cachedAuth: GoogleAuth | undefined;
+export async function getGoogleClient() {
+  if (!cachedAuth) {
+    let GoogleAuth;
+    try {
+      const importedModule = await import('google-auth-library');
+      GoogleAuth = importedModule.GoogleAuth;
+    } catch (err) {
+      throw new Error(
+        'The google-auth-library package is required as a peer dependency. Please install it in your project or globally.',
+      );
+    }
+    cachedAuth = new GoogleAuth({
+      scopes: 'https://www.googleapis.com/auth/cloud-platform',
+    });
+  }
+  const client = await cachedAuth.getClient();
+  const projectId = await cachedAuth.getProjectId();
+  return { client, projectId };
 }

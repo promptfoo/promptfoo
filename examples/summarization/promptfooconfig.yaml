@@ -1,0 +1,18 @@
+prompts:
+  - 'Summarize this article: {{article}}'
+  - 'Summarize this article concisely: {{article}}'
+
+providers:
+  - openai:gpt-3.5-turbo
+
+tests:
+  - vars:
+      article: file://articles/*
+    assert:
+      - type: not-starts-with
+        value: Sure
+      - type: not-contains
+        value: AI language model
+      # Prefer shorter summaries
+      - type: javascript
+        value: output.length < 500

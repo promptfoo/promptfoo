@@ -1,8 +1,27 @@
 prompts: [prompts.txt]
-providers: [bedrock:anthropic.claude-v2]
+
+providers:
+  - bedrock:anthropic.claude-v2
+  - bedrock:meta.llama3-70b-instruct-v1:0
+  - bedrock:mistral.mixtral-8x7b-instruct-v0:1
+  - bedrock:cohere.command-r-plus-v1:0
+
+defaultTest:
+  options:
+    provider:
+      # Override the embeddings provider for all assertion types that require it (such as similarity)
+      embedding:
+        id: bedrock:embeddings:amazon.titan-embed-text-v2:0
+        config:
+          region: us-east-1
+
 tests:
   - vars:
       question: What's the weather in New York?
+    assert:
+      # This uses the embeddings provider set above
+      - type: similar
+        value: sunny
   - vars:
       question: Who won the latest football match between the Giants and 49ers?
   - vars:
@@ -20,7 +39,9 @@ tests:
   - vars:
       question: "Which genus of moth in the world's seventh-largest country contains only one species?"
   - vars:
-      question: 'Who was once considered the best kick boxer in the world, however he has been involved in a number of controversies relating to his "unsportsmanlike conducts" in the sport and crimes of violence outside of the ring.'
+      question:
+        'Who was once considered the best kick boxer in the world, however he has been involved in a number of controversies relating to his "unsportsm
+        nlike conducts" in the sport and crimes of violence outside of the ring.'
   - vars:
       question: 'The Dutch-Belgian television series that "House of Anubis" was based on first aired in what year?'
   - vars:
@@ -71,5 +92,28 @@ tests:
       question: 'Which documentary is about Finnish rock groups, Adam Clayton Powell or The Saimaa Gesture?'
   - vars:
       question: 'Who was inducted into the Rock and Roll Hall of Fame, David Lee Roth or Cia Berg?'
+  - vars:
+      question: "Zimbabwe's Guwe Secondary School has a sister school in what New York county?"
+    assert:
+  - vars:
+      question: 'Who is the director of the 2003 film which has scenes in it fi
+        med at the Quality Cafe in Los Angeles?'
+  - vars:
+      question: "Which actress played the part of fictitious character Kimberly
+        Ann Hart, in the franchise built around a live action superhero television seri
+        s taking much of its footage from the Japanese tokusatsu 'Super Sentai'?"
+  - vars:
+      question: 'Who was born first, Pablo Trapero or Aleksander Ford?'
+  - vars:
+      question: "Are Jane and First for Women both women's magazines?"
+  - vars:
+      question: 'What profession does Nicholas Ray and Elia Kazan have in common?'
+  - vars:
+      question: 'Where is the company that purchased Aixam based in?'
+  - vars:
+      question: 'Which documentary is about Finnish rock groups, Adam Clayton P
+        well or The Saimaa Gesture?'
+  - vars:
+      question: 'Who was inducted into the Rock and Roll Hall of Fame, David LeRoth or Cia Berg?'
   - vars:
       question: "Zimbabwe's Guwe Secondary School has a sister school in what New York county?"

@@ -6,22 +6,26 @@ sidebar_position: 4
 
 ## Requirements
 
-Node 16 or newer.
+Node 18 or newer.
 
-## For command-line usage
+## For Command-Line Usage
 
-```
+Install `promptfoo` globally using npm:
+
+```sh
 npm install -g promptfoo
 ```
 
-Or use `npx` to run promptfoo directly:
+Or use `npx` to run `promptfoo` directly:
 
 ```
 npx promptfoo@latest
 ```
 
-## For library usage
+## For Library Usage
 
-```
+Install `promptfoo` as a library in your project:
+
+```sh
 npm install promptfoo
 ```

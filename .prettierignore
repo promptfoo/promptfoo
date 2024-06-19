@@ -1,8 +1,15 @@
 dist
 venv
 .aider*
+drizzle
 src/web/nextui/out
 src/web/nextui/.next
 
 site/.docusaurus
 site/build
+
+examples/multiple-turn-conversation/prompt.json
+examples/openai-chat-history/prompt.json
+examples/simple-test/output.html
+
+.coverage

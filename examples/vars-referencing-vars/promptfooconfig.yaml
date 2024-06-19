@@ -1,0 +1,16 @@
+prompts:
+  - 'Write a {{sentence}}'
+
+providers:
+  - openai:gpt-3.5-turbo-0613
+
+tests:
+  - vars:
+      sentence: 'tweet about {{topic}}'
+      topic: 'bananas'
+  - vars:
+      sentence: 'tweet about fruits'
+      topic: 'fruits'
+  - vars:
+      sentence: 'tweet about weasels'
+      topic: 'weasels'

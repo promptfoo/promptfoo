@@ -8,15 +8,26 @@ import yaml from 'js-yaml';
 import {
   dereferenceConfig,
   maybeRecordFirstRun,
+  providerToIdentifier,
   readConfigs,
   readFilters,
   readGlobalConfig,
+  readOutput,
   resetGlobalConfig,
+  resultIsForTestCase,
+  transformOutput,
+  varsMatch,
   writeMultipleOutputs,
   writeOutput,
 } from '../src/util';
 
-import type { EvaluateResult, EvaluateTable, UnifiedConfig } from '../src/types';
+import type {
+  ApiProvider,
+  EvaluateResult,
+  EvaluateTable,
+  TestCase,
+  UnifiedConfig,
+} from '../src/types';
 
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
@@ -36,294 +47,326 @@ jest.mock('fs', () => ({
 }));
 
 jest.mock('../src/esm');
+jest.mock('../src/database');
 
 beforeEach(() => {
   jest.clearAllMocks();
 });
 
 describe('util', () => {
-  test('writeOutput with CSV output', () => {
-    const outputPath = 'output.csv';
-    const results: EvaluateResult[] = [
-      {
-        success: true,
-        score: 1.0,
-        namedScores: {},
-        latencyMs: 1000,
-        provider: {
-          id: 'foo',
-        },
-        prompt: {
-          raw: 'Test prompt',
-          display: '[display] Test prompt',
-        },
-        response: {
-          output: 'Test output',
-        },
-        vars: {
-          var1: 'value1',
-          var2: 'value2',
-        },
-      },
-    ];
-    const table: EvaluateTable = {
-      head: {
-        prompts: [{ raw: 'Test prompt', display: '[display] Test prompt', provider: 'foo' }],
-        vars: ['var1', 'var2'],
-      },
-      body: [
+  describe('writeOutput', () => {
+    it('writeOutput with CSV output', () => {
+      const outputPath = 'output.csv';
+      const results: EvaluateResult[] = [
         {
-          outputs: [
-            {
-              pass: true,
-              score: 1.0,
-              namedScores: {},
-              text: 'Test output',
-              prompt: 'Test prompt',
-              latencyMs: 1000,
-              cost: 0,
-            },
-          ],
-          vars: ['value1', 'value2'],
-          test: {},
+          success: true,
+          score: 1.0,
+          namedScores: {},
+          latencyMs: 1000,
+          provider: {
+            id: 'foo',
+          },
+          prompt: {
+            raw: 'Test prompt',
+            label: '[display] Test prompt',
+          },
+          response: {
+            output: 'Test output',
+          },
+          vars: {
+            var1: 'value1',
+            var2: 'value2',
+          },
         },
-      ],
-    };
-    const summary = {
-      version: 1,
-      stats: {
-        successes: 1,
-        failures: 1,
-        tokenUsage: {
-          total: 10,
-          prompt: 5,
-          completion: 5,
-          cached: 0,
+      ];
+      const table: EvaluateTable = {
+        head: {
+          prompts: [{ raw: 'Test prompt', label: '[display] Test prompt', provider: 'foo' }],
+          vars: ['var1', 'var2'],
         },
-      },
-      results,
-      table,
-    };
-    const config = {
-      description: 'test',
-    };
-    const shareableUrl = null;
-    writeOutput(outputPath, summary, config, shareableUrl);
+        body: [
+          {
+            outputs: [
+              {
+                pass: true,
+                score: 1.0,
+                namedScores: {},
+                text: 'Test output',
+                prompt: 'Test prompt',
+                latencyMs: 1000,
+                cost: 0,
+              },
+            ],
+            vars: ['value1', 'value2'],
+            test: {},
+          },
+        ],
+      };
+      const summary = {
+        version: 2,
+        timestamp: '2024-01-01T00:00:00.000Z',
+        stats: {
+          successes: 1,
+          failures: 1,
+          tokenUsage: {
+            total: 10,
+            prompt: 5,
+            completion: 5,
+            cached: 0,
+          },
+        },
+        results,
+        table,
+      };
+      const config = {
+        description: 'test',
+      };
+      const shareableUrl = null;
+      writeOutput(outputPath, null, summary, config, shareableUrl);
 
-    expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
+      expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
+    });
+
+    it('writeOutput with JSON output', () => {
+      const outputPath = 'output.json';
+      const results: EvaluateResult[] = [
+        {
+          success: true,
+          score: 1.0,
+          namedScores: {},
+          latencyMs: 1000,
+          provider: {
+            id: 'foo',
+          },
+          prompt: {
+            raw: 'Test prompt',
+            label: '[display] Test prompt',
+          },
+          response: {
+            output: 'Test output',
+          },
+          vars: {
+            var1: 'value1',
+            var2: 'value2',
+          },
+        },
+      ];
+      const table: EvaluateTable = {
+        head: {
+          prompts: [{ raw: 'Test prompt', label: '[display] Test prompt', provider: 'foo' }],
+          vars: ['var1', 'var2'],
+        },
+        body: [
+          {
+            outputs: [
+              {
+                pass: true,
+                score: 1.0,
+                namedScores: {},
+                text: 'Test output',
+                prompt: 'Test prompt',
+                latencyMs: 1000,
+                cost: 0,
+              },
+            ],
+            vars: ['value1', 'value2'],
+            test: {},
+          },
+        ],
+      };
+      const summary = {
+        version: 2,
+        timestamp: '2024-01-01T00:00:00.000Z',
+        stats: {
+          successes: 1,
+          failures: 1,
+          tokenUsage: {
+            total: 10,
+            prompt: 5,
+            completion: 5,
+            cached: 0,
+          },
+        },
+        results,
+        table,
+      };
+      const config = {
+        description: 'test',
+      };
+      const shareableUrl = null;
+      writeOutput(outputPath, null, summary, config, shareableUrl);
+
+      expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
+    });
+
+    it('writeOutput with YAML output', () => {
+      const outputPath = 'output.yaml';
+      const results: EvaluateResult[] = [
+        {
+          success: true,
+          score: 1.0,
+          namedScores: {},
+          latencyMs: 1000,
+          provider: {
+            id: 'foo',
+          },
+          prompt: {
+            raw: 'Test prompt',
+            label: '[display] Test prompt',
+          },
+          response: {
+            output: 'Test output',
+          },
+          vars: {
+            var1: 'value1',
+            var2: 'value2',
+          },
+        },
+      ];
+      const table: EvaluateTable = {
+        head: {
+          prompts: [{ raw: 'Test prompt', label: '[display] Test prompt', provider: 'foo' }],
+          vars: ['var1', 'var2'],
+        },
+        body: [
+          {
+            outputs: [
+              {
+                pass: true,
+                score: 1.0,
+                namedScores: {},
+                text: 'Test output',
+                prompt: 'Test prompt',
+                latencyMs: 1000,
+                cost: 0,
+              },
+            ],
+            vars: ['value1', 'value2'],
+            test: {},
+          },
+        ],
+      };
+      const summary = {
+        version: 2,
+        timestamp: '2024-01-01T00:00:00.000Z',
+        stats: {
+          successes: 1,
+          failures: 1,
+          tokenUsage: {
+            total: 10,
+            prompt: 5,
+            completion: 5,
+            cached: 0,
+          },
+        },
+        results,
+        table,
+      };
+      const config = {
+        description: 'test',
+      };
+      const shareableUrl = null;
+      writeOutput(outputPath, null, summary, config, shareableUrl);
+
+      expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
+    });
+
+    it('writeOutput with json and txt output', () => {
+      const outputPath = ['output.json', 'output.txt'];
+      const results: EvaluateResult[] = [
+        {
+          success: true,
+          score: 1.0,
+          namedScores: {},
+          latencyMs: 1000,
+          provider: {
+            id: 'foo',
+          },
+          prompt: {
+            raw: 'Test prompt',
+            label: '[display] Test prompt',
+          },
+          response: {
+            output: 'Test output',
+          },
+          vars: {
+            var1: 'value1',
+            var2: 'value2',
+          },
+        },
+      ];
+      const table: EvaluateTable = {
+        head: {
+          prompts: [{ raw: 'Test prompt', label: '[display] Test prompt', provider: 'foo' }],
+          vars: ['var1', 'var2'],
+        },
+        body: [
+          {
+            outputs: [
+              {
+                pass: true,
+                score: 1.0,
+                namedScores: {},
+                text: 'Test output',
+                prompt: 'Test prompt',
+                latencyMs: 1000,
+                cost: 0,
+              },
+            ],
+            vars: ['value1', 'value2'],
+            test: {},
+          },
+        ],
+      };
+      const summary = {
+        version: 2,
+        timestamp: '2024-01-01T00:00:00.000Z',
+        stats: {
+          successes: 1,
+          failures: 1,
+          tokenUsage: {
+            total: 10,
+            prompt: 5,
+            completion: 5,
+            cached: 0,
+          },
+        },
+        results,
+        table,
+      };
+      const config = {
+        description: 'test',
+      };
+      const shareableUrl = null;
+      writeMultipleOutputs(outputPath, null, summary, config, shareableUrl);
+
+      expect(fs.writeFileSync).toHaveBeenCalledTimes(2);
+    });
   });
 
-  test('writeOutput with JSON output', () => {
-    const outputPath = 'output.json';
-    const results: EvaluateResult[] = [
-      {
-        success: true,
-        score: 1.0,
-        namedScores: {},
-        latencyMs: 1000,
-        provider: {
-          id: 'foo',
-        },
-        prompt: {
-          raw: 'Test prompt',
-          display: '[display] Test prompt',
-        },
-        response: {
-          output: 'Test output',
-        },
-        vars: {
-          var1: 'value1',
-          var2: 'value2',
-        },
-      },
-    ];
-    const table: EvaluateTable = {
-      head: {
-        prompts: [{ raw: 'Test prompt', display: '[display] Test prompt', provider: 'foo' }],
-        vars: ['var1', 'var2'],
-      },
-      body: [
-        {
-          outputs: [
-            {
-              pass: true,
-              score: 1.0,
-              namedScores: {},
-              text: 'Test output',
-              prompt: 'Test prompt',
-              latencyMs: 1000,
-              cost: 0,
-            },
-          ],
-          vars: ['value1', 'value2'],
-          test: {},
-        },
-      ],
-    };
-    const summary = {
-      version: 1,
-      stats: {
-        successes: 1,
-        failures: 1,
-        tokenUsage: {
-          total: 10,
-          prompt: 5,
-          completion: 5,
-          cached: 0,
-        },
-      },
-      results,
-      table,
-    };
-    const config = {
-      description: 'test',
-    };
-    const shareableUrl = null;
-    writeOutput(outputPath, summary, config, shareableUrl);
+  describe('readOutput', () => {
+    it('reads JSON output', async () => {
+      const outputPath = 'output.json';
+      jest.mocked(fs.readFileSync).mockReturnValue('{}');
+      const output = await readOutput(outputPath);
+      expect(output).toEqual({});
+    });
 
-    expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
-  });
+    it('fails for csv output', async () => {
+      await expect(readOutput('output.csv')).rejects.toThrow(
+        'Unsupported output file format: csv currently only supports json',
+      );
+    });
 
-  test('writeOutput with YAML output', () => {
-    const outputPath = 'output.yaml';
-    const results: EvaluateResult[] = [
-      {
-        success: true,
-        score: 1.0,
-        namedScores: {},
-        latencyMs: 1000,
-        provider: {
-          id: 'foo',
-        },
-        prompt: {
-          raw: 'Test prompt',
-          display: '[display] Test prompt',
-        },
-        response: {
-          output: 'Test output',
-        },
-        vars: {
-          var1: 'value1',
-          var2: 'value2',
-        },
-      },
-    ];
-    const table: EvaluateTable = {
-      head: {
-        prompts: [{ raw: 'Test prompt', display: '[display] Test prompt', provider: 'foo' }],
-        vars: ['var1', 'var2'],
-      },
-      body: [
-        {
-          outputs: [
-            {
-              pass: true,
-              score: 1.0,
-              namedScores: {},
-              text: 'Test output',
-              prompt: 'Test prompt',
-              latencyMs: 1000,
-              cost: 0,
-            },
-          ],
-          vars: ['value1', 'value2'],
-          test: {},
-        },
-      ],
-    };
-    const summary = {
-      version: 1,
-      stats: {
-        successes: 1,
-        failures: 1,
-        tokenUsage: {
-          total: 10,
-          prompt: 5,
-          completion: 5,
-          cached: 0,
-        },
-      },
-      results,
-      table,
-    };
-    const config = {
-      description: 'test',
-    };
-    const shareableUrl = null;
-    writeOutput(outputPath, summary, config, shareableUrl);
+    it('fails for yaml output', async () => {
+      await expect(readOutput('output.yaml')).rejects.toThrow(
+        'Unsupported output file format: yaml currently only supports json',
+      );
 
-    expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
-  });
-
-  test('writeOutput with json and txt output', () => {
-    const outputPath = ['output.json', 'output.txt'];
-    const results: EvaluateResult[] = [
-      {
-        success: true,
-        score: 1.0,
-        namedScores: {},
-        latencyMs: 1000,
-        provider: {
-          id: 'foo',
-        },
-        prompt: {
-          raw: 'Test prompt',
-          display: '[display] Test prompt',
-        },
-        response: {
-          output: 'Test output',
-        },
-        vars: {
-          var1: 'value1',
-          var2: 'value2',
-        },
-      },
-    ];
-    const table: EvaluateTable = {
-      head: {
-        prompts: [{ raw: 'Test prompt', display: '[display] Test prompt', provider: 'foo' }],
-        vars: ['var1', 'var2'],
-      },
-      body: [
-        {
-          outputs: [
-            {
-              pass: true,
-              score: 1.0,
-              namedScores: {},
-              text: 'Test output',
-              prompt: 'Test prompt',
-              latencyMs: 1000,
-              cost: 0,
-            },
-          ],
-          vars: ['value1', 'value2'],
-          test: {},
-        },
-      ],
-    };
-    const summary = {
-      version: 1,
-      stats: {
-        successes: 1,
-        failures: 1,
-        tokenUsage: {
-          total: 10,
-          prompt: 5,
-          completion: 5,
-          cached: 0,
-        },
-      },
-      results,
-      table,
-    };
-    const config = {
-      description: 'test',
-    };
-    const shareableUrl = null;
-    writeMultipleOutputs(outputPath, summary, config, shareableUrl);
-
-    expect(fs.writeFileSync).toHaveBeenCalledTimes(2);
+      await expect(readOutput('output.yml')).rejects.toThrow(
+        'Unsupported output file format: yml currently only supports json',
+      );
+    });
   });
 
   describe('readCliConfig', () => {
@@ -332,10 +375,10 @@ describe('util', () => {
       resetGlobalConfig();
     });
 
-    test('reads from existing config', () => {
+    it('reads from existing config', () => {
       const config = { hasRun: false };
-      (fs.existsSync as jest.Mock).mockReturnValue(true);
-      (fs.readFileSync as jest.Mock).mockReturnValue(yaml.dump(config));
+      jest.mocked(fs.existsSync).mockReturnValue(true);
+      jest.mocked(fs.readFileSync).mockReturnValue(yaml.dump(config));
 
       const result = readGlobalConfig();
 
@@ -344,9 +387,9 @@ describe('util', () => {
       expect(result).toEqual(config);
     });
 
-    test('creates new config if none exists', () => {
-      (fs.existsSync as jest.Mock).mockReturnValue(false);
-      (fs.writeFileSync as jest.Mock).mockImplementation();
+    it('creates new config if none exists', () => {
+      jest.mocked(fs.existsSync).mockReturnValue(false);
+      jest.mocked(fs.writeFileSync).mockImplementation();
 
       const result = readGlobalConfig();
 
@@ -362,9 +405,9 @@ describe('util', () => {
       jest.clearAllMocks();
     });
 
-    test('returns true if it is the first run', () => {
-      (fs.existsSync as jest.Mock).mockReturnValue(false);
-      (fs.writeFileSync as jest.Mock).mockImplementation();
+    it('returns true if it is the first run', () => {
+      jest.mocked(fs.existsSync).mockReturnValue(false);
+      jest.mocked(fs.writeFileSync).mockImplementation();
 
       const result = maybeRecordFirstRun();
 
@@ -372,10 +415,10 @@ describe('util', () => {
       expect(result).toBe(true);
     });
 
-    test('returns false if it is not the first run', () => {
+    it('returns false if it is not the first run', () => {
       const config = { hasRun: true };
-      (fs.existsSync as jest.Mock).mockReturnValue(true);
-      (fs.readFileSync as jest.Mock).mockReturnValue(yaml.dump(config));
+      jest.mocked(fs.existsSync).mockReturnValue(true);
+      jest.mocked(fs.readFileSync).mockReturnValue(yaml.dump(config));
 
       const result = maybeRecordFirstRun();
 
@@ -384,19 +427,19 @@ describe('util', () => {
     });
   });
 
-  test('readFilters', () => {
+  it('readFilters', async () => {
     const mockFilter = jest.fn();
     jest.doMock(path.resolve('filter.js'), () => mockFilter, { virtual: true });
 
-    (globSync as jest.Mock).mockImplementation((pathOrGlob) => [pathOrGlob]);
+    jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob]);
 
-    const filters = readFilters({ testFilter: 'filter.js' });
+    const filters = await readFilters({ testFilter: 'filter.js' });
 
     expect(filters.testFilter).toBe(mockFilter);
   });
 
   describe('readConfigs', () => {
-    test('reads from existing configs', async () => {
+    it('reads from existing configs', async () => {
       const config1 = {
         description: 'test1',
         providers: ['provider1'],
@@ -432,8 +475,9 @@ describe('util', () => {
         sharing: true,
       };
 
-      (globSync as jest.Mock).mockImplementation((pathOrGlob) => [pathOrGlob]);
-      (fs.readFileSync as jest.Mock)
+      jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob]);
+      jest
+        .mocked(fs.readFileSync)
         .mockReturnValueOnce(JSON.stringify(config1))
         .mockReturnValueOnce(JSON.stringify(config2))
         .mockReturnValueOnce(JSON.stringify(config1))
@@ -441,8 +485,8 @@ describe('util', () => {
         .mockReturnValue('you should not see this');
 
       // Mocks for prompt loading
-      (fs.readdirSync as jest.Mock).mockReturnValue([]);
-      (fs.statSync as jest.Mock).mockImplementation(() => {
+      jest.mocked(fs.readdirSync).mockReturnValue([]);
+      jest.mocked(fs.statSync).mockImplementation(() => {
         throw new Error('File does not exist');
       });
 
@@ -463,6 +507,7 @@ describe('util', () => {
         env: { envVar1: 'envValue1' },
         evaluateOptions: { maxConcurrency: 1 },
         commandLineOptions: { verbose: true },
+        metadata: {},
         sharing: false,
       });
 
@@ -483,6 +528,7 @@ describe('util', () => {
         env: { envVar2: 'envValue2' },
         evaluateOptions: { maxConcurrency: 2 },
         commandLineOptions: { verbose: false },
+        metadata: {},
         sharing: true,
       });
 
@@ -508,21 +554,22 @@ describe('util', () => {
         env: { envVar1: 'envValue1', envVar2: 'envValue2' },
         evaluateOptions: { maxConcurrency: 2 },
         commandLineOptions: { verbose: false },
+        metadata: {},
         sharing: false,
       });
     });
 
-    test('throws error for unsupported configuration file format', async () => {
-      (fs.existsSync as jest.Mock).mockReturnValue(true);
+    it('throws error for unsupported configuration file format', async () => {
+      jest.mocked(fs.existsSync).mockReturnValue(true);
 
       await expect(readConfigs(['config1.unsupported'])).rejects.toThrow(
         'Unsupported configuration file format: .unsupported',
       );
     });
 
-    test('makeAbsolute should resolve file:// syntax and plaintext prompts', async () => {
-      (fs.existsSync as jest.Mock).mockReturnValue(true);
-      (fs.readFileSync as jest.Mock).mockImplementation((path: string) => {
+    it('makeAbsolute should resolve file:// syntax and plaintext prompts', async () => {
+      jest.mocked(fs.existsSync).mockReturnValue(true);
+      jest.mocked(fs.readFileSync).mockImplementation((path: string) => {
         if (path === 'config1.json') {
           return JSON.stringify({
             description: 'test1',
@@ -548,10 +595,37 @@ describe('util', () => {
       ]);
     });
 
+    it('dedupes prompts when reading configs', async () => {
+      jest.mocked(fs.existsSync).mockReturnValue(true);
+      jest.mocked(fs.readFileSync).mockImplementation((path: string) => {
+        if (path === 'config1.json') {
+          return JSON.stringify({
+            description: 'test1',
+            prompts: ['prompt1', 'file://prompt2.txt', 'prompt3'],
+          });
+        } else if (path === 'config2.json') {
+          return JSON.stringify({
+            description: 'test2',
+            prompts: ['prompt3', 'file://prompt2.txt', 'prompt4'],
+          });
+        }
+        return null;
+      });
+
+      const configPaths = ['config1.json', 'config2.json'];
+      const result = await readConfigs(configPaths);
+
+      expect(result.prompts).toEqual([
+        'prompt1',
+        'file://' + path.resolve(path.dirname(configPaths[0]), 'prompt2.txt'),
+        'prompt3',
+        'prompt4',
+      ]);
+    });
   });
 
   describe('dereferenceConfig', () => {
-    test('should dereference a config with no $refs', async () => {
+    it('should dereference a config with no $refs', async () => {
       const rawConfig = {
         prompts: ['Hello world'],
         description: 'Test config',
@@ -564,7 +638,7 @@ describe('util', () => {
       expect(dereferencedConfig).toEqual(rawConfig);
     });
 
-    test('should dereference a config with $refs', async () => {
+    it('should dereference a config with $refs', async () => {
       const rawConfig = {
         prompts: [],
         tests: [],
@@ -595,7 +669,7 @@ describe('util', () => {
       expect(dereferencedConfig).toEqual(expectedConfig);
     });
 
-    test('should preserve regular functions when dereferencing', async () => {
+    it('should preserve regular functions when dereferencing', async () => {
       const rawConfig = {
         description: 'Test config with function parameters',
         prompts: [],
@@ -628,7 +702,7 @@ describe('util', () => {
       expect(dereferencedConfig).toEqual(rawConfig);
     });
 
-    test('should preserve tools with references and definitions when dereferencing', async () => {
+    it('should preserve tools with references and definitions when dereferencing', async () => {
       const rawConfig = {
         prompts: [{ $ref: '#/definitions/prompt' }],
         tests: [],
@@ -721,6 +795,135 @@ describe('util', () => {
         },
       };
       expect(dereferencedConfig).toEqual(expectedOutput);
+    });
+  });
+
+  describe('transformOutput', () => {
+    afterEach(() => {
+      jest.clearAllMocks();
+      jest.resetModules();
+    });
+
+    it('transforms output using a direct function', async () => {
+      const output = 'original output';
+      const context = { vars: { key: 'value' }, prompt: { id: '123' } };
+      const transformFunction = 'output.toUpperCase()';
+      const transformedOutput = await transformOutput(transformFunction, output, context);
+      expect(transformedOutput).toBe('ORIGINAL OUTPUT');
+    });
+
+    it('transforms output using an imported function from a file', async () => {
+      const output = 'hello';
+      const context = { vars: { key: 'value' }, prompt: { id: '123' } };
+      jest.doMock(path.resolve('transform.js'), () => (output: string) => output.toUpperCase(), {
+        virtual: true,
+      });
+      const transformFunctionPath = 'file://transform.js';
+      const transformedOutput = await transformOutput(transformFunctionPath, output, context);
+      expect(transformedOutput).toBe('HELLO');
+    });
+
+    it('throws error if transform function does not return a value', async () => {
+      const output = 'test';
+      const context = { vars: {}, prompt: {} };
+      const transformFunction = ''; // Empty function, returns undefined
+      await expect(transformOutput(transformFunction, output, context)).rejects.toThrow(
+        'Transform function did not return a value',
+      );
+    });
+
+    it('throws error if file does not export a function', async () => {
+      const output = 'test';
+      const context = { vars: {}, prompt: {} };
+      jest.doMock(path.resolve('transform.js'), () => 'banana', { virtual: true });
+      const transformFunctionPath = 'file://transform.js';
+      await expect(transformOutput(transformFunctionPath, output, context)).rejects.toThrow(
+        'Transform transform.js must export a function or have a default export as a function',
+      );
+    });
+  });
+
+  describe('providerToIdentifier', () => {
+    it('works with string', () => {
+      const provider = 'openai:gpt-4';
+
+      expect(providerToIdentifier(provider)).toStrictEqual(provider);
+    });
+
+    it('works with provider id undefined', () => {
+      expect(providerToIdentifier(undefined)).toBeUndefined();
+    });
+
+    it('works with ApiProvider', () => {
+      const providerId = 'custom';
+      const apiProvider = {
+        id() {
+          return providerId;
+        },
+      } as ApiProvider;
+
+      expect(providerToIdentifier(apiProvider)).toStrictEqual(providerId);
+    });
+
+    it('works with ProviderOptions', () => {
+      const providerId = 'custom';
+      const providerOptions = {
+        id: providerId,
+      };
+
+      expect(providerToIdentifier(providerOptions)).toStrictEqual(providerId);
+    });
+  });
+
+  describe('varsMatch', () => {
+    it('true with both undefined', () => {
+      expect(varsMatch(undefined, undefined)).toBe(true);
+    });
+
+    it('false with one undefined', () => {
+      expect(varsMatch(undefined, {})).toBe(false);
+      expect(varsMatch({}, undefined)).toBe(false);
+    });
+  });
+
+  describe('resultIsForTestCase', () => {
+    const testCase: TestCase = {
+      provider: 'provider',
+      vars: {
+        key: 'value',
+      },
+    };
+    const result = {
+      provider: 'provider',
+      vars: {
+        key: 'value',
+      },
+    } as any as EvaluateResult;
+
+    it('is true', () => {
+      expect(resultIsForTestCase(result, testCase)).toBe(true);
+    });
+
+    it('is false if provider is different', () => {
+      const nonMatchTestCase: TestCase = {
+        provider: 'different',
+        vars: {
+          key: 'value',
+        },
+      };
+
+      expect(resultIsForTestCase(result, nonMatchTestCase)).toBe(false);
+    });
+
+    it('is false if vars are different', () => {
+      const nonMatchTestCase: TestCase = {
+        provider: 'provider',
+        vars: {
+          key: 'different',
+        },
+      };
+
+      expect(resultIsForTestCase(result, nonMatchTestCase)).toBe(false);
     });
   });
 });

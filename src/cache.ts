@@ -25,14 +25,16 @@ const cacheType =
 
 export function getCache() {
   if (!cacheInstance) {
-    const cachePath =
-      process.env.PROMPTFOO_CACHE_PATH || path.join(getConfigDirectoryPath(), 'cache');
-    if (!fs.existsSync(cachePath)) {
-      logger.info(`Creating cache folder at ${cachePath}.`);
-      fs.mkdirSync(cachePath, { recursive: true });
+    let cachePath = '';
+    if (cacheType === 'disk' && enabled) {
+      cachePath = process.env.PROMPTFOO_CACHE_PATH || path.join(getConfigDirectoryPath(), 'cache');
+      if (!fs.existsSync(cachePath)) {
+        logger.info(`Creating cache folder at ${cachePath}.`);
+        fs.mkdirSync(cachePath, { recursive: true });
+      }
     }
     cacheInstance = cacheManager.caching({
-      store: cacheType === 'disk' ? fsStore : 'memory',
+      store: cacheType === 'disk' && enabled ? fsStore : 'memory',
       options: {
         max: process.env.PROMPTFOO_CACHE_MAX_FILE_COUNT || 10_000, // number of files
         path: cachePath,
@@ -54,10 +56,15 @@ export async function fetchWithCache(
 ): Promise<{ data: any; cached: boolean }> {
   if (!enabled || bust) {
     const resp = await fetchWithRetries(url, options, timeout);
-    return {
-      cached: false,
-      data: format === 'json' ? await resp.json() : await resp.text(),
-    };
+    const respText = await resp.text();
+    try {
+      return {
+        cached: false,
+        data: format === 'json' ? JSON.parse(respText) : respText,
+      };
+    } catch (error) {
+      throw new Error(`Error parsing response as JSON: ${respText}`);
+    }
   }
 
   const cache = await getCache();
@@ -66,32 +73,45 @@ export async function fetchWithCache(
   delete copy.headers;
   const cacheKey = `fetch:${url}:${JSON.stringify(copy)}`;
 
-  // Try to get the cached response
-  const cachedResponse = await cache.get(cacheKey);
+  let cached = true;
+  let errorResponse = null;
 
-  if (cachedResponse) {
-    logger.debug(`Returning cached response for ${url}: ${cachedResponse}`);
-    return {
-      cached: true,
-      data: JSON.parse(cachedResponse as string),
-    };
-  }
-
-  // Fetch the actual data and store it in the cache
-  const response = await fetchWithRetries(url, options, timeout);
-  try {
-    const data = format === 'json' ? await response.json() : await response.text();
-    if (response.ok) {
-      logger.debug(`Storing ${url} response in cache: ${JSON.stringify(data)}`);
-      await cache.set(cacheKey, JSON.stringify(data));
+  // Use wrap to ensure that the fetch is only done once even for concurrent invocations
+  const cachedResponse = await cache.wrap(cacheKey, async () => {
+    // Fetch the actual data and store it in the cache
+    cached = false;
+    const response = await fetchWithRetries(url, options, timeout);
+    const responseText = await response.text();
+    try {
+      const data = JSON.stringify(format === 'json' ? JSON.parse(responseText) : responseText);
+      if (!response.ok) {
+        errorResponse = data;
+        // Don't cache error responses
+        return;
+      }
+      if (!data) {
+        // Don't cache empty responses
+        return;
+      }
+      logger.debug(`Storing ${url} response in cache: ${data}`);
+      return data;
+    } catch (err) {
+      throw new Error(
+        `Error parsing response from ${url}: ${
+          (err as Error).message
+        }. Received text: ${responseText}`,
+      );
     }
-    return {
-      cached: false,
-      data,
-    };
-  } catch (err) {
-    throw new Error(`Error parsing response from ${url}: ${err}`);
+  });
+
+  if (cached && cachedResponse) {
+    logger.debug(`Returning cached response for ${url}: ${cachedResponse}`);
   }
+
+  return {
+    cached,
+    data: JSON.parse((cachedResponse ?? errorResponse) as string),
+  };
 }
 
 export function enableCache() {

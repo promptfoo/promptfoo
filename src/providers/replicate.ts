@@ -4,13 +4,23 @@ import fetch from 'node-fetch';
 import logger from '../logger';
 import { getCache, isCacheEnabled } from '../cache';
 
-import type { ApiProvider, EnvOverrides, ProviderResponse } from '../types.js';
+import type { Cache } from 'cache-manager';
+
+import type {
+  ApiModerationProvider,
+  ApiProvider,
+  EnvOverrides,
+  ModerationFlag,
+  ProviderModerationResponse,
+  ProviderResponse,
+} from '../types.js';
 
 interface ReplicateCompletionOptions {
   apiKey?: string;
   temperature?: number;
   max_length?: number;
   max_new_tokens?: number;
+  max_tokens?: number;
   top_p?: number;
   top_k?: number;
   repetition_penalty?: number;
@@ -139,8 +149,21 @@ export class ReplicateProvider implements ApiProvider {
     }
     logger.debug(`\tReplicate API response: ${JSON.stringify(response)}`);
     try {
+      let formattedOutput;
+      if (Array.isArray(response)) {
+        if (response.length === 0 || typeof response[0] === 'string') {
+          formattedOutput = response.join('');
+        } else {
+          formattedOutput = JSON.stringify(response);
+        }
+      } else if (typeof response === 'string') {
+        formattedOutput = response;
+      } else {
+        formattedOutput = JSON.stringify(response);
+      }
+
       const result = {
-        output: (response as string[]).join(''),
+        output: formattedOutput,
         tokenUsage: {}, // TODO: add token usage once Replicate API supports it
       };
       if (cache && cacheKey) {
@@ -154,3 +177,107 @@ export class ReplicateProvider implements ApiProvider {
     }
   }
 }
+
+const LLAMAGUARD_DESCRIPTIONS: { [key: string]: string } = {
+  S1: 'Violent Crimes',
+  S2: 'Non-Violent Crimes',
+  S3: 'Sex-Related Crimes',
+  S4: 'Child Sexual Exploitation',
+  S5: 'Specialized Advice',
+  S6: 'Privacy',
+  S7: 'Intellectual Property',
+  S8: 'Indiscriminate Weapons',
+  S9: 'Hate',
+  S10: 'Suicide & Self-Harm',
+  S11: 'Sexual Content',
+};
+
+export class ReplicateModerationProvider
+  extends ReplicateProvider
+  implements ApiModerationProvider
+{
+  async callModerationApi(prompt: string, assistant: string): Promise<ProviderModerationResponse> {
+    if (!this.apiKey) {
+      throw new Error(
+        'Replicate API key is not set. Set the REPLICATE_API_TOKEN environment variable or or add `apiKey` to the provider config.',
+      );
+    }
+
+    let cache: Cache | undefined;
+    let cacheKey: string | undefined;
+    if (isCacheEnabled()) {
+      cache = await getCache();
+      cacheKey = `replicate:${this.modelName}:${JSON.stringify(
+        this.config,
+      )}:${prompt}:${assistant}`;
+
+      // Try to get the cached response
+      const cachedResponse = await cache.get(cacheKey);
+
+      if (cachedResponse) {
+        logger.debug(`Returning cached response for ${prompt}: ${cachedResponse}`);
+        return JSON.parse(cachedResponse as string);
+      }
+    }
+
+    const replicate = new Replicate({
+      auth: this.apiKey,
+      fetch: fetch as any,
+    });
+
+    logger.debug(`Calling Replicate moderation API: prompt [${prompt}] assistant [${assistant}]`);
+    let output: string | undefined;
+    try {
+      const data = {
+        input: {
+          prompt,
+          assistant,
+        },
+      };
+      const resp = await replicate.run(this.modelName as any, data);
+      // Replicate SDK seems to be mis-typed for this type of model.
+      output = resp as unknown as string;
+    } catch (err) {
+      return {
+        error: `API call error: ${String(err)}`,
+      };
+    }
+    logger.debug(`\tReplicate moderation API response: ${JSON.stringify(output)}`);
+    try {
+      if (!output) {
+        throw new Error('API response error: no output');
+      }
+      const [safeString, codes] = output.split('\n');
+      const saveCache = async () => {
+        if (cache && cacheKey) {
+          await cache.set(cacheKey, JSON.stringify(output));
+        }
+      };
+
+      const flags: ModerationFlag[] = [];
+      if (safeString === 'safe') {
+        await saveCache();
+      } else {
+        const splits = codes.split(',');
+        for (const code of splits) {
+          if (LLAMAGUARD_DESCRIPTIONS[code]) {
+            flags.push({
+              code,
+              description: `${LLAMAGUARD_DESCRIPTIONS[code]} (${code})`,
+              confidence: 1,
+            });
+          }
+        }
+      }
+      return { flags };
+    } catch (err) {
+      return {
+        error: `API response error: ${String(err)}: ${JSON.stringify(output)}`,
+      };
+    }
+  }
+}
+
+export const DefaultModerationProvider = new ReplicateModerationProvider(
+  'meta/meta-llama-guard-2-8b:b063023ee937f28e922982abdbf97b041ffe34ad3b35a53d33e1d74bb19b36c4',
+);

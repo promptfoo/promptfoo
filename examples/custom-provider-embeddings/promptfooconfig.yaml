@@ -1,0 +1,14 @@
+prompts:
+  - 'Translate this to French: {{message}}'
+
+providers:
+  - openai:chat:gpt-3.5-turbo
+
+tests:
+  - vars:
+      message: Hello world
+    assert:
+      - type: similar
+        threshold: 0.25
+        value: 'Greetings earth'
+        provider: ./customProvider.js

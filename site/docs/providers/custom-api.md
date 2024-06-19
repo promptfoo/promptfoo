@@ -2,15 +2,50 @@
 sidebar_position: 50
 ---
 
-# Custom API Provider
+# Custom Javascript
 
 To create a custom API provider, implement the `ApiProvider` interface in a separate module. Here is the interface:
 
-```javascript
-class ApiProvider {
-  constructor(options: { id?: string; config: Record<string, any>});
+```ts
+export interface CallApiContextParams {
+  vars: Record<string, string | object>;
+}
+
+export interface CallApiOptionsParams {
+  // Whether to include logprobs in API response (used with OpenAI providers)
+  includeLogProbs?: boolean;
+
+  // Used when provider is overridden on the test case.
+  originalProvider?: ApiProvider;
+}
+
+export interface ApiProvider {
+  constructor(options: { id?: string; config: Record<string, any> });
+
+  // Unique identifier for the provider
   id: () => string;
-  callApi: (prompt: string, context: { vars: Record<string, any> }) => Promise<ProviderResponse>;
+
+  // Text generation function
+  callApi: (
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ) => Promise<ProviderResponse>;
+
+  // Embedding function
+  callEmbeddingApi?: (prompt: string) => Promise<ProviderEmbeddingResponse>;
+
+  // Classification function
+  callClassificationApi?: (prompt: string) => Promise<ProviderClassificationResponse>;
+
+  // Shown on output UI
+  label?: ProviderLabel;
+
+  // Applied by the evaluator on provider response
+  transform?: string;
+
+  // Custom delay for the provider.
+  delay?: number;
 }
 ```
 
@@ -60,17 +95,51 @@ class CustomApiProvider {
 module.exports = CustomApiProvider;
 ```
 
+### Caching
+
+You can interact with promptfoo's cache by importing the `promptfoo.cache` module. For example:
+
+```js
+const promptfoo = require('../../dist/src/index.js').default;
+
+const cache = promptfoo.cache.getCache();
+await cache.set('foo', 'bar');
+console.log(await cache.get('foo')); // "bar"
+```
+
+The cache is managed by [`cache-manager`](https://www.npmjs.com/package/cache-manager/v/4.1.0).
+
+promptfoo also has built-in utility functions for fetching with cache and timeout:
+
+```js
+const { data, cached } = await promptfoo.cache.fetchWithCache(
+  'https://api.openai.com/v1/chat/completions',
+  {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+    },
+    body: JSON.stringify(body),
+  },
+  10_000 /* 10 second timeout */,
+);
+
+console.log('Got from OpenAI:', data);
+console.log('Was it cached?', cached);
+```
+
 ## Using the provider
 
 Include the custom provider in promptfoo config:
 
 ```yaml
-providers: ['./customApiProvider.js']
+providers: ['file://relative/path/to/customApiProvider.js']
 ```
 
 Alternatively, you can pass the path to the custom API provider directly in the CLI:
 
-```bash
+```
 promptfoo eval -p prompt1.txt prompt2.txt -o results.csv  -v vars.csv -r ./customApiProvider.js
 ```
 
@@ -84,12 +153,16 @@ You can instantiate multiple providers of the same type with distinct IDs. In th
 
 ```yaml
 providers:
-  - customProvider.js:
-      id: custom-provider-hightemp
-      config:
-        temperature: 1.0
-  - customProvider.js:
-      id: custom-provider-lowtemp
-      config:
-        temperature: 0
+  - id: file:///absolute/path/to/customProvider.js
+    label: custom-provider-hightemp
+    config:
+      temperature: 1.0
+  - id: file:///absolute/path/to/customProvider.js
+    label: custom-provider-lowtemp
+    config:
+      temperature: 0
 ```
+
+### ES modules
+
+ES modules are supported, but must have a `.mjs` file extension. Alternatively, if you are transpiling Javascript or Typescript, we recommend pointing promptfoo to the transpiled plain Javascript output.
