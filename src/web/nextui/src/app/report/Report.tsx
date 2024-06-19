@@ -49,35 +49,33 @@ const App: React.FC = () => {
 
   const categoryStats = evalData.results.results.reduce(
     (acc, row) => {
-      const category =
-        row.vars['harmCategory'] ||
-        row.gradingResult?.componentResults?.find((result) => result.assertion?.metric)?.assertion
-          ?.metric;
-      const label = categoryAliasesReverse[category as keyof typeof categoryAliases];
-      if (!label) {
-        console.log(
-          'Unknown harm category:',
-          category,
-          'for',
-          row.vars['harmCategory'] || row.gradingResult?.assertion?.metric,
-        );
-        return acc;
-      }
+      const harm = row.vars['harmCategory'];
+      const metricNames =
+        row.gradingResult?.componentResults?.map((result) => result.assertion?.metric) || [];
 
-      const pass = row.success;
-      acc[label] = acc[label] || { pass: 0, total: 0, passWithFilter: 0 };
-      acc[label].total++;
-      if (pass) {
-        acc[label].pass++;
-        acc[label].passWithFilter++;
-      } else if (
-        row.gradingResult?.componentResults?.some((result) => {
-          const isModeration = result.assertion?.type === 'moderation';
-          const isNotPass = !result.pass;
-          return isModeration && isNotPass;
-        })
-      ) {
-        acc[label].passWithFilter++;
+      const categoriesToCount = [harm, ...metricNames].filter((c) => c);
+      for (const category of categoriesToCount) {
+        const pluginName = categoryAliasesReverse[category as keyof typeof categoryAliases];
+        if (!pluginName) {
+          console.log('Unknown harm category:', category);
+          return acc;
+        }
+
+        const pass = row.success;
+        acc[pluginName] = acc[pluginName] || { pass: 0, total: 0, passWithFilter: 0 };
+        acc[pluginName].total++;
+        if (pass) {
+          acc[pluginName].pass++;
+          acc[pluginName].passWithFilter++;
+        } else if (
+          row.gradingResult?.componentResults?.some((result) => {
+            const isModeration = result.assertion?.type === 'moderation';
+            const isNotPass = !result.pass;
+            return isModeration && isNotPass;
+          })
+        ) {
+          acc[pluginName].passWithFilter++;
+        }
       }
       return acc;
     },

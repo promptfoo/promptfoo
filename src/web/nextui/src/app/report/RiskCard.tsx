@@ -12,7 +12,7 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { Gauge } from '@mui/x-charts/Gauge';
 
-import { categoryAliases, subCategoryDescriptions } from './constants';
+import { categoryAliases, subCategoryDescriptions, displayNameOverrides } from './constants';
 
 import './RiskCard.css';
 
@@ -98,7 +98,10 @@ const RiskCard: React.FC<{
                   style={{ cursor: 'pointer' }}
                 >
                   <ListItemText
-                    primary={categoryAliases[test.name as keyof typeof categoryAliases]}
+                    primary={
+                      displayNameOverrides[test.name as keyof typeof displayNameOverrides] ||
+                      categoryAliases[test.name as keyof typeof categoryAliases]
+                    }
                     primaryTypographyProps={{ variant: 'body2' }}
                   />
                   {test.passed ? (
