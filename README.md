@@ -120,6 +120,8 @@ Deterministic eval metrics
 | `icontains-all`                 | output contains all list of substrings, case insensitive          |
 | `is-json`                       | output is valid json (optional json schema validation)            |
 | `contains-json`                 | output contains valid json (optional json schema validation)      |
+| `is-sql`                        | output is valid sql                                               |
+| `contains-sql`                  | output contains valid sql                                         |
 | `javascript`                    | provided Javascript function validates the output                 |
 | `python`                        | provided Python function validates the output                     |
 | `webhook`                       | provided webhook returns `{pass: true}`                           |

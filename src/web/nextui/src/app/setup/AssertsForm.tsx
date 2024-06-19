@@ -25,6 +25,8 @@ const assertTypes: AssertionType[] = [
   'regex',
   'is-json',
   'contains-json',
+  'is-sql',
+  'contains-sql',
   //'javascript',
   //'python',
   'similar',
