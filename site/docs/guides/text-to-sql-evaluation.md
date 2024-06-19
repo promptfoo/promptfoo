@@ -4,6 +4,10 @@ Promptfoo is a command-line tool that allows you to test and validate text-to-SQ
 
 This guide will walk you through setting up an eval harness that will help you improve the quality of your text-to-SQL prompts.
 
+The end result is a view that looks like this:
+
+![text to sql evaluation](/img/docs/text-to-sql-eval.png)
+
 ## Configuration
 
 Start by creating a blank `promptfooconfig.yaml` file (optionally, generate a placeholder using `npx promptfoo@latest init`).
@@ -33,14 +37,7 @@ prompts:
 
 ### Step 2: Specify the Providers
 
-Define the language model providers you are using. For example:
-
-```yaml
-providers:
-  - openai:gpt-3.5-turbo
-```
-
-If you define multiple providers, you can compare performance across different models:
+Define one or more language model providers to use. For example, here we compare the performance between GPT 3.5 and GPT 4:
 
 ```yaml
 providers:
@@ -68,6 +65,10 @@ This test checks produces a query for `bananas` (remember our prompt above) and 
   assert:
     - type: is-sql
 ```
+
+:::tip
+Use `contains-sql` instead of `is-sql` to allow responses that contain text with SQL code blocks.
+:::
 
 #### Table-Specific SQL Validation
 
@@ -207,4 +208,6 @@ Use the web viewer:
 npx promptfoo@latest view
 ```
 
-This will open your test results and allow you to browse and refine your prompts.
+This will open your test results and allow you to refine your prompts and compare model performance.
+
+![text to sql evaluation](/img/docs/text-to-sql-eval.png)
