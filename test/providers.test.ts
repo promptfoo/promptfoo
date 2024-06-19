@@ -968,7 +968,7 @@ config:
 
     jest.mocked(importModule).mockResolvedValue(CustomApiProvider);
     const providers = await loadApiProviders(providerPath);
-    expect(importModule).toHaveBeenCalledWith(path.resolve('/absolute/path/to/file.js'));
+    expect(importModule).toHaveBeenCalledWith('/absolute/path/to/file.js');
     expect(providers).toHaveLength(1);
     expect(providers[0].id()).toBe('custom-api-provider');
     const response = await providers[0].callApi('Test input');
