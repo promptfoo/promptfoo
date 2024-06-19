@@ -482,8 +482,14 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     }
     try {
       const message = data.choices[0].message;
-      const output =
-        message.content === null ? message.function_call || message.tool_calls : message.content;
+      let output = ''
+      if (message.content && (message.function_call || message.tool_calls)) {
+        output = message
+      } else if (message.content === null) {
+        output = message.function_call || message.tool_calls
+      } else {
+        output = message.content;
+      }
       const logProbs = data.choices[0].logprobs?.content?.map(
         (logProbObj: { token: string; logprob: number }) => logProbObj.logprob,
       );
