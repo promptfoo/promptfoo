@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as path from 'path';
 import fetch from 'node-fetch';
 import child_process from 'child_process';
 import Stream from 'stream';
@@ -35,6 +36,7 @@ import {
   type ICloudflareProviderConfig,
 } from '../src/providers/cloudflare-ai';
 import { VoyageEmbeddingProvider } from '../src/providers/voyage';
+import { importModule } from '../src/esm';
 
 import type { ProviderOptionsMap, ProviderFunction } from '../src/types';
 
@@ -59,7 +61,10 @@ jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
 }));
 
-jest.mock('../src/esm');
+jest.mock('../src/esm', () => ({
+  ...jest.requireActual('../src/esm'),
+  importModule: jest.fn(),
+}));
 
 jest.mock('fs', () => ({
   readFileSync: jest.fn(),
@@ -924,6 +929,50 @@ config:
     const response = await providers[0].callApi('Test prompt');
     expect(response.output).toBe('Output for Test prompt');
     expect(response.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+  });
+
+  it('loadApiProviders with CustomApiProvider', async () => {
+    const providerPath = 'file://path/to/file.js';
+
+    class CustomApiProvider {
+      id() {
+        return 'custom-api-provider';
+      }
+
+      async callApi(input: string) {
+        return { output: `Processed ${input}` };
+      }
+    }
+
+    jest.mocked(importModule).mockResolvedValue(CustomApiProvider);
+    const providers = await loadApiProviders(providerPath);
+    expect(importModule).toHaveBeenCalledWith(path.resolve('path/to/file.js'));
+    expect(providers).toHaveLength(1);
+    expect(providers[0].id()).toBe('custom-api-provider');
+    const response = await providers[0].callApi('Test input');
+    expect(response.output).toBe('Processed Test input');
+  });
+
+  it('loadApiProviders with CustomApiProvider, absolute path', async () => {
+    const providerPath = 'file:///absolute/path/to/file.js';
+
+    class CustomApiProvider {
+      id() {
+        return 'custom-api-provider';
+      }
+
+      async callApi(input: string) {
+        return { output: `Processed ${input}` };
+      }
+    }
+
+    jest.mocked(importModule).mockResolvedValue(CustomApiProvider);
+    const providers = await loadApiProviders(providerPath);
+    expect(importModule).toHaveBeenCalledWith(path.resolve('/absolute/path/to/file.js'));
+    expect(providers).toHaveLength(1);
+    expect(providers[0].id()).toBe('custom-api-provider');
+    const response = await providers[0].callApi('Test input');
+    expect(response.output).toBe('Processed Test input');
   });
 
   it('loadApiProviders with RawProviderConfig[]', async () => {
