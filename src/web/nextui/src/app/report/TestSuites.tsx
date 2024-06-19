@@ -14,10 +14,11 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 
 import {
-  riskCategories,
-  subCategoryDescriptions,
   categoryAliases,
+  displayNameOverrides,
+  riskCategories,
   riskCategorySeverityMap,
+  subCategoryDescriptions,
 } from './constants';
 import './TestSuites.css';
 import { useRouter } from 'next/navigation';
@@ -29,6 +30,7 @@ const getSubCategoryStats = (
   for (const [category, subCategories] of Object.entries(riskCategories)) {
     for (const subCategory of subCategories) {
       subCategoryStats.push({
+        pluginName: subCategory,
         type: categoryAliases[subCategory as keyof typeof categoryAliases] || subCategory,
         description:
           subCategoryDescriptions[subCategory as keyof typeof subCategoryDescriptions] || '',
@@ -170,7 +172,11 @@ const TestSuites: React.FC<{
                 }
                 return (
                   <TableRow key={index}>
-                    <TableCell>{subCategory.type}</TableCell>
+                    <TableCell>
+                      {displayNameOverrides[
+                        subCategory.pluginName as keyof typeof displayNameOverrides
+                      ] || subCategory.type}
+                    </TableCell>
                     <TableCell>{subCategory.description}</TableCell>
                     <TableCell className={passRateClass}>
                       {subCategory.passRate} (
@@ -186,7 +192,7 @@ const TestSuites: React.FC<{
                     <TableCell className={`vuln-${subCategory.severity.toLowerCase()}`}>
                       {subCategory.severity}
                     </TableCell>
-                    <TableCell>
+                    <TableCell style={{ minWidth: 270 }}>
                       <Button
                         variant="contained"
                         size="small"
