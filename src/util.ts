@@ -301,12 +301,12 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
     }
   };
 
-  const seenPrompts = new Set<string>();
+  const seenPrompts = new Set<string | Prompt>();
   const addSeenPrompt = (prompt: string | Prompt) => {
     if (typeof prompt === 'string') {
       seenPrompts.add(prompt);
     } else if (typeof prompt === 'object' && prompt.id) {
-      seenPrompts.add(prompt.id);
+      seenPrompts.add(prompt);
     } else {
       throw new Error('Invalid prompt object');
     }
