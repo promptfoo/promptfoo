@@ -8,7 +8,7 @@ import logger from './logger';
 import { getNunjucksEngine } from './util';
 
 export const CONFIG_TEMPLATE = `# Learn more about building a configuration: https://promptfoo.dev/docs/configuration/guide
-description: 'My eval'
+description: "My eval"
 
 prompts:
   {% for prompt in prompts -%}
