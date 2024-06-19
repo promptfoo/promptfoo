@@ -1,0 +1,258 @@
+Text-Only Version Go To Full Site
+
+NPR > Politics
+
+How the Founding Fathers' concept of 'Minority Rule' is alive and well today
+By Terry Gross
+
+Monday, April 22, 2024 • 1:26 PM EDT
+
+Heard on Fresh Air
+
+It's a fundamental tension in a democracy: How do you have majority rule in a way that also protects minority rights? Journalist Ari Berman says the Founding Fathers struggled with that question back in 1787 — except, for them, white male landowners were the minority in need of protection.
+
+"Most of the founders were skeptical of the public's ability to elect the president directly," Berman says. "So they created this very complicated situation in which electors would elect the president instead of the people electing the president directly."
+
+In his new book, Minority Rule, Berman connects the debates and compromises of the country's founders to contemporary politics. He says the founding fathers created a system that concentrated power in the hands of the elite and that today, institutions like the Electoral College and the Senate — designed as a check against the power of the majority — are having much the same effect.
+
+Berman notes that in the country's first presidential election, in 1789, only a small fraction of the population was eligible to vote — and in certain states, voters were only allowed to vote for electors, not the candidates themselves.
+
+Related Story: A Growing Number Of Critics Raise Alarms About The Electoral College
+Though the right to vote has since been expanded, Berman says the democratic process remains deeply flawed. He points out that in 2000 and again in 2016, the presidential candidate who won the popular vote did not win the electoral vote. Additionally, he says, because the Constitution stipulates that each state gets two senators, regardless of its population, "smaller, whiter, more conservative states have far more power and representation in the Senate then larger, more diverse, more urban states."
+
+Related Story: Electors Across The Country Vote For President: What You Need To Know
+"What we see right now is the same kind of thing, in which a privileged, conservative, white minority is trying to suppress the power of a much more diverse multiracial governing majority," Berman says. "And that's a very dangerous situation for American democracy."
+
+Interview highlights
+On the Constitution as a flawed document
+
+We venerate the Constitution as a civic religion. I think we would be much greater served to look at the Constitution as a whole document and say, there are some remarkable parts of this document, but there's also some really flawed parts of this document that we still haven't corrected. Because the really remarkable thing is that even as America has democratized in the centuries since — and nobody would argue that America isn't more democratic now than it was back then — some features of the Constitution have become more undemocratic.
+
+On the creation of the Electoral College to uphold minority rule
+
+Most of the founders were skeptical of the public's ability to elect the president directly. They felt like the public would be uninformed, or it would be chosen by the largest states, or would be chosen by free states in a way that would hurt the South. So it's interesting, one of the themes that runs through the book and runs through the founding is that these smaller minorities wanted protection. And when I may say smaller minorities, I don't mean minority groups. I mean the small states wanted protection, the slave states wanted protection, and they felt like they would get that protection in the Electoral College. So they created this very complicated situation in which electors would elect the president instead of the people electing the president directly.
+
+On how representatives from Delaware scuffled the initial plan to have Senate representation being based on population
+
+James Madison and other prominent framers wanted the Senate to be based on proportional representation, so they wanted it to be based on population. So larger states like Virginia would have more representation than smaller states like Delaware. But the smaller states rebelled. And there's this amazing moment at the Constitutional Convention where the attorney general of Delaware gets up and he tells the likes of James Madison, if you don't give us the same representation, we're going to find a foreign ally who we're going to join with instead, and we're going to leave the United States of America. And that was a stunning demand. The idea that they would go rejoin England or they would join France instead, if they didn't have the same level of representation, meant that the larger states had no choice but to give in to the demand of the smaller states to ratify the Constitution.
+
+But what Madison worried about is that it would allow what he called a more objectionable minority than ever to control the U.S. Senate, because if the smaller states had the same level of representation as the larger states, that was inevitably going to lead to minority rule. And Madison worried that would get worse as more states join the union. And, of course, that's what's happened today, where the gap between large and small states is dramatically larger than it was back in 1787.
+
+On how the two Senator per state representation affects minority rule
+
+Just to give you one really stunning stat, by 2040, 70% of the population is going to live in 15 states with 30 senators. That means that 30% of the country, which is going to be whiter, more rural, more conservative, is going to elect 70% of the U.S. Senate. So the trend in the U.S. Senate is becoming more imbalanced and more undemocratic. And what's really interesting to me is a lot of conservatives want to go back and they want to quote the framers, but they ignore that a lot of the framers, including James Madison, the architect of the Constitution, had grave concerns about some of the institutions they were creating, particularly the structure of the U.S. Senate.
+
+Lauren Krenzel and Joel Wolfram produced and edited this interview for broadcast. Bridget Bentz, Molly Seavy-Nesper and Meghan Sullivan adapted it for the web.
+
+Transcript
+TERRY GROSS, HOST:
+
+This is FRESH AIR. I'm Terry Gross. Minority rule is threatening American democracy, writes my guest Ari Berman. To understand the fight today, he says, you need to understand the long-standing clash between competing notions of majority rule and minority rights. That clash goes back to the Founding Fathers, who tried to temper what they feared were the extremes of majority rule by creating institutions like the Electoral College, which prevented the direct election of a president, and the Senate, which gave equal representation to states with large populations and those with small ones. The Founding Fathers also reached compromises to give the South a disproportionate say so that they could ratify the Constitution while remaining slaveholders. Berman's new book, "Minority Rule", connects the debates of the Founding Fathers and the resolutions they came up with to contemporary politics and issues, like partisan gerrymandering, voting rights restrictions, and anti-immigration policies. Berman has been covering voting rights issues for many years and is the author of an earlier book called "Give Us The Ballot: The Modern Struggle For Voting Rights In America". He's the voting rights correspondent for Mother Jones. Ari Berman, welcome back to FRESH AIR.
+
+ARI BERMAN: Hi, Terry. Thank you so much for having me back.
+
+GROSS: My pleasure. So minority versus majority rule is complicated. I want to say I'm in favor of majority rule, but what about periods when the majority is racist or homophobic or patriarchal? Do you want that majority suppressing the rights of the minority? So it's kind of more complicated than it seems. Would you agree?
+
+BERMAN: It is. And it's a fundamental tension in a democracy, which is, how do you protect majority rule, but do so in the way that the majority protects minority rights? And that's something that the Founding Fathers struggled with 230 years ago, which is, how do you balance protections for different minorities with the idea that majority should rule? Now, the interesting thing is, is that when we think of the protection of minority rights, we think of vulnerable minority groups, right? Previously disenfranchised communities, for example, are those that have been persecuted in the past. What the Founding Fathers were concerned about was a privileged minority group - themselves, basically, white male landowners who were a distinct minority within the country, but they wanted to protect them. And what we see right now is the same kind of thing in which a privileged, conservative white minority is trying to suppress the power of a much more diverse, multiracial governing majority. And that's a very dangerous situation for American democracy.
+
+GROSS: As an example of minority rule today, you talk about the Supreme Court and the conservative justices on it and how they were appointed. Can you run through that for us?
+
+BERMAN: So for the first time in American history, 5 of 6 conservative justices on the Supreme Court were appointed by presidents who lost the popular vote initially and confirmed by senators representing a minority of Americans. So the Supreme Court is a product of minority rule, and it's a product of two skewed institutions - how we elect our presidents through the electoral college and how we appoint U.S. senators, both of which are flawed because they both violate one person, one vote. In the electoral college, we have a ticking time bomb in which a candidate can win the popular vote, but lose the electoral college. And in the Senate, we have a situation in which smaller, more conservative, wider states have dramatically more representation than larger, more diverse, more urban states. And so the Supreme Court is a product of minority rule, and then it, of course, has issued very radical decisions in recent years on things like abortion rights, gun control, voting rights that are at odds with the majority of public opinion. So we have a Supreme Court that is a product of minority rule that is then issuing decisions that deepen minority rule within the United States.
+
+GROSS: And the two presidents you're referring to who did not win the popular vote were George W. Bush and President Trump.
+
+BERMAN: Yes. And those two presidents, George W. Bush and Donald Trump appointed 5 of 6 conservative justices on the Supreme Court - so a majority of the Supreme Court. And what we see is a decadeslong strategy by the Republican Party to use the courts to try to do unpopular things. And of course, they used very bare-knuckled tactics to get that majority on the Supreme Court, including blocking Barack Obama from filling an open seat on the Supreme Court eight months before the election, and then appointing Amy Coney Barrett to the Supreme Court just weeks before the election. So the Supreme Court really has been the epicenter of the Republican Party's drive for minority rule.
+
+GROSS: Let's go back to the beginning. Some of the Founding Fathers wanted to curb the excesses of democracy. What did they see as a threat?
+
+BERMAN: They were skeptical of democracy both on the historical notion of democracy at the time, which was direct democracy in ancient Greece and places like that, which they thought had led to mob rule. But they were more concerned with America after 1776, when there were these quite Democratic for the time state legislatures that were elected after the Declaration of Independence when new state constitutions were granted. And those state legislatures had a lot of power. Legislators were elected annually, for example. They were very responsive to public demands. And the federal government, in terms of the Continental Congress, had very little power. It could not raise its own revenue, for example. And what happened was the states were passing populist policies that the Framers didn't like.
+
+And there was a big economic crisis in the 1780s. And what happened is states began to do things like debt relief and tax relief that benefited impoverished farmers, for example, but hurt wealthier Americans by leading to inflation. And basically, the Framers felt like there was an excess of democracy, in the states that were leading the country to the brink of collapse. And that what they needed to do was they needed to create a strong central government and a strong central government that would not only restrain the power of the states, but restrain the power of democracy more broadly. So instead of decisions being made by politicians who are influenced by the masses, decisions would be made by these elite white men that had a greater perspective and the greater public good at heart.
+
+GROSS: Here's something John Adams said that you quote in your book. If a majority were to control all branches of the government, debts would be abolished first, taxes laid heavy on the rich and not at all on the others, and at last, a downright equal vision of everything would be demanded and voted. I was surprised to read that.
+
+BERMAN: A pretty remarkable quote, right? I was surprised to read a lot of these things, too, because the Founding Fathers, as much as we worship them, we're very honest that they were worried about protecting people like themselves and that if we had pure democracy or a broader representative democracy, there would be these demands for things like equality, which the Founding Fathers didn't really favor. They wanted to make sure that the government, first and foremost, protected people like them.
+
+GROSS: The Founding Fathers limited who could vote. What - would you describe the limitations?
+
+BERMAN: Many states restricted voting rights to white male property owners, which meant that poorer whites couldn't vote. Of course, women couldn't vote. African Americans couldn't vote. Native Americans weren't even considered citizens of the United States. So a majority of the country was excluded from voting at the time of the founding and after.
+
+GROSS: So there were restrictions on who could vote. And you couldn't vote for all of the people in the institutions of government. The president was voted on through the electoral college - like, you voted for the electors who then voted for the president. And that worked a little differently than it does today. Would you describe, first of all, why the electoral college was created?
+
+BERMAN: Yeah. And it wasn't even that you voted for the electoral college. In most states, the state's legislatures just picked the elector, so the public had no say in terms of who the electors were. But basically, the Founders were...
+
+GROSS: Wait, so who did you vote for?
+
+BERMAN: You voted for - I mean, a lot of people just didn't vote at all. That's the thing, is that in the first election in which George Washington was elected, only 6% of Americans were eligible to vote. So most people just didn't vote at all. And then in certain states, you were allowed to vote for the electors. But basically, what happens is states nominated the electors and then the electors chose the president with very little input from the voters on who the electors were, or who the president would be.
+
+GROSS: And why did the Founding Fathers want the electoral college as opposed to a direct vote?
+
+BERMAN: Most of the Founders were skeptical of the public's ability to elect the president directly. They felt like the public would be uninformed, or it would be chosen by the largest states or it would be chosen by free states in a way that would hurt the South. One of the themes that runs through the book and runs through the founding is that these smaller minorities wanted protection. And when I may say smaller minorities, I don't mean minority groups. I mean the small states wanted protection. The slave states wanted protection. And they felt like they would get that protection in the electoral college. So they created this very complicated situation in which electors would elect the president instead of the people electing the president directly.
+
+GROSS: Let's talk about the Senate. The Senate was created to counteract some of the democracy of the House. Can you explain the debate over what the Senate should be and how the people in it should be chosen?
+
+BERMAN: First off, senators were nominated by state legislatures and chosen by the lower House. So senators were not directly elected by the people, and there was basically unanimity among the Founders for that. But there were debates over who senators should represent. James Madison and other prominent Framers wanted the Senate to be based on proportional representation. So they wanted it to be based on population. So larger states like Virginia would have more representation than smaller states like Delaware. But the smaller states rebelled. And there's an amazing moment at the Constitutional Convention where the attorney general of Delaware gets up, and he tells the likes of James Madison, the architect of the Constitution, If you don't give us the same representation, we're going to find a foreign ally who we're going to join with instead, and we're going to leave the United States of America. And that was a stunning demand. The idea that they would go rejoin England or they would join France instead if they didn't have the same level of representation.
+
+It meant that the larger states had no choice but to give in to the demand of the smaller states to ratify the Constitution. But what Madison worried about is that it would allow what he called a more objectionable minority than ever to control the U.S. Senate, because if the smaller states had the same level of representation as the larger states, that was inevitably going to lead to minority rule. And Madison worried that would get worse as more states joined the union. And of course, that's what's happened today, where the gap between large and small states is dramatically larger than it was back in 1787.
+
+GROSS: You make a comparison in the book - at the time of the Constitutional Convention, Virginia had 12 times as many people as Delaware. Today, California has 68 times the population of Wyoming, but California and Wyoming both have two representatives in the Senate.
+
+BERMAN: Yeah, and what that means is that smaller, wider, more conservative states have far more power and representation in the Senate than larger, more diverse, more urban states. And that imbalance is getting worse. So just to give you one really stunning stat, by 2040, 70% of the population is going to live in 15 states with 30 senators. That means that 30% of the country, which is going to be wider, more rural, more conservative, is going to elect 70% of the U.S. Senate. So the trend in the U.S. Senate is becoming more imbalanced and more undemocratic. And what's really interesting to me is a lot of conservatives want to go back, and they want to quote the Framers. But they ignore that a lot of the Framers, including James Madison, had grave concerns about some of the institutions they were creating, particularly the structure of the U.S. Senate.
+
+GROSS: Well, let's take a short break, and then we'll talk some more. If you're just joining me, my guest is journalist Ari Berman. His new book is called "Minority Rule." We'll be right back. This is FRESH AIR.
+
+(SOUNDBITE OF FLORATONE'S "FRONTIERS")
+
+GROSS: This is FRESH AIR. Let's get back to my interview with Ari Berman, author of the new book "Minority Rule." He is the voting rights correspondent for Mother Jones and has written about voting rights for years.
+
+One of the more bizarre and offensive compromises that the Founding Fathers made was the three-fifths clause. And I know a lot of people know what that is, but I'm going to ask you to explain it.
+
+BERMAN: What it meant was that when it came to representation in the House of Representatives, slaves, who obviously were disenfranchised, were counted as three-fifths of a person, which dated back to how Southern states were taxed in the 1780s. And this was a huge benefit to Southern states because what they were doing was they were disenfranchising African Americans, but then they were getting more representation because of that disenfranchised enslaved population. So they didn't have to actually extend any rights to Black people. But by virtue of having them as slaves, they gained a third more representation than they would have had if slaves weren't counted at all in terms of the representation. So it was a huge benefit to the Southern states, and it was honestly, in many ways, an incentive for them to continue slavery because they could continue this horrible institution, but they could benefit in terms of the representation they were receiving. It's one of the ugliest compromises. And again, I hesitate to use the word compromise because this was another concession. It's one of the ugliest parts of the original Constitution, as we know it, in 1787.
+
+And what it did is it protected the power of the slave states all across the federal government. So 10 of the 12 U.S. Presidents are slaveholders. Nearly every speaker of the House from the beginning of the country until the Civil War is a slaveholder. Eighteen of the first 31 Supreme Court justices are slaveholders. That meant that slave states had the power to basically control the federal government, and they were rewarded for continuing the ugliest of American institutions.
+
+GROSS: I don't know how closely you've been following what's happening in the schools in some states where there are restrictions on what is being described as critical race theory. I'm wondering if you could teach a class using the language that you just used or the descriptions you just used to describe the three-fifths clause...
+
+BERMAN: I mean, if we...
+
+GROSS: ...If there are places where you wouldn't be allowed to do that now.
+
+BERMAN: This is why the effort to censor history, which I write about in the book and I call the gerrymandering of history, is so dangerous because these things happened. These things happened whether we like it or not. It's not woke to say that there was slavery in America. It's not woke to say that there was Jim Crow in America. It's not woke to say that there was a three-fifths clause in America. These things happened. And we have to learn from this history and be honest about the country's racist past if we're going to cure the inequities of racism going forward.
+
+GROSS: And also, that the Constitution was filled with compromises. It's in some respects an imperfect document. And I think in schools, it's often taught as a perfect document.
+
+BERMAN: Exactly. We venerate the Constitution as a civic religion. I think we would be much greater served to look at the Constitution as a whole document and say there's some remarkable parts of this document, but there's also some really flawed parts of this document that we still haven't corrected. Because the really remarkable thing is that even as America has democratized in the centuries since - and nobody would argue that America isn't more democratic now than it was back then - some features of the Constitution have become more undemocratic. So things like a president winning the popular vote but losing the electoral college, or senators representing a minority of Americans but holding a majority in the body, those things have become more routine now than they were back in the 1780s. And in that case, the Constitution is more undemocratic now than it was even at the time of the founding.
+
+GROSS: So you use the state of Wisconsin as a case study in how disconnected, like, the people's elected representatives could be from the people themselves. And it's largely because, you say, of court rulings legalizing gerrymandering, voter suppression, dark money. So let's look at Wisconsin and some of the things that have gone on there.
+
+In 2011, the Republicans were in control of the state's redistricting process for the first time since the late '50s. So they got to redraw the map that designates who votes for which representatives in Congress and in the state legislature. They redrew the map in secret with the help of their law firm. What was unusual about how they redrew the map?
+
+BERMAN: What was unusual is that redistricting maps had always been drawn at the legislature through a public process. What Republicans did is they went across the street to a Republican-allied law firm. They drew the maps in secret. They made Republican legislators sign confidentiality agreements to not discuss them. They hired Republican consultants, as opposed to legislative staff, to draw these maps. No legislators saw their districts ahead of time. No Democrats saw the maps at all until they were introduced.
+
+And so Republicans used the map-drawing process to then put in place these heavily gerrymandered districts that would ensure Republican control for a decade and beyond. And Wisconsin is such an interesting case study because it became the laboratory for how Republicans would curb democracy more broadly at the state level, and how they would rig political institutions to benefit a conservative white minority as opposed to a broader majority.
+
+And this became the focal point of the Republican Party strategy after the 2010 election where they took over all of these key states. And they tried to use that to counteract the power that Democrats had at the federal level after the election of Barack Obama. And Wisconsin became the case study of how they could take control of all of these major institutions, and gerrymandering was one of the anti-democratic tactics they used to enshrine their power.
+
+GROSS: Well, let's take another break here. If you're just joining us, my guest is Ari Berman. He's the voting rights correspondent from Mother Jones and has written about voting rights for many years. His new book is called "Minority Rule." We'll be right back after a short break. I'm Terry Gross, and this is FRESH AIR.
+
+(SOUNDBITE OF HERLIN RILEY'S "RUSH HOUR")
+
+GROSS: This is FRESH AIR, I'm Terry Gross.
+
+This is FRESH AIR. I am Terry Gross. Let's get back to my interview with Ari Berman, author of the new book "Minority Rule." He writes that the Founding Fathers created political institutions within a system that concentrated power in the hands of an elite, propertied, white male minority. His book describes the Founding Fathers' debates and compromises and how those are reflected in versions of minority rule today and the ongoing debate between minority and majority rule. Ari Berman is the voting rights correspondent for Mother Jones. When we left off, we were talking about how the electoral maps were redrawn in Wisconsin after Republicans took control of the Wisconsin state legislature in 2011 and then were in charge of the redistricting process. The new maps ensured Republican victories in state elections for at least a decade.
+
+How did the Republicans in Wisconsin use their power after gerrymandering the state?
+
+BERMAN: They really went after Democratic power and Democratic constituencies at all levels. And that's why I say it became a laboratory for oligarchy more broadly. They went after labor unions, who were the biggest supporter of the Democratic Party in progressive causes, by taking away collective bargaining rights for public sector unions like teachers. This was, of course, incredibly controversial, led to massive protests at the state legislature, but they nonetheless succeeded. They passed new laws to make it harder for Democratic constituencies to vote, new ID requirements, cutting early voting, things like that.
+
+So they infused a tremendous amount of dark money into races like the state Supreme Court because judges are elected in Wisconsin, and so they were able to win a majority in the state Supreme Court by funneling all of this dark money to candidates. And then, of course, that state Supreme Court then upheld policies like voter suppression, gerrymandering, union busting. So it was a takeover at all levels of government. And what was so notable about Wisconsin is Wisconsin was a state that was known for good government. It was known as a state for landmark reforms. It was a place that passed the first policies that led to Social Security, to unemployment insurance, to collective bargaining rights for unions. And it went from a state that was known for good government to a state in which it seemed like Republicans were rigging every level of government to benefit themselves. And that was a major change not just in the politics of Wisconsin, but in the broader culture of Wisconsin and one that had national ramifications as well.
+
+GROSS: What are some of the other states that followed the path that Wisconsin took?
+
+BERMAN: There's so many states - Ohio, Florida, North Carolina. What we saw is after the 2010 election, which is a real pivotal turning point in the direction of American politics, Republicans replicated these strategies in swing state after swing state. They passed new laws, making it harder to vote. They passed new gerrymandered maps. They went after unions. And this radicalized the Republican Party even before Donald Trump. And what I argue in the book is that the radicalization of the Republican Party at the state level in places like Wisconsin laid the groundwork for an authoritarian figure like Donald Trump to emerge. Trump wouldn't have been able to emerge in the Republican Party if the Republican Party hadn't already radicalized against democracy before Trump came on the scene.
+
+GROSS: So if Wisconsin was a laboratory for Republicans in how to build a Republican-controlled state, what's happening in Wisconsin now?
+
+BERMAN: Well, the fascinating thing is that the laboratory for autocracy in Wisconsin is once again becoming a laboratory for democracy, meaning that the Republican foundation has largely fallen apart in Wisconsin, and state politics has shifted dramatically - because what we saw is that the Republican drive for power in Wisconsin produced a fierce backlash among the voters and led them to organize in other ways.
+
+So Wisconsin has a Democratic governor right now, and more significantly, there is now a progressive majority on the state Supreme Court in Wisconsin. And that progressive majority on the state Supreme Court struck down the gerrymandered maps that were key to Republicans retaining power in Wisconsin. And the Democratic governor and Republican legislature in Wisconsin actually reached an agreement on fairer maps where the Republican legislature passed the governor's proposal for maps in Wisconsin so that in 2024, for the first time in a decade and a half, there will be competitive elections at the state level in Wisconsin, and the legislature is up for grabs.
+
+So one of - the story I try to tell in my book over the long haul is that there's been this push and pull between antidemocratic and democratic forces. And at times, the antidemocratic forces have succeeded and at times the pro-democratic forces have succeeded. And Wisconsin shows that push and pull. And after a decade of the antidemocratic forces succeeding in Wisconsin, the pro-democracy forces have seen a lot of success recently by organizing at the state level. And I think that's a theme not just in Wisconsin, but in other key battleground states like Michigan and Pennsylvania as well.
+
+GROSS: You devote a whole chapter of your book to Pat Buchanan, who was very conservative. He was an aide to Richard Nixon. And he ran several times for president, twice as a Republican primary candidate. That was in '92 and '96. And in 2000, the year of the contested election between Bush and Gore, he ran in the election as an independent on the Reform Party ticket. So where does Pat Buchanan fit into your theme of minority rule?
+
+BERMAN: Pat Buchanan is an extremely influential figure in the drive for minority rule. He is the first major presidential candidate to mix antipathy towards the civil rights movement of the 1960s with opposition to broad immigration in the '80s and '90s and basically makes opposition to demographic change the centerpiece of his presidential campaigns in the 1990s. And what Buchanan is arguing is that what he calls the emerging white minority needs to be protected. And that's why he's basically the godfather of the modern-day push for minority rule on the right, because the 1990 census is the first to predict that whites will one day be a minority in the country. And Buchanan is the first major presidential candidate to make a big deal about this and say, the more diverse the country becomes, the more Democratic - big-D Democratic - it will become. And therefore, we need to lead a counter revolution against the changing demographics of the country before it's too late. And Donald Trump largely adopts that as his platform in 2016, 2020 and now in 2024.
+
+GROSS: And in terms of Buchanan being a blueprint for Trump, Buchanan's campaign slogan was make America first again, which he borrowed from Reagan's campaign slogan, let's make America great again. So you put those two together and you have make America great again. So I wonder if Trump realizes how much he borrowed from Buchanan or if some of this is filtered through Stephen Miller or somebody else. What do you think? Do you know?
+
+BERMAN: I think it's a little bit of both. I think some of it is filtered, but Trump has endorsed Buchanan's ideas. In January 2019, Buchanan writes a column endorsing Trump's plan to build a wall along the U.S.-Mexico border, which was an idea that Buchanan first had proposed in 1992. And Trump tweets that column by Buchanan to his 58 million Twitter followers. So there was a clear linkage between Trump and Buchanan. And you can see how the Republican Party has moved to the right because there's this actually fascinating story in which Trump is, in 1999, flirting with running for the Reform Party nomination. And Buchanan is running for that nomination. And Trump goes on "Meet The Press" and says about Buchanan, he's a Hitler lover. He doesn't like the Blacks. He doesn't like the gays. How could anyone vote for this guy?
+
+And then just a few years later, Trump is running on Buchanan's America First policies. He's talking about restricting immigration. He's talking about building a wall among the U.S.-Mexico border. He's talking about preventing children who were born in the U.S. to undocumented parents from becoming U.S. citizens. These are all things that Buchanan first laid out in the '90s that were extremely controversial at the time. And in fact, Buchanan was pushed out of the Republican Party because his ideas were so extreme, and because his views on demographic change and immigration were widely viewed to be racist. But then Trump takes the, quote-unquote, "America First" policy platform of Buchanan, and he markets it to a much broader audience.
+
+GROSS: Another way that I think Buchanan foreshadowed the Republican Party's platform and strategy was it was Buchanan who came up with the expression cultural wars that became culture wars. But he used culture war issues to try to get votes. Can you talk about his version of culture wars?
+
+BERMAN: So Buchanan gives this famous speech, this keynote speech of the 1992 Presidential Convention nominating George H. W. Bush, and he talks about a cultural war for the soul of America. And he denounces things like homosexuality and abortion. But he goes further in a lot of his campaign speeches, and he talks about protecting Judeo Christian values and says, the values of white Christian America are under siege. And he basically says that we're in a cultural war where people are trying to erase the vision of the Founders, which was to create a white Christian country.
+
+And this is something that has become another major theme on the right. Because efforts to censor history, to erase history, to claim that white Christian America is somehow under siege - this dates back to Buchanan as well. And nowadays, Republicans in many ways are fighting the very type of culture war to defend a besieged White America that Buchanan wanted the Republican Party to embrace fully in the 1990s.
+
+GROSS: Well, let's take another short break here. If you're just joining us, my guest is Ari Berman. He's the voting rights correspondent from Mother Jones, and author of the new book "Minority Rule." We'll be right back. This is FRESH AIR.
+
+(SOUNDBITE OF GAIA WILMER'S "MIGRATIONS")
+
+GROSS: This is FRESH AIR. Let's get back to my interview with Ari Berman. He's been writing about voting rights for years, and now he's the author of the new book "Minority Rule.".
+
+You know, we've been talking about minority rule and how minority rule is really often now a way of standing up for the elites and suppressing the rights of the minorities. It's interesting how minority rule has kind of become a problem within the Republican Party itself. And I'm thinking here of, like, what's happening in the House of Representatives. You know, Kevin McCarthy went down, and he was voted out by a majority of the Republicans, but the movement to vote him out started from a minority. And now look at Marjorie Taylor Greene and how much power she has in the Republican Party and how she's always like toying with the idea of calling with the ouster of the current House speaker Mike Johnson. I'd like you to talk about that, how minority rule has become a problem within the Republican Party.
+
+BERMAN: Well, I think that the Republican Party has embarked on minority rule to such an extreme degree, that, for example, they let one member of Congress call an election for speaker, which gave an extremely small minority a disproportionate amount of power, and that's led to chaos in the House of Representatives. So minority rule is really cannibalizing the Republican Party. It's making them eat themselves. And all of these anti-Democratic compromises that the Republican Party has made to gain power makes it so that when they're within power, it's very difficult for them to govern effectively because they've given the extreme minority forces within the party so much power to control not just the Republican Party, but the institutions that are supposed to represent the majority of Americans more broadly.
+
+GROSS: Do you think that what started as a minority in the Republican Party on the extreme right has become or is becoming a majority?
+
+BERMAN: Yes. Now you see a majority of Republicans saying things like the 2020 election was stolen, and a majority of Republicans radicalizing democracy more broadly. And so the minority rule faction might have been a minority within the Republican Party in the '90s, for example. But there's no doubt that in Trump's Republican Party, it's a majority, and that minority rule is the overriding goal for the Republican Party today. And the kind of pivotal event in the last few years of American politics, the insurrection at the U.S. Capitol, was the most striking example of how the Republican Party and extreme elements within the Republican Party are going to really unprecedented ends to try to overthrow the will of the majority.
+
+GROSS: What are some of the things you're watching out for now in the presidential campaign? And what are some of your concerns about voting rights in this next election - in the presidential election?
+
+BERMAN: Well, I think that the fight for the foundation of American politics is the biggest story of our time and certainly the biggest story in the 2024 election. And I am looking at how the anti-Democratic forces on the right are regrouping after the insurrection and trying to institutionalize the insurrection through other means and try to have a - essentially authoritarian takeover in 2024 where Donald Trump is both a product of an undemocratic political system, but also an accelerant taking that undemocratic political system in an even more undemocratic direction to where minority rule becomes something that's impossible to reverse. That's my biggest fear about the 2024 election, and then that anti-Democratic movement is playing out in a lot of different ways. One of the major ways it's playing out is all of these new restrictions on voting that were passed after the 2020 election. So Trump loses the fight to overturn the election, but then all of these state legislatures turn around and pass new restrictions on voting to target Democratic constituencies. And those new restrictions on voting in places like Georgia and Florida and North Carolina, they're going to be in effect for the first time in 2024. So I'm watching will people be able to vote in a free and fair election? Will their votes be counted fairly? Will there be an attempt to overturn those votes? And will our institutions become so stretched that if Donald Trump retakes power, it won't resemble the democracy that we've believed that we've had for the last 230 years.
+
+GROSS: I'm having Deja vu, Ari, 'cause I remember talking with you after the Voting Rights Act was gutted. And you were saying this next presidential election - and this was - I guess it was, like, the 2020 election we were talking about? That this would be - that that would be the first election without...
+
+BERMAN: 2016.
+
+GROSS: 2016.
+
+BERMAN: Yeah. Yeah.
+
+GROSS: Yeah. That that would be the first election without the protections of the full Voting Rights Act. And now you're saying, this is going to be an unprecedented election because it'll be the first election with all these new voting restrictions. What are some of the restrictions that you're referring to?
+
+BERMAN: Well, I feel like a bit of a prophet without honor, Terry...
+
+(LAUGHTER)
+
+BERMAN: ...Warning about all these undemocratic things that are occurring, and they just keep getting worse because there's a steady continuum of anti-Democratic tactics and an anti-Democratic movement within the Republican Party. Texas passed a law, for example, that takes over election administration and allows the Republican Secretary of State to oversee the election only in the state's largest blue County, Harris County, Texas, home to Houston. So this is a remarkable thing to pass a law that's only targeting one county in terms of taking over election administration there and taking over the largest and most diverse blue county in the state. That's something that would have previously had to have been approved under the Voting Rights Act, and I think would have been blocked. North Carolina passed a law that took away the power from the Democratic governor to appoint a majority of election board members, which means that those election boards could do things like dramatically cut the number of early voting locations. It also gave the Republican-controlled legislature the power to certify the elections, meaning that if Donald Trump loses the election and Republicans don't like it, the Republican-controlled legislature could make it easier to overturn the popular vote winner of that state. There's new restrictions in places like Georgia that have many different components, making it harder to vote by mail, making it easier to purge people from the voting roles, making it easier to contest election outcomes. So we're seeing restriction upon restriction placed in front of voters in the 2024 election.
+
+And so, first and foremost, I'm looking at, will there be the ability to have fair elections in these states? And then if there are fair elections, will their votes be counted and respected, or will there be a more organized effort to try to overturn the election in 2024 if Trump loses because many of this was seat of their pants in terms of the strategy to overturn the election in 2020. And I think the election denier movement has gotten much stronger, better funded, more effective in terms of using its tactics and trying to institutionalize its tactics and taking over the election process in key states and key counties going forward.
+
+GROSS: If you're just joining me, my guest as journalist Ari Berman, his new book is called Minority Rule. We'll be right back. This is FRESH AIR.
+
+(SOUNDBITE OF BLANCO SONG, "PULL UP")
+
+UNIDENTIFIED PERSON: A.B.
+
+GROSS: This is FRESH AIR. Let's get back to my interview with Ari Berman, author of the new book "Minority Rule." He is the voting rights correspondent for Mother Jones and has written about voting rights for years.
+
+During this interview, you've given us examples from the past and the present about minority rule. And you're saying that if Trump is reelected, he could institutionalize minority rule. What do you mean by that? What are your concerns?
+
+BERMAN: My concern is that Donald Trump could weaponize the power of the federal government on behalf of this elite white minority that he represents. He could purge the federal government of longtime apolitical civil servants. He could invoke the Insurrection Act against his political opponents and those who are opposed to his policies. He could pass federal bans on things like voting rights, new restrictions on voting at a federal level. Some of this Trump could do himself, some of it he'll need enablers in Congress and on the courts. But we've already seen that Congress and the courts have been enablers of Trump's agenda.
+
+So if there were to be a trifecta in Washington of Republican control - if Trump were to have a Republican-controlled Congress and also be the president, if he would have a six-member conservative super majority on the Supreme Court - where would the accountability come from? Where would the checks and balances be at that point? And what I'm warning about in this book is that we already have these undemocratic institutions. And if you layer an anti-democratic movement and an authoritarian leader on top of those undemocratic institutions, it becomes a very volatile situation where the very foundation of American democracy, a government for the people of the people, becomes at risk.
+
+GROSS: So what do you see as the most powerful and successful efforts or potentially successful efforts right now trying to uphold democracy?
+
+BERMAN: The most powerful forces that are upholding democracy right now are at the state level, where a lot of innovative pro-democracy policies are being passed. And in the book, I give the example of Michigan, which after 2010 had a seemingly rigged state government. But through direct democracy using the ballot initiative process, activists were able to put in place policies banning partisan gerrymandering, making it much more easier to vote through policies like automatic and Election Day registration, early voting, no-excuse absentee voting. They combated election subversion. They passed other ballot initiatives to legalize marijuana and to enshrine abortion rights.
+
+And that's an example of how voters themselves use the power they had to expand democracy and other key rights and fight back against a rigged system. So what I'm arguing in the book is that absent major institutional reform on the federal level, the states once again have to become laboratories of democracy and provide a national model that can be exported across the different states to protect key rights and freedoms.
+
+GROSS: Well, Ari Berman, I want to thank you so much for talking with us.
+
+BERMAN: Thank you so much for having me back, Terry.
+
+GROSS: Ari Berman's new book is called "Minority Rule." Tomorrow on FRESH AIR, my guest will be the songwriter, singer, guitarist and three-time Grammy winner known as St. Vincent. In addition to her own albums, she co-wrote the song "Cruel Summer" with Taylor Swift and the song "Obsessed" with Olivia Rodrigo. She recorded an album of duets with David Byrne and fronted Nirvana when they were inducted into the Rock & Roll Hall of Fame in 2014. St. Vincent has a new album called "All Born Screaming." I hope you'll join us.
+
+(SOUNDBITE OF SONG, "FLEA")
+
+ST VINCENT: (Singing) I'm just like a hungry little flea jumping on somebody's warm body when you start to itch and scratch and scream. Once I'm in, you can't get rid of me. Once I'm in, you can't get rid of me. Drip you in diamonds...
+
+GROSS: FRESH AIR's executive producer is Danny Miller. Our technical director and engineer is Audrey Bentham. Our interviews and reviews are produced and edited by Amy Salit, Phyllis Myers, Roberta Shorrock, Ann Marie Baldonado, Sam Briger, Lauren Krenzel, Thea Chaloner, Susan Nyakundi and Joel Wolfram. Our digital media producer is Molly Seavy-Nesper. Therese Madden directed today's show. Our co-host is Tonya Mosley. I'm Terry Gross.
+
+(SOUNDBITE OF SONG, "FLEA")
+
+ST VINCENT: (Singing) When you're walking down your sunny street - I got it - thinking of your bills or what to eat. I got it, I, I got it. Then you feel that little prick from me. I got it, I, I got it. I look at you and all I see is meat. Drip you in diamonds, pour you in cream. You will be mine for eternity. I'll bring you China, milk for your tea. You will be mine for eternity.
+
+(SOUNDBITE OF THE POLITICIANS AND MCKINLEY JACKSON'S "FREE YOUR MIND").
+
+Topics
+
+News
+Culture
+Music
+Contact Us Terms of Use Permissions Privacy Policy
+© NPR

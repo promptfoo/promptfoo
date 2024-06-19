@@ -1,6 +1,6 @@
-// Helpers for parsing CSV eval files, shared by frontend and backend.
+// Helpers for parsing CSV eval files, shared by frontend and backend. Cannot import native modules.
 
-import type { Assertion, AssertionType, CsvRow, TestCase } from "./types";
+import type { Assertion, AssertionType, CsvRow, TestCase } from './types';
 
 const DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD = 0.8;
 
@@ -8,6 +8,10 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
   const vars: Record<string, string> = {};
   const asserts: Assertion[] = [];
   const options: TestCase['options'] = {};
+  let providerOutput: string | object | undefined;
+  let description: string | undefined;
+  let metric: string | undefined;
+  let threshold: number | undefined;
   for (const [key, value] of Object.entries(row)) {
     if (key.startsWith('__expected')) {
       if (value.trim() !== '') {
@@ -17,15 +21,30 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
       options.prefix = value;
     } else if (key === '__suffix') {
       options.suffix = value;
+    } else if (key === '__description') {
+      description = value;
+    } else if (key === '__providerOutput') {
+      providerOutput = value;
+    } else if (key === '__metric') {
+      metric = value;
+    } else if (key === '__threshold') {
+      threshold = parseFloat(value);
     } else {
       vars[key] = value;
     }
+  }
+
+  for (const assert of asserts) {
+    assert.metric = metric;
   }
 
   return {
     vars,
     assert: asserts,
     options,
+    ...(description ? { description } : {}),
+    ...(providerOutput ? { providerOutput } : {}),
+    ...(threshold ? { threshold } : {}),
   };
 }
 
@@ -48,7 +67,7 @@ export function assertionFromString(expected: string): Assertion {
       sliceLength = 'eval:'.length;
     }
 
-    const functionBody = expected.slice(sliceLength);
+    const functionBody = expected.slice(sliceLength).trim();
     return {
       type: 'javascript',
       value: functionBody,
@@ -62,7 +81,7 @@ export function assertionFromString(expected: string): Assertion {
   }
   if (expected.startsWith('python:')) {
     const sliceLength = 'python:'.length;
-    const functionBody = expected.slice(sliceLength);
+    const functionBody = expected.slice(sliceLength).trim();
     return {
       type: 'python',
       value: functionBody,
@@ -71,7 +90,7 @@ export function assertionFromString(expected: string): Assertion {
 
   // New options
   const assertionRegex =
-    /^(not-)?(equals|contains-any|contains-all|icontains-any|icontains-all|contains-json|is-json|regex|icontains|contains|webhook|rouge-n|similar|starts-with|levenshtein|classifier|model-graded-factuality|factuality|model-graded-closedqa|answer-relevance|context-recall|context-relevance|context-faithfulness|is-valid-openai-function-call|is-valid-openai-tools-call|latency|perplexity|perplexity-score|cost)(?:\((\d+(?:\.\d+)?)\))?(?::(.*))?$/;
+    /^(not-)?(equals|contains-any|contains-all|icontains-any|icontains-all|contains-json|is-json|is-sql|regex|icontains|contains|webhook|rouge-n|similar|starts-with|levenshtein|classifier|model-graded-factuality|factuality|model-graded-closedqa|answer-relevance|context-recall|context-relevance|context-faithfulness|is-valid-openai-function-call|is-valid-openai-tools-call|latency|perplexity|perplexity-score|cost)(?:\((\d+(?:\.\d+)?)\))?(?::([\s\S]*))?$/;
   const regexMatch = expected.match(assertionRegex);
 
   if (regexMatch) {
@@ -92,6 +111,7 @@ export function assertionFromString(expected: string): Assertion {
     } else if (type === 'contains-json' || type === 'is-json') {
       return {
         type: fullType as AssertionType,
+        value: value,
       };
     } else if (
       type === 'rouge-n' ||

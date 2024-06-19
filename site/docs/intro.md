@@ -4,15 +4,14 @@ sidebar_position: 1
 
 # Intro
 
-`promptfoo` is a CLI and library for evaluating LLM output quality.
+`promptfoo` is a CLI and library for evaluating LLM apps.
 
 With promptfoo, you can:
 
-- **Systematically test prompts, models, and RAGs** with predefined [test cases](/docs/configuration/expected-outputs)
-- **Evaluate quality and catch regressions** by comparing LLM outputs [side-by-side](/docs/usage/web-ui)
-- **Speed up evaluations** with [caching](/docs/configuration/caching) and concurrent tests
-- **Score outputs automatically** by defining [expectations](/docs/configuration/expected-outputs)
-- Use as a [CLI](/docs/usage/command-line), or integrate into your workflow as a [library](/docs/usage/node-package)
+- **Build reliable prompts, models, and RAGs** with benchmarks specific to your use-case
+- **Speed up evaluations** with caching, concurrency, and live reloading
+- **Score outputs automatically** by defining [metrics](/docs/configuration/expected-outputs) and perform automated [red teaming](/docs/red-team)
+- Use as a [CLI](/docs/usage/command-line), [library](/docs/usage/node-package), or in [CI/CD](/docs/integrations/github-action)
 - Use OpenAI, Anthropic, Azure, Google, HuggingFace, open-source models like Llama, or integrate custom API providers for [any LLM API](/docs/providers)
 
 The goal: **test-driven LLM development**, not trial-and-error.
@@ -21,7 +20,7 @@ promptfoo produces matrix views that let you quickly evaluate outputs across man
 
 Here's an example of a side-by-side comparison of multiple prompts and inputs:
 
-![Side-by-side evaluation of LLM prompt quality](https://user-images.githubusercontent.com/310310/244891219-2b79e8f8-9b79-49e7-bffb-24cba18352f2.png)
+![Side-by-side evaluation of LLM prompt quality](https://github.com/promptfoo/promptfoo/assets/310310/ce5a7817-da82-4484-b26d-32474f1cabc5)
 
 It works on the command line too.
 
@@ -31,12 +30,13 @@ It works on the command line too.
 
 There are many different ways to evaluate prompts. Here are some reasons to consider promptfoo:
 
-- **Battle-tested**: promptfoo was built to eval & improve LLM apps serving over 10 million users in production. Our tooling is flexible and can be adapted to many setups.
-- **Simple, declarative test cases**: Define your evals without writing code or working with heavy notebooks.
-- **Language agnostic**: Use Python, Javascript, or whatever else you're working in.
+- **Developer friendly**: promptfoo is fast, with quality-of-life features like live reloads and caching.
+- **Battle-tested**: Originally built for LLM apps serving over 10 million users in production. Our tooling is flexible and can be adapted to many setups.
+- **Simple, declarative test cases**: Define evals without writing code or working with heavy notebooks.
+- **Language agnostic**: Use Python, Javascript, or any other language.
 - **Share & collaborate**: Built-in share functionality & web viewer for working with teammates.
 - **Open-source**: LLM evals are a commodity and should be served by 100% open-source projects with no strings attached.
-- **Privacy**: This software runs completely locally. Your evals run on your machine and talk directly with the LLM.
+- **Private**: This software runs completely locally. The evals run on your machine and talk directly with the LLM.
 
 ## Workflow and philosophy
 

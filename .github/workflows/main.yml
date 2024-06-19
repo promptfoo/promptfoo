@@ -1,39 +1,106 @@
 name: CI
-on: [push, pull_request]
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
   OPENAI_API_KEY: xxx
-  AZURE_OPENAI_API_HOST: xxx
   ANTHROPIC_API_KEY: xxx
+  AZURE_OPENAI_API_HOST: xxx
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: xxx
+  NEXT_PUBLIC_SUPABASE_URL: https://placeholder.promptfoo.dev
+  NEXT_TELEMETRY_DISABLED: 1
 jobs:
   build:
-    name: Build, lint, and test on Node ${{ matrix.node }} and ${{ matrix.os }}
+    name: Build and test on Node ${{ matrix.node }} and ${{ matrix.os }}
 
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
-        node: ['16.x', '18.x', '20.x']
-        python: ['3.7']
+        node: ['18.x', '20.x', '22.x']
+        python: ['3.9']
         os: [ubuntu-latest, windows-latest, macOS-latest]
+        exclude:
+          # Remove when https://github.com/nodejs/node/issues/51766 is resolved
+          - node: '22.x'
+            os: windows-latest
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
+
+      - name: Node and Next.js caching
+        # https://nextjs.org/docs/pages/building-your-application/deploying/ci-build-caching#github-actions
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.npm
+            ${{ github.workspace }}/.next/cache
+          # Generate a new cache whenever packages or source files change.
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}-${{ hashFiles('**/*.js', '**/*.jsx', '**/*.ts', '**/*.tsx') }}
+          # If source files changed but packages didn't, rebuild from a prior cache.
+          restore-keys: |
+            ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}-
 
       - name: Use Node ${{ matrix.node }}
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
+          cache: 'npm'
 
       - name: Use Python ${{ matrix.python }}
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
 
-      - name: Install deps and build (with cache)
-        uses: bahmutov/npm-install@v1
+      - name: Install Dependencies
+        run: |
+          npm ci
+
+      - name: Check Dependency Versions
+        run: |
+          npm exec check-dependency-version-consistency
 
       - name: Test
         run: npm run test --ci --coverage --maxWorkers=2
 
       - name: Build
         run: npm run build
+
+  style-check:
+    name: Style Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Use Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: |
+          npm ci
+
+      - name: Lint Project
+        run: |
+          npm run lint
+
+      - name: Lint UI
+        working-directory: src/web/nextui
+        run: |
+          npm run lint
+
+      - name: Run Style Check
+        run: |
+          npm run format:check

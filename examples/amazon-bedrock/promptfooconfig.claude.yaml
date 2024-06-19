@@ -1,16 +1,51 @@
 prompts:
-  - 'Convert this English to {{language}}: {{input}}'
-  - 'Translate to {{language}}: {{input}}'
+  - 'Write a tweet about {{topic}}'
+
 providers:
-  - id: bedrock:completion:anthropic.claude-instant-v1
+  - id: bedrock:anthropic.claude-instant-v1
     config:
-      region: 'us-west-2'
+      region: 'us-east-1'
       temperature: 0.7
       max_tokens_to_sample: 256
+  - id: bedrock:anthropic.claude-3-haiku-20240307-v1:0
+    config:
+      region: 'us-east-1'
+      temperature: 0.7
+      max_tokens: 256
+  - id: bedrock:anthropic.claude-3-sonnet-20240229-v1:0
+    config:
+      region: 'us-east-1'
+      temperature: 0.7
+      max_tokens: 256
+
 tests:
   - vars:
-      language: French
-      input: Hello world
+      topic: Our eco-friendly packaging
   - vars:
-      language: Spanish
-      input: Where is the library?
+      topic: A sneak peek at our secret menu item
+  - vars:
+      topic: Behind-the-scenes at our latest photoshoot
+  - vars:
+      topic: the impact of autonomous drones on wildlife conservation
+  - vars:
+      topic: the emerging trend of virtual reality courtrooms
+  - vars:
+      topic: the ethical implications of AI-generated art
+  - vars:
+      topic: the unexpected health benefits of daily meditation
+  - vars:
+      topic: how AI is changing the way we play board games
+  - vars:
+      topic: unconventional productivity hacks involving household items
+  - vars:
+      topic: An underground art exhibition in an abandoned subway station
+  - vars:
+      topic: A webinar on the impact of AI on traditional marketing strategies
+  - vars:
+      topic: The launch of a new eco-friendly sneaker made from ocean plastic
+  - vars:
+      topic: the correlation between social media usage and self-esteem in teenagers
+  - vars:
+      topic: the impact of urban noise pollution on migratory bird patterns
+  - vars:
+      topic: the role of gut microbiota in moderating anxiety and depression

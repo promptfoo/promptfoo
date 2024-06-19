@@ -1,0 +1,45 @@
+description: 'Is-SQL example'
+
+prompts:
+  - |
+    Output a SQL query that returns the number of {{product}} sold in the last month.
+
+    Database schema:
+    {{database}}
+
+    Only output SQL code.
+
+providers:
+  - openai:gpt-3.5-turbo
+
+tests:
+  - vars:
+      product: bananas
+      database: file://database.sql
+    assert:
+      # Ensure output is a valid SQL query
+      - type: is-sql
+
+  - vars:
+      product: apples
+      database: file://database.sql
+    assert:
+      # Ensure output is a valid SQL query
+      - type: is-sql
+        value:
+          databaseType: 'MySQL'
+          # Ensure only the following tables are used
+          allowedTables:
+            - select::null::Products
+            - select::null::Shipments
+
+  - vars:
+      product: oranges
+      database: file://database.sql
+    assert:
+      - type: is-sql
+        value:
+          databaseType: 'MySQL'
+          allowedColumns:
+            # We expect this test to fail no matter what
+            - select::null::DoesntExist

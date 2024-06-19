@@ -29,8 +29,8 @@ export default function Home(): JSX.Element {
   const { siteConfig } = useDocusaurusContext();
   return (
     <Layout
-      title="LLM evaluation"
-      description="Library for evaluating LLM prompt quality and testing."
+      title="Iterate on LLMs faster"
+      description="Tailored LLM evals for your use case. Maximize model quality and catch regressions."
     >
       <HomepageHeader />
       <main>
@@ -41,7 +41,7 @@ export default function Home(): JSX.Element {
           <h4>Web Viewer</h4>
           <Link to="/docs/intro">
             <img
-              style={{ maxWidth: 'min(100%, 1024px)' }}
+              style={{ maxWidth: 'min(100%, 1024px)', border: '1px solid #ddd', borderRadius: 10 }}
               src="https://user-images.githubusercontent.com/310310/261666627-ce5a7817-da82-4484-b26d-32474f1cabc5.png"
             />
           </Link>
@@ -50,8 +50,18 @@ export default function Home(): JSX.Element {
           <h4>Command line</h4>
           <Link to="/docs/intro">
             <img
-              style={{ maxWidth: 'min(100%, 1024px)' }}
+              style={{ maxWidth: 'min(100%, 1024px)', border: '1px solid #ddd', borderRadius: 10 }}
               src="https://user-images.githubusercontent.com/310310/244891726-480e1114-d049-40b9-bd5f-f81c15060284.gif"
+            />
+          </Link>
+        </div>
+        <div style={{ textAlign: 'center', padding: '2rem 0 8rem 0' }}>
+          <h4>Red Teaming &amp; Risk Assessment</h4>
+          <Link to="/docs/red-team">
+            <img
+              style={{ maxWidth: 'min(100%, 1024px)', border: '1px solid #ddd', borderRadius: 10 }}
+              src="/img/riskreport-1.png"
+              srcSet="/img/riskreport-1.png 1x, /img/riskreport-1@2x.png 2x"
             />
           </Link>
         </div>

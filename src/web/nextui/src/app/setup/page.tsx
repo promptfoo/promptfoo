@@ -71,7 +71,7 @@ const EvaluateTestSuiteCreator: React.FC = () => {
   }
 
   const extractVarsFromPrompts = (prompts: string[]): string[] => {
-    const varRegex = /{{(\w+)}}/g;
+    const varRegex = /{{\s*(\w+)\s*}}/g;
     const varsSet = new Set<string>();
 
     prompts.forEach((prompt) => {

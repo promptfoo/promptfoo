@@ -1,34 +1,50 @@
 import path from 'path';
-
-import { PythonShell, Options as PythonShellOptions } from 'python-shell';
+import fs from 'fs';
 
 import logger from '../logger';
 import { getCache, isCacheEnabled } from '../cache';
+import { runPython } from '../python/wrapper';
+import { sha256 } from '../util';
 
 import type {
   ApiProvider,
   CallApiContextParams,
   ProviderOptions,
   ProviderResponse,
+  ProviderEmbeddingResponse,
+  ProviderClassificationResponse,
 } from '../types';
 
+interface PythonProviderConfig {
+  pythonExecutable?: string;
+}
+
 export class PythonProvider implements ApiProvider {
-  constructor(private scriptPath: string, private options?: ProviderOptions) {}
+  private config: PythonProviderConfig;
+
+  constructor(
+    private scriptPath: string,
+    private options?: ProviderOptions,
+  ) {
+    this.id = () => options?.id ?? `python:${this.scriptPath}`;
+    this.config = options?.config ?? {};
+  }
 
   id() {
     return `python:${this.scriptPath}`;
   }
 
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    const absPath = path.resolve(path.join(this.options?.config.basePath, this.scriptPath));
-    const options: PythonShellOptions = {
-      mode: 'text',
-      pythonPath: process.env.PROMPTFOO_PYTHON || 'python',
-      scriptPath: path.join(__dirname),
-      args: [absPath, prompt, JSON.stringify(this.options), JSON.stringify(context)],
-    };
-
-    const cacheKey = `python:${this.scriptPath}:${prompt}:${JSON.stringify(this.options)}`;
+  private async executePythonScript(
+    prompt: string,
+    context: CallApiContextParams | undefined,
+    apiType: 'call_api' | 'call_embedding_api' | 'call_classification_api',
+  ): Promise<any> {
+    const absPath = path.resolve(path.join(this.options?.config.basePath || '', this.scriptPath));
+    logger.debug(`Computing file hash for script ${absPath}`);
+    const fileHash = sha256(fs.readFileSync(absPath, 'utf-8'));
+    const cacheKey = `python:${this.scriptPath}:${apiType}:${fileHash}:${prompt}:${JSON.stringify(
+      this.options,
+    )}`;
     const cache = await getCache();
     let cachedResult;
 
@@ -37,23 +53,81 @@ export class PythonProvider implements ApiProvider {
     }
 
     if (cachedResult) {
-      logger.debug(`Returning cached result for script ${absPath}`);
+      logger.debug(`Returning cached ${apiType} result for script ${absPath}`);
       return JSON.parse(cachedResult);
     } else {
-      logger.debug(`Running python script ${absPath} with scriptPath ${this.scriptPath} and args ${JSON.stringify(options.args)}`);
-      const results = await PythonShell.run('./wrapper.py', options);
-      logger.debug(`Python script ${absPath} returned: ${results.join('\n')}`);
-      const result: {type: 'final_result', data: ProviderResponse} = JSON.parse(results[results.length - 1]);
-      if (result?.type !== 'final_result') {
-        throw new Error('The Python script `call_api` function must return a dict with an `output` or `error` string');
+      if (context) {
+        // These are not useful in Python
+        delete context.fetchWithCache;
+        delete context.getCache;
+        delete context.logger;
       }
-      if (!('output' in result.data) && !('error' in result.data)) {
-        throw new Error('The Python script `call_api` function must return a dict with an `output` or `error` string');
+
+      const args =
+        apiType === 'call_api' ? [prompt, this.options, context] : [prompt, this.options];
+      logger.debug(
+        `Running python script ${absPath} with scriptPath ${this.scriptPath} and args: ${args.join(
+          '\n',
+        )}`,
+      );
+      let result;
+      switch (apiType) {
+        case 'call_api':
+          result = (await runPython(absPath, apiType, args, {
+            pythonExecutable: this.config.pythonExecutable,
+          })) as ProviderResponse;
+          if (!result || (!('output' in result) && !('error' in result))) {
+            throw new Error(
+              `The Python script \`${apiType}\` function must return a dict with an \`output\` string/object or \`error\` string, instead got: ${JSON.stringify(
+                result,
+              )}`,
+            );
+          }
+          break;
+        case 'call_embedding_api':
+          result = (await runPython(absPath, apiType, args, {
+            pythonExecutable: this.config.pythonExecutable,
+          })) as ProviderEmbeddingResponse;
+          if (!result || (!('embedding' in result) && !('error' in result))) {
+            throw new Error(
+              `The Python script \`${apiType}\` function must return a dict with an \`embedding\` array or \`error\` string, instead got ${JSON.stringify(
+                result,
+              )}`,
+            );
+          }
+          break;
+        case 'call_classification_api':
+          result = (await runPython(absPath, apiType, args, {
+            pythonExecutable: this.config.pythonExecutable,
+          })) as ProviderClassificationResponse;
+          if (!result || (!('classification' in result) && !('error' in result))) {
+            throw new Error(
+              `The Python script \`${apiType}\` function must return a dict with a \`classification\` object or \`error\` string, instead of ${JSON.stringify(
+                result,
+              )}`,
+            );
+          }
+          break;
+        default:
+          throw new Error(`Unsupported apiType: ${apiType}`);
       }
-      if (isCacheEnabled()) {
-        await cache.set(cacheKey, JSON.stringify(result.data));
+
+      if (isCacheEnabled() && !('error' in result)) {
+        await cache.set(cacheKey, JSON.stringify(result));
       }
-      return result.data;
+      return result;
     }
+  }
+
+  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+    return this.executePythonScript(prompt, context, 'call_api');
+  }
+
+  async callEmbeddingApi(prompt: string): Promise<ProviderEmbeddingResponse> {
+    return this.executePythonScript(prompt, undefined, 'call_embedding_api');
+  }
+
+  async callClassificationApi(prompt: string): Promise<ProviderClassificationResponse> {
+    return this.executePythonScript(prompt, undefined, 'call_classification_api');
   }
 }

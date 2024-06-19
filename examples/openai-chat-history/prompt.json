@@ -1,18 +1,18 @@
 [
   {
     "role": "system",
-    "content": "{{ system_message }}"
+    "content": {{ system_message | dump }}
   },
   {% for message in previous_messages %}
     {% for role, content in message %}
       {
         "role": "{{ role }}",
-        "content": "{{ content }}"
+        "content": {{ content | dump }}
       },
     {% endfor %}
   {% endfor %}
   {
     "role": "user",
-    "content": "{{ question }}"
+    "content": {{ question | dump }}
   }
 ]

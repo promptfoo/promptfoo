@@ -5,6 +5,7 @@ const storeType = process.env.PROMPTFOO_SHARE_STORE_TYPE || 'memory';
 const ttl = parseInt(process.env.PROMPTFOO_SHARE_TTL || String(60 * 60 * 24 * 14), 10);
 
 function getStore() {
+  // TODO(ian): Just use the sqlite db for this
   switch (storeType) {
     case 'redis':
       console.log('Using Redis store');

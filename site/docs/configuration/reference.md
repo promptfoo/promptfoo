@@ -25,18 +25,19 @@ Here is the main structure of the promptfoo configuration file:
 
 A test case represents a single example input that is fed into all prompts and providers.
 
-| Property             | Type                                        | Required | Description                                                                                                                                 |
-| -------------------- | ------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| description          | string                                      | No       | Description of what you're testing                                                                                                          |
-| vars                 | Record\<string, string \| string[] \| any\> | No       | Key-value pairs to substitute in the prompt. If `vars` is a plain string, it will be treated as a YAML filepath to load a var mapping from. |
-| assert               | [Assertion](#assertion)[]                   | No       | List of automatic checks to run on the LLM output                                                                                           |
-| threshold            | number                                      | No       | Test will fail if the combined score of assertions is less than this number                                                                 |
-| options              | Object                                      | No       | Additional configuration settings                                                                                                           |
-| options.prefix       | string                                      | No       | This is prepended to the prompt                                                                                                             |
-| options.suffix       | string                                      | No       | This is appended to the prompt                                                                                                              |
-| options.transform    | string                                      | No       | A JavaScript snippet that runs on LLM output before any assertions                                                                          |
-| options.provider     | string                                      | No       | The API provider to use for LLM rubric grading                                                                                              |
-| options.rubricPrompt | string                                      | No       | The prompt to use for LLM rubric grading                                                                                                    |
+| Property              | Type                                        | Required | Description                                                                                                                                 |
+| --------------------- | ------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| description           | string                                      | No       | Description of what you're testing                                                                                                          |
+| vars                  | Record\<string, string \| string[] \| any\> | No       | Key-value pairs to substitute in the prompt. If `vars` is a plain string, it will be treated as a YAML filepath to load a var mapping from. |
+| assert                | [Assertion](#assertion)[]                   | No       | List of automatic checks to run on the LLM output                                                                                           |
+| threshold             | number                                      | No       | Test will fail if the combined score of assertions is less than this number                                                                 |
+| options               | Object                                      | No       | Additional configuration settings                                                                                                           |
+| options.prefix        | string                                      | No       | This is prepended to the prompt                                                                                                             |
+| options.suffix        | string                                      | No       | This is appended to the prompt                                                                                                              |
+| options.transform     | string                                      | No       | A filepath (js or py), or JavaScript snippet that runs on LLM output before any assertions                                                  |
+| options.storeOutputAs | string                                      | No       | The output of this test will be stored as a variable, which can be used in subsequent tests                                                 |
+| options.provider      | string                                      | No       | The API provider to use for LLM rubric grading                                                                                              |
+| options.rubricPrompt  | string \| string[]                          | No       | Model-graded LLM prompt                                                                                                                     |
 
 ### Assertion
 
@@ -79,7 +80,15 @@ ProviderOptions is an object that includes the `id` of the provider and an optio
 interface ProviderOptions {
   id?: ProviderId;
   config?: any;
-  prompts?: string[]; // List of prompt display strings
+
+  // List of prompt display strings
+  prompts?: string[];
+
+  // Transform the output, either with inline Javascript or external py/js script (see `Transforms`)
+  transform?: string;
+
+  // Sleep this long before each request
+  delay?: number;
 }
 ```
 
@@ -121,14 +130,14 @@ interface ProviderEmbeddingResponse {
 
 ```typescript
 interface TestSuiteConfig {
-  // Optional description of what your LLM is trying to do
+  // Optional description of what you're trying to test
   description?: string;
 
   // One or more LLM APIs to use, for example: openai:gpt-3.5-turbo, openai:gpt-4, localai:chat:vicuna
   providers: ProviderId | ProviderFunction | (ProviderId | ProviderOptionsMap | ProviderOptions)[];
 
-  // One or more prompt files to load
-  prompts: FilePath | FilePath[];
+  // One or more prompts
+  prompts: (FilePath | Prompt | PromptFunction)[];
 
   // Path to a test file, OR list of LLM prompt variations (aka "test case")
   tests: FilePath | (FilePath | TestCase)[];
@@ -143,17 +152,19 @@ interface TestSuiteConfig {
   outputPath?: FilePath | FilePath[];
 
   // Determines whether or not sharing is enabled.
-  sharing?: boolean | {
-    apiBaseUrl?: string;
-    appBaseUrl?: string;
-  };
+  sharing?:
+    | boolean
+    | {
+        apiBaseUrl?: string;
+        appBaseUrl?: string;
+      };
 
   // Nunjucks filters
   nunjucksFilters?: Record<string, FilePath>;
 
   // Envar overrides
   env?: EnvOverrides;
-  
+
   // Whether to write latest results to promptfoo storage. This enables you to use the web viewer.
   writeLatestResults?: boolean;
 }
@@ -183,8 +194,34 @@ interface Scenario {
 }
 ```
 
-Also, see [this table here](/docs/configuration/scenarios#configuration)
-for descriptions.
+Also, see [this table here](/docs/configuration/scenarios#configuration) for descriptions.
+
+### Prompt
+
+A `Prompt` is what it sounds like. When specifying a prompt object in a static config, it should look like this:
+
+```typescript
+interface Prompt {
+  id: string; // Path, usually prefixed with file://
+  label: string; // How to display it in outputs and web UI
+}
+```
+
+When passing a `Prompt` object directly to the Javascript library:
+
+```typescript
+interface Prompt {
+  // The actual prompt
+  raw: string;
+  // How it should appear in the UI
+  label: string;
+  // A function to generate a prompt on a per-input basis. Overrides the raw prompt.
+  function?: (context: {
+    vars: Record<string, string | object>;
+    provider?: ApiProvider;
+  }) => Promise<string | object>;
+}
+```
 
 ### EvaluateOptions
 
@@ -243,6 +280,7 @@ EvaluateSummary is an object that represents a summary of the evaluation results
 ```typescript
 interface EvaluateSummary {
   version: number;
+  timestamp: string; // ISO 8601 datetime
   results: EvaluateResult[];
   table: EvaluateTable;
   stats: EvaluateStats;

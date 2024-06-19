@@ -1,7 +1,7 @@
 description: 'HF private inference endpoint'
 
 prompts:
-  - "Write a tweet about {{topic}}:"
+  - 'Write a tweet about {{topic}}:'
 
 providers:
   - id: huggingface:text-generation:gemma-7b-it

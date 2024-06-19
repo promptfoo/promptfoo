@@ -7,19 +7,21 @@ import { parse as parseCsv } from 'csv-parse/sync';
 import { globSync } from 'glob';
 
 import logger from './logger';
-import { fetchCsvFromGoogleSheet } from './fetch';
 import { OpenAiChatCompletionProvider } from './providers/openai';
 import { testCaseFromCsvRow } from './csv';
+import { fetchCsvFromGoogleSheet } from './googleSheets';
 
 import type {
-  Assertion,
   CsvRow,
+  ProviderOptions,
   TestCase,
   TestSuite,
   TestSuiteConfig,
-  UnifiedConfig,
   VarMapping,
 } from './types';
+import { loadApiProvider } from './providers';
+
+const SYNTHESIZE_DEFAULT_PROVIDER = 'gpt-4-0125-preview';
 
 function parseJson(json: string): any | undefined {
   try {
@@ -40,7 +42,9 @@ export async function readVarsFiles(
   const ret: Record<string, string | string[] | object> = {};
   for (const pathOrGlob of pathOrGlobs) {
     const resolvedPath = path.resolve(basePath, pathOrGlob);
-    const paths = globSync(resolvedPath);
+    const paths = globSync(resolvedPath, {
+      windowsPathsNoEscape: true,
+    });
 
     for (const p of paths) {
       const yamlData = yaml.load(fs.readFileSync(p, 'utf-8'));
@@ -51,7 +55,10 @@ export async function readVarsFiles(
   return ret;
 }
 
-export async function readTestsFile(varsPath: string, basePath: string = ''): Promise<CsvRow[]> {
+export async function readStandaloneTestsFile(
+  varsPath: string,
+  basePath: string = '',
+): Promise<TestCase[]> {
   // This function is confusingly named - it reads a CSV, JSON, or YAML file of
   // TESTS or test equivalents.
   const resolvedVarsPath = path.resolve(basePath, varsPath);
@@ -59,8 +66,7 @@ export async function readTestsFile(varsPath: string, basePath: string = ''): Pr
   let rows: CsvRow[] = [];
 
   if (varsPath.startsWith('https://docs.google.com/spreadsheets/')) {
-    const csvData = await fetchCsvFromGoogleSheet(varsPath);
-    rows = parseCsv(csvData, { columns: true });
+    rows = await fetchCsvFromGoogleSheet(varsPath);
   } else if (fileExtension === 'csv') {
     rows = parseCsv(fs.readFileSync(resolvedVarsPath, 'utf-8'), { columns: true });
   } else if (fileExtension === 'json') {
@@ -69,7 +75,11 @@ export async function readTestsFile(varsPath: string, basePath: string = ''): Pr
     rows = yaml.load(fs.readFileSync(resolvedVarsPath, 'utf-8')) as unknown as any;
   }
 
-  return rows;
+  return rows.map((row, idx) => {
+    const test = testCaseFromCsvRow(row);
+    test.description = `Row #${idx + 1}`;
+    return test;
+  });
 }
 
 type TestCaseWithVarsFile = TestCase<
@@ -86,7 +96,9 @@ export async function readTest(
     const ret: TestCase = { ...testCase, vars: undefined };
     if (typeof testCase.vars === 'string' || Array.isArray(testCase.vars)) {
       ret.vars = await readVarsFiles(testCase.vars, testBasePath);
-    } else if (typeof testCase.vars === 'object') {
+    } else {
+      ret.vars = testCase.vars;
+    } /*else if (typeof testCase.vars === 'object') {
       const vars: Record<string, string | string[] | object> = {};
       for (const [key, value] of Object.entries(testCase.vars)) {
         if (typeof value === 'string' && value.startsWith('file://')) {
@@ -103,7 +115,7 @@ export async function readTest(
         }
       }
       ret.vars = vars;
-    }
+    }*/
     return ret;
   };
 
@@ -116,6 +128,18 @@ export async function readTest(
     testCase = await loadTestWithVars(rawTestCase, testBasePath);
   } else {
     testCase = await loadTestWithVars(test, basePath);
+  }
+
+  if (testCase.provider && typeof testCase.provider !== 'function') {
+    // Load provider
+    if (typeof testCase.provider === 'string') {
+      testCase.provider = await loadApiProvider(testCase.provider);
+    } else if (typeof testCase.provider.id === 'string') {
+      testCase.provider = await loadApiProvider(testCase.provider.id, {
+        options: testCase.provider as ProviderOptions,
+        basePath,
+      });
+    }
   }
 
   // Validation of the shape of test
@@ -140,12 +164,25 @@ export async function readTests(
 
   const loadTestsFromGlob = async (loadTestsGlob: string) => {
     const resolvedPath = path.resolve(basePath, loadTestsGlob);
-    const testFiles = globSync(resolvedPath);
+    const testFiles = globSync(resolvedPath, {
+      windowsPathsNoEscape: true,
+    });
     const ret = [];
     for (const testFile of testFiles) {
-      const testFileContent = yaml.load(fs.readFileSync(testFile, 'utf-8')) as TestCase[];
-      for (const testCase of testFileContent) {
-        ret.push(await readTest(testCase, path.dirname(testFile)));
+      let testCases: TestCase[] | undefined;
+      if (testFile.endsWith('.csv')) {
+        testCases = await readStandaloneTestsFile(testFile, basePath);
+      } else if (testFile.endsWith('.yaml') || testFile.endsWith('.yml')) {
+        testCases = yaml.load(fs.readFileSync(testFile, 'utf-8')) as TestCase[];
+      } else if (testFile.endsWith('.json')) {
+        testCases = require(testFile);
+      } else {
+        throw new Error(`Unsupported file type for test file: ${testFile}`);
+      }
+      if (testCases) {
+        for (const testCase of testCases) {
+          ret.push(await readTest(testCase, path.dirname(testFile)));
+        }
       }
     }
     return ret;
@@ -156,13 +193,8 @@ export async function readTests(
       // Points to a tests file with multiple test cases
       return loadTestsFromGlob(tests);
     } else {
-      // Points to a legacy vars.csv
-      const vars = await readTestsFile(tests, basePath);
-      return vars.map((row, idx) => {
-        const test = testCaseFromCsvRow(row);
-        test.description = `Row #${idx + 1}`;
-        return test;
-      });
+      // Points to a tests.csv or Google Sheet
+      return readStandaloneTestsFile(tests, basePath);
     }
   } else if (Array.isArray(tests)) {
     for (const globOrTest of tests) {
@@ -212,13 +244,21 @@ export async function synthesize({
   numPersonas = numPersonas || 5;
   numTestCasesPerPersona = numTestCasesPerPersona || 3;
 
-  logger.info(
+  let progressBar;
+  if (process.env.LOG_LEVEL !== 'debug') {
+    const cliProgress = await import('cli-progress');
+    progressBar = new cliProgress.SingleBar({}, cliProgress.Presets.shades_classic);
+    const totalProgressSteps = 1 + numPersonas * numTestCasesPerPersona;
+    progressBar.start(totalProgressSteps, 0);
+  }
+
+  logger.debug(
     `Starting dataset synthesis. We'll begin by generating up to ${numPersonas} personas. Each persona will be used to generate ${numTestCasesPerPersona} test cases.`,
   );
 
   // Consider the following prompt for an LLM application: {{prompt}}. List up to 5 user personas that would send this prompt.
-  logger.info(`\nGenerating user personas from ${prompts.length} prompts...`);
-  const provider = new OpenAiChatCompletionProvider('gpt-4-1106-preview', {
+  logger.debug(`\nGenerating user personas from ${prompts.length} prompts...`);
+  const provider = new OpenAiChatCompletionProvider(SYNTHESIZE_DEFAULT_PROVIDER, {
     config: {
       temperature: 1.0,
       response_format: {
@@ -239,9 +279,13 @@ List up to ${numPersonas} user personas that would send ${
   );
 
   const personas = (JSON.parse(resp.output as string) as { personas: string[] }).personas;
-  logger.info(
+  logger.debug(
     `\nGenerated ${personas.length} personas:\n${personas.map((p) => `  - ${p}`).join('\n')}`,
   );
+
+  if (progressBar) {
+    progressBar.increment();
+  }
 
   // Extract variable names from the nunjucks template in the prompts
   const variableRegex = /{{\s*(\w+)\s*}}/g;
@@ -252,7 +296,7 @@ List up to ${numPersonas} user personas that would send ${
       variables.add(match[1]);
     }
   }
-  logger.info(
+  logger.debug(
     `\nExtracted ${variables.size} variables from prompts:\n${Array.from(variables)
       .map((v) => `  - ${v}`)
       .join('\n')}`,
@@ -278,7 +322,7 @@ ${JSON.stringify(test.vars, null, 2)}
   const testCaseVars: VarMapping[] = [];
   for (let i = 0; i < personas.length; i++) {
     const persona = personas[i];
-    logger.info(`\nGenerating test cases for persona ${i + 1}...`);
+    logger.debug(`\nGenerating test cases for persona ${i + 1}...`);
     // Construct the prompt for the LLM to generate variable values
     const personaPrompt = `Consider ${
       prompts.length > 1 ? 'these prompts' : 'this prompt'
@@ -309,12 +353,19 @@ Your response should contain a JSON map of variable names to values, of the form
       vars: VarMapping[];
     };
     for (const vars of parsed.vars) {
-      logger.info(`${JSON.stringify(vars, null, 2)}`);
+      logger.debug(`${JSON.stringify(vars, null, 2)}`);
       testCaseVars.push(vars);
+      if (progressBar) {
+        progressBar.increment();
+      }
     }
   }
 
-  // Dedup testCaseVars
+  if (progressBar) {
+    progressBar.stop();
+  }
+
+  // Dedup test case vars
   const uniqueTestCaseStrings = new Set(testCaseVars.map((testCase) => JSON.stringify(testCase)));
   const dedupedTestCaseVars: VarMapping[] = Array.from(uniqueTestCaseStrings).map((testCase) =>
     JSON.parse(testCase),

@@ -1,25 +1,26 @@
 prompts:
   prompts/chat_prompt.json: chat_prompt
-  prompts/completion_prompt.txt: completion_prompt
+  prompts/llama_prompt.txt: llama_prompt
 
 providers:
-  - openai:gpt-3.5-turbo-0613:
-      id: openai-gpt-3.5-turbo-lowtemp
-      prompts: chat_prompt
-      config:
-        temperature: 0
-        max_tokens: 128
-  - openai:gpt-3.5-turbo-0613:
-      id: openai-gpt-3.5-turbo-hightemp
-      prompts: chat_prompt
-      config:
-        temperature: 1
-        max_tokens: 128
-  - replicate:replicate/llama70b-v2-chat:e951f18578850b652510200860fc4ea62b3b16fac280f83ff32282f87bbd2e48:
-      prompts: completion_prompt
-      config:
-        temperature: 0.01 # minimum temperature
-        max_length: 128
+  - id: openai:gpt-3.5-turbo-0613
+    label: openai-gpt-3.5-turbo-lowtemp
+    prompts: chat_prompt
+    config:
+      temperature: 0
+      max_tokens: 128
+  - id: openai:gpt-3.5-turbo-0613
+    label: openai-gpt-3.5-turbo-hightemp
+    prompts: chat_prompt
+    config:
+      temperature: 1
+      max_tokens: 128
+  - id: replicate:meta/meta-llama-3-70b-instruct
+    label: llama70b-v2-chat
+    prompts: llama_prompt
+    config:
+      temperature: 0.01 # minimum temperature
+      max_length: 128
 
 tests:
   - vars:

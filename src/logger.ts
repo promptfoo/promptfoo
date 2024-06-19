@@ -36,7 +36,7 @@ export function getLogLevel() {
 }
 
 export function setLogLevel(level: keyof typeof LOG_LEVELS) {
-  if (LOG_LEVELS.hasOwnProperty(level)) {
+  if (level in LOG_LEVELS) {
     logger.transports[0].level = level;
   } else {
     throw new Error(`Invalid log level: ${level}`);

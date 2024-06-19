@@ -46,6 +46,16 @@ assert:
       };
 ```
 
+## Handling objects
+
+If the LLM outputs a JSON object (such as in the case of tool/function calls), then `output` will already be parsed as an object:
+
+```yaml
+assert:
+  - type: javascript
+    value: output[0].function.name === 'get_current_weather'
+```
+
 ## Return type
 
 The return value of your Javascript function can be a boolean, number, or a `GradingResult`:
@@ -172,6 +182,10 @@ async function main(output, context) {
 
 module.exports = main;
 ```
+
+### ES modules
+
+ES modules are supported, but must have a `.mjs` file extension. Alternatively, if you are transpiling Javascript or Typescript, we recommend pointing promptfoo to the transpiled plain Javascript output.
 
 ## Other assertion types
 

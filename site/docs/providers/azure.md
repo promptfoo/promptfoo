@@ -43,7 +43,13 @@ All other [OpenAI provider](/docs/providers/openai) environment variables and co
 
 ## Using client credentials
 
-To use client credentials for authentication with Azure, you need to set the following configuration variables:
+To use client credentials for authentication with Azure, first install the peer dependency:
+
+```sh
+npm i @azure/identity
+```
+
+Then set the following configuration variables:
 
 ```yaml
 providers:
@@ -63,7 +69,7 @@ The `azureAuthorityHost` defaults to 'https://login.microsoftonline.com' if not 
 
 You must also install a peer dependency from Azure:
 
-```
+```sh
 npm i @azure/identity
 ```
 
@@ -175,3 +181,42 @@ OpenAI config:
 | response_format   | Specifies the format of the response.                                  |
 | stop              | Specifies stop sequences for the generation.                           |
 | passthrough       | Anything under `passthrough` will be sent as a top-level request param |
+
+## Assistants
+
+To eval an OpenAI assistant on Azure, first create a deployment for the assistant and create an assistant in the Azure web UI.
+
+Then install the peer dependency locally:
+
+```sh
+npm i @azure/openai-assistants
+```
+
+Next, record the assistant ID and set up your provider like so:
+
+```yaml
+providers:
+  - id: azureopenai:assistant:asst_E4GyOBYKlnAzMi19SZF2Sn8I
+    config:
+      apiHost: yourdeploymentname.openai.azure.com
+```
+
+Be sure to replace the assistant ID and the name of your deployment.
+
+Here's an example of a simple full assistant eval:
+
+```yaml
+prompts:
+  - 'Write a tweet about {{topic}}'
+
+providers:
+  - id: azureopenai:assistant:asst_E4GyOBYKlnAzMi19SZF2Sn8I
+    config:
+      apiHost: yourdeploymentname.openai.azure.com
+
+tests:
+  - vars:
+      topic: bananas
+```
+
+See the guide on [How to eval OpenAI assistants](/docs/guides/evaluate-openai-assistants/) for more information on how to compare different models, instructions, and more.

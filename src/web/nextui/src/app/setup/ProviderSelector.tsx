@@ -67,11 +67,39 @@ const defaultProviders: ProviderOptions[] = ([] as (ProviderOptions & { id: stri
   )
   .concat(
     [
+      'replicate:mistralai/mistral-7b-v0.1',
+      'replicate:mistralai/mistral-7b-instruct-v0.2',
+      'replicate:mistralai/mixtral-8x7b-instruct-v0.1',
+    ].map((id) => ({
+      id,
+      config: {
+        temperature: 0.7,
+        top_p: 0.9,
+        top_k: -1,
+        max_new_tokens: 128,
+        min_new_tokens: -1,
+        repetition_penality: 1.15,
+        prompt_template: '{prompt}',
+      },
+    })),
+  )
+  .concat(
+    [
       'anthropic:claude-1',
       'anthropic:claude-1-100k',
       'anthropic:claude-instant-1',
       'anthropic:claude-instant-1-100k',
     ].map((id) => ({ id, config: { max_tokens_to_sample: 256, temperature: 0.5 } })),
+  )
+  .concat(
+    [
+      'anthropic:messages:claude-instant-1.2',
+      'anthropic:messages:claude-2.0',
+      'anthropic:messages:claude-2.1',
+      'anthropic:messages:claude-3-haiku-20240307',
+      'anthropic:messages:claude-3-sonnet-20240229',
+      'anthropic:messages:claude-3-opus-20240229',
+    ].map((id) => ({ id, config: { max_tokens: 1024, temperature: 0.5 } })),
   )
   .concat(
     [
@@ -241,7 +269,12 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange
           }
           const splits = optionString.split(':');
           if (splits.length > 1) {
-            return splits[1];
+            // account for Anthropic messages ID format having the descriptive text in the third split
+            if (splits.length > 2 && splits[0] === 'anthropic') {
+              return splits[2];
+            } else {
+              return splits[1];
+            }
           }
           return 'Unknown provider';
         }}

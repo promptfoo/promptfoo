@@ -19,7 +19,7 @@ In this guide, we'll walk through the steps to compare three large language mode
 
 Create a new directory for your comparison project and initialize it with `promptfoo init`.
 
-```bash
+```sh
 npx promptfoo@latest init mixtral-gpt-comparison
 ```
 
@@ -36,7 +36,7 @@ providers:
 
 Set your API keys as environment variables:
 
-```bash
+```sh
 export REPLICATE_API_TOKEN=your_replicate_api_token
 export OPENAI_API_KEY=your_openai_api_key
 ```
@@ -48,7 +48,7 @@ In this example, we're using Replicate, but you can also use providers like [Hug
 - huggingface:text-generation:mistralai/Mistral-7B-Instruct-v0.1
 - id: openai:chat:mistralai/Mixtral-8x7B-Instruct-v0.1
   config:
-    apiBaseUrl: https://api.together.xyz
+    apiBaseUrl: https://api.together.xyz/v1
 ```
 
 Local options such as [ollama](/docs/providers/ollama), [vllm](/docs/providers/vllm), and [localai](/docs/providers/localai) also exist. See [providers](/docs/providers) for all options.
@@ -136,7 +136,7 @@ Optionally, you can set up assertions to automatically assess the output for cor
 
 With everything configured, run the evaluation using the `promptfoo` CLI:
 
-```bash
+```
 npx promptfoo@latest eval
 ```
 
@@ -144,7 +144,7 @@ This command will execute each test case against each configured model and recor
 
 To visualize the results, use the `promptfoo` viewer:
 
-```bash
+```sh
 npx promptfoo@latest view
 ```
 
@@ -154,7 +154,7 @@ It will show results like so:
 
 You can also output the results to a file in various formats, such as JSON, YAML, or CSV:
 
-```bash
+```
 npx promptfoo@latest eval -o results.csv
 ```
 

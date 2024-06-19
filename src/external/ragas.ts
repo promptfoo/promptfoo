@@ -1,15 +1,12 @@
 // These prompts are ported from RAGAS.
 // https://github.com/explodinggradients/ragas. See APACHE_LICENSE for license.
 
-export const ANSWER_RELEVANCY_GENERATE = {
-  role: 'system',
-  content: `Generate question for the given answer.
+export const ANSWER_RELEVANCY_GENERATE = `Generate question for the given answer.
 Answer:\nThe PSLV-C56 mission is scheduled to be launched on Sunday, 30 July 2023 at 06:30 IST / 01:00 UTC. It will be launched from the Satish Dhawan Space Centre, Sriharikota, Andhra Pradesh, India
 Question: When is the scheduled launch date and time for the PSLV-C56 mission, and where will it be launched from?
 
-Answer:{answer}
-Question:`,
-};
+Answer:{{answer}}
+Question:`;
 
 export const CONTEXT_RECALL = `Given a context, and an answer, analyze each sentence in the answer and classify if the sentence can be attributed to the given context or not.
 Think in steps and reason before coming to conclusion.

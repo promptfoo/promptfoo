@@ -2,7 +2,7 @@
 sidebar_position: 4
 ---
 
-# Input and output files
+# Prompts, tests, and outputs
 
 ## Prompts
 
@@ -45,6 +45,7 @@ prompts:
 ```
 
 And in `personality1.json`:
+
 ```json title=personality1.json
 [
   {
@@ -127,16 +128,22 @@ Here's an example of how to set separate prompts for Llama v2 and GPT models:
 
 ```yaml title=promptfooconfig.yaml
 prompts:
-  prompts/gpt_chat_prompt.json: gpt_chat_prompt
-  prompts/llama_completion_prompt.txt: llama_completion_prompt
+  - id: file://prompts/gpt_chat_prompt.json
+    label: gpt_chat_prompt
+  - id: file://prompts/llama_completion_prompt.txt
+    label: llama_completion_prompt
 
 providers:
-  - openai:gpt-3.5-turbo-0613:
-      prompts: gpt_chat_prompt
-  - openai:gpt-4-turbo-0613:
-      prompts: gpt_chat_prompt
-  - replicate:replicate/llama70b-v2-chat:e951f18578850b652510200860fc4ea62b3b16fac280f83ff32282f87bbd2e48:
-      prompts: llama_completion_prompt
+  - id: openai:gpt-3.5-turbo-0613
+    prompts:
+      - gpt_chat_prompt
+  - id: openai:gpt-4-turbo-0613
+    prompts:
+      - gpt_chat_prompt
+  - id: replicate:meta/llama70b-v2-chat:02e509c789964a7ea8736978a43525956ef40397be9033abf9fd2badfe68c9e3
+    label: llama70b-v2-chat
+    prompts:
+      - llama_completion_prompt
 ```
 
 In this configuration, the `gpt_chat_prompt` is used for both GPT-3.5 and GPT-4 models, while the `llama_completion_prompt` is used for the Llama v2 model. The prompts are defined in separate files within the `prompts` directory.
@@ -178,7 +185,7 @@ To reference a specific function in your prompt file, use the following syntax: 
 
 ```javascript title=prompt.js:prompt1
 // highlight-start
-module.exports.prompt1 = async function ({ vars }) {
+module.exports.prompt1 = async function ({ vars, provider }) {
   // highlight-end
   return [
     {
@@ -193,20 +200,21 @@ module.exports.prompt1 = async function ({ vars }) {
 };
 ```
 
-A Python prompt function, `prompt.py`:
+A Python prompt function, `prompt.py:my_prompt_function`:
 
 ```python title=prompt.py
 import json
 import sys
 
-def generate_prompt(context: dict) -> str:
+def my_prompt_function(context: dict) -> str:
     return (
         f"Describe {context['vars']['topic']} concisely, comparing it to the Python"
         " programming language."
     )
 
 if __name__ == "__main__":
-    print(generate_prompt(json.loads(sys.argv[1])))
+    # If you don't specify a `function_name` in the provider string, it will run the main
+    print(my_prompt_function(json.loads(sys.argv[1])))
 ```
 
 To verify that your function is producing the correct prompt:
@@ -220,6 +228,14 @@ By default, promptfoo runs the `python` executable in your shell.
 
 To override the Python executable, set the `PROMPTFOO_PYTHON` environment variable to an executable (e.g. `/usr/bin/python3.11` or `python3.11`).
 :::
+
+#### Viewing the final prompt
+
+Prompt functions show source code at the top of the results table because they can return dynamic values that differ between test cases.
+
+In order to see the prompts for each test case, toggle `Table Settings` > `Show full prompt in output cell`. This will display the final prompt for each test case/provider combination.
+
+![final prompt shown for each test case](/img/docs/final-prompt-for-test-case.png)
 
 ### Nunjucks filters
 
@@ -260,11 +276,34 @@ In this example, the `body` variable is passed through the `allcaps` filter befo
 
 ## Tests File
 
-The tests file is an optional CSV file that can be used to define test cases
-separately from the `promptfooconfig` configuration file.
+If you have a lot of tests, you can optionally keep them separate from the main config file.
 
-The first row of the CSV file should contain the variable names,
-and each subsequent row should contain the corresponding values for each test case.
+The easiest way to do this is by creating `tests.yaml` that contains a list of tests. Then, include it in your `promptfooconfig.yaml` like so:
+
+```yaml
+prompts:
+  # ...
+
+providers:
+  # ...
+
+tests: tests.yaml
+```
+
+You can even break it into multiple files or globs:
+
+```yaml
+tests:
+  - normal_test.yaml
+  - special_test.yaml
+  - path/to/more_tests/*.yaml
+```
+
+### Import from CSV
+
+promptfoo also supports a test CSV format.
+
+The first row of the CSV file should contain the variable names, and each subsequent row should contain the corresponding values for each test case.
 
 Vars are substituted by [Nunjucks](https://mozilla.github.io/nunjucks/) templating syntax into prompts. The first row is the variable names. All other rows are variable values.
 
@@ -282,22 +321,32 @@ The tests file optionally supports several special columns:
   - For multiple assertions, use `__expected1`, `__expected2`, `__expected3`, etc.
 - `__prefix`: This string is prepended to each prompt before it's sent to the API
 - `__suffix`: This string is appended to each prompt before it's sent to the API
+- `__description`: The test description
+- `__metric`: The metric assigned to every assertion in the test case
+- `__threshold`: The threshold assigned to the test case
+
+:::tip
+You can load your tests from [Google Sheets](/docs/configuration/guide#loading-tests-from-csv).
+:::
 
 ## Output File
 
-The results of the evaluation are written to this file. Each record in the output file corresponds to a test case and includes the original prompt, the output generated by the LLM, and the values of the variables used in the test case.
+The results of the evaluation are written to this file. For example:
+
+```
+promptfoo eval --output filepath.json
+```
+
+The output file can also be set using the `outputPath` key in the promptfoo configuration.
+
+Several file formats are supported, including JSON, YAML, CSV, and HTML.
+
+Each record in the output file corresponds to a test case and includes the original prompt, the output generated by the LLM, and the values of the variables used in the test case.
 
 For example outputs, see the [examples/](https://github.com/typpo/promptfoo/tree/main/examples/simple-cli) directory.
 
-The output file is specified by the `outputPath` key in the promptfoo configuration.
-
 ## Permuting inputs and assertions
 
-A vanilla `prompts.txt`/`promptfooconfig.yaml` pair supports
-each test combining one set of variables with one set of assertions.
-Trying to combine many sets of variables with many sets of assertions
-can lead to exponentially more config entries.
+A vanilla `prompts.txt`/`promptfooconfig.yaml` pair supports each test combining one set of variables with one set of assertions. Trying to combine many sets of variables with many sets of assertions can lead to exponentially more config entries.
 
-[Scenarios](/docs/configuration/scenarios.md)
-enables one to use all possible combinations of 1+ sets of variables
-and 1+ sets of assertions within one config entry.
+[Scenarios](/docs/configuration/scenarios.md) enable you to use all possible combinations of 1+ sets of variables and 1+ sets of assertions within one config entry.

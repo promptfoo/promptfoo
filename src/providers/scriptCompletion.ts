@@ -4,6 +4,7 @@ import invariant from 'tiny-invariant';
 
 import logger from '../logger';
 import { getCache, isCacheEnabled } from '../cache';
+import { safeJsonStringify } from '../util';
 
 import type {
   ApiProvider,
@@ -19,7 +20,10 @@ function stripText(text: string) {
 }
 
 export class ScriptCompletionProvider implements ApiProvider {
-  constructor(private scriptPath: string, private options?: ProviderOptions) {}
+  constructor(
+    private scriptPath: string,
+    private options?: ProviderOptions,
+  ) {}
 
   id() {
     return `exec:${this.scriptPath}`;
@@ -35,7 +39,7 @@ export class ScriptCompletionProvider implements ApiProvider {
     }
 
     if (cachedResult) {
-      logger.debug(`Returning cached result for script ${this.scriptPath}`);
+      logger.debug(`Returning cached result for script ${this.scriptPath}: ${cachedResult}`);
       return JSON.parse(cachedResult as string);
     } else {
       return new Promise<ProviderResponse>((resolve, reject) => {
@@ -57,10 +61,14 @@ export class ScriptCompletionProvider implements ApiProvider {
         }
         const command = scriptParts.shift();
         invariant(command, 'No command found in script path');
+        // These are not useful in the shell
+        delete context?.fetchWithCache;
+        delete context?.getCache;
+        delete context?.logger;
         const scriptArgs = scriptParts.concat([
           prompt,
-          JSON.stringify(this.options || {}),
-          JSON.stringify(context || {}),
+          safeJsonStringify(this.options || {}),
+          safeJsonStringify(context || {}),
         ]);
         const options = this.options?.config.basePath ? { cwd: this.options.config.basePath } : {};
 

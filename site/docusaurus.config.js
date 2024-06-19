@@ -19,7 +19,7 @@ const config = {
 
   // GitHub pages deployment config.
   // If you aren't using GitHub pages, you don't need these.
-  organizationName: 'typpo', // Usually your GitHub org/user name.
+  organizationName: 'promptfoo', // Usually your GitHub org/user name.
   projectName: 'promptfoo', // Usually your repo name.
 
   onBrokenLinks: 'throw',
@@ -32,6 +32,31 @@ const config = {
     defaultLocale: 'en',
     locales: ['en'],
   },
+
+  headTags: [
+    {
+      tagName: 'link',
+      attributes: {
+        rel: 'preconnect',
+        href: 'https://fonts.googleapis.com',
+      },
+    },
+    {
+      tagName: 'link',
+      attributes: {
+        rel: 'preconnect',
+        href: 'https://fonts.gstatic.com',
+        crossorigin: 'true',
+      },
+    },
+    {
+      tagName: 'link',
+      attributes: {
+        rel: 'stylesheet',
+        href: 'https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap',
+      },
+    },
+  ],
 
   presets: [
     [
@@ -83,9 +108,19 @@ const config = {
             label: 'Tutorial',
           },
           */
-          {to: '/docs/intro', label: 'Docs', position: 'right'},
+          { to: '/docs/intro', label: 'Docs', position: 'right' },
           {
-            href: 'https://github.com/typpo/promptfoo',
+            to: '/llm-vulnerability-scanner',
+            label: 'LLM Vulnerability Scanner',
+            position: 'right',
+          },
+          {
+            to: '/docs/red-team',
+            label: 'LLM Red Teaming',
+            position: 'right',
+          },
+          {
+            href: 'https://github.com/promptfoo/promptfoo',
             label: 'GitHub',
             position: 'right',
           },
@@ -139,6 +174,10 @@ const config = {
                 label: 'Minimizing hallucinations',
                 to: '/docs/guides/prevent-llm-hallucations',
               },
+              {
+                label: 'LLM red teaming',
+                to: '/docs/red-team',
+              },
             ],
           },
           {
@@ -146,11 +185,15 @@ const config = {
             items: [
               {
                 label: 'GitHub',
-                href: 'https://github.com/typpo/promptfoo',
+                href: 'https://github.com/promptfoo/promptfoo',
               },
               {
                 label: 'Discord',
                 href: 'https://discord.gg/gHPS9jjfbs',
+              },
+              {
+                label: 'Contact Us',
+                href: 'mailto:inquiries@promptfoo.dev',
               },
             ],
           },
@@ -160,7 +203,16 @@ const config = {
       prism: {
         theme: lightCodeTheme,
         darkTheme: darkCodeTheme,
-        additionalLanguages: ['bash', 'javascript', 'typescript', 'python', 'json', 'yaml', 'markup-templating', 'liquid'],
+        additionalLanguages: [
+          'bash',
+          'javascript',
+          'typescript',
+          'python',
+          'json',
+          'yaml',
+          'markup-templating',
+          'liquid',
+        ],
       },
       zoom: {
         selector: '.markdown :not(em) > img',

@@ -12,8 +12,8 @@ import compression from 'compression';
 import opener from 'opener';
 import { Server as SocketIOServer } from 'socket.io';
 import promptfoo, {
-  EvaluateSummary,
-  EvaluateTestSuite,
+  EvaluateTestSuiteWithEvaluateOptions,
+  Job,
   Prompt,
   PromptWithMetadata,
   TestCase,
@@ -23,24 +23,19 @@ import promptfoo, {
 import logger from '../logger';
 import { getDirectory } from '../esm';
 import {
-  getLatestResultsPath,
   getPrompts,
   getPromptsForTestCasesHash,
-  listPreviousResultFilenames,
   listPreviousResults,
   readResult,
-  filenameToDate,
   getTestCases,
   updateResult,
+  readLatestResults,
+  migrateResultsFromFileSystemToDatabase,
+  getStandaloneEvals,
+  deleteEval,
 } from '../util';
 import { synthesizeFromTestSuite } from '../testCases';
-
-interface Job {
-  status: 'in-progress' | 'complete';
-  progress: number;
-  total: number;
-  result: EvaluateSummary | null;
-}
+import { getDbSignalPath } from '../database';
 
 // Running jobs
 const evalJobs = new Map<string, Job>();
@@ -48,7 +43,18 @@ const evalJobs = new Map<string, Job>();
 // Prompts cache
 let allPrompts: PromptWithMetadata[] | null = null;
 
-export function startServer(port = 15500, apiBaseUrl = '', skipConfirmation = false) {
+export enum BrowserBehavior {
+  ASK = 0,
+  OPEN = 1,
+  SKIP = 2,
+}
+
+export async function startServer(
+  port = 15500,
+  apiBaseUrl = '',
+  browserBehavior = BrowserBehavior.ASK,
+  filterDescription?: string,
+) {
   const app = express();
 
   const staticDir = path.join(getDirectory(), 'web', 'nextui');
@@ -65,47 +71,35 @@ export function startServer(port = 15500, apiBaseUrl = '', skipConfirmation = fa
     },
   });
 
-  const latestJsonPath = getLatestResultsPath();
-  const readLatestJson = () => {
-    const data = fs.readFileSync(latestJsonPath, 'utf8');
-    return JSON.parse(data);
-  };
+  await migrateResultsFromFileSystemToDatabase();
 
-  io.on('connection', (socket) => {
-    // Send the initial table data when a client connects
-    socket.emit('init', readLatestJson());
+  const watchFilePath = getDbSignalPath();
+  const watcher = debounce(async (curr: Stats, prev: Stats) => {
+    if (curr.mtime !== prev.mtime) {
+      io.emit('update', await readLatestResults(filterDescription));
+      allPrompts = null;
+    }
+  }, 250);
+  fs.watchFile(watchFilePath, watcher);
 
-    // Watch for changes to latest.json and emit the update event
-    const watcher = debounce((curr: Stats, prev: Stats) => {
-      if (curr.mtime !== prev.mtime) {
-        socket.emit('update', readLatestJson());
-        allPrompts = null;
-      }
-    }, 250);
-    fs.watchFile(latestJsonPath, watcher);
-
-    // Stop watching the file when the socket connection is closed
-    socket.on('disconnect', () => {
-      fs.unwatchFile(latestJsonPath, watcher);
-    });
+  io.on('connection', async (socket) => {
+    socket.emit('init', await readLatestResults(filterDescription));
   });
 
-  app.get('/results', (req, res) => {
-    const previousResults = listPreviousResults();
-    previousResults.reverse();
+  app.get('/api/results', (req, res) => {
+    const previousResults = listPreviousResults(undefined /* limit */, filterDescription);
     res.json({
-      data: previousResults.map((fileMeta) => {
-        const dateString = filenameToDate(fileMeta.fileName);
+      data: previousResults.map((meta) => {
         return {
-          id: fileMeta.fileName,
-          label: fileMeta.description ? `${fileMeta.description} (${dateString})` : dateString,
+          id: meta.evalId,
+          label: meta.description ? `${meta.description} (${meta.evalId})` : meta.evalId,
         };
       }),
     });
   });
 
   app.post('/api/eval/job', (req, res) => {
-    const testSuite = req.body as EvaluateTestSuite;
+    const { evaluateOptions, ...testSuite } = req.body as EvaluateTestSuiteWithEvaluateOptions;
     const id = uuidv4();
     evalJobs.set(id, { status: 'in-progress', progress: 0, total: 0, result: null });
 
@@ -115,16 +109,16 @@ export function startServer(port = 15500, apiBaseUrl = '', skipConfirmation = fa
           writeLatestResults: true,
           sharing: testSuite.sharing ?? true,
         }),
-        {
+        Object.assign({}, evaluateOptions, {
           eventSource: 'web',
-          progressCallback: (progress, total) => {
+          progressCallback: (progress: number, total: number) => {
             const job = evalJobs.get(id);
             invariant(job, 'Job not found');
             job.progress = progress;
             job.total = total;
             console.log(`[${id}] ${progress}/${total}`);
           },
-        },
+        }),
       )
       .then((result) => {
         const job = evalJobs.get(id);
@@ -153,7 +147,7 @@ export function startServer(port = 15500, apiBaseUrl = '', skipConfirmation = fa
 
   app.patch('/api/eval/:id', (req, res) => {
     const id = req.params.id;
-    const evalTable = req.body.table;
+    const { table, config } = req.body;
 
     if (!id) {
       res.status(400).json({ error: 'Missing id' });
@@ -161,25 +155,26 @@ export function startServer(port = 15500, apiBaseUrl = '', skipConfirmation = fa
     }
 
     try {
-      updateResult(id, evalTable);
-      res.json({ message: 'Eval table updated successfully' });
+      updateResult(id, config, table);
+      res.json({ message: 'Eval updated successfully' });
     } catch (error) {
       res.status(500).json({ error: 'Failed to update eval table' });
     }
   });
 
-  app.get('/results/:filename', (req, res) => {
-    const filename = req.params.filename;
-    const safeFilename = path.basename(filename);
-    if (
-      safeFilename !== filename ||
-      !listPreviousResultFilenames()
-        .includes(safeFilename)
-    ) {
-      res.status(400).send('Invalid filename');
-      return;
+  app.delete('/api/eval/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+      await deleteEval(id);
+      res.json({ message: 'Eval deleted successfully' });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to delete eval' });
     }
-    const file = readResult(safeFilename);
+  });
+
+  app.get('/api/results/:id', async (req, res) => {
+    const { id } = req.params;
+    const file = await readResult(id);
     if (!file) {
       res.status(404).send('Result not found');
       return;
@@ -187,21 +182,28 @@ export function startServer(port = 15500, apiBaseUrl = '', skipConfirmation = fa
     res.json({ data: file.result });
   });
 
-  app.get('/api/prompts', (req, res) => {
+  app.get('/api/prompts', async (req, res) => {
     if (allPrompts == null) {
-      allPrompts = getPrompts();
+      allPrompts = await getPrompts();
     }
     res.json({ data: allPrompts });
   });
 
-  app.get('/api/prompts/:sha256hash', (req, res) => {
+  app.get('/api/progress', async (req, res) => {
+    const results = await getStandaloneEvals();
+    res.json({
+      data: results,
+    });
+  });
+
+  app.get('/api/prompts/:sha256hash', async (req, res) => {
     const sha256hash = req.params.sha256hash;
-    const prompts = getPromptsForTestCasesHash(sha256hash);
+    const prompts = await getPromptsForTestCasesHash(sha256hash);
     res.json({ data: prompts });
   });
 
-  app.get('/api/datasets', (req, res) => {
-    res.json({ data: getTestCases() });
+  app.get('/api/datasets', async (req, res) => {
+    res.json({ data: await getTestCases() });
   });
 
   app.get('/api/config', (req, res) => {
@@ -240,9 +242,9 @@ export function startServer(port = 15500, apiBaseUrl = '', skipConfirmation = fa
       }
     };
 
-    if (skipConfirmation) {
+    if (browserBehavior === BrowserBehavior.OPEN) {
       openUrl();
-    } else {
+    } else if (browserBehavior === BrowserBehavior.ASK) {
       const rl = readline.createInterface({
         input: process.stdin,
         output: process.stdout,
@@ -252,7 +254,6 @@ export function startServer(port = 15500, apiBaseUrl = '', skipConfirmation = fa
           openUrl();
         }
         rl.close();
-        logger.info('Press Ctrl+C to stop the server');
       });
     }
   });

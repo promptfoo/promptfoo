@@ -4,7 +4,7 @@ sidebar_label: Gemini vs GPT
 
 # Gemini vs GPT: benchmark on your own data
 
-When comparing Gemini with GPT, you'll find plenty of eval and opinions online.  Model capabilities set a _ceiling_ on what you're able to accomplish, but in my experience most LLM apps are highly dependent on their prompting and use case.
+When comparing Gemini with GPT, you'll find plenty of eval and opinions online. Model capabilities set a _ceiling_ on what you're able to accomplish, but in my experience most LLM apps are highly dependent on their prompting and use case.
 
 So, the sensible thing to do is run an eval on your own data.
 
@@ -17,6 +17,7 @@ The end result is a locally hosted CLI and web view that lets you compare model 
 ## Prerequisites
 
 Before starting, ensure you have the following:
+
 - `promptfoo` CLI [installed](/docs/installation).
 - API keys for Google Vertex AI and OpenAI.
   - `VERTEX_API_KEY` and `VERTEX_PROJECT_ID` environment variables set for Google Vertex AI (see [Vertex configuration](/docs/providers/vertex))
@@ -26,7 +27,7 @@ Before starting, ensure you have the following:
 
 Create a new directory for your benchmarking project:
 
-```bash
+```sh
 npx promptfoo@latest init gemini-gpt-comparison
 ```
 
@@ -47,7 +48,7 @@ prompts:
   - 'Think step-by-step and answer the following: {{question}}'
 ```
 
-If you want to compare performance across _multiple_ prompts, add to the prompt list.  It's also possible to assign specific prompts for each model, in case you need to tune the prompt to each model:
+If you want to compare performance across _multiple_ prompts, add to the prompt list. It's also possible to assign specific prompts for each model, in case you need to tune the prompt to each model:
 
 ```yaml
 prompts:
@@ -58,9 +59,11 @@ providers:
   - id: vertex:gemini-pro
     prompts: gemini_prompt
   - id: openai:gpt-3.5-turbo
-    prompts: gpt_prompt
+    prompts:
+      - gpt_prompt
   - id: openai:gpt-4
-    prompts: gpt_prompt
+    prompts:
+      - gpt_prompt
 ```
 
 ## Step 3: Add test cases
@@ -77,13 +80,13 @@ tests:
       question: If you place an orange below a plate in the living room, and then move the plate to the kitchen, where is the orange now?
 ```
 
-In this case, I just took some examples from a [Hacker News thread](https://news.ycombinator.com/item?id=38628456).  This is where you should put in _your own_ test cases that are representative of the task you want these LLMs to complete.
+In this case, I just took some examples from a [Hacker News thread](https://news.ycombinator.com/item?id=38628456). This is where you should put in _your own_ test cases that are representative of the task you want these LLMs to complete.
 
 ## Step 4: Run the comparison
 
 Execute the comparison using the `promptfoo eval` command:
 
-```bash
+```
 npx promptfoo@latest eval
 ```
 
@@ -93,13 +96,13 @@ This will run the test cases against Gemini, GPT 3.5, and GPT 4 and output the r
 
 Then, use the `promptfoo view` command to open the viewer and compare the results visually:
 
-```bash
+```sh
 npx promptfoo@latest view
 ```
 
 ## Step 5: Add automatic evals (optional)
 
-Automatic evals are a nice way to scale your work, so you don't need to check each outputs every time.  
+Automatic evals are a nice way to scale your work, so you don't need to check each outputs every time.
 
 To add automatic evaluations to your test cases, you'll include assertions in your test cases. Assertions are conditions that the output of the language model must meet for the test case to be considered successful. Here's how you can add them:
 
@@ -130,7 +133,7 @@ tests:
 
 For more complex validations, you can use models to grade outputs, custom JavaScript or Python functions, or even external webhooks. Have a look at all the [assertion types](/docs/configuration/expected-outputs).
 
-You can use `llm-rubric` to run free-form assertions.  For example, here we use the assertion to detect a hallucination about the weather:
+You can use `llm-rubric` to run free-form assertions. For example, here we use the assertion to detect a hallucination about the weather:
 
 ```yaml
 - vars:
@@ -146,7 +149,7 @@ After adding assertions, re-run the `promptfoo eval` command to execute your tes
 
 ## Next steps
 
-In our tiny eval, we observed that GPT 3.5 and Gemini Pro had similar failure modes for cases that require common-sense logic.  This is more or less expected.
+In our tiny eval, we observed that GPT 3.5 and Gemini Pro had similar failure modes for cases that require common-sense logic. This is more or less expected.
 
 **The key here is that your results may vary based on your LLM needs, so I encourage you to enter your own test cases and choose the model that is best for you.**
 

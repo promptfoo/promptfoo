@@ -7,7 +7,7 @@ import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
 import { getApiBaseUrl } from '@/api';
 import { IS_RUNNING_LOCALLY } from '@/constants';
 import { getResult } from '@/database';
-import { EvaluateSummary, EvaluateTestSuite, SharedResults } from '@/../../../types';
+import { EvaluateSummary, SharedResults, UnifiedConfig } from '@/../../../types';
 import Eval from '../Eval';
 
 import './page.css';
@@ -34,8 +34,8 @@ export default async function Page({ params }: { params: { id: string } }) {
     // Load local file and list of recent files in parallel
     const apiBaseUrl = await getApiBaseUrl();
     const [response, response2] = await Promise.all([
-      fetch(`${apiBaseUrl}/results/${decodedId.slice(6)}`),
-      fetch(`${apiBaseUrl}/results`),
+      fetch(`${apiBaseUrl}/api/results/${decodedId.slice(6)}`),
+      fetch(`${apiBaseUrl}/api/results`),
     ]);
 
     if (!response.ok) {
@@ -59,7 +59,7 @@ export default async function Page({ params }: { params: { id: string } }) {
         version: result.version,
         createdAt: result.createdAt,
         results: result.results as unknown as EvaluateSummary,
-        config: result.config as unknown as EvaluateTestSuite,
+        config: result.config as unknown as UnifiedConfig,
       },
     };
 

@@ -2,16 +2,21 @@ import * as React from 'react';
 
 import invariant from 'tiny-invariant';
 
+import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import Autocomplete, { AutocompleteRenderInputParams } from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
 import CircularProgress from '@mui/material/CircularProgress';
+import DeleteIcon from '@mui/icons-material/Delete';
+import EyeIcon from '@mui/icons-material/Visibility';
 import EditIcon from '@mui/icons-material/Edit';
 import FormControl from '@mui/material/FormControl';
 import Heading from '@mui/material/Typography';
 import InputLabel from '@mui/material/InputLabel';
 import ListItemText from '@mui/material/ListItemText';
+import ListItemIcon from '@mui/material/ListItemIcon';
+import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import OutlinedInput from '@mui/material/OutlinedInput';
 import Paper from '@mui/material/Box';
@@ -23,9 +28,10 @@ import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import { styled } from '@mui/system';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useDebounce } from 'use-debounce';
 
+import DownloadMenu from './DownloadMenu';
 import ResultsCharts from './ResultsCharts';
 import ResultsTable from './ResultsTable';
 import ConfigModal from './ConfigModal';
@@ -39,6 +45,7 @@ import type { VisibilityState } from '@tanstack/table-core';
 import type { FilterMode } from './types';
 
 import './ResultsView.css';
+import { getApiBaseUrl } from '@/api';
 
 const ResponsiveStack = styled(Stack)(({ theme }) => ({
   maxWidth: '100%',
@@ -63,21 +70,24 @@ export default function ResultsView({
   defaultEvalId,
 }: ResultsViewProps) {
   const router = useRouter();
-  const { table, config, maxTextLength, wordBreak, showInferenceDetails, filePath } = useResultsViewStore();
+  const searchParams = useSearchParams();
+  const { table, config, setConfig, maxTextLength, wordBreak, showInferenceDetails, evalId } =
+    useResultsViewStore();
   const { setStateFromConfig } = useMainStore();
-  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
-  const [selectedColumns, setSelectedColumns] = React.useState<string[]>([]);
 
-  const [searchText, setSearchText] = React.useState('');
+  const [searchText, setSearchText] = React.useState(searchParams?.get('search') || '');
   const [debouncedSearchText] = useDebounce(searchText, 1000);
-  const handleSearchTextChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchText(event.target.value);
+  const handleSearchTextChange = (text: string) => {
+    setSearchText(text);
   };
 
   const [failureFilter, setFailureFilter] = React.useState<{ [key: string]: boolean }>({});
-  const handleFailureFilterToggle = (columnId: string, checked: boolean) => {
-    setFailureFilter((prevFailureFilter) => ({ ...prevFailureFilter, [columnId]: checked }));
-  };
+  const handleFailureFilterToggle = React.useCallback(
+    (columnId: string, checked: boolean) => {
+      setFailureFilter((prevFailureFilter) => ({ ...prevFailureFilter, [columnId]: checked }));
+    },
+    [setFailureFilter],
+  );
 
   const [filterMode, setFilterMode] = React.useState<FilterMode>('all');
   const handleFilterModeChange = (event: SelectChangeEvent<unknown>) => {
@@ -99,7 +109,7 @@ export default function ResultsView({
   const handleShareButtonClick = async () => {
     setShareLoading(true);
     try {
-      const response = await fetch(`${REMOTE_API_BASE_URL}/eval`, {
+      const response = await fetch(`${REMOTE_API_BASE_URL}/api/eval`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -152,37 +162,95 @@ export default function ResultsView({
     setColumnVisibility(newColumnVisibility);
   };
 
-  const columnData = [
-    ...head.vars.map((_, idx) => ({
-      value: `Variable ${idx + 1}`,
-      label: `Var ${idx + 1}: ${
-        head.vars[idx].length > 100 ? head.vars[idx].slice(0, 97) + '...' : head.vars[idx]
-      }`,
-      group: 'Variables',
-    })),
-    ...head.prompts.map((_, idx) => ({
-      value: `Prompt ${idx + 1}`,
-      label: `Prompt ${idx + 1}: ${
-        head.prompts[idx].display.length > 100
-          ? head.prompts[idx].display.slice(0, 97) + '...'
-          : head.prompts[idx].display
-      }`,
-      group: 'Prompts',
-    })),
-  ];
+  const handleDescriptionClick = async () => {
+    invariant(config, 'Config must be loaded before clicking its description');
+    const newDescription = window.prompt('Enter new description:', config.description);
+    if (newDescription !== null && newDescription !== config.description) {
+      const newConfig = { ...config, description: newDescription };
+      try {
+        const response = await fetch(`${await getApiBaseUrl()}/api/eval/${evalId}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ config: newConfig }),
+        });
+        if (!response.ok) {
+          throw new Error('Network response was not ok');
+        }
+        setConfig(newConfig);
+      } catch (error) {
+        console.error('Failed to update table:', error);
+      }
+    }
+  };
 
-  // Set all columns as selected by default
-  React.useEffect(() => {
-    setSelectedColumns(columnData.map((col) => col.value));
-  }, [head]);
+  const handleDeleteEvalClick = async () => {
+    if (window.confirm('Are you sure you want to delete this evaluation?')) {
+      try {
+        const response = await fetch(`${await getApiBaseUrl()}/api/eval/${evalId}`, {
+          method: 'DELETE',
+        });
+        if (!response.ok) {
+          throw new Error('Network response was not ok');
+        }
+        router.push('/');
+      } catch (error) {
+        console.error('Failed to delete evaluation:', error);
+        alert('Failed to delete evaluation');
+      }
+    }
+  };
+
+  const columnData = React.useMemo(() => {
+    return [
+      ...head.vars.map((_, idx) => ({
+        value: `Variable ${idx + 1}`,
+        label: `Var ${idx + 1}: ${
+          head.vars[idx].length > 100 ? head.vars[idx].slice(0, 97) + '...' : head.vars[idx]
+        }`,
+        group: 'Variables',
+      })),
+      ...head.prompts.map((_, idx) => {
+        const prompt = head.prompts[idx];
+        const label = prompt.label || prompt.display || prompt.raw;
+        return {
+          value: `Prompt ${idx + 1}`,
+          label: `Prompt ${idx + 1}: ${label.length > 100 ? label.slice(0, 97) + '...' : label}`,
+          group: 'Prompts',
+        };
+      }),
+    ];
+  }, [head.vars, head.prompts]);
+
+  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
+  const [selectedColumns, setSelectedColumns] = React.useState<string[]>(
+    columnData.map((col) => col.value),
+  );
+
+  // State for anchor element
+  const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
+
+  // Handle menu close
+  const handleMenuClose = () => {
+    setAnchorEl(null);
+  };
+
+  // Function to open the eval actions menu
+  const handleOpenMenu = (event: React.MouseEvent<HTMLElement>) => {
+    setAnchorEl(event.currentTarget);
+  };
 
   return (
     <div style={{ marginLeft: '1rem', marginRight: '1rem' }}>
-      {config?.description && (
-        <Box mb={2}>
-          <Heading variant="h5">{config.description} <span className="description-filepath">{filePath}</span></Heading>
-        </Box>
-      )}
+      <Box mb={2} sx={{ display: 'flex', alignItems: 'center' }}>
+        <Heading variant="h5" sx={{ flexGrow: 1 }}>
+          <span className="description" onClick={handleDescriptionClick}>
+            {config?.description || evalId}
+          </span>{' '}
+          {config?.description && <span className="description-filepath">{evalId}</span>}
+        </Heading>
+      </Box>
       <Paper py="md">
         <ResponsiveStack direction="row" spacing={4} alignItems="center">
           <Box>
@@ -247,6 +315,7 @@ export default function ResultsView({
                 <MenuItem value="all">Show all results</MenuItem>
                 <MenuItem value="failures">Show failures only</MenuItem>
                 <MenuItem value="different">Show different only</MenuItem>
+                <MenuItem value="highlights">Show highlights only</MenuItem>
               </Select>
             </FormControl>
           </Box>
@@ -257,13 +326,70 @@ export default function ResultsView({
               label="Search"
               placeholder="Text or regex"
               value={searchText}
-              onChange={handleSearchTextChange}
+              onChange={(e) => handleSearchTextChange(e.target.value)}
             />
           </Box>
           <Box flexGrow={1} />
           <Box display="flex" justifyContent="flex-end">
             <ResponsiveStack direction="row" spacing={2}>
-              <Tooltip title="Edit table view settings">
+              <Button color="primary" onClick={handleOpenMenu} startIcon={<ArrowDropDownIcon />}>
+                Eval actions
+              </Button>
+              {config && (
+                <Menu
+                  id="eval-actions-menu"
+                  anchorEl={anchorEl}
+                  keepMounted
+                  open={Boolean(anchorEl)}
+                  onClose={handleMenuClose}
+                >
+                  <Tooltip title="View the configuration that defines this eval" placement="left">
+                    <MenuItem onClick={() => setConfigModalOpen(true)}>
+                      <ListItemIcon>
+                        <VisibilityIcon fontSize="small" />
+                      </ListItemIcon>
+                      View YAML
+                    </MenuItem>
+                  </Tooltip>
+                  <Tooltip title="Edit this eval in the web UI" placement="left">
+                    <MenuItem
+                      onClick={() => {
+                        setStateFromConfig(config);
+                        router.push('/setup/');
+                      }}
+                    >
+                      <ListItemIcon>
+                        <EditIcon fontSize="small" />
+                      </ListItemIcon>
+                      Edit Eval
+                    </MenuItem>
+                  </Tooltip>
+                  <DownloadMenu />
+                  {config?.sharing && (
+                    <Tooltip title="Generate a unique URL that others can access" placement="left">
+                      <MenuItem onClick={handleShareButtonClick} disabled={shareLoading}>
+                        <ListItemIcon>
+                          {shareLoading ? (
+                            <CircularProgress size={16} />
+                          ) : (
+                            <ShareIcon fontSize="small" />
+                          )}
+                        </ListItemIcon>
+                        Share
+                      </MenuItem>
+                    </Tooltip>
+                  )}
+                  <Tooltip title="Delete this eval" placement="left">
+                    <MenuItem onClick={handleDeleteEvalClick}>
+                      <ListItemIcon>
+                        <DeleteIcon fontSize="small" />
+                      </ListItemIcon>
+                      Delete
+                    </MenuItem>
+                  </Tooltip>
+                </Menu>
+              )}
+              <Tooltip title="Edit table view settings" placement="bottom">
                 <Button
                   color="primary"
                   onClick={() => setViewSettingsModalOpen(true)}
@@ -272,40 +398,14 @@ export default function ResultsView({
                   Table Settings
                 </Button>
               </Tooltip>
-              {config && (
-                <Tooltip title="View the configuration that defines this eval">
+              {config?.metadata?.redteam && (
+                <Tooltip title="View vulnerability scan report" placement="bottom">
                   <Button
                     color="primary"
-                    onClick={() => setConfigModalOpen(true)}
-                    startIcon={<VisibilityIcon />}
+                    startIcon={<EyeIcon />}
+                    onClick={() => router.push(`/report/?evalId=${evalId}`)}
                   >
-                    View YAML
-                  </Button>
-                </Tooltip>
-              )}
-              {config && (
-                <Tooltip title="Edit eval">
-                  <Button
-                    color="primary"
-                    onClick={() => {
-                      setStateFromConfig(config);
-                      router.push('/setup/');
-                    }}
-                    startIcon={<EditIcon />}
-                  >
-                    Edit Eval
-                  </Button>
-                </Tooltip>
-              )}
-              {config?.sharing && (
-                <Tooltip title="Generate a unique URL that others can access">
-                  <Button
-                    color="primary"
-                    onClick={handleShareButtonClick}
-                    disabled={shareLoading}
-                    startIcon={shareLoading ? <CircularProgress size={16} /> : <ShareIcon />}
-                  >
-                    Share
+                    Vulnerability Report
                   </Button>
                 </Tooltip>
               )}
@@ -323,6 +423,7 @@ export default function ResultsView({
         failureFilter={failureFilter}
         searchText={debouncedSearchText}
         onFailureFilterToggle={handleFailureFilterToggle}
+        onSearchTextChange={handleSearchTextChange}
       />
       <ConfigModal open={configModalOpen} onClose={() => setConfigModalOpen(false)} />
       <ShareModal

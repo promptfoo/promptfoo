@@ -3,6 +3,9 @@ from openai import OpenAI
 client = OpenAI()
 
 def call_api(prompt, options, context):
+    # Get config values
+    some_option = options.get('config').get('someOption')
+
     chat_completion = client.chat.completions.create(
             messages=[{
                 'role': 'system',

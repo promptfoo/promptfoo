@@ -3,7 +3,8 @@ import { Button, Box, Dialog, DialogTitle, DialogContent, DialogActions } from '
 
 import VarsForm from './VarsForm';
 import AssertsForm from './AssertsForm';
-import type { TestCase } from '@/../../../types';
+
+import type { Assertion, TestCase } from '@/../../../types';
 
 interface TestCaseFormProps {
   open: boolean;
@@ -77,7 +78,11 @@ const TestCaseForm: React.FC<TestCaseFormProps> = ({
           <AssertsForm
             key={assertsFormKey}
             onAdd={(asserts) => setAsserts(asserts)}
-            initialValues={initialValues?.assert || []}
+            initialValues={
+              ((initialValues?.assert || []).filter(
+                (item) => item.type !== 'assert-set',
+              ) as Assertion[]) || []
+            }
           />
         </Box>
       </DialogContent>

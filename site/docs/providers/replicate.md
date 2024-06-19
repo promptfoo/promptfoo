@@ -4,7 +4,7 @@ sidebar_position: 99
 
 # Replicate
 
-Replicate is an API for machine learning models. It currently hosts models like [Llama v2](https://replicate.com/replicate/llama70b-v2-chat), [Gemma](https://replicate.com/cjwbw/gemma-7b-it), and [Mistral/Mixtral](https://replicate.com/mistralai/mixtral-8x7b-instruct-v0.1).
+Replicate is an API for machine learning models. It currently hosts models like [Llama v2](https://replicate.com/replicate/llama70b-v2-chat), [Gemma](https://replicate.com/google-deepmind/gemma-7b-it), and [Mistral/Mixtral](https://replicate.com/mistralai/mixtral-8x7b-instruct-v0.1).
 
 To run a model, specify the Replicate model name and version, like so:
 
@@ -23,15 +23,15 @@ providers:
       temperature: 0.01
       max_length: 1024
       prompt:
-        prefix: "[INST] "
-        suffix: " [/INST]"
+        prefix: '[INST] '
+        suffix: ' [/INST]'
 ```
 
-Here's an example of using Gemma on Replicate.  Note that unlike Llama, it does not have a default version, so we specify the model version:
+Here's an example of using Gemma on Replicate. Note that unlike Llama, it does not have a default version, so we specify the model version:
 
 ```yaml
 providers:
-  - id: replicate:cjwbw/gemma-7b-it:2790a695e5dcae15506138cc4718d1106d0d475e6dca4b1d43f42414647993d5
+  - id: replicate:google-deepmind/gemma-7b-it:2790a695e5dcae15506138cc4718d1106d0d475e6dca4b1d43f42414647993d5
     config:
       temperature: 0.01
       max_new_tokens: 1024

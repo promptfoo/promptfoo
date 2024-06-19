@@ -47,8 +47,6 @@ table.results-table,
   position: relative;
   box-shadow: inset 0 0 0 1px var(--border-color);
   vertical-align: top;
-
-  padding: 1rem;
 }
 
 .compact.results-table th,
@@ -113,18 +111,39 @@ table.results-table,
   flex-direction: column;
   white-space: pre-wrap;
   height: 100%;
+  padding: 1rem;
 }
 
 .results-table tr .cell img {
   max-width: 256px;
   max-height: 256px;
-  cursor: pointer;
+  cursor: zoom-in;
 }
 
 .results-table tr .variable > *,
 .compact.results-table tr .cell > * {
   /* Header and vars always inline, cells are inline in compact mode. */
-  display: inline;
+  /*display: inline;*/
+}
+
+.results-table tr .cell .prompt {
+  background-color: var(--variable-background-color);
+  border: 1px solid var(--border-color);
+  padding: 1rem;
+  border-radius: 4px;
+  margin-bottom: 0.5rem;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 0.8rem;
+}
+
+.results-table tr .cell .prompt .pill {
+  display: block;
+  background-color: var(--neutral-background-color);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 0.25rem;
+  width: fit-content;
+  margin-bottom: 0.5rem;
 }
 
 .results-table tr .cell-actions {
@@ -223,6 +242,9 @@ table.results-table,
 }
 
 .results-table .status {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
   font-weight: bold;
   margin-bottom: 0.5rem;
 }
@@ -232,6 +254,7 @@ table.results-table,
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
   margin-right: 0.25rem;
+  align-self: flex-start; /* prevents it from stretching to fill width */
 }
 
 .results-table .pass .pill {
@@ -303,6 +326,7 @@ table.results-table,
 .results-table tr .cell .lightbox img {
   max-width: 90%;
   max-height: 90%;
+  cursor: zoom-out;
 }
 
 .resizer {

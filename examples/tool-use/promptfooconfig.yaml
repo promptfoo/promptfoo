@@ -1,0 +1,50 @@
+providers:
+  - id: anthropic:messages:claude-3-opus-20240229
+    config:
+      tools:
+        - name: get_weather
+          description: Get the current weather in a given location
+          input_schema:
+            type: object
+            properties:
+              location:
+                type: string
+                description: The city and state, e.g. San Francisco, CA
+              unit:
+                type: string
+                enum:
+                  - celsius
+                  - fahrenheit
+            required:
+              - location
+  - id: openai:chat:gpt-3.5-turbo-0613
+    config:
+      functions:
+        - name: get_weather
+          description: Get the current weather in a given location
+          parameters:
+            type: object
+            properties:
+              location:
+                type: string
+                description: The city and state, e.g. San Francisco, CA
+              unit:
+                type: string
+                enum:
+                  - celsius
+                  - fahrenheit
+            required:
+              - location
+
+prompts:
+  - Tell me about the weather in {{city}}.
+
+tests:
+  - vars:
+      city: Boston
+  - vars:
+      city: New York
+  - vars:
+      city: Paris
+  - vars:
+      city: Mars

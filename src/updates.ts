@@ -7,13 +7,13 @@ import packageJson from '../package.json';
 
 const VERSION = packageJson.version;
 
-export async function getLatestVersion(packageName: string) {
-  const response = await fetchWithTimeout(`https://registry.npmjs.org/${packageName}`, {}, 1000);
+export async function getLatestVersion() {
+  const response = await fetchWithTimeout(`https://api.promptfoo.dev/api/latestVersion`, {}, 1000);
   if (!response.ok) {
-    throw new Error(`Failed to fetch package information for ${packageName}`);
+    throw new Error(`Failed to fetch package information for promptfoo`);
   }
-  const data = await response.json();
-  return data['dist-tags'].latest;
+  const data = (await response.json()) as { latestVersion: string };
+  return data.latestVersion;
 }
 
 export async function checkForUpdates(): Promise<boolean> {
@@ -23,7 +23,7 @@ export async function checkForUpdates(): Promise<boolean> {
 
   let latestVersion: string;
   try {
-    latestVersion = await getLatestVersion('promptfoo');
+    latestVersion = await getLatestVersion();
   } catch {
     return false;
   }

@@ -10,7 +10,7 @@ Here's an example config that uses Mixtral-8x7b for text completions:
 providers:
   - id: openai:completion:mistralai/Mixtral-8x7B-v0.1
     config:
-      apiBaseUrl: http://localhost:8080
+      apiBaseUrl: http://localhost:8080/v1
 ```
 
-If desired, you can instead use the `OPENAI_API_BASE_URL` environment variable instead of the `apiBaseUrl` config.
+If desired, you can instead use the `OPENAI_BASE_URL` environment variable instead of the `apiBaseUrl` config.

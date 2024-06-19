@@ -2,7 +2,7 @@
 sidebar_position: 51
 ---
 
-# Python script
+# Custom Python
 
 The `python` provider allows you to use a Python script as an API provider for evaluating prompts. This is useful when you have custom logic or models implemented in Python that you want to integrate with your test suite.
 
@@ -13,13 +13,17 @@ To configure the Python provider, you need to specify the path to your Python sc
 ```yaml
 providers:
   - id: 'python:my_script.py'
+    label: 'Test script 1' # Optional display label for this provider
     config:
       additionalOption: 123
 ```
 
-### Python Script
+### Python script
 
-Your Python script should accept a prompt, options, and context as arguments. It should return a JSON-encoded `ProviderResponse`. The `ProviderResponse` must include an `output` field containing the result of the API call. Optionally, it can include an `error` field if something goes wrong, and a `tokenUsage` field to report the number of tokens used.
+Your Python script should accept a prompt, options, and context as arguments. It should return a JSON-encoded `ProviderResponse`.
+
+- The `ProviderResponse` must include an `output` field containing the result of the API call.
+- Optionally, it can include an `error` field if something goes wrong, and a `tokenUsage` field to report the number of tokens used.
 
 Here's an example of a Python script that could be used with the Python provider, which includes handling for the prompt, options, and context:
 
@@ -29,7 +33,8 @@ import json
 
 def call_api(prompt, options, context):
     # The 'options' parameter contains additional configuration for the API call.
-    additional_option = options.get('additionalOption', None)
+    config = options.get('config', None)
+    additional_option = config.get('additionalOption', None)
 
     # The 'context' parameter provides info about which vars were used to create the final prompt.
     user_variable = context['vars'].get('userVariable', None)
@@ -73,12 +78,25 @@ class TokenUsage:
     completion: int
 
 class ProviderResponse:
-    output: Optional[str]
+    output: Optional[Union[str, Dict[str, Any]]]
     error: Optional[str]
     tokenUsage: Optional[TokenUsage]
     cost: Optional[float]
     cached: Optional[bool]
     logProbs: Optional[List[float]]
+```
+
+### Setting the Python executable
+
+In some scenarios, you may need to specify a custom Python executable. This is particularly useful when working with virtual environments or when the default Python path does not point to the desired Python interpreter.
+
+Here's an example of how you can override the Python executable using the `pythonExecutable` option:
+
+```yaml
+providers:
+  - id: 'python:my_script.py'
+    config:
+      pythonExecutable: /path/to/python3.11
 ```
 
 ### Troubleshooting

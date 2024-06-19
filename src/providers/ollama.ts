@@ -137,13 +137,18 @@ export class OllamaCompletionProvider implements ApiProvider {
     const params = {
       model: this.modelName,
       prompt,
-      options: Object.keys(this.config).reduce((options, key) => {
-        const optionName = key as keyof OllamaCompletionOptions;
-        if (OllamaCompletionOptionKeys.has(optionName)) {
-          options[optionName] = this.config[optionName];
-        }
-        return options;
-      }, {} as Partial<Record<keyof OllamaCompletionOptions, number | boolean | string[] | undefined>>),
+      options: Object.keys(this.config).reduce(
+        (options, key) => {
+          const optionName = key as keyof OllamaCompletionOptions;
+          if (OllamaCompletionOptionKeys.has(optionName)) {
+            options[optionName] = this.config[optionName];
+          }
+          return options;
+        },
+        {} as Partial<
+          Record<keyof OllamaCompletionOptions, number | boolean | string[] | undefined>
+        >,
+      ),
     };
 
     logger.debug(`Calling Ollama API: ${JSON.stringify(params)}`);
@@ -155,6 +160,9 @@ export class OllamaCompletionProvider implements ApiProvider {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            ...(process.env.OLLAMA_API_KEY
+              ? { Authorization: `Bearer ${process.env.OLLAMA_API_KEY}` }
+              : {}),
           },
           body: JSON.stringify(params),
         },
@@ -223,13 +231,18 @@ export class OllamaChatProvider implements ApiProvider {
     const params = {
       model: this.modelName,
       messages,
-      options: Object.keys(this.config).reduce((options, key) => {
-        const optionName = key as keyof OllamaCompletionOptions;
-        if (OllamaCompletionOptionKeys.has(optionName)) {
-          options[optionName] = this.config[optionName];
-        }
-        return options;
-      }, {} as Partial<Record<keyof OllamaCompletionOptions, number | boolean | string[] | undefined>>),
+      options: Object.keys(this.config).reduce(
+        (options, key) => {
+          const optionName = key as keyof OllamaCompletionOptions;
+          if (OllamaCompletionOptionKeys.has(optionName)) {
+            options[optionName] = this.config[optionName];
+          }
+          return options;
+        },
+        {} as Partial<
+          Record<keyof OllamaCompletionOptions, number | boolean | string[] | undefined>
+        >,
+      ),
     };
 
     logger.debug(`Calling Ollama API: ${JSON.stringify(params)}`);
@@ -241,6 +254,9 @@ export class OllamaChatProvider implements ApiProvider {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            ...(process.env.OLLAMA_API_KEY
+              ? { Authorization: `Bearer ${process.env.OLLAMA_API_KEY}` }
+              : {}),
           },
           body: JSON.stringify(params),
         },
@@ -300,6 +316,9 @@ export class OllamaEmbeddingProvider extends OllamaCompletionProvider {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            ...(process.env.OLLAMA_API_KEY
+              ? { Authorization: `Bearer ${process.env.OLLAMA_API_KEY}` }
+              : {}),
           },
           body: JSON.stringify(params),
         },

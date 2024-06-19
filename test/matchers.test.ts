@@ -12,17 +12,18 @@ import {
 } from '../src/matchers';
 import { DefaultEmbeddingProvider, DefaultGradingProvider } from '../src/providers/openai';
 
-import { TestGrader } from './assertions.test';
+import { TestGrader } from './utils';
 
 import type {
   GradingConfig,
   ProviderResponse,
   ProviderClassificationResponse,
   ApiProvider,
-  ProviderOptions,
   ProviderTypeMap,
 } from '../src/types';
 import { HuggingfaceTextClassificationProvider } from '../src/providers/huggingface';
+
+jest.mock('../src/esm');
 
 const Grader = new TestGrader();
 
@@ -88,7 +89,7 @@ describe('matchesSimilarity', () => {
     expect(result.reason).toBe('Similarity 0.00 is less than threshold 0.9');
   });
 
-  it('should use the overridden simmilarity grading config', async () => {
+  it('should use the overridden similarity grading config', async () => {
     const expected = 'Expected output';
     const output = 'Sample output';
     const threshold = 0.5;
@@ -404,9 +405,9 @@ describe('getGradingProvider', () => {
 
 describe('getAndCheckProvider', () => {
   it('should return the default provider when provider is not defined', async () => {
-    expect(await getAndCheckProvider('text', undefined, DefaultGradingProvider, 'test check')).toBe(
-      DefaultGradingProvider,
-    );
+    await expect(
+      getAndCheckProvider('text', undefined, DefaultGradingProvider, 'test check'),
+    ).resolves.toBe(DefaultGradingProvider);
   });
 
   it('should return the default provider when provider does not support type', async () => {
@@ -414,9 +415,9 @@ describe('getAndCheckProvider', () => {
       id: () => 'test-provider',
       callApi: () => Promise.resolve({ output: 'test' }),
     };
-    expect(
-      await getAndCheckProvider('embedding', provider, DefaultEmbeddingProvider, 'test check'),
-    ).toBe(DefaultEmbeddingProvider);
+    await expect(
+      getAndCheckProvider('embedding', provider, DefaultEmbeddingProvider, 'test check'),
+    ).resolves.toBe(DefaultEmbeddingProvider);
   });
 
   it('should return the provider if it implements the required method', async () => {
@@ -433,9 +434,7 @@ describe('getAndCheckProvider', () => {
     );
     expect(result).toBe(provider);
   });
-});
 
-describe('getGradingProvider', () => {
   it('should return the default provider when no provider is specified', async () => {
     const provider = await getGradingProvider('text', undefined, DefaultGradingProvider);
     expect(provider).toBe(DefaultGradingProvider);
@@ -602,7 +601,7 @@ describe('matchesClassification', () => {
 
     const result = await matchesClassification(expected, output, threshold, grading);
     expect(result.pass).toBeTruthy();
-    expect(result.reason).toBe(`Classification ${expected} has score 0.6 >= ${threshold}`);
+    expect(result.reason).toBe(`Classification ${expected} has score 0.60 >= ${threshold}`);
   });
 
   it('should fail when the classification score is below the threshold', async () => {
@@ -617,7 +616,22 @@ describe('matchesClassification', () => {
 
     const result = await matchesClassification(expected, output, threshold, grading);
     expect(result.pass).toBeFalsy();
-    expect(result.reason).toBe(`Classification ${expected} has score 0.6 < ${threshold}`);
+    expect(result.reason).toBe(`Classification ${expected} has score 0.60 < ${threshold}`);
+  });
+
+  it('should pass when the maximum classification score is above the threshold with undefined expected', async () => {
+    const expected = undefined;
+    const output = 'Sample output';
+    const threshold = 0.55;
+
+    const grader = new TestGrader();
+    const grading: GradingConfig = {
+      provider: grader,
+    };
+
+    const result = await matchesClassification(expected, output, threshold, grading);
+    expect(result.pass).toBeTruthy();
+    expect(result.reason).toBe(`Maximum classification score 0.60 >= ${threshold}`);
   });
 
   it('should use the overridden classification grading config', async () => {
@@ -643,7 +657,7 @@ describe('matchesClassification', () => {
 
     const result = await matchesClassification(expected, output, threshold, grading);
     expect(result.pass).toBeTruthy();
-    expect(result.reason).toBe(`Classification ${expected} has score 0.6 >= ${threshold}`);
+    expect(result.reason).toBe(`Classification ${expected} has score 0.60 >= ${threshold}`);
     expect(mockCallApi).toHaveBeenCalled();
 
     mockCallApi.mockRestore();

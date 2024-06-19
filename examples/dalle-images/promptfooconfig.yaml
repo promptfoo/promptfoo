@@ -1,6 +1,6 @@
 prompts:
-  - "In the style of Van Gogh: {{subject}}"
-  - "In the style of Dali: {{subject}}"
+  - 'In the style of Van Gogh: {{subject}}'
+  - 'In the style of Dali: {{subject}}'
 
 providers:
   - openai:image:dall-e-3

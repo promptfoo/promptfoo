@@ -33,17 +33,16 @@ Python assertions support multiline strings:
 assert:
   - type: python
     value: |
-      // Insert your scoring logic here...
+      # Insert your scoring logic here...
       if output == 'Expected output':
-          print(json.dumps({
+          return {
             'pass': True,
             'score': 0.5,
-          }))
-      else:
-          print(json.dumps({
-            'pass': False,
-            'score': 0,
-          }))
+          }
+      return {
+        'pass': False,
+        'score': 0,
+      }
 ```
 
 ## Using test context
@@ -51,9 +50,12 @@ assert:
 A `context` object is available in the Python function. Here is its type definition:
 
 ```py
-class AssertContext:
+from typing import Any, Dict, TypedDict, Union
+
+class AssertContext(TypedDict):
     prompt: str
-    vars: Dict[str, Union[str, object]]
+    vars: Dict[str, str]
+    test: Dict[str, Any]  # Contains keys like "vars", "assert", "options"
 ```
 
 For example, if the test case has a var `example`, access it in Python like this:
@@ -78,25 +80,24 @@ assert:
     value: file://relative/path/to/script.py
 ```
 
-This file will be called from the shell in the form of: `python relative/path/to/assert.py <output> <context>`. The contents of `stdout` are used as the assertion response.
+This file will be called with an `output` string and an `AssertContext` object (see above).
+It expects that either a `bool` (pass/fail), `float` (score), or `GradingResult` will be returned.
 
-The context variable is a JSON string, described above. Here's an example assert.py:
+Here's an example `assert.py`:
 
 ```py
-import json
-import sys
+from typing import Dict, TypedDict, Union
 
-def main():
-    if len(sys.argv) >= 3:
-        output = sys.argv[1]
-        context = json.loads(sys.argv[2])
-    else:
-        raise ValueError("Model output and context are expected from promptfoo.")
-    processed = preprocess_output(output)
-    success = test_output(processed)
-    return success
+def get_assert(output: str, context) -> Union[bool, float, Dict[str, Any]]:
+    print('Prompt:', context['prompt'])
+    print('Vars', context['vars']['topic'])
 
-print(main())
+    # This return is an example GradingResult dict
+    return {
+      'pass': True,
+      'score': 0.6,
+      'reason': 'Looks good to me',
+    }
 ```
 
 ## Overriding the Python binary
