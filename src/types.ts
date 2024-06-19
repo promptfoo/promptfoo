@@ -424,6 +424,7 @@ type BaseAssertionTypes =
   | 'is-json'
   | 'is-sql'
   | 'contains-json'
+  | 'contains-sql'
   | 'javascript'
   | 'python'
   | 'similar'

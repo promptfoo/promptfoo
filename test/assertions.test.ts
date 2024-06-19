@@ -1210,6 +1210,94 @@ describe('runAssertion', () => {
     });
   });
 
+  it('should pass when the contains-sql assertion passes', async () => {
+    const output = 'wassup\n```\nSELECT id, name FROM users\n```\nyolo';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      assertion: {
+        type: 'contains-sql',
+      },
+      test: {} as AtomicTestCase,
+      output,
+    });
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+    });
+  });
+
+  it('should pass when the contains-sql assertion sees `sql` in code block', async () => {
+    const output = 'wassup\n```sql\nSELECT id, name FROM users\n```\nyolo';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      assertion: {
+        type: 'contains-sql',
+      },
+      test: {} as AtomicTestCase,
+      output,
+    });
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+    });
+  });
+
+  it('should pass when the contains-sql assertion sees sql without code block', async () => {
+    const output = 'SELECT id, name FROM users';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      assertion: {
+        type: 'contains-sql',
+      },
+      test: {} as AtomicTestCase,
+      output,
+    });
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+    });
+  });
+
+  it('should fail when the contains-sql does not contain code block', async () => {
+    const output = 'nothin';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      assertion: {
+        type: 'contains-sql',
+      },
+      test: {} as AtomicTestCase,
+      output,
+    });
+    expect(result).toMatchObject({
+      pass: false,
+    });
+  });
+
+  it('should fail when the contains-sql does not contain sql in code block', async () => {
+    const output = '```python\nprint("Hello, World!")\n```';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4'),
+      assertion: {
+        type: 'contains-sql',
+      },
+      test: {} as AtomicTestCase,
+      output,
+    });
+    expect(result).toMatchObject({
+      pass: false,
+    });
+  });
+
   it('should pass when the contains-json assertion passes', async () => {
     const output =
       'this is some other stuff \n\n {"key": "value", "key2": {"key3": "value2", "key4": ["value3", "value4"]}} \n\n blah blah';

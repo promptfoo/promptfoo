@@ -12,6 +12,7 @@ These metrics are created by logical tests that are run on LLM output.
 | [contains-all](#contains-all)                                   | output contains all list of substrings                             |
 | [contains-any](#contains-any)                                   | output contains any of the listed substrings                       |
 | [contains-json](#contains-json)                                 | output contains valid json (optional json schema validation)       |
+| [contains-sql](#contains-sql)                                   | output contains valid sql                                          |
 | [cost](#cost)                                                   | Inference cost is below a threshold                                |
 | [equals](#equality)                                             | output matches exactly                                             |
 | [icontains](#contains)                                          | output contains substring, case insensitive                        |
@@ -160,6 +161,17 @@ assert:
 ```
 
 See also: [`is-json`](#is-json)
+
+### Contains-Sql
+
+This assertion ensure that the output is either valid SQL, or contains a code block with valid SQL.
+
+```yaml
+assert:
+  - type: contains-sql
+```
+
+See [`is-sql`](#is-sql) for advanced usage, including specific database types and allowlists for tables and columns.
 
 ### Cost
 

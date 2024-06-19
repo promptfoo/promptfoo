@@ -390,6 +390,16 @@ export async function runAssertion({
     return isSql(outputString, renderedValue, inverse, assertion);
   }
 
+  if (baseType === 'contains-sql') {
+    const match = outputString.match(/```(?:sql)?([^`]+)```/);
+    if (match) {
+      const sqlCode = match[1].trim();
+      return isSql(sqlCode, renderedValue, inverse, assertion);
+    } else {
+      return isSql(outputString, renderedValue, inverse, assertion);
+    }
+  }
+
   if (baseType === 'contains') {
     invariant(renderedValue, '"contains" assertion type must have a string or number value');
     invariant(
