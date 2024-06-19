@@ -301,7 +301,7 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
     }
   };
 
-  const seenPrompts = new Set<string|Prompt>();
+  const seenPrompts = new Set<string | Prompt>();
   const addSeenPrompt = (prompt: string | Prompt) => {
     if (typeof prompt === 'string') {
       seenPrompts.add(prompt);
