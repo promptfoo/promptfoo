@@ -482,11 +482,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     }
     try {
       const message = data.choices[0].message;
-      let output = ''
+      let output = '';
       if (message.content && (message.function_call || message.tool_calls)) {
-        output = message
+        output = message;
       } else if (message.content === null) {
-        output = message.function_call || message.tool_calls
+        output = message.function_call || message.tool_calls;
       } else {
         output = message.content;
       }
