@@ -223,9 +223,10 @@ export async function readPrompts(
       const ext = path.parse(promptPath).ext;
       if (ext === '.js' || ext === '.cjs' || ext === '.mjs') {
         const promptFunction = await importModule(promptPath, functionName);
+        const resolvedPathLookup = functionName ? `${promptPath}:${functionName}` : promptPath;
         promptContents.push({
           raw: String(promptFunction),
-          label: String(promptFunction),
+          label: resolvedPathToDisplay.get(resolvedPathLookup) || String(promptFunction),
           function: promptFunction,
         });
       } else if (ext === '.py') {
