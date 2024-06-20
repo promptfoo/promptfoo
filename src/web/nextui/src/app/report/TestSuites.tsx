@@ -182,7 +182,7 @@ const TestSuites: React.FC<{
                       {subCategory.passRate} (
                       {subCategory.passRateWithFilter !== subCategory.passRate ? (
                         <>
-                          <strong>{subCategory.passRateWithFilter} with filter</strong>
+                          <strong>{subCategory.passRateWithFilter} with mitigation</strong>
                         </>
                       ) : (
                         subCategory.passRateWithFilter
