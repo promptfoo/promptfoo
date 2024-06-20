@@ -45,6 +45,7 @@ import { showCommand } from './commands/show';
 import { deleteCommand } from './commands/delete';
 import { importCommand } from './commands/import';
 import { exportCommand } from './commands/export';
+import { configCommand } from './commands/config';
 
 import type {
   CommandLineOptions,
@@ -925,6 +926,7 @@ async function main() {
   deleteCommand(program);
   importCommand(program);
   exportCommand(program);
+  configCommand(program);
 
   program.parse(process.argv);
 
