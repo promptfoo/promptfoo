@@ -72,6 +72,7 @@ The Anthropic provider supports several options to customize the behavior of the
 - `top_p`: Controls nucleus sampling, affecting the randomness of the output.
 - `top_k`: Only sample from the top K options for each subsequent token.
 - `tools`: An array of tool or function definitions for the model to call.
+- `tool_choice`: An object specifying the tool to call.
 
 Example configuration with options and prompts:
 

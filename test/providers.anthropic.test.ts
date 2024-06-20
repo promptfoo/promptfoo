@@ -87,7 +87,7 @@ describe('Anthropic', () => {
       expect(result).toMatchObject({
         cost: undefined,
         output: dedent`<thinking>I need to use the get_weather, and the user wants SF, which is likely San Francisco, CA.</thinking>
-  
+
           {"type":"tool_use","id":"toolu_01A09q90qw90lq917835lq9","name":"get_weather","input":{"location":"San Francisco, CA","unit":"celsius"}}`,
         tokenUsage: {},
       });
@@ -95,6 +95,52 @@ describe('Anthropic', () => {
       const resultFromCache = await provider.callApi('What is the forecast in San Francisco?');
       expect(provider.anthropic.messages.create).toHaveBeenCalledTimes(1);
       expect(result).toMatchObject(resultFromCache);
+    });
+
+    it('should pass the tool choice if specified', async () => {
+      const toolChoice: Anthropic.MessageCreateParams.ToolChoiceTool = {
+        name: 'get_weather',
+        type: 'tool',
+      };
+      provider.config.tool_choice = toolChoice;
+      provider.anthropic.messages.create = jest.fn().mockResolvedValue({
+        content: [
+          {
+            type: 'text',
+            text: '<thinking>I need to use the get_weather, and the user wants SF, which is likely San Francisco, CA.</thinking>',
+          },
+          {
+            type: 'tool_use',
+            id: 'toolu_01A09q90qw90lq917835lq9',
+            name: 'get_weather',
+            input: { location: 'San Francisco, CA', unit: 'celsius' },
+          },
+        ],
+      } as Anthropic.Messages.Message);
+
+      const result = await provider.callApi('What is the forecast in San Francisco?');
+      expect(provider.anthropic.messages.create).toHaveBeenCalledTimes(1);
+      expect(provider.anthropic.messages.create).toHaveBeenNthCalledWith(1, {
+        model: 'claude-3-opus-20240229',
+        max_tokens: 1024,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                text: 'What is the forecast in San Francisco?',
+                type: 'text',
+              },
+            ],
+          },
+        ],
+        tools,
+        tool_choice: toolChoice,
+        temperature: 0,
+        stream: false,
+      });
+
+      provider.config.tool_choice = undefined;
     });
 
     it('should not use cache if caching is disabled for ToolUse requests', async () => {
@@ -120,7 +166,7 @@ describe('Anthropic', () => {
 
       expect(result).toMatchObject({
         output: dedent`<thinking>I need to use the get_weather, and the user wants SF, which is likely San Francisco, CA.</thinking>
-  
+
           {"type":"tool_use","id":"toolu_01A09q90qw90lq917835lq9","name":"get_weather","input":{"location":"San Francisco, CA","unit":"celsius"}}`,
         tokenUsage: {},
       });

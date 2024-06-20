@@ -16,6 +16,10 @@ interface AnthropicMessageOptions {
   model?: string;
   cost?: number;
   tools?: Anthropic.Tool[];
+  tool_choice?:
+    | Anthropic.MessageCreateParams.ToolChoiceAny
+    | Anthropic.MessageCreateParams.ToolChoiceAuto
+    | Anthropic.MessageCreateParams.ToolChoiceTool;
 }
 
 function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
@@ -200,6 +204,7 @@ export class AnthropicMessagesProvider implements ApiProvider {
       stream: false,
       temperature: this.config.temperature || 0,
       ...(this.config.tools ? { tools: this.config.tools } : {}),
+      ...(this.config.tool_choice ? { tool_choice: this.config.tool_choice } : {}),
     };
 
     logger.debug(`Calling Anthropic Messages API: ${JSON.stringify(params)}`);
