@@ -12,6 +12,7 @@ const config: Config = {
   transform: {
     '^.+\\.m?[tj]sx?$': '@swc/jest',
   },
+  setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
 };
 
 export default config;

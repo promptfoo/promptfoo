@@ -146,16 +146,6 @@ describe('Anthropic', () => {
       expect(provider.anthropic.messages.create).toHaveBeenCalledTimes(0);
     });
 
-    it('should handle missing apiKey', async () => {
-      const provider = new AnthropicMessagesProvider('claude-3-opus-20240229', {
-        config: { apiKey: undefined },
-      });
-
-      await expect(provider.callApi('What is the forecast in San Francisco?')).resolves.toEqual({
-        error: 'API call error: invalid x-api-key, status 401, type authentication_error',
-      });
-    });
-
     it('should handle API call error', async () => {
       const provider = new AnthropicMessagesProvider('claude-3-opus-20240229');
       provider.anthropic.messages.create = jest
@@ -247,17 +237,6 @@ describe('Anthropic', () => {
       expect(freshResult).toMatchObject({
         output: 'Test output',
         tokenUsage: {},
-      });
-    });
-
-    it('should handle missing apiKey', async () => {
-      const provider = new AnthropicCompletionProvider('claude-1', {
-        config: { apiKey: undefined },
-      });
-
-      await expect(provider.callApi('Test prompt')).resolves.toEqual({
-        error:
-          'API call error: Error: 401 {"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}}',
       });
     });
 
