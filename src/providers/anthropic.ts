@@ -154,6 +154,13 @@ export class AnthropicMessagesProvider implements ApiProvider {
         output: 0.075 / 1000,
       },
     })),
+    ...['claude-3-5-sonnet-20240620'].map((model) => ({
+      id: model,
+      cost: {
+        input: 3 / 1e6,
+        output: 15 / 1e6,
+      },
+    })),
   ];
 
   static ANTHROPIC_MODELS_NAMES = AnthropicMessagesProvider.ANTHROPIC_MODELS.map(
