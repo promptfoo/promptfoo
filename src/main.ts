@@ -200,6 +200,7 @@ async function main() {
     path.join(pwd, 'promptfooconfig.js'),
     path.join(pwd, 'promptfooconfig.json'),
     path.join(pwd, 'promptfooconfig.yaml'),
+    path.join(pwd, 'promptfooconfig.yml'),
   ];
   let defaultConfig: Partial<UnifiedConfig> = {};
   let defaultConfigPath: string | undefined;
