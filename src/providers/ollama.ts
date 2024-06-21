@@ -333,7 +333,7 @@ export class OllamaEmbeddingProvider extends OllamaCompletionProvider {
     logger.debug(`\tOllama embeddings API response: ${JSON.stringify(response.data)}`);
 
     try {
-      const embedding = response.data.embeddings as number[];
+      const embedding = response.data.embedding as number[];
       if (!embedding) {
         throw new Error('No embedding found in Ollama embeddings API response');
       }
