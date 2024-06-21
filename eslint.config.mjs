@@ -27,6 +27,8 @@ export default [
       '**/src/web/nextui/.next/**/*',
       '**/src/web/nextui/out/**/*',
       'dist/**/*',
+      'site/.docusaurus/**/*',
+      'site/build/**/*',
     ],
   },
   {
