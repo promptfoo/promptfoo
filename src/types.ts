@@ -666,6 +666,9 @@ export interface TestSuiteConfig {
   // Envar overrides
   env?: EnvOverrides;
 
+  // Metrics to calculate after the eval has been completed
+  derivedMetrics?: DerivedMetric[];
+
   // Any other information about this configuration.
   metadata?: Record<string, any>;
 }
