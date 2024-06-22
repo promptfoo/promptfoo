@@ -225,7 +225,9 @@ export function processPrompt(prompt: RawPrompt, basePath: string = ''): Prompt[
     }
   }
 
-  const extension = path.parse(promptPath).ext;
+  const parsedPath = path.parse(promptPath);
+
+  const extension = parsedPath.ext;
   console.warn('extension', extension, 'promptPath', promptPath);
   if (extension === '.txt') {
     const fileContent = fs.readFileSync(promptPath, 'utf-8');
@@ -242,7 +244,6 @@ export function processPrompt(prompt: RawPrompt, basePath: string = ''): Prompt[
     // console.warn('-------prompts-------', prompts);
     return prompts;
   }
-
   if (extension === '.jsonl') {
     const fileContent = fs.readFileSync(promptPath, 'utf-8');
     const jsonLines = fileContent.split(/\r?\n/).filter((line) => line.length > 0);
@@ -250,6 +251,59 @@ export function processPrompt(prompt: RawPrompt, basePath: string = ''): Prompt[
       raw: json,
       label: `${prompt.label ? `${prompt.label}: ` : ''}${rawPath}: ${json}`,
     }));
+  }
+
+  let filename = parsedPath.base;
+  let functionName: string | undefined;
+  if (parsedPath.base.includes(':')) {
+    const splits = parsedPath.base.split(':');
+    if (
+      splits[0] &&
+      (splits[0].endsWith('.js') ||
+        splits[0].endsWith('.cjs') ||
+        splits[0].endsWith('.mjs') ||
+        splits[0].endsWith('.py'))
+    ) {
+      [filename, functionName] = splits;
+    }
+  }
+
+  if (extension === '.py') {
+    const fileContent = fs.readFileSync(promptPath, 'utf-8');
+    const promptFunction = async (context: {
+      vars: Record<string, string | object>;
+      provider?: ApiProvider;
+    }) => {
+      if (functionName) {
+        return runPython(promptPath, functionName, [
+          {
+            ...context,
+            provider: {
+              id: context.provider?.id,
+              label: context.provider?.label,
+            },
+          },
+        ]);
+      } else {
+        // Legacy: run the whole file
+        const options: PythonShellOptions = {
+          mode: 'text',
+          pythonPath: process.env.PROMPTFOO_PYTHON || 'python',
+          args: [safeJsonStringify(context)],
+        };
+        logger.debug(`Executing python prompt script ${promptPath}`);
+        const results = (await PythonShell.run(promptPath, options)).join('\n');
+        logger.debug(`Python prompt script ${promptPath} returned: ${results}`);
+        return results;
+      }
+    };
+    return [
+      {
+        raw: fileContent,
+        label: `${prompt.label ? `${prompt.label}: ` : ''}${rawPath}: ${fileContent}`,
+        function: promptFunction,
+      },
+    ];
   }
 
   // ** globs

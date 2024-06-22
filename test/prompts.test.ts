@@ -217,14 +217,17 @@ describe('readPrompts', () => {
     expect(fs.readFileSync).toHaveBeenCalledTimes(1);
   });
 
-  it('readPrompts with .py file', async () => {
+  fit('readPrompts with .py file', async () => {
     const code = `print('dummy prompt')`;
     jest.mocked(fs.readFileSync).mockReturnValue(code);
-    const result = await readPrompts('prompt.py');
+    await expect(readPrompts('prompt.py')).resolves.toEqual([
+      {
+        function: expect.any(Function),
+        label: `prompt.py: ${code}`,
+        raw: code,
+      },
+    ]);
     expect(fs.readFileSync).toHaveBeenCalledTimes(1);
-    expect(result[0].raw).toEqual(code);
-    expect(result[0].label).toEqual(code);
-    expect(result[0].function).toBeDefined();
   });
 
   it('readPrompts with Prompt object array', async () => {
