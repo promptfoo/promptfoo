@@ -1,3 +1,9 @@
+/**
+ * This module exports various prompts used for model graded evaluation.
+ * They are imported and re-exported by the `prompts` module.
+ *
+ * @module prompts
+ */
 export * from './external/ragas';
 export const DEFAULT_GRADING_PROMPT = JSON.stringify([
   {
