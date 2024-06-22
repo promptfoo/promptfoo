@@ -73,17 +73,24 @@ export function readProviderPromptMap(
   return ret;
 }
 
-export function maybeFilepath(str: string): boolean {
-  return (
-    !str.includes('\n') &&
-    !str.includes('portkey://') &&
-    !str.includes('langfuse://') &&
-    (str.includes('/') ||
-      str.includes('\\') ||
-      str.includes('*') ||
-      str.charAt(str.length - 3) === '.' ||
-      str.charAt(str.length - 4) === '.')
-  );
+export function maybeFilePath(str: string): boolean {
+  if (typeof str !== 'string') {
+    throw new Error(`Invalid input: ${JSON.stringify(str)}`);
+  }
+
+  const forbiddenSubstrings = ['\n', 'portkey://', 'langfuse://'];
+  if (forbiddenSubstrings.some((substring) => str.includes(substring))) {
+    return false;
+  }
+
+  const containsDot = str.charAt(str.length - 3) === '.' || str.charAt(str.length - 4) === '.';
+  const hasValidFileExtension =
+    str.endsWith('.') ||
+    str.includes('*') ||
+    str.includes('/') ||
+    str.includes('\\') ||
+    str.startsWith('file://');
+  return hasValidFileExtension || containsDot;
 }
 
 enum PromptInputType {
@@ -156,7 +163,7 @@ export function normalizeInput(
   throw new Error(`Invalid input prompt: ${JSON.stringify(promptPathOrGlobs)}`);
 }
 
-export function hydratePrompt(prompt: Partial<Prompt>, basePath: string = ''): Prompt {
+export function hydratePrompt(prompt: RawPrompt, basePath: string = ''): Prompt {
   return prompt;
 }
 
@@ -175,13 +182,13 @@ export async function readPrompts(
   const promptPathInfos: { raw: string; resolved: string | undefined }[] = promptPartials.flatMap(
     (prompt) => {
       invariant(prompt.raw, `Prompt path must be a string, but got ${JSON.stringify(prompt.raw)}`);
-      if (prompt.raw.startsWith('file://') || maybeFilepath(prompt.raw)) {
+      if (prompt.raw.startsWith('file://') || maybeFilePath(prompt.raw)) {
         // This path is explicitly marked as a file, ensure that it's not used as a raw prompt.
         forceLoadFromFile.add(prompt.raw.slice('file://'.length));
       }
       const rawPath = prompt.raw;
       let resolvedPath;
-      if (maybeFilepath(prompt.raw)) {
+      if (maybeFilePath(prompt.raw)) {
         resolvedPath = path.resolve(basePath, prompt.raw);
         const globbedPaths = globSync(resolvedPath.replace(/\\/g, '/'), {
           windowsPathsNoEscape: true,
@@ -232,7 +239,7 @@ export async function readPrompts(
       usedRaw = true;
     }
     if (usedRaw) {
-      if (maybeFilepath(promptPathInfo.raw)) {
+      if (maybeFilePath(promptPathInfo.raw)) {
         // It looks like a filepath, so falling back could be a mistake. Print a warning
         logger.warn(
           `Could not find prompt file: "${chalk.red(filename)}". Treating it as a text prompt.`,
