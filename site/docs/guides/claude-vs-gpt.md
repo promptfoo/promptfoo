@@ -11,7 +11,7 @@ You should test these models on tasks that are relevant to your specific use cas
 
 This guide will walk you through setting up a comparison between Anthropic's Claude 3.5 and OpenAI's GPT-4o using `promptfoo`. The end result is a side-by-side evaluation of how these models perform on custom tasks:
 
-![Claude 3.5 vs GPT-4o comparison](/img/docs/claude-vs-gpt.png)
+![Claude 3.5 vs GPT-4o comparison](/img/docs/claude3.5-vs-gpt4o.png)
 
 ## Prerequisites
 
