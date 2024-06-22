@@ -104,3 +104,28 @@ jobs:
       - name: Run Style Check
         run: |
           npm run format:check
+
+  docs:
+    name: Build Docs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Use Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        working-directory: site
+        run: npm ci
+
+      - name: Type Check
+        working-directory: site
+        run: npm run typecheck
+
+      - name: Build Documentation
+        working-directory: site
+        run: npm run build
