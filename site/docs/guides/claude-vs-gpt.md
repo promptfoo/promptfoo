@@ -186,11 +186,11 @@ We're also going to update the system prompt to say, "Be concise".
 
 The result is that Claude 3.5 frequently fails our latency requirements:
 
-![Claude latency assertions](/img/docs/claude3-vs-gpt4-latency.png)
+![claude latency assertions](/img/docs/claude3-vs-gpt4-latency.png)
 
 Clicking into a specific test case shows the individual test results:
 
-![Claude test details](/img/docs/claude3-result-details.png)
+![claude test details](/img/docs/claude3-result-details.png)
 
 Of course, our requirements are different from yours. You should customize these values to suit your use case.
 
