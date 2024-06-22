@@ -28,7 +28,7 @@
     "eslint": "8.47.0",
     "eslint-config-next": "13.4.13",
     "js-yaml": "^4.1.0",
-    "next": "13.4.13",
+    "next": "14.2.4",
     "opener": "^1.5.2",
     "prismjs": "^1.29.0",
     "react": "18.2.0",
