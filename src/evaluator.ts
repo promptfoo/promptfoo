@@ -37,6 +37,25 @@ import type {
 } from './types';
 export const DEFAULT_MAX_CONCURRENCY = 4;
 
+/**
+ * Providers can be configured with a prompts attribute. This attribute corresponds to
+ * an array of prompt labels. Labels can either refer to a group (for example from a file)
+ * or to individual prompts. If the attribute is present, this function validates that the
+ * prompt labels fit the matching criteria of the provider. If no prompts attribute is
+ * present, all prompts are allowed by default.
+ *
+ * @param {Prompt} prompt - The prompt object to check.
+ * @param {string[]} allowedPrompts - The list of allowed prompt labels.
+ * @returns {boolean} Returns true if the prompt is allowed, false otherwise.
+ */
+export function isAllowedPrompt(prompt: Prompt, allowedPrompts: string[] | undefined): boolean {
+  return (
+    !Array.isArray(allowedPrompts) ||
+    allowedPrompts.includes(prompt.label) ||
+    allowedPrompts.some((allowedPrompt) => prompt.label.startsWith(`${allowedPrompt}:`))
+  );
+}
+
 export function generateVarCombinations(
   vars: Record<string, string | string[] | any>,
 ): Record<string, string | any[]>[] {
@@ -502,11 +521,8 @@ class Evaluator {
     for (const prompt of testSuite.prompts) {
       for (const provider of testSuite.providers) {
         // Check if providerPromptMap exists and if it contains the current prompt's label
-        if (testSuite.providerPromptMap) {
-          const allowedPrompts = testSuite.providerPromptMap[provider.id()];
-          if (allowedPrompts && !allowedPrompts.includes(prompt.label)) {
-            continue;
-          }
+        if (!isAllowedPrompt(prompt, testSuite.providerPromptMap?.[provider.id()])) {
+          continue;
         }
         const completedPrompt = {
           ...prompt,
@@ -631,12 +647,8 @@ class Evaluator {
           let colIndex = 0;
           for (const prompt of testSuite.prompts) {
             for (const provider of testSuite.providers) {
-              if (testSuite.providerPromptMap) {
-                const allowedPrompts = testSuite.providerPromptMap[provider.id()];
-                if (allowedPrompts && !allowedPrompts.includes(prompt.label)) {
-                  // This prompt should not be used with this provider.
-                  continue;
-                }
+              if (!isAllowedPrompt(prompt, testSuite.providerPromptMap?.[provider.id()])) {
+                continue;
               }
               runEvalOptions.push({
                 delay: options.delay || 0,
