@@ -203,13 +203,18 @@ describe('readPrompts', () => {
     ];
 
     jest.mocked(fs.readFileSync).mockReturnValue(data.map((o) => JSON.stringify(o)).join('\n'));
-    jest.mocked(fs.statSync).mockReturnValue({ isDirectory: () => false });
-    const promptPaths = ['prompts.jsonl'];
-
-    const result = await readPrompts(promptPaths);
-
+    jest.mocked(fs.statSync).mockReturnValue({ isDirectory: () => false } as fs.Stats);
+    await expect(readPrompts(['prompts.jsonl'])).resolves.toEqual([
+      {
+        raw: JSON.stringify(data[0]),
+        label: `prompts.jsonl: ${JSON.stringify(data[0])}`,
+      },
+      {
+        raw: JSON.stringify(data[1]),
+        label: `prompts.jsonl: ${JSON.stringify(data[1])}`,
+      },
+    ]);
     expect(fs.readFileSync).toHaveBeenCalledTimes(1);
-    expect(result).toEqual([toPrompt(JSON.stringify(data[0])), toPrompt(JSON.stringify(data[1]))]);
   });
 
   it('readPrompts with .py file', async () => {
@@ -301,10 +306,10 @@ def prompt2:
 
 describe('maybeFilePath', () => {
   it('should return true for valid file paths', () => {
-    expect(maybeFilePath('path/to/file.txt')).toBe(true);
     expect(maybeFilePath('C:\\path\\to\\file.txt')).toBe(true);
     expect(maybeFilePath('file.*')).toBe(true);
     expect(maybeFilePath('filename.ext')).toBe(true);
+    expect(maybeFilePath('path/to/file.txt')).toBe(true);
   });
 
   it('should return false for strings with new lines', () => {
@@ -321,8 +326,8 @@ describe('maybeFilePath', () => {
   });
 
   it('should return false for strings without file path indicators', () => {
-    expect(maybeFilePath('justastring')).toBe(false);
     expect(maybeFilePath('anotherstring')).toBe(false);
+    expect(maybeFilePath('justastring')).toBe(false);
     expect(maybeFilePath('stringwith.dotbutnotfile')).toBe(false);
   });
 
@@ -336,10 +341,20 @@ describe('maybeFilePath', () => {
   });
 
   it('should return true for strings with file extension at the third or fourth last position', () => {
-    expect(maybeFilePath('filename.e')).toBe(false);
     expect(maybeFilePath('file.ext')).toBe(true);
-    expect(maybeFilePath('filename.ex')).toBe(true);
     expect(maybeFilePath('file.name.ext')).toBe(true);
+    expect(maybeFilePath('filename.e')).toBe(false);
+    expect(maybeFilePath('filename.ex')).toBe(true);
+  });
+
+  it('it works for files that end with specific allowed extensions', () => {
+    expect(maybeFilePath('filename.cjs')).toBe(true);
+    expect(maybeFilePath('filename.js')).toBe(true);
+    expect(maybeFilePath('filename.json')).toBe(true);
+    expect(maybeFilePath('filename.jsonl')).toBe(true);
+    expect(maybeFilePath('filename.mjs')).toBe(true);
+    expect(maybeFilePath('filename.py')).toBe(true);
+    expect(maybeFilePath('filename.txt')).toBe(true);
   });
 
   // Additional tests

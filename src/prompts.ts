@@ -83,13 +83,15 @@ export function maybeFilePath(str: string): boolean {
     return false;
   }
 
-  const containsDot = str.charAt(str.length - 3) === '.' || str.charAt(str.length - 4) === '.';
+  const validFileExtensions = ['.txt', '.jsonl', '.json', '.py', '.js', '.cjs', '.mjs'];
   const hasValidFileExtension =
     str.endsWith('.') ||
     str.includes('*') ||
     str.includes('/') ||
     str.includes('\\') ||
-    str.startsWith('file://');
+    str.startsWith('file://') ||
+    validFileExtensions.some((ext) => str.endsWith(ext));
+  const containsDot = str.charAt(str.length - 3) === '.' || str.charAt(str.length - 4) === '.';
   return hasValidFileExtension || containsDot;
 }
 
@@ -238,10 +240,16 @@ export function processPrompt(prompt: RawPrompt, basePath: string = ''): Prompt[
       }))
       .filter((p) => p.raw.length > 0);
     // console.warn('-------prompts-------', prompts);
-    if (prompts.length === 0) {
-      throw new Error(`There are no prompts in ${JSON.stringify(prompt.raw)}`);
-    }
     return prompts;
+  }
+
+  if (extension === '.jsonl') {
+    const fileContent = fs.readFileSync(promptPath, 'utf-8');
+    const jsonLines = fileContent.split(/\r?\n/).filter((line) => line.length > 0);
+    return jsonLines.map((json) => ({
+      raw: json,
+      label: `${prompt.label ? `${prompt.label}: ` : ''}${rawPath}: ${json}`,
+    }));
   }
 
   // ** globs
@@ -285,7 +293,13 @@ export async function readPrompts(
   const promptPartials = normalizeInput(promptPathOrGlobs);
   console.warn('promptPartials', promptPartials);
 
-  const prompts: Prompt[] = promptPartials.flatMap((prompt) => processPrompt(prompt, basePath));
+  const prompts: Prompt[] = promptPartials.flatMap((prompt) => {
+    const promptBatch = processPrompt(prompt, basePath);
+    if (promptBatch.length === 0) {
+      throw new Error(`There are no prompts in ${JSON.stringify(prompt.raw)}`);
+    }
+    return promptBatch;
+  });
 
   return prompts;
 }
