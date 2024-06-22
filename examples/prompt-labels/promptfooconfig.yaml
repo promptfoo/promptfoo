@@ -1,5 +1,4 @@
 prompts:
-  - 'what is 
   - id: file://prompts1.txt
     label: content_generation
   - id: file://prompts2.txt
