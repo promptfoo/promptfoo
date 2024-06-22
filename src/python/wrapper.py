@@ -1,7 +1,7 @@
 import json
 import os
 import sys
-import importlib
+import importlib.util
 import asyncio
 
 def call_method(script_path, method_name, *args):
@@ -9,8 +9,13 @@ def call_method(script_path, method_name, *args):
     module_name = os.path.basename(script_path).rsplit('.', 1)[0]
     if script_dir not in sys.path:
         sys.path.insert(0, script_dir)
+
     print(f'Importing module {module_name} from {script_dir} ...')
-    script_module = importlib.import_module(module_name)
+    
+    spec = importlib.util.spec_from_file_location(module_name, script_path)
+    script_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(script_module)
+    
     method_to_call = getattr(script_module, method_name)
     if asyncio.iscoroutinefunction(method_to_call):
         return asyncio.run(method_to_call(*args))
