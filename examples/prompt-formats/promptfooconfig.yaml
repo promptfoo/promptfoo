@@ -1,29 +1,43 @@
 prompts:
-  - 'what is 
   - id: file://prompts1.txt
-    label: content_generation
+    label: riddles
   - id: file://prompts2.txt
-    label: knowledge_base_query
+    label: jokes
 
 providers:
   - id: openai:gpt-4o
     label: 4o
     prompts:
-      - content_generation
+      - riddles
   - id: openai:gpt-3.5-turbo
     label: '3.5'
     prompts:
-      - knowledge_base_query
+      - jokes
 
 tests:
   - vars:
-      topic: machine learning trends
+      riddle: The more you take, the more you leave behind. What am I?
     assert:
       - type: select-best
-        value: Choose the response that most effectively generates a comprehensive overview of current machine learning trends.
-
+        value: Choose the response that contains 'footsteps'
   - vars:
-      topic: transformer models
+      riddle: I have keys but open no locks. I have space but no room. You can enter, but you can't go outside. What am I?
+    assert:
+      - type: icontains
+        value: 'keyboard'
+  - vars:
+      joke: Why don't scientists trust atoms?
+    assert:
+      - type: similar
+        value: 'make up everything'
+        threshold: 0.7
+  - vars:
+      joke: Why did the scarecrow win an award?
     assert:
       - type: select-best
-        value: Choose the response that provides the most accurate and detailed information about transformer models from the knowledge base.
+        value: Choose the funniest answer.
+  - vars:
+      joke: Why did the bicycle fall over?
+    assert:
+      - type: regex
+        value: '(?i).*two-tired.*'

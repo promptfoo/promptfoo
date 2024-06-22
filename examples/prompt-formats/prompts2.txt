@@ -1,3 +1,15 @@
-'Retrieve detailed information about {{topic}} from the knowledge base.'
+Read the dad joke carefully. Provide a short punchline: {{joke}}
 ---
-'Provide a summary of the most important aspects of {{topic}}, based on available knowledge base information.'
+Analyze the dad provided.  
+Respond with a single word or brief phrase punchline, avoiding any further explanation:  
+{{joke}}
+
+**Examples:**
+
+1. **Joke:** Why can't a nose be 12 inches long?
+   - **Answer:** Then it would be a foot
+
+2. **Joke:** What do you call cheese that isn't yours?
+   - **Answer:** Nacho cheese
+
+**Joke:** {{joke}}
