@@ -83,36 +83,22 @@ export function maybeFilePath(str: string): boolean {
     return false;
   }
 
-  const validFileExtensions = ['.txt', '.jsonl', '.json', '.py', '.js', '.cjs', '.mjs'];
-  const hasValidFileExtension =
+  const validFileExtensions = ['.cjs', '.js', '.json', '.jsonl', '.mjs', '.py', '.txt'];
+  return (
+    str.startsWith('file://') ||
+    validFileExtensions.some((ext) => {
+      const tokens = str.split(':'); // function may be file.js:functionName
+      // Checks if the second to last token or the last token ends with the extension
+      return tokens.pop()?.endsWith(ext) || tokens.pop()?.endsWith(ext);
+    }) ||
+    str.charAt(str.length - 3) === '.' ||
+    str.charAt(str.length - 4) === '.' ||
     str.endsWith('.') ||
     str.includes('*') ||
     str.includes('/') ||
-    str.includes('\\') ||
-    str.startsWith('file://') ||
-    validFileExtensions.some((ext) => str.includes(ext));
-  const containsDot = str.charAt(str.length - 3) === '.' || str.charAt(str.length - 4) === '.';
-  return hasValidFileExtension || containsDot;
+    str.includes('\\')
+  );
 }
-
-enum PromptInputType {
-  STRING = 1,
-  ARRAY = 2,
-  NAMED = 3,
-}
-
-/*
-export interface Prompt {
-  id?: string;
-  raw: string;
-  display?: string; // deprecated
-  label: string;
-  function?: (context: {
-    vars: Record<string, string | object>;
-    provider?: ApiProvider;
-  }) => Promise<string | object>;
-}
-*/
 
 type RawPrompt = Partial<Prompt> & {
   source?: string; // The source of the prompt, such as a file path or a string. Could also be an index in the array or a key in the object.
@@ -158,7 +144,7 @@ export function normalizeInput(
   }
 
   if (typeof promptPathOrGlobs === 'object' && Object.keys(promptPathOrGlobs).length) {
-    /* NOTE: This is considered legacy and has been deprecated. Example format
+    /* NOTE: This format is considered legacy and has been deprecated. Example:
     {
       'prompts.txt': 'foo1',
       'prompts.py': 'foo2',
@@ -176,13 +162,7 @@ export function normalizeInput(
 
 export async function processPrompt(prompt: RawPrompt, basePath: string = ''): Promise<Prompt[]> {
   const rawPath = prompt.raw;
-
-  console.warn('-------prompt', prompt);
-
   invariant(rawPath, `prompt.raw must be a string, but got ${JSON.stringify(prompt.raw)}`);
-
-  console.warn('rawPath', rawPath);
-
   if (!maybeFilePath(rawPath)) {
     return [
       {
@@ -201,15 +181,11 @@ export async function processPrompt(prompt: RawPrompt, basePath: string = ''): P
     if (process.env.PROMPTFOO_STRICT_FILES) {
       throw err;
     }
-    // If the path doesn't exist, it's probably a raw prompt
-    // prompts.push({ raw: promptPathInfo.raw, label: promptPathInfo.raw });
   }
-  console.warn('----stat----', stat, stat?.isDirectory());
   if (stat?.isDirectory()) {
     const globbedPaths = globSync(promptPath.replace(/\\/g, '/'), {
       windowsPathsNoEscape: true,
     });
-    console.warn('globbedPaths', globbedPaths);
     logger.debug(
       `Expanded prompt ${rawPath} to ${promptPath} and then to ${JSON.stringify(globbedPaths)}`,
     );
@@ -236,14 +212,20 @@ export async function processPrompt(prompt: RawPrompt, basePath: string = ''): P
       [filename, functionName] = splits;
     }
   }
-  console.warn('filename', filename, 'functionName', functionName);
 
   const parsedPath = path.parse(filename);
   const extension = parsedPath.ext;
-  console.warn('extension', extension, 'promptPath', promptPath);
+
+  if (extension === '.jsonl') {
+    const fileContent = fs.readFileSync(promptPath, 'utf-8');
+    const jsonLines = fileContent.split(/\r?\n/).filter((line) => line.length > 0);
+    return jsonLines.map((json) => ({
+      raw: json,
+      label: `${prompt.label ? `${prompt.label}: ` : ''}${rawPath}: ${json}`,
+    }));
+  }
   if (extension === '.txt') {
     const fileContent = fs.readFileSync(promptPath, 'utf-8');
-    // console.warn('-------fileContent-------', fileContent);
     const prompts: Prompt[] = fileContent
       .split(PROMPT_DELIMITER)
       .map((p) => ({
@@ -252,17 +234,8 @@ export async function processPrompt(prompt: RawPrompt, basePath: string = ''): P
           ? `${prompt.label}: ${prompt.raw}: ${p.trim()}`
           : `${prompt.raw}: ${p.trim()}`,
       }))
-      .filter((p) => p.raw.length > 0);
-    // console.warn('-------prompts-------', prompts);
+      .filter((p) => p.raw.length > 0); // handle leading/trailing delimiters and empty lines
     return prompts;
-  }
-  if (extension === '.jsonl') {
-    const fileContent = fs.readFileSync(promptPath, 'utf-8');
-    const jsonLines = fileContent.split(/\r?\n/).filter((line) => line.length > 0);
-    return jsonLines.map((json) => ({
-      raw: json,
-      label: `${prompt.label ? `${prompt.label}: ` : ''}${rawPath}: ${json}`,
-    }));
   }
 
   if (extension === '.py') {
@@ -333,20 +306,6 @@ export async function processPrompt(prompt: RawPrompt, basePath: string = ''): P
     }));
   }
   return [];
-
-  /*
-
-  const parsedPath = path.parse(promptPath);
-
-  // ** functions
-  let filename = parsedPath.base;
-  let functionName: string | undefined;
-  if (parsedPath.base.includes(':')) {
-    const splits = parsedPath.base.split(':');
-    if (splits[0] && ['js', 'cjs', 'mjs', 'py'].includes(splits[0].split('.')[0])) {
-      [filename, functionName] = splits;
-    }
-  } */
 }
 
 export async function readPrompts(
@@ -371,155 +330,6 @@ export async function readPrompts(
 }
 
 /*
-
-
-  const forceLoadFromFile = new Set<string>(); // files to load prompts from
-  const resolvedPathToDisplay = new Map<string, string>();
-
-  const promptPathInfos: { raw: string; resolved: string | undefined }[] = promptPartials.flatMap(
-    (prompt) => {
-      invariant(prompt.raw, `Prompt path must be a string, but got ${JSON.stringify(prompt.raw)}`);
-      if (prompt.raw.startsWith('file://') || maybeFilePath(prompt.raw)) {
-        // This path is explicitly marked as a file, ensure that it's not used as a raw prompt.
-        forceLoadFromFile.add(prompt.raw.slice('file://'.length));
-      }
-      const rawPath = prompt.raw;
-      let resolvedPath;
-      if (maybeFilePath(prompt.raw)) {
-        resolvedPath = path.resolve(basePath, prompt.raw);
-        const globbedPaths = globSync(resolvedPath.replace(/\\/g, '/'), {
-          windowsPathsNoEscape: true,
-        });
-        logger.debug(
-          `Expanded prompt ${rawPath} to ${resolvedPath} and then to ${JSON.stringify(globbedPaths)}`,
-        );
-        if (globbedPaths.length > 0) {
-          return globbedPaths.map((globbedPath) => ({ raw: rawPath, resolved: globbedPath }));
-        }
-      }
-      // globSync will return empty if no files match, which is the case when the path includes a function name like: file.js:func
-      return [{ raw: rawPath, resolved: resolvedPath }];
-    },
-  );
-
-  logger.debug(`Resolved prompt paths: ${JSON.stringify(promptPathInfos)}`);
-
-  for (const promptPathInfo of promptPathInfos) {
-    const parsedPath = path.parse(promptPathInfo.raw);
-    let filename = parsedPath.base;
-    let functionName: string | undefined;
-    if (parsedPath.base.includes(':')) {
-      const splits = parsedPath.base.split(':');
-      if (
-        splits[0] &&
-        (splits[0].endsWith('.js') ||
-          splits[0].endsWith('.cjs') ||
-          splits[0].endsWith('.mjs') ||
-          splits[0].endsWith('.py'))
-      ) {
-        [filename, functionName] = splits;
-      }
-    }
-    const promptPath = path.join(parsedPath.dir, filename);
-    let stat;
-    let usedRaw = false;
-    try {
-      stat = fs.statSync(promptPath);
-    } catch (err) {
-      if (process.env.PROMPTFOO_STRICT_FILES || forceLoadFromFile.has(filename)) {
-        throw err;
-      }
-      // If the path doesn't exist, it's probably a raw prompt
-      prompts.push({ raw: promptPathInfo.raw, label: promptPathInfo.raw });
-      usedRaw = true;
-    }
-    if (usedRaw) {
-      if (maybeFilePath(promptPathInfo.raw)) {
-        // It looks like a filepath, so falling back could be a mistake. Print a warning
-        logger.warn(
-          `Could not find prompt file: "${chalk.red(filename)}". Treating it as a text prompt.`,
-        );
-      }
-    } else if (stat?.isDirectory()) {
-      // FIXME(ian): Make directory handling share logic with file handling.
-      const filesInDirectory = fs.readdirSync(promptPath);
-      const fileContents = filesInDirectory.map((fileName) => {
-        const joinedPath = path.join(promptPath, fileName);
-        resolvedPath = path.resolve(basePath, joinedPath);
-        resolvedPathToDisplay.set(resolvedPath, joinedPath);
-        return fs.readFileSync(resolvedPath, 'utf-8');
-      });
-      promptContents.push(...fileContents.map((content) => ({ raw: content, label: content })));
-    } else {
-      const ext = path.parse(promptPath).ext;
-      if (ext === '.js' || ext === '.cjs' || ext === '.mjs') {
-        const promptFunction = await importModule(promptPath, functionName);
-        const resolvedPathLookup = functionName ? `${promptPath}:${functionName}` : promptPath;
-        promptContents.push({
-          raw: String(promptFunction),
-          label: resolvedPathToDisplay.get(resolvedPathLookup) || String(promptFunction),
-          function: promptFunction,
-        });
-      } else if (ext === '.py') {
-        const fileContent = fs.readFileSync(promptPath, 'utf-8');
-        const promptFunction = async (context: {
-          vars: Record<string, string | object>;
-          provider?: ApiProvider;
-        }) => {
-          if (functionName) {
-            return runPython(promptPath, functionName, [
-              {
-                ...context,
-                provider: {
-                  id: context.provider?.id,
-                  label: context.provider?.label,
-                },
-              },
-            ]);
-          } else {
-            // Legacy: run the whole file
-            const options: PythonShellOptions = {
-              mode: 'text',
-              pythonPath: process.env.PROMPTFOO_PYTHON || 'python',
-              args: [safeJsonStringify(context)],
-            };
-            logger.debug(`Executing python prompt script ${promptPath}`);
-            const results = (await PythonShell.run(promptPath, options)).join('\n');
-            logger.debug(`Python prompt script ${promptPath} returned: ${results}`);
-            return results;
-          }
-        };
-        let label = fileContent;
-
-        const resolvedPathLookup = functionName ? `${promptPath}:${functionName}` : promptPath;
-        label = resolvedPathToDisplay.get(resolvedPathLookup) || resolvedPathLookup;
-
-        promptContents.push({
-          raw: fileContent,
-          label,
-          function: promptFunction,
-        });
-      } else {
-        const fileContent = fs.readFileSync(promptPath, 'utf-8');
-        const label: string | undefined =
-          resolvedPathToDisplay.get(promptPath) ||
-          (fileContent?.length > 200 ? promptPath : fileContent);
-
-        const ext = path.parse(promptPath).ext;
-        if (ext === '.jsonl') {
-          // Special case for JSONL file
-          const jsonLines = fileContent.split(/\r?\n/).filter((line) => line.length > 0);
-          for (const json of jsonLines) {
-            promptContents.push({ raw: json, label: json });
-          }
-          continue;
-        }
-        // }
-        promptContents.push({ raw: fileContent, label });
-      }
-    }
-  }
-
   if (
     // promptContents.length === 1 &&
     //inputType !== PromptInputType.NAMED &&
