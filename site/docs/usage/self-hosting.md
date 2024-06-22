@@ -1,42 +1,76 @@
 ---
 sidebar_position: 50
+title: Self-hosting Guide for promptfoo
+description: Learn how to self-host the promptfoo application using Docker. Follow this step-by-step guide to set up and configure your own instance.
+keywords:
+  - promptfoo
+  - self-hosting
+  - Docker
+  - setup guide
+  - configuration
 ---
 
-# Self-hosting
+# Self-hosting Guide
 
-promptfoo provides a Docker image that allows you to host a central server that stores your team's evals.
+promptfoo provides a Docker image that allows you to host a central server that stores your team's evals. This guide will walk you through the setup process and configuration options.
 
-The self-hosted app consists of:
+## Introduction
 
-- Next.js application that runs the web ui.
-- filesystem store that persists the eval results.
-- key-value (KV) store that persists shared data (redis, filesystem, or memory).
+This guide will help you set up and run a self-hosted instance of the promptfoo application using Docker. You'll learn how to configure the necessary environment variables and persist data for long-term use.
+
+## Prerequisites
+
+Before you begin, ensure you have the following:
+
+- Docker installed on your system.
+- Basic understanding of Docker commands.
+- System requirements: At least 2GB of RAM and 10GB of available storage.
 
 ## Setup
 
-Clone the repository and see the provided [Dockerfile](https://github.com/promptfoo/promptfoo/blob/main/Dockerfile). Here's an example Docker command to build and run the container:
+### Step 1: Clone the Repository
+
+Clone the promptfoo repository from GitHub.
+
+```sh
+git clone https://github.com/promptfoo/promptfoo.git
+cd promptfoo
+```
+
+### Step 2: Build the Docker Image
+
+Build the Docker image using the provided Dockerfile.
 
 ```sh
 docker build --build-arg NEXT_PUBLIC_PROMPTFOO_BASE_URL=http://localhost:3000 -t promptfoo-ui .
-docker run -p 3000:3000 -v /path/to/local_promptfoo:/root/.promptfoo promptfoo-ui
+```
+
+### Step 3: Run the Docker Container
+
+Run the Docker container with the following command:
+
+```sh
+docker run -d --name promptfoo_container -p 3000:3000 -v /path/to/local_promptfoo:/root/.promptfoo promptfoo-ui
 ```
 
 - `NEXT_PUBLIC_PROMPTFOO_BASE_URL` tells the web app where to send the API request when the user clicks the 'Share' button. This should be configured to match the URL of your self-hosted instance.
 - The `-v` argument maps the working directory `/root/.promptfoo` to a path on your local filesystem `/path/to/local_promptfoo`. Replace this path with your preferred local path. You can omit this argument, but then your evals won't be persisted.
 
-You can also set API credentials on the running Docker instance so that evals can be run on the server. For example, we'll set the OpenAI API key so users can run evals directly from the web ui:
+### Step 4: Set API Credentials
+
+Set API credentials on the running Docker instance so that evals can be run on the server. For example, set the OpenAI API key:
 
 ```sh
-docker run -p 3000:3000 -e -e OPENAI_API_KEY=sk-abc123 promptfoo-ui
+docker run -d --name promptfoo_container -p 3000:3000 -e OPENAI_API_KEY=sk-abc123 promptfoo-ui
 ```
 
-## Configuring eval storage
+## Configuring Eval Storage
 
-promptfoo uses a sqlite database located in `/root/.promptfoo` on the image, as well as some other files in that directory to track state. Be sure to persist this directory (and the `promptfoo.db` file specifically) in order to save evals.
+promptfoo uses a SQLite database located in `/root/.promptfoo` on the image, as well as some other files in that directory to track state. Be sure to persist this directory (and the `promptfoo.db` file specifically) to save evals.
 
 ## Configuring the KV Store
 
-By default, the application uses an in-memory store for shared results. However, you can configure it to use Redis or the filesystem by setting the appropriate environment variables. Below is a table of environment variables you can set to configure the KV store:
+By default, the application uses an in-memory store for shared results. However, you can configure it to use Redis or the filesystem by setting the appropriate environment variables:
 
 | Environment Variable             | Description                                                    | Default Value       |
 | -------------------------------- | -------------------------------------------------------------- | ------------------- |
@@ -48,24 +82,33 @@ By default, the application uses an in-memory store for shared results. However,
 | `PROMPTFOO_SHARE_REDIS_DB`       | The Redis database number.                                     | `0`                 |
 | `PROMPTFOO_SHARE_STORE_PATH`     | The filesystem path for storing shared results.                | `share-store`       |
 
-## Pointing the promptfoo client to your hosted instance
+### Example Redis Configuration
 
-When self-hosting, you need to set the environment variables so that the `promptfoo share` command knows how to reach your hosted application. Here's an example:
+To use Redis for the KV store, set the environment variables like this:
+```sh
+docker run -d --name promptfoo_container -p 3000:3000 -v /path/to/local_promptfoo:/root/.promptfoo -e PROMPTFOO_SHARE_STORE_TYPE=redis -e PROMPTFOO_SHARE_REDIS_HOST=redis_host -e PROMPTFOO_SHARE_REDIS_PORT=6379 -e PROMPTFOO_SHARE_REDIS_PASSWORD=your_password promptfoo-ui
+```
 
+## Pointing the promptfoo Client to Your Hosted Instance
+
+Set environment variables so that the `promptfoo share` command knows how to reach your hosted application:
 ```sh
 PROMPTFOO_REMOTE_API_BASE_URL=http://localhost:3000 PROMPTFOO_REMOTE_APP_BASE_URL=http://localhost:3000 promptfoo share -y
 ```
-
 This will create a shareable URL using your self-hosted service.
 
-The `PROMPTFOO_REMOTE_API_BASE_URL` environment variable specifies the base URL for the API endpoints of your self-hosted service. This is where the `promptfoo share` command sends data to create a shareable URL.
-
-Similarly, the `PROMPTFOO_REMOTE_APP_BASE_URL` environment variable sets the base URL for the UI of your self-hosted service. This will be a visible part of the shareable URL.
-
-These configuration options can also be set under the `sharing` property of your promptfoo config:
-
+Alternatively, these configuration options can be set in the `promptfoo` config file:
 ```yaml
 sharing:
   apiBaseUrl: http://localhost:3000
   appBaseUrl: http://localhost:3000
 ```
+
+## Troubleshooting
+
+### Common Issues
+
+- **Container Fails to Start**: Ensure all environment variables are correctly set and ports are not in use.
+- **Data Not Persisting**: Verify the volume mount path is correct and the container has write permissions.
+
+For further assistance, refer to the [Docker documentation](https://docs.docker.com/get-started/) and the [promptfoo GitHub repository](https://github.com/promptfoo/promptfoo).

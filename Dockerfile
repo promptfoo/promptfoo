@@ -33,7 +33,7 @@ RUN npm install
 RUN npm run build
 
 WORKDIR /app/src/web/nextui
-RUN npm prune --production
+RUN npm prune --omit=dev
 
 # ---- Final Stage ----
 FROM node:20-alpine
@@ -46,8 +46,6 @@ COPY --from=builder /app/src/web/nextui/public ./public
 COPY --from=builder /app/src/web/nextui/.next/standalone ./
 COPY --from=builder /app/src/web/nextui/.next/static ./src/web/nextui/.next/static
 COPY --from=builder /app/drizzle ./src/web/nextui/.next/server/drizzle
-
-RUN mkdir -p /root/.promptfoo/output
 
 # Create a script to write environment variables to .env file
 RUN echo -e '#!/bin/sh\n\
@@ -65,5 +63,7 @@ EXPOSE 3000
 
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s CMD curl -f http://$HOSTNAME:$PORT || exit 1
 
 CMD ["sh", "entrypoint.sh"]
