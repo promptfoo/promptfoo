@@ -26,7 +26,7 @@ tests:
     assert:
       - type: icontains
         value: 'keyboard'
-  - vars: 
+  - vars:
       riddle: I'm tall when I'm young, and I'm short when I'm old. What am I?
     assert:
       - type: select-best

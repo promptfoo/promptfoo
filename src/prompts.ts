@@ -92,36 +92,69 @@ enum PromptInputType {
   NAMED = 3,
 }
 
+/*
+export interface Prompt {
+  id?: string;
+  raw: string;
+  display?: string; // deprecated
+  label: string;
+  function?: (context: {
+    vars: Record<string, string | object>;
+    provider?: ApiProvider;
+  }) => Promise<string | object>;
+}
+*/
+
+export function normalizeInput(
+  promptPathOrGlobs: string | (string | Partial<Prompt>)[] | Record<string, string>,
+): (string | Partial<Prompt>)[] {
+  if (typeof promptPathOrGlobs === 'string') {
+    return [promptPathOrGlobs];
+  }
+  if (Array.isArray(promptPathOrGlobs)) {
+    return promptPathOrGlobs;
+  }
+  if (typeof promptPathOrGlobs === 'object') {
+    return Object.entries(promptPathOrGlobs).map(([label, promptPathOrGlob]) => {
+      return { raw: promptPathOrGlob, source: label };
+    });
+  }
+  throw new Error(`Invalid prompt format: ${JSON.stringify(promptPathOrGlobs)}`);
+}
+
 export async function readPrompts(
   promptPathOrGlobs: string | (string | Partial<Prompt>)[] | Record<string, string>,
   basePath: string = '',
 ): Promise<Prompt[]> {
   logger.debug(`Reading prompts from ${JSON.stringify(promptPathOrGlobs)}`);
-  let promptPathInfos: { raw: string; resolved: string }[] = [];
+
+  promptPathOrGlobs = normalizeInput(promptPathOrGlobs);
+
   let promptContents: Prompt[] = [];
 
-  let inputType: PromptInputType | undefined;
   let resolvedPath: string | undefined;
-  const forceLoadFromFile = new Set<string>();
+  const forceLoadFromFile = new Set<string>(); // files to load prompts from
   const resolvedPathToDisplay = new Map<string, string>();
-  if (typeof promptPathOrGlobs === 'string') {
-    // Path to a prompt file
-    if (promptPathOrGlobs.startsWith('file://')) {
-      promptPathOrGlobs = promptPathOrGlobs.slice('file://'.length);
-      // Ensure this path is not used as a raw prompt.
-      forceLoadFromFile.add(promptPathOrGlobs);
-    }
-    resolvedPath = path.resolve(basePath, promptPathOrGlobs);
-    promptPathInfos = [{ raw: promptPathOrGlobs, resolved: resolvedPath }];
-    resolvedPathToDisplay.set(resolvedPath, promptPathOrGlobs);
-    inputType = PromptInputType.STRING;
-  } else if (Array.isArray(promptPathOrGlobs)) {
-    // TODO(ian): Handle object array, such as OpenAI messages
-    inputType = PromptInputType.ARRAY;
-    promptPathInfos = promptPathOrGlobs.flatMap((pathOrGlob) => {
+
+  const promptPathInfos: { raw: string; resolved: string }[] = promptPathOrGlobs.flatMap(
+    (pathOrGlob) => {
       let label;
       let rawPath: string;
-      if (typeof pathOrGlob === 'object') {
+
+      if (typeof pathOrGlob === 'string') {
+        label = pathOrGlob;
+        rawPath = pathOrGlob;
+        // Path to a prompt file
+        if (pathOrGlob.startsWith('file://')) {
+          promptPathOrGlobs = pathOrGlob.slice('file://'.length);
+          // Ensure this path is not used as a raw prompt.
+          forceLoadFromFile.add(pathOrGlob);
+        }
+        resolvedPath = path.resolve(basePath, pathOrGlob);
+        resolvedPathToDisplay.set(resolvedPath, pathOrGlob);
+        return { raw: pathOrGlob, resolved: resolvedPath };
+      } else if (typeof pathOrGlob === 'object') {
+        // TODO(ian): Handle object array, such as OpenAI messages
         // Parse prompt config object {id, label}
         invariant(
           pathOrGlob.label,
@@ -133,11 +166,10 @@ export async function readPrompts(
           `Prompt object requires id, but got ${JSON.stringify(pathOrGlob)}`,
         );
         rawPath = pathOrGlob.id;
-        inputType = PromptInputType.NAMED;
       } else {
-        label = pathOrGlob;
-        rawPath = pathOrGlob;
+        throw new Error(`Invalid prompt format: ${JSON.stringify(pathOrGlob)}`);
       }
+
       invariant(
         typeof rawPath === 'string',
         `Prompt path must be a string, but got ${JSON.stringify(rawPath)}`,
@@ -160,16 +192,8 @@ export async function readPrompts(
       }
       // globSync will return empty if no files match, which is the case when the path includes a function name like: file.js:func
       return [{ raw: rawPath, resolved: resolvedPath }];
-    });
-  } else if (typeof promptPathOrGlobs === 'object') {
-    // Display/contents mapping
-    promptPathInfos = Object.keys(promptPathOrGlobs).map((key) => {
-      resolvedPath = path.resolve(basePath, key);
-      resolvedPathToDisplay.set(resolvedPath, (promptPathOrGlobs as Record<string, string>)[key]);
-      return { raw: key, resolved: resolvedPath };
-    });
-    inputType = PromptInputType.NAMED;
-  }
+    },
+  );
 
   logger.debug(`Resolved prompt paths: ${JSON.stringify(promptPathInfos)}`);
 
@@ -259,10 +283,9 @@ export async function readPrompts(
           }
         };
         let label = fileContent;
-        if (inputType === PromptInputType.NAMED) {
-          const resolvedPathLookup = functionName ? `${promptPath}:${functionName}` : promptPath;
-          label = resolvedPathToDisplay.get(resolvedPathLookup) || resolvedPathLookup;
-        }
+
+        const resolvedPathLookup = functionName ? `${promptPath}:${functionName}` : promptPath;
+        label = resolvedPathToDisplay.get(resolvedPathLookup) || resolvedPathLookup;
 
         promptContents.push({
           raw: fileContent,
@@ -272,29 +295,28 @@ export async function readPrompts(
       } else {
         const fileContent = fs.readFileSync(promptPath, 'utf-8');
         let label: string | undefined;
-        if (inputType === PromptInputType.NAMED) {
-          label = resolvedPathToDisplay.get(promptPath) || promptPath;
-        } else {
-          label = fileContent.length > 200 ? promptPath : fileContent;
+        label =
+          resolvedPathToDisplay.get(promptPath) ||
+          (fileContent?.length > 200 ? promptPath : fileContent);
 
-          const ext = path.parse(promptPath).ext;
-          if (ext === '.jsonl') {
-            // Special case for JSONL file
-            const jsonLines = fileContent.split(/\r?\n/).filter((line) => line.length > 0);
-            for (const json of jsonLines) {
-              promptContents.push({ raw: json, label: json });
-            }
-            continue;
+        const ext = path.parse(promptPath).ext;
+        if (ext === '.jsonl') {
+          // Special case for JSONL file
+          const jsonLines = fileContent.split(/\r?\n/).filter((line) => line.length > 0);
+          for (const json of jsonLines) {
+            promptContents.push({ raw: json, label: json });
           }
+          continue;
         }
+        // }
         promptContents.push({ raw: fileContent, label });
       }
     }
   }
 
   if (
-    promptContents.length === 1 &&
-    inputType !== PromptInputType.NAMED &&
+    // promptContents.length === 1 &&
+    //inputType !== PromptInputType.NAMED &&
     !promptContents[0]['function']
   ) {
     // Split raw text file into multiple prompts
