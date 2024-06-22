@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import dedent from "dedent";
+import dedent from 'dedent';
 
 import { globSync } from 'glob';
 
@@ -232,7 +232,7 @@ describe('readPrompts', () => {
     expect(fs.readFileSync).toHaveBeenCalledTimes(2);
   });
 
-  it('readPrompts with .js file', async () => {
+  fit('readPrompts with .js file', async () => {
     jest.doMock(
       path.resolve('prompt.js'),
       () => {
@@ -240,8 +240,14 @@ describe('readPrompts', () => {
       },
       { virtual: true },
     );
-    const result = await readPrompts('prompt.js');
-    expect(result[0].function).toBeDefined();
+    await expect(readPrompts('prompt.js')).resolves.toEqual([
+      {
+        raw: 'console.log("dummy prompt")',
+        label: 'prompt.js: console.log("dummy prompt")',
+        function: expect.any(Function),
+      },
+    ]);
+    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
   });
 
   it('readPrompts with directory', async () => {

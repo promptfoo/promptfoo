@@ -174,7 +174,7 @@ export function normalizeInput(
   throw new Error(`Invalid input prompt: ${JSON.stringify(promptPathOrGlobs)}`);
 }
 
-export function processPrompt(prompt: RawPrompt, basePath: string = ''): Prompt[] {
+export async function processPrompt(prompt: RawPrompt, basePath: string = ''): Promise<Prompt[]> {
   const rawPath = prompt.raw;
 
   console.warn('-------prompt', prompt);
@@ -226,17 +226,13 @@ export function processPrompt(prompt: RawPrompt, basePath: string = ''): Prompt[
     }
   }
 
-
   // You can specify a function name in the filename like this:
   // prompt.py:myFunction or prompts.js:myFunction.
   let filename = path.parse(promptPath).base;
   let functionName: string | undefined;
   if (filename.includes(':')) {
     const splits = filename.split(':');
-    if (
-      splits[0] &&
-      ['.js', '.cjs', '.mjs', '.py'].some((ext) => splits[0].includes(ext))
-    ) {
+    if (splits[0] && ['.js', '.cjs', '.mjs', '.py'].some((ext) => splits[0].includes(ext))) {
       [filename, functionName] = splits;
     }
   }
@@ -307,6 +303,20 @@ export function processPrompt(prompt: RawPrompt, basePath: string = ''): Prompt[
     ];
   }
 
+  if (['.js', '.cjs', '.mjs'].includes(extension)) {
+    const promptFunction = await importModule(promptPath, functionName);
+    console.warn('-promptFunction-', String(promptFunction));
+    return [
+      {
+        raw: String(promptFunction),
+        label: functionName
+          ? `${promptPath}:${functionName}`
+          : `${promptPath}:${String(promptFunction)}`,
+        function: promptFunction,
+      },
+    ];
+  }
+
   // ** globs
   const resolvedPath = path.resolve(basePath, rawPath);
   const globbedPaths = globSync(resolvedPath.replace(/\\/g, '/'), {
@@ -348,14 +358,15 @@ export async function readPrompts(
   const promptPartials = normalizeInput(promptPathOrGlobs);
   console.warn('promptPartials', promptPartials);
 
-  const prompts: Prompt[] = promptPartials.flatMap((prompt) => {
-    const promptBatch = processPrompt(prompt, basePath);
+  const promptBatches: Prompt[][] = [];
+  for (const prompt of promptPartials) {
+    const promptBatch = await processPrompt(prompt, basePath);
     if (promptBatch.length === 0) {
       throw new Error(`There are no prompts in ${JSON.stringify(prompt.raw)}`);
     }
-    return promptBatch;
-  });
-
+    promptBatches.push(promptBatch);
+  }
+  const prompts: Prompt[] = promptBatches.flat();
   return prompts;
 }
 
