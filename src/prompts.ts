@@ -90,7 +90,7 @@ export function maybeFilePath(str: string): boolean {
     str.includes('/') ||
     str.includes('\\') ||
     str.startsWith('file://') ||
-    validFileExtensions.some((ext) => str.endsWith(ext));
+    validFileExtensions.some((ext) => str.includes(ext));
   const containsDot = str.charAt(str.length - 3) === '.' || str.charAt(str.length - 4) === '.';
   return hasValidFileExtension || containsDot;
 }
@@ -151,6 +151,7 @@ export function normalizeInput(
       }
       return {
         source: `${index}`,
+        raw: promptPathOrGlob.raw || promptPathOrGlob.id,
         ...promptPathOrGlob,
       };
     });
@@ -225,8 +226,23 @@ export function processPrompt(prompt: RawPrompt, basePath: string = ''): Prompt[
     }
   }
 
-  const parsedPath = path.parse(promptPath);
 
+  // You can specify a function name in the filename like this:
+  // prompt.py:myFunction or prompts.js:myFunction.
+  let filename = path.parse(promptPath).base;
+  let functionName: string | undefined;
+  if (filename.includes(':')) {
+    const splits = filename.split(':');
+    if (
+      splits[0] &&
+      ['.js', '.cjs', '.mjs', '.py'].some((ext) => splits[0].includes(ext))
+    ) {
+      [filename, functionName] = splits;
+    }
+  }
+  console.warn('filename', filename, 'functionName', functionName);
+
+  const parsedPath = path.parse(filename);
   const extension = parsedPath.ext;
   console.warn('extension', extension, 'promptPath', promptPath);
   if (extension === '.txt') {
@@ -251,21 +267,6 @@ export function processPrompt(prompt: RawPrompt, basePath: string = ''): Prompt[
       raw: json,
       label: `${prompt.label ? `${prompt.label}: ` : ''}${rawPath}: ${json}`,
     }));
-  }
-
-  let filename = parsedPath.base;
-  let functionName: string | undefined;
-  if (parsedPath.base.includes(':')) {
-    const splits = parsedPath.base.split(':');
-    if (
-      splits[0] &&
-      (splits[0].endsWith('.js') ||
-        splits[0].endsWith('.cjs') ||
-        splits[0].endsWith('.mjs') ||
-        splits[0].endsWith('.py'))
-    ) {
-      [filename, functionName] = splits;
-    }
   }
 
   if (extension === '.py') {

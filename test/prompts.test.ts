@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import dedent from "dedent";
 
 import { globSync } from 'glob';
 
@@ -148,33 +149,6 @@ describe('readPrompts', () => {
     expect(fs.readFileSync).toHaveBeenCalledTimes(2);
   });
 
-  it('readPrompts with directory', async () => {
-    jest.mocked(fs.statSync).mockReturnValue({ isDirectory: () => true } as fs.Stats);
-    jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob].flat());
-    jest.mocked(fs.readdirSync).mockReturnValue(['prompt1.txt', 'prompt2.txt']);
-    jest.mocked(fs.readFileSync).mockImplementation((filePath) => {
-      if (filePath.toString().endsWith(path.join('prompts', 'prompt1.txt'))) {
-        return 'Test prompt 1\n---\nTest prompt 2';
-      } else if (filePath.toString().endsWith(path.join('prompts', 'prompt2.txt'))) {
-        return 'Test prompt 3\n---\nTest prompt 4\n---\nTest prompt 5';
-      }
-      throw new Error('Unexpected file path in test');
-    });
-    await expect(readPrompts(['prompts/*'])).toEqual([
-      {
-        label: 'prompts1.txt: Test prompt 1',
-        raw: 'Test prompt 1',
-      },
-      {
-        label: 'prompts2.txt: Test prompt 2',
-        raw: 'Test prompt 2',
-      },
-    ]);
-    expect(fs.statSync).toHaveBeenCalledTimes(1);
-    expect(fs.readdirSync).toHaveBeenCalledTimes(1);
-    expect(fs.readFileSync).toHaveBeenCalledTimes(2);
-  });
-
   it('readPrompts with map input', async () => {
     jest.mocked(fs.readFileSync).mockReturnValue('some raw text');
     jest.mocked(fs.statSync).mockReturnValue({ isDirectory: () => false } as fs.Stats);
@@ -217,7 +191,7 @@ describe('readPrompts', () => {
     expect(fs.readFileSync).toHaveBeenCalledTimes(1);
   });
 
-  fit('readPrompts with .py file', async () => {
+  it('readPrompts with .py file', async () => {
     const code = `print('dummy prompt')`;
     jest.mocked(fs.readFileSync).mockReturnValue(code);
     await expect(readPrompts('prompt.py')).resolves.toEqual([
@@ -236,26 +210,26 @@ describe('readPrompts', () => {
       { id: 'prompts.py:prompt2', label: 'Second prompt' },
     ];
 
-    const code = `def prompt1:
-  return 'First prompt'
-def prompt2:
-  return 'Second prompt'`;
+    const code = dedent`
+      def prompt1:
+        return 'First prompt'
+      def prompt2:
+        return 'Second prompt'
+      `;
     jest.mocked(fs.readFileSync).mockReturnValue(code);
-
-    const result = await readPrompts(prompts);
-
+    await expect(readPrompts(prompts)).resolves.toEqual([
+      {
+        raw: code,
+        label: expect.stringMatching(/\First prompt: prompts.py:prompt1/),
+        function: expect.any(Function),
+      },
+      {
+        raw: code,
+        label: expect.stringMatching(/\bSecond prompt: prompts.py:prompt2/),
+        function: expect.any(Function),
+      },
+    ]);
     expect(fs.readFileSync).toHaveBeenCalledTimes(2);
-    expect(result).toHaveLength(2);
-    expect(result[0]).toEqual({
-      raw: code,
-      label: 'First prompt',
-      function: expect.any(Function),
-    });
-    expect(result[1]).toEqual({
-      raw: code,
-      label: 'Second prompt',
-      function: expect.any(Function),
-    });
   });
 
   it('readPrompts with .js file', async () => {
@@ -268,6 +242,33 @@ def prompt2:
     );
     const result = await readPrompts('prompt.js');
     expect(result[0].function).toBeDefined();
+  });
+
+  it('readPrompts with directory', async () => {
+    jest.mocked(fs.statSync).mockReturnValue({ isDirectory: () => true } as fs.Stats);
+    jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob].flat());
+    jest.mocked(fs.readdirSync).mockReturnValue(['prompt1.txt', 'prompt2.txt']);
+    jest.mocked(fs.readFileSync).mockImplementation((filePath) => {
+      if (filePath.toString().endsWith(path.join('prompts', 'prompt1.txt'))) {
+        return 'Test prompt 1\n---\nTest prompt 2';
+      } else if (filePath.toString().endsWith(path.join('prompts', 'prompt2.txt'))) {
+        return 'Test prompt 3\n---\nTest prompt 4\n---\nTest prompt 5';
+      }
+      throw new Error('Unexpected file path in test');
+    });
+    await expect(readPrompts(['prompts/*'])).toEqual([
+      {
+        label: 'prompts1.txt: Test prompt 1',
+        raw: 'Test prompt 1',
+      },
+      {
+        label: 'prompts2.txt: Test prompt 2',
+        raw: 'Test prompt 2',
+      },
+    ]);
+    expect(fs.statSync).toHaveBeenCalledTimes(1);
+    expect(fs.readdirSync).toHaveBeenCalledTimes(1);
+    expect(fs.readFileSync).toHaveBeenCalledTimes(2);
   });
 
   it('readPrompts with glob pattern for .txt files', async () => {
