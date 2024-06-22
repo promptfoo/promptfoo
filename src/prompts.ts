@@ -163,8 +163,95 @@ export function normalizeInput(
   throw new Error(`Invalid input prompt: ${JSON.stringify(promptPathOrGlobs)}`);
 }
 
-export function hydratePrompt(prompt: RawPrompt, basePath: string = ''): Prompt {
-  return prompt;
+export function hydratePrompt(prompt: RawPrompt, basePath: string = ''): Prompt[] {
+  const rawPath = prompt.raw;
+
+  invariant(rawPath, `prompt.raw must be a string, but got ${JSON.stringify(prompt.raw)}`);
+
+  console.warn('rawPath', rawPath);
+
+  if (!maybeFilePath(rawPath)) {
+    return [
+      {
+        raw: rawPath,
+        label: `${prompt.source ? `${prompt.source}: ` : ''}${rawPath}`,
+      },
+    ];
+  }
+
+  const promptPath = path.join(basePath, rawPath);
+
+  let stat;
+  try {
+    stat = fs.statSync(promptPath);
+  } catch (err) {
+    if (process.env.PROMPTFOO_STRICT_FILES) {
+      throw err;
+    }
+    // If the path doesn't exist, it's probably a raw prompt
+    // prompts.push({ raw: promptPathInfo.raw, label: promptPathInfo.raw });
+  }
+  console.warn('----stat----', stat);
+  if (stat?.isDirectory()) {
+    return [];
+  }
+
+
+
+
+
+
+
+
+  const extension = path.parse(promptPath).ext;
+  console.warn('extension', extension, 'promptPath', promptPath);
+  if (extension === '.txt') {
+    const fileContent = fs.readFileSync(promptPath, 'utf-8');
+    // console.warn('-------fileContent-------', fileContent);
+    const prompts: Prompt[] = fileContent
+      .split(PROMPT_DELIMITER)
+      .map((p) => ({
+        raw: p.trim(),
+        label: `${prompt.raw}: ${p.trim()}`,
+      }))
+      .filter((p) => p.raw.length > 0);
+    // console.warn('-------prompts-------', prompts);
+    if (prompts.length === 0) {
+      throw new Error(`There are no prompts in ${JSON.stringify(prompt.raw)}`);
+    }
+    return prompts;
+  }
+
+  // ** globs
+  const resolvedPath = path.resolve(basePath, rawPath);
+  const globbedPaths = globSync(resolvedPath.replace(/\\/g, '/'), {
+    windowsPathsNoEscape: true,
+  });
+  console.warn('globbedPaths', globbedPaths);
+  logger.debug(
+    `Expanded prompt ${rawPath} to ${resolvedPath} and then to ${JSON.stringify(globbedPaths)}`,
+  );
+  if (globbedPaths.length > 0) {
+    return globbedPaths.map((globbedPath) => ({
+      raw: rawPath,
+      label: globbedPath,
+    }));
+  }
+  return [];
+
+  /*
+
+  const parsedPath = path.parse(promptPath);
+
+  // ** functions
+  let filename = parsedPath.base;
+  let functionName: string | undefined;
+  if (parsedPath.base.includes(':')) {
+    const splits = parsedPath.base.split(':');
+    if (splits[0] && ['js', 'cjs', 'mjs', 'py'].includes(splits[0].split('.')[0])) {
+      [filename, functionName] = splits;
+    }
+  } */
 }
 
 export async function readPrompts(
@@ -175,6 +262,14 @@ export async function readPrompts(
 
   const promptPartials = normalizeInput(promptPathOrGlobs);
   console.warn('promptPartials', promptPartials);
+
+  const prompts: Prompt[] = promptPartials.flatMap((prompt) => hydratePrompt(prompt, basePath));
+
+  return prompts;
+}
+
+/*
+
 
   const forceLoadFromFile = new Set<string>(); // files to load prompts from
   const resolvedPathToDisplay = new Map<string, string>();
@@ -206,8 +301,6 @@ export async function readPrompts(
   );
 
   logger.debug(`Resolved prompt paths: ${JSON.stringify(promptPathInfos)}`);
-
-  const prompts: Prompt[] = [];
 
   for (const promptPathInfo of promptPathInfos) {
     const parsedPath = path.parse(promptPathInfo.raw);
@@ -341,3 +434,4 @@ export async function readPrompts(
   }
   return promptContents;
 }
+*/
