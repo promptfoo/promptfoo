@@ -116,6 +116,7 @@ async function resolveConfigs(
         ? false
         : fileConfig.sharing ?? defaultConfig.sharing ?? true,
     defaultTest: defaultTestRaw ? await readTest(defaultTestRaw, basePath) : undefined,
+    derivedMetrics: fileConfig.derivedMetrics || defaultConfig.derivedMetrics,
     outputPath: cmdObj.output || fileConfig.outputPath || defaultConfig.outputPath,
     metadata: fileConfig.metadata || defaultConfig.metadata,
   };
@@ -180,6 +181,7 @@ async function resolveConfigs(
     tests: parsedTests,
     scenarios: config.scenarios,
     defaultTest,
+    derivedMetrics: config.derivedMetrics,
     nunjucksFilters: await readFilters(
       fileConfig.nunjucksFilters || defaultConfig.nunjucksFilters || {},
     ),
