@@ -6,9 +6,9 @@ import { IS_RUNNING_LOCALLY, USE_SUPABASE } from '@/constants';
 export const dynamic = IS_RUNNING_LOCALLY ? 'auto' : 'force-dynamic';
 
 export async function GET(request: Request, { params }: { params: { filename: string } }) {
-  if (USE_SUPABASE) {
-    return NextResponse.json({ error: 'Not implemented' });
-  }
+  if (IS_RUNNING_LOCALLY) return NextResponse.json({});
+  if (USE_SUPABASE) return NextResponse.json({ error: 'Not implemented' });
+
   const { filename: evalId } = params;
   const match = await readResult(evalId);
   if (!match) {
@@ -16,3 +16,5 @@ export async function GET(request: Request, { params }: { params: { filename: st
   }
   return NextResponse.json({ data: match.result });
 }
+
+export const generateStaticParams = () => [{ filename: '1' }];

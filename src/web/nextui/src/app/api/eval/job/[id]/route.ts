@@ -10,6 +10,7 @@ import evalJobs from '../evalJobsStore';
 export const dynamic = IS_RUNNING_LOCALLY ? 'auto' : 'force-dynamic';
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+  if (IS_RUNNING_LOCALLY) return NextResponse.json({});
   if (USE_SUPABASE) {
     const supabase = createRouteHandlerClient({ cookies });
     const { id } = params;
@@ -42,3 +43,5 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     }
   }
 }
+
+export const generateStaticParams = () => [{ id: '1' }];

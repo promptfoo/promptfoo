@@ -47,6 +47,8 @@ async function getDataForId(
 }
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+  if (IS_RUNNING_LOCALLY) return NextResponse.json({});
+
   try {
     const resp = await getDataForId(params.id);
     if (!resp) {
@@ -87,3 +89,5 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     );
   }
 }
+
+export const generateStaticParams = () => [{ id: '1' }];
