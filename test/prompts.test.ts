@@ -3,7 +3,7 @@ import * as path from 'path';
 
 import { globSync } from 'glob';
 
-import { maybeFilepath, readPrompts } from '../src/prompts';
+import { maybeFilepath, normalizeInput, readPrompts } from '../src/prompts';
 
 import type { Prompt } from '../src/types';
 
@@ -37,6 +37,20 @@ describe('readPrompts', () => {
     jest.clearAllMocks();
   });
 
+  fit('rejects invalid inputs', async () => {
+    await expect(readPrompts(null as any)).rejects.toThrow('Invalid input prompt: null');
+    await expect(readPrompts(undefined as any)).rejects.toThrow('Invalid input prompt: undefined');
+    await expect(readPrompts(1 as any)).rejects.toThrow('Invalid input prompt: 1');
+    await expect(readPrompts(true as any)).rejects.toThrow('Invalid input prompt: true');
+    await expect(readPrompts(false as any)).rejects.toThrow('Invalid input prompt: false');
+  });
+
+  fit('rejects empty inputs', async () => {
+    await expect(readPrompts([])).rejects.toThrow('Invalid input prompt: []');
+    await expect(readPrompts({} as any)).rejects.toThrow('Invalid input prompt: {}');
+    await expect(readPrompts('')).rejects.toThrow('Invalid input prompt: ""');
+  });
+
   it('reads a single prompt', async () => {
     const prompt = 'This is a test prompt';
     await expect(readPrompts(prompt)).resolves.toEqual([
@@ -45,6 +59,18 @@ describe('readPrompts', () => {
         label: prompt,
       },
     ]);
+  });
+
+  it('readPrompts with empty input', async () => {
+    jest.mocked(fs.readFileSync).mockReturnValue('');
+    jest.mocked(fs.statSync).mockReturnValue({ isDirectory: () => false } as fs.Stats);
+    await expect(readPrompts(['prompts.txt'])).resolves.toEqual([
+      {
+        label: 'prompts.txt: ',
+        raw: '',
+      },
+    ]);
+    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
   });
 
   it('read a list of prompts', async () => {
@@ -115,7 +141,7 @@ describe('readPrompts', () => {
     expect(fs.readFileSync).toHaveBeenCalledTimes(2);
   });
 
-  fit('readPrompts with directory', async () => {
+  it('readPrompts with directory', async () => {
     jest.mocked(fs.statSync).mockReturnValue({ isDirectory: () => true } as fs.Stats);
     jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob].flat());
     jest.mocked(fs.readdirSync).mockReturnValue(['prompt1.txt', 'prompt2.txt']);
@@ -140,17 +166,6 @@ describe('readPrompts', () => {
     expect(fs.statSync).toHaveBeenCalledTimes(1);
     expect(fs.readdirSync).toHaveBeenCalledTimes(1);
     expect(fs.readFileSync).toHaveBeenCalledTimes(2);
-  });
-
-  it('readPrompts with empty input', async () => {
-    jest.mocked(fs.readFileSync).mockReturnValue('');
-    jest.mocked(fs.statSync).mockReturnValue({ isDirectory: () => false });
-    const promptPaths = ['prompts.txt'];
-
-    const result = await readPrompts(promptPaths);
-
-    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
-    expect(result).toEqual([toPrompt('')]);
   });
 
   it('readPrompts with map input', async () => {
@@ -313,5 +328,48 @@ describe('maybeFilepath', () => {
     expect(maybeFilepath('file.ext')).toBe(true);
     expect(maybeFilepath('filename.ex')).toBe(true);
     expect(maybeFilepath('file.name.ext')).toBe(true);
+  });
+});
+
+fdescribe('normalizeInput', () => {
+  it('rejects invalid input types', () => {
+    expect(() => normalizeInput(null as any)).toThrow('Invalid input prompt: null');
+    expect(() => normalizeInput(undefined as any)).toThrow('Invalid input prompt: undefined');
+    expect(() => normalizeInput(1 as any)).toThrow('Invalid input prompt: 1');
+    expect(() => normalizeInput(true as any)).toThrow('Invalid input prompt: true');
+    expect(() => normalizeInput(false as any)).toThrow('Invalid input prompt: false');
+  });
+
+  it('rejects empty inputs', () => {
+    expect(() => normalizeInput([])).toThrow('Invalid input prompt: []');
+    expect(() => normalizeInput({} as any)).toThrow('Invalid input prompt: {}');
+    expect(() => normalizeInput('')).toThrow('Invalid input prompt: ""');
+    // TODO: should we validate that strings / keys are not empty here?
+  });
+
+  it('returns array with single string when input is a non-empty string', () => {
+    const result = normalizeInput('valid string');
+    expect(result).toEqual([{ raw: 'valid string', label: 'valid string' }]);
+  });
+
+  it('returns input array when input is a non-empty array', () => {
+    const inputArray = ['prompt1', { raw: 'prompt2' }];
+    const result = normalizeInput(inputArray);
+    expect(result).toEqual([
+      { raw: 'prompt1', label: 'prompt1' },
+      { raw: 'prompt2' },
+    ]);
+  });
+
+  it('normalizes object input to array of prompts', () => {
+    const inputObject = {
+      key1: 'prompt1',
+      key2: 'prompt2',
+    };
+    const result = normalizeInput(inputObject);
+    expect(result).toEqual([
+      { label: 'key1', raw: 'prompt1' },
+      { label: 'key2', raw: 'prompt2' },
+    ]);
   });
 });

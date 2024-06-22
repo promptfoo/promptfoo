@@ -105,21 +105,46 @@ export interface Prompt {
 }
 */
 
+/**
+ * Normalize the input prompt to an array of prompts. Rejects invalid and empty inputs.
+ * @param {string | (string | Partial<Prompt>)[] | Record<string, string>} promptPathOrGlobs The input prompt.
+ * @returns {(string | Partial<Prompt>)[]} The normalized prompts.
+ * @throws {Error} If the input is invalid or empty.
+ */
 export function normalizeInput(
   promptPathOrGlobs: string | (string | Partial<Prompt>)[] | Record<string, string>,
-): (string | Partial<Prompt>)[] {
+): Partial<Prompt>[] {
+  if (
+    !promptPathOrGlobs ||
+    ((typeof promptPathOrGlobs === 'string' || Array.isArray(promptPathOrGlobs)) &&
+      !promptPathOrGlobs.length)
+  ) {
+    throw new Error(`Invalid input prompt: ${JSON.stringify(promptPathOrGlobs)}`);
+  }
   if (typeof promptPathOrGlobs === 'string') {
-    return [promptPathOrGlobs];
+    return [
+      {
+        raw: promptPathOrGlobs,
+        label: promptPathOrGlobs,
+      },
+    ];
   }
   if (Array.isArray(promptPathOrGlobs)) {
-    return promptPathOrGlobs;
-  }
-  if (typeof promptPathOrGlobs === 'object') {
-    return Object.entries(promptPathOrGlobs).map(([label, promptPathOrGlob]) => {
-      return { raw: promptPathOrGlob, source: label };
+    return promptPathOrGlobs.map((promptPathOrGlob) => {
+      if (typeof promptPathOrGlob === 'string') {
+        return {
+          raw: promptPathOrGlob,
+          label: promptPathOrGlob,
+        };
+      }
+      return promptPathOrGlob;
     });
   }
-  throw new Error(`Invalid prompt format: ${JSON.stringify(promptPathOrGlobs)}`);
+  if (typeof promptPathOrGlobs === 'object' && Object.keys(promptPathOrGlobs).length) {
+    return Object.entries(promptPathOrGlobs).map(([key, raw]) => ({ raw, label: key }));
+  }
+  // numbers, booleans, etc
+  throw new Error(`Invalid input prompt: ${JSON.stringify(promptPathOrGlobs)}`);
 }
 
 export async function readPrompts(
