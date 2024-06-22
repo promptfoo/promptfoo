@@ -3,6 +3,7 @@ prompts:
     label: riddles
   - id: file://prompts2.txt
     label: jokes
+  - 'You are a riddle solver. Be concise. Answer with a single word or phrase. Riddle: {{riddle}}'
 
 providers:
   - id: openai:gpt-4o
@@ -25,6 +26,11 @@ tests:
     assert:
       - type: icontains
         value: 'keyboard'
+  - vars: 
+      riddle: I'm tall when I'm young, and I'm short when I'm old. What am I?
+    assert:
+      - type: select-best
+        value: Choose the response that contains 'candle'
   - vars:
       joke: Why don't scientists trust atoms?
     assert:

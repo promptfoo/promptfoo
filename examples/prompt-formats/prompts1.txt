@@ -15,3 +15,10 @@ Respond with a single word or brief phrase that solves the riddle, avoiding any 
    - **Answer:** Piano
 
 **Riddle:** {{riddle}}
+---
+- role: system
+  content: 'You are a careful riddle solver. Be concise.'
+- role: user
+  content: |
+    Answer this riddle:
+    {{riddle}}
