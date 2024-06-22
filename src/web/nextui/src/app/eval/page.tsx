@@ -30,5 +30,9 @@ export default async function Page() {
   }
 
   // TODO(ian): Pass recent evals as well
-  return <Eval />;
+  return (
+    <React.Suspense>
+      <Eval />
+    </React.Suspense>
+  );
 }
