@@ -73,7 +73,7 @@ describe('readPrompts', () => {
     expect(fs.readFileSync).toHaveBeenCalledTimes(1);
   });
 
-  fit('read a list of prompts', async () => {
+  it('read a list of prompts', async () => {
     const prompts = ['Sample prompt 1', 'Sample prompt 2'];
     await expect(readPrompts(prompts)).toEqual([
       {
@@ -344,29 +344,29 @@ describe('normalizeInput', () => {
     expect(() => normalizeInput([])).toThrow('Invalid input prompt: []');
     expect(() => normalizeInput({} as any)).toThrow('Invalid input prompt: {}');
     expect(() => normalizeInput('')).toThrow('Invalid input prompt: ""');
-    // TODO: should we validate that strings / keys are not empty here?
   });
 
   it('returns array with single string when input is a non-empty string', () => {
-    const result = normalizeInput('valid string');
-    expect(result).toEqual([{ raw: 'valid string', label: 'valid string' }]);
+    expect(normalizeInput('valid string')).toEqual([{ raw: 'valid string' }]);
   });
 
   it('returns input array when input is a non-empty array', () => {
     const inputArray = ['prompt1', { raw: 'prompt2' }];
-    const result = normalizeInput(inputArray);
-    expect(result).toEqual([{ raw: 'prompt1', label: 'prompt1' }, { raw: 'prompt2' }]);
+    expect(normalizeInput(inputArray)).toEqual([
+      { raw: 'prompt1', source: '0' },
+      { raw: 'prompt2', source: '1' },
+    ]);
   });
 
+  // NOTE: Legacy and considered deprecated
   it('normalizes object input to array of prompts', () => {
     const inputObject = {
       key1: 'prompt1',
       key2: 'prompt2',
     };
-    const result = normalizeInput(inputObject);
-    expect(result).toEqual([
-      { label: 'key1', raw: 'prompt1' },
-      { label: 'key2', raw: 'prompt2' },
+    expect(normalizeInput(inputObject)).toEqual([
+      { source: 'key1', raw: 'prompt1' },
+      { source: 'key2', raw: 'prompt2' },
     ]);
   });
 });

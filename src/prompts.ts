@@ -105,6 +105,10 @@ export interface Prompt {
 }
 */
 
+type RawPrompt = Partial<Prompt> & {
+  source?: string; // The source of the prompt, such as a file path or a string. Could also be an index in the array or a key in the object.
+};
+
 /**
  * Normalize the input prompt to an array of prompts. Rejects invalid and empty inputs.
  * @param {string | (string | Partial<Prompt>)[] | Record<string, string>} promptPathOrGlobs The input prompt.
@@ -113,7 +117,7 @@ export interface Prompt {
  */
 export function normalizeInput(
   promptPathOrGlobs: string | (string | Partial<Prompt>)[] | Record<string, string>,
-): Partial<Prompt>[] {
+): RawPrompt[] {
   if (
     !promptPathOrGlobs ||
     ((typeof promptPathOrGlobs === 'string' || Array.isArray(promptPathOrGlobs)) &&
@@ -124,9 +128,7 @@ export function normalizeInput(
   if (typeof promptPathOrGlobs === 'string') {
     return [
       {
-        id: promptPathOrGlobs,
         raw: promptPathOrGlobs,
-        label: promptPathOrGlobs,
       },
     ];
   }
@@ -134,19 +136,28 @@ export function normalizeInput(
     return promptPathOrGlobs.map((promptPathOrGlob, index) => {
       if (typeof promptPathOrGlob === 'string') {
         return {
-          id: `${index}:${promptPathOrGlob}`,
+          source: `${index}`,
           raw: promptPathOrGlob,
-          label: promptPathOrGlob,
         };
       }
-      return promptPathOrGlob;
+      return {
+        source: `${index}`,
+        ...promptPathOrGlob,
+      };
     });
   }
   if (typeof promptPathOrGlobs === 'object' && Object.keys(promptPathOrGlobs).length) {
-    return Object.entries(promptPathOrGlobs).map(([key, raw]) => ({ id: `${key}:${raw}`, raw, label: key }));
+    return Object.entries(promptPathOrGlobs).map(([key, raw]) => ({
+      source: key,
+      raw,
+    }));
   }
   // numbers, booleans, etc
   throw new Error(`Invalid input prompt: ${JSON.stringify(promptPathOrGlobs)}`);
+}
+
+export function hydratePrompt(prompt: Partial<Prompt>, basePath: string = ''): Prompt {
+  return prompt;
 }
 
 export async function readPrompts(
@@ -161,15 +172,17 @@ export async function readPrompts(
   const forceLoadFromFile = new Set<string>(); // files to load prompts from
   const resolvedPathToDisplay = new Map<string, string>();
 
-  const prompts: Prompt[] = promptPartials.flatMap(
+  const promptPathInfos: { raw: string; resolved: string | undefined }[] = promptPartials.flatMap(
     (prompt) => {
       invariant(prompt.raw, `Prompt path must be a string, but got ${JSON.stringify(prompt.raw)}`);
       if (prompt.raw.startsWith('file://') || maybeFilepath(prompt.raw)) {
         // This path is explicitly marked as a file, ensure that it's not used as a raw prompt.
         forceLoadFromFile.add(prompt.raw.slice('file://'.length));
       }
-      if (maybeFilepath(prompt.raw))
-        const resolvedPath = path.resolve(basePath, prompt.raw);
+      const rawPath = prompt.raw;
+      let resolvedPath;
+      if (maybeFilepath(prompt.raw)) {
+        resolvedPath = path.resolve(basePath, prompt.raw);
         const globbedPaths = globSync(resolvedPath.replace(/\\/g, '/'), {
           windowsPathsNoEscape: true,
         });
@@ -187,8 +200,10 @@ export async function readPrompts(
 
   logger.debug(`Resolved prompt paths: ${JSON.stringify(promptPathInfos)}`);
 
+  const prompts: Prompt[] = [];
+
   for (const promptPathInfo of promptPathInfos) {
-    const parsedPath = path.parse(promptPathInfo.resolved);
+    const parsedPath = path.parse(promptPathInfo.raw);
     let filename = parsedPath.base;
     let functionName: string | undefined;
     if (parsedPath.base.includes(':')) {
@@ -213,7 +228,7 @@ export async function readPrompts(
         throw err;
       }
       // If the path doesn't exist, it's probably a raw prompt
-      promptContents.push({ raw: promptPathInfo.raw, label: promptPathInfo.raw });
+      prompts.push({ raw: promptPathInfo.raw, label: promptPathInfo.raw });
       usedRaw = true;
     }
     if (usedRaw) {
@@ -284,8 +299,7 @@ export async function readPrompts(
         });
       } else {
         const fileContent = fs.readFileSync(promptPath, 'utf-8');
-        let label: string | undefined;
-        label =
+        const label: string | undefined =
           resolvedPathToDisplay.get(promptPath) ||
           (fileContent?.length > 200 ? promptPath : fileContent);
 
