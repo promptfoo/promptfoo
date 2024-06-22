@@ -11,7 +11,7 @@ You should test these models on tasks that are relevant to your specific use cas
 
 This guide will walk you through setting up a comparison between Anthropic's Claude 3.5 and OpenAI's latest GPT-4o using `promptfoo`. The end result is a side-by-side evaluation of how these models perform on custom tasks:
 
-![Claude 3.5 vs GPT-4o comparison](/img/docs/claude3.5-vs-gpt4o.png)
+![Claude 3.5 vs GPT-4o comparison](/img/docs/claude-vs-gpt.png)
 
 ## Prerequisites
 
@@ -138,7 +138,7 @@ npx promptfoo@latest view
 
 This will display a comparison view showing how Claude 3.5 and GPT-4o performed on each test case:
 
-![Claude 3.5 vs GPT-4o comparison expanded](/img/docs/claude3.5-vs-gpt4o-expanded.png)
+![Claude 3.5 vs GPT-4o comparison expanded](/img/docs/claude3-vs-gpt4-expanded.png)
 
 You can also output the raw results data to a file:
 
@@ -160,24 +160,24 @@ Some key things to look for:
 Here are a few observations from our example riddle test set:
 
 - GPT 4o's responses tended to be shorter, while Claude 3.5 often includes extra commentary
-- GPT 4o was about 4x faster
+- GPT 4o was about 7x faster
 - GPT 4o was about 3x cheaper
 
 ### Adding assertions for things we care about
 
 Based on the above observations, let's add the following assertions to all tests in this eval:
 
-- Latency must be under 3000 ms
-- Cost must be under $0.01
+- Latency must be under 2000 ms
+- Cost must be under $0.0025
 - Sliding scale Javascript function that penalizes long responses
 
 ```yaml
 defaultTest:
   assert:
     - type: cost
-      threshold: 0.01
+      threshold: 0.0025
     - type: latency
-      threshold: 3000
+      threshold: 2000
     - type: javascript
       value: 'output.length <= 100 ? 1 : output.length > 1000 ? 0 : 1 - (output.length - 100) / 900'
 ```
@@ -186,11 +186,11 @@ We're also going to update the system prompt to say, "Be concise".
 
 The result is that Claude 3.5 frequently fails our latency requirements:
 
-![Claude latency assertions](/img/docs/claude3.5-vs-gpt4o-latency.png)
+![Claude latency assertions](/img/docs/claude3-vs-gpt4-latency.png)
 
 Clicking into a specific test case shows the individual test results:
 
-![Claude test details](/img/docs/claude3.5-result-details.png)
+![Claude test details](/img/docs/claude3-result-details.png)
 
 Of course, our requirements are different from yours. You should customize these values to suit your use case.
 
