@@ -5,7 +5,7 @@ description: 'Learn how to benchmark Claude 3.5 Sonnet against GPT-4o using your
 
 # Benchmarking Claude 3.5 Sonnet vs GPT-4o on Your Custom Data
 
-Generic benchmarks often fall short when evaluating Large Language Models (LLMs) like Claude and GPT. To truly understand which model excels for your specific needs, it's crucial to test them on tasks relevant to your use case. This guide walks you through setting up a custom comparison between Anthropic's Claude 3.5 Sonnet and OpenAI's GPT-4o using `promptfoo`.
+When evaluating the performance of Large Language Models (LLMs) like Claude 3.5 Sonnet and GPT-4o, generic benchmarks often fall short. To truly understand which model excels for your specific needs, it's crucial to test them on tasks relevant to your use case. This guide walks you through setting up a custom comparison between Anthropic's Claude 3.5 Sonnet and OpenAI's GPT-4o using `promptfoo`.
 
 ![Claude 3.5 Sonnet vs GPT-4o comparison](/img/docs/claude3.5-sonnet-vs-gpt4o.png)
 
@@ -20,42 +20,42 @@ Before starting, ensure you have:
 
 1. Create a new project directory:
 
-```sh
-npx promptfoo@latest init claude3.5-vs-gpt4o
-cd claude3.5-vs-gpt4o
-```
+   ```sh
+   npx promptfoo@latest init claude3.5-vs-gpt4o
+   cd claude3.5-vs-gpt4o
+   ```
 
 2. Open `promptfooconfig.yaml` and configure the models:
 
-```yaml
-providers:
-  - id: anthropic:claude-3.5-sonnet
-    config:
-      temperature: 0.3
-      max_tokens: 1024
-  - id: openai:gpt-4o
-    config:
-      temperature: 0.3
-      max_tokens: 1024
-```
+   ```yaml
+   providers:
+     - id: anthropic:claude-3.5-sonnet
+       config:
+         temperature: 0.3
+         max_tokens: 1024
+     - id: openai:gpt-4o
+       config:
+         temperature: 0.3
+         max_tokens: 1024
+   ```
 
 3. Define your prompts:
 
-```yaml
-prompts:
-  - file://prompt.yaml
-```
+   ```yaml
+   prompts:
+     - file://prompt.yaml
+   ```
 
-Create `prompt.yaml`:
+4. Create `prompt.yaml`:
 
-```yaml
-- role: system
-  content: 'You are a careful riddle solver. Be concise.'
-- role: user
-  content: |
-    Answer this riddle:
-    {{riddle}}
-```
+   ```yaml
+   - role: system
+     content: 'You are a careful riddle solver. Be concise.'
+   - role: user
+     content: |
+       Answer this riddle:
+       {{riddle}}
+   ```
 
 ## Step 2: Create Test Cases
 
@@ -122,9 +122,9 @@ Examine the comparison results, focusing on:
 
 ### Example Observations
 
-- GPT-4o responses tend to be more concise
-- GPT-4o is approximately 5x faster
-- GPT-4o is about 8x more cost-effective
+- GPT-4o responses tend to be more concise.
+- GPT-4o is approximately 5x faster.
+- GPT-4o is about 8x more cost-effective.
 
 ![Claude latency assertions](/img/docs/claude3.5-sonnet-vs-gpt4o-latency.png)
 
@@ -144,4 +144,8 @@ To dive deeper into `promptfoo`, explore our [getting started guide](/docs/getti
 
 ## Additional Resources
 
-[PLACEHOLDER: Add links to related documentation, tutorials, or external resources]
+- [Anthropic API Documentation](https://www.anthropic.com/api)
+- [OpenAI API Documentation](https://beta.openai.com/docs/)
+- [promptfoo Configuration Guide](/docs/configuration/guide)
+- [Setting Up API Keys](/docs/providers/overview)
+- [Assertions & Metrics](/docs/configuration/expected-outputs)
