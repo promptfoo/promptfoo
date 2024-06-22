@@ -5,7 +5,9 @@ description: 'Learn how to benchmark Claude 3.5 Sonnet against GPT-4o using your
 
 # Benchmarking Claude 3.5 Sonnet vs GPT-4o on Your Custom Data
 
-When evaluating the performance of Large Language Models (LLMs) like Claude 3.5 Sonnet and GPT-4o, generic benchmarks often fall short. To truly understand which model excels for your specific needs, it's crucial to test them on tasks relevant to your use case. This guide walks you through setting up a custom comparison between Anthropic's Claude 3.5 Sonnet and OpenAI's GPT-4o using `promptfoo`.
+When evaluating the performance of Large Language Models (LLMs) like Claude 3.5 Sonnet and GPT-4o, generic benchmarks often fall short. To truly understand which model excels for your specific needs, you need to test them on tasks relevant to your use case. This guide walks you through setting up a custom comparison between Anthropic's Claude 3.5 Sonnet and OpenAI's GPT-4o using `promptfoo`.
+
+You should test these models on tasks that are relevant to your specific use case, rather than relying solely on public benchmarks.
 
 ![Claude 3.5 Sonnet vs GPT-4o comparison](/img/docs/claude3.5-sonnet-vs-gpt4o.png)
 
@@ -93,7 +95,7 @@ defaultTest:
 
 Execute the evaluation:
 
-```sh
+```
 npx promptfoo@latest eval
 ```
 
@@ -123,8 +125,8 @@ Examine the comparison results, focusing on:
 ### Example Observations
 
 - GPT-4o responses tend to be more concise.
-- GPT-4o is approximately 5x faster.
-- GPT-4o is about 8x more cost-effective.
+- GPT-4o is approximately 4x faster.
+- GPT-4o is about 3x more cost-effective.
 
 ![Claude latency assertions](/img/docs/claude3.5-sonnet-vs-gpt4o-latency.png)
 
