@@ -3,7 +3,7 @@ import * as path from 'path';
 
 import { globSync } from 'glob';
 
-import { readPrompts } from '../src/prompts';
+import { maybeFilepath, readPrompts } from '../src/prompts';
 
 import type { Prompt } from '../src/types';
 
@@ -217,5 +217,44 @@ def prompt2:
     expect(result).toHaveLength(2);
     expect(result[0]).toEqual({ raw: fileContents['1.txt'], label: fileContents['1.txt'] });
     expect(result[1]).toEqual({ raw: fileContents['2.txt'], label: fileContents['2.txt'] });
+  });
+});
+
+describe('maybeFilepath', () => {
+  it('should return true for valid file paths', () => {
+    expect(maybeFilepath('path/to/file.txt')).toBe(true);
+    expect(maybeFilepath('C:\\path\\to\\file.txt')).toBe(true);
+    expect(maybeFilepath('file.*')).toBe(true);
+    expect(maybeFilepath('filename.ext')).toBe(true);
+  });
+
+  it('should return false for strings with new lines', () => {
+    expect(maybeFilepath('path/to\nfile.txt')).toBe(false);
+  });
+
+  it('should return false for strings with "portkey://"', () => {
+    expect(maybeFilepath('portkey://path/to/file.txt')).toBe(false);
+  });
+
+  it('should return false for strings with "langfuse://"', () => {
+    expect(maybeFilepath('langfuse://path/to/file.txt')).toBe(false);
+  });
+
+  it('should return false for strings without file path indicators', () => {
+    expect(maybeFilepath('justastring')).toBe(false);
+    expect(maybeFilepath('anotherstring')).toBe(false);
+    expect(maybeFilepath('stringwith.dotbutnotfile')).toBe(false);
+  });
+
+  it('should return true for strings with wildcard character', () => {
+    expect(maybeFilepath('*.txt')).toBe(true);
+    expect(maybeFilepath('path/to/*.txt')).toBe(true);
+  });
+
+  it('should return true for strings with file extension at the third or fourth last position', () => {
+    expect(maybeFilepath('filename.e')).toBe(false);
+    expect(maybeFilepath('file.ext')).toBe(true);
+    expect(maybeFilepath('filename.ex')).toBe(true);
+    expect(maybeFilepath('file.name.ext')).toBe(true);
   });
 });
