@@ -1,16 +1,16 @@
 ---
-sidebar_label: Claude 3 vs GPT-4
+sidebar_label: Claude 3.5 Sonnet vs GPT-4o
 ---
 
-# Claude 3 vs GPT-4: Benchmark on Your Own Data
+# Claude 3.5 Sonnet vs GPT-4o: Benchmark on Your Own Data
 
 When evaluating the performance of LLMs, generic benchmarks will only get you so far. This is especially the case for Claude vs GPT, as there are many split evaluations (subjective and objective) on their efficacy.
 
 You should test these models on tasks that are relevant to your specific use case, rather than relying solely on public benchmarks.
 
-This guide will walk you through setting up a comparison between Anthropic's Claude 3 Opus and OpenAI's latest GPT-4 preview using `promptfoo`. The end result is a side-by-side evaluation of how these models perform on custom tasks:
+This guide will walk you through setting up a comparison between Anthropic's Claude 3.5 Sonnet and OpenAI's GPT-4o using `promptfoo`. The end result is a side-by-side evaluation of how these models perform on custom tasks:
 
-![Claude 3 vs GPT-4 comparison](/img/docs/claude3-vs-gpt4.png)
+![Claude 3.5 Sonnet vs GPT-4o comparison](/img/docs/claude3.5-sonnet-vs-gpt4o.png)
 
 ## Prerequisites
 
@@ -24,31 +24,31 @@ Before getting started, make sure you have:
 Create a new directory for your comparison project:
 
 ```sh
-npx promptfoo@latest init claude3-vs-gpt4
-cd claude3-vs-gpt4
+npx promptfoo@latest init claude3.5-vs-gpt4o
+cd claude3.5-vs-gpt4o
 ```
 
 Open the generated `promptfooconfig.yaml` file. This is where you'll configure the models to test, the prompts to use, and the test cases to run.
 
 ### Configure the Models
 
-Specify the Claude 3 and GPT-4 model IDs under `providers`:
+Specify the Claude 3.5 Sonnet and GPT-4o model IDs under `providers`:
 
 ```yaml
 providers:
-  - anthropic:messages:claude-3-opus-20240229
-  - openai:chat:gpt-4-0125-preview
+  - anthropic:claude-3.5-sonnet
+  - openai:gpt-4o
 ```
 
 You can optionally set parameters like temperature and max tokens for each model:
 
 ```yaml
 providers:
-  - id: anthropic:messages:claude-3-opus-20240229
+  - id: anthropic:claude-3.5-sonnet
     config:
       temperature: 0.3
       max_tokens: 1024
-  - id: openai:chat:gpt-4-0125-preview
+  - id: openai:gpt-4o
     config:
       temperature: 0.3
       max_tokens: 1024
@@ -60,7 +60,7 @@ Next, define the prompt(s) you want to test the models on. For this example, we'
 
 ```yaml
 prompts:
-  - 'Answer this riddle: {{riddle}}
+  - 'Answer this riddle: {{riddle}}'
 ```
 
 If desired, you can use a prompt template defined in a separate `prompt.yaml` or `prompt.json` file. This makes it easier to set the system message, etc:
@@ -102,7 +102,7 @@ tests:
       riddle: "You see a boat filled with people. It has not sunk, but when you look again you don't see a single person on the boat. Why?"
     assert:
       - type: llm-rubric
-        value: explains that the people are below deck, or they are all in a relationship
+        value: explains that the people are below deck or they are all in a relationship
   - vars:
       riddle: 'The more of this there is, the less you see. What is it?'
     assert:
@@ -127,7 +127,7 @@ With your configuration complete, you can kick off the evaluation:
 npx promptfoo@latest eval
 ```
 
-This will run each test case against both Claude 3 and GPT-4 and record the results.
+This will run each test case against both Claude 3.5 Sonnet and GPT-4o and record the results.
 
 To view the results, start up the `promptfoo` viewer:
 
@@ -135,13 +135,13 @@ To view the results, start up the `promptfoo` viewer:
 npx promptfoo@latest view
 ```
 
-This will display a comparison view showing how Claude 3 and GPT-4 performed on each test case:
+This will display a comparison view showing how Claude 3.5 Sonnet and GPT-4o performed on each test case:
 
-![Claude 3 vs GPT-4 comparison](/img/docs/claude3-vs-gpt4-expanded.png)
+![Claude 3.5 Sonnet vs GPT-4o comparison](/img/docs/claude3.5-sonnet-vs-gpt4o-expanded.png)
 
 You can also output the raw results data to a file:
 
-```
+```sh
 npx promptfoo@latest eval -o results.json
 ```
 
@@ -151,24 +151,24 @@ With the evaluation complete, it's time to dig into the results and see how the 
 
 Some key things to look for:
 
-- Which model had a higher overall pass rate on the test assertions? In this case, both models did equally well in terms of getting the answer, which is great - these riddles often trip up less powerful models like GPT 3.5 and Claude 2.
+- Which model had a higher overall pass rate on the test assertions?
 - Were there specific test cases where one model significantly outperformed the other?
-- How did the models compare on other output quality metrics.
+- How did the models compare on other output quality metrics?
 - Consider model properties like speed and cost in addition to quality.
 
 Here are a few observations from our example riddle test set:
 
-- GPT 4's responses tended to be shorter, while Claude 3 often includes extra commentary
-- GPT 4 was about 5x faster
-- GPT 4 was about 8x cheaper
+- GPT-4o's responses tended to be shorter, while Claude 3.5 Sonnet often includes extra commentary.
+- GPT-4o was about 5x faster.
+- GPT-4o was about 8x cheaper.
 
-### Adding assertions for things we care about
+### Adding Assertions for Things We Care About
 
 Based on the above observations, let's add the following assertions to all tests in this eval:
 
-- Latency must be under 3000 ms
-- Cost must be under $0.01
-- Sliding scale Javascript function that penalizes long responses
+- Latency must be under 3000 ms.
+- Cost must be under $0.01.
+- Sliding scale JavaScript function that penalizes long responses.
 
 ```yaml
 defaultTest:
@@ -185,17 +185,17 @@ We're also going to update the system prompt to say, "Be concise".
 
 The result is that Claude frequently fails our latency requirements:
 
-![claude latency assertions](/img/docs/claude3-vs-gpt4-latency.png)
+![claude latency assertions](/img/docs/claude3.5-sonnet-vs-gpt4o-latency.png)
 
 Clicking into a specific test case shows the individual test results:
 
-![claude test details](/img/docs/claude3-result-details.png)
+![claude test details](/img/docs/claude3.5-result-details.png)
 
 Of course, our requirements are different from yours. You should customize these values to suit your use case.
 
 ## Conclusion
 
-By running this type of targeted evaluation, you can gain valuable insights into how Claude 3 Opus and GPT-4 are likely to perform on your application's real-world data and tasks.
+By running this type of targeted evaluation, you can gain valuable insights into how Claude 3.5 Sonnet and GPT-4o are likely to perform on your application's real-world data and tasks.
 
 `promptfoo` makes it easy to set up a repeatable evaluation pipeline so you can test models as they evolve and measure the impact of model and prompt changes.
 
