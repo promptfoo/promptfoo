@@ -32,16 +32,7 @@ Self-hosting promptfoo offers several advantages:
 - Customizable setup to fit your organization's needs
 - Seamless integration with your existing infrastructure
 
-## Prerequisites
-
-Before diving in, ensure you have:
-
-- Docker installed on your system
-- Basic familiarity with Docker commands
-- A machine with at least 2GB of RAM and 10GB of available storage
-- Administrator access to your system
-
-## Step-by-Step Setup Process
+## Setup
 
 ### 1. Clone the Repository
 
@@ -77,7 +68,7 @@ Key points:
 
 ### 4. Set API Credentials
 
-To enable server-side evaluations, set your API credentials. For example, to set the OpenAI API key:
+You can also set API credentials on the running Docker instance so that evals can be run on the server. For example, we'll set the OpenAI API key so users can run evals directly from the web ui:
 
 ```sh
 docker run -d --name promptfoo_container -p 3000:3000 -e OPENAI_API_KEY=sk-abc123 promptfoo-ui
