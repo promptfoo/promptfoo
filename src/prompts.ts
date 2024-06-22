@@ -108,7 +108,7 @@ export interface Prompt {
 /**
  * Normalize the input prompt to an array of prompts. Rejects invalid and empty inputs.
  * @param {string | (string | Partial<Prompt>)[] | Record<string, string>} promptPathOrGlobs The input prompt.
- * @returns {(string | Partial<Prompt>)[]} The normalized prompts.
+ * @returns {Partial<Prompt>[]} The normalized prompts.
  * @throws {Error} If the input is invalid or empty.
  */
 export function normalizeInput(
@@ -117,22 +117,24 @@ export function normalizeInput(
   if (
     !promptPathOrGlobs ||
     ((typeof promptPathOrGlobs === 'string' || Array.isArray(promptPathOrGlobs)) &&
-      !promptPathOrGlobs.length)
+      promptPathOrGlobs.length === 0)
   ) {
     throw new Error(`Invalid input prompt: ${JSON.stringify(promptPathOrGlobs)}`);
   }
   if (typeof promptPathOrGlobs === 'string') {
     return [
       {
+        id: promptPathOrGlobs,
         raw: promptPathOrGlobs,
         label: promptPathOrGlobs,
       },
     ];
   }
   if (Array.isArray(promptPathOrGlobs)) {
-    return promptPathOrGlobs.map((promptPathOrGlob) => {
+    return promptPathOrGlobs.map((promptPathOrGlob, index) => {
       if (typeof promptPathOrGlob === 'string') {
         return {
+          id: `${index}:${promptPathOrGlob}`,
           raw: promptPathOrGlob,
           label: promptPathOrGlob,
         };
@@ -141,7 +143,7 @@ export function normalizeInput(
     });
   }
   if (typeof promptPathOrGlobs === 'object' && Object.keys(promptPathOrGlobs).length) {
-    return Object.entries(promptPathOrGlobs).map(([key, raw]) => ({ raw, label: key }));
+    return Object.entries(promptPathOrGlobs).map(([key, raw]) => ({ id: `${key}:${raw}`, raw, label: key }));
   }
   // numbers, booleans, etc
   throw new Error(`Invalid input prompt: ${JSON.stringify(promptPathOrGlobs)}`);
@@ -153,67 +155,30 @@ export async function readPrompts(
 ): Promise<Prompt[]> {
   logger.debug(`Reading prompts from ${JSON.stringify(promptPathOrGlobs)}`);
 
-  promptPathOrGlobs = normalizeInput(promptPathOrGlobs);
+  const promptPartials = normalizeInput(promptPathOrGlobs);
+  console.warn('promptPartials', promptPartials);
 
-  let promptContents: Prompt[] = [];
-
-  let resolvedPath: string | undefined;
   const forceLoadFromFile = new Set<string>(); // files to load prompts from
   const resolvedPathToDisplay = new Map<string, string>();
 
-  const promptPathInfos: { raw: string; resolved: string }[] = promptPathOrGlobs.flatMap(
-    (pathOrGlob) => {
-      let label;
-      let rawPath: string;
-
-      if (typeof pathOrGlob === 'string') {
-        label = pathOrGlob;
-        rawPath = pathOrGlob;
-        // Path to a prompt file
-        if (pathOrGlob.startsWith('file://')) {
-          promptPathOrGlobs = pathOrGlob.slice('file://'.length);
-          // Ensure this path is not used as a raw prompt.
-          forceLoadFromFile.add(pathOrGlob);
-        }
-        resolvedPath = path.resolve(basePath, pathOrGlob);
-        resolvedPathToDisplay.set(resolvedPath, pathOrGlob);
-        return { raw: pathOrGlob, resolved: resolvedPath };
-      } else if (typeof pathOrGlob === 'object') {
-        // TODO(ian): Handle object array, such as OpenAI messages
-        // Parse prompt config object {id, label}
-        invariant(
-          pathOrGlob.label,
-          `Prompt object requires label, but got ${JSON.stringify(pathOrGlob)}`,
-        );
-        label = pathOrGlob.label;
-        invariant(
-          pathOrGlob.id,
-          `Prompt object requires id, but got ${JSON.stringify(pathOrGlob)}`,
-        );
-        rawPath = pathOrGlob.id;
-      } else {
-        throw new Error(`Invalid prompt format: ${JSON.stringify(pathOrGlob)}`);
-      }
-
-      invariant(
-        typeof rawPath === 'string',
-        `Prompt path must be a string, but got ${JSON.stringify(rawPath)}`,
-      );
-      if (rawPath.startsWith('file://')) {
-        rawPath = rawPath.slice('file://'.length);
+  const prompts: Prompt[] = promptPartials.flatMap(
+    (prompt) => {
+      invariant(prompt.raw, `Prompt path must be a string, but got ${JSON.stringify(prompt.raw)}`);
+      if (prompt.raw.startsWith('file://') || maybeFilepath(prompt.raw)) {
         // This path is explicitly marked as a file, ensure that it's not used as a raw prompt.
-        forceLoadFromFile.add(rawPath);
+        forceLoadFromFile.add(prompt.raw.slice('file://'.length));
       }
-      resolvedPath = path.resolve(basePath, rawPath);
-      resolvedPathToDisplay.set(resolvedPath, label);
-      const globbedPaths = globSync(resolvedPath.replace(/\\/g, '/'), {
-        windowsPathsNoEscape: true,
-      });
-      logger.debug(
-        `Expanded prompt ${rawPath} to ${resolvedPath} and then to ${JSON.stringify(globbedPaths)}`,
-      );
-      if (globbedPaths.length > 0) {
-        return globbedPaths.map((globbedPath) => ({ raw: rawPath, resolved: globbedPath }));
+      if (maybeFilepath(prompt.raw))
+        const resolvedPath = path.resolve(basePath, prompt.raw);
+        const globbedPaths = globSync(resolvedPath.replace(/\\/g, '/'), {
+          windowsPathsNoEscape: true,
+        });
+        logger.debug(
+          `Expanded prompt ${rawPath} to ${resolvedPath} and then to ${JSON.stringify(globbedPaths)}`,
+        );
+        if (globbedPaths.length > 0) {
+          return globbedPaths.map((globbedPath) => ({ raw: rawPath, resolved: globbedPath }));
+        }
       }
       // globSync will return empty if no files match, which is the case when the path includes a function name like: file.js:func
       return [{ raw: rawPath, resolved: resolvedPath }];

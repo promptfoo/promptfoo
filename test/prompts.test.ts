@@ -37,7 +37,7 @@ describe('readPrompts', () => {
     jest.clearAllMocks();
   });
 
-  fit('rejects invalid inputs', async () => {
+  it('rejects invalid inputs', async () => {
     await expect(readPrompts(null as any)).rejects.toThrow('Invalid input prompt: null');
     await expect(readPrompts(undefined as any)).rejects.toThrow('Invalid input prompt: undefined');
     await expect(readPrompts(1 as any)).rejects.toThrow('Invalid input prompt: 1');
@@ -45,7 +45,7 @@ describe('readPrompts', () => {
     await expect(readPrompts(false as any)).rejects.toThrow('Invalid input prompt: false');
   });
 
-  fit('rejects empty inputs', async () => {
+  it('rejects empty inputs', async () => {
     await expect(readPrompts([])).rejects.toThrow('Invalid input prompt: []');
     await expect(readPrompts({} as any)).rejects.toThrow('Invalid input prompt: {}');
     await expect(readPrompts('')).rejects.toThrow('Invalid input prompt: ""');
@@ -73,7 +73,7 @@ describe('readPrompts', () => {
     expect(fs.readFileSync).toHaveBeenCalledTimes(1);
   });
 
-  it('read a list of prompts', async () => {
+  fit('read a list of prompts', async () => {
     const prompts = ['Sample prompt 1', 'Sample prompt 2'];
     await expect(readPrompts(prompts)).toEqual([
       {
@@ -331,7 +331,7 @@ describe('maybeFilepath', () => {
   });
 });
 
-fdescribe('normalizeInput', () => {
+describe('normalizeInput', () => {
   it('rejects invalid input types', () => {
     expect(() => normalizeInput(null as any)).toThrow('Invalid input prompt: null');
     expect(() => normalizeInput(undefined as any)).toThrow('Invalid input prompt: undefined');
@@ -355,10 +355,7 @@ fdescribe('normalizeInput', () => {
   it('returns input array when input is a non-empty array', () => {
     const inputArray = ['prompt1', { raw: 'prompt2' }];
     const result = normalizeInput(inputArray);
-    expect(result).toEqual([
-      { raw: 'prompt1', label: 'prompt1' },
-      { raw: 'prompt2' },
-    ]);
+    expect(result).toEqual([{ raw: 'prompt1', label: 'prompt1' }, { raw: 'prompt2' }]);
   });
 
   it('normalizes object input to array of prompts', () => {
