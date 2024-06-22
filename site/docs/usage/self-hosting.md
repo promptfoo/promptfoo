@@ -13,9 +13,15 @@ keywords:
   - team collaboration
 ---
 
-# Self-hosting promptfoo: A Comprehensive Guide
+# Self-hosting
 
-Welcome to the self-hosting guide for promptfoo, the powerful tool for evaluating and testing large language models (LLMs). This guide will walk you through setting up your own instance of promptfoo using Docker, allowing your team to collaborate on LLM evaluations securely.
+promptfoo provides a Docker image that allows you to host a central server that stores your team's evals.
+
+The self-hosted app consists of:
+
+- Next.js application that runs the web ui.
+- filesystem store that persists the eval results.
+- key-value (KV) store that persists shared data (redis, filesystem, or memory).
 
 ## Why Self-host promptfoo?
 
@@ -85,19 +91,19 @@ Replace `sk-abc123` with your actual API key.
 
 promptfoo uses a SQLite database (`promptfoo.db`) located in `/root/.promptfoo` on the image. Ensure this directory is persisted to save your evaluations.
 
-### KV Store Configuration
+### Configuring the KV Store
 
 By default, promptfoo uses an in-memory store for shared results. You can configure it to use Redis or the filesystem by setting these environment variables:
 
-| Variable                         | Description                                     | Default             |
-| -------------------------------- | ----------------------------------------------- | ------------------- |
-| `PROMPTFOO_SHARE_STORE_TYPE`     | Store type (`memory`, `redis`, or `filesystem`) | `memory`            |
-| `PROMPTFOO_SHARE_TTL`            | TTL for shared URLs (seconds)                   | `1209600` (2 weeks) |
-| `PROMPTFOO_SHARE_REDIS_HOST`     | Redis host                                      | -                   |
-| `PROMPTFOO_SHARE_REDIS_PORT`     | Redis port                                      | -                   |
-| `PROMPTFOO_SHARE_REDIS_PASSWORD` | Redis password                                  | -                   |
-| `PROMPTFOO_SHARE_REDIS_DB`       | Redis database number                           | `0`                 |
-| `PROMPTFOO_SHARE_STORE_PATH`     | Filesystem path for shared results              | `share-store`       |
+| Environment Variable             | Description                                                    | Default Value       |
+| -------------------------------- | -------------------------------------------------------------- | ------------------- |
+| `PROMPTFOO_SHARE_STORE_TYPE`     | The type of store to use (`memory`, `redis`, or `filesystem`). | `memory`            |
+| `PROMPTFOO_SHARE_TTL`            | The time-to-live (TTL) for shared URLs in seconds.             | `1209600` (2 weeks) |
+| `PROMPTFOO_SHARE_REDIS_HOST`     | The Redis host.                                                | -                   |
+| `PROMPTFOO_SHARE_REDIS_PORT`     | The Redis port.                                                | -                   |
+| `PROMPTFOO_SHARE_REDIS_PASSWORD` | The Redis password.                                            | -                   |
+| `PROMPTFOO_SHARE_REDIS_DB`       | The Redis database number.                                     | `0`                 |
+| `PROMPTFOO_SHARE_STORE_PATH`     | The filesystem path for storing shared results.                | `share-store`       |
 
 #### Redis Configuration Example
 
@@ -121,42 +127,10 @@ To use the `promptfoo share` command with your self-hosted instance, set these e
 PROMPTFOO_REMOTE_API_BASE_URL=http://localhost:3000 PROMPTFOO_REMOTE_APP_BASE_URL=http://localhost:3000 promptfoo share -y
 ```
 
-Alternatively, add these settings to your promptfoo config file:
+These configuration options can also be set under the `sharing` property of your promptfoo config:
 
 ```yaml
 sharing:
   apiBaseUrl: http://localhost:3000
   appBaseUrl: http://localhost:3000
 ```
-
-## Troubleshooting
-
-### Common Issues and Solutions
-
-1. **Container Fails to Start**
-
-   - Verify all environment variables are correctly set
-   - Ensure required ports are not in use
-   - Check Docker logs for detailed error messages
-
-2. **Data Not Persisting**
-
-   - Confirm the volume mount path is correct
-   - Verify the container has write permissions to the mounted directory
-
-3. **API Requests Failing**
-
-   - Double-check your API credentials
-   - Ensure your network allows outbound connections to API endpoints
-
-4. **Slow Performance**
-   - Check if your host machine meets the minimum system requirements
-   - Consider upgrading hardware resources if needed
-
-For more advanced troubleshooting, refer to the [Docker documentation](https://docs.docker.com/get-started/) and the [promptfoo GitHub repository](https://github.com/promptfoo/promptfoo).
-
-## Conclusion
-
-By following this guide, you've successfully set up a self-hosted instance of promptfoo. This powerful configuration allows your team to collaborate on LLM evaluations securely and efficiently. For further customization options or support, don't hesitate to consult the promptfoo documentation or reach out to the community.
-
-Happy evaluating!
