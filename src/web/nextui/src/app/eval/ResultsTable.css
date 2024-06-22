@@ -63,6 +63,11 @@ table.results-table,
   background-color: var(--variable-background-color);
 }
 
+.variable .cell {
+  max-height: 100%;
+  overflow-y: auto;
+}
+
 .results-table tr.header {
   background-color: var(--header-background-color);
 }
