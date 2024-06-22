@@ -1,0 +1,51 @@
+name: Test Docker Image
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Build Docker image
+        run: docker build --build-arg NEXT_PUBLIC_PROMPTFOO_BASE_URL=http://localhost:3000 -t promptfoo-ui:ci .
+
+      - name: Run Docker container
+        run: |
+          # Start the Docker container in detached mode
+          docker run -d --name promptfoo-container -p 3000:3000 promptfoo-ui:ci
+
+          # Loop to check if the server is up
+          for i in {1..10}; do
+            if curl -f http://localhost:3000/health; then
+              echo -e "\nHealth check passed"
+              HEALTH_CHECK_PASS=true
+              break
+            else
+              echo "Health check failed, retrying in 2 seconds..."
+              sleep 2
+            fi
+          done
+
+          # If health check did not pass after retries, exit with an error
+          if [ -z "$HEALTH_CHECK_PASS" ]; then
+            echo -e "\nHealth check failed after multiple attempts" >&2
+            docker stop promptfoo-container
+            docker rm promptfoo-container
+            exit 1
+          fi
+
+          # Stop and remove the Docker container
+          docker stop promptfoo-container
+          docker rm promptfoo-container
