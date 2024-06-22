@@ -120,7 +120,7 @@ jobs:
 
       - name: Install Dependencies
         working-directory: site
-        run: npm ci
+        run: npm install
 
       - name: Type Check
         working-directory: site
