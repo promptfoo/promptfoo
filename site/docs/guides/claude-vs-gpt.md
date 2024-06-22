@@ -29,7 +29,7 @@ Before starting, ensure you have:
 
    ```yaml
    providers:
-     - id: anthropic:claude-3.5-sonnet
+     - id: anthropic:messages:claude-3-5-sonnet-20240620
        config:
          temperature: 0.3
          max_tokens: 1024
