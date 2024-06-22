@@ -232,7 +232,7 @@ describe('readPrompts', () => {
     expect(fs.readFileSync).toHaveBeenCalledTimes(2);
   });
 
-  xit('readPrompts with .js file', async () => {
+  it.skip('readPrompts with .js file', async () => {
     jest.doMock(
       path.resolve('prompt.js'),
       () => {
@@ -277,7 +277,7 @@ describe('readPrompts', () => {
     expect(fs.readFileSync).toHaveBeenCalledTimes(2);
   });
 
-  xit('readPrompts with glob pattern for .txt files', async () => {
+  it.skip('readPrompts with glob pattern for .txt files', async () => {
     const fileContents: Record<string, string> = {
       '1.txt': 'First text file content',
       '2.txt': 'Second text file content',
@@ -355,7 +355,7 @@ describe('maybeFilePath', () => {
     expect(maybeFilePath('filename.ex')).toBe(true);
   });
 
-  it('it works for files that end with specific allowed extensions', () => {
+  it('works for files that end with specific allowed extensions', () => {
     expect(maybeFilePath('filename.cjs')).toBe(true);
     expect(maybeFilePath('filename.js')).toBe(true);
     expect(maybeFilePath('filename.js:functionName')).toBe(true);

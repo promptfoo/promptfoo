@@ -1,7 +1,6 @@
 import * as path from 'path';
 import * as fs from 'fs';
 
-import chalk from 'chalk';
 import invariant from 'tiny-invariant';
 import { globSync } from 'glob';
 import { PythonShell, Options as PythonShellOptions } from 'python-shell';
@@ -87,7 +86,7 @@ export function maybeFilePath(str: string): boolean {
   return (
     str.startsWith('file://') ||
     validFileExtensions.some((ext) => {
-      const tokens = str.split(':'); // function may be file.js:functionName
+      const tokens = str.split(':'); // str may be file.js:functionName
       // Checks if the second to last token or the last token ends with the extension
       return tokens.pop()?.endsWith(ext) || tokens.pop()?.endsWith(ext);
     }) ||
@@ -160,9 +159,83 @@ export function normalizeInput(
   throw new Error(`Invalid input prompt: ${JSON.stringify(promptPathOrGlobs)}`);
 }
 
+function processJsonlFile(filePath: string, labelPrefix: string | undefined, rawPath: string) {
+  const fileContent = fs.readFileSync(filePath, 'utf-8');
+  const jsonLines = fileContent.split(/\r?\n/).filter(line => line.length > 0);
+  return jsonLines.map(json => ({
+    raw: json,
+    label: `${labelPrefix ? `${labelPrefix}: ` : ''}${rawPath}: ${json}`,
+  }));
+}
+
+function processTxtFile(promptPath: string, prompt: RawPrompt): Prompt[] {
+  const fileContent = fs.readFileSync(promptPath, 'utf-8');
+  return fileContent
+    .split(PROMPT_DELIMITER)
+    .map((p) => ({
+      raw: p.trim(),
+      label: prompt.label
+        ? `${prompt.label}: ${prompt.raw}: ${p.trim()}`
+        : `${prompt.raw}: ${p.trim()}`,
+    }))
+    .filter((p) => p.raw.length > 0); // handle leading/trailing delimiters and empty lines
+}
+
+function processPythonFile(promptPath: string, functionName: string | undefined, rawPath: string, prompt: RawPrompt): Prompt[] {
+  const fileContent = fs.readFileSync(promptPath, 'utf-8');
+  const promptFunction = async (context: {
+    vars: Record<string, string | object>;
+    provider?: ApiProvider;
+  }) => {
+    if (functionName) {
+      return runPython(promptPath, functionName, [
+        {
+          ...context,
+          provider: {
+            id: context.provider?.id,
+            label: context.provider?.label,
+          },
+        },
+      ]);
+    } else {
+      // Legacy: run the whole file
+      const options: PythonShellOptions = {
+        mode: 'text',
+        pythonPath: process.env.PROMPTFOO_PYTHON || 'python',
+        args: [safeJsonStringify(context)],
+      };
+      logger.debug(`Executing python prompt script ${promptPath}`);
+      const results = (await PythonShell.run(promptPath, options)).join('\n');
+      logger.debug(`Python prompt script ${promptPath} returned: ${results}`);
+      return results;
+    }
+  };
+  return [
+    {
+      raw: fileContent,
+      label: `${prompt.label ? `${prompt.label}: ` : ''}${rawPath}: ${fileContent}`,
+      function: promptFunction,
+    },
+  ];
+}
+
+async function processJsFile(promptPath: string, functionName: string | undefined): Promise<Prompt[]> {
+  const promptFunction = await importModule(promptPath, functionName);
+  return [
+    {
+      raw: String(promptFunction),
+      label: functionName
+        ? `${promptPath}:${functionName}`
+        : `${promptPath}:${String(promptFunction)}`,
+      function: promptFunction,
+    },
+  ];
+}
+
 export async function processPrompt(prompt: RawPrompt, basePath: string = ''): Promise<Prompt[]> {
   const rawPath = prompt.raw;
   invariant(rawPath, `prompt.raw must be a string, but got ${JSON.stringify(prompt.raw)}`);
+  // literal prompt
   if (!maybeFilePath(rawPath)) {
     return [
       {
@@ -217,77 +290,16 @@ export async function processPrompt(prompt: RawPrompt, basePath: string = ''): P
   const extension = parsedPath.ext;
 
   if (extension === '.jsonl') {
-    const fileContent = fs.readFileSync(promptPath, 'utf-8');
-    const jsonLines = fileContent.split(/\r?\n/).filter((line) => line.length > 0);
-    return jsonLines.map((json) => ({
-      raw: json,
-      label: `${prompt.label ? `${prompt.label}: ` : ''}${rawPath}: ${json}`,
-    }));
+    return processJsonlFile(promptPath, prompt.label, rawPath);
   }
   if (extension === '.txt') {
-    const fileContent = fs.readFileSync(promptPath, 'utf-8');
-    const prompts: Prompt[] = fileContent
-      .split(PROMPT_DELIMITER)
-      .map((p) => ({
-        raw: p.trim(),
-        label: prompt.label
-          ? `${prompt.label}: ${prompt.raw}: ${p.trim()}`
-          : `${prompt.raw}: ${p.trim()}`,
-      }))
-      .filter((p) => p.raw.length > 0); // handle leading/trailing delimiters and empty lines
-    return prompts;
+    return processTxtFile(promptPath, prompt);
   }
-
   if (extension === '.py') {
-    const fileContent = fs.readFileSync(promptPath, 'utf-8');
-    const promptFunction = async (context: {
-      vars: Record<string, string | object>;
-      provider?: ApiProvider;
-    }) => {
-      if (functionName) {
-        return runPython(promptPath, functionName, [
-          {
-            ...context,
-            provider: {
-              id: context.provider?.id,
-              label: context.provider?.label,
-            },
-          },
-        ]);
-      } else {
-        // Legacy: run the whole file
-        const options: PythonShellOptions = {
-          mode: 'text',
-          pythonPath: process.env.PROMPTFOO_PYTHON || 'python',
-          args: [safeJsonStringify(context)],
-        };
-        logger.debug(`Executing python prompt script ${promptPath}`);
-        const results = (await PythonShell.run(promptPath, options)).join('\n');
-        logger.debug(`Python prompt script ${promptPath} returned: ${results}`);
-        return results;
-      }
-    };
-    return [
-      {
-        raw: fileContent,
-        label: `${prompt.label ? `${prompt.label}: ` : ''}${rawPath}: ${fileContent}`,
-        function: promptFunction,
-      },
-    ];
+    return processPythonFile(promptPath, functionName, rawPath, prompt);
   }
-
   if (['.js', '.cjs', '.mjs'].includes(extension)) {
-    const promptFunction = await importModule(promptPath, functionName);
-    console.warn('-promptFunction-', String(promptFunction));
-    return [
-      {
-        raw: String(promptFunction),
-        label: functionName
-          ? `${promptPath}:${functionName}`
-          : `${promptPath}:${String(promptFunction)}`,
-        function: promptFunction,
-      },
-    ];
+    return processJsFile(promptPath, functionName);
   }
 
   // ** globs
