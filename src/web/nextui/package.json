@@ -26,7 +26,7 @@
     "drizzle-orm": "^0.29.3",
     "diff": "^5.1.0",
     "eslint": "8.47.0",
-    "eslint-config-next": "13.4.13",
+    "eslint-config-next": "14.2.4",
     "js-yaml": "^4.1.0",
     "next": "14.2.4",
     "opener": "^1.5.2",
