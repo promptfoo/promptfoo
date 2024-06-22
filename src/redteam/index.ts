@@ -126,20 +126,22 @@ export async function synthesize({
   const testCases: TestCase[] = [];
   const adversarialPrompts: TestCase[] = [];
 
-  if (
-    plugins.includes('prompt-injection') ||
-    plugins.includes('jailbreak') ||
-    plugins.some((p) => p.startsWith('harmful'))
-  ) {
+  const addHarmfulCases = plugins.some((p) => p.startsWith('harmful'));
+  if (plugins.includes('prompt-injection') || plugins.includes('jailbreak') || addHarmfulCases) {
     logger.debug('Generating harmful test cases');
     const harmfulPrompts = await getHarmfulTests(
       purpose,
       injectVar,
       plugins.filter((p) => p.startsWith('harmful:')),
     );
-    testCases.push(...harmfulPrompts);
     adversarialPrompts.push(...harmfulPrompts);
-    logger.debug(`Added ${harmfulPrompts.length} harmful test cases`);
+
+    if (addHarmfulCases) {
+      testCases.push(...harmfulPrompts);
+      logger.debug(`Added ${harmfulPrompts.length} harmful test cases`);
+    } else {
+      logger.debug(`Generated ${harmfulPrompts.length} harmful test cases`);
+    }
   }
 
   const pluginActions: {
