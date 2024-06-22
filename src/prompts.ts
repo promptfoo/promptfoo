@@ -174,6 +174,8 @@ export function normalizeInput(
 export function processPrompt(prompt: RawPrompt, basePath: string = ''): Prompt[] {
   const rawPath = prompt.raw;
 
+  console.warn('-------prompt', prompt);
+
   invariant(rawPath, `prompt.raw must be a string, but got ${JSON.stringify(prompt.raw)}`);
 
   console.warn('rawPath', rawPath);
@@ -230,7 +232,9 @@ export function processPrompt(prompt: RawPrompt, basePath: string = ''): Prompt[
       .split(PROMPT_DELIMITER)
       .map((p) => ({
         raw: p.trim(),
-        label: `${prompt.raw}: ${p.trim()}`,
+        label: prompt.label
+          ? `${prompt.label}: ${prompt.raw}: ${p.trim()}`
+          : `${prompt.raw}: ${p.trim()}`,
       }))
       .filter((p) => p.raw.length > 0);
     // console.warn('-------prompts-------', prompts);

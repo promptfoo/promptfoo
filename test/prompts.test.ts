@@ -175,17 +175,17 @@ describe('readPrompts', () => {
     expect(fs.readFileSync).toHaveBeenCalledTimes(2);
   });
 
-  fit('readPrompts with map input', async () => {
+  it('readPrompts with map input', async () => {
     jest.mocked(fs.readFileSync).mockReturnValue('some raw text');
     jest.mocked(fs.statSync).mockReturnValue({ isDirectory: () => false } as fs.Stats);
     await expect(
       readPrompts({
         'prompts.txt': 'foo1',
-        'prompts.py': 'foo2',
+        'prompts2.txt': 'foo2',
       }),
     ).resolves.toEqual([
-      { raw: 'some raw text', label: 'foo1' },
-      { raw: 'some raw text', label: 'foo2' },
+      { raw: 'some raw text', label: 'foo1: prompts.txt: some raw text' },
+      { raw: 'some raw text', label: 'foo2: prompts2.txt: some raw text' },
     ]);
     expect(fs.readFileSync).toHaveBeenCalledTimes(2);
   });
