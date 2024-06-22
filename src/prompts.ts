@@ -153,17 +153,25 @@ export function normalizeInput(
       };
     });
   }
+
   if (typeof promptPathOrGlobs === 'object' && Object.keys(promptPathOrGlobs).length) {
-    return Object.entries(promptPathOrGlobs).map(([key, raw]) => ({
-      source: key,
-      raw,
+    /* NOTE: This is considered legacy and has been deprecated. Example format
+    {
+      'prompts.txt': 'foo1',
+      'prompts.py': 'foo2',
+    }
+    */
+    return Object.entries(promptPathOrGlobs).map(([raw, key]) => ({
+      label: key,
+      raw: raw,
+      source: raw,
     }));
   }
   // numbers, booleans, etc
   throw new Error(`Invalid input prompt: ${JSON.stringify(promptPathOrGlobs)}`);
 }
 
-export function hydratePrompt(prompt: RawPrompt, basePath: string = ''): Prompt[] {
+export function processPrompt(prompt: RawPrompt, basePath: string = ''): Prompt[] {
   const rawPath = prompt.raw;
 
   invariant(rawPath, `prompt.raw must be a string, but got ${JSON.stringify(prompt.raw)}`);
@@ -191,17 +199,27 @@ export function hydratePrompt(prompt: RawPrompt, basePath: string = ''): Prompt[
     // If the path doesn't exist, it's probably a raw prompt
     // prompts.push({ raw: promptPathInfo.raw, label: promptPathInfo.raw });
   }
-  console.warn('----stat----', stat);
+  console.warn('----stat----', stat, stat?.isDirectory());
   if (stat?.isDirectory()) {
-    return [];
+    const globbedPaths = globSync(promptPath.replace(/\\/g, '/'), {
+      windowsPathsNoEscape: true,
+    });
+    console.warn('globbedPaths', globbedPaths);
+    logger.debug(
+      `Expanded prompt ${rawPath} to ${promptPath} and then to ${JSON.stringify(globbedPaths)}`,
+    );
+    globbedPaths.forEach((globbedPath) => {
+      const readdirSync = fs.readdirSync(globbedPath);
+      console.warn('----readdirSync----', readdirSync);
+    });
+
+    if (globbedPaths.length > 0) {
+      return globbedPaths.map((globbedPath) => ({
+        raw: rawPath,
+        label: globbedPath,
+      }));
+    }
   }
-
-
-
-
-
-
-
 
   const extension = path.parse(promptPath).ext;
   console.warn('extension', extension, 'promptPath', promptPath);
@@ -263,7 +281,7 @@ export async function readPrompts(
   const promptPartials = normalizeInput(promptPathOrGlobs);
   console.warn('promptPartials', promptPartials);
 
-  const prompts: Prompt[] = promptPartials.flatMap((prompt) => hydratePrompt(prompt, basePath));
+  const prompts: Prompt[] = promptPartials.flatMap((prompt) => processPrompt(prompt, basePath));
 
   return prompts;
 }

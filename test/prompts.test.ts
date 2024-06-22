@@ -96,22 +96,25 @@ describe('readPrompts', () => {
     expect(fs.readFileSync).toHaveBeenCalledTimes(1);
   });
 
-  it.each([['prompts.txt'], 'prompts.txt'])(`readPrompts single prompt file with input:%p`, async (promptPath) => {
-    jest.mocked(fs.statSync).mockReturnValue({ isDirectory: () => false } as fs.Stats);
-    jest.mocked(fs.readFileSync).mockReturnValue('Test prompt 1\n---\nTest prompt 2');
-    jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob.toString()]);
-    await expect(readPrompts(promptPath)).resolves.toEqual([
-      {
-        label: 'prompts.txt: Test prompt 1',
-        raw: 'Test prompt 1',
-      },
-      {
-        label: 'prompts.txt: Test prompt 2',
-        raw: 'Test prompt 2',
-      },
-    ]);
-    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
-  });
+  it.each([['prompts.txt'], 'prompts.txt'])(
+    `readPrompts single prompt file with input:%p`,
+    async (promptPath) => {
+      jest.mocked(fs.statSync).mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      jest.mocked(fs.readFileSync).mockReturnValue('Test prompt 1\n---\nTest prompt 2');
+      jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob.toString()]);
+      await expect(readPrompts(promptPath)).resolves.toEqual([
+        {
+          label: 'prompts.txt: Test prompt 1',
+          raw: 'Test prompt 1',
+        },
+        {
+          label: 'prompts.txt: Test prompt 2',
+          raw: 'Test prompt 2',
+        },
+      ]);
+      expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it('readPrompts with multiple prompt files', async () => {
     jest
@@ -145,7 +148,7 @@ describe('readPrompts', () => {
     expect(fs.readFileSync).toHaveBeenCalledTimes(2);
   });
 
-  fit('readPrompts with directory', async () => {
+  it('readPrompts with directory', async () => {
     jest.mocked(fs.statSync).mockReturnValue({ isDirectory: () => true } as fs.Stats);
     jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob].flat());
     jest.mocked(fs.readdirSync).mockReturnValue(['prompt1.txt', 'prompt2.txt']);
@@ -172,19 +175,19 @@ describe('readPrompts', () => {
     expect(fs.readFileSync).toHaveBeenCalledTimes(2);
   });
 
-  it('readPrompts with map input', async () => {
+  fit('readPrompts with map input', async () => {
     jest.mocked(fs.readFileSync).mockReturnValue('some raw text');
-    jest.mocked(fs.statSync).mockReturnValue({ isDirectory: () => false });
-
-    const result = await readPrompts({
-      'prompts.txt': 'foo1',
-      'prompts.py': 'foo2',
-    });
-
+    jest.mocked(fs.statSync).mockReturnValue({ isDirectory: () => false } as fs.Stats);
+    await expect(
+      readPrompts({
+        'prompts.txt': 'foo1',
+        'prompts.py': 'foo2',
+      }),
+    ).resolves.toEqual([
+      { raw: 'some raw text', label: 'foo1' },
+      { raw: 'some raw text', label: 'foo2' },
+    ]);
     expect(fs.readFileSync).toHaveBeenCalledTimes(2);
-    expect(result).toHaveLength(2);
-    expect(result[0]).toEqual({ raw: 'some raw text', label: 'foo1' });
-    expect(result[1]).toEqual(expect.objectContaining({ raw: 'some raw text', label: 'foo2' }));
   });
 
   it('readPrompts with JSONL file', async () => {
@@ -398,15 +401,23 @@ describe('normalizeInput', () => {
     ]);
   });
 
-  // NOTE: Legacy and considered deprecated
+  // NOTE: Legacy mode. This is deprecated and will be removed in a future version.
   it('normalizes object input to array of prompts', () => {
     const inputObject = {
-      key1: 'prompt1',
-      key2: 'prompt2',
+      'prompts1.txt': 'label A',
+      'prompts2.txt': 'label B',
     };
     expect(normalizeInput(inputObject)).toEqual([
-      { source: 'key1', raw: 'prompt1' },
-      { source: 'key2', raw: 'prompt2' },
+      {
+        label: 'label A',
+        raw: 'prompts1.txt',
+        source: 'prompts1.txt',
+      },
+      {
+        label: 'label B',
+        raw: 'prompts2.txt',
+        source: 'prompts2.txt',
+      },
     ]);
   });
 });
