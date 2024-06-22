@@ -59,7 +59,7 @@ And in `personality1.json`:
 ]
 ```
 
-Learn more about [chat conversations with OpenAI message format](/docs/providers/openai#chat-conversations).
+Learn more about [chat conversations with OpenAI message format](/docs/providers/openai#formatting-chat-messages).
 
 ### Prompts from file
 
