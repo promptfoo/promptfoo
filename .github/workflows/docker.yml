@@ -1,3 +1,8 @@
+# This GitHub Action builds the Docker image for the Next.js application,
+# runs the Docker container, performs a health check to ensure the application
+# is running correctly, and then stops and removes the container. This action
+# is exclusively triggered via workflow dispatch.
+
 name: Test Docker Image
 
 on:
