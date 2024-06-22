@@ -1,14 +1,14 @@
 ---
-sidebar_label: Claude 3 vs GPT-4
+sidebar_label: Claude 3.5 vs GPT-4o
 ---
 
-# Claude 3 vs GPT-4: Benchmark on Your Own Data
+# Claude 3.5 vs GPT-4o: Benchmark on Your Own Data
 
 When evaluating the performance of LLMs, generic benchmarks will only get you so far. This is especially the case for Claude vs GPT, as there are many split evaluations (subjective and objective) on their efficacy.
 
 You should test these models on tasks that are relevant to your specific use case, rather than relying solely on public benchmarks.
 
-This guide will walk you through setting up a comparison between Anthropic's Claude 3 Opus and OpenAI's latest GPT-4 preview using `promptfoo`. The end result is a side-by-side evaluation of how these models perform on custom tasks:
+This guide will walk you through setting up a comparison between Anthropic's Claude 3.5 and OpenAI's GPT-4o using `promptfoo`. The end result is a side-by-side evaluation of how these models perform on custom tasks:
 
 ![Claude 3 vs GPT-4 comparison](/img/docs/claude3-vs-gpt4.png)
 
@@ -36,19 +36,19 @@ Specify the Claude 3 and GPT-4 model IDs under `providers`:
 
 ```yaml
 providers:
-  - anthropic:messages:claude-3-opus-20240229
-  - openai:chat:gpt-4-0125-preview
+  - anthropic:messages:claude-3-5-sonnet-20240620
+  - openai:chat:gpt-4o
 ```
 
 You can optionally set parameters like temperature and max tokens for each model:
 
 ```yaml
 providers:
-  - id: anthropic:messages:claude-3-opus-20240229
+  - id: anthropic:messages:claude-3-5-sonnet-20240620
     config:
       temperature: 0.3
       max_tokens: 1024
-  - id: openai:chat:gpt-4-0125-preview
+  - id: openai:chat:gpt-4o
     config:
       temperature: 0.3
       max_tokens: 1024
@@ -195,7 +195,7 @@ Of course, our requirements are different from yours. You should customize these
 
 ## Conclusion
 
-By running this type of targeted evaluation, you can gain valuable insights into how Claude 3 Opus and GPT-4 are likely to perform on your application's real-world data and tasks.
+By running this type of targeted evaluation, you can gain valuable insights into how Claude 3.5 and GPT-4o are likely to perform on your application's real-world data and tasks.
 
 `promptfoo` makes it easy to set up a repeatable evaluation pipeline so you can test models as they evolve and measure the impact of model and prompt changes.
 
