@@ -4,7 +4,7 @@ import fs from 'fs';
 import logger from '../logger';
 import { getCache, isCacheEnabled } from '../cache';
 import { runPython } from '../python/wrapper';
-import { sha256 } from '../util';
+import { safeJsonStringify, sha256 } from '../util';
 
 import type {
   ApiProvider,
@@ -66,9 +66,7 @@ export class PythonProvider implements ApiProvider {
       const args =
         apiType === 'call_api' ? [prompt, this.options, context] : [prompt, this.options];
       logger.debug(
-        `Running python script ${absPath} with scriptPath ${this.scriptPath} and args: ${args.join(
-          '\n',
-        )}`,
+        `Running python script ${absPath} with scriptPath ${this.scriptPath} and args: ${safeJsonStringify(args)}`,
       );
       let result;
       switch (apiType) {
