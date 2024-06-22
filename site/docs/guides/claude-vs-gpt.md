@@ -142,7 +142,7 @@ This will display a comparison view showing how Claude 3.5 Sonnet and GPT-4o per
 
 You can also output the raw results data to a file:
 
-```sh
+```
 npx promptfoo@latest eval -o results.json
 ```
 
@@ -160,8 +160,8 @@ Some key things to look for:
 Here are a few observations from our example riddle test set:
 
 - GPT 4o's responses tended to be shorter, while Claude 3.5 Sonnet often includes extra commentary
-- GPT 4o was about 5x faster
-- GPT 4o was about 8x cheaper
+- GPT 4o was about 4x faster
+- GPT 4o was about 3x cheaper
 
 ### Adding assertions for things we care about
 
