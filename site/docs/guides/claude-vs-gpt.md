@@ -1,16 +1,17 @@
 ---
-sidebar_label: Claude 3 vs GPT-4
+sidebar_label: 'Claude 3.5 vs GPT-4o'
+description: 'Learn how to benchmark Claude 3.5 against GPT-4o using your own data with promptfoo. Discover which model performs best for your specific use case.'
 ---
 
-# Claude 3 vs GPT-4: Benchmark on Your Own Data
+# Claude 3.5 vs GPT-4o: Benchmark on Your Own Data
 
 When evaluating the performance of LLMs, generic benchmarks will only get you so far. This is especially the case for Claude vs GPT, as there are many split evaluations (subjective and objective) on their efficacy.
 
 You should test these models on tasks that are relevant to your specific use case, rather than relying solely on public benchmarks.
 
-This guide will walk you through setting up a comparison between Anthropic's Claude 3 Opus and OpenAI's latest GPT-4 preview using `promptfoo`. The end result is a side-by-side evaluation of how these models perform on custom tasks:
+This guide will walk you through setting up a comparison between Anthropic's Claude 3.5 and OpenAI's GPT-4o using `promptfoo`. The end result is a side-by-side evaluation of how these models perform on custom tasks:
 
-![Claude 3 vs GPT-4 comparison](/img/docs/claude3-vs-gpt4.png)
+![Claude 3.5 vs GPT-4o comparison](/img/docs/claude-vs-gpt.png)
 
 ## Prerequisites
 
@@ -24,31 +25,31 @@ Before getting started, make sure you have:
 Create a new directory for your comparison project:
 
 ```sh
-npx promptfoo@latest init claude3-vs-gpt4
-cd claude3-vs-gpt4
+npx promptfoo@latest init claude3.5-vs-gpt4o
+cd claude3.5-vs-gpt4o
 ```
 
 Open the generated `promptfooconfig.yaml` file. This is where you'll configure the models to test, the prompts to use, and the test cases to run.
 
 ### Configure the Models
 
-Specify the Claude 3 and GPT-4 model IDs under `providers`:
+Specify the Claude 3.5 and GPT-4o model IDs under `providers`:
 
 ```yaml
 providers:
-  - anthropic:messages:claude-3-opus-20240229
-  - openai:chat:gpt-4-0125-preview
+  - anthropic:messages:claude-3-5-sonnet-20240620
+  - openai:chat:gpt-4o
 ```
 
 You can optionally set parameters like temperature and max tokens for each model:
 
 ```yaml
 providers:
-  - id: anthropic:messages:claude-3-opus-20240229
+  - id: anthropic:messages:claude-3-5-sonnet-20240620
     config:
       temperature: 0.3
       max_tokens: 1024
-  - id: openai:chat:gpt-4-0125-preview
+  - id: openai:chat:gpt-4o
     config:
       temperature: 0.3
       max_tokens: 1024
@@ -74,7 +75,7 @@ The contents of `prompt.yaml`:
 
 ```yaml
 - role: system
-  content: 'You are a careful riddle solver'
+  content: 'You are a careful riddle solver. Be concise.'
 - role: user
   content: |
     Answer this riddle:
@@ -102,7 +103,7 @@ tests:
       riddle: "You see a boat filled with people. It has not sunk, but when you look again you don't see a single person on the boat. Why?"
     assert:
       - type: llm-rubric
-        value: explains that the people are below deck, or they are all in a relationship
+        value: explains that the people are below deck or they are all in a relationship
   - vars:
       riddle: 'The more of this there is, the less you see. What is it?'
     assert:
@@ -127,7 +128,7 @@ With your configuration complete, you can kick off the evaluation:
 npx promptfoo@latest eval
 ```
 
-This will run each test case against both Claude 3 and GPT-4 and record the results.
+This will run each test case against both Claude 3.5 and GPT-4o and record the results.
 
 To view the results, start up the `promptfoo` viewer:
 
@@ -135,9 +136,9 @@ To view the results, start up the `promptfoo` viewer:
 npx promptfoo@latest view
 ```
 
-This will display a comparison view showing how Claude 3 and GPT-4 performed on each test case:
+This will display a comparison view showing how Claude 3.5 and GPT-4o performed on each test case:
 
-![Claude 3 vs GPT-4 comparison](/img/docs/claude3-vs-gpt4-expanded.png)
+![Claude 3.5 vs GPT-4o comparison expanded](/img/docs/claude3-vs-gpt4-expanded.png)
 
 You can also output the raw results data to a file:
 
@@ -158,32 +159,32 @@ Some key things to look for:
 
 Here are a few observations from our example riddle test set:
 
-- GPT 4's responses tended to be shorter, while Claude 3 often includes extra commentary
-- GPT 4 was about 5x faster
-- GPT 4 was about 8x cheaper
+- GPT 4o's responses tended to be shorter, while Claude 3.5 often includes extra commentary
+- GPT 4o was about 7x faster
+- GPT 4o was about 3x cheaper
 
 ### Adding assertions for things we care about
 
 Based on the above observations, let's add the following assertions to all tests in this eval:
 
-- Latency must be under 3000 ms
-- Cost must be under $0.01
+- Latency must be under 2000 ms
+- Cost must be under $0.0025
 - Sliding scale Javascript function that penalizes long responses
 
 ```yaml
 defaultTest:
   assert:
     - type: cost
-      threshold: 0.01
+      threshold: 0.0025
     - type: latency
-      threshold: 3000
+      threshold: 2000
     - type: javascript
       value: 'output.length <= 100 ? 1 : output.length > 1000 ? 0 : 1 - (output.length - 100) / 900'
 ```
 
 We're also going to update the system prompt to say, "Be concise".
 
-The result is that Claude frequently fails our latency requirements:
+The result is that Claude 3.5 frequently fails our latency requirements:
 
 ![claude latency assertions](/img/docs/claude3-vs-gpt4-latency.png)
 
@@ -195,7 +196,7 @@ Of course, our requirements are different from yours. You should customize these
 
 ## Conclusion
 
-By running this type of targeted evaluation, you can gain valuable insights into how Claude 3 Opus and GPT-4 are likely to perform on your application's real-world data and tasks.
+By running this type of targeted evaluation, you can gain valuable insights into how Claude 3.5 and GPT-4o are likely to perform on your application's real-world data and tasks.
 
 `promptfoo` makes it easy to set up a repeatable evaluation pipeline so you can test models as they evolve and measure the impact of model and prompt changes.
 

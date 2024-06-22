@@ -544,7 +544,9 @@ function ResultsTable({
         id: 'description',
         header: () => <span className="font-bold">Description</span>,
         cell: (info: CellContext<EvaluateTableRow, unknown>) => (
-          <TruncatedText text={String(info.getValue())} maxLength={maxTextLength} />
+          <div className="cell">
+            <TruncatedText text={String(info.getValue())} maxLength={maxTextLength} />
+          </div>
         ),
         size: 50,
       };

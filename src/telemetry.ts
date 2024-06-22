@@ -3,7 +3,7 @@ import chalk from 'chalk';
 import packageJson from '../package.json';
 import logger from './logger';
 import { fetchWithTimeout } from './fetch';
-import { maybeRecordFirstRun } from './util';
+import { maybeRecordFirstRun } from './globalConfig';
 
 type EventValue = string | number | boolean | string[];
 type TelemetryEvent = {

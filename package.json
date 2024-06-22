@@ -59,8 +59,8 @@
     "node-sql-parser": "^5.2.0"
   },
   "devDependencies": {
-    "@aws-sdk/client-bedrock-runtime": "^3.598.0",
-    "@azure/identity": "^4.2.1",
+    "@aws-sdk/client-bedrock-runtime": "^3.602.0",
+    "@azure/identity": "^4.3.0",
     "@eslint/js": "^9.5.0",
     "@swc/cli": "^0.3.12",
     "@swc/core": "^1.6.1",
@@ -85,7 +85,7 @@
     "@types/semver": "^7.5.8",
     "@types/uuid": "^9.0.8",
     "check-dependency-version-consistency": "^4.1.0",
-    "cloudflare": "^3.2.0",
+    "cloudflare": "^3.4.0",
     "drizzle-kit": "^0.20.13",
     "eslint": "^8.57.0",
     "eslint-plugin-jest": "^28.6.0",
@@ -101,7 +101,7 @@
     "typescript-eslint": "^7.13.1"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.23.0",
+    "@anthropic-ai/sdk": "^0.24.0",
     "@apidevtools/json-schema-ref-parser": "^11.6.4",
     "ajv": "^8.16.0",
     "ajv-formats": "^2.1.1",
@@ -131,7 +131,7 @@
     "mathjs": "^13.0.0",
     "node-fetch": "^2.6.7",
     "nunjucks": "^3.2.4",
-    "openai": "^4.51.0",
+    "openai": "^4.52.0",
     "opener": "^1.5.2",
     "proxy-agent": "^6.4.0",
     "python-shell": "^5.0.0",

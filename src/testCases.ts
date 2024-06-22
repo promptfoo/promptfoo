@@ -167,7 +167,12 @@ export async function readTests(
     const testFiles = globSync(resolvedPath, {
       windowsPathsNoEscape: true,
     });
-    const ret = [];
+
+    const ret: TestCase<Record<string, string | string[] | object>>[] = [];
+    if (testFiles.length < 1) {
+      logger.error(`No test files found for path: ${loadTestsGlob}`);
+      return ret;
+    }
     for (const testFile of testFiles) {
       let testCases: TestCase[] | undefined;
       if (testFile.endsWith('.csv')) {

@@ -1,8 +1,14 @@
 prompts:
   - 'Say this as though you are a pirate: {{body}}'
   - 'Say this as though you are a seafarer from the 17th century: {{body}}'
+
 providers:
   - openai:gpt-3.5-turbo
+
+derivedMetrics:
+  - name: DoubleConsistency
+    value: Consistency * 2
+
 tests:
   - description: Check for exact match
     vars:
