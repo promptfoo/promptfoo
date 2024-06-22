@@ -45,6 +45,7 @@ import { showCommand } from './commands/show';
 import { deleteCommand } from './commands/delete';
 import { importCommand } from './commands/import';
 import { exportCommand } from './commands/export';
+import { configCommand } from './commands/config';
 
 import type {
   CommandLineOptions,
@@ -116,6 +117,7 @@ async function resolveConfigs(
         ? false
         : fileConfig.sharing ?? defaultConfig.sharing ?? true,
     defaultTest: defaultTestRaw ? await readTest(defaultTestRaw, basePath) : undefined,
+    derivedMetrics: fileConfig.derivedMetrics || defaultConfig.derivedMetrics,
     outputPath: cmdObj.output || fileConfig.outputPath || defaultConfig.outputPath,
     metadata: fileConfig.metadata || defaultConfig.metadata,
   };
@@ -180,6 +182,7 @@ async function resolveConfigs(
     tests: parsedTests,
     scenarios: config.scenarios,
     defaultTest,
+    derivedMetrics: config.derivedMetrics,
     nunjucksFilters: await readFilters(
       fileConfig.nunjucksFilters || defaultConfig.nunjucksFilters || {},
     ),
@@ -926,6 +929,7 @@ async function main() {
   deleteCommand(program);
   importCommand(program);
   exportCommand(program);
+  configCommand(program);
 
   program.parse(process.argv);
 
