@@ -23,6 +23,12 @@ export * from './gradingPrompts';
 
 const PROMPT_DELIMITER = process.env.PROMPTFOO_PROMPT_SEPARATOR || '---';
 
+/**
+ * Reads and maps provider prompts based on the configuration and parsed prompts.
+ * @param {Partial<UnifiedConfig>} config - The configuration object.
+ * @param {Prompt[]} parsedPrompts - Array of parsed prompts.
+ * @returns {TestSuite['providerPromptMap']} A map of provider IDs to their respective prompts.
+ */
 export function readProviderPromptMap(
   config: Partial<UnifiedConfig>,
   parsedPrompts: Prompt[],
@@ -72,6 +78,11 @@ export function readProviderPromptMap(
   return ret;
 }
 
+/**
+ * Determines if a string is a valid file path.
+ * @param {string} str - The string to check.
+ * @returns {boolean} True if the string is a valid file path, false otherwise.
+ */
 export function maybeFilePath(str: string): boolean {
   if (typeof str !== 'string') {
     throw new Error(`Invalid input: ${JSON.stringify(str)}`);
@@ -100,13 +111,15 @@ export function maybeFilePath(str: string): boolean {
 }
 
 type RawPrompt = Partial<Prompt> & {
-  source?: string; // The source of the prompt, such as a file path or a string. Could also be an index in the array or a key in the object.
+  // The source of the prompt, such as a file path or a string.
+  // Could also be an index in the array or a key in the object.
+  source?: string;
 };
 
 /**
- * Normalize the input prompt to an array of prompts. Rejects invalid and empty inputs.
- * @param {string | (string | Partial<Prompt>)[] | Record<string, string>} promptPathOrGlobs The input prompt.
- * @returns {Partial<Prompt>[]} The normalized prompts.
+ * Normalizes the input prompt to an array of prompts, rejecting invalid and empty inputs.
+ * @param {string | (string | Partial<Prompt>)[] | Record<string, string>} promptPathOrGlobs - The input prompt.
+ * @returns {RawPrompt[]} The normalized prompts.
  * @throws {Error} If the input is invalid or empty.
  */
 export function normalizeInput(
@@ -159,7 +172,18 @@ export function normalizeInput(
   throw new Error(`Invalid input prompt: ${JSON.stringify(promptPathOrGlobs)}`);
 }
 
-function processJsonlFile(filePath: string, labelPrefix: string | undefined, rawPath: string) {
+/**
+ * Processes a JSONL file to extract prompts.
+ * @param {string} filePath - Path to the JSONL file.
+ * @param {string | undefined} labelPrefix - Optional prefix for labels.
+ * @param {string} rawPath - Raw path of the file.
+ * @returns {Prompt[]} Array of prompts extracted from the file.
+ */
+function processJsonlFile(
+  filePath: string,
+  labelPrefix: string | undefined,
+  rawPath: string,
+): Prompt[] {
   const fileContent = fs.readFileSync(filePath, 'utf-8');
   const jsonLines = fileContent.split(/\r?\n/).filter((line) => line.length > 0);
   return jsonLines.map((json) => ({
@@ -168,6 +192,12 @@ function processJsonlFile(filePath: string, labelPrefix: string | undefined, raw
   }));
 }
 
+/**
+ * Processes a text file to extract prompts, splitting by a delimiter.
+ * @param {string} promptPath - Path to the text file.
+ * @param {RawPrompt} prompt - The raw prompt data.
+ * @returns {Prompt[]} Array of prompts extracted from the file.
+ */
 function processTxtFile(promptPath: string, prompt: RawPrompt): Prompt[] {
   const fileContent = fs.readFileSync(promptPath, 'utf-8');
   return fileContent
@@ -181,6 +211,14 @@ function processTxtFile(promptPath: string, prompt: RawPrompt): Prompt[] {
     .filter((p) => p.raw.length > 0); // handle leading/trailing delimiters and empty lines
 }
 
+/**
+ * Processes a Python file to extract or execute a function as a prompt.
+ * @param {string} promptPath - Path to the Python file.
+ * @param {RawPrompt} prompt - The raw prompt data.
+ * @param {string | undefined} functionName - Optional function name to execute.
+ * @param {string} rawPath - Raw path of the file.
+ * @returns {Prompt[]} Array of prompts extracted or executed from the file.
+ */
 function processPythonFile(
   promptPath: string,
   prompt: RawPrompt,
@@ -224,6 +262,12 @@ function processPythonFile(
   ];
 }
 
+/**
+ * Processes a JavaScript file to import and execute a module function as a prompt.
+ * @param {string} promptPath - Path to the JavaScript file.
+ * @param {string | undefined} functionName - Optional function name to execute.
+ * @returns {Promise<Prompt[]>} Promise resolving to an array of prompts.
+ */
 async function processJsFile(
   promptPath: string,
   functionName: string | undefined,
@@ -240,8 +284,13 @@ async function processJsFile(
   ];
 }
 
-// You can specify a function name in the filename like this:
-// prompt.py:myFunction or prompts.js:myFunction.
+/**
+ * Parses a file path or glob pattern to extract function names and file extensions.
+ * Function names can be specified in the filename like this:
+ * prompt.py:myFunction or prompts.js:myFunction.
+ * @param {string} promptPath - The path or glob pattern.
+ * @returns {{functionName?: string; extension: string; isDirectory: boolean}} Parsed details including function name, file extension, and directory status.
+ */
 function parsePathOrGlob(promptPath: string): {
   functionName?: string;
   extension: string;
@@ -271,6 +320,11 @@ function parsePathOrGlob(promptPath: string): {
   return { functionName, extension, isDirectory: stats?.isDirectory() ?? false };
 }
 
+/**
+ * Processes a string as a literal prompt.
+ * @param {RawPrompt} prompt - The raw prompt data.
+ * @returns {Prompt[]} Array of prompts created from the string.
+ */
 function processString(prompt: RawPrompt): Prompt[] {
   return [
     {
@@ -280,6 +334,12 @@ function processString(prompt: RawPrompt): Prompt[] {
   ];
 }
 
+/**
+ * Processes a raw prompt based on its content type and path.
+ * @param {RawPrompt} prompt - The raw prompt data.
+ * @param {string} basePath - Base path for file resolution.
+ * @returns {Promise<Prompt[]>} Promise resolving to an array of processed prompts.
+ */
 export async function processPrompt(prompt: RawPrompt, basePath: string = ''): Promise<Prompt[]> {
   invariant(
     typeof prompt.raw === 'string',
@@ -351,6 +411,12 @@ export async function processPrompt(prompt: RawPrompt, basePath: string = ''): P
   return [];
 }
 
+/**
+ * Reads and processes prompts from a specified path or glob pattern.
+ * @param {string | (string | Partial<Prompt>)[] | Record<string, string>} promptPathOrGlobs - The path or glob pattern.
+ * @param {string} basePath - Base path for file resolution.
+ * @returns {Promise<Prompt[]>} Promise resolving to an array of processed prompts.
+ */
 export async function readPrompts(
   promptPathOrGlobs: string | (string | Partial<Prompt>)[] | Record<string, string>,
   basePath: string = '',
@@ -371,22 +437,3 @@ export async function readPrompts(
   const prompts: Prompt[] = promptBatches.flat();
   return prompts;
 }
-
-/*
-  if (
-    // promptContents.length === 1 &&
-    //inputType !== PromptInputType.NAMED &&
-    !promptContents[0]['function']
-  ) {
-    // Split raw text file into multiple prompts
-    const content = promptContents[0].raw;
-    promptContents = content
-      .split(PROMPT_DELIMITER)
-      .map((p) => ({ raw: p.trim(), label: p.trim() }));
-  }
-  if (promptContents.length === 0) {
-    throw new Error(`There are no prompts in ${JSON.stringify(promptPathOrGlobs)}`);
-  }
-  return promptContents;
-}
-*/
