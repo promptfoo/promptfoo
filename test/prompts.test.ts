@@ -5,7 +5,13 @@ import { importModule } from '../src/esm';
 
 import { globSync } from 'glob';
 
-import { readProviderPromptMap, maybeFilePath, normalizeInput, readPrompts } from '../src/prompts';
+import {
+  readProviderPromptMap,
+  maybeFilePath,
+  normalizeInput,
+  readPrompts,
+  processJsonFile,
+} from '../src/prompts';
 
 import type { Prompt, ProviderResponse, UnifiedConfig } from '../src/types';
 
@@ -402,6 +408,30 @@ describe('readPrompts', () => {
     expect(fs.readdirSync).toHaveBeenCalledTimes(1);
     expect(fs.readFileSync).toHaveBeenCalledTimes(2);
     expect(fs.statSync).toHaveBeenCalledTimes(3);
+  });
+
+  it('should correctly process a JSON file with multiple entries', async () => {
+    const mockJsonContent = JSON.stringify([
+      { name: 'You are a helpful assistant', role: 'system' },
+      { name: 'How do I get to the moon?', role: 'user' },
+    ]);
+
+    jest.mocked(fs.readFileSync).mockReturnValue(mockJsonContent);
+    jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
+
+    const filePath = 'file://path/to/mock.json';
+    await expect(readPrompts([filePath])).resolves.toEqual([
+      {
+        raw: '{"name":"You are a helpful assistant","role":"system"}',
+        label: '/path/to/mock.json: {"name":"You are a helpful assistant","role":"system"}',
+      },
+      {
+        raw: '{"name":"How do I get to the moon?","role":"user"}',
+        label: '/path/to/mock.json: {"name":"How do I get to the moon?","role":"user"}',
+      },
+    ]);
+    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('mock.json'), 'utf8');
+    expect(fs.statSync).toHaveBeenCalledTimes(1);
   });
 });
 

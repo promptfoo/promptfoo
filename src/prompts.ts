@@ -173,21 +173,41 @@ export function normalizeInput(
 /**
  * Processes a JSONL file to extract prompts.
  * @param filePath - Path to the JSONL file.
- * @param labelPrefix - Optional prefix for labels.
- * @param rawPath - Raw path of the file.
+ * @param prompt - The raw prompt data.
  * @returns Array of prompts extracted from the file.
  */
-function processJsonlFile(
-  filePath: string,
-  labelPrefix: string | undefined,
-  rawPath: string,
-): Prompt[] {
+function processJsonlFile(filePath: string, prompt: RawPrompt): Prompt[] {
   const fileContent = fs.readFileSync(filePath, 'utf-8');
   const jsonLines = fileContent.split(/\r?\n/).filter((line) => line.length > 0);
   return jsonLines.map((json) => ({
     raw: json,
-    label: `${labelPrefix ? `${labelPrefix}: ` : ''}${rawPath}: ${json}`,
+    label: `${prompt.label ? `${prompt.label}: ` : ''}${filePath}: ${json}`,
   }));
+}
+
+/**
+ * Processes a JSON file to extract prompts.
+ * This function reads a JSON file, parses it, and maps each entry to a `Prompt` object.
+ * Each prompt is labeled with the file path and the JSON content.
+ *
+ * @param filePath - The path to the JSON file.
+ * @param prompt - The raw prompt data, used for labeling.
+ * @returns An array of `Prompt` objects extracted from the JSON file.
+ * @throws Will throw an error if the file cannot be read or parsed.
+ */
+function processJsonFile(filePath: string, prompt: RawPrompt): Prompt[] {
+  try {
+    const fileContents = fs.readFileSync(filePath, 'utf8');
+    const jsonData = JSON.parse(fileContents);
+    // Assumes jsonData is an array of objects that can directly map to Prompt[]
+    return jsonData.map((item: any) => ({
+      raw: JSON.stringify(item),
+      label: `${prompt.label ? `${prompt.label}: ` : ''}${filePath}: ${JSON.stringify(item)}`,
+    }));
+  } catch (error) {
+    logger.error(`Error processing JSON file: ${error}`);
+    throw new Error(`Failed to process JSON file at ${filePath}: ${error}`);
+  }
 }
 
 /**
@@ -216,7 +236,7 @@ function processTxtFile(promptPath: string, prompt: RawPrompt): Prompt[] {
  * @param context - Context for the prompt.
  * @returns The prompts
  */
-export const promptFunction = async (
+export const pythonPromptFunction = async (
   promptPath: string,
   functionName: string,
   context: {
@@ -241,7 +261,7 @@ export const promptFunction = async (
  * @param context - Context for the prompt.
  * @returns The prompts
  */
-export const promptFunctionLegacy = async (
+export const pythonPromptFunctionLegacy = async (
   promptPath: string,
   context: {
     vars: Record<string, string | object>;
@@ -264,23 +284,21 @@ export const promptFunctionLegacy = async (
  * @param promptPath - Path to the Python file.
  * @param prompt - The raw prompt data.
  * @param functionName - Optional function name to execute.
- * @param rawPath - Raw path of the file.
  * @returns Array of prompts extracted or executed from the file.
  */
 function processPythonFile(
   promptPath: string,
   prompt: RawPrompt,
   functionName: string | undefined,
-  rawPath: string,
 ): Prompt[] {
   const fileContent = fs.readFileSync(promptPath, 'utf-8');
   return [
     {
       raw: fileContent,
-      label: `${prompt.label ? `${prompt.label}: ` : ''}${rawPath}: ${fileContent}`,
+      label: `${prompt.label ? `${prompt.label}: ` : ''}${prompt.raw}: ${fileContent}`,
       function: functionName
-        ? (...args) => promptFunction(promptPath, functionName, ...args)
-        : (...args) => promptFunctionLegacy(promptPath, ...args),
+        ? (...args) => pythonPromptFunction(promptPath, functionName, ...args)
+        : (...args) => pythonPromptFunctionLegacy(promptPath, ...args),
     },
   ];
 }
@@ -412,13 +430,16 @@ export async function processPrompt(
     return prompts;
   }
   if (extension === '.jsonl') {
-    return processJsonlFile(promptPath, prompt.label, prompt.raw);
+    return processJsonlFile(promptPath, prompt);
+  }
+  if (extension === '.json') {
+    return processJsonFile(promptPath, prompt);
   }
   if (extension === '.txt') {
     return processTxtFile(promptPath, prompt);
   }
   if (extension === '.py') {
-    return processPythonFile(promptPath, prompt, functionName, prompt.raw);
+    return processPythonFile(promptPath, prompt, functionName);
   }
   if (['.js', '.cjs', '.mjs'].includes(extension)) {
     return processJsFile(promptPath, functionName);
