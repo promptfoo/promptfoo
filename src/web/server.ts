@@ -53,7 +53,8 @@ export async function startServer(
   port = 15500,
   apiBaseUrl = '',
   browserBehavior = BrowserBehavior.ASK,
-  filterDescription?: string,
+  filterDescription: string = '',
+  serveApp: boolean = true,
 ) {
   const app = express();
 
@@ -206,12 +207,6 @@ export async function startServer(
     res.json({ data: await getTestCases() });
   });
 
-  app.get('/api/config', (req, res) => {
-    res.json({
-      apiBaseUrl: apiBaseUrl || '',
-    });
-  });
-
   app.post('/api/dataset/generate', async (req, res) => {
     const testSuite: TestSuite = {
       prompts: req.body.prompts as Prompt[],
@@ -225,9 +220,8 @@ export async function startServer(
     };
   });
 
-  // Must come after the above routes (particularly /api/config) so it doesn't
-  // overwrite dynamic routes.
-  app.use(express.static(staticDir));
+  // Must come after the above routes so it doesn't overwrite dynamic routes.
+  if (serveApp) app.use(express.static(staticDir));
 
   httpServer.listen(port, () => {
     const url = `http://localhost:${port}`;
