@@ -87,6 +87,15 @@ describe('readPrompts', () => {
     expect(fs.readFileSync).toHaveBeenCalledTimes(1);
   });
 
+  it('should throw an error for an unsupported file format', async () => {
+    jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ id: 'test prompt' }))
+    jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
+    await expect(readPrompts(['unsupported.for.mat'])).rejects.toThrow(
+      'There are no prompts in "unsupported.for.mat"',
+    );
+    expect(fs.readFileSync).toHaveBeenCalledTimes(0);
+  });
+
   it('should read a single prompt', async () => {
     const prompt = 'This is a test prompt';
     await expect(readPrompts(prompt)).resolves.toEqual([
@@ -256,24 +265,6 @@ describe('readPrompts', () => {
       },
     ]);
     expect(fs.readFileSync).toHaveBeenCalledTimes(2);
-  });
-
-  xit('should read with .js file', async () => {
-    jest.doMock(
-      path.resolve('prompt.js'),
-      () => {
-        return () => console.log('dummy prompt');
-      },
-      { virtual: true },
-    );
-    await expect(readPrompts('prompt.js')).resolves.toEqual([
-      {
-        raw: "()=>console.log('dummy prompt')",
-        label: "prompt.js:()=>console.log('dummy prompt')",
-        function: expect.any(Function),
-      },
-    ]);
-    expect(fs.readFileSync).toHaveBeenCalledTimes(0);
   });
 
   it('should read with .js file without named function', async () => {
