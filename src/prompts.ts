@@ -376,7 +376,12 @@ export async function processPrompt(
     // literal prompt
     return processString(prompt);
   }
-  const promptPath = path.join(basePath, prompt.raw);
+
+  let promptPath = path.join(basePath, prompt.raw);
+  if (promptPath.includes('file:')) {
+    promptPath = promptPath.split('file:')[1];
+  }
+
   const {
     extension,
     functionName,

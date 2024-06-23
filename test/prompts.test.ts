@@ -120,7 +120,7 @@ describe('readPrompts', () => {
     ]);
   });
 
-  it('should reads a .txt file with a single prompt', async () => {
+  it('should read a .txt file with a single prompt', async () => {
     jest.mocked(fs.readFileSync).mockReturnValue('Sample Prompt');
     jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
     await expect(readPrompts('prompts.txt')).resolves.toEqual([
@@ -388,11 +388,11 @@ describe('readPrompts', () => {
     await expect(readPrompts(['file://./prompts/*.txt'])).resolves.toEqual([
       {
         raw: fileContents['1.txt'],
-        label: `file:/prompts/*.txt/prompt1.txt: ${fileContents['1.txt']}`,
+        label: `/prompts/*.txt/prompt1.txt: ${fileContents['1.txt']}`,
       },
       {
         raw: fileContents['2.txt'],
-        label: `file:/prompts/*.txt/prompt2.txt: ${fileContents['2.txt']}`,
+        label: `/prompts/*.txt/prompt2.txt: ${fileContents['2.txt']}`,
       },
     ]);
     expect(fs.readdirSync).toHaveBeenCalledTimes(1);
