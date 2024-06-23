@@ -76,7 +76,7 @@ export async function synthesize({
   plugins,
 }: SynthesizeOptions) {
   validatePlugins(plugins);
-  const provider = await loadApiProvider(SYNTHESIS_MODEL);
+  const reasoningProvider = await loadApiProvider(SYNTHESIS_MODEL);
   logger.info(
     `Synthesizing test cases for ${prompts.length} ${
       prompts.length === 1 ? 'prompt' : 'prompts'
@@ -103,7 +103,7 @@ export async function synthesize({
 
   // Get purpose
   updateProgress();
-  const purpose = purposeOverride || (await getPurpose(prompts, provider));
+  const purpose = purposeOverride || (await getPurpose(prompts, reasoningProvider));
   updateProgress();
 
   logger.debug(`System purpose: ${purpose}`);
@@ -145,6 +145,12 @@ export async function synthesize({
     'prompt-injection': addInjections.bind(null, adversarialPrompts),
   };
 
+  const provider = await loadApiProvider(SYNTHESIS_MODEL, {
+    config: {
+      temperature: 0.5,
+    },
+  });
+
   for (const plugin of plugins) {
     if (pluginActions[plugin]) {
       updateProgress();
@@ -184,7 +190,7 @@ async function getPurpose(prompts: string[], provider: ApiProvider): Promise<str
     - Executive assistant that helps with scheduling and reminders
     - Ecommerce chatbot that sells shoes
   `);
-  logger.debug(`System purpose: ${purpose}`);
-  invariant(typeof purpose === 'string', 'Expected purpose to be a string');
+
+  invariant(typeof purpose === 'string', `Expected purpose to be a string, got: ${purpose}`);
   return purpose;
 }
