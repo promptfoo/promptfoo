@@ -47,6 +47,8 @@ Build the Docker image with the following command:
 docker build --build-arg NEXT_PUBLIC_PROMPTFOO_BASE_URL=http://localhost:3000 -t promptfoo-ui .
 ```
 
+`NEXT_PUBLIC_PROMPTFOO_BASE_URL` tells the web app where to send the API request when the user clicks the 'Share' button. This should be configured to match the URL of your self-hosted instance.
+
 Replace `http://localhost:3000` with your instance's URL if you're not running it locally.
 
 ### 3. Run the Docker Container
