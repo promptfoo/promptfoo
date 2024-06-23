@@ -5,7 +5,9 @@ import { useRouter } from 'next/navigation';
 import { Button, CircularProgress } from '@mui/material';
 
 import { useStore } from '@/state/evalConfig';
-import { NEXTJS_BASE_URL, USE_SUPABASE } from '@/constants';
+import { USE_SUPABASE } from '@/constants';
+
+import { getApiBaseUrl } from '@/api';
 
 const RunTestSuiteButton: React.FC = () => {
   const router = useRouter();
@@ -27,8 +29,10 @@ const RunTestSuiteButton: React.FC = () => {
       evaluateOptions,
     };
 
+    const baseUrl = await getApiBaseUrl();
+
     try {
-      const response = await fetch(`${NEXTJS_BASE_URL}/api/eval/job/`, {
+      const response = await fetch(`${baseUrl}/api/eval/job/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -43,7 +47,7 @@ const RunTestSuiteButton: React.FC = () => {
       const job = await response.json();
 
       const intervalId = setInterval(async () => {
-        const progressResponse = await fetch(`${NEXTJS_BASE_URL}/api/eval/job/${job.id}/`);
+        const progressResponse = await fetch(`${baseUrl}/api/eval/job/${job.id}/`);
 
         if (!progressResponse.ok) {
           clearInterval(intervalId);

@@ -31,6 +31,10 @@ const nextConfig = {
 
     return config;
   },
+  env: {
+    NEXT_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL:
+      process.env.NEXT_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL || 'http://localhost:15500',
+  },
 };
 
 module.exports = nextConfig;
