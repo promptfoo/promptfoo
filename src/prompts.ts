@@ -212,6 +212,57 @@ function processTxtFile(promptPath: string, prompt: RawPrompt): Prompt[] {
 }
 
 /**
+ * Python prompt function. Runs a specific function from the python file.
+ * @param promptPath - Path to the Python file.
+ * @param functionName - Function name to execute.
+ * @param context - Context for the prompt.
+ * @returns The prompts
+ */
+export const promptFunction = async (
+  promptPath: string,
+  functionName: string,
+  context: {
+    vars: Record<string, string | object>;
+    provider?: ApiProvider;
+  },
+) => {
+  return runPython(promptPath, functionName, [
+    {
+      ...context,
+      provider: {
+        id: context.provider?.id,
+        label: context.provider?.label,
+      },
+    },
+  ]);
+};
+
+/**
+ * Legacy Python prompt function. Runs the whole python file.
+ * @param promptPath - Path to the Python file.
+ * @param context - Context for the prompt.
+ * @returns The prompts
+ */
+export const promptFunctionLegacy = async (
+  promptPath: string,
+  context: {
+    vars: Record<string, string | object>;
+    provider?: ApiProvider;
+  },
+) => {
+  // Legacy: run the whole file
+  const options: PythonShellOptions = {
+    mode: 'text',
+    pythonPath: process.env.PROMPTFOO_PYTHON || 'python',
+    args: [safeJsonStringify(context)],
+  };
+  logger.debug(`Executing python prompt script ${promptPath}`);
+  const results = (await PythonShell.run(promptPath, options)).join('\n');
+  logger.debug(`Python prompt script ${promptPath} returned: ${results}`);
+  return results;
+};
+
+/**
  * Processes a Python file to extract or execute a function as a prompt.
  * @param {string} promptPath - Path to the Python file.
  * @param {RawPrompt} prompt - The raw prompt data.
@@ -226,40 +277,13 @@ function processPythonFile(
   rawPath: string,
 ): Prompt[] {
   const fileContent = fs.readFileSync(promptPath, 'utf-8');
-  const promptFunction = async (context: {
-    vars: Record<string, string | object>;
-    provider?: ApiProvider;
-  }) => {
-    return runPython(promptPath, functionName as string, [
-      {
-        ...context,
-        provider: {
-          id: context.provider?.id,
-          label: context.provider?.label,
-        },
-      },
-    ]);
-  };
-  const promptFunctionLegacy = async (context: {
-    vars: Record<string, string | object>;
-    provider?: ApiProvider;
-  }) => {
-    // Legacy: run the whole file
-    const options: PythonShellOptions = {
-      mode: 'text',
-      pythonPath: process.env.PROMPTFOO_PYTHON || 'python',
-      args: [safeJsonStringify(context)],
-    };
-    logger.debug(`Executing python prompt script ${promptPath}`);
-    const results = (await PythonShell.run(promptPath, options)).join('\n');
-    logger.debug(`Python prompt script ${promptPath} returned: ${results}`);
-    return results;
-  };
   return [
     {
       raw: fileContent,
       label: `${prompt.label ? `${prompt.label}: ` : ''}${rawPath}: ${fileContent}`,
-      function: functionName ? promptFunction : promptFunctionLegacy,
+      function: functionName
+        ? (...args) => promptFunction(promptPath, functionName, ...args)
+        : (...args) => promptFunctionLegacy(promptPath, ...args),
     },
   ];
 }
@@ -278,9 +302,7 @@ async function processJsFile(
   return [
     {
       raw: String(promptFunction),
-      label: functionName
-        ? `${promptPath}`
-        : `${promptPath}:${String(promptFunction)}`,
+      label: functionName ? `${promptPath}` : `${promptPath}:${String(promptFunction)}`,
       function: promptFunction,
     },
   ];
