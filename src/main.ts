@@ -58,6 +58,7 @@ import { generateTable } from './table';
 import { createShareableUrl } from './share';
 import { filterTests } from './commands/eval/filterTests';
 import { validateAssertions } from './assertions/validateAssertions';
+import invariant from 'tiny-invariant';
 
 async function resolveConfigs(
   cmdObj: Partial<CommandLineOptions>,
@@ -153,6 +154,20 @@ async function resolveConfigs(
         cmdObj.tests ? undefined : basePath,
       );
       scenario.tests = parsedScenarioTests;
+      const filteredTests = await filterTests(
+        {
+          ...scenario,
+          providers: parsedProviders,
+          prompts: parsedPrompts,
+        },
+        {
+          firstN: cmdObj.filterFirstN,
+          pattern: cmdObj.filterPattern,
+          failing: cmdObj.filterFailing,
+        },
+      );
+      invariant(filteredTests, 'filteredTests are undefined');
+      scenario.tests = filteredTests;
     }
   }
 
