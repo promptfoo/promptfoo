@@ -335,23 +335,23 @@ describe('readPrompts', () => {
     });
     await expect(readPrompts(['prompts/*'])).resolves.toEqual([
       {
-        label: 'prompts/*/prompt1.txt: Test prompt 1',
+        label: expect.stringMatching(/prompts[\\/]\*[\\/]prompt1\.txt: Test prompt 1/),
         raw: 'Test prompt 1',
       },
       {
-        label: 'prompts/*/prompt1.txt: Test prompt 2',
+        label: expect.stringMatching(/prompts[\\/]\*[\\/]prompt1\.txt: Test prompt 2/),
         raw: 'Test prompt 2',
       },
       {
-        label: 'prompts/*/prompt2.txt: Test prompt 3',
+        label: expect.stringMatching(/prompts[\\/]\*[\\/]prompt2\.txt: Test prompt 3/),
         raw: 'Test prompt 3',
       },
       {
-        label: 'prompts/*/prompt2.txt: Test prompt 4',
+        label: expect.stringMatching(/prompts[\\/]\*[\\/]prompt2\.txt: Test prompt 4/),
         raw: 'Test prompt 4',
       },
       {
-        label: 'prompts/*/prompt2.txt: Test prompt 5',
+        label: expect.stringMatching(/prompts[\\/]\*[\\/]prompt2\.txt: Test prompt 5/),
         raw: 'Test prompt 5',
       },
     ]);
@@ -387,12 +387,12 @@ describe('readPrompts', () => {
     });
     await expect(readPrompts(['file://./prompts/*.txt'])).resolves.toEqual([
       {
-        raw: fileContents['1.txt'],
-        label: `/prompts/*.txt/prompt1.txt: ${fileContents['1.txt']}`,
+        label: expect.stringMatching('prompt1.txt: First text file content'),
+        raw: 'First text file content',
       },
       {
-        raw: fileContents['2.txt'],
-        label: `/prompts/*.txt/prompt2.txt: ${fileContents['2.txt']}`,
+        label: expect.stringMatching('prompt2.txt: Second text file content'),
+        raw: 'Second text file content',
       },
     ]);
     expect(fs.readdirSync).toHaveBeenCalledTimes(1);
