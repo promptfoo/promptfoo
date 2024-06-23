@@ -3,13 +3,14 @@ sidebar_position: 50
 title: Self-hosting Guide for promptfoo
 description: Learn how to self-host promptfoo using Docker. This comprehensive guide walks you through setup, configuration, and troubleshooting for your own instance.
 keywords:
+  - AI testing
+  - configuration
+  - Docker
+  - LLM eval
+  - LLM evaluation
   - promptfoo
   - self-hosting
-  - Docker
   - setup guide
-  - configuration
-  - LLM evaluation
-  - AI testing
   - team collaboration
 ---
 
@@ -59,7 +60,7 @@ docker run -d --name promptfoo_container -p 3000:3000 -v /path/to/local_promptfo
 Key points:
 
 - `-v /path/to/local_promptfoo:/root/.promptfoo` maps the container's working directory to your local filesystem. Replace `/path/to/local_promptfoo` with your preferred path.
-- Omitting the `-v` argument will result in non-persistent evaluations.
+- Omitting the `-v` argument will result in non-persistent evals.
 
 ### 4. Set API Credentials
 
@@ -75,7 +76,7 @@ Replace `sk-abc123` with your actual API key.
 
 ### Eval Storage
 
-promptfoo uses a SQLite database (`promptfoo.db`) located in `/root/.promptfoo` on the image. Ensure this directory is persisted to save your evaluations.
+promptfoo uses a SQLite database (`promptfoo.db`) located in `/root/.promptfoo` on the image. Ensure this directory is persisted to save your evals.
 
 ### Configuring the KV Store
 
