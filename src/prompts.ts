@@ -339,7 +339,11 @@ function processString(prompt: RawPrompt): Prompt[] {
  * @param {string} basePath - Base path for file resolution.
  * @returns {Promise<Prompt[]>} Promise resolving to an array of processed prompts.
  */
-export async function processPrompt(prompt: RawPrompt, basePath: string = ''): Promise<Prompt[]> {
+export async function processPrompt(
+  prompt: RawPrompt,
+  basePath: string = '',
+  maxRecursionDepth: number = 1,
+): Promise<Prompt[]> {
   invariant(
     typeof prompt.raw === 'string',
     `prompt.raw must be a string, but got ${JSON.stringify(prompt.raw)}`,
@@ -359,19 +363,7 @@ export async function processPrompt(prompt: RawPrompt, basePath: string = ''): P
     isDirectory: boolean;
   } = parsePathOrGlob(promptPath);
 
-  if (extension === '.jsonl') {
-    return processJsonlFile(promptPath, prompt.label, prompt.raw);
-  }
-  if (extension === '.txt') {
-    return processTxtFile(promptPath, prompt);
-  }
-  if (extension === '.py') {
-    return processPythonFile(promptPath, prompt, functionName, prompt.raw);
-  }
-  if (['.js', '.cjs', '.mjs'].includes(extension)) {
-    return processJsFile(promptPath, functionName);
-  }
-  if (isDirectory) {
+  if (isDirectory && maxRecursionDepth > 0) {
     const globbedPath = globSync(promptPath.replace(/\\/g, '/'), {
       windowsPathsNoEscape: true,
     });
@@ -384,10 +376,26 @@ export async function processPrompt(prompt: RawPrompt, basePath: string = ''): P
     });
     const prompts: Prompt[] = [];
     for (const globbedFilePath of globbedFilePaths) {
-      const processedPrompts = await processPrompt({ raw: globbedFilePath }, basePath);
+      const processedPrompts = await processPrompt(
+        { raw: globbedFilePath },
+        basePath,
+        maxRecursionDepth - 1,
+      );
       prompts.push(...processedPrompts);
     }
     return prompts;
+  }
+  if (extension === '.jsonl') {
+    return processJsonlFile(promptPath, prompt.label, prompt.raw);
+  }
+  if (extension === '.txt') {
+    return processTxtFile(promptPath, prompt);
+  }
+  if (extension === '.py') {
+    return processPythonFile(promptPath, prompt, functionName, prompt.raw);
+  }
+  if (['.js', '.cjs', '.mjs'].includes(extension)) {
+    return processJsFile(promptPath, functionName);
   }
   return [];
 }
