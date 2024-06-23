@@ -3,9 +3,9 @@ sidebar_label: Chat threads
 sidebar_position: 10
 ---
 
-# Chat conversations/threads
+# Chat conversations / threads
 
-The [prompt file](/docs/configuration/parameters#prompt-files) supports a message in OpenAI's JSON prompt format. This allows you to set multiple messages including the system prompt. For example:
+The [prompt file](/docs/configuration/parameters#prompts-from-file) supports a message in OpenAI's JSON prompt format. This allows you to set multiple messages including the system prompt. For example:
 
 ```json
 [
