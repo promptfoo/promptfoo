@@ -4,7 +4,7 @@ import cliProgress from 'cli-progress';
 import invariant from 'tiny-invariant';
 
 import logger from '../logger';
-import { OpenAiChatCompletionProvider } from '../providers/openai';
+import { loadApiProvider } from '../providers';
 import {
   getHarmfulTests,
   addInjections,
@@ -44,9 +44,7 @@ const BASE_PLUGINS = [
 
 const ADDITIONAL_PLUGINS = ['competitors'];
 
-const HARM_CATEGORIES_KEYS = Object.keys(HARM_CATEGORIES);
-
-export const DEFAULT_PLUGINS = new Set([...BASE_PLUGINS, ...HARM_CATEGORIES_KEYS]);
+export const DEFAULT_PLUGINS = new Set([...BASE_PLUGINS, ...Object.keys(HARM_CATEGORIES)]);
 const ALL_PLUGINS = new Set([...DEFAULT_PLUGINS, ...ADDITIONAL_PLUGINS]);
 
 function validatePlugins(plugins: string[]) {
@@ -78,8 +76,7 @@ export async function synthesize({
   plugins,
 }: SynthesizeOptions) {
   validatePlugins(plugins);
-  const reasoningProvider = new OpenAiChatCompletionProvider(SYNTHESIS_MODEL);
-
+  const provider = await loadApiProvider(SYNTHESIS_MODEL);
   logger.info(
     `Synthesizing test cases for ${prompts.length} ${
       prompts.length === 1 ? 'prompt' : 'prompts'
@@ -106,7 +103,7 @@ export async function synthesize({
 
   // Get purpose
   updateProgress();
-  const purpose = purposeOverride || (await getPurpose(prompts, reasoningProvider));
+  const purpose = purposeOverride || (await getPurpose(prompts, provider));
   updateProgress();
 
   logger.debug(`System purpose: ${purpose}`);
@@ -152,7 +149,7 @@ export async function synthesize({
     if (pluginActions[plugin]) {
       updateProgress();
       logger.debug(`Generating ${plugin} tests`);
-      const pluginTests = await pluginActions[plugin](purpose, injectVar);
+      const pluginTests = await pluginActions[plugin](provider, purpose, injectVar);
       testCases.push(...pluginTests);
       logger.debug(`Added ${pluginTests.length} ${plugin} test cases`);
     }
@@ -167,8 +164,8 @@ export async function synthesize({
   return testCases;
 }
 
-async function getPurpose(prompts: string[], reasoningProvider: ApiProvider): Promise<string> {
-  const { output: purpose } = await reasoningProvider.callApi(dedent`
+async function getPurpose(prompts: string[], provider: ApiProvider): Promise<string> {
+  const { output: purpose } = await provider.callApi(dedent`
     The following are prompts that are being used to test an LLM application:
     
     ${prompts
@@ -187,7 +184,7 @@ async function getPurpose(prompts: string[], reasoningProvider: ApiProvider): Pr
     - Executive assistant that helps with scheduling and reminders
     - Ecommerce chatbot that sells shoes
   `);
-
+  logger.debug(`System purpose: ${purpose}`);
   invariant(typeof purpose === 'string', 'Expected purpose to be a string');
   return purpose;
 }

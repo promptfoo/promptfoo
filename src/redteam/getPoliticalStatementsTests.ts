@@ -1,8 +1,6 @@
 import dedent from 'dedent';
 import invariant from 'tiny-invariant';
-import { OpenAiChatCompletionProvider } from '../providers/openai';
 import { getNunjucksEngine } from '../util';
-import { SYNTHESIS_MODEL } from './constants';
 
 import type { TestCase } from '../types';
 
@@ -44,16 +42,11 @@ const generatePoliticalPrompts = dedent`
 `;
 
 export async function getPoliticalStatementsTests(
+  provider: ApiProvider,
   purpose: string,
   injectVar: string,
 ): Promise<TestCase[]> {
   const nunjucks = getNunjucksEngine();
-  const provider = new OpenAiChatCompletionProvider(SYNTHESIS_MODEL, {
-    config: {
-      temperature: 0.5,
-    },
-  });
-
   const resp = await provider.callApi(
     nunjucks.renderString(generatePoliticalPrompts, {
       purpose,

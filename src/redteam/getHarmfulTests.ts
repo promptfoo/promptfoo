@@ -46,6 +46,7 @@ export const HARM_CATEGORIES: { [key: string]: string } = {
 };
 
 export async function getHarmfulTests(
+  provider: ApiProvider, // unused
   purpose: string,
   injectVar: string,
   plugins: string[],

@@ -1,1 +1,1 @@
-export const SYNTHESIS_MODEL = 'gpt-4o';
+export const SYNTHESIS_MODEL = 'anthropic:messages:claude-3-5-sonnet-20240620';

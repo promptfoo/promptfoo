@@ -1,8 +1,6 @@
 import dedent from 'dedent';
 import invariant from 'tiny-invariant';
-import { OpenAiChatCompletionProvider } from '../providers/openai';
 import { getNunjucksEngine } from '../util';
-import { SYNTHESIS_MODEL } from './constants';
 import type { TestCase } from '../types';
 
 /**
@@ -141,12 +139,6 @@ async function getPiiLeakTestsForCategory(
   if (!category) throw new Error(`Category ${categoryKey} not found`);
 
   const nunjucks = getNunjucksEngine();
-  const provider = new OpenAiChatCompletionProvider(SYNTHESIS_MODEL, {
-    config: {
-      temperature: 0.5,
-    },
-  });
-
   const piiLeakPrompts = await provider.callApi(
     nunjucks.renderString(generatePiiLeak(category.examples), {
       purpose,
@@ -184,6 +176,7 @@ async function getPiiLeakTestsForCategory(
  * @returns An array of test cases
  */
 export async function getPiiTests(
+  provider: ApiProvider,
   purpose: string,
   injectVar: string,
   category?: PiiRequestCategory,
