@@ -7,14 +7,18 @@ import {
 } from './openai';
 
 import {
-  DefaultGradingProvider as AnthropicGradeProvider,
+  DefaultGradingProvider as AnthropicGradingProvider,
   DefaultGradingJsonProvider as AnthropicGradingJsonProvider,
   DefaultSuggestionsProvider as AnthropicSuggestionsProvider,
 } from './anthropic';
 
+import { DefaultGradingProvider as GeminiGradingProvider } from './vertex';
+
+import { hasGoogleDefaultCredentials } from './vertexUtil';
+
 import { EnvOverrides } from '../types';
 
-export function getDefaultProviders(env?: EnvOverrides) {
+export async function getDefaultProviders(env?: EnvOverrides) {
   const preferAnthropic =
     !process.env.OPENAI_API_KEY &&
     !env?.OPENAI_API_KEY &&
@@ -22,13 +26,26 @@ export function getDefaultProviders(env?: EnvOverrides) {
 
   if (preferAnthropic) {
     return {
-      embeddingProvider: OpenAiEmbeddingProvider, // TODO(ian): AnthropicEmbeddingProvider
-      gradingProvider: AnthropicGradeProvider,
+      embeddingProvider: OpenAiEmbeddingProvider, // TODO(ian): Voyager instead?
+      gradingProvider: AnthropicGradingProvider,
       gradingJsonProvider: AnthropicGradingJsonProvider,
       suggestionsProvider: AnthropicSuggestionsProvider,
       moderationProvider: OpenAiModerationProvider,
     };
   }
+
+  const preferGoogle =
+    !process.env.OPENAI_API_KEY && !env?.OPENAI_API_KEY && (await hasGoogleDefaultCredentials());
+  if (preferGoogle) {
+    return {
+      embeddingProvider: OpenAiEmbeddingProvider,
+      gradingProvider: GeminiGradingProvider,
+      gradingJsonProvider: GeminiGradingProvider,
+      suggestionsProvider: GeminiGradingProvider,
+      moderationProvider: OpenAiModerationProvider,
+    };
+  }
+
   return {
     embeddingProvider: OpenAiEmbeddingProvider,
     gradingProvider: OpenAiGradingProvider,
