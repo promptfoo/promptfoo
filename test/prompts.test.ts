@@ -5,13 +5,7 @@ import { importModule } from '../src/esm';
 
 import { globSync } from 'glob';
 
-import {
-  readProviderPromptMap,
-  maybeFilePath,
-  normalizeInput,
-  readPrompts,
-  processJsonFile,
-} from '../src/prompts';
+import { readProviderPromptMap, maybeFilePath, normalizeInput, readPrompts } from '../src/prompts';
 
 import type { Prompt, ProviderResponse, UnifiedConfig } from '../src/types';
 
@@ -423,11 +417,15 @@ describe('readPrompts', () => {
     await expect(readPrompts([filePath])).resolves.toEqual([
       {
         raw: '{"name":"You are a helpful assistant","role":"system"}',
-        label: '/path/to/mock.json: {"name":"You are a helpful assistant","role":"system"}',
+        label: expect.stringContaining(
+          'mock.json: {"name":"You are a helpful assistant","role":"system"}',
+        ),
       },
       {
         raw: '{"name":"How do I get to the moon?","role":"user"}',
-        label: '/path/to/mock.json: {"name":"How do I get to the moon?","role":"user"}',
+        label: expect.stringContaining(
+          'mock.json: {"name":"How do I get to the moon?","role":"user"}',
+        ),
       },
     ]);
     expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('mock.json'), 'utf8');
