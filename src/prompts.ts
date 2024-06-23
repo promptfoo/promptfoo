@@ -376,6 +376,7 @@ function processString(prompt: RawPrompt): Prompt[] {
  * Processes a raw prompt based on its content type and path.
  * @param prompt - The raw prompt data.
  * @param basePath - Base path for file resolution.
+ * @param maxRecursionDepth - Maximum recursion depth for globbing.
  * @returns Promise resolving to an array of processed prompts.
  */
 export async function processPrompt(
@@ -460,14 +461,13 @@ export async function readPrompts(
   logger.debug(`Reading prompts from ${JSON.stringify(promptPathOrGlobs)}`);
 
   const promptPartials: RawPrompt[] = normalizeInput(promptPathOrGlobs);
-  const promptBatches: Prompt[][] = [];
+  const prompts: Prompt[] = [];
   for (const prompt of promptPartials) {
     const promptBatch = await processPrompt(prompt, basePath);
     if (promptBatch.length === 0) {
       throw new Error(`There are no prompts in ${JSON.stringify(prompt.raw)}`);
     }
-    promptBatches.push(promptBatch);
+    prompts.push(...promptBatch);
   }
-  const prompts: Prompt[] = promptBatches.flat();
   return prompts;
 }
