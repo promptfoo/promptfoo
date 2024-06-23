@@ -22,6 +22,7 @@ import type {
 export * from './gradingPrompts';
 
 const PROMPT_DELIMITER = process.env.PROMPTFOO_PROMPT_SEPARATOR || '---';
+const VALID_FILE_EXTENSIONS = ['.cjs', '.js', '.json', '.jsonl', '.mjs', '.py', '.txt'];
 
 /**
  * Reads and maps provider prompts based on the configuration and parsed prompts.
@@ -93,10 +94,9 @@ export function maybeFilePath(str: string): boolean {
     return false;
   }
 
-  const validFileExtensions = ['.cjs', '.js', '.json', '.jsonl', '.mjs', '.py', '.txt'];
   return (
     str.startsWith('file://') ||
-    validFileExtensions.some((ext) => {
+    VALID_FILE_EXTENSIONS.some((ext) => {
       const tokens = str.split(':'); // str may be file.js:functionName
       // Checks if the second to last token or the last token ends with the extension
       return tokens.pop()?.endsWith(ext) || tokens.pop()?.endsWith(ext);
@@ -143,12 +143,10 @@ export function normalizeInput(
     return promptPathOrGlobs.map((promptPathOrGlob, index) => {
       if (typeof promptPathOrGlob === 'string') {
         return {
-          source: `${index}`,
           raw: promptPathOrGlob,
         };
       }
       return {
-        source: `${index}`,
         raw: promptPathOrGlob.raw || promptPathOrGlob.id,
         ...promptPathOrGlob,
       };

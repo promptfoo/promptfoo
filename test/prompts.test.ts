@@ -115,11 +115,11 @@ describe('readPrompts', () => {
     await expect(readPrompts(prompts)).resolves.toEqual([
       {
         raw: 'Sample prompt A',
-        label: '0: Sample prompt A',
+        label: 'Sample prompt A',
       },
       {
         raw: 'Sample prompt B',
-        label: '1: Sample prompt B',
+        label: 'Sample prompt B',
       },
     ]);
   });
@@ -596,10 +596,7 @@ describe('normalizeInput', () => {
 
   it('returns input array when input is a non-empty array', () => {
     const inputArray = ['prompt1', { raw: 'prompt2' }];
-    expect(normalizeInput(inputArray)).toEqual([
-      { raw: 'prompt1', source: '0' },
-      { raw: 'prompt2', source: '1' },
-    ]);
+    expect(normalizeInput(inputArray)).toEqual([{ raw: 'prompt1' }, { raw: 'prompt2' }]);
   });
 
   // NOTE: Legacy mode. This is deprecated and will be removed in a future version.
