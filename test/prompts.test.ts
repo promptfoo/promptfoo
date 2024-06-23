@@ -18,27 +18,32 @@ jest.mock('glob', () => ({
   globSync: jest.fn(),
 }));
 
-jest.mock('fs', () => ({
-  readFileSync: jest.fn(),
-  writeFileSync: jest.fn(),
-  statSync: jest.fn(),
-  readdirSync: jest.fn(),
-  existsSync: jest.fn(),
-  mkdirSync: jest.fn(),
-}));
+jest.mock('fs', () => {
+  const actual = jest.requireActual('fs');
+  return {
+    ...actual,
+    readFileSync: jest.fn(),
+    writeFileSync: jest.fn(),
+    statSync: jest.fn(actual.statSync),
+    readdirSync: jest.fn(actual.readdirSync),
+    existsSync: jest.fn(actual.existsSync),
+    mkdirSync: jest.fn(),
+  };
+});
 
 jest.mock('../src/database');
-
-function toPrompt(text: string): Prompt {
-  return { raw: text, label: text };
-}
 
 describe('readPrompts', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  it('rejects invalid inputs', async () => {
+  afterEach(() => {
+    delete process.env.PROMPTFOO_STRICT_FILES;
+    jest.clearAllMocks();
+  });
+
+  it('should throw an error for invalid inputs', async () => {
     await expect(readPrompts(null as any)).rejects.toThrow('Invalid input prompt: null');
     await expect(readPrompts(undefined as any)).rejects.toThrow('Invalid input prompt: undefined');
     await expect(readPrompts(1 as any)).rejects.toThrow('Invalid input prompt: 1');
@@ -46,13 +51,30 @@ describe('readPrompts', () => {
     await expect(readPrompts(false as any)).rejects.toThrow('Invalid input prompt: false');
   });
 
-  it('rejects empty inputs', async () => {
+  it('should throw an error for empty inputs', async () => {
     await expect(readPrompts([])).rejects.toThrow('Invalid input prompt: []');
     await expect(readPrompts({} as any)).rejects.toThrow('Invalid input prompt: {}');
     await expect(readPrompts('')).rejects.toThrow('Invalid input prompt: ""');
   });
 
-  it('reads a single prompt', async () => {
+  it('should throw an error when PROMPTFOO_STRICT_FILES is true and the file does not exist', async () => {
+    process.env.PROMPTFOO_STRICT_FILES = 'true';
+    await expect(readPrompts('non-existent-file.txt')).rejects.toThrow(
+      "ENOENT: no such file or directory, stat 'non-existent-file.txt'",
+    );
+    delete process.env.PROMPTFOO_STRICT_FILES;
+  });
+
+  it('should throw an error for a .txt file with no prompts', async () => {
+    jest.mocked(fs.readFileSync).mockReturnValue('');
+    jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
+    await expect(readPrompts(['prompts.txt'])).rejects.toThrow(
+      'There are no prompts in "prompts.txt"',
+    );
+    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+  });
+
+  it('should read a single prompt', async () => {
     const prompt = 'This is a test prompt';
     await expect(readPrompts(prompt)).resolves.toEqual([
       {
@@ -62,7 +84,7 @@ describe('readPrompts', () => {
     ]);
   });
 
-  it('read a list of prompts', async () => {
+  it('should read a list of prompts', async () => {
     const prompts = ['Sample prompt A', 'Sample prompt B'];
     await expect(readPrompts(prompts)).resolves.toEqual([
       {
@@ -76,18 +98,9 @@ describe('readPrompts', () => {
     ]);
   });
 
-  it('readPrompts throws an error for a .txt file with no prompts', async () => {
-    jest.mocked(fs.readFileSync).mockReturnValue('');
-    jest.mocked(fs.statSync).mockReturnValue({ isDirectory: () => false } as fs.Stats);
-    await expect(readPrompts(['prompts.txt'])).rejects.toThrow(
-      'There are no prompts in "prompts.txt"',
-    );
-    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
-  });
-
-  it('readPrompts reads a .txt file with a single prompt', async () => {
+  it('should reads a .txt file with a single prompt', async () => {
     jest.mocked(fs.readFileSync).mockReturnValue('Sample Prompt');
-    jest.mocked(fs.statSync).mockReturnValue({ isDirectory: () => false } as fs.Stats);
+    jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
     await expect(readPrompts('prompts.txt')).resolves.toEqual([
       {
         label: 'prompts.txt: Sample Prompt',
@@ -98,9 +111,9 @@ describe('readPrompts', () => {
   });
 
   it.each([['prompts.txt'], 'prompts.txt'])(
-    `readPrompts single prompt file with input:%p`,
+    `should read a single prompt file with input:%p`,
     async (promptPath) => {
-      jest.mocked(fs.statSync).mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
       jest.mocked(fs.readFileSync).mockReturnValue('Test prompt 1\n---\nTest prompt 2');
       jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob.toString()]);
       await expect(readPrompts(promptPath)).resolves.toEqual([
@@ -117,7 +130,7 @@ describe('readPrompts', () => {
     },
   );
 
-  it('readPrompts with multiple prompt files', async () => {
+  it('should read multiple prompt files', async () => {
     jest
       .mocked(fs.readFileSync)
       .mockReturnValueOnce('Test prompt 1\n---\nTest prompt 2')
@@ -149,7 +162,7 @@ describe('readPrompts', () => {
     expect(fs.readFileSync).toHaveBeenCalledTimes(2);
   });
 
-  it('readPrompts with map input', async () => {
+  it('should read with map input', async () => {
     jest.mocked(fs.readFileSync).mockReturnValue('some raw text');
     jest.mocked(fs.statSync).mockReturnValue({ isDirectory: () => false } as fs.Stats);
     await expect(
@@ -164,7 +177,7 @@ describe('readPrompts', () => {
     expect(fs.readFileSync).toHaveBeenCalledTimes(2);
   });
 
-  it('readPrompts with JSONL file', async () => {
+  it('should read with JSONL file', async () => {
     const data = [
       [
         { role: 'system', content: 'You are a helpful assistant.' },
@@ -191,7 +204,7 @@ describe('readPrompts', () => {
     expect(fs.readFileSync).toHaveBeenCalledTimes(1);
   });
 
-  it('readPrompts with .py file', async () => {
+  it('should read with .py file', async () => {
     const code = `print('dummy prompt')`;
     jest.mocked(fs.readFileSync).mockReturnValue(code);
     await expect(readPrompts('prompt.py')).resolves.toEqual([
@@ -204,7 +217,7 @@ describe('readPrompts', () => {
     expect(fs.readFileSync).toHaveBeenCalledTimes(1);
   });
 
-  it('readPrompts with Prompt object array', async () => {
+  it('should read with Prompt object array', async () => {
     const prompts = [
       { id: 'prompts.py:prompt1', label: 'First prompt' },
       { id: 'prompts.py:prompt2', label: 'Second prompt' },
@@ -232,7 +245,7 @@ describe('readPrompts', () => {
     expect(fs.readFileSync).toHaveBeenCalledTimes(2);
   });
 
-  it.skip('readPrompts with .js file', async () => {
+  it.skip('should read with .js file', async () => {
     jest.doMock(
       path.resolve('prompt.js'),
       () => {
@@ -250,7 +263,7 @@ describe('readPrompts', () => {
     expect(fs.readFileSync).toHaveBeenCalledTimes(1);
   });
 
-  it('readPrompts with directory', async () => {
+  it('should read a directory', async () => {
     jest.mocked(fs.statSync).mockReturnValue({ isDirectory: () => true } as fs.Stats);
     jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob].flat());
     jest.mocked(fs.readdirSync).mockReturnValue(['prompt1.txt', 'prompt2.txt']);
@@ -277,7 +290,7 @@ describe('readPrompts', () => {
     expect(fs.readFileSync).toHaveBeenCalledTimes(2);
   });
 
-  it.skip('readPrompts with glob pattern for .txt files', async () => {
+  it.skip('should read with glob pattern for .txt files', async () => {
     const fileContents: Record<string, string> = {
       '1.txt': 'First text file content',
       '2.txt': 'Second text file content',

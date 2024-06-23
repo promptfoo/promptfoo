@@ -250,6 +250,7 @@ function parsePathOrGlob(promptPath: string): {
   let stats;
   try {
     stats = fs.statSync(promptPath);
+    console.error('============== fs.statSync', stats);
   } catch (err) {
     if (process.env.PROMPTFOO_STRICT_FILES) {
       throw err;
