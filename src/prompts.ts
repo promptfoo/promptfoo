@@ -181,7 +181,7 @@ function processTxtFile(promptPath: string, prompt: RawPrompt): Prompt[] {
     .filter((p) => p.raw.length > 0); // handle leading/trailing delimiters and empty lines
 }
 
-function processPythonFile(promptPath: string, functionName: string | undefined, rawPath: string, prompt: RawPrompt): Prompt[] {
+function processPythonFile(promptPath: string, prompt: RawPrompt, functionName: string | undefined, rawPath: string): Prompt[] {
   const fileContent = fs.readFileSync(promptPath, 'utf-8');
   const promptFunction = async (context: {
     vars: Record<string, string | object>;
@@ -232,35 +232,73 @@ async function processJsFile(promptPath: string, functionName: string | undefine
   ];
 }
 
-export async function processPrompt(prompt: RawPrompt, basePath: string = ''): Promise<Prompt[]> {
-  const rawPath = prompt.raw;
-  invariant(rawPath, `prompt.raw must be a string, but got ${JSON.stringify(prompt.raw)}`);
-  // literal prompt
-  if (!maybeFilePath(rawPath)) {
-    return [
-      {
-        raw: rawPath,
-        label: `${prompt.source ? `${prompt.source}: ` : ''}${rawPath}`,
-      },
-    ];
-  }
 
-  const promptPath = path.join(basePath, rawPath);
-
-  let stat;
+// You can specify a function name in the filename like this:
+// prompt.py:myFunction or prompts.js:myFunction.
+function parsePathOrGlob(promptPath: string): { functionName?: string, extension: string, isDirectory: boolean } {
+  let stats;
   try {
-    stat = fs.statSync(promptPath);
+    stats = fs.statSync(promptPath);
   } catch (err) {
     if (process.env.PROMPTFOO_STRICT_FILES) {
       throw err;
     }
   }
-  if (stat?.isDirectory()) {
+  let filename = path.parse(promptPath).base;
+  let functionName: string | undefined;
+
+  if (filename.includes(':')) {
+    const splits = filename.split(':');
+    if (splits[0] && ['.js', '.cjs', '.mjs', '.py'].some((ext) => splits[0].endsWith(ext))) {
+      [filename, functionName] = splits;
+    }
+  }
+  const parsedPath = path.parse(filename);
+  const extension = parsedPath.ext;
+
+  return { functionName, extension, isDirectory: stats?.isDirectory() ?? false };
+}
+
+function processString(prompt: RawPrompt): Prompt[] {
+  return [
+    {
+      raw: prompt!.raw as string,
+      label: `${prompt.source ? `${prompt.source}: ` : ''}${prompt.raw}`,
+    },
+  ];
+}
+
+export async function processPrompt(prompt: RawPrompt, basePath: string = ''): Promise<Prompt[]> {
+  invariant(typeof prompt.raw === 'string', `prompt.raw must be a string, but got ${JSON.stringify(prompt.raw)}`);
+  if (!maybeFilePath(prompt.raw)) { // literal prompt
+    return processString(prompt);
+  }
+  const promptPath = path.join(basePath, prompt.raw);
+  const { extension, functionName, isDirectory }: {
+    extension: string;
+    functionName?: string;
+    isDirectory: boolean;
+  } = parsePathOrGlob(promptPath);
+
+  if (extension === '.jsonl') {
+    return processJsonlFile(promptPath, prompt.label, prompt.raw);
+  }
+  if (extension === '.txt') {
+    return processTxtFile(promptPath, prompt);
+  }
+  if (extension === '.py') {
+    return processPythonFile(promptPath, prompt, functionName, prompt.raw);
+  }
+  if (['.js', '.cjs', '.mjs'].includes(extension)) {
+    return processJsFile(promptPath, functionName);
+  }
+
+  if (isDirectory) {
     const globbedPaths = globSync(promptPath.replace(/\\/g, '/'), {
       windowsPathsNoEscape: true,
     });
     logger.debug(
-      `Expanded prompt ${rawPath} to ${promptPath} and then to ${JSON.stringify(globbedPaths)}`,
+      `Expanded prompt ${prompt.raw} to ${promptPath} and then to ${JSON.stringify(globbedPaths)}`,
     );
     globbedPaths.forEach((globbedPath) => {
       const readdirSync = fs.readdirSync(globbedPath);
@@ -269,51 +307,24 @@ export async function processPrompt(prompt: RawPrompt, basePath: string = ''): P
 
     if (globbedPaths.length > 0) {
       return globbedPaths.map((globbedPath) => ({
-        raw: rawPath,
+        raw: prompt.raw as string,
         label: globbedPath,
       }));
     }
   }
 
-  // You can specify a function name in the filename like this:
-  // prompt.py:myFunction or prompts.js:myFunction.
-  let filename = path.parse(promptPath).base;
-  let functionName: string | undefined;
-  if (filename.includes(':')) {
-    const splits = filename.split(':');
-    if (splits[0] && ['.js', '.cjs', '.mjs', '.py'].some((ext) => splits[0].includes(ext))) {
-      [filename, functionName] = splits;
-    }
-  }
-
-  const parsedPath = path.parse(filename);
-  const extension = parsedPath.ext;
-
-  if (extension === '.jsonl') {
-    return processJsonlFile(promptPath, prompt.label, rawPath);
-  }
-  if (extension === '.txt') {
-    return processTxtFile(promptPath, prompt);
-  }
-  if (extension === '.py') {
-    return processPythonFile(promptPath, functionName, rawPath, prompt);
-  }
-  if (['.js', '.cjs', '.mjs'].includes(extension)) {
-    return processJsFile(promptPath, functionName);
-  }
-
   // ** globs
-  const resolvedPath = path.resolve(basePath, rawPath);
+  const resolvedPath = path.resolve(basePath, prompt.raw);
   const globbedPaths = globSync(resolvedPath.replace(/\\/g, '/'), {
     windowsPathsNoEscape: true,
   });
   console.warn('globbedPaths', globbedPaths);
   logger.debug(
-    `Expanded prompt ${rawPath} to ${resolvedPath} and then to ${JSON.stringify(globbedPaths)}`,
+    `Expanded prompt ${prompt.raw} to ${resolvedPath} and then to ${JSON.stringify(globbedPaths)}`,
   );
   if (globbedPaths.length > 0) {
     return globbedPaths.map((globbedPath) => ({
-      raw: rawPath,
+      raw: prompt.raw as string,
       label: globbedPath,
     }));
   }

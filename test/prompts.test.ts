@@ -355,7 +355,7 @@ describe('maybeFilePath', () => {
     expect(maybeFilePath('filename.ex')).toBe(true);
   });
 
-  it('works for files that end with specific allowed extensions', () => {
+  it('should work for files that end with specific allowed extensions', () => {
     expect(maybeFilePath('filename.cjs')).toBe(true);
     expect(maybeFilePath('filename.js')).toBe(true);
     expect(maybeFilePath('filename.js:functionName')).toBe(true);
@@ -427,7 +427,7 @@ describe('normalizeInput', () => {
   });
 
   // NOTE: Legacy mode. This is deprecated and will be removed in a future version.
-  it('normalizes object input to array of prompts', () => {
+  it('returns array of prompts when input is an object', () => {
     const inputObject = {
       'prompts1.txt': 'label A',
       'prompts2.txt': 'label B',
