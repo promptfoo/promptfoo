@@ -15,22 +15,17 @@ keywords:
 
 # Self-hosting
 
-promptfoo provides a Docker image that allows you to host a central server that stores your team's evals.
+promptfoo provides a Docker image that allows you to host a central server that stores your team's evals. With this, you can:
+
+- Share your evals with your team.
+- Run evals in your CI/CD pipeline and aggregate the results.
+- Keep sensitive data off of your local machine.
 
 The self-hosted app consists of:
 
 - Next.js application that runs the web ui.
 - filesystem store that persists the eval results.
 - key-value (KV) store that persists shared data (redis, filesystem, or memory).
-
-## Why Self-host promptfoo?
-
-Self-hosting promptfoo offers several advantages:
-
-- Complete control over your data and evaluations
-- Enhanced security for sensitive prompts and results
-- Customizable setup to fit your organization's needs
-- Seamless integration with your existing infrastructure
 
 ## Setup
 
@@ -110,13 +105,19 @@ docker run -d --name promptfoo_container -p 3000:3000 \
   promptfoo-ui
 ```
 
-## Connecting promptfoo Client to Your Instance
+## Pointing the promptfoo client to your hosted instance
 
-To use the `promptfoo share` command with your self-hosted instance, set these environment variables:
+When self-hosting, you need to set the environment variables so that the `promptfoo share` command knows how to reach your hosted application. Here's an example:
 
 ```sh
 PROMPTFOO_REMOTE_API_BASE_URL=http://localhost:3000 PROMPTFOO_REMOTE_APP_BASE_URL=http://localhost:3000 promptfoo share -y
 ```
+
+This will create a shareable URL using your self-hosted service.
+
+The `PROMPTFOO_REMOTE_API_BASE_URL` environment variable specifies the base URL for the API endpoints of your self-hosted service. This is where the `promptfoo share` command sends data to create a shareable URL.
+
+Similarly, the `PROMPTFOO_REMOTE_APP_BASE_URL` environment variable sets the base URL for the UI of your self-hosted service. This will be a visible part of the shareable URL.
 
 These configuration options can also be set under the `sharing` property of your promptfoo config:
 
