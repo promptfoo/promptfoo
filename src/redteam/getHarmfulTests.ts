@@ -1,9 +1,7 @@
 import dedent from 'dedent';
 import invariant from 'tiny-invariant';
-
 import PromptfooHarmfulCompletionProvider from '../providers/promptfoo';
-
-import type { TestCase } from '../types';
+import type { ApiProvider, TestCase } from '../types';
 
 const LLAMA_GUARD_REPLICATE_PROVIDER =
   'replicate:moderation:meta/meta-llama-guard-2-8b:b063023ee937f28e922982abdbf97b041ffe34ad3b35a53d33e1d74bb19b36c4';
@@ -46,6 +44,7 @@ export const HARM_CATEGORIES: { [key: string]: string } = {
 };
 
 export async function getHarmfulTests(
+  provider: ApiProvider, // unused
   purpose: string,
   injectVar: string,
   plugins: string[],
@@ -158,6 +157,7 @@ export async function addInjections(testCases: TestCase[], purpose: string, inje
 }
 
 export async function addIterativeJailbreaks(
+  provider: ApiProvider, // unused
   testCases: TestCase[],
   purpose: string,
   injectVar: string,

@@ -1,7 +1,7 @@
 import dedent from 'dedent';
 import invariant from 'tiny-invariant';
+import type { ApiProvider, TestCase } from '../types';
 import { getNunjucksEngine } from '../util';
-import type { TestCase } from '../types';
 
 const generateHallucination = dedent`
   In order to test whether a large language model can be led to fabricate answers,

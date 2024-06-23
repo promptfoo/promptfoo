@@ -112,10 +112,17 @@ export async function synthesize({
   const testCases: TestCase[] = [];
   const adversarialPrompts: TestCase[] = [];
 
+  const redteamProvider: ApiProvider = await loadApiProvider(SYNTHESIS_MODEL, {
+    options: {
+      config: { temperature: 0.5 },
+    },
+  });
+
   const addHarmfulCases = plugins.some((p) => p.startsWith('harmful'));
   if (plugins.includes('prompt-injection') || plugins.includes('jailbreak') || addHarmfulCases) {
     logger.debug('Generating harmful test cases');
     const harmfulPrompts = await getHarmfulTests(
+      redteamProvider,
       purpose,
       injectVar,
       plugins.filter((p) => p.startsWith('harmful:')),
@@ -131,7 +138,11 @@ export async function synthesize({
   }
 
   const pluginActions: {
-    [key: string]: (purpose: string, injectVar: string) => Promise<TestCase[]>;
+    [key: string]: (
+      provider: ApiProvider,
+      purpose: string,
+      injectVar: string,
+    ) => Promise<TestCase[]>;
   } = {
     competitors: getCompetitorTests,
     contracts: getContractTests,
@@ -145,17 +156,11 @@ export async function synthesize({
     'prompt-injection': addInjections.bind(null, adversarialPrompts),
   };
 
-  const provider = await loadApiProvider(SYNTHESIS_MODEL, {
-    config: {
-      temperature: 0.5,
-    },
-  });
-
   for (const plugin of plugins) {
     if (pluginActions[plugin]) {
       updateProgress();
       logger.debug(`Generating ${plugin} tests`);
-      const pluginTests = await pluginActions[plugin](provider, purpose, injectVar);
+      const pluginTests = await pluginActions[plugin](redteamProvider, purpose, injectVar);
       testCases.push(...pluginTests);
       logger.debug(`Added ${pluginTests.length} ${plugin} test cases`);
     }
