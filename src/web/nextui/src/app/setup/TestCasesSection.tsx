@@ -18,7 +18,7 @@ import Typography from '@mui/material/Typography';
 
 import TestCaseDialog from './TestCaseDialog';
 import { useStore } from '@/state/evalConfig';
-import { testCaseFromCsvRow } from '@/../../../../dist/src/csv';
+import { testCaseFromCsvRow } from '../../../../../csv';
 
 import type { CsvRow, TestCase } from '@/../../../types';
 
