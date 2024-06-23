@@ -225,7 +225,7 @@ export default function Eval({
         <div>
           <CircularProgress size={22} />
         </div>
-        <div>Loading eval data</div>
+        <div>Waiting for eval data</div>
       </div>
     );
   }

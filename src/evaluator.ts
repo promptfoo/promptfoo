@@ -722,17 +722,17 @@ class Evaluator {
       const outputTextDisplay =
         typeof row.response?.output === 'object'
           ? JSON.stringify(row.response.output)
-          : row.response?.output || null;
+          : row.response?.output || row.error || '';
       if (isTest) {
         if (row.success) {
           resultText = `${outputTextDisplay || row.error || ''}`;
         } else {
-          resultText = `${row.error}\n---\n${outputTextDisplay || ''}`;
+          resultText = `${row.error}\n---\n${outputTextDisplay}`;
         }
       } else if (row.error) {
         resultText = `${row.error}`;
       } else {
-        resultText = outputTextDisplay || row.error || '';
+        resultText = outputTextDisplay;
       }
 
       const { rowIndex, colIndex } = evalStep;
