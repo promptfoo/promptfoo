@@ -14,9 +14,13 @@ jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
 }));
 
-jest.mock('glob', () => ({
-  globSync: jest.fn(),
-}));
+jest.mock('glob', () => {
+  const actual = jest.requireActual('glob');
+  return {
+    ...actual,
+    globSync: jest.fn(actual.globSync),
+  };
+});
 
 jest.mock('fs', () => {
   const actual = jest.requireActual('fs');
@@ -263,31 +267,55 @@ describe('readPrompts', () => {
     expect(fs.readFileSync).toHaveBeenCalledTimes(1);
   });
 
-  it('should read a directory', async () => {
-    jest.mocked(fs.statSync).mockReturnValue({ isDirectory: () => true } as fs.Stats);
+  sit('should read a directory', async () => {
+    jest.mocked(fs.statSync).mockReturnValue({
+      isDirectory: () => true,
+    } as fs.Stats);
     jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob].flat());
     jest.mocked(fs.readdirSync).mockReturnValue(['prompt1.txt', 'prompt2.txt']);
+    // The mocked paths here are an artifact of our globSync mock. In a real
+    // world setting we would get back `prompts/prompt1.txt` instead of `prompts/*/prompt1.txt`
+    // but for the sake of this test we are just going to pretend that the globSync
+    // mock is doing the right thing and giving us back the right paths.
     jest.mocked(fs.readFileSync).mockImplementation((filePath) => {
-      if (filePath.toString().endsWith(path.join('prompts', 'prompt1.txt'))) {
+      if (
+        filePath.toString().endsWith(path.join('prompts', 'prompt1.txt')) ||
+        filePath.toString().endsWith(path.join('prompts', '*/prompt1.txt'))
+      ) {
         return 'Test prompt 1\n---\nTest prompt 2';
-      } else if (filePath.toString().endsWith(path.join('prompts', 'prompt2.txt'))) {
+      } else if (
+        filePath.toString().endsWith(path.join('prompts', 'prompt2.txt')) ||
+        filePath.toString().endsWith(path.join('prompts', '*/prompt2.txt'))
+      ) {
         return 'Test prompt 3\n---\nTest prompt 4\n---\nTest prompt 5';
       }
-      throw new Error('Unexpected file path in test');
+      throw new Error(`Unexpected file path in test: ${filePath}`);
     });
-    await expect(readPrompts(['prompts/*'])).toEqual([
+    await expect(readPrompts(['prompts/*'])).resolves.toEqual([
       {
-        label: 'prompts1.txt: Test prompt 1',
+        label: 'prompts/*/prompt1.txt: Test prompt 1',
         raw: 'Test prompt 1',
       },
       {
-        label: 'prompts2.txt: Test prompt 2',
+        label: 'prompts/*/prompt1.txt: Test prompt 2',
         raw: 'Test prompt 2',
       },
+      {
+        label: 'prompts/*/prompt2.txt: Test prompt 3',
+        raw: 'Test prompt 3',
+      },
+      {
+        label: 'prompts/*/prompt2.txt: Test prompt 4',
+        raw: 'Test prompt 4',
+      },
+      {
+        label: 'prompts/*/prompt2.txt: Test prompt 5',
+        raw: 'Test prompt 5',
+      },
     ]);
-    expect(fs.statSync).toHaveBeenCalledTimes(1);
     expect(fs.readdirSync).toHaveBeenCalledTimes(1);
     expect(fs.readFileSync).toHaveBeenCalledTimes(2);
+    expect(fs.statSync).toHaveBeenCalledTimes(3);
   });
 
   it.skip('should read with glob pattern for .txt files', async () => {

@@ -299,7 +299,6 @@ function parsePathOrGlob(promptPath: string): {
   let stats;
   try {
     stats = fs.statSync(promptPath);
-    console.error('============== fs.statSync', stats);
   } catch (err) {
     if (process.env.PROMPTFOO_STRICT_FILES) {
       throw err;
@@ -372,41 +371,23 @@ export async function processPrompt(prompt: RawPrompt, basePath: string = ''): P
   if (['.js', '.cjs', '.mjs'].includes(extension)) {
     return processJsFile(promptPath, functionName);
   }
-
   if (isDirectory) {
-    const globbedPaths = globSync(promptPath.replace(/\\/g, '/'), {
+    const globbedPath = globSync(promptPath.replace(/\\/g, '/'), {
       windowsPathsNoEscape: true,
     });
     logger.debug(
-      `Expanded prompt ${prompt.raw} to ${promptPath} and then to ${JSON.stringify(globbedPaths)}`,
+      `Expanded prompt ${prompt.raw} to ${promptPath} and then to ${JSON.stringify(globbedPath)}`,
     );
-    globbedPaths.forEach((globbedPath) => {
-      const readdirSync = fs.readdirSync(globbedPath);
-      console.warn('----readdirSync----', readdirSync);
+    const globbedFilePaths = globbedPath.flatMap((globbedPath) => {
+      const filenames = fs.readdirSync(globbedPath);
+      return filenames.map((filename) => path.join(globbedPath, filename));
     });
-
-    if (globbedPaths.length > 0) {
-      return globbedPaths.map((globbedPath) => ({
-        raw: prompt.raw as string,
-        label: globbedPath,
-      }));
+    const prompts: Prompt[] = [];
+    for (const globbedFilePath of globbedFilePaths) {
+      const processedPrompts = await processPrompt({ raw: globbedFilePath }, basePath);
+      prompts.push(...processedPrompts);
     }
-  }
-
-  // ** globs
-  const resolvedPath = path.resolve(basePath, prompt.raw);
-  const globbedPaths = globSync(resolvedPath.replace(/\\/g, '/'), {
-    windowsPathsNoEscape: true,
-  });
-  console.warn('globbedPaths', globbedPaths);
-  logger.debug(
-    `Expanded prompt ${prompt.raw} to ${resolvedPath} and then to ${JSON.stringify(globbedPaths)}`,
-  );
-  if (globbedPaths.length > 0) {
-    return globbedPaths.map((globbedPath) => ({
-      raw: prompt.raw as string,
-      label: globbedPath,
-    }));
+    return prompts;
   }
   return [];
 }
@@ -423,9 +404,7 @@ export async function readPrompts(
 ): Promise<Prompt[]> {
   logger.debug(`Reading prompts from ${JSON.stringify(promptPathOrGlobs)}`);
 
-  const promptPartials = normalizeInput(promptPathOrGlobs);
-  console.warn('promptPartials', promptPartials);
-
+  const promptPartials: RawPrompt[] = normalizeInput(promptPathOrGlobs);
   const promptBatches: Prompt[][] = [];
   for (const prompt of promptPartials) {
     const promptBatch = await processPrompt(prompt, basePath);
