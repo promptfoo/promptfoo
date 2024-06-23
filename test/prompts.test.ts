@@ -73,7 +73,11 @@ describe('readPrompts', () => {
   it('should throw an error when PROMPTFOO_STRICT_FILES is true and the file does not exist', async () => {
     process.env.PROMPTFOO_STRICT_FILES = 'true';
     await expect(readPrompts('non-existent-file.txt')).rejects.toThrow(
-      "ENOENT: no such file or directory, stat 'non-existent-file.txt'",
+      expect.objectContaining({
+        message: expect.stringMatching(
+          /ENOENT: no such file or directory, stat '.*non-existent-file.txt'/,
+        ),
+      }),
     );
     delete process.env.PROMPTFOO_STRICT_FILES;
   });
