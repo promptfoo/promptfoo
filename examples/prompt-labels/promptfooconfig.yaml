@@ -9,11 +9,14 @@ providers:
     label: 4o
     prompts:
       - content_generation
+    config:
+      temperature: 0.1
   - id: openai:gpt-3.5-turbo
     label: '3.5'
     prompts:
       - knowledge_base_query
-
+    config:
+      temperature: 0.1
 tests:
   - vars:
       topic: machine learning trends
