@@ -29,36 +29,25 @@ interface SynthesizeOptions {
   plugins: string[];
 }
 
-const ALL_PLUGINS = new Set(
-  [
-    'competitors',
-    'contracts',
-    'excessive-agency',
-    'hallucination',
-    'harmful',
-    'hijacking',
-    'jailbreak',
-    'overreliance',
-    'pii',
-    'politics',
-    'prompt-injection',
-  ].concat(Object.keys(HARM_CATEGORIES)),
-);
+const BASE_PLUGINS = [
+  'contracts',
+  'excessive-agency',
+  'hallucination',
+  'harmful',
+  'hijacking',
+  'jailbreak',
+  'overreliance',
+  'pii',
+  'politics',
+  'prompt-injection',
+];
 
-export const DEFAULT_PLUGINS = new Set(
-  [
-    'contracts',
-    'excessive-agency',
-    'hallucination',
-    'harmful',
-    'hijacking',
-    'jailbreak',
-    'overreliance',
-    'pii',
-    'politics',
-    'prompt-injection',
-  ].concat(Object.keys(HARM_CATEGORIES)),
-);
+const ADDITIONAL_PLUGINS = ['competitors'];
+
+const HARM_CATEGORIES_KEYS = Object.keys(HARM_CATEGORIES);
+
+export const DEFAULT_PLUGINS = new Set([...BASE_PLUGINS, ...HARM_CATEGORIES_KEYS]);
+const ALL_PLUGINS = new Set([...DEFAULT_PLUGINS, ...ADDITIONAL_PLUGINS]);
 
 function validatePlugins(plugins: string[]) {
   for (const plugin of plugins) {
