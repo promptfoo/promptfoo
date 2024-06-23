@@ -42,7 +42,13 @@ const evalJobs = new Map<string, Job>();
 // Prompts cache
 let allPrompts: PromptWithMetadata[] | null = null;
 
-export async function startServer(port = 15500, apiBaseUrl = '', skipConfirmation = false) {
+export async function startServer(
+  port = 15500,
+  apiBaseUrl = '',
+  skipConfirmation = false,
+  // Development mode: don't serve the statically-compiled Next app.
+  isDev = false,
+) {
   const app = express();
 
   const staticDir = path.join(getDirectory(), 'web', 'nextui');
@@ -205,34 +211,38 @@ export async function startServer(port = 15500, apiBaseUrl = '', skipConfirmatio
 
   // Must come after the above routes (particularly /api/config) so it doesn't
   // overwrite dynamic routes.
-  app.use(express.static(staticDir));
+  if (!isDev) {
+    app.use(express.static(staticDir));
+  }
 
   httpServer.listen(port, () => {
     const url = `http://localhost:${port}`;
     logger.info(`Server running at ${url} and monitoring for new evals.`);
 
-    const openUrl = async () => {
-      try {
-        logger.info('Press Ctrl+C to stop the server');
-        await opener(url);
-      } catch (err) {
-        logger.error(`Failed to open browser: ${String(err)}`);
-      }
-    };
-
-    if (skipConfirmation) {
-      openUrl();
-    } else {
-      const rl = readline.createInterface({
-        input: process.stdin,
-        output: process.stdout,
-      });
-      rl.question('Open URL in browser? (y/N): ', async (answer) => {
-        if (answer.toLowerCase().startsWith('y')) {
-          openUrl();
+    if (!isDev) {
+      const openUrl = async () => {
+        try {
+          logger.info('Press Ctrl+C to stop the server');
+          await opener(url);
+        } catch (err) {
+          logger.error(`Failed to open browser: ${String(err)}`);
         }
-        rl.close();
-      });
+      };
+
+      if (skipConfirmation) {
+        openUrl();
+      } else {
+        const rl = readline.createInterface({
+          input: process.stdin,
+          output: process.stdout,
+        });
+        rl.question('Open URL in browser? (y/N): ', async (answer) => {
+          if (answer.toLowerCase().startsWith('y')) {
+            openUrl();
+          }
+          rl.close();
+        });
+      }
     }
   });
 }

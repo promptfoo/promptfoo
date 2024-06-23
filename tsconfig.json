@@ -13,5 +13,8 @@
     "resolveJsonModule": true
   },
   "include": ["src/", "typings/**/*"],
-  "exclude": ["node_modules", "dist", "src/web/client/**/*", "src/web/nextui/**/*"]
+  "exclude": ["node_modules", "dist", "src/web/client/**/*", "src/web/nextui/**/*"],
+  "ts-node": {
+    "transpileOnly": true
+  }
 }
