@@ -206,10 +206,11 @@ export class AnthropicMessagesProvider implements ApiProvider {
     const params: Anthropic.MessageCreateParams = {
       model: this.modelName,
       ...(system ? { system } : {}),
-      max_tokens: this.config?.max_tokens || 1024,
+      max_tokens:
+        this.config?.max_tokens || parseInt(process.env.ANTHROPIC_MAX_TOKENS || '1024', 10),
       messages: extractedMessages,
       stream: false,
-      temperature: this.config.temperature || 0,
+      temperature: this.config.temperature || parseFloat(process.env.ANTHROPIC_TEMPERATURE || '0'),
       ...(this.config.tools ? { tools: this.config.tools } : {}),
       ...(this.config.tool_choice ? { tool_choice: this.config.tool_choice } : {}),
     };
