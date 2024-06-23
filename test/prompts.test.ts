@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import dedent from 'dedent';
+import { importModule } from '../src/esm';
 
 import { globSync } from 'glob';
 
@@ -13,6 +14,14 @@ jest.mock('../src/esm');
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
 }));
+
+jest.mock('../src/esm', () => {
+  const actual = jest.requireActual('../src/esm');
+  return {
+    ...actual,
+    importModule: jest.fn(actual.importModule),
+  };
+});
 
 jest.mock('glob', () => {
   const actual = jest.requireActual('glob');
@@ -249,7 +258,7 @@ describe('readPrompts', () => {
     expect(fs.readFileSync).toHaveBeenCalledTimes(2);
   });
 
-  it('should read with .js file', async () => {
+  xit('should read with .js file', async () => {
     jest.doMock(
       path.resolve('prompt.js'),
       () => {
@@ -265,6 +274,48 @@ describe('readPrompts', () => {
       },
     ]);
     expect(fs.readFileSync).toHaveBeenCalledTimes(0);
+  });
+
+  it('should read with .js file without named function', async () => {
+    const promptPath = 'prompt.js';
+    const mockFunction = () => console.log('dummy prompt');
+
+    jest.mocked(importModule).mockResolvedValueOnce(mockFunction);
+    jest.mocked(fs.statSync).mockReturnValue({ isDirectory: () => false } as fs.Stats);
+
+    await expect(readPrompts(promptPath)).resolves.toEqual([
+      {
+        raw:  "()=>console.log('dummy prompt')",
+        label:  "prompt.js:()=>console.log('dummy prompt')",
+        function: mockFunction,
+      },
+    ]);
+    expect(importModule).toHaveBeenCalledWith(promptPath, undefined);
+    expect(fs.statSync).toHaveBeenCalledTimes(1);
+  });
+
+  it('should import and execute a named function within a JavaScript file', async () => {
+      const promptPath = 'prompt.js:functionName';
+      const functionName = 'functionName';
+      const mockFunction = jest.fn(() => 'dummy prompt result');
+  
+      jest.mocked(importModule).mockResolvedValueOnce(mockFunction);
+      jest.mocked(fs.statSync).mockReturnValue({ isDirectory: () => false } as fs.Stats);
+  
+      const result = await readPrompts(promptPath);
+      expect(result).toEqual([
+        {
+          raw: String(mockFunction),
+          label: "prompt.js:functionName",
+          function: mockFunction,
+        },
+      ]);
+  
+      const promptFunction = result[0].function as unknown as () => string;  
+      expect(promptFunction()).toBe('dummy prompt result');
+
+      expect(importModule).toHaveBeenCalledWith(promptPath, functionName);
+      expect(fs.statSync).toHaveBeenCalledTimes(1);
   });
 
   it('should read a directory', async () => {

@@ -277,7 +277,7 @@ async function processJsFile(
     {
       raw: String(promptFunction),
       label: functionName
-        ? `${promptPath}:${functionName}`
+        ? `${promptPath}`
         : `${promptPath}:${String(promptFunction)}`,
       function: promptFunction,
     },
