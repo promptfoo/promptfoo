@@ -1,4 +1,4 @@
-import React from 'react';
+import { Suspense } from 'react';
 import Link from 'next/link';
 import { cookies } from 'next/headers';
 import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
@@ -30,5 +30,9 @@ export default async function Page() {
   }
 
   // TODO(ian): Pass recent evals as well
-  return <Eval />;
+  return (
+    <Suspense>
+      <Eval />
+    </Suspense>
+  );
 }
