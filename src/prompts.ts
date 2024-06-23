@@ -230,34 +230,36 @@ function processPythonFile(
     vars: Record<string, string | object>;
     provider?: ApiProvider;
   }) => {
-    if (functionName) {
-      return runPython(promptPath, functionName, [
-        {
-          ...context,
-          provider: {
-            id: context.provider?.id,
-            label: context.provider?.label,
-          },
+    return runPython(promptPath, functionName as string, [
+      {
+        ...context,
+        provider: {
+          id: context.provider?.id,
+          label: context.provider?.label,
         },
-      ]);
-    } else {
-      // Legacy: run the whole file
-      const options: PythonShellOptions = {
-        mode: 'text',
-        pythonPath: process.env.PROMPTFOO_PYTHON || 'python',
-        args: [safeJsonStringify(context)],
-      };
-      logger.debug(`Executing python prompt script ${promptPath}`);
-      const results = (await PythonShell.run(promptPath, options)).join('\n');
-      logger.debug(`Python prompt script ${promptPath} returned: ${results}`);
-      return results;
-    }
+      },
+    ]);
+  };
+  const promptFunctionLegacy = async (context: {
+    vars: Record<string, string | object>;
+    provider?: ApiProvider;
+  }) => {
+    // Legacy: run the whole file
+    const options: PythonShellOptions = {
+      mode: 'text',
+      pythonPath: process.env.PROMPTFOO_PYTHON || 'python',
+      args: [safeJsonStringify(context)],
+    };
+    logger.debug(`Executing python prompt script ${promptPath}`);
+    const results = (await PythonShell.run(promptPath, options)).join('\n');
+    logger.debug(`Python prompt script ${promptPath} returned: ${results}`);
+    return results;
   };
   return [
     {
       raw: fileContent,
       label: `${prompt.label ? `${prompt.label}: ` : ''}${rawPath}: ${fileContent}`,
-      function: promptFunction,
+      function: functionName ? promptFunction : promptFunctionLegacy,
     },
   ];
 }
