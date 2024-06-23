@@ -161,8 +161,8 @@ export function normalizeInput(
 
 function processJsonlFile(filePath: string, labelPrefix: string | undefined, rawPath: string) {
   const fileContent = fs.readFileSync(filePath, 'utf-8');
-  const jsonLines = fileContent.split(/\r?\n/).filter(line => line.length > 0);
-  return jsonLines.map(json => ({
+  const jsonLines = fileContent.split(/\r?\n/).filter((line) => line.length > 0);
+  return jsonLines.map((json) => ({
     raw: json,
     label: `${labelPrefix ? `${labelPrefix}: ` : ''}${rawPath}: ${json}`,
   }));
@@ -181,7 +181,12 @@ function processTxtFile(promptPath: string, prompt: RawPrompt): Prompt[] {
     .filter((p) => p.raw.length > 0); // handle leading/trailing delimiters and empty lines
 }
 
-function processPythonFile(promptPath: string, prompt: RawPrompt, functionName: string | undefined, rawPath: string): Prompt[] {
+function processPythonFile(
+  promptPath: string,
+  prompt: RawPrompt,
+  functionName: string | undefined,
+  rawPath: string,
+): Prompt[] {
   const fileContent = fs.readFileSync(promptPath, 'utf-8');
   const promptFunction = async (context: {
     vars: Record<string, string | object>;
@@ -219,7 +224,10 @@ function processPythonFile(promptPath: string, prompt: RawPrompt, functionName: 
   ];
 }
 
-async function processJsFile(promptPath: string, functionName: string | undefined): Promise<Prompt[]> {
+async function processJsFile(
+  promptPath: string,
+  functionName: string | undefined,
+): Promise<Prompt[]> {
   const promptFunction = await importModule(promptPath, functionName);
   return [
     {
@@ -232,10 +240,13 @@ async function processJsFile(promptPath: string, functionName: string | undefine
   ];
 }
 
-
 // You can specify a function name in the filename like this:
 // prompt.py:myFunction or prompts.js:myFunction.
-function parsePathOrGlob(promptPath: string): { functionName?: string, extension: string, isDirectory: boolean } {
+function parsePathOrGlob(promptPath: string): {
+  functionName?: string;
+  extension: string;
+  isDirectory: boolean;
+} {
   let stats;
   try {
     stats = fs.statSync(promptPath);
@@ -269,12 +280,20 @@ function processString(prompt: RawPrompt): Prompt[] {
 }
 
 export async function processPrompt(prompt: RawPrompt, basePath: string = ''): Promise<Prompt[]> {
-  invariant(typeof prompt.raw === 'string', `prompt.raw must be a string, but got ${JSON.stringify(prompt.raw)}`);
-  if (!maybeFilePath(prompt.raw)) { // literal prompt
+  invariant(
+    typeof prompt.raw === 'string',
+    `prompt.raw must be a string, but got ${JSON.stringify(prompt.raw)}`,
+  );
+  if (!maybeFilePath(prompt.raw)) {
+    // literal prompt
     return processString(prompt);
   }
   const promptPath = path.join(basePath, prompt.raw);
-  const { extension, functionName, isDirectory }: {
+  const {
+    extension,
+    functionName,
+    isDirectory,
+  }: {
     extension: string;
     functionName?: string;
     isDirectory: boolean;

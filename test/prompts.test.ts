@@ -4,9 +4,9 @@ import dedent from 'dedent';
 
 import { globSync } from 'glob';
 
-import { maybeFilePath, normalizeInput, readPrompts } from '../src/prompts';
+import { readProviderPromptMap, maybeFilePath, normalizeInput, readPrompts } from '../src/prompts';
 
-import type { Prompt } from '../src/types';
+import type { Prompt, ProviderResponse, UnifiedConfig } from '../src/types';
 
 jest.mock('../src/esm');
 
@@ -309,6 +309,89 @@ describe('readPrompts', () => {
     expect(fs.readdirSync).toHaveBeenCalledTimes(1);
     expect(fs.readFileSync).toHaveBeenCalledTimes(2);
     expect(fs.statSync).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('readProviderPromptMap', () => {
+  let config: Partial<UnifiedConfig>;
+  let parsedPrompts: Prompt[];
+
+  beforeEach(() => {
+    parsedPrompts = [
+      { label: 'prompt1', raw: 'prompt1' },
+      { label: 'prompt2', raw: 'prompt2' },
+    ];
+  });
+
+  it('should return an empty object if config.providers is undefined', () => {
+    config = {};
+    const result = readProviderPromptMap(config, parsedPrompts);
+    expect(result).toEqual({});
+  });
+
+  it('should return a map with all prompts if config.providers is a string', () => {
+    config = { providers: 'provider1' };
+    const result = readProviderPromptMap(config, parsedPrompts);
+    expect(result).toEqual({ provider1: ['prompt1', 'prompt2'] });
+  });
+
+  it('should return a map with all prompts if config.providers is a function', () => {
+    config = {
+      providers: () =>
+        Promise.resolve({
+          providerName: 'Custom function',
+          prompts: ['prompt1', 'prompt2'],
+        }) as Promise<ProviderResponse>,
+    };
+    expect(readProviderPromptMap(config, parsedPrompts)).toEqual({
+      'Custom function': ['prompt1', 'prompt2'],
+    });
+  });
+
+  it('should handle provider objects with id and prompts', () => {
+    config = {
+      providers: [{ id: 'provider1', prompts: ['customPrompt1'] }],
+    };
+    expect(readProviderPromptMap(config, parsedPrompts)).toEqual({ provider1: ['customPrompt1'] });
+  });
+
+  it('should handle provider objects with id, label, and prompts', () => {
+    config = {
+      providers: [{ id: 'provider1', label: 'providerLabel', prompts: ['customPrompt1'] }],
+    };
+    expect(readProviderPromptMap(config, parsedPrompts)).toEqual({
+      provider1: ['customPrompt1'],
+      providerLabel: ['customPrompt1'],
+    });
+  });
+
+  it('should handle provider options map with id and prompts', () => {
+    config = {
+      providers: [
+        {
+          originalProvider: {
+            id: 'provider1',
+            prompts: ['customPrompt1'],
+          },
+        },
+      ],
+    };
+    expect(readProviderPromptMap(config, parsedPrompts)).toEqual({ provider1: ['customPrompt1'] });
+  });
+
+  it('should handle provider options map without id and use original id', () => {
+    config = {
+      providers: [
+        {
+          originalProvider: {
+            prompts: ['customPrompt1'],
+          },
+        },
+      ],
+    };
+    expect(readProviderPromptMap(config, parsedPrompts)).toEqual({
+      originalProvider: ['customPrompt1'],
+    });
   });
 });
 
