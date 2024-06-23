@@ -249,22 +249,22 @@ describe('readPrompts', () => {
     expect(fs.readFileSync).toHaveBeenCalledTimes(2);
   });
 
-  it.skip('should read with .js file', async () => {
+  it('should read with .js file', async () => {
     jest.doMock(
       path.resolve('prompt.js'),
       () => {
-        return jest.fn(() => console.log('dummy prompt'));
+        return () => console.log('dummy prompt');
       },
       { virtual: true },
     );
     await expect(readPrompts('prompt.js')).resolves.toEqual([
       {
-        raw: 'console.log("dummy prompt")',
-        label: 'prompt.js: console.log("dummy prompt")',
+        raw: "()=>console.log('dummy prompt')",
+        label: "prompt.js:()=>console.log('dummy prompt')",
         function: expect.any(Function),
       },
     ]);
-    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+    expect(fs.readFileSync).toHaveBeenCalledTimes(0);
   });
 
   it('should read a directory', async () => {
