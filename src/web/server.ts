@@ -190,12 +190,6 @@ export async function startServer(
     res.json({ data: await getTestCases() });
   });
 
-  app.get('/api/config', (req, res) => {
-    res.json({
-      apiBaseUrl: apiBaseUrl || '',
-    });
-  });
-
   app.post('/api/dataset/generate', async (req, res) => {
     const testSuite: TestSuite = {
       prompts: req.body.prompts as Prompt[],
