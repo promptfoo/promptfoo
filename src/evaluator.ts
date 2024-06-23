@@ -38,15 +38,21 @@ import type {
 export const DEFAULT_MAX_CONCURRENCY = 4;
 
 /**
- * Providers can be configured with a prompts attribute. This attribute corresponds to
- * an array of prompt labels. Labels can either refer to a group (for example from a file)
- * or to individual prompts. If the attribute is present, this function validates that the
- * prompt labels fit the matching criteria of the provider. If no prompts attribute is
- * present, all prompts are allowed by default.
+ * Validates if a given prompt is allowed based on the provided list of allowed
+ * prompt labels. Providers can be configured with a `prompts` attribute, which
+ * corresponds to an array of prompt labels. Labels can either refer to a group
+ * (for example from a file) or to individual prompts. If the attribute is
+ * present, this function validates that the prompt labels fit the matching
+ * criteria of the provider. Examples:
  *
- * @param {Prompt} prompt - The prompt object to check.
- * @param {string[]} allowedPrompts - The list of allowed prompt labels.
- * @returns {boolean} Returns true if the prompt is allowed, false otherwise.
+ * - `prompts: ['examplePrompt']` matches `examplePrompt` exactly
+ * - `prompts: ['exampleGroup:*']` matches any prompt that starts with `exampleGroup:`
+ *
+ * If no `prompts` attribute is present, all prompts are allowed by default.
+ *
+ * @param prompt - The prompt object to check.
+ * @param allowedPrompts - The list of allowed prompt labels.
+ * @returns Returns true if the prompt is allowed, false otherwise.
  */
 export function isAllowedPrompt(prompt: Prompt, allowedPrompts: string[] | undefined): boolean {
   return (
