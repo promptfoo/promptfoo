@@ -11,7 +11,10 @@ import {
   DefaultGradingJsonProvider as AnthropicGradingJsonProvider,
   DefaultSuggestionsProvider as AnthropicSuggestionsProvider,
 } from './anthropic';
-import { DefaultGradingProvider as GeminiGradingProvider } from './vertex';
+import {
+  DefaultGradingProvider as GeminiGradingProvider,
+  DefaultEmbeddingProvider as GeminiEmbeddingProvider,
+} from './vertex';
 import { hasGoogleDefaultCredentials } from './vertexUtil';
 
 import type { EnvOverrides } from '../types';
@@ -38,7 +41,7 @@ export async function getDefaultProviders(env?: EnvOverrides) {
   if (preferGoogle) {
     logger.debug('Using Google default providers');
     return {
-      embeddingProvider: OpenAiEmbeddingProvider,
+      embeddingProvider: GeminiEmbeddingProvider,
       gradingProvider: GeminiGradingProvider,
       gradingJsonProvider: GeminiGradingProvider,
       suggestionsProvider: GeminiGradingProvider,

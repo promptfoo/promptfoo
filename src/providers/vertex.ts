@@ -14,9 +14,11 @@ import {
 } from './vertexUtil';
 
 import type {
+  ApiEmbeddingProvider,
   ApiProvider,
   CallApiContextParams,
   EnvOverrides,
+  ProviderEmbeddingResponse,
   ProviderResponse,
   TokenUsage,
 } from '../types.js';
@@ -447,4 +449,72 @@ export class VertexChatProvider extends VertexGenericProvider {
   }
 }
 
+export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
+  modelName: string;
+  config: any;
+  env?: any;
+
+  constructor(modelName: string, config: any = {}, env?: any) {
+    this.modelName = modelName;
+    this.config = config;
+    this.env = env;
+  }
+
+  id() {
+    return `vertex:${this.modelName}`;
+  }
+
+  getRegion(): string {
+    return this.config.region || 'us-central1';
+  }
+
+  async callApi(): Promise<ProviderResponse> {
+    throw new Error('Vertex API does not provide text inference.');
+  }
+
+  async callEmbeddingApi(input: string): Promise<ProviderEmbeddingResponse> {
+    // See https://cloud.google.com/vertex-ai/generative-ai/docs/embeddings/get-text-embeddings#get_text_embeddings_for_a_snippet_of_text
+    const body = {
+      instances: [{ content: input }],
+      parameters: {
+        autoTruncate: this.config.autoTruncate || false,
+      },
+    };
+
+    let data: any;
+    try {
+      const { client, projectId } = await getGoogleClient();
+      const url = `https://${this.getRegion()}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${this.getRegion()}/publishers/google/models/${
+        this.modelName
+      }:predict`;
+      const res = await client.request<any>({
+        url,
+        method: 'POST',
+        data: body,
+      });
+      data = res.data;
+    } catch (err) {
+      logger.error(`Vertex API call error: ${err}`);
+      throw err;
+    }
+
+    logger.debug(`Vertex embeddings API response: ${JSON.stringify(data)}`);
+
+    try {
+      const embedding = data.predictions[0].embeddings.values;
+      const tokenCount = data.predictions[0].embeddings.statistics.token_count;
+      return {
+        embedding,
+        tokenUsage: {
+          total: tokenCount,
+        },
+      };
+    } catch (err) {
+      logger.error(`Error parsing Vertex embeddings API response: ${err}`);
+      throw err;
+    }
+  }
+}
+
 export const DefaultGradingProvider = new VertexChatProvider('gemini-1.5-pro');
+export const DefaultEmbeddingProvider = new VertexEmbeddingProvider('text-embedding-004');
