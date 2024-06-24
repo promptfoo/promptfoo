@@ -1,8 +1,7 @@
 import { Command } from 'commander';
-
+import { getUserEmail, setUserEmail } from '../accounts';
 import logger from '../logger';
 import telemetry from '../telemetry';
-import { getUserEmail, setUserEmail } from '../accounts';
 
 export function configCommand(program: Command) {
   const configCommand = program.command('config').description('Edit configuration settings');
