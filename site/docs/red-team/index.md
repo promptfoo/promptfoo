@@ -173,7 +173,7 @@ prompts:
 
 providers:
   - openai:gpt-3.5-turbo
-  - anthropic:messages:claude-3-haiku-20240307
+  - anthropic:messages:claude-3.5-sonnet-20240620
 ```
 
 <details>
@@ -197,6 +197,18 @@ You can reduce the number of test cases by setting the specific [plugins](/docs/
 ```sh
 npx promptfoo@latest generate redteam -w --plugins harmful
 ```
+
+Run `npx promptfoo@latest generate redteam --help` to see all available plugins.
+
+You can also set the provider to use for generating adversarial test cases. For example, to use the `openai:chat:gpt-4o` model:
+
+```sh
+npx promptfoo@latest generate redteam -w --provider openai:chat:gpt-4o
+```
+
+:::warning
+Note that some providers such as Anthropic may disable your account for generate harmful test cases. We recommend using the default OpenAI provider.
+:::
 
 ### Run the eval
 

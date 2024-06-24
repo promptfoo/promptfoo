@@ -1,9 +1,7 @@
 import dedent from 'dedent';
 import invariant from 'tiny-invariant';
-import { OpenAiChatCompletionProvider } from '../providers/openai';
+import type { ApiProvider, TestCase } from '../types';
 import { getNunjucksEngine } from '../util';
-import { SYNTHESIS_MODEL } from './constants';
-import type { TestCase } from '../types';
 
 /**
  * Generates a template for PII leak tests based on the provided examples.
@@ -126,12 +124,15 @@ const PII_CATEGORIES: PiiCategory[] = [
 
 /**
  * General function to generate prompts for any category
+ *
+ * @param provider - The provider to use
  * @param categoryKey - The key of the category to generate prompts for
  * @param purpose - The purpose of the system
  * @param injectVar - The variable to inject the prompts into
  * @returns An array of test cases
  */
 async function getPiiLeakTestsForCategory(
+  provider: ApiProvider,
   categoryKey: string,
   purpose: string,
   injectVar: string,
@@ -141,12 +142,6 @@ async function getPiiLeakTestsForCategory(
   if (!category) throw new Error(`Category ${categoryKey} not found`);
 
   const nunjucks = getNunjucksEngine();
-  const provider = new OpenAiChatCompletionProvider(SYNTHESIS_MODEL, {
-    config: {
-      temperature: 0.5,
-    },
-  });
-
   const piiLeakPrompts = await provider.callApi(
     nunjucks.renderString(generatePiiLeak(category.examples), {
       purpose,
@@ -178,12 +173,15 @@ async function getPiiLeakTestsForCategory(
 
 /**
  * Example usage for a specific category
+ *
+ * @param provider - The provider to use
  * @param purpose - The purpose of the system
  * @param injectVar - The variable to inject the prompts into
  * @param category - The category of PII requests to generate tests for
  * @returns An array of test cases
  */
 export async function getPiiTests(
+  provider: ApiProvider,
   purpose: string,
   injectVar: string,
   category?: PiiRequestCategory,
@@ -192,10 +190,10 @@ export async function getPiiTests(
   if (!category) {
     const allTests: TestCase[] = [];
     for (const cat of PII_CATEGORIES) {
-      const tests = await getPiiLeakTestsForCategory(cat.key, purpose, injectVar);
+      const tests = await getPiiLeakTestsForCategory(provider, cat.key, purpose, injectVar);
       allTests.push(...tests);
     }
     return allTests;
   }
-  return getPiiLeakTestsForCategory(category, purpose, injectVar);
+  return getPiiLeakTestsForCategory(provider, category, purpose, injectVar);
 }

@@ -883,12 +883,12 @@ config:
     const modelName = 'mistralai/mistral-medium';
 
     // Without any model type should throw an error
-    await expect(() => loadApiProvider(`cloudflare-ai:${modelName}`)).rejects.toThrow(
+    await expect(loadApiProvider(`cloudflare-ai:${modelName}`)).rejects.toThrow(
       /Unknown Cloudflare AI model type/,
     );
 
     for (const unsupportedModelType of unsupportedModelTypes) {
-      await expect(() =>
+      await expect(
         loadApiProvider(`cloudflare-ai:${unsupportedModelType}:${modelName}`),
       ).rejects.toThrow(/Unknown Cloudflare AI model type/);
     }
