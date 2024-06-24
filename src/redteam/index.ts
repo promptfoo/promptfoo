@@ -149,11 +149,13 @@ export async function synthesize({
     'excessive-agency': getOverconfidenceTests,
     hallucination: getHallucinationTests,
     hijacking: getHijackingTests,
-    jailbreak: addIterativeJailbreaks.bind(null, adversarialPrompts),
+    jailbreak: (provider, purpose, injectVar) =>
+      addIterativeJailbreaks(provider, adversarialPrompts, purpose, injectVar),
     overreliance: getUnderconfidenceTests,
     pii: getPiiTests,
     politics: getPoliticalStatementsTests,
-    'prompt-injection': addInjections.bind(null, adversarialPrompts),
+    'prompt-injection': (provider, purpose, injectVar) =>
+      addInjections(provider, adversarialPrompts, purpose, injectVar),
   };
 
   for (const plugin of plugins) {
