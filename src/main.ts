@@ -485,15 +485,16 @@ async function main() {
     );
 
   interface RedteamCommandOptions {
-    config?: string;
-    output?: string;
-    write: boolean;
-    cache: boolean;
-    envFile?: string;
-    purpose?: string;
-    injectVar?: string;
-    plugins?: string[];
     addPlugins?: string[];
+    cache: boolean;
+    config?: string;
+    envFile?: string;
+    injectVar?: string;
+    output?: string;
+    plugins?: string[];
+    provider?: string;
+    purpose?: string;
+    write: boolean;
   }
 
   generateCommand
@@ -507,10 +508,14 @@ async function main() {
       'Set the system purpose. If not set, the system purpose will be inferred from the config file',
     )
     .option(
+      '--provider <provider>', // TODO: set message based on what the default grading provider is.
+      'Provider to use for generating adversarial tests. Defaults to default grading provider',
+    )
+    .option(
       '--injectVar <varname>',
       'Override the variable to inject user input into the prompt. If not set, the variable will default to {{query}}',
-    )
-    .option('--plugins <plugins>', 'Comma-separated list of plugins to use', (val) =>
+    ) // TODO add defaults
+    .option('--plugins <plugins>', 'Comma-separated list of plugins to use. Defaults to', (val) =>
       val.split(',').map((x) => x.trim()),
     )
     .option(
@@ -522,15 +527,16 @@ async function main() {
     .option('--env-file <path>', 'Path to .env file')
     .action(
       async ({
-        config,
-        output,
-        write,
-        cache,
-        envFile,
-        purpose,
-        injectVar,
-        plugins,
         addPlugins,
+        cache,
+        config,
+        envFile,
+        injectVar,
+        output,
+        plugins,
+        provider,
+        purpose,
+        write,
       }: RedteamCommandOptions) => {
         setupEnv(envFile);
         if (!cache) {
@@ -567,6 +573,7 @@ async function main() {
             addPlugins && addPlugins.length > 0
               ? Array.from(REDTEAM_DEFAULT_PLUGINS).concat(addPlugins)
               : plugins,
+          provider,
         });
 
         if (output) {

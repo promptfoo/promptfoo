@@ -23,10 +23,11 @@ import { SYNTHESIS_MODEL } from './constants';
 import type { ApiProvider, TestCase, TestSuite } from '../types';
 
 interface SynthesizeOptions {
-  prompts: string[];
   injectVar?: string;
-  purpose?: string;
   plugins: string[];
+  prompts: string[];
+  provider?: string;
+  purpose?: string;
 }
 
 const BASE_PLUGINS = [
@@ -71,12 +72,13 @@ export async function synthesizeFromTestSuite(
 
 export async function synthesize({
   prompts,
+  provider,
   injectVar,
   purpose: purposeOverride,
   plugins,
 }: SynthesizeOptions) {
   validatePlugins(plugins);
-  const reasoningProvider = await loadApiProvider(SYNTHESIS_MODEL);
+  const reasoningProvider = await loadApiProvider(provider || SYNTHESIS_MODEL);
   logger.info(
     `Synthesizing test cases for ${prompts.length} ${
       prompts.length === 1 ? 'prompt' : 'prompts'
@@ -112,7 +114,7 @@ export async function synthesize({
   const testCases: TestCase[] = [];
   const adversarialPrompts: TestCase[] = [];
 
-  const redteamProvider: ApiProvider = await loadApiProvider(SYNTHESIS_MODEL, {
+  const redteamProvider: ApiProvider = await loadApiProvider(provider || SYNTHESIS_MODEL, {
     options: {
       config: { temperature: 0.5 },
     },
