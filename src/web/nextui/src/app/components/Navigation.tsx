@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import DarkMode from './DarkMode';
 import LoggedInAs from './LoggedInAs';
 import Logo from './Logo';
+
 import './Navigation.css';
 
 function NavLink({ href, label }: { href: string; label: string }) {

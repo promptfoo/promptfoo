@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Roboto } from 'next/font/google';
 
 import { PageShell } from './components/PageShell';
+
 import './globals.css';
 
 const roboto = Roboto({

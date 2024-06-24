@@ -10,10 +10,11 @@ import Typography from '@mui/material/Typography';
 
 import type { ResultsFile, SharedResults } from '../eval/types';
 import Overview from './Overview';
-import './Report.css';
 import RiskCategories from './RiskCategories';
 import TestSuites from './TestSuites';
 import { categoryAliases, categoryAliasesReverse } from './constants';
+
+import './Report.css';
 
 const App: React.FC = () => {
   const [evalId, setEvalId] = React.useState<string | null>(null);

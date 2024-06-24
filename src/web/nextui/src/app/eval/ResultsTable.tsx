@@ -31,6 +31,7 @@ import Link from 'next/link';
 import invariant from 'tiny-invariant';
 
 import EvalOutputCell from './EvalOutputCell';
+
 import './ResultsTable.css';
 
 function formatRowOutput(output: EvaluateTableOutput | string) {

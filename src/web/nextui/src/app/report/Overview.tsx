@@ -5,8 +5,9 @@ import CardContent from '@mui/material/CardContent';
 import Grid from '@mui/material/Grid';
 import Typography from '@mui/material/Typography';
 
-import './Overview.css';
 import { Severity, riskCategorySeverityMap } from './constants';
+
+import './Overview.css';
 
 interface OverviewProps {
   categoryStats: Record<string, { pass: number; total: number }>;

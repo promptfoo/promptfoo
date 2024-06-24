@@ -17,6 +17,7 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 
 import PromptDialog from './PromptDialog';
+
 import './PromptsSection.css';
 
 const PromptsSection: React.FC = () => {

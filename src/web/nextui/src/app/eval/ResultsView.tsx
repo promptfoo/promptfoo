@@ -38,11 +38,12 @@ import ConfigModal from './ConfigModal';
 import DownloadMenu from './DownloadMenu';
 import ResultsCharts from './ResultsCharts';
 import ResultsTable from './ResultsTable';
-import './ResultsView.css';
 import SettingsModal from './ResultsViewSettingsModal';
 import ShareModal from './ShareModal';
 import { useStore as useResultsViewStore } from './store';
 import type { FilterMode } from './types';
+
+import './ResultsView.css';
 
 const ResponsiveStack = styled(Stack)(({ theme }) => ({
   maxWidth: '100%',

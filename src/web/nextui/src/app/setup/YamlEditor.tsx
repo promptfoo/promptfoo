@@ -12,9 +12,9 @@ import Link from 'next/link';
 // @ts-ignore: No types available
 import { highlight, languages } from 'prismjs/components/prism-core';
 import 'prismjs/components/prism-yaml';
-import 'prismjs/themes/prism.css';
 
 import './YamlEditor.css';
+import 'prismjs/themes/prism.css';
 
 const YamlEditorComponent: React.FC = () => {
   const {

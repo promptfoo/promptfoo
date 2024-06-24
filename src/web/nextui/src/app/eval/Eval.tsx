@@ -14,10 +14,11 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { io as SocketIOClient } from 'socket.io-client';
 import invariant from 'tiny-invariant';
 
-import './Eval.css';
 import ResultsView from './ResultsView';
 import { useStore } from './store';
 import type { EvaluateTable } from './types';
+
+import './Eval.css';
 
 async function fetchEvalsFromSupabase(): Promise<{ id: string; createdAt: string }[]> {
   const supabase = createClientComponentClient<Database>();

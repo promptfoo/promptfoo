@@ -4,6 +4,7 @@ import Link from '@docusaurus/Link';
 import CodeBlock from '@theme/CodeBlock';
 
 import LogoContainer from '../LogoContainer';
+
 import styles from './styles.module.css';
 
 export default function HomepageInfo(): JSX.Element {

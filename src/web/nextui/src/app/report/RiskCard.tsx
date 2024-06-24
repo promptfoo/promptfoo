@@ -13,8 +13,9 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { Gauge } from '@mui/x-charts/Gauge';
 
-import './RiskCard.css';
 import { categoryAliases, subCategoryDescriptions, displayNameOverrides } from './constants';
+
+import './RiskCard.css';
 
 const RiskCard: React.FC<{
   title: string;

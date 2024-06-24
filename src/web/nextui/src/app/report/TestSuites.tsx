@@ -15,7 +15,6 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { useRouter } from 'next/navigation';
 
-import './TestSuites.css';
 import {
   categoryAliases,
   displayNameOverrides,
@@ -23,6 +22,8 @@ import {
   riskCategorySeverityMap,
   subCategoryDescriptions,
 } from './constants';
+
+import './TestSuites.css';
 
 const getSubCategoryStats = (
   categoryStats: Record<string, { pass: number; total: number; passWithFilter: number }>,
