@@ -212,12 +212,12 @@ function processJsonFile(filePath: string, prompt: RawPrompt): Prompt[] {
 
 /**
  * Processes a text file to extract prompts, splitting by a delimiter.
- * @param promptPath - Path to the text file.
+ * @param filePath - Path to the text file.
  * @param prompt - The raw prompt data.
  * @returns Array of prompts extracted from the file.
  */
-function processTxtFile(promptPath: string, prompt: RawPrompt): Prompt[] {
-  const fileContent = fs.readFileSync(promptPath, 'utf-8');
+function processTxtFile(filePath: string, prompt: RawPrompt): Prompt[] {
+  const fileContent = fs.readFileSync(filePath, 'utf-8');
   return fileContent
     .split(PROMPT_DELIMITER)
     .map((p) => ({
@@ -237,14 +237,14 @@ function processTxtFile(promptPath: string, prompt: RawPrompt): Prompt[] {
  * @returns The prompts
  */
 export const pythonPromptFunction = async (
-  promptPath: string,
+  filePath: string,
   functionName: string,
   context: {
     vars: Record<string, string | object>;
     provider?: ApiProvider;
   },
 ) => {
-  return runPython(promptPath, functionName, [
+  return runPython(filePath, functionName, [
     {
       ...context,
       provider: {
@@ -257,12 +257,12 @@ export const pythonPromptFunction = async (
 
 /**
  * Legacy Python prompt function. Runs the whole python file.
- * @param promptPath - Path to the Python file.
+ * @param filePath - Path to the Python file.
  * @param context - Context for the prompt.
  * @returns The prompts
  */
 export const pythonPromptFunctionLegacy = async (
-  promptPath: string,
+  filePath: string,
   context: {
     vars: Record<string, string | object>;
     provider?: ApiProvider;
@@ -273,51 +273,51 @@ export const pythonPromptFunctionLegacy = async (
     pythonPath: process.env.PROMPTFOO_PYTHON || 'python',
     args: [safeJsonStringify(context)],
   };
-  logger.debug(`Executing python prompt script ${promptPath}`);
-  const results = (await PythonShell.run(promptPath, options)).join('\n');
-  logger.debug(`Python prompt script ${promptPath} returned: ${results}`);
+  logger.debug(`Executing python prompt script ${filePath}`);
+  const results = (await PythonShell.run(filePath, options)).join('\n');
+  logger.debug(`Python prompt script ${filePath} returned: ${results}`);
   return results;
 };
 
 /**
  * Processes a Python file to extract or execute a function as a prompt.
- * @param promptPath - Path to the Python file.
+ * @param filePath - Path to the Python file.
  * @param prompt - The raw prompt data.
  * @param functionName - Optional function name to execute.
  * @returns Array of prompts extracted or executed from the file.
  */
 function processPythonFile(
-  promptPath: string,
+  filePath: string,
   prompt: RawPrompt,
   functionName: string | undefined,
 ): Prompt[] {
-  const fileContent = fs.readFileSync(promptPath, 'utf-8');
+  const fileContent = fs.readFileSync(filePath, 'utf-8');
   return [
     {
       raw: fileContent,
       label: `${prompt.label ? `${prompt.label}: ` : ''}${prompt.raw}: ${fileContent}`,
       function: functionName
-        ? (...args) => pythonPromptFunction(promptPath, functionName, ...args)
-        : (...args) => pythonPromptFunctionLegacy(promptPath, ...args),
+        ? (...args) => pythonPromptFunction(filePath, functionName, ...args)
+        : (...args) => pythonPromptFunctionLegacy(filePath, ...args),
     },
   ];
 }
 
 /**
  * Processes a JavaScript file to import and execute a module function as a prompt.
- * @param promptPath - Path to the JavaScript file.
+ * @param filePath - Path to the JavaScript file.
  * @param functionName - Optional function name to execute.
  * @returns Promise resolving to an array of prompts.
  */
 async function processJsFile(
-  promptPath: string,
+  filePath: string,
   functionName: string | undefined,
 ): Promise<Prompt[]> {
-  const promptFunction = await importModule(promptPath, functionName);
+  const promptFunction = await importModule(filePath, functionName);
   return [
     {
       raw: String(promptFunction),
-      label: functionName ? `${promptPath}` : `${promptPath}:${String(promptFunction)}`,
+      label: functionName ? `${filePath}` : `${filePath}:${String(promptFunction)}`,
       function: promptFunction,
     },
   ];
