@@ -1,6 +1,5 @@
 import dedent from 'dedent';
 import invariant from 'tiny-invariant';
-
 import type { ApiProvider, CallApiContextParams, CallApiOptionsParams } from '../types';
 import { getNunjucksEngine } from '../util';
 

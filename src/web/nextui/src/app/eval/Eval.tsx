@@ -1,7 +1,6 @@
 'use client';
 
 import * as React from 'react';
-
 import { REMOTE_API_BASE_URL } from '@/../../../constants';
 import type { EvaluateSummary, UnifiedConfig, SharedResults } from '@/../../../types';
 import { getApiBaseUrl } from '@/api';
@@ -13,11 +12,9 @@ import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { io as SocketIOClient } from 'socket.io-client';
 import invariant from 'tiny-invariant';
-
 import ResultsView from './ResultsView';
 import { useStore } from './store';
 import type { EvaluateTable } from './types';
-
 import './Eval.css';
 
 async function fetchEvalsFromSupabase(): Promise<{ id: string; createdAt: string }[]> {

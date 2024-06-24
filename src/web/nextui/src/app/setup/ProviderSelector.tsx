@@ -1,8 +1,6 @@
 import React from 'react';
-
 import type { ProviderOptions } from '@/../../../types';
 import { Autocomplete, Box, Chip, TextField } from '@mui/material';
-
 import ProviderConfigDialog from './ProviderConfigDialog';
 
 const defaultProviders: ProviderOptions[] = ([] as (ProviderOptions & { id: string })[])

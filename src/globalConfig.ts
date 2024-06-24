@@ -5,7 +5,6 @@
 import * as fs from 'fs';
 import yaml from 'js-yaml';
 import * as path from 'path';
-
 import { getConfigDirectoryPath } from './util';
 
 interface GlobalConfig {

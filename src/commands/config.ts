@@ -1,5 +1,4 @@
 import { Command } from 'commander';
-
 import { getUserEmail, setUserEmail } from '../accounts';
 import logger from '../logger';
 

@@ -1,5 +1,4 @@
 import * as React from 'react';
-
 import './CustomMetrics.css';
 
 interface CustomMetricsProps {

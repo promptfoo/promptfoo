@@ -1,7 +1,6 @@
 import * as fs from 'fs';
 import { Response } from 'node-fetch';
 import * as path from 'path';
-
 import { runAssertions, runAssertion } from '../src/assertions';
 import { fetchWithRetries } from '../src/fetch';
 import {

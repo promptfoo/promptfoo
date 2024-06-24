@@ -1,5 +1,4 @@
 import React from 'react';
-
 import { useAuth } from '@/supabase-client';
 import Avatar from '@mui/material/Avatar';
 import IconButton from '@mui/material/IconButton';

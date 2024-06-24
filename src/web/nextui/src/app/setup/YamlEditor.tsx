@@ -1,6 +1,5 @@
 import React from 'react';
 import Editor from 'react-simple-code-editor';
-
 import { useStore } from '@/state/evalConfig';
 import EditIcon from '@mui/icons-material/Edit';
 import SaveIcon from '@mui/icons-material/Save';
@@ -12,7 +11,6 @@ import Link from 'next/link';
 // @ts-ignore: No types available
 import { highlight, languages } from 'prismjs/components/prism-core';
 import 'prismjs/components/prism-yaml';
-
 import './YamlEditor.css';
 import 'prismjs/themes/prism.css';
 

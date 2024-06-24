@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
-
 import { useStore } from '@/state/evalConfig';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -14,7 +13,6 @@ import DialogContentText from '@mui/material/DialogContentText';
 import DialogTitle from '@mui/material/DialogTitle';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
-
 import type { ProviderOptions, TestCase, TestSuiteConfig } from '../eval/types';
 import ConfigureEnvButton from './ConfigureEnvButton';
 import PromptsSection from './PromptsSection';
@@ -22,7 +20,6 @@ import ProviderSelector from './ProviderSelector';
 import RunTestSuiteButton from './RunTestSuiteButton';
 import TestCasesSection from './TestCasesSection';
 import YamlEditor from './YamlEditor';
-
 import './page.css';
 
 export type WebTestSuiteConfig = TestSuiteConfig & {

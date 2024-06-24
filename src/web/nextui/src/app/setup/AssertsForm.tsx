@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-
 import type { Assertion, AssertionType } from '@/../../../types';
 import Delete from '@mui/icons-material/Delete';
 import Autocomplete from '@mui/material/Autocomplete';

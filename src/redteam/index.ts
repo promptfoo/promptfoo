@@ -2,7 +2,6 @@ import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import dedent from 'dedent';
 import invariant from 'tiny-invariant';
-
 import logger from '../logger';
 import { loadApiProvider } from '../providers';
 import type { ApiProvider, TestCase, TestSuite } from '../types';

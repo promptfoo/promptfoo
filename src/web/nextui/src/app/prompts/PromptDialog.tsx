@@ -1,5 +1,4 @@
 import React from 'react';
-
 import type { PromptWithMetadata } from '@/../../../types';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';

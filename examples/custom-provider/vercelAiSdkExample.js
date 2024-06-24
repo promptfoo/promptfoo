@@ -3,7 +3,6 @@
 import { anthropic } from '@ai-sdk/anthropic';
 import { generateObject } from 'ai';
 import promptfoo from 'promptfoo';
-
 import { promptSchema } from './schemaValidation.mjs';
 
 class CustomProvider {

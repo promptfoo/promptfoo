@@ -4,7 +4,6 @@ import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
 import invariant from 'tiny-invariant';
-
 import evalJobs from '../evalJobsStore';
 
 export const dynamic = IS_RUNNING_LOCALLY ? 'auto' : 'force-dynamic';

@@ -1,6 +1,5 @@
 import Box from '@mui/material/Box';
 import Image from 'next/image';
-
 import './Logo.css';
 
 export default function Logo() {

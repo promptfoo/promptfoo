@@ -3,7 +3,6 @@ import * as fs from 'fs';
 import fetch from 'node-fetch';
 import * as path from 'path';
 import Stream from 'stream';
-
 import { clearCache, disableCache, enableCache } from '../src/cache';
 import { importModule } from '../src/esm';
 import { loadApiProvider, loadApiProviders } from '../src/providers';

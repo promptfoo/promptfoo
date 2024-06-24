@@ -1,6 +1,5 @@
 import type { Cache } from 'cache-manager';
 import OpenAI from 'openai';
-
 import { fetchWithCache, getCache, isCacheEnabled } from '../cache';
 import logger from '../logger';
 import type {

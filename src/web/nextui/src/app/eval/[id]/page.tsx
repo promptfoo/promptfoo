@@ -1,5 +1,4 @@
 import React from 'react';
-
 import { EvaluateSummary, SharedResults, UnifiedConfig } from '@/../../../types';
 import { getApiBaseUrl } from '@/api';
 import { IS_RUNNING_LOCALLY } from '@/constants';
@@ -8,9 +7,7 @@ import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
 import { Metadata } from 'next';
 import { cookies } from 'next/headers';
 import { notFound } from 'next/navigation';
-
 import Eval from '../Eval';
-
 import './page.css';
 
 export const metadata: Metadata = {

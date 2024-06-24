@@ -144,7 +144,6 @@ Create a new file called `index.test.js` and add the following code:
 
 ```javascript
 import { expect } from 'chai';
-
 import './assertions';
 
 const gradingConfig = {

@@ -1,5 +1,4 @@
 import Ajv from 'ajv';
-
 import { renderVarsInObject } from '../util';
 
 const ajv = new Ajv();

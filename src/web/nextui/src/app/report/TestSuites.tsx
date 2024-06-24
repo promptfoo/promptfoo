@@ -1,5 +1,4 @@
 import React from 'react';
-
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Paper from '@mui/material/Paper';
@@ -14,7 +13,6 @@ import TableSortLabel from '@mui/material/TableSortLabel';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { useRouter } from 'next/navigation';
-
 import {
   categoryAliases,
   displayNameOverrides,
@@ -22,7 +20,6 @@ import {
   riskCategorySeverityMap,
   subCategoryDescriptions,
 } from './constants';
-
 import './TestSuites.css';
 
 const getSubCategoryStats = (

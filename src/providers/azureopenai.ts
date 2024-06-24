@@ -6,7 +6,6 @@ import type {
   RunStepMessageCreationDetails,
 } from '@azure/openai-assistants';
 import invariant from 'tiny-invariant';
-
 import { fetchWithCache } from '../cache';
 import logger from '../logger';
 import type {

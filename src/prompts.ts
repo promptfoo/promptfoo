@@ -4,7 +4,6 @@ import { globSync } from 'glob';
 import * as path from 'path';
 import { PythonShell, Options as PythonShellOptions } from 'python-shell';
 import invariant from 'tiny-invariant';
-
 import { importModule } from './esm';
 import logger from './logger';
 import { runPython } from './python/wrapper';

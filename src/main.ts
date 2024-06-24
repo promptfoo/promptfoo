@@ -8,7 +8,6 @@ import yaml from 'js-yaml';
 import path from 'path';
 import readline from 'readline';
 import invariant from 'tiny-invariant';
-
 import { readAssertions } from './assertions';
 import { validateAssertions } from './assertions/validateAssertions';
 import { disableCache, clearCache } from './cache';

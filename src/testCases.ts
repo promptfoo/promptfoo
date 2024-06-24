@@ -4,7 +4,6 @@ import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import * as path from 'path';
 import { parse as parsePath } from 'path';
-
 import { testCaseFromCsvRow } from './csv';
 import { fetchCsvFromGoogleSheet } from './googleSheets';
 import logger from './logger';

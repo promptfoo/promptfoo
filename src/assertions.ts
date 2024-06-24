@@ -10,7 +10,6 @@ import path from 'path';
 import Clone from 'rfdc';
 import rouge from 'rouge';
 import invariant from 'tiny-invariant';
-
 import { AssertionsResult } from './assertions/AssertionsResult';
 import cliState from './cliState';
 import { importModule } from './esm';

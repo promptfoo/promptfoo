@@ -7,7 +7,6 @@ import {
 } from '@tanstack/react-table';
 import * as React from 'react';
 import ReactMarkdown from 'react-markdown';
-
 import { getApiBaseUrl } from '@/api';
 import CustomMetrics from '@/app/eval/CustomMetrics';
 import EvalOutputPromptDialog from '@/app/eval/EvalOutputPromptDialog';
@@ -29,9 +28,7 @@ import Typography from '@mui/material/Typography';
 import type { CellContext, ColumnDef, VisibilityState } from '@tanstack/table-core';
 import Link from 'next/link';
 import invariant from 'tiny-invariant';
-
 import EvalOutputCell from './EvalOutputCell';
-
 import './ResultsTable.css';
 
 function formatRowOutput(output: EvaluateTableOutput | string) {

@@ -1,6 +1,5 @@
 import dedent from 'dedent';
 import invariant from 'tiny-invariant';
-
 import PromptfooHarmfulCompletionProvider from '../providers/promptfoo';
 import type { ApiProvider, TestCase } from '../types';
 

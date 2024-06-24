@@ -7,7 +7,6 @@ import yaml from 'js-yaml';
 import * as path from 'path';
 import readline from 'readline';
 import invariant from 'tiny-invariant';
-
 import { runAssertions, runCompareAssertion } from './assertions';
 import { fetchWithCache, getCache } from './cache';
 import cliState from './cliState';

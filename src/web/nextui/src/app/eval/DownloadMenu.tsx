@@ -1,5 +1,4 @@
 import * as React from 'react';
-
 import DownloadIcon from '@mui/icons-material/Download';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
@@ -10,7 +9,6 @@ import MenuItem from '@mui/material/MenuItem';
 import Stack from '@mui/material/Stack';
 import { stringify as csvStringify } from 'csv-stringify/sync';
 import yaml from 'js-yaml';
-
 import { useStore as useResultsViewStore } from './store';
 
 function DownloadMenu() {

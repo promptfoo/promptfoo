@@ -10,7 +10,6 @@ import opener from 'opener';
 import { Server as SocketIOServer } from 'socket.io';
 import invariant from 'tiny-invariant';
 import { v4 as uuidv4 } from 'uuid';
-
 import { getDbSignalPath } from '../database';
 import { getDirectory } from '../esm';
 import promptfoo, {

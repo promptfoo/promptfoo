@@ -4,7 +4,6 @@ import fsStore from 'cache-manager-fs-hash';
 import fs from 'fs';
 import type { RequestInfo, RequestInit } from 'node-fetch';
 import path from 'path';
-
 import { fetchWithRetries } from './fetch';
 import logger from './logger';
 import { getConfigDirectoryPath } from './util';

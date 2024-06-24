@@ -1,5 +1,4 @@
 import readline from 'readline';
-
 import { REMOTE_API_BASE_URL } from './constants';
 import { fetchWithProxy } from './fetch';
 import logger from './logger';

@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState } from 'react';
-
 import { NEXTJS_BASE_URL, USE_SUPABASE } from '@/constants';
 import { useStore } from '@/state/evalConfig';
 import { Button, CircularProgress } from '@mui/material';

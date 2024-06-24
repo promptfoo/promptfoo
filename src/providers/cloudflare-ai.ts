@@ -1,6 +1,5 @@
 import type Cloudflare from 'cloudflare';
 import invariant from 'tiny-invariant';
-
 import { fetchWithCache } from '../cache';
 import logger from '../logger';
 import type {

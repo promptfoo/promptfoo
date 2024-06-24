@@ -1,5 +1,4 @@
 import { Command } from 'commander';
-
 import logger from '../logger';
 import telemetry from '../telemetry';
 import { deleteEval, getEvalFromId, setupEnv } from '../util';

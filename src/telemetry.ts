@@ -1,5 +1,4 @@
 import chalk from 'chalk';
-
 import packageJson from '../package.json';
 import { fetchWithTimeout } from './fetch';
 import { maybeRecordFirstRun } from './globalConfig';

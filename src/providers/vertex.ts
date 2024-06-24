@@ -1,5 +1,4 @@
 import Clone from 'rfdc';
-
 import { getCache, isCacheEnabled } from '../cache';
 import logger from '../logger';
 import type {

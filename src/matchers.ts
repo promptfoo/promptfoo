@@ -1,5 +1,4 @@
 import invariant from 'tiny-invariant';
-
 import logger from './logger';
 import {
   ANSWER_RELEVANCY_GENERATE,

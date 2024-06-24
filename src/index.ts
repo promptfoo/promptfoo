@@ -1,5 +1,4 @@
 import invariant from 'tiny-invariant';
-
 import assertions from './assertions';
 import * as cache from './cache';
 import { evaluate as doEvaluate } from './evaluator';
