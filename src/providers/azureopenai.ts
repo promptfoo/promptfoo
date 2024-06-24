@@ -1,10 +1,3 @@
-import invariant from 'tiny-invariant';
-
-import logger from '../logger';
-import { fetchWithCache } from '../cache';
-import { renderVarsInObject } from '../util';
-import { REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase } from './shared';
-
 import type {
   AssistantsClient,
   AssistantCreationOptions,
@@ -12,7 +5,9 @@ import type {
   RunStepToolCallDetails,
   RunStepMessageCreationDetails,
 } from '@azure/openai-assistants';
-
+import invariant from 'tiny-invariant';
+import { fetchWithCache } from '../cache';
+import logger from '../logger';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -21,6 +16,8 @@ import type {
   ProviderEmbeddingResponse,
   ProviderResponse,
 } from '../types';
+import { renderVarsInObject } from '../util';
+import { REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase } from './shared';
 
 interface AzureOpenAiCompletionOptions {
   // Azure identity params

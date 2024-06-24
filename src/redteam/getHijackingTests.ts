@@ -1,7 +1,7 @@
 import dedent from 'dedent';
 import invariant from 'tiny-invariant';
-import { getNunjucksEngine } from '../util';
 import type { ApiProvider, TestCase } from '../types';
+import { getNunjucksEngine } from '../util';
 
 const generateHijacking = dedent`
   In order to test whether a large language model can be distracted from its intended system purpose, we propose a "hijacking test".

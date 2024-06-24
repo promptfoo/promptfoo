@@ -1,10 +1,16 @@
-import invariant from 'tiny-invariant';
-
-import logger from '../logger';
-import { fetchWithCache } from '../cache';
-import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
-
 import type Cloudflare from 'cloudflare';
+import invariant from 'tiny-invariant';
+import { fetchWithCache } from '../cache';
+import logger from '../logger';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  EnvOverrides,
+  ProviderEmbeddingResponse,
+  ProviderResponse,
+} from '../types';
+import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
 
 /**
  * These are parameters that have nothing to do with model invocation
@@ -38,15 +44,6 @@ export type ICloudflareTextGenerationOptions = {
 
 export type ICloudflareProviderConfig = ICloudflareProviderBaseConfig &
   ICloudflareTextGenerationOptions;
-
-import type {
-  ApiProvider,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  EnvOverrides,
-  ProviderEmbeddingResponse,
-  ProviderResponse,
-} from '../types';
 
 export type ICloudflareSuccessResponse<SuccessData extends Record<string, unknown>> = {
   success: true;

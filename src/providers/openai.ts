@@ -1,14 +1,7 @@
-import OpenAI from 'openai';
-
-import logger from '../logger';
-import { fetchWithCache, getCache, isCacheEnabled } from '../cache';
-import { renderVarsInObject } from '../util';
-import { REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase } from './shared';
-import { OpenAiFunction, OpenAiTool } from './openaiUtil';
-import { safeJsonStringify } from '../util';
-
 import type { Cache } from 'cache-manager';
-
+import OpenAI from 'openai';
+import { fetchWithCache, getCache, isCacheEnabled } from '../cache';
+import logger from '../logger';
 import type {
   ApiModerationProvider,
   ApiProvider,
@@ -21,6 +14,10 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../types.js';
+import { renderVarsInObject } from '../util';
+import { safeJsonStringify } from '../util';
+import { OpenAiFunction, OpenAiTool } from './openaiUtil';
+import { REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase } from './shared';
 
 interface OpenAiSharedOptions {
   apiKey?: string;

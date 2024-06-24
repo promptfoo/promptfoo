@@ -1,9 +1,8 @@
 import chalk from 'chalk';
 import semverGt from 'semver/functions/gt';
-
-import logger from './logger';
-import { fetchWithTimeout } from './fetch';
 import packageJson from '../package.json';
+import { fetchWithTimeout } from './fetch';
+import logger from './logger';
 
 const VERSION = packageJson.version;
 

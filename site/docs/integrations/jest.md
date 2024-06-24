@@ -38,6 +38,7 @@ Create a new file called `matchers.js` and add the following:
 
 ```javascript
 import { assertions } from 'promptfoo';
+
 const { matchesSimilarity, matchesLlmRubric } = assertions;
 
 export function installJestMatchers() {
@@ -115,9 +116,9 @@ export function installJestMatchers() {
 
 ```typescript
 import { assertions } from 'promptfoo';
-const { matchesSimilarity, matchesLlmRubric } = assertions;
-
 import type { GradingConfig } from 'promptfoo';
+
+const { matchesSimilarity, matchesLlmRubric } = assertions;
 
 declare global {
   namespace jest {

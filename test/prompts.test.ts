@@ -1,10 +1,7 @@
 import * as fs from 'fs';
-import * as path from 'path';
-
 import { globSync } from 'glob';
-
+import * as path from 'path';
 import { readPrompts } from '../src/prompts';
-
 import type { Prompt } from '../src/types';
 
 jest.mock('../src/esm');

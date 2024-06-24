@@ -1,6 +1,5 @@
-import { AssertionSet } from '../../src/types';
-
 import { AssertionsResult } from '../../src/assertions/AssertionsResult';
+import { AssertionSet } from '../../src/types';
 
 describe('AssertionsResult', () => {
   const succeedingResult = {

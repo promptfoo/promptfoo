@@ -1,26 +1,25 @@
 import chalk from 'chalk';
-import dedent from 'dedent';
 import cliProgress from 'cli-progress';
+import dedent from 'dedent';
 import invariant from 'tiny-invariant';
-
 import logger from '../logger';
 import { loadApiProvider } from '../providers';
+import type { ApiProvider, TestCase, TestSuite } from '../types';
+import { REDTEAM_MODEL } from './constants';
+import { getCompetitorTests } from './getCompetitorTests';
+import { getHallucinationTests } from './getHallucinationTests';
 import {
   getHarmfulTests,
   addInjections,
   addIterativeJailbreaks,
   HARM_CATEGORIES,
 } from './getHarmfulTests';
-import { getCompetitorTests } from './getCompetitorTests';
-import { getContractTests } from './getUnintendedContractTests';
-import { getHallucinationTests } from './getHallucinationTests';
 import { getHijackingTests } from './getHijackingTests';
 import { getOverconfidenceTests } from './getOverconfidenceTests';
 import { getPiiTests } from './getPiiTests';
 import { getPoliticalStatementsTests } from './getPoliticalStatementsTests';
 import { getUnderconfidenceTests } from './getUnderconfidenceTests';
-import { REDTEAM_MODEL } from './constants';
-import type { ApiProvider, TestCase, TestSuite } from '../types';
+import { getContractTests } from './getUnintendedContractTests';
 
 interface SynthesizeOptions {
   injectVar?: string;

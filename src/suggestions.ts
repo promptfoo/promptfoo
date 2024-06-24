@@ -1,6 +1,5 @@
 import { SUGGEST_PROMPTS_SYSTEM_MESSAGE } from './prompts';
 import { DefaultSuggestionsProvider } from './providers/openai';
-
 import type { TokenUsage } from './types';
 
 const DEFAULT_TEMPERATURE = 0.9;
