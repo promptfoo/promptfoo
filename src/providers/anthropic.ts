@@ -1,8 +1,9 @@
+import Anthropic, { APIError } from '@anthropic-ai/sdk';
+
 import { getCache, isCacheEnabled } from '../cache';
 import logger from '../logger';
 import type { ApiProvider, EnvOverrides, ProviderResponse, TokenUsage } from '../types.js';
 import { parseChatPrompt } from './shared';
-import Anthropic, { APIError } from '@anthropic-ai/sdk';
 
 interface AnthropicMessageOptions {
   apiKey?: string;

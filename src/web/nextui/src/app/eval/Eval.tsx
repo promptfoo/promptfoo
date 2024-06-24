@@ -1,9 +1,7 @@
 'use client';
 
-import './Eval.css';
-import ResultsView from './ResultsView';
-import { useStore } from './store';
-import type { EvaluateTable } from './types';
+import * as React from 'react';
+
 import { REMOTE_API_BASE_URL } from '@/../../../constants';
 import type { EvaluateSummary, UnifiedConfig, SharedResults } from '@/../../../types';
 import { getApiBaseUrl } from '@/api';
@@ -13,9 +11,13 @@ import type { Database } from '@/types/supabase';
 import CircularProgress from '@mui/material/CircularProgress';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { useRouter, useSearchParams } from 'next/navigation';
-import * as React from 'react';
 import { io as SocketIOClient } from 'socket.io-client';
 import invariant from 'tiny-invariant';
+
+import './Eval.css';
+import ResultsView from './ResultsView';
+import { useStore } from './store';
+import type { EvaluateTable } from './types';
 
 async function fetchEvalsFromSupabase(): Promise<{ id: string; createdAt: string }[]> {
   const supabase = createClientComponentClient<Database>();

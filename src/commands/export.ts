@@ -1,9 +1,10 @@
-import { getDb, evals } from '../database';
-import logger from '../logger';
-import telemetry from '../telemetry';
 import { Command } from 'commander';
 import { eq, desc } from 'drizzle-orm';
 import fs from 'fs';
+
+import { getDb, evals } from '../database';
+import logger from '../logger';
+import telemetry from '../telemetry';
 
 export function exportCommand(program: Command) {
   program

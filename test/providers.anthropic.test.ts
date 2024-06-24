@@ -1,3 +1,6 @@
+import Anthropic from '@anthropic-ai/sdk';
+import dedent from 'dedent';
+
 import { clearCache, disableCache, enableCache, getCache } from '../src/cache';
 import { loadApiProvider } from '../src/providers';
 import {
@@ -8,8 +11,6 @@ import {
   parseMessages,
 } from '../src/providers/anthropic';
 import { AwsBedrockCompletionProvider } from '../src/providers/bedrock';
-import Anthropic from '@anthropic-ai/sdk';
-import dedent from 'dedent';
 
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),

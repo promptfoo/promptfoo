@@ -1,4 +1,6 @@
-import './YamlEditor.css';
+import React from 'react';
+import Editor from 'react-simple-code-editor';
+
 import { useStore } from '@/state/evalConfig';
 import EditIcon from '@mui/icons-material/Edit';
 import SaveIcon from '@mui/icons-material/Save';
@@ -11,8 +13,8 @@ import Link from 'next/link';
 import { highlight, languages } from 'prismjs/components/prism-core';
 import 'prismjs/components/prism-yaml';
 import 'prismjs/themes/prism.css';
-import React from 'react';
-import Editor from 'react-simple-code-editor';
+
+import './YamlEditor.css';
 
 const YamlEditorComponent: React.FC = () => {
   const {

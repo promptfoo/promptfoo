@@ -1,3 +1,6 @@
+import chalk from 'chalk';
+import { Command } from 'commander';
+
 import logger from '../logger';
 import { generateTable, wrapTable } from '../table';
 import telemetry from '../telemetry';
@@ -8,8 +11,6 @@ import {
   printBorder,
   setupEnv,
 } from '../util';
-import chalk from 'chalk';
-import { Command } from 'commander';
 
 export async function showCommand(program: Command) {
   const showCommand = program

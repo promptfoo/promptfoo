@@ -1,3 +1,5 @@
+import invariant from 'tiny-invariant';
+
 import logger from './logger';
 import {
   ANSWER_RELEVANCY_GENERATE,
@@ -28,7 +30,6 @@ import type {
   ApiModerationProvider,
 } from './types';
 import { getNunjucksEngine } from './util';
-import invariant from 'tiny-invariant';
 
 const nunjucks = getNunjucksEngine();
 

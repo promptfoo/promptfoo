@@ -1,12 +1,5 @@
-import ConfigModal from './ConfigModal';
-import DownloadMenu from './DownloadMenu';
-import ResultsCharts from './ResultsCharts';
-import ResultsTable from './ResultsTable';
-import './ResultsView.css';
-import SettingsModal from './ResultsViewSettingsModal';
-import ShareModal from './ShareModal';
-import { useStore as useResultsViewStore } from './store';
-import type { FilterMode } from './types';
+import * as React from 'react';
+
 import { REMOTE_API_BASE_URL, REMOTE_APP_BASE_URL } from '@/../../../constants';
 import { getApiBaseUrl } from '@/api';
 import { useStore as useMainStore } from '@/state/evalConfig';
@@ -38,9 +31,18 @@ import Heading from '@mui/material/Typography';
 import { styled } from '@mui/system';
 import type { VisibilityState } from '@tanstack/table-core';
 import { useRouter, useSearchParams } from 'next/navigation';
-import * as React from 'react';
 import invariant from 'tiny-invariant';
 import { useDebounce } from 'use-debounce';
+
+import ConfigModal from './ConfigModal';
+import DownloadMenu from './DownloadMenu';
+import ResultsCharts from './ResultsCharts';
+import ResultsTable from './ResultsTable';
+import './ResultsView.css';
+import SettingsModal from './ResultsViewSettingsModal';
+import ShareModal from './ShareModal';
+import { useStore as useResultsViewStore } from './store';
+import type { FilterMode } from './types';
 
 const ResponsiveStack = styled(Stack)(({ theme }) => ({
   maxWidth: '100%',

@@ -143,8 +143,9 @@ Our test code will use the custom chai assertions in order to run a few test cas
 Create a new file called `index.test.js` and add the following code:
 
 ```javascript
-import './assertions';
 import { expect } from 'chai';
+
+import './assertions';
 
 const gradingConfig = {
   provider: 'openai:chat:gpt-3.5-turbo',

@@ -1,3 +1,7 @@
+import * as fs from 'fs';
+import { globSync } from 'glob';
+import * as path from 'path';
+
 import type {
   ApiProvider,
   EvaluateResult,
@@ -17,9 +21,6 @@ import {
   writeMultipleOutputs,
   writeOutput,
 } from '../src/util';
-import * as fs from 'fs';
-import { globSync } from 'glob';
-import * as path from 'path';
 
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),

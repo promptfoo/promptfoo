@@ -1,4 +1,14 @@
 #!/usr/bin/env node
+import chalk from 'chalk';
+import chokidar from 'chokidar';
+import { Command } from 'commander';
+import dedent from 'dedent';
+import fs from 'fs';
+import yaml from 'js-yaml';
+import path from 'path';
+import readline from 'readline';
+import invariant from 'tiny-invariant';
+
 import { readAssertions } from './assertions';
 import { validateAssertions } from './assertions/validateAssertions';
 import { disableCache, clearCache } from './cache';
@@ -50,15 +60,6 @@ import {
   writeResultsToDatabase,
 } from './util';
 import { BrowserBehavior, startServer } from './web/server';
-import chalk from 'chalk';
-import chokidar from 'chokidar';
-import { Command } from 'commander';
-import dedent from 'dedent';
-import fs from 'fs';
-import yaml from 'js-yaml';
-import path from 'path';
-import readline from 'readline';
-import invariant from 'tiny-invariant';
 
 async function resolveConfigs(
   cmdObj: Partial<CommandLineOptions>,

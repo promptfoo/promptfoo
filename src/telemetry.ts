@@ -1,8 +1,9 @@
+import chalk from 'chalk';
+
 import packageJson from '../package.json';
 import { fetchWithTimeout } from './fetch';
 import { maybeRecordFirstRun } from './globalConfig';
 import logger from './logger';
-import chalk from 'chalk';
 
 type EventValue = string | number | boolean | string[];
 type TelemetryEvent = {

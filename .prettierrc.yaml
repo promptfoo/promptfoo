@@ -4,3 +4,5 @@ printWidth: 100
 bracketSpacing: true
 plugins:
   - '@trivago/prettier-plugin-sort-imports'
+importOrderSeparation: true
+importOrder: ['react', '<THIRD_PARTY_MODULES>', '^[./]']

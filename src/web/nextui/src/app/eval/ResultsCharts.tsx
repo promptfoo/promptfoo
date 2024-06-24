@@ -1,5 +1,6 @@
-import { useStore } from './store';
-import type { EvaluateTable } from './types';
+import React, { useRef, useEffect, useState } from 'react';
+import { ErrorBoundary } from 'react-error-boundary';
+
 import CloseIcon from '@mui/icons-material/Close';
 import Dialog from '@mui/material/Dialog';
 import DialogContent from '@mui/material/DialogContent';
@@ -25,8 +26,9 @@ import {
   Colors,
   type TooltipItem,
 } from 'chart.js';
-import React, { useRef, useEffect, useState } from 'react';
-import { ErrorBoundary } from 'react-error-boundary';
+
+import { useStore } from './store';
+import type { EvaluateTable } from './types';
 
 interface ResultsChartsProps {
   columnVisibility: VisibilityState;

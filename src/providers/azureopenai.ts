@@ -1,3 +1,12 @@
+import type {
+  AssistantsClient,
+  AssistantCreationOptions,
+  FunctionDefinition,
+  RunStepToolCallDetails,
+  RunStepMessageCreationDetails,
+} from '@azure/openai-assistants';
+import invariant from 'tiny-invariant';
+
 import { fetchWithCache } from '../cache';
 import logger from '../logger';
 import type {
@@ -10,14 +19,6 @@ import type {
 } from '../types';
 import { renderVarsInObject } from '../util';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase } from './shared';
-import type {
-  AssistantsClient,
-  AssistantCreationOptions,
-  FunctionDefinition,
-  RunStepToolCallDetails,
-  RunStepMessageCreationDetails,
-} from '@azure/openai-assistants';
-import invariant from 'tiny-invariant';
 
 interface AzureOpenAiCompletionOptions {
   // Azure identity params

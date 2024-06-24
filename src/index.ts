@@ -1,3 +1,5 @@
+import invariant from 'tiny-invariant';
+
 import assertions from './assertions';
 import * as cache from './cache';
 import { evaluate as doEvaluate } from './evaluator';
@@ -20,7 +22,6 @@ import {
   writeOutput,
   migrateResultsFromFileSystemToDatabase,
 } from './util';
-import invariant from 'tiny-invariant';
 
 export * from './types';
 

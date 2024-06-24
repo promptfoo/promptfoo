@@ -1,3 +1,6 @@
+import type Cloudflare from 'cloudflare';
+import invariant from 'tiny-invariant';
+
 import { fetchWithCache } from '../cache';
 import logger from '../logger';
 import type {
@@ -9,8 +12,6 @@ import type {
   ProviderResponse,
 } from '../types';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
-import type Cloudflare from 'cloudflare';
-import invariant from 'tiny-invariant';
 
 /**
  * These are parameters that have nothing to do with model invocation

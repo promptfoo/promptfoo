@@ -1,6 +1,7 @@
 'use client';
 
-import PromptDialog from './PromptDialog';
+import React, { useEffect, useState } from 'react';
+
 import type { PromptWithMetadata } from '@/../../../types';
 import { getApiBaseUrl } from '@/api';
 import Box from '@mui/material/Box';
@@ -14,7 +15,8 @@ import TableSortLabel from '@mui/material/TableSortLabel';
 import Tooltip from '@mui/material/Tooltip';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import React, { useEffect, useState } from 'react';
+
+import PromptDialog from './PromptDialog';
 
 const MAX_CELL_LENGTH = 500;
 

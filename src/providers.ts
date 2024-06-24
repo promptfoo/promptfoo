@@ -1,3 +1,8 @@
+import fs from 'fs';
+import yaml from 'js-yaml';
+import path from 'path';
+import invariant from 'tiny-invariant';
+
 import { importModule } from './esm';
 import logger from './logger';
 import { AnthropicCompletionProvider, AnthropicMessagesProvider } from './providers/anthropic';
@@ -54,10 +59,6 @@ import type {
   ProviderOptionsMap,
   TestSuiteConfig,
 } from './types';
-import fs from 'fs';
-import yaml from 'js-yaml';
-import path from 'path';
-import invariant from 'tiny-invariant';
 
 export async function loadApiProviders(
   providerPaths: TestSuiteConfig['providers'],

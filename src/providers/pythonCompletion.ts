@@ -1,3 +1,6 @@
+import fs from 'fs';
+import path from 'path';
+
 import { getCache, isCacheEnabled } from '../cache';
 import logger from '../logger';
 import { runPython } from '../python/wrapper';
@@ -10,8 +13,6 @@ import type {
   ProviderClassificationResponse,
 } from '../types';
 import { safeJsonStringify, sha256 } from '../util';
-import fs from 'fs';
-import path from 'path';
 
 interface PythonProviderConfig {
   pythonExecutable?: string;

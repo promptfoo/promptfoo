@@ -1,3 +1,5 @@
+import fetch from 'node-fetch';
+
 import logger from '../logger';
 import type {
   ApiProvider,
@@ -5,7 +7,6 @@ import type {
   CallApiContextParams,
   CallApiOptionsParams,
 } from '../types';
-import fetch from 'node-fetch';
 
 interface PromptfooHarmfulCompletionOptions {
   purpose: string;

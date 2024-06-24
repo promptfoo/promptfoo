@@ -1,3 +1,13 @@
+import async from 'async';
+import chalk from 'chalk';
+import type { MultiBar, SingleBar } from 'cli-progress';
+import * as fs from 'fs';
+import { globSync } from 'glob';
+import yaml from 'js-yaml';
+import * as path from 'path';
+import readline from 'readline';
+import invariant from 'tiny-invariant';
+
 import { runAssertions, runCompareAssertion } from './assertions';
 import { fetchWithCache, getCache } from './cache';
 import cliState from './cliState';
@@ -23,15 +33,6 @@ import type {
   Assertion,
 } from './types';
 import { getNunjucksEngine, transformOutput, sha256, renderVarsInObject } from './util';
-import async from 'async';
-import chalk from 'chalk';
-import type { MultiBar, SingleBar } from 'cli-progress';
-import * as fs from 'fs';
-import { globSync } from 'glob';
-import yaml from 'js-yaml';
-import * as path from 'path';
-import readline from 'readline';
-import invariant from 'tiny-invariant';
 
 export const DEFAULT_MAX_CONCURRENCY = 4;
 

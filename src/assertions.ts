@@ -1,3 +1,16 @@
+import Ajv, { ValidateFunction } from 'ajv';
+import addFormats from 'ajv-formats';
+import async from 'async';
+import { distance as levenshtein } from 'fastest-levenshtein';
+import fs from 'fs';
+import yaml from 'js-yaml';
+import { type Option as sqlParserOption } from 'node-sql-parser';
+import util from 'node:util';
+import path from 'path';
+import Clone from 'rfdc';
+import rouge from 'rouge';
+import invariant from 'tiny-invariant';
+
 import { AssertionsResult } from './assertions/AssertionsResult';
 import cliState from './cliState';
 import { importModule } from './esm';
@@ -32,18 +45,6 @@ import {
   AssertionValue,
 } from './types';
 import { transformOutput, getNunjucksEngine } from './util';
-import Ajv, { ValidateFunction } from 'ajv';
-import addFormats from 'ajv-formats';
-import async from 'async';
-import { distance as levenshtein } from 'fastest-levenshtein';
-import fs from 'fs';
-import yaml from 'js-yaml';
-import { type Option as sqlParserOption } from 'node-sql-parser';
-import util from 'node:util';
-import path from 'path';
-import Clone from 'rfdc';
-import rouge from 'rouge';
-import invariant from 'tiny-invariant';
 
 const ASSERTIONS_MAX_CONCURRENCY = process.env.PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY
   ? parseInt(process.env.PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY, 10)

@@ -1,4 +1,5 @@
-import type { GradingResult } from './types';
+import { useState, useEffect } from 'react';
+
 import CheckIcon from '@mui/icons-material/Check';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import Box from '@mui/material/Box';
@@ -16,7 +17,8 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import TextareaAutosize from '@mui/material/TextareaAutosize';
 import Typography from '@mui/material/Typography';
-import { useState, useEffect } from 'react';
+
+import type { GradingResult } from './types';
 
 interface EvalOutputPromptDialogProps {
   open: boolean;

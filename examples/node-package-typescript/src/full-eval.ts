@@ -1,5 +1,6 @@
-import promptfoo, { EvaluateTestSuite } from '../../../dist/src/index.js';
 import fs from 'node:fs';
+
+import promptfoo, { EvaluateTestSuite } from '../../../dist/src/index.js';
 
 const prompts: EvaluateTestSuite['prompts'] = [
   // Prompts can be raw text...

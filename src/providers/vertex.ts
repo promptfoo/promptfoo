@@ -1,3 +1,5 @@
+import Clone from 'rfdc';
+
 import { getCache, isCacheEnabled } from '../cache';
 import logger from '../logger';
 import type {
@@ -17,7 +19,6 @@ import {
   type GeminiApiResponse,
   type GeminiResponseData,
 } from './vertexUtil';
-import Clone from 'rfdc';
 
 interface VertexCompletionOptions {
   apiKey?: string;

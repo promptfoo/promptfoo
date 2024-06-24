@@ -1,3 +1,10 @@
+import { parse as parseCsv } from 'csv-parse/sync';
+import * as fs from 'fs';
+import { globSync } from 'glob';
+import yaml from 'js-yaml';
+import * as path from 'path';
+import { parse as parsePath } from 'path';
+
 import { testCaseFromCsvRow } from './csv';
 import { fetchCsvFromGoogleSheet } from './googleSheets';
 import logger from './logger';
@@ -11,12 +18,6 @@ import type {
   TestSuiteConfig,
   VarMapping,
 } from './types';
-import { parse as parseCsv } from 'csv-parse/sync';
-import * as fs from 'fs';
-import { globSync } from 'glob';
-import yaml from 'js-yaml';
-import * as path from 'path';
-import { parse as parsePath } from 'path';
 
 const SYNTHESIZE_DEFAULT_PROVIDER = 'gpt-4-0125-preview';
 

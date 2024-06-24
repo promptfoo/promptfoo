@@ -1,3 +1,17 @@
+import $RefParser from '@apidevtools/json-schema-ref-parser';
+import { createHash } from 'crypto';
+import { stringify } from 'csv-stringify/sync';
+import dotenv from 'dotenv';
+import { desc, eq } from 'drizzle-orm';
+import deepEqual from 'fast-deep-equal';
+import * as fs from 'fs';
+import { globSync } from 'glob';
+import yaml from 'js-yaml';
+import nunjucks from 'nunjucks';
+import * as os from 'os';
+import * as path from 'path';
+import invariant from 'tiny-invariant';
+
 import cliState from './cliState';
 import {
   datasets,
@@ -35,19 +49,6 @@ import {
   isApiProvider,
   isProviderOptions,
 } from './types';
-import $RefParser from '@apidevtools/json-schema-ref-parser';
-import { createHash } from 'crypto';
-import { stringify } from 'csv-stringify/sync';
-import dotenv from 'dotenv';
-import { desc, eq } from 'drizzle-orm';
-import deepEqual from 'fast-deep-equal';
-import * as fs from 'fs';
-import { globSync } from 'glob';
-import yaml from 'js-yaml';
-import nunjucks from 'nunjucks';
-import * as os from 'os';
-import * as path from 'path';
-import invariant from 'tiny-invariant';
 
 const DEFAULT_QUERY_LIMIT = 100;
 

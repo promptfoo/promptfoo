@@ -1,8 +1,10 @@
-import AssertsForm from './AssertsForm';
-import VarsForm from './VarsForm';
+import React, { useState } from 'react';
+
 import type { Assertion, TestCase } from '@/../../../types';
 import { Button, Box, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material';
-import React, { useState } from 'react';
+
+import AssertsForm from './AssertsForm';
+import VarsForm from './VarsForm';
 
 interface TestCaseFormProps {
   open: boolean;

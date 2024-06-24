@@ -1,5 +1,5 @@
-import PromptDialog from './PromptDialog';
-import './PromptsSection.css';
+import React, { useState, useRef, useEffect } from 'react';
+
 import { useStore } from '@/state/evalConfig';
 import Copy from '@mui/icons-material/ContentCopy';
 import Delete from '@mui/icons-material/Delete';
@@ -15,7 +15,9 @@ import TableContainer from '@mui/material/TableContainer';
 import TableRow from '@mui/material/TableRow';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import React, { useState, useRef, useEffect } from 'react';
+
+import PromptDialog from './PromptDialog';
+import './PromptsSection.css';
 
 const PromptsSection: React.FC = () => {
   const [promptDialogOpen, setPromptDialogOpen] = useState(false);

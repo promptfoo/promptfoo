@@ -1,5 +1,7 @@
 'use client';
 
+import React from 'react';
+
 import { supabase } from '@/supabase-client';
 import Button from '@mui/material/Button';
 import Container from '@mui/material/Container';
@@ -8,7 +10,6 @@ import Typography from '@mui/material/Typography';
 import type { User } from '@supabase/auth-helpers-nextjs';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import React from 'react';
 
 export default function Login() {
   const router = useRouter();

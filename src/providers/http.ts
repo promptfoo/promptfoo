@@ -1,3 +1,5 @@
+import invariant from 'tiny-invariant';
+
 import { fetchWithCache } from '../cache';
 import logger from '../logger';
 import type {
@@ -8,7 +10,6 @@ import type {
 } from '../types.js';
 import { getNunjucksEngine, safeJsonStringify } from '../util';
 import { REQUEST_TIMEOUT_MS } from './shared';
-import invariant from 'tiny-invariant';
 
 export class HttpProvider implements ApiProvider {
   url: string;

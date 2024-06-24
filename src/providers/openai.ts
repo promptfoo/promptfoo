@@ -1,3 +1,6 @@
+import type { Cache } from 'cache-manager';
+import OpenAI from 'openai';
+
 import { fetchWithCache, getCache, isCacheEnabled } from '../cache';
 import logger from '../logger';
 import type {
@@ -16,8 +19,6 @@ import { renderVarsInObject } from '../util';
 import { safeJsonStringify } from '../util';
 import { OpenAiFunction, OpenAiTool } from './openaiUtil';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase } from './shared';
-import type { Cache } from 'cache-manager';
-import OpenAI from 'openai';
 
 interface OpenAiSharedOptions {
   apiKey?: string;

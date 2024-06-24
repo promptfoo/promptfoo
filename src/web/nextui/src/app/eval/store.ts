@@ -1,7 +1,8 @@
-import type { EvaluateTable, UnifiedConfig } from './types';
 import { get, set, del } from 'idb-keyval';
 import { create } from 'zustand';
 import { persist, createJSONStorage, StateStorage } from 'zustand/middleware';
+
+import type { EvaluateTable, UnifiedConfig } from './types';
 
 const storage: StateStorage = {
   getItem: async (name: string): Promise<string | null> => {

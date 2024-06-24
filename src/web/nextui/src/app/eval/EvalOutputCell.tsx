@@ -1,3 +1,6 @@
+import * as React from 'react';
+import ReactMarkdown from 'react-markdown';
+
 import CustomMetrics from '@/app/eval/CustomMetrics';
 import EvalOutputPromptDialog from '@/app/eval/EvalOutputPromptDialog';
 import FailReasonCarousel from '@/app/eval/FailReasonCarousel';
@@ -8,8 +11,6 @@ import { EvaluateTableOutput } from '@/app/eval/types';
 import { useShiftKey } from '@/app/hooks/useShiftKey';
 import Tooltip from '@mui/material/Tooltip';
 import { diffSentences, diffJson, diffWords } from 'diff';
-import * as React from 'react';
-import ReactMarkdown from 'react-markdown';
 
 function scoreToString(score: number | null) {
   if (score === null || score === 0 || score === 1) {

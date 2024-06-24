@@ -1,3 +1,16 @@
+import compression from 'compression';
+import cors from 'cors';
+import debounce from 'debounce';
+import express from 'express';
+import fs, { Stats } from 'fs';
+import http from 'node:http';
+import path from 'node:path';
+import readline from 'node:readline';
+import opener from 'opener';
+import { Server as SocketIOServer } from 'socket.io';
+import invariant from 'tiny-invariant';
+import { v4 as uuidv4 } from 'uuid';
+
 import { getDbSignalPath } from '../database';
 import { getDirectory } from '../esm';
 import promptfoo, {
@@ -22,18 +35,6 @@ import {
   getStandaloneEvals,
   deleteEval,
 } from '../util';
-import compression from 'compression';
-import cors from 'cors';
-import debounce from 'debounce';
-import express from 'express';
-import fs, { Stats } from 'fs';
-import http from 'node:http';
-import path from 'node:path';
-import readline from 'node:readline';
-import opener from 'opener';
-import { Server as SocketIOServer } from 'socket.io';
-import invariant from 'tiny-invariant';
-import { v4 as uuidv4 } from 'uuid';
 
 // Running jobs
 const evalJobs = new Map<string, Job>();

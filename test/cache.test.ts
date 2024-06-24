@@ -1,5 +1,6 @@
-import { fetchWithCache, disableCache, enableCache, clearCache } from '../src/cache';
 import fetch, { Response } from 'node-fetch';
+
+import { fetchWithCache, disableCache, enableCache, clearCache } from '../src/cache';
 
 jest.mock('node-fetch');
 const mockedFetch = jest.mocked(fetch);

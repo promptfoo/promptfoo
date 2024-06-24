@@ -1,11 +1,12 @@
-import DarkMode from './DarkMode';
-import LoggedInAs from './LoggedInAs';
-import Logo from './Logo';
-import './Navigation.css';
 import { USE_SUPABASE } from '@/constants';
 import { Stack } from '@mui/material';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+
+import DarkMode from './DarkMode';
+import LoggedInAs from './LoggedInAs';
+import Logo from './Logo';
+import './Navigation.css';
 
 function NavLink({ href, label }: { href: string; label: string }) {
   const pathname = usePathname() || '';

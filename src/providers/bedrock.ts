@@ -1,3 +1,7 @@
+import Anthropic from '@anthropic-ai/sdk';
+import type { BedrockRuntime } from '@aws-sdk/client-bedrock-runtime';
+import dedent from 'dedent';
+
 import { getCache, isCacheEnabled } from '../cache';
 import logger from '../logger';
 import type {
@@ -9,9 +13,6 @@ import type {
 } from '../types.js';
 import { parseMessages } from './anthropic';
 import { parseChatPrompt } from './shared';
-import Anthropic from '@anthropic-ai/sdk';
-import type { BedrockRuntime } from '@aws-sdk/client-bedrock-runtime';
-import dedent from 'dedent';
 
 interface BedrockOptions {
   region?: string;

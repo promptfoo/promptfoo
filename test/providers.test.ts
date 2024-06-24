@@ -1,3 +1,9 @@
+import child_process from 'child_process';
+import * as fs from 'fs';
+import fetch from 'node-fetch';
+import * as path from 'path';
+import Stream from 'stream';
+
 import { clearCache, disableCache, enableCache } from '../src/cache';
 import { importModule } from '../src/esm';
 import { loadApiProvider, loadApiProviders } from '../src/providers';
@@ -32,11 +38,6 @@ import { ScriptCompletionProvider } from '../src/providers/scriptCompletion';
 import { VoyageEmbeddingProvider } from '../src/providers/voyage';
 import { WebhookProvider } from '../src/providers/webhook';
 import type { ProviderOptionsMap, ProviderFunction } from '../src/types';
-import child_process from 'child_process';
-import * as fs from 'fs';
-import fetch from 'node-fetch';
-import * as path from 'path';
-import Stream from 'stream';
 
 jest.mock('fs', () => ({
   readFileSync: jest.fn(),

@@ -1,3 +1,7 @@
+import * as fs from 'fs';
+import { Response } from 'node-fetch';
+import * as path from 'path';
+
 import { runAssertions, runAssertion } from '../src/assertions';
 import { fetchWithRetries } from '../src/fetch';
 import {
@@ -15,9 +19,6 @@ import type {
   GradingResult,
 } from '../src/types';
 import { TestGrader } from './utils';
-import * as fs from 'fs';
-import { Response } from 'node-fetch';
-import * as path from 'path';
 
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),

@@ -1,10 +1,12 @@
-import './Overview.css';
-import { Severity, riskCategorySeverityMap } from './constants';
+import React from 'react';
+
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import Grid from '@mui/material/Grid';
 import Typography from '@mui/material/Typography';
-import React from 'react';
+
+import './Overview.css';
+import { Severity, riskCategorySeverityMap } from './constants';
 
 interface OverviewProps {
   categoryStats: Record<string, { pass: number; total: number }>;
