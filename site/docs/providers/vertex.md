@@ -31,6 +31,7 @@ You can use it by specifying any of the available stable or latest [model versio
 - `vertex:gemini-1.5-pro-latest`
 - `vertex:gemini-1.5-pro-preview-0409`
 - `vertex:gemini-1.5-pro-preview-0514`
+- `vertex:gemini-1.5-pro`
 - `vertex:gemini-1.5-pro-001`
 - `vertex:gemini-1.0-pro-vision-001`
 - `vertex:gemini-1.5-flash-preview-0514`

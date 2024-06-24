@@ -104,7 +104,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
   });
 
   it('should handle API call errors', async () => {
-    const mockError = new Error('API call error');
+    const mockError = new Error('something went wrong');
     jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
       client: {
         request: jest.fn().mockRejectedValue(mockError),
@@ -115,7 +115,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
     const response = await provider.callGeminiApi('test prompt');
 
     expect(response).toEqual({
-      error: `API call error: ${JSON.stringify(mockError)}`,
+      error: `API call error: Error: something went wrong`,
     });
   });
 
