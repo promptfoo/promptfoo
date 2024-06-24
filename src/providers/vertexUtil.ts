@@ -107,3 +107,12 @@ export async function getGoogleClient() {
   const projectId = await cachedAuth.getProjectId();
   return { client, projectId };
 }
+
+export async function hasGoogleDefaultCredentials() {
+  try {
+    await getGoogleClient();
+    return true;
+  } catch (err) {
+    return false;
+  }
+}
