@@ -1,6 +1,8 @@
 import { Command } from 'commander';
-import { getUserEmail, setUserEmail } from '../accounts';
+
 import logger from '../logger';
+import telemetry from '../telemetry';
+import { getUserEmail, setUserEmail } from '../accounts';
 
 export function configCommand(program: Command) {
   const configCommand = program.command('config').description('Edit configuration settings');
@@ -10,24 +12,34 @@ export function configCommand(program: Command) {
   getCommand
     .command('email')
     .description('Get user email')
-    .action(() => {
+    .action(async () => {
       const email = getUserEmail();
       if (email) {
         logger.info(email);
       } else {
         logger.info('No email set.');
       }
+      telemetry.record('command_used', {
+        name: 'config get',
+        configKey: 'email',
+      });
+      await telemetry.send();
     });
 
   setCommand
     .command('email <email>')
     .description('Set user email')
-    .action((email: string) => {
+    .action(async (email: string) => {
       setUserEmail(email);
       if (email) {
         logger.info(`Email set to ${email}`);
       } else {
         logger.info('Email unset.');
       }
+      telemetry.record('command_used', {
+        name: 'config set',
+        configKey: 'email',
+      });
+      await telemetry.send();
     });
 }
