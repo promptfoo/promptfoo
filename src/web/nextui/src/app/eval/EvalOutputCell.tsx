@@ -1,17 +1,15 @@
-import * as React from 'react';
-
-import ReactMarkdown from 'react-markdown';
-import { diffSentences, diffJson, diffWords } from 'diff';
-import Tooltip from '@mui/material/Tooltip';
-
-import CommentDialog from '@/app/eval/TableCommentDialog';
 import CustomMetrics from '@/app/eval/CustomMetrics';
 import EvalOutputPromptDialog from '@/app/eval/EvalOutputPromptDialog';
 import FailReasonCarousel from '@/app/eval/FailReasonCarousel';
+import CommentDialog from '@/app/eval/TableCommentDialog';
 import TruncatedText from '@/app/eval/TruncatedText';
+import { useStore as useResultsViewStore } from '@/app/eval/store';
 import { EvaluateTableOutput } from '@/app/eval/types';
 import { useShiftKey } from '@/app/hooks/useShiftKey';
-import { useStore as useResultsViewStore } from '@/app/eval/store';
+import Tooltip from '@mui/material/Tooltip';
+import { diffSentences, diffJson, diffWords } from 'diff';
+import * as React from 'react';
+import ReactMarkdown from 'react-markdown';
 
 function scoreToString(score: number | null) {
   if (score === null || score === 0 || score === 1) {

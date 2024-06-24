@@ -1,19 +1,11 @@
-import invariant from 'tiny-invariant';
-
 import assertions from './assertions';
-import providers, { loadApiProvider } from './providers';
-import telemetry from './telemetry';
 import * as cache from './cache';
 import { evaluate as doEvaluate } from './evaluator';
+import { readPrompts } from './prompts';
+import providers, { loadApiProvider } from './providers';
 import { loadApiProviders } from './providers';
+import telemetry from './telemetry';
 import { readTests } from './testCases';
-import {
-  readFilters,
-  writeResultsToDatabase,
-  writeMultipleOutputs,
-  writeOutput,
-  migrateResultsFromFileSystemToDatabase,
-} from './util';
 import type {
   EvaluateOptions,
   TestSuite,
@@ -21,7 +13,14 @@ import type {
   ProviderOptions,
   PromptFunction,
 } from './types';
-import { readPrompts } from './prompts';
+import {
+  readFilters,
+  writeResultsToDatabase,
+  writeMultipleOutputs,
+  writeOutput,
+  migrateResultsFromFileSystemToDatabase,
+} from './util';
+import invariant from 'tiny-invariant';
 
 export * from './types';
 

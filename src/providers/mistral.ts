@@ -1,6 +1,5 @@
-import logger from '../logger';
 import { fetchWithCache } from '../cache';
-
+import logger from '../logger';
 import { ApiProvider, EnvOverrides, ProviderResponse, TokenUsage } from '../types';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
 

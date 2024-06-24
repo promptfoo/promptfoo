@@ -1,8 +1,6 @@
-import { redirect } from 'next/navigation';
-
-import { IS_RUNNING_LOCALLY } from '@/constants';
-
 import './Home.css';
+import { IS_RUNNING_LOCALLY } from '@/constants';
+import { redirect } from 'next/navigation';
 
 export default function Page() {
   if (IS_RUNNING_LOCALLY) {

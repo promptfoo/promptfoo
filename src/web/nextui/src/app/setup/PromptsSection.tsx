@@ -1,23 +1,21 @@
-import React, { useState, useRef, useEffect } from 'react';
+import PromptDialog from './PromptDialog';
+import './PromptsSection.css';
+import { useStore } from '@/state/evalConfig';
+import Copy from '@mui/icons-material/ContentCopy';
+import Delete from '@mui/icons-material/Delete';
+import Edit from '@mui/icons-material/Edit';
+import Publish from '@mui/icons-material/Publish';
 import Button from '@mui/material/Button';
-import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
+import Stack from '@mui/material/Stack';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
 import TableContainer from '@mui/material/TableContainer';
 import TableRow from '@mui/material/TableRow';
 import Tooltip from '@mui/material/Tooltip';
-import Stack from '@mui/material/Stack';
-import Edit from '@mui/icons-material/Edit';
-import Delete from '@mui/icons-material/Delete';
-import Publish from '@mui/icons-material/Publish';
-import Copy from '@mui/icons-material/ContentCopy';
-
-import PromptDialog from './PromptDialog';
-import { useStore } from '@/state/evalConfig';
-
-import './PromptsSection.css';
+import Typography from '@mui/material/Typography';
+import React, { useState, useRef, useEffect } from 'react';
 
 const PromptsSection: React.FC = () => {
   const [promptDialogOpen, setPromptDialogOpen] = useState(false);

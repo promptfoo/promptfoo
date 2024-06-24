@@ -1,18 +1,17 @@
-import React from 'react';
+import { useStore } from './store';
+import Check from '@mui/icons-material/Check';
+import Download from '@mui/icons-material/Download';
+import FileCopy from '@mui/icons-material/FileCopy';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import Check from '@mui/icons-material/Check';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
-import Download from '@mui/icons-material/Download';
-import FileCopy from '@mui/icons-material/FileCopy';
 import IconButton from '@mui/material/IconButton';
-import Typography from '@mui/material/Typography';
-
-import { useStore } from './store';
 import Tooltip from '@mui/material/Tooltip';
+import Typography from '@mui/material/Typography';
+import React from 'react';
 
 interface ConfigModalProps {
   open: boolean;

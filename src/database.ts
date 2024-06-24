@@ -1,13 +1,10 @@
-import path from 'node:path';
-
-import { relations, sql } from 'drizzle-orm';
-import { text, integer, sqliteTable, primaryKey } from 'drizzle-orm/sqlite-core';
-import { drizzle } from 'drizzle-orm/better-sqlite3';
-import Database from 'better-sqlite3';
-
-import { getConfigDirectoryPath } from './util';
-
 import type { EvaluateSummary, UnifiedConfig } from './types';
+import { getConfigDirectoryPath } from './util';
+import Database from 'better-sqlite3';
+import { relations, sql } from 'drizzle-orm';
+import { drizzle } from 'drizzle-orm/better-sqlite3';
+import { text, integer, sqliteTable, primaryKey } from 'drizzle-orm/sqlite-core';
+import path from 'node:path';
 
 // ------------ Prompts ------------
 

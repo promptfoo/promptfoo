@@ -2,13 +2,10 @@
  * Functions for manipulating the global configuration file, which lives at
  * ~/.promptfoo/promptfoo.yaml by default.
  */
-
-import * as fs from 'fs';
-import * as path from 'path';
-
-import yaml from 'js-yaml';
-
 import { getConfigDirectoryPath } from './util';
+import * as fs from 'fs';
+import yaml from 'js-yaml';
+import * as path from 'path';
 
 interface GlobalConfig {
   hasRun?: boolean;

@@ -1,6 +1,6 @@
-import { Command } from 'commander';
 import { getUserEmail, setUserEmail } from '../accounts';
 import logger from '../logger';
+import { Command } from 'commander';
 
 export function configCommand(program: Command) {
   const configCommand = program.command('config').description('Edit configuration settings');

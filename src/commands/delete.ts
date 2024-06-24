@@ -1,7 +1,7 @@
-import { Command } from 'commander';
-import { deleteEval, getEvalFromId, setupEnv } from '../util';
 import logger from '../logger';
 import telemetry from '../telemetry';
+import { deleteEval, getEvalFromId, setupEnv } from '../util';
+import { Command } from 'commander';
 
 export function deleteCommand(program: Command) {
   const deleteCommand = program

@@ -1,16 +1,8 @@
-import * as path from 'path';
-import * as fs from 'fs';
-
-import yaml from 'js-yaml';
-import { parse as parsePath } from 'path';
-import { parse as parseCsv } from 'csv-parse/sync';
-import { globSync } from 'glob';
-
-import logger from './logger';
-import { OpenAiChatCompletionProvider } from './providers/openai';
 import { testCaseFromCsvRow } from './csv';
 import { fetchCsvFromGoogleSheet } from './googleSheets';
-
+import logger from './logger';
+import { loadApiProvider } from './providers';
+import { OpenAiChatCompletionProvider } from './providers/openai';
 import type {
   CsvRow,
   ProviderOptions,
@@ -19,7 +11,12 @@ import type {
   TestSuiteConfig,
   VarMapping,
 } from './types';
-import { loadApiProvider } from './providers';
+import { parse as parseCsv } from 'csv-parse/sync';
+import * as fs from 'fs';
+import { globSync } from 'glob';
+import yaml from 'js-yaml';
+import * as path from 'path';
+import { parse as parsePath } from 'path';
 
 const SYNTHESIZE_DEFAULT_PROVIDER = 'gpt-4-0125-preview';
 

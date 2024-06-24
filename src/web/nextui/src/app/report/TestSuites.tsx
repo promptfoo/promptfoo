@@ -1,4 +1,11 @@
-import React from 'react';
+import './TestSuites.css';
+import {
+  categoryAliases,
+  displayNameOverrides,
+  riskCategories,
+  riskCategorySeverityMap,
+  subCategoryDescriptions,
+} from './constants';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Paper from '@mui/material/Paper';
@@ -12,16 +19,8 @@ import TableRow from '@mui/material/TableRow';
 import TableSortLabel from '@mui/material/TableSortLabel';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-
-import {
-  categoryAliases,
-  displayNameOverrides,
-  riskCategories,
-  riskCategorySeverityMap,
-  subCategoryDescriptions,
-} from './constants';
-import './TestSuites.css';
 import { useRouter } from 'next/navigation';
+import React from 'react';
 
 const getSubCategoryStats = (
   categoryStats: Record<string, { pass: number; total: number; passWithFilter: number }>,

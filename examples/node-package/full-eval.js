@@ -1,6 +1,5 @@
-import fs from 'node:fs';
-
 import promptfoo from '../../dist/src/index.js';
+import fs from 'node:fs';
 
 const prompts = [
   // Prompts can be raw text...

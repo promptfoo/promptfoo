@@ -1,5 +1,5 @@
-import React from 'react';
 import styles from './LogoContainer.module.css';
+import React from 'react';
 
 export default function LogoContainer() {
   return (

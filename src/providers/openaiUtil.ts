@@ -1,5 +1,5 @@
-import Ajv from 'ajv';
 import { renderVarsInObject } from '../util';
+import Ajv from 'ajv';
 
 const ajv = new Ajv();
 

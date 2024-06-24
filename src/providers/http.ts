@@ -1,16 +1,14 @@
-import invariant from 'tiny-invariant';
-
-import logger from '../logger';
 import { fetchWithCache } from '../cache';
-import { REQUEST_TIMEOUT_MS } from './shared';
-import { getNunjucksEngine, safeJsonStringify } from '../util';
-
+import logger from '../logger';
 import type {
   ApiProvider,
   CallApiContextParams,
   ProviderOptions,
   ProviderResponse,
 } from '../types.js';
+import { getNunjucksEngine, safeJsonStringify } from '../util';
+import { REQUEST_TIMEOUT_MS } from './shared';
+import invariant from 'tiny-invariant';
 
 export class HttpProvider implements ApiProvider {
   url: string;

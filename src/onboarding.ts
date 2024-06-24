@@ -1,11 +1,9 @@
-import fs from 'fs';
-import path from 'path';
-
-import chalk from 'chalk';
-import inquirer from 'inquirer';
-
 import logger from './logger';
 import { getNunjucksEngine } from './util';
+import chalk from 'chalk';
+import fs from 'fs';
+import inquirer from 'inquirer';
+import path from 'path';
 
 export const CONFIG_TEMPLATE = `# Learn more about building a configuration: https://promptfoo.dev/docs/configuration/guide
 description: "My eval"

@@ -1,12 +1,9 @@
-import * as fs from 'fs';
-
-import yaml from 'js-yaml';
-import { globSync } from 'glob';
-
-import { readStandaloneTestsFile, readTest, readTests } from '../src/testCases';
 import { testCaseFromCsvRow } from '../src/csv';
-
+import { readStandaloneTestsFile, readTest, readTests } from '../src/testCases';
 import type { AssertionType, TestCase } from '../src/types';
+import * as fs from 'fs';
+import { globSync } from 'glob';
+import yaml from 'js-yaml';
 
 jest.mock('node-fetch', () => jest.fn());
 jest.mock('proxy-agent', () => ({

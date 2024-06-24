@@ -1,9 +1,8 @@
-import React, { useState } from 'react';
-import IconButton from '@mui/material/IconButton';
+import './FailReasonCarousel.css';
 import ArrowBackIosIcon from '@mui/icons-material/ArrowBackIos';
 import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
-
-import './FailReasonCarousel.css';
+import IconButton from '@mui/material/IconButton';
+import React, { useState } from 'react';
 
 interface FailReasonCarouselProps {
   failReasons: string[];

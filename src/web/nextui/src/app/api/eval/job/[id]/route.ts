@@ -1,11 +1,10 @@
-import invariant from 'tiny-invariant';
-import { NextRequest, NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
-
-import { getJob, getResult, SupabaseJobStatus, SupabaseEvaluationJob } from '@/database';
-import { IS_RUNNING_LOCALLY, USE_SUPABASE } from '@/constants';
 import evalJobs from '../evalJobsStore';
+import { IS_RUNNING_LOCALLY, USE_SUPABASE } from '@/constants';
+import { getJob, getResult, SupabaseJobStatus, SupabaseEvaluationJob } from '@/database';
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { cookies } from 'next/headers';
+import { NextRequest, NextResponse } from 'next/server';
+import invariant from 'tiny-invariant';
 
 export const dynamic = IS_RUNNING_LOCALLY ? 'auto' : 'force-dynamic';
 

@@ -1,15 +1,13 @@
-import chalk from 'chalk';
-
-import logger from '../logger';
 import { MODEL_GRADED_ASSERTION_TYPES } from '../assertions';
+import logger from '../logger';
+import type { TestCase, TestSuite } from '../types';
+import { AzureOpenAiChatCompletionProvider, AzureOpenAiCompletionProvider } from './azureopenai';
 import {
   OpenAiAssistantProvider,
   OpenAiChatCompletionProvider,
   OpenAiCompletionProvider,
 } from './openai';
-import { AzureOpenAiChatCompletionProvider, AzureOpenAiCompletionProvider } from './azureopenai';
-
-import type { TestCase, TestSuite } from '../types';
+import chalk from 'chalk';
 
 export function maybeEmitAzureOpenAiWarning(testSuite: TestSuite, tests: TestCase[]) {
   const hasAzure = testSuite.providers.some(

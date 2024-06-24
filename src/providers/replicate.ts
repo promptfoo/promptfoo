@@ -1,11 +1,5 @@
-import Replicate from 'replicate';
-
-import fetch from 'node-fetch';
-import logger from '../logger';
 import { getCache, isCacheEnabled } from '../cache';
-
-import type { Cache } from 'cache-manager';
-
+import logger from '../logger';
 import type {
   ApiModerationProvider,
   ApiProvider,
@@ -14,6 +8,9 @@ import type {
   ProviderModerationResponse,
   ProviderResponse,
 } from '../types.js';
+import type { Cache } from 'cache-manager';
+import fetch from 'node-fetch';
+import Replicate from 'replicate';
 
 interface ReplicateCompletionOptions {
   apiKey?: string;

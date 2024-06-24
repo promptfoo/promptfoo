@@ -1,9 +1,7 @@
+import type { ApiProvider, CallApiContextParams, CallApiOptionsParams } from '../types';
+import { getNunjucksEngine } from '../util';
 import dedent from 'dedent';
 import invariant from 'tiny-invariant';
-
-import { getNunjucksEngine } from '../util';
-
-import type { ApiProvider, CallApiContextParams, CallApiOptionsParams } from '../types';
 
 const ATTACKER_MODEL = 'gpt-4o';
 

@@ -1,10 +1,8 @@
-import React from 'react';
+import LogoContainer from '../LogoContainer';
+import styles from './styles.module.css';
 import Link from '@docusaurus/Link';
 import CodeBlock from '@theme/CodeBlock';
-
-import LogoContainer from '../LogoContainer';
-
-import styles from './styles.module.css';
+import React from 'react';
 
 export default function HomepageInfo(): JSX.Element {
   return (

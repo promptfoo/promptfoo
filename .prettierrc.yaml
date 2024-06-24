@@ -2,3 +2,5 @@ trailingComma: 'all'
 singleQuote: true
 printWidth: 100
 bracketSpacing: true
+plugins:
+  - '@trivago/prettier-plugin-sort-imports'

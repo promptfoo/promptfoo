@@ -37,8 +37,8 @@ Create a new file called `assertions.js` and add the following:
 
 ```javascript
 import { Assertion } from 'chai';
-
 import { assertions } from 'promptfoo';
+
 const { matchesSimilarity, matchesLlmRubric } = assertions;
 
 Assertion.addAsyncMethod('toMatchSemanticSimilarity', async function (expected, threshold = 0.8) {
@@ -96,11 +96,10 @@ Assertion.addAsyncMethod('toMatchClosedQA', async function (input, expected, gra
 
 ```typescript
 import { Assertion } from 'chai';
-
 import { assertions } from 'promptfoo';
-const { matchesSimilarity, matchesLlmRubric } = assertions;
-
 import type { GradingConfig } from 'promptfoo';
+
+const { matchesSimilarity, matchesLlmRubric } = assertions;
 
 Assertion.addAsyncMethod(
   'toMatchSemanticSimilarity',
@@ -144,8 +143,8 @@ Our test code will use the custom chai assertions in order to run a few test cas
 Create a new file called `index.test.js` and add the following code:
 
 ```javascript
-import { expect } from 'chai';
 import './assertions';
+import { expect } from 'chai';
 
 const gradingConfig = {
   provider: 'openai:chat:gpt-3.5-turbo',

@@ -1,9 +1,14 @@
-import Clone from 'rfdc';
-
-import logger from '../logger';
-import { parseChatPrompt } from './shared';
 import { getCache, isCacheEnabled } from '../cache';
+import logger from '../logger';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  EnvOverrides,
+  ProviderResponse,
+  TokenUsage,
+} from '../types.js';
 import { getNunjucksEngine } from '../util';
+import { parseChatPrompt } from './shared';
 import {
   GeminiErrorResponse,
   Palm2ApiResponse,
@@ -12,14 +17,7 @@ import {
   type GeminiApiResponse,
   type GeminiResponseData,
 } from './vertexUtil';
-
-import type {
-  ApiProvider,
-  CallApiContextParams,
-  EnvOverrides,
-  ProviderResponse,
-  TokenUsage,
-} from '../types.js';
+import Clone from 'rfdc';
 
 interface VertexCompletionOptions {
   apiKey?: string;

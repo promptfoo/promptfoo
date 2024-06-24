@@ -1,8 +1,8 @@
-import { Command } from 'commander';
 import { getDb, evals } from '../database';
-import fs from 'fs';
 import logger from '../logger';
 import telemetry from '../telemetry';
+import { Command } from 'commander';
+import fs from 'fs';
 
 export function importCommand(program: Command) {
   program

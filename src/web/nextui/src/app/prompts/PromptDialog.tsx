@@ -1,4 +1,5 @@
-import React from 'react';
+import type { PromptWithMetadata } from '@/../../../types';
+import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
@@ -10,10 +11,8 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import TextareaAutosize from '@mui/material/TextareaAutosize';
 import Typography from '@mui/material/Typography';
-import Button from '@mui/material/Button';
 import Link from 'next/link';
-
-import type { PromptWithMetadata } from '@/../../../types';
+import React from 'react';
 
 interface PromptDialogProps {
   openDialog: boolean;

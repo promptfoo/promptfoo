@@ -1,16 +1,14 @@
-import React from 'react';
-import { Metadata } from 'next';
-import { notFound } from 'next/navigation';
-import { cookies } from 'next/headers';
-import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
-
+import Eval from '../Eval';
+import './page.css';
+import { EvaluateSummary, SharedResults, UnifiedConfig } from '@/../../../types';
 import { getApiBaseUrl } from '@/api';
 import { IS_RUNNING_LOCALLY } from '@/constants';
 import { getResult } from '@/database';
-import { EvaluateSummary, SharedResults, UnifiedConfig } from '@/../../../types';
-import Eval from '../Eval';
-
-import './page.css';
+import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
+import { Metadata } from 'next';
+import { cookies } from 'next/headers';
+import { notFound } from 'next/navigation';
+import React from 'react';
 
 export const metadata: Metadata = {
   robots: 'noindex,nofollow',

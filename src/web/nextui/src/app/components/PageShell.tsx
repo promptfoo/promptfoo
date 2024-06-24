@@ -1,13 +1,11 @@
 'use client';
 
-import React from 'react';
-import useMediaQuery from '@mui/material/useMediaQuery';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
-
-import { AuthProvider } from '@/supabase-client';
-import Navigation from '@/app/components/Navigation';
-
 import './PageShell.css';
+import Navigation from '@/app/components/Navigation';
+import { AuthProvider } from '@/supabase-client';
+import { ThemeProvider, createTheme } from '@mui/material/styles';
+import useMediaQuery from '@mui/material/useMediaQuery';
+import React from 'react';
 
 export { PageShell };
 

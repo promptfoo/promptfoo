@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react';
 import { Box, TextField, Typography, Stack } from '@mui/material';
+import React, { useEffect } from 'react';
 
 interface VarsFormProps {
   onAdd: (vars: Record<string, string>) => void;
