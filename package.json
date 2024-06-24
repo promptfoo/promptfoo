@@ -54,7 +54,6 @@
     "@azure/openai-assistants": "^1.0.0-beta.5",
     "@ibm-generative-ai/node-sdk": "^2.0.6",
     "google-auth-library": "^9.7.0",
-    "googleapis": "^134.0.0",
     "langfuse": "^3.7.0",
     "node-sql-parser": "^5.2.0"
   },
@@ -104,6 +103,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.24.0",
     "@apidevtools/json-schema-ref-parser": "^11.6.4",
+    "@googleapis/sheets": "^8.0.0",
     "ajv": "^8.16.0",
     "ajv-formats": "^2.1.1",
     "async": "^3.2.5",
