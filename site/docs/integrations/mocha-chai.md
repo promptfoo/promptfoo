@@ -37,8 +37,8 @@ Create a new file called `assertions.js` and add the following:
 
 ```javascript
 import { Assertion } from 'chai';
-
 import { assertions } from 'promptfoo';
+
 const { matchesSimilarity, matchesLlmRubric } = assertions;
 
 Assertion.addAsyncMethod('toMatchSemanticSimilarity', async function (expected, threshold = 0.8) {
@@ -96,11 +96,10 @@ Assertion.addAsyncMethod('toMatchClosedQA', async function (input, expected, gra
 
 ```typescript
 import { Assertion } from 'chai';
-
 import { assertions } from 'promptfoo';
-const { matchesSimilarity, matchesLlmRubric } = assertions;
-
 import type { GradingConfig } from 'promptfoo';
+
+const { matchesSimilarity, matchesLlmRubric } = assertions;
 
 Assertion.addAsyncMethod(
   'toMatchSemanticSimilarity',

@@ -1,4 +1,16 @@
 import React, { useRef, useEffect, useState } from 'react';
+import { ErrorBoundary } from 'react-error-boundary';
+import CloseIcon from '@mui/icons-material/Close';
+import Dialog from '@mui/material/Dialog';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
+import FormControl from '@mui/material/FormControl';
+import IconButton from '@mui/material/IconButton';
+import MenuItem from '@mui/material/MenuItem';
+import Paper from '@mui/material/Paper';
+import Select from '@mui/material/Select';
+import { useTheme } from '@mui/material/styles';
+import type { VisibilityState } from '@tanstack/table-core';
 import {
   Chart,
   BarController,
@@ -13,21 +25,7 @@ import {
   Colors,
   type TooltipItem,
 } from 'chart.js';
-import Select from '@mui/material/Select';
-import MenuItem from '@mui/material/MenuItem';
-import FormControl from '@mui/material/FormControl';
-import Dialog from '@mui/material/Dialog';
-import DialogTitle from '@mui/material/DialogTitle';
-import DialogContent from '@mui/material/DialogContent';
-import { useTheme } from '@mui/material/styles';
-import Paper from '@mui/material/Paper';
-import IconButton from '@mui/material/IconButton';
-import CloseIcon from '@mui/icons-material/Close';
-import { ErrorBoundary } from 'react-error-boundary';
-
 import { useStore } from './store';
-
-import type { VisibilityState } from '@tanstack/table-core';
 import type { EvaluateTable } from './types';
 
 interface ResultsChartsProps {

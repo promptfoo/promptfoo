@@ -1,11 +1,8 @@
 import * as fs from 'fs';
-
-import yaml from 'js-yaml';
 import { globSync } from 'glob';
-
-import { readStandaloneTestsFile, readTest, readTests } from '../src/testCases';
+import yaml from 'js-yaml';
 import { testCaseFromCsvRow } from '../src/csv';
-
+import { readStandaloneTestsFile, readTest, readTests } from '../src/testCases';
 import type { AssertionType, TestCase } from '../src/types';
 
 jest.mock('node-fetch', () => jest.fn());

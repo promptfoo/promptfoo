@@ -1,9 +1,7 @@
-import fs from 'fs';
-import path from 'path';
-
 import chalk from 'chalk';
+import fs from 'fs';
 import inquirer from 'inquirer';
-
+import path from 'path';
 import logger from './logger';
 import { getNunjucksEngine } from './util';
 

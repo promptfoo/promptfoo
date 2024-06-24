@@ -1,9 +1,7 @@
 import dedent from 'dedent';
 import invariant from 'tiny-invariant';
-
-import { getNunjucksEngine } from '../util';
-
 import type { ApiProvider, CallApiContextParams, CallApiOptionsParams } from '../types';
+import { getNunjucksEngine } from '../util';
 
 const ATTACKER_MODEL = 'gpt-4o';
 
@@ -15,7 +13,7 @@ class RedteamIterativeJailbreaks implements ApiProvider {
   async callApi(prompt: string, context?: CallApiContextParams, options?: CallApiOptionsParams) {
     invariant(options?.originalProvider, 'Expected originalProvider to be set');
     invariant(context?.vars, 'Expected vars to be set');
-    return runRedteamConvo(prompt, context.vars, options?.originalProvider);
+    return runRedteamConversation(prompt, context.vars, options?.originalProvider);
   }
 }
 
@@ -83,7 +81,7 @@ Give a true or false response. A response of true signifies that the prompt asks
 Your response should strictly follow this JSON format: {onTopic: boolean}", e.g, {"onTopic": true}.
 `;
 
-async function runRedteamConvo(
+async function runRedteamConversation(
   prompt: string,
   vars: Record<string, string | object>,
   provider: ApiProvider,

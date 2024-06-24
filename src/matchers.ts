@@ -1,7 +1,5 @@
 import invariant from 'tiny-invariant';
 import logger from './logger';
-import { getNunjucksEngine } from './util';
-import { loadApiProvider } from './providers';
 import {
   ANSWER_RELEVANCY_GENERATE,
   SELECT_BEST_PROMPT,
@@ -15,7 +13,8 @@ import {
   OPENAI_CLOSED_QA_PROMPT,
   OPENAI_FACTUALITY_PROMPT,
 } from './prompts';
-
+import { loadApiProvider } from './providers';
+import { getDefaultProviders } from './providers/defaults';
 import type {
   ApiClassificationProvider,
   ApiEmbeddingProvider,
@@ -29,7 +28,7 @@ import type {
   ProviderType,
   ApiModerationProvider,
 } from './types';
-import { getDefaultProviders } from './providers/defaults';
+import { getNunjucksEngine } from './util';
 
 const nunjucks = getNunjucksEngine();
 

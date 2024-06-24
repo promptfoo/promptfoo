@@ -1,6 +1,6 @@
-import { Telemetry } from '../src/telemetry';
 import packageJson from '../package.json';
 import { fetchWithTimeout } from '../src/fetch';
+import { Telemetry } from '../src/telemetry';
 
 jest.mock('../src/fetch', () => ({
   fetchWithTimeout: jest.fn(),

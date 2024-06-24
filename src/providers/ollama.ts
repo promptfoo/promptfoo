@@ -1,8 +1,7 @@
-import logger from '../logger';
 import { fetchWithCache } from '../cache';
-import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
-
+import logger from '../logger';
 import type { ApiProvider, ProviderEmbeddingResponse, ProviderResponse } from '../types.js';
+import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
 
 interface OllamaCompletionOptions {
   // From https://github.com/jmorganca/ollama/blob/v0.1.0/api/types.go#L161

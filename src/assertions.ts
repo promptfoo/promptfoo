@@ -1,21 +1,20 @@
-import fs from 'fs';
-import path from 'path';
-import util from 'node:util';
-
-import async from 'async';
-import rouge from 'rouge';
-import invariant from 'tiny-invariant';
-import yaml from 'js-yaml';
 import Ajv, { ValidateFunction } from 'ajv';
 import addFormats from 'ajv-formats';
-import Clone from 'rfdc';
+import async from 'async';
 import { distance as levenshtein } from 'fastest-levenshtein';
-
+import fs from 'fs';
+import yaml from 'js-yaml';
+import { type Option as sqlParserOption } from 'node-sql-parser';
+import util from 'node:util';
+import path from 'path';
+import Clone from 'rfdc';
+import rouge from 'rouge';
+import invariant from 'tiny-invariant';
+import { AssertionsResult } from './assertions/AssertionsResult';
 import cliState from './cliState';
-import telemetry from './telemetry';
-import logger from './logger';
+import { importModule } from './esm';
 import { fetchWithRetries } from './fetch';
-import { transformOutput, getNunjucksEngine } from './util';
+import logger from './logger';
 import {
   matchesSimilarity,
   matchesLlmRubric,
@@ -29,11 +28,11 @@ import {
   matchesSelectBest,
   matchesModeration,
 } from './matchers';
-import { validateFunctionCall } from './providers/openaiUtil';
 import { OpenAiChatCompletionProvider } from './providers/openai';
+import { validateFunctionCall } from './providers/openaiUtil';
+import { parseChatPrompt } from './providers/shared';
 import { runPython, runPythonCode } from './python/wrapper';
-import { importModule } from './esm';
-
+import telemetry from './telemetry';
 import {
   type ApiProvider,
   type Assertion,
@@ -44,9 +43,7 @@ import {
   isGradingResult,
   AssertionValue,
 } from './types';
-import { AssertionsResult } from './assertions/AssertionsResult';
-import { parseChatPrompt } from './providers/shared';
-import { type Option as sqlParserOption } from 'node-sql-parser';
+import { transformOutput, getNunjucksEngine } from './util';
 
 const ASSERTIONS_MAX_CONCURRENCY = process.env.PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY
   ? parseInt(process.env.PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY, 10)

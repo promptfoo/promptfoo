@@ -1,5 +1,4 @@
 import logger from './logger';
-
 import type { CsvRow } from './types';
 
 async function checkGoogleSheetAccess(url: string) {

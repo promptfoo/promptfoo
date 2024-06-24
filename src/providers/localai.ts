@@ -1,13 +1,12 @@
-import logger from '../logger';
 import { fetchWithCache } from '../cache';
-import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
-
+import logger from '../logger';
 import type {
   ApiProvider,
   EnvOverrides,
   ProviderEmbeddingResponse,
   ProviderResponse,
 } from '../types.js';
+import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
 
 interface LocalAiCompletionOptions {
   apiBaseUrl?: string;

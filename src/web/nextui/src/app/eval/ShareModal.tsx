@@ -1,14 +1,14 @@
 import React, { useRef, useState } from 'react';
+import CheckIcon from '@mui/icons-material/Check';
+import FileCopyIcon from '@mui/icons-material/FileCopy';
+import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
-import DialogTitle from '@mui/material/DialogTitle';
+import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogContentText from '@mui/material/DialogContentText';
-import DialogActions from '@mui/material/DialogActions';
-import Button from '@mui/material/Button';
-import TextField from '@mui/material/TextField';
+import DialogTitle from '@mui/material/DialogTitle';
 import IconButton from '@mui/material/IconButton';
-import FileCopyIcon from '@mui/icons-material/FileCopy';
-import CheckIcon from '@mui/icons-material/Check';
+import TextField from '@mui/material/TextField';
 
 interface ShareModalProps {
   open: boolean;
