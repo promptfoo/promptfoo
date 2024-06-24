@@ -124,7 +124,7 @@ prompts:
 
 The equivalent Javascript is also supported:
 
-```yaml
+```js
 function getPrompt(context) {
   if (context.vars.destination === 'Australia') {
     return `Act as a travel agent, mate: ${context.query}`;
@@ -198,7 +198,7 @@ If your API responds with a JSON object and you want to pick out a specific valu
 
 For example, `json.nested.output` will reference the output in the following API response:
 
-```yaml
+```js
 { 'nested': { 'output': '...' } }
 ```
 
