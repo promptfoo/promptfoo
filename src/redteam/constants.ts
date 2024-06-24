@@ -1,1 +1,1 @@
-export const SYNTHESIS_MODEL = 'openai:chat:gpt-4o';
+export const REDTEAM_MODEL = 'openai:chat:gpt-4o';

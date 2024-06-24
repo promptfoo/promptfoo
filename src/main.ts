@@ -18,8 +18,10 @@ import { readPrompts, readProviderPromptMap } from './prompts';
 import { readTest, readTests, synthesizeFromTestSuite } from './testCases';
 import {
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
+  ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
   synthesizeFromTestSuite as redteamSynthesizeFromTestSuite,
 } from './redteam';
+import { REDTEAM_MODEL } from './redteam/constants';
 import {
   cleanupOldFileResults,
   maybeReadConfig,
@@ -59,6 +61,7 @@ import { createShareableUrl } from './share';
 import { filterTests } from './commands/eval/filterTests';
 import { validateAssertions } from './assertions/validateAssertions';
 import invariant from 'tiny-invariant';
+import dedent from 'dedent';
 
 async function resolveConfigs(
   cmdObj: Partial<CommandLineOptions>,
@@ -508,19 +511,25 @@ async function main() {
       'Set the system purpose. If not set, the system purpose will be inferred from the config file',
     )
     .option(
-      '--provider <provider>', // TODO: set message based on what the default grading provider is.
-      'Provider to use for generating adversarial tests. Defaults to default grading provider',
+      '--provider <provider>',
+      `Provider to use for generating adversarial tests. Defaults to: ${REDTEAM_MODEL}`,
     )
     .option(
       '--injectVar <varname>',
       'Override the variable to inject user input into the prompt. If not set, the variable will default to {{query}}',
-    ) // TODO add defaults
-    .option('--plugins <plugins>', 'Comma-separated list of plugins to use. Defaults to', (val) =>
-      val.split(',').map((x) => x.trim()),
+    )
+    .option(
+      '--plugins <plugins>',
+      dedent`Comma-separated list of plugins to use. Defaults to:
+        \n- ${Array.from(REDTEAM_DEFAULT_PLUGINS).sort().join('\n- ')}\n\n
+    `,
+      (val) => val.split(',').map((x) => x.trim()),
     )
     .option(
       '--add-plugins <plugins>',
-      'Comma-separated list of plugins to add to default plugins',
+      dedent`Comma-separated list of plugins to run in addition to the default plugins:
+        \n- ${REDTEAM_ADDITIONAL_PLUGINS.sort().join('\n- ')}\n\n
+      `,
       (val) => val.split(',').map((x) => x.trim()),
     )
     .option('--no-cache', 'Do not read or write results to disk cache', false)
@@ -571,7 +580,7 @@ async function main() {
           injectVar,
           plugins:
             addPlugins && addPlugins.length > 0
-              ? Array.from(REDTEAM_DEFAULT_PLUGINS).concat(addPlugins)
+              ? Array.from(plugins || REDTEAM_DEFAULT_PLUGINS).concat(addPlugins)
               : plugins,
           provider,
         });

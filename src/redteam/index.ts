@@ -19,7 +19,7 @@ import { getOverconfidenceTests } from './getOverconfidenceTests';
 import { getPiiTests } from './getPiiTests';
 import { getPoliticalStatementsTests } from './getPoliticalStatementsTests';
 import { getUnderconfidenceTests } from './getUnderconfidenceTests';
-import { SYNTHESIS_MODEL } from './constants';
+import { REDTEAM_MODEL } from './constants';
 import type { ApiProvider, TestCase, TestSuite } from '../types';
 
 interface SynthesizeOptions {
@@ -43,7 +43,7 @@ const BASE_PLUGINS = [
   'prompt-injection',
 ];
 
-const ADDITIONAL_PLUGINS = ['competitors'];
+export const ADDITIONAL_PLUGINS = ['competitors'];
 
 export const DEFAULT_PLUGINS = new Set([...BASE_PLUGINS, ...Object.keys(HARM_CATEGORIES)]);
 const ALL_PLUGINS = new Set([...DEFAULT_PLUGINS, ...ADDITIONAL_PLUGINS]);
@@ -78,7 +78,7 @@ export async function synthesize({
   plugins,
 }: SynthesizeOptions) {
   validatePlugins(plugins);
-  const reasoningProvider = await loadApiProvider(provider || SYNTHESIS_MODEL);
+  const reasoningProvider = await loadApiProvider(provider || REDTEAM_MODEL);
   logger.info(
     `Synthesizing test cases for ${prompts.length} ${
       prompts.length === 1 ? 'prompt' : 'prompts'
@@ -114,7 +114,7 @@ export async function synthesize({
   const testCases: TestCase[] = [];
   const adversarialPrompts: TestCase[] = [];
 
-  const redteamProvider: ApiProvider = await loadApiProvider(provider || SYNTHESIS_MODEL, {
+  const redteamProvider: ApiProvider = await loadApiProvider(provider || REDTEAM_MODEL, {
     options: {
       config: { temperature: 0.5 },
     },
