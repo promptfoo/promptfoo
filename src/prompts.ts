@@ -204,18 +204,13 @@ function processJsonlFile(filePath: string, prompt: RawPrompt): Prompt[] {
  * @throws Will throw an error if the file cannot be read or parsed.
  */
 function processJsonFile(filePath: string, prompt: RawPrompt): Prompt[] {
-  try {
-    const fileContents = fs.readFileSync(filePath, 'utf8');
-    return [
-      {
-        raw: fileContents,
-        label: `${prompt.label ? `${prompt.label}: ` : ''}${filePath}: ${fileContents}`,
-      },
-    ];
-  } catch (error) {
-    logger.error(`Error processing JSON file: ${error}`);
-    throw new Error(`Failed to process JSON file at ${filePath}: ${error}`);
-  }
+  const fileContents = fs.readFileSync(filePath, 'utf8');
+  return [
+    {
+      raw: fileContents,
+      label: `${prompt.label ? `${prompt.label}: ` : ''}${filePath}: ${fileContents}`,
+    },
+  ];
 }
 
 /**
@@ -229,21 +224,16 @@ function processJsonFile(filePath: string, prompt: RawPrompt): Prompt[] {
  * @throws Will throw an error if the file cannot be read or parsed.
  */
 function processYamlFile(filePath: string, prompt: RawPrompt): Prompt[] {
-  try {
-    const fileContents = fs.readFileSync(filePath, 'utf8');
-    const yamlContent = yaml.load(fileContents, {
-      json: true,
-    });
-    return [
-      {
-        raw: JSON.stringify(yamlContent),
-        label: prompt.label ? `${prompt.label}: ${filePath}` : `${filePath}: ${fileContents}`,
-      },
-    ];
-  } catch (error) {
-    logger.error(`Error processing YAML file: ${error}`);
-    throw new Error(`Failed to process YAML file at ${filePath}: ${error}`);
-  }
+  const fileContents = fs.readFileSync(filePath, 'utf8');
+  const yamlContent = yaml.load(fileContents, {
+    json: true,
+  });
+  return [
+    {
+      raw: JSON.stringify(yamlContent),
+      label: prompt.label ? `${prompt.label}: ${filePath}` : `${filePath}: ${fileContents}`,
+    },
+  ];
 }
 
 /**

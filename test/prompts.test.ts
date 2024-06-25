@@ -3,23 +3,23 @@ import * as fs from 'fs';
 import { globSync } from 'glob';
 import * as yaml from 'js-yaml';
 import * as path from 'path';
+import { PythonShell } from 'python-shell';
 import { importModule } from '../src/esm';
-import { readProviderPromptMap, maybeFilePath, normalizeInput, readPrompts } from '../src/prompts';
-import type { Prompt, ProviderResponse, UnifiedConfig } from '../src/types';
-
-jest.mock('../src/esm');
+import logger from '../src/logger';
+import {
+  maybeFilePath,
+  normalizeInput,
+  pythonPromptFunction,
+  pythonPromptFunctionLegacy,
+  readPrompts,
+  readProviderPromptMap,
+} from '../src/prompts';
+import { runPython } from '../src/python/wrapper';
+import type { ApiProvider, Prompt, ProviderResponse, UnifiedConfig } from '../src/types';
 
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
 }));
-
-jest.mock('../src/esm', () => {
-  const actual = jest.requireActual('../src/esm');
-  return {
-    ...actual,
-    importModule: jest.fn(actual.importModule),
-  };
-});
 
 jest.mock('glob', () => {
   const actual = jest.requireActual('glob');
@@ -42,7 +42,18 @@ jest.mock('fs', () => {
   };
 });
 
+jest.mock('python-shell');
+
+jest.mock('../src/esm', () => {
+  const actual = jest.requireActual('../src/esm');
+  return {
+    ...actual,
+    importModule: jest.fn(actual.importModule),
+  };
+});
 jest.mock('../src/database');
+jest.mock('../src/logger');
+jest.mock('../src/python/wrapper');
 
 describe('readPrompts', () => {
   beforeEach(() => {
@@ -688,5 +699,66 @@ describe('normalizeInput', () => {
         source: 'prompts2.txt',
       },
     ]);
+  });
+});
+
+interface PythonContext {
+  vars: Record<string, string | object>;
+  provider: ApiProvider;
+}
+
+describe('pythonPromptFunction', () => {
+  it('should call runPython with correct arguments', async () => {
+    const filePath = 'path/to/script.py';
+    const functionName = 'testFunction';
+    const context = {
+      vars: { key: 'value' },
+      provider: {
+        id: () => 'providerId',
+        label: 'providerLabel',
+        callApi: jest.fn(),
+      } as ApiProvider,
+    } as PythonContext;
+
+    const mockRunPython = jest.mocked(runPython);
+    mockRunPython.mockResolvedValue('mocked result');
+
+    await expect(pythonPromptFunction(filePath, functionName, context)).resolves.toEqual(
+      'mocked result',
+    );
+    expect(mockRunPython).toHaveBeenCalledWith(filePath, functionName, [
+      {
+        ...context,
+        provider: {
+          id: expect.any(Function),
+          label: 'providerLabel',
+        },
+      },
+    ]);
+  });
+});
+
+describe('pythonPromptFunctionLegacy', () => {
+  it('should call PythonShell.run with correct arguments', async () => {
+    const filePath = 'path/to/script.py';
+    const context = {
+      vars: { key: 'value' },
+      provider: { id: () => 'providerId', label: 'providerLabel' } as ApiProvider,
+    } as PythonContext;
+    const mockPythonShellRun = jest.mocked(PythonShell.run);
+    const mockLoggerDebug = jest.mocked(logger.debug);
+    mockPythonShellRun.mockImplementation(() => {
+      return Promise.resolve(['mocked result']);
+    });
+    await expect(pythonPromptFunctionLegacy(filePath, context)).resolves.toEqual('mocked result');
+    expect(mockPythonShellRun).toHaveBeenCalledWith(filePath, {
+      mode: 'text',
+      pythonPath: process.env.PROMPTFOO_PYTHON || 'python',
+      args: [JSON.stringify(context)],
+    });
+    expect(mockLoggerDebug).toHaveBeenCalledWith(`Executing python prompt script ${filePath}`);
+    expect(mockLoggerDebug).toHaveBeenCalledWith(
+      `Python prompt script ${filePath} returned: mocked result`,
+    );
   });
 });
