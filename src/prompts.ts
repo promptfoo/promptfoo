@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import { globSync } from 'glob';
+import yaml from 'js-yaml';
 import * as path from 'path';
 import { PythonShell, Options as PythonShellOptions } from 'python-shell';
 import invariant from 'tiny-invariant';
@@ -19,7 +20,17 @@ import { safeJsonStringify } from './util';
 export * from './gradingPrompts';
 
 const PROMPT_DELIMITER = process.env.PROMPTFOO_PROMPT_SEPARATOR || '---';
-const VALID_FILE_EXTENSIONS = ['.cjs', '.js', '.json', '.jsonl', '.mjs', '.py', '.txt'];
+const VALID_FILE_EXTENSIONS = [
+  '.cjs',
+  '.js',
+  '.json',
+  '.jsonl',
+  '.mjs',
+  '.py',
+  '.txt',
+  '.yml',
+  '.yaml',
+];
 
 /**
  * Reads and maps provider prompts based on the configuration and parsed prompts.
@@ -204,6 +215,34 @@ function processJsonFile(filePath: string, prompt: RawPrompt): Prompt[] {
   } catch (error) {
     logger.error(`Error processing JSON file: ${error}`);
     throw new Error(`Failed to process JSON file at ${filePath}: ${error}`);
+  }
+}
+
+/**
+ * Processes a YAML file to extract prompts.
+ * This function reads a YAML file, parses it, and maps each entry to a `Prompt` object.
+ * Each prompt is labeled with the file path and the YAML content.
+ *
+ * @param filePath - The path to the YAML file.
+ * @param prompt - The raw prompt data, used for labeling.
+ * @returns An array of `Prompt` objects extracted from the YAML file.
+ * @throws Will throw an error if the file cannot be read or parsed.
+ */
+function processYamlFile(filePath: string, prompt: RawPrompt): Prompt[] {
+  try {
+    const fileContents = fs.readFileSync(filePath, 'utf8');
+    const yamlContent = yaml.load(fileContents, {
+      json: true,
+    });
+    return [
+      {
+        raw: JSON.stringify(yamlContent),
+        label: prompt.label ? `${prompt.label}: ${filePath}` : `${filePath}: ${fileContents}`,
+      },
+    ];
+  } catch (error) {
+    logger.error(`Error processing YAML file: ${error}`);
+    throw new Error(`Failed to process YAML file at ${filePath}: ${error}`);
   }
 }
 
@@ -441,6 +480,9 @@ export async function processPrompt(
   }
   if (['.js', '.cjs', '.mjs'].includes(extension)) {
     return processJsFile(promptPath, functionName);
+  }
+  if (['.yml', '.yaml'].includes(extension)) {
+    return processYamlFile(promptPath, prompt);
   }
   return [];
 }

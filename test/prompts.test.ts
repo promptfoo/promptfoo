@@ -1,6 +1,7 @@
 import dedent from 'dedent';
 import * as fs from 'fs';
 import { globSync } from 'glob';
+import * as yaml from 'js-yaml';
 import * as path from 'path';
 import { importModule } from '../src/esm';
 import { readProviderPromptMap, maybeFilePath, normalizeInput, readPrompts } from '../src/prompts';
@@ -423,6 +424,48 @@ describe('readPrompts', () => {
     ]);
     expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('mock.json'), 'utf8');
     expect(fs.statSync).toHaveBeenCalledTimes(1);
+  });
+
+  it('should read a .yaml file with prompts', async () => {
+    const yamlContent = dedent`
+    - role: user
+      content:
+        - type: text
+          text: "What’s in this image?"
+        - type: image_url
+          image_url:
+            url: "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"
+    `;
+    jest.mocked(fs.readFileSync).mockReturnValue(yamlContent);
+    jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
+    await expect(readPrompts('prompts.yaml')).resolves.toEqual([
+      {
+        raw: JSON.stringify(yaml.load(yamlContent)),
+        label: `prompts.yaml: ${JSON.stringify(yaml.load(yamlContent))}`,
+      },
+    ]);
+    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+  });
+
+  it('should read a .yml file with prompts', async () => {
+    const ymlContent = dedent`
+    - role: user
+      content:
+        - type: text
+          text: "What’s in this image?"
+        - type: image_url
+          image_url:
+            url: "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"
+    `;
+    jest.mocked(fs.readFileSync).mockReturnValue(ymlContent);
+    jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
+    await expect(readPrompts('prompts.yml')).resolves.toEqual([
+      {
+        raw: JSON.stringify(yaml.load(ymlContent)),
+        label: `prompts.yml: ${JSON.stringify(yaml.load(ymlContent))}`,
+      },
+    ]);
+    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
   });
 });
 

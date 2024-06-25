@@ -1,4 +1,5 @@
-prompts: [prompt.json]
+prompts:
+  - id: prompt.yaml
 providers: [openai:chat:gpt-4o]
 
 tests:
