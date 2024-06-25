@@ -33,17 +33,16 @@ jest.mock('fs', () => {
   const actual = jest.requireActual('fs');
   return {
     ...actual,
-    readFileSync: jest.fn(),
-    writeFileSync: jest.fn(),
-    statSync: jest.fn(actual.statSync),
-    readdirSync: jest.fn(actual.readdirSync),
     existsSync: jest.fn(actual.existsSync),
     mkdirSync: jest.fn(),
+    readdirSync: jest.fn(actual.readdirSync),
+    readFileSync: jest.fn(),
+    statSync: jest.fn(actual.statSync),
+    writeFileSync: jest.fn(),
   };
 });
 
 jest.mock('python-shell');
-
 jest.mock('../src/esm', () => {
   const actual = jest.requireActual('../src/esm');
   return {
@@ -51,15 +50,10 @@ jest.mock('../src/esm', () => {
     importModule: jest.fn(actual.importModule),
   };
 });
-jest.mock('../src/database');
 jest.mock('../src/logger');
 jest.mock('../src/python/wrapper');
 
 describe('readPrompts', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
-
   afterEach(() => {
     delete process.env.PROMPTFOO_STRICT_FILES;
     jest.clearAllMocks();
@@ -768,13 +762,13 @@ describe('normalizeInput', () => {
   });
 });
 
-interface PythonContext {
-  vars: Record<string, string | object>;
-  provider: ApiProvider;
-}
-
 describe('pythonPromptFunction', () => {
-  it('should call runPython with correct arguments', async () => {
+  interface PythonContext {
+    vars: Record<string, string | object>;
+    provider: ApiProvider;
+  }
+
+  it('should call python wrapper function with correct arguments', async () => {
     const filePath = 'path/to/script.py';
     const functionName = 'testFunction';
     const context = {
@@ -802,10 +796,8 @@ describe('pythonPromptFunction', () => {
       },
     ]);
   });
-});
 
-describe('pythonPromptFunctionLegacy', () => {
-  it('should call PythonShell.run with correct arguments', async () => {
+  it('should call legacy function with correct arguments', async () => {
     const filePath = 'path/to/script.py';
     const context = {
       vars: { key: 'value' },
