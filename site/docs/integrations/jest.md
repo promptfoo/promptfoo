@@ -11,7 +11,7 @@ import JestExampleImage from '../assets/jest-example.png';
 
 `promptfoo` can be integrated with test frameworks like [Jest](https://jestjs.io/) in order to evaluate prompts as part of existing testing and CI workflows.
 
-This guide includes examples that show how to create Jest test cases for desired prompt quality using semantic similarity and LLM grading. You can also skip to the [full example code](https://github.com/typpo/promptfoo/tree/main/examples/jest-integration).
+This guide includes examples that show how to create Jest test cases for desired prompt quality using semantic similarity and LLM grading. You can also skip to the [full example code](https://github.com/promptfoo/promptfoo/tree/main/examples/jest-integration).
 
 For more information on supported checks, see [Expected Outputs documentation](/docs/configuration/expected-outputs/).
 
