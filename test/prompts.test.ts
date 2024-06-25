@@ -201,7 +201,27 @@ describe('readPrompts', () => {
     expect(fs.readFileSync).toHaveBeenCalledTimes(2);
   });
 
-  it('should read with JSONL file', async () => {
+  it('should read a .json file', async () => {
+    const mockJsonContent = JSON.stringify([
+      { name: 'You are a helpful assistant', role: 'system' },
+      { name: 'How do I get to the moon?', role: 'user' },
+    ]);
+
+    jest.mocked(fs.readFileSync).mockReturnValue(mockJsonContent);
+    jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
+
+    const filePath = 'file://path/to/mock.json';
+    await expect(readPrompts([filePath])).resolves.toEqual([
+      {
+        raw: mockJsonContent,
+        label: expect.stringContaining(`mock.json: ${mockJsonContent}`),
+      },
+    ]);
+    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('mock.json'), 'utf8');
+    expect(fs.statSync).toHaveBeenCalledTimes(1);
+  });
+
+  it('should read a .jsonl file', async () => {
     const data = [
       [
         { role: 'system', content: 'You are a helpful assistant.' },
@@ -228,20 +248,56 @@ describe('readPrompts', () => {
     expect(fs.readFileSync).toHaveBeenCalledTimes(1);
   });
 
-  it('should read with .py file', async () => {
-    const code = `print('dummy prompt')`;
-    jest.mocked(fs.readFileSync).mockReturnValue(code);
-    await expect(readPrompts('prompt.py')).resolves.toEqual([
+  it('should read a .yaml file', async () => {
+    const yamlContent = dedent`
+    - role: user
+      content:
+        - type: text
+          text: "What’s in this image?"
+        - type: image_url
+          image_url:
+            url: "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"
+    `;
+    jest.mocked(fs.readFileSync).mockReturnValue(yamlContent);
+    jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
+    await expect(readPrompts('prompts.yaml')).resolves.toEqual([
       {
-        function: expect.any(Function),
-        label: `prompt.py: ${code}`,
-        raw: code,
+        raw: JSON.stringify(yaml.load(yamlContent)),
+        label: `prompts.yaml: ${yamlContent}`,
       },
     ]);
     expect(fs.readFileSync).toHaveBeenCalledTimes(1);
   });
 
-  it('should read with Prompt object array', async () => {
+  it('should read a .yml file', async () => {
+    const ymlContent = dedent`
+    - role: user
+      content:
+        - type: text
+          text: "What’s in this image?"
+        - type: image_url
+          image_url:
+            url: "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"
+    `;
+    jest.mocked(fs.readFileSync).mockReturnValue(ymlContent);
+    jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
+    await expect(
+      readPrompts([
+        {
+          id: 'prompts.yml',
+          label: 'image-summary',
+        },
+      ]),
+    ).resolves.toEqual([
+      {
+        raw: JSON.stringify(yaml.load(ymlContent)),
+        label: `image-summary: prompts.yml`,
+      },
+    ]);
+    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+  });
+
+  it('should read a .py prompt object array', async () => {
     const prompts = [
       { id: 'prompts.py:prompt1', label: 'First prompt' },
       { id: 'prompts.py:prompt2', label: 'Second prompt' },
@@ -269,7 +325,20 @@ describe('readPrompts', () => {
     expect(fs.readFileSync).toHaveBeenCalledTimes(2);
   });
 
-  it('should read with .js file without named function', async () => {
+  it('should read a .py file', async () => {
+    const code = `print('dummy prompt')`;
+    jest.mocked(fs.readFileSync).mockReturnValue(code);
+    await expect(readPrompts('prompt.py')).resolves.toEqual([
+      {
+        function: expect.any(Function),
+        label: `prompt.py: ${code}`,
+        raw: code,
+      },
+    ]);
+    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+  });
+
+  it('should read a .js file without named function', async () => {
     const promptPath = 'prompt.js';
     const mockFunction = () => console.log('dummy prompt');
 
@@ -287,7 +356,7 @@ describe('readPrompts', () => {
     expect(fs.statSync).toHaveBeenCalledTimes(1);
   });
 
-  it('should import and execute a named function within a JavaScript file', async () => {
+  it('should read a .js file with named function', async () => {
     const promptPath = 'prompt.js:functionName';
     const functionName = 'functionName';
     const mockFunction = jest.fn(() => 'dummy prompt result');
@@ -404,75 +473,6 @@ describe('readPrompts', () => {
     expect(fs.readdirSync).toHaveBeenCalledTimes(1);
     expect(fs.readFileSync).toHaveBeenCalledTimes(2);
     expect(fs.statSync).toHaveBeenCalledTimes(3);
-  });
-
-  it('should correctly process a JSON file with multiple entries', async () => {
-    const mockJsonContent = JSON.stringify([
-      { name: 'You are a helpful assistant', role: 'system' },
-      { name: 'How do I get to the moon?', role: 'user' },
-    ]);
-
-    jest.mocked(fs.readFileSync).mockReturnValue(mockJsonContent);
-    jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
-
-    const filePath = 'file://path/to/mock.json';
-    await expect(readPrompts([filePath])).resolves.toEqual([
-      {
-        raw: mockJsonContent,
-        label: expect.stringContaining(`mock.json: ${mockJsonContent}`),
-      },
-    ]);
-    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('mock.json'), 'utf8');
-    expect(fs.statSync).toHaveBeenCalledTimes(1);
-  });
-
-  it('should read a .yaml file with prompts', async () => {
-    const yamlContent = dedent`
-    - role: user
-      content:
-        - type: text
-          text: "What’s in this image?"
-        - type: image_url
-          image_url:
-            url: "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"
-    `;
-    jest.mocked(fs.readFileSync).mockReturnValue(yamlContent);
-    jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
-    await expect(readPrompts('prompts.yaml')).resolves.toEqual([
-      {
-        raw: JSON.stringify(yaml.load(yamlContent)),
-        label: `prompts.yaml: ${yamlContent}`,
-      },
-    ]);
-    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
-  });
-
-  it('should read a .yml file with prompts', async () => {
-    const ymlContent = dedent`
-    - role: user
-      content:
-        - type: text
-          text: "What’s in this image?"
-        - type: image_url
-          image_url:
-            url: "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"
-    `;
-    jest.mocked(fs.readFileSync).mockReturnValue(ymlContent);
-    jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
-    await expect(
-      readPrompts([
-        {
-          id: 'prompts.yml',
-          label: 'image-summary',
-        },
-      ]),
-    ).resolves.toEqual([
-      {
-        raw: JSON.stringify(yaml.load(ymlContent)),
-        label: `image-summary: prompts.yml`,
-      },
-    ]);
-    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
   });
 });
 
