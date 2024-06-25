@@ -315,7 +315,9 @@ describe('readPrompts', () => {
       isDirectory: () => true,
     } as fs.Stats);
     jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob].flat());
-    jest.mocked(fs.readdirSync).mockReturnValue(['prompt1.txt', 'prompt2.txt']);
+    jest
+      .mocked(fs.readdirSync as (path: fs.PathLike) => string[])
+      .mockReturnValue(['prompt1.txt', 'prompt2.txt']);
     // The mocked paths here are an artifact of our globSync mock. In a real
     // world setting we would get back `prompts/prompt1.txt` instead of `prompts/*/prompt1.txt`
     // but for the sake of this test we are just going to pretend that the globSync
@@ -375,12 +377,14 @@ describe('readPrompts', () => {
       }
       throw new Error(`Unexpected file path in test: ${path}`);
     });
-    jest.mocked(fs.readdirSync).mockImplementation((path: fs.PathLike) => {
-      if (path.toString().includes('prompts')) {
-        return ['prompt1.txt', 'prompt2.txt'];
-      }
-      throw new Error(`Unexpected directory path in test ${path}`);
-    });
+    jest
+      .mocked(fs.readdirSync as (path: fs.PathLike) => string[])
+      .mockImplementation((path: fs.PathLike): string[] => {
+        if (path.toString().includes('prompts')) {
+          return ['prompt1.txt', 'prompt2.txt'];
+        }
+        throw new Error(`Unexpected directory path in test ${path}`);
+      });
     jest.mocked(fs.statSync).mockImplementation((path: fs.PathLike) => {
       const stats = new fs.Stats();
       stats.isDirectory = () => path.toString().includes('prompts');
