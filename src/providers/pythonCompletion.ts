@@ -1,11 +1,8 @@
-import path from 'path';
 import fs from 'fs';
-
-import logger from '../logger';
+import path from 'path';
 import { getCache, isCacheEnabled } from '../cache';
+import logger from '../logger';
 import { runPython } from '../python/wrapper';
-import { safeJsonStringify, sha256 } from '../util';
-
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -14,6 +11,7 @@ import type {
   ProviderEmbeddingResponse,
   ProviderClassificationResponse,
 } from '../types';
+import { safeJsonStringify, sha256 } from '../util';
 
 interface PythonProviderConfig {
   pythonExecutable?: string;

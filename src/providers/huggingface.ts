@@ -1,6 +1,5 @@
-import logger from '../logger';
 import { fetchWithCache } from '../cache';
-
+import logger from '../logger';
 import {
   ApiProvider,
   ApiSimilarityProvider,

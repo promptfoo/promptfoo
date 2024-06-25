@@ -1,8 +1,7 @@
 import { fetchWithCache } from '../cache';
 import logger from '../logger';
-import { REQUEST_TIMEOUT_MS } from './shared';
-
 import type { ApiEmbeddingProvider, ProviderResponse, ProviderEmbeddingResponse } from '../types';
+import { REQUEST_TIMEOUT_MS } from './shared';
 
 export class VoyageEmbeddingProvider implements ApiEmbeddingProvider {
   modelName: string;

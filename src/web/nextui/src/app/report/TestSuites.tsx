@@ -12,7 +12,7 @@ import TableRow from '@mui/material/TableRow';
 import TableSortLabel from '@mui/material/TableSortLabel';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-
+import { useRouter } from 'next/navigation';
 import {
   categoryAliases,
   displayNameOverrides,
@@ -21,7 +21,6 @@ import {
   subCategoryDescriptions,
 } from './constants';
 import './TestSuites.css';
-import { useRouter } from 'next/navigation';
 
 const getSubCategoryStats = (
   categoryStats: Record<string, { pass: number; total: number; passWithFilter: number }>,

@@ -1,7 +1,6 @@
-import { NextResponse } from 'next/server';
-
-import { listPreviousResults } from '../../../../../../util';
 import { IS_RUNNING_LOCALLY, USE_SUPABASE } from '@/constants';
+import { NextResponse } from 'next/server';
+import { listPreviousResults } from '../../../../../../util';
 
 export const dynamic = IS_RUNNING_LOCALLY ? 'auto' : 'force-dynamic';
 

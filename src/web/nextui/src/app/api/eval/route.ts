@@ -1,12 +1,10 @@
-import { NextResponse } from 'next/server';
-import { v4 as uuidv4 } from 'uuid';
-
+import { runDbMigrations } from '@/../../../../migrate';
+import type { SharedResults } from '@/../../../types';
+import { writeResultsToDatabase } from '@/../../../util';
 import store from '@/app/api/eval/shareStore';
 import { IS_RUNNING_LOCALLY } from '@/constants';
-import { writeResultsToDatabase } from '@/../../../util';
-import { runDbMigrations } from '@/../../../../migrate';
-
-import type { SharedResults } from '@/../../../types';
+import { NextResponse } from 'next/server';
+import { v4 as uuidv4 } from 'uuid';
 
 export const dynamic = IS_RUNNING_LOCALLY ? 'auto' : 'force-dynamic';
 

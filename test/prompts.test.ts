@@ -1,12 +1,9 @@
-import * as fs from 'fs';
-import * as path from 'path';
 import dedent from 'dedent';
-import { importModule } from '../src/esm';
-
+import * as fs from 'fs';
 import { globSync } from 'glob';
-
+import * as path from 'path';
+import { importModule } from '../src/esm';
 import { readProviderPromptMap, maybeFilePath, normalizeInput, readPrompts } from '../src/prompts';
-
 import type { Prompt, ProviderResponse, UnifiedConfig } from '../src/types';
 
 jest.mock('../src/esm');

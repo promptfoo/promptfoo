@@ -1,5 +1,4 @@
 import { getAndCheckProvider, getGradingProvider, matchesClassification } from '../src/matchers';
-import { OpenAiChatCompletionProvider, OpenAiEmbeddingProvider } from '../src/providers/openai';
 import {
   matchesSimilarity,
   matchesLlmRubric,
@@ -10,10 +9,9 @@ import {
   matchesContextRecall,
   matchesContextFaithfulness,
 } from '../src/matchers';
+import { HuggingfaceTextClassificationProvider } from '../src/providers/huggingface';
+import { OpenAiChatCompletionProvider, OpenAiEmbeddingProvider } from '../src/providers/openai';
 import { DefaultEmbeddingProvider, DefaultGradingProvider } from '../src/providers/openai';
-
-import { TestGrader } from './utils';
-
 import type {
   GradingConfig,
   ProviderResponse,
@@ -21,7 +19,7 @@ import type {
   ApiProvider,
   ProviderTypeMap,
 } from '../src/types';
-import { HuggingfaceTextClassificationProvider } from '../src/providers/huggingface';
+import { TestGrader } from './utils';
 
 jest.mock('../src/esm');
 

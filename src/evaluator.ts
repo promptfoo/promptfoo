@@ -1,25 +1,21 @@
-import readline from 'readline';
-import * as fs from 'fs';
-import * as path from 'path';
-
 import async from 'async';
 import chalk from 'chalk';
-import invariant from 'tiny-invariant';
-import yaml from 'js-yaml';
+import type { MultiBar, SingleBar } from 'cli-progress';
+import * as fs from 'fs';
 import { globSync } from 'glob';
-
-import cliState from './cliState';
-import logger from './logger';
-import telemetry from './telemetry';
+import yaml from 'js-yaml';
+import * as path from 'path';
+import readline from 'readline';
+import invariant from 'tiny-invariant';
 import { runAssertions, runCompareAssertion } from './assertions';
-import { generatePrompts } from './suggestions';
-import { getNunjucksEngine, transformOutput, sha256, renderVarsInObject } from './util';
+import { fetchWithCache, getCache } from './cache';
+import cliState from './cliState';
+import { importModule } from './esm';
+import logger from './logger';
 import { maybeEmitAzureOpenAiWarning } from './providers/azureopenaiUtil';
 import { runPython } from './python/wrapper';
-import { importModule } from './esm';
-import { fetchWithCache, getCache } from './cache';
-
-import type { MultiBar, SingleBar } from 'cli-progress';
+import { generatePrompts } from './suggestions';
+import telemetry from './telemetry';
 import type {
   ApiProvider,
   CompletedPrompt,
@@ -35,6 +31,8 @@ import type {
   ProviderResponse,
   Assertion,
 } from './types';
+import { getNunjucksEngine, transformOutput, sha256, renderVarsInObject } from './util';
+
 export const DEFAULT_MAX_CONCURRENCY = 4;
 
 /**

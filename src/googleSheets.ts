@@ -1,5 +1,4 @@
 import logger from './logger';
-
 import type { CsvRow } from './types';
 
 async function checkGoogleSheetAccess(url: string) {
@@ -39,11 +38,11 @@ export async function fetchCsvFromGoogleSheetUnauthenticated(url: string): Promi
 }
 
 export async function fetchCsvFromGoogleSheetAuthenticated(url: string): Promise<CsvRow[]> {
-  const { google } = await import('googleapis');
-  const auth = new google.auth.GoogleAuth({
+  const { sheets: googleSheets, auth: googleAuth } = await import('@googleapis/sheets');
+  const auth = new googleAuth.GoogleAuth({
     scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
   });
-  const sheets = google.sheets('v4');
+  const sheets = googleSheets('v4');
 
   const match = url.match(/\/d\/([^/]+)/);
   if (!match) {
@@ -72,11 +71,11 @@ export async function fetchCsvFromGoogleSheetAuthenticated(url: string): Promise
 }
 
 export async function writeCsvToGoogleSheet(rows: CsvRow[], url: string): Promise<void> {
-  const { google } = await import('googleapis');
-  const auth = new google.auth.GoogleAuth({
+  const { sheets: googleSheets, auth: googleAuth } = await import('@googleapis/sheets');
+  const auth = new googleAuth.GoogleAuth({
     scopes: ['https://www.googleapis.com/auth/spreadsheets'],
   });
-  const sheets = google.sheets('v4');
+  const sheets = googleSheets('v4');
 
   const match = url.match(/\/d\/([^/]+)/);
   if (!match) {

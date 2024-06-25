@@ -1,7 +1,6 @@
 import { fetchWithCache } from '../cache';
-import { REQUEST_TIMEOUT_MS } from './shared';
-
 import type { ApiProvider, ProviderResponse } from '../types.js';
+import { REQUEST_TIMEOUT_MS } from './shared';
 
 interface LlamaCompletionOptions {
   n_predict?: number;
