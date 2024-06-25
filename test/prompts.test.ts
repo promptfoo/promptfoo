@@ -500,14 +500,14 @@ describe('readProviderPromptMap', () => {
 
   it('should return an empty object if config.providers is undefined', () => {
     config = {};
-    const result = readProviderPromptMap(config, parsedPrompts);
-    expect(result).toEqual({});
+    expect(readProviderPromptMap(config, parsedPrompts)).toEqual({});
   });
 
   it('should return a map with all prompts if config.providers is a string', () => {
     config = { providers: 'provider1' };
-    const result = readProviderPromptMap(config, parsedPrompts);
-    expect(result).toEqual({ provider1: ['prompt1', 'prompt2'] });
+    expect(readProviderPromptMap(config, parsedPrompts)).toEqual({
+      provider1: ['prompt1', 'prompt2'],
+    });
   });
 
   it('should return a map with all prompts if config.providers is a function', () => {
@@ -559,6 +559,72 @@ describe('readProviderPromptMap', () => {
       providers: [
         {
           originalProvider: {
+            prompts: ['customPrompt1'],
+          },
+        },
+      ],
+    };
+    expect(readProviderPromptMap(config, parsedPrompts)).toEqual({
+      originalProvider: ['customPrompt1'],
+    });
+  });
+
+  it('should use rawProvider.prompts if provided for provider objects with id', () => {
+    config = {
+      providers: [{ id: 'provider1', prompts: ['customPrompt1'] }],
+    };
+    expect(readProviderPromptMap(config, parsedPrompts)).toEqual({ provider1: ['customPrompt1'] });
+  });
+
+  it('should fall back to allPrompts if no prompts provided for provider objects with id', () => {
+    config = {
+      providers: [{ id: 'provider1' }],
+    };
+    expect(readProviderPromptMap(config, parsedPrompts)).toEqual({
+      provider1: ['prompt1', 'prompt2'],
+    });
+  });
+
+  it('should use rawProvider.prompts for both id and label if provided', () => {
+    config = {
+      providers: [{ id: 'provider1', label: 'providerLabel', prompts: ['customPrompt1'] }],
+    };
+    expect(readProviderPromptMap(config, parsedPrompts)).toEqual({
+      provider1: ['customPrompt1'],
+      providerLabel: ['customPrompt1'],
+    });
+  });
+
+  it('should fall back to allPrompts for both id and label if no prompts provided', () => {
+    config = {
+      providers: [{ id: 'provider1', label: 'providerLabel' }],
+    };
+    expect(readProviderPromptMap(config, parsedPrompts)).toEqual({
+      provider1: ['prompt1', 'prompt2'],
+      providerLabel: ['prompt1', 'prompt2'],
+    });
+  });
+
+  it('should use providerObject.id from ProviderOptionsMap when provided', () => {
+    config = {
+      providers: [
+        {
+          originalProvider: {
+            id: 'explicitId',
+            prompts: ['customPrompt1'],
+          },
+        },
+      ],
+    };
+    expect(readProviderPromptMap(config, parsedPrompts)).toEqual({ explicitId: ['customPrompt1'] });
+  });
+
+  it('should fallback to originalId when providerObject.id is not specified in ProviderOptionsMap', () => {
+    config = {
+      providers: [
+        {
+          originalProvider: {
+            // 'originalProvider' is treated as originalId
             prompts: ['customPrompt1'],
           },
         },
