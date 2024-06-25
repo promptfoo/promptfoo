@@ -441,7 +441,7 @@ describe('readPrompts', () => {
     await expect(readPrompts('prompts.yaml')).resolves.toEqual([
       {
         raw: JSON.stringify(yaml.load(yamlContent)),
-        label: `prompts.yaml: ${JSON.stringify(yaml.load(yamlContent))}`,
+        label: `prompts.yaml: ${yamlContent}`,
       },
     ]);
     expect(fs.readFileSync).toHaveBeenCalledTimes(1);
@@ -459,10 +459,17 @@ describe('readPrompts', () => {
     `;
     jest.mocked(fs.readFileSync).mockReturnValue(ymlContent);
     jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
-    await expect(readPrompts('prompts.yml')).resolves.toEqual([
+    await expect(
+      readPrompts([
+        {
+          id: 'prompts.yml',
+          label: 'image-summary',
+        },
+      ]),
+    ).resolves.toEqual([
       {
         raw: JSON.stringify(yaml.load(ymlContent)),
-        label: `prompts.yml: ${JSON.stringify(yaml.load(ymlContent))}`,
+        label: `image-summary: prompts.yml`,
       },
     ]);
     expect(fs.readFileSync).toHaveBeenCalledTimes(1);
