@@ -4,10 +4,12 @@ prompts:
     label: yaml label
 
   - id: prompt.json
-    label: json prompt
+  - id: prompt.json
+    label: json label
 
   - id: prompt.jsonl
-    label: jsonl prompt
+  - id: prompt.jsonl
+    label: jsonl label
 
 providers: [openai:chat:gpt-4o]
 
