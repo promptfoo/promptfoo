@@ -195,12 +195,12 @@ function processJsonlFile(filePath: string, prompt: RawPrompt): Prompt[] {
 function processJsonFile(filePath: string, prompt: RawPrompt): Prompt[] {
   try {
     const fileContents = fs.readFileSync(filePath, 'utf8');
-    const jsonData = JSON.parse(fileContents);
-    // Assumes jsonData is an array of objects that can directly map to Prompt[]
-    return jsonData.map((item: any) => ({
-      raw: JSON.stringify(item),
-      label: `${prompt.label ? `${prompt.label}: ` : ''}${filePath}: ${JSON.stringify(item)}`,
-    }));
+    return [
+      {
+        raw: fileContents,
+        label: `${prompt.label ? `${prompt.label}: ` : ''}${filePath}: ${fileContents}`,
+      },
+    ];
   } catch (error) {
     logger.error(`Error processing JSON file: ${error}`);
     throw new Error(`Failed to process JSON file at ${filePath}: ${error}`);

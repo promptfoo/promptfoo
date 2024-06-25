@@ -413,16 +413,8 @@ describe('readPrompts', () => {
     const filePath = 'file://path/to/mock.json';
     await expect(readPrompts([filePath])).resolves.toEqual([
       {
-        raw: '{"name":"You are a helpful assistant","role":"system"}',
-        label: expect.stringContaining(
-          'mock.json: {"name":"You are a helpful assistant","role":"system"}',
-        ),
-      },
-      {
-        raw: '{"name":"How do I get to the moon?","role":"user"}',
-        label: expect.stringContaining(
-          'mock.json: {"name":"How do I get to the moon?","role":"user"}',
-        ),
+        raw: mockJsonContent,
+        label: expect.stringContaining(`mock.json: ${mockJsonContent}`),
       },
     ]);
     expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('mock.json'), 'utf8');
