@@ -789,7 +789,7 @@ describe('pythonPromptFunction', () => {
     const mockRunPython = jest.mocked(runPython);
     mockRunPython.mockResolvedValue('mocked result');
 
-    await expect(pythonPromptFunction(filePath, functionName, context)).resolves.toEqual(
+    await expect(pythonPromptFunction(filePath, functionName, context)).resolves.toBe(
       'mocked result',
     );
     expect(mockRunPython).toHaveBeenCalledWith(filePath, functionName, [
@@ -816,7 +816,7 @@ describe('pythonPromptFunctionLegacy', () => {
     mockPythonShellRun.mockImplementation(() => {
       return Promise.resolve(['mocked result']);
     });
-    await expect(pythonPromptFunctionLegacy(filePath, context)).resolves.toEqual('mocked result');
+    await expect(pythonPromptFunctionLegacy(filePath, context)).resolves.toBe('mocked result');
     expect(mockPythonShellRun).toHaveBeenCalledWith(filePath, {
       mode: 'text',
       pythonPath: process.env.PROMPTFOO_PYTHON || 'python',
