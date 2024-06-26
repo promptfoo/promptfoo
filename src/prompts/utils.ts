@@ -101,7 +101,7 @@ export function parsePathOrGlob(
 ): {
   extension: string;
   functionName?: string;
-  isDirectory: boolean;
+  isPathPattern: boolean;
   promptPath: string;
 } {
   let filePath = path.join(basePath, promptPath);
@@ -129,7 +129,7 @@ export function parsePathOrGlob(
   return {
     extension: path.parse(filename).ext,
     functionName,
-    isDirectory: stats?.isDirectory() ?? false,
+    isPathPattern: stats?.isDirectory() || /[*?{}\[\]]/.test(filePath), // glob pattern
     promptPath: path.join(basePath, filename),
   };
 }

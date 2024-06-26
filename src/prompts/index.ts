@@ -1,6 +1,4 @@
-import * as fs from 'fs';
 import { globSync } from 'glob';
-import * as path from 'path';
 import invariant from 'tiny-invariant';
 import logger from '../logger';
 import type {
@@ -92,6 +90,7 @@ export async function processPrompt(
     typeof prompt.raw === 'string',
     `prompt.raw must be a string, but got ${JSON.stringify(prompt.raw)}`,
   );
+
   if (!maybeFilePath(prompt.raw)) {
     return processString(prompt);
   }
@@ -99,28 +98,24 @@ export async function processPrompt(
   const {
     extension,
     functionName,
-    isDirectory,
+    isPathPattern,
     promptPath,
   }: {
     extension: string;
     functionName?: string;
-    isDirectory: boolean;
+    isPathPattern: boolean;
     promptPath: string;
   } = parsePathOrGlob(basePath, prompt.raw);
 
-  if (isDirectory && maxRecursionDepth > 0) {
+  if (isPathPattern && maxRecursionDepth > 0) {
     const globbedPath = globSync(promptPath.replace(/\\/g, '/'), {
       windowsPathsNoEscape: true,
     });
     logger.debug(
       `Expanded prompt ${prompt.raw} to ${promptPath} and then to ${JSON.stringify(globbedPath)}`,
     );
-    const globbedFilePaths = globbedPath.flatMap((globbedPath) => {
-      const filenames = fs.readdirSync(globbedPath);
-      return filenames.map((filename) => path.join(globbedPath, filename));
-    });
     const prompts: Prompt[] = [];
-    for (const globbedFilePath of globbedFilePaths) {
+    for (const globbedFilePath of globbedPath) {
       const processedPrompts = await processPrompt(
         { raw: globbedFilePath },
         basePath,

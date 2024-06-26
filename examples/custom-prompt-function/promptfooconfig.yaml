@@ -7,6 +7,10 @@ prompts:
     label: prompt_txt
   - file://prompt.txt
 
+  - id: file://./prompts/*.txt
+    label: prompt_glob
+  - file://./prompts/*.txt
+
   - id: file://prompt.yaml
     label: prompt_yaml
   - file://prompt.yaml

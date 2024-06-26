@@ -2,7 +2,6 @@ import dedent from 'dedent';
 import * as fs from 'fs';
 import { globSync } from 'glob';
 import * as yaml from 'js-yaml';
-import * as path from 'path';
 import { importModule } from '../src/esm';
 import { readPrompts, readProviderPromptMap } from '../src/prompts';
 import type { Prompt, ProviderResponse, UnifiedConfig } from '../src/types';
@@ -25,7 +24,6 @@ jest.mock('fs', () => {
     ...actual,
     existsSync: jest.fn(actual.existsSync),
     mkdirSync: jest.fn(),
-    readdirSync: jest.fn(actual.readdirSync),
     readFileSync: jest.fn(),
     statSync: jest.fn(actual.statSync),
     writeFileSync: jest.fn(),
@@ -376,26 +374,28 @@ describe('readPrompts', () => {
   });
 
   it('should read a directory', async () => {
-    jest.mocked(fs.statSync).mockReturnValue({
-      isDirectory: () => true,
-    } as fs.Stats);
-    jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob].flat());
     jest
-      .mocked(fs.readdirSync as (path: fs.PathLike) => string[])
-      .mockReturnValue(['prompt1.txt', 'prompt2.txt']);
+      .mocked(fs.statSync)
+      .mockReturnValue({
+        isDirectory: () => false,
+      } as fs.Stats)
+      .mockReturnValueOnce({
+        isDirectory: () => true,
+      } as fs.Stats);
+    jest.mocked(globSync).mockImplementation(() => ['prompt1.txt', 'prompt2.txt']);
     // The mocked paths here are an artifact of our globSync mock. In a real
     // world setting we would get back `prompts/prompt1.txt` instead of `prompts/*/prompt1.txt`
     // but for the sake of this test we are just going to pretend that the globSync
     // mock is doing the right thing and giving us back the right paths.
     jest.mocked(fs.readFileSync).mockImplementation((filePath) => {
       if (
-        filePath.toString().endsWith(path.join('prompts', 'prompt1.txt')) ||
-        filePath.toString().endsWith(path.join('prompts', '*/prompt1.txt'))
+        filePath.toString().endsWith('prompt1.txt') ||
+        filePath.toString().endsWith('*/prompt1.txt')
       ) {
         return 'Test prompt 1\n---\nTest prompt 2';
       } else if (
-        filePath.toString().endsWith(path.join('prompts', 'prompt2.txt')) ||
-        filePath.toString().endsWith(path.join('prompts', '*/prompt2.txt'))
+        filePath.toString().endsWith('prompt2.txt') ||
+        filePath.toString().endsWith('*/prompt2.txt')
       ) {
         return 'Test prompt 3\n---\nTest prompt 4\n---\nTest prompt 5';
       }
@@ -403,69 +403,26 @@ describe('readPrompts', () => {
     });
     await expect(readPrompts(['prompts/*'])).resolves.toEqual([
       {
-        label: expect.stringMatching(/prompts[\\/]\*[\\/]prompt1\.txt: Test prompt 1/),
+        label: expect.stringMatching('prompt1.txt: Test prompt 1'),
         raw: 'Test prompt 1',
       },
       {
-        label: expect.stringMatching(/prompts[\\/]\*[\\/]prompt1\.txt: Test prompt 2/),
+        label: expect.stringMatching('prompt1.txt: Test prompt 2'),
         raw: 'Test prompt 2',
       },
       {
-        label: expect.stringMatching(/prompts[\\/]\*[\\/]prompt2\.txt: Test prompt 3/),
+        label: expect.stringMatching('prompt2.txt: Test prompt 3'),
         raw: 'Test prompt 3',
       },
       {
-        label: expect.stringMatching(/prompts[\\/]\*[\\/]prompt2\.txt: Test prompt 4/),
+        label: expect.stringMatching('prompt2.txt: Test prompt 4'),
         raw: 'Test prompt 4',
       },
       {
-        label: expect.stringMatching(/prompts[\\/]\*[\\/]prompt2\.txt: Test prompt 5/),
+        label: expect.stringMatching('prompt2.txt: Test prompt 5'),
         raw: 'Test prompt 5',
       },
     ]);
-    expect(fs.readdirSync).toHaveBeenCalledTimes(1);
-    expect(fs.readFileSync).toHaveBeenCalledTimes(2);
-    expect(fs.statSync).toHaveBeenCalledTimes(3);
-  });
-
-  it('should read with glob pattern for .txt files', async () => {
-    const fileContents: Record<string, string> = {
-      '1.txt': 'First text file content',
-      '2.txt': 'Second text file content',
-    };
-
-    jest.mocked(fs.readFileSync).mockImplementation((path: fs.PathOrFileDescriptor) => {
-      if (path.toString().includes('1.txt')) {
-        return fileContents['1.txt'];
-      } else if (path.toString().includes('2.txt')) {
-        return fileContents['2.txt'];
-      }
-      throw new Error(`Unexpected file path in test: ${path}`);
-    });
-    jest
-      .mocked(fs.readdirSync as (path: fs.PathLike) => string[])
-      .mockImplementation((path: fs.PathLike): string[] => {
-        if (path.toString().includes('prompts')) {
-          return ['prompt1.txt', 'prompt2.txt'];
-        }
-        throw new Error(`Unexpected directory path in test ${path}`);
-      });
-    jest.mocked(fs.statSync).mockImplementation((path: fs.PathLike) => {
-      const stats = new fs.Stats();
-      stats.isDirectory = () => path.toString().includes('prompts');
-      return stats;
-    });
-    await expect(readPrompts(['file://./prompts/*.txt'])).resolves.toEqual([
-      {
-        label: expect.stringMatching('prompt1.txt: First text file content'),
-        raw: 'First text file content',
-      },
-      {
-        label: expect.stringMatching('prompt2.txt: Second text file content'),
-        raw: 'Second text file content',
-      },
-    ]);
-    expect(fs.readdirSync).toHaveBeenCalledTimes(1);
     expect(fs.readFileSync).toHaveBeenCalledTimes(2);
     expect(fs.statSync).toHaveBeenCalledTimes(3);
   });

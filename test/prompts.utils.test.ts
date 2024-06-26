@@ -150,7 +150,7 @@ describe('parsePathOrGlob', () => {
     expect(parsePathOrGlob('/base', 'file.txt')).toEqual({
       extension: '.txt',
       functionName: undefined,
-      isDirectory: false,
+      isPathPattern: false,
       promptPath: path.join('/base', 'file.txt'),
     });
   });
@@ -160,7 +160,7 @@ describe('parsePathOrGlob', () => {
     expect(parsePathOrGlob('/base', 'file.py:myFunction')).toEqual({
       extension: '.py',
       functionName: 'myFunction',
-      isDirectory: false,
+      isPathPattern: false,
       promptPath: path.join('/base', 'file.py'),
     });
   });
@@ -170,7 +170,7 @@ describe('parsePathOrGlob', () => {
     expect(parsePathOrGlob('/base', 'file:file.js')).toEqual({
       extension: '.js',
       functionName: undefined,
-      isDirectory: false,
+      isPathPattern: false,
       promptPath: path.join('/base', 'file.js'),
     });
   });
@@ -180,7 +180,7 @@ describe('parsePathOrGlob', () => {
     expect(parsePathOrGlob('/base', 'dir')).toEqual({
       extension: '',
       functionName: undefined,
-      isDirectory: true,
+      isPathPattern: true,
       promptPath: path.join('/base', 'dir'),
     });
   });
@@ -192,7 +192,7 @@ describe('parsePathOrGlob', () => {
     expect(parsePathOrGlob('/base', 'nonexistent.js')).toEqual({
       extension: '.js',
       functionName: undefined,
-      isDirectory: false,
+      isPathPattern: false,
       promptPath: path.join('/base', 'nonexistent.js'),
     });
   });
@@ -211,7 +211,7 @@ describe('parsePathOrGlob', () => {
     expect(parsePathOrGlob('/base', 'file')).toEqual({
       extension: '',
       functionName: undefined,
-      isDirectory: false,
+      isPathPattern: false,
       promptPath: path.join('/base', 'file'),
     });
   });
@@ -221,7 +221,7 @@ describe('parsePathOrGlob', () => {
     expect(parsePathOrGlob('./base', 'file.txt')).toEqual({
       extension: '.txt',
       functionName: undefined,
-      isDirectory: false,
+      isPathPattern: false,
       promptPath: path.join('./base', 'file.txt'),
     });
   });
@@ -231,7 +231,7 @@ describe('parsePathOrGlob', () => {
     expect(parsePathOrGlob('/base', 'file.txt')).toEqual({
       extension: '.txt',
       functionName: undefined,
-      isDirectory: false,
+      isPathPattern: false,
       promptPath: path.join('/base', 'file.txt'),
     });
   });
