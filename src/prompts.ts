@@ -353,15 +353,21 @@ async function processJsFile(
  * Parses a file path or glob pattern to extract function names and file extensions.
  * Function names can be specified in the filename like this:
  * prompt.py:myFunction or prompts.js:myFunction.
+ * @param basePath - The base path for file resolution.
  * @param promptPath - The path or glob pattern.
  * @returns Parsed details including function name, file extension, and directory status.
  */
-function parsePathOrGlob(promptPath: string): {
-  functionName?: string;
+function parsePathOrGlob(basePath: string, promptPath: string): {
   extension: string;
+  functionName?: string;
   isDirectory: boolean;
-  filename: string;
+  promptPath: string;
 } {
+  promptPath = path.join(basePath, promptPath);
+  if (promptPath.includes('file:')) {
+    promptPath = promptPath.split('file:')[1];
+  }
+
   let stats;
   try {
     stats = fs.statSync(promptPath);
@@ -382,7 +388,9 @@ function parsePathOrGlob(promptPath: string): {
   const parsedPath = path.parse(filename);
   const extension = parsedPath.ext;
 
-  return { filename, functionName, extension, isDirectory: stats?.isDirectory() ?? false };
+  promptPath = path.join(basePath, filename);
+
+  return { promptPath, functionName, extension, isDirectory: stats?.isDirectory() ?? false };
 }
 
 /**
@@ -420,24 +428,17 @@ export async function processPrompt(
     return processString(prompt);
   }
 
-  let promptPath = path.join(basePath, prompt.raw);
-  if (promptPath.includes('file:')) {
-    promptPath = promptPath.split('file:')[1];
-  }
-
   const {
     extension,
-    filename,
     functionName,
     isDirectory,
+    promptPath,
   }: {
-    filename: string;
     extension: string;
     functionName?: string;
     isDirectory: boolean;
-  } = parsePathOrGlob(promptPath);
-
-  promptPath = path.join(basePath, filename);
+    promptPath: string;
+  } = parsePathOrGlob(basePath, prompt.raw);
 
   if (isDirectory && maxRecursionDepth > 0) {
     const globbedPath = globSync(promptPath.replace(/\\/g, '/'), {
