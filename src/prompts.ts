@@ -360,6 +360,7 @@ function parsePathOrGlob(promptPath: string): {
   functionName?: string;
   extension: string;
   isDirectory: boolean;
+  filename: string;
 } {
   let stats;
   try {
@@ -381,7 +382,7 @@ function parsePathOrGlob(promptPath: string): {
   const parsedPath = path.parse(filename);
   const extension = parsedPath.ext;
 
-  return { functionName, extension, isDirectory: stats?.isDirectory() ?? false };
+  return { filename, functionName, extension, isDirectory: stats?.isDirectory() ?? false };
 }
 
 /**
@@ -426,13 +427,17 @@ export async function processPrompt(
 
   const {
     extension,
+    filename,
     functionName,
     isDirectory,
   }: {
+    filename: string;
     extension: string;
     functionName?: string;
     isDirectory: boolean;
   } = parsePathOrGlob(promptPath);
+
+  promptPath = path.join(basePath, filename);
 
   if (isDirectory && maxRecursionDepth > 0) {
     const globbedPath = globSync(promptPath.replace(/\\/g, '/'), {
