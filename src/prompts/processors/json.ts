@@ -13,6 +13,7 @@ import { Prompt } from '../../types';
  */
 export function processJsonFile(filePath: string, prompt: Partial<Prompt>): Prompt[] {
   const fileContents = fs.readFileSync(filePath, 'utf8');
+  // NOTE: We do not validate if this is a valid JSON file.
   return [
     {
       raw: fileContents,
