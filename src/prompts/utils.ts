@@ -34,12 +34,6 @@ export function maybeFilePath(str: string): boolean {
   );
 }
 
-type RawPrompt = Partial<Prompt> & {
-  // The source of the prompt, such as a file path or a string.
-  // Could also be an index in the array or a key in the object.
-  source?: string;
-};
-
 /**
  * Normalizes the input prompt to an array of prompts, rejecting invalid and empty inputs.
  * @param promptPathOrGlobs - The input prompt.
@@ -48,7 +42,7 @@ type RawPrompt = Partial<Prompt> & {
  */
 export function normalizeInput(
   promptPathOrGlobs: string | (string | Partial<Prompt>)[] | Record<string, string>,
-): RawPrompt[] {
+): Partial<Prompt>[] {
   if (
     !promptPathOrGlobs ||
     ((typeof promptPathOrGlobs === 'string' || Array.isArray(promptPathOrGlobs)) &&
@@ -87,7 +81,6 @@ export function normalizeInput(
     return Object.entries(promptPathOrGlobs).map(([raw, key]) => ({
       label: key,
       raw: raw,
-      source: raw,
     }));
   }
   // numbers, booleans, etc

@@ -76,12 +76,6 @@ export function readProviderPromptMap(
   return ret;
 }
 
-type RawPrompt = Partial<Prompt> & {
-  // The source of the prompt, such as a file path or a string.
-  // Could also be an index in the array or a key in the object.
-  source?: string;
-};
-
 /**
  * Processes a raw prompt based on its content type and path.
  * @param prompt - The raw prompt data.
@@ -90,7 +84,7 @@ type RawPrompt = Partial<Prompt> & {
  * @returns Promise resolving to an array of processed prompts.
  */
 export async function processPrompt(
-  prompt: RawPrompt,
+  prompt: Partial<Prompt>,
   basePath: string = '',
   maxRecursionDepth: number = 1,
 ): Promise<Prompt[]> {
@@ -170,7 +164,7 @@ export async function readPrompts(
 ): Promise<Prompt[]> {
   logger.debug(`Reading prompts from ${JSON.stringify(promptPathOrGlobs)}`);
 
-  const promptPartials: RawPrompt[] = normalizeInput(promptPathOrGlobs);
+  const promptPartials: Partial<Prompt>[] = normalizeInput(promptPathOrGlobs);
   const prompts: Prompt[] = [];
   for (const prompt of promptPartials) {
     const promptBatch = await processPrompt(prompt, basePath);
