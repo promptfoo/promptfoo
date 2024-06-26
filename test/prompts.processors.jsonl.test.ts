@@ -27,18 +27,44 @@ describe('processJsonlFile', () => {
     expect(mockReadFileSync).toHaveBeenCalledWith(filePath, 'utf-8');
   });
 
-  it('should process a valid JSONL file with a label', () => {
+  it('should process a valid JSONL file with a single record without a label', () => {
+    const filePath = 'file.jsonl';
+    const fileContent = '[{"key1": "value1"}, {"key2": "value2"}]';
+    mockReadFileSync.mockReturnValue(fileContent);
+    expect(processJsonlFile(filePath, {})).toEqual([
+      {
+        raw: '[{"key1": "value1"}, {"key2": "value2"}]',
+        label: `file.jsonl`,
+      },
+    ]);
+    expect(mockReadFileSync).toHaveBeenCalledWith(filePath, 'utf-8');
+  });
+
+  it('should process a valid JSONL file with a single record and a label', () => {
+    const filePath = 'file.jsonl';
+    const fileContent = '[{"key1": "value1"}, {"key2": "value2"}]';
+    mockReadFileSync.mockReturnValue(fileContent);
+    expect(processJsonlFile(filePath, { label: 'Label' })).toEqual([
+      {
+        raw: '[{"key1": "value1"}, {"key2": "value2"}]',
+        label: `Label`,
+      },
+    ]);
+    expect(mockReadFileSync).toHaveBeenCalledWith(filePath, 'utf-8');
+  });
+
+  it('should process a valid JSONL file with multiple records and a label', () => {
     const filePath = 'file.jsonl';
     const fileContent = '[{"key1": "value1"}]\n[{"key2": "value2"}]';
     mockReadFileSync.mockReturnValue(fileContent);
     expect(processJsonlFile(filePath, { label: 'Label' })).toEqual([
       {
         raw: '[{"key1": "value1"}]',
-        label: `Label: ${filePath}: [{"key1": "value1"}]`,
+        label: `Label: [{"key1": "value1"}]`,
       },
       {
         raw: '[{"key2": "value2"}]',
-        label: `Label: ${filePath}: [{"key2": "value2"}]`,
+        label: `Label: [{"key2": "value2"}]`,
       },
     ]);
     expect(mockReadFileSync).toHaveBeenCalledWith(filePath, 'utf-8');

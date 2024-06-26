@@ -17,7 +17,7 @@ export function processJsonFile(filePath: string, prompt: Partial<Prompt>): Prom
   return [
     {
       raw: fileContents,
-      label: `${prompt.label ? `${prompt.label}: ` : ''}${filePath}: ${fileContents}`,
+      label: prompt.label || `${filePath}: ${fileContents}`,
     },
   ];
 }

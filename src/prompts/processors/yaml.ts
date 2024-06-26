@@ -20,7 +20,7 @@ export function processYamlFile(filePath: string, prompt: Partial<Prompt>): Prom
   return [
     {
       raw: JSON.stringify(yamlContent),
-      label: prompt.label ? `${prompt.label}: ${filePath}` : `${filePath}: ${fileContents}`,
+      label: prompt.label || `${filePath}: ${fileContents}`,
     },
   ];
 }

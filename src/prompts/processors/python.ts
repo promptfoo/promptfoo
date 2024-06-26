@@ -71,7 +71,11 @@ export function processPythonFile(
   return [
     {
       raw: fileContent,
-      label: `${prompt.label ? `${prompt.label}: ` : ''}${prompt.raw}: ${fileContent}`,
+      label: prompt.label
+        ? prompt.label
+        : functionName
+          ? `${filePath}:${functionName}`
+          : `${filePath}: ${fileContent}`,
       function: functionName
         ? (...args) => pythonPromptFunction(filePath, functionName, ...args)
         : (...args) => pythonPromptFunctionLegacy(filePath, ...args),

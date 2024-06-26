@@ -284,7 +284,7 @@ describe('readPrompts', () => {
     ).resolves.toEqual([
       {
         raw: JSON.stringify(yaml.load(ymlContent)),
-        label: `image-summary: prompts.yml`,
+        label: `image-summary`,
       },
     ]);
     expect(fs.readFileSync).toHaveBeenCalledTimes(1);
@@ -306,12 +306,12 @@ describe('readPrompts', () => {
     await expect(readPrompts(prompts)).resolves.toEqual([
       {
         raw: code,
-        label: expect.stringMatching(/\First prompt: prompts.py:prompt1/),
+        label: 'First prompt',
         function: expect.any(Function),
       },
       {
         raw: code,
-        label: expect.stringMatching(/\bSecond prompt: prompts.py:prompt2/),
+        label: 'Second prompt',
         function: expect.any(Function),
       },
     ]);

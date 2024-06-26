@@ -32,7 +32,7 @@ describe('processYamlFile', () => {
     expect(processYamlFile(filePath, { label: 'Label' })).toEqual([
       {
         raw: JSON.stringify(parsedYaml),
-        label: `Label: ${filePath}`,
+        label: `Label`,
       },
     ]);
     expect(mockReadFileSync).toHaveBeenCalledWith(filePath, 'utf8');

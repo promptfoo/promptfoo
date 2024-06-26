@@ -30,7 +30,7 @@ describe('processJsonFile', () => {
     expect(processJsonFile(filePath, { label: 'Label' })).toEqual([
       {
         raw: fileContent,
-        label: `Label: ${filePath}: ${fileContent}`,
+        label: `Label`,
       },
     ]);
     expect(mockReadFileSync).toHaveBeenCalledWith(filePath, 'utf8');
