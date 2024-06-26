@@ -19,6 +19,7 @@ import {
   varsMatch,
   writeMultipleOutputs,
   writeOutput,
+  extractJsonObjects,
 } from '../src/util';
 
 jest.mock('proxy-agent', () => ({
@@ -859,5 +860,37 @@ describe('util', () => {
 
       expect(resultIsForTestCase(result, nonMatchTestCase)).toBe(false);
     });
+  });
+});
+
+describe('extractJsonObjects', () => {
+  it('should extract a single JSON object from a string', () => {
+    const input = '{"key": "value"}';
+    const expectedOutput = [{ key: 'value' }];
+    expect(extractJsonObjects(input)).toEqual(expectedOutput);
+  });
+
+  it('should extract multiple JSON objects from a string', () => {
+    const input = 'yolo {"key1": "value1"} some text {"key2": "value2"} fomo';
+    const expectedOutput = [{ key1: 'value1' }, { key2: 'value2' }];
+    expect(extractJsonObjects(input)).toEqual(expectedOutput);
+  });
+
+  it('should return an empty array if no JSON objects are found', () => {
+    const input = 'no json here';
+    const expectedOutput = [];
+    expect(extractJsonObjects(input)).toEqual(expectedOutput);
+  });
+
+  it('should handle nested JSON objects', () => {
+    const input = 'wassup {"outer": {"inner": "value"}, "foo": [1,2,3,4]}';
+    const expectedOutput = [{ outer: { inner: 'value' }, foo: [1, 2, 3, 4] }];
+    expect(extractJsonObjects(input)).toEqual(expectedOutput);
+  });
+
+  it('should handle invalid JSON gracefully', () => {
+    const input = '{"key": "value" some text {"key2": "value2"}';
+    const expectedOutput = [{ key2: 'value2' }];
+    expect(extractJsonObjects(input)).toEqual(expectedOutput);
   });
 });

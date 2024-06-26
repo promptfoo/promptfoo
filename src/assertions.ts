@@ -43,7 +43,7 @@ import {
   isGradingResult,
   AssertionValue,
 } from './types';
-import { transformOutput, getNunjucksEngine } from './util';
+import { transformOutput, getNunjucksEngine, extractJsonObjects } from './util';
 
 const ASSERTIONS_MAX_CONCURRENCY = process.env.PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY
   ? parseInt(process.env.PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY, 10)
@@ -550,10 +550,10 @@ export async function runAssertion({
   }
   if (baseType === 'contains-json') {
     let errorMessage = 'Expected output to contain valid JSON';
-    const jsonOutputs = containsJSON(outputString);
-    for (const jsonMatch of jsonOutputs) {
-      pass = jsonMatch !== inverse;
-      if (pass && renderedValue) {
+    const jsonObjects = extractJsonObjects(outputString);
+    pass = inverse ? jsonObjects.length === 0 : jsonObjects.length > 0;
+    for (const jsonObject of jsonObjects) {
+      if (renderedValue) {
         let validate: ValidateFunction;
         if (typeof renderedValue === 'string') {
           if (renderedValue.startsWith('file://')) {
@@ -571,7 +571,7 @@ export async function runAssertion({
         } else {
           throw new Error('contains-json assertion must have a string or object value');
         }
-        pass = validate(jsonMatch);
+        pass = validate(jsonObject);
         if (pass) {
           break;
         } else {
@@ -1276,36 +1276,6 @@ ${
   }
 
   throw new Error('Unknown assertion type: ' + assertion.type);
-}
-
-function containsJSON(str: string): any {
-  // This will extract all json objects from a string
-
-  const jsonObjects = [];
-  let openBracket = str.indexOf('{');
-  let closeBracket = str.indexOf('}', openBracket);
-  // Iterate over the string until we find a valid JSON-like pattern
-  // Iterate over all trailing } until the contents parse as json
-  while (openBracket !== -1) {
-    const jsonStr = str.slice(openBracket, closeBracket + 1);
-    try {
-      jsonObjects.push(JSON.parse(jsonStr));
-      // This is a valid JSON object, so start looking for
-      // an opening bracket after the last closing bracket
-      openBracket = str.indexOf('{', closeBracket + 1);
-      closeBracket = str.indexOf('}', openBracket);
-    } catch (err) {
-      // Not a valid object, move on to the next closing bracket
-      closeBracket = str.indexOf('}', closeBracket + 1);
-      while (closeBracket === -1) {
-        // No closing brackets made a valid json object, so
-        // start looking with the next opening bracket
-        openBracket = str.indexOf('{', openBracket + 1);
-        closeBracket = str.indexOf('}', openBracket);
-      }
-    }
-  }
-  return jsonObjects;
 }
 
 export async function isSql(

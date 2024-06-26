@@ -1,3 +1,4 @@
+import { json } from 'drizzle-orm/mysql-core';
 import invariant from 'tiny-invariant';
 import logger from './logger';
 import {
@@ -28,7 +29,7 @@ import type {
   ProviderType,
   ApiModerationProvider,
 } from './types';
-import { getNunjucksEngine } from './util';
+import { extractJsonObjects, getNunjucksEngine } from './util';
 
 const nunjucks = getNunjucksEngine();
 
@@ -338,22 +339,11 @@ export async function matchesLlmRubric(
 
   invariant(typeof resp.output === 'string', 'llm-rubric produced malformed response');
   try {
-    let parsed: Partial<GradingResult> | null = null;
-
-    // Try parsing resp.output directly as JSON
-    try {
-      parsed = JSON.parse(resp.output) as Partial<GradingResult>;
-    } catch (err) {
-      // If direct parsing fails, try extracting JSON from a markdown code block
-      const codeBlockMatch = resp.output.match(/```([\s\S]*?)```/);
-      if (codeBlockMatch) {
-        parsed = JSON.parse(codeBlockMatch[1]) as Partial<GradingResult>;
-      } else {
-        // If no markdown code block is found, throw the original parsing error
-        throw err;
-      }
+    const jsonObjects = extractJsonObjects(resp.output);
+    if (jsonObjects.length === 0) {
+      return fail('Could not extract JSON from llm-rubric response', resp.tokenUsage);
     }
-
+    const parsed = jsonObjects[0] as Partial<GradingResult>;
     const pass = parsed.pass ?? (typeof parsed.score === 'undefined' ? true : parsed.score > 0);
     return {
       pass,
@@ -366,7 +356,10 @@ export async function matchesLlmRubric(
       },
     };
   } catch (err) {
-    return fail(`llm-rubric produced malformed response: ${resp.output}`, resp.tokenUsage);
+    return fail(
+      `llm-rubric produced malformed response: ${err}\n\n${resp.output}`,
+      resp.tokenUsage,
+    );
   }
 }
 
