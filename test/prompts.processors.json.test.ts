@@ -4,7 +4,7 @@ import { processJsonFile } from '../src/prompts/processors/json';
 jest.mock('fs');
 
 describe('processJsonFile', () => {
-  const mockReadFileSync = fs.readFileSync as jest.Mock;
+  const mockReadFileSync = jest.mocked(fs.readFileSync);
 
   beforeEach(() => {
     jest.clearAllMocks();

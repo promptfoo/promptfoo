@@ -52,9 +52,7 @@ describe('processYamlFile', () => {
     const filePath = 'invalid.yaml';
     const fileContent = 'invalid: yaml: content';
     mockReadFileSync.mockReturnValue(fileContent);
-    expect(() => processYamlFile(filePath, {})).toThrow({
-      message: expect.stringContaining('bad indentation of a mapping entry'),
-    });
+    expect(() => processYamlFile(filePath, {})).toThrow(/bad indentation of a mapping entry/);
     expect(mockReadFileSync).toHaveBeenCalledWith(filePath, 'utf8');
   });
 });

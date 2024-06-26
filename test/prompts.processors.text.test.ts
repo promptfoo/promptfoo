@@ -78,8 +78,8 @@ describe('processTxtFile', () => {
     const filePath = 'file.txt';
     const fileContent = `${PROMPT_DELIMITER}${PROMPT_DELIMITER}`;
     mockReadFileSync.mockReturnValue(fileContent);
-    expect(mockReadFileSync).toHaveBeenCalledWith(filePath, 'utf-8');
     expect(processTxtFile(filePath, {})).toEqual([]);
+    expect(mockReadFileSync).toHaveBeenCalledWith(filePath, 'utf-8');
   });
 
   it('should return an empty array for an empty file', () => {

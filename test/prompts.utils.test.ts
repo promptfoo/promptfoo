@@ -131,12 +131,10 @@ describe('normalizeInput', () => {
       {
         label: 'label A',
         raw: 'prompts1.txt',
-        source: 'prompts1.txt',
       },
       {
         label: 'label B',
         raw: 'prompts2.txt',
-        source: 'prompts2.txt',
       },
     ]);
   });

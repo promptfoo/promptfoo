@@ -71,12 +71,19 @@ prompts:
   - file://path/to/prompt2.txt
   - file://path/to/prompt.json
   - file://path/to/prompt.yaml
+  - file://path/to/prompt.yml
   # Globs are supported
   - file://prompts/*.txt
   - file://path/**/*
   # Prompt functions
+  # Executes entire file
   - file:///root/path/to/prompt.js
   - file://./path/to/prompt.py
+  # Executes individual functions
+  - file:///root/path/to/prompt.js:prompt1
+  - file:///root/path/to/prompt.js:prompt2
+  - file:///root/path/to/prompt.py:prompt1
+  - file:///root/path/to/prompt.py:prompt2
 ```
 
 Example of multiple prompt files:
@@ -104,13 +111,13 @@ Prompts can be JSON too. Use this to configure multi-shot prompt formats:
 ]
 ```
 
-### Multiple prompts in a single file
+### Multiple prompts in a single text file
 
-If you have only one file, you can include multiple prompts in the file, separated by the separator `---`. If you have multiple files, each prompt should be in a separate file.
+If you have only one text file, you can include multiple prompts in the file, separated by the separator `---`. If you have multiple files, each prompt should be in a separate file.
 
 Example of a single prompt file with multiple prompts (`prompts.txt`):
 
-```
+```text
 Translate the following text to French: "{{name}}: {{text}}"
 ---
 Translate the following text to German: "{{name}}: {{text}}"
