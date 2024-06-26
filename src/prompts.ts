@@ -355,7 +355,7 @@ function processYamlFile(filePath: string, prompt: RawPrompt): Prompt[] {
  * @param promptPath - The path or glob pattern.
  * @returns Parsed details including function name, file extension, and directory status.
  */
-function parsePathOrGlob(
+export function parsePathOrGlob(
   basePath: string,
   promptPath: string,
 ): {
