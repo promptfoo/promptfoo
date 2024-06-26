@@ -338,10 +338,22 @@ export async function matchesLlmRubric(
 
   invariant(typeof resp.output === 'string', 'llm-rubric produced malformed response');
   try {
-    const firstOpeningBrace = resp.output.indexOf('{');
-    const firstClosingBrace = resp.output.indexOf('}');
-    const jsonStr = resp.output.substring(firstOpeningBrace, firstClosingBrace + 1);
-    const parsed = JSON.parse(jsonStr) as Partial<GradingResult>;
+    let parsed: Partial<GradingResult> | null = null;
+
+    // Try parsing resp.output directly as JSON
+    try {
+      parsed = JSON.parse(resp.output) as Partial<GradingResult>;
+    } catch (err) {
+      // If direct parsing fails, try extracting JSON from a markdown code block
+      const codeBlockMatch = resp.output.match(/```([\s\S]*?)```/);
+      if (codeBlockMatch) {
+        parsed = JSON.parse(codeBlockMatch[1]) as Partial<GradingResult>;
+      } else {
+        // If no markdown code block is found, throw the original parsing error
+        throw err;
+      }
+    }
+
     const pass = parsed.pass ?? (typeof parsed.score === 'undefined' ? true : parsed.score > 0);
     return {
       pass,
