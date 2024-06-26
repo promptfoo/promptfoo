@@ -1,4 +1,8 @@
 prompts:
+  - 'You are an angry pirate. Be concise and stay in character. Tell me about {{topic}}'
+  - id: 'You are an angry pirate. Be concise and stay in character. Tell me about {{topic}}'
+    label: text
+
   - id: file://prompt.txt
     label: prompt_txt
   - file://prompt.txt

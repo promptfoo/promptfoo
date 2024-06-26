@@ -249,7 +249,7 @@ function processTxtFile(filePath: string, prompt: RawPrompt): Prompt[] {
     .map((p) => ({
       raw: p.trim(),
       label: prompt.label
-        ? `${prompt.label}: ${prompt.raw}: ${p.trim()}`
+        ? `${prompt.label}: ${p.trim()}`
         : `${prompt.raw}: ${p.trim()}`,
     }))
     .filter((p) => p.raw.length > 0); // handle leading/trailing delimiters and empty lines
@@ -402,7 +402,7 @@ function processString(prompt: RawPrompt): Prompt[] {
   return [
     {
       raw: prompt!.raw as string,
-      label: `${prompt.raw}`,
+      label: prompt.label ?? `${prompt.raw}`,
     },
   ];
 }
