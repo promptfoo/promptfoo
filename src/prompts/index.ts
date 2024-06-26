@@ -138,7 +138,7 @@ export async function processPrompt(
     return processJsonlFile(promptPath, prompt);
   }
   if (['.js', '.cjs', '.mjs'].includes(extension)) {
-    return processJsFile(promptPath, functionName);
+    return processJsFile(promptPath, prompt, functionName);
   }
   if (extension === '.py') {
     return processPythonFile(promptPath, prompt, functionName);

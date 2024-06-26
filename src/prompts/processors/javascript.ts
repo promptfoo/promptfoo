@@ -9,13 +9,16 @@ import { Prompt } from '../../types';
  */
 export async function processJsFile(
   filePath: string,
+  prompt: Partial<Prompt>,
   functionName: string | undefined,
 ): Promise<Prompt[]> {
   const promptFunction = await importModule(filePath, functionName);
   return [
     {
       raw: String(promptFunction),
-      label: functionName ? `${filePath}` : `${filePath}:${String(promptFunction)}`,
+      label: prompt.label
+        ? `${prompt.label}: ${filePath}`
+        : `${filePath}: ${String(promptFunction)}`,
       function: promptFunction,
     },
   ];
