@@ -343,7 +343,7 @@ describe('readPrompts', () => {
     await expect(readPrompts(promptPath)).resolves.toEqual([
       {
         raw: "()=>console.log('dummy prompt')",
-        label: "prompt.js: ()=>console.log('dummy prompt')",
+        label: 'prompt.js',
         function: mockFunction,
       },
     ]);
@@ -371,7 +371,7 @@ describe('readPrompts', () => {
     const promptFunction = result[0].function as unknown as () => string;
     expect(promptFunction()).toBe('dummy prompt result');
 
-    expect(importModule).toHaveBeenCalledWith(promptPath, functionName);
+    expect(importModule).toHaveBeenCalledWith('prompt.js', 'functionName');
     expect(fs.statSync).toHaveBeenCalledTimes(1);
   });
 
