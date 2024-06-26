@@ -402,7 +402,7 @@ function processString(prompt: RawPrompt): Prompt[] {
   return [
     {
       raw: prompt!.raw as string,
-      label: `${prompt.source ? `${prompt.source}: ` : ''}${prompt.raw}`,
+      label: `${prompt.raw}`,
     },
   ];
 }
