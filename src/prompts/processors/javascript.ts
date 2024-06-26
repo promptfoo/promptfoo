@@ -16,9 +16,7 @@ export async function processJsFile(
   return [
     {
       raw: String(promptFunction),
-      label: prompt.label
-        ? `${prompt.label}: ${filePath}`
-        : `${filePath}: ${String(promptFunction)}`,
+      label: prompt.label ? prompt.label : functionName ? `${filePath}:${functionName}` : filePath,
       function: promptFunction,
     },
   ];

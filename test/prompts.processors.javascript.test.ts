@@ -40,7 +40,7 @@ describe('processJsFile', () => {
     expect(mockImportModule).toHaveBeenCalledWith(filePath, undefined);
   });
 
-  it.only('should process a valid JavaScript file with a function name without a label', async () => {
+  it('should process a valid JavaScript file with a function name without a label', async () => {
     const filePath = 'file.js';
     const functionName = 'myFunction';
     const mockFunction = () => 'dummy prompt';
@@ -63,7 +63,7 @@ describe('processJsFile', () => {
     await expect(processJsFile(filePath, { label: 'myLabel' }, functionName)).resolves.toEqual([
       {
         raw: String(mockFunction),
-        label: 'myLabel:myFunction',
+        label: 'myLabel',
         function: mockFunction,
       },
     ]);

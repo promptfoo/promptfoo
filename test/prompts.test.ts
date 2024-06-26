@@ -343,7 +343,7 @@ describe('readPrompts', () => {
     await expect(readPrompts(promptPath)).resolves.toEqual([
       {
         raw: "()=>console.log('dummy prompt')",
-        label: "prompt.js:()=>console.log('dummy prompt')",
+        label: "prompt.js: ()=>console.log('dummy prompt')",
         function: mockFunction,
       },
     ]);
@@ -354,7 +354,7 @@ describe('readPrompts', () => {
   it('should read a .js file with named function', async () => {
     const promptPath = 'prompt.js:functionName';
     const functionName = 'functionName';
-    const mockFunction = jest.fn(() => 'dummy prompt result');
+    const mockFunction = () => 'dummy prompt result';
 
     jest.mocked(importModule).mockResolvedValueOnce(mockFunction);
     jest.mocked(fs.statSync).mockReturnValue({ isDirectory: () => false } as fs.Stats);
@@ -364,7 +364,7 @@ describe('readPrompts', () => {
       {
         raw: String(mockFunction),
         label: 'prompt.js:functionName',
-        function: mockFunction,
+        function: expect.any(Function),
       },
     ]);
 
