@@ -8,13 +8,14 @@ import { PROMPT_DELIMITER } from '../constants';
  * @param prompt - The raw prompt data.
  * @returns Array of prompts extracted from the file.
  */
-export function processTxtFile(filePath: string, prompt: Partial<Prompt>): Prompt[] {
+export function processTxtFile(filePath: string, { label }: Partial<Prompt>): Prompt[] {
   const fileContent = fs.readFileSync(filePath, 'utf-8');
-  return fileContent
+  return fileContent // handle leading/trailing delimiters and empty lines
     .split(PROMPT_DELIMITER)
-    .map((p) => ({
-      raw: p.trim(),
-      label: prompt.label ? `${prompt.label}: ${p.trim()}` : `${prompt.raw}: ${p.trim()}`,
-    }))
-    .filter((p) => p.raw.length > 0); // handle leading/trailing delimiters and empty lines
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0)
+    .map((prompt) => ({
+      raw: prompt,
+      label: label ? `${label}: ${filePath}: ${prompt}` : `${filePath}: ${prompt}`,
+    }));
 }
