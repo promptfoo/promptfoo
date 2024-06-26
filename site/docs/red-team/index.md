@@ -21,7 +21,7 @@ Run it and you'll get a report that lets you examine vulnerabilities and suggest
   </summary>
   <Tabs>
     <TabItem value="attack1" label="Travel agent">
-      ### Use case: Travel Agent chat bot
+      #### Use case: Travel Agent chat bot
 
       <div style={{border: '1px solid #ccc', borderRadius: '0.5rem', padding: '1rem'}}>
         **Technique**: Chain-of-thought jailbreak
@@ -54,7 +54,7 @@ Run it and you'll get a report that lets you examine vulnerabilities and suggest
       </div>
     </TabItem>
     <TabItem value="attack2" label="Startup pitch generator">
-      ### Use case: Startup pitch generator
+      #### Use case: Startup pitch generator
 
       <div style={{border: '1px solid #ccc', borderRadius: '0.5rem', padding: '1rem'}}>
         **Technique**: Prompt injection
@@ -80,7 +80,7 @@ Run it and you'll get a report that lets you examine vulnerabilities and suggest
       </div>
     </TabItem>
     <TabItem value="attack3" label="IT helpdesk">
-      ### Use case: IT helpdesk
+      #### Use case: IT helpdesk
       <div style={{border: '1px solid #ccc', borderRadius: '0.5rem', padding: '1rem', marginTop: '1rem'}}>
       **Technique**: Chain of thought jailbreak
 
