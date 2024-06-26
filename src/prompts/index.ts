@@ -19,7 +19,7 @@ import { processTxtFile } from './processors/text';
 import { processYamlFile } from './processors/yaml';
 import { maybeFilePath, normalizeInput, parsePathOrGlob } from './utils';
 
-export * from '../gradingPrompts';
+export * from './grading';
 
 /**
  * Reads and maps provider prompts based on the configuration and parsed prompts.
