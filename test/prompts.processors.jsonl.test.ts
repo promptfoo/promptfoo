@@ -1,48 +1,55 @@
 import * as fs from 'fs';
-import { processJsonFile } from '../src/prompts/processors/json';
+import { processJsonlFile } from '../src/prompts/processors/jsonl';
 
 jest.mock('fs');
 
-describe('processJsonFile', () => {
+describe('processJsonlFile', () => {
   const mockReadFileSync = jest.mocked(fs.readFileSync);
 
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  it('should process a valid JSON file without a label', () => {
-    const filePath = 'file.json';
-    const fileContent = JSON.stringify({ key: 'value' });
+  it('should process a valid JSONL file without a label', () => {
+    const filePath = 'file.jsonl';
+    const fileContent = '[{"key1": "value1"}]\n[{"key2": "value2"}]';
     mockReadFileSync.mockReturnValue(fileContent);
-    expect(processJsonFile(filePath, {})).toEqual([
+    expect(processJsonlFile(filePath, {})).toEqual([
       {
-        raw: fileContent,
-        label: `${filePath}: ${fileContent}`,
+        raw: '[{"key1": "value1"}]',
+        label: 'file.jsonl: [{"key1": "value1"}]',
+      },
+      {
+        raw: '[{"key2": "value2"}]',
+        label: 'file.jsonl: [{"key2": "value2"}]',
       },
     ]);
-    expect(mockReadFileSync).toHaveBeenCalledWith(filePath, 'utf8');
+    expect(mockReadFileSync).toHaveBeenCalledWith(filePath, 'utf-8');
   });
 
-  it('should process a valid JSON file with a label', () => {
-    const filePath = 'file.json';
-    const fileContent = JSON.stringify({ key: 'value' });
+  it('should process a valid JSONL file with a label', () => {
+    const filePath = 'file.jsonl';
+    const fileContent = '[{"key1": "value1"}]\n[{"key2": "value2"}]';
     mockReadFileSync.mockReturnValue(fileContent);
-    expect(processJsonFile(filePath, { label: 'Label' })).toEqual([
+    expect(processJsonlFile(filePath, { label: 'Label' })).toEqual([
       {
-        raw: fileContent,
-        label: `Label: ${filePath}: ${fileContent}`,
+        raw: '[{"key1": "value1"}]',
+        label: `Label: ${filePath}: [{"key1": "value1"}]`,
+      },
+      {
+        raw: '[{"key2": "value2"}]',
+        label: `Label: ${filePath}: [{"key2": "value2"}]`,
       },
     ]);
-    expect(mockReadFileSync).toHaveBeenCalledWith(filePath, 'utf8');
+    expect(mockReadFileSync).toHaveBeenCalledWith(filePath, 'utf-8');
   });
 
   it('should throw an error if the file cannot be read', () => {
-    const filePath = 'nonexistent.json';
+    const filePath = 'nonexistent.jsonl';
     mockReadFileSync.mockImplementation(() => {
       throw new Error('File not found');
     });
-
-    expect(() => processJsonFile(filePath, {})).toThrow('File not found');
-    expect(mockReadFileSync).toHaveBeenCalledWith(filePath, 'utf8');
+    expect(() => processJsonlFile(filePath, {})).toThrow('File not found');
+    expect(mockReadFileSync).toHaveBeenCalledWith(filePath, 'utf-8');
   });
 });
