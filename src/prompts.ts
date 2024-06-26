@@ -179,18 +179,23 @@ export function normalizeInput(
 }
 
 /**
- * Processes a JSONL file to extract prompts.
- * @param filePath - Path to the JSONL file.
- * @param prompt - The raw prompt data.
- * @returns Array of prompts extracted from the file.
+ * Processes a JavaScript file to import and execute a module function as a prompt.
+ * @param filePath - Path to the JavaScript file.
+ * @param functionName - Optional function name to execute.
+ * @returns Promise resolving to an array of prompts.
  */
-function processJsonlFile(filePath: string, prompt: RawPrompt): Prompt[] {
-  const fileContent = fs.readFileSync(filePath, 'utf-8');
-  const jsonLines = fileContent.split(/\r?\n/).filter((line) => line.length > 0);
-  return jsonLines.map((json) => ({
-    raw: json,
-    label: `${prompt.label ? `${prompt.label}: ` : ''}${filePath}: ${json}`,
-  }));
+async function processJsFile(
+  filePath: string,
+  functionName: string | undefined,
+): Promise<Prompt[]> {
+  const promptFunction = await importModule(filePath, functionName);
+  return [
+    {
+      raw: String(promptFunction),
+      label: functionName ? `${filePath}` : `${filePath}:${String(promptFunction)}`,
+      function: promptFunction,
+    },
+  ];
 }
 
 /**
@@ -214,45 +219,18 @@ function processJsonFile(filePath: string, prompt: RawPrompt): Prompt[] {
 }
 
 /**
- * Processes a YAML file to extract prompts.
- * This function reads a YAML file, parses it, and maps each entry to a `Prompt` object.
- * Each prompt is labeled with the file path and the YAML content.
- *
- * @param filePath - The path to the YAML file.
- * @param prompt - The raw prompt data, used for labeling.
- * @returns An array of `Prompt` objects extracted from the YAML file.
- * @throws Will throw an error if the file cannot be read or parsed.
- */
-function processYamlFile(filePath: string, prompt: RawPrompt): Prompt[] {
-  const fileContents = fs.readFileSync(filePath, 'utf8');
-  const yamlContent = yaml.load(fileContents, {
-    json: true,
-  });
-  return [
-    {
-      raw: JSON.stringify(yamlContent),
-      label: prompt.label ? `${prompt.label}: ${filePath}` : `${filePath}: ${fileContents}`,
-    },
-  ];
-}
-
-/**
- * Processes a text file to extract prompts, splitting by a delimiter.
- * @param filePath - Path to the text file.
+ * Processes a JSONL file to extract prompts.
+ * @param filePath - Path to the JSONL file.
  * @param prompt - The raw prompt data.
  * @returns Array of prompts extracted from the file.
  */
-function processTxtFile(filePath: string, prompt: RawPrompt): Prompt[] {
+function processJsonlFile(filePath: string, prompt: RawPrompt): Prompt[] {
   const fileContent = fs.readFileSync(filePath, 'utf-8');
-  return fileContent
-    .split(PROMPT_DELIMITER)
-    .map((p) => ({
-      raw: p.trim(),
-      label: prompt.label
-        ? `${prompt.label}: ${p.trim()}`
-        : `${prompt.raw}: ${p.trim()}`,
-    }))
-    .filter((p) => p.raw.length > 0); // handle leading/trailing delimiters and empty lines
+  const jsonLines = fileContent.split(/\r?\n/).filter((line) => line.length > 0);
+  return jsonLines.map((json) => ({
+    raw: json,
+    label: `${prompt.label ? `${prompt.label}: ` : ''}${filePath}: ${json}`,
+  }));
 }
 
 /**
@@ -330,21 +308,41 @@ function processPythonFile(
 }
 
 /**
- * Processes a JavaScript file to import and execute a module function as a prompt.
- * @param filePath - Path to the JavaScript file.
- * @param functionName - Optional function name to execute.
- * @returns Promise resolving to an array of prompts.
+ * Processes a text file to extract prompts, splitting by a delimiter.
+ * @param filePath - Path to the text file.
+ * @param prompt - The raw prompt data.
+ * @returns Array of prompts extracted from the file.
  */
-async function processJsFile(
-  filePath: string,
-  functionName: string | undefined,
-): Promise<Prompt[]> {
-  const promptFunction = await importModule(filePath, functionName);
+function processTxtFile(filePath: string, prompt: RawPrompt): Prompt[] {
+  const fileContent = fs.readFileSync(filePath, 'utf-8');
+  return fileContent
+    .split(PROMPT_DELIMITER)
+    .map((p) => ({
+      raw: p.trim(),
+      label: prompt.label ? `${prompt.label}: ${p.trim()}` : `${prompt.raw}: ${p.trim()}`,
+    }))
+    .filter((p) => p.raw.length > 0); // handle leading/trailing delimiters and empty lines
+}
+
+/**
+ * Processes a YAML file to extract prompts.
+ * This function reads a YAML file, parses it, and maps each entry to a `Prompt` object.
+ * Each prompt is labeled with the file path and the YAML content.
+ *
+ * @param filePath - The path to the YAML file.
+ * @param prompt - The raw prompt data, used for labeling.
+ * @returns An array of `Prompt` objects extracted from the YAML file.
+ * @throws Will throw an error if the file cannot be read or parsed.
+ */
+function processYamlFile(filePath: string, prompt: RawPrompt): Prompt[] {
+  const fileContents = fs.readFileSync(filePath, 'utf8');
+  const yamlContent = yaml.load(fileContents, {
+    json: true,
+  });
   return [
     {
-      raw: String(promptFunction),
-      label: functionName ? `${filePath}` : `${filePath}:${String(promptFunction)}`,
-      function: promptFunction,
+      raw: JSON.stringify(yamlContent),
+      label: prompt.label ? `${prompt.label}: ${filePath}` : `${filePath}: ${fileContents}`,
     },
   ];
 }
@@ -357,26 +355,29 @@ async function processJsFile(
  * @param promptPath - The path or glob pattern.
  * @returns Parsed details including function name, file extension, and directory status.
  */
-function parsePathOrGlob(basePath: string, promptPath: string): {
+function parsePathOrGlob(
+  basePath: string,
+  promptPath: string,
+): {
   extension: string;
   functionName?: string;
   isDirectory: boolean;
   promptPath: string;
 } {
-  promptPath = path.join(basePath, promptPath);
-  if (promptPath.includes('file:')) {
-    promptPath = promptPath.split('file:')[1];
+  let filePath = path.join(basePath, promptPath);
+  if (filePath.includes('file:')) {
+    filePath = filePath.split('file:')[1];
   }
 
   let stats;
   try {
-    stats = fs.statSync(promptPath);
+    stats = fs.statSync(filePath);
   } catch (err) {
     if (process.env.PROMPTFOO_STRICT_FILES) {
       throw err;
     }
   }
-  let filename = path.parse(promptPath).base;
+  let filename = path.parse(filePath).base;
   let functionName: string | undefined;
 
   if (filename.includes(':')) {
@@ -385,12 +386,12 @@ function parsePathOrGlob(basePath: string, promptPath: string): {
       [filename, functionName] = splits;
     }
   }
-  const parsedPath = path.parse(filename);
-  const extension = parsedPath.ext;
-
-  promptPath = path.join(basePath, filename);
-
-  return { promptPath, functionName, extension, isDirectory: stats?.isDirectory() ?? false };
+  return {
+    extension: path.parse(filename).ext,
+    functionName,
+    isDirectory: stats?.isDirectory() ?? false,
+    promptPath: path.join(basePath, filename),
+  };
 }
 
 /**
@@ -462,20 +463,21 @@ export async function processPrompt(
     }
     return prompts;
   }
-  if (extension === '.jsonl') {
-    return processJsonlFile(promptPath, prompt);
-  }
+
   if (extension === '.json') {
     return processJsonFile(promptPath, prompt);
   }
-  if (extension === '.txt') {
-    return processTxtFile(promptPath, prompt);
+  if (extension === '.jsonl') {
+    return processJsonlFile(promptPath, prompt);
+  }
+  if (['.js', '.cjs', '.mjs'].includes(extension)) {
+    return processJsFile(promptPath, functionName);
   }
   if (extension === '.py') {
     return processPythonFile(promptPath, prompt, functionName);
   }
-  if (['.js', '.cjs', '.mjs'].includes(extension)) {
-    return processJsFile(promptPath, functionName);
+  if (extension === '.txt') {
+    return processTxtFile(promptPath, prompt);
   }
   if (['.yml', '.yaml'].includes(extension)) {
     return processYamlFile(promptPath, prompt);
