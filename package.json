@@ -23,7 +23,7 @@
     "dist"
   ],
   "engines": {
-    "node": ">=18"
+    "node": ">=18.0.0"
   },
   "bin": {
     "promptfoo": "dist/src/main.js"
