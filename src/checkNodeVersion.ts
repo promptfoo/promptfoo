@@ -24,7 +24,7 @@ export const checkNodeVersion = (): void => {
   if (!versionMatch) {
     logger.warn(
       chalk.yellow(
-        `Unexpected Node.js version format: ${process.version}. Please upgrade to Node.js ${requiredVersion}.`,
+        `Unexpected Node.js version format: ${process.version}. Please use Node.js ${requiredVersion}.`,
       ),
     );
     return;
@@ -43,7 +43,7 @@ export const checkNodeVersion = (): void => {
   ) {
     logger.warn(
       chalk.yellow(
-        `You are using Node.js ${major}.${minor}.${patch}. This version is no longer supported. Please upgrade to Node.js ${requiredVersion}.`,
+        `You are using Node.js ${major}.${minor}.${patch}. This version is not supported. Please use Node.js ${requiredVersion}.`,
       ),
     );
     process.exit(1);

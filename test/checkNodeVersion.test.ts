@@ -53,7 +53,7 @@ describe('checkNodeVersion', () => {
     expect(checkNodeVersion()).toBeUndefined();
     expect(logger.warn).toHaveBeenCalledWith(
       chalk.yellow(
-        'You are using Node.js 16.10.0. This version is no longer supported. Please upgrade to Node.js >=18.0.0.',
+        'You are using Node.js 16.10.0. This version is not supported. Please use Node.js >=18.0.0.',
       ),
     );
   });
@@ -63,7 +63,7 @@ describe('checkNodeVersion', () => {
 
     expect(() => checkNodeVersion()).not.toThrow(); // To ensure the test does not fail due to process.exit
     expect(logger.warn).toHaveBeenCalledWith(
-      chalk.yellow('Unexpected Node.js version format: v16. Please upgrade to Node.js >=18.0.0.'),
+      chalk.yellow('Unexpected Node.js version format: v16. Please use Node.js >=18.0.0.'),
     );
   });
 
@@ -78,7 +78,7 @@ describe('checkNodeVersion', () => {
     expect(checkNodeVersion()).toBeUndefined();
     expect(logger.warn).toHaveBeenCalledWith(
       chalk.yellow(
-        'You are using Node.js 18.0.0. This version is no longer supported. Please upgrade to Node.js >=18.0.1.',
+        'You are using Node.js 18.0.0. This version is not supported. Please use Node.js >=18.0.1.',
       ),
     );
   });
