@@ -48,7 +48,7 @@ import { PortkeyChatCompletionProvider } from './providers/portkey';
 import { PythonProvider } from './providers/pythonCompletion';
 import { ReplicateModerationProvider, ReplicateProvider } from './providers/replicate';
 import { ScriptCompletionProvider } from './providers/scriptCompletion';
-import { VertexChatProvider } from './providers/vertex';
+import { VertexChatProvider, VertexEmbeddingProvider } from './providers/vertex';
 import { VoyageEmbeddingProvider } from './providers/voyage';
 import { WebhookProvider } from './providers/webhook';
 import type {
@@ -345,9 +345,17 @@ export async function loadApiProvider(
   } else if (providerPath.startsWith('palm:') || providerPath.startsWith('google:')) {
     const modelName = providerPath.split(':')[1];
     ret = new PalmChatProvider(modelName, providerOptions);
-  } else if (providerPath.startsWith('vertex')) {
-    const modelName = providerPath.split(':')[1];
-    ret = new VertexChatProvider(modelName, providerOptions);
+  } else if (providerPath.startsWith('vertex:')) {
+    const splits = providerPath.split(':');
+    const firstPart = splits[1];
+    if (firstPart === 'chat') {
+      ret = new VertexChatProvider(splits.slice(2).join(':'), providerOptions);
+    } else if (firstPart === 'embedding' || firstPart === 'embeddings') {
+      ret = new VertexEmbeddingProvider(splits.slice(2).join(':'), providerOptions);
+    } else {
+      // Default to chat provider
+      ret = new VertexChatProvider(splits.slice(1).join(':'), providerOptions);
+    }
   } else if (providerPath.startsWith('mistral:')) {
     const modelName = providerPath.split(':')[1];
     ret = new MistralChatCompletionProvider(modelName, providerOptions);
