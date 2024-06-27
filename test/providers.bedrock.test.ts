@@ -1,4 +1,101 @@
-import { addConfigParam, parseValue } from '../src/providers/bedrock';
+import { addConfigParam, AwsBedrockGenericProvider, parseValue } from '../src/providers/bedrock';
+
+jest.mock('@aws-sdk/client-bedrock-runtime', () => {
+  return {
+    BedrockRuntime: jest.fn().mockImplementation(() => {
+      return {
+        invokeModel: jest.fn(),
+      };
+    }),
+  };
+});
+
+jest.mock(
+  '@smithy/node-http-handler',
+  () => {
+    return {
+      NodeHttpHandler: jest.fn(),
+    };
+  },
+  { virtual: true },
+);
+
+jest.mock('proxy-agent', () => jest.fn());
+
+jest.mock('../src/cache', () => ({
+  getCache: jest.fn(),
+  isCacheEnabled: jest.fn(),
+}));
+
+jest.mock('../src/logger', () => ({
+  debug: jest.fn(),
+  warn: jest.fn(),
+  error: jest.fn(),
+}));
+
+describe('AwsBedrockGenericProvider', () => {
+  let BedrockRuntime;
+
+  beforeEach(() => {
+    jest.resetModules();
+    BedrockRuntime = require('@aws-sdk/client-bedrock-runtime').BedrockRuntime;
+    jest.clearAllMocks();
+  });
+
+  afterEach(() => {
+    delete process.env.HTTP_PROXY;
+    delete process.env.HTTPS_PROXY;
+  });
+
+  it('should create Bedrock instance with proxy settings when the proxy peer dependencies are not installed', async () => {
+    process.env.HTTP_PROXY = 'http://localhost:8080';
+    jest.doMock('@smithy/node-http-handler', () => {
+      return {
+        NodeHttpHandler: jest.fn(),
+      };
+    });
+    const provider = new (class extends AwsBedrockGenericProvider {
+      constructor() {
+        super('test-model', { config: { region: 'us-east-1' } });
+      }
+    })();
+    await expect(provider.getBedrockInstance()).rejects.toThrow(
+      'The @smithy/node-http-handler package is required as a peer dependency. Please install it in your project or globally.',
+    );
+  });
+
+  it('should create Bedrock instance without proxy settings', async () => {
+    const provider = new (class extends AwsBedrockGenericProvider {
+      constructor() {
+        super('test-model', { config: { region: 'us-east-1' } });
+      }
+    })();
+    await provider.getBedrockInstance();
+
+    expect(BedrockRuntime).toHaveBeenCalledWith({
+      region: 'us-east-1',
+    });
+  });
+
+  it('should throw an error if NodeHttpHandler dependency is missing for proxy', async () => {
+    process.env.HTTP_PROXY = 'http://localhost:8080';
+    process.env.HTTPS_PROXY = 'https://localhost:8080';
+
+    jest.doMock('@smithy/node-http-handler', () => {
+      throw new Error('Missing dependency');
+    });
+
+    const provider = new (class extends AwsBedrockGenericProvider {
+      constructor() {
+        super('test-model', { config: { region: 'us-east-1' } });
+      }
+    })();
+
+    await expect(provider.getBedrockInstance()).rejects.toThrow(
+      'The @smithy/node-http-handler package is required as a peer dependency. Please install it in your project or globally.',
+    );
+  });
+});
 
 describe('addConfigParam', () => {
   it('should add config value if provided', () => {
