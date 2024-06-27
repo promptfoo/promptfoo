@@ -354,6 +354,7 @@ function EvalOutputCell({
             provider={output.provider}
             gradingResults={output.gradingResult?.componentResults}
             output={text}
+            metadata={output.metadata}
           />
         </>
       )}

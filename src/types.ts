@@ -168,6 +168,7 @@ export interface ProviderResponse {
   cost?: number;
   cached?: boolean;
   logProbs?: number[];
+  metadata?: Record<string, any>;
 }
 
 export interface ProviderEmbeddingResponse {
@@ -323,6 +324,7 @@ export interface EvaluateResult {
   gradingResult?: GradingResult;
   namedScores: Record<string, number>;
   cost?: number;
+  metadata?: Record<string, any>;
 }
 
 export interface EvaluateTableOutput {
@@ -336,6 +338,7 @@ export interface EvaluateTableOutput {
   tokenUsage?: Partial<TokenUsage>;
   gradingResult?: GradingResult;
   cost: number;
+  metadata?: Record<string, any>;
 }
 
 export interface EvaluateTableRow {

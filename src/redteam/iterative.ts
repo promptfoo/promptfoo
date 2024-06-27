@@ -111,13 +111,18 @@ async function runRedteamConversation(
   let highestScore = 0;
   let bestResponse = '';
 
+  let targetPrompt: string | null = null;
   for (let i = 0; i < 4; i++) {
     const redteamBody = JSON.stringify(redteamHistory);
 
     // Get new prompt
     const redteamResp = await redteamProvider.callApi(redteamBody);
     invariant(typeof redteamResp.output === 'string', 'Expected output to be a string');
-    const { improvement, prompt: newPrompt } = JSON.parse(redteamResp.output);
+    const { improvement, prompt: newPrompt } = JSON.parse(redteamResp.output) as {
+      improvement: string;
+      prompt: string;
+    };
+    targetPrompt = newPrompt;
 
     // Is it on topic?
     const isOnTopicBody = JSON.stringify([
@@ -127,14 +132,14 @@ async function runRedteamConversation(
       },
       {
         role: 'user',
-        content: newPrompt,
+        content: targetPrompt,
       },
     ]);
     const isOnTopicResp = await redteamProvider.callApi(isOnTopicBody);
     invariant(typeof isOnTopicResp.output === 'string', 'Expected output to be a string');
     const isOnTopic = JSON.parse(isOnTopicResp.output).isOnTopic;
 
-    const targetResp = await targetProvider.callApi(newPrompt);
+    const targetResp = await targetProvider.callApi(targetPrompt);
     invariant(typeof targetResp.output === 'string', 'Expected output to be a string');
     const targetResponse = targetResp.output;
 
@@ -170,7 +175,12 @@ async function runRedteamConversation(
     });
   }
 
-  return { output: bestResponse };
+  return {
+    output: bestResponse,
+    metadata: {
+      redteamFinalPrompt: targetPrompt,
+    },
+  };
 }
 
 export default RedteamIterativeJailbreaks;
