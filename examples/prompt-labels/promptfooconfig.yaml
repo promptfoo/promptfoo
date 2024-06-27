@@ -1,0 +1,27 @@
+prompts:
+  - id: file://prompts1.txt
+    label: content_generation
+  - id: file://prompts2.txt
+    label: knowledge_base_query
+
+providers:
+  - id: openai:gpt-4o
+    label: 4o
+    prompts:
+      - content_generation
+  - id: openai:gpt-3.5-turbo
+    label: '3.5'
+    prompts:
+      - knowledge_base_query
+tests:
+  - vars:
+      topic: machine learning trends
+    assert:
+      - type: select-best
+        value: Choose the response that most effectively generates a comprehensive overview of current machine learning trends.
+
+  - vars:
+      topic: transformer models
+    assert:
+      - type: select-best
+        value: Choose the response that provides the most accurate and detailed information about transformer models from the knowledge base.
