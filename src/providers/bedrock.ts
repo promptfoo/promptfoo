@@ -327,7 +327,6 @@ const BEDROCK_MODEL = {
     },
     output: (responseJson: any) => responseJson?.generations[0]?.text,
   },
-
   COHERE_COMMAND_R: {
     params: (config: BedrockCohereCommandRGenerationOptions, prompt: string, stop: string[]) => {
       const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
@@ -448,9 +447,25 @@ export abstract class AwsBedrockGenericProvider {
 
   async getBedrockInstance() {
     if (!this.bedrock) {
+      let handler;
+      if (process.env.PROXY) {
+        try {
+          const { NodeHttpHandler } = await import('@smithy/node-http-handler');
+          const { ProxyAgent } = await import('proxy-agent');
+          handler = new NodeHttpHandler({ httpsAgent: new ProxyAgent() });
+        } catch (err) {
+          throw new Error(
+            `The @smithy/node-http-handler package is required as a peer dependency. Please install it in your project or globally.`,
+          );
+        }
+      }
       try {
         const { BedrockRuntime } = await import('@aws-sdk/client-bedrock-runtime');
-        this.bedrock = new BedrockRuntime({ region: this.getRegion() });
+        const bedrock = new BedrockRuntime({
+          region: this.getRegion(),
+          ...(handler ? { requestHandler: handler } : {}),
+        });
+        this.bedrock = bedrock;
       } catch (err) {
         throw new Error(
           'The @aws-sdk/client-bedrock-runtime package is required as a peer dependency. Please install it in your project or globally.',
