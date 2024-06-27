@@ -84,7 +84,7 @@ const App: React.FC = () => {
       <Grid container direction="column" spacing={1} pt={6} pb={8}>
         <Grid item className="report-header">
           <Typography variant="h4">
-            <strong>LLM Risk Report</strong>
+            <strong>LLM Risk Assessment</strong>
             {evalData.config.description && `: ${evalData.config.description}`}
           </Typography>
           <Typography variant="subtitle1" mb={2}>
