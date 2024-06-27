@@ -11,6 +11,7 @@ import invariant from 'tiny-invariant';
 import { readAssertions } from './assertions';
 import { validateAssertions } from './assertions/validateAssertions';
 import { disableCache, clearCache } from './cache';
+import { checkNodeVersion } from './checkNodeVersion';
 import cliState from './cliState';
 import { configCommand } from './commands/config';
 import { deleteCommand } from './commands/delete';
@@ -967,5 +968,6 @@ async function main() {
 }
 
 if (require.main === module) {
+  checkNodeVersion();
   main();
 }
