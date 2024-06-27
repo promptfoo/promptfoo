@@ -117,7 +117,7 @@ If you have only one text file, you can include multiple prompts in the file, se
 
 Example of a single prompt file with multiple prompts (`prompts.txt`):
 
-```text
+```
 Translate the following text to French: "{{name}}: {{text}}"
 ---
 Translate the following text to German: "{{name}}: {{text}}"

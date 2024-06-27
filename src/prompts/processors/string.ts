@@ -1,3 +1,4 @@
+import invariant from 'tiny-invariant';
 import { Prompt } from '../../types';
 
 /**
@@ -6,9 +7,13 @@ import { Prompt } from '../../types';
  * @returns Array of prompts created from the string.
  */
 export function processString(prompt: Partial<Prompt>): Prompt[] {
+  invariant(
+    typeof prompt.raw === 'string',
+    `prompt.raw must be a string, but got ${JSON.stringify(prompt.raw)}`,
+  );
   return [
     {
-      raw: prompt!.raw as string,
+      raw: prompt.raw,
       label: prompt.label ?? `${prompt.raw}`,
     },
   ];
