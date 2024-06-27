@@ -29,24 +29,23 @@ prompts:
 
 # And models...
 providers:
-  - openai:gpt-4-0125-preview
-  - anthropic:claude-3-opus
-  - mistral:mistral-large-latest
+  - openai:gpt-4o
+  - anthropic:claude-3.5-sonnet
 
 # ... using these tests
 tests:
   - vars:
       language: French
-      document: "To be or not to be, that is the question..."
+      document: "file://docs/*.txt"
     assert:
       - type: contains
-        value: "Être ou ne pas être"
+        value: "foo bar"
+      - type: llm-rubric
+        value: "does not apologize"
       - type: cost
         threshold: 0.01
       - type: latency
-        threshold: 1000
-      - type: llm-rubric
-        value: does not apologize
+        threshold: 3000
   - # ...
               `}
             </CodeBlock>
