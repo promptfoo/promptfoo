@@ -258,13 +258,13 @@ tests:
       language: French
       input: Hello world
     assert:
-      - $ref: '#assertionTemplates/startsUpperCase'
+      - $ref: '#/assertionTemplates/startsUpperCase'
   - vars:
       language: German
       input: How's it going?
     assert:
-      - $ref: '#assertionTemplates/noAIreference'
-      - $ref: '#assertionTemplates/startsUpperCase'
+      - $ref: '#/assertionTemplates/noAIreference'
+      - $ref: '#/assertionTemplates/startsUpperCase'
 
 // highlight-start
 assertionTemplates:

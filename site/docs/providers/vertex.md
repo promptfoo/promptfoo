@@ -31,11 +31,14 @@ You can use it by specifying any of the available stable or latest [model versio
 - `vertex:gemini-1.5-pro-latest`
 - `vertex:gemini-1.5-pro-preview-0409`
 - `vertex:gemini-1.5-pro-preview-0514`
+- `vertex:gemini-1.5-pro`
 - `vertex:gemini-1.5-pro-001`
 - `vertex:gemini-1.0-pro-vision-001`
 - `vertex:gemini-1.5-flash-preview-0514`
 - `vertex:gemini-1.5-flash-001`
 - `vertex:aqa`
+
+Embeddings models such as `vertex:embedding:text-embedding-004` are also supported.
 
 :::tip
 If you are using Google AI Studio, see the [`google` provider](/docs/providers/palm).
@@ -95,6 +98,20 @@ AI safety settings can be configured using the `safetySettings` key. For example
 ```
 
 See more details on Google's SafetySetting API [here](https://ai.google.dev/api/rest/v1/SafetySetting).
+
+## Overriding graders
+
+To use Vertex models for model grading (e.g. `llm-rubric` and `factuality` assertions), or to override the embeddings provider for the `similar` assertion, use `defaultTest` to override providers for all tests:
+
+```yaml
+defaultTest:
+  options:
+    provider:
+      # Use gemini-pro for model-graded evals (e.g. assertions such as llm-rubric)
+      text: vertex:chat:gemini-pro
+      # Use vertex embeddings for similarity
+      embedding: vertex:embedding:text-embedding-004
+```
 
 ## Other configuration options
 

@@ -1,9 +1,17 @@
 import Clone from 'rfdc';
-
-import logger from '../logger';
-import { parseChatPrompt } from './shared';
 import { getCache, isCacheEnabled } from '../cache';
+import logger from '../logger';
+import type {
+  ApiEmbeddingProvider,
+  ApiProvider,
+  CallApiContextParams,
+  EnvOverrides,
+  ProviderResponse,
+  ProviderEmbeddingResponse,
+  TokenUsage,
+} from '../types.js';
 import { getNunjucksEngine } from '../util';
+import { parseChatPrompt } from './shared';
 import {
   GeminiErrorResponse,
   Palm2ApiResponse,
@@ -12,14 +20,6 @@ import {
   type GeminiApiResponse,
   type GeminiResponseData,
 } from './vertexUtil';
-
-import type {
-  ApiProvider,
-  CallApiContextParams,
-  EnvOverrides,
-  ProviderResponse,
-  TokenUsage,
-} from '../types.js';
 
 interface VertexCompletionOptions {
   apiKey?: string;
@@ -165,34 +165,36 @@ export class VertexChatProvider extends VertexGenericProvider {
   // TODO(ian): Completion models
   // https://cloud.google.com/vertex-ai/generative-ai/docs/learn/model-versioning#gemini-model-versions
   static CHAT_MODELS = [
+    'aqa',
     'chat-bison',
-    'chat-bison@001',
-    'chat-bison@002',
     'chat-bison-32k',
     'chat-bison-32k@001',
     'chat-bison-32k@002',
+    'chat-bison@001',
+    'chat-bison@002',
     'codechat-bison',
-    'codechat-bison@001',
-    'codechat-bison@002',
     'codechat-bison-32k',
     'codechat-bison-32k@001',
     'codechat-bison-32k@002',
-    'gemini-pro',
-    'gemini-ultra',
-    'gemini-1.0-pro-vision',
-    'gemini-1.0-pro-vision-001',
+    'codechat-bison@001',
+    'codechat-bison@002',
     'gemini-1.0-pro',
     'gemini-1.0-pro-001',
     'gemini-1.0-pro-002',
-    'gemini-pro-vision',
+    'gemini-1.0-pro-vision',
+    'gemini-1.0-pro-vision-001',
+    'gemini-1.0-pro-vision-001',
+    'gemini-1.5-flash',
+    'gemini-1.5-flash-001',
+    'gemini-1.5-flash-preview-0514',
+    'gemini-1.5-pro',
+    'gemini-1.5-pro-001',
     'gemini-1.5-pro-latest',
     'gemini-1.5-pro-preview-0409',
     'gemini-1.5-pro-preview-0514',
-    'gemini-1.5-pro-001',
-    'gemini-1.0-pro-vision-001',
-    'gemini-1.5-flash-preview-0514',
-    'gemini-1.5-flash-001',
-    'aqa',
+    'gemini-pro',
+    'gemini-pro-vision',
+    'gemini-ultra',
   ];
 
   constructor(
@@ -285,8 +287,12 @@ export class VertexChatProvider extends VertexGenericProvider {
         data: body,
       });
       data = res.data as GeminiApiResponse;
+      logger.debug(`Gemini API response: ${JSON.stringify(data)}`);
     } catch (err) {
       const geminiError = err as any;
+      logger.debug(
+        `Gemini API error:\nString:\n${String(geminiError)}\nJSON:\n${JSON.stringify(geminiError)}]`,
+      );
       if (
         geminiError.response &&
         geminiError.response.data &&
@@ -302,7 +308,7 @@ export class VertexChatProvider extends VertexGenericProvider {
         };
       }
       return {
-        error: `API call error: ${JSON.stringify(err, null, 2)}`,
+        error: `API call error: ${String(err)}`,
       };
     }
 
@@ -440,3 +446,73 @@ export class VertexChatProvider extends VertexGenericProvider {
     }
   }
 }
+
+export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
+  modelName: string;
+  config: any;
+  env?: any;
+
+  constructor(modelName: string, config: any = {}, env?: any) {
+    this.modelName = modelName;
+    this.config = config;
+    this.env = env;
+  }
+
+  id() {
+    return `vertex:${this.modelName}`;
+  }
+
+  getRegion(): string {
+    return this.config.region || 'us-central1';
+  }
+
+  async callApi(): Promise<ProviderResponse> {
+    throw new Error('Vertex API does not provide text inference.');
+  }
+
+  async callEmbeddingApi(input: string): Promise<ProviderEmbeddingResponse> {
+    // See https://cloud.google.com/vertex-ai/generative-ai/docs/embeddings/get-text-embeddings#get_text_embeddings_for_a_snippet_of_text
+    const body = {
+      instances: [{ content: input }],
+      parameters: {
+        autoTruncate: this.config.autoTruncate || false,
+      },
+    };
+
+    let data: any;
+    try {
+      const { client, projectId } = await getGoogleClient();
+      const url = `https://${this.getRegion()}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${this.getRegion()}/publishers/google/models/${
+        this.modelName
+      }:predict`;
+      const res = await client.request<any>({
+        url,
+        method: 'POST',
+        data: body,
+      });
+      data = res.data;
+    } catch (err) {
+      logger.error(`Vertex API call error: ${err}`);
+      throw err;
+    }
+
+    logger.debug(`Vertex embeddings API response: ${JSON.stringify(data)}`);
+
+    try {
+      const embedding = data.predictions[0].embeddings.values;
+      const tokenCount = data.predictions[0].embeddings.statistics.token_count;
+      return {
+        embedding,
+        tokenUsage: {
+          total: tokenCount,
+        },
+      };
+    } catch (err) {
+      logger.error(`Error parsing Vertex embeddings API response: ${err}`);
+      throw err;
+    }
+  }
+}
+
+export const DefaultGradingProvider = new VertexChatProvider('gemini-1.5-pro');
+export const DefaultEmbeddingProvider = new VertexEmbeddingProvider('text-embedding-004');

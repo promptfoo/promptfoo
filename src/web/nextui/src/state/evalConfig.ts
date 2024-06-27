@@ -1,6 +1,3 @@
-import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
-
 import type {
   EnvOverrides,
   EvaluateOptions,
@@ -9,6 +6,8 @@ import type {
   TestCase,
   UnifiedConfig,
 } from '@/../../../types';
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
 export interface State {
   env: EnvOverrides;

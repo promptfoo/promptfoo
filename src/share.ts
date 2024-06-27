@@ -1,6 +1,5 @@
-import { fetchWithProxy } from './fetch';
 import { REMOTE_API_BASE_URL, REMOTE_APP_BASE_URL } from './constants';
-
+import { fetchWithProxy } from './fetch';
 import type { EvaluateSummary, SharedResults, UnifiedConfig } from './types';
 
 export async function createShareableUrl(

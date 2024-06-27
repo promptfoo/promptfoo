@@ -1,8 +1,7 @@
-import { VertexChatProvider } from '../src/providers/vertex';
-import { getCache, isCacheEnabled } from '../src/cache';
-import * as vertexUtil from '../src/providers/vertexUtil';
-
 import type { JSONClient } from 'google-auth-library/build/src/auth/googleauth';
+import { getCache, isCacheEnabled } from '../src/cache';
+import { VertexChatProvider } from '../src/providers/vertex';
+import * as vertexUtil from '../src/providers/vertexUtil';
 
 jest.mock('../src/cache', () => ({
   getCache: jest.fn().mockReturnValue({
@@ -104,7 +103,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
   });
 
   it('should handle API call errors', async () => {
-    const mockError = new Error('API call error');
+    const mockError = new Error('something went wrong');
     jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
       client: {
         request: jest.fn().mockRejectedValue(mockError),
@@ -115,7 +114,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
     const response = await provider.callGeminiApi('test prompt');
 
     expect(response).toEqual({
-      error: `API call error: ${JSON.stringify(mockError)}`,
+      error: `API call error: Error: something went wrong`,
     });
   });
 

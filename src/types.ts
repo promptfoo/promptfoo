@@ -1,5 +1,5 @@
-import type logger from './logger';
 import type { fetchWithCache, getCache } from './cache';
+import type logger from './logger';
 
 export type FilePath = string;
 
@@ -168,6 +168,7 @@ export interface ProviderResponse {
   cost?: number;
   cached?: boolean;
   logProbs?: number[];
+  metadata?: Record<string, any>;
 }
 
 export interface ProviderEmbeddingResponse {
@@ -323,6 +324,7 @@ export interface EvaluateResult {
   gradingResult?: GradingResult;
   namedScores: Record<string, number>;
   cost?: number;
+  metadata?: Record<string, any>;
 }
 
 export interface EvaluateTableOutput {
@@ -336,6 +338,7 @@ export interface EvaluateTableOutput {
   tokenUsage?: Partial<TokenUsage>;
   gradingResult?: GradingResult;
   cost: number;
+  metadata?: Record<string, any>;
 }
 
 export interface EvaluateTableRow {
@@ -665,6 +668,9 @@ export interface TestSuiteConfig {
 
   // Envar overrides
   env?: EnvOverrides;
+
+  // Metrics to calculate after the eval has been completed
+  derivedMetrics?: DerivedMetric[];
 
   // Any other information about this configuration.
   metadata?: Record<string, any>;

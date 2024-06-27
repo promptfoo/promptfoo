@@ -1,26 +1,6 @@
 import * as fs from 'fs';
-import * as path from 'path';
-
 import { globSync } from 'glob';
-
-import yaml from 'js-yaml';
-
-import {
-  dereferenceConfig,
-  maybeRecordFirstRun,
-  providerToIdentifier,
-  readConfigs,
-  readFilters,
-  readGlobalConfig,
-  readOutput,
-  resetGlobalConfig,
-  resultIsForTestCase,
-  transformOutput,
-  varsMatch,
-  writeMultipleOutputs,
-  writeOutput,
-} from '../src/util';
-
+import * as path from 'path';
 import type {
   ApiProvider,
   EvaluateResult,
@@ -28,6 +8,19 @@ import type {
   TestCase,
   UnifiedConfig,
 } from '../src/types';
+import {
+  dereferenceConfig,
+  providerToIdentifier,
+  readConfigs,
+  readFilters,
+  readOutput,
+  resultIsForTestCase,
+  transformOutput,
+  varsMatch,
+  writeMultipleOutputs,
+  writeOutput,
+  extractJsonObjects,
+} from '../src/util';
 
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
@@ -366,64 +359,6 @@ describe('util', () => {
       await expect(readOutput('output.yml')).rejects.toThrow(
         'Unsupported output file format: yml currently only supports json',
       );
-    });
-  });
-
-  describe('readCliConfig', () => {
-    afterEach(() => {
-      jest.clearAllMocks();
-      resetGlobalConfig();
-    });
-
-    it('reads from existing config', () => {
-      const config = { hasRun: false };
-      jest.mocked(fs.existsSync).mockReturnValue(true);
-      jest.mocked(fs.readFileSync).mockReturnValue(yaml.dump(config));
-
-      const result = readGlobalConfig();
-
-      expect(fs.existsSync).toHaveBeenCalledTimes(1);
-      expect(fs.readFileSync).toHaveBeenCalledTimes(1);
-      expect(result).toEqual(config);
-    });
-
-    it('creates new config if none exists', () => {
-      jest.mocked(fs.existsSync).mockReturnValue(false);
-      jest.mocked(fs.writeFileSync).mockImplementation();
-
-      const result = readGlobalConfig();
-
-      expect(fs.existsSync).toHaveBeenCalledTimes(2);
-      expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
-      expect(result).toEqual({ hasRun: false });
-    });
-  });
-
-  describe('maybeRecordFirstRun', () => {
-    afterEach(() => {
-      resetGlobalConfig();
-      jest.clearAllMocks();
-    });
-
-    it('returns true if it is the first run', () => {
-      jest.mocked(fs.existsSync).mockReturnValue(false);
-      jest.mocked(fs.writeFileSync).mockImplementation();
-
-      const result = maybeRecordFirstRun();
-
-      expect(fs.writeFileSync).toHaveBeenCalledTimes(2);
-      expect(result).toBe(true);
-    });
-
-    it('returns false if it is not the first run', () => {
-      const config = { hasRun: true };
-      jest.mocked(fs.existsSync).mockReturnValue(true);
-      jest.mocked(fs.readFileSync).mockReturnValue(yaml.dump(config));
-
-      const result = maybeRecordFirstRun();
-
-      expect(fs.readFileSync).toHaveBeenCalledTimes(1);
-      expect(result).toBe(false);
     });
   });
 
@@ -925,5 +860,37 @@ describe('util', () => {
 
       expect(resultIsForTestCase(result, nonMatchTestCase)).toBe(false);
     });
+  });
+});
+
+describe('extractJsonObjects', () => {
+  it('should extract a single JSON object from a string', () => {
+    const input = '{"key": "value"}';
+    const expectedOutput = [{ key: 'value' }];
+    expect(extractJsonObjects(input)).toEqual(expectedOutput);
+  });
+
+  it('should extract multiple JSON objects from a string', () => {
+    const input = 'yolo {"key1": "value1"} some text {"key2": "value2"} fomo';
+    const expectedOutput = [{ key1: 'value1' }, { key2: 'value2' }];
+    expect(extractJsonObjects(input)).toEqual(expectedOutput);
+  });
+
+  it('should return an empty array if no JSON objects are found', () => {
+    const input = 'no json here';
+    const expectedOutput = [];
+    expect(extractJsonObjects(input)).toEqual(expectedOutput);
+  });
+
+  it('should handle nested JSON objects', () => {
+    const input = 'wassup {"outer": {"inner": "value"}, "foo": [1,2,3,4]}';
+    const expectedOutput = [{ outer: { inner: 'value' }, foo: [1, 2, 3, 4] }];
+    expect(extractJsonObjects(input)).toEqual(expectedOutput);
+  });
+
+  it('should handle invalid JSON gracefully', () => {
+    const input = '{"key": "value" some text {"key2": "value2"}';
+    const expectedOutput = [{ key2: 'value2' }];
+    expect(extractJsonObjects(input)).toEqual(expectedOutput);
   });
 });

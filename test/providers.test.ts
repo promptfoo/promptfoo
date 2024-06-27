@@ -1,31 +1,17 @@
-import * as fs from 'fs';
-import * as path from 'path';
-import fetch from 'node-fetch';
 import child_process from 'child_process';
+import * as fs from 'fs';
+import fetch from 'node-fetch';
+import * as path from 'path';
 import Stream from 'stream';
-import { AwsBedrockCompletionProvider } from '../src/providers/bedrock';
-import {
-  OpenAiAssistantProvider,
-  OpenAiCompletionProvider,
-  OpenAiChatCompletionProvider,
-} from '../src/providers/openai';
-import { AnthropicCompletionProvider } from '../src/providers/anthropic';
-import { LlamaProvider } from '../src/providers/llama';
-
 import { clearCache, disableCache, enableCache } from '../src/cache';
+import { importModule } from '../src/esm';
 import { loadApiProvider, loadApiProviders } from '../src/providers';
+import { AnthropicCompletionProvider } from '../src/providers/anthropic';
 import {
   AzureOpenAiChatCompletionProvider,
   AzureOpenAiCompletionProvider,
 } from '../src/providers/azureopenai';
-import { OllamaChatProvider, OllamaCompletionProvider } from '../src/providers/ollama';
-import { WebhookProvider } from '../src/providers/webhook';
-import {
-  HuggingfaceTextGenerationProvider,
-  HuggingfaceFeatureExtractionProvider,
-  HuggingfaceTextClassificationProvider,
-} from '../src/providers/huggingface';
-import { ScriptCompletionProvider } from '../src/providers/scriptCompletion';
+import { AwsBedrockCompletionProvider } from '../src/providers/bedrock';
 import {
   CloudflareAiChatCompletionProvider,
   CloudflareAiCompletionProvider,
@@ -35,9 +21,22 @@ import {
   type ICloudflareEmbeddingResponse,
   type ICloudflareProviderConfig,
 } from '../src/providers/cloudflare-ai';
+import {
+  HuggingfaceTextGenerationProvider,
+  HuggingfaceFeatureExtractionProvider,
+  HuggingfaceTextClassificationProvider,
+} from '../src/providers/huggingface';
+import { LlamaProvider } from '../src/providers/llama';
+import { OllamaChatProvider, OllamaCompletionProvider } from '../src/providers/ollama';
+import {
+  OpenAiAssistantProvider,
+  OpenAiCompletionProvider,
+  OpenAiChatCompletionProvider,
+} from '../src/providers/openai';
+import { ScriptCompletionProvider } from '../src/providers/scriptCompletion';
+import { VertexChatProvider, VertexEmbeddingProvider } from '../src/providers/vertex';
 import { VoyageEmbeddingProvider } from '../src/providers/voyage';
-import { importModule } from '../src/esm';
-
+import { WebhookProvider } from '../src/providers/webhook';
 import type { ProviderOptionsMap, ProviderFunction } from '../src/types';
 
 jest.mock('fs', () => ({
@@ -872,6 +871,30 @@ config:
     expect(provider.id()).toBe('voyage:voyage-2');
   });
 
+  it('loadApiProvider with vertex:chat', async () => {
+    const provider = await loadApiProvider('vertex:chat:vertex-chat-model');
+    expect(provider).toBeInstanceOf(VertexChatProvider);
+    expect(provider.id()).toBe('vertex:vertex-chat-model');
+  });
+
+  it('loadApiProvider with vertex:embedding', async () => {
+    const provider = await loadApiProvider('vertex:embedding:vertex-embedding-model');
+    expect(provider).toBeInstanceOf(VertexEmbeddingProvider);
+    expect(provider.id()).toBe('vertex:vertex-embedding-model');
+  });
+
+  it('loadApiProvider with vertex:embeddings', async () => {
+    const provider = await loadApiProvider('vertex:embeddings:vertex-embedding-model');
+    expect(provider).toBeInstanceOf(VertexEmbeddingProvider);
+    expect(provider.id()).toBe('vertex:vertex-embedding-model');
+  });
+
+  it('loadApiProvider with vertex:modelname', async () => {
+    const provider = await loadApiProvider('vertex:vertex-chat-model');
+    expect(provider).toBeInstanceOf(VertexChatProvider);
+    expect(provider.id()).toBe('vertex:vertex-chat-model');
+  });
+
   it('loadApiProvider with cloudflare-ai', async () => {
     const supportedModelTypes = [
       { modelType: 'chat', providerKlass: CloudflareAiChatCompletionProvider },
@@ -883,12 +906,12 @@ config:
     const modelName = 'mistralai/mistral-medium';
 
     // Without any model type should throw an error
-    await expect(() => loadApiProvider(`cloudflare-ai:${modelName}`)).rejects.toThrow(
+    await expect(loadApiProvider(`cloudflare-ai:${modelName}`)).rejects.toThrow(
       /Unknown Cloudflare AI model type/,
     );
 
     for (const unsupportedModelType of unsupportedModelTypes) {
-      await expect(() =>
+      await expect(
         loadApiProvider(`cloudflare-ai:${unsupportedModelType}:${modelName}`),
       ).rejects.toThrow(/Unknown Cloudflare AI model type/);
     }

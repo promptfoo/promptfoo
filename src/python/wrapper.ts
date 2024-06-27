@@ -1,9 +1,7 @@
+import { promises as fs } from 'fs';
 import os from 'os';
 import path from 'path';
-import { promises as fs } from 'fs';
-
 import { PythonShell, Options as PythonShellOptions } from 'python-shell';
-
 import logger from '../logger';
 import { safeJsonStringify } from '../util';
 

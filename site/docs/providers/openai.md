@@ -128,11 +128,11 @@ interface OpenAiConfig {
 
 You can include images in the prompt by using content blocks.
 
-See [OpenAI vision example](https://github.com/typpo/promptfoo/tree/main/examples/openai-vision).
+See [OpenAI vision example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-vision).
 
 ## Using tools and functions
 
-OpenAI tools and functions are supported. See [OpenAI tools example](https://github.com/typpo/promptfoo/tree/main/examples/openai-tools-call) and [OpenAI functions example](https://github.com/typpo/promptfoo/tree/main/examples/openai-function-call).
+OpenAI tools and functions are supported. See [OpenAI tools example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-tools-call) and [OpenAI functions example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-function-call).
 
 ### Using tools
 
@@ -186,7 +186,7 @@ tests:
 # ...
 ```
 
-Sometimes OpenAI function calls don't match `tools` schemas. Use [`is-valid-openai-tools-call`](/docs/configuration/expected-outputs/#is-valid-openai-function-call) or [`is-valid-openai-tools-call`](/docs/configuration/expected-outputs/#is-valid-openai-tools-call) assertions to enforce an exact schema match between tools and the function definition.
+Sometimes OpenAI function calls don't match `tools` schemas. Use [`is-valid-openai-tools-call`](/docs/configuration/expected-outputs/deterministic/#is-valid-openai-function-call) or [`is-valid-openai-tools-call`](/docs/configuration/expected-outputs/deterministic/#is-valid-openai-tools-call) assertions to enforce an exact schema match between tools and the function definition.
 
 To further test `tools` definitions, you can use the `javascript` assertion and/or `transform` directives. For example:
 
@@ -294,7 +294,7 @@ tests:
   # ...
 ```
 
-Sometimes OpenAI function calls don't match `functions` schemas. Use [`is-valid-openai-function-call`](/docs/configuration/expected-outputs/#is-valid-openai-function-call) assertions to enforce an exact schema match between function calls and the function definition.
+Sometimes OpenAI function calls don't match `functions` schemas. Use [`is-valid-openai-function-call`](/docs/configuration/expected-outputs/deterministic#is-valid-openai-function-call) assertions to enforce an exact schema match between function calls and the function definition.
 
 To further test function call definitions, you can use the `javascript` assertion and/or `transform` directives. For example:
 

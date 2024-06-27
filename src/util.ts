@@ -1,22 +1,17 @@
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
-import { createHash } from 'crypto';
-
-import dotenv from 'dotenv';
 import $RefParser from '@apidevtools/json-schema-ref-parser';
-import invariant from 'tiny-invariant';
-import nunjucks from 'nunjucks';
-import yaml from 'js-yaml';
-import deepEqual from 'fast-deep-equal';
+import { createHash } from 'crypto';
 import { stringify } from 'csv-stringify/sync';
-import { globSync } from 'glob';
+import dotenv from 'dotenv';
 import { desc, eq } from 'drizzle-orm';
-
+import deepEqual from 'fast-deep-equal';
+import * as fs from 'fs';
+import { globSync } from 'glob';
+import yaml from 'js-yaml';
+import nunjucks from 'nunjucks';
+import * as os from 'os';
+import * as path from 'path';
+import invariant from 'tiny-invariant';
 import cliState from './cliState';
-import logger from './logger';
-import { getDirectory, importModule } from './esm';
-import { readTests } from './testCases';
 import {
   datasets,
   getDb,
@@ -26,9 +21,12 @@ import {
   prompts,
   getDbSignalPath,
 } from './database';
+import { getDirectory, importModule } from './esm';
+import { writeCsvToGoogleSheet } from './googleSheets';
+import logger from './logger';
 import { runDbMigrations } from './migrate';
 import { runPython } from './python/wrapper';
-
+import { readTests } from './testCases';
 import {
   type EvalWithMetadata,
   type EvaluateResult,
@@ -50,52 +48,8 @@ import {
   isApiProvider,
   isProviderOptions,
 } from './types';
-import { writeCsvToGoogleSheet } from './googleSheets';
 
 const DEFAULT_QUERY_LIMIT = 100;
-
-let globalConfigCache: any = null;
-
-export function resetGlobalConfig(): void {
-  globalConfigCache = null;
-}
-
-export function readGlobalConfig(): any {
-  if (!globalConfigCache) {
-    const configDir = getConfigDirectoryPath();
-    const configFilePath = path.join(configDir, 'promptfoo.yaml');
-
-    if (fs.existsSync(configFilePath)) {
-      globalConfigCache = yaml.load(fs.readFileSync(configFilePath, 'utf-8'));
-    } else {
-      if (!fs.existsSync(configDir)) {
-        fs.mkdirSync(configDir, { recursive: true });
-      }
-      globalConfigCache = { hasRun: false };
-      fs.writeFileSync(configFilePath, yaml.dump(globalConfigCache));
-    }
-  }
-
-  return globalConfigCache;
-}
-
-export function maybeRecordFirstRun(): boolean {
-  // Return true if first run
-  try {
-    const config = readGlobalConfig();
-    if (!config.hasRun) {
-      config.hasRun = true;
-      fs.writeFileSync(
-        path.join(getConfigDirectoryPath(true /* createIfNotExists */), 'promptfoo.yaml'),
-        yaml.dump(config),
-      );
-      return true;
-    }
-    return false;
-  } catch (err) {
-    return false;
-  }
-}
 
 export async function maybeReadConfig(configPath: string): Promise<UnifiedConfig | undefined> {
   if (!fs.existsSync(configPath)) {
@@ -1370,4 +1324,34 @@ export function renderVarsInObject<T>(obj: T, vars?: Record<string, string | obj
     return renderVarsInObject(fn({ vars }) as T);
   }
   return obj;
+}
+
+export function extractJsonObjects(str: string): object[] {
+  // This will extract all json objects from a string
+
+  const jsonObjects = [];
+  let openBracket = str.indexOf('{');
+  let closeBracket = str.indexOf('}', openBracket);
+  // Iterate over the string until we find a valid JSON-like pattern
+  // Iterate over all trailing } until the contents parse as json
+  while (openBracket !== -1) {
+    const jsonStr = str.slice(openBracket, closeBracket + 1);
+    try {
+      jsonObjects.push(JSON.parse(jsonStr));
+      // This is a valid JSON object, so start looking for
+      // an opening bracket after the last closing bracket
+      openBracket = str.indexOf('{', closeBracket + 1);
+      closeBracket = str.indexOf('}', openBracket);
+    } catch (err) {
+      // Not a valid object, move on to the next closing bracket
+      closeBracket = str.indexOf('}', closeBracket + 1);
+      while (closeBracket === -1) {
+        // No closing brackets made a valid json object, so
+        // start looking with the next opening bracket
+        openBracket = str.indexOf('{', openBracket + 1);
+        closeBracket = str.indexOf('}', openBracket);
+      }
+    }
+  }
+  return jsonObjects;
 }

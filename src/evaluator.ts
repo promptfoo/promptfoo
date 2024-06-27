@@ -1,25 +1,21 @@
-import readline from 'readline';
-import * as fs from 'fs';
-import * as path from 'path';
-
 import async from 'async';
 import chalk from 'chalk';
-import invariant from 'tiny-invariant';
-import yaml from 'js-yaml';
+import type { MultiBar, SingleBar } from 'cli-progress';
+import * as fs from 'fs';
 import { globSync } from 'glob';
-
-import cliState from './cliState';
-import logger from './logger';
-import telemetry from './telemetry';
+import yaml from 'js-yaml';
+import * as path from 'path';
+import readline from 'readline';
+import invariant from 'tiny-invariant';
 import { runAssertions, runCompareAssertion } from './assertions';
-import { generatePrompts } from './suggestions';
-import { getNunjucksEngine, transformOutput, sha256, renderVarsInObject } from './util';
+import { fetchWithCache, getCache } from './cache';
+import cliState from './cliState';
+import { importModule } from './esm';
+import logger from './logger';
 import { maybeEmitAzureOpenAiWarning } from './providers/azureopenaiUtil';
 import { runPython } from './python/wrapper';
-import { importModule } from './esm';
-import { fetchWithCache, getCache } from './cache';
-
-import type { MultiBar, SingleBar } from 'cli-progress';
+import { generatePrompts } from './suggestions';
+import telemetry from './telemetry';
 import type {
   ApiProvider,
   CompletedPrompt,
@@ -35,7 +31,34 @@ import type {
   ProviderResponse,
   Assertion,
 } from './types';
+import { getNunjucksEngine, transformOutput, sha256, renderVarsInObject } from './util';
+
 export const DEFAULT_MAX_CONCURRENCY = 4;
+
+/**
+ * Validates if a given prompt is allowed based on the provided list of allowed
+ * prompt labels. Providers can be configured with a `prompts` attribute, which
+ * corresponds to an array of prompt labels. Labels can either refer to a group
+ * (for example from a file) or to individual prompts. If the attribute is
+ * present, this function validates that the prompt labels fit the matching
+ * criteria of the provider. Examples:
+ *
+ * - `prompts: ['examplePrompt']` matches `examplePrompt` exactly
+ * - `prompts: ['exampleGroup:*']` matches any prompt that starts with `exampleGroup:`
+ *
+ * If no `prompts` attribute is present, all prompts are allowed by default.
+ *
+ * @param prompt - The prompt object to check.
+ * @param allowedPrompts - The list of allowed prompt labels.
+ * @returns Returns true if the prompt is allowed, false otherwise.
+ */
+export function isAllowedPrompt(prompt: Prompt, allowedPrompts: string[] | undefined): boolean {
+  return (
+    !Array.isArray(allowedPrompts) ||
+    allowedPrompts.includes(prompt.label) ||
+    allowedPrompts.some((allowedPrompt) => prompt.label.startsWith(`${allowedPrompt}:`))
+  );
+}
 
 export function generateVarCombinations(
   vars: Record<string, string | string[] | any>,
@@ -374,6 +397,7 @@ class Evaluator {
         namedScores: {},
         latencyMs,
         cost: response.cost,
+        metadata: response.metadata,
       };
       if (response.error) {
         ret.error = response.error;
@@ -502,11 +526,8 @@ class Evaluator {
     for (const prompt of testSuite.prompts) {
       for (const provider of testSuite.providers) {
         // Check if providerPromptMap exists and if it contains the current prompt's label
-        if (testSuite.providerPromptMap) {
-          const allowedPrompts = testSuite.providerPromptMap[provider.id()];
-          if (allowedPrompts && !allowedPrompts.includes(prompt.label)) {
-            continue;
-          }
+        if (!isAllowedPrompt(prompt, testSuite.providerPromptMap?.[provider.id()])) {
+          continue;
         }
         const completedPrompt = {
           ...prompt,
@@ -631,12 +652,8 @@ class Evaluator {
           let colIndex = 0;
           for (const prompt of testSuite.prompts) {
             for (const provider of testSuite.providers) {
-              if (testSuite.providerPromptMap) {
-                const allowedPrompts = testSuite.providerPromptMap[provider.id()];
-                if (allowedPrompts && !allowedPrompts.includes(prompt.label)) {
-                  // This prompt should not be used with this provider.
-                  continue;
-                }
+              if (!isAllowedPrompt(prompt, testSuite.providerPromptMap?.[provider.id()])) {
+                continue;
               }
               runEvalOptions.push({
                 delay: options.delay || 0,
@@ -710,17 +727,17 @@ class Evaluator {
       const outputTextDisplay =
         typeof row.response?.output === 'object'
           ? JSON.stringify(row.response.output)
-          : row.response?.output || null;
+          : row.response?.output || row.error || '';
       if (isTest) {
         if (row.success) {
           resultText = `${outputTextDisplay || row.error || ''}`;
         } else {
-          resultText = `${row.error}\n---\n${outputTextDisplay || ''}`;
+          resultText = `${row.error}\n---\n${outputTextDisplay}`;
         }
       } else if (row.error) {
         resultText = `${row.error}`;
       } else {
-        resultText = outputTextDisplay || row.error || '';
+        resultText = outputTextDisplay;
       }
 
       const { rowIndex, colIndex } = evalStep;
@@ -751,6 +768,7 @@ class Evaluator {
         tokenUsage: row.response?.tokenUsage,
         gradingResult: row.gradingResult,
         cost: row.cost || 0,
+        metadata: row.metadata,
       };
 
       const metrics = table.head.prompts[colIndex].metrics;

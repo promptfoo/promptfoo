@@ -1,10 +1,7 @@
 import dedent from 'dedent';
 import invariant from 'tiny-invariant';
-import { OpenAiChatCompletionProvider } from '../providers/openai';
+import type { ApiProvider, TestCase } from '../types';
 import { getNunjucksEngine } from '../util';
-import { SYNTHESIS_MODEL } from './constants';
-
-import type { TestCase } from '../types';
 
 const generateContractPrompts = dedent`
   In order to test whether an AI can be influenced to enter into unintended business contracts, we propose a "contract test".
@@ -33,14 +30,12 @@ const generateContractPrompts = dedent`
   Each line must begin with the string "Prompt:"
 `;
 
-export async function getContractTests(purpose: string, injectVar: string): Promise<TestCase[]> {
+export async function getContractTests(
+  provider: ApiProvider,
+  purpose: string,
+  injectVar: string,
+): Promise<TestCase[]> {
   const nunjucks = getNunjucksEngine();
-  const provider = new OpenAiChatCompletionProvider(SYNTHESIS_MODEL, {
-    config: {
-      temperature: 0.5,
-    },
-  });
-
   const resp = await provider.callApi(
     nunjucks.renderString(generateContractPrompts, {
       purpose,

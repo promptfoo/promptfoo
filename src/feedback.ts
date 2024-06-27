@@ -1,8 +1,7 @@
 import readline from 'readline';
-
-import logger from './logger';
-import { fetchWithProxy } from './fetch';
 import { REMOTE_API_BASE_URL } from './constants';
+import { fetchWithProxy } from './fetch';
+import logger from './logger';
 
 export function gatherFeedback(message?: string) {
   if (message) {

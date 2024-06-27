@@ -1,4 +1,84 @@
-import { addConfigParam } from '../src/providers/bedrock';
+import { addConfigParam, AwsBedrockGenericProvider, parseValue } from '../src/providers/bedrock';
+
+jest.mock('@aws-sdk/client-bedrock-runtime', () => {
+  return {
+    BedrockRuntime: jest.fn().mockImplementation(() => {
+      return {
+        invokeModel: jest.fn(),
+      };
+    }),
+  };
+});
+
+jest.mock(
+  '@smithy/node-http-handler',
+  () => {
+    return {
+      NodeHttpHandler: jest.fn(),
+    };
+  },
+  { virtual: true },
+);
+
+jest.mock('proxy-agent', () => jest.fn());
+
+jest.mock('../src/cache', () => ({
+  getCache: jest.fn(),
+  isCacheEnabled: jest.fn(),
+}));
+
+jest.mock('../src/logger', () => ({
+  debug: jest.fn(),
+  warn: jest.fn(),
+  error: jest.fn(),
+}));
+
+describe('AwsBedrockGenericProvider', () => {
+  let BedrockRuntime;
+
+  beforeEach(() => {
+    jest.resetModules();
+    BedrockRuntime = require('@aws-sdk/client-bedrock-runtime').BedrockRuntime;
+    jest.clearAllMocks();
+  });
+
+  afterEach(() => {
+    delete process.env.HTTP_PROXY;
+    delete process.env.HTTPS_PROXY;
+  });
+
+  it('should create Bedrock instance without proxy settings', async () => {
+    const provider = new (class extends AwsBedrockGenericProvider {
+      constructor() {
+        super('test-model', { config: { region: 'us-east-1' } });
+      }
+    })();
+    await provider.getBedrockInstance();
+
+    expect(BedrockRuntime).toHaveBeenCalledWith({
+      region: 'us-east-1',
+    });
+  });
+
+  it('should throw an error if NodeHttpHandler dependency is missing for proxy', async () => {
+    process.env.HTTP_PROXY = 'http://localhost:8080';
+    process.env.HTTPS_PROXY = 'https://localhost:8080';
+
+    jest.doMock('@smithy/node-http-handler', () => {
+      throw new Error('Missing dependency');
+    });
+
+    const provider = new (class extends AwsBedrockGenericProvider {
+      constructor() {
+        super('test-model', { config: { region: 'us-east-1' } });
+      }
+    })();
+
+    await expect(provider.getBedrockInstance()).rejects.toThrow(
+      'The @smithy/node-http-handler package is required as a peer dependency. Please install it in your project or globally.',
+    );
+  });
+});
 
 describe('addConfigParam', () => {
   it('should add config value if provided', () => {
@@ -43,5 +123,81 @@ describe('addConfigParam', () => {
     addConfigParam(params, 'key', undefined, process.env.TEST_ENV_KEY, 0);
     expect(params.key).toBe(42);
     delete process.env.TEST_ENV_KEY;
+  });
+
+  it('should handle undefined config, env, and default values gracefully', () => {
+    const params: any = {};
+    addConfigParam(params, 'key', undefined, undefined, undefined);
+    expect(params.key).toBeUndefined();
+  });
+
+  it('should correctly parse non-number string values', () => {
+    const params: any = {};
+    process.env.TEST_ENV_KEY = 'nonNumberString';
+    addConfigParam(params, 'key', undefined, process.env.TEST_ENV_KEY, 0);
+    expect(params.key).toBe(0);
+    delete process.env.TEST_ENV_KEY;
+  });
+
+  it('should correctly parse empty string values', () => {
+    const params: any = {};
+    process.env.TEST_ENV_KEY = '';
+    addConfigParam(params, 'key', undefined, process.env.TEST_ENV_KEY, 'defaultValue');
+    expect(params.key).toBe('');
+    delete process.env.TEST_ENV_KEY;
+  });
+
+  it('should handle env value not set', () => {
+    const params: any = {};
+    addConfigParam(params, 'key', undefined, process.env.UNSET_ENV_KEY, 'defaultValue');
+    expect(params.key).toBe('defaultValue');
+  });
+
+  it('should handle config values that are objects', () => {
+    const params: any = {};
+    const configValue = { nestedKey: 'nestedValue' };
+    addConfigParam(params, 'key', configValue);
+    expect(params.key).toEqual(configValue);
+  });
+
+  it('should handle config values that are arrays', () => {
+    const params: any = {};
+    const configValue = ['value1', 'value2'];
+    addConfigParam(params, 'key', configValue);
+    expect(params.key).toEqual(configValue);
+  });
+
+  it('should handle special characters in env values', () => {
+    const params: any = {};
+    process.env.TEST_ENV_KEY = '!@#$%^&*()_+';
+    addConfigParam(params, 'key', undefined, process.env.TEST_ENV_KEY, 'defaultValue');
+    expect(params.key).toBe('!@#$%^&*()_+');
+    delete process.env.TEST_ENV_KEY;
+  });
+});
+
+describe('parseValue', () => {
+  it('should return the original value if defaultValue is not a number', () => {
+    expect(parseValue('stringValue', 'defaultValue')).toBe('stringValue');
+  });
+
+  it('should return parsed float value if defaultValue is a number', () => {
+    expect(parseValue('42.5', 0)).toBe(42.5);
+  });
+
+  it('should return NaN for non-numeric strings if defaultValue is a number', () => {
+    expect(parseValue('notANumber', 0)).toBe(0);
+  });
+
+  it('should return 0 for an empty string if defaultValue is a number', () => {
+    expect(parseValue('', 0)).toBe(0);
+  });
+
+  it('should return null for a null value if defaultValue is not a number', () => {
+    expect(parseValue(null as never, 'defaultValue')).toBeNull();
+  });
+
+  it('should return undefined for an undefined value if defaultValue is not a number', () => {
+    expect(parseValue(undefined as never, 'defaultValue')).toBeUndefined();
   });
 });
