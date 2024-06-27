@@ -13,11 +13,6 @@ import {
   DefaultModerationProvider as OpenAiModerationProvider,
 } from './openai';
 import {
-  DefaultGradingProvider as AnthropicGradingProvider,
-  DefaultGradingJsonProvider as AnthropicGradingJsonProvider,
-  DefaultSuggestionsProvider as AnthropicSuggestionsProvider,
-} from './anthropic';
-import {
   DefaultGradingProvider as GeminiGradingProvider,
   DefaultEmbeddingProvider as GeminiEmbeddingProvider,
 } from './vertex';

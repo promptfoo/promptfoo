@@ -37,7 +37,6 @@ import { ScriptCompletionProvider } from '../src/providers/scriptCompletion';
 import { VertexChatProvider, VertexEmbeddingProvider } from '../src/providers/vertex';
 import { VoyageEmbeddingProvider } from '../src/providers/voyage';
 import { WebhookProvider } from '../src/providers/webhook';
-
 import type { ProviderOptionsMap, ProviderFunction } from '../src/types';
 
 jest.mock('fs', () => ({
@@ -871,7 +870,7 @@ config:
     expect(provider).toBeInstanceOf(VoyageEmbeddingProvider);
     expect(provider.id()).toBe('voyage:voyage-2');
   });
-  
+
   it('loadApiProvider with vertex:chat', async () => {
     const provider = await loadApiProvider('vertex:chat:vertex-chat-model');
     expect(provider).toBeInstanceOf(VertexChatProvider);
@@ -889,7 +888,7 @@ config:
     expect(provider).toBeInstanceOf(VertexEmbeddingProvider);
     expect(provider.id()).toBe('vertex:vertex-embedding-model');
   });
-  
+
   it('loadApiProvider with vertex:modelname', async () => {
     const provider = await loadApiProvider('vertex:vertex-chat-model');
     expect(provider).toBeInstanceOf(VertexChatProvider);
