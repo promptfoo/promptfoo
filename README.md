@@ -169,7 +169,7 @@ If you're looking to customize your usage, you have a wide set of parameters at 
 
 | Option                              | Description                                                                                                                                                                            |
 | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `-p, --prompts <paths...>`          | Paths to [prompt files](https://www.promptfoo.dev/docs/configuration/parameters#prompt-files), directory, or glob                                                                      |
+| `-p, --prompts <paths...>`          | Paths to [prompt files](https://www.promptfoo.dev/docs/configuration/parameters#prompts), directory, or glob                                                                      |
 | `-r, --providers <name or path...>` | One of: openai:chat, openai:completion, openai:model-name, localai:chat:model-name, localai:completion:model-name. See [API providers][providers-docs]                                 |
 | `-o, --output <path>`               | Path to [output file](https://www.promptfoo.dev/docs/configuration/parameters#output-file) (csv, json, yaml, html)                                                                     |
 | `--tests <path>`                    | Path to [external test file](https://www.promptfoo.dev/docs/configurationexpected-outputsassertions#load-an-external-tests-file)                                                       |

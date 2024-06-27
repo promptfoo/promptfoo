@@ -56,7 +56,7 @@ The Replicate provider supports several [configuration options](https://github.c
 | `stop_sequences`     | Specifies stopping sequences that halt the generation.        |
 | `seed`               | Sets a seed for reproducible results.                         |
 
-:::warn
+:::warning
 Not every model supports every completion parameter. Be sure to review the API provided by the model beforehand.
 :::
 
