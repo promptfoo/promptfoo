@@ -1162,7 +1162,7 @@ export function getNunjucksEngine(filters?: NunjucksFilterMap) {
 }
 
 export function printBorder() {
-  const border = '='.repeat(TERMINAL_MAX_WIDTH - 10);
+  const border = '='.repeat(TERMINAL_MAX_WIDTH);
   logger.info(border);
 }
 
