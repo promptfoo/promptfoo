@@ -66,7 +66,7 @@ export class HttpProvider implements ApiProvider {
     }
     logger.debug(`\tHTTP response: ${JSON.stringify(response.data)}`);
 
-    return this.responseParser(response.data);
+    return { output: this.responseParser(response.data) };
   }
 }
 
