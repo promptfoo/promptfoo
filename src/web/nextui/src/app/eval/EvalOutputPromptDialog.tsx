@@ -25,6 +25,7 @@ interface EvalOutputPromptDialogProps {
   provider?: string;
   output?: string;
   gradingResults?: GradingResult[];
+  metadata?: Record<string, any>;
 }
 
 function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[] }) {
@@ -75,6 +76,7 @@ export default function EvalOutputPromptDialog({
   provider,
   output,
   gradingResults,
+  metadata,
 }: EvalOutputPromptDialogProps) {
   const [copied, setCopied] = useState(false);
 
@@ -108,6 +110,19 @@ export default function EvalOutputPromptDialog({
             {copied ? <CheckIcon /> : <ContentCopyIcon />}
           </IconButton>
         </Box>
+        {metadata?.redteamFinalPrompt && (
+          <Box my={2}>
+            <Typography variant="subtitle1" style={{ marginBottom: '1rem', marginTop: '1rem' }}>
+              Modified Prompt (Red Team)
+            </Typography>
+            <TextareaAutosize
+              readOnly
+              maxRows={20}
+              value={metadata.redteamFinalPrompt}
+              style={{ width: '100%', padding: '0.75rem' }}
+            />
+          </Box>
+        )}
         {output && (
           <Box my={2}>
             <Typography variant="subtitle1" style={{ marginBottom: '1rem', marginTop: '1rem' }}>

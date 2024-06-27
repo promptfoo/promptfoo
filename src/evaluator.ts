@@ -372,6 +372,7 @@ class Evaluator {
         namedScores: {},
         latencyMs,
         cost: response.cost,
+        metadata: response.metadata,
       };
       if (response.error) {
         ret.error = response.error;
@@ -749,6 +750,7 @@ class Evaluator {
         tokenUsage: row.response?.tokenUsage,
         gradingResult: row.gradingResult,
         cost: row.cost || 0,
+        metadata: row.metadata,
       };
 
       const metrics = table.head.prompts[colIndex].metrics;
