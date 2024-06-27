@@ -34,6 +34,7 @@ import {
   OpenAiChatCompletionProvider,
 } from '../src/providers/openai';
 import { ScriptCompletionProvider } from '../src/providers/scriptCompletion';
+import { VertexChatProvider, VertexEmbeddingProvider } from '../src/providers/vertex';
 import { VoyageEmbeddingProvider } from '../src/providers/voyage';
 import { WebhookProvider } from '../src/providers/webhook';
 import type { ProviderOptionsMap, ProviderFunction } from '../src/types';
@@ -868,6 +869,30 @@ config:
     const provider = await loadApiProvider('voyage:voyage-2');
     expect(provider).toBeInstanceOf(VoyageEmbeddingProvider);
     expect(provider.id()).toBe('voyage:voyage-2');
+  });
+
+  it('loadApiProvider with vertex:chat', async () => {
+    const provider = await loadApiProvider('vertex:chat:vertex-chat-model');
+    expect(provider).toBeInstanceOf(VertexChatProvider);
+    expect(provider.id()).toBe('vertex:vertex-chat-model');
+  });
+
+  it('loadApiProvider with vertex:embedding', async () => {
+    const provider = await loadApiProvider('vertex:embedding:vertex-embedding-model');
+    expect(provider).toBeInstanceOf(VertexEmbeddingProvider);
+    expect(provider.id()).toBe('vertex:vertex-embedding-model');
+  });
+
+  it('loadApiProvider with vertex:embeddings', async () => {
+    const provider = await loadApiProvider('vertex:embeddings:vertex-embedding-model');
+    expect(provider).toBeInstanceOf(VertexEmbeddingProvider);
+    expect(provider.id()).toBe('vertex:vertex-embedding-model');
+  });
+
+  it('loadApiProvider with vertex:modelname', async () => {
+    const provider = await loadApiProvider('vertex:vertex-chat-model');
+    expect(provider).toBeInstanceOf(VertexChatProvider);
+    expect(provider.id()).toBe('vertex:vertex-chat-model');
   });
 
   it('loadApiProvider with cloudflare-ai', async () => {
