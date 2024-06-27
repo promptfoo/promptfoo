@@ -1,4 +1,4 @@
-import { addConfigParam } from '../src/providers/bedrock';
+import { addConfigParam, parseValue } from '../src/providers/bedrock';
 
 describe('addConfigParam', () => {
   it('should add config value if provided', () => {
@@ -43,5 +43,81 @@ describe('addConfigParam', () => {
     addConfigParam(params, 'key', undefined, process.env.TEST_ENV_KEY, 0);
     expect(params.key).toBe(42);
     delete process.env.TEST_ENV_KEY;
+  });
+
+  it('should handle undefined config, env, and default values gracefully', () => {
+    const params: any = {};
+    addConfigParam(params, 'key', undefined, undefined, undefined);
+    expect(params.key).toBeUndefined();
+  });
+
+  it('should correctly parse non-number string values', () => {
+    const params: any = {};
+    process.env.TEST_ENV_KEY = 'nonNumberString';
+    addConfigParam(params, 'key', undefined, process.env.TEST_ENV_KEY, 0);
+    expect(params.key).toBe(0);
+    delete process.env.TEST_ENV_KEY;
+  });
+
+  it('should correctly parse empty string values', () => {
+    const params: any = {};
+    process.env.TEST_ENV_KEY = '';
+    addConfigParam(params, 'key', undefined, process.env.TEST_ENV_KEY, 'defaultValue');
+    expect(params.key).toBe('');
+    delete process.env.TEST_ENV_KEY;
+  });
+
+  it('should handle env value not set', () => {
+    const params: any = {};
+    addConfigParam(params, 'key', undefined, process.env.UNSET_ENV_KEY, 'defaultValue');
+    expect(params.key).toBe('defaultValue');
+  });
+
+  it('should handle config values that are objects', () => {
+    const params: any = {};
+    const configValue = { nestedKey: 'nestedValue' };
+    addConfigParam(params, 'key', configValue);
+    expect(params.key).toEqual(configValue);
+  });
+
+  it('should handle config values that are arrays', () => {
+    const params: any = {};
+    const configValue = ['value1', 'value2'];
+    addConfigParam(params, 'key', configValue);
+    expect(params.key).toEqual(configValue);
+  });
+
+  it('should handle special characters in env values', () => {
+    const params: any = {};
+    process.env.TEST_ENV_KEY = '!@#$%^&*()_+';
+    addConfigParam(params, 'key', undefined, process.env.TEST_ENV_KEY, 'defaultValue');
+    expect(params.key).toBe('!@#$%^&*()_+');
+    delete process.env.TEST_ENV_KEY;
+  });
+});
+
+describe('parseValue', () => {
+  it('should return the original value if defaultValue is not a number', () => {
+    expect(parseValue('stringValue', 'defaultValue')).toBe('stringValue');
+  });
+
+  it('should return parsed float value if defaultValue is a number', () => {
+    expect(parseValue('42.5', 0)).toBe(42.5);
+  });
+
+  it('should return NaN for non-numeric strings if defaultValue is a number', () => {
+    expect(parseValue('notANumber', 0)).toBe(0);
+  });
+
+  it('should return 0 for an empty string if defaultValue is a number', () => {
+    expect(parseValue('', 0)).toBe(0);
+  });
+
+  it('should return null for a null value if defaultValue is not a number', () => {
+    expect(parseValue(null as never, 'defaultValue')).toBeNull();
+  });
+
+  it('should return undefined for an undefined value if defaultValue is not a number', () => {
+    expect(parseValue(undefined as never, 'defaultValue')).toBeUndefined();
   });
 });

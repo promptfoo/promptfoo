@@ -178,9 +178,9 @@ export function addConfigParam(
   }
 }
 
-function parseValue(value: string, defaultValue: any) {
+export function parseValue(value: string, defaultValue: any) {
   if (typeof defaultValue === 'number') {
-    return parseFloat(value);
+    return Number.isNaN(parseFloat(value)) ? defaultValue : parseFloat(value);
   }
   return value;
 }
