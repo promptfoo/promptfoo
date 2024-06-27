@@ -11,3 +11,7 @@ export const REMOTE_APP_BASE_URL =
   process.env.NEXT_PUBLIC_PROMPTFOO_BASE_URL ||
   process.env.PROMPTFOO_REMOTE_APP_BASE_URL ||
   `https://app.promptfoo.dev`;
+
+// Maximum width for terminal outputs.
+export const TERMINAL_MAX_WIDTH =
+  process.stdout.columns && process.stdout.columns > 10 ? process.stdout.columns - 10 : 120;

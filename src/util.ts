@@ -12,6 +12,7 @@ import * as os from 'os';
 import * as path from 'path';
 import invariant from 'tiny-invariant';
 import cliState from './cliState';
+import { TERMINAL_MAX_WIDTH } from './constants';
 import {
   datasets,
   getDb,
@@ -1161,7 +1162,7 @@ export function getNunjucksEngine(filters?: NunjucksFilterMap) {
 }
 
 export function printBorder() {
-  const border = '='.repeat((process.stdout.columns || 80) - 10);
+  const border = '='.repeat(TERMINAL_MAX_WIDTH - 10);
   logger.info(border);
 }
 
