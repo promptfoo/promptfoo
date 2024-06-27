@@ -448,7 +448,8 @@ export abstract class AwsBedrockGenericProvider {
   async getBedrockInstance() {
     if (!this.bedrock) {
       let handler;
-      if (process.env.PROXY) {
+      // set from https://www.npmjs.com/package/proxy-agent
+      if (process.env.HTTP_PROXY || process.env.HTTPS_PROXY) {
         try {
           const { NodeHttpHandler } = await import('@smithy/node-http-handler');
           const { ProxyAgent } = await import('proxy-agent');
