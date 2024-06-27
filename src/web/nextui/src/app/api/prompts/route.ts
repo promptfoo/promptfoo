@@ -1,7 +1,6 @@
-import { NextResponse } from 'next/server';
-
-import { IS_RUNNING_LOCALLY, USE_SUPABASE } from '@/constants';
 import { getPrompts } from '@/../../../util';
+import { IS_RUNNING_LOCALLY, USE_SUPABASE } from '@/constants';
+import { NextResponse } from 'next/server';
 
 export const dynamic = IS_RUNNING_LOCALLY ? 'auto' : 'force-dynamic';
 

@@ -1,5 +1,6 @@
-import * as path from 'path';
 import { pathToFileURL } from 'node:url';
+import * as path from 'path';
+
 // esm-specific crap that needs to get mocked out in tests
 
 //import path from 'path';

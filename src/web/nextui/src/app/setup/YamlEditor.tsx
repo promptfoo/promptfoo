@@ -1,21 +1,18 @@
 import React from 'react';
 import Editor from 'react-simple-code-editor';
+import { useStore } from '@/state/evalConfig';
+import EditIcon from '@mui/icons-material/Edit';
+import SaveIcon from '@mui/icons-material/Save';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Typography from '@mui/material/Typography';
+import yaml from 'js-yaml';
+import Link from 'next/link';
 // @ts-ignore: No types available
 import { highlight, languages } from 'prismjs/components/prism-core';
 import 'prismjs/components/prism-yaml';
-import 'prismjs/themes/prism.css';
-import yaml from 'js-yaml';
-
-import EditIcon from '@mui/icons-material/Edit';
-import SaveIcon from '@mui/icons-material/Save';
-import Typography from '@mui/material/Typography';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Link from 'next/link';
-
-import { useStore } from '@/state/evalConfig';
-
 import './YamlEditor.css';
+import 'prismjs/themes/prism.css';
 
 const YamlEditorComponent: React.FC = () => {
   const {

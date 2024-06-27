@@ -1,16 +1,14 @@
 import * as React from 'react';
-
-import yaml from 'js-yaml';
 import DownloadIcon from '@mui/icons-material/Download';
+import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
 import DialogContent from '@mui/material/DialogContent';
-import Stack from '@mui/material/Stack';
-import Button from '@mui/material/Button';
-import MenuItem from '@mui/material/MenuItem';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
+import MenuItem from '@mui/material/MenuItem';
+import Stack from '@mui/material/Stack';
 import { stringify as csvStringify } from 'csv-stringify/sync';
-
+import yaml from 'js-yaml';
 import { useStore as useResultsViewStore } from './store';
 
 function DownloadMenu() {

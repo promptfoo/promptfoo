@@ -1,10 +1,9 @@
 import chalk from 'chalk';
 import { Command } from 'commander';
-
-import { getEvals, getPrompts, getTestCases, printBorder, setupEnv, sha256 } from '../util';
-import { wrapTable } from '../table';
 import logger from '../logger';
+import { wrapTable } from '../table';
 import telemetry from '../telemetry';
+import { getEvals, getPrompts, getTestCases, printBorder, setupEnv, sha256 } from '../util';
 
 export function listCommand(program: Command) {
   const listCommand = program.command('list').description('List various resources');

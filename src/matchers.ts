@@ -1,7 +1,5 @@
 import invariant from 'tiny-invariant';
 import logger from './logger';
-import { getNunjucksEngine } from './util';
-import { loadApiProvider } from './providers';
 import {
   ANSWER_RELEVANCY_GENERATE,
   SELECT_BEST_PROMPT,
@@ -15,7 +13,8 @@ import {
   OPENAI_CLOSED_QA_PROMPT,
   OPENAI_FACTUALITY_PROMPT,
 } from './prompts';
-
+import { loadApiProvider } from './providers';
+import { getDefaultProviders } from './providers/defaults';
 import type {
   ApiClassificationProvider,
   ApiEmbeddingProvider,
@@ -29,7 +28,7 @@ import type {
   ProviderType,
   ApiModerationProvider,
 } from './types';
-import { getDefaultProviders } from './providers/defaults';
+import { extractJsonObjects, getNunjucksEngine } from './util';
 
 const nunjucks = getNunjucksEngine();
 
@@ -339,10 +338,11 @@ export async function matchesLlmRubric(
 
   invariant(typeof resp.output === 'string', 'llm-rubric produced malformed response');
   try {
-    const firstOpeningBrace = resp.output.indexOf('{');
-    const firstClosingBrace = resp.output.indexOf('}');
-    const jsonStr = resp.output.substring(firstOpeningBrace, firstClosingBrace + 1);
-    const parsed = JSON.parse(jsonStr) as Partial<GradingResult>;
+    const jsonObjects = extractJsonObjects(resp.output);
+    if (jsonObjects.length === 0) {
+      return fail('Could not extract JSON from llm-rubric response', resp.tokenUsage);
+    }
+    const parsed = jsonObjects[0] as Partial<GradingResult>;
     const pass = parsed.pass ?? (typeof parsed.score === 'undefined' ? true : parsed.score > 0);
     return {
       pass,
@@ -355,7 +355,10 @@ export async function matchesLlmRubric(
       },
     };
   } catch (err) {
-    return fail(`llm-rubric produced malformed response: ${resp.output}`, resp.tokenUsage);
+    return fail(
+      `llm-rubric produced malformed response: ${err}\n\n${resp.output}`,
+      resp.tokenUsage,
+    );
   }
 }
 

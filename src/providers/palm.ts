@@ -1,8 +1,7 @@
-import logger from '../logger';
 import { fetchWithCache } from '../cache';
-import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
-
+import logger from '../logger';
 import type { ApiProvider, EnvOverrides, ProviderResponse } from '../types.js';
+import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 
 const DEFAULT_API_HOST = 'generativelanguage.googleapis.com';
 

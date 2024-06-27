@@ -1,4 +1,10 @@
 import logger from '../logger';
+import type { EnvOverrides } from '../types';
+import {
+  DefaultGradingProvider as AnthropicGradingProvider,
+  DefaultGradingJsonProvider as AnthropicGradingJsonProvider,
+  DefaultSuggestionsProvider as AnthropicSuggestionsProvider,
+} from './anthropic';
 import {
   DefaultEmbeddingProvider as OpenAiEmbeddingProvider,
   DefaultGradingJsonProvider as OpenAiGradingJsonProvider,
@@ -16,8 +22,6 @@ import {
   DefaultEmbeddingProvider as GeminiEmbeddingProvider,
 } from './vertex';
 import { hasGoogleDefaultCredentials } from './vertexUtil';
-
-import type { EnvOverrides } from '../types';
 
 export async function getDefaultProviders(env?: EnvOverrides) {
   const preferAnthropic =

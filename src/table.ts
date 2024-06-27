@@ -1,5 +1,5 @@
-import Table from 'cli-table3';
 import chalk from 'chalk';
+import Table from 'cli-table3';
 import type { EvaluateSummary } from './types';
 
 function ellipsize(str: string, maxLen: number) {

@@ -1,11 +1,10 @@
 import React from 'react';
-import clsx from 'clsx';
 import Link from '@docusaurus/Link';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
-import Layout from '@theme/Layout';
 import HomepageFeatures from '@site/src/components/HomepageFeatures';
 import HomepageInfo from '@site/src/components/HomepageInfo';
-
+import Layout from '@theme/Layout';
+import clsx from 'clsx';
 import styles from './index.module.css';
 
 function HomepageHeader() {

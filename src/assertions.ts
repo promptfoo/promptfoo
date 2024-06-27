@@ -1,21 +1,20 @@
-import fs from 'fs';
-import path from 'path';
-import util from 'node:util';
-
-import async from 'async';
-import rouge from 'rouge';
-import invariant from 'tiny-invariant';
-import yaml from 'js-yaml';
 import Ajv, { ValidateFunction } from 'ajv';
 import addFormats from 'ajv-formats';
-import Clone from 'rfdc';
+import async from 'async';
 import { distance as levenshtein } from 'fastest-levenshtein';
-
+import fs from 'fs';
+import yaml from 'js-yaml';
+import { type Option as sqlParserOption } from 'node-sql-parser';
+import util from 'node:util';
+import path from 'path';
+import Clone from 'rfdc';
+import rouge from 'rouge';
+import invariant from 'tiny-invariant';
+import { AssertionsResult } from './assertions/AssertionsResult';
 import cliState from './cliState';
-import telemetry from './telemetry';
-import logger from './logger';
+import { importModule } from './esm';
 import { fetchWithRetries } from './fetch';
-import { transformOutput, getNunjucksEngine } from './util';
+import logger from './logger';
 import {
   matchesSimilarity,
   matchesLlmRubric,
@@ -29,11 +28,11 @@ import {
   matchesSelectBest,
   matchesModeration,
 } from './matchers';
-import { validateFunctionCall } from './providers/openaiUtil';
 import { OpenAiChatCompletionProvider } from './providers/openai';
+import { validateFunctionCall } from './providers/openaiUtil';
+import { parseChatPrompt } from './providers/shared';
 import { runPython, runPythonCode } from './python/wrapper';
-import { importModule } from './esm';
-
+import telemetry from './telemetry';
 import {
   type ApiProvider,
   type Assertion,
@@ -44,9 +43,7 @@ import {
   isGradingResult,
   AssertionValue,
 } from './types';
-import { AssertionsResult } from './assertions/AssertionsResult';
-import { parseChatPrompt } from './providers/shared';
-import { type Option as sqlParserOption } from 'node-sql-parser';
+import { transformOutput, getNunjucksEngine, extractJsonObjects } from './util';
 
 const ASSERTIONS_MAX_CONCURRENCY = process.env.PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY
   ? parseInt(process.env.PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY, 10)
@@ -553,10 +550,10 @@ export async function runAssertion({
   }
   if (baseType === 'contains-json') {
     let errorMessage = 'Expected output to contain valid JSON';
-    const jsonOutputs = containsJSON(outputString);
-    for (const jsonMatch of jsonOutputs) {
-      pass = jsonMatch !== inverse;
-      if (pass && renderedValue) {
+    const jsonObjects = extractJsonObjects(outputString);
+    pass = inverse ? jsonObjects.length === 0 : jsonObjects.length > 0;
+    for (const jsonObject of jsonObjects) {
+      if (renderedValue) {
         let validate: ValidateFunction;
         if (typeof renderedValue === 'string') {
           if (renderedValue.startsWith('file://')) {
@@ -574,7 +571,7 @@ export async function runAssertion({
         } else {
           throw new Error('contains-json assertion must have a string or object value');
         }
-        pass = validate(jsonMatch);
+        pass = validate(jsonObject);
         if (pass) {
           break;
         } else {
@@ -1279,36 +1276,6 @@ ${
   }
 
   throw new Error('Unknown assertion type: ' + assertion.type);
-}
-
-function containsJSON(str: string): any {
-  // This will extract all json objects from a string
-
-  const jsonObjects = [];
-  let openBracket = str.indexOf('{');
-  let closeBracket = str.indexOf('}', openBracket);
-  // Iterate over the string until we find a valid JSON-like pattern
-  // Iterate over all trailing } until the contents parse as json
-  while (openBracket !== -1) {
-    const jsonStr = str.slice(openBracket, closeBracket + 1);
-    try {
-      jsonObjects.push(JSON.parse(jsonStr));
-      // This is a valid JSON object, so start looking for
-      // an opening bracket after the last closing bracket
-      openBracket = str.indexOf('{', closeBracket + 1);
-      closeBracket = str.indexOf('}', openBracket);
-    } catch (err) {
-      // Not a valid object, move on to the next closing bracket
-      closeBracket = str.indexOf('}', closeBracket + 1);
-      while (closeBracket === -1) {
-        // No closing brackets made a valid json object, so
-        // start looking with the next opening bracket
-        openBracket = str.indexOf('{', openBracket + 1);
-        closeBracket = str.indexOf('}', openBracket);
-      }
-    }
-  }
-  return jsonObjects;
 }
 
 export async function isSql(

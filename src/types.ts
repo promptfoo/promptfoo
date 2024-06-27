@@ -1,5 +1,5 @@
-import type logger from './logger';
 import type { fetchWithCache, getCache } from './cache';
+import type logger from './logger';
 
 export type FilePath = string;
 
