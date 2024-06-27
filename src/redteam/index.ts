@@ -145,18 +145,18 @@ export async function synthesize({
       injectVar: string,
     ) => Promise<TestCase[]>;
   } = {
-    competitors: getCompetitorTests,
-    contracts: getContractTests,
-    'excessive-agency': getOverconfidenceTests,
-    hallucination: getHallucinationTests,
-    hijacking: getHijackingTests,
     jailbreak: (provider, purpose, injectVar) =>
       addIterativeJailbreaks(provider, adversarialPrompts, purpose, injectVar),
-    overreliance: getUnderconfidenceTests,
-    pii: getPiiTests,
-    politics: getPoliticalStatementsTests,
     'prompt-injection': (provider, purpose, injectVar) =>
       addInjections(provider, adversarialPrompts, purpose, injectVar),
+    pii: getPiiTests,
+    'excessive-agency': getOverconfidenceTests,
+    hijacking: getHijackingTests,
+    hallucination: getHallucinationTests,
+    overreliance: getUnderconfidenceTests,
+    competitors: getCompetitorTests,
+    contracts: getContractTests,
+    politics: getPoliticalStatementsTests,
   };
 
   for (const plugin of plugins) {

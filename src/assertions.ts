@@ -1395,6 +1395,8 @@ export async function readAssertions(filePath: string): Promise<Assertion[]> {
 
 // These exports are used by the node.js package (index.ts)
 export default {
+  runAssertion,
+  runAssertions,
   matchesSimilarity,
   matchesClassification,
   matchesLlmRubric,
