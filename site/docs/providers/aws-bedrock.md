@@ -1,6 +1,6 @@
 # Bedrock
 
-The `bedrock` lets you use Amazon Bedrock in your evals. This is a common way to access Anthropic's Claude and other models.
+The `bedrock` lets you use Amazon Bedrock in your evals. This is a common way to access Anthropic's Claude and other models. The complete list of available models can be found [here](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns).
 
 ## Setup
 
