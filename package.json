@@ -49,7 +49,7 @@
     "prepublishOnly": "npm run build:clean && npm run build"
   },
   "peerDependencies": {
-    "@aws-sdk/client-bedrock-runtime": "^3.458.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.602.0",
     "@azure/identity": "^4.0.0",
     "@azure/openai-assistants": "^1.0.0-beta.5",
     "@ibm-generative-ai/node-sdk": "^2.0.6",
