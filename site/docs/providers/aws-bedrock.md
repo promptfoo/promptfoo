@@ -26,6 +26,8 @@ providers:
   - bedrock:anthropic.claude-3-haiku-20240307-v1:0
 ```
 
+Note that provider is `bedrock:` followed by the [ARN/model id](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns) of the model.
+
 Additional config parameters are passed like so:
 
 ```yaml
