@@ -185,6 +185,65 @@ export function parseValue(value: string, defaultValue: any) {
   return value;
 }
 
+const getLlamaModelHandler = (ver: number) => {
+  return {
+    params: (config: BedrockLlamaGenerationOptions, prompt: string) => {
+      const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
+      let finalPrompt: string;
+      if (messages.length > 0 && messages[0].role === 'system') {
+        const userMessages = messages
+          .slice(1)
+          .map((m) => `${m.content}`)
+          .join('\n');
+
+        if (ver == 3) {
+          finalPrompt = dedent`<|begin_of_text|><|start_header_id|>system<|end_header_id|>
+
+          ${messages[0].content}<|eot_id|><|start_header_id|>user<|end_header_id|>
+
+          ${userMessages}<|eot_id|><|start_header_id|>assistant<|end_header_id|>`;
+        } else {
+          finalPrompt = dedent`
+          <s>[INST] <<SYS>>
+          ${messages[0].content}
+          <</SYS>>
+
+          ${userMessages} [/INST]
+        `;
+        }
+      } else {
+        const userMessages = messages.map((m) => `${m.content}`).join('\n');
+        if (ver == 3) {
+          finalPrompt = dedent`<|begin_of_text|><|start_header_id|>user<|end_header_id|>
+
+          ${userMessages}<|eot_id|><|start_header_id|>assistant<|end_header_id|>`;
+        } else {
+          finalPrompt = `<s>[INST] ${userMessages} [/INST]`;
+        }
+      }
+
+      const params: { prompt: string; temperature?: number; top_p?: number; max_gen_len?: number } =
+        { prompt: finalPrompt };
+      addConfigParam(
+        params,
+        'temperature',
+        config?.temperature,
+        process.env.AWS_BEDROCK_TEMPERATURE,
+        0.01,
+      );
+      addConfigParam(params, 'top_p', config?.top_p, process.env.AWS_BEDROCK_TOP_P, 1);
+      addConfigParam(
+        params,
+        'max_gen_len',
+        config?.max_gen_len,
+        process.env.AWS_BEDROCK_MAX_GEN_LEN,
+        1024,
+      );
+      return params;
+    },
+    output: (responseJson: any) => responseJson?.generation,
+  };
+};
 const BEDROCK_MODEL = {
   CLAUDE_COMPLETION: {
     params: (config: BedrockClaudeLegacyCompletionOptions, prompt: string, stop: string[]) => {
@@ -269,47 +328,8 @@ const BEDROCK_MODEL = {
     },
     output: (responseJson: any) => responseJson?.results[0]?.outputText,
   },
-  LLAMA: {
-    params: (config: BedrockLlamaGenerationOptions, prompt: string) => {
-      const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
-      let finalPrompt: string;
-      if (messages.length > 0 && messages[0].role === 'system') {
-        const userMessages = messages
-          .slice(1)
-          .map((m) => `${m.content}`)
-          .join('\n');
-        finalPrompt = dedent`
-          <s>[INST] <<SYS>>
-          ${messages[0].content}
-          <</SYS>>
-
-          ${userMessages} [/INST]
-        `;
-      } else {
-        finalPrompt = `<s>[INST] ${messages.map((m) => `${m.content}`).join('\n')} [/INST]`;
-      }
-
-      const params: { prompt: string; temperature?: number; top_p?: number; max_gen_len?: number } =
-        { prompt: finalPrompt };
-      addConfigParam(
-        params,
-        'temperature',
-        config?.temperature,
-        process.env.AWS_BEDROCK_TEMPERATURE,
-        0.01,
-      );
-      addConfigParam(params, 'top_p', config?.top_p, process.env.AWS_BEDROCK_TOP_P, 1);
-      addConfigParam(
-        params,
-        'max_gen_len',
-        config?.max_gen_len,
-        process.env.AWS_BEDROCK_MAX_GEN_LEN,
-        1024,
-      );
-      return params;
-    },
-    output: (responseJson: any) => responseJson?.generation,
-  },
+  LLAMA2: getLlamaModelHandler(2),
+  LLAMA3: getLlamaModelHandler(3), // Prompt format of llama3 instruct differs from llama2.
   COHERE_COMMAND: {
     params: (config: BedrockCohereCommandGenerationOptions, prompt: string, stop: string[]) => {
       const params: any = { prompt: prompt };
@@ -402,10 +422,10 @@ const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'cohere.command-r-plus-v1:0': BEDROCK_MODEL.COHERE_COMMAND_R,
   'cohere.command-r-v1:0': BEDROCK_MODEL.COHERE_COMMAND_R,
   'cohere.command-text-v14': BEDROCK_MODEL.COHERE_COMMAND,
-  'meta.llama2-13b-chat-v1': BEDROCK_MODEL.LLAMA,
-  'meta.llama2-70b-chat-v1': BEDROCK_MODEL.LLAMA,
-  'meta.llama3-70b-instruct-v1:0': BEDROCK_MODEL.LLAMA,
-  'meta.llama3-8b-instruct-v1:0': BEDROCK_MODEL.LLAMA,
+  'meta.llama2-13b-chat-v1': BEDROCK_MODEL.LLAMA2,
+  'meta.llama2-70b-chat-v1': BEDROCK_MODEL.LLAMA2,
+  'meta.llama3-70b-instruct-v1:0': BEDROCK_MODEL.LLAMA3,
+  'meta.llama3-8b-instruct-v1:0': BEDROCK_MODEL.LLAMA3,
   'mistral.mistral-7b-instruct-v0:2': BEDROCK_MODEL.MISTRAL,
   'mistral.mistral-large-2402-v1:0': BEDROCK_MODEL.MISTRAL,
   'mistral.mistral-small-2402-v1:0': BEDROCK_MODEL.MISTRAL,
@@ -421,8 +441,11 @@ function getHandlerForModel(modelName: string) {
   if (modelName.startsWith('anthropic.claude')) {
     return BEDROCK_MODEL.CLAUDE_MESSAGES;
   }
-  if (modelName.startsWith('meta.llama')) {
-    return BEDROCK_MODEL.LLAMA;
+  if (modelName.startsWith('meta.llama2')) {
+    return BEDROCK_MODEL.LLAMA2;
+  }
+  if (modelName.startsWith('meta.llama3')) {
+    return BEDROCK_MODEL.LLAMA3;
   }
   if (modelName.startsWith('cohere.command-r')) {
     return BEDROCK_MODEL.COHERE_COMMAND_R;
