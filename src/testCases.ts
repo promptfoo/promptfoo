@@ -182,6 +182,10 @@ export async function readTests(
         throw new Error(`Unsupported file type for test file: ${testFile}`);
       }
       if (testCases) {
+        if (!Array.isArray(testCases)) {
+          logger.warn(`Assuming ${testFile} contains a single test case.`);
+          testCases = [testCases];
+        }
         for (const testCase of testCases) {
           ret.push(await readTest(testCase, path.dirname(testFile)));
         }
