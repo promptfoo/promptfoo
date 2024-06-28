@@ -102,14 +102,12 @@ export interface CallApiOptionsParams {
   originalProvider?: ApiProvider;
 }
 
-
 export interface TokenUsage {
   total: number;
   prompt: number;
   completion: number;
   cached?: number;
 }
-
 
 export interface ProviderEmbeddingResponse {
   error?: string;
