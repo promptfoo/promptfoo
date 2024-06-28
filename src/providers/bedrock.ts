@@ -387,13 +387,29 @@ const BEDROCK_MODEL = {
 };
 
 const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
+  'amazon.titan-text-express-v1': BEDROCK_MODEL.TITAN_TEXT,
+  'amazon.titan-text-lite-v1': BEDROCK_MODEL.TITAN_TEXT,
+  'amazon.titan-text-premier-v1:0': BEDROCK_MODEL.TITAN_TEXT,
+  'anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'anthropic.claude-3-opus-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'anthropic.claude-3-sonnet-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-instant-v1': BEDROCK_MODEL.CLAUDE_COMPLETION,
   'anthropic.claude-v1': BEDROCK_MODEL.CLAUDE_COMPLETION,
-  'anthropic.claude-v2': BEDROCK_MODEL.CLAUDE_COMPLETION,
   'anthropic.claude-v2:1': BEDROCK_MODEL.CLAUDE_COMPLETION,
-  'amazon.titan-text-lite-v1': BEDROCK_MODEL.TITAN_TEXT,
-  'amazon.titan-text-express-v1': BEDROCK_MODEL.TITAN_TEXT,
-  'amazon.titan-text-premier-v1:0': BEDROCK_MODEL.TITAN_TEXT,
+  'anthropic.claude-v2': BEDROCK_MODEL.CLAUDE_COMPLETION,
+  'cohere.command-light-text-v14': BEDROCK_MODEL.COHERE_COMMAND,
+  'cohere.command-r-plus-v1:0': BEDROCK_MODEL.COHERE_COMMAND_R,
+  'cohere.command-r-v1:0': BEDROCK_MODEL.COHERE_COMMAND_R,
+  'cohere.command-text-v14': BEDROCK_MODEL.COHERE_COMMAND,
+  'meta.llama2-13b-chat-v1': BEDROCK_MODEL.LLAMA,
+  'meta.llama2-70b-chat-v1': BEDROCK_MODEL.LLAMA,
+  'meta.llama3-70b-instruct-v1:0': BEDROCK_MODEL.LLAMA,
+  'meta.llama3-8b-instruct-v1:0': BEDROCK_MODEL.LLAMA,
+  'mistral.mistral-7b-instruct-v0:2': BEDROCK_MODEL.MISTRAL,
+  'mistral.mistral-large-2402-v1:0': BEDROCK_MODEL.MISTRAL,
+  'mistral.mistral-small-2402-v1:0': BEDROCK_MODEL.MISTRAL,
+  'mistral.mixtral-8x7b-instruct-v0:1': BEDROCK_MODEL.MISTRAL,
 };
 
 // See https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html
