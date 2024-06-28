@@ -387,13 +387,6 @@ const BEDROCK_MODEL = {
 };
 
 const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
-  'ai21.j2-mid-v1': BEDROCK_MODEL.TITAN_TEXT,
-  'ai21.j2-ultra-v1': BEDROCK_MODEL.TITAN_TEXT,
-  'ai21.jamba-instruct-v1:0': BEDROCK_MODEL.TITAN_TEXT,
-  'amazon.titan-embed-image-v1': BEDROCK_MODEL.TITAN_TEXT,
-  'amazon.titan-embed-text-v1': BEDROCK_MODEL.TITAN_TEXT,
-  'amazon.titan-embed-text-v2:0': BEDROCK_MODEL.TITAN_TEXT,
-  'amazon.titan-image-generator-v1': BEDROCK_MODEL.TITAN_TEXT,
   'amazon.titan-text-express-v1': BEDROCK_MODEL.TITAN_TEXT,
   'amazon.titan-text-lite-v1': BEDROCK_MODEL.TITAN_TEXT,
   'amazon.titan-text-premier-v1:0': BEDROCK_MODEL.TITAN_TEXT,
@@ -409,8 +402,6 @@ const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'cohere.command-r-plus-v1:0': BEDROCK_MODEL.COHERE_COMMAND_R,
   'cohere.command-r-v1:0': BEDROCK_MODEL.COHERE_COMMAND_R,
   'cohere.command-text-v14': BEDROCK_MODEL.COHERE_COMMAND,
-  'cohere.embed-english-v3': BEDROCK_MODEL.COHERE_COMMAND,
-  'cohere.embed-multilingual-v3': BEDROCK_MODEL.COHERE_COMMAND,
   'meta.llama2-13b-chat-v1': BEDROCK_MODEL.LLAMA,
   'meta.llama2-70b-chat-v1': BEDROCK_MODEL.LLAMA,
   'meta.llama3-70b-instruct-v1:0': BEDROCK_MODEL.LLAMA,
@@ -419,8 +410,6 @@ const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'mistral.mistral-large-2402-v1:0': BEDROCK_MODEL.MISTRAL,
   'mistral.mistral-small-2402-v1:0': BEDROCK_MODEL.MISTRAL,
   'mistral.mixtral-8x7b-instruct-v0:1': BEDROCK_MODEL.MISTRAL,
-  'stability.stable-diffusion-xl-v0': BEDROCK_MODEL.TITAN_TEXT,
-  'stability.stable-diffusion-xl-v1': BEDROCK_MODEL.TITAN_TEXT,
 };
 
 // See https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html
