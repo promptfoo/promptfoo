@@ -44,36 +44,36 @@ export interface CommandLineOptions {
 
 export interface EnvOverrides {
   ANTHROPIC_API_KEY?: string;
-  BAM_API_KEY?: string;
-  BAM_API_HOST?: string;
+  AWS_BEDROCK_REGION?: string;
+  AZURE_OPENAI_API_BASE_URL?: string;
   AZURE_OPENAI_API_HOST?: string;
   AZURE_OPENAI_API_KEY?: string;
-  AZURE_OPENAI_API_BASE_URL?: string;
   AZURE_OPENAI_BASE_URL?: string;
-  AWS_BEDROCK_REGION?: string;
+  BAM_API_HOST?: string;
+  BAM_API_KEY?: string;
+  CLOUDFLARE_ACCOUNT_ID?: string;
+  CLOUDFLARE_API_KEY?: string;
   COHERE_API_KEY?: string;
-  OPENAI_API_KEY?: string;
-  OPENAI_API_HOST?: string;
+  GOOGLE_API_HOST?: string;
+  GOOGLE_API_KEY?: string;
+  LOCALAI_BASE_URL?: string;
+  MISTRAL_API_BASE_URL?: string;
+  MISTRAL_API_HOST?: string;
+  MISTRAL_API_KEY?: string;
   OPENAI_API_BASE_URL?: string;
+  OPENAI_API_HOST?: string;
+  OPENAI_API_KEY?: string;
   OPENAI_BASE_URL?: string;
   OPENAI_ORGANIZATION?: string;
+  PALM_API_HOST?: string;
+  PALM_API_KEY?: string;
   REPLICATE_API_KEY?: string;
   REPLICATE_API_TOKEN?: string;
-  LOCALAI_BASE_URL?: string;
-  MISTRAL_API_HOST?: string;
-  MISTRAL_API_BASE_URL?: string;
-  PALM_API_KEY?: string;
-  PALM_API_HOST?: string;
-  GOOGLE_API_KEY?: string;
-  GOOGLE_API_HOST?: string;
-  VERTEX_API_KEY?: string;
   VERTEX_API_HOST?: string;
+  VERTEX_API_KEY?: string;
   VERTEX_PROJECT_ID?: string;
-  VERTEX_REGION?: string;
   VERTEX_PUBLISHER?: string;
-  MISTRAL_API_KEY?: string;
-  CLOUDFLARE_API_KEY?: string;
-  CLOUDFLARE_ACCOUNT_ID?: string;
+  VERTEX_REGION?: string;
 }
 
 export type ProviderId = string;
@@ -102,6 +102,37 @@ export interface CallApiOptionsParams {
   originalProvider?: ApiProvider;
 }
 
+
+export interface TokenUsage {
+  total: number;
+  prompt: number;
+  completion: number;
+  cached?: number;
+}
+
+
+export interface ProviderEmbeddingResponse {
+  error?: string;
+  embedding?: number[];
+  tokenUsage?: Partial<TokenUsage>;
+}
+
+export interface ProviderResponse {
+  error?: string;
+  output?: string | object;
+  tokenUsage?: Partial<TokenUsage>;
+  cost?: number;
+  cached?: boolean;
+  logProbs?: number[];
+  metadata?: Record<string, any>;
+}
+
+export interface ProviderSimilarityResponse {
+  error?: string;
+  similarity?: number;
+  tokenUsage?: Partial<TokenUsage>;
+}
+
 type CallApiFunction = {
   (
     prompt: string,
@@ -110,6 +141,11 @@ type CallApiFunction = {
   ): Promise<ProviderResponse>;
   label?: string;
 };
+
+export interface ProviderClassificationResponse {
+  error?: string;
+  classification?: Record<string, number>;
+}
 
 export interface ApiProvider {
   // Unique identifier for the provider
@@ -154,44 +190,6 @@ export interface ApiClassificationProvider extends ApiProvider {
   callClassificationApi: (prompt: string) => Promise<ProviderClassificationResponse>;
 }
 
-export interface ApiModerationProvider extends ApiProvider {
-  callModerationApi: (prompt: string, response: string) => Promise<ProviderModerationResponse>;
-}
-
-export interface TokenUsage {
-  total: number;
-  prompt: number;
-  completion: number;
-  cached?: number;
-}
-
-export interface ProviderResponse {
-  error?: string;
-  output?: string | object;
-  tokenUsage?: Partial<TokenUsage>;
-  cost?: number;
-  cached?: boolean;
-  logProbs?: number[];
-  metadata?: Record<string, any>;
-}
-
-export interface ProviderEmbeddingResponse {
-  error?: string;
-  embedding?: number[];
-  tokenUsage?: Partial<TokenUsage>;
-}
-
-export interface ProviderSimilarityResponse {
-  error?: string;
-  similarity?: number;
-  tokenUsage?: Partial<TokenUsage>;
-}
-
-export interface ProviderClassificationResponse {
-  error?: string;
-  classification?: Record<string, number>;
-}
-
 export interface ModerationFlag {
   code: string;
   description: string;
@@ -201,6 +199,10 @@ export interface ModerationFlag {
 export interface ProviderModerationResponse {
   error?: string;
   flags?: ModerationFlag[];
+}
+
+export interface ApiModerationProvider extends ApiProvider {
+  callModerationApi: (prompt: string, response: string) => Promise<ProviderModerationResponse>;
 }
 
 export interface CsvRow {
