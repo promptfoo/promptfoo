@@ -1,3 +1,4 @@
+import $RefParser from '@apidevtools/json-schema-ref-parser';
 import { parse as parseCsv } from 'csv-parse/sync';
 import * as fs from 'fs';
 import { globSync } from 'glob';
@@ -164,6 +165,10 @@ export async function readTests(
     const testFiles = globSync(resolvedPath, {
       windowsPathsNoEscape: true,
     });
+    const _deref = async (testCases: TestCase[], file: string) => {
+      logger.debug(`Dereferencing testfile ${file}`);
+      return (await $RefParser.dereference(testCases)) as TestCase[];
+    };
 
     const ret: TestCase<Record<string, string | string[] | object>>[] = [];
     if (testFiles.length < 1) {
@@ -176,11 +181,13 @@ export async function readTests(
         testCases = await readStandaloneTestsFile(testFile, basePath);
       } else if (testFile.endsWith('.yaml') || testFile.endsWith('.yml')) {
         testCases = yaml.load(fs.readFileSync(testFile, 'utf-8')) as TestCase[];
+        testCases = await _deref(testCases, testFile);
       } else if (testFile.endsWith('.json')) {
-        testCases = require(testFile);
+        testCases = await _deref(require(testFile), testFile);
       } else {
         throw new Error(`Unsupported file type for test file: ${testFile}`);
       }
+
       if (testCases) {
         for (const testCase of testCases) {
           ret.push(await readTest(testCase, path.dirname(testFile)));
