@@ -136,7 +136,7 @@ Variables containing multiple lines and quotes are automatically escaped in JSON
 If the file is not valid JSON (such as in the case above, due to the nunjucks `{% for %}` loops), use the built-in nunjucks filter [`dump`](https://mozilla.github.io/nunjucks/templating.html#dump) to stringify the object as JSON.
 :::
 
-## Using the `_conversation` variable
+## Using the `_conversation` variable {#using-the-conversation-variable}
 
 A built-in `_conversation` variable contains the full prompt and previous turns of a conversation. Use it to reference previous outputs and test an ongoing chat conversation.
 
