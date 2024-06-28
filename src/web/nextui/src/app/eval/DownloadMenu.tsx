@@ -26,6 +26,10 @@ function DownloadMenu() {
     URL.revokeObjectURL(url);
   };
 
+  const handleClose = () => {
+    setOpen(false);
+  };
+
   const downloadConfig = () => {
     const configData = yaml.dump(config);
     const mimeType = 'text/yaml;charset=utf-8';
@@ -93,10 +97,6 @@ function DownloadMenu() {
 
   const handleOpen = () => {
     setOpen(true);
-  };
-
-  const handleClose = () => {
-    setOpen(false);
   };
 
   return (

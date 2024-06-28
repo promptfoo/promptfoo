@@ -204,6 +204,43 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
   }
 }
 
+function formatOpenAiError(data: {
+  error: { message: string; type?: string; code?: string };
+}): string {
+  let errorMessage = `API error: ${data.error.message}`;
+  if (data.error.type) {
+    errorMessage += `, Type: ${data.error.type}`;
+  }
+  if (data.error.code) {
+    errorMessage += `, Code: ${data.error.code}`;
+  }
+  errorMessage += '\n\n' + safeJsonStringify(data, true /* prettyPrint */);
+  return errorMessage;
+}
+
+function calculateCost(
+  modelName: string,
+  config: OpenAiSharedOptions,
+  promptTokens?: number,
+  completionTokens?: number,
+): number | undefined {
+  if (!promptTokens || !completionTokens) {
+    return undefined;
+  }
+
+  const model = [
+    ...OpenAiChatCompletionProvider.OPENAI_CHAT_MODELS,
+    ...OpenAiCompletionProvider.OPENAI_COMPLETION_MODELS,
+  ].find((m) => m.id === modelName);
+  if (!model || !model.cost) {
+    return undefined;
+  }
+
+  const inputCost = config.cost ?? model.cost.input;
+  const outputCost = config.cost ?? model.cost.output;
+  return inputCost * promptTokens + outputCost * completionTokens || undefined;
+}
+
 export class OpenAiCompletionProvider extends OpenAiGenericProvider {
   static OPENAI_COMPLETION_MODELS = [
     {
@@ -534,43 +571,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       };
     }
   }
-}
-
-function formatOpenAiError(data: {
-  error: { message: string; type?: string; code?: string };
-}): string {
-  let errorMessage = `API error: ${data.error.message}`;
-  if (data.error.type) {
-    errorMessage += `, Type: ${data.error.type}`;
-  }
-  if (data.error.code) {
-    errorMessage += `, Code: ${data.error.code}`;
-  }
-  errorMessage += '\n\n' + safeJsonStringify(data, true /* prettyPrint */);
-  return errorMessage;
-}
-
-function calculateCost(
-  modelName: string,
-  config: OpenAiSharedOptions,
-  promptTokens?: number,
-  completionTokens?: number,
-): number | undefined {
-  if (!promptTokens || !completionTokens) {
-    return undefined;
-  }
-
-  const model = [
-    ...OpenAiChatCompletionProvider.OPENAI_CHAT_MODELS,
-    ...OpenAiCompletionProvider.OPENAI_COMPLETION_MODELS,
-  ].find((m) => m.id === modelName);
-  if (!model || !model.cost) {
-    return undefined;
-  }
-
-  const inputCost = config.cost ?? model.cost.input;
-  const outputCost = config.cost ?? model.cost.output;
-  return inputCost * promptTokens + outputCost * completionTokens || undefined;
 }
 
 type OpenAiAssistantOptions = OpenAiSharedOptions & {

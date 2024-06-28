@@ -3,50 +3,6 @@ import type { Assertion, AssertionType, CsvRow, TestCase } from './types';
 
 const DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD = 0.8;
 
-export function testCaseFromCsvRow(row: CsvRow): TestCase {
-  const vars: Record<string, string> = {};
-  const asserts: Assertion[] = [];
-  const options: TestCase['options'] = {};
-  let providerOutput: string | object | undefined;
-  let description: string | undefined;
-  let metric: string | undefined;
-  let threshold: number | undefined;
-  for (const [key, value] of Object.entries(row)) {
-    if (key.startsWith('__expected')) {
-      if (value.trim() !== '') {
-        asserts.push(assertionFromString(value));
-      }
-    } else if (key === '__prefix') {
-      options.prefix = value;
-    } else if (key === '__suffix') {
-      options.suffix = value;
-    } else if (key === '__description') {
-      description = value;
-    } else if (key === '__providerOutput') {
-      providerOutput = value;
-    } else if (key === '__metric') {
-      metric = value;
-    } else if (key === '__threshold') {
-      threshold = parseFloat(value);
-    } else {
-      vars[key] = value;
-    }
-  }
-
-  for (const assert of asserts) {
-    assert.metric = metric;
-  }
-
-  return {
-    vars,
-    assert: asserts,
-    options,
-    ...(description ? { description } : {}),
-    ...(providerOutput ? { providerOutput } : {}),
-    ...(threshold ? { threshold } : {}),
-  };
-}
-
 export function assertionFromString(expected: string): Assertion {
   // Legacy options
   if (
@@ -144,5 +100,49 @@ export function assertionFromString(expected: string): Assertion {
   return {
     type: 'equals',
     value: expected,
+  };
+}
+
+export function testCaseFromCsvRow(row: CsvRow): TestCase {
+  const vars: Record<string, string> = {};
+  const asserts: Assertion[] = [];
+  const options: TestCase['options'] = {};
+  let providerOutput: string | object | undefined;
+  let description: string | undefined;
+  let metric: string | undefined;
+  let threshold: number | undefined;
+  for (const [key, value] of Object.entries(row)) {
+    if (key.startsWith('__expected')) {
+      if (value.trim() !== '') {
+        asserts.push(assertionFromString(value));
+      }
+    } else if (key === '__prefix') {
+      options.prefix = value;
+    } else if (key === '__suffix') {
+      options.suffix = value;
+    } else if (key === '__description') {
+      description = value;
+    } else if (key === '__providerOutput') {
+      providerOutput = value;
+    } else if (key === '__metric') {
+      metric = value;
+    } else if (key === '__threshold') {
+      threshold = parseFloat(value);
+    } else {
+      vars[key] = value;
+    }
+  }
+
+  for (const assert of asserts) {
+    assert.metric = metric;
+  }
+
+  return {
+    vars,
+    assert: asserts,
+    options,
+    ...(description ? { description } : {}),
+    ...(providerOutput ? { providerOutput } : {}),
+    ...(threshold ? { threshold } : {}),
   };
 }

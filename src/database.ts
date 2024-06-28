@@ -16,26 +16,6 @@ export const prompts = sqliteTable('prompts', {
   prompt: text('prompt').notNull(),
 });
 
-export const promptsRelations = relations(prompts, ({ many }) => ({
-  evalsToPrompts: many(evalsToPrompts),
-}));
-
-// ------------ Datasets ------------
-
-export const datasets = sqliteTable('datasets', {
-  id: text('id').primaryKey(),
-  tests: text('tests', { mode: 'json' }).$type<UnifiedConfig['tests']>(),
-  createdAt: integer('created_at')
-    .notNull()
-    .default(sql`CURRENT_TIMESTAMP`),
-});
-
-export const datasetsRelations = relations(datasets, ({ many }) => ({
-  evalsToDatasets: many(evalsToDatasets),
-}));
-
-// ------------ Evals ------------
-
 export const evals = sqliteTable('evals', {
   id: text('id').primaryKey(),
   createdAt: integer('created_at')
@@ -45,11 +25,6 @@ export const evals = sqliteTable('evals', {
   results: text('results', { mode: 'json' }).$type<EvaluateSummary>().notNull(),
   config: text('config', { mode: 'json' }).$type<Partial<UnifiedConfig>>().notNull(),
 });
-
-export const evalsRelations = relations(evals, ({ many }) => ({
-  evalsToPrompts: many(evalsToPrompts),
-  evalsToDatasets: many(evalsToDatasets),
-}));
 
 export const evalsToPrompts = sqliteTable(
   'evals_to_prompts',
@@ -68,16 +43,19 @@ export const evalsToPrompts = sqliteTable(
   }),
 );
 
-export const evalsToPromptsRelations = relations(evalsToPrompts, ({ one }) => ({
-  eval: one(evals, {
-    fields: [evalsToPrompts.evalId],
-    references: [evals.id],
-  }),
-  prompt: one(prompts, {
-    fields: [evalsToPrompts.promptId],
-    references: [prompts.id],
-  }),
+export const promptsRelations = relations(prompts, ({ many }) => ({
+  evalsToPrompts: many(evalsToPrompts),
 }));
+
+// ------------ Datasets ------------
+
+export const datasets = sqliteTable('datasets', {
+  id: text('id').primaryKey(),
+  tests: text('tests', { mode: 'json' }).$type<UnifiedConfig['tests']>(),
+  createdAt: integer('created_at')
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
+});
 
 export const evalsToDatasets = sqliteTable(
   'evals_to_datasets',
@@ -95,6 +73,28 @@ export const evalsToDatasets = sqliteTable(
     pk: primaryKey({ columns: [t.evalId, t.datasetId] }),
   }),
 );
+
+export const datasetsRelations = relations(datasets, ({ many }) => ({
+  evalsToDatasets: many(evalsToDatasets),
+}));
+
+// ------------ Evals ------------
+
+export const evalsRelations = relations(evals, ({ many }) => ({
+  evalsToPrompts: many(evalsToPrompts),
+  evalsToDatasets: many(evalsToDatasets),
+}));
+
+export const evalsToPromptsRelations = relations(evalsToPrompts, ({ one }) => ({
+  eval: one(evals, {
+    fields: [evalsToPrompts.evalId],
+    references: [evals.id],
+  }),
+  prompt: one(prompts, {
+    fields: [evalsToPrompts.promptId],
+    references: [prompts.id],
+  }),
+}));
 
 export const evalsToDatasetsRelations = relations(evalsToDatasets, ({ one }) => ({
   eval: one(evals, {

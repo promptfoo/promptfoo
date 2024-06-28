@@ -228,17 +228,6 @@ interface SynthesizeOptions {
   numTestCasesPerPersona?: number;
 }
 
-export async function synthesizeFromTestSuite(
-  testSuite: TestSuite,
-  options: Partial<SynthesizeOptions>,
-) {
-  return synthesize({
-    ...options,
-    prompts: testSuite.prompts.map((prompt) => prompt.raw),
-    tests: testSuite.tests || [],
-  });
-}
-
 export async function synthesize({
   prompts,
   instructions,
@@ -380,4 +369,15 @@ Your response should contain a JSON map of variable names to values, of the form
     JSON.parse(testCase),
   );
   return dedupedTestCaseVars;
+}
+
+export async function synthesizeFromTestSuite(
+  testSuite: TestSuite,
+  options: Partial<SynthesizeOptions>,
+) {
+  return synthesize({
+    ...options,
+    prompts: testSuite.prompts.map((prompt) => prompt.raw),
+    tests: testSuite.tests || [],
+  });
 }

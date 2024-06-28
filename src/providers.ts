@@ -59,53 +59,6 @@ import type {
   TestSuiteConfig,
 } from './types';
 
-export async function loadApiProviders(
-  providerPaths: TestSuiteConfig['providers'],
-  options: {
-    basePath?: string;
-    env?: EnvOverrides;
-  } = {},
-): Promise<ApiProvider[]> {
-  const { basePath, env } = options;
-  if (typeof providerPaths === 'string') {
-    return [await loadApiProvider(providerPaths, { basePath, env })];
-  } else if (typeof providerPaths === 'function') {
-    return [
-      {
-        id: () => 'custom-function',
-        callApi: providerPaths,
-      },
-    ];
-  } else if (Array.isArray(providerPaths)) {
-    return Promise.all(
-      providerPaths.map((provider, idx) => {
-        if (typeof provider === 'string') {
-          return loadApiProvider(provider, { basePath, env });
-        } else if (typeof provider === 'function') {
-          return {
-            id: provider.label ? () => provider.label! : () => `custom-function-${idx}`,
-            callApi: provider,
-          };
-        } else if (provider.id) {
-          // List of ProviderConfig objects
-          return loadApiProvider((provider as ProviderOptions).id!, {
-            options: provider,
-            basePath,
-            env,
-          });
-        } else {
-          // List of { id: string, config: ProviderConfig } objects
-          const id = Object.keys(provider)[0];
-          const providerObject = (provider as ProviderOptionsMap)[id];
-          const context = { ...providerObject, id: providerObject.id || id };
-          return loadApiProvider(id, { options: context, basePath, env });
-        }
-      }),
-    );
-  }
-  throw new Error('Invalid providers list');
-}
-
 // FIXME(ian): Make loadApiProvider handle all the different provider types (string, ProviderOptions, ApiProvider, etc), rather than the callers.
 export async function loadApiProvider(
   providerPath: string,
@@ -398,6 +351,53 @@ export async function loadApiProvider(
   ret.transform = options.transform;
   ret.delay = options.delay;
   return ret;
+}
+
+export async function loadApiProviders(
+  providerPaths: TestSuiteConfig['providers'],
+  options: {
+    basePath?: string;
+    env?: EnvOverrides;
+  } = {},
+): Promise<ApiProvider[]> {
+  const { basePath, env } = options;
+  if (typeof providerPaths === 'string') {
+    return [await loadApiProvider(providerPaths, { basePath, env })];
+  } else if (typeof providerPaths === 'function') {
+    return [
+      {
+        id: () => 'custom-function',
+        callApi: providerPaths,
+      },
+    ];
+  } else if (Array.isArray(providerPaths)) {
+    return Promise.all(
+      providerPaths.map((provider, idx) => {
+        if (typeof provider === 'string') {
+          return loadApiProvider(provider, { basePath, env });
+        } else if (typeof provider === 'function') {
+          return {
+            id: provider.label ? () => provider.label! : () => `custom-function-${idx}`,
+            callApi: provider,
+          };
+        } else if (provider.id) {
+          // List of ProviderConfig objects
+          return loadApiProvider((provider as ProviderOptions).id!, {
+            options: provider,
+            basePath,
+            env,
+          });
+        } else {
+          // List of { id: string, config: ProviderConfig } objects
+          const id = Object.keys(provider)[0];
+          const providerObject = (provider as ProviderOptionsMap)[id];
+          const context = { ...providerObject, id: providerObject.id || id };
+          return loadApiProvider(id, { options: context, basePath, env });
+        }
+      }),
+    );
+  }
+  throw new Error('Invalid providers list');
 }
 
 export default {

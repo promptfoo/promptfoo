@@ -276,6 +276,8 @@ function ResultsTable({
     searchRegex,
   ]);
 
+  const [pagination, setPagination] = React.useState({ pageIndex: 0, pageSize: 50 });
+
   React.useEffect(() => {
     setPagination((prev) => ({ ...prev, pageIndex: 0 }));
   }, [failureFilter, filterMode, searchText]);
@@ -557,8 +559,6 @@ function ResultsTable({
     cols.push(...variableColumns, ...promptColumns);
     return cols;
   }, [descriptionColumn, variableColumns, promptColumns]);
-
-  const [pagination, setPagination] = React.useState({ pageIndex: 0, pageSize: 50 });
 
   const reactTable = useReactTable({
     data: filteredBody,

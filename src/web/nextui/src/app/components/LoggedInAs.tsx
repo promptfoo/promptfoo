@@ -14,13 +14,13 @@ export default function LoggedInAs() {
     setAnchorEl(event.currentTarget);
   };
 
+  const handleClose = () => {
+    setAnchorEl(null);
+  };
+
   const handleLogout = async () => {
     logout?.();
     handleClose();
-  };
-
-  const handleClose = () => {
-    setAnchorEl(null);
   };
 
   if (!user) {

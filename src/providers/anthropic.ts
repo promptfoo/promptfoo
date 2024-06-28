@@ -55,26 +55,6 @@ export function outputFromMessage(message: Anthropic.Messages.Message) {
     .join('\n\n');
 }
 
-export function calculateCost(
-  modelName: string,
-  config: AnthropicMessageOptions,
-  promptTokens?: number,
-  completionTokens?: number,
-): number | undefined {
-  if (!promptTokens || !completionTokens) {
-    return undefined;
-  }
-
-  const model = [...AnthropicMessagesProvider.ANTHROPIC_MODELS].find((m) => m.id === modelName);
-  if (!model || !model.cost) {
-    return undefined;
-  }
-
-  const inputCost = config.cost ?? model.cost.input;
-  const outputCost = config.cost ?? model.cost.output;
-  return inputCost * promptTokens + outputCost * completionTokens || undefined;
-}
-
 interface AnthropicMessageInput {
   role: 'user' | 'assistant' | 'system';
   content: string | Array<Anthropic.ImageBlockParam | Anthropic.TextBlockParam>;
@@ -104,6 +84,26 @@ export function parseMessages(messages: string) {
       }
     });
   return { system, extractedMessages };
+}
+
+export function calculateCost(
+  modelName: string,
+  config: AnthropicMessageOptions,
+  promptTokens?: number,
+  completionTokens?: number,
+): number | undefined {
+  if (!promptTokens || !completionTokens) {
+    return undefined;
+  }
+
+  const model = [...AnthropicMessagesProvider.ANTHROPIC_MODELS].find((m) => m.id === modelName);
+  if (!model || !model.cost) {
+    return undefined;
+  }
+
+  const inputCost = config.cost ?? model.cost.input;
+  const outputCost = config.cost ?? model.cost.output;
+  return inputCost * promptTokens + outputCost * completionTokens || undefined;
 }
 
 export class AnthropicMessagesProvider implements ApiProvider {

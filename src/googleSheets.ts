@@ -15,15 +15,6 @@ async function checkGoogleSheetAccess(url: string) {
   }
 }
 
-export async function fetchCsvFromGoogleSheet(url: string): Promise<CsvRow[]> {
-  const { public: isPublic } = await checkGoogleSheetAccess(url);
-  logger.debug(`Google Sheets URL: ${url}, isPublic: ${isPublic}`);
-  if (isPublic) {
-    return fetchCsvFromGoogleSheetUnauthenticated(url);
-  }
-  return fetchCsvFromGoogleSheetAuthenticated(url);
-}
-
 export async function fetchCsvFromGoogleSheetUnauthenticated(url: string): Promise<CsvRow[]> {
   const { parse: parseCsv } = await import('csv-parse/sync');
   const { fetchWithProxy } = await import('./fetch');
@@ -68,6 +59,15 @@ export async function fetchCsvFromGoogleSheetAuthenticated(url: string): Promise
     });
     return csvRow;
   });
+}
+
+export async function fetchCsvFromGoogleSheet(url: string): Promise<CsvRow[]> {
+  const { public: isPublic } = await checkGoogleSheetAccess(url);
+  logger.debug(`Google Sheets URL: ${url}, isPublic: ${isPublic}`);
+  if (isPublic) {
+    return fetchCsvFromGoogleSheetUnauthenticated(url);
+  }
+  return fetchCsvFromGoogleSheetAuthenticated(url);
 }
 
 export async function writeCsvToGoogleSheet(rows: CsvRow[], url: string): Promise<void> {

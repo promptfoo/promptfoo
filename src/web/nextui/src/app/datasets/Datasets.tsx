@@ -50,6 +50,11 @@ export default function Datasets() {
     })();
   }, [sortField, sortOrder, page, rowsPerPage]);
 
+  const handleClickOpen = (index: number) => {
+    setDialogTestCaseIndex(index);
+    setOpenDialog(true);
+  };
+
   useEffect(() => {
     const testCaseId = searchParams?.get('id');
     if (testCaseId) {
@@ -59,11 +64,6 @@ export default function Datasets() {
       }
     }
   }, [testCases, searchParams]);
-
-  const handleClickOpen = (index: number) => {
-    setDialogTestCaseIndex(index);
-    setOpenDialog(true);
-  };
 
   const handleClose = () => {
     setOpenDialog(false);
