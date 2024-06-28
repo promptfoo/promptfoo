@@ -4,42 +4,41 @@ The `bedrock` lets you use Amazon Bedrock in your evals. This is a common way to
 
 ## Setup
 
-First, ensure that you have access to the desired models under the [Providers](https://console.aws.amazon.com/bedrock/home) page in Amazon Bedrock.
+1. Ensure you have access to the desired models under the [Providers](https://console.aws.amazon.com/bedrock/home) page in Amazon Bedrock.
 
-Next, install `@aws-sdk/client-bedrock-runtime`:
+2. Install `@aws-sdk/client-bedrock-runtime`:
 
-```sh
-npm install -g @aws-sdk/client-bedrock-runtime
-```
+    ```sh
+    npm install -g @aws-sdk/client-bedrock-runtime
+    ```
 
-The AWS SDK will automatically pull credentials from the following locations:
+3. The AWS SDK will automatically pull credentials from the following locations:
 
-- IAM roles on EC2
-- `~/.aws/credentials`
-- `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` environment variables
-- See [setting node.js credentials (AWS)](https://docs.aws.amazon.com/sdk-for-javascript/v2/developer-guide/setting-credentials-node.html) for more
+    - IAM roles on EC2
+    - `~/.aws/credentials`
+    - `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` environment variables
 
-Finally, edit your configuration file to point to the AWS Bedrock provider. Here's an example:
+    See [setting node.js credentials (AWS)](https://docs.aws.amazon.com/sdk-for-javascript/v2/developer-guide/setting-credentials-node.html) for more details.
 
-```yaml
-providers:
-  - bedrock:anthropic.claude-3-haiku-20240307-v1:0
-```
+4. Edit your configuration file to point to the AWS Bedrock provider. Here's an example:
 
-Note that provider is `bedrock:` followed by the [ARN/model id](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns) of the model.
+    ```yaml
+    providers:
+      - id: bedrock:anthropic.claude-3-5-sonnet-20240620-v1:0
+    ```
 
-Additional config parameters are passed like so:
+    Note that the provider is `bedrock:` followed by the [ARN/model id](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns) of the model.
 
-```yaml
-providers:
-  - id: bedrock:anthropic.claude-3-haiku-20240307-v1:0
-    // highlight-start
-    config:
-      region: 'us-west-2'
-      temperature: 0.7
-      max_tokens: 256
-    // highlight-end
-```
+5. Additional config parameters are passed like so:
+
+    ```yaml
+    providers:
+      - id: bedrock:anthropic.claude-3-5-sonnet-20240620-v1:0
+        config:
+          region: 'us-west-2'
+          temperature: 0.7
+          max_tokens: 256
+    ```
 
 ## Example
 
@@ -60,7 +59,7 @@ providers:
       region: 'us-east-1'
       temperature: 0.7
       max_tokens: 256
-  - id: bedrock:anthropic.claude-3-sonnet-20240229-v1:0
+  - id: bedrock:anthropic.claude-3-5-sonnet-20240620-v1:0
     config:
       region: 'us-east-1'
       temperature: 0.7
@@ -75,13 +74,13 @@ tests:
       topic: Behind-the-scenes at our latest photoshoot
 ```
 
-## Model-graded tests
+## Model-graded Tests
 
 By default, model-graded tests use OpenAI and require the `OPENAI_API_KEY` environment variable to be set. When using AWS Bedrock, you have the option of overriding the grader for [model-graded assertions](/docs/configuration/expected-outputs/model-graded/) to point to AWS Bedrock, or other providers.
 
 Note that because of how model-graded evals are implemented, **the LLM grading models must support chat-formatted prompts** (except for embedding or classification models).
 
-The easiest way to do this for _all_ your test cases is to add the [`defaultTest`](/docs/configuration/guide/#default-test-cases) property to your config:
+To set this for all your test cases, add the [`defaultTest`](/docs/configuration/guide/#default-test-cases) property to your config:
 
 ```yaml title=promptfooconfig.yaml
 defaultTest:
@@ -92,7 +91,7 @@ defaultTest:
         # Provider config options
 ```
 
-But you can also do this for individual assertions:
+You can also do this for individual assertions:
 
 ```yaml
 # ...
@@ -107,7 +106,7 @@ assert:
           # Other provider config options...
 ```
 
-Or individual tests:
+Or for individual tests:
 
 ```yaml
 # ...
