@@ -164,7 +164,7 @@ tests:
 
 The evaluation will output the perplexity scores of each model, and you can get a feel for what scores you're comfortable with. Keep in mind that different models and domains may require different thresholds for optimal performance.
 
-For more detailed information on perplexity and other useful metrics, refer to the [perplexity assertion](/docs/configuration/expected-outputs/#perplexity).
+For more detailed information on perplexity and other useful metrics, refer to the [perplexity assertion](/docs/configuration/expected-outputs/deterministic#perplexity).
 
 ### Retrieval-Augmented Generation
 
