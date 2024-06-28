@@ -8,37 +8,37 @@ The `bedrock` lets you use Amazon Bedrock in your evals. This is a common way to
 
 2. Install `@aws-sdk/client-bedrock-runtime`:
 
-    ```sh
-    npm install -g @aws-sdk/client-bedrock-runtime
-    ```
+   ```sh
+   npm install -g @aws-sdk/client-bedrock-runtime
+   ```
 
 3. The AWS SDK will automatically pull credentials from the following locations:
 
-    - IAM roles on EC2
-    - `~/.aws/credentials`
-    - `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` environment variables
+   - IAM roles on EC2
+   - `~/.aws/credentials`
+   - `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` environment variables
 
-    See [setting node.js credentials (AWS)](https://docs.aws.amazon.com/sdk-for-javascript/v2/developer-guide/setting-credentials-node.html) for more details.
+   See [setting node.js credentials (AWS)](https://docs.aws.amazon.com/sdk-for-javascript/v2/developer-guide/setting-credentials-node.html) for more details.
 
 4. Edit your configuration file to point to the AWS Bedrock provider. Here's an example:
 
-    ```yaml
-    providers:
-      - id: bedrock:anthropic.claude-3-5-sonnet-20240620-v1:0
-    ```
+   ```yaml
+   providers:
+     - id: bedrock:anthropic.claude-3-5-sonnet-20240620-v1:0
+   ```
 
-    Note that the provider is `bedrock:` followed by the [ARN/model id](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns) of the model.
+   Note that the provider is `bedrock:` followed by the [ARN/model id](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns) of the model.
 
 5. Additional config parameters are passed like so:
 
-    ```yaml
-    providers:
-      - id: bedrock:anthropic.claude-3-5-sonnet-20240620-v1:0
-        config:
-          region: 'us-west-2'
-          temperature: 0.7
-          max_tokens: 256
-    ```
+   ```yaml
+   providers:
+     - id: bedrock:anthropic.claude-3-5-sonnet-20240620-v1:0
+       config:
+         region: 'us-west-2'
+         temperature: 0.7
+         max_tokens: 256
+   ```
 
 ## Example
 
