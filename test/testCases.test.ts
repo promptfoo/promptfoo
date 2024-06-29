@@ -273,6 +273,21 @@ describe('readTests', () => {
     expect(fs.readFileSync).toHaveBeenCalledTimes(2);
     expect(result).toEqual([Object.assign({}, test1Content[0], { vars: vars1Content })]);
   });
+
+  it('readTests with single TestCase content', async () => {
+    const testsPaths = ['test1.yaml'];
+    const test1Content = {
+      description: 'Test 1',
+      assert: [{ type: 'equals', value: 'value1' }],
+    };
+    jest.mocked(fs.readFileSync).mockReturnValueOnce(yaml.dump(test1Content));
+    jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob]);
+
+    const result = await readTests(testsPaths);
+
+    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+    expect(result).toEqual([test1Content]);
+  });
 });
 
 describe('testCaseFromCsvRow', () => {

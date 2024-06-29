@@ -1,6 +1,6 @@
 description: 'Simple test'
 prompts:
-  - 'Rephrase this in {{language}}: {{body}}'
+  - 'Rephrase this in {{language}}: {{body}}. Output in markdown table format'
   - 'Translate this to conversational {{language}}: {{body}}'
 providers: [openai:gpt-3.5-turbo]
 tests:

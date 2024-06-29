@@ -186,6 +186,34 @@ table.results-table,
   cursor: pointer;
 }
 
+/* Table-within-a-cell, used for markdown tables */
+.results-table tr .cell table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+}
+
+.results-table tr .cell table th,
+.results-table tr .cell table td {
+  border: 1px solid var(--border-color);
+  padding: 0.5rem;
+  text-align: left;
+}
+
+.results-table tr .cell table th {
+  background-color: var(--header-background-color);
+  font-weight: bold;
+}
+
+.results-table tr .cell table tr:nth-child(even) {
+  background-color: var(--row-background-color);
+}
+
+.results-table tr .cell table tr:hover {
+  background-color: var(--hover-background-color);
+}
+/* End Table-within-a-cell */
+
 .results-table th .output-header {
   display: flex;
   flex-direction: column;
