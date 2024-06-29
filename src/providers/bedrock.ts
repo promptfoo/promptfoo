@@ -185,7 +185,7 @@ export function parseValue(value: string, defaultValue: any) {
   return value;
 }
 
-const getLlamaModelHandler = (ver: number) => {
+export const getLlamaModelHandler = (ver: number) => {
   return {
     params: (config: BedrockLlamaGenerationOptions, prompt: string) => {
       const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);

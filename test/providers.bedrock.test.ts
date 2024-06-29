@@ -1,4 +1,5 @@
-import { addConfigParam, AwsBedrockGenericProvider, parseValue } from '../src/providers/bedrock';
+import dedent from 'dedent';
+import { addConfigParam, AwsBedrockGenericProvider, getLlamaModelHandler, parseValue } from '../src/providers/bedrock';
 
 jest.mock('@aws-sdk/client-bedrock-runtime', () => {
   return {
@@ -199,5 +200,43 @@ describe('parseValue', () => {
 
   it('should return undefined for an undefined value if defaultValue is not a number', () => {
     expect(parseValue(undefined as never, 'defaultValue')).toBeUndefined();
+  });
+});
+
+describe('getLlamaModelHandler', () => {
+  describe('LLAMA2', () => {
+    it('should generate correct prompt for LLAMA2', () => {
+      const config = {
+        temperature: 0.5,
+        top_p: 0.9,
+        max_gen_len: 512,
+      };
+      const prompt = 'Describe the purpose of a "hello world" program in one sentence.';
+      expect(getLlamaModelHandler(2).params(config, prompt)).toEqual({
+        prompt: `<s>[INST] Describe the purpose of a \"hello world\" program in one sentence. [/INST]`,
+        temperature: 0.5,
+        top_p: 0.9,
+        max_gen_len: 512
+      });
+    });
+  });
+
+  describe('LLAMA3', () => {
+    it('should generate correct prompt for LLAMA3', () => {
+      const config = {
+        temperature: 0.5,
+        top_p: 0.9,
+        max_gen_len: 512,
+      };
+      const prompt = 'Describe the purpose of a "hello world" program in one sentence.';
+      expect(getLlamaModelHandler(3).params(config, prompt)).toEqual({
+        prompt: dedent`<|begin_of_text|><|start_header_id|>user<|end_header_id|>
+
+        Describe the purpose of a "hello world" program in one sentence.<|eot_id|><|start_header_id|>assistant<|end_header_id|>`,
+        temperature: 0.5,
+        top_p: 0.9,
+        max_gen_len: 512
+      });
+    });
   });
 });
