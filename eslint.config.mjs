@@ -43,6 +43,7 @@ export default [
       '@typescript-eslint/ban-types': 0,
       '@typescript-eslint/no-explicit-any': 0,
       '@typescript-eslint/no-unused-vars': 0,
+      '@typescript-eslint/no-use-before-define': 'error',
       '@typescript-eslint/no-var-requires': 0,
       'no-case-declarations': 0,
       'no-control-regex': 0,

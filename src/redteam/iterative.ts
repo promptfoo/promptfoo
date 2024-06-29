@@ -5,18 +5,6 @@ import { getNunjucksEngine } from '../util';
 
 const ATTACKER_MODEL = 'gpt-4o';
 
-class RedteamIterativeJailbreaks implements ApiProvider {
-  id() {
-    return 'redteam-iterative-jailbreaks';
-  }
-
-  async callApi(prompt: string, context?: CallApiContextParams, options?: CallApiOptionsParams) {
-    invariant(options?.originalProvider, 'Expected originalProvider to be set');
-    invariant(context?.vars, 'Expected vars to be set');
-    return runRedteamConversation(prompt, context.vars, options?.originalProvider);
-  }
-}
-
 // Based on: https://arxiv.org/abs/2312.02119
 
 const ATTACKER_SYSTEM_PROMPT = dedent`
@@ -181,6 +169,18 @@ async function runRedteamConversation(
       redteamFinalPrompt: targetPrompt,
     },
   };
+}
+
+class RedteamIterativeJailbreaks implements ApiProvider {
+  id() {
+    return 'redteam-iterative-jailbreaks';
+  }
+
+  async callApi(prompt: string, context?: CallApiContextParams, options?: CallApiOptionsParams) {
+    invariant(options?.originalProvider, 'Expected originalProvider to be set');
+    invariant(context?.vars, 'Expected vars to be set');
+    return runRedteamConversation(prompt, context.vars, options?.originalProvider);
+  }
 }
 
 export default RedteamIterativeJailbreaks;

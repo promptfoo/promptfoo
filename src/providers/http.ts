@@ -10,6 +10,16 @@ import type {
 import { getNunjucksEngine, safeJsonStringify } from '../util';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
+function createResponseParser(parser: any): (data: any) => ProviderResponse {
+  if (typeof parser === 'function') {
+    return parser;
+  }
+  if (typeof parser === 'string') {
+    return new Function('json', `return ${parser}`) as (data: any) => ProviderResponse;
+  }
+  return (data) => ({ output: data });
+}
+
 export class HttpProvider implements ApiProvider {
   url: string;
   config: any;
@@ -68,14 +78,4 @@ export class HttpProvider implements ApiProvider {
 
     return { output: this.responseParser(response.data) };
   }
-}
-
-function createResponseParser(parser: any): (data: any) => ProviderResponse {
-  if (typeof parser === 'function') {
-    return parser;
-  }
-  if (typeof parser === 'string') {
-    return new Function('json', `return ${parser}`) as (data: any) => ProviderResponse;
-  }
-  return (data) => ({ output: data });
 }

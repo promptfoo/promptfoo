@@ -53,17 +53,6 @@ export default function Cols() {
     setAnchorEl(null);
   };
 
-  const handleExport = (format: string) => {
-    const dataStr = format === 'json' ? JSON.stringify(cols) : convertToCSV(cols);
-    const blob = new Blob([dataStr], { type: `text/${format};charset=utf-8;` });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `cols_export.${format}`;
-    link.click();
-    URL.revokeObjectURL(link.href);
-    setAnchorEl(null);
-  };
-
   const calculatePassRate = (
     metrics: { testPassCount: number; testFailCount: number } | undefined,
   ) => {
@@ -101,6 +90,17 @@ export default function Cols() {
       .concat(rows)
       .map((it) => it.map((value) => value ?? '').join(','))
       .join('\n');
+  };
+
+  const handleExport = (format: string) => {
+    const dataStr = format === 'json' ? JSON.stringify(cols) : convertToCSV(cols);
+    const blob = new Blob([dataStr], { type: `text/${format};charset=utf-8;` });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `cols_export.${format}`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+    setAnchorEl(null);
   };
 
   const filteredCols = React.useMemo(() => {

@@ -84,6 +84,9 @@ export default function ResultsView({
     [setFailureFilter],
   );
 
+  invariant(table, 'Table data must be loaded before rendering ResultsView');
+  const { head } = table;
+
   const [filterMode, setFilterMode] = React.useState<FilterMode>('all');
   const handleFilterModeChange = (event: SelectChangeEvent<unknown>) => {
     const mode = event.target.value as FilterMode;
@@ -132,11 +135,33 @@ export default function ResultsView({
     }
   };
 
+  const columnData = React.useMemo(() => {
+    return [
+      ...head.vars.map((_, idx) => ({
+        value: `Variable ${idx + 1}`,
+        label: `Var ${idx + 1}: ${
+          head.vars[idx].length > 100 ? head.vars[idx].slice(0, 97) + '...' : head.vars[idx]
+        }`,
+        group: 'Variables',
+      })),
+      ...head.prompts.map((_, idx) => {
+        const prompt = head.prompts[idx];
+        const label = prompt.label || prompt.display || prompt.raw;
+        return {
+          value: `Prompt ${idx + 1}`,
+          label: `Prompt ${idx + 1}: ${label.length > 100 ? label.slice(0, 97) + '...' : label}`,
+          group: 'Prompts',
+        };
+      }),
+    ];
+  }, [head.vars, head.prompts]);
+
   const [configModalOpen, setConfigModalOpen] = React.useState(false);
   const [viewSettingsModalOpen, setViewSettingsModalOpen] = React.useState(false);
-
-  invariant(table, 'Table data must be loaded before rendering ResultsView');
-  const { head } = table;
+  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
+  const [selectedColumns, setSelectedColumns] = React.useState<string[]>(
+    columnData.map((col) => col.value),
+  );
 
   const handleChange = (event: SelectChangeEvent<typeof selectedColumns>) => {
     const {
@@ -196,32 +221,6 @@ export default function ResultsView({
       }
     }
   };
-
-  const columnData = React.useMemo(() => {
-    return [
-      ...head.vars.map((_, idx) => ({
-        value: `Variable ${idx + 1}`,
-        label: `Var ${idx + 1}: ${
-          head.vars[idx].length > 100 ? head.vars[idx].slice(0, 97) + '...' : head.vars[idx]
-        }`,
-        group: 'Variables',
-      })),
-      ...head.prompts.map((_, idx) => {
-        const prompt = head.prompts[idx];
-        const label = prompt.label || prompt.display || prompt.raw;
-        return {
-          value: `Prompt ${idx + 1}`,
-          label: `Prompt ${idx + 1}: ${label.length > 100 ? label.slice(0, 97) + '...' : label}`,
-          group: 'Prompts',
-        };
-      }),
-    ];
-  }, [head.vars, head.prompts]);
-
-  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
-  const [selectedColumns, setSelectedColumns] = React.useState<string[]>(
-    columnData.map((col) => col.value),
-  );
 
   // State for anchor element
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
