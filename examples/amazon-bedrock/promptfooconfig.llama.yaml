@@ -1,0 +1,15 @@
+prompts:
+  - 'Convert this English to {{language}}: {{input}}'
+  - 'Translate to {{language}}: {{input}}'
+
+providers:
+  - id: bedrock:meta.llama3-8b-instruct-v1:0
+  - id: bedrock:meta.llama2-13b-chat-v1
+
+tests:
+  - vars:
+      language: French
+      input: Hello world
+  - vars:
+      language: Spanish
+      input: Where is the library?
