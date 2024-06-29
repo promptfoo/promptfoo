@@ -8,3 +8,7 @@ export function getUserEmail(): string | undefined {
 export function setUserEmail(email: string) {
   writeGlobalConfig({ account: { email } });
 }
+
+export function getAuthor(): string {
+  return getUserEmail() || 'Unknown';  
+}

@@ -49,6 +49,7 @@ import {
   isApiProvider,
   isProviderOptions,
 } from './types';
+import { getAuthor } from './accounts';
 
 const DEFAULT_QUERY_LIMIT = 100;
 
@@ -490,6 +491,7 @@ export async function writeResultsToDatabase(
       .values({
         id: evalId,
         createdAt: createdAt.getTime(),
+        author: getAuthor(),
         description: config.description,
         config,
         results,
@@ -777,6 +779,7 @@ export async function readResult(
       .select({
         id: evals.id,
         createdAt: evals.createdAt,
+        author: evals.author,
         results: evals.results,
         config: evals.config,
       })
@@ -788,10 +791,11 @@ export async function readResult(
       return undefined;
     }
 
-    const { id: resultId, createdAt, results, config } = evalResult[0];
+    const { id: resultId, createdAt, results, config, author } = evalResult[0];
     const result: ResultsFile = {
       version: 3,
       createdAt: new Date(createdAt).toISOString().slice(0, 10),
+      author,
       results,
       config,
     };
@@ -860,6 +864,7 @@ export async function readLatestResults(
     .select({
       id: evals.id,
       createdAt: evals.createdAt,
+      author: evals.author,
       description: evals.description,
       results: evals.results,
       config: evals.config,
@@ -881,6 +886,7 @@ export async function readLatestResults(
   return {
     version: 3,
     createdAt: new Date(latestResult.createdAt).toISOString(),
+    author: latestResult.author,
     results: latestResult.results,
     config: latestResult.config,
   };
@@ -896,6 +902,7 @@ export async function getPromptsWithPredicate(
     .select({
       id: evals.id,
       createdAt: evals.createdAt,
+      author: evals.author,
       results: evals.results,
       config: evals.config,
     })
@@ -910,6 +917,7 @@ export async function getPromptsWithPredicate(
     const resultWrapper: ResultsFile = {
       version: 3,
       createdAt,
+      author: eval_.author,
       results: eval_.results,
       config: eval_.config,
     };
@@ -981,6 +989,7 @@ export async function getTestCasesWithPredicate(
     .select({
       id: evals.id,
       createdAt: evals.createdAt,
+      author: evals.author,
       results: evals.results,
       config: evals.config,
     })
@@ -995,6 +1004,7 @@ export async function getTestCasesWithPredicate(
     const resultWrapper: ResultsFile = {
       version: 3,
       createdAt,
+      author: eval_.author,
       results: eval_.results,
       config: eval_.config,
     };
@@ -1083,6 +1093,7 @@ export async function getEvalsWithPredicate(
     .select({
       id: evals.id,
       createdAt: evals.createdAt,
+      author: evals.author,
       results: evals.results,
       config: evals.config,
       description: evals.description,
@@ -1099,6 +1110,7 @@ export async function getEvalsWithPredicate(
     const resultWrapper: ResultsFile = {
       version: 3,
       createdAt: createdAt,
+      author: eval_.author,
       results: eval_.results,
       config: eval_.config,
     };

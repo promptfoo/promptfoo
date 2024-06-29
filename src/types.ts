@@ -713,6 +713,7 @@ export interface ResultsFile {
   createdAt: string;
   results: EvaluateSummary;
   config: Partial<UnifiedConfig>;
+  author: string;
 }
 
 // File exported as --output option
