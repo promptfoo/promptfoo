@@ -185,7 +185,7 @@ export function parseValue(value: string, defaultValue: any) {
   return value;
 }
 
-enum LlamaVersion {
+export enum LlamaVersion {
   V2 = 2,
   V3 = 3,
 }
@@ -196,6 +196,42 @@ interface LlamaMessage {
 }
 
 const formatPromptV2 = (messages: LlamaMessage[]): string => {
+  let formattedPrompt = '<s>';
+  let isFirstUserMessage = true;
+
+  for (let i = 0; i < messages.length; i++) {
+    const message = messages[i];
+    const nextMessage = messages[i + 1];
+
+    switch (message.role) {
+      case 'system':
+        if (isFirstUserMessage) {
+          formattedPrompt += '[INST] <<SYS>>\n';
+          formattedPrompt += `${message.content.trim()}\n`;
+          formattedPrompt += '<</SYS>>\n\n';
+        }
+        break;
+      case 'user':
+        if (isFirstUserMessage) {
+          formattedPrompt += '[INST] ';
+          isFirstUserMessage = false;
+        } else {
+          formattedPrompt += '<s>[INST] ';
+        }
+        formattedPrompt += `${message.content.trim()}`;
+        if (!nextMessage || nextMessage.role === 'user') {
+          formattedPrompt += ' [/INST]';
+        }
+        break;
+      case 'assistant':
+        formattedPrompt += ` [/INST] ${message.content.trim()} </s>`;
+        break;
+    }
+  }
+
+  return formattedPrompt;
+};
+const formatPromptV21 = (messages: LlamaMessage[]): string => {
   let formattedPrompt = '<s>';
   let isFirstUserMessage = true;
 
@@ -224,7 +260,7 @@ const formatPromptV2 = (messages: LlamaMessage[]): string => {
         }
         break;
       case 'assistant':
-        formattedPrompt += ` ${message.content.trim()} </s>`;
+        formattedPrompt += ` [/INST] ${message.content.trim()} </s>`;
         break;
     }
   }
@@ -246,43 +282,50 @@ const formatPromptV3 = (messages: LlamaMessage[]): string => {
   return formattedPrompt;
 };
 
-export const getLlamaModelHandler = (version: LlamaVersion) => ({
-  params: (config: BedrockLlamaGenerationOptions, prompt: string) => {
-    const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
+export const getLlamaModelHandler = (version: LlamaVersion) => {
+  if (version !== LlamaVersion.V2 && version !== LlamaVersion.V3) {
+    throw new Error(`Unsupported LLAMA version: ${version}`);
+  }
 
-    let finalPrompt: string;
-    switch (version) {
-      case LlamaVersion.V2:
-        finalPrompt = formatPromptV2(messages as LlamaMessage[]);
-        break;
-      case LlamaVersion.V3:
-        finalPrompt = formatPromptV3(messages as LlamaMessage[]);
-        break;
-      default:
-        throw new Error(`Unsupported LLAMA version: ${version}`);
-    }
-    const params: { prompt: string; temperature?: number; top_p?: number; max_gen_len?: number } = {
-      prompt: finalPrompt,
-    };
-    addConfigParam(
-      params,
-      'temperature',
-      config?.temperature,
-      process.env.AWS_BEDROCK_TEMPERATURE,
-      0.01,
-    );
-    addConfigParam(params, 'top_p', config?.top_p, process.env.AWS_BEDROCK_TOP_P, 1);
-    addConfigParam(
-      params,
-      'max_gen_len',
-      config?.max_gen_len,
-      process.env.AWS_BEDROCK_MAX_GEN_LEN,
-      1024,
-    );
-    return params;
-  },
-  output: (responseJson: any) => responseJson?.generation,
-});
+  return {
+    params: (config: BedrockLlamaGenerationOptions, prompt: string) => {
+      const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
+
+      let finalPrompt: string;
+      switch (version) {
+        case LlamaVersion.V2:
+          finalPrompt = formatPromptV2(messages as LlamaMessage[]);
+          break;
+        case LlamaVersion.V3:
+          finalPrompt = formatPromptV3(messages as LlamaMessage[]);
+          break;
+        default:
+          throw new Error(`Unsupported LLAMA version: ${version}`);
+      }
+      const params: { prompt: string; temperature?: number; top_p?: number; max_gen_len?: number } =
+        {
+          prompt: finalPrompt,
+        };
+      addConfigParam(
+        params,
+        'temperature',
+        config?.temperature,
+        process.env.AWS_BEDROCK_TEMPERATURE,
+        0.01,
+      );
+      addConfigParam(params, 'top_p', config?.top_p, process.env.AWS_BEDROCK_TOP_P, 1);
+      addConfigParam(
+        params,
+        'max_gen_len',
+        config?.max_gen_len,
+        process.env.AWS_BEDROCK_MAX_GEN_LEN,
+        1024,
+      );
+      return params;
+    },
+    output: (responseJson: any) => responseJson?.generation,
+  };
+};
 
 const BEDROCK_MODEL = {
   CLAUDE_COMPLETION: {

@@ -3,6 +3,7 @@ import {
   addConfigParam,
   AwsBedrockGenericProvider,
   getLlamaModelHandler,
+  LlamaVersion,
   parseValue,
 } from '../src/providers/bedrock';
 
@@ -210,31 +211,60 @@ describe('parseValue', () => {
 
 describe('getLlamaModelHandler', () => {
   describe('LLAMA2', () => {
-    it('should generate correct prompt for LLAMA2', () => {
-      const config = {
-        temperature: 0.5,
-        top_p: 0.9,
-        max_gen_len: 512,
-      };
+    const handler = getLlamaModelHandler(LlamaVersion.V2);
+
+    it('should generate correct prompt for a single user message', () => {
+      const config = { temperature: 0.5, top_p: 0.9, max_gen_len: 512 };
       const prompt = 'Describe the purpose of a "hello world" program in one sentence.';
-      expect(getLlamaModelHandler(2).params(config, prompt)).toEqual({
-        prompt: `<s>[INST] Describe the purpose of a \"hello world\" program in one sentence. [/INST]`,
+      expect(handler.params(config, prompt)).toEqual({
+        prompt: `<s>[INST] Describe the purpose of a "hello world" program in one sentence. [/INST]`,
         temperature: 0.5,
         top_p: 0.9,
         max_gen_len: 512,
       });
     });
+
+    it('should handle a system message followed by a user message', () => {
+      const config = {};
+      const prompt = JSON.stringify([
+        { role: 'system', content: 'You are a helpful assistant.' },
+        { role: 'user', content: 'What is the capital of France?' },
+      ]);
+      expect(handler.params(config, prompt)).toEqual({
+        prompt: dedent`<s>[INST] <<SYS>>
+        You are a helpful assistant.
+        <</SYS>>
+
+        [INST] What is the capital of France? [/INST]`,
+        temperature: 0.01,
+        top_p: 1,
+        max_gen_len: 1024,
+      });
+    });
+
+    it('should handle multiple turns of conversation', () => {
+      const config = {};
+      const prompt = JSON.stringify([
+        { role: 'user', content: 'Hello' },
+        { role: 'assistant', content: 'Hi there! How can I assist you today?' },
+        { role: 'user', content: "What's the weather like?" },
+      ]);
+      expect(handler.params(config, prompt)).toEqual({
+        prompt: dedent`<s>[INST] Hello [/INST] Hi there! How can I assist you today? </s><s>[INST] What's the weather like? [/INST]`,
+        temperature: 0.01,
+        top_p: 1,
+        max_gen_len: 1024,
+      });
+    });
   });
 
   describe('LLAMA3', () => {
-    it('should generate correct prompt for LLAMA3', () => {
-      const config = {
-        temperature: 0.5,
-        top_p: 0.9,
-        max_gen_len: 512,
-      };
+    const handler = getLlamaModelHandler(LlamaVersion.V3);
+
+    it('should generate correct prompt for a single user message', () => {
+      const config = { temperature: 0.5, top_p: 0.9, max_gen_len: 512 };
       const prompt = 'Describe the purpose of a "hello world" program in one sentence.';
-      expect(getLlamaModelHandler(3).params(config, prompt)).toEqual({
+      expect(handler.params(config, prompt)).toEqual({
         prompt: dedent`<|begin_of_text|><|start_header_id|>user<|end_header_id|>
 
         Describe the purpose of a "hello world" program in one sentence.<|eot_id|><|start_header_id|>assistant<|end_header_id|>`,
@@ -243,5 +273,54 @@ describe('getLlamaModelHandler', () => {
         max_gen_len: 512,
       });
     });
+
+    it('should handle a system message followed by a user message', () => {
+      const config = {};
+      const prompt = JSON.stringify([
+        { role: 'system', content: 'You are a helpful assistant.' },
+        { role: 'user', content: 'What is the capital of France?' },
+      ]);
+      expect(handler.params(config, prompt)).toEqual({
+        prompt: dedent`<|begin_of_text|><|start_header_id|>system<|end_header_id|>
+
+        You are a helpful assistant.<|eot_id|><|start_header_id|>user<|end_header_id|>
+
+        What is the capital of France?<|eot_id|><|start_header_id|>assistant<|end_header_id|>`,
+        temperature: 0.01,
+        top_p: 1,
+        max_gen_len: 1024,
+      });
+    });
+
+    it('should handle multiple turns of conversation', () => {
+      const config = {};
+      const prompt = JSON.stringify([
+        { role: 'user', content: 'Hello' },
+        { role: 'assistant', content: 'Hi there! How can I assist you today?' },
+        { role: 'user', content: "What's the weather like?" },
+      ]);
+      expect(handler.params(config, prompt)).toEqual({
+        prompt: dedent`<|begin_of_text|><|start_header_id|>user<|end_header_id|>
+
+        Hello<|eot_id|><|start_header_id|>assistant<|end_header_id|>
+
+        Hi there! How can I assist you today?<|eot_id|><|start_header_id|>user<|end_header_id|>
+
+        What's the weather like?<|eot_id|><|start_header_id|>assistant<|end_header_id|>`,
+        temperature: 0.01,
+        top_p: 1,
+        max_gen_len: 1024,
+      });
+    });
+  });
+
+  it('should throw an error for unsupported LLAMA version', () => {
+    expect(() => getLlamaModelHandler(1 as LlamaVersion)).toThrow('Unsupported LLAMA version: 1');
+  });
+
+  it('should handle output correctly', () => {
+    const handler = getLlamaModelHandler(LlamaVersion.V2);
+    expect(handler.output({ generation: 'Test response' })).toBe('Test response');
+    expect(handler.output({})).toBeUndefined();
   });
 });
