@@ -27,6 +27,7 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import type { CellContext, ColumnDef, VisibilityState } from '@tanstack/table-core';
 import Link from 'next/link';
+import remarkGfm from 'remark-gfm';
 import invariant from 'tiny-invariant';
 import EvalOutputCell from './EvalOutputCell';
 import './ResultsTable.css';
@@ -342,7 +343,7 @@ function ResultsTable({
                 return (
                   <div className="cell">
                     {renderMarkdown ? (
-                      <ReactMarkdown>{value}</ReactMarkdown>
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{value}</ReactMarkdown>
                     ) : (
                       <TruncatedText text={value} maxLength={maxTextLength} />
                     )}
