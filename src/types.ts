@@ -44,41 +44,37 @@ export interface CommandLineOptions {
 
 export interface EnvOverrides {
   ANTHROPIC_API_KEY?: string;
-  AWS_BEDROCK_REGION?: string;
-  AZURE_OPENAI_API_BASE_URL?: string;
+  BAM_API_KEY?: string;
+  BAM_API_HOST?: string;
   AZURE_OPENAI_API_HOST?: string;
   AZURE_OPENAI_API_KEY?: string;
+  AZURE_OPENAI_API_BASE_URL?: string;
   AZURE_OPENAI_BASE_URL?: string;
-  BAM_API_HOST?: string;
-  BAM_API_KEY?: string;
-  CLOUDFLARE_ACCOUNT_ID?: string;
-  CLOUDFLARE_API_KEY?: string;
+  AWS_BEDROCK_REGION?: string;
   COHERE_API_KEY?: string;
-  GOOGLE_API_HOST?: string;
-  GOOGLE_API_KEY?: string;
-  LOCALAI_BASE_URL?: string;
-  MISTRAL_API_BASE_URL?: string;
-  MISTRAL_API_HOST?: string;
-  MISTRAL_API_KEY?: string;
-  OPENAI_API_BASE_URL?: string;
-  OPENAI_API_HOST?: string;
   OPENAI_API_KEY?: string;
+  OPENAI_API_HOST?: string;
+  OPENAI_API_BASE_URL?: string;
   OPENAI_BASE_URL?: string;
   OPENAI_ORGANIZATION?: string;
-  PALM_API_HOST?: string;
-  PALM_API_KEY?: string;
   REPLICATE_API_KEY?: string;
   REPLICATE_API_TOKEN?: string;
-  VERTEX_API_HOST?: string;
+  LOCALAI_BASE_URL?: string;
+  MISTRAL_API_HOST?: string;
+  MISTRAL_API_BASE_URL?: string;
+  PALM_API_KEY?: string;
+  PALM_API_HOST?: string;
+  GOOGLE_API_KEY?: string;
+  GOOGLE_API_HOST?: string;
   VERTEX_API_KEY?: string;
+  VERTEX_API_HOST?: string;
   VERTEX_PROJECT_ID?: string;
-  VERTEX_PUBLISHER?: string;
   VERTEX_REGION?: string;
+  VERTEX_PUBLISHER?: string;
+  MISTRAL_API_KEY?: string;
+  CLOUDFLARE_API_KEY?: string;
+  CLOUDFLARE_ACCOUNT_ID?: string;
 }
-
-export type ProviderId = string;
-
-export type ProviderLabel = string;
 
 export interface ProviderOptions {
   id?: ProviderId;
@@ -97,40 +93,19 @@ export interface CallApiContextParams {
   getCache?: typeof getCache;
 }
 
-export interface TokenUsage {
-  total: number;
-  prompt: number;
-  completion: number;
-  cached?: number;
+export interface CallApiOptionsParams {
+  includeLogProbs?: boolean;
+  originalProvider?: ApiProvider;
 }
 
-export interface ProviderEmbeddingResponse {
-  error?: string;
-  embedding?: number[];
-  tokenUsage?: Partial<TokenUsage>;
-}
-
-export interface ProviderResponse {
-  error?: string;
-  output?: string | object;
-  tokenUsage?: Partial<TokenUsage>;
-  cost?: number;
-  cached?: boolean;
-  logProbs?: number[];
-  metadata?: Record<string, any>;
-}
-
-export interface ProviderSimilarityResponse {
-  error?: string;
-  similarity?: number;
-  tokenUsage?: Partial<TokenUsage>;
-}
-
-
-export interface ProviderClassificationResponse {
-  error?: string;
-  classification?: Record<string, number>;
-}
+type CallApiFunction = {
+  (
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse>;
+  label?: string;
+};
 
 export interface ApiProvider {
   // Unique identifier for the provider
@@ -155,21 +130,6 @@ export interface ApiProvider {
   delay?: number;
 }
 
-export interface CallApiOptionsParams {
-  includeLogProbs?: boolean;
-  originalProvider?: ApiProvider;
-}
-
-type CallApiFunction = {
-  (
-    prompt: string,
-    context?: CallApiContextParams,
-    options?: CallApiOptionsParams,
-  ): Promise<ProviderResponse>;
-  label?: string;
-};
-
-
 export function isApiProvider(provider: any): provider is ApiProvider {
   return typeof provider === 'object' && 'id' in provider && typeof provider.id === 'function';
 }
@@ -190,6 +150,44 @@ export interface ApiClassificationProvider extends ApiProvider {
   callClassificationApi: (prompt: string) => Promise<ProviderClassificationResponse>;
 }
 
+export interface ApiModerationProvider extends ApiProvider {
+  callModerationApi: (prompt: string, response: string) => Promise<ProviderModerationResponse>;
+}
+
+export interface TokenUsage {
+  total: number;
+  prompt: number;
+  completion: number;
+  cached?: number;
+}
+
+export interface ProviderResponse {
+  error?: string;
+  output?: string | object;
+  tokenUsage?: Partial<TokenUsage>;
+  cost?: number;
+  cached?: boolean;
+  logProbs?: number[];
+  metadata?: Record<string, any>;
+}
+
+export interface ProviderEmbeddingResponse {
+  error?: string;
+  embedding?: number[];
+  tokenUsage?: Partial<TokenUsage>;
+}
+
+export interface ProviderSimilarityResponse {
+  error?: string;
+  similarity?: number;
+  tokenUsage?: Partial<TokenUsage>;
+}
+
+export interface ProviderClassificationResponse {
+  error?: string;
+  classification?: Record<string, number>;
+}
+
 export interface ModerationFlag {
   code: string;
   description: string;
@@ -199,10 +197,6 @@ export interface ModerationFlag {
 export interface ProviderModerationResponse {
   error?: string;
   flags?: ModerationFlag[];
-}
-
-export interface ApiModerationProvider extends ApiProvider {
-  callModerationApi: (prompt: string, response: string) => Promise<ProviderModerationResponse>;
 }
 
 export interface CsvRow {
@@ -243,22 +237,6 @@ export interface OutputConfig {
   storeOutputAs?: string;
 }
 
-export interface Prompt {
-  id?: string;
-  raw: string;
-  /**
-   * @deprecated in > 0.59.0. Use `label` instead.
-   */
-  display?: string;
-  label: string;
-  function?: (context: {
-    vars: Record<string, string | object>;
-    provider?: ApiProvider;
-  }) => Promise<string | object>;
-}
-
-export type NunjucksFilterMap = Record<string, (...args: any[]) => string>;
-
 export interface RunEvalOptions {
   provider: ApiProvider;
   prompt: Prompt;
@@ -288,6 +266,20 @@ export interface EvaluateOptions {
   cache?: boolean;
   eventSource?: string;
   interactiveProviders?: boolean;
+}
+
+export interface Prompt {
+  id?: string;
+  raw: string;
+  /**
+   * @deprecated in > 0.59.0. Use `label` instead.
+   */
+  display?: string;
+  label: string;
+  function?: (context: {
+    vars: Record<string, string | object>;
+    provider?: ApiProvider;
+  }) => Promise<string | object>;
 }
 
 // Used for final prompt display
@@ -320,32 +312,6 @@ export interface PromptWithMetadata {
   count: number;
 }
 
-export interface GradingResult {
-  // Whether the test passed or failed
-  pass: boolean;
-
-  // Test score, typically between 0 and 1
-  score: number;
-
-  // Plain text reason for the result
-  reason: string;
-
-  // Map of labeled metrics to values
-  namedScores?: Record<string, number>;
-
-  // Record of tokens usage for this assertion
-  tokensUsed?: TokenUsage;
-
-  // List of results for each component of the assertion
-  componentResults?: GradingResult[];
-
-  // The assertion that was evaluated
-  assertion?: Assertion | null;
-
-  // User comment
-  comment?: string;
-}
-
 export interface EvaluateResult {
   provider: Pick<ProviderOptions, 'id' | 'label'>;
   prompt: Prompt;
@@ -375,6 +341,21 @@ export interface EvaluateTableOutput {
   metadata?: Record<string, any>;
 }
 
+export interface EvaluateTableRow {
+  description?: string;
+  outputs: EvaluateTableOutput[];
+  vars: string[];
+  test: AtomicTestCase;
+}
+
+export interface EvaluateTable {
+  head: {
+    prompts: CompletedPrompt[];
+    vars: string[];
+  };
+  body: EvaluateTableRow[];
+}
+
 export interface EvaluateStats {
   successes: number;
   failures: number;
@@ -387,6 +368,49 @@ export interface EvaluateSummary {
   results: EvaluateResult[];
   table: EvaluateTable;
   stats: EvaluateStats;
+}
+
+export interface GradingResult {
+  // Whether the test passed or failed
+  pass: boolean;
+
+  // Test score, typically between 0 and 1
+  score: number;
+
+  // Plain text reason for the result
+  reason: string;
+
+  // Map of labeled metrics to values
+  namedScores?: Record<string, number>;
+
+  // Record of tokens usage for this assertion
+  tokensUsed?: TokenUsage;
+
+  // List of results for each component of the assertion
+  componentResults?: GradingResult[];
+
+  // The assertion that was evaluated
+  assertion?: Assertion | null;
+
+  // User comment
+  comment?: string;
+}
+
+export function isGradingResult(result: any): result is GradingResult {
+  return (
+    typeof result === 'object' &&
+    result !== null &&
+    typeof result.pass === 'boolean' &&
+    typeof result.score === 'number' &&
+    typeof result.reason === 'string' &&
+    (typeof result.namedScores === 'undefined' || typeof result.namedScores === 'object') &&
+    (typeof result.tokensUsed === 'undefined' || typeof result.tokensUsed === 'object') &&
+    (typeof result.componentResults === 'undefined' || Array.isArray(result.componentResults)) &&
+    (typeof result.assertion === 'undefined' ||
+      result.assertion === null ||
+      typeof result.assertion === 'object') &&
+    (typeof result.comment === 'undefined' || typeof result.comment === 'string')
+  );
 }
 
 type BaseAssertionTypes =
@@ -433,8 +457,6 @@ type NotPrefixed<T extends string> = `not-${T}`;
 
 export type AssertionType = BaseAssertionTypes | NotPrefixed<BaseAssertionTypes>;
 
-export type AssertionValueFunctionResult = boolean | number | GradingResult;
-
 export interface AssertionSet {
   type: 'assert-set';
 
@@ -449,6 +471,64 @@ export interface AssertionSet {
 
   // The required score for this assert set. If not provided, the test case is graded pass/fail.
   threshold?: number;
+}
+
+// TODO(ian): maybe Assertion should support {type: config} to make the yaml cleaner
+export interface Assertion {
+  // Type of assertion
+  type: AssertionType;
+
+  // The expected value, if applicable
+  value?: AssertionValue;
+
+  // The threshold value, only applicable for similarity (cosine distance)
+  threshold?: number;
+
+  // The weight of this assertion compared to other assertions in the test case. Defaults to 1.
+  weight?: number;
+
+  // Some assertions (similarity, llm-rubric) require an LLM provider
+  provider?: GradingConfig['provider'];
+
+  // Override the grading rubric
+  rubricPrompt?: GradingConfig['rubricPrompt'];
+
+  // Tag this assertion result as a named metric
+  metric?: string;
+
+  // Process the output before running the assertion
+  transform?: string;
+}
+
+export type AssertionValue = string | string[] | object | AssertionValueFunction;
+
+export type AssertionValueFunction = (
+  output: string,
+  context: AssertionValueFunctionContext,
+) => AssertionValueFunctionResult | Promise<AssertionValueFunctionResult>;
+
+export interface AssertionValueFunctionContext {
+  prompt: string | undefined;
+  vars: Record<string, string | object>;
+  test: AtomicTestCase<Record<string, string | object>>;
+}
+
+export type AssertionValueFunctionResult = boolean | number | GradingResult;
+
+// Used when building prompts index from files.
+export interface TestCasesWithMetadataPrompt {
+  prompt: CompletedPrompt;
+  id: string;
+  evalId: string;
+}
+
+export interface TestCasesWithMetadata {
+  id: string;
+  testCases: FilePath | (FilePath | TestCase)[];
+  recentEvalDate: Date;
+  recentEvalId: string;
+  count: number;
+  prompts: TestCasesWithMetadataPrompt[];
 }
 
 // Each test case is graded pass/fail with a score.  A test case represents a unique input to the LLM after substituting `vars` in the prompt.
@@ -482,99 +562,6 @@ export interface TestCase<Vars = Record<string, string | string[] | object>> {
   threshold?: number;
 }
 
-// Same as a TestCase, except the `vars` object has been flattened into its final form.
-export interface AtomicTestCase<Vars = Record<string, string | object>> extends TestCase {
-  vars?: Record<string, string | object>;
-}
-
-export interface AssertionValueFunctionContext {
-  prompt: string | undefined;
-  vars: Record<string, string | object>;
-  test: AtomicTestCase<Record<string, string | object>>;
-}
-
-export type AssertionValueFunction = (
-  output: string,
-  context: AssertionValueFunctionContext,
-) => AssertionValueFunctionResult | Promise<AssertionValueFunctionResult>;
-
-export type AssertionValue = string | string[] | object | AssertionValueFunction;
-
-// TODO(ian): maybe Assertion should support {type: config} to make the yaml cleaner
-export interface Assertion {
-  // Type of assertion
-  type: AssertionType;
-
-  // The expected value, if applicable
-  value?: AssertionValue;
-
-  // The threshold value, only applicable for similarity (cosine distance)
-  threshold?: number;
-
-  // The weight of this assertion compared to other assertions in the test case. Defaults to 1.
-  weight?: number;
-
-  // Some assertions (similarity, llm-rubric) require an LLM provider
-  provider?: GradingConfig['provider'];
-
-  // Override the grading rubric
-  rubricPrompt?: GradingConfig['rubricPrompt'];
-
-  // Tag this assertion result as a named metric
-  metric?: string;
-
-  // Process the output before running the assertion
-  transform?: string;
-}
-
-export function isGradingResult(result: any): result is GradingResult {
-  return (
-    typeof result === 'object' &&
-    result !== null &&
-    typeof result.pass === 'boolean' &&
-    typeof result.score === 'number' &&
-    typeof result.reason === 'string' &&
-    (typeof result.namedScores === 'undefined' || typeof result.namedScores === 'object') &&
-    (typeof result.tokensUsed === 'undefined' || typeof result.tokensUsed === 'object') &&
-    (typeof result.componentResults === 'undefined' || Array.isArray(result.componentResults)) &&
-    (typeof result.assertion === 'undefined' ||
-      result.assertion === null ||
-      typeof result.assertion === 'object') &&
-    (typeof result.comment === 'undefined' || typeof result.comment === 'string')
-  );
-}
-
-// Used when building prompts index from files.
-export interface TestCasesWithMetadataPrompt {
-  prompt: CompletedPrompt;
-  id: string;
-  evalId: string;
-}
-
-export interface EvaluateTableRow {
-  description?: string;
-  outputs: EvaluateTableOutput[];
-  vars: string[];
-  test: AtomicTestCase;
-}
-
-export interface EvaluateTable {
-  head: {
-    prompts: CompletedPrompt[];
-    vars: string[];
-  };
-  body: EvaluateTableRow[];
-}
-
-export interface TestCasesWithMetadata {
-  id: string;
-  testCases: FilePath | (FilePath | TestCase)[];
-  recentEvalDate: Date;
-  recentEvalId: string;
-  count: number;
-  prompts: TestCasesWithMetadataPrompt[];
-}
-
 export interface Scenario {
   // Optional description of what you're testing
   description?: string;
@@ -585,6 +572,13 @@ export interface Scenario {
   // Optional list of automatic checks to run on the LLM output
   tests: TestCase[];
 }
+
+// Same as a TestCase, except the `vars` object has been flattened into its final form.
+export interface AtomicTestCase<Vars = Record<string, string | object>> extends TestCase {
+  vars?: Record<string, string | object>;
+}
+
+export type NunjucksFilterMap = Record<string, (...args: any[]) => string>;
 
 export type DerivedMetric = {
   // The name of this metric
@@ -626,6 +620,10 @@ export interface TestSuite {
   // Metrics to calculate after the eval has been completed
   derivedMetrics?: DerivedMetric[];
 }
+
+export type ProviderId = string;
+
+export type ProviderLabel = string;
 
 export type ProviderFunction = ApiProvider['callApi'];
 
@@ -705,16 +703,16 @@ export type EvaluateTestSuiteWithEvaluateOptions = EvaluateTestSuite & {
   evaluateOptions: EvaluateOptions;
 };
 
+export interface SharedResults {
+  data: ResultsFile;
+}
+
 // promptfoo's internal results format
 export interface ResultsFile {
   version: number;
   createdAt: string;
   results: EvaluateSummary;
   config: Partial<UnifiedConfig>;
-}
-
-export interface SharedResults {
-  data: ResultsFile;
 }
 
 // File exported as --output option

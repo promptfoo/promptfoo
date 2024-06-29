@@ -48,7 +48,6 @@ export default [
       'no-case-declarations': 0,
       'no-control-regex': 0,
       'no-empty': 0,
-      'no-use-before-define': 'error',
       'no-useless-escape': 0,
       'unused-imports/no-unused-imports': 'error',
     },
