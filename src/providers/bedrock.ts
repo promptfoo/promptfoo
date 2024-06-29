@@ -185,65 +185,69 @@ export function parseValue(value: string, defaultValue: any) {
   return value;
 }
 
-export const getLlamaModelHandler = (ver: number) => {
-  return {
-    params: (config: BedrockLlamaGenerationOptions, prompt: string) => {
-      const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
-      let finalPrompt: string;
-      if (messages.length > 0 && messages[0].role === 'system') {
-        const userMessages = messages
-          .slice(1)
-          .map((m) => `${m.content}`)
-          .join('\n');
+export const getLlamaModelHandler = (version: number) => ({
+  params: (config: BedrockLlamaGenerationOptions, prompt: string) => {
+    const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
+    let finalPrompt: string;
+    if (messages.length > 0 && messages[0].role === 'system') {
+      const userMessages = messages
+        .slice(1)
+        .map((m) => `${m.content}`)
+        .join('\n');
 
-        if (ver == 3) {
-          finalPrompt = dedent`<|begin_of_text|><|start_header_id|>system<|end_header_id|>
+      if (version == 2) {
+        finalPrompt = dedent`
+          <s>[INST] <<SYS>>
+          ${messages[0].content}
+          <</SYS>>
+  
+          ${userMessages} [/INST]
+        `;
+      } else if (version == 3) {
+        finalPrompt = dedent`<|begin_of_text|><|start_header_id|>system<|end_header_id|>
 
           ${messages[0].content}<|eot_id|><|start_header_id|>user<|end_header_id|>
 
           ${userMessages}<|eot_id|><|start_header_id|>assistant<|end_header_id|>`;
-        } else {
-          finalPrompt = dedent`
-          <s>[INST] <<SYS>>
-          ${messages[0].content}
-          <</SYS>>
-
-          ${userMessages} [/INST]
-        `;
-        }
       } else {
-        const userMessages = messages.map((m) => `${m.content}`).join('\n');
-        if (ver == 3) {
-          finalPrompt = dedent`<|begin_of_text|><|start_header_id|>user<|end_header_id|>
+        throw new Error(`Unsupported LLAMA version: ${version}`);
+      }
+    } else {
+      const userMessages = messages.map((m) => `${m.content}`).join('\n');
+      if (version == 2) {
+        finalPrompt = `<s>[INST] ${userMessages} [/INST]`;
+      } else if (version == 3) {
+        finalPrompt = dedent`<|begin_of_text|><|start_header_id|>user<|end_header_id|>
 
           ${userMessages}<|eot_id|><|start_header_id|>assistant<|end_header_id|>`;
-        } else {
-          finalPrompt = `<s>[INST] ${userMessages} [/INST]`;
-        }
+      } else {
+        throw new Error(`Unsupported LLAMA version: ${version}`);
       }
+    }
 
-      const params: { prompt: string; temperature?: number; top_p?: number; max_gen_len?: number } =
-        { prompt: finalPrompt };
-      addConfigParam(
-        params,
-        'temperature',
-        config?.temperature,
-        process.env.AWS_BEDROCK_TEMPERATURE,
-        0.01,
-      );
-      addConfigParam(params, 'top_p', config?.top_p, process.env.AWS_BEDROCK_TOP_P, 1);
-      addConfigParam(
-        params,
-        'max_gen_len',
-        config?.max_gen_len,
-        process.env.AWS_BEDROCK_MAX_GEN_LEN,
-        1024,
-      );
-      return params;
-    },
-    output: (responseJson: any) => responseJson?.generation,
-  };
-};
+    const params: { prompt: string; temperature?: number; top_p?: number; max_gen_len?: number } = {
+      prompt: finalPrompt,
+    };
+    addConfigParam(
+      params,
+      'temperature',
+      config?.temperature,
+      process.env.AWS_BEDROCK_TEMPERATURE,
+      0.01,
+    );
+    addConfigParam(params, 'top_p', config?.top_p, process.env.AWS_BEDROCK_TOP_P, 1);
+    addConfigParam(
+      params,
+      'max_gen_len',
+      config?.max_gen_len,
+      process.env.AWS_BEDROCK_MAX_GEN_LEN,
+      1024,
+    );
+    return params;
+  },
+  output: (responseJson: any) => responseJson?.generation,
+});
+
 const BEDROCK_MODEL = {
   CLAUDE_COMPLETION: {
     params: (config: BedrockClaudeLegacyCompletionOptions, prompt: string, stop: string[]) => {

@@ -1,5 +1,10 @@
 import dedent from 'dedent';
-import { addConfigParam, AwsBedrockGenericProvider, getLlamaModelHandler, parseValue } from '../src/providers/bedrock';
+import {
+  addConfigParam,
+  AwsBedrockGenericProvider,
+  getLlamaModelHandler,
+  parseValue,
+} from '../src/providers/bedrock';
 
 jest.mock('@aws-sdk/client-bedrock-runtime', () => {
   return {
@@ -216,7 +221,7 @@ describe('getLlamaModelHandler', () => {
         prompt: `<s>[INST] Describe the purpose of a \"hello world\" program in one sentence. [/INST]`,
         temperature: 0.5,
         top_p: 0.9,
-        max_gen_len: 512
+        max_gen_len: 512,
       });
     });
   });
@@ -235,7 +240,7 @@ describe('getLlamaModelHandler', () => {
         Describe the purpose of a "hello world" program in one sentence.<|eot_id|><|start_header_id|>assistant<|end_header_id|>`,
         temperature: 0.5,
         top_p: 0.9,
-        max_gen_len: 512
+        max_gen_len: 512,
       });
     });
   });
