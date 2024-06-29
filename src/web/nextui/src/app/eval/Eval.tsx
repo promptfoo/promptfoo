@@ -54,7 +54,7 @@ export default function Eval({
   defaultEvalId: defaultEvalIdProp,
 }: EvalOptions) {
   const router = useRouter();
-  const { table, setTable, setConfig, setEvalId } = useStore();
+  const { table, setTable, setConfig, setEvalId, setAuthor } = useStore();
   const [loaded, setLoaded] = React.useState(false);
   const [failed, setFailed] = React.useState(false);
   const [recentEvals, setRecentEvals] = React.useState<{ id: string; label: string }[]>(
@@ -74,9 +74,10 @@ export default function Eval({
       const body = await resp.json();
       setTable(body.data.results.table);
       setConfig(body.data.config);
+      setAuthor(body.data.author);
       setEvalId(id);
     },
-    [setTable, setConfig, setEvalId],
+    [setTable, setConfig, setEvalId, setAuthor],
   );
 
   const handleRecentEvalSelection = async (id: string) => {
@@ -108,6 +109,7 @@ export default function Eval({
     } else if (preloadedData) {
       setTable(preloadedData.data.results?.table as EvaluateTable);
       setConfig(preloadedData.data.config);
+      setAuthor(preloadedData.data.author);
       setLoaded(true);
     } else if (fetchId) {
       const run = async () => {
@@ -121,6 +123,7 @@ export default function Eval({
         const results = await response.json();
         setTable(results.data.results?.table as EvaluateTable);
         setConfig(results.data.config);
+        setAuthor(results.data.author);
         setLoaded(true);
       };
       run();
@@ -133,6 +136,7 @@ export default function Eval({
           setLoaded(true);
           setTable(data?.results.table);
           setConfig(data?.config);
+          setAuthor(data?.author);
           fetchRecentFileEvals().then((newRecentEvals) => {
             setDefaultEvalId(newRecentEvals[0]?.id);
             setEvalId(newRecentEvals[0]?.id);
@@ -143,6 +147,7 @@ export default function Eval({
           console.log('Received data update', data);
           setTable(data.results.table);
           setConfig(data.config);
+          setAuthor(data.author);
           fetchRecentFileEvals().then((newRecentEvals) => {
             const newId = newRecentEvals[0]?.id;
             if (newId) {
@@ -173,6 +178,7 @@ export default function Eval({
             setDefaultEvalId(records[0].id);
             setTable(results.table);
             setConfig(config);
+            setAuthor(null);
             setLoaded(true);
           });
         }
@@ -188,6 +194,7 @@ export default function Eval({
           const body = await resp.json();
           setTable(body.data.results.table);
           setConfig(body.data.config);
+          setAuthor(body.data.author);
           setLoaded(true);
           setDefaultEvalId(defaultEvalId);
           setEvalId(defaultEvalId);
@@ -205,6 +212,7 @@ export default function Eval({
     fetchId,
     setTable,
     setConfig,
+    setAuthor,
     setEvalId,
     fetchEvalById,
     preloadedData,

@@ -10,5 +10,5 @@ export function setUserEmail(email: string) {
 }
 
 export function getAuthor(): string {
-  return getUserEmail() || 'Unknown';  
+  return getUserEmail() || 'Unknown';
 }
