@@ -97,11 +97,6 @@ export interface CallApiContextParams {
   getCache?: typeof getCache;
 }
 
-export interface CallApiOptionsParams {
-  includeLogProbs?: boolean;
-  originalProvider?: ApiProvider;
-}
-
 export interface TokenUsage {
   total: number;
   prompt: number;
@@ -131,14 +126,6 @@ export interface ProviderSimilarityResponse {
   tokenUsage?: Partial<TokenUsage>;
 }
 
-type CallApiFunction = {
-  (
-    prompt: string,
-    context?: CallApiContextParams,
-    options?: CallApiOptionsParams,
-  ): Promise<ProviderResponse>;
-  label?: string;
-};
 
 export interface ProviderClassificationResponse {
   error?: string;
@@ -167,6 +154,21 @@ export interface ApiProvider {
   // Custom delay for the provider.
   delay?: number;
 }
+
+export interface CallApiOptionsParams {
+  includeLogProbs?: boolean;
+  originalProvider?: ApiProvider;
+}
+
+type CallApiFunction = {
+  (
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse>;
+  label?: string;
+};
+
 
 export function isApiProvider(provider: any): provider is ApiProvider {
   return typeof provider === 'object' && 'id' in provider && typeof provider.id === 'function';
