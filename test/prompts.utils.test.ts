@@ -168,7 +168,7 @@ describe('parsePathOrGlob', () => {
   it('should parse a directory path', () => {
     jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => true } as fs.Stats);
     expect(parsePathOrGlob('/base', 'dir')).toEqual({
-      extension: '',
+      extension: undefined,
       functionName: undefined,
       isPathPattern: true,
       promptPath: path.join('/base', 'dir'),
@@ -231,7 +231,7 @@ describe('parsePathOrGlob', () => {
   it('should handle glob patterns in file path', () => {
     jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
     expect(parsePathOrGlob('/base', '*.js')).toEqual({
-      extension: '',
+      extension: undefined,
       functionName: undefined,
       isPathPattern: true,
       promptPath: path.join('/base', '*.js'),
@@ -271,7 +271,7 @@ describe('parsePathOrGlob', () => {
   it('should handle complex directory paths', () => {
     jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => true } as fs.Stats);
     expect(parsePathOrGlob('/base', 'a/b/c/d/e/f/g')).toEqual({
-      extension: '',
+      extension: undefined,
       functionName: undefined,
       isPathPattern: true,
       promptPath: path.join('/base', 'a/b/c/d/e/f/g'),

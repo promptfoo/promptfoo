@@ -101,7 +101,7 @@ export async function processPrompt(
     isPathPattern,
     promptPath,
   }: {
-    extension: string;
+    extension?: string;
     functionName?: string;
     isPathPattern: boolean;
     promptPath: string;
@@ -132,7 +132,7 @@ export async function processPrompt(
   if (extension === '.jsonl') {
     return processJsonlFile(promptPath, prompt);
   }
-  if (['.js', '.cjs', '.mjs'].includes(extension)) {
+  if (extension && ['.js', '.cjs', '.mjs'].includes(extension)) {
     return processJsFile(promptPath, prompt, functionName);
   }
   if (extension === '.py') {
@@ -141,7 +141,7 @@ export async function processPrompt(
   if (extension === '.txt') {
     return processTxtFile(promptPath, prompt);
   }
-  if (['.yml', '.yaml'].includes(extension)) {
+  if (extension && ['.yml', '.yaml'].includes(extension)) {
     return processYamlFile(promptPath, prompt);
   }
   return [];

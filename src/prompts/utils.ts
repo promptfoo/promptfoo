@@ -99,7 +99,7 @@ export function parsePathOrGlob(
   basePath: string,
   promptPath: string,
 ): {
-  extension: string;
+  extension?: string;
   functionName?: string;
   isPathPattern: boolean;
   promptPath: string;
@@ -129,11 +129,11 @@ export function parsePathOrGlob(
   }
 
   const isPathPattern = stats?.isDirectory() || /[*?{}\[\]]/.test(filePath); // glob pattern
-
+  const safeFilename = path.relative(basePath, path.resolve(basePath, filename));
   return {
-    extension: isPathPattern ? '' : path.parse(filename).ext,
+    extension: isPathPattern ? undefined : path.parse(safeFilename).ext,
     functionName,
     isPathPattern,
-    promptPath: path.join(basePath, filename),
+    promptPath: path.join(basePath, safeFilename),
   };
 }
