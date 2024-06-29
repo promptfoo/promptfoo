@@ -4,7 +4,9 @@ prompts:
 
 providers:
   - id: bedrock:meta.llama3-8b-instruct-v1:0
+    label: llama3 instruct
   - id: bedrock:meta.llama2-13b-chat-v1
+    label: llama2 chat
 
 tests:
   - vars:

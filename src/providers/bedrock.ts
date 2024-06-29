@@ -196,7 +196,7 @@ export interface LlamaMessage {
 }
 
 // see https://github.com/meta-llama/llama/blob/main/llama/generation.py#L284-L395
-export const formatPromptV2 = (messages: LlamaMessage[]): string => {
+export const formatPromptLlama2Chat = (messages: LlamaMessage[]): string => {
   if (messages.length === 0) return '';
 
   let formattedPrompt = '<s>';
@@ -218,7 +218,7 @@ export const formatPromptV2 = (messages: LlamaMessage[]): string => {
           formattedPrompt += `[INST] ${message.content.trim()} [/INST]`;
         } else if (i === 0 && systemMessageIncluded) {
           formattedPrompt += `${message.content.trim()} [/INST]`;
-        } else if (i > 0 && !systemMessageIncluded) {
+        } else if (i > 0 && messages[i - 1].role === 'assistant') {
           formattedPrompt += `<s>[INST] ${message.content.trim()} [/INST]`;
         } else {
           formattedPrompt += `${message.content.trim()} [/INST]`;
@@ -237,7 +237,7 @@ export const formatPromptV2 = (messages: LlamaMessage[]): string => {
   return formattedPrompt;
 };
 
-const formatPromptV3 = (messages: LlamaMessage[]): string => {
+const formatPromptLlama3Instruct = (messages: LlamaMessage[]): string => {
   let formattedPrompt = '<|begin_of_text|>';
 
   for (const message of messages) {
@@ -263,10 +263,10 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
       let finalPrompt: string;
       switch (version) {
         case LlamaVersion.V2:
-          finalPrompt = formatPromptV2(messages as LlamaMessage[]);
+          finalPrompt = formatPromptLlama2Chat(messages as LlamaMessage[]);
           break;
         case LlamaVersion.V3:
-          finalPrompt = formatPromptV3(messages as LlamaMessage[]);
+          finalPrompt = formatPromptLlama3Instruct(messages as LlamaMessage[]);
           break;
         default:
           throw new Error(`Unsupported LLAMA version: ${version}`);
@@ -633,15 +633,20 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
     );
     if (isCacheEnabled()) {
       try {
-        await cache.set(cacheKey, response.body.transformToString());
+        await cache.set(cacheKey, new TextDecoder().decode(response.body));
       } catch (err) {
         logger.error(`Failed to cache response: ${String(err)}`);
       }
     }
     try {
+      const output = JSON.parse(new TextDecoder().decode(response.body));
       return {
-        output: model.output(JSON.parse(response.body.transformToString())),
-        tokenUsage: {}, // TODO: add token usage once Amazon Bedrock API supports it
+        output: model.output(output),
+        tokenUsage: {
+          total: output.prompt_token_count + output.generation_token_count,
+          prompt: output.prompt_token_count,
+          completion: output.generation_token_count,
+        },
       };
     } catch (err) {
       return {
