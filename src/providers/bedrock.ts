@@ -628,9 +628,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
         error: `API call error: ${String(err)}`,
       };
     }
-    logger.debug(
-      `\tAmazon Bedrock API response: ${JSON.stringify(JSON.parse(response.body.transformToString()))}`,
-    );
+    logger.debug(`\tAmazon Bedrock API response: ${response.body.transformToString()}`);
     if (isCacheEnabled()) {
       try {
         await cache.set(cacheKey, new TextDecoder().decode(response.body));

@@ -2,11 +2,11 @@ import dedent from 'dedent';
 import {
   addConfigParam,
   AwsBedrockGenericProvider,
-  getLlamaModelHandler,
   formatPromptLlama2Chat,
+  getLlamaModelHandler,
+  LlamaMessage,
   LlamaVersion,
   parseValue,
-  LlamaMessage,
 } from '../src/providers/bedrock';
 
 jest.mock('@aws-sdk/client-bedrock-runtime', () => {
