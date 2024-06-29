@@ -190,43 +190,47 @@ export enum LlamaVersion {
   V3 = 3,
 }
 
-interface LlamaMessage {
+export interface LlamaMessage {
   role: 'system' | 'user' | 'assistant';
   content: string;
 }
 
 // see https://github.com/meta-llama/llama/blob/main/llama/generation.py#L284-L395
-const formatPromptV2 = (messages: LlamaMessage[]): string => {
+export const formatPromptV2 = (messages: LlamaMessage[]): string => {
+  if (messages.length === 0) return '';
+
   let formattedPrompt = '<s>';
-  let isFirstUserMessage = true;
+  let systemMessageIncluded = false;
 
   for (let i = 0; i < messages.length; i++) {
     const message = messages[i];
-    const nextMessage = messages[i + 1];
 
     switch (message.role) {
       case 'system':
-        if (isFirstUserMessage) {
-          formattedPrompt += '[INST] <<SYS>>\n';
-          formattedPrompt += `${message.content.trim()}\n`;
-          formattedPrompt += '<</SYS>>\n\n';
+        if (!systemMessageIncluded) {
+          formattedPrompt += `[INST] <<SYS>>\n${message.content.trim()}\n<</SYS>>\n\n`;
+          systemMessageIncluded = true;
         }
         break;
+
       case 'user':
-        if (isFirstUserMessage) {
-          formattedPrompt += '[INST] ';
-          isFirstUserMessage = false;
+        if (i === 0 && !systemMessageIncluded) {
+          formattedPrompt += `[INST] ${message.content.trim()} [/INST]`;
+        } else if (i === 0 && systemMessageIncluded) {
+          formattedPrompt += `${message.content.trim()} [/INST]`;
+        } else if (i > 0 && !systemMessageIncluded) {
+          formattedPrompt += `<s>[INST] ${message.content.trim()} [/INST]`;
         } else {
-          formattedPrompt += '<s>[INST] ';
-        }
-        formattedPrompt += `${message.content.trim()}`;
-        if (!nextMessage || nextMessage.role === 'user') {
-          formattedPrompt += ' [/INST]';
+          formattedPrompt += `${message.content.trim()} [/INST]`;
         }
         break;
+
       case 'assistant':
-        formattedPrompt += ` [/INST] ${message.content.trim()} </s>`;
+        formattedPrompt += ` ${message.content.trim()} </s>`;
         break;
+
+      default:
+        throw new Error(`Unexpected role: ${message.role}`);
     }
   }
 
