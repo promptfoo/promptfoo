@@ -39,7 +39,7 @@ jobs:
           fi
       - name: Create git tag
         if: env.TAG == 'true'
-        run: git tag v${{ env.VERSION }}
+        run: git tag ${{ env.VERSION }}
       - name: Push git tag
         if: env.TAG == 'true'
         run: git push --tags
