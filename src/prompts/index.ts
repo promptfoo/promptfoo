@@ -158,7 +158,6 @@ export async function readPrompts(
   basePath: string = '',
 ): Promise<Prompt[]> {
   logger.debug(`Reading prompts from ${JSON.stringify(promptPathOrGlobs)}`);
-
   const promptPartials: Partial<Prompt>[] = normalizeInput(promptPathOrGlobs);
   const prompts: Prompt[] = [];
   for (const prompt of promptPartials) {

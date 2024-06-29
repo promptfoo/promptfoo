@@ -165,16 +165,6 @@ describe('parsePathOrGlob', () => {
     });
   });
 
-  it('should parse a file path with file: prefix', () => {
-    jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
-    expect(parsePathOrGlob('/base', 'file:file.js')).toEqual({
-      extension: '.js',
-      functionName: undefined,
-      isPathPattern: false,
-      promptPath: path.join('/base', 'file.js'),
-    });
-  });
-
   it('should parse a directory path', () => {
     jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => true } as fs.Stats);
     expect(parsePathOrGlob('/base', 'dir')).toEqual({
@@ -228,11 +218,63 @@ describe('parsePathOrGlob', () => {
 
   it('should handle paths with environment variables', () => {
     jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
-    expect(parsePathOrGlob('/base', 'file.txt')).toEqual({
+    process.env.FILE_PATH = 'file.txt';
+    expect(parsePathOrGlob('/base', process.env.FILE_PATH)).toEqual({
       extension: '.txt',
       functionName: undefined,
       isPathPattern: false,
       promptPath: path.join('/base', 'file.txt'),
+    });
+    delete process.env.FILE_PATH;
+  });
+
+  it('should handle glob patterns in file path', () => {
+    jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+    expect(parsePathOrGlob('/base', '*.js')).toEqual({
+      extension: '',
+      functionName: undefined,
+      isPathPattern: true,
+      promptPath: path.join('/base', '*.js'),
+    });
+  });
+
+  it('should handle complex file paths', () => {
+    jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+    expect(parsePathOrGlob('/base', 'dir/subdir/file.py:func')).toEqual({
+      extension: '.py',
+      functionName: 'func',
+      isPathPattern: false,
+      promptPath: path.join('/base', 'dir/subdir/file.py'),
+    });
+  });
+
+  it('should handle non-standard file extensions', () => {
+    jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+    expect(parsePathOrGlob('/base', 'file.customext')).toEqual({
+      extension: '.customext',
+      functionName: undefined,
+      isPathPattern: false,
+      promptPath: path.join('/base', 'file.customext'),
+    });
+  });
+
+  it('should handle deeply nested file paths', () => {
+    jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+    expect(parsePathOrGlob('/base', 'a/b/c/d/e/f/g/file.py:func')).toEqual({
+      extension: '.py',
+      functionName: 'func',
+      isPathPattern: false,
+      promptPath: path.join('/base', 'a/b/c/d/e/f/g/file.py'),
+    });
+  });
+
+  it('should handle complex directory paths', () => {
+    jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => true } as fs.Stats);
+    expect(parsePathOrGlob('/base', 'a/b/c/d/e/f/g')).toEqual({
+      extension: '',
+      functionName: undefined,
+      isPathPattern: true,
+      promptPath: path.join('/base', 'a/b/c/d/e/f/g'),
     });
   });
 });

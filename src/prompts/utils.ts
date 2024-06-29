@@ -117,7 +117,8 @@ export function parsePathOrGlob(
       throw err;
     }
   }
-  let filename = path.parse(filePath).base;
+
+  let filename = path.relative(basePath, filePath);
   let functionName: string | undefined;
 
   if (filename.includes(':')) {
@@ -126,10 +127,13 @@ export function parsePathOrGlob(
       [filename, functionName] = splits;
     }
   }
+
+  const isPathPattern = stats?.isDirectory() || /[*?{}\[\]]/.test(filePath); // glob pattern
+
   return {
-    extension: path.parse(filename).ext,
+    extension: isPathPattern ? '' : path.parse(filename).ext,
     functionName,
-    isPathPattern: stats?.isDirectory() || /[*?{}\[\]]/.test(filePath), // glob pattern
+    isPathPattern,
     promptPath: path.join(basePath, filename),
   };
 }
