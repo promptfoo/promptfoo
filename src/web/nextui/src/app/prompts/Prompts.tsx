@@ -50,6 +50,11 @@ export default function Prompts() {
     })();
   }, [sortField, sortOrder]);
 
+  const handleClickOpen = (index: number) => {
+    setOpenDialog(true);
+    setSelectedPromptIndex(index);
+  };
+
   useEffect(() => {
     const promptId = searchParams?.get('id');
     if (promptId) {
@@ -59,11 +64,6 @@ export default function Prompts() {
       }
     }
   }, [prompts, searchParams]);
-
-  const handleClickOpen = (index: number) => {
-    setOpenDialog(true);
-    setSelectedPromptIndex(index);
-  };
 
   const handleClose = () => {
     setOpenDialog(false);

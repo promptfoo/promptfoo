@@ -111,106 +111,86 @@ function handleRougeScore(
   };
 }
 
-export async function runAssertions({
-  prompt,
-  provider,
-  test,
-  output,
-  latencyMs,
-  logProbs,
-  cost,
-}: {
-  prompt?: string;
-  provider?: ApiProvider;
-  test: AtomicTestCase;
-  output: string | object;
-  latencyMs?: number;
-  logProbs?: number[];
-  cost?: number;
-}): Promise<GradingResult> {
-  if (!test.assert || test.assert.length < 1) {
-    return AssertionsResult.noAssertsResult();
+export async function isSql(
+  outputString: string,
+  renderedValue: AssertionValue | undefined,
+  inverse: boolean,
+  assertion: Assertion,
+): Promise<GradingResult> {
+  let pass = false;
+  let parsedSql;
+  let databaseType: string = 'MySQL';
+  let whiteTableList: string[] | undefined;
+  let whiteColumnList: string[] | undefined;
+
+  if (renderedValue && typeof renderedValue === 'object') {
+    const value = renderedValue as {
+      database?: string;
+      allowedTables?: string[];
+      allowedColumns?: string[];
+    };
+
+    databaseType = value.database || 'MySQL';
+    whiteTableList = value.allowedTables;
+    whiteColumnList = value.allowedColumns;
   }
 
-  const mainAssertResult = new AssertionsResult({
-    threshold: test.threshold,
-  });
-  const subAssertResults: AssertionsResult[] = [];
-  const asserts: {
-    assertion: Assertion;
-    assertResult: AssertionsResult;
-    index: number;
-  }[] = test.assert
-    .map((assertion, i) => {
-      if (assertion.type === 'assert-set') {
-        const subAssertResult = new AssertionsResult({
-          threshold: assertion.threshold,
-          parentAssertionSet: {
-            assertionSet: assertion,
-            index: i,
-          },
-        });
+  if (renderedValue && typeof renderedValue !== 'object') {
+    throw new Error('is-sql assertion must have a object value.');
+  }
 
-        subAssertResults.push(subAssertResult);
-
-        return assertion.assert.map((subAssert, j) => {
-          return {
-            assertion: subAssert,
-            assertResult: subAssertResult,
-            index: j,
-          };
-        });
-      }
-
-      return { assertion, assertResult: mainAssertResult, index: i };
-    })
-    .flat();
-
-  await async.forEachOfLimit(
-    asserts,
-    ASSERTIONS_MAX_CONCURRENCY,
-    async ({ assertion, assertResult, index }) => {
-      if (assertion.type.startsWith('select-')) {
-        // Select-type assertions are handled separately because they depend on multiple outputs.
-        return;
-      }
-
-      const result = await runAssertion({
-        prompt,
-        provider,
-        assertion,
-        test,
-        output,
-        latencyMs,
-        logProbs,
-        cost,
-      });
-
-      assertResult.addResult({
-        index,
-        result,
-        metric: assertion.metric,
-        weight: assertion.weight,
-      });
-    },
-  );
-
-  subAssertResults.forEach((subAssertResult) => {
-    const result = subAssertResult.testResult();
-    const {
-      index,
-      assertionSet: { metric, weight },
-    } = subAssertResult.parentAssertionSet!;
-
-    mainAssertResult.addResult({
-      index,
-      result,
-      metric,
-      weight,
-    });
+  const { Parser: SqlParser } = await import('node-sql-parser').catch(() => {
+    throw new Error('node-sql-parser is not installed. Please install it first');
   });
 
-  return mainAssertResult.testResult();
+  const sqlParser = new SqlParser();
+
+  const opt: sqlParserOption = { database: databaseType };
+
+  const failureReasons: string[] = [];
+
+  try {
+    parsedSql = sqlParser.astify(outputString, opt);
+    pass = !inverse;
+  } catch (err) {
+    pass = inverse;
+    failureReasons.push(
+      `SQL statement does not conform to the provided ${databaseType} database syntax.`,
+    );
+  }
+
+  if (whiteTableList) {
+    opt.type = 'table';
+    try {
+      sqlParser.whiteListCheck(outputString, whiteTableList, opt);
+    } catch (err) {
+      pass = inverse;
+      const error = err as Error;
+      failureReasons.push(`SQL validation failed: ${error.message}.`);
+    }
+  }
+
+  if (whiteColumnList) {
+    opt.type = 'column';
+    try {
+      sqlParser.whiteListCheck(outputString, whiteColumnList, opt);
+    } catch (err) {
+      pass = inverse;
+      const error = err as Error;
+      failureReasons.push(`SQL validation failed: ${error.message}.`);
+    }
+  }
+
+  if (inverse && pass === false && failureReasons.length === 0) {
+    failureReasons.push('The output SQL statement is valid');
+  }
+
+  return {
+    pass,
+    score: pass ? 1 : 0,
+    reason: pass ? 'Assertion passed' : failureReasons.join(' '),
+    assertion,
+  };
 }
 
 export async function runAssertion({
@@ -1278,86 +1258,106 @@ ${
   throw new Error('Unknown assertion type: ' + assertion.type);
 }
 
-export async function isSql(
-  outputString: string,
-  renderedValue: AssertionValue | undefined,
-  inverse: boolean,
-  assertion: Assertion,
-): Promise<GradingResult> {
-  let pass = false;
-  let parsedSql;
-  let databaseType: string = 'MySQL';
-  let whiteTableList: string[] | undefined;
-  let whiteColumnList: string[] | undefined;
-
-  if (renderedValue && typeof renderedValue === 'object') {
-    const value = renderedValue as {
-      database?: string;
-      allowedTables?: string[];
-      allowedColumns?: string[];
-    };
-
-    databaseType = value.database || 'MySQL';
-    whiteTableList = value.allowedTables;
-    whiteColumnList = value.allowedColumns;
+export async function runAssertions({
+  prompt,
+  provider,
+  test,
+  output,
+  latencyMs,
+  logProbs,
+  cost,
+}: {
+  prompt?: string;
+  provider?: ApiProvider;
+  test: AtomicTestCase;
+  output: string | object;
+  latencyMs?: number;
+  logProbs?: number[];
+  cost?: number;
+}): Promise<GradingResult> {
+  if (!test.assert || test.assert.length < 1) {
+    return AssertionsResult.noAssertsResult();
   }
 
-  if (renderedValue && typeof renderedValue !== 'object') {
-    throw new Error('is-sql assertion must have a object value.');
-  }
+  const mainAssertResult = new AssertionsResult({
+    threshold: test.threshold,
+  });
+  const subAssertResults: AssertionsResult[] = [];
+  const asserts: {
+    assertion: Assertion;
+    assertResult: AssertionsResult;
+    index: number;
+  }[] = test.assert
+    .map((assertion, i) => {
+      if (assertion.type === 'assert-set') {
+        const subAssertResult = new AssertionsResult({
+          threshold: assertion.threshold,
+          parentAssertionSet: {
+            assertionSet: assertion,
+            index: i,
+          },
+        });
 
-  const { Parser: SqlParser } = await import('node-sql-parser').catch(() => {
-    throw new Error('node-sql-parser is not installed. Please install it first');
+        subAssertResults.push(subAssertResult);
+
+        return assertion.assert.map((subAssert, j) => {
+          return {
+            assertion: subAssert,
+            assertResult: subAssertResult,
+            index: j,
+          };
+        });
+      }
+
+      return { assertion, assertResult: mainAssertResult, index: i };
+    })
+    .flat();
+
+  await async.forEachOfLimit(
+    asserts,
+    ASSERTIONS_MAX_CONCURRENCY,
+    async ({ assertion, assertResult, index }) => {
+      if (assertion.type.startsWith('select-')) {
+        // Select-type assertions are handled separately because they depend on multiple outputs.
+        return;
+      }
+
+      const result = await runAssertion({
+        prompt,
+        provider,
+        assertion,
+        test,
+        output,
+        latencyMs,
+        logProbs,
+        cost,
+      });
+
+      assertResult.addResult({
+        index,
+        result,
+        metric: assertion.metric,
+        weight: assertion.weight,
+      });
+    },
+  );
+
+  subAssertResults.forEach((subAssertResult) => {
+    const result = subAssertResult.testResult();
+    const {
+      index,
+      assertionSet: { metric, weight },
+    } = subAssertResult.parentAssertionSet!;
+
+    mainAssertResult.addResult({
+      index,
+      result,
+      metric,
+      weight,
+    });
   });
 
-  const sqlParser = new SqlParser();
-
-  const opt: sqlParserOption = { database: databaseType };
-
-  const failureReasons: string[] = [];
-
-  try {
-    parsedSql = sqlParser.astify(outputString, opt);
-    pass = !inverse;
-  } catch (err) {
-    pass = inverse;
-    failureReasons.push(
-      `SQL statement does not conform to the provided ${databaseType} database syntax.`,
-    );
-  }
-
-  if (whiteTableList) {
-    opt.type = 'table';
-    try {
-      sqlParser.whiteListCheck(outputString, whiteTableList, opt);
-    } catch (err) {
-      pass = inverse;
-      const error = err as Error;
-      failureReasons.push(`SQL validation failed: ${error.message}.`);
-    }
-  }
-
-  if (whiteColumnList) {
-    opt.type = 'column';
-    try {
-      sqlParser.whiteListCheck(outputString, whiteColumnList, opt);
-    } catch (err) {
-      pass = inverse;
-      const error = err as Error;
-      failureReasons.push(`SQL validation failed: ${error.message}.`);
-    }
-  }
-
-  if (inverse && pass === false && failureReasons.length === 0) {
-    failureReasons.push('The output SQL statement is valid');
-  }
-
-  return {
-    pass,
-    score: pass ? 1 : 0,
-    reason: pass ? 'Assertion passed' : failureReasons.join(' '),
-    assertion,
-  };
+  return mainAssertResult.testResult();
 }
 
 export async function runCompareAssertion(

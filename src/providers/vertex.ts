@@ -21,6 +21,39 @@ import {
   type GeminiResponseData,
 } from './vertexUtil';
 
+interface Blob {
+  mimeType: string;
+  data: string; // base64-encoded string
+}
+
+interface FunctionCall {
+  name: string;
+  args?: { [key: string]: any };
+}
+
+interface FunctionResponse {
+  name: string;
+  response: { [key: string]: any };
+}
+
+interface FileData {
+  mimeType?: string;
+  fileUri: string;
+}
+
+interface Part {
+  text?: string;
+  inlineData?: Blob;
+  functionCall?: FunctionCall;
+  functionResponse?: FunctionResponse;
+  fileData?: FileData;
+}
+
+interface Content {
+  parts: Part[];
+  role?: string;
+}
+
 interface VertexCompletionOptions {
   apiKey?: string;
   apiHost?: string;
@@ -56,39 +89,6 @@ interface VertexCompletionOptions {
   };
 
   systemInstruction?: Content;
-}
-
-interface Content {
-  parts: Part[];
-  role?: string;
-}
-
-interface Part {
-  text?: string;
-  inlineData?: Blob;
-  functionCall?: FunctionCall;
-  functionResponse?: FunctionResponse;
-  fileData?: FileData;
-}
-
-interface Blob {
-  mimeType: string;
-  data: string; // base64-encoded string
-}
-
-interface FunctionCall {
-  name: string;
-  args?: { [key: string]: any };
-}
-
-interface FunctionResponse {
-  name: string;
-  response: { [key: string]: any };
-}
-
-interface FileData {
-  mimeType?: string;
-  fileUri: string;
 }
 
 const clone = Clone();

@@ -165,6 +165,13 @@ interface IBedrockModel {
   output: (responseJson: any) => any;
 }
 
+export function parseValue(value: string, defaultValue: any) {
+  if (typeof defaultValue === 'number') {
+    return Number.isNaN(parseFloat(value)) ? defaultValue : parseFloat(value);
+  }
+  return value;
+}
+
 export function addConfigParam(
   params: any,
   key: string,
@@ -176,13 +183,6 @@ export function addConfigParam(
     params[key] =
       configValue ?? (envValue !== undefined ? parseValue(envValue, defaultValue) : defaultValue);
   }
-}
-
-export function parseValue(value: string, defaultValue: any) {
-  if (typeof defaultValue === 'number') {
-    return Number.isNaN(parseFloat(value)) ? defaultValue : parseFloat(value);
-  }
-  return value;
 }
 
 export enum LlamaVersion {

@@ -4,6 +4,58 @@ import logger from '../logger';
 import type { ApiProvider, EnvOverrides, ProviderResponse, TokenUsage } from '../types.js';
 import { parseChatPrompt } from './shared';
 
+const ANTHROPIC_MODELS = [
+  ...['claude-instant-1.2'].map((model) => ({
+    id: model,
+    cost: {
+      input: 0.0008 / 1000,
+      output: 0.0024 / 1000,
+    },
+  })),
+  ...['claude-2.0'].map((model) => ({
+    id: model,
+    cost: {
+      input: 0.008 / 1000,
+      output: 0.024 / 1000,
+    },
+  })),
+  ...['claude-2.1'].map((model) => ({
+    id: model,
+    cost: {
+      input: 0.008 / 1000,
+      output: 0.024 / 1000,
+    },
+  })),
+  ...['claude-3-haiku-20240307'].map((model) => ({
+    id: model,
+    cost: {
+      input: 0.00025 / 1000,
+      output: 0.00125 / 1000,
+    },
+  })),
+  ...['claude-3-sonnet-20240229'].map((model) => ({
+    id: model,
+    cost: {
+      input: 0.003 / 1000,
+      output: 0.015 / 1000,
+    },
+  })),
+  ...['claude-3-opus-20240229'].map((model) => ({
+    id: model,
+    cost: {
+      input: 0.015 / 1000,
+      output: 0.075 / 1000,
+    },
+  })),
+  ...['claude-3-5-sonnet-20240620'].map((model) => ({
+    id: model,
+    cost: {
+      input: 3 / 1e6,
+      output: 15 / 1e6,
+    },
+  })),
+];
+
 interface AnthropicMessageOptions {
   apiKey?: string;
   apiBaseUrl?: string;
@@ -55,26 +107,6 @@ export function outputFromMessage(message: Anthropic.Messages.Message) {
     .join('\n\n');
 }
 
-export function calculateCost(
-  modelName: string,
-  config: AnthropicMessageOptions,
-  promptTokens?: number,
-  completionTokens?: number,
-): number | undefined {
-  if (!promptTokens || !completionTokens) {
-    return undefined;
-  }
-
-  const model = [...AnthropicMessagesProvider.ANTHROPIC_MODELS].find((m) => m.id === modelName);
-  if (!model || !model.cost) {
-    return undefined;
-  }
-
-  const inputCost = config.cost ?? model.cost.input;
-  const outputCost = config.cost ?? model.cost.output;
-  return inputCost * promptTokens + outputCost * completionTokens || undefined;
-}
-
 interface AnthropicMessageInput {
   role: 'user' | 'assistant' | 'system';
   content: string | Array<Anthropic.ImageBlockParam | Anthropic.TextBlockParam>;
@@ -106,6 +138,26 @@ export function parseMessages(messages: string) {
   return { system, extractedMessages };
 }
 
+export function calculateCost(
+  modelName: string,
+  config: AnthropicMessageOptions,
+  promptTokens?: number,
+  completionTokens?: number,
+): number | undefined {
+  if (!promptTokens || !completionTokens) {
+    return undefined;
+  }
+
+  const model = ANTHROPIC_MODELS.find((m) => m.id === modelName);
+  if (!model || !model.cost) {
+    return undefined;
+  }
+
+  const inputCost = config.cost ?? model.cost.input;
+  const outputCost = config.cost ?? model.cost.output;
+  return inputCost * promptTokens + outputCost * completionTokens || undefined;
+}
+
 export class AnthropicMessagesProvider implements ApiProvider {
   modelName: string;
   config: AnthropicMessageOptions;
@@ -113,61 +165,9 @@ export class AnthropicMessagesProvider implements ApiProvider {
   apiKey?: string;
   anthropic: Anthropic;
 
-  static ANTHROPIC_MODELS = [
-    ...['claude-instant-1.2'].map((model) => ({
-      id: model,
-      cost: {
-        input: 0.0008 / 1000,
-        output: 0.0024 / 1000,
-      },
-    })),
-    ...['claude-2.0'].map((model) => ({
-      id: model,
-      cost: {
-        input: 0.008 / 1000,
-        output: 0.024 / 1000,
-      },
-    })),
-    ...['claude-2.1'].map((model) => ({
-      id: model,
-      cost: {
-        input: 0.008 / 1000,
-        output: 0.024 / 1000,
-      },
-    })),
-    ...['claude-3-haiku-20240307'].map((model) => ({
-      id: model,
-      cost: {
-        input: 0.00025 / 1000,
-        output: 0.00125 / 1000,
-      },
-    })),
-    ...['claude-3-sonnet-20240229'].map((model) => ({
-      id: model,
-      cost: {
-        input: 0.003 / 1000,
-        output: 0.015 / 1000,
-      },
-    })),
-    ...['claude-3-opus-20240229'].map((model) => ({
-      id: model,
-      cost: {
-        input: 0.015 / 1000,
-        output: 0.075 / 1000,
-      },
-    })),
-    ...['claude-3-5-sonnet-20240620'].map((model) => ({
-      id: model,
-      cost: {
-        input: 3 / 1e6,
-        output: 15 / 1e6,
-      },
-    })),
-  ];
+  static ANTHROPIC_MODELS = ANTHROPIC_MODELS;
 
-  static ANTHROPIC_MODELS_NAMES = AnthropicMessagesProvider.ANTHROPIC_MODELS.map(
-    (model) => model.id,
-  );
+  static ANTHROPIC_MODELS_NAMES = ANTHROPIC_MODELS.map((model) => model.id);
 
   constructor(
     modelName: string,

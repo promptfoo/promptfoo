@@ -35,6 +35,16 @@ const YamlEditorComponent: React.FC = () => {
   const [code, setCode] = React.useState('');
   const [isReadOnly, setIsReadOnly] = React.useState(true);
 
+  const handleChange = (yamlObj: any) => {
+    setEnv(yamlObj.env || {});
+    setDescription(yamlObj.description || '');
+    setProviders(yamlObj.providers || []);
+    setPrompts(yamlObj.prompts || []);
+    setTestCases(yamlObj.tests || []);
+    setDefaultTest(yamlObj.defaultTest || {});
+    setEvaluateOptions(yamlObj.evaluateOptions || {});
+  };
+
   const toggleReadOnly = () => {
     if (!isReadOnly) {
       try {
@@ -60,16 +70,6 @@ const YamlEditorComponent: React.FC = () => {
 
     setCode(yaml.dump(testSuite));
   }, [env, description, providers, prompts, testCases, defaultTest, evaluateOptions]);
-
-  const handleChange = (yamlObj: any) => {
-    setEnv(yamlObj.env || {});
-    setDescription(yamlObj.description || '');
-    setProviders(yamlObj.providers || []);
-    setPrompts(yamlObj.prompts || []);
-    setTestCases(yamlObj.tests || []);
-    setDefaultTest(yamlObj.defaultTest || {});
-    setEvaluateOptions(yamlObj.evaluateOptions || {});
-  };
 
   return (
     <Box mt={4}>
