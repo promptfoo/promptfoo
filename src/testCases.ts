@@ -189,6 +189,9 @@ export async function readTests(
       }
 
       if (testCases) {
+        if (!Array.isArray(testCases) && typeof testCases === 'object') {
+          testCases = [testCases];
+        }
         for (const testCase of testCases) {
           ret.push(await readTest(testCase, path.dirname(testFile)));
         }
