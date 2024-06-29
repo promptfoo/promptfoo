@@ -185,46 +185,82 @@ export function parseValue(value: string, defaultValue: any) {
   return value;
 }
 
-export const getLlamaModelHandler = (version: number) => ({
+enum LlamaVersion {
+  V2 = 2,
+  V3 = 3,
+}
+
+interface LlamaMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+}
+
+const formatPromptV2 = (messages: LlamaMessage[]): string => {
+  let formattedPrompt = '<s>';
+  let isFirstUserMessage = true;
+
+  for (let i = 0; i < messages.length; i++) {
+    const message = messages[i];
+    const nextMessage = messages[i + 1];
+
+    switch (message.role) {
+      case 'system':
+        if (isFirstUserMessage) {
+          formattedPrompt += '[INST] <<SYS>>\n';
+          formattedPrompt += `${message.content.trim()}\n`;
+          formattedPrompt += '<</SYS>>\n\n';
+        }
+        break;
+      case 'user':
+        if (isFirstUserMessage) {
+          formattedPrompt += isFirstUserMessage ? '[INST] ' : '<s>[INST] ';
+          isFirstUserMessage = false;
+        } else {
+          formattedPrompt += ' [/INST]</s><s>[INST] ';
+        }
+        formattedPrompt += `${message.content.trim()}`;
+        if (!nextMessage || nextMessage.role === 'user') {
+          formattedPrompt += ' [/INST]';
+        }
+        break;
+      case 'assistant':
+        formattedPrompt += ` ${message.content.trim()} </s>`;
+        break;
+    }
+  }
+
+  return formattedPrompt;
+};
+
+const formatPromptV3 = (messages: LlamaMessage[]): string => {
+  let formattedPrompt = '<|begin_of_text|>';
+
+  for (const message of messages) {
+    formattedPrompt += dedent`
+      <|start_header_id|>${message.role}<|end_header_id|>
+
+      ${message.content.trim()}<|eot_id|>`;
+  }
+
+  formattedPrompt += '<|start_header_id|>assistant<|end_header_id|>';
+  return formattedPrompt;
+};
+
+export const getLlamaModelHandler = (version: LlamaVersion) => ({
   params: (config: BedrockLlamaGenerationOptions, prompt: string) => {
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
+
     let finalPrompt: string;
-    if (messages.length > 0 && messages[0].role === 'system') {
-      const userMessages = messages
-        .slice(1)
-        .map((m) => `${m.content}`)
-        .join('\n');
-
-      if (version == 2) {
-        finalPrompt = dedent`
-          <s>[INST] <<SYS>>
-          ${messages[0].content}
-          <</SYS>>
-  
-          ${userMessages} [/INST]
-        `;
-      } else if (version == 3) {
-        finalPrompt = dedent`<|begin_of_text|><|start_header_id|>system<|end_header_id|>
-
-          ${messages[0].content}<|eot_id|><|start_header_id|>user<|end_header_id|>
-
-          ${userMessages}<|eot_id|><|start_header_id|>assistant<|end_header_id|>`;
-      } else {
+    switch (version) {
+      case LlamaVersion.V2:
+        finalPrompt = formatPromptV2(messages as LlamaMessage[]);
+        break;
+      case LlamaVersion.V3:
+        finalPrompt = formatPromptV3(messages as LlamaMessage[]);
+        break;
+      default:
         throw new Error(`Unsupported LLAMA version: ${version}`);
-      }
-    } else {
-      const userMessages = messages.map((m) => `${m.content}`).join('\n');
-      if (version == 2) {
-        finalPrompt = `<s>[INST] ${userMessages} [/INST]`;
-      } else if (version == 3) {
-        finalPrompt = dedent`<|begin_of_text|><|start_header_id|>user<|end_header_id|>
-
-          ${userMessages}<|eot_id|><|start_header_id|>assistant<|end_header_id|>`;
-      } else {
-        throw new Error(`Unsupported LLAMA version: ${version}`);
-      }
     }
-
     const params: { prompt: string; temperature?: number; top_p?: number; max_gen_len?: number } = {
       prompt: finalPrompt,
     };
@@ -332,8 +368,8 @@ const BEDROCK_MODEL = {
     },
     output: (responseJson: any) => responseJson?.results[0]?.outputText,
   },
-  LLAMA2: getLlamaModelHandler(2),
-  LLAMA3: getLlamaModelHandler(3), // Prompt format of llama3 instruct differs from llama2.
+  LLAMA2: getLlamaModelHandler(LlamaVersion.V2),
+  LLAMA3: getLlamaModelHandler(LlamaVersion.V3), // Prompt format of llama3 instruct differs from llama2.
   COHERE_COMMAND: {
     params: (config: BedrockCohereCommandGenerationOptions, prompt: string, stop: string[]) => {
       const params: any = { prompt: prompt };
