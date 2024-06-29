@@ -1,6 +1,8 @@
 import chalk from 'chalk';
 import { Command } from 'commander';
-
+import logger from '../logger';
+import { generateTable, wrapTable } from '../table';
+import telemetry from '../telemetry';
 import {
   getEvalFromId,
   getPromptFromHash,
@@ -8,88 +10,6 @@ import {
   printBorder,
   setupEnv,
 } from '../util';
-import { generateTable, wrapTable } from '../table';
-import logger from '../logger';
-import telemetry from '../telemetry';
-
-export async function showCommand(program: Command) {
-  const showCommand = program
-    .command('show <id>')
-    .description('Show details of a specific resource')
-    .option('--env-path <path>', 'Path to the environment file')
-    .action(async (id: string, cmdObj: { envPath?: string }) => {
-      setupEnv(cmdObj.envPath);
-      telemetry.maybeShowNotice();
-      telemetry.record('command_used', {
-        name: 'show',
-      });
-
-      await telemetry.send();
-      const evl = await getEvalFromId(id);
-      if (evl) {
-        return handleEval(id);
-      }
-
-      const prompt = await getPromptFromHash(id);
-      if (prompt) {
-        return handlePrompt(id);
-      }
-
-      const dataset = await getDatasetFromHash(id);
-      if (dataset) {
-        return handleDataset(id);
-      }
-
-      logger.error(`No resource found with ID ${id}`);
-    });
-
-  showCommand
-    .command('eval <id>')
-    .description('Show details of a specific evaluation')
-    .action(handleEval);
-
-  showCommand
-    .command('prompt <id>')
-    .description('Show details of a specific prompt')
-    .action(handlePrompt);
-
-  showCommand
-    .command('dataset <id>')
-    .description('Show details of a specific dataset')
-    .action(handleDataset);
-}
-
-async function handleEval(id: string) {
-  telemetry.maybeShowNotice();
-  telemetry.record('command_used', {
-    name: 'show eval',
-  });
-  await telemetry.send();
-
-  const evl = await getEvalFromId(id);
-  if (!evl) {
-    logger.error(`No evaluation found with ID ${id}`);
-    return;
-  }
-
-  const { prompts, vars } = evl.results.table.head;
-  logger.info(generateTable(evl.results, 100, 25));
-  if (evl.results.table.body.length > 25) {
-    const rowsLeft = evl.results.table.body.length - 25;
-    logger.info(`... ${rowsLeft} more row${rowsLeft === 1 ? '' : 's'} not shown ...\n`);
-  }
-
-  printBorder();
-  logger.info(chalk.cyan(`Eval ${id}`));
-  printBorder();
-  // TODO(ian): List prompt ids
-  logger.info(`${prompts.length} prompts`);
-  logger.info(
-    `${vars.length} variables: ${vars.slice(0, 5).join(', ')}${
-      vars.length > 5 ? ` (and ${vars.length - 5} more...)` : ''
-    }`,
-  );
-}
 
 async function handlePrompt(id: string) {
   telemetry.maybeShowNotice();
@@ -136,6 +56,38 @@ async function handlePrompt(id: string) {
   );
   logger.info(
     `Run ${chalk.green('promptfoo show dataset <id>')} to see details of a specific dataset.`,
+  );
+}
+
+async function handleEval(id: string) {
+  telemetry.maybeShowNotice();
+  telemetry.record('command_used', {
+    name: 'show eval',
+  });
+  await telemetry.send();
+
+  const evl = await getEvalFromId(id);
+  if (!evl) {
+    logger.error(`No evaluation found with ID ${id}`);
+    return;
+  }
+
+  const { prompts, vars } = evl.results.table.head;
+  logger.info(generateTable(evl.results, 100, 25));
+  if (evl.results.table.body.length > 25) {
+    const rowsLeft = evl.results.table.body.length - 25;
+    logger.info(`... ${rowsLeft} more row${rowsLeft === 1 ? '' : 's'} not shown ...\n`);
+  }
+
+  printBorder();
+  logger.info(chalk.cyan(`Eval ${id}`));
+  printBorder();
+  // TODO(ian): List prompt ids
+  logger.info(`${prompts.length} prompts`);
+  logger.info(
+    `${vars.length} variables: ${vars.slice(0, 5).join(', ')}${
+      vars.length > 5 ? ` (and ${vars.length - 5} more...)` : ''
+    }`,
   );
 }
 
@@ -186,4 +138,51 @@ async function handleDataset(id: string) {
   logger.info(
     `Run ${chalk.green('promptfoo show eval <id>')} to see details of a specific evaluation.`,
   );
+}
+
+export async function showCommand(program: Command) {
+  const showCommand = program
+    .command('show <id>')
+    .description('Show details of a specific resource')
+    .option('--env-path <path>', 'Path to the environment file')
+    .action(async (id: string, cmdObj: { envPath?: string }) => {
+      setupEnv(cmdObj.envPath);
+      telemetry.maybeShowNotice();
+      telemetry.record('command_used', {
+        name: 'show',
+      });
+
+      await telemetry.send();
+      const evl = await getEvalFromId(id);
+      if (evl) {
+        return handleEval(id);
+      }
+
+      const prompt = await getPromptFromHash(id);
+      if (prompt) {
+        return handlePrompt(id);
+      }
+
+      const dataset = await getDatasetFromHash(id);
+      if (dataset) {
+        return handleDataset(id);
+      }
+
+      logger.error(`No resource found with ID ${id}`);
+    });
+
+  showCommand
+    .command('eval <id>')
+    .description('Show details of a specific evaluation')
+    .action(handleEval);
+
+  showCommand
+    .command('prompt <id>')
+    .description('Show details of a specific prompt')
+    .action(handlePrompt);
+
+  showCommand
+    .command('dataset <id>')
+    .description('Show details of a specific dataset')
+    .action(handleDataset);
 }

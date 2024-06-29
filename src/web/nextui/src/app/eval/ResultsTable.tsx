@@ -1,7 +1,3 @@
-import * as React from 'react';
-
-import ReactMarkdown from 'react-markdown';
-import invariant from 'tiny-invariant';
 import {
   createColumnHelper,
   flexRender,
@@ -9,31 +5,31 @@ import {
   getPaginationRowModel,
   useReactTable,
 } from '@tanstack/react-table';
+import * as React from 'react';
+import ReactMarkdown from 'react-markdown';
+import { getApiBaseUrl } from '@/api';
+import CustomMetrics from '@/app/eval/CustomMetrics';
+import EvalOutputPromptDialog from '@/app/eval/EvalOutputPromptDialog';
+import GenerateTestCases from '@/app/eval/GenerateTestCases';
+import TruncatedText, { TruncatedTextProps } from '@/app/eval/TruncatedText';
+import { useStore as useMainStore } from '@/app/eval/store';
+import { useStore as useResultsViewStore } from '@/app/eval/store';
+import { EvaluateTableRow, EvaluateTableOutput, FilterMode, EvaluateTable } from '@/app/eval/types';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import MenuItem from '@mui/material/MenuItem';
-import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import Select from '@mui/material/Select';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import Link from 'next/link';
-
-import CustomMetrics from '@/app/eval/CustomMetrics';
-import EvalOutputCell from './EvalOutputCell';
-import EvalOutputPromptDialog from '@/app/eval/EvalOutputPromptDialog';
-import GenerateTestCases from '@/app/eval/GenerateTestCases';
-import TruncatedText, { TruncatedTextProps } from '@/app/eval/TruncatedText';
-import { getApiBaseUrl } from '@/api';
-import { useStore as useMainStore } from '@/app/eval/store';
-import { useStore as useResultsViewStore } from '@/app/eval/store';
-
 import type { CellContext, ColumnDef, VisibilityState } from '@tanstack/table-core';
-
-import { EvaluateTableRow, EvaluateTableOutput, FilterMode, EvaluateTable } from '@/app/eval/types';
-
+import Link from 'next/link';
+import remarkGfm from 'remark-gfm';
+import invariant from 'tiny-invariant';
+import EvalOutputCell from './EvalOutputCell';
 import './ResultsTable.css';
 
 function formatRowOutput(output: EvaluateTableOutput | string) {
@@ -281,6 +277,8 @@ function ResultsTable({
     searchRegex,
   ]);
 
+  const [pagination, setPagination] = React.useState({ pageIndex: 0, pageSize: 50 });
+
   React.useEffect(() => {
     setPagination((prev) => ({ ...prev, pageIndex: 0 }));
   }, [failureFilter, filterMode, searchText]);
@@ -345,7 +343,7 @@ function ResultsTable({
                 return (
                   <div className="cell">
                     {renderMarkdown ? (
-                      <ReactMarkdown>{value}</ReactMarkdown>
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{value}</ReactMarkdown>
                     ) : (
                       <TruncatedText text={value} maxLength={maxTextLength} />
                     )}
@@ -562,8 +560,6 @@ function ResultsTable({
     cols.push(...variableColumns, ...promptColumns);
     return cols;
   }, [descriptionColumn, variableColumns, promptColumns]);
-
-  const [pagination, setPagination] = React.useState({ pageIndex: 0, pageSize: 50 });
 
   const reactTable = useReactTable({
     data: filteredBody,

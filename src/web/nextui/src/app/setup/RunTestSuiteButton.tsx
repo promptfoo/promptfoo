@@ -1,12 +1,10 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { Button, CircularProgress } from '@mui/material';
-
-import { useStore } from '@/state/evalConfig';
 import { USE_SUPABASE } from '@/constants';
-
+import { useStore } from '@/state/evalConfig';
+import { Button, CircularProgress } from '@mui/material';
+import { useRouter } from 'next/navigation';
 import { getApiBaseUrl } from '@/api';
 
 const RunTestSuiteButton: React.FC = () => {

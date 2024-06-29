@@ -1,8 +1,59 @@
-import logger from '../logger';
 import { fetchWithCache } from '../cache';
-
+import logger from '../logger';
 import { ApiProvider, EnvOverrides, ProviderResponse, TokenUsage } from '../types';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
+
+const MISTRAL_CHAT_MODELS = [
+  ...['open-mistral-7b'].map((model) => ({
+    id: model,
+    cost: {
+      input: 0.00025 / 1000,
+      output: 0.00025 / 1000,
+    },
+  })),
+  ...['open-mixtral-8x7b'].map((model) => ({
+    id: model,
+    cost: {
+      input: 0.0007 / 1000,
+      output: 0.0007 / 1000,
+    },
+  })),
+  ...['open-mixtral-8x22b'].map((model) => ({
+    id: model,
+    cost: {
+      input: 0.002 / 1000,
+      output: 0.006 / 1000,
+    },
+  })),
+  ...['mistral-small-latest'].map((model) => ({
+    id: model,
+    cost: {
+      input: 0.002 / 1000,
+      output: 0.006 / 1000,
+    },
+  })),
+  ...['mistral-medium-latest'].map((model) => ({
+    id: model,
+    cost: {
+      input: 0.0027 / 1000,
+      output: 0.0081 / 1000,
+    },
+  })),
+  ...['mistral-large-latest'].map((model) => ({
+    id: model,
+    cost: {
+      input: 0.008 / 1000,
+      output: 0.024 / 1000,
+    },
+  })),
+  ...['codestral-latest'].map((model) => ({
+    id: model,
+    cost: {
+      input: 0.002 / 1000,
+      output: 0.006 / 1000,
+    },
+  })),
+];
 
 interface MistralChatCompletionOptions {
   apiKey?: string;
@@ -43,9 +94,7 @@ function calculateCost(
     return undefined;
   }
 
-  const model = [...MistralChatCompletionProvider.MISTRAL_CHAT_MODELS].find(
-    (m) => m.id === modelName,
-  );
+  const model = MISTRAL_CHAT_MODELS.find((m) => m.id === modelName);
   if (!model || !model.cost) {
     return undefined;
   }
@@ -60,61 +109,9 @@ export class MistralChatCompletionProvider implements ApiProvider {
   config: MistralChatCompletionOptions;
   env?: EnvOverrides;
 
-  static MISTRAL_CHAT_MODELS = [
-    ...['open-mistral-7b'].map((model) => ({
-      id: model,
-      cost: {
-        input: 0.00025 / 1000,
-        output: 0.00025 / 1000,
-      },
-    })),
-    ...['open-mixtral-8x7b'].map((model) => ({
-      id: model,
-      cost: {
-        input: 0.0007 / 1000,
-        output: 0.0007 / 1000,
-      },
-    })),
-    ...['open-mixtral-8x22b'].map((model) => ({
-      id: model,
-      cost: {
-        input: 0.002 / 1000,
-        output: 0.006 / 1000,
-      },
-    })),
-    ...['mistral-small-latest'].map((model) => ({
-      id: model,
-      cost: {
-        input: 0.002 / 1000,
-        output: 0.006 / 1000,
-      },
-    })),
-    ...['mistral-medium-latest'].map((model) => ({
-      id: model,
-      cost: {
-        input: 0.0027 / 1000,
-        output: 0.0081 / 1000,
-      },
-    })),
-    ...['mistral-large-latest'].map((model) => ({
-      id: model,
-      cost: {
-        input: 0.008 / 1000,
-        output: 0.024 / 1000,
-      },
-    })),
-    ...['codestral-latest'].map((model) => ({
-      id: model,
-      cost: {
-        input: 0.002 / 1000,
-        output: 0.006 / 1000,
-      },
-    })),
-  ];
+  static MISTRAL_CHAT_MODELS = MISTRAL_CHAT_MODELS;
 
-  static MISTRAL_CHAT_MODELS_NAMES = MistralChatCompletionProvider.MISTRAL_CHAT_MODELS.map(
-    (model) => model.id,
-  );
+  static MISTRAL_CHAT_MODELS_NAMES = MISTRAL_CHAT_MODELS.map((model) => model.id);
 
   constructor(
     modelName: string,

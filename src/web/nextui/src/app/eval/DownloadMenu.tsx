@@ -1,15 +1,14 @@
 import * as React from 'react';
-
-import yaml from 'js-yaml';
 import DownloadIcon from '@mui/icons-material/Download';
+import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
 import DialogContent from '@mui/material/DialogContent';
-import Stack from '@mui/material/Stack';
-import Button from '@mui/material/Button';
-import MenuItem from '@mui/material/MenuItem';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
-
+import MenuItem from '@mui/material/MenuItem';
+import Stack from '@mui/material/Stack';
+import { stringify as csvStringify } from 'csv-stringify/sync';
+import yaml from 'js-yaml';
 import { useStore as useResultsViewStore } from './store';
 
 function DownloadMenu() {
@@ -25,6 +24,10 @@ function DownloadMenu() {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+  };
+
+  const handleClose = () => {
+    setOpen(false);
   };
 
   const downloadConfig = () => {
@@ -62,12 +65,38 @@ function DownloadMenu() {
     handleClose();
   };
 
-  const handleOpen = () => {
-    setOpen(true);
+  const downloadCsv = () => {
+    if (!table) {
+      alert('No table data');
+      return;
+    }
+
+    const csvRows = [];
+
+    // Create headers
+    const headers = [
+      ...table.head.vars,
+      ...table.head.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`),
+    ];
+    csvRows.push(headers);
+
+    // Create rows
+    table.body.forEach((row) => {
+      const rowValues = [
+        ...row.vars,
+        ...row.outputs.map(({ pass, text }) => (pass ? '[PASS] ' : '[FAIL] ') + text),
+      ];
+      csvRows.push(rowValues);
+    });
+
+    const output = csvStringify(csvRows);
+    const blob = new Blob([output], { type: 'text/csv;charset=utf-8;' });
+    openDownloadDialog(blob, `${evalId}-table.csv`);
+    handleClose();
   };
 
-  const handleClose = () => {
-    setOpen(false);
+  const handleOpen = () => {
+    setOpen(true);
   };
 
   return (
@@ -88,6 +117,14 @@ function DownloadMenu() {
               sx={{ justifyContent: 'flex-start' }}
             >
               Download YAML Config
+            </Button>
+            <Button
+              onClick={downloadCsv}
+              startIcon={<DownloadIcon />}
+              fullWidth
+              sx={{ justifyContent: 'flex-start' }}
+            >
+              Download Table CSV
             </Button>
             <Button
               onClick={downloadTable}

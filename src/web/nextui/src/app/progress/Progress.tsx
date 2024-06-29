@@ -1,11 +1,11 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import Link from 'next/link';
+import type { StandaloneEval } from '@/../../../util';
+import DownloadIcon from '@mui/icons-material/Download';
 import Autocomplete from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import DownloadIcon from '@mui/icons-material/Download';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import Pagination from '@mui/material/Pagination';
@@ -16,8 +16,7 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import TableSortLabel from '@mui/material/TableSortLabel';
 import TextField from '@mui/material/TextField';
-
-import type { StandaloneEval } from '@/../../../util';
+import Link from 'next/link';
 
 export default function Cols() {
   const [cols, setCols] = useState<StandaloneEval[]>([]);
@@ -51,17 +50,6 @@ export default function Cols() {
   };
 
   const handleClose = () => {
-    setAnchorEl(null);
-  };
-
-  const handleExport = (format: string) => {
-    const dataStr = format === 'json' ? JSON.stringify(cols) : convertToCSV(cols);
-    const blob = new Blob([dataStr], { type: `text/${format};charset=utf-8;` });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `cols_export.${format}`;
-    link.click();
-    URL.revokeObjectURL(link.href);
     setAnchorEl(null);
   };
 
@@ -102,6 +90,17 @@ export default function Cols() {
       .concat(rows)
       .map((it) => it.map((value) => value ?? '').join(','))
       .join('\n');
+  };
+
+  const handleExport = (format: string) => {
+    const dataStr = format === 'json' ? JSON.stringify(cols) : convertToCSV(cols);
+    const blob = new Blob([dataStr], { type: `text/${format};charset=utf-8;` });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `cols_export.${format}`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+    setAnchorEl(null);
   };
 
   const filteredCols = React.useMemo(() => {

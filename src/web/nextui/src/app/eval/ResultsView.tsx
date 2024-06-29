@@ -1,51 +1,46 @@
 import * as React from 'react';
-
-import invariant from 'tiny-invariant';
-
+import { REMOTE_API_BASE_URL, REMOTE_APP_BASE_URL } from '@/../../../constants';
+import { getApiBaseUrl } from '@/api';
+import { useStore as useMainStore } from '@/state/evalConfig';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
+import DeleteIcon from '@mui/icons-material/Delete';
+import EditIcon from '@mui/icons-material/Edit';
+import SettingsIcon from '@mui/icons-material/Settings';
+import ShareIcon from '@mui/icons-material/Share';
+import EyeIcon from '@mui/icons-material/Visibility';
+import VisibilityIcon from '@mui/icons-material/Visibility';
 import Autocomplete, { AutocompleteRenderInputParams } from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
+import Paper from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
 import CircularProgress from '@mui/material/CircularProgress';
-import DeleteIcon from '@mui/icons-material/Delete';
-import EyeIcon from '@mui/icons-material/Visibility';
-import EditIcon from '@mui/icons-material/Edit';
 import FormControl from '@mui/material/FormControl';
-import Heading from '@mui/material/Typography';
 import InputLabel from '@mui/material/InputLabel';
-import ListItemText from '@mui/material/ListItemText';
 import ListItemIcon from '@mui/material/ListItemIcon';
+import ListItemText from '@mui/material/ListItemText';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import OutlinedInput from '@mui/material/OutlinedInput';
-import Paper from '@mui/material/Box';
 import Select, { SelectChangeEvent } from '@mui/material/Select';
-import SettingsIcon from '@mui/icons-material/Settings';
-import ShareIcon from '@mui/icons-material/Share';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
-import VisibilityIcon from '@mui/icons-material/Visibility';
+import Heading from '@mui/material/Typography';
 import { styled } from '@mui/system';
+import type { VisibilityState } from '@tanstack/table-core';
 import { useRouter, useSearchParams } from 'next/navigation';
+import invariant from 'tiny-invariant';
 import { useDebounce } from 'use-debounce';
-
+import ConfigModal from './ConfigModal';
 import DownloadMenu from './DownloadMenu';
 import ResultsCharts from './ResultsCharts';
 import ResultsTable from './ResultsTable';
-import ConfigModal from './ConfigModal';
-import ShareModal from './ShareModal';
 import SettingsModal from './ResultsViewSettingsModal';
+import ShareModal from './ShareModal';
 import { useStore as useResultsViewStore } from './store';
-import { useStore as useMainStore } from '@/state/evalConfig';
-import { REMOTE_API_BASE_URL, REMOTE_APP_BASE_URL } from '@/../../../constants';
-
-import type { VisibilityState } from '@tanstack/table-core';
 import type { FilterMode } from './types';
-
 import './ResultsView.css';
-import { getApiBaseUrl } from '@/api';
 
 const ResponsiveStack = styled(Stack)(({ theme }) => ({
   maxWidth: '100%',
@@ -88,6 +83,9 @@ export default function ResultsView({
     },
     [setFailureFilter],
   );
+
+  invariant(table, 'Table data must be loaded before rendering ResultsView');
+  const { head } = table;
 
   const [filterMode, setFilterMode] = React.useState<FilterMode>('all');
   const handleFilterModeChange = (event: SelectChangeEvent<unknown>) => {
@@ -137,11 +135,33 @@ export default function ResultsView({
     }
   };
 
+  const columnData = React.useMemo(() => {
+    return [
+      ...head.vars.map((_, idx) => ({
+        value: `Variable ${idx + 1}`,
+        label: `Var ${idx + 1}: ${
+          head.vars[idx].length > 100 ? head.vars[idx].slice(0, 97) + '...' : head.vars[idx]
+        }`,
+        group: 'Variables',
+      })),
+      ...head.prompts.map((_, idx) => {
+        const prompt = head.prompts[idx];
+        const label = prompt.label || prompt.display || prompt.raw;
+        return {
+          value: `Prompt ${idx + 1}`,
+          label: `Prompt ${idx + 1}: ${label.length > 100 ? label.slice(0, 97) + '...' : label}`,
+          group: 'Prompts',
+        };
+      }),
+    ];
+  }, [head.vars, head.prompts]);
+
   const [configModalOpen, setConfigModalOpen] = React.useState(false);
   const [viewSettingsModalOpen, setViewSettingsModalOpen] = React.useState(false);
-
-  invariant(table, 'Table data must be loaded before rendering ResultsView');
-  const { head } = table;
+  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
+  const [selectedColumns, setSelectedColumns] = React.useState<string[]>(
+    columnData.map((col) => col.value),
+  );
 
   const handleChange = (event: SelectChangeEvent<typeof selectedColumns>) => {
     const {
@@ -201,32 +221,6 @@ export default function ResultsView({
       }
     }
   };
-
-  const columnData = React.useMemo(() => {
-    return [
-      ...head.vars.map((_, idx) => ({
-        value: `Variable ${idx + 1}`,
-        label: `Var ${idx + 1}: ${
-          head.vars[idx].length > 100 ? head.vars[idx].slice(0, 97) + '...' : head.vars[idx]
-        }`,
-        group: 'Variables',
-      })),
-      ...head.prompts.map((_, idx) => {
-        const prompt = head.prompts[idx];
-        const label = prompt.label || prompt.display || prompt.raw;
-        return {
-          value: `Prompt ${idx + 1}`,
-          label: `Prompt ${idx + 1}: ${label.length > 100 ? label.slice(0, 97) + '...' : label}`,
-          group: 'Prompts',
-        };
-      }),
-    ];
-  }, [head.vars, head.prompts]);
-
-  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
-  const [selectedColumns, setSelectedColumns] = React.useState<string[]>(
-    columnData.map((col) => col.value),
-  );
 
   // State for anchor element
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);

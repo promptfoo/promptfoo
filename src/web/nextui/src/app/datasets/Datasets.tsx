@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import Link from 'next/link';
+import type { TestCase, TestCasesWithMetadata } from '@/../../../types';
+import { getApiBaseUrl } from '@/api';
 import Box from '@mui/material/Box';
 import Pagination from '@mui/material/Pagination';
 import Table from '@mui/material/Table';
@@ -11,12 +12,9 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import TableSortLabel from '@mui/material/TableSortLabel';
 import Tooltip from '@mui/material/Tooltip';
+import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-
 import DatasetDialog from './DatasetDialog';
-import { getApiBaseUrl } from '@/api';
-
-import type { TestCase, TestCasesWithMetadata } from '@/../../../types';
 
 export default function Datasets() {
   const searchParams = useSearchParams();
@@ -52,6 +50,11 @@ export default function Datasets() {
     })();
   }, [sortField, sortOrder, page, rowsPerPage]);
 
+  const handleClickOpen = (index: number) => {
+    setDialogTestCaseIndex(index);
+    setOpenDialog(true);
+  };
+
   useEffect(() => {
     const testCaseId = searchParams?.get('id');
     if (testCaseId) {
@@ -61,11 +64,6 @@ export default function Datasets() {
       }
     }
   }, [testCases, searchParams]);
-
-  const handleClickOpen = (index: number) => {
-    setDialogTestCaseIndex(index);
-    setOpenDialog(true);
-  };
 
   const handleClose = () => {
     setOpenDialog(false);

@@ -1,11 +1,9 @@
 // @ts-check
-
 import eslint from '@eslint/js';
-import tseslint from 'typescript-eslint';
-import globals from 'globals';
-
-import unusedImports from 'eslint-plugin-unused-imports';
 import jest from 'eslint-plugin-jest';
+import unusedImports from 'eslint-plugin-unused-imports';
+import globals from 'globals';
+import tseslint from 'typescript-eslint';
 
 export default [
   ...tseslint.config(eslint.configs.recommended, ...tseslint.configs.recommended),
@@ -27,6 +25,8 @@ export default [
       '**/src/web/nextui/.next/**/*',
       '**/src/web/nextui/out/**/*',
       'dist/**/*',
+      'site/.docusaurus/**/*',
+      'site/build/**/*',
     ],
   },
   {
@@ -43,6 +43,7 @@ export default [
       '@typescript-eslint/ban-types': 0,
       '@typescript-eslint/no-explicit-any': 0,
       '@typescript-eslint/no-unused-vars': 0,
+      '@typescript-eslint/no-use-before-define': 'error',
       '@typescript-eslint/no-var-requires': 0,
       'no-case-declarations': 0,
       'no-control-regex': 0,

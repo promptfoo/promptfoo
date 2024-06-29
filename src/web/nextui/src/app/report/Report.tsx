@@ -1,20 +1,17 @@
 'use client';
 
 import React from 'react';
-import Container from '@mui/material/Container';
-import Typography from '@mui/material/Typography';
-import Grid from '@mui/material/Grid';
-import Chip from '@mui/material/Chip';
-
-import RiskCategories from './RiskCategories';
-import Overview from './Overview';
-import TestSuites from './TestSuites';
 import { getApiBaseUrl } from '@/api';
-
+import Chip from '@mui/material/Chip';
+import Container from '@mui/material/Container';
+import Grid from '@mui/material/Grid';
+import Typography from '@mui/material/Typography';
 import type { ResultsFile, SharedResults } from '../eval/types';
-
-import './Report.css';
+import Overview from './Overview';
+import RiskCategories from './RiskCategories';
+import TestSuites from './TestSuites';
 import { categoryAliases, categoryAliasesReverse } from './constants';
+import './Report.css';
 
 const App: React.FC = () => {
   const [evalId, setEvalId] = React.useState<string | null>(null);
@@ -87,7 +84,7 @@ const App: React.FC = () => {
       <Grid container direction="column" spacing={1} pt={6} pb={8}>
         <Grid item className="report-header">
           <Typography variant="h4">
-            <strong>LLM Risk Report</strong>
+            <strong>LLM Risk Assessment</strong>
             {evalData.config.description && `: ${evalData.config.description}`}
           </Typography>
           <Typography variant="subtitle1" mb={2}>

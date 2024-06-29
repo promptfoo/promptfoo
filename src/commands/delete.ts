@@ -1,7 +1,17 @@
 import { Command } from 'commander';
-import { deleteEval, getEvalFromId, setupEnv } from '../util';
 import logger from '../logger';
 import telemetry from '../telemetry';
+import { deleteEval, getEvalFromId, setupEnv } from '../util';
+
+async function handleEvalDelete(evalId: string, envPath?: string) {
+  try {
+    await deleteEval(evalId);
+    logger.info(`Evaluation with ID ${evalId} has been successfully deleted.`);
+  } catch (error) {
+    logger.error(`Could not delete evaluation with ID ${evalId}:\n${error}`);
+    process.exit(1);
+  }
+}
 
 export function deleteCommand(program: Command) {
   const deleteCommand = program
@@ -38,14 +48,4 @@ export function deleteCommand(program: Command) {
 
       handleEvalDelete(evalId, cmdObj.envPath);
     });
-}
-
-async function handleEvalDelete(evalId: string, envPath?: string) {
-  try {
-    await deleteEval(evalId);
-    logger.info(`Evaluation with ID ${evalId} has been successfully deleted.`);
-  } catch (error) {
-    logger.error(`Could not delete evaluation with ID ${evalId}:\n${error}`);
-    process.exit(1);
-  }
 }

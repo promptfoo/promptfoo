@@ -1,5 +1,5 @@
-import type logger from './logger';
 import type { fetchWithCache, getCache } from './cache';
+import type logger from './logger';
 
 export type FilePath = string;
 
@@ -86,10 +86,6 @@ export interface ProviderOptions {
   env?: EnvOverrides;
 }
 
-export function isProviderOptions(provider: any): provider is ProviderOptions {
-  return !isApiProvider(provider) && typeof provider === 'object';
-}
-
 export interface CallApiContextParams {
   vars: Record<string, string | object>;
   logger?: typeof logger;
@@ -138,6 +134,10 @@ export function isApiProvider(provider: any): provider is ApiProvider {
   return typeof provider === 'object' && 'id' in provider && typeof provider.id === 'function';
 }
 
+export function isProviderOptions(provider: any): provider is ProviderOptions {
+  return !isApiProvider(provider) && typeof provider === 'object';
+}
+
 export interface ApiEmbeddingProvider extends ApiProvider {
   callEmbeddingApi: (input: string) => Promise<ProviderEmbeddingResponse>;
 }
@@ -168,6 +168,7 @@ export interface ProviderResponse {
   cost?: number;
   cached?: boolean;
   logProbs?: number[];
+  metadata?: Record<string, any>;
 }
 
 export interface ProviderEmbeddingResponse {
@@ -323,6 +324,7 @@ export interface EvaluateResult {
   gradingResult?: GradingResult;
   namedScores: Record<string, number>;
   cost?: number;
+  metadata?: Record<string, any>;
 }
 
 export interface EvaluateTableOutput {
@@ -336,6 +338,7 @@ export interface EvaluateTableOutput {
   tokenUsage?: Partial<TokenUsage>;
   gradingResult?: GradingResult;
   cost: number;
+  metadata?: Record<string, any>;
 }
 
 export interface EvaluateTableRow {

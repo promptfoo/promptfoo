@@ -128,11 +128,11 @@ interface OpenAiConfig {
 
 You can include images in the prompt by using content blocks.
 
-See [OpenAI vision example](https://github.com/typpo/promptfoo/tree/main/examples/openai-vision).
+See [OpenAI vision example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-vision).
 
 ## Using tools and functions
 
-OpenAI tools and functions are supported. See [OpenAI tools example](https://github.com/typpo/promptfoo/tree/main/examples/openai-tools-call) and [OpenAI functions example](https://github.com/typpo/promptfoo/tree/main/examples/openai-function-call).
+OpenAI tools and functions are supported. See [OpenAI tools example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-tools-call) and [OpenAI functions example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-function-call).
 
 ### Using tools
 

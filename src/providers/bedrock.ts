@@ -1,12 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk';
-import dedent from 'dedent';
-
-import logger from '../logger';
-import { getCache, isCacheEnabled } from '../cache';
-import { parseMessages } from './anthropic';
-
 import type { BedrockRuntime } from '@aws-sdk/client-bedrock-runtime';
-
+import dedent from 'dedent';
+import { getCache, isCacheEnabled } from '../cache';
+import logger from '../logger';
 import type {
   ApiProvider,
   ApiEmbeddingProvider,
@@ -14,6 +10,7 @@ import type {
   ProviderResponse,
   ProviderEmbeddingResponse,
 } from '../types.js';
+import { parseMessages } from './anthropic';
 import { parseChatPrompt } from './shared';
 
 interface BedrockOptions {
@@ -168,6 +165,13 @@ interface IBedrockModel {
   output: (responseJson: any) => any;
 }
 
+export function parseValue(value: string, defaultValue: any) {
+  if (typeof defaultValue === 'number') {
+    return Number.isNaN(parseFloat(value)) ? defaultValue : parseFloat(value);
+  }
+  return value;
+}
+
 export function addConfigParam(
   params: any,
   key: string,
@@ -179,13 +183,6 @@ export function addConfigParam(
     params[key] =
       configValue ?? (envValue !== undefined ? parseValue(envValue, defaultValue) : defaultValue);
   }
-}
-
-function parseValue(value: string, defaultValue: any) {
-  if (typeof defaultValue === 'number') {
-    return parseFloat(value);
-  }
-  return value;
 }
 
 const BEDROCK_MODEL = {
@@ -330,7 +327,6 @@ const BEDROCK_MODEL = {
     },
     output: (responseJson: any) => responseJson?.generations[0]?.text,
   },
-
   COHERE_COMMAND_R: {
     params: (config: BedrockCohereCommandRGenerationOptions, prompt: string, stop: string[]) => {
       const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
@@ -391,13 +387,29 @@ const BEDROCK_MODEL = {
 };
 
 const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
+  'amazon.titan-text-express-v1': BEDROCK_MODEL.TITAN_TEXT,
+  'amazon.titan-text-lite-v1': BEDROCK_MODEL.TITAN_TEXT,
+  'amazon.titan-text-premier-v1:0': BEDROCK_MODEL.TITAN_TEXT,
+  'anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'anthropic.claude-3-opus-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'anthropic.claude-3-sonnet-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-instant-v1': BEDROCK_MODEL.CLAUDE_COMPLETION,
   'anthropic.claude-v1': BEDROCK_MODEL.CLAUDE_COMPLETION,
-  'anthropic.claude-v2': BEDROCK_MODEL.CLAUDE_COMPLETION,
   'anthropic.claude-v2:1': BEDROCK_MODEL.CLAUDE_COMPLETION,
-  'amazon.titan-text-lite-v1': BEDROCK_MODEL.TITAN_TEXT,
-  'amazon.titan-text-express-v1': BEDROCK_MODEL.TITAN_TEXT,
-  'amazon.titan-text-premier-v1:0': BEDROCK_MODEL.TITAN_TEXT,
+  'anthropic.claude-v2': BEDROCK_MODEL.CLAUDE_COMPLETION,
+  'cohere.command-light-text-v14': BEDROCK_MODEL.COHERE_COMMAND,
+  'cohere.command-r-plus-v1:0': BEDROCK_MODEL.COHERE_COMMAND_R,
+  'cohere.command-r-v1:0': BEDROCK_MODEL.COHERE_COMMAND_R,
+  'cohere.command-text-v14': BEDROCK_MODEL.COHERE_COMMAND,
+  'meta.llama2-13b-chat-v1': BEDROCK_MODEL.LLAMA,
+  'meta.llama2-70b-chat-v1': BEDROCK_MODEL.LLAMA,
+  'meta.llama3-70b-instruct-v1:0': BEDROCK_MODEL.LLAMA,
+  'meta.llama3-8b-instruct-v1:0': BEDROCK_MODEL.LLAMA,
+  'mistral.mistral-7b-instruct-v0:2': BEDROCK_MODEL.MISTRAL,
+  'mistral.mistral-large-2402-v1:0': BEDROCK_MODEL.MISTRAL,
+  'mistral.mistral-small-2402-v1:0': BEDROCK_MODEL.MISTRAL,
+  'mistral.mixtral-8x7b-instruct-v0:1': BEDROCK_MODEL.MISTRAL,
 };
 
 // See https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html
@@ -451,9 +463,26 @@ export abstract class AwsBedrockGenericProvider {
 
   async getBedrockInstance() {
     if (!this.bedrock) {
+      let handler;
+      // set from https://www.npmjs.com/package/proxy-agent
+      if (process.env.HTTP_PROXY || process.env.HTTPS_PROXY) {
+        try {
+          const { NodeHttpHandler } = await import('@smithy/node-http-handler');
+          const { ProxyAgent } = await import('proxy-agent');
+          handler = new NodeHttpHandler({ httpsAgent: new ProxyAgent() });
+        } catch (err) {
+          throw new Error(
+            `The @smithy/node-http-handler package is required as a peer dependency. Please install it in your project or globally.`,
+          );
+        }
+      }
       try {
         const { BedrockRuntime } = await import('@aws-sdk/client-bedrock-runtime');
-        this.bedrock = new BedrockRuntime({ region: this.getRegion() });
+        const bedrock = new BedrockRuntime({
+          region: this.getRegion(),
+          ...(handler ? { requestHandler: handler } : {}),
+        });
+        this.bedrock = bedrock;
       } catch (err) {
         throw new Error(
           'The @aws-sdk/client-bedrock-runtime package is required as a peer dependency. Please install it in your project or globally.',

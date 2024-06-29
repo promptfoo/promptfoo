@@ -1,29 +1,25 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { ErrorBoundary } from 'react-error-boundary';
+import { useStore } from '@/state/evalConfig';
+import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Container from '@mui/material/Container';
-import Typography from '@mui/material/Typography';
-import Box from '@mui/material/Box';
-import Stack from '@mui/material/Stack';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogContentText from '@mui/material/DialogContentText';
 import DialogTitle from '@mui/material/DialogTitle';
-import { ErrorBoundary } from 'react-error-boundary';
-
-import RunTestSuiteButton from './RunTestSuiteButton';
+import Stack from '@mui/material/Stack';
+import Typography from '@mui/material/Typography';
+import type { ProviderOptions, TestCase, TestSuiteConfig } from '../eval/types';
 import ConfigureEnvButton from './ConfigureEnvButton';
 import PromptsSection from './PromptsSection';
-import TestCasesSection from './TestCasesSection';
 import ProviderSelector from './ProviderSelector';
+import RunTestSuiteButton from './RunTestSuiteButton';
+import TestCasesSection from './TestCasesSection';
 import YamlEditor from './YamlEditor';
-
-import { useStore } from '@/state/evalConfig';
-
-import type { ProviderOptions, TestCase, TestSuiteConfig } from '../eval/types';
-
 import './page.css';
 
 export type WebTestSuiteConfig = TestSuiteConfig & {

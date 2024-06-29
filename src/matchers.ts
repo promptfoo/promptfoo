@@ -1,7 +1,5 @@
 import invariant from 'tiny-invariant';
 import logger from './logger';
-import { getNunjucksEngine } from './util';
-import { loadApiProvider } from './providers';
 import {
   ANSWER_RELEVANCY_GENERATE,
   SELECT_BEST_PROMPT,
@@ -15,7 +13,8 @@ import {
   OPENAI_CLOSED_QA_PROMPT,
   OPENAI_FACTUALITY_PROMPT,
 } from './prompts';
-
+import { loadApiProvider } from './providers';
+import { getDefaultProviders } from './providers/defaults';
 import type {
   ApiClassificationProvider,
   ApiEmbeddingProvider,
@@ -29,7 +28,7 @@ import type {
   ProviderType,
   ApiModerationProvider,
 } from './types';
-import { getDefaultProviders } from './providers/defaults';
+import { extractJsonObjects, getNunjucksEngine } from './util';
 
 const nunjucks = getNunjucksEngine();
 
@@ -182,7 +181,7 @@ export async function matchesSimilarity(
   const finalProvider = (await getAndCheckProvider(
     'embedding',
     grading?.provider,
-    getDefaultProviders().embeddingProvider,
+    (await getDefaultProviders()).embeddingProvider,
     'similarity check',
   )) as ApiEmbeddingProvider | ApiSimilarityProvider;
 
@@ -329,7 +328,7 @@ export async function matchesLlmRubric(
   const finalProvider = await getAndCheckProvider(
     'text',
     grading.provider,
-    getDefaultProviders().gradingJsonProvider,
+    (await getDefaultProviders()).gradingJsonProvider,
     'llm-rubric check',
   );
   const resp = await finalProvider.callApi(prompt);
@@ -339,10 +338,11 @@ export async function matchesLlmRubric(
 
   invariant(typeof resp.output === 'string', 'llm-rubric produced malformed response');
   try {
-    const firstOpeningBrace = resp.output.indexOf('{');
-    const firstClosingBrace = resp.output.indexOf('}');
-    const jsonStr = resp.output.substring(firstOpeningBrace, firstClosingBrace + 1);
-    const parsed = JSON.parse(jsonStr) as Partial<GradingResult>;
+    const jsonObjects = extractJsonObjects(resp.output);
+    if (jsonObjects.length === 0) {
+      return fail('Could not extract JSON from llm-rubric response', resp.tokenUsage);
+    }
+    const parsed = jsonObjects[0] as Partial<GradingResult>;
     const pass = parsed.pass ?? (typeof parsed.score === 'undefined' ? true : parsed.score > 0);
     return {
       pass,
@@ -355,7 +355,10 @@ export async function matchesLlmRubric(
       },
     };
   } catch (err) {
-    return fail(`llm-rubric produced malformed response: ${resp.output}`, resp.tokenUsage);
+    return fail(
+      `llm-rubric produced malformed response: ${err}\n\n${resp.output}`,
+      resp.tokenUsage,
+    );
   }
 }
 
@@ -384,7 +387,7 @@ export async function matchesFactuality(
   const finalProvider = await getAndCheckProvider(
     'text',
     grading.provider,
-    getDefaultProviders().gradingProvider,
+    (await getDefaultProviders()).gradingProvider,
     'factuality check',
   );
   const resp = await finalProvider.callApi(prompt);
@@ -479,7 +482,7 @@ export async function matchesClosedQa(
   const finalProvider = await getAndCheckProvider(
     'text',
     grading.provider,
-    getDefaultProviders().gradingProvider,
+    (await getDefaultProviders()).gradingProvider,
     'model-graded-closedqa check',
   );
   const resp = await finalProvider.callApi(prompt);
@@ -522,13 +525,13 @@ export async function matchesAnswerRelevance(
   const embeddingProvider = await getAndCheckProvider(
     'embedding',
     grading?.provider,
-    getDefaultProviders().embeddingProvider,
+    (await getDefaultProviders()).embeddingProvider,
     'answer relevancy check',
   );
   const textProvider = await getAndCheckProvider(
     'text',
     grading?.provider,
-    getDefaultProviders().gradingProvider,
+    (await getDefaultProviders()).gradingProvider,
     'answer relevancy check',
   );
 
@@ -619,7 +622,7 @@ export async function matchesContextRecall(
   const textProvider = await getAndCheckProvider(
     'text',
     grading?.provider,
-    getDefaultProviders().gradingProvider,
+    (await getDefaultProviders()).gradingProvider,
     'context recall check',
   );
 
@@ -667,7 +670,7 @@ export async function matchesContextRelevance(
   const textProvider = await getAndCheckProvider(
     'text',
     grading?.provider,
-    getDefaultProviders().gradingProvider,
+    (await getDefaultProviders()).gradingProvider,
     'context relevance check',
   );
 
@@ -716,7 +719,7 @@ export async function matchesContextFaithfulness(
   const textProvider = await getAndCheckProvider(
     'text',
     grading?.provider,
-    getDefaultProviders().gradingProvider,
+    (await getDefaultProviders()).gradingProvider,
     'faithfulness check',
   );
 
@@ -794,7 +797,7 @@ export async function matchesSelectBest(
   const textProvider = await getAndCheckProvider(
     'text',
     grading?.provider,
-    getDefaultProviders().gradingProvider,
+    (await getDefaultProviders()).gradingProvider,
     'select-best check',
   );
 
@@ -857,7 +860,7 @@ export async function matchesModeration(
   const moderationProvider = (await getAndCheckProvider(
     'moderation',
     grading?.provider,
-    getDefaultProviders().moderationProvider,
+    (await getDefaultProviders()).moderationProvider,
     'moderation check',
   )) as ApiModerationProvider;
 

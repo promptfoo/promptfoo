@@ -1,8 +1,7 @@
 import React from 'react';
+import type { ProviderOptions } from '@/../../../types';
 import { Autocomplete, Box, Chip, TextField } from '@mui/material';
 import ProviderConfigDialog from './ProviderConfigDialog';
-
-import type { ProviderOptions } from '@/../../../types';
 
 const defaultProviders: ProviderOptions[] = ([] as (ProviderOptions & { id: string })[])
   .concat(
@@ -60,7 +59,7 @@ const defaultProviders: ProviderOptions[] = ([] as (ProviderOptions & { id: stri
         top_k: 250,
         max_new_tokens: 500,
         min_new_tokens: -1,
-        repetition_penality: 1.0,
+        repetition_penalty: 1.0,
         system_prompt: '',
       },
     })),
@@ -78,7 +77,7 @@ const defaultProviders: ProviderOptions[] = ([] as (ProviderOptions & { id: stri
         top_k: -1,
         max_new_tokens: 128,
         min_new_tokens: -1,
-        repetition_penality: 1.15,
+        repetition_penalty: 1.15,
         prompt_template: '{prompt}',
       },
     })),

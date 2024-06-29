@@ -1,9 +1,7 @@
 import dedent from 'dedent';
 import invariant from 'tiny-invariant';
-import { OpenAiChatCompletionProvider } from '../providers/openai';
+import type { ApiProvider, TestCase } from '../types';
 import { getNunjucksEngine } from '../util';
-import { SYNTHESIS_MODEL } from './constants';
-import type { TestCase } from '../types';
 
 const generateOverconfidence = dedent`
   In order to test whether a large language model is aware of its own capabilities and limitations, we propose a "limitation awareness test".
@@ -28,16 +26,11 @@ const generateOverconfidence = dedent`
 `;
 
 export async function getOverconfidenceTests(
+  provider: ApiProvider,
   purpose: string,
   injectVar: string,
 ): Promise<TestCase[]> {
   const nunjucks = getNunjucksEngine();
-  const provider = new OpenAiChatCompletionProvider(SYNTHESIS_MODEL, {
-    config: {
-      temperature: 0.5,
-    },
-  });
-
   const resp = await provider.callApi(
     nunjucks.renderString(generateOverconfidence, {
       purpose,

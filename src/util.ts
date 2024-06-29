@@ -1,22 +1,18 @@
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
-import { createHash } from 'crypto';
-
-import dotenv from 'dotenv';
 import $RefParser from '@apidevtools/json-schema-ref-parser';
-import invariant from 'tiny-invariant';
-import nunjucks from 'nunjucks';
-import yaml from 'js-yaml';
-import deepEqual from 'fast-deep-equal';
+import { createHash } from 'crypto';
 import { stringify } from 'csv-stringify/sync';
-import { globSync } from 'glob';
+import dotenv from 'dotenv';
 import { desc, eq } from 'drizzle-orm';
-
+import deepEqual from 'fast-deep-equal';
+import * as fs from 'fs';
+import { globSync } from 'glob';
+import yaml from 'js-yaml';
+import nunjucks from 'nunjucks';
+import * as os from 'os';
+import * as path from 'path';
+import invariant from 'tiny-invariant';
 import cliState from './cliState';
-import logger from './logger';
-import { getDirectory, importModule } from './esm';
-import { readTests } from './testCases';
+import { TERMINAL_MAX_WIDTH } from './constants';
 import {
   datasets,
   getDb,
@@ -26,9 +22,12 @@ import {
   prompts,
   getDbSignalPath,
 } from './database';
+import { getDirectory, importModule } from './esm';
+import { writeCsvToGoogleSheet } from './googleSheets';
+import logger from './logger';
 import { runDbMigrations } from './migrate';
 import { runPython } from './python/wrapper';
-
+import { readTests } from './testCases';
 import {
   type EvalWithMetadata,
   type EvaluateResult,
@@ -50,16 +49,8 @@ import {
   isApiProvider,
   isProviderOptions,
 } from './types';
-import { writeCsvToGoogleSheet } from './googleSheets';
 
 const DEFAULT_QUERY_LIMIT = 100;
-
-export async function maybeReadConfig(configPath: string): Promise<UnifiedConfig | undefined> {
-  if (!fs.existsSync(configPath)) {
-    return undefined;
-  }
-  return readConfig(configPath);
-}
 
 export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<UnifiedConfig> {
   if (process.env.PROMPTFOO_DISABLE_REF_PARSER) {
@@ -178,6 +169,13 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
     default:
       throw new Error(`Unsupported configuration file format: ${ext}`);
   }
+}
+
+export async function maybeReadConfig(configPath: string): Promise<UnifiedConfig | undefined> {
+  if (!fs.existsSync(configPath)) {
+    return undefined;
+  }
+  return readConfig(configPath);
 }
 
 /**
@@ -318,16 +316,23 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
   return combinedConfig;
 }
 
-export async function writeMultipleOutputs(
-  outputPaths: string[],
-  evalId: string | null,
-  results: EvaluateSummary,
-  config: Partial<UnifiedConfig>,
-  shareableUrl: string | null,
-) {
-  await Promise.all(
-    outputPaths.map((outputPath) => writeOutput(outputPath, evalId, results, config, shareableUrl)),
-  );
+export function getNunjucksEngine(filters?: NunjucksFilterMap) {
+  if (process.env.PROMPTFOO_DISABLE_TEMPLATING) {
+    return {
+      renderString: (template: string) => template,
+    };
+  }
+
+  const env = nunjucks.configure({
+    autoescape: false,
+  });
+
+  if (filters) {
+    for (const [name, filter] of Object.entries(filters)) {
+      env.addFilter(name, filter);
+    }
+  }
+  return env;
 }
 
 export async function writeOutput(
@@ -418,6 +423,22 @@ ${gradingResultText}`.trim();
       );
     }
   }
+}
+
+export async function writeMultipleOutputs(
+  outputPaths: string[],
+  evalId: string | null,
+  results: EvaluateSummary,
+  config: Partial<UnifiedConfig>,
+  shareableUrl: string | null,
+) {
+  await Promise.all(
+    outputPaths.map((outputPath) => writeOutput(outputPath, evalId, results, config, shareableUrl)),
+  );
+}
+
+export function sha256(str: string) {
+  return createHash('sha256').update(str).digest('hex');
 }
 
 export async function readOutput(outputPath: string): Promise<OutputFile> {
@@ -625,7 +646,58 @@ export function listPreviousResults_fileSystem(): { fileName: string; descriptio
   });
 }
 
+export function filenameToDate(filename: string) {
+  const dateString = filename.slice('eval-'.length, filename.length - '.json'.length);
+
+  // Replace hyphens with colons where necessary (Windows compatibility).
+  const dateParts = dateString.split('T');
+  const timePart = dateParts[1].replace(/-/g, ':');
+  const formattedDateString = `${dateParts[0]}T${timePart}`;
+
+  const date = new Date(formattedDateString);
+  return date;
+  /*
+  return date.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    timeZoneName: 'short',
+  });
+  */
+}
+
+export function dateToFilename(date: Date) {
+  return `eval-${date.toISOString().replace(/:/g, '-')}.json`;
+}
+
+/**
+ * @deprecated Used only for migration to sqlite
+ */
+export function readResult_fileSystem(
+  name: string,
+): { id: string; result: ResultsFile; createdAt: Date } | undefined {
+  const resultsDirectory = path.join(getConfigDirectoryPath(), 'output');
+  const resultsPath = path.join(resultsDirectory, name);
+  try {
+    const result = JSON.parse(
+      fs.readFileSync(fs.realpathSync(resultsPath), 'utf-8'),
+    ) as ResultsFile;
+    const createdAt = filenameToDate(name);
+    return {
+      id: sha256(JSON.stringify(result.config)),
+      result,
+      createdAt,
+    };
+  } catch (err) {
+    logger.error(`Failed to read results from ${resultsPath}:\n${err}`);
+  }
+}
+
 let attemptedMigration = false;
+
 export async function migrateResultsFromFileSystemToDatabase() {
   if (attemptedMigration) {
     // TODO(ian): Record this bit in the database.
@@ -696,33 +768,6 @@ export function cleanupOldFileResults(remaining = RESULT_HISTORY_LENGTH) {
   }
 }
 
-export function filenameToDate(filename: string) {
-  const dateString = filename.slice('eval-'.length, filename.length - '.json'.length);
-
-  // Replace hyphens with colons where necessary (Windows compatibility).
-  const dateParts = dateString.split('T');
-  const timePart = dateParts[1].replace(/-/g, ':');
-  const formattedDateString = `${dateParts[0]}T${timePart}`;
-
-  const date = new Date(formattedDateString);
-  return date;
-  /*
-  return date.toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    timeZoneName: 'short',
-  });
-  */
-}
-
-export function dateToFilename(date: Date) {
-  return `eval-${date.toISOString().replace(/:/g, '-')}.json`;
-}
-
 export async function readResult(
   id: string,
 ): Promise<{ id: string; result: ResultsFile; createdAt: Date } | undefined> {
@@ -757,29 +802,6 @@ export async function readResult(
     };
   } catch (err) {
     logger.error(`Failed to read result with ID ${id} from database:\n${err}`);
-  }
-}
-
-/**
- * @deprecated Used only for migration to sqlite
- */
-export function readResult_fileSystem(
-  name: string,
-): { id: string; result: ResultsFile; createdAt: Date } | undefined {
-  const resultsDirectory = path.join(getConfigDirectoryPath(), 'output');
-  const resultsPath = path.join(resultsDirectory, name);
-  try {
-    const result = JSON.parse(
-      fs.readFileSync(fs.realpathSync(resultsPath), 'utf-8'),
-    ) as ResultsFile;
-    const createdAt = filenameToDate(name);
-    return {
-      id: sha256(JSON.stringify(result.config)),
-      result,
-      createdAt,
-    };
-  } catch (err) {
-    logger.error(`Failed to read results from ${resultsPath}:\n${err}`);
   }
 }
 
@@ -864,31 +886,6 @@ export async function readLatestResults(
   };
 }
 
-export function getPromptsForTestCases(testCases: TestCase[]) {
-  const testCasesJson = JSON.stringify(testCases);
-  const testCasesSha256 = sha256(testCasesJson);
-  return getPromptsForTestCasesHash(testCasesSha256);
-}
-
-export function getPromptsForTestCasesHash(
-  testCasesSha256: string,
-  limit: number = DEFAULT_QUERY_LIMIT,
-) {
-  return getPromptsWithPredicate((result) => {
-    const testsJson = JSON.stringify(result.config.tests);
-    const hash = sha256(testsJson);
-    return hash === testCasesSha256;
-  }, limit);
-}
-
-export function sha256(str: string) {
-  return createHash('sha256').update(str).digest('hex');
-}
-
-export function getPrompts(limit: number = DEFAULT_QUERY_LIMIT) {
-  return getPromptsWithPredicate(() => true, limit);
-}
-
 export async function getPromptsWithPredicate(
   predicate: (result: ResultsFile) => boolean,
   limit: number,
@@ -958,8 +955,21 @@ export async function getPromptsWithPredicate(
   return Object.values(groupedPrompts);
 }
 
-export async function getTestCases(limit: number = DEFAULT_QUERY_LIMIT) {
-  return getTestCasesWithPredicate(() => true, limit);
+export function getPromptsForTestCasesHash(
+  testCasesSha256: string,
+  limit: number = DEFAULT_QUERY_LIMIT,
+) {
+  return getPromptsWithPredicate((result) => {
+    const testsJson = JSON.stringify(result.config.tests);
+    const hash = sha256(testsJson);
+    return hash === testCasesSha256;
+  }, limit);
+}
+
+export function getPromptsForTestCases(testCases: TestCase[]) {
+  const testCasesJson = JSON.stringify(testCases);
+  const testCasesSha256 = sha256(testCasesJson);
+  return getPromptsForTestCasesHash(testCasesSha256);
 }
 
 export async function getTestCasesWithPredicate(
@@ -1036,6 +1046,14 @@ export async function getTestCasesWithPredicate(
   return Object.values(groupedTestCases);
 }
 
+export function getPrompts(limit: number = DEFAULT_QUERY_LIMIT) {
+  return getPromptsWithPredicate(() => true, limit);
+}
+
+export async function getTestCases(limit: number = DEFAULT_QUERY_LIMIT) {
+  return getTestCasesWithPredicate(() => true, limit);
+}
+
 export async function getPromptFromHash(hash: string) {
   const prompts = await getPrompts();
   for (const prompt of prompts) {
@@ -1051,20 +1069,6 @@ export async function getDatasetFromHash(hash: string) {
   for (const dataset of datasets) {
     if (dataset.id.startsWith(hash)) {
       return dataset;
-    }
-  }
-  return undefined;
-}
-
-export async function getEvals(limit: number = DEFAULT_QUERY_LIMIT) {
-  return getEvalsWithPredicate(() => true, limit);
-}
-
-export async function getEvalFromId(hash: string) {
-  const evals_ = await getEvals();
-  for (const eval_ of evals_) {
-    if (eval_.id.startsWith(hash)) {
-      return eval_;
     }
   }
   return undefined;
@@ -1113,6 +1117,20 @@ export async function getEvalsWithPredicate(
   return ret;
 }
 
+export async function getEvals(limit: number = DEFAULT_QUERY_LIMIT) {
+  return getEvalsWithPredicate(() => true, limit);
+}
+
+export async function getEvalFromId(hash: string) {
+  const evals_ = await getEvals();
+  for (const eval_ of evals_) {
+    if (eval_.id.startsWith(hash)) {
+      return eval_;
+    }
+  }
+  return undefined;
+}
+
 export async function deleteEval(evalId: string) {
   const db = getDb();
   await db.transaction(async () => {
@@ -1144,27 +1162,8 @@ export async function readFilters(filters: Record<string, string>): Promise<Nunj
   return ret;
 }
 
-export function getNunjucksEngine(filters?: NunjucksFilterMap) {
-  if (process.env.PROMPTFOO_DISABLE_TEMPLATING) {
-    return {
-      renderString: (template: string) => template,
-    };
-  }
-
-  const env = nunjucks.configure({
-    autoescape: false,
-  });
-
-  if (filters) {
-    for (const [name, filter] of Object.entries(filters)) {
-      env.addFilter(name, filter);
-    }
-  }
-  return env;
-}
-
 export function printBorder() {
-  const border = '='.repeat((process.stdout.columns || 80) - 10);
+  const border = '='.repeat(TERMINAL_MAX_WIDTH);
   logger.info(border);
 }
 
@@ -1327,4 +1326,34 @@ export function renderVarsInObject<T>(obj: T, vars?: Record<string, string | obj
     return renderVarsInObject(fn({ vars }) as T);
   }
   return obj;
+}
+
+export function extractJsonObjects(str: string): object[] {
+  // This will extract all json objects from a string
+
+  const jsonObjects = [];
+  let openBracket = str.indexOf('{');
+  let closeBracket = str.indexOf('}', openBracket);
+  // Iterate over the string until we find a valid JSON-like pattern
+  // Iterate over all trailing } until the contents parse as json
+  while (openBracket !== -1) {
+    const jsonStr = str.slice(openBracket, closeBracket + 1);
+    try {
+      jsonObjects.push(JSON.parse(jsonStr));
+      // This is a valid JSON object, so start looking for
+      // an opening bracket after the last closing bracket
+      openBracket = str.indexOf('{', closeBracket + 1);
+      closeBracket = str.indexOf('}', openBracket);
+    } catch (err) {
+      // Not a valid object, move on to the next closing bracket
+      closeBracket = str.indexOf('}', closeBracket + 1);
+      while (closeBracket === -1) {
+        // No closing brackets made a valid json object, so
+        // start looking with the next opening bracket
+        openBracket = str.indexOf('{', openBracket + 1);
+        closeBracket = str.indexOf('}', openBracket);
+      }
+    }
+  }
+  return jsonObjects;
 }

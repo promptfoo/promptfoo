@@ -1,9 +1,9 @@
 import chalk from 'chalk';
 import semverGt from 'semver/functions/gt';
-
-import logger from './logger';
-import { fetchWithTimeout } from './fetch';
 import packageJson from '../package.json';
+import { TERMINAL_MAX_WIDTH } from './constants';
+import { fetchWithTimeout } from './fetch';
+import logger from './logger';
 
 const VERSION = packageJson.version;
 
@@ -28,7 +28,7 @@ export async function checkForUpdates(): Promise<boolean> {
     return false;
   }
   if (semverGt(latestVersion, VERSION)) {
-    const border = '='.repeat(process.stdout.columns - 10);
+    const border = '='.repeat(TERMINAL_MAX_WIDTH);
     logger.info(
       `\n${border}
 ${chalk.yellow('⚠️')} The current version of promptfoo ${chalk.yellow(

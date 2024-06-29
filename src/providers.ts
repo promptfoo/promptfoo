@@ -1,10 +1,40 @@
 import fs from 'fs';
-import path from 'path';
-
-import invariant from 'tiny-invariant';
 import yaml from 'js-yaml';
-
+import path from 'path';
+import invariant from 'tiny-invariant';
+import { importModule } from './esm';
 import logger from './logger';
+import { AnthropicCompletionProvider, AnthropicMessagesProvider } from './providers/anthropic';
+import {
+  AzureOpenAiAssistantProvider,
+  AzureOpenAiChatCompletionProvider,
+  AzureOpenAiCompletionProvider,
+  AzureOpenAiEmbeddingProvider,
+} from './providers/azureopenai';
+import { BAMChatProvider, BAMEmbeddingProvider } from './providers/bam';
+import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './providers/bedrock';
+import * as CloudflareAiProviders from './providers/cloudflare-ai';
+import { CohereChatCompletionProvider } from './providers/cohere';
+import { HttpProvider } from './providers/http';
+import {
+  HuggingfaceFeatureExtractionProvider,
+  HuggingfaceSentenceSimilarityProvider,
+  HuggingfaceTextClassificationProvider,
+  HuggingfaceTextGenerationProvider,
+  HuggingfaceTokenExtractionProvider,
+} from './providers/huggingface';
+import { LlamaProvider } from './providers/llama';
+import {
+  LocalAiCompletionProvider,
+  LocalAiChatProvider,
+  LocalAiEmbeddingProvider,
+} from './providers/localai';
+import { MistralChatCompletionProvider } from './providers/mistral';
+import {
+  OllamaEmbeddingProvider,
+  OllamaCompletionProvider,
+  OllamaChatProvider,
+} from './providers/ollama';
 import {
   OpenAiAssistantProvider,
   OpenAiCompletionProvider,
@@ -13,46 +43,14 @@ import {
   OpenAiImageProvider,
   OpenAiModerationProvider,
 } from './providers/openai';
-import { AnthropicCompletionProvider, AnthropicMessagesProvider } from './providers/anthropic';
-import { ReplicateModerationProvider, ReplicateProvider } from './providers/replicate';
-import {
-  LocalAiCompletionProvider,
-  LocalAiChatProvider,
-  LocalAiEmbeddingProvider,
-} from './providers/localai';
 import { PalmChatProvider } from './providers/palm';
-import { LlamaProvider } from './providers/llama';
-import {
-  OllamaEmbeddingProvider,
-  OllamaCompletionProvider,
-  OllamaChatProvider,
-} from './providers/ollama';
-import { VertexChatProvider } from './providers/vertex';
-import { MistralChatCompletionProvider } from './providers/mistral';
-import { WebhookProvider } from './providers/webhook';
-import { ScriptCompletionProvider } from './providers/scriptCompletion';
-import {
-  AzureOpenAiAssistantProvider,
-  AzureOpenAiChatCompletionProvider,
-  AzureOpenAiCompletionProvider,
-  AzureOpenAiEmbeddingProvider,
-} from './providers/azureopenai';
-import {
-  HuggingfaceFeatureExtractionProvider,
-  HuggingfaceSentenceSimilarityProvider,
-  HuggingfaceTextClassificationProvider,
-  HuggingfaceTextGenerationProvider,
-  HuggingfaceTokenExtractionProvider,
-} from './providers/huggingface';
-import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './providers/bedrock';
-import { PythonProvider } from './providers/pythonCompletion';
-import { CohereChatCompletionProvider } from './providers/cohere';
-import * as CloudflareAiProviders from './providers/cloudflare-ai';
-import { BAMChatProvider, BAMEmbeddingProvider } from './providers/bam';
 import { PortkeyChatCompletionProvider } from './providers/portkey';
-import { HttpProvider } from './providers/http';
-import { importModule } from './esm';
-
+import { PythonProvider } from './providers/pythonCompletion';
+import { ReplicateModerationProvider, ReplicateProvider } from './providers/replicate';
+import { ScriptCompletionProvider } from './providers/scriptCompletion';
+import { VertexChatProvider, VertexEmbeddingProvider } from './providers/vertex';
+import { VoyageEmbeddingProvider } from './providers/voyage';
+import { WebhookProvider } from './providers/webhook';
 import type {
   ApiProvider,
   EnvOverrides,
@@ -60,54 +58,6 @@ import type {
   ProviderOptionsMap,
   TestSuiteConfig,
 } from './types';
-import { VoyageEmbeddingProvider } from './providers/voyage';
-
-export async function loadApiProviders(
-  providerPaths: TestSuiteConfig['providers'],
-  options: {
-    basePath?: string;
-    env?: EnvOverrides;
-  } = {},
-): Promise<ApiProvider[]> {
-  const { basePath, env } = options;
-  if (typeof providerPaths === 'string') {
-    return [await loadApiProvider(providerPaths, { basePath, env })];
-  } else if (typeof providerPaths === 'function') {
-    return [
-      {
-        id: () => 'custom-function',
-        callApi: providerPaths,
-      },
-    ];
-  } else if (Array.isArray(providerPaths)) {
-    return Promise.all(
-      providerPaths.map((provider, idx) => {
-        if (typeof provider === 'string') {
-          return loadApiProvider(provider, { basePath, env });
-        } else if (typeof provider === 'function') {
-          return {
-            id: provider.label ? () => provider.label! : () => `custom-function-${idx}`,
-            callApi: provider,
-          };
-        } else if (provider.id) {
-          // List of ProviderConfig objects
-          return loadApiProvider((provider as ProviderOptions).id!, {
-            options: provider,
-            basePath,
-            env,
-          });
-        } else {
-          // List of { id: string, config: ProviderConfig } objects
-          const id = Object.keys(provider)[0];
-          const providerObject = (provider as ProviderOptionsMap)[id];
-          const context = { ...providerObject, id: providerObject.id || id };
-          return loadApiProvider(id, { options: context, basePath, env });
-        }
-      }),
-    );
-  }
-  throw new Error('Invalid providers list');
-}
 
 // FIXME(ian): Make loadApiProvider handle all the different provider types (string, ProviderOptions, ApiProvider, etc), rather than the callers.
 export async function loadApiProvider(
@@ -348,9 +298,17 @@ export async function loadApiProvider(
   } else if (providerPath.startsWith('palm:') || providerPath.startsWith('google:')) {
     const modelName = providerPath.split(':')[1];
     ret = new PalmChatProvider(modelName, providerOptions);
-  } else if (providerPath.startsWith('vertex')) {
-    const modelName = providerPath.split(':')[1];
-    ret = new VertexChatProvider(modelName, providerOptions);
+  } else if (providerPath.startsWith('vertex:')) {
+    const splits = providerPath.split(':');
+    const firstPart = splits[1];
+    if (firstPart === 'chat') {
+      ret = new VertexChatProvider(splits.slice(2).join(':'), providerOptions);
+    } else if (firstPart === 'embedding' || firstPart === 'embeddings') {
+      ret = new VertexEmbeddingProvider(splits.slice(2).join(':'), providerOptions);
+    } else {
+      // Default to chat provider
+      ret = new VertexChatProvider(splits.slice(1).join(':'), providerOptions);
+    }
   } else if (providerPath.startsWith('mistral:')) {
     const modelName = providerPath.split(':')[1];
     ret = new MistralChatCompletionProvider(modelName, providerOptions);
@@ -393,6 +351,53 @@ export async function loadApiProvider(
   ret.transform = options.transform;
   ret.delay = options.delay;
   return ret;
+}
+
+export async function loadApiProviders(
+  providerPaths: TestSuiteConfig['providers'],
+  options: {
+    basePath?: string;
+    env?: EnvOverrides;
+  } = {},
+): Promise<ApiProvider[]> {
+  const { basePath, env } = options;
+  if (typeof providerPaths === 'string') {
+    return [await loadApiProvider(providerPaths, { basePath, env })];
+  } else if (typeof providerPaths === 'function') {
+    return [
+      {
+        id: () => 'custom-function',
+        callApi: providerPaths,
+      },
+    ];
+  } else if (Array.isArray(providerPaths)) {
+    return Promise.all(
+      providerPaths.map((provider, idx) => {
+        if (typeof provider === 'string') {
+          return loadApiProvider(provider, { basePath, env });
+        } else if (typeof provider === 'function') {
+          return {
+            id: provider.label ? () => provider.label! : () => `custom-function-${idx}`,
+            callApi: provider,
+          };
+        } else if (provider.id) {
+          // List of ProviderConfig objects
+          return loadApiProvider((provider as ProviderOptions).id!, {
+            options: provider,
+            basePath,
+            env,
+          });
+        } else {
+          // List of { id: string, config: ProviderConfig } objects
+          const id = Object.keys(provider)[0];
+          const providerObject = (provider as ProviderOptionsMap)[id];
+          const context = { ...providerObject, id: providerObject.id || id };
+          return loadApiProvider(id, { options: context, basePath, env });
+        }
+      }),
+    );
+  }
+  throw new Error('Invalid providers list');
 }
 
 export default {
