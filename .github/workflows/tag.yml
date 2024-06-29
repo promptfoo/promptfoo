@@ -30,7 +30,7 @@ jobs:
         run: |
           git fetch --tags
           VERSION=$(echo $VERSION)
-          if [[ $(git tag -l v$VERSION | wc -l) -eq '1' ]]; then
+          if [[ $(git tag -l $VERSION | wc -l) -eq '1' ]]; then
             echo "git tag already exists"
             echo "TAG=false" >> $GITHUB_ENV
           else
