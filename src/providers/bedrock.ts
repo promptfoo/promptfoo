@@ -195,6 +195,7 @@ interface LlamaMessage {
   content: string;
 }
 
+// see https://github.com/meta-llama/llama/blob/main/llama/generation.py#L284-L395
 const formatPromptV2 = (messages: LlamaMessage[]): string => {
   let formattedPrompt = '<s>';
   let isFirstUserMessage = true;
@@ -217,42 +218,6 @@ const formatPromptV2 = (messages: LlamaMessage[]): string => {
           isFirstUserMessage = false;
         } else {
           formattedPrompt += '<s>[INST] ';
-        }
-        formattedPrompt += `${message.content.trim()}`;
-        if (!nextMessage || nextMessage.role === 'user') {
-          formattedPrompt += ' [/INST]';
-        }
-        break;
-      case 'assistant':
-        formattedPrompt += ` [/INST] ${message.content.trim()} </s>`;
-        break;
-    }
-  }
-
-  return formattedPrompt;
-};
-const formatPromptV21 = (messages: LlamaMessage[]): string => {
-  let formattedPrompt = '<s>';
-  let isFirstUserMessage = true;
-
-  for (let i = 0; i < messages.length; i++) {
-    const message = messages[i];
-    const nextMessage = messages[i + 1];
-
-    switch (message.role) {
-      case 'system':
-        if (isFirstUserMessage) {
-          formattedPrompt += '[INST] <<SYS>>\n';
-          formattedPrompt += `${message.content.trim()}\n`;
-          formattedPrompt += '<</SYS>>\n\n';
-        }
-        break;
-      case 'user':
-        if (isFirstUserMessage) {
-          formattedPrompt += isFirstUserMessage ? '[INST] ' : '<s>[INST] ';
-          isFirstUserMessage = false;
-        } else {
-          formattedPrompt += ' [/INST]</s><s>[INST] ';
         }
         formattedPrompt += `${message.content.trim()}`;
         if (!nextMessage || nextMessage.role === 'user') {
