@@ -341,6 +341,11 @@ export async function loadApiProvider(
     const RedteamIterativeProvider = (await import(path.join(__dirname, './redteam/iterative')))
       .default;
     ret = new RedteamIterativeProvider(providerOptions);
+  } else if (providerPath === 'promptfoo:redteam:iterative:image') {
+    const RedteamIterativeProvider = (
+      await import(path.join(__dirname, './redteam/iterativeImage'))
+    ).default;
+    ret = new RedteamIterativeProvider(providerOptions);
   } else {
     if (providerPath.startsWith('file://')) {
       providerPath = providerPath.slice('file://'.length);
