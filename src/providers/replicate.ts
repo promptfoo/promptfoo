@@ -322,7 +322,6 @@ export class ReplicateImageProvider extends ReplicateProvider {
     let response: any | undefined;
     let cached = false;
     if (isCacheEnabled()) {
-      // Try to get the cached response
       const cachedResponse = await cache.get(cacheKey);
       if (cachedResponse) {
         console.log(cachedResponse);
