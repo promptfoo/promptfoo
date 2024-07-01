@@ -30,7 +30,11 @@ async def custom_async_func(prompt, options, context):
         messages=[
             {
                 "role": "system",
-                "content": "You are an AI assistant acting as a marketer for a startup called Bananamax. Your task is to develop a marketing strategy and create a compelling marketing message based on the provided information",
+                "content": (
+                    "You are an AI assistant acting as a marketer for a startup called Bananamax. "
+                    "Your task is to develop a marketing strategy and create a compelling "
+                    "marketing message based on the provided information."
+                ),
             },
             {
                 "role": "user",
