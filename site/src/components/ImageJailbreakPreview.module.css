@@ -1,0 +1,53 @@
+.container {
+  position: relative;
+  cursor: pointer;
+  margin-top: 4rem;
+  transition: transform 0.3s ease-in-out;
+}
+
+.container:not(.flipped):hover {
+  transform: scale(1.02);
+}
+
+.imageWrapper {
+  position: relative;
+}
+
+.image {
+  width: 100%;
+  height: auto;
+  transition: filter 0.5s linear;
+}
+
+.container:not(.flipped) .image {
+  filter: blur(20px);
+}
+
+.title {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 2rem;
+  color: white;
+  text-align: center;
+  transition: opacity 0.5s ease-in-out;
+  z-index: 1;
+}
+
+@media (max-width: 600px) {
+  .title {
+    font-size: 1rem;
+  }
+}
+
+.flipped .title {
+  opacity: 0;
+}
+
+.caption {
+  background-color: #000;
+  color: white;
+  padding: 2rem;
+  margin-top: -1rem;
+}
