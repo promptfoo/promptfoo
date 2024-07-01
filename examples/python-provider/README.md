@@ -1,6 +1,9 @@
-To get started, set your OPENAI_API_KEY environment variable.
+To get started:
 
-Next, edit promptfooconfig.yaml.
+1. ensure that the openai sdk is installed `pip install openai`
+2. set your `OPENAI_API_KEY` environment variable.
+
+Next, edit promptfooconfig.yaml with your custom prompts and assertions.
 
 Then run:
 
