@@ -57,6 +57,7 @@
 
 .navbar__brand {
   font-family: var(--ifm-font-family-monospace);
+  margin-top: 0.25rem;
 }
 
 .navbar__logo img {

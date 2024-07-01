@@ -852,21 +852,26 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
     }
 
     if (!response) {
-      response = await openai.images.generate({
-        model: this.modelName,
-        prompt,
-        n: 1,
-        size:
-          ((this.config.size || process.env.OPENAI_IMAGE_SIZE) as
-            | '1024x1024'
-            | '256x256'
-            | '512x512'
-            | '1792x1024'
-            | '1024x1792'
-            | undefined) || '1024x1024',
-      });
+      try {
+        response = await openai.images.generate({
+          model: this.modelName,
+          prompt,
+          n: 1,
+          size:
+            ((this.config.size || process.env.OPENAI_IMAGE_SIZE) as
+              | '1024x1024'
+              | '256x256'
+              | '512x512'
+              | '1792x1024'
+              | '1024x1792'
+              | undefined) || '1024x1024',
+        });
+      } catch (error) {
+        return {
+          error: `OpenAI threw error: ${(error as Error).message}`,
+        };
+      }
     }
-
     const url = response.data[0].url;
     if (!url) {
       return {

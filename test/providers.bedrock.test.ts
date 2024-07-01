@@ -1,4 +1,13 @@
-import { addConfigParam, AwsBedrockGenericProvider, parseValue } from '../src/providers/bedrock';
+import dedent from 'dedent';
+import {
+  addConfigParam,
+  AwsBedrockGenericProvider,
+  formatPromptLlama2Chat,
+  getLlamaModelHandler,
+  LlamaMessage,
+  LlamaVersion,
+  parseValue,
+} from '../src/providers/bedrock';
 
 jest.mock('@aws-sdk/client-bedrock-runtime', () => {
   return {
@@ -199,5 +208,200 @@ describe('parseValue', () => {
 
   it('should return undefined for an undefined value if defaultValue is not a number', () => {
     expect(parseValue(undefined as never, 'defaultValue')).toBeUndefined();
+  });
+});
+
+describe('llama', () => {
+  describe('getLlamaModelHandler', () => {
+    describe('LLAMA2', () => {
+      const handler = getLlamaModelHandler(LlamaVersion.V2);
+
+      it('should generate correct prompt for a single user message', () => {
+        const config = { temperature: 0.5, top_p: 0.9, max_gen_len: 512 };
+        const prompt = 'Describe the purpose of a "hello world" program in one sentence.';
+        expect(handler.params(config, prompt)).toEqual({
+          prompt: `<s>[INST] Describe the purpose of a "hello world" program in one sentence. [/INST]`,
+          temperature: 0.5,
+          top_p: 0.9,
+          max_gen_len: 512,
+        });
+      });
+
+      it('should handle a system message followed by a user message', () => {
+        const config = {};
+        const prompt = JSON.stringify([
+          { role: 'system', content: 'You are a helpful assistant.' },
+          { role: 'user', content: 'What is the capital of France?' },
+        ]);
+        expect(handler.params(config, prompt)).toEqual({
+          prompt: dedent`<s>[INST] <<SYS>>
+        You are a helpful assistant.
+        <</SYS>>
+  
+        What is the capital of France? [/INST]`,
+          temperature: 0.01,
+          top_p: 1,
+          max_gen_len: 1024,
+        });
+      });
+
+      it('should handle multiple turns of conversation', () => {
+        const config = {};
+        const prompt = JSON.stringify([
+          { role: 'user', content: 'Hello' },
+          { role: 'assistant', content: 'Hi there! How can I assist you today?' },
+          { role: 'user', content: "What's the weather like?" },
+        ]);
+        expect(handler.params(config, prompt)).toEqual({
+          prompt:
+            "<s>[INST] Hello [/INST] Hi there! How can I assist you today? </s><s>[INST] What's the weather like? [/INST]",
+          temperature: 0.01,
+          top_p: 1,
+          max_gen_len: 1024,
+        });
+      });
+    });
+
+    describe('LLAMA3', () => {
+      const handler = getLlamaModelHandler(LlamaVersion.V3);
+
+      it('should generate correct prompt for a single user message', () => {
+        const config = { temperature: 0.5, top_p: 0.9, max_gen_len: 512 };
+        const prompt = 'Describe the purpose of a "hello world" program in one sentence.';
+        expect(handler.params(config, prompt)).toEqual({
+          prompt: dedent`<|begin_of_text|><|start_header_id|>user<|end_header_id|>
+
+        Describe the purpose of a "hello world" program in one sentence.<|eot_id|><|start_header_id|>assistant<|end_header_id|>`,
+          temperature: 0.5,
+          top_p: 0.9,
+          max_gen_len: 512,
+        });
+      });
+
+      it('should handle a system message followed by a user message', () => {
+        const config = {};
+        const prompt = JSON.stringify([
+          { role: 'system', content: 'You are a helpful assistant.' },
+          { role: 'user', content: 'What is the capital of France?' },
+        ]);
+        expect(handler.params(config, prompt)).toEqual({
+          prompt: dedent`<|begin_of_text|><|start_header_id|>system<|end_header_id|>
+
+        You are a helpful assistant.<|eot_id|><|start_header_id|>user<|end_header_id|>
+
+        What is the capital of France?<|eot_id|><|start_header_id|>assistant<|end_header_id|>`,
+          temperature: 0.01,
+          top_p: 1,
+          max_gen_len: 1024,
+        });
+      });
+
+      it('should handle multiple turns of conversation', () => {
+        const config = {};
+        const prompt = JSON.stringify([
+          { role: 'user', content: 'Hello' },
+          { role: 'assistant', content: 'Hi there! How can I assist you today?' },
+          { role: 'user', content: "What's the weather like?" },
+        ]);
+        expect(handler.params(config, prompt)).toEqual({
+          prompt: dedent`<|begin_of_text|><|start_header_id|>user<|end_header_id|>
+
+        Hello<|eot_id|><|start_header_id|>assistant<|end_header_id|>
+
+        Hi there! How can I assist you today?<|eot_id|><|start_header_id|>user<|end_header_id|>
+
+        What's the weather like?<|eot_id|><|start_header_id|>assistant<|end_header_id|>`,
+          temperature: 0.01,
+          top_p: 1,
+          max_gen_len: 1024,
+        });
+      });
+    });
+
+    it('should throw an error for unsupported LLAMA version', () => {
+      expect(() => getLlamaModelHandler(1 as LlamaVersion)).toThrow('Unsupported LLAMA version: 1');
+    });
+
+    it('should handle output correctly', () => {
+      const handler = getLlamaModelHandler(LlamaVersion.V2);
+      expect(handler.output({ generation: 'Test response' })).toBe('Test response');
+      expect(handler.output({})).toBeUndefined();
+    });
+  });
+  describe('formatPromptLlama2Chat', () => {
+    it('should format a single user message correctly', () => {
+      const messages: LlamaMessage[] = [
+        {
+          role: 'user',
+          content: 'Describe the purpose of a "hello world" program in one sentence.',
+        },
+      ];
+      const expectedPrompt =
+        '<s>[INST] Describe the purpose of a "hello world" program in one sentence. [/INST]';
+      expect(formatPromptLlama2Chat(messages)).toBe(expectedPrompt);
+    });
+
+    it('should handle a system message followed by a user message', () => {
+      const messages: LlamaMessage[] = [
+        { role: 'system', content: 'You are a helpful assistant.' },
+        { role: 'user', content: 'What is the capital of France?' },
+      ];
+      const expectedPrompt = dedent`
+      <s>[INST] <<SYS>>
+      You are a helpful assistant.
+      <</SYS>>
+
+      What is the capital of France? [/INST]
+    `;
+      expect(formatPromptLlama2Chat(messages)).toBe(expectedPrompt);
+    });
+
+    it('should handle a system message, user message, and assistant response', () => {
+      const messages: LlamaMessage[] = [
+        { role: 'system', content: 'You are a helpful assistant.' },
+        { role: 'user', content: 'What is the capital of France?' },
+        { role: 'assistant', content: 'The capital of France is Paris.' },
+      ];
+      const expectedPrompt = dedent`
+      <s>[INST] <<SYS>>
+      You are a helpful assistant.
+      <</SYS>>
+
+      What is the capital of France? [/INST] The capital of France is Paris. </s>
+    `;
+      expect(formatPromptLlama2Chat(messages)).toBe(expectedPrompt);
+    });
+
+    it('should handle multiple turns of conversation', () => {
+      // see https://huggingface.co/blog/llama2#how-to-prompt-llama-2
+      const messages: LlamaMessage[] = [
+        { role: 'system', content: 'You are a helpful assistant.' },
+        { role: 'user', content: 'Hello' },
+        { role: 'assistant', content: 'Hi there! How can I assist you today?' },
+        { role: 'user', content: "What's the weather like?" },
+      ];
+      const expectedPrompt = dedent`
+      <s>[INST] <<SYS>>
+      You are a helpful assistant.
+      <</SYS>>
+
+      Hello [/INST] Hi there! How can I assist you today? </s><s>[INST] What's the weather like? [/INST]
+    `;
+      expect(formatPromptLlama2Chat(messages)).toBe(expectedPrompt);
+    });
+
+    it('should handle only a system message correctly', () => {
+      const messages: LlamaMessage[] = [
+        { role: 'system', content: 'You are a helpful assistant.' },
+      ];
+      const expectedPrompt =
+        dedent`
+      <s>[INST] <<SYS>>
+      You are a helpful assistant.
+      <</SYS>>
+
+      ` + '\n\n';
+      expect(formatPromptLlama2Chat(messages)).toBe(expectedPrompt);
+    });
   });
 });

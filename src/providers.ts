@@ -46,7 +46,11 @@ import {
 import { PalmChatProvider } from './providers/palm';
 import { PortkeyChatCompletionProvider } from './providers/portkey';
 import { PythonProvider } from './providers/pythonCompletion';
-import { ReplicateModerationProvider, ReplicateProvider } from './providers/replicate';
+import {
+  ReplicateImageProvider,
+  ReplicateModerationProvider,
+  ReplicateProvider,
+} from './providers/replicate';
 import { ScriptCompletionProvider } from './providers/scriptCompletion';
 import { VertexChatProvider, VertexEmbeddingProvider } from './providers/vertex';
 import { VoyageEmbeddingProvider } from './providers/voyage';
@@ -228,6 +232,8 @@ export async function loadApiProvider(
     const modelName = splits.slice(2).join(':');
     if (modelType === 'moderation') {
       ret = new ReplicateModerationProvider(modelName, providerOptions);
+    } else if (modelType === 'image') {
+      ret = new ReplicateImageProvider(modelName, providerOptions);
     } else {
       // By default, there is no model type.
       ret = new ReplicateProvider(modelType + ':' + modelName, providerOptions);
@@ -334,6 +340,11 @@ export async function loadApiProvider(
   } else if (providerPath === 'promptfoo:redteam:iterative') {
     const RedteamIterativeProvider = (await import(path.join(__dirname, './redteam/iterative')))
       .default;
+    ret = new RedteamIterativeProvider(providerOptions);
+  } else if (providerPath === 'promptfoo:redteam:iterative:image') {
+    const RedteamIterativeProvider = (
+      await import(path.join(__dirname, './redteam/iterativeImage'))
+    ).default;
     ret = new RedteamIterativeProvider(providerOptions);
   } else {
     if (providerPath.startsWith('file://')) {
