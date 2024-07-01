@@ -1,10 +1,14 @@
 prompts:
-  - 'Write a tweet about {{topic}}'
-  - 'Write a very concise, funny tweet about {{topic}}'
+  - 'Write a very concise funny tweet about {{topic}}'
 
 providers:
   - id: python:provider.py # or provider_async.py
     label: My custom provider
+    config:
+      someOption: foobar
+
+  - id: python:provider.py:some_other_method
+    label: My other method
     config:
       someOption: foobar
 

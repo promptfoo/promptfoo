@@ -8,6 +8,7 @@ import type {
   TestSuite,
   ProviderOptions,
 } from '../types';
+import { parsePathOrGlob } from '../util';
 import { processJsFile } from './processors/javascript';
 import { processJsonFile } from './processors/json';
 import { processJsonlFile } from './processors/jsonl';
@@ -15,7 +16,7 @@ import { processPythonFile } from './processors/python';
 import { processString } from './processors/string';
 import { processTxtFile } from './processors/text';
 import { processYamlFile } from './processors/yaml';
-import { maybeFilePath, normalizeInput, parsePathOrGlob } from './utils';
+import { maybeFilePath, normalizeInput } from './utils';
 
 export * from './grading';
 
@@ -95,24 +96,17 @@ export async function processPrompt(
     return processString(prompt);
   }
 
-  const {
-    extension,
-    functionName,
-    isPathPattern,
-    promptPath,
-  }: {
-    extension: string;
-    functionName?: string;
-    isPathPattern: boolean;
-    promptPath: string;
-  } = parsePathOrGlob(basePath, prompt.raw);
+  const { extension, functionName, isPathPattern, filePath } = parsePathOrGlob(
+    basePath,
+    prompt.raw,
+  );
 
   if (isPathPattern && maxRecursionDepth > 0) {
-    const globbedPath = globSync(promptPath.replace(/\\/g, '/'), {
+    const globbedPath = globSync(filePath.replace(/\\/g, '/'), {
       windowsPathsNoEscape: true,
     });
     logger.debug(
-      `Expanded prompt ${prompt.raw} to ${promptPath} and then to ${JSON.stringify(globbedPath)}`,
+      `Expanded prompt ${prompt.raw} to ${filePath} and then to ${JSON.stringify(globbedPath)}`,
     );
     const prompts: Prompt[] = [];
     for (const globbedFilePath of globbedPath) {
@@ -127,22 +121,22 @@ export async function processPrompt(
   }
 
   if (extension === '.json') {
-    return processJsonFile(promptPath, prompt);
+    return processJsonFile(filePath, prompt);
   }
   if (extension === '.jsonl') {
-    return processJsonlFile(promptPath, prompt);
+    return processJsonlFile(filePath, prompt);
   }
   if (['.js', '.cjs', '.mjs'].includes(extension)) {
-    return processJsFile(promptPath, prompt, functionName);
+    return processJsFile(filePath, prompt, functionName);
   }
   if (extension === '.py') {
-    return processPythonFile(promptPath, prompt, functionName);
+    return processPythonFile(filePath, prompt, functionName);
   }
   if (extension === '.txt') {
-    return processTxtFile(promptPath, prompt);
+    return processTxtFile(filePath, prompt);
   }
   if (['.yml', '.yaml'].includes(extension)) {
-    return processYamlFile(promptPath, prompt);
+    return processYamlFile(filePath, prompt);
   }
   return [];
 }

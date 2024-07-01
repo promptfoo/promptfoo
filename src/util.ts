@@ -1357,3 +1357,50 @@ export function extractJsonObjects(str: string): object[] {
   }
   return jsonObjects;
 }
+
+/**
+ * Parses a file path or glob pattern to extract function names and file extensions.
+ * Function names can be specified in the filename like this:
+ * prompt.py:myFunction or prompts.js:myFunction.
+ * @param basePath - The base path for file resolution.
+ * @param promptPath - The path or glob pattern.
+ * @returns Parsed details including function name, file extension, and directory status.
+ */
+export function parsePathOrGlob(
+  basePath: string,
+  promptPath: string,
+): {
+  extension: string;
+  functionName?: string;
+  isPathPattern: boolean;
+  filePath: string;
+} {
+  let filePath = path.join(basePath, promptPath);
+  if (filePath.includes('file:')) {
+    filePath = filePath.split('file:')[1];
+  }
+
+  let stats;
+  try {
+    stats = fs.statSync(filePath);
+  } catch (err) {
+    if (process.env.PROMPTFOO_STRICT_FILES) {
+      throw err;
+    }
+  }
+  let filename = path.parse(filePath).base;
+  let functionName: string | undefined;
+
+  if (filename.includes(':')) {
+    const splits = filename.split(':');
+    if (splits[0] && ['.js', '.cjs', '.mjs', '.py'].some((ext) => splits[0].endsWith(ext))) {
+      [filename, functionName] = splits;
+    }
+  }
+  return {
+    extension: path.parse(filename).ext,
+    functionName,
+    isPathPattern: stats?.isDirectory() || /[*?{}\[\]]/.test(filePath), // glob pattern
+    filePath: path.join(basePath, filename),
+  };
+}

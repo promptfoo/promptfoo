@@ -20,3 +20,6 @@ def call_api(prompt, options, context):
     return {
         'output': chat_completion.choices[0].message.content
     }
+
+def some_other_method(prompt, options, context):
+    return call_api(prompt + '\n ALWAYS end with #yolo', options, context)
