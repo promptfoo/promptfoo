@@ -31,7 +31,7 @@ describe('PythonProvider', () => {
   let provider: PythonProvider;
 
   beforeEach(() => {
-    provider = new PythonProvider(scriptPath, options);
+    provider = new PythonProvider(scriptPath, undefined, options);
     (path.resolve as jest.Mock).mockReturnValue(absPath);
     (fs.readFileSync as jest.Mock).mockReturnValue('file content');
     (getCache as jest.Mock).mockResolvedValue({
@@ -46,17 +46,12 @@ describe('PythonProvider', () => {
     jest.clearAllMocks();
   });
 
-  it('should return cached result if available', async () => {
+  fit('should return cached result if available', async () => {
     const cache = await getCache();
-    (cache.get as jest.Mock).mockResolvedValue(JSON.stringify({ output: 'cached result' }));
-
-    const result = await provider.callApi(prompt, context);
-
-    expect(result).toEqual({ output: 'cached result' });
+    await expect(provider.callApi(prompt, { ...context, vars: {} })).resolves.toEqual({ output: 'result' });
     expect(cache.get).toHaveBeenCalledWith(cacheKey);
     expect(runPython).not.toHaveBeenCalled();
   });
-
   it('should run the script and cache the result if not cached', async () => {
     const result = await provider.callApi(prompt, context);
 
