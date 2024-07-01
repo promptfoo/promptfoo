@@ -215,7 +215,7 @@ const config = {
         ],
       },
       zoom: {
-        selector: '.markdown :not(em) > img',
+        selector: '.markdown :not(em) > img:not(.no-zoom)',
       },
       algolia: {
         // The application ID provided by Algolia
