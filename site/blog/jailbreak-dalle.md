@@ -10,7 +10,7 @@ We all know that image models like OpenAI’s Dall-E can be jailbroken to genera
 
 This post shows how to automatically discover one-shot jailbreaks with open-source [LLM red teaming](/docs/red-team) and includes a collection of examples.
 
-![llm image red teaming](https://storage.googleapis.com/promptfoo-public-1/promptfoo.dev/blog/jailbreak-dalle/gallery-blurred.png)
+[![llm image red teaming](https://storage.googleapis.com/promptfoo-public-1/promptfoo.dev/blog/jailbreak-dalle/gallery-blurred.png)](#images)
 
 ## How it works
 
