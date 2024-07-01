@@ -1,5 +1,3 @@
-import * as fs from 'fs';
-import * as path from 'path';
 import { Prompt } from '../types';
 import { VALID_FILE_EXTENSIONS } from './constants';
 
