@@ -4,13 +4,15 @@ ian_comment: 'images here: https://console.cloud.google.com/storage/browser/prom
 
 import ImageJailbreakPreview from '@site/src/components/ImageJailbreakPreview';
 
-# Jailbreaking Dall-E
+# Automated jailbreaking techniques with Dall-E
 
 We all know that image models like OpenAI’s Dall-E can be jailbroken to generate violent, disturbing, and offensive images. It turns out this process can be fully automated.
 
 This post shows how to automatically discover one-shot jailbreaks with open-source [LLM red teaming](/docs/red-team) and includes a collection of examples.
 
-[![llm image red teaming](https://storage.googleapis.com/promptfoo-public-1/promptfoo.dev/blog/jailbreak-dalle/gallery-blurred.png)](#images)
+<a href="#images">
+  <img src="https://storage.googleapis.com/promptfoo-public-1/promptfoo.dev/blog/jailbreak-dalle/gallery-blurred.png" alt="llm image red teaming" />
+</a>
 
 ## How it works
 
@@ -317,6 +319,8 @@ Tips:
   ```
 
 ## What's next
+
+The red team [implementation](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/iterativeImage.ts) is not state-of-the-art and has been purposely simplified from the original TAP implementation in order to improve speed and cost. But, it gets the job done. Contributions are welcome!
 
 With images, it's very hard to toe the line between easily generating disturbing content versus being overly censorious. The above examples drive this point home.
 
