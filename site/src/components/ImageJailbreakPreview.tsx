@@ -32,7 +32,12 @@ const ImageJailbreakPreview: React.FC<ImageJailbreakPreviewProps> = ({ title, im
       {flipped &&
         images.map((image, index) => (
           <div key={index} className={styles.imageWrapper}>
-            <img src={image.src} alt={image.caption} className={`${styles.image} no-zoom`} />
+            <img
+              loading="lazy"
+              src={image.src}
+              alt={image.caption}
+              className={`${styles.image} no-zoom`}
+            />
             <p className={styles.caption}>
               <strong>Dall-E refused prompt:</strong> {title}
               <br />
