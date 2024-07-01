@@ -1,4 +1,5 @@
 ---
+ian_comment: 'images here: https://console.cloud.google.com/storage/browser/promptfoo-public-1/promptfoo.dev/blog/jailbreak-dalle;tab=objects?project=promptfoo&prefix=&forceOnObjectsSortingFiltering=false'
 ---
 
 import ImageJailbreakPreview from '@site/src/components/ImageJailbreakPreview';

@@ -108,16 +108,21 @@ const config = {
             label: 'Tutorial',
           },
           */
-          { to: '/docs/intro', label: 'Docs', position: 'right' },
+          { to: '/docs/intro', label: 'Docs', position: 'left' },
           {
             to: '/llm-vulnerability-scanner',
             label: 'LLM Vulnerability Scanner',
-            position: 'right',
+            position: 'left',
           },
           {
             to: '/docs/red-team',
             label: 'LLM Red Teaming',
-            position: 'right',
+            position: 'left',
+          },
+          {
+            href: '/blog',
+            label: 'Blog',
+            position: 'left',
           },
           {
             href: 'https://github.com/promptfoo/promptfoo',
@@ -190,6 +195,10 @@ const config = {
               {
                 label: 'Discord',
                 href: 'https://discord.gg/gHPS9jjfbs',
+              },
+              {
+                label: 'Blog',
+                href: '/blog',
               },
               {
                 label: 'Contact Us',
