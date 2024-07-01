@@ -14,7 +14,7 @@ def call_api(prompt, options, context):
                 'role': 'user',
                 'content': prompt,
             }],
-            model='gpt-3.5-turbo',
+            model='gpt-4o',
     )
 
     return {
