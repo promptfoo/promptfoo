@@ -103,8 +103,15 @@ export async function loadApiProvider(
     const scriptPath = providerPath.split(':')[1];
     ret = new ScriptCompletionProvider(scriptPath, providerOptions);
   } else if (providerPath.startsWith('python:')) {
-    const scriptPath = providerPath.split(':')[1];
-    ret = new PythonProvider(scriptPath, providerOptions);
+    let scriptPath = providerPath.substring('python:'.length);
+    let functionName: string | undefined;
+    if (scriptPath.includes(':')) {
+      const splits = scriptPath.split(':');
+      if (splits[0] && splits[0].endsWith('.py')) {
+        [scriptPath, functionName] = splits;
+      }
+    }
+    ret = new PythonProvider(scriptPath, functionName, providerOptions);
   } else if (providerPath.startsWith('openai:')) {
     // Load OpenAI module
     const splits = providerPath.split(':');

@@ -22,14 +22,16 @@ export class PythonProvider implements ApiProvider {
 
   constructor(
     private scriptPath: string,
+    private functionName?: string,
     private options?: ProviderOptions,
   ) {
-    this.id = () => options?.id ?? `python:${this.scriptPath}`;
+    this.id = () =>
+      options?.id ?? `python:${this.scriptPath}${this.functionName ? `:${this.functionName}` : ''}`;
     this.config = options?.config ?? {};
   }
 
   id() {
-    return `python:${this.scriptPath}`;
+    return `python:${this.scriptPath}${this.functionName ? `:${this.functionName}` : ''}`;
   }
 
   private async executePythonScript(
@@ -40,7 +42,7 @@ export class PythonProvider implements ApiProvider {
     const absPath = path.resolve(path.join(this.options?.config.basePath || '', this.scriptPath));
     logger.debug(`Computing file hash for script ${absPath}`);
     const fileHash = sha256(fs.readFileSync(absPath, 'utf-8'));
-    const cacheKey = `python:${this.scriptPath}:${apiType}:${fileHash}:${prompt}:${JSON.stringify(
+    const cacheKey = `${this.id()}:${apiType}:${fileHash}:${prompt}:${JSON.stringify(
       this.options,
     )}`;
     const cache = await getCache();
@@ -64,12 +66,13 @@ export class PythonProvider implements ApiProvider {
       const args =
         apiType === 'call_api' ? [prompt, this.options, context] : [prompt, this.options];
       logger.debug(
-        `Running python script ${absPath} with scriptPath ${this.scriptPath} and args: ${safeJsonStringify(args)}`,
+        `Running python script ${absPath} with scriptPath ${this.scriptPath}${this.functionName ? `:${this.functionName}` : ''} and args: ${safeJsonStringify(args)}`,
       );
       let result;
+      const functionName = this.functionName ?? apiType;
       switch (apiType) {
         case 'call_api':
-          result = (await runPython(absPath, apiType, args, {
+          result = (await runPython(absPath, functionName, args, {
             pythonExecutable: this.config.pythonExecutable,
           })) as ProviderResponse;
           if (!result || (!('output' in result) && !('error' in result))) {
@@ -81,7 +84,7 @@ export class PythonProvider implements ApiProvider {
           }
           break;
         case 'call_embedding_api':
-          result = (await runPython(absPath, apiType, args, {
+          result = (await runPython(absPath, functionName, args, {
             pythonExecutable: this.config.pythonExecutable,
           })) as ProviderEmbeddingResponse;
           if (!result || (!('embedding' in result) && !('error' in result))) {
@@ -93,7 +96,7 @@ export class PythonProvider implements ApiProvider {
           }
           break;
         case 'call_classification_api':
-          result = (await runPython(absPath, apiType, args, {
+          result = (await runPython(absPath, functionName, args, {
             pythonExecutable: this.config.pythonExecutable,
           })) as ProviderClassificationResponse;
           if (!result || (!('classification' in result) && !('error' in result))) {
