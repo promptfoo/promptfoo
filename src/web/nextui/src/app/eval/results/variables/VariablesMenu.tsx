@@ -1,13 +1,12 @@
+import Divider from '@mui/material/Divider';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import { useVariablesContext } from './VariablesProvider';
 import { VARIABLES_MENU_TRIGGER_BUTTON_ID } from './constants';
 
-type Props = {
-  display: boolean;
-};
+type Props = {};
 
-export default function VariablesMenu({ display }: Props) {
+export default function VariablesMenu({}: Props) {
   const { settingsMenu } = useVariablesContext();
 
   return (

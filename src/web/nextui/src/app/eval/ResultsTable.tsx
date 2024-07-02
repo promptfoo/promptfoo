@@ -346,7 +346,7 @@ function ResultsTable({
               <span>
                 <VariablesMenuTrigger />
               </span>
-              <VariablesMenu display={false} />
+              <VariablesMenu />
             </div>
           ),
           columns: head.vars.map((varName, idx) =>
