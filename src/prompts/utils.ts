@@ -1,5 +1,3 @@
-import * as fs from 'fs';
-import * as path from 'path';
 import { Prompt } from '../types';
 import { VALID_FILE_EXTENSIONS } from './constants';
 
@@ -85,60 +83,4 @@ export function normalizeInput(
   }
   // numbers, booleans, etc
   throw new Error(`Invalid input prompt: ${JSON.stringify(promptPathOrGlobs)}`);
-}
-
-/**
- * Parses a file path or glob pattern to extract function names and file extensions.
- * Function names can be specified in the filename like this:
- * prompt.py:myFunction or prompts.js:myFunction.
- * @param basePath - The base path for file resolution.
- * @param promptPath - The path or glob pattern.
- * @returns Parsed details including function name, file extension, and directory status.
- */
-export function parsePathOrGlob(
-  basePath: string,
-  promptPath: string,
-): {
-  extension?: string;
-  functionName?: string;
-  isPathPattern: boolean;
-  promptPath: string;
-} {
-  let filePath = path.join(basePath, promptPath);
-  if (filePath.includes('file:')) {
-    filePath = filePath.split('file:')[1];
-  }
-
-  let stats;
-  try {
-    stats = fs.statSync(filePath);
-  } catch (err) {
-    if (process.env.PROMPTFOO_STRICT_FILES) {
-      throw err;
-    }
-  }
-
-  let filename = path.relative(basePath, filePath);
-  let functionName: string | undefined;
-
-  if (filename.includes(':')) {
-    const splits = filename.split(':');
-    if (splits[0] && ['.js', '.cjs', '.mjs', '.py'].some((ext) => splits[0].endsWith(ext))) {
-      [filename, functionName] = splits;
-    }
-  }
-
-  const isPathPattern = stats?.isDirectory() || /[*?{}\[\]]/.test(filePath); // glob pattern
-  const safeFilename = path.relative(
-    basePath,
-    path.isAbsolute(filename) ? filename : path.resolve(basePath, filename),
-  );
-  return {
-    extension: isPathPattern ? undefined : path.parse(safeFilename).ext,
-    functionName,
-    isPathPattern,
-    promptPath: safeFilename.startsWith(basePath)
-      ? safeFilename
-      : path.join(basePath, safeFilename),
-  };
 }

@@ -20,10 +20,11 @@ providers:
 
 ### Python script
 
-Your Python script should accept a prompt, options, and context as arguments. It should return a JSON-encoded `ProviderResponse`.
+Your Python script should implement a function that accepts a prompt, options, and context as arguments. It should return a JSON-encoded `ProviderResponse`.
 
 - The `ProviderResponse` must include an `output` field containing the result of the API call.
 - Optionally, it can include an `error` field if something goes wrong, and a `tokenUsage` field to report the number of tokens used.
+- By default, supported functions are `call_api`, `call_embedding_api`, and `call_classification_api`. To override the function name, specify the script like so: `python:my_script.py:function_name`
 
 Here's an example of a Python script that could be used with the Python provider, which includes handling for the prompt, options, and context:
 
@@ -58,6 +59,14 @@ def call_api(prompt, options, context):
         result['tokenUsage'] = {"total": token_count, "prompt": prompt_token_count, "completion": completion_token_count}
 
     return result
+
+def call_embedding_api(prompt):
+    # Returns ProviderEmbeddingResponse
+    pass
+
+def call_classification_api(prompt):
+    # Returns ProviderClassificationResponse
+    pass
 ```
 
 ### Types
@@ -84,6 +93,17 @@ class ProviderResponse:
     cost: Optional[float]
     cached: Optional[bool]
     logProbs: Optional[List[float]]
+
+class ProviderEmbeddingResponse:
+    embedding: List[float]
+    tokenUsage: Optional[TokenUsage]
+    cached: Optional[bool]
+
+class ProviderClassificationResponse:
+    classification: Dict[str, Any]
+    tokenUsage: Optional[TokenUsage]
+    cached: Optional[bool]
+
 ```
 
 ### Setting the Python executable
