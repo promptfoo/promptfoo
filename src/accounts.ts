@@ -1,14 +1,14 @@
 import { readGlobalConfig, writeGlobalConfig } from './globalConfig';
 
-export function getUserEmail(): string | undefined {
+export function getUserEmail(): string | null {
   const globalConfig = readGlobalConfig();
-  return globalConfig.account?.email;
+  return globalConfig.account?.email || null;
 }
 
 export function setUserEmail(email: string) {
   writeGlobalConfig({ account: { email } });
 }
 
-export function getAuthor(): string {
-  return getUserEmail() || 'Unknown';
+export function getAuthor(): string | null {
+  return getUserEmail() || null;
 }

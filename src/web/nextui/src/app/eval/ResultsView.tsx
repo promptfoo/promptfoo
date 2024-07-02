@@ -262,26 +262,30 @@ export default function ResultsView({
     <div style={{ marginLeft: '1rem', marginRight: '1rem' }}>
       <Box mb={2} className="eval-header">
         <Typography variant="h5" sx={{ display: 'flex', alignItems: 'center' }}>
-          <span className="description" onClick={handleDescriptionClick}>
-            {config?.description || evalId}
-          </span>
+          <Tooltip title="Click to edit description">
+            <span className="description" onClick={handleDescriptionClick}>
+              {config?.description || evalId}
+            </span>
+          </Tooltip>
         </Typography>
         {config?.description && evalId && (
           <>
-            <Chip
-              size="small"
-              label={
-                <>
-                  <strong>ID:</strong> {evalId}
-                </>
-              }
-              sx={{
-                ml: 1,
-                opacity: 0.7,
-                cursor: 'pointer',
-              }}
-              onClick={handleEvalIdCopyClick}
-            />
+            <Tooltip title="Click to copy">
+              <Chip
+                size="small"
+                label={
+                  <>
+                    <strong>ID:</strong> {evalId}
+                  </>
+                }
+                sx={{
+                  ml: 1,
+                  opacity: 0.7,
+                  cursor: 'pointer',
+                }}
+                onClick={handleEvalIdCopyClick}
+              />
+            </Tooltip>
             <Snackbar
               open={evalIdCopied}
               autoHideDuration={1000}
@@ -290,17 +294,17 @@ export default function ResultsView({
             />
           </>
         )}
-        {author && (
+        <Tooltip title={!author ? 'Set eval author with `promptfoo config set email`' : ''}>
           <Chip
             size="small"
             label={
               <>
-                <strong>Author:</strong> {author}
+                <strong>Author:</strong> {author || 'Unknown'}
               </>
             }
             sx={{ ml: 1, opacity: 0.7 }}
           />
-        )}
+        </Tooltip>
       </Box>
       <Paper py="md">
         <ResponsiveStack direction="row" spacing={4} alignItems="center">

@@ -109,7 +109,7 @@ export default function Eval({
     } else if (preloadedData) {
       setTable(preloadedData.data.results?.table as EvaluateTable);
       setConfig(preloadedData.data.config);
-      setAuthor(preloadedData.data.author);
+      setAuthor(preloadedData.data.author || null);
       setLoaded(true);
     } else if (fetchId) {
       const run = async () => {
@@ -123,7 +123,7 @@ export default function Eval({
         const results = await response.json();
         setTable(results.data.results?.table as EvaluateTable);
         setConfig(results.data.config);
-        setAuthor(results.data.author);
+        setAuthor(results.data.author || null);
         setLoaded(true);
       };
       run();
@@ -136,7 +136,7 @@ export default function Eval({
           setLoaded(true);
           setTable(data?.results.table);
           setConfig(data?.config);
-          setAuthor(data?.author);
+          setAuthor(data?.author || null);
           fetchRecentFileEvals().then((newRecentEvals) => {
             setDefaultEvalId(newRecentEvals[0]?.id);
             setEvalId(newRecentEvals[0]?.id);
@@ -147,7 +147,7 @@ export default function Eval({
           console.log('Received data update', data);
           setTable(data.results.table);
           setConfig(data.config);
-          setAuthor(data.author);
+          setAuthor(data.author || null);
           fetchRecentFileEvals().then((newRecentEvals) => {
             const newId = newRecentEvals[0]?.id;
             if (newId) {
@@ -194,7 +194,7 @@ export default function Eval({
           const body = await resp.json();
           setTable(body.data.results.table);
           setConfig(body.data.config);
-          setAuthor(body.data.author);
+          setAuthor(body.data.author || null);
           setLoaded(true);
           setDefaultEvalId(defaultEvalId);
           setEvalId(defaultEvalId);
