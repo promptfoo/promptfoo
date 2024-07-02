@@ -1,7 +1,7 @@
 description: 'IBM Granite vs Llama'
 
 prompts:
-  - 'Be consise. Answer this riddle :{{riddle}}'
+  - 'Be concise. Answer this riddle :{{riddle}}'
 
 providers:
   - id: bam:chat:meta-llama/llama-2-70b-chat
