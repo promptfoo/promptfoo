@@ -1,11 +1,9 @@
-import { createContext, useContext, useState, useCallback } from 'react';
+import { createContext, useContext, useState, useRef } from 'react';
 import type { EvaluateTable } from '@/app/eval/types';
 
 // ====================================================
 // Types
 // ====================================================
-
-type AnchorEl = null | HTMLElement;
 
 type VariableColumn = {
   visible: boolean;
@@ -20,8 +18,8 @@ type Props = {
 type ContextState = {
   settingsMenu: {
     display: boolean;
-    toggle: (target: HTMLButtonElement) => void;
-    anchorEl: AnchorEl;
+    toggle: () => void;
+    anchorEl: React.MutableRefObject<HTMLButtonElement | null> | null;
   };
   variableColumns: VariableColumn[];
   toggleColumnVisibility: (index: number) => void;
@@ -75,28 +73,18 @@ export default function VariablesProvider({ children, vars }: Props) {
     DEFAULT_STATE.settingsMenu.display,
   );
 
-  const [settingsMenuAnchorEl, setSettingsMenuAnchorEl] = useState<AnchorEl>(
-    DEFAULT_STATE.settingsMenu.anchorEl,
-  );
+  const settingsMenuAnchorEl = useRef<HTMLButtonElement | null>(null);
 
   // ====================================================
   // Event Handlers
   // ====================================================
 
   /**
-   * Toggles the display of the settings menu. If the menu is being opened for the first time,
-   * the anchor element is set to the trigger element. This indicates to the menu where in the viewport
-   * it should be displayed.
+   * Toggles the display of the settings menu.
    */
-  const toggleSettingsMenu = useCallback(
-    (target: HTMLButtonElement) => {
-      // Idempotent initialization of the anchor element for the menu
-      if (settingsMenuAnchorEl === null) setSettingsMenuAnchorEl(target);
-
-      setDisplaySettingsMenu((prev) => !prev);
-    },
-    [settingsMenuAnchorEl],
-  );
+  function toggleSettingsMenu() {
+    setDisplaySettingsMenu((prev) => !prev);
+  }
 
   function toggleColumnVisibility(index: number) {
     setVariableColumns((prev) => {

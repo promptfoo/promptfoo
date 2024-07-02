@@ -28,7 +28,7 @@ export default function VariablesMenuTrigger({}: Props) {
   // ====================================================
 
   function handleClick(event: React.MouseEvent<HTMLButtonElement>) {
-    settingsMenu.toggle(event.currentTarget);
+    settingsMenu.toggle();
   }
 
   // ====================================================
@@ -46,6 +46,7 @@ export default function VariablesMenuTrigger({}: Props) {
         aria-expanded={settingsMenu.display ? 'true' : undefined}
         aria-haspopup="true"
         aria-label={HELPER_TEXT}
+        ref={settingsMenu.anchorEl}
       >
         <SettingsIcon fontSize="inherit" />
       </IconButton>

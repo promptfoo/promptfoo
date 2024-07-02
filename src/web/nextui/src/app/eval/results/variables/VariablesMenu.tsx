@@ -12,7 +12,7 @@ function VariablesMenu({}: Props) {
 
   return (
     <Menu
-      anchorEl={settingsMenu.anchorEl}
+      anchorEl={settingsMenu.anchorEl?.current}
       open={settingsMenu.display}
       onClose={settingsMenu.toggle}
       MenuListProps={{
