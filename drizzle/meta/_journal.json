@@ -15,6 +15,13 @@
       "when": 1710706957023,
       "tag": "0001_wide_calypso",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1719636070237,
+      "tag": "0002_tidy_juggernaut",
+      "breakpoints": true
     }
   ]
 }

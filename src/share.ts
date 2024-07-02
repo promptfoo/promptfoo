@@ -1,3 +1,4 @@
+import { getAuthor } from './accounts';
 import { REMOTE_API_BASE_URL, REMOTE_APP_BASE_URL } from './constants';
 import { fetchWithProxy } from './fetch';
 import type { EvaluateSummary, SharedResults, UnifiedConfig } from './types';
@@ -8,9 +9,10 @@ export async function createShareableUrl(
 ): Promise<string> {
   const sharedResults: SharedResults = {
     data: {
-      version: 2,
+      version: 3,
       // TODO(ian): Take date from results, if applicable.
       createdAt: new Date().toISOString(),
+      author: getAuthor(),
       results,
       config,
     },

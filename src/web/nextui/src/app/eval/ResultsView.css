@@ -7,7 +7,12 @@
   background-color: #f0f0f0;
 }
 
-.description-filepath {
-  color: #bbb;
-  font-size: 0.75rem;
+.eval-header {
+  display: flex;
+  align-items: center;
+  flex-grow: 1;
+}
+
+.eval-header strong {
+  font-weight: 500;
 }
