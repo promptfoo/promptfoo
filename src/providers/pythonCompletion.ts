@@ -32,14 +32,12 @@ export class PythonProvider implements ApiProvider {
     );
     this.scriptPath = path.relative(options?.config.basePath || '', providerPath);
     this.functionName = functionName || null;
-    this.id = () =>
-      options?.id ??
-      `python:${this.scriptPath}:${this.functionName ? `${this.functionName}` : 'default'}`;
+    this.id = () => options?.id ?? `python:${this.scriptPath}:${this.functionName || 'default'}`;
     this.config = options?.config ?? {};
   }
 
   id() {
-    return `python:${this.scriptPath}`;
+    return `python:${this.scriptPath}:${this.functionName || 'default'}`;
   }
 
   private async executePythonScript(

@@ -2,13 +2,11 @@ prompts:
   - 'Write a very concise funny tweet about {{topic}}'
 
 providers:
-  - id: python:provider.py # defaults to call_api
-    label: Default provider
+  - id: python:provider.py # defaults to call_api function
     config:
       someOption: foobar
 
-  - id: python:provider.py:some_other_method
-    label: non-default provider
+  - id: python:provider.py:some_other_function
 
   - id: python:provider.py:async_provider
     label: async provider
