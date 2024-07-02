@@ -1,9 +1,12 @@
+import { Suspense } from 'react';
 import Datasets from './Datasets';
 
 export default function Page() {
   return (
     <div>
-      <Datasets />
+      <Suspense>
+        <Datasets />
+      </Suspense>
     </div>
   );
 }

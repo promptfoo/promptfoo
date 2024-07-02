@@ -1,4 +1,4 @@
-import React from 'react';
+import { Suspense } from 'react';
 import { IS_RUNNING_LOCALLY, USE_SUPABASE } from '@/constants';
 import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
@@ -29,5 +29,9 @@ export default async function Page() {
   }
 
   // TODO(ian): Pass recent evals as well
-  return <Eval />;
+  return (
+    <Suspense>
+      <Eval />
+    </Suspense>
+  );
 }
