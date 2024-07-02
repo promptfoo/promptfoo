@@ -286,7 +286,7 @@ describe('parsePathOrGlob', () => {
       extension: '.txt',
       functionName: undefined,
       isPathPattern: false,
-      promptPath: 'base/relative/path/to/file.txt',
+      promptPath: expect.stringMatching(/base[\\\/]relative[\\\/]path[\\\/]to[\\\/]file.txt/),
     });
   });
 });
