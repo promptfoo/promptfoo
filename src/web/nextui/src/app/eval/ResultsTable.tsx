@@ -591,7 +591,7 @@ function ResultsTable({
   });
 
   return (
-    <VariablesProvider>
+    <VariablesProvider vars={head.vars}>
       <div>
         <table
           className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''}`}

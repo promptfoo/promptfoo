@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useCallback } from 'react';
+import type { EvaluateTable } from '@/app/eval/types';
 
 // ====================================================
 // Types
@@ -6,8 +7,14 @@ import { createContext, useContext, useState, useCallback } from 'react';
 
 type AnchorEl = null | HTMLElement;
 
+type VariableColumn = {
+  visible: boolean;
+  label: string;
+};
+
 type Props = {
   children: React.ReactNode;
+  vars: EvaluateTable['head']['vars'];
 };
 
 type ContextState = {
@@ -16,6 +23,7 @@ type ContextState = {
     toggle: (target: HTMLButtonElement) => void;
     anchorEl: AnchorEl;
   };
+  variableColumns: VariableColumn[];
 };
 
 // ====================================================
@@ -28,6 +36,7 @@ const DEFAULT_STATE = {
     toggle: () => {},
     anchorEl: null,
   },
+  variableColumns: [],
 } as ContextState;
 
 // ====================================================
@@ -46,10 +55,17 @@ export function useVariablesContext() {
 // Component
 // ====================================================
 
-export default function VariablesProvider({ children }: Props) {
+export default function VariablesProvider({ children, vars }: Props) {
   // ====================================================
   // State
   // ====================================================
+
+  const [variableColumns, setVariableColumns] = useState<VariableColumn[]>(
+    vars.map((variable) => ({
+      visible: true,
+      label: variable,
+    })),
+  );
 
   const [displaySettingsMenu, setDisplaySettingsMenu] = useState<boolean>(
     DEFAULT_STATE.settingsMenu.display,
@@ -90,6 +106,7 @@ export default function VariablesProvider({ children }: Props) {
           toggle: toggleSettingsMenu,
           anchorEl: settingsMenuAnchorEl,
         },
+        variableColumns,
       }}
     >
       {children}
