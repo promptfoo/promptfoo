@@ -1,5 +1,5 @@
 import VariablesMenu from './VariablesMenu';
 import VariablesMenuTrigger from './VariablesMenuTrigger';
-import VariablesProvider from './VariablesProvider';
+import VariablesProvider, { useVariablesContext } from './VariablesProvider';
 
-export { VariablesMenu, VariablesMenuTrigger, VariablesProvider };
+export { VariablesMenu, VariablesMenuTrigger, VariablesProvider, useVariablesContext };

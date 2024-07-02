@@ -8,7 +8,7 @@ import { VARIABLES_MENU_TRIGGER_BUTTON_ID } from './constants';
 type Props = {};
 
 function VariablesMenu({}: Props) {
-  const { settingsMenu, variableColumns } = useVariablesContext();
+  const { settingsMenu, variableColumns, toggleColumnVisibility } = useVariablesContext();
 
   return (
     <Menu
@@ -28,7 +28,7 @@ function VariablesMenu({}: Props) {
         Visible
       </div>
       <Divider />
-      {variableColumns.map((column) => (
+      {variableColumns.map((column, index) => (
         <div
           key={column.label}
           style={{
@@ -40,7 +40,7 @@ function VariablesMenu({}: Props) {
           }}
         >
           <span>{column.label}</span>
-          <Checkbox checked={column.visible} />
+          <Checkbox checked={column.visible} onChange={() => toggleColumnVisibility(index)} />
         </div>
       ))}
     </Menu>

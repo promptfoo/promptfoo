@@ -38,6 +38,7 @@ import ResultsCharts from './ResultsCharts';
 import ResultsTable from './ResultsTable';
 import SettingsModal from './ResultsViewSettingsModal';
 import ShareModal from './ShareModal';
+import { VariablesProvider } from './results/variables';
 import { useStore as useResultsViewStore } from './store';
 import type { FilterMode } from './types';
 import './ResultsView.css';
@@ -408,17 +409,19 @@ export default function ResultsView({
         </ResponsiveStack>
       </Paper>
       <ResultsCharts columnVisibility={columnVisibility} />
-      <ResultsTable
-        maxTextLength={maxTextLength}
-        columnVisibility={columnVisibility}
-        wordBreak={wordBreak}
-        showStats={showInferenceDetails}
-        filterMode={filterMode}
-        failureFilter={failureFilter}
-        searchText={debouncedSearchText}
-        onFailureFilterToggle={handleFailureFilterToggle}
-        onSearchTextChange={handleSearchTextChange}
-      />
+      <VariablesProvider vars={head.vars}>
+        <ResultsTable
+          maxTextLength={maxTextLength}
+          columnVisibility={columnVisibility}
+          wordBreak={wordBreak}
+          showStats={showInferenceDetails}
+          filterMode={filterMode}
+          failureFilter={failureFilter}
+          searchText={debouncedSearchText}
+          onFailureFilterToggle={handleFailureFilterToggle}
+          onSearchTextChange={handleSearchTextChange}
+        />
+      </VariablesProvider>
       <ConfigModal open={configModalOpen} onClose={() => setConfigModalOpen(false)} />
       <ShareModal
         open={shareModalOpen}

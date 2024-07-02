@@ -24,6 +24,7 @@ type ContextState = {
     anchorEl: AnchorEl;
   };
   variableColumns: VariableColumn[];
+  toggleColumnVisibility: (index: number) => void;
 };
 
 // ====================================================
@@ -37,6 +38,7 @@ const DEFAULT_STATE = {
     anchorEl: null,
   },
   variableColumns: [],
+  toggleColumnVisibility: () => {},
 } as ContextState;
 
 // ====================================================
@@ -62,6 +64,8 @@ export default function VariablesProvider({ children, vars }: Props) {
 
   const [variableColumns, setVariableColumns] = useState<VariableColumn[]>(
     vars.map((variable) => ({
+      // By default all columns are visible
+      // TODO: Use local storage to persist user preferences on a per-evaluation basis
       visible: true,
       label: variable,
     })),
@@ -94,6 +98,18 @@ export default function VariablesProvider({ children, vars }: Props) {
     [settingsMenuAnchorEl],
   );
 
+  function toggleColumnVisibility(index: number) {
+    setVariableColumns((prev) => {
+      const updatedColumns = [...prev];
+      updatedColumns[index] = {
+        ...prev[index],
+        visible: !prev[index].visible,
+      };
+
+      return updatedColumns;
+    });
+  }
+
   // ====================================================
   // Render
   // ====================================================
@@ -107,6 +123,7 @@ export default function VariablesProvider({ children, vars }: Props) {
           anchorEl: settingsMenuAnchorEl,
         },
         variableColumns,
+        toggleColumnVisibility,
       }}
     >
       {children}

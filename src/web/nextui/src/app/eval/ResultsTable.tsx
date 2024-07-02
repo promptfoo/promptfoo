@@ -30,7 +30,7 @@ import Link from 'next/link';
 import remarkGfm from 'remark-gfm';
 import invariant from 'tiny-invariant';
 import EvalOutputCell from './EvalOutputCell';
-import { VariablesMenu, VariablesMenuTrigger, VariablesProvider } from './results/variables';
+import { VariablesMenu, VariablesMenuTrigger, useVariablesContext } from './results/variables';
 import './ResultsTable.css';
 
 function formatRowOutput(output: EvaluateTableOutput | string) {
@@ -129,6 +129,8 @@ function ResultsTable({
   onSearchTextChange,
 }: ResultsTableProps) {
   const { evalId: filePath, table, setTable } = useMainStore();
+
+  const variablesContext = useVariablesContext();
 
   invariant(table, 'Table should be defined');
   const { head, body } = table;
@@ -330,6 +332,8 @@ function ResultsTable({
   const { renderMarkdown } = useResultsViewStore();
   const variableColumns = React.useMemo(() => {
     if (head.vars.length > 0) {
+      const visibleColumns = variablesContext.variableColumns.filter((col) => col.visible);
+
       return [
         columnHelper.group({
           id: 'vars',
@@ -349,11 +353,11 @@ function ResultsTable({
               <VariablesMenu />
             </div>
           ),
-          columns: head.vars.map((varName, idx) =>
+          columns: visibleColumns.map(({ label }, idx) =>
             columnHelper.accessor((row: EvaluateTableRow) => row.vars[idx], {
               id: `Variable ${idx + 1}`,
               header: () => (
-                <TableHeader text={varName} maxLength={maxTextLength} className="font-bold" />
+                <TableHeader text={label} maxLength={maxTextLength} className="font-bold" />
               ),
               cell: (info: CellContext<EvaluateTableRow, string>) => {
                 const value = info.getValue();
@@ -374,7 +378,7 @@ function ResultsTable({
       ];
     }
     return [];
-  }, [columnHelper, head.vars, maxTextLength, renderMarkdown]);
+  }, [columnHelper, head.vars, maxTextLength, renderMarkdown, variablesContext.variableColumns]);
 
   const getOutput = React.useCallback(
     (rowIndex: number, promptIndex: number) => {
@@ -591,140 +595,138 @@ function ResultsTable({
   });
 
   return (
-    <VariablesProvider vars={head.vars}>
-      <div>
-        <table
-          className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''}`}
-          style={{
-            wordBreak,
-          }}
-        >
-          <thead>
-            {reactTable.getHeaderGroups().map((headerGroup) => (
-              <tr key={headerGroup.id} className="header">
-                {headerGroup.headers.map((header) => (
-                  <th
-                    key={header.id}
-                    colSpan={header.colSpan}
-                    style={{
-                      width: header.getSize(),
-                    }}
-                  >
-                    {header.isPlaceholder
-                      ? null
-                      : flexRender(header.column.columnDef.header, header.getContext())}
-                    <div
-                      onMouseDown={header.getResizeHandler()}
-                      onTouchStart={header.getResizeHandler()}
-                      className={`resizer ${header.column.getIsResizing() ? 'isResizing' : ''}`}
-                    />
-                  </th>
-                ))}
+    <div>
+      <table
+        className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''}`}
+        style={{
+          wordBreak,
+        }}
+      >
+        <thead>
+          {reactTable.getHeaderGroups().map((headerGroup) => (
+            <tr key={headerGroup.id} className="header">
+              {headerGroup.headers.map((header) => (
+                <th
+                  key={header.id}
+                  colSpan={header.colSpan}
+                  style={{
+                    width: header.getSize(),
+                  }}
+                >
+                  {header.isPlaceholder
+                    ? null
+                    : flexRender(header.column.columnDef.header, header.getContext())}
+                  <div
+                    onMouseDown={header.getResizeHandler()}
+                    onTouchStart={header.getResizeHandler()}
+                    className={`resizer ${header.column.getIsResizing() ? 'isResizing' : ''}`}
+                  />
+                </th>
+              ))}
+            </tr>
+          ))}
+        </thead>
+        <tbody>
+          {reactTable.getRowModel().rows.map((row, rowIndex) => {
+            let colBorderDrawn = false;
+            return (
+              <tr key={row.id}>
+                {row.getVisibleCells().map((cell) => {
+                  const isMetadataCol =
+                    cell.column.id.startsWith('Variable') || cell.column.id === 'description';
+                  const shouldDrawColBorder = !isMetadataCol && !colBorderDrawn;
+                  if (shouldDrawColBorder) {
+                    colBorderDrawn = true;
+                  }
+                  const shouldDrawRowBorder = rowIndex === 0 && !isMetadataCol;
+                  return (
+                    <td
+                      key={cell.id}
+                      style={{
+                        width: cell.column.getSize(),
+                      }}
+                      className={`${isMetadataCol ? 'variable' : ''} ${
+                        shouldDrawRowBorder ? 'first-prompt-row' : ''
+                      } ${shouldDrawColBorder ? 'first-prompt-col' : ''}`}
+                    >
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </td>
+                  );
+                })}
               </tr>
-            ))}
-          </thead>
-          <tbody>
-            {reactTable.getRowModel().rows.map((row, rowIndex) => {
-              let colBorderDrawn = false;
-              return (
-                <tr key={row.id}>
-                  {row.getVisibleCells().map((cell) => {
-                    const isMetadataCol =
-                      cell.column.id.startsWith('Variable') || cell.column.id === 'description';
-                    const shouldDrawColBorder = !isMetadataCol && !colBorderDrawn;
-                    if (shouldDrawColBorder) {
-                      colBorderDrawn = true;
-                    }
-                    const shouldDrawRowBorder = rowIndex === 0 && !isMetadataCol;
-                    return (
-                      <td
-                        key={cell.id}
-                        style={{
-                          width: cell.column.getSize(),
-                        }}
-                        className={`${isMetadataCol ? 'variable' : ''} ${
-                          shouldDrawRowBorder ? 'first-prompt-row' : ''
-                        } ${shouldDrawColBorder ? 'first-prompt-col' : ''}`}
-                      >
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                      </td>
-                    );
-                  })}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-        {reactTable.getPageCount() > 1 && (
-          <Box className="pagination" sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <Button
-              onClick={() => {
-                setPagination((old) => ({ ...old, pageIndex: Math.max(old.pageIndex - 1, 0) }));
-                window.scrollTo(0, 0);
-              }}
-              disabled={reactTable.getState().pagination.pageIndex === 0}
-              variant="contained"
-            >
-              Previous
-            </Button>
-            <Typography component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              Page
-              <TextField
-                size="small"
-                type="number"
-                value={reactTable.getState().pagination.pageIndex + 1}
-                onChange={(e) => {
-                  const page = e.target.value ? Number(e.target.value) - 1 : 0;
-                  setPagination((old) => ({
-                    ...old,
-                    pageIndex: Math.min(Math.max(page, 0), reactTable.getPageCount() - 1),
-                  }));
-                }}
-                InputProps={{
-                  style: { width: '60px', textAlign: 'center' },
-                }}
-                variant="outlined"
-              />
-              <span>of {reactTable.getPageCount()}</span>
-            </Typography>
-            <Button
-              onClick={() => {
+            );
+          })}
+        </tbody>
+      </table>
+      {reactTable.getPageCount() > 1 && (
+        <Box className="pagination" sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Button
+            onClick={() => {
+              setPagination((old) => ({ ...old, pageIndex: Math.max(old.pageIndex - 1, 0) }));
+              window.scrollTo(0, 0);
+            }}
+            disabled={reactTable.getState().pagination.pageIndex === 0}
+            variant="contained"
+          >
+            Previous
+          </Button>
+          <Typography component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            Page
+            <TextField
+              size="small"
+              type="number"
+              value={reactTable.getState().pagination.pageIndex + 1}
+              onChange={(e) => {
+                const page = e.target.value ? Number(e.target.value) - 1 : 0;
                 setPagination((old) => ({
                   ...old,
-                  pageIndex: Math.min(old.pageIndex + 1, reactTable.getPageCount() - 1),
+                  pageIndex: Math.min(Math.max(page, 0), reactTable.getPageCount() - 1),
                 }));
+              }}
+              InputProps={{
+                style: { width: '60px', textAlign: 'center' },
+              }}
+              variant="outlined"
+            />
+            <span>of {reactTable.getPageCount()}</span>
+          </Typography>
+          <Button
+            onClick={() => {
+              setPagination((old) => ({
+                ...old,
+                pageIndex: Math.min(old.pageIndex + 1, reactTable.getPageCount() - 1),
+              }));
+              window.scrollTo(0, 0);
+            }}
+            disabled={reactTable.getState().pagination.pageIndex + 1 >= reactTable.getPageCount()}
+            variant="contained"
+          >
+            Next
+          </Button>
+          <Typography component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Select
+              value={pagination.pageSize}
+              onChange={(e) => {
+                setPagination({ pageIndex: 0, pageSize: Number(e.target.value) });
                 window.scrollTo(0, 0);
               }}
-              disabled={reactTable.getState().pagination.pageIndex + 1 >= reactTable.getPageCount()}
-              variant="contained"
+              displayEmpty
+              inputProps={{ 'aria-label': 'Results per page' }}
+              size="small"
+              sx={{ m: 1, minWidth: 80 }}
             >
-              Next
-            </Button>
-            <Typography component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Select
-                value={pagination.pageSize}
-                onChange={(e) => {
-                  setPagination({ pageIndex: 0, pageSize: Number(e.target.value) });
-                  window.scrollTo(0, 0);
-                }}
-                displayEmpty
-                inputProps={{ 'aria-label': 'Results per page' }}
-                size="small"
-                sx={{ m: 1, minWidth: 80 }}
-              >
-                <MenuItem value={10}>10</MenuItem>
-                <MenuItem value={50}>50</MenuItem>
-                <MenuItem value={100}>100</MenuItem>
-                <MenuItem value={500}>500</MenuItem>
-                <MenuItem value={1000}>1000</MenuItem>
-              </Select>
-              <span>results per page</span>
-            </Typography>
-          </Box>
-        )}
-        <GenerateTestCases />
-      </div>
-    </VariablesProvider>
+              <MenuItem value={10}>10</MenuItem>
+              <MenuItem value={50}>50</MenuItem>
+              <MenuItem value={100}>100</MenuItem>
+              <MenuItem value={500}>500</MenuItem>
+              <MenuItem value={1000}>1000</MenuItem>
+            </Select>
+            <span>results per page</span>
+          </Typography>
+        </Box>
+      )}
+      <GenerateTestCases />
+    </div>
   );
 }
 
