@@ -1,6 +1,8 @@
 prompts:
-  prompts/openai_prompt.json: openai_prompt
-  prompts/llama_prompt.txt: llama_prompt
+  - id: file://prompts/openai_prompt.json
+    label: openai_prompt
+  - id: prompts/llama_prompt.txt
+    label: llama_prompt
 
 providers:
   - id: ollama:llama2

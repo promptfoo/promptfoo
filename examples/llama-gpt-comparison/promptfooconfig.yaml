@@ -1,6 +1,8 @@
 prompts:
-  prompts/chat_prompt.json: chat_prompt
-  prompts/llama_prompt.txt: llama_prompt
+  - id: prompts/chat_prompt.json
+    label: chat_prompt
+  - id: prompts/llama_prompt.txt
+    label: llama_prompt
 
 providers:
   - id: openai:gpt-3.5-turbo-0613

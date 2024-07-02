@@ -1370,7 +1370,7 @@ export function parsePathOrGlob(
   basePath: string,
   promptPath: string,
 ): {
-  extension: string;
+  extension?: string;
   functionName?: string;
   isPathPattern: boolean;
   filePath: string;
@@ -1388,7 +1388,8 @@ export function parsePathOrGlob(
       throw err;
     }
   }
-  let filename = path.parse(filePath).base;
+
+  let filename = path.relative(basePath, filePath);
   let functionName: string | undefined;
 
   if (filename.includes(':')) {
@@ -1397,10 +1398,16 @@ export function parsePathOrGlob(
       [filename, functionName] = splits;
     }
   }
+
+  const isPathPattern = stats?.isDirectory() || /[*?{}\[\]]/.test(filePath); // glob pattern
+  const safeFilename = path.relative(
+    basePath,
+    path.isAbsolute(filename) ? filename : path.resolve(basePath, filename),
+  );
   return {
-    extension: path.parse(filename).ext,
+    extension: isPathPattern ? undefined : path.parse(safeFilename).ext,
+    filePath: safeFilename.startsWith(basePath) ? safeFilename : path.join(basePath, safeFilename),
     functionName,
-    isPathPattern: stats?.isDirectory() || /[*?{}\[\]]/.test(filePath), // glob pattern
-    filePath: path.join(basePath, filename),
+    isPathPattern,
   };
 }
