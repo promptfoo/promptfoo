@@ -236,7 +236,10 @@ export async function loadApiProvider(
       ret = new ReplicateImageProvider(modelName, providerOptions);
     } else {
       // By default, there is no model type.
-      ret = new ReplicateProvider(modelType + ':' + modelName, providerOptions);
+      ret = new ReplicateProvider(
+        modelName ? modelType + ':' + modelName : modelType,
+        providerOptions,
+      );
     }
   } else if (providerPath.startsWith('bam:')) {
     const splits = providerPath.split(':');
