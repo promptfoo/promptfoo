@@ -269,11 +269,11 @@ tests:
 // highlight-start
 assertionTemplates:
     noAIreference:
-      - type: llm-rubric
-        value: does not describe self as an AI, model, or chatbot
+      type: llm-rubric
+      value: does not describe self as an AI, model, or chatbot
     startsUpperCase:
-      - type: javascript
-        value: output[0] === output[0].toUpperCase()
+      type: javascript
+      value: output[0] === output[0].toUpperCase()
 // highlight-end
 ```
 
