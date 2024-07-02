@@ -33,6 +33,11 @@ import {
   OpenAiCompletionProvider,
   OpenAiChatCompletionProvider,
 } from '../src/providers/openai';
+import {
+  ReplicateImageProvider,
+  ReplicateModerationProvider,
+  ReplicateProvider,
+} from '../src/providers/replicate';
 import { ScriptCompletionProvider } from '../src/providers/scriptCompletion';
 import { VertexChatProvider, VertexEmbeddingProvider } from '../src/providers/vertex';
 import { VoyageEmbeddingProvider } from '../src/providers/voyage';
@@ -893,6 +898,42 @@ config:
     const provider = await loadApiProvider('vertex:vertex-chat-model');
     expect(provider).toBeInstanceOf(VertexChatProvider);
     expect(provider.id()).toBe('vertex:vertex-chat-model');
+  });
+
+  it('loadApiProvider with replicate:modelname', async () => {
+    const provider = await loadApiProvider('replicate:meta/llama3');
+    expect(provider).toBeInstanceOf(ReplicateProvider);
+    expect(provider.id()).toBe('replicate:meta/llama3');
+  });
+
+  it('loadApiProvider with replicate:modelname:version', async () => {
+    const provider = await loadApiProvider('replicate:meta/llama3:abc123');
+    expect(provider).toBeInstanceOf(ReplicateProvider);
+    expect(provider.id()).toBe('replicate:meta/llama3:abc123');
+  });
+
+  it('loadApiProvider with replicate:image', async () => {
+    const provider = await loadApiProvider('replicate:image:stability-ai/sdxl');
+    expect(provider).toBeInstanceOf(ReplicateImageProvider);
+    expect(provider.id()).toBe('replicate:stability-ai/sdxl');
+  });
+
+  it('loadApiProvider with replicate:image:version', async () => {
+    const provider = await loadApiProvider('replicate:image:stability-ai/sdxl:abc123');
+    expect(provider).toBeInstanceOf(ReplicateImageProvider);
+    expect(provider.id()).toBe('replicate:stability-ai/sdxl:abc123');
+  });
+
+  it('loadApiProvider with replicate:moderation', async () => {
+    const provider = await loadApiProvider('replicate:moderation:foo/bar');
+    expect(provider).toBeInstanceOf(ReplicateModerationProvider);
+    expect(provider.id()).toBe('replicate:foo/bar');
+  });
+
+  it('loadApiProvider with replicate:moderation:version', async () => {
+    const provider = await loadApiProvider('replicate:moderation:foo/bar:abc123');
+    expect(provider).toBeInstanceOf(ReplicateModerationProvider);
+    expect(provider.id()).toBe('replicate:foo/bar:abc123');
   });
 
   it('loadApiProvider with cloudflare-ai', async () => {
