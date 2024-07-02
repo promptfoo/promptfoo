@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useRef } from 'react';
+import { createContext, useContext, useState } from 'react';
 import type { EvaluateTable } from '@/app/eval/types';
 
 // ====================================================
@@ -19,7 +19,6 @@ type ContextState = {
   settingsMenu: {
     display: boolean;
     toggle: () => void;
-    anchorEl: React.MutableRefObject<HTMLButtonElement | null> | null;
   };
   variableColumns: VariableColumn[];
   toggleColumnVisibility: (index: number) => void;
@@ -33,7 +32,6 @@ const DEFAULT_STATE = {
   settingsMenu: {
     display: false,
     toggle: () => {},
-    anchorEl: null,
   },
   variableColumns: [],
   toggleColumnVisibility: () => {},
@@ -73,8 +71,6 @@ export default function VariablesProvider({ children, vars }: Props) {
     DEFAULT_STATE.settingsMenu.display,
   );
 
-  const settingsMenuAnchorEl = useRef<HTMLButtonElement | null>(null);
-
   // ====================================================
   // Event Handlers
   // ====================================================
@@ -108,7 +104,6 @@ export default function VariablesProvider({ children, vars }: Props) {
         settingsMenu: {
           display: displaySettingsMenu,
           toggle: toggleSettingsMenu,
-          anchorEl: settingsMenuAnchorEl,
         },
         variableColumns,
         toggleColumnVisibility,

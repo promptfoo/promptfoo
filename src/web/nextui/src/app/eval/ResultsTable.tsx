@@ -31,7 +31,7 @@ import remarkGfm from 'remark-gfm';
 import invariant from 'tiny-invariant';
 import EvalOutputCell from './EvalOutputCell';
 import {
-  VariablesMenuTrigger,
+  VariablesSettingsTrigger,
   useVariablesContext,
   VariablesSettingsModal,
 } from './results/variables';
@@ -352,7 +352,7 @@ function ResultsTable({
             >
               <span className="font-bold">Variables</span>
               <span>
-                <VariablesMenuTrigger />
+                <VariablesSettingsTrigger />
               </span>
             </div>
           ),

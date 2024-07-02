@@ -20,7 +20,7 @@ const HELPER_TEXT = 'Variables settings';
 // Component
 // ====================================================
 
-export default function VariablesMenuTrigger({}: Props) {
+export default function VariablesSettingsTrigger({}: Props) {
   const { settingsMenu } = useVariablesContext();
 
   // ====================================================
