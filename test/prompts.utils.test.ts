@@ -277,4 +277,16 @@ describe('parsePathOrGlob', () => {
       promptPath: path.join('/base', 'a/b/c/d/e/f/g'),
     });
   });
+
+  it('should join basePath and safeFilename correctly', () => {
+    jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+    const basePath = 'base';
+    const relativePath = 'relative/path/to/file.txt';
+    expect(parsePathOrGlob(basePath, relativePath)).toEqual({
+      extension: '.txt',
+      functionName: undefined,
+      isPathPattern: false,
+      promptPath: 'base/relative/path/to/file.txt',
+    });
+  });
 });
