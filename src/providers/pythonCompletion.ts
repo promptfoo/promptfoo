@@ -26,11 +26,11 @@ export class PythonProvider implements ApiProvider {
     runPath: string,
     private options?: ProviderOptions,
   ) {
-    const { filePath: promptPath, functionName } = parsePathOrGlob(
+    const { filePath: providerPath, functionName } = parsePathOrGlob(
       options?.config.basePath || '',
       runPath,
     );
-    this.scriptPath = promptPath;
+    this.scriptPath = path.relative(options?.config.basePath || '', providerPath);
     this.functionName = functionName || null;
     this.id = () =>
       options?.id ??
