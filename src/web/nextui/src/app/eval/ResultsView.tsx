@@ -237,7 +237,7 @@ export default function ResultsView({
   };
 
   return (
-    <VariablesSettingsProvider vars={head.vars}>
+    <VariablesSettingsProvider vars={head.vars} evalId={defaultEvalId as string}>
       <div style={{ marginLeft: '1rem', marginRight: '1rem' }}>
         <Box mb={2} sx={{ display: 'flex', alignItems: 'center' }}>
           <Heading variant="h5" sx={{ flexGrow: 1 }}>

@@ -1,5 +1,6 @@
 import { createContext, useContext, useState } from 'react';
 import type { EvaluateTable } from '@/app/eval/types';
+import { useLocalStorage } from 'usehooks-ts';
 
 // ====================================================
 // Types
@@ -13,6 +14,7 @@ type VariableColumn = {
 type Props = {
   children: React.ReactNode;
   vars: EvaluateTable['head']['vars'];
+  evalId: string;
 };
 
 type ContextState = {
@@ -53,17 +55,21 @@ export function useVariablesSettingsContext() {
 // Component
 // ====================================================
 
-export default function VariablesSettingsProvider({ children, vars }: Props) {
+export default function VariablesSettingsProvider({ children, vars, evalId }: Props) {
   // ====================================================
   // State
   // ====================================================
 
-  // TODO: Sync state w/ local storage to persist user preferences
-
-  const [variableColumns, setVariableColumns] = useState<VariableColumn[]>(
+  // Visibility state is persisted to local storage to keep the user's preferences between
+  // page reloads.
+  //! Note: this should be more tightly coupled with the table initialization to ensure that
+  //! the table's initial state is consistent with the user's preferences. Currently, the table
+  //! is initialized with all columns visible, and then the visibility is updated based on the
+  //! user's preferences.
+  const [variableColumns, setVariableColumns] = useLocalStorage<VariableColumn[]>(
+    `variable-settings_${evalId}_columns`,
+    // By default all columns are visible
     vars.map((variable) => ({
-      // By default all columns are visible
-      // TODO: Use local storage to persist user preferences on a per-evaluation basis
       visible: true,
       label: variable,
     })),
