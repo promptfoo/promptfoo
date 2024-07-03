@@ -1,10 +1,12 @@
 import VariablesSettingsModal from './VariablesSettingsModal';
-import VariablesSettings, { useVariablesSettingsContext } from './VariablesSettingsProvider';
+import VariablesSettingsProvider, {
+  useVariablesSettingsContext,
+} from './VariablesSettingsProvider';
 import VariablesSettingsTrigger from './VariablesSettingsTrigger';
 
 export {
   VariablesSettingsTrigger,
-  VariablesSettings,
+  VariablesSettingsProvider,
   useVariablesSettingsContext,
   VariablesSettingsModal,
 };
