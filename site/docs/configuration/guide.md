@@ -119,6 +119,10 @@ Or a list of paths:
 tests: ['tests/accuracy', 'tests/creativity', 'tests/hallucination']
 ```
 
+:::tip
+We also support CSV datasets from [local file](/docs/configuration/parameters/#import-from-csv) and [Google Sheets](/docs/integrations/google-sheets).
+:::
+
 ## Import vars from separate files
 
 The `vars` attribute can point to a file or directory. For example:
