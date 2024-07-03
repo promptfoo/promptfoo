@@ -30,6 +30,8 @@ const YamlEditorComponent: React.FC = () => {
     setDefaultTest,
     evaluateOptions,
     setEvaluateOptions,
+    scenarios,
+    setScenarios,
   } = useStore();
 
   const [code, setCode] = React.useState('');
@@ -43,6 +45,7 @@ const YamlEditorComponent: React.FC = () => {
     setTestCases(yamlObj.tests || []);
     setDefaultTest(yamlObj.defaultTest || {});
     setEvaluateOptions(yamlObj.evaluateOptions || {});
+    setScenarios(yamlObj.scenarios || []);
   };
 
   const toggleReadOnly = () => {
@@ -66,10 +69,11 @@ const YamlEditorComponent: React.FC = () => {
       tests: testCases,
       defaultTest,
       evaluateOptions,
+      scenarios,
     };
 
     setCode(yaml.dump(testSuite));
-  }, [env, description, providers, prompts, testCases, defaultTest, evaluateOptions]);
+  }, [env, description, providers, prompts, testCases, defaultTest, evaluateOptions, scenarios]);
 
   return (
     <Box mt={4}>
