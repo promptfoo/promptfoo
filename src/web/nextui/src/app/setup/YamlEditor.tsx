@@ -16,22 +16,22 @@ import 'prismjs/themes/prism.css';
 
 const YamlEditorComponent: React.FC = () => {
   const {
-    env,
-    setEnv,
-    description,
-    setDescription,
-    providers,
-    setProviders,
-    prompts,
-    setPrompts,
-    testCases,
-    setTestCases,
     defaultTest,
     setDefaultTest,
+    description,
+    setDescription,
+    env,
+    setEnv,
     evaluateOptions,
     setEvaluateOptions,
+    prompts,
+    setPrompts,
+    providers,
+    setProviders,
     scenarios,
     setScenarios,
+    testCases,
+    setTestCases,
   } = useStore();
 
   const [code, setCode] = React.useState('');
