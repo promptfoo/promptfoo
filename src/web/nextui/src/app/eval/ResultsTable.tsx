@@ -32,7 +32,7 @@ import invariant from 'tiny-invariant';
 import EvalOutputCell from './EvalOutputCell';
 import {
   VariablesSettingsTrigger,
-  useVariablesContext,
+  useVariablesSettingsContext,
   VariablesSettingsModal,
 } from './results/variables';
 import './ResultsTable.css';
@@ -134,7 +134,7 @@ function ResultsTable({
 }: ResultsTableProps) {
   const { evalId: filePath, table, setTable } = useMainStore();
 
-  const variablesContext = useVariablesContext();
+  const variablesContext = useVariablesSettingsContext();
 
   invariant(table, 'Table should be defined');
   const { head, body } = table;

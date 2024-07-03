@@ -6,12 +6,12 @@ import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import IconButton from '@mui/material/IconButton';
-import { useVariablesContext } from './VariablesProvider';
+import { useVariablesSettingsContext } from './VariablesSettingsProvider';
 
 type Props = {};
 
 export default function VariablesSettingsModal({}: Props) {
-  const { settingsMenu, variableColumns, toggleColumnVisibility } = useVariablesContext();
+  const { settingsMenu, variableColumns, toggleColumnVisibility } = useVariablesSettingsContext();
 
   return (
     <Dialog open={settingsMenu.display} onClose={settingsMenu.toggle} fullWidth maxWidth="sm">

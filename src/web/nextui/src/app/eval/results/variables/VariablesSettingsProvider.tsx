@@ -45,7 +45,7 @@ const VariablesContext = createContext<ContextState>(DEFAULT_STATE);
 
 VariablesContext.displayName = 'VariablesContext';
 
-export function useVariablesContext() {
+export function useVariablesSettingsContext() {
   return useContext(VariablesContext);
 }
 
@@ -53,10 +53,12 @@ export function useVariablesContext() {
 // Component
 // ====================================================
 
-export default function VariablesProvider({ children, vars }: Props) {
+export default function VariablesSettingsProvider({ children, vars }: Props) {
   // ====================================================
   // State
   // ====================================================
+
+  // TODO: Sync state w/ local storage to persist user preferences
 
   const [variableColumns, setVariableColumns] = useState<VariableColumn[]>(
     vars.map((variable) => ({
