@@ -62,18 +62,18 @@ const YamlEditorComponent: React.FC = () => {
 
   React.useEffect(() => {
     const testSuite = {
-      env,
-      description,
-      providers,
-      prompts,
-      tests: testCases,
       defaultTest,
+      description,
+      env,
       evaluateOptions,
+      prompts,
+      providers,
       scenarios,
+      tests: testCases,
     };
 
     setCode(yaml.dump(testSuite));
-  }, [env, description, providers, prompts, testCases, defaultTest, evaluateOptions, scenarios]);
+  }, [defaultTest, description, env, evaluateOptions, prompts, providers, scenarios, testCases]);
 
   return (
     <Box mt={4}>
