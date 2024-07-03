@@ -38,14 +38,14 @@ const YamlEditorComponent: React.FC = () => {
   const [isReadOnly, setIsReadOnly] = React.useState(true);
 
   const handleChange = (yamlObj: any) => {
-    setEnv(yamlObj.env || {});
-    setDescription(yamlObj.description || '');
-    setProviders(yamlObj.providers || []);
-    setPrompts(yamlObj.prompts || []);
-    setTestCases(yamlObj.tests || []);
     setDefaultTest(yamlObj.defaultTest || {});
+    setDescription(yamlObj.description || '');
+    setEnv(yamlObj.env || {});
     setEvaluateOptions(yamlObj.evaluateOptions || {});
+    setPrompts(yamlObj.prompts || []);
+    setProviders(yamlObj.providers || []);
     setScenarios(yamlObj.scenarios || []);
+    setTestCases(yamlObj.tests || []);
   };
 
   const toggleReadOnly = () => {
