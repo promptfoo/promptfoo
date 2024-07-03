@@ -325,10 +325,13 @@ export async function matchesLlmRubric(
     ...fromVars(vars),
   });
 
+  const defaultProviders = await getDefaultProviders();
+  const defaultProvider =
+    defaultProviders.llmRubricProvider || defaultProviders.gradingJsonProvider;
   const finalProvider = await getAndCheckProvider(
     'text',
     grading.provider,
-    (await getDefaultProviders()).gradingJsonProvider,
+    defaultProvider,
     'llm-rubric check',
   );
   const resp = await finalProvider.callApi(prompt);

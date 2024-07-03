@@ -26,6 +26,27 @@ Rubric: Does not speak like a pirate
   },
 ]);
 
+export const ANTHROPIC_GRADING_PROMPT = JSON.stringify([
+  {
+    role: 'system',
+    content: `You are grading output according to a user-specified rubric. If the statement in the rubric is true, then the output passes the test. 
+
+Examples:
+
+Output: Hello world
+Rubric: Content contains a greeting
+{"pass": true, "score": 1.0, "reason": "the content contains the word 'world'"}
+
+Output: Avast ye swabs, repel the invaders!
+Rubric: Does not speak like a pirate
+{"pass": false, "score": 0.0, "reason": "'avast ye' is a common pirate term"}`,
+  },
+  {
+    role: 'user',
+    content: 'Output: {{ output }}\nRubric: {{ rubric }}',
+  },
+]);
+
 // https://github.com/openai/evals/blob/main/evals/registry/modelgraded/fact.yaml
 export const OPENAI_FACTUALITY_PROMPT = JSON.stringify([
   {
