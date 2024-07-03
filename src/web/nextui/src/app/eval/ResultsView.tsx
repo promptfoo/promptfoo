@@ -38,7 +38,11 @@ import ResultsCharts from './ResultsCharts';
 import ResultsTable from './ResultsTable';
 import SettingsModal from './ResultsViewSettingsModal';
 import ShareModal from './ShareModal';
-import { VariablesSettingsProvider, VariablesSettingsTrigger } from './results/variables';
+import {
+  VariablesSettingsProvider,
+  VariablesSettingsTrigger,
+  VariablesSettingsModal,
+} from './results/variables';
 import { useStore as useResultsViewStore } from './store';
 import type { FilterMode } from './types';
 import './ResultsView.css';
@@ -436,6 +440,7 @@ export default function ResultsView({
           onClose={() => setViewSettingsModalOpen(false)}
         />
       </div>
+      <VariablesSettingsModal />
     </VariablesSettingsProvider>
   );
 }
