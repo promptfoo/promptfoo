@@ -30,11 +30,7 @@ import Link from 'next/link';
 import remarkGfm from 'remark-gfm';
 import invariant from 'tiny-invariant';
 import EvalOutputCell from './EvalOutputCell';
-import {
-  VariablesSettingsTrigger,
-  useVariablesSettingsContext,
-  VariablesSettingsModal,
-} from './results/variables';
+import { useVariablesSettingsContext, VariablesSettingsModal } from './results/variables';
 import './ResultsTable.css';
 
 function formatRowOutput(output: EvaluateTableOutput | string) {
@@ -135,6 +131,7 @@ function ResultsTable({
   const { evalId: filePath, table, setTable } = useMainStore();
 
   const variablesContext = useVariablesSettingsContext();
+  const visibleVariableColumns = variablesContext.variableColumns.filter((col) => col.visible);
 
   invariant(table, 'Table should be defined');
   const { head, body } = table;
@@ -332,31 +329,14 @@ function ResultsTable({
 
   const columnHelper = React.useMemo(() => createColumnHelper<EvaluateTableRow>(), []);
 
-  //! CANARY
   const { renderMarkdown } = useResultsViewStore();
   const variableColumns = React.useMemo(() => {
     if (head.vars.length > 0) {
-      const visibleColumns = variablesContext.variableColumns.filter((col) => col.visible);
-
       return [
         columnHelper.group({
           id: 'vars',
-          header: () => (
-            <div
-              style={{
-                display: 'flex',
-                flexDirection: 'row',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-              }}
-            >
-              <span className="font-bold">Variables</span>
-              <span>
-                <VariablesSettingsTrigger />
-              </span>
-            </div>
-          ),
-          columns: visibleColumns.map(({ label }, idx) =>
+          header: () => <span className="font-bold">Variables</span>,
+          columns: visibleVariableColumns.map(({ label }, idx) =>
             columnHelper.accessor((row: EvaluateTableRow) => row.vars[idx], {
               id: `Variable ${idx + 1}`,
               header: () => (
@@ -381,7 +361,14 @@ function ResultsTable({
       ];
     }
     return [];
-  }, [columnHelper, head.vars, maxTextLength, renderMarkdown, variablesContext.variableColumns]);
+  }, [
+    columnHelper,
+    head.vars,
+    maxTextLength,
+    renderMarkdown,
+    variablesContext.variableColumns,
+    visibleVariableColumns,
+  ]);
 
   const getOutput = React.useCallback(
     (rowIndex: number, promptIndex: number) => {
@@ -581,9 +568,12 @@ function ResultsTable({
     if (descriptionColumn) {
       cols.push(descriptionColumn);
     }
-    cols.push(...variableColumns, ...promptColumns);
+    if (visibleVariableColumns.length > 0) {
+      cols.push(...variableColumns);
+    }
+    cols.push(...promptColumns);
     return cols;
-  }, [descriptionColumn, variableColumns, promptColumns]);
+  }, [descriptionColumn, variableColumns, promptColumns, visibleVariableColumns]);
 
   const reactTable = useReactTable({
     data: filteredBody,
