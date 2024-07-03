@@ -16,33 +16,36 @@ import 'prismjs/themes/prism.css';
 
 const YamlEditorComponent: React.FC = () => {
   const {
-    env,
-    setEnv,
-    description,
-    setDescription,
-    providers,
-    setProviders,
-    prompts,
-    setPrompts,
-    testCases,
-    setTestCases,
     defaultTest,
     setDefaultTest,
+    description,
+    setDescription,
+    env,
+    setEnv,
     evaluateOptions,
     setEvaluateOptions,
+    prompts,
+    setPrompts,
+    providers,
+    setProviders,
+    scenarios,
+    setScenarios,
+    testCases,
+    setTestCases,
   } = useStore();
 
   const [code, setCode] = React.useState('');
   const [isReadOnly, setIsReadOnly] = React.useState(true);
 
   const handleChange = (yamlObj: any) => {
-    setEnv(yamlObj.env || {});
-    setDescription(yamlObj.description || '');
-    setProviders(yamlObj.providers || []);
-    setPrompts(yamlObj.prompts || []);
-    setTestCases(yamlObj.tests || []);
     setDefaultTest(yamlObj.defaultTest || {});
+    setDescription(yamlObj.description || '');
+    setEnv(yamlObj.env || {});
     setEvaluateOptions(yamlObj.evaluateOptions || {});
+    setPrompts(yamlObj.prompts || []);
+    setProviders(yamlObj.providers || []);
+    setScenarios(yamlObj.scenarios || []);
+    setTestCases(yamlObj.tests || []);
   };
 
   const toggleReadOnly = () => {
@@ -59,17 +62,18 @@ const YamlEditorComponent: React.FC = () => {
 
   React.useEffect(() => {
     const testSuite = {
-      env,
-      description,
-      providers,
-      prompts,
-      tests: testCases,
       defaultTest,
+      description,
+      env,
       evaluateOptions,
+      prompts,
+      providers,
+      scenarios,
+      tests: testCases,
     };
 
     setCode(yaml.dump(testSuite));
-  }, [env, description, providers, prompts, testCases, defaultTest, evaluateOptions]);
+  }, [defaultTest, description, env, evaluateOptions, prompts, providers, scenarios, testCases]);
 
   return (
     <Box mt={4}>

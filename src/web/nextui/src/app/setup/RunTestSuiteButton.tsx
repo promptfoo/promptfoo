@@ -8,8 +8,16 @@ import { useRouter } from 'next/navigation';
 
 const RunTestSuiteButton: React.FC = () => {
   const router = useRouter();
-  const { env, description, providers, prompts, testCases, defaultTest, evaluateOptions } =
-    useStore();
+  const {
+    defaultTest,
+    description,
+    env,
+    evaluateOptions,
+    prompts,
+    providers,
+    scenarios,
+    testCases,
+  } = useStore();
   const [isRunning, setIsRunning] = useState(false);
   const [progressPercent, setProgressPercent] = useState(0);
 
@@ -17,13 +25,14 @@ const RunTestSuiteButton: React.FC = () => {
     setIsRunning(true);
 
     const testSuite = {
-      env,
-      description,
-      providers,
-      prompts,
-      tests: testCases,
       defaultTest,
+      description,
+      env,
       evaluateOptions,
+      prompts,
+      providers,
+      scenarios,
+      tests: testCases,
     };
 
     try {
