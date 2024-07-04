@@ -2,6 +2,10 @@ import { AssertionsResult } from '../../src/assertions/AssertionsResult';
 import { AssertionSet } from '../../src/types';
 
 describe('AssertionsResult', () => {
+  beforeEach(() => {
+    delete process.env.PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES;
+  });
+
   const succeedingResult = {
     pass: true,
     score: 1,
@@ -56,17 +60,13 @@ describe('AssertionsResult', () => {
   });
 
   it('handles PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES', () => {
-    const initialEnv = process.env.PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES;
     process.env.PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES = 'true';
-
     expect(() =>
       assertionsResult.addResult({
         index: 0,
         result: failingResult,
       }),
     ).toThrow(new Error(failingResult.reason));
-
-    process.env.PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES = initialEnv;
   });
 
   it('handles named metrics', () => {
