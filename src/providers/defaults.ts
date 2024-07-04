@@ -4,6 +4,7 @@ import {
   DefaultGradingProvider as AnthropicGradingProvider,
   DefaultGradingJsonProvider as AnthropicGradingJsonProvider,
   DefaultSuggestionsProvider as AnthropicSuggestionsProvider,
+  DefaultLlmRubricProvider as AnthropicLlmRubricProvider,
 } from './anthropic';
 import {
   DefaultEmbeddingProvider as OpenAiEmbeddingProvider,
@@ -32,6 +33,7 @@ export async function getDefaultProviders(env?: EnvOverrides) {
       gradingJsonProvider: AnthropicGradingJsonProvider,
       suggestionsProvider: AnthropicSuggestionsProvider,
       moderationProvider: OpenAiModerationProvider,
+      llmRubricProvider: AnthropicLlmRubricProvider,
     };
   }
 
