@@ -1151,8 +1151,6 @@ ${
     );
 
     // Assertion provider overrides test provider
-    test.options = test.options || {};
-    test.options.provider = assertion.provider || test.options.provider;
     const classificationResult = await matchesClassification(
       renderedValue,
       outputString,
@@ -1366,9 +1364,7 @@ export async function runCompareAssertion(
   outputs: string[],
 ): Promise<GradingResult[]> {
   invariant(typeof assertion.value === 'string', 'select-best must have a string value');
-  test.options = test.options || {};
-  test.options.provider = assertion.provider || test.options.provider;
-  test.options.rubricPrompt = assertion.rubricPrompt || test.options.rubricPrompt;
+  test = getFinalTest(test, assertion);
   const comparisonResults = await matchesSelectBest(
     assertion.value,
     outputs,
