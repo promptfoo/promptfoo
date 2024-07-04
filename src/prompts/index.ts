@@ -129,7 +129,7 @@ export async function processPrompt(
       logger.debug(
         `Attempted to load file at "${prompt.raw}", but no file found. Using raw string.`,
       );
-      return processString(prompt);
+      prompts.push(...processString(prompt));
     }
     return prompts;
   }

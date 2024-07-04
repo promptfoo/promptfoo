@@ -4,6 +4,7 @@ import { globSync } from 'glob';
 import * as yaml from 'js-yaml';
 import { importModule } from '../src/esm';
 import { readPrompts, readProviderPromptMap } from '../src/prompts';
+import { maybeFilePath } from '../src/prompts/utils';
 import type { Prompt, ProviderResponse, UnifiedConfig } from '../src/types';
 
 jest.mock('proxy-agent', () => ({
@@ -40,11 +41,21 @@ jest.mock('../src/esm', () => {
 });
 jest.mock('../src/logger');
 jest.mock('../src/python/wrapper');
+jest.mock('../src/prompts/utils', () => {
+  const actual = jest.requireActual('../src/prompts/utils');
+  return {
+    ...actual,
+    maybeFilePath: jest.fn(actual.maybeFilePath),
+  };
+});
 
 describe('readPrompts', () => {
   afterEach(() => {
     delete process.env.PROMPTFOO_STRICT_FILES;
-    jest.resetAllMocks();
+    jest.mocked(fs.readFileSync).mockReset();
+    jest.mocked(fs.statSync).mockReset();
+    jest.mocked(globSync).mockReset();
+    jest.mocked(maybeFilePath).mockClear();
   });
 
   it('should throw an error for invalid inputs', async () => {
@@ -431,6 +442,14 @@ describe('readPrompts', () => {
     ]);
     expect(fs.readFileSync).toHaveBeenCalledTimes(2);
     expect(fs.statSync).toHaveBeenCalledTimes(3);
+  });
+
+  it('should fall back to a string if maybeFilePath is true but a file does not exist', async () => {
+    jest.mocked(globSync).mockReturnValueOnce([]);
+    jest.mocked(maybeFilePath).mockReturnValueOnce(true);
+    await expect(readPrompts('non-existent-file.txt*')).resolves.toEqual([
+      { raw: 'non-existent-file.txt*', label: 'non-existent-file.txt*' },
+    ]);
   });
 });
 
