@@ -94,8 +94,9 @@ export async function synthesize({
   logger.info(
     `Synthesizing test cases for ${prompts.length} ${
       prompts.length === 1 ? 'prompt' : 'prompts'
-    }...\nPlugins:\n${chalk.yellow(plugins.sort().join('\n\t'))}`,
+    }...\nUsing plugins:\n\t${chalk.yellow(plugins.sort().join('\n\t'))}`,
   );
+  logger.info('Generating...');
 
   // Initialize progress bar
   const progressBar = new cliProgress.SingleBar({}, cliProgress.Presets.shades_classic);
