@@ -15,6 +15,7 @@ import { checkNodeVersion } from './checkNodeVersion';
 import cliState from './cliState';
 import { configCommand } from './commands/config';
 import { deleteCommand } from './commands/delete';
+import { filterProviders } from './commands/eval/filterProviders';
 import { filterTests } from './commands/eval/filterTests';
 import { exportCommand } from './commands/export';
 import { importCommand } from './commands/import';
@@ -715,6 +716,7 @@ async function main() {
       '--filter-pattern <pattern>',
       'Only run tests whose description matches the regular expression pattern',
     )
+    .option('--filter-providers <providers>', 'Only run tests with these providers')
     .option('--filter-failing <path>', 'Path to json output file')
     .option(
       '--var <key=value>',
@@ -772,6 +774,8 @@ async function main() {
           pattern: cmdObj.filterPattern,
           failing: cmdObj.filterFailing,
         });
+
+        testSuite.providers = filterProviders(testSuite.providers, cmdObj.filterProviders);
 
         const options: EvaluateOptions = {
           showProgressBar: getLogLevel() === 'debug' ? false : cmdObj.progressBar,
