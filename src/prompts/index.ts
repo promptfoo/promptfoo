@@ -124,13 +124,6 @@ export async function processPrompt(
       );
       prompts.push(...processedPrompts);
     }
-    if (prompts.length === 0) {
-      // There was nothing at this filepath, so treat it as a prompt string.
-      logger.debug(
-        `Attempted to load file at "${prompt.raw}", but no file found. Using raw string.`,
-      );
-      return processString(prompt);
-    }
     return prompts;
   }
 
