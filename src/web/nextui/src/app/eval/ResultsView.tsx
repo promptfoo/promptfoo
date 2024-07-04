@@ -268,6 +268,11 @@ export default function ResultsView({
                   onChange={(event, newValue: { label: string; id?: string } | null) => {
                     if (newValue && newValue.id) {
                       onRecentEvalSelected(newValue.id);
+
+                      // Reset all filters and search
+                      setSearchText('');
+                      setFilterMode('all');
+                      setFailureFilter({});
                     }
                   }}
                   disableClearable
