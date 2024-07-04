@@ -3,7 +3,7 @@ import './CustomMetrics.css';
 
 interface CustomMetricsProps {
   lookup: Record<string, number>;
-  metricTotals: Record<string, number>;
+  metricTotals?: Record<string, number>;
   onSearchTextChange?: (searchText: string) => void;
 }
 
