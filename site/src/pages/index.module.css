@@ -90,6 +90,36 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
+.imageSection {
+  text-align: center;
+  padding: 4rem 0;
+}
+
+.featureImage {
+  max-width: min(100%, 1024px);
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transition: transform 0.3s ease;
+}
+
+.featureImage:hover {
+  transform: scale(1.02);
+}
+
+.ctaSection {
+  text-align: center;
+  padding: 6rem 0;
+  background-color: #f8f9fa;
+  margin-top: 4rem;
+}
+
+.ctaSection h3 {
+  font-size: 2rem;
+  margin-bottom: 2rem;
+  color: #333;
+}
+
 @media screen and (max-width: 768px) {
   .walkthroughContainer {
     flex-direction: column;
@@ -102,5 +132,17 @@
 
   .walkthroughButtons {
     margin-bottom: 2rem;
+  }
+
+  .imageSection {
+    padding: 2rem 0;
+  }
+
+  .ctaSection {
+    padding: 4rem 0;
+  }
+
+  .ctaSection h3 {
+    font-size: 1.5rem;
   }
 }

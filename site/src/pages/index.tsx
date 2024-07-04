@@ -95,35 +95,38 @@ export default function Home(): JSX.Element {
         <HomepageInfo />
         <HomepageFeatures />
 
-        <div style={{ textAlign: 'center', padding: '2rem 0 4rem 0' }}>
+        <div className={styles.imageSection}>
           <h4>Web Viewer</h4>
           <Link to="/docs/intro">
             <img
-              style={{ maxWidth: 'min(100%, 1024px)', border: '1px solid #ddd', borderRadius: 10 }}
+              className={styles.featureImage}
               src="https://user-images.githubusercontent.com/310310/261666627-ce5a7817-da82-4484-b26d-32474f1cabc5.png"
+              alt="Web Viewer"
             />
           </Link>
         </div>
-        <div style={{ textAlign: 'center', padding: '2rem 0 8rem 0' }}>
+        <div className={styles.imageSection}>
           <h4>Command line</h4>
           <Link to="/docs/intro">
             <img
-              style={{ maxWidth: 'min(100%, 1024px)', border: '1px solid #ddd', borderRadius: 10 }}
+              className={styles.featureImage}
               src="https://user-images.githubusercontent.com/310310/244891726-480e1114-d049-40b9-bd5f-f81c15060284.gif"
+              alt="Command line"
             />
           </Link>
         </div>
-        <div style={{ textAlign: 'center', padding: '2rem 0 8rem 0' }}>
+        <div className={styles.imageSection}>
           <h4>Red Teaming &amp; Risk Assessment</h4>
           <Link to="/docs/red-team">
             <img
-              style={{ maxWidth: 'min(100%, 1024px)', border: '1px solid #ddd', borderRadius: 10 }}
+              className={styles.featureImage}
               src="/img/riskreport-1.png"
               srcSet="/img/riskreport-1.png 1x, /img/riskreport-1@2x.png 2x"
+              alt="Red Teaming & Risk Assessment"
             />
           </Link>
         </div>
-        <div style={{ textAlign: 'center', padding: '2rem 0 12rem 0' }}>
+        <div className={styles.ctaSection}>
           <h3>promptfoo is used by LLM apps serving over 10 million users</h3>
           <div className={styles.buttons}>
             <Link className="button button--primary button--lg" to="/docs/intro">
