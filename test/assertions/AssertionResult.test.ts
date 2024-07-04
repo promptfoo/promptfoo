@@ -1,9 +1,7 @@
 import { AssertionsResult } from '../../src/assertions/AssertionsResult';
 import { AssertionSet } from '../../src/types';
-import { jest } from '@jest/globals';
 
 describe('AssertionsResult', () => {
-
   beforeEach(() => {
     delete process.env.PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES;
   });
