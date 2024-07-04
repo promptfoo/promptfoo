@@ -373,6 +373,25 @@ function ResultsTable({
     [filteredBody],
   );
 
+  const metricTotals = React.useMemo(() => {
+    const totals: Record<string, number> = {};
+    table?.body.forEach((row) => {
+      row.test.assert?.forEach((assertion) => {
+        if (assertion.metric) {
+          totals[assertion.metric] = (totals[assertion.metric] || 0) + 1;
+        }
+        if ('assert' in assertion && Array.isArray(assertion.assert)) {
+          assertion.assert.forEach((subAssertion) => {
+            if ('metric' in subAssertion && subAssertion.metric) {
+              totals[subAssertion.metric] = (totals[subAssertion.metric] || 0) + 1;
+            }
+          });
+        }
+      });
+    });
+    return totals;
+  }, [table]);
+
   const promptColumns = React.useMemo(() => {
     return [
       columnHelper.group({
@@ -456,6 +475,7 @@ function ResultsTable({
                     Object.keys(prompt.metrics.namedScores).length > 0 ? (
                       <CustomMetrics
                         lookup={prompt.metrics.namedScores}
+                        metricTotals={metricTotals}
                         onSearchTextChange={onSearchTextChange}
                       />
                     ) : null}
