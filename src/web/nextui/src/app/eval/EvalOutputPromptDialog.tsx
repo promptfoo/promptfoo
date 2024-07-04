@@ -53,7 +53,7 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
               return (
                 <TableRow key={i}>
                   <TableCell>{result.pass ? '✅' : '❌'}</TableCell>
-                  <TableCell>{result.score.toFixed(2)}</TableCell>
+                  <TableCell>{result.score?.toFixed(2)}</TableCell>
                   <TableCell>{result.assertion?.type || ''}</TableCell>
                   <TableCell style={{ whiteSpace: 'pre-wrap' }}>
                     {result.assertion?.value ? String(result.assertion.value) : '-'}

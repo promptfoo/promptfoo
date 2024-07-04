@@ -84,7 +84,7 @@ export default function Cols() {
       calculatePassRate(col.metrics),
       col.metrics?.testPassCount == null ? '-' : `${col.metrics.testPassCount}`,
       col.metrics?.testFailCount == null ? '-' : `${col.metrics.testFailCount}`,
-      col.metrics?.score == null ? '-' : col.metrics.score.toFixed(2),
+      col.metrics?.score == null ? '-' : col.metrics.score?.toFixed(2),
     ]);
     return [headers]
       .concat(rows)
@@ -323,7 +323,7 @@ export default function Cols() {
                 {col.metrics?.testFailCount == null ? '-' : `${col.metrics.testFailCount}`}
               </TableCell>
               <TableCell>
-                {col.metrics?.score == null ? '-' : col.metrics.score.toFixed(2)}
+                {col.metrics?.score == null ? '-' : col.metrics.score?.toFixed(2)}
               </TableCell>
             </TableRow>
           ))}

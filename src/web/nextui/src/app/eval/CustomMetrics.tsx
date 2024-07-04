@@ -19,7 +19,7 @@ const CustomMetrics: React.FC<CustomMetricsProps> = ({ lookup, onSearchTextChang
             onClick={() => onSearchTextChange && onSearchTextChange(`metric=${metric}:[^0]`)}
             className={onSearchTextChange ? 'clickable' : ''}
           >
-            {metric}: {score.toFixed(2)}
+            {metric}: {score?.toFixed(2)}
           </span>
         ) : null,
       )}

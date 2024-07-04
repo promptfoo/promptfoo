@@ -347,12 +347,12 @@ export async function writeOutput(
   const outputToSimpleString = (output: EvaluateTableOutput) => {
     const passFailText = output.pass ? '[PASS]' : '[FAIL]';
     const namedScoresText = Object.entries(output.namedScores)
-      .map(([name, value]) => `${name}: ${value.toFixed(2)}`)
+      .map(([name, value]) => `${name}: ${value?.toFixed(2)}`)
       .join(', ');
     const scoreText =
       namedScoresText.length > 0
-        ? `(${output.score.toFixed(2)}, ${namedScoresText})`
-        : `(${output.score.toFixed(2)})`;
+        ? `(${output.score?.toFixed(2)}, ${namedScoresText})`
+        : `(${output.score?.toFixed(2)})`;
     const gradingResultText = output.gradingResult
       ? `${output.pass ? 'Pass' : 'Fail'} Reason: ${output.gradingResult.reason}`
       : '';

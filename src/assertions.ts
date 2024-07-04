@@ -101,10 +101,10 @@ function handleRougeScore(
     pass,
     score: inverted ? 1 - score : score,
     reason: pass
-      ? `${baseType.toUpperCase()} score ${score.toFixed(
+      ? `${baseType.toUpperCase()} score ${score?.toFixed(
           2,
         )} is greater than or equal to threshold ${assertion.threshold || 0.75}`
-      : `${baseType.toUpperCase()} score ${score.toFixed(2)} is less than threshold ${
+      : `${baseType.toUpperCase()} score ${score?.toFixed(2)} is less than threshold ${
           assertion.threshold || 0.75
         }`,
     assertion,
@@ -1205,7 +1205,7 @@ ${
       score: pass ? 1 : 0,
       reason: pass
         ? 'Assertion passed'
-        : `Perplexity ${perplexity.toFixed(2)} is greater than threshold ${assertion.threshold}`,
+        : `Perplexity ${perplexity?.toFixed(2)} is greater than threshold ${assertion.threshold}`,
       assertion,
     };
   }
@@ -1227,7 +1227,7 @@ ${
       score: perplexityNorm,
       reason: pass
         ? 'Assertion passed'
-        : `Perplexity score ${perplexityNorm.toFixed(2)} is less than threshold ${
+        : `Perplexity score ${perplexityNorm?.toFixed(2)} is less than threshold ${
             assertion.threshold
           }`,
       assertion,
