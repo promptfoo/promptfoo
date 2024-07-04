@@ -25,7 +25,6 @@ export function maybeFilePath(str: string): boolean {
     }) ||
     str.charAt(str.length - 3) === '.' ||
     str.charAt(str.length - 4) === '.' ||
-    str.endsWith('.') ||
     str.includes('*') ||
     str.includes('/') ||
     str.includes('\\')

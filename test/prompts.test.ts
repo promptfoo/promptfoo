@@ -4,6 +4,7 @@ import { globSync } from 'glob';
 import * as yaml from 'js-yaml';
 import { importModule } from '../src/esm';
 import { readPrompts, readProviderPromptMap } from '../src/prompts';
+import { maybeFilePath } from '../src/prompts/utils';
 import type { Prompt, ProviderResponse, UnifiedConfig } from '../src/types';
 
 jest.mock('proxy-agent', () => ({
@@ -36,6 +37,13 @@ jest.mock('../src/esm', () => {
   return {
     ...actual,
     importModule: jest.fn(actual.importModule),
+  };
+});
+jest.mock('../src/prompts/utils', () => {
+  const actual = jest.requireActual('../src/prompts/utils');
+  return {
+    ...actual,
+    maybeFilePath: jest.fn(actual.maybeFilePath),
   };
 });
 jest.mock('../src/logger');
@@ -425,6 +433,18 @@ describe('readPrompts', () => {
     ]);
     expect(fs.readFileSync).toHaveBeenCalledTimes(2);
     expect(fs.statSync).toHaveBeenCalledTimes(3);
+  });
+
+  it('should fall back to prompt string literal if file does not exist', async () => {
+    jest.mocked(globSync).mockImplementationOnce(() => []);
+    jest.mocked(maybeFilePath).mockReturnValueOnce(true);
+    await expect(readPrompts('Please tell me about /path/to/file.py')).resolves.toEqual([
+      {
+        label: '/path/to/file.py',
+        raw: '/path/to/file.py',
+      },
+    ]);
+    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
   });
 });
 
