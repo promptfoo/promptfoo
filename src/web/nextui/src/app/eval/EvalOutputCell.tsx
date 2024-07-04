@@ -345,7 +345,7 @@ function EvalOutputCell({
       {output.prompt && (
         <>
           <span className="action" onClick={handlePromptOpen}>
-            <Tooltip title="View ouput and test details">
+            <Tooltip title="View output and test details">
               <span>🔎</span>
             </Tooltip>
           </span>

@@ -398,6 +398,7 @@ The following properties can be overwritten in provider config:
 - `thread.messages` - A list of message objects that the thread is created with.
 - `temperature` - Temperature for the model
 - `toolChoice` - Controls whether the AI should use a tool
+- `attachments` - File attachments to include in messages - see [Assistant v2 attachments](https://platform.openai.com/docs/assistants/migration)
 
 Here's an example of a more detailed config:
 
