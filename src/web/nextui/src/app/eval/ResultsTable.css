@@ -8,12 +8,9 @@ pre {
 
 table.results-table,
 .divTable {
-  border: 1px solid var(--table-border-color);
   border-collapse: collapse;
   width: 100%;
-
   margin: 1rem 0;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .results-table ins {
@@ -45,7 +42,7 @@ table.results-table,
 .results-table td,
 .td {
   position: relative;
-  box-shadow: inset 0 0 0 1px var(--border-color);
+  border: 1px solid var(--border-color);
   vertical-align: top;
 }
 
@@ -330,11 +327,11 @@ table.results-table,
   cursor: pointer;
 }
 
-.first-prompt-col {
+.results-table td.first-prompt-col {
   border-left: 2px solid #888;
 }
 
-.first-prompt-row {
+.results-table td.first-prompt-row {
   border-top: 2px solid #888;
 }
 
