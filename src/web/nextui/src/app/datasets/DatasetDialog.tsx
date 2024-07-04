@@ -86,7 +86,7 @@ export default function DatasetDialog({ openDialog, handleClose, testCase }: Dat
                             (promptData.prompt.metrics.testPassCount +
                               promptData.prompt.metrics.testFailCount)) *
                           100.0
-                        )?.toFixed(2) + '%'
+                        ).toFixed(2) + '%'
                       : '-'}
                   </TableCell>
                   <TableCell>{promptData.prompt.metrics?.testPassCount ?? '-'}</TableCell>

@@ -17,7 +17,7 @@ function scoreToString(score: number | null) {
     // Don't show boolean scores.
     return '';
   }
-  return `(${score?.toFixed(2)})`;
+  return `(${score.toFixed(2)})`;
 }
 
 interface EvalOutputCellProps {
