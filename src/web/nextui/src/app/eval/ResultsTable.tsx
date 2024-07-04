@@ -638,7 +638,7 @@ function ResultsTable({
         </tbody>
       </table>
       {reactTable.getPageCount() > 1 && (
-        <Box className="pagination" sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+        <Box className="pagination" mx={1} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <Button
             onClick={() => {
               setPagination((old) => ({ ...old, pageIndex: Math.max(old.pageIndex - 1, 0) }));
