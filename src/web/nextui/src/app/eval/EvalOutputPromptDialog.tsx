@@ -113,7 +113,7 @@ export default function EvalOutputPromptDialog({
         {metadata?.redteamFinalPrompt && (
           <Box my={2}>
             <Typography variant="subtitle1" style={{ marginBottom: '1rem', marginTop: '1rem' }}>
-              Modified Prompt (Red Team)
+              Modified User Input (Red Team)
             </Typography>
             <TextareaAutosize
               readOnly

@@ -42,7 +42,7 @@ const BASE_PLUGINS = [
   'prompt-injection',
 ];
 
-export const ADDITIONAL_PLUGINS = ['competitors'];
+export const ADDITIONAL_PLUGINS = ['competitors', 'experimental-jailbreak'];
 
 export const DEFAULT_PLUGINS = new Set([...BASE_PLUGINS, ...Object.keys(HARM_CATEGORIES)]);
 const ALL_PLUGINS = new Set([...DEFAULT_PLUGINS, ...ADDITIONAL_PLUGINS]);
@@ -94,7 +94,7 @@ export async function synthesize({
   logger.info(
     `Synthesizing test cases for ${prompts.length} ${
       prompts.length === 1 ? 'prompt' : 'prompts'
-    }...\nPlugins: ${chalk.yellow(plugins.join(', '))}`,
+    }...\nPlugins:\n${chalk.yellow(plugins.sort().join('\n\t'))}`,
   );
 
   // Initialize progress bar
@@ -124,7 +124,7 @@ export async function synthesize({
 
   // Get adversarial test cases
   const testCases: TestCase[] = [];
-  const adversarialPrompts: TestCase[] = [];
+  const harmfulPrompts: TestCase[] = [];
 
   const redteamProvider: ApiProvider = await loadApiProvider(provider || REDTEAM_MODEL, {
     options: {
@@ -141,7 +141,7 @@ export async function synthesize({
       injectVar,
       plugins.filter((p) => p.startsWith('harmful:')),
     );
-    adversarialPrompts.push(...harmfulPrompts);
+    harmfulPrompts.push(...harmfulPrompts);
 
     if (addHarmfulCases) {
       testCases.push(...harmfulPrompts);
@@ -158,10 +158,6 @@ export async function synthesize({
       injectVar: string,
     ) => Promise<TestCase[]>;
   } = {
-    jailbreak: (provider, purpose, injectVar) =>
-      addIterativeJailbreaks(provider, adversarialPrompts, purpose, injectVar),
-    'prompt-injection': (provider, purpose, injectVar) =>
-      addInjections(provider, adversarialPrompts, purpose, injectVar),
     pii: getPiiTests,
     'excessive-agency': getOverconfidenceTests,
     hijacking: getHijackingTests,
@@ -180,6 +176,37 @@ export async function synthesize({
       testCases.push(...pluginTests);
       logger.debug(`Added ${pluginTests.length} ${plugin} test cases`);
     }
+  }
+
+  if (plugins.includes('experimental-jailbreak')) {
+    // Experimental - adds jailbreaks to ALL test cases
+    logger.debug('Adding experimental jailbreaks to all test cases');
+    const experimentalJailbreaks = await addIterativeJailbreaks(
+      redteamProvider,
+      testCases,
+      purpose,
+      injectVar,
+    );
+    testCases.push(...experimentalJailbreaks);
+    logger.debug(`Added ${experimentalJailbreaks.length} experimental jailbreak test cases`);
+  } else if (plugins.includes('jailbreak')) {
+    // Adds jailbreaks only to harmful prompts
+    logger.debug('Adding jailbreaks to harmful prompts');
+    const jailbreaks = await addIterativeJailbreaks(
+      redteamProvider,
+      harmfulPrompts,
+      purpose,
+      injectVar,
+    );
+    testCases.push(...jailbreaks);
+    logger.debug(`Added ${jailbreaks.length} jailbreak test cases`);
+  }
+
+  if (plugins.includes('prompt-injection')) {
+    logger.debug('Adding prompt injections');
+    const injections = await addInjections(redteamProvider, harmfulPrompts, purpose, injectVar);
+    testCases.push(...injections);
+    logger.debug(`Added ${injections.length} prompt injection test cases`);
   }
 
   // Finish progress bar
