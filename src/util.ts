@@ -1375,10 +1375,10 @@ export function parsePathOrGlob(
   isPathPattern: boolean;
   filePath: string;
 } {
-  let filePath = path.join(basePath, promptPath);
-  if (filePath.includes('file:')) {
-    filePath = filePath.split('file:')[1];
+  if (promptPath.startsWith('file://')) {
+    promptPath = promptPath.slice(7);
   }
+  const filePath = path.join(basePath, promptPath);
 
   let stats;
   try {
