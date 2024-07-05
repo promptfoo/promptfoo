@@ -134,8 +134,14 @@ export default function ResultsView({
     }
   };
 
+  const hasAnyDescriptions = React.useMemo(
+    () => table.body.some((row) => row.description),
+    [table.body],
+  );
+
   const columnData = React.useMemo(() => {
     return [
+      ...(hasAnyDescriptions ? [{ value: 'description', label: 'Description' }] : []),
       ...head.vars.map((_, idx) => ({
         value: `Variable ${idx + 1}`,
         label: `Var ${idx + 1}: ${
@@ -153,7 +159,7 @@ export default function ResultsView({
         };
       }),
     ];
-  }, [head.vars, head.prompts]);
+  }, [head.vars, head.prompts, hasAnyDescriptions]);
 
   const [configModalOpen, setConfigModalOpen] = React.useState(false);
   const [viewSettingsModalOpen, setViewSettingsModalOpen] = React.useState(false);
@@ -169,6 +175,7 @@ export default function ResultsView({
     setSelectedColumns(typeof value === 'string' ? value.split(',') : value);
 
     const allColumns = [
+      ...(hasAnyDescriptions ? ['description'] : []),
       ...head.vars.map((_, idx) => `Variable ${idx + 1}`),
       ...head.prompts.map((_, idx) => `Prompt ${idx + 1}`),
     ];
