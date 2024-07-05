@@ -10,5 +10,5 @@ export function setUserEmail(email: string) {
 }
 
 export function getAuthor(): string | null {
-  return getUserEmail() || null;
+  return process.env.PROMPTFOO_AUTHOR || getUserEmail() || null;
 }
