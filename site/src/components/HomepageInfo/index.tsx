@@ -9,7 +9,7 @@ export default function HomepageInfo(): JSX.Element {
     <>
       <section className={styles.section}>
         <div className="container">
-          <h2 className={styles.blurb}>Trusted by developers at companies like</h2>
+          <h2 className={styles.blurb}>Trusted by developers at</h2>
           <LogoContainer />
         </div>
       </section>

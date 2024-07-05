@@ -16,9 +16,7 @@ function HomepageHeader() {
     <header className={clsx('hero hero--primary', styles.heroBanner)}>
       <div className="container">
         <h1 className="hero__title">Ship LLM apps with confidence</h1>
-        <p className="hero__subtitle">
-          Open-source used by 20,000 developers to improve quality and catch risky failures
-        </p>
+        <p className="hero__subtitle">Open-source LLM testing used by 20,000 developers</p>
         <div className={styles.buttons}>
           <Link className="button button--primary button--lg" to="/docs/intro">
             Get Started
@@ -36,15 +34,14 @@ function HomepageWalkthrough() {
     {
       id: 1,
       caption: 'Build reliable prompts, RAGs, and agents',
-      image:
-        'https://user-images.githubusercontent.com/310310/261666627-ce5a7817-da82-4484-b26d-32474f1cabc5.png',
+      image: '/img/claude-vs-gpt-example.png',
       description: (
         <>
-          <p>Promptfoo runs locally and can integrate directly with your app.</p>
           <p>Start testing the performance of models, prompts, and more in minutes:</p>
           <pre className={styles.codeBox}>
             <code>npx promptfoo@latest init</code>
           </pre>
+          <p>Promptfoo runs locally and can integrate directly with your app.</p>
           <p>
             <Link to="/docs/intro">&raquo; Learn more</Link>
           </p>
@@ -54,7 +51,7 @@ function HomepageWalkthrough() {
     },
     {
       id: 2,
-      caption: 'Discover security & brand risks',
+      caption: 'Catch security, brand, and legal risks',
       image: '/img/riskreport-1.png',
       description: (
         <>
@@ -80,7 +77,7 @@ function HomepageWalkthrough() {
             No SDKs, cloud dependencies, or logins.
           </p>
           <p>
-            <Link to="/docs/installation">&raquo; See install docs</Link>
+            <Link to="/docs/getting-started">&raquo; See setup docs</Link>
           </p>
         </>
       ),
