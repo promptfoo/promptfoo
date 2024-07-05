@@ -714,6 +714,7 @@ export interface ResultsFile {
   createdAt: string;
   results: EvaluateSummary;
   config: Partial<UnifiedConfig>;
+  author: string | null;
 }
 
 // File exported as --output option

@@ -19,6 +19,9 @@ interface TableState {
   evalId: string | null;
   setEvalId: (evalId: string) => void;
 
+  author: string | null;
+  setAuthor: (author: string | null) => void;
+
   table: EvaluateTable | null;
   setTable: (table: EvaluateTable | null) => void;
 
@@ -46,6 +49,9 @@ export const useStore = create<TableState>()(
     (set, get) => ({
       evalId: null,
       setEvalId: (evalId: string) => set(() => ({ evalId })),
+
+      author: null,
+      setAuthor: (author: string | null) => set(() => ({ author })),
 
       table: null,
       setTable: (table: EvaluateTable | null) => set(() => ({ table })),

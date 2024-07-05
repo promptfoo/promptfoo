@@ -13,6 +13,7 @@ import Autocomplete, { AutocompleteRenderInputParams } from '@mui/material/Autoc
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
+import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
 import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
@@ -22,10 +23,11 @@ import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import OutlinedInput from '@mui/material/OutlinedInput';
 import Select, { SelectChangeEvent } from '@mui/material/Select';
+import Snackbar from '@mui/material/Snackbar';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
-import Heading from '@mui/material/Typography';
+import Typography from '@mui/material/Typography';
 import { styled } from '@mui/system';
 import type { VisibilityState } from '@tanstack/table-core';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -65,8 +67,16 @@ export default function ResultsView({
 }: ResultsViewProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { table, config, setConfig, maxTextLength, wordBreak, showInferenceDetails, evalId } =
-    useResultsViewStore();
+  const {
+    author,
+    table,
+    config,
+    setConfig,
+    maxTextLength,
+    wordBreak,
+    showInferenceDetails,
+    evalId,
+  } = useResultsViewStore();
   const { setStateFromConfig } = useMainStore();
 
   const [searchText, setSearchText] = React.useState(searchParams?.get('search') || '');
@@ -241,15 +251,66 @@ export default function ResultsView({
     setAnchorEl(event.currentTarget);
   };
 
+  const [evalIdCopied, setEvalIdCopied] = React.useState(false);
+
+  const handleEvalIdCopyClick = async () => {
+    if (!evalId) {
+      return;
+    }
+    await navigator.clipboard.writeText(evalId);
+    setEvalIdCopied(true);
+    setTimeout(() => {
+      setEvalIdCopied(false);
+    }, 1000);
+  };
+
   return (
-    <div>
-      <Box mx={1} mb={2} sx={{ display: 'flex', alignItems: 'center' }}>
-        <Heading variant="h5" sx={{ flexGrow: 1 }}>
-          <span className="description" onClick={handleDescriptionClick}>
-            {config?.description || evalId}
-          </span>{' '}
-          {config?.description && <span className="description-filepath">{evalId}</span>}
-        </Heading>
+    <div style={{ marginLeft: '1rem', marginRight: '1rem' }}>
+      <Box mb={2} className="eval-header">
+        <Typography variant="h5" sx={{ display: 'flex', alignItems: 'center' }}>
+          <Tooltip title="Click to edit description">
+            <span className="description" onClick={handleDescriptionClick}>
+              {config?.description || evalId}
+            </span>
+          </Tooltip>
+        </Typography>
+        {config?.description && evalId && (
+          <>
+            <Tooltip title="Click to copy">
+              <Chip
+                size="small"
+                label={
+                  <>
+                    <strong>ID:</strong> {evalId}
+                  </>
+                }
+                sx={{
+                  ml: 1,
+                  opacity: 0.7,
+                  cursor: 'pointer',
+                }}
+                onClick={handleEvalIdCopyClick}
+              />
+            </Tooltip>
+            <Snackbar
+              open={evalIdCopied}
+              autoHideDuration={1000}
+              onClose={() => setEvalIdCopied(false)}
+              message="Eval id copied to clipboard"
+            />
+          </>
+        )}
+        <Tooltip title={!author ? 'Set eval author with `promptfoo config set email`' : ''}>
+          <Chip
+            size="small"
+            label={
+              <>
+                <strong>Author:</strong> {author || 'Unknown'}
+              </>
+            }
+            sx={{ ml: 1, opacity: 0.7 }}
+          />
+        </Tooltip>
       </Box>
       <ResponsiveStack direction="row" spacing={4} alignItems="center">
         <Box>

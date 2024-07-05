@@ -56,6 +56,7 @@ export default async function Page({ params }: { params: { id: string } }) {
       data: {
         version: result.version,
         createdAt: result.createdAt,
+        author: 'Remote User',
         results: result.results as unknown as EvaluateSummary,
         config: result.config as unknown as UnifiedConfig,
       },
