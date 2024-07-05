@@ -4,16 +4,15 @@ You're using LLMs to generate code snippets, functions, or even entire programs.
 
 This is where sandboxed evaluations come in. By running LLM-generated code in a controlled, isolated environment, we can:
 
-1. Assess the correctness and functionality of the code without compromising our system's security.
-2. Benchmark different LLMs or prompts to determine which produces the most reliable code.
-3. Catch potential errors, infinite loops, or resource-intensive operations before they impact our main systems.
-4. Systematically test the LLM's code generation capabilities across various programming tasks and edge cases.
+1. Safely assess the code correctness.
+2. Benchmark different LLMs or prompts to find which produce the most reliable code.
+3. Catch potential errors, infinite loops, or resource-intensive operations before they impact the host system.
 
 In this tutorial, we'll use promptfoo to set up an automated pipeline for generating Python code with an LLM, executing it in a secure sandbox using epicbox, and evaluating the results.
 
 ## Prerequisites
 
-Let's get started by setting up our environment and configuring the necessary tools. Make sure you have the following installed:
+Make sure you have the following installed:
 
 - Node.js and npm
 - Python 3.9+

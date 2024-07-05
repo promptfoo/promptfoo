@@ -1,1 +1,1 @@
-See https://promptfoo.dev/docs/guides/sandboxed-evals
+See https://promptfoo.dev/docs/guides/sandboxed-code-evals
