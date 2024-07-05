@@ -72,6 +72,7 @@ async function resolveConfigs(
   const configPaths = cmdObj.config;
   if (configPaths) {
     fileConfig = await readConfigs(configPaths);
+    validateConfig(fileConfig)
   }
 
   // Standalone assertion mode

@@ -1,5 +1,6 @@
 import $RefParser from '@apidevtools/json-schema-ref-parser';
-import Ajv from 'ajv';
+import Ajv, { ValidateFunction } from 'ajv';
+import addFormats from 'ajv-formats';
 import { createHash } from 'crypto';
 import { stringify } from 'csv-stringify/sync';
 import dotenv from 'dotenv';
@@ -772,6 +773,9 @@ export function cleanupOldFileResults(remaining = RESULT_HISTORY_LENGTH) {
   }
 }
 
+const ajv = new Ajv();
+addFormats(ajv);
+
 /**
  * Validates a UnifiedConfig object against the schema defined in src/schema.json.
  *
@@ -779,12 +783,12 @@ export function cleanupOldFileResults(remaining = RESULT_HISTORY_LENGTH) {
  * @returns {boolean} - Returns true if all configs are valid, otherwise logs a warning.
  */
 export function validateConfig(config: Partial<UnifiedConfig>): void {
-  const ajv = new Ajv();
   const validate = ajv.compile(schema);
   const valid = validate(config);
   if (!valid) {
     logger.warn(`Invalid config: ${JSON.stringify(validate.errors, null, 2)}`);
-  } else {
+  }
+  else {
     logger.warn('config valid');
   }
 }
