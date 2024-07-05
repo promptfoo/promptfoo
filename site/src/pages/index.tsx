@@ -1,6 +1,9 @@
 import React from 'react';
 import Link from '@docusaurus/Link';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
+import CompareIcon from '@mui/icons-material/Compare';
+import DescriptionIcon from '@mui/icons-material/Description';
+import SecurityIcon from '@mui/icons-material/Security';
 import HomepageFeatures from '@site/src/components/HomepageFeatures';
 import HomepageInfo from '@site/src/components/HomepageInfo';
 import Layout from '@theme/Layout';
@@ -13,7 +16,9 @@ function HomepageHeader() {
     <header className={clsx('hero hero--primary', styles.heroBanner)}>
       <div className="container">
         <h1 className="hero__title">Ship LLM apps with confidence</h1>
-        <p className="hero__subtitle">Improve quality, detect failures, and reduce risk</p>
+        <p className="hero__subtitle">
+          Open-source used by 20,000 developers to improve quality and catch risky failures
+        </p>
         <div className={styles.buttons}>
           <Link className="button button--primary button--lg" to="/docs/intro">
             Get Started
@@ -30,23 +35,56 @@ function HomepageWalkthrough() {
   const steps = [
     {
       id: 1,
-      caption: 'Detailed evaluations',
+      caption: 'Build reliable prompts, RAGs, and agents',
       image:
         'https://user-images.githubusercontent.com/310310/261666627-ce5a7817-da82-4484-b26d-32474f1cabc5.png',
-      description: 'Start comparing models and prompts in minutes: `npx promptfoo@latest init`',
+      description: (
+        <>
+          <p>Promptfoo runs locally and can integrate directly with your app.</p>
+          <p>Start testing the performance of models, prompts, and more in minutes:</p>
+          <pre className={styles.codeBox}>
+            <code>npx promptfoo@latest init</code>
+          </pre>
+          <p>
+            <Link to="/docs/intro">&raquo; Learn more</Link>
+          </p>
+        </>
+      ),
+      icon: <CompareIcon />,
     },
     {
       id: 2,
-      caption: 'Discover vulnerabilities',
+      caption: 'Discover security & brand risks',
       image: '/img/riskreport-1.png',
-      description:
-        'Scan your application for security vulnerabilities, data leaks, and other risks.',
+      description: (
+        <>
+          <p>
+            Set up automated scans for security vulnerabilities, data leaks, and other business and
+            legal risks.
+          </p>
+          <p>
+            <Link to="/docs/red-team">&raquo; Learn more</Link>
+          </p>
+        </>
+      ),
+      icon: <SecurityIcon />,
     },
     {
       id: 3,
-      caption: 'Simple, declarative config',
+      caption: 'Simple, local configuration',
       image: '/img/yaml-example.png',
-      description: 'Just a simple YAML file. No SDK integrations. Language agnostic.',
+      description: (
+        <>
+          <p>
+            Promptfoo uses a simple, declarative config and runs completely locally on your machine.
+            No SDKs, cloud dependencies, or logins.
+          </p>
+          <p>
+            <Link to="/docs/installation">&raquo; See install docs</Link>
+          </p>
+        </>
+      ),
+      icon: <DescriptionIcon />,
     },
   ];
 
@@ -62,7 +100,7 @@ function HomepageWalkthrough() {
               )}
               onClick={() => setSelectedStep(step.id)}
             >
-              <span className={styles.walkthroughButtonNumber}>{step.id}</span>
+              <span className={styles.walkthroughButtonNumber}>{step.icon}</span>
               {step.caption}
             </button>
             {selectedStep === step.id && (

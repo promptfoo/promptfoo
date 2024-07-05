@@ -27,7 +27,7 @@
   justify-content: space-between;
   align-items: flex-start;
   padding: 2rem 0;
-  max-width: 1200px;
+  max-width: calc(100% - 4rem);
   margin: 0 auto;
 }
 
@@ -61,8 +61,7 @@
 }
 
 .walkthroughDescription {
-  margin-top: 0.5rem;
-  font-size: 0.9rem;
+  margin-top: 1rem;
   color: #666;
   line-height: 1.4;
 }
@@ -88,6 +87,24 @@
   width: 100%;
   border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.codeBox {
+  background-color: #f4f4f4;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 1rem;
+  margin: 1rem 0;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 0.9rem;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.codeBox code {
+  display: block;
+  color: #333;
 }
 
 .imageSection {
