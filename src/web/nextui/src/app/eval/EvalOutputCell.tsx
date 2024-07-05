@@ -180,7 +180,7 @@ function EvalOutputCell({
     } catch (error) {
       console.error('Invalid regular expression:', (error as Error).message);
     }
-  } else if (renderMarkdown) {
+  } else if (renderMarkdown && !showDiffs) {
     node = (
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
