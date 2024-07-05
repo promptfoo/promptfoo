@@ -591,6 +591,7 @@ type OpenAiAssistantOptions = OpenAiSharedOptions & {
     | 'auto'
     | { type: 'function'; function?: { name: string } }
     | { type: 'file_search' };
+  attachments?: OpenAI.Beta.Threads.Message.Attachment[];
 };
 
 export class OpenAiAssistantProvider extends OpenAiGenericProvider {
@@ -627,7 +628,13 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
     });
 
     const messages = parseChatPrompt(prompt, [
-      { role: 'user', content: prompt },
+      {
+        role: 'user',
+        content: prompt,
+        ...(this.assistantConfig.attachments
+          ? { attachments: this.assistantConfig.attachments }
+          : {}),
+      },
     ]) as OpenAI.Beta.Threads.ThreadCreateParams.Message[];
     const body: OpenAI.Beta.Threads.ThreadCreateAndRunParams = {
       assistant_id: this.assistantId,

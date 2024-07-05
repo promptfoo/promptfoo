@@ -7,17 +7,20 @@ prompts:
     label: prompt_txt
   - file://prompt.txt
 
-  - id: file://./prompts/*.txt
+  - id: '*.txt'
     label: prompt_glob
-  - file://./prompts/*.txt
+  - '*.txt'
+  - 'file://./*.txt'
 
   - id: file://prompt.yaml
     label: prompt_yaml
   - file://prompt.yaml
 
-  - id: file://prompt.json
+  - id: subfolder/prompt.json
     label: prompt_json
-  - file://prompt.json
+  - subfolder/prompt.json
+
+  - file://./subfolder/*.json
 
   - id: file://prompt.jsonl
     label: prompt_jsonl

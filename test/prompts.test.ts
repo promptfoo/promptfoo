@@ -4,6 +4,7 @@ import { globSync } from 'glob';
 import * as yaml from 'js-yaml';
 import { importModule } from '../src/esm';
 import { readPrompts, readProviderPromptMap } from '../src/prompts';
+import { maybeFilePath } from '../src/prompts/utils';
 import type { Prompt, ProviderResponse, UnifiedConfig } from '../src/types';
 
 jest.mock('proxy-agent', () => ({
@@ -40,11 +41,21 @@ jest.mock('../src/esm', () => {
 });
 jest.mock('../src/logger');
 jest.mock('../src/python/wrapper');
+jest.mock('../src/prompts/utils', () => {
+  const actual = jest.requireActual('../src/prompts/utils');
+  return {
+    ...actual,
+    maybeFilePath: jest.fn(actual.maybeFilePath),
+  };
+});
 
 describe('readPrompts', () => {
   afterEach(() => {
     delete process.env.PROMPTFOO_STRICT_FILES;
-    jest.clearAllMocks();
+    jest.mocked(fs.readFileSync).mockReset();
+    jest.mocked(fs.statSync).mockReset();
+    jest.mocked(globSync).mockReset();
+    jest.mocked(maybeFilePath).mockClear();
   });
 
   it('should throw an error for invalid inputs', async () => {
@@ -63,6 +74,10 @@ describe('readPrompts', () => {
 
   it('should throw an error when PROMPTFOO_STRICT_FILES is true and the file does not exist', async () => {
     process.env.PROMPTFOO_STRICT_FILES = 'true';
+    jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
+    jest.mocked(fs.readFileSync).mockImplementationOnce(() => {
+      throw new Error("ENOENT: no such file or directory, stat 'non-existent-file.txt'");
+    });
     await expect(readPrompts('non-existent-file.txt')).rejects.toThrow(
       expect.objectContaining({
         message: expect.stringMatching(
@@ -70,11 +85,10 @@ describe('readPrompts', () => {
         ),
       }),
     );
-    delete process.env.PROMPTFOO_STRICT_FILES;
   });
 
   it('should throw an error for a .txt file with no prompts', async () => {
-    jest.mocked(fs.readFileSync).mockReturnValue('');
+    jest.mocked(fs.readFileSync).mockReturnValueOnce('');
     jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
     await expect(readPrompts(['prompts.txt'])).rejects.toThrow(
       'There are no prompts in "prompts.txt"',
@@ -83,7 +97,6 @@ describe('readPrompts', () => {
   });
 
   it('should throw an error for an unsupported file format', async () => {
-    jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ id: 'test prompt' }));
     jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
     await expect(readPrompts(['unsupported.for.mat'])).rejects.toThrow(
       'There are no prompts in "unsupported.for.mat"',
@@ -116,7 +129,7 @@ describe('readPrompts', () => {
   });
 
   it('should read a .txt file with a single prompt', async () => {
-    jest.mocked(fs.readFileSync).mockReturnValue('Sample Prompt');
+    jest.mocked(fs.readFileSync).mockReturnValueOnce('Sample Prompt');
     jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
     await expect(readPrompts('prompts.txt')).resolves.toEqual([
       {
@@ -148,10 +161,14 @@ describe('readPrompts', () => {
   );
 
   it('should read multiple prompt files', async () => {
-    jest
-      .mocked(fs.readFileSync)
-      .mockReturnValueOnce('Test prompt 1\n---\nTest prompt 2')
-      .mockReturnValueOnce('Test prompt 3\n---\nTest prompt 4\n---\nTest prompt 5');
+    jest.mocked(fs.readFileSync).mockImplementation((filePath) => {
+      if (filePath.toString().endsWith('prompt1.txt')) {
+        return 'Test prompt 1\n---\nTest prompt 2';
+      } else if (filePath.toString().endsWith('prompt2.txt')) {
+        return 'Test prompt 3\n---\nTest prompt 4\n---\nTest prompt 5';
+      }
+      throw new Error(`Unexpected file path in test: ${filePath}`);
+    });
     jest.mocked(fs.statSync).mockReturnValue({ isDirectory: () => false } as fs.Stats);
     jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob.toString()]);
     await expect(readPrompts(['prompt1.txt', 'prompt2.txt'])).resolves.toEqual([
@@ -200,7 +217,7 @@ describe('readPrompts', () => {
       { name: 'How do I get to the moon?', role: 'user' },
     ]);
 
-    jest.mocked(fs.readFileSync).mockReturnValue(mockJsonContent);
+    jest.mocked(fs.readFileSync).mockReturnValueOnce(mockJsonContent);
     jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
 
     const filePath = 'file://path/to/mock.json';
@@ -226,7 +243,7 @@ describe('readPrompts', () => {
       ],
     ];
 
-    jest.mocked(fs.readFileSync).mockReturnValue(data.map((o) => JSON.stringify(o)).join('\n'));
+    jest.mocked(fs.readFileSync).mockReturnValueOnce(data.map((o) => JSON.stringify(o)).join('\n'));
     jest.mocked(fs.statSync).mockReturnValue({ isDirectory: () => false } as fs.Stats);
     await expect(readPrompts(['prompts.jsonl'])).resolves.toEqual([
       {
@@ -251,7 +268,7 @@ describe('readPrompts', () => {
           image_url:
             url: "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"
     `;
-    jest.mocked(fs.readFileSync).mockReturnValue(yamlContent);
+    jest.mocked(fs.readFileSync).mockReturnValueOnce(yamlContent);
     jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
     await expect(readPrompts('prompts.yaml')).resolves.toEqual([
       {
@@ -374,14 +391,14 @@ describe('readPrompts', () => {
   });
 
   it('should read a directory', async () => {
-    jest
-      .mocked(fs.statSync)
-      .mockReturnValue({
-        isDirectory: () => false,
-      } as fs.Stats)
-      .mockReturnValueOnce({
-        isDirectory: () => true,
-      } as fs.Stats);
+    jest.mocked(fs.statSync).mockImplementation((filePath) => {
+      if (filePath.toString().endsWith('prompt1.txt')) {
+        return { isDirectory: () => false } as fs.Stats;
+      } else if (filePath.toString().endsWith('prompts')) {
+        return { isDirectory: () => true } as fs.Stats;
+      }
+      throw new Error(`Unexpected file path in test: ${filePath}`);
+    });
     jest.mocked(globSync).mockImplementation(() => ['prompt1.txt', 'prompt2.txt']);
     // The mocked paths here are an artifact of our globSync mock. In a real
     // world setting we would get back `prompts/prompt1.txt` instead of `prompts/*/prompt1.txt`
@@ -425,6 +442,14 @@ describe('readPrompts', () => {
     ]);
     expect(fs.readFileSync).toHaveBeenCalledTimes(2);
     expect(fs.statSync).toHaveBeenCalledTimes(3);
+  });
+
+  it('should fall back to a string if maybeFilePath is true but a file does not exist', async () => {
+    jest.mocked(globSync).mockReturnValueOnce([]);
+    jest.mocked(maybeFilePath).mockReturnValueOnce(true);
+    await expect(readPrompts('non-existent-file.txt*')).resolves.toEqual([
+      { raw: 'non-existent-file.txt*', label: 'non-existent-file.txt*' },
+    ]);
   });
 });
 

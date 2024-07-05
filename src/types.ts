@@ -33,6 +33,7 @@ export interface CommandLineOptions {
   filterFailing?: string;
   filterFirstN?: string;
   filterPattern?: string;
+  filterProviders?: string;
   var?: Record<string, string>;
 
   generateSuggestions?: boolean;

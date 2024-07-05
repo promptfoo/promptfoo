@@ -103,7 +103,7 @@ export async function loadApiProvider(
     const scriptPath = providerPath.split(':')[1];
     ret = new ScriptCompletionProvider(scriptPath, providerOptions);
   } else if (providerPath.startsWith('python:')) {
-    const scriptPath = providerPath.split(':')[1];
+    const scriptPath = providerPath.split(':').slice(1).join(':');
     ret = new PythonProvider(scriptPath, providerOptions);
   } else if (providerPath.startsWith('openai:')) {
     // Load OpenAI module
@@ -236,7 +236,10 @@ export async function loadApiProvider(
       ret = new ReplicateImageProvider(modelName, providerOptions);
     } else {
       // By default, there is no model type.
-      ret = new ReplicateProvider(modelType + ':' + modelName, providerOptions);
+      ret = new ReplicateProvider(
+        modelName ? modelType + ':' + modelName : modelType,
+        providerOptions,
+      );
     }
   } else if (providerPath.startsWith('bam:')) {
     const splits = providerPath.split(':');
