@@ -1,5 +1,5 @@
 {
-  "$ref": "#/definitions/TestSuiteConfig",
+  "$ref": "#/definitions/UnifiedConfig",
   "$schema": "http://json-schema.org/draft-07/schema#",
   "definitions": {
     "ApiProvider": {
@@ -268,7 +268,7 @@
           "type": "string"
         },
         "test": {
-          "$ref": "#/definitions/AtomicTestCase%3Calias-1210021082-73341-73467-1210021082-0-215038%3Cstring%2C(string%7Cobject-src_types.ts-12480-12487-src_types.ts-12471-12487-src_types.ts-12457-12488-src_types.ts-12441-12489-src_types.ts-12433-12490-src_types.ts-12312-12492-src_types.ts-0-18966)%3E%3E"
+          "$ref": "#/definitions/AtomicTestCase%3Calias-1210021082-73341-73467-1210021082-0-215038%3Cstring%2C(string%7Cobject-src_types.ts-12480-12487-src_types.ts-12471-12487-src_types.ts-12457-12488-src_types.ts-12441-12489-src_types.ts-12433-12490-src_types.ts-12312-12492-src_types.ts-0-18967)%3E%3E"
         },
         "vars": {
           "additionalProperties": {
@@ -426,7 +426,7 @@
       },
       "type": "object"
     },
-    "AtomicTestCase<alias-1210021082-73341-73467-1210021082-0-215038<string,(string|object-src_types.ts-12480-12487-src_types.ts-12471-12487-src_types.ts-12457-12488-src_types.ts-12441-12489-src_types.ts-12433-12490-src_types.ts-12312-12492-src_types.ts-0-18966)>>": {
+    "AtomicTestCase<alias-1210021082-73341-73467-1210021082-0-215038<string,(string|object-src_types.ts-12480-12487-src_types.ts-12471-12487-src_types.ts-12457-12488-src_types.ts-12441-12489-src_types.ts-12433-12490-src_types.ts-12312-12492-src_types.ts-0-18967)>>": {
       "additionalProperties": false,
       "properties": {
         "assert": {
@@ -1296,9 +1296,120 @@
       },
       "type": "object"
     },
-    "TestSuiteConfig": {
+    "UnifiedConfig": {
       "additionalProperties": false,
       "properties": {
+        "commandLineOptions": {
+          "additionalProperties": false,
+          "properties": {
+            "assertions": {
+              "$ref": "#/definitions/FilePath"
+            },
+            "cache": {
+              "type": "boolean"
+            },
+            "config": {
+              "items": {
+                "$ref": "#/definitions/FilePath"
+              },
+              "type": "array"
+            },
+            "delay": {
+              "type": "string"
+            },
+            "envFile": {
+              "$ref": "#/definitions/FilePath"
+            },
+            "filterFailing": {
+              "type": "string"
+            },
+            "filterFirstN": {
+              "type": "string"
+            },
+            "filterPattern": {
+              "type": "string"
+            },
+            "filterProviders": {
+              "type": "string"
+            },
+            "generateSuggestions": {
+              "type": "boolean"
+            },
+            "grader": {
+              "type": "string"
+            },
+            "interactiveProviders": {
+              "type": "boolean"
+            },
+            "maxConcurrency": {
+              "type": "string"
+            },
+            "modelOutputs": {
+              "$ref": "#/definitions/FilePath"
+            },
+            "output": {
+              "items": {
+                "$ref": "#/definitions/FilePath"
+              },
+              "type": "array"
+            },
+            "progressBar": {
+              "type": "boolean"
+            },
+            "promptPrefix": {
+              "type": "string"
+            },
+            "promptSuffix": {
+              "type": "string"
+            },
+            "prompts": {
+              "items": {
+                "$ref": "#/definitions/FilePath"
+              },
+              "type": "array"
+            },
+            "providers": {
+              "items": {
+                "$ref": "#/definitions/FilePath"
+              },
+              "type": "array"
+            },
+            "repeat": {
+              "type": "string"
+            },
+            "share": {
+              "type": "boolean"
+            },
+            "table": {
+              "type": "boolean"
+            },
+            "tableCellMaxLength": {
+              "type": "string"
+            },
+            "tests": {
+              "$ref": "#/definitions/FilePath"
+            },
+            "var": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "vars": {
+              "$ref": "#/definitions/FilePath"
+            },
+            "verbose": {
+              "type": "boolean"
+            },
+            "watch": {
+              "type": "boolean"
+            },
+            "write": {
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        },
         "defaultTest": {
           "additionalProperties": false,
           "properties": {
@@ -1453,6 +1564,9 @@
         "env": {
           "$ref": "#/definitions/EnvOverrides"
         },
+        "evaluateOptions": {
+          "$ref": "#/definitions/EvaluateOptions"
+        },
         "metadata": {
           "type": "object"
         },
@@ -1576,7 +1690,7 @@
           ]
         }
       },
-      "required": ["providers", "prompts", "tests"],
+      "required": ["evaluateOptions", "prompts", "providers", "tests"],
       "type": "object"
     }
   }

@@ -1,4 +1,5 @@
 import $RefParser from '@apidevtools/json-schema-ref-parser';
+import Ajv from 'ajv';
 import { createHash } from 'crypto';
 import { stringify } from 'csv-stringify/sync';
 import dotenv from 'dotenv';
@@ -28,6 +29,7 @@ import { writeCsvToGoogleSheet } from './googleSheets';
 import logger from './logger';
 import { runDbMigrations } from './migrate';
 import { runPython } from './python/wrapper';
+import schema from './schema.json';
 import { readTests } from './testCases';
 import {
   type EvalWithMetadata,
@@ -767,6 +769,23 @@ export function cleanupOldFileResults(remaining = RESULT_HISTORY_LENGTH) {
   const sortedFilenames = listPreviousResultFilenames_fileSystem();
   for (let i = 0; i < sortedFilenames.length - remaining; i++) {
     fs.unlinkSync(path.join(getConfigDirectoryPath(), 'output', sortedFilenames[i]));
+  }
+}
+
+/**
+ * Validates a UnifiedConfig object against the schema defined in src/schema.json.
+ *
+ * @param {Partial<UnifiedConfig>} config - An array of UnifiedConfig objects to validate.
+ * @returns {boolean} - Returns true if all configs are valid, otherwise logs a warning.
+ */
+export function validateConfig(config: Partial<UnifiedConfig>): void {
+  const ajv = new Ajv();
+  const validate = ajv.compile(schema);
+  const valid = validate(config);
+  if (!valid) {
+    logger.warn(`Invalid config: ${JSON.stringify(validate.errors, null, 2)}`);
+  } else {
+    logger.warn('config valid');
   }
 }
 

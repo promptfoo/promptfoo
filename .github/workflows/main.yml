@@ -75,6 +75,28 @@ jobs:
       - name: Build
         run: npm run build
 
+  schema:
+    name: Validates that generated artifacts are up to date
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: Use Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+      - name: Install Dependencies
+        run: |
+          npm ci
+      - name: Generate schema
+        run: npx ts-json-schema-generator --path 'src/types.ts' --type 'TestSuiteConfig' -f tsconfig.json > src/schema.json
+      - name: Run Prettier
+        run: npx prettier --write schema.json
+      - name: Check for schema changes
+        run: |
+          git diff --exit-code schema.json
+
   style-check:
     name: Style Check
     runs-on: ubuntu-latest
