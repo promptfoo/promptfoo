@@ -1,5 +1,6 @@
 import type { fetchWithCache, getCache } from './cache';
 import type logger from './logger';
+import { z } from 'zod';
 
 export type FilePath = string;
 
@@ -162,15 +163,22 @@ export interface TokenUsage {
   cached?: number;
 }
 
-export interface ProviderResponse {
-  error?: string;
-  output?: string | object;
-  tokenUsage?: Partial<TokenUsage>;
-  cost?: number;
-  cached?: boolean;
-  logProbs?: number[];
-  metadata?: Record<string, any>;
-}
+const ProviderResponseSchema = z.object({
+  cached: z.boolean().optional(),
+  cost: z.number().optional(),
+  error: z.string().optional(),
+  logProbs: z.array(z.number()).optional(),
+  metadata: z.record(z.any()).optional(),
+  output: z.union([z.string(), z.any()]).optional(),
+  tokenUsage: z.object({
+    total: z.number().optional(),
+    prompt: z.number().optional(),
+    completion: z.number().optional(),
+    cached: z.number().optional(),
+  }).optional(),
+});
+
+export type ProviderResponse = z.infer<typeof ProviderResponseSchema>;
 
 export interface ProviderEmbeddingResponse {
   error?: string;
