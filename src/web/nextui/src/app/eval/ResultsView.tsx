@@ -159,7 +159,7 @@ export default function ResultsView({
         };
       }),
     ];
-  }, [head.vars, head.prompts]);
+  }, [head.vars, head.prompts, hasAnyDescriptions]);
 
   const [configModalOpen, setConfigModalOpen] = React.useState(false);
   const [viewSettingsModalOpen, setViewSettingsModalOpen] = React.useState(false);
