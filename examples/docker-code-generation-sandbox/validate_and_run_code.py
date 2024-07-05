@@ -1,6 +1,9 @@
 import epicbox
 import re
 
+# Replace with your preferred Docker image
+DOCKER_IMAGE = 'python:3.9-alpine'
+
 def get_assert(output, context):
     # Extract the Python function from the LLM output
     function_match = re.search(r'```python\s*\n(def\s+.*?)\n```', output, re.DOTALL)
@@ -12,7 +15,7 @@ def get_assert(output, context):
     # Configure epicbox
     epicbox.configure(
         profiles=[
-            epicbox.Profile('python', 'python:3.9-alpine')
+            epicbox.Profile('python', DOCKER_IMAGE)  
         ]
     )
 

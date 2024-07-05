@@ -21,7 +21,7 @@ Make sure you have the following installed:
 - epicbox (`pip install epicbox`)
 - urllib3 < 2 (`pip install 'urllib3<2'`)
 
-Pull the required Docker image:
+Pull the Docker image you want to use so it is available locally. In this tutorial, we'll use a generic Python image, but you can use a custom one if you want:
 
 ```
 docker pull python:3.9-alpine
@@ -36,7 +36,9 @@ Create a file named `promptfooconfig.yaml`:
 ```yaml
 prompts: code_generation_prompt.txt
 
-providers: openai:gpt-4o
+providers:
+  - ollama:chat:llama3:70b
+  - openai:gpt-4o
 
 tests:
   - vars:
@@ -64,7 +66,7 @@ defaultTest:
 This configuration does several important things:
 
 1. It tells promptfoo to use our prompt template
-1. We're testing GPT-4o (you can replace this with a [provider](/docs/providers) of your choice. Promptfoo supports both local and commercial providers).
+1. We're testing GPT-4o and Llama 3 (you can replace this with a [provider](/docs/providers) of your choice. Promptfoo supports both local and commercial providers).
 1. It defines coding problems. For each problem, it specifies the function name, a test input, and the expected output.
 1. It sets up a Python-based assertion that will run for each test case, validating the generated code.
 
@@ -92,6 +94,9 @@ Create a file named `validate_and_run_code.py`. This will be a [Python assertion
 import epicbox
 import re
 
+# Replace with your preferred Docker image
+DOCKER_IMAGE = 'python:3.9-alpine'
+
 def get_assert(output, context):
     # Extract the Python function from the LLM output
     function_match = re.search(r'```python\s*\n(def\s+.*?)\n```', output, re.DOTALL)
@@ -102,7 +107,7 @@ def get_assert(output, context):
 
     epicbox.configure(
         profiles=[
-            epicbox.Profile('python', 'python:3.9-alpine')
+            epicbox.Profile('python', DOCKER_IMAGE)
         ]
     )
 
@@ -146,7 +151,7 @@ promptfoo eval
 
 This command will:
 
-- Generate Python code for each problem using GPT-4o
+- Generate Python code for each problem using an LLM
 - Extract the generated code
 - Run it in the Docker sandbox environment
 - Determine whether the output is correct or not
