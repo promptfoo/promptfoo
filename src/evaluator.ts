@@ -725,9 +725,9 @@ class Evaluator {
       // Bookkeeping for table
       let resultText: string | undefined;
       const outputTextDisplay =
-        typeof row.response?.output === 'object'
+        (typeof row.response?.output === 'object'
           ? JSON.stringify(row.response.output)
-          : row.response?.output || row.error || '';
+          : row.response?.output || row.error || '') as string;
       if (isTest) {
         if (row.success) {
           resultText = `${outputTextDisplay || row.error || ''}`;
