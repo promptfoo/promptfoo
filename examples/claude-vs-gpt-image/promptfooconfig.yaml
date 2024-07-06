@@ -1,0 +1,19 @@
+description: 'Claude vs GPT Image Analysis'
+
+prompts:
+  - ./prompt.py:function_name
+  # - file://prompt.js:another_function_name
+
+providers:
+  - id: bedrock:anthropic.claude-3-sonnet-20240229-v1:0
+  - id: anthropic:messages:claude-3-5-sonnet-20240620
+  - id: openai:gpt-4o
+    label: custom label for gpt-4o
+
+tests:
+  - vars:
+      image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/0/0d/Great_Wave_off_Kanagawa2.jpg/640px-Great_Wave_off_Kanagawa2.jpg
+
+assert:
+  - type: icontains
+    value: The Great Wave off Kanagawa
