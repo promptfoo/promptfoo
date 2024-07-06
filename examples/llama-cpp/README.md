@@ -21,18 +21,18 @@ You can check to see if it's running by going to [http://localhost:8080](http://
 2. Run the evaluation:
 
    ```sh
-   promptfoo eval
+   npx promptfoo@latest eval
    ```
 
 3. View the results:
 
    ```sh
-   promptfoo view
+   npx promptfoo@latest view
    ```
 
 ## Note on Supported Models
 
-`llama.cpp` supports many models, which can be converted to the GGUF format. We recommend downloading models from [Hugging Face](https://huggingface.co/models?library=gguf). Note that you may need to authenticate with your Hugging Face account in their CLI to download models.
+`llama.cpp` supports many models, which can be converted to the GGUF format. We recommend downloading models from [Hugging Face](https://huggingface.co/models?library=gguf). Note that you may need to [authenticate with your Hugging Face account](https://huggingface.co/docs/huggingface_hub/en/guides/cli) in their CLI to download models.
 
 ## Note on Prompt Formatting
 
