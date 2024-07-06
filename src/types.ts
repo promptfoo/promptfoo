@@ -232,17 +232,27 @@ export type ProviderType = 'embedding' | 'classification' | 'text' | 'moderation
 
 export type ProviderTypeMap = Partial<Record<ProviderType, string | ProviderOptions | ApiProvider>>;
 
-export interface GradingConfig {
-  rubricPrompt?: string | string[];
-  provider?: string | ProviderOptions | ApiProvider | ProviderTypeMap;
-  factuality?: {
-    subset?: number;
-    superset?: number;
-    agree?: number;
-    disagree?: number;
-    differButFactual?: number;
-  };
-}
+const GradingConfigSchema = z.object({
+  rubricPrompt: z.union([z.string(), z.array(z.string())]).optional(),
+  provider: z
+    .union([
+      z.string(),
+      z.any(),
+      z.record(z.string(), z.union([z.string(), z.any()])).optional(),
+    ])
+    .optional(),
+  factuality: z
+    .object({
+      subset: z.number().optional(),
+      superset: z.number().optional(),
+      agree: z.number().optional(),
+      disagree: z.number().optional(),
+      differButFactual: z.number().optional(),
+    })
+    .optional(),
+});
+
+export type GradingConfig = z.infer<typeof GradingConfigSchema>;
 
 export interface PromptConfig {
   prefix?: string;
@@ -436,45 +446,48 @@ export function isGradingResult(result: any): result is GradingResult {
   );
 }
 
-type BaseAssertionTypes =
-  | 'human'
-  | 'equals'
-  | 'contains'
-  | 'icontains'
-  | 'contains-all'
-  | 'contains-any'
-  | 'icontains-all'
-  | 'icontains-any'
-  | 'starts-with'
-  | 'regex'
-  | 'is-json'
-  | 'is-sql'
-  | 'contains-json'
-  | 'contains-sql'
-  | 'javascript'
-  | 'python'
-  | 'similar'
-  | 'answer-relevance'
-  | 'context-faithfulness'
-  | 'context-recall'
-  | 'context-relevance'
-  | 'llm-rubric'
-  | 'model-graded-closedqa'
-  | 'factuality'
-  | 'model-graded-factuality'
-  | 'webhook'
-  | 'rouge-n'
-  | 'rouge-s'
-  | 'rouge-l'
-  | 'levenshtein'
-  | 'is-valid-openai-function-call'
-  | 'is-valid-openai-tools-call'
-  | 'latency'
-  | 'perplexity'
-  | 'perplexity-score'
-  | 'cost'
-  | 'select-best'
-  | 'moderation';
+export const BaseAssertionTypesSchema = z.enum([
+  'answer-relevance',
+  'contains-all',
+  'contains-any',
+  'contains-json',
+  'contains-sql',
+  'contains',
+  'context-faithfulness',
+  'context-recall',
+  'context-relevance',
+  'cost',
+  'equals',
+  'factuality',
+  'human',
+  'icontains-all',
+  'icontains-any',
+  'icontains',
+  'is-json',
+  'is-sql',
+  'is-valid-openai-function-call',
+  'is-valid-openai-tools-call',
+  'javascript',
+  'latency',
+  'levenshtein',
+  'llm-rubric',
+  'model-graded-closedqa',
+  'model-graded-factuality',
+  'moderation',
+  'perplexity-score',
+  'perplexity',
+  'python',
+  'regex',
+  'rouge-l',
+  'rouge-n',
+  'rouge-s',
+  'select-best',
+  'similar',
+  'starts-with',
+  'webhook',
+]);
+
+export type BaseAssertionTypes = z.infer<typeof BaseAssertionTypesSchema>;
 
 type NotPrefixed<T extends string> = `not-${T}`;
 
