@@ -13,7 +13,8 @@ providers:
 tests:
   - vars:
       image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/0/0d/Great_Wave_off_Kanagawa2.jpg/640px-Great_Wave_off_Kanagawa2.jpg
+      label: Great Wave off Kanagawa
 
 assert:
   - type: icontains
-    value: The Great Wave off Kanagawa
+    value: '{{label}}'
