@@ -4,6 +4,7 @@ import logger from '../../logger';
 import { runPython } from '../../python/wrapper';
 import type { Prompt, ApiProvider } from '../../types';
 import { safeJsonStringify } from '../../util';
+import invariant from 'tiny-invariant';
 
 /**
  * Python prompt function. Runs a specific function from the python file.
@@ -77,8 +78,15 @@ export function processPythonFile(
           ? `${filePath}:${functionName}`
           : `${filePath}: ${fileContent}`,
       function: functionName
-        ? (...args) => pythonPromptFunction(filePath, functionName, ...args)
-        : (...args) => pythonPromptFunctionLegacy(filePath, ...args),
+        ? (context) => {
+          console.warn('pythonPromptFunction context', context);
+          invariant(context.provider , 'provider is required');
+          if (typeof context.provider.id === 'function') {
+            context.provider.id = context.provider?.id();
+          }
+          return pythonPromptFunction(filePath, functionName, context);
+        }
+        : (context) => pythonPromptFunctionLegacy(filePath, context),
     },
   ];
 }

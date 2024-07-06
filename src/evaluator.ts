@@ -199,6 +199,10 @@ export async function renderPrompt(
 
   // Apply prompt functions
   if (prompt.function) {
+    console.warn('-----------------Running prompt function');
+    console.warn('vars', vars);
+    console.warn('provider', provider);
+    console.warn('provider.id', provider?.id);
     const result = await prompt.function({ vars, provider });
     if (typeof result === 'string') {
       basePrompt = result;
@@ -299,7 +303,8 @@ class Evaluator {
 
     // Set up the special _conversation variable
     const vars = test.vars || {};
-    const conversationKey = `${provider.label || provider.id()}:${prompt.id}`;
+    const providerId = typeof provider.id === 'function' ? provider.id() : provider.id;
+    const conversationKey = `${provider.label || providerId}:${prompt.id}`;
     const usesConversation = prompt.raw.includes('_conversation');
     if (
       !process.env.PROMPTFOO_DISABLE_CONVERSATION_VAR &&
@@ -322,7 +327,7 @@ class Evaluator {
 
     const setup = {
       provider: {
-        id: provider.id(),
+        id: typeof provider.id === 'function' ? provider.id() : provider.id,
         label: provider.label,
       },
       prompt: {
@@ -830,7 +835,7 @@ class Evaluator {
         const threadIndex = index % concurrency;
         const progressbar = multiProgressBars[threadIndex];
         progressbar.increment({
-          provider: evalStep.provider.label || evalStep.provider.id(),
+          provider: evalStep.provider.label || typeof evalStep.provider.id === 'function' ? evalStep.provider.id() : evalStep.provider.id,
           prompt: evalStep.prompt.raw.slice(0, 10).replace(/\n/g, ' '),
           vars: Object.entries(evalStep.test.vars || {})
             .map(([k, v]) => `${k}=${v}`)
@@ -1016,7 +1021,7 @@ class Evaluator {
       providerPrefixes: Array.from(
         new Set(
           testSuite.providers.map((p) => {
-            const idParts = p.id().split(':');
+            const idParts = typeof p.id === 'function' ? p.id().split(':') : p.id.split(':');
             return idParts.length > 1 ? idParts[0] : 'unknown';
           }),
         ),
