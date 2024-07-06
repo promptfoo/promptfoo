@@ -358,7 +358,6 @@ export async function loadApiProvider(
       : path.join(basePath || process.cwd(), providerPath);
     const CustomApiProvider = await importModule(modulePath);
     ret = new CustomApiProvider(options);
-    ret.label = ret.label || options.label;
   }
   ret.transform = options.transform;
   ret.delay = options.delay;
