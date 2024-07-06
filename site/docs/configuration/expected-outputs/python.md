@@ -100,7 +100,7 @@ def get_assert(output: str, context) -> Union[bool, float, Dict[str, Any]]:
     }
 ```
 
-You can also return nested metrics and assertions:
+You can also return nested metrics and assertions via a `GradingResult` object:
 
 ```py
 {
@@ -121,7 +121,7 @@ You can also return nested metrics and assertions:
 
 ### GradingResult types
 
-Here's a Python type definition you can use for the `GradingResult` object:
+Here's a Python type definition you can use for the [`GradingResult`](/docs/configuration/reference/#gradingresult) object:
 
 ```py
 @dataclass
