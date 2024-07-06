@@ -86,6 +86,10 @@ prompts:
   - file:///root/path/to/prompt.py:prompt2
 ```
 
+:::tip
+Check them into version control. This approach helps in tracking changes, collaboration, and ensuring consistency across different environments.
+:::
+
 Example of multiple prompt files:
 
 ```txt title=prompt1.txt
@@ -117,7 +121,7 @@ If you have only one text file, you can include multiple prompts in the file, se
 
 Example of a single prompt file with multiple prompts (`prompts.txt`):
 
-```
+```text title=prompts.txt
 Translate the following text to French: "{{name}}: {{text}}"
 ---
 Translate the following text to German: "{{name}}: {{text}}"
@@ -234,8 +238,8 @@ if __name__ == "__main__":
 To verify that your function is producing the correct prompt:
 
 1. Run `promptfoo view`
-1. Check that the table header contains your function code.
-1. Hover over a particular output that you want to investigate and click the Magnifying Glass (🔎) to view the final prompt in the details pane.
+2. Check that the table header contains your function code.
+3. Hover over a particular output that you want to investigate and click the Magnifying Glass (🔎) to view the final prompt in the details pane.
 
 :::info
 By default, promptfoo runs the `python` executable in your shell.
