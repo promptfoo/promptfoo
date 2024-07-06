@@ -1,6 +1,6 @@
 def get_assert(output, context):
-    print('Prompt:', context['prompt'])
-    print('Vars', context['vars']['topic'])
+    print("Prompt:", context["prompt"])
+    print("Vars", context["vars"]["topic"])
 
     # You can return a bool...
     # return 'bananas' in output.lower()
