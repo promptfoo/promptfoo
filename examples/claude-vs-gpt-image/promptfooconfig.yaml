@@ -1,7 +1,7 @@
 description: 'Claude vs GPT Image Analysis'
 
 prompts:
-  # - ./prompt.py:function_name
+  - ./prompt.py:function_name
   - ./prompt.js:another_function_name
 
 providers:
