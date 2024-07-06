@@ -56,7 +56,6 @@ import {
   readLatestResults,
   setConfigDirectoryPath,
   setupEnv,
-  validateConfig,
   writeMultipleOutputs,
   writeOutput,
   writeResultsToDatabase,
@@ -72,7 +71,6 @@ async function resolveConfigs(
   const configPaths = cmdObj.config;
   if (configPaths) {
     fileConfig = await readConfigs(configPaths);
-    validateConfig(fileConfig)
   }
 
   // Standalone assertion mode
@@ -429,7 +427,6 @@ async function main() {
             },
             defaultConfig,
           );
-          validateConfig(resolved.config);
           testSuite = resolved.testSuite;
         } else {
           throw new Error('Could not find config file. Please use `--config`');
@@ -564,7 +561,6 @@ async function main() {
             },
             defaultConfig,
           );
-          validateConfig(resolved.config);
           testSuite = resolved.testSuite;
         } else {
           throw new Error('Could not find config file. Please use `--config`');
@@ -761,7 +757,6 @@ async function main() {
         }
 
         ({ config, testSuite, basePath } = await resolveConfigs(cmdObj, defaultConfig));
-        validateConfig(config);
         cliState.basePath = basePath;
 
         let maxConcurrency = parseInt(cmdObj.maxConcurrency || '', 10);

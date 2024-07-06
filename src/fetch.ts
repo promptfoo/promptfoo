@@ -25,7 +25,7 @@ export function fetchWithTimeout(
 
     fetchWithProxy(url, {
       ...options,
-      signal: signal as never,
+      signal: signal as never, // AbortSignal type is not exported by node-fetch 2.x
     })
       .then((response) => {
         clearTimeout(timeoutId);
