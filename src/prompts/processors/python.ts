@@ -1,10 +1,10 @@
 import * as fs from 'fs';
 import { PythonShell, Options as PythonShellOptions } from 'python-shell';
+import invariant from 'tiny-invariant';
 import logger from '../../logger';
 import { runPython } from '../../python/wrapper';
 import type { Prompt, ApiProvider } from '../../types';
 import { safeJsonStringify } from '../../util';
-import invariant from 'tiny-invariant';
 
 /**
  * Python prompt function. Runs a specific function from the python file.
@@ -79,13 +79,13 @@ export function processPythonFile(
           : `${filePath}: ${fileContent}`,
       function: functionName
         ? (context) => {
-          console.warn('pythonPromptFunction context', context);
-          invariant(context.provider , 'provider is required');
-          if (typeof context.provider.id === 'function') {
-            context.provider.id = context.provider?.id();
+            console.warn('pythonPromptFunction context', context);
+            invariant(context.provider, 'provider is required');
+            if (typeof context.provider.id === 'function') {
+              context.provider.id = context.provider?.id();
+            }
+            return pythonPromptFunction(filePath, functionName, context);
           }
-          return pythonPromptFunction(filePath, functionName, context);
-        }
         : (context) => pythonPromptFunctionLegacy(filePath, context),
     },
   ];

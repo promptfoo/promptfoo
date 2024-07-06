@@ -171,18 +171,20 @@ To specify a prompt function in `promptfooconfig.yaml`, reference the file direc
 prompts: ['prompt.js', 'prompt.py']
 ```
 
-In the prompt function, you can access the test case variables through the `vars` object. The function should return a string or an object that represents the prompt.
+In the prompt function, you can access the test case variables and provider information via the context. The function will have access to a `vars` object and `provider` object. Having access to the provider object allows you to dynamically generate prompts for different providers with different formats.
+
+The function should return a string or an object that represents the prompt.
 
 #### Examples
 
 A Javascript prompt function, `prompt.js`:
 
 ```javascript title=prompt.js
-module.exports = async function ({ vars }) {
+module.exports = async function ({ vars, provider }) {
   return [
     {
       role: 'system',
-      content: `You're an angry pirate. Be concise and stay in character.`,
+      content: `You're an angry pirate named ${provider.label || provider.id}. Be concise and stay in character.`,
     },
     {
       role: 'user',
@@ -201,7 +203,7 @@ module.exports.prompt1 = async function ({ vars, provider }) {
   return [
     {
       role: 'system',
-      content: `You're an angry pirate. Be concise and stay in character.`,
+      content: `You're an angry pirate named ${provider.label || provider.id}. Be concise and stay in character.`,
     },
     {
       role: 'user',
