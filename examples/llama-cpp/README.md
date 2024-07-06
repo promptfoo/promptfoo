@@ -1,16 +1,40 @@
+# Getting started with Promptfoo and llama.cpp
 
+## Install llama.cpp
 
+To get started, install `llama.cpp` following the [instructions on their GitHub page](https://github.com/ggerganov/llama.cpp).
 
-Install llama.cpp https://github.com/ggerganov/llama.cpp instructions can be found here 
+## Starting the Server
 
-llama.cpp supports many models and can be converted to gguf format. We recommend downloading models from hugging face https://huggingface.co/models?library=gguf Note that you may have to authenticate with your hugging face account in their CLI to download models.
+To get the server started, use the following command:
 
-Get the server started with
-
-```
+```bash
 ./llama-server -m your_model.gguf --port 8080
 ```
 
-# Basic web UI can be accessed via browser: http://localhost:8080
+You can check to see if it's running by going to [http://localhost:8080](http://localhost:8080).
 
-Note that we do not make any effort to format the prompts in a way that is compatible with llama.cpp. We simply pass the prompt as is. Therefore you may wish to add `[INST]` and `[/INST]` to the prompt to make it compatible with llama.cpp, etc. You should consult the docs for the specific model you are using to ensure compatibility with it's interface.
+## Configuring Promptfoo
+
+1. Edit the text files in the `prompts/` directory and make any necessary changes to `promptfooconfig.yaml`.
+
+2. Run the evaluation:
+
+   ```sh
+   promptfoo eval
+   ```
+
+3. View the results:
+
+   ```sh
+   promptfoo view
+   ```
+
+## Note on Supported Models
+
+`llama.cpp` supports many models, which can be converted to the GGUF format. We recommend downloading models from [Hugging Face](https://huggingface.co/models?library=gguf). Note that you may need to authenticate with your Hugging Face account in their CLI to download models.
+
+## Note on Prompt Formatting
+
+We do not make any effort to format the prompts in a way that is compatible with `llama.cpp`. We simply pass the prompt as is. Therefore, you may wish to add `[INST]` and `[/INST]` to the prompt to make it compatible with `llama.cpp`, etc. You should consult the documentation for the specific model you are using to ensure compatibility with its interface. We provide a few different formatting examples to illustrate the different ways you can format your prompts.
+

@@ -1,5 +1,6 @@
 providers:
   - id: llama
+    label: llama3-8b
     config:
       baseUrl: http://localhost:8080
 
@@ -16,11 +17,9 @@ prompts:
   - "# Context: You are a social media expert known for viral content.\n# Human: Create a funny tweet about {{topic}}\n# AI:"
 
 tests:
-  - description: "Test text summarization"
-    vars:
+  - vars:
       topic: "San Francisco"
     assert:
       - type: icontains
         value: "San Francisco"
       - type: answer-relevance
-        
