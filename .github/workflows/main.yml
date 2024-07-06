@@ -105,6 +105,26 @@ jobs:
         run: |
           npm run format:check
 
+  python:
+    name: Check Python
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Use Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.12
+
+      - name: Install Dependencies
+        run: |
+          pip install ruff
+
+      - name: Check Formatting
+        run: |
+          ruff check .
+
   docs:
     name: Build Docs
     runs-on: ubuntu-latest
