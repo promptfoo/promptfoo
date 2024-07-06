@@ -1024,7 +1024,7 @@ class Evaluator {
       providerPrefixes: Array.from(
         new Set(
           testSuite.providers.map((p) => {
-            const idParts = typeof p.id === 'function' ? p.id().split(':') : p.id.split(':');
+            const idParts = p.id().split(':');
             return idParts.length > 1 ? idParts[0] : 'unknown';
           }),
         ),
