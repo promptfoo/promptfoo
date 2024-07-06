@@ -75,7 +75,7 @@ export async function loadApiProvider(
   const { options = {}, basePath, env } = context;
   const providerOptions: ProviderOptions = {
     // Hack(ian): Override id with label. This makes it so that debug and display info, which rely on id, will use the label instead.
-    id: options.label || options.id,
+    id: '------' + options.label || options.id,
     config: {
       ...options.config,
       basePath,
@@ -361,7 +361,6 @@ export async function loadApiProvider(
     ret = new CustomApiProvider(options);
     ret.label = ret.label || options.label;
   }
-
   ret.transform = options.transform;
   ret.delay = options.delay;
   return ret;

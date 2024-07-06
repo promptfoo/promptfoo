@@ -18,7 +18,10 @@ export const pythonPromptFunction = async (
   functionName: string,
   context: {
     vars: Record<string, string | object>;
-    provider?: ApiProvider;
+    provider?: {
+      id: string;
+      label?: string;
+    };
   },
 ) => {
   return runPython(filePath, functionName, [
@@ -42,7 +45,10 @@ export const pythonPromptFunctionLegacy = async (
   filePath: string,
   context: {
     vars: Record<string, string | object>;
-    provider?: ApiProvider;
+    provider?: {
+      id: string;
+      label?: string;
+    };
   },
 ) => {
   const options: PythonShellOptions = {
@@ -78,15 +84,32 @@ export function processPythonFile(
           ? `${filePath}:${functionName}`
           : `${filePath}: ${fileContent}`,
       function: functionName
-        ? (context) => {
-            console.warn('pythonPromptFunction context', context);
-            invariant(context.provider, 'provider is required');
-            if (typeof context.provider.id === 'function') {
-              context.provider.id = context.provider?.id();
-            }
-            return pythonPromptFunction(filePath, functionName, context);
+        ? (context: { vars: Record<string, string | object>; provider?: ApiProvider }) => {
+            invariant(context?.provider?.id, 'provider.id is required');
+            return pythonPromptFunction(filePath, functionName, {
+              vars: context.vars,
+              provider: {
+                id:
+                  typeof context.provider?.id === 'function'
+                    ? context.provider?.id()
+                    : context.provider?.id,
+                label: context.provider?.label,
+              },
+            });
           }
-        : (context) => pythonPromptFunctionLegacy(filePath, context),
+        : (context: { vars: Record<string, string | object>; provider?: ApiProvider }) => {
+            invariant(context?.provider?.id, 'provider.id is required');
+            return pythonPromptFunctionLegacy(filePath, {
+              vars: context.vars,
+              provider: {
+                id:
+                  typeof context.provider?.id === 'function'
+                    ? context.provider?.id()
+                    : context.provider?.id,
+                label: context.provider?.label,
+              },
+            });
+          },
     },
   ];
 }

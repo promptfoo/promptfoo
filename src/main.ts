@@ -165,6 +165,10 @@ async function resolveConfigs(
     env: config.env,
     basePath,
   });
+  console.warn('parsedProviders', parsedProviders);
+  for (const provider of parsedProviders) {
+    console.warn('provider', provider?.id());
+  }
   const parsedTests: TestCase[] = await readTests(
     config.tests || [],
     cmdObj.tests ? undefined : basePath,
