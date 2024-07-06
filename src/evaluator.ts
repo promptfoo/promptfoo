@@ -199,10 +199,6 @@ export async function renderPrompt(
 
   // Apply prompt functions
   if (prompt.function) {
-    console.warn('-----------------Running prompt function');
-    console.warn('vars', vars);
-    console.warn('provider', provider);
-    console.warn('provider.id', provider?.id);
     const result = await prompt.function({ vars, provider });
     if (typeof result === 'string') {
       basePrompt = result;
