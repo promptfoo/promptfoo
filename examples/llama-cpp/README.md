@@ -37,4 +37,3 @@ You can check to see if it's running by going to [http://localhost:8080](http://
 ## Note on Prompt Formatting
 
 We do not make any effort to format the prompts in a way that is compatible with `llama.cpp`. We simply pass the prompt as is. Therefore, you may wish to add `[INST]` and `[/INST]` to the prompt to make it compatible with `llama.cpp`, etc. You should consult the documentation for the specific model you are using to ensure compatibility with its interface. We provide a few different formatting examples to illustrate the different ways you can format your prompts.
-

@@ -5,10 +5,10 @@ providers:
       baseUrl: http://localhost:8080
 
 prompts:
-  - "Write a funny tweet about {{topic}}"
+  - 'Write a funny tweet about {{topic}}'
   - "Human: Write a funny tweet about {{topic}}\nAI:"
   - "Q: Create a humorous tweet about {{topic}}\nA:"
-  - "[INST] Write a funny tweet about {{topic}} [/INST]"
+  - '[INST] Write a funny tweet about {{topic}} [/INST]'
   - "<human>: Craft a witty tweet about {{topic}}\n<assistant>:"
   - "### Instruction: Compose a clever tweet on the topic of {{topic}}\n### Response:"
   - "System: You are a witty AI.\nUser: Tweet about {{topic}}\nAssistant:"
@@ -18,8 +18,8 @@ prompts:
 
 tests:
   - vars:
-      topic: "San Francisco"
+      topic: 'San Francisco'
     assert:
       - type: icontains
-        value: "San Francisco"
+        value: 'San Francisco'
       - type: answer-relevance
