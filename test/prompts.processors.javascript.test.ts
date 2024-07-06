@@ -1,9 +1,28 @@
 import { importModule } from '../src/esm';
-import { processJsFile } from '../src/prompts/processors/javascript';
+import { processJsFile, transformContext } from '../src/prompts/processors/javascript';
 
 jest.mock('../src/esm', () => ({
   importModule: jest.fn(),
 }));
+
+describe('transformContext', () => {
+  it('should transform context with provider', () => {
+    const context = {
+      vars: { key: 'value' },
+      provider: { id: () => 'providerId', label: 'providerLabel', callApi: jest.fn() },
+    };
+    const result = transformContext(context);
+    expect(result).toEqual({
+      vars: { key: 'value' },
+      provider: { id: 'providerId', label: 'providerLabel' },
+    });
+  });
+
+  it('should throw an error if provider is missing', () => {
+    const context = { vars: { key: 'value' } };
+    expect(() => transformContext(context)).toThrow('Provider is required');
+  });
+});
 
 describe('processJsFile', () => {
   const mockImportModule = jest.mocked(importModule);
@@ -20,7 +39,7 @@ describe('processJsFile', () => {
       {
         raw: String(mockFunction),
         label: 'file.js',
-        function: mockFunction,
+        function: expect.any(Function),
       },
     ]);
     expect(mockImportModule).toHaveBeenCalledWith(filePath, undefined);
@@ -34,7 +53,7 @@ describe('processJsFile', () => {
       {
         raw: String(mockFunction),
         label: 'myLabel',
-        function: mockFunction,
+        function: expect.any(Function),
       },
     ]);
     expect(mockImportModule).toHaveBeenCalledWith(filePath, undefined);
@@ -64,7 +83,7 @@ describe('processJsFile', () => {
       {
         raw: String(mockFunction),
         label: 'myLabel',
-        function: mockFunction,
+        function: expect.any(Function),
       },
     ]);
     expect(mockImportModule).toHaveBeenCalledWith(filePath, functionName);

@@ -2,7 +2,7 @@ import invariant from 'tiny-invariant';
 import { importModule } from '../../esm';
 import { ApiProvider, Prompt, PromptFunctionContext } from '../../types';
 
-const transformContext = (context: {
+export const transformContext = (context: {
   vars: Record<string, string | object>;
   provider?: ApiProvider;
 }): PromptFunctionContext => {
