@@ -1,6 +1,6 @@
 def get_assert(output, context):
-    print('Prompt:', context['prompt'])
-    print('Vars', context['vars']['topic'])
+    print("Prompt:", context["prompt"])
+    print("Vars", context["vars"]["topic"])
 
     # You can return a bool...
     # return 'bananas' in output.lower()
@@ -10,7 +10,7 @@ def get_assert(output, context):
 
     # Or an entire grading result...
     return {
-        'pass': 'bananas' in output.lower(),
-        'score': 0.5,
-        'reason': 'Contains banana',
+        "pass": "bananas" in output.lower(),
+        "score": 0.5,
+        "reason": "Contains banana",
     }
