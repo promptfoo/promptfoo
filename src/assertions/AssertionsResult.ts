@@ -1,3 +1,4 @@
+import invariant from 'tiny-invariant';
 import { AssertionSet, GradingResult } from '../types';
 
 const DEFAULT_TOKENS_USED = {
@@ -69,9 +70,9 @@ export class AssertionsResult {
     }
 
     if (result.tokensUsed) {
-      this.tokensUsed.total += result.tokensUsed.total;
-      this.tokensUsed.prompt += result.tokensUsed.prompt;
-      this.tokensUsed.completion += result.tokensUsed.completion;
+      this.tokensUsed.total += result.tokensUsed.total || 0;
+      this.tokensUsed.prompt += result.tokensUsed.prompt || 0;
+      this.tokensUsed.completion += result.tokensUsed.completion || 0;
     }
 
     if (result.pass) {

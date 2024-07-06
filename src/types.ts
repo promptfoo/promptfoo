@@ -1,6 +1,6 @@
+import { z } from 'zod';
 import type { fetchWithCache, getCache } from './cache';
 import type logger from './logger';
-import { z } from 'zod';
 
 export type FilePath = string;
 
@@ -156,12 +156,14 @@ export interface ApiModerationProvider extends ApiProvider {
   callModerationApi: (prompt: string, response: string) => Promise<ProviderModerationResponse>;
 }
 
-export interface TokenUsage {
-  total: number;
-  prompt: number;
-  completion: number;
-  cached?: number;
-}
+const TokenUsageSchema = z.object({
+  cached: z.number().optional(),
+  completion: z.number().optional(),
+  prompt: z.number().optional(),
+  total: z.number().optional(),
+});
+
+export type TokenUsage = z.infer<typeof TokenUsageSchema>;
 
 const ProviderResponseSchema = z.object({
   cached: z.boolean().optional(),
@@ -170,12 +172,7 @@ const ProviderResponseSchema = z.object({
   logProbs: z.array(z.number()).optional(),
   metadata: z.record(z.any()).optional(),
   output: z.union([z.string(), z.any()]).optional(),
-  tokenUsage: z.object({
-    total: z.number().optional(),
-    prompt: z.number().optional(),
-    completion: z.number().optional(),
-    cached: z.number().optional(),
-  }).optional(),
+  tokenUsage: TokenUsageSchema.optional(),
 });
 
 export type ProviderResponse = z.infer<typeof ProviderResponseSchema>;

@@ -430,9 +430,9 @@ class Evaluator {
         ret.score = checkResult.score;
         ret.namedScores = checkResult.namedScores || {};
         if (checkResult.tokensUsed) {
-          this.stats.tokenUsage.total += checkResult.tokensUsed.total;
-          this.stats.tokenUsage.prompt += checkResult.tokensUsed.prompt;
-          this.stats.tokenUsage.completion += checkResult.tokensUsed.completion;
+          this.stats.tokenUsage.total += checkResult.tokensUsed.total || 0;
+          this.stats.tokenUsage.prompt += checkResult.tokensUsed.prompt || 0;
+          this.stats.tokenUsage.completion += checkResult.tokensUsed.completion || 0;
         }
         ret.response = processedResponse;
         ret.gradingResult = checkResult;
@@ -724,10 +724,11 @@ class Evaluator {
 
       // Bookkeeping for table
       let resultText: string | undefined;
-      const outputTextDisplay =
-        (typeof row.response?.output === 'object'
+      const outputTextDisplay = (
+        typeof row.response?.output === 'object'
           ? JSON.stringify(row.response.output)
-          : row.response?.output || row.error || '') as string;
+          : row.response?.output || row.error || ''
+      ) as string;
       if (isTest) {
         if (row.success) {
           resultText = `${outputTextDisplay || row.error || ''}`;
@@ -807,9 +808,12 @@ class Evaluator {
       metrics.totalLatencyMs += row.latencyMs || 0;
       metrics.tokenUsage.cached =
         (metrics.tokenUsage.cached || 0) + (row.response?.tokenUsage?.cached || 0);
-      metrics.tokenUsage.completion += row.response?.tokenUsage?.completion || 0;
-      metrics.tokenUsage.prompt += row.response?.tokenUsage?.prompt || 0;
-      metrics.tokenUsage.total += row.response?.tokenUsage?.total || 0;
+      metrics.tokenUsage.completion =
+        (metrics.tokenUsage.completion || 0) + (row.response?.tokenUsage?.completion || 0);
+      metrics.tokenUsage.prompt =
+        (metrics.tokenUsage.prompt || 0) + (row.response?.tokenUsage?.prompt || 0);
+      metrics.tokenUsage.total =
+        (metrics.tokenUsage.total || 0) + (row.response?.tokenUsage?.total || 0);
       metrics.cost += row.cost || 0;
     };
 
@@ -958,9 +962,19 @@ class Evaluator {
               prompt: 0,
               completion: 0,
             };
-            output.gradingResult.tokensUsed.total += gradingResult.tokensUsed?.total || 0;
-            output.gradingResult.tokensUsed.prompt += gradingResult.tokensUsed?.prompt || 0;
-            output.gradingResult.tokensUsed.completion += gradingResult.tokensUsed?.completion || 0;
+            output.gradingResult.tokensUsed = output.gradingResult.tokensUsed || {
+              total: 0,
+              prompt: 0,
+              completion: 0,
+            };
+            output.gradingResult.tokensUsed.total =
+              (output.gradingResult.tokensUsed.total || 0) + (gradingResult.tokensUsed?.total || 0);
+            output.gradingResult.tokensUsed.prompt =
+              (output.gradingResult.tokensUsed.prompt || 0) +
+              (gradingResult.tokensUsed?.prompt || 0);
+            output.gradingResult.tokensUsed.completion =
+              (output.gradingResult.tokensUsed.completion || 0) +
+              (gradingResult.tokensUsed?.completion || 0);
             output.pass = output.gradingResult.pass =
               output.gradingResult.pass && gradingResult.pass;
             if (!gradingResult.pass) {
