@@ -38,12 +38,13 @@ import { createShareableUrl } from './share';
 import { generateTable } from './table';
 import telemetry from './telemetry';
 import { readTest, readTests, synthesizeFromTestSuite } from './testCases';
-import type {
-  CommandLineOptions,
-  EvaluateOptions,
-  TestCase,
-  TestSuite,
-  UnifiedConfig,
+import {
+  ProviderSchema,
+  type CommandLineOptions,
+  type EvaluateOptions,
+  type TestCase,
+  type TestSuite,
+  type UnifiedConfig,
 } from './types';
 import { checkForUpdates } from './updates';
 import {
@@ -130,11 +131,37 @@ async function resolveConfigs(
     logger.error(chalk.red('You must provide at least 1 prompt'));
     process.exit(1);
   }
+
+  // Convert providers to array if not already an array
+  if (config.providers && typeof config.providers === 'string') {
+    config.providers = [config.providers];
+  }
   if (!config.providers || config.providers.length === 0) {
-    logger.error(
-      chalk.red('You must specify at least 1 provider (for example, openai:gpt-3.5-turbo)'),
-    );
+    logger.error(chalk.red('You must specify at least 1 provider (for example, openai:gpt-4o)'));
     process.exit(1);
+  }
+  if (Array.isArray(config.providers)) {
+    config.providers.forEach((provider) => {
+      const result = ProviderSchema.safeParse(provider);
+      if (!result.success) {
+        const errors = result.error.errors
+          .map((err) => {
+            return `- ${err.message}`;
+          })
+          .join('\n');
+        const providerString = typeof provider === 'string' ? provider : JSON.stringify(provider);
+        logger.warn(
+          chalk.yellow(
+            dedent`
+              Provider: ${providerString} encountered errors during schema validation:
+
+                ${errors}
+
+              This may have have unintended consequences.` + '\n',
+          ),
+        );
+      }
+    });
   }
 
   // Parse prompts, providers, and tests

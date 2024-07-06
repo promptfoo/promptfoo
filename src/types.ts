@@ -80,15 +80,17 @@ export const EnvOverridesSchema = z.object({
 
 export type EnvOverrides = z.infer<typeof EnvOverridesSchema>;
 
-export const ProviderOptionsSchema = z.object({
-  id: z.custom<ProviderId>().optional(),
-  label: z.custom<ProviderLabel>().optional(),
-  config: z.any().optional(),
-  prompts: z.array(z.string()).optional(), // List of prompt display strings
-  transform: z.string().optional(),
-  delay: z.number().optional(),
-  env: EnvOverridesSchema.optional(),
-});
+export const ProviderOptionsSchema = z
+  .object({
+    id: z.custom<ProviderId>().optional(),
+    label: z.custom<ProviderLabel>().optional(),
+    config: z.any().optional(),
+    prompts: z.array(z.string()).optional(), // List of prompt display strings
+    transform: z.string().optional(),
+    delay: z.number().optional(),
+    env: EnvOverridesSchema.optional(),
+  })
+  .strict();
 
 export type ProviderOptions = z.infer<typeof ProviderOptionsSchema>;
 
@@ -235,11 +237,7 @@ export type ProviderTypeMap = Partial<Record<ProviderType, string | ProviderOpti
 const GradingConfigSchema = z.object({
   rubricPrompt: z.union([z.string(), z.array(z.string())]).optional(),
   provider: z
-    .union([
-      z.string(),
-      z.any(),
-      z.record(z.string(), z.union([z.string(), z.any()])).optional(),
-    ])
+    .union([z.string(), z.any(), z.record(z.string(), z.union([z.string(), z.any()])).optional()])
     .optional(),
   factuality: z
     .object({
@@ -567,6 +565,9 @@ export interface TestCasesWithMetadata {
   prompts: TestCasesWithMetadataPrompt[];
 }
 
+export const ProviderSchema = z.union([z.string(), ProviderOptionsSchema, ApiProviderSchema]);
+export type Provider = z.infer<typeof ProviderSchema>;
+
 // Each test case is graded pass/fail with a score.  A test case represents a unique input to the LLM after substituting `vars` in the prompt.
 export interface TestCase<Vars = Record<string, string | string[] | object>> {
   // Optional description of what you're testing
@@ -576,7 +577,7 @@ export interface TestCase<Vars = Record<string, string | string[] | object>> {
   vars?: Vars;
 
   // Override the provider.
-  provider?: string | ProviderOptions | ApiProvider;
+  provider?: Provider;
 
   // Output related from running values in Vars with provider. Having this value would skip running the prompt through the provider, and go straight to the assertions
   providerOutput?: string | object;
