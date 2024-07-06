@@ -6,6 +6,14 @@ import { runPython } from '../../python/wrapper';
 import type { Prompt, ApiProvider, PromptFunction } from '../../types';
 import { safeJsonStringify } from '../../util';
 
+type PythonContext = {
+  vars: Record<string, string | object>;
+  provider: {
+    id: string;
+    label?: string;
+  };
+};
+
 /**
  * Python prompt function. Runs a specific function from the python file.
  * @param promptPath - Path to the Python file.
@@ -22,18 +30,16 @@ export const pythonPromptFunction = async (
   },
 ) => {
   invariant(context.provider?.id, 'provider.id is required');
-  return runPython(filePath, functionName, [
-    {
-      vars: context.vars,
-      provider: {
-        id:
-          typeof context.provider?.id === 'function'
-            ? context.provider?.id()
-            : context.provider?.id,
-        label: context.provider?.label,
-      },
+  const transformedContext: PythonContext = {
+    vars: context.vars,
+    provider: {
+      id:
+        typeof context.provider?.id === 'function' ? context.provider?.id() : context.provider?.id,
+      label: context.provider?.label,
     },
-  ]);
+  };
+
+  return runPython(filePath, functionName, [transformedContext]);
 };
 
 /**
@@ -50,21 +56,18 @@ export const pythonPromptFunctionLegacy = async (
   },
 ): Promise<string> => {
   invariant(context?.provider?.id, 'provider.id is required');
+  const transformedContext: PythonContext = {
+    vars: context.vars,
+    provider: {
+      id:
+        typeof context.provider?.id === 'function' ? context.provider?.id() : context.provider?.id,
+      label: context.provider?.label,
+    },
+  };
   const options: PythonShellOptions = {
     mode: 'text',
     pythonPath: process.env.PROMPTFOO_PYTHON || 'python',
-    args: [
-      safeJsonStringify({
-        vars: context.vars,
-        provider: {
-          id:
-            typeof context.provider?.id === 'function'
-              ? context.provider?.id()
-              : context.provider?.id,
-          label: context.provider?.label,
-        },
-      }),
-    ],
+    args: [safeJsonStringify(transformedContext)],
   };
   logger.debug(`Executing python prompt script ${filePath}`);
   const results = (await PythonShell.run(filePath, options)).join('\n');
