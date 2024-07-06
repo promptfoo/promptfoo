@@ -5,7 +5,7 @@ import * as yaml from 'js-yaml';
 import { importModule } from '../src/esm';
 import { readPrompts, readProviderPromptMap } from '../src/prompts';
 import { maybeFilePath } from '../src/prompts/utils';
-import type { Prompt, ProviderResponse, UnifiedConfig } from '../src/types';
+import type { ApiProvider, Prompt, ProviderResponse, UnifiedConfig } from '../src/types';
 
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
@@ -359,7 +359,7 @@ describe('readPrompts', () => {
       {
         raw: "()=>console.log('dummy prompt')",
         label: 'prompt.js',
-        function: mockFunction,
+        function: expect.any(Function),
       },
     ]);
     expect(importModule).toHaveBeenCalledWith(promptPath, undefined);
@@ -368,8 +368,10 @@ describe('readPrompts', () => {
 
   it('should read a .js file with named function', async () => {
     const promptPath = 'prompt.js:functionName';
-    const functionName = 'functionName';
-    const mockFunction = () => 'dummy prompt result';
+    const mockFunction = (context: {
+      vars: Record<string, string | object>;
+      provider?: ApiProvider;
+    }) => 'dummy prompt result';
 
     jest.mocked(importModule).mockResolvedValueOnce(mockFunction);
     jest.mocked(fs.statSync).mockReturnValue({ isDirectory: () => false } as fs.Stats);
@@ -383,8 +385,13 @@ describe('readPrompts', () => {
       },
     ]);
 
-    const promptFunction = result[0].function as unknown as () => string;
-    expect(promptFunction()).toBe('dummy prompt result');
+    const promptFunction = result[0].function as unknown as (context: {
+      vars: Record<string, string | object>;
+      provider?: ApiProvider;
+    }) => string;
+    expect(promptFunction({ vars: {}, provider: { id: () => 'foo' } as ApiProvider })).toBe(
+      'dummy prompt result',
+    );
 
     expect(importModule).toHaveBeenCalledWith('prompt.js', 'functionName');
     expect(fs.statSync).toHaveBeenCalledTimes(1);
