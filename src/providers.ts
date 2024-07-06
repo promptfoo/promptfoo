@@ -74,8 +74,7 @@ export async function loadApiProvider(
 ): Promise<ApiProvider> {
   const { options = {}, basePath, env } = context;
   const providerOptions: ProviderOptions = {
-    // Hack(ian): Override id with label. This makes it so that debug and display info, which rely on id, will use the label instead.
-    id: options.label || options.id,
+    id: options.id,
     config: {
       ...options.config,
       basePath,
@@ -182,7 +181,7 @@ export async function loadApiProvider(
       ret = new AnthropicCompletionProvider(modelType, providerOptions);
     } else {
       throw new Error(
-        `Unknown Anthropic model type: ${modelType}. Use one of the following providers: anthropic:completion:<model name>`,
+        `Unknown Anthropic model type: ${modelType}. Use one of the following providers: anthropic:messages:<model name>, anthropic:completion:<model name>`,
       );
     }
   } else if (providerPath.startsWith('voyage:')) {
@@ -359,11 +358,10 @@ export async function loadApiProvider(
       : path.join(basePath || process.cwd(), providerPath);
     const CustomApiProvider = await importModule(modulePath);
     ret = new CustomApiProvider(options);
-    ret.label = ret.label || options.label;
   }
-
   ret.transform = options.transform;
   ret.delay = options.delay;
+  ret.label ||= options.label;
   return ret;
 }
 

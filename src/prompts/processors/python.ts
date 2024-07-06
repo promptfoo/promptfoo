@@ -1,8 +1,9 @@
 import * as fs from 'fs';
 import { PythonShell, Options as PythonShellOptions } from 'python-shell';
+import invariant from 'tiny-invariant';
 import logger from '../../logger';
 import { runPython } from '../../python/wrapper';
-import type { Prompt, ApiProvider } from '../../types';
+import type { Prompt, ApiProvider, PromptFunctionContext } from '../../types';
 import { safeJsonStringify } from '../../util';
 
 /**
@@ -20,15 +21,17 @@ export const pythonPromptFunction = async (
     provider?: ApiProvider;
   },
 ) => {
-  return runPython(filePath, functionName, [
-    {
-      ...context,
-      provider: {
-        id: context.provider?.id,
-        label: context.provider?.label,
-      },
+  invariant(context.provider?.id, 'provider.id is required');
+  const transformedContext: PromptFunctionContext = {
+    vars: context.vars,
+    provider: {
+      id:
+        typeof context.provider?.id === 'function' ? context.provider?.id() : context.provider?.id,
+      label: context.provider?.label,
     },
-  ]);
+  };
+
+  return runPython(filePath, functionName, [transformedContext]);
 };
 
 /**
@@ -43,11 +46,20 @@ export const pythonPromptFunctionLegacy = async (
     vars: Record<string, string | object>;
     provider?: ApiProvider;
   },
-) => {
+): Promise<string> => {
+  invariant(context?.provider?.id, 'provider.id is required');
+  const transformedContext: PromptFunctionContext = {
+    vars: context.vars,
+    provider: {
+      id:
+        typeof context.provider?.id === 'function' ? context.provider?.id() : context.provider?.id,
+      label: context.provider?.label,
+    },
+  };
   const options: PythonShellOptions = {
     mode: 'text',
     pythonPath: process.env.PROMPTFOO_PYTHON || 'python',
-    args: [safeJsonStringify(context)],
+    args: [safeJsonStringify(transformedContext)],
   };
   logger.debug(`Executing python prompt script ${filePath}`);
   const results = (await PythonShell.run(filePath, options)).join('\n');
@@ -68,17 +80,15 @@ export function processPythonFile(
   functionName: string | undefined,
 ): Prompt[] {
   const fileContent = fs.readFileSync(filePath, 'utf-8');
+  const label =
+    prompt.label ?? (functionName ? `${filePath}:${functionName}` : `${filePath}: ${fileContent}`);
   return [
     {
       raw: fileContent,
-      label: prompt.label
-        ? prompt.label
-        : functionName
-          ? `${filePath}:${functionName}`
-          : `${filePath}: ${fileContent}`,
+      label,
       function: functionName
-        ? (...args) => pythonPromptFunction(filePath, functionName, ...args)
-        : (...args) => pythonPromptFunctionLegacy(filePath, ...args),
+        ? (context) => pythonPromptFunction(filePath, functionName, context)
+        : (context) => pythonPromptFunctionLegacy(filePath, context),
     },
   ];
 }
