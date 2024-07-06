@@ -3,16 +3,8 @@ import { PythonShell, Options as PythonShellOptions } from 'python-shell';
 import invariant from 'tiny-invariant';
 import logger from '../../logger';
 import { runPython } from '../../python/wrapper';
-import type { Prompt, ApiProvider, PromptFunction } from '../../types';
+import type { Prompt, ApiProvider, PromptFunctionContext } from '../../types';
 import { safeJsonStringify } from '../../util';
-
-type PythonContext = {
-  vars: Record<string, string | object>;
-  provider: {
-    id: string;
-    label?: string;
-  };
-};
 
 /**
  * Python prompt function. Runs a specific function from the python file.
@@ -30,7 +22,7 @@ export const pythonPromptFunction = async (
   },
 ) => {
   invariant(context.provider?.id, 'provider.id is required');
-  const transformedContext: PythonContext = {
+  const transformedContext: PromptFunctionContext = {
     vars: context.vars,
     provider: {
       id:
@@ -56,7 +48,7 @@ export const pythonPromptFunctionLegacy = async (
   },
 ): Promise<string> => {
   invariant(context?.provider?.id, 'provider.id is required');
-  const transformedContext: PythonContext = {
+  const transformedContext: PromptFunctionContext = {
     vars: context.vars,
     provider: {
       id:

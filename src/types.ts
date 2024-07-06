@@ -299,6 +299,14 @@ export interface EvaluateOptions {
   interactiveProviders?: boolean;
 }
 
+export type PromptFunctionContext = {
+  vars: Record<string, string | object>;
+  provider: {
+    id: string;
+    label?: string;
+  };
+};
+
 export type PromptFunction = (context: {
   vars: Record<string, string | object>;
   provider?: ApiProvider;
