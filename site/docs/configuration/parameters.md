@@ -214,8 +214,15 @@ import json
 import sys
 
 def my_prompt_function(context: dict) -> str:
+
+    provider: dict = context['providers']
+    provider_id: str = provider['id']  # ex. openai:gpt-4o or bedrock:anthropic.claude-3-sonnet-20240229-v1:0
+    provider_label: str | None = provider.get('label') # exists if set in promptfoo config.
+
+    variables: dict = context['vars'] # access the test case variables
+
     return (
-        f"Describe {context['vars']['topic']} concisely, comparing it to the Python"
+        f"Describe {variables['topic']} concisely, comparing it to the Python"
         " programming language."
     )
 
