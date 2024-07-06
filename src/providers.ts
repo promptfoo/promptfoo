@@ -181,7 +181,7 @@ export async function loadApiProvider(
       ret = new AnthropicCompletionProvider(modelType, providerOptions);
     } else {
       throw new Error(
-        `Unknown Anthropic model type: ${modelType}. Use one of the following providers: anthropic:completion:<model name>`,
+        `Unknown Anthropic model type: ${modelType}. Use one of the following providers: anthropic:messages:<model name>, anthropic:completion:<model name>`,
       );
     }
   } else if (providerPath.startsWith('voyage:')) {

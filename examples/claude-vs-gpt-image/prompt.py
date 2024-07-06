@@ -49,15 +49,6 @@ def function_name(context: PromptFunctionContext) -> list[dict[str, typing.Any]]
                 ],
             },
         ]
-    if context["provider"]["id"] == "openai:gpt-3.5-turbo":
-        return [
-            {"role": "system", "content": system_prompt},
-            {
-                "role": "user",
-                "content": f"data:image/jpeg;base64,{get_image_base64(context['vars']['image_url'])}",
-            },
-        ]
-
     if context["provider"]["label"] == "custom label for gpt-4o":
         return [
             {
