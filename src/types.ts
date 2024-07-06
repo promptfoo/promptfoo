@@ -1,104 +1,112 @@
 import { z } from 'zod';
-import type { fetchWithCache, getCache } from './cache';
-import type logger from './logger';
 
 export type FilePath = string;
 
-export interface CommandLineOptions {
+export const CommandLineOptionsSchema = z.object({
   // Shared with TestSuite
-  prompts?: FilePath[];
-  providers: FilePath[];
-  output: FilePath[];
+  prompts: z.array(z.string()).optional(),
+  providers: z.array(z.string()),
+  output: z.array(z.string()),
 
   // Shared with EvaluateOptions
-  maxConcurrency: string;
-  repeat: string;
-  delay: string;
+  maxConcurrency: z.string(),
+  repeat: z.string(),
+  delay: z.string(),
 
   // Command line only
-  vars?: FilePath;
-  tests?: FilePath;
-  config?: FilePath[];
-  assertions?: FilePath;
-  modelOutputs?: FilePath;
-  verbose?: boolean;
-  grader?: string;
-  tableCellMaxLength?: string;
-  write?: boolean;
-  cache?: boolean;
-  table?: boolean;
-  share?: boolean;
-  progressBar?: boolean;
-  watch?: boolean;
-  interactiveProviders?: boolean;
-  filterFailing?: string;
-  filterFirstN?: string;
-  filterPattern?: string;
-  filterProviders?: string;
-  var?: Record<string, string>;
+  vars: z.string().optional(),
+  tests: z.string().optional(),
+  config: z.array(z.string()).optional(),
+  assertions: z.string().optional(),
+  modelOutputs: z.string().optional(),
+  verbose: z.boolean().optional(),
+  grader: z.string().optional(),
+  tableCellMaxLength: z.string().optional(),
+  write: z.boolean().optional(),
+  cache: z.boolean().optional(),
+  table: z.boolean().optional(),
+  share: z.boolean().optional(),
+  progressBar: z.boolean().optional(),
+  watch: z.boolean().optional(),
+  interactiveProviders: z.boolean().optional(),
+  filterFailing: z.string().optional(),
+  filterFirstN: z.string().optional(),
+  filterPattern: z.string().optional(),
+  filterProviders: z.string().optional(),
+  var: z.record(z.string()).optional(),
 
-  generateSuggestions?: boolean;
-  promptPrefix?: string;
-  promptSuffix?: string;
+  generateSuggestions: z.boolean().optional(),
+  promptPrefix: z.string().optional(),
+  promptSuffix: z.string().optional(),
 
-  envFile?: FilePath;
-}
+  envFile: z.string().optional(),
+});
 
-export interface EnvOverrides {
-  ANTHROPIC_API_KEY?: string;
-  BAM_API_KEY?: string;
-  BAM_API_HOST?: string;
-  AZURE_OPENAI_API_HOST?: string;
-  AZURE_OPENAI_API_KEY?: string;
-  AZURE_OPENAI_API_BASE_URL?: string;
-  AZURE_OPENAI_BASE_URL?: string;
-  AWS_BEDROCK_REGION?: string;
-  COHERE_API_KEY?: string;
-  OPENAI_API_KEY?: string;
-  OPENAI_API_HOST?: string;
-  OPENAI_API_BASE_URL?: string;
-  OPENAI_BASE_URL?: string;
-  OPENAI_ORGANIZATION?: string;
-  REPLICATE_API_KEY?: string;
-  REPLICATE_API_TOKEN?: string;
-  LOCALAI_BASE_URL?: string;
-  MISTRAL_API_HOST?: string;
-  MISTRAL_API_BASE_URL?: string;
-  PALM_API_KEY?: string;
-  PALM_API_HOST?: string;
-  GOOGLE_API_KEY?: string;
-  GOOGLE_API_HOST?: string;
-  VERTEX_API_KEY?: string;
-  VERTEX_API_HOST?: string;
-  VERTEX_PROJECT_ID?: string;
-  VERTEX_REGION?: string;
-  VERTEX_PUBLISHER?: string;
-  MISTRAL_API_KEY?: string;
-  CLOUDFLARE_API_KEY?: string;
-  CLOUDFLARE_ACCOUNT_ID?: string;
-}
+export type CommandLineOptions = z.infer<typeof CommandLineOptionsSchema>;
 
-export interface ProviderOptions {
-  id?: ProviderId;
-  label?: ProviderLabel;
-  config?: any;
-  prompts?: string[]; // List of prompt display strings
-  transform?: string;
-  delay?: number;
-  env?: EnvOverrides;
-}
+export const EnvOverridesSchema = z.object({
+  ANTHROPIC_API_KEY: z.string().optional(),
+  BAM_API_KEY: z.string().optional(),
+  BAM_API_HOST: z.string().optional(),
+  AZURE_OPENAI_API_HOST: z.string().optional(),
+  AZURE_OPENAI_API_KEY: z.string().optional(),
+  AZURE_OPENAI_API_BASE_URL: z.string().optional(),
+  AZURE_OPENAI_BASE_URL: z.string().optional(),
+  AWS_BEDROCK_REGION: z.string().optional(),
+  COHERE_API_KEY: z.string().optional(),
+  OPENAI_API_KEY: z.string().optional(),
+  OPENAI_API_HOST: z.string().optional(),
+  OPENAI_API_BASE_URL: z.string().optional(),
+  OPENAI_BASE_URL: z.string().optional(),
+  OPENAI_ORGANIZATION: z.string().optional(),
+  REPLICATE_API_KEY: z.string().optional(),
+  REPLICATE_API_TOKEN: z.string().optional(),
+  LOCALAI_BASE_URL: z.string().optional(),
+  MISTRAL_API_HOST: z.string().optional(),
+  MISTRAL_API_BASE_URL: z.string().optional(),
+  PALM_API_KEY: z.string().optional(),
+  PALM_API_HOST: z.string().optional(),
+  GOOGLE_API_KEY: z.string().optional(),
+  GOOGLE_API_HOST: z.string().optional(),
+  VERTEX_API_KEY: z.string().optional(),
+  VERTEX_API_HOST: z.string().optional(),
+  VERTEX_PROJECT_ID: z.string().optional(),
+  VERTEX_REGION: z.string().optional(),
+  VERTEX_PUBLISHER: z.string().optional(),
+  MISTRAL_API_KEY: z.string().optional(),
+  CLOUDFLARE_API_KEY: z.string().optional(),
+  CLOUDFLARE_ACCOUNT_ID: z.string().optional(),
+});
 
-export interface CallApiContextParams {
-  vars: Record<string, string | object>;
-  logger?: typeof logger;
-  fetchWithCache?: typeof fetchWithCache;
-  getCache?: typeof getCache;
-}
+export type EnvOverrides = z.infer<typeof EnvOverridesSchema>;
 
-export interface CallApiOptionsParams {
-  includeLogProbs?: boolean;
-  originalProvider?: ApiProvider;
-}
+export const ProviderOptionsSchema = z.object({
+  id: z.custom<ProviderId>().optional(),
+  label: z.custom<ProviderLabel>().optional(),
+  config: z.any().optional(),
+  prompts: z.array(z.string()).optional(), // List of prompt display strings
+  transform: z.string().optional(),
+  delay: z.number().optional(),
+  env: EnvOverridesSchema.optional(),
+});
+
+export type ProviderOptions = z.infer<typeof ProviderOptionsSchema>;
+
+export const CallApiContextParamsSchema = z.object({
+  vars: z.record(z.union([z.string(), z.object({})])),
+  logger: z.optional(z.any()),
+  fetchWithCache: z.optional(z.any()),
+  getCache: z.optional(z.any()),
+});
+
+export type CallApiContextParams = z.infer<typeof CallApiContextParamsSchema>;
+
+export const CallApiOptionsParamsSchema = z.object({
+  includeLogProbs: z.optional(z.boolean()),
+  originalProvider: z.optional(z.any()), // Assuming ApiProvider is not a zod schema, using z.any()
+});
+
+export type CallApiOptionsParams = z.infer<typeof CallApiOptionsParamsSchema>;
 
 type CallApiFunction = {
   (
@@ -109,28 +117,31 @@ type CallApiFunction = {
   label?: string;
 };
 
-export interface ApiProvider {
-  // Unique identifier for the provider
-  id: () => string;
+export const ApiProviderSchema = z.object({
+  id: z.function().returns(z.string()),
 
-  // Text generation function
-  callApi: CallApiFunction;
+  callApi: z.custom<CallApiFunction>(),
 
-  // Embedding function
-  callEmbeddingApi?: (prompt: string) => Promise<ProviderEmbeddingResponse>;
+  callEmbeddingApi: z
+    .function()
+    .args(z.string())
+    .returns(z.promise(z.custom<ProviderEmbeddingResponse>()))
+    .optional(),
 
-  // Classification function
-  callClassificationApi?: (prompt: string) => Promise<ProviderClassificationResponse>;
+  callClassificationApi: z
+    .function()
+    .args(z.string())
+    .returns(z.promise(z.custom<ProviderClassificationResponse>()))
+    .optional(),
 
-  // Shown on output
-  label?: ProviderLabel;
+  label: z.custom<ProviderLabel>().optional(),
 
-  // Applied by the evaluator on provider response
-  transform?: string;
+  transform: z.string().optional(),
 
-  // Custom delay for the provider.
-  delay?: number;
-}
+  delay: z.number().optional(),
+});
+
+export type ApiProvider = z.infer<typeof ApiProviderSchema>;
 
 export function isApiProvider(provider: any): provider is ApiProvider {
   return typeof provider === 'object' && 'id' in provider && typeof provider.id === 'function';
@@ -177,22 +188,28 @@ const ProviderResponseSchema = z.object({
 
 export type ProviderResponse = z.infer<typeof ProviderResponseSchema>;
 
-export interface ProviderEmbeddingResponse {
-  error?: string;
-  embedding?: number[];
-  tokenUsage?: Partial<TokenUsage>;
-}
+const ProviderEmbeddingResponseSchema = z.object({
+  error: z.string().optional(),
+  embedding: z.array(z.number()).optional(),
+  tokenUsage: TokenUsageSchema.partial().optional(),
+});
 
-export interface ProviderSimilarityResponse {
-  error?: string;
-  similarity?: number;
-  tokenUsage?: Partial<TokenUsage>;
-}
+export type ProviderEmbeddingResponse = z.infer<typeof ProviderEmbeddingResponseSchema>;
 
-export interface ProviderClassificationResponse {
-  error?: string;
-  classification?: Record<string, number>;
-}
+const ProviderSimilarityResponseSchema = z.object({
+  error: z.string().optional(),
+  similarity: z.number().optional(),
+  tokenUsage: TokenUsageSchema.partial().optional(),
+});
+
+export type ProviderSimilarityResponse = z.infer<typeof ProviderSimilarityResponseSchema>;
+
+const ProviderClassificationResponseSchema = z.object({
+  error: z.string().optional(),
+  classification: z.record(z.number()).optional(),
+});
+
+export type ProviderClassificationResponse = z.infer<typeof ProviderClassificationResponseSchema>;
 
 export interface ModerationFlag {
   code: string;

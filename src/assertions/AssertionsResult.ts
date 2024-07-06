@@ -1,4 +1,3 @@
-import invariant from 'tiny-invariant';
 import { AssertionSet, GradingResult } from '../types';
 
 const DEFAULT_TOKENS_USED = {
