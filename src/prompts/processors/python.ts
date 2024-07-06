@@ -3,7 +3,7 @@ import { PythonShell, Options as PythonShellOptions } from 'python-shell';
 import invariant from 'tiny-invariant';
 import logger from '../../logger';
 import { runPython } from '../../python/wrapper';
-import type { Prompt, ApiProvider } from '../../types';
+import type { Prompt, ApiProvider, PromptFunction } from '../../types';
 import { safeJsonStringify } from '../../util';
 
 /**
@@ -18,17 +18,18 @@ export const pythonPromptFunction = async (
   functionName: string,
   context: {
     vars: Record<string, string | object>;
-    provider?: {
-      id: string;
-      label?: string;
-    };
+    provider?: ApiProvider;
   },
 ) => {
+  invariant(context.provider?.id, 'provider.id is required');
   return runPython(filePath, functionName, [
     {
-      ...context,
+      vars: context.vars,
       provider: {
-        id: context.provider?.id,
+        id:
+          typeof context.provider?.id === 'function'
+            ? context.provider?.id()
+            : context.provider?.id,
         label: context.provider?.label,
       },
     },
@@ -45,16 +46,25 @@ export const pythonPromptFunctionLegacy = async (
   filePath: string,
   context: {
     vars: Record<string, string | object>;
-    provider?: {
-      id: string;
-      label?: string;
-    };
+    provider?: ApiProvider;
   },
-) => {
+): Promise<string> => {
+  invariant(context?.provider?.id, 'provider.id is required');
   const options: PythonShellOptions = {
     mode: 'text',
     pythonPath: process.env.PROMPTFOO_PYTHON || 'python',
-    args: [safeJsonStringify(context)],
+    args: [
+      safeJsonStringify({
+        vars: context.vars,
+        provider: {
+          id:
+            typeof context.provider?.id === 'function'
+              ? context.provider?.id()
+              : context.provider?.id,
+          label: context.provider?.label,
+        },
+      }),
+    ],
   };
   logger.debug(`Executing python prompt script ${filePath}`);
   const results = (await PythonShell.run(filePath, options)).join('\n');
@@ -75,41 +85,15 @@ export function processPythonFile(
   functionName: string | undefined,
 ): Prompt[] {
   const fileContent = fs.readFileSync(filePath, 'utf-8');
+  const label =
+    prompt.label ?? (functionName ? `${filePath}:${functionName}` : `${filePath}: ${fileContent}`);
   return [
     {
       raw: fileContent,
-      label: prompt.label
-        ? prompt.label
-        : functionName
-          ? `${filePath}:${functionName}`
-          : `${filePath}: ${fileContent}`,
+      label,
       function: functionName
-        ? (context: { vars: Record<string, string | object>; provider?: ApiProvider }) => {
-            invariant(context?.provider?.id, 'provider.id is required');
-            return pythonPromptFunction(filePath, functionName, {
-              vars: context.vars,
-              provider: {
-                id:
-                  typeof context.provider?.id === 'function'
-                    ? context.provider?.id()
-                    : context.provider?.id,
-                label: context.provider?.label,
-              },
-            });
-          }
-        : (context: { vars: Record<string, string | object>; provider?: ApiProvider }) => {
-            invariant(context?.provider?.id, 'provider.id is required');
-            return pythonPromptFunctionLegacy(filePath, {
-              vars: context.vars,
-              provider: {
-                id:
-                  typeof context.provider?.id === 'function'
-                    ? context.provider?.id()
-                    : context.provider?.id,
-                label: context.provider?.label,
-              },
-            });
-          },
+        ? (context) => pythonPromptFunction(filePath, functionName, context)
+        : (context) => pythonPromptFunctionLegacy(filePath, context),
     },
   ];
 }
