@@ -28,7 +28,7 @@ function HomepageHeader() {
 }
 
 function HomepageWalkthrough() {
-  const [selectedStep, setSelectedStep] = React.useState(window.innerWidth < 768 ? null : 1);
+  const [selectedStep, setSelectedStep] = React.useState(window?.innerWidth < 768 ? null : 1);
   const steps = [
     {
       id: 1,
@@ -90,12 +90,12 @@ function HomepageWalkthrough() {
     {
       id: 3,
       caption: 'CI/CD Testing',
-      image: '/img/yaml-example.png',
-      image2x: '/img/yaml-example@2x.png',
+      image: '/img/docs/github-action-comment.png',
+      image2x: '/img/docs/github-action-comment.png',
       description: (
         <>
           <p>
-            Promptfoo's simple declarative config and local runtime makes it easy to set up in{' '}
+            Promptfoo's simple file-based config and local runtime make it easy to set up in{' '}
             <Link to="/docs/integrations/github-action/">GitHub Actions</Link> or other CI services.
           </p>
           <p>

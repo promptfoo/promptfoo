@@ -32,6 +32,8 @@
 .walkthroughContainer {
   max-width: min(1400px, 95%);
   margin: 2rem auto;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #e0e0e0;
 }
 
 .walkthroughTabs {

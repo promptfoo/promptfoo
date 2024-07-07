@@ -22,7 +22,7 @@ export default function HomepageInfo(): JSX.Element {
         <div className={styles.configToWebview}>
           <div className={styles.codeExample}>
             <div className={styles.featureTitle}>
-              <SettingsIcon /> Simple, declarative config
+              <SettingsIcon /> Simple declarative config
             </div>
 
             <CodeBlock language="yaml" className={styles.codeBlock}>
