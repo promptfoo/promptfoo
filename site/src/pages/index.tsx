@@ -34,6 +34,7 @@ function HomepageWalkthrough() {
       id: 1,
       caption: 'Evaluations',
       image: '/img/claude-vs-gpt-example.png',
+      image2x: '/img/claude-vs-gpt-example@2x.png',
       description: (
         <>
           <p>
@@ -59,6 +60,7 @@ function HomepageWalkthrough() {
       id: 2,
       caption: 'Security & Red Teaming',
       image: '/img/riskreport-1.png',
+      image2x: '/img/riskreport-1@2x.png',
       description: (
         <>
           <p>
@@ -89,6 +91,7 @@ function HomepageWalkthrough() {
       id: 3,
       caption: 'CI/CD Testing',
       image: '/img/yaml-example.png',
+      image2x: '/img/yaml-example@2x.png',
       description: (
         <>
           <p>
@@ -106,7 +109,6 @@ function HomepageWalkthrough() {
   ];
 
   const selectedStepData = steps.find((step) => step.id === selectedStep);
-
   return (
     <div className={styles.walkthroughContainer}>
       <div className={styles.walkthroughTabs}>
@@ -126,7 +128,8 @@ function HomepageWalkthrough() {
       <div className={styles.walkthroughContent}>
         <div className={styles.walkthroughImageContainer}>
           <img
-            src={steps.find((step) => step.id === selectedStep)?.image}
+            src={selectedStepData?.image}
+            srcSet={`${selectedStepData?.image} 1x, ${selectedStepData?.image2x} 2x`}
             alt={`Walkthrough step ${selectedStep}`}
             className={styles.walkthroughImage}
           />
