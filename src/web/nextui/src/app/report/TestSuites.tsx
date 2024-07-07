@@ -172,21 +172,22 @@ const TestSuites: React.FC<{
                 return (
                   <TableRow key={index}>
                     <TableCell>
-                      {displayNameOverrides[
-                        subCategory.pluginName as keyof typeof displayNameOverrides
-                      ] || subCategory.type}
+                      <span style={{ fontWeight: 500 }}>
+                        {displayNameOverrides[
+                          subCategory.pluginName as keyof typeof displayNameOverrides
+                        ] || subCategory.type}
+                      </span>
                     </TableCell>
                     <TableCell>{subCategory.description}</TableCell>
                     <TableCell className={passRateClass}>
-                      {subCategory.passRate} (
+                      <strong>{subCategory.passRate}</strong>
                       {subCategory.passRateWithFilter !== subCategory.passRate ? (
                         <>
-                          <strong>{subCategory.passRateWithFilter} with mitigation</strong>
+                          <br />({subCategory.passRateWithFilter} with mitigation)
                         </>
                       ) : (
                         subCategory.passRateWithFilter
                       )}
-                      )
                     </TableCell>
                     <TableCell className={`vuln-${subCategory.severity.toLowerCase()}`}>
                       {subCategory.severity}
