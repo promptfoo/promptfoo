@@ -289,7 +289,7 @@ When the `__expected` field is provided, the success and failure statistics in t
 
 To run multiple assertions, use column names `__expected1`, `__expected2`, `__expected3`, etc.
 
-For more advanced test cases, we recommend using a testing framework like [Jest](/docs/integrations/jest) or [Mocha](/docs/integrations/mocha-chai) and using promptfoo [as a library](/docs/usage/node-package).
+For more advanced test cases, we recommend using a testing framework like [Jest or Vitest](/docs/integrations/jest) or [Mocha](/docs/integrations/mocha-chai) and using promptfoo [as a library](/docs/usage/node-package).
 
 ## Reusing assertions with templates
 

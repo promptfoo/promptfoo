@@ -384,6 +384,25 @@ function ResultsTable({
     [filteredBody],
   );
 
+  const metricTotals = React.useMemo(() => {
+    const totals: Record<string, number> = {};
+    table?.body.forEach((row) => {
+      row.test.assert?.forEach((assertion) => {
+        if (assertion.metric) {
+          totals[assertion.metric] = (totals[assertion.metric] || 0) + 1;
+        }
+        if ('assert' in assertion && Array.isArray(assertion.assert)) {
+          assertion.assert.forEach((subAssertion) => {
+            if ('metric' in subAssertion && subAssertion.metric) {
+              totals[subAssertion.metric] = (totals[subAssertion.metric] || 0) + 1;
+            }
+          });
+        }
+      });
+    });
+    return totals;
+  }, [table]);
+
   const promptColumns = React.useMemo(() => {
     return [
       columnHelper.group({
@@ -467,6 +486,7 @@ function ResultsTable({
                     Object.keys(prompt.metrics.namedScores).length > 0 ? (
                       <CustomMetrics
                         lookup={prompt.metrics.namedScores}
+                        metricTotals={metricTotals}
                         onSearchTextChange={onSearchTextChange}
                       />
                     ) : null}
@@ -526,23 +546,24 @@ function ResultsTable({
       }),
     ];
   }, [
-    columnHelper,
-    head.prompts,
-    numGoodTests,
     body.length,
-    highestPassingCount,
+    columnHelper,
     failureFilter,
-    showStats,
+    filterMode,
+    getFirstOutput,
+    getOutput,
+    handleRating,
+    head.prompts,
+    highestPassingCount,
+    maxTextLength,
+    metricTotals,
     numAsserts,
     numGoodAsserts,
-    maxTextLength,
+    numGoodTests,
     onFailureFilterToggle,
-    filterMode,
-    searchText,
-    getOutput,
-    getFirstOutput,
-    handleRating,
     onSearchTextChange,
+    searchText,
+    showStats,
   ]);
 
   const descriptionColumn = React.useMemo(() => {
@@ -652,7 +673,7 @@ function ResultsTable({
         </tbody>
       </table>
       {reactTable.getPageCount() > 1 && (
-        <Box className="pagination" sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+        <Box className="pagination" mx={1} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <Button
             onClick={() => {
               setPagination((old) => ({ ...old, pageIndex: Math.max(old.pageIndex - 1, 0) }));

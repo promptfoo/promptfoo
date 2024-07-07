@@ -93,6 +93,10 @@ describe('maybeFilePath', () => {
     const longInvalidPath = 'a/'.repeat(100) + 'file\n.txt';
     expect(maybeFilePath(longInvalidPath)).toBe(false);
   });
+
+  it('should return false for strings ending with a dot', () => {
+    expect(maybeFilePath('Write a tweet about {{topic}}.')).toBe(false);
+  });
 });
 
 describe('normalizeInput', () => {

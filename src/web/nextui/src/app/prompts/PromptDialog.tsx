@@ -68,7 +68,7 @@ const PromptDialog: React.FC<PromptDialogProps> = ({ openDialog, handleClose, se
                         {evalData.datasetId.slice(0, 6)}
                       </Link>
                     </TableCell>
-                    <TableCell>{evalData.metrics?.score.toFixed(2) ?? '-'}</TableCell>
+                    <TableCell>{evalData.metrics?.score?.toFixed(2) ?? '-'}</TableCell>
                     <TableCell>{passRate}</TableCell>
                     <TableCell>{passCount}</TableCell>
                     <TableCell>{failCount}</TableCell>

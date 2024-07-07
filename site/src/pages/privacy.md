@@ -4,7 +4,7 @@ This Privacy Policy describes how your personal information is collected, used, 
 
 ## We do not collect Personal Information
 
-Promptfoo does not collect any personally identifiable information (PII) when you use our CLI, library, or website. The source code is executed on your machine and any call to Language Model (LLM) APIs (OpenAI, Anthropic, etc.) are sent directly to the LLM provider. We do not have access to these requests or responses.
+Promptfoo does not collect any personally identifiable information (PII) when you use our CLI, library, or website. The source code is executed on your machine and any call to Language Model (LLM) APIs (OpenAI, Anthropic, etc.) are sent directly to the LLM provider. We do not have access to these requests or responses. Additionally, we do not sell or trade data to outside parties.
 
 API keys are set as local environment variables and never transmitted to anywhere besides the LLM API directly (OpenAI, Anthropic, etc).
 

@@ -21,6 +21,7 @@ export const evals = sqliteTable('evals', {
   createdAt: integer('created_at')
     .notNull()
     .default(sql`CURRENT_TIMESTAMP`),
+  author: text('author'),
   description: text('description'),
   results: text('results', { mode: 'json' }).$type<EvaluateSummary>().notNull(),
   config: text('config', { mode: 'json' }).$type<Partial<UnifiedConfig>>().notNull(),

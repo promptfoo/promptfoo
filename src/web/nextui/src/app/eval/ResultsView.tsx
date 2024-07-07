@@ -11,9 +11,9 @@ import EyeIcon from '@mui/icons-material/Visibility';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import Autocomplete, { AutocompleteRenderInputParams } from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
-import Paper from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
+import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
 import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
@@ -23,10 +23,11 @@ import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import OutlinedInput from '@mui/material/OutlinedInput';
 import Select, { SelectChangeEvent } from '@mui/material/Select';
+import Snackbar from '@mui/material/Snackbar';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
-import Heading from '@mui/material/Typography';
+import Typography from '@mui/material/Typography';
 import { styled } from '@mui/system';
 import type { VisibilityState } from '@tanstack/table-core';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -71,8 +72,16 @@ export default function ResultsView({
 }: ResultsViewProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { table, config, setConfig, maxTextLength, wordBreak, showInferenceDetails, evalId } =
-    useResultsViewStore();
+  const {
+    author,
+    table,
+    config,
+    setConfig,
+    maxTextLength,
+    wordBreak,
+    showInferenceDetails,
+    evalId,
+  } = useResultsViewStore();
   const { setStateFromConfig } = useMainStore();
 
   const [searchText, setSearchText] = React.useState(searchParams?.get('search') || '');
@@ -140,8 +149,14 @@ export default function ResultsView({
     }
   };
 
+  const hasAnyDescriptions = React.useMemo(
+    () => table.body.some((row) => row.description),
+    [table.body],
+  );
+
   const columnData = React.useMemo(() => {
     return [
+      ...(hasAnyDescriptions ? [{ value: 'description', label: 'Description' }] : []),
       ...head.vars.map((_, idx) => ({
         value: `Variable ${idx + 1}`,
         label: `Var ${idx + 1}: ${
@@ -159,7 +174,7 @@ export default function ResultsView({
         };
       }),
     ];
-  }, [head.vars, head.prompts]);
+  }, [head.vars, head.prompts, hasAnyDescriptions]);
 
   const [configModalOpen, setConfigModalOpen] = React.useState(false);
   const [viewSettingsModalOpen, setViewSettingsModalOpen] = React.useState(false);
@@ -175,6 +190,7 @@ export default function ResultsView({
     setSelectedColumns(typeof value === 'string' ? value.split(',') : value);
 
     const allColumns = [
+      ...(hasAnyDescriptions ? ['description'] : []),
       ...head.vars.map((_, idx) => `Variable ${idx + 1}`),
       ...head.prompts.map((_, idx) => `Prompt ${idx + 1}`),
     ];
@@ -240,183 +256,232 @@ export default function ResultsView({
     setAnchorEl(event.currentTarget);
   };
 
+  const [evalIdCopied, setEvalIdCopied] = React.useState(false);
+
+  const handleEvalIdCopyClick = async () => {
+    if (!evalId) {
+      return;
+    }
+    await navigator.clipboard.writeText(evalId);
+    setEvalIdCopied(true);
+    setTimeout(() => {
+      setEvalIdCopied(false);
+    }, 1000);
+  };
+
   return (
     <VariablesSettingsProvider vars={head.vars} evalId={defaultEvalId}>
       <div style={{ marginLeft: '1rem', marginRight: '1rem' }}>
-        <Box mb={2} sx={{ display: 'flex', alignItems: 'center' }}>
-          <Heading variant="h5" sx={{ flexGrow: 1 }}>
-            <span className="description" onClick={handleDescriptionClick}>
-              {config?.description || evalId}
-            </span>{' '}
-            {config?.description && <span className="description-filepath">{evalId}</span>}
-          </Heading>
-        </Box>
-        <Paper py="md">
-          <ResponsiveStack direction="row" spacing={4} alignItems="center">
-            <Box>
-              {recentEvals && recentEvals.length > 0 && (
-                <FormControl sx={{ m: 1, minWidth: 200 }} size="small">
-                  <Autocomplete
-                    size="small"
-                    options={recentEvals}
-                    renderOption={(props, option) => (
-                      <li {...props} key={option.id}>
-                        {option.label}
-                      </li>
-                    )}
-                    style={{ width: 350 }}
-                    renderInput={(params: AutocompleteRenderInputParams) => (
-                      <TextField {...params} label="Eval run" variant="outlined" />
-                    )}
-                    defaultValue={
-                      recentEvals.find((evl) => evl.id === defaultEvalId) || recentEvals[0]
-                    }
-                    onChange={(event, newValue: { label: string; id?: string } | null) => {
-                      if (newValue && newValue.id) {
-                        onRecentEvalSelected(newValue.id);
-                      }
-                    }}
-                    disableClearable
-                  />
-                </FormControl>
-              )}
-            </Box>
-            <Box>
-              <FormControl sx={{ m: 1, minWidth: 200, maxWidth: 350 }} size="small">
-                <InputLabel id="visible-columns-label">Columns</InputLabel>
-                <Select
-                  labelId="visible-columns-label"
-                  id="visible-columns"
-                  multiple
-                  value={selectedColumns}
-                  onChange={handleChange}
-                  input={<OutlinedInput label="Visible columns" />}
-                  renderValue={(selected: string[]) => selected.join(', ')}
-                >
-                  {columnData.map((column) => (
-                    <MenuItem dense key={column.value} value={column.value}>
-                      <Checkbox checked={selectedColumns.indexOf(column.value) > -1} />
-                      <ListItemText primary={column.label} />
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Box>
-            <Box>
-              <FormControl sx={{ minWidth: 180 }} size="small">
-                <InputLabel id="failure-filter-mode-label">Display</InputLabel>
-                <Select
-                  labelId="filter-mode-label"
-                  id="filter-mode"
-                  value={filterMode}
-                  onChange={handleFilterModeChange}
-                  label="Filter"
-                >
-                  <MenuItem value="all">Show all results</MenuItem>
-                  <MenuItem value="failures">Show failures only</MenuItem>
-                  <MenuItem value="different">Show different only</MenuItem>
-                  <MenuItem value="highlights">Show highlights only</MenuItem>
-                </Select>
-              </FormControl>
-            </Box>
-            <Box>
-              <TextField
-                sx={{ minWidth: 180 }}
-                size="small"
-                label="Search"
-                placeholder="Text or regex"
-                value={searchText}
-                onChange={(e) => handleSearchTextChange(e.target.value)}
+        <Box mb={2} className="eval-header">
+          <Typography variant="h5" sx={{ display: 'flex', alignItems: 'center' }}>
+            <Tooltip title="Click to edit description">
+              <span className="description" onClick={handleDescriptionClick}>
+                {config?.description || evalId}
+              </span>
+            </Tooltip>
+          </Typography>
+          {config?.description && evalId && (
+            <>
+              <Tooltip title="Click to copy">
+                <Chip
+                  size="small"
+                  label={
+                    <>
+                      <strong>ID:</strong> {evalId}
+                    </>
+                  }
+                  sx={{
+                    ml: 1,
+                    opacity: 0.7,
+                    cursor: 'pointer',
+                  }}
+                  onClick={handleEvalIdCopyClick}
+                />
+              </Tooltip>
+              <Snackbar
+                open={evalIdCopied}
+                autoHideDuration={1000}
+                onClose={() => setEvalIdCopied(false)}
+                message="Eval id copied to clipboard"
               />
-            </Box>
-            <Box flexGrow={1} />
-            <Box display="flex" justifyContent="flex-end">
-              <ResponsiveStack direction="row" spacing={2}>
-                <Button color="primary" onClick={handleOpenMenu} startIcon={<ArrowDropDownIcon />}>
-                  Eval actions
+            </>
+          )}
+          <Tooltip title={!author ? 'Set eval author with `promptfoo config set email`' : ''}>
+            <Chip
+              size="small"
+              label={
+                <>
+                  <strong>Author:</strong> {author || 'Unknown'}
+                </>
+              }
+              sx={{ ml: 1, opacity: 0.7 }}
+            />
+          </Tooltip>
+        </Box>
+        <ResponsiveStack direction="row" spacing={4} alignItems="center">
+          <Box>
+            {recentEvals && recentEvals.length > 0 && (
+              <FormControl sx={{ m: 1, minWidth: 200 }} size="small">
+                <Autocomplete
+                  size="small"
+                  options={recentEvals}
+                  renderOption={(props, option) => (
+                    <li {...props} key={option.id}>
+                      {option.label}
+                    </li>
+                  )}
+                  style={{ width: 350 }}
+                  renderInput={(params: AutocompleteRenderInputParams) => (
+                    <TextField {...params} label="Eval run" variant="outlined" />
+                  )}
+                  defaultValue={recentEvals.find((evl) => evl.id === defaultEvalId) || recentEvals[0]}
+                  onChange={(event, newValue: { label: string; id?: string } | null) => {
+                    if (newValue && newValue.id) {
+                      onRecentEvalSelected(newValue.id);
+
+                      // Reset all filters and search
+                      setSearchText('');
+                      setFilterMode('all');
+                      setFailureFilter({});
+                    }
+                  }}
+                  disableClearable
+                />
+              </FormControl>
+            )}
+          </Box>
+          <Box>
+            <FormControl sx={{ m: 1, minWidth: 200, maxWidth: 350 }} size="small">
+              <InputLabel id="visible-columns-label">Columns</InputLabel>
+              <Select
+                labelId="visible-columns-label"
+                id="visible-columns"
+                multiple
+                value={selectedColumns}
+                onChange={handleChange}
+                input={<OutlinedInput label="Visible columns" />}
+                renderValue={(selected: string[]) => selected.join(', ')}
+              >
+                {columnData.map((column) => (
+                  <MenuItem dense key={column.value} value={column.value}>
+                    <Checkbox checked={selectedColumns.indexOf(column.value) > -1} />
+                    <ListItemText primary={column.label} />
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Box>
+          <Box>
+            <FormControl sx={{ minWidth: 180 }} size="small">
+              <InputLabel id="failure-filter-mode-label">Display</InputLabel>
+              <Select
+                labelId="filter-mode-label"
+                id="filter-mode"
+                value={filterMode}
+                onChange={handleFilterModeChange}
+                label="Filter"
+              >
+                <MenuItem value="all">Show all results</MenuItem>
+                <MenuItem value="failures">Show failures only</MenuItem>
+                <MenuItem value="different">Show different only</MenuItem>
+                <MenuItem value="highlights">Show highlights only</MenuItem>
+              </Select>
+            </FormControl>
+          </Box>
+          <Box>
+            <TextField
+              sx={{ minWidth: 180 }}
+              size="small"
+              label="Search"
+              placeholder="Text or regex"
+              value={searchText}
+              onChange={(e) => handleSearchTextChange(e.target.value)}
+            />
+          </Box>
+          <Box flexGrow={1} />
+          <Box display="flex" justifyContent="flex-end">
+            <ResponsiveStack direction="row" spacing={2}>
+              <Button color="primary" onClick={handleOpenMenu} startIcon={<ArrowDropDownIcon />}>
+                Eval actions
+              </Button>
+              {config && (
+                <Menu
+                  id="eval-actions-menu"
+                  anchorEl={anchorEl}
+                  keepMounted
+                  open={Boolean(anchorEl)}
+                  onClose={handleMenuClose}
+                >
+                  <Tooltip title="View the configuration that defines this eval" placement="left">
+                    <MenuItem onClick={() => setConfigModalOpen(true)}>
+                      <ListItemIcon>
+                        <VisibilityIcon fontSize="small" />
+                      </ListItemIcon>
+                      View YAML
+                    </MenuItem>
+                  </Tooltip>
+                  <Tooltip title="Edit this eval in the web UI" placement="left">
+                    <MenuItem
+                      onClick={() => {
+                        setStateFromConfig(config);
+                        router.push('/setup/');
+                      }}
+                    >
+                      <ListItemIcon>
+                        <EditIcon fontSize="small" />
+                      </ListItemIcon>
+                      Edit Eval
+                    </MenuItem>
+                  </Tooltip>
+                  <DownloadMenu />
+                  {config?.sharing && (
+                    <Tooltip title="Generate a unique URL that others can access" placement="left">
+                      <MenuItem onClick={handleShareButtonClick} disabled={shareLoading}>
+                        <ListItemIcon>
+                          {shareLoading ? (
+                            <CircularProgress size={16} />
+                          ) : (
+                            <ShareIcon fontSize="small" />
+                          )}
+                        </ListItemIcon>
+                        Share
+                      </MenuItem>
+                    </Tooltip>
+                  )}
+                  <Tooltip title="Delete this eval" placement="left">
+                    <MenuItem onClick={handleDeleteEvalClick}>
+                      <ListItemIcon>
+                        <DeleteIcon fontSize="small" />
+                      </ListItemIcon>
+                      Delete
+                    </MenuItem>
+                  </Tooltip>
+                </Menu>
+              )}
+              <Tooltip title="Edit table view settings" placement="bottom">
+                <Button
+                  color="primary"
+                  onClick={() => setViewSettingsModalOpen(true)}
+                  startIcon={<SettingsIcon />}
+                >
+                  Table Settings
                 </Button>
-                {config && (
-                  <Menu
-                    id="eval-actions-menu"
-                    anchorEl={anchorEl}
-                    keepMounted
-                    open={Boolean(anchorEl)}
-                    onClose={handleMenuClose}
-                  >
-                    <Tooltip title="View the configuration that defines this eval" placement="left">
-                      <MenuItem onClick={() => setConfigModalOpen(true)}>
-                        <ListItemIcon>
-                          <VisibilityIcon fontSize="small" />
-                        </ListItemIcon>
-                        View YAML
-                      </MenuItem>
-                    </Tooltip>
-                    <Tooltip title="Edit this eval in the web UI" placement="left">
-                      <MenuItem
-                        onClick={() => {
-                          setStateFromConfig(config);
-                          router.push('/setup/');
-                        }}
-                      >
-                        <ListItemIcon>
-                          <EditIcon fontSize="small" />
-                        </ListItemIcon>
-                        Edit Eval
-                      </MenuItem>
-                    </Tooltip>
-                    <DownloadMenu />
-                    {config?.sharing && (
-                      <Tooltip
-                        title="Generate a unique URL that others can access"
-                        placement="left"
-                      >
-                        <MenuItem onClick={handleShareButtonClick} disabled={shareLoading}>
-                          <ListItemIcon>
-                            {shareLoading ? (
-                              <CircularProgress size={16} />
-                            ) : (
-                              <ShareIcon fontSize="small" />
-                            )}
-                          </ListItemIcon>
-                          Share
-                        </MenuItem>
-                      </Tooltip>
-                    )}
-                    <Tooltip title="Delete this eval" placement="left">
-                      <MenuItem onClick={handleDeleteEvalClick}>
-                        <ListItemIcon>
-                          <DeleteIcon fontSize="small" />
-                        </ListItemIcon>
-                        Delete
-                      </MenuItem>
-                    </Tooltip>
-                  </Menu>
-                )}
-                <Tooltip title="Edit table view settings" placement="bottom">
+              </Tooltip>
+              <VariablesSettingsTrigger />
+              {config?.metadata?.redteam && (
+                <Tooltip title="View vulnerability scan report" placement="bottom">
                   <Button
                     color="primary"
-                    onClick={() => setViewSettingsModalOpen(true)}
-                    startIcon={<SettingsIcon />}
+                    startIcon={<EyeIcon />}
+                    onClick={() => router.push(`/report/?evalId=${evalId}`)}
                   >
-                    Table Settings
+                    Vulnerability Report
                   </Button>
                 </Tooltip>
-                <VariablesSettingsTrigger />
-                {config?.metadata?.redteam && (
-                  <Tooltip title="View vulnerability scan report" placement="bottom">
-                    <Button
-                      color="primary"
-                      startIcon={<EyeIcon />}
-                      onClick={() => router.push(`/report/?evalId=${evalId}`)}
-                    >
-                      Vulnerability Report
-                    </Button>
-                  </Tooltip>
-                )}
-              </ResponsiveStack>
-            </Box>
-          </ResponsiveStack>
-        </Paper>
+              )}
+            </ResponsiveStack>
+          </Box>
+        </ResponsiveStack>
         <ResultsCharts columnVisibility={columnVisibility} />
         <ResultsTable
           maxTextLength={maxTextLength}
@@ -435,12 +500,9 @@ export default function ResultsView({
           onClose={() => setShareModalOpen(false)}
           shareUrl={shareUrl}
         />
-        <SettingsModal
-          open={viewSettingsModalOpen}
-          onClose={() => setViewSettingsModalOpen(false)}
-        />
+        <SettingsModal open={viewSettingsModalOpen} onClose={() => setViewSettingsModalOpen(false)} />
+        <VariablesSettingsModal />
       </div>
-      <VariablesSettingsModal />
-    </VariablesSettingsProvider>
+    </VariableSettingsProvider>
   );
 }

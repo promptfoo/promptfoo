@@ -15,6 +15,7 @@ import { checkNodeVersion } from './checkNodeVersion';
 import cliState from './cliState';
 import { configCommand } from './commands/config';
 import { deleteCommand } from './commands/delete';
+import { filterProviders } from './commands/eval/filterProviders';
 import { filterTests } from './commands/eval/filterTests';
 import { exportCommand } from './commands/export';
 import { importCommand } from './commands/import';
@@ -37,12 +38,13 @@ import { createShareableUrl } from './share';
 import { generateTable } from './table';
 import telemetry from './telemetry';
 import { readTest, readTests, synthesizeFromTestSuite } from './testCases';
-import type {
-  CommandLineOptions,
-  EvaluateOptions,
-  TestCase,
-  TestSuite,
-  UnifiedConfig,
+import {
+  ProviderSchema,
+  type CommandLineOptions,
+  type EvaluateOptions,
+  type TestCase,
+  type TestSuite,
+  type UnifiedConfig,
 } from './types';
 import { checkForUpdates } from './updates';
 import {
@@ -129,12 +131,33 @@ async function resolveConfigs(
     logger.error(chalk.red('You must provide at least 1 prompt'));
     process.exit(1);
   }
+
   if (!config.providers || config.providers.length === 0) {
-    logger.error(
-      chalk.red('You must specify at least 1 provider (for example, openai:gpt-3.5-turbo)'),
-    );
+    logger.error(chalk.red('You must specify at least 1 provider (for example, openai:gpt-4o)'));
     process.exit(1);
   }
+  invariant(Array.isArray(config.providers), 'providers must be an array');
+  config.providers.forEach((provider) => {
+    const result = ProviderSchema.safeParse(provider);
+    if (!result.success) {
+      const errors = result.error.errors
+        .map((err) => {
+          return `- ${err.message}`;
+        })
+        .join('\n');
+      const providerString = typeof provider === 'string' ? provider : JSON.stringify(provider);
+      logger.warn(
+        chalk.yellow(
+          dedent`
+              Provider: ${providerString} encountered errors during schema validation:
+
+                ${errors}
+
+              Please double check your configuration.` + '\n',
+        ),
+      );
+    }
+  });
 
   // Parse prompts, providers, and tests
   const parsedPrompts = await readPrompts(config.prompts, cmdObj.prompts ? undefined : basePath);
@@ -715,6 +738,7 @@ async function main() {
       '--filter-pattern <pattern>',
       'Only run tests whose description matches the regular expression pattern',
     )
+    .option('--filter-providers <providers>', 'Only run tests with these providers')
     .option('--filter-failing <path>', 'Path to json output file')
     .option(
       '--var <key=value>',
@@ -772,6 +796,8 @@ async function main() {
           pattern: cmdObj.filterPattern,
           failing: cmdObj.filterFailing,
         });
+
+        testSuite.providers = filterProviders(testSuite.providers, cmdObj.filterProviders);
 
         const options: EvaluateOptions = {
           showProgressBar: getLogLevel() === 'debug' ? false : cmdObj.progressBar,

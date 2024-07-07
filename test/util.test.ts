@@ -1045,4 +1045,24 @@ describe('parsePathOrGlob', () => {
       filePath: expect.stringMatching(/base[\\\/]relative[\\\/]path[\\\/]to[\\\/]file.txt/),
     });
   });
+
+  it('should handle empty basePath', () => {
+    jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+    expect(parsePathOrGlob('', 'file.txt')).toEqual({
+      extension: '.txt',
+      functionName: undefined,
+      isPathPattern: false,
+      filePath: 'file.txt',
+    });
+  });
+
+  it('should handle file:// prefix', () => {
+    jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+    expect(parsePathOrGlob('', 'file://file.txt')).toEqual({
+      extension: '.txt',
+      functionName: undefined,
+      isPathPattern: false,
+      filePath: 'file.txt',
+    });
+  });
 });
