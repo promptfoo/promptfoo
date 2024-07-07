@@ -61,7 +61,7 @@ interface ResultsViewProps {
     label: string;
   }[];
   onRecentEvalSelected: (file: string) => void;
-  defaultEvalId?: string;
+  defaultEvalId: string;
 }
 
 export default function ResultsView({
@@ -241,7 +241,7 @@ export default function ResultsView({
   };
 
   return (
-    <VariablesSettingsProvider vars={head.vars} evalId={defaultEvalId as string}>
+    <VariablesSettingsProvider vars={head.vars} evalId={defaultEvalId}>
       <div style={{ marginLeft: '1rem', marginRight: '1rem' }}>
         <Box mb={2} sx={{ display: 'flex', alignItems: 'center' }}>
           <Heading variant="h5" sx={{ flexGrow: 1 }}>
