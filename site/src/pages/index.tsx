@@ -4,6 +4,7 @@ import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import CompareIcon from '@mui/icons-material/Compare';
 import DescriptionIcon from '@mui/icons-material/Description';
 import SecurityIcon from '@mui/icons-material/Security';
+import HomepageFeatures from '@site/src/components/HomepageFeatures';
 import HomepageInfo from '@site/src/components/HomepageInfo';
 import Layout from '@theme/Layout';
 import clsx from 'clsx';
@@ -15,7 +16,7 @@ function HomepageHeader() {
     <header className={clsx('hero hero--primary', styles.heroBanner)}>
       <div className="container">
         <h1>Ship LLM apps with confidence</h1>
-        <p>Open-source LLM testing used by 20,000 developers</p>
+        <p>Open-source LLM testing used by 20,000+ developers</p>
         <div className={styles.buttons}>
           <Link className="button button--primary button--lg" to="/docs/intro">
             Get Started
@@ -31,17 +32,23 @@ function HomepageWalkthrough() {
   const steps = [
     {
       id: 1,
-      caption: 'Build reliable prompts, RAGs, and agents',
+      caption: 'Evaluations',
       image: '/img/claude-vs-gpt-example.png',
       description: (
         <>
+          <p>
+            <strong>Build reliable prompts, RAGs, and agents</strong>
+          </p>
           <p>Start testing the performance of your models, prompts, and tools in minutes:</p>
           <pre className={styles.codeBox}>
             <code>npx promptfoo@latest init</code>
           </pre>
-          <p>Promptfoo runs locally and can integrate directly with your app.</p>
           <p>
-            <Link to="/docs/intro">&raquo; Learn more</Link>
+            Promptfoo runs locally and integrates directly with your app - no SDKs, cloud
+            dependencies, or logins.
+          </p>
+          <p>
+            <Link to="/docs/intro">&raquo; Get Started</Link>
           </p>
         </>
       ),
@@ -50,16 +57,28 @@ function HomepageWalkthrough() {
     },
     {
       id: 2,
-      caption: 'Catch security, legal, and brand risks',
+      caption: 'Security & Red Teaming',
       image: '/img/riskreport-1.png',
       description: (
         <>
           <p>
-            Set up automated scans for security vulnerabilities, data leaks, and other business and
-            legal risks.
+            <strong>Uncover and mitigate LLM vulnerabilities</strong>
           </p>
+          <p>Run automated scans to detect serious security and product flaws.</p>
+          <p>Protect your app from legal and brand risks such as:</p>
+          <ul>
+            <li>PII leaks</li>
+            <li>Jailbreaks</li>
+            <li>Harmful content</li>
+            <li>Specialized medical and legal advice</li>
+            <li>Competitor endorsements</li>
+            <li>Political statements</li>
+            <li>
+              and <Link to="/docs/guides/llm-redteaming">much more</Link>
+            </li>
+          </ul>
           <p>
-            <Link to="/docs/red-team">&raquo; Learn more</Link>
+            <Link to="/docs/red-team">&raquo; Scan for vulnerabilities in your LLM app</Link>
           </p>
         </>
       ),
@@ -68,13 +87,13 @@ function HomepageWalkthrough() {
     },
     {
       id: 3,
-      caption: 'Simple local configuration',
+      caption: 'CI/CD Testing',
       image: '/img/yaml-example.png',
       description: (
         <>
           <p>
-            Promptfoo uses a simple, declarative config and runs completely locally on your machine.
-            No SDKs, cloud dependencies, or logins.
+            Promptfoo's simple declarative config and local runtime makes it easy to set up in{' '}
+            <Link to="/docs/integrations/github-action/">GitHub Actions</Link> or other CI services.
           </p>
           <p>
             <Link to="/docs/getting-started">&raquo; See setup docs</Link>
@@ -90,33 +109,31 @@ function HomepageWalkthrough() {
 
   return (
     <div className={styles.walkthroughContainer}>
-      <div className={styles.walkthroughButtons}>
+      <div className={styles.walkthroughTabs}>
         {steps.map((step) => (
-          <div key={step.id}>
-            <button
-              className={clsx(
-                styles.walkthroughButton,
-                selectedStep === step.id && styles.walkthroughButtonActive,
-              )}
-              onClick={() => setSelectedStep(step.id)}
-            >
-              <span className={styles.walkthroughButtonNumber}>{step.icon}</span>
-              {step.caption}
-            </button>
-            {selectedStep === step.id && (
-              <p className={styles.walkthroughDescription}>{step.description}</p>
+          <button
+            key={step.id}
+            className={clsx(
+              styles.walkthroughTab,
+              selectedStep === step.id && styles.walkthroughTabActive,
             )}
-          </div>
+            onClick={() => setSelectedStep(step.id)}
+          >
+            {step.caption}
+          </button>
         ))}
       </div>
-      <div className={styles.walkthroughImageContainer}>
-        <Link to={selectedStepData?.destinationUrl || '#'}>
+      <div className={styles.walkthroughContent}>
+        <div className={styles.walkthroughImageContainer}>
           <img
-            src={selectedStepData?.image || steps[0].image}
-            alt={`Walkthrough step ${selectedStep || 1}`}
+            src={steps.find((step) => step.id === selectedStep)?.image}
+            alt={`Walkthrough step ${selectedStep}`}
             className={styles.walkthroughImage}
           />
-        </Link>
+        </div>
+        <div className={styles.walkthroughDescription}>
+          {steps.find((step) => step.id === selectedStep)?.description}
+        </div>
       </div>
     </div>
   );
@@ -136,11 +153,8 @@ export default function Home(): JSX.Element {
 
         <section className={styles.actionOrientedSection}>
           <div className="container">
-            <h2>Customized security probes for your application</h2>
-            <p>
-              Reports provide actionable insights and clear paths to remediation. Each vulnerability
-              comes with details on how to mitigate.
-            </p>
+            <h2>Detect & fix critical failures</h2>
+            <p>Discover hidden risks and take action to protect your brand and users.</p>
             <div>
               <Link to="/llm-vulnerability-scanner">
                 <img src="/img/riskreport-2.png" alt="Sample vulnerability report" />
@@ -148,38 +162,7 @@ export default function Home(): JSX.Element {
             </div>
           </div>
         </section>
-
-        <div className={styles.imageSection}>
-          <h4>Web Viewer</h4>
-          <Link to="/docs/intro">
-            <img
-              className={styles.featureImage}
-              src="/img/claude-vs-gpt-example.png"
-              alt="Web Viewer"
-            />
-          </Link>
-        </div>
-        <div className={styles.imageSection}>
-          <h4>Command line</h4>
-          <Link to="/docs/intro">
-            <img
-              className={styles.featureImage}
-              src="https://user-images.githubusercontent.com/310310/244891726-480e1114-d049-40b9-bd5f-f81c15060284.gif"
-              alt="Command line"
-            />
-          </Link>
-        </div>
-        <div className={styles.imageSection}>
-          <h4>Red Teaming &amp; Risk Assessment</h4>
-          <Link to="/docs/red-team">
-            <img
-              className={styles.featureImage}
-              src="/img/riskreport-1.png"
-              srcSet="/img/riskreport-1.png 1x, /img/riskreport-1@2x.png 2x"
-              alt="Red Teaming & Risk Assessment"
-            />
-          </Link>
-        </div>
+        <HomepageFeatures />
         <div className={styles.ctaSection}>
           <h3>promptfoo is used by LLM apps serving over 10 million users</h3>
           <div className={styles.buttons}>

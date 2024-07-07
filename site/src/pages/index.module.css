@@ -30,71 +30,44 @@
 }
 
 .walkthroughContainer {
+  max-width: min(1400px, 95%);
+  margin: 2rem auto;
+}
+
+.walkthroughTabs {
+  display: flex;
+  justify-content: center;
+  border-bottom: 1px solid #e0e0e0;
+  margin-bottom: 1rem;
+}
+
+.walkthroughTab {
+  padding: 1rem 1rem;
+  border: none;
+  background: none;
+  font-size: 1.25rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.walkthroughTabActive {
+  border-bottom: 2px solid #1890ff;
+  color: #1890ff;
+}
+
+.walkthroughContent {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  padding: 2rem 0;
-  max-width: calc(100% - 4rem);
-  margin: 0 auto;
-}
-
-.walkthroughButtons {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  width: 30%;
-}
-
-.walkthroughButton {
-  display: flex;
-  text-align: left;
-  padding: 1rem;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  background-color: #ffffff;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  font-size: 1.25rem;
-  width: 100%;
-}
-
-@media (max-width: 1200px) {
-  .walkthroughButton {
-    font-size: 1rem;
-    font-weight: bold;
-  }
-}
-
-.walkthroughButton:hover {
-  background-color: #f0f0f0;
-}
-
-.walkthroughButtonActive {
-  background-color: #e6f7ff;
-  border-color: #1890ff;
 }
 
 .walkthroughDescription {
-  margin-top: 1rem;
-  color: #666;
-  line-height: 1.4;
-}
-
-.walkthroughButtonNumber {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background-color: #e3eeff;
-  color: #404040;
-  font-weight: bold;
-  margin-right: 1rem;
+  width: 30%;
 }
 
 .walkthroughImageContainer {
-  width: 65%;
+  width: 70%;
+  padding-right: 2rem;
 }
 
 .walkthroughImage {
@@ -114,12 +87,7 @@
   overflow-x: auto;
   white-space: pre-wrap;
   word-wrap: break-word;
-  animation: rainbow-glint 5s infinite;
-}
-
-.codeBox code {
-  display: block;
-  color: #333;
+  animation: rainbow-glint 5s linear infinite;
 }
 
 @keyframes rainbow-glint {
@@ -138,6 +106,22 @@
   }
   80% {
     box-shadow: 0 0 5px rgba(0, 0, 255, 0.5);
+  }
+}
+
+@media screen and (max-width: 768px) {
+  .walkthroughContent {
+    flex-direction: column;
+  }
+
+  .walkthroughDescription,
+  .walkthroughImageContainer {
+    width: 100%;
+  }
+
+  .walkthroughDescription {
+    padding-right: 0;
+    margin-bottom: 1rem;
   }
 }
 
@@ -167,6 +151,7 @@
 }
 
 .actionOrientedSection h2 {
+  font-size: 2.5rem;
   color: #333;
   margin-bottom: 2rem;
 }
