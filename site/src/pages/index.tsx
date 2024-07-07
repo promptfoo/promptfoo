@@ -28,8 +28,7 @@ function HomepageHeader() {
 }
 
 function HomepageWalkthrough() {
-  const [selectedStep, setSelectedStep] = React.useState(1);
-
+  const [selectedStep, setSelectedStep] = React.useState(window.innerWidth < 768 ? null : 1);
   const steps = [
     {
       id: 1,
@@ -37,7 +36,7 @@ function HomepageWalkthrough() {
       image: '/img/claude-vs-gpt-example.png',
       description: (
         <>
-          <p>Start testing the performance of models, prompts, and more in minutes:</p>
+          <p>Start testing the performance of your models, prompts, and tools in minutes:</p>
           <pre className={styles.codeBox}>
             <code>npx promptfoo@latest init</code>
           </pre>
@@ -48,10 +47,11 @@ function HomepageWalkthrough() {
         </>
       ),
       icon: <CompareIcon />,
+      destinationUrl: '/docs/intro',
     },
     {
       id: 2,
-      caption: 'Catch security, brand, and legal risks',
+      caption: 'Catch security, legal, and brand risks',
       image: '/img/riskreport-1.png',
       description: (
         <>
@@ -65,6 +65,7 @@ function HomepageWalkthrough() {
         </>
       ),
       icon: <SecurityIcon />,
+      destinationUrl: '/docs/red-team',
     },
     {
       id: 3,
@@ -82,8 +83,11 @@ function HomepageWalkthrough() {
         </>
       ),
       icon: <DescriptionIcon />,
+      destinationUrl: '/docs/getting-started',
     },
   ];
+
+  const selectedStepData = steps.find((step) => step.id === selectedStep);
 
   return (
     <div className={styles.walkthroughContainer}>
@@ -107,11 +111,13 @@ function HomepageWalkthrough() {
         ))}
       </div>
       <div className={styles.walkthroughImageContainer}>
-        <img
-          src={steps.find((step) => step.id === selectedStep)?.image}
-          alt={`Walkthrough step ${selectedStep}`}
-          className={styles.walkthroughImage}
-        />
+        <Link to={selectedStepData?.destinationUrl || '#'}>
+          <img
+            src={selectedStepData?.image || steps[0].image}
+            alt={`Walkthrough step ${selectedStep || 1}`}
+            className={styles.walkthroughImage}
+          />
+        </Link>
       </div>
     </div>
   );

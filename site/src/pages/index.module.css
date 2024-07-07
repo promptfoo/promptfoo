@@ -40,7 +40,7 @@
 
 .walkthroughButton {
   display: flex;
-  align-items: center;
+  text-align: left;
   padding: 1rem;
   border: 1px solid #e0e0e0;
   border-radius: 8px;
@@ -49,6 +49,13 @@
   transition: all 0.3s ease;
   font-size: 1.25rem;
   width: 100%;
+}
+
+@media (max-width: 1200px) {
+  .walkthroughButton {
+    font-size: 1rem;
+    font-weight: bold;
+  }
 }
 
 .walkthroughButton:hover {
@@ -100,11 +107,31 @@
   overflow-x: auto;
   white-space: pre-wrap;
   word-wrap: break-word;
+  animation: rainbow-glint 5s infinite;
 }
 
 .codeBox code {
   display: block;
   color: #333;
+}
+
+@keyframes rainbow-glint {
+  0%,
+  100% {
+    box-shadow: 0 0 5px rgba(255, 0, 0, 0.5);
+  }
+  20% {
+    box-shadow: 0 0 5px rgba(255, 165, 0, 0.5);
+  }
+  40% {
+    box-shadow: 0 0 5px rgba(255, 255, 0, 0.5);
+  }
+  60% {
+    box-shadow: 0 0 5px rgba(0, 128, 0, 0.5);
+  }
+  80% {
+    box-shadow: 0 0 5px rgba(0, 0, 255, 0.5);
+  }
 }
 
 .imageSection {
@@ -149,6 +176,10 @@
 
   .walkthroughButtons {
     margin-bottom: 2rem;
+  }
+
+  .walkthroughButton {
+    align-items: center;
   }
 
   .imageSection {
