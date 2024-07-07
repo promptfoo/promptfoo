@@ -3,6 +3,10 @@
   text-align: center;
 }
 
+h2 {
+  font-size: 2rem;
+}
+
 .codeExample {
   flex: 1;
   max-width: 50%;

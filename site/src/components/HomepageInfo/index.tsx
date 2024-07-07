@@ -15,7 +15,7 @@ export default function HomepageInfo(): JSX.Element {
       </section>
       <section className={styles.section}>
         <div className="container">
-          <h2 className={styles.blurb}>... to rapidly improve prompts and evaluate models</h2>
+          <h2 className={styles.blurb}>... to rapidly improve LLM performance</h2>
         </div>
         <div className={styles.configToWebview}>
           <div className={styles.codeExample}>
@@ -56,11 +56,6 @@ tests:
               <img src="https://user-images.githubusercontent.com/310310/261666627-ce5a7817-da82-4484-b26d-32474f1cabc5.png" />
             </Link>
           </div>
-        </div>
-      </section>
-      <section className={styles.section}>
-        <div className="container">
-          <h2 className={styles.blurb}>How it works</h2>
         </div>
       </section>
     </>

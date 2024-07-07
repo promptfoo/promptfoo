@@ -4,7 +4,6 @@ import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import CompareIcon from '@mui/icons-material/Compare';
 import DescriptionIcon from '@mui/icons-material/Description';
 import SecurityIcon from '@mui/icons-material/Security';
-import HomepageFeatures from '@site/src/components/HomepageFeatures';
 import HomepageInfo from '@site/src/components/HomepageInfo';
 import Layout from '@theme/Layout';
 import clsx from 'clsx';
@@ -15,8 +14,8 @@ function HomepageHeader() {
   return (
     <header className={clsx('hero hero--primary', styles.heroBanner)}>
       <div className="container">
-        <h1 className="hero__title">Ship LLM apps with confidence</h1>
-        <p className="hero__subtitle">Open-source LLM testing used by 20,000 developers</p>
+        <h1>Ship LLM apps with confidence</h1>
+        <p>Open-source LLM testing used by 20,000 developers</p>
         <div className={styles.buttons}>
           <Link className="button button--primary button--lg" to="/docs/intro">
             Get Started
@@ -69,7 +68,7 @@ function HomepageWalkthrough() {
     },
     {
       id: 3,
-      caption: 'Simple, local configuration',
+      caption: 'Simple local configuration',
       image: '/img/yaml-example.png',
       description: (
         <>
@@ -134,14 +133,28 @@ export default function Home(): JSX.Element {
       <HomepageWalkthrough />
       <main>
         <HomepageInfo />
-        <HomepageFeatures />
+
+        <section className={styles.actionOrientedSection}>
+          <div className="container">
+            <h2>Customized security probes for your application</h2>
+            <p>
+              Reports provide actionable insights and clear paths to remediation. Each vulnerability
+              comes with details on how to mitigate.
+            </p>
+            <div>
+              <Link to="/llm-vulnerability-scanner">
+                <img src="/img/riskreport-2.png" alt="Sample vulnerability report" />
+              </Link>
+            </div>
+          </div>
+        </section>
 
         <div className={styles.imageSection}>
           <h4>Web Viewer</h4>
           <Link to="/docs/intro">
             <img
               className={styles.featureImage}
-              src="https://user-images.githubusercontent.com/310310/261666627-ce5a7817-da82-4484-b26d-32474f1cabc5.png"
+              src="/img/claude-vs-gpt-example.png"
               alt="Web Viewer"
             />
           </Link>

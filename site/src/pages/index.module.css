@@ -5,6 +5,17 @@
   overflow: hidden;
 }
 
+.heroBanner h1 {
+  font-size: 4rem;
+  margin-bottom: 2rem;
+}
+
+.heroBanner p {
+  font-size: 1.25rem;
+  font-weight: normal;
+  margin-bottom: 2rem;
+}
+
 @media screen and (max-width: 996px) {
   .heroBanner {
     padding: 1rem;
@@ -15,6 +26,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 1rem;
 }
 
 .walkthroughContainer {
@@ -146,6 +158,29 @@
   transform: scale(1.02);
 }
 
+.actionOrientedSection {
+  padding: 4rem 4rem;
+  background-color: #f4f4f4;
+  text-align: center;
+  border-radius: 12px;
+  min-width: min(100%, 1440px);
+}
+
+.actionOrientedSection h2 {
+  color: #333;
+  margin-bottom: 2rem;
+}
+
+.actionOrientedSection p {
+  font-size: 1.125rem;
+  color: #666;
+  margin-bottom: 2rem;
+}
+
+.actionOrientedSection img {
+  border-radius: 12px;
+}
+
 .ctaSection {
   text-align: center;
   padding: 6rem 0;
@@ -160,6 +195,11 @@
 }
 
 @media screen and (max-width: 768px) {
+  .heroBanner h1 {
+    font-size: 2rem;
+    margin-bottom: 2rem;
+  }
+
   .walkthroughContainer {
     flex-direction: column;
   }
