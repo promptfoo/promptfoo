@@ -12,6 +12,7 @@ export default function HomepageFeatures() {
       image2x: '/img/security-coverage.png',
       alt: 'promptfoo security coverage examples',
       link: '/docs/red-team',
+      cta: 'Learn More',
     },
     {
       title: 'Built for developers',
@@ -23,6 +24,7 @@ export default function HomepageFeatures() {
         'https://user-images.githubusercontent.com/310310/244891726-480e1114-d049-40b9-bd5f-f81c15060284.gif',
       alt: 'promptfoo CLI',
       link: '/docs/getting-started',
+      cta: 'Get Started',
     },
     {
       title: 'Battle-tested, 100% open-source',
@@ -32,6 +34,7 @@ export default function HomepageFeatures() {
       image2x: '/img/github-repo.png',
       alt: 'promptfoo github repo',
       link: 'https://github.com/promptfoo/promptfoo',
+      cta: 'View on GitHub',
     },
   ];
 
@@ -46,7 +49,7 @@ export default function HomepageFeatures() {
                 <h3>{feature.title}</h3>
                 <p>{feature.description}</p>
                 <Link to={feature.link} className="button button--secondary">
-                  Learn More
+                  {feature.cta}
                 </Link>
               </div>
               <div className={styles.featureImageWrapper}>

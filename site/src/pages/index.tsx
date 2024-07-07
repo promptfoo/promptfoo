@@ -28,7 +28,7 @@ function HomepageHeader() {
 }
 
 function HomepageWalkthrough() {
-  const [selectedStep, setSelectedStep] = React.useState(window?.innerWidth < 768 ? null : 1);
+  const [selectedStep, setSelectedStep] = React.useState(1);
   const steps = [
     {
       id: 1,
@@ -64,9 +64,12 @@ function HomepageWalkthrough() {
       description: (
         <>
           <p>
-            <strong>Uncover and mitigate LLM vulnerabilities</strong>
+            <strong>Find and fix LLM vulnerabilities</strong>
           </p>
-          <p>Run automated scans to detect serious security and product flaws.</p>
+          <p>
+            Automated scans tailored to your application can detect serious security and product
+            flaws.
+          </p>
           <p>Protect your app from legal and brand risks such as:</p>
           <ul>
             <li>PII leaks</li>
@@ -91,9 +94,12 @@ function HomepageWalkthrough() {
       id: 3,
       caption: 'CI/CD Testing',
       image: '/img/docs/github-action-comment.png',
-      image2x: '/img/docs/github-action-comment.png',
+      image2x: '/img/docs/github-action-comment@2x.png',
       description: (
         <>
+          <p>
+            <strong>Fits in your development workflow</strong>
+          </p>
           <p>
             Promptfoo's simple file-based config and local runtime make it easy to set up in{' '}
             <Link to="/docs/integrations/github-action/">GitHub Actions</Link> or other CI services.
@@ -160,7 +166,11 @@ export default function Home(): JSX.Element {
             <p>Discover hidden risks and take action to protect your brand and users.</p>
             <div>
               <Link to="/llm-vulnerability-scanner">
-                <img src="/img/riskreport-2.png" alt="Sample vulnerability report" />
+                <img
+                  src="/img/riskreport-2.png"
+                  srcSet="/img/riskreport-2.png 1x, /img/riskreport-2@2x.png 2x"
+                  alt="Sample vulnerability report"
+                />
               </Link>
             </div>
           </div>

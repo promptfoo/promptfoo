@@ -119,6 +119,8 @@
   .walkthroughDescription,
   .walkthroughImageContainer {
     width: 100%;
+    padding: 0;
+    margin-bottom: 1rem;
   }
 
   .walkthroughDescription {
@@ -183,8 +185,8 @@
 
 @media screen and (max-width: 768px) {
   .heroBanner h1 {
-    font-size: 2rem;
-    margin-bottom: 2rem;
+    font-size: 2.5rem;
+    margin: 2rem 0;
   }
 
   .walkthroughContainer {
@@ -202,6 +204,14 @@
 
   .walkthroughButton {
     align-items: center;
+  }
+
+  .actionOrientedSection {
+    padding: 4rem 0;
+  }
+
+  .actionOrientedSection h2 {
+    font-size: 2rem;
   }
 
   .imageSection {
