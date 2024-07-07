@@ -55,6 +55,7 @@ export default function HomepageFeatures() {
               <div className={styles.featureImageWrapper}>
                 <Link to={feature.link}>
                   <img
+                    loading="lazy"
                     src={feature.image}
                     srcSet={`${feature.image} 1x, ${feature.image2x} 2x`}
                     alt={feature.alt}

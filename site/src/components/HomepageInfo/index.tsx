@@ -61,6 +61,7 @@ tests:
             </div>
             <Link to="https://user-images.githubusercontent.com/310310/261666627-ce5a7817-da82-4484-b26d-32474f1cabc5.png">
               <img
+                loading="lazy"
                 src="https://user-images.githubusercontent.com/310310/261666627-ce5a7817-da82-4484-b26d-32474f1cabc5.png"
                 className={styles.resultImage}
               />

@@ -167,6 +167,7 @@ export default function Home(): JSX.Element {
             <div>
               <Link to="/llm-vulnerability-scanner">
                 <img
+                  loading="lazy"
                   src="/img/riskreport-2.png"
                   srcSet="/img/riskreport-2.png 1x, /img/riskreport-2@2x.png 2x"
                   alt="Sample vulnerability report"
