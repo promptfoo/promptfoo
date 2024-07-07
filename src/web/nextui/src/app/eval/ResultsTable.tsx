@@ -361,14 +361,7 @@ function ResultsTable({
       ];
     }
     return [];
-  }, [
-    columnHelper,
-    head.vars,
-    maxTextLength,
-    renderMarkdown,
-    variablesContext.variableColumns,
-    visibleVariableColumns,
-  ]);
+  }, [columnHelper, head.vars, maxTextLength, renderMarkdown, visibleVariableColumns]);
 
   const getOutput = React.useCallback(
     (rowIndex: number, promptIndex: number) => {
