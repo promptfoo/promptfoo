@@ -10,7 +10,7 @@ import { useVariablesSettingsContext } from './VariablesSettingsProvider';
 
 type Props = {};
 
-export default function VariablesSettingsModal({}: Props) {
+export default function VariablesSettingsModal(props: Props) {
   const { settingsMenu, variableColumns, toggleColumnVisibility } = useVariablesSettingsContext();
 
   return (
