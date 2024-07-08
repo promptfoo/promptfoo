@@ -9,7 +9,7 @@ export default function HomepageInfo(): JSX.Element {
   return (
     <div className={styles.infoContainer}>
       <section className={styles.section}>
-        <h2>Easy abstraction for complex LLM testing</h2>
+        <h2>Easy abstractions for complex LLM testing</h2>
         <div className={styles.configToWebview}>
           <div className={styles.codeExample}>
             <div className={styles.featureTitle}>

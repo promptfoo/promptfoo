@@ -136,13 +136,13 @@ export async function synthesize({
   const addHarmfulCases = plugins.some((p) => p.startsWith('harmful'));
   if (plugins.includes('prompt-injection') || plugins.includes('jailbreak') || addHarmfulCases) {
     logger.debug('Generating harmful test cases');
-    const harmfulPrompts = await getHarmfulTests(
+    const newHarmfulPrompts = await getHarmfulTests(
       redteamProvider,
       purpose,
       injectVar,
       plugins.filter((p) => p.startsWith('harmful:')),
     );
-    harmfulPrompts.push(...harmfulPrompts);
+    harmfulPrompts.push(...newHarmfulPrompts);
 
     if (addHarmfulCases) {
       testCases.push(...harmfulPrompts);
