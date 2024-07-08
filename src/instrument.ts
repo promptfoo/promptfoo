@@ -10,7 +10,9 @@ if (process.env.PROMPTFOO_ENABLE_ERROR_REPORTING) {
     tracesSampleRate: 1.0,
     profilesSampleRate: 1.0,
   });
-  logger.info('Error reporting enabled.');
+  if (Sentry.isInitialized()) {
+    logger.info('Error reporting enabled.');
+  }
   const author = getAuthor();
   if (author) {
     Sentry.setUser({ email: author });
