@@ -50,7 +50,7 @@
     "db:generate": "npx drizzle-kit generate:sqlite",
     "audit:fix": "npm audit fix && npm audit fix --prefix src/web/nextui && npm audit fix --prefix site",
     "prepublishOnly": "npm run build:clean && npm run build",
-    "sentry:sourcemaps": "sentry-cli sourcemaps inject --org promptfoo-h0 --project node ./dist && sentry-cli sourcemaps upload --org promptfoo-h0 --project node ./dist"
+    "sentry:sourcemaps": "sentry-cli sourcemaps inject --org promptfoo --project cli ./dist && sentry-cli sourcemaps upload --org promptfoo --project cli ./dist"
   },
   "peerDependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.602.0",
@@ -110,7 +110,9 @@
     "@anthropic-ai/sdk": "^0.24.3",
     "@apidevtools/json-schema-ref-parser": "^11.6.4",
     "@googleapis/sheets": "^9.0.0",
+    "@sentry/cli": "^2.32.1",
     "@sentry/node": "^8.15.0",
+    "@sentry/profiling-node": "^8.15.0",
     "ajv": "^8.16.0",
     "ajv-formats": "^2.1.1",
     "async": "^3.2.5",

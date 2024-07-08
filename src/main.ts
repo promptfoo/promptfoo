@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import './instrument';
 import chalk from 'chalk';
 import chokidar from 'chokidar';
 import { Command } from 'commander';

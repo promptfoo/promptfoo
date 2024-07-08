@@ -19,15 +19,23 @@ To disable telemetry, set the following environment variable:
 PROMPTFOO_DISABLE_TELEMETRY=1
 ```
 
-## Sentry
+## Optional Error Reporting
 
-If telemetry is enabled, we collect anonymous crash data through Sentry.io so we can detect and fix breakages.
+In addition to basic telemetry, `promptfoo` can optionally use [Sentry](https://sentry.io/) for error tracking and monitoring. Sentry helps us identify and fix bugs more efficiently by providing detailed error reports.
+
+To enable error reporting with Sentry, you need to explicitly opt-in by setting the following environment variable:
+
+```sh
+PROMPTFOO_ENABLE_ERROR_REPORTING=1
+```
+
+We recommend enabling Sentry if you encounter any issues, as it provides us with valuable information to resolve problems quickly. Note that you should NOT enable error reporting if your prompts include any secrets or personally identifiable information, as this may expose those secrets to the Sentry service.
 
 ## Updates
 
 The CLI checks NPM's package registry for updates. If there is a newer version available, it will display a banner to the user.
 
-To disable, set:
+To disable update checks, set:
 
 ```sh
 PROMPTFOO_DISABLE_UPDATE=1
