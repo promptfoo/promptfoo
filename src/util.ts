@@ -1390,7 +1390,7 @@ export function parsePathOrGlob(
   if (promptPath.startsWith('file://')) {
     promptPath = promptPath.slice(7);
   }
-  const filePath = path.resolve(basePath, promptPath);
+  const filePath = path.join(basePath, promptPath);
 
   let stats;
   try {
