@@ -86,6 +86,10 @@ prompts:
   - file:///root/path/to/prompt.py:prompt2
 ```
 
+:::tip
+Check them into version control. This approach helps in tracking changes, collaboration, and ensuring consistency across different environments.
+:::
+
 Example of multiple prompt files:
 
 ```txt title=prompt1.txt
@@ -117,7 +121,7 @@ If you have only one text file, you can include multiple prompts in the file, se
 
 Example of a single prompt file with multiple prompts (`prompts.txt`):
 
-```
+```text title=prompts.txt
 Translate the following text to French: "{{name}}: {{text}}"
 ---
 Translate the following text to German: "{{name}}: {{text}}"
@@ -167,18 +171,20 @@ To specify a prompt function in `promptfooconfig.yaml`, reference the file direc
 prompts: ['prompt.js', 'prompt.py']
 ```
 
-In the prompt function, you can access the test case variables through the `vars` object. The function should return a string or an object that represents the prompt.
+In the prompt function, you can access the test case variables and provider information via the context. The function will have access to a `vars` object and `provider` object. Having access to the provider object allows you to dynamically generate prompts for different providers with different formats.
+
+The function should return a string or an object that represents the prompt.
 
 #### Examples
 
 A Javascript prompt function, `prompt.js`:
 
 ```javascript title=prompt.js
-module.exports = async function ({ vars }) {
+module.exports = async function ({ vars, provider }) {
   return [
     {
       role: 'system',
-      content: `You're an angry pirate. Be concise and stay in character.`,
+      content: `You're an angry pirate named ${provider.label || provider.id}. Be concise and stay in character.`,
     },
     {
       role: 'user',
@@ -197,7 +203,7 @@ module.exports.prompt1 = async function ({ vars, provider }) {
   return [
     {
       role: 'system',
-      content: `You're an angry pirate. Be concise and stay in character.`,
+      content: `You're an angry pirate named ${provider.label || provider.id}. Be concise and stay in character.`,
     },
     {
       role: 'user',
@@ -214,8 +220,15 @@ import json
 import sys
 
 def my_prompt_function(context: dict) -> str:
+
+    provider: dict = context['providers']
+    provider_id: str = provider['id']  # ex. openai:gpt-4o or bedrock:anthropic.claude-3-sonnet-20240229-v1:0
+    provider_label: str | None = provider.get('label') # exists if set in promptfoo config.
+
+    variables: dict = context['vars'] # access the test case variables
+
     return (
-        f"Describe {context['vars']['topic']} concisely, comparing it to the Python"
+        f"Describe {variables['topic']} concisely, comparing it to the Python"
         " programming language."
     )
 
@@ -227,8 +240,8 @@ if __name__ == "__main__":
 To verify that your function is producing the correct prompt:
 
 1. Run `promptfoo view`
-1. Check that the table header contains your function code.
-1. Hover over a particular output that you want to investigate and click the Magnifying Glass (🔎) to view the final prompt in the details pane.
+2. Check that the table header contains your function code.
+3. Hover over a particular output that you want to investigate and click the Magnifying Glass (🔎) to view the final prompt in the details pane.
 
 :::info
 By default, promptfoo runs the `python` executable in your shell.

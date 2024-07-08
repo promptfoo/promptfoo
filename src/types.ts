@@ -299,6 +299,19 @@ export interface EvaluateOptions {
   interactiveProviders?: boolean;
 }
 
+export type PromptFunctionContext = {
+  vars: Record<string, string | object>;
+  provider: {
+    id: string;
+    label?: string;
+  };
+};
+
+export type PromptFunction = (context: {
+  vars: Record<string, string | object>;
+  provider?: ApiProvider;
+}) => Promise<string | object>;
+
 export interface Prompt {
   id?: string;
   raw: string;
@@ -307,10 +320,7 @@ export interface Prompt {
    */
   display?: string;
   label: string;
-  function?: (context: {
-    vars: Record<string, string | object>;
-    provider?: ApiProvider;
-  }) => Promise<string | object>;
+  function?: PromptFunction;
 }
 
 // Used for final prompt display
@@ -725,10 +735,6 @@ export interface EvalWithMetadata {
   results: EvaluateSummary;
   description?: string;
 }
-
-export type PromptFunction = (context: {
-  vars: Record<string, string | object>;
-}) => Promise<string | object>;
 
 // node.js package interface
 export type EvaluateTestSuite = {

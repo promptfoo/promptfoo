@@ -37,7 +37,7 @@ describe('pythonPromptFunction', () => {
       {
         ...context,
         provider: {
-          id: expect.any(Function),
+          id: 'providerId',
           label: 'providerLabel',
         },
       },
@@ -59,7 +59,15 @@ describe('pythonPromptFunction', () => {
     expect(mockPythonShellRun).toHaveBeenCalledWith(filePath, {
       mode: 'text',
       pythonPath: process.env.PROMPTFOO_PYTHON || 'python',
-      args: [JSON.stringify(context)],
+      args: [
+        JSON.stringify({
+          vars: context.vars,
+          provider: {
+            id: context.provider.id(),
+            label: context.provider.label,
+          },
+        }),
+      ],
     });
     expect(mockLoggerDebug).toHaveBeenCalledWith(`Executing python prompt script ${filePath}`);
     expect(mockLoggerDebug).toHaveBeenCalledWith(
