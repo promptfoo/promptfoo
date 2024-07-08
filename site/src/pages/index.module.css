@@ -146,6 +146,19 @@
   transform: scale(1.02);
 }
 
+.logoSection {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 2rem;
+  padding: 4rem 0;
+}
+
+.logoSection h2 {
+  text-align: center;
+  font-size: 2rem;
+}
+
 .actionOrientedSection {
   padding: 4rem 4rem;
   background-color: #f4f4f4;
@@ -155,7 +168,7 @@
 }
 
 .actionOrientedSection h2 {
-  font-size: 2.5rem;
+  font-size: 2rem;
   color: #333;
   margin-bottom: 2rem;
 }
@@ -173,8 +186,10 @@
 .ctaSection {
   text-align: center;
   padding: 6rem 0;
+  /*
   background-color: #f8f9fa;
-  margin-top: 4rem;
+  */
+  margin: 4rem 0;
 }
 
 .ctaSection h3 {

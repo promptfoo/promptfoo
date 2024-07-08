@@ -3,22 +3,13 @@ import Link from '@docusaurus/Link';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import SettingsIcon from '@mui/icons-material/Settings';
 import CodeBlock from '@theme/CodeBlock';
-import LogoContainer from '../LogoContainer';
 import styles from './styles.module.css';
 
 export default function HomepageInfo(): JSX.Element {
   return (
     <div className={styles.infoContainer}>
       <section className={styles.section}>
-        <div className="container">
-          <h2 className={styles.blurb}>Trusted by developers at</h2>
-          <LogoContainer />
-        </div>
-      </section>
-      <section className={styles.section}>
-        <div className="container">
-          <h2 className={styles.blurb}>... to rapidly improve LLM performance</h2>
-        </div>
+        <h2>Easy abstraction for complex LLM testing</h2>
         <div className={styles.configToWebview}>
           <div className={styles.codeExample}>
             <div className={styles.featureTitle}>

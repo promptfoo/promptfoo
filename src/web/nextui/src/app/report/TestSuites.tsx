@@ -185,9 +185,7 @@ const TestSuites: React.FC<{
                         <>
                           <br />({subCategory.passRateWithFilter} with mitigation)
                         </>
-                      ) : (
-                        subCategory.passRateWithFilter
-                      )}
+                      ) : null}
                     </TableCell>
                     <TableCell className={`vuln-${subCategory.severity.toLowerCase()}`}>
                       {subCategory.severity}
