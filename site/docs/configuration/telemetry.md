@@ -19,6 +19,10 @@ To disable telemetry, set the following environment variable:
 PROMPTFOO_DISABLE_TELEMETRY=1
 ```
 
+## Sentry
+
+If telemetry is enabled, we collect anonymous crash data through Sentry.io so we can detect and fix breakages.
+
 ## Updates
 
 The CLI checks NPM's package registry for updates. If there is a newer version available, it will display a banner to the user.

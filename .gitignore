@@ -12,3 +12,6 @@ __pycache__
 
 # jest
 .coverage
+
+# Sentry Config File
+.sentryclirc

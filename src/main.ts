@@ -63,6 +63,8 @@ import {
 } from './util';
 import { BrowserBehavior, startServer } from './web/server';
 
+telemetry.maybeInitSentry();
+
 async function resolveConfigs(
   cmdObj: Partial<CommandLineOptions>,
   defaultConfig: Partial<UnifiedConfig>,

@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/node';
 import chalk from 'chalk';
 import packageJson from '../package.json';
 import { fetchWithTimeout } from './fetch';
@@ -41,6 +42,14 @@ export class Telemetry {
           'Anonymous telemetry is enabled. For more info, see https://www.promptfoo.dev/docs/configuration/telemetry',
         ),
       );
+    }
+  }
+
+  maybeInitSentry() {
+    if (!this.disabled) {
+      Sentry.init({
+        dsn: 'https://a56ad7d60c635183e92d2bd8abc9c5e1@o4507564411846656.ingest.us.sentry.io/4507564414271488',
+      });
     }
   }
 

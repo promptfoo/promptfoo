@@ -41,7 +41,7 @@
     "build:clean": "shx rm -rf dist",
     "build:nextui": "sh src/web/nextui/build.sh",
     "build:watch": "tsc --watch",
-    "build": "tsc && shx cp src/*.html dist/src && shx cp src/python/wrapper.py dist/src/python && shx rm -rf dist/drizzle && shx cp -r drizzle dist/drizzle && npm run build:nextui && shx chmod +x dist/src/main.js",
+    "build": "tsc && shx cp src/*.html dist/src && shx cp src/python/wrapper.py dist/src/python && shx rm -rf dist/drizzle && shx cp -r drizzle dist/drizzle && npm run build:nextui && shx chmod +x dist/src/main.js && npm run sentry:sourcemaps",
     "test": "jest",
     "test:watch": "jest --watch",
     "format": "prettier -w .",
@@ -49,7 +49,8 @@
     "db:migrate": "npx tsx src/migrate.ts",
     "db:generate": "npx drizzle-kit generate:sqlite",
     "audit:fix": "npm audit fix && npm audit fix --prefix src/web/nextui && npm audit fix --prefix site",
-    "prepublishOnly": "npm run build:clean && npm run build"
+    "prepublishOnly": "npm run build:clean && npm run build",
+    "sentry:sourcemaps": "sentry-cli sourcemaps inject --org promptfoo-h0 --project node ./dist && sentry-cli sourcemaps upload --org promptfoo-h0 --project node ./dist"
   },
   "peerDependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.602.0",
@@ -67,6 +68,7 @@
     "@eslint/js": "^9.6.0",
     "@swc/cli": "^0.4.0",
     "@swc/core": "^1.6.13",
+    "@sentry/cli": "^2.32.1",
     "@swc/jest": "^0.2.36",
     "@trivago/prettier-plugin-sort-imports": "^4.3.0",
     "@types/async": "^3.2.24",
@@ -108,6 +110,7 @@
     "@anthropic-ai/sdk": "^0.24.3",
     "@apidevtools/json-schema-ref-parser": "^11.6.4",
     "@googleapis/sheets": "^9.0.0",
+    "@sentry/node": "^8.15.0",
     "ajv": "^8.16.0",
     "ajv-formats": "^2.1.1",
     "async": "^3.2.5",
