@@ -1072,7 +1072,7 @@ describe('parsePathOrGlob', () => {
       extension: '.txt',
       functionName: undefined,
       isPathPattern: false,
-      filePath: '/absolute/base/prompts/file.txt',
+      filePath: expect.stringMatching(/^[/\\]absolute[/\\]base[/\\]prompts[/\\]file\.txt$/),
     });
   });
 
@@ -1082,7 +1082,7 @@ describe('parsePathOrGlob', () => {
       extension: '.txt',
       functionName: undefined,
       isPathPattern: false,
-      filePath: 'relative/base/file.txt',
+      filePath: expect.stringMatching(/^relative[/\\]base[/\\]file\.txt$/),
     });
   });
 });
