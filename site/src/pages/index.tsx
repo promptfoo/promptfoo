@@ -19,7 +19,14 @@ function HomepageHeader() {
         <h1>Ship LLM apps with confidence</h1>
         <p>Open-source LLM testing used by 20,000+ developers</p>
         <div className={styles.buttons}>
-          <Link className="button button--primary button--lg" to="/docs/intro">
+          <Link
+            className="button button--primary button--lg"
+            to={
+              typeof window !== 'undefined' && window.location.hash === '#redteam'
+                ? '/docs/red-team'
+                : '/docs/intro'
+            }
+          >
             Get Started
           </Link>
         </div>
@@ -29,7 +36,12 @@ function HomepageHeader() {
 }
 
 function HomepageWalkthrough() {
-  const [selectedStep, setSelectedStep] = React.useState(1);
+  const [selectedStep, setSelectedStep] = React.useState(() => {
+    if (typeof window !== 'undefined' && window.location.hash === '#redteam') {
+      return 2;
+    }
+    return 1;
+  });
   const steps = [
     {
       id: 1,
