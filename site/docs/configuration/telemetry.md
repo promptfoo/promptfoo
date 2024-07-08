@@ -29,7 +29,7 @@ To enable error reporting with Sentry, you need to explicitly opt-in by setting 
 PROMPTFOO_ENABLE_ERROR_REPORTING=1
 ```
 
-We recommend enabling Sentry if you encounter any issues, as it provides us with valuable information to resolve problems quickly.
+We recommend enabling Sentry if you encounter any issues, as it provides us with valuable information to resolve problems quickly. Note that you should NOT enable error reporting if your prompts include any secrets or personally identifiable information, as this may expose those secrets to the Sentry service.
 
 ## Updates
 
