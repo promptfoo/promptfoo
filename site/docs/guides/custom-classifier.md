@@ -14,7 +14,7 @@ In this guide, we'll walk you through setting up an example that compares image 
 
 For tasks where you need to classify images into predefined categories, you can use prompts that ask the model to pick a class from a list. For example:
 
-```
+```text
 Select the category that best describes the image: a) cat, b) dog, c) bird.
 ```
 
@@ -22,7 +22,7 @@ Select the category that best describes the image: a) cat, b) dog, c) bird.
 
 For structured outputs, instruct the model to return results in JSON format. This is useful for extracting multiple attributes or detailed information. For example:
 
-```
+```text
 Provide a JSON object with the following keys: { "category": "", "confidence": "" }
 ```
 
@@ -30,8 +30,48 @@ Provide a JSON object with the following keys: { "category": "", "confidence": "
 
 When the output needs to be constrained to specific values, you can use an enum-based approach. For example:
 
-```
+```text
 Output one word from the following list that best describes the image: ["cat", "dog", "bird"]
+```
+
+## Handling Image Quality and Distribution Issues
+
+In a production setting, you may often encounter issues with image quality or receive images that do not fit the distribution of what you are trying to analyze. These challenges can affect the performance and accuracy of your image classification system.
+
+### Dealing with Poor Image Quality
+
+- **Preprocessing**: Implement preprocessing steps such as resizing, denoising, and enhancing contrast to improve image quality before classification.
+- **Augmentation**: Use data augmentation techniques to create variations of your training images, helping the model become more robust to different image qualities.
+- **Quality Checks**: Integrate quality checks to filter out images that do not meet a certain quality threshold before they are classified.
+
+### Handling Out-of-Distribution Images
+
+- **Anomaly Detection**: Incorporate anomaly detection methods to identify images that do not fit the expected distribution. These images can be flagged for further review or processed separately.
+- **Model Retraining**: Periodically retrain your model with new data that includes a wider variety of images to improve its ability to handle out-of-distribution samples.
+- **Contextual Prompts**: Use prompts that include context about the expected distribution. For example:
+
+  ```text
+  Classify the following image into one of the following categories: [cat, dog, bird, car]. If the image does not clearly belong to one of these categories, provide a brief explanation.
+  ```
+
+### Few-Shot Prompting and Its Limitations
+
+Few-shot prompting involves providing the model with a few examples of the task before asking it to perform the classification. However, this technique is often not viable in production settings due to the large amount of context window it occupies. Instead, we can use a reverse approach by feeding the LLM examples of good and bad images to shape the prompts.
+
+**Example Reverse Approach**:
+
+```text
+Consider the following examples of good and bad images. Use these examples to understand the criteria for a good image before classifying the next image.
+
+Good Image Examples:
+1. A clear, high-resolution image of a cat sitting on a windowsill.
+2. A well-lit, sharp image of a dog playing in the park.
+
+Bad Image Examples:
+1. A blurry, low-resolution image of a bird in flight.
+2. An overexposed image of a car where details are hard to discern.
+
+Now, classify the following image: [insert image].
 ```
 
 ## Using a Real Dataset
