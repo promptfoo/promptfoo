@@ -7,7 +7,7 @@ export default function HomepageFeatures() {
     {
       title: 'Comprehensive security coverage',
       description:
-        'Custom probes for your application identify failures you actually care about, not just generic jailbreaks and prompt injections.',
+        'Custom probes for your application that identify failures you actually care about, not just generic jailbreaks and prompt injections.',
       image: '/img/security-coverage.png',
       image2x: '/img/security-coverage.png',
       alt: 'promptfoo security coverage examples',

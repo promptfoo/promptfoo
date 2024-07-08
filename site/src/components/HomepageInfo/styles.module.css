@@ -5,6 +5,10 @@
   margin: 4rem 0 6rem 0;
 }
 
+.infoContainer h2 {
+  font-size: 2rem;
+}
+
 .section {
   text-align: center;
 }

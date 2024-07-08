@@ -6,6 +6,7 @@ import DescriptionIcon from '@mui/icons-material/Description';
 import SecurityIcon from '@mui/icons-material/Security';
 import HomepageFeatures from '@site/src/components/HomepageFeatures';
 import HomepageInfo from '@site/src/components/HomepageInfo';
+import LogoContainer from '@site/src/components/LogoContainer';
 import Layout from '@theme/Layout';
 import clsx from 'clsx';
 import styles from './index.module.css';
@@ -152,18 +153,23 @@ export default function Home(): JSX.Element {
   const { siteConfig } = useDocusaurusContext();
   return (
     <Layout
-      title="Iterate on LLMs faster"
-      description="Tailored LLM evals for your use case. Maximize model quality and catch regressions."
+      title="Secure & reliable LLMs"
+      description="Custom LLM evals and red-teaming for your app. Find and fix vulnerabilities, maximize output quality, catch regressions."
     >
       <HomepageHeader />
       <HomepageWalkthrough />
       <main>
+        <section className={styles.logoSection}>
+          <div className="container">
+            <h2>Trusted by developers at</h2>
+            <LogoContainer />
+          </div>
+        </section>
+        <HomepageFeatures />
         <HomepageInfo />
-
         <section className={styles.actionOrientedSection}>
           <div className="container">
             <h2>Detect & fix critical failures</h2>
-            <p>Discover hidden risks and take action to protect your brand and users.</p>
             <div>
               <Link to="/llm-vulnerability-scanner">
                 <img
@@ -176,12 +182,12 @@ export default function Home(): JSX.Element {
             </div>
           </div>
         </section>
-        <HomepageFeatures />
+
         <div className={styles.ctaSection}>
-          <h3>promptfoo is used by LLM apps serving over 10 million users</h3>
+          <h3>Make your LLM app reliable & secure</h3>
           <div className={styles.buttons}>
             <Link className="button button--primary button--lg" to="/docs/intro">
-              Get Started
+              Read Start Guide
             </Link>
           </div>
         </div>
