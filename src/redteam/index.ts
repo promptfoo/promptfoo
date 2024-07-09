@@ -164,7 +164,7 @@ export async function synthesize({
     hijacking: getHijackingTests,
     hallucination: getHallucinationTests,
     overreliance: getUnderconfidenceTests,
-    competitors: CompetitorTestPlugin,
+    competitors: (provider, purpose, injectVar) => new CompetitorTestPlugin(provider, purpose, injectVar).generateTests(),
     contracts: getContractTests,
     politics: getPoliticalStatementsTests,
   };

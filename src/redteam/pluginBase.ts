@@ -44,15 +44,12 @@ export abstract class PluginBase {
    */
   async generateTests(): Promise<TestCase[]> {
     const nunjucks = getNunjucksEngine();
-    const resp = await this.provider.callApi(
+    const { output: generatedPrompts } = await this.provider.callApi(
       nunjucks.renderString(this.template, {
         purpose: this.purpose,
       }),
     );
-
-    const { output: generatedPrompts } = resp;
     invariant(typeof generatedPrompts === 'string', 'Expected generatedPrompts to be a string');
-
     const prompts = generatedPrompts
       .split('\n')
       .filter((line) => line.includes(this.promptPrefix))
