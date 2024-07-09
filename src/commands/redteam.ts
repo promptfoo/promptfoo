@@ -156,7 +156,9 @@ export function redteamCommand(program: Command) {
       const configPath = path.join(projectDir, 'promptfooconfig.yaml');
       fs.writeFileSync(configPath, yaml.dump(config), 'utf8');
 
-      logger.info(chalk.green(`Created red teaming configuration file at ${configPath}`));
+      logger.info(
+        '\n' + chalk.green(`Created red teaming configuration file at ${configPath}`) + '\n',
+      );
 
       const { readyToGenerate } = await inquirer.prompt([
         {
@@ -176,7 +178,12 @@ export function redteamCommand(program: Command) {
           defaultConfigPath: configPath,
         });
       } else {
-        console.log('To generate test cases later, use the command: promptfoo generate redteam');
+        logger.info(
+          chalk.blue(
+            'To generate test cases later, use the command: ' +
+              chalk.bold('promptfoo generate redteam'),
+          ),
+        );
       }
     });
 
