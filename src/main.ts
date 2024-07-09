@@ -586,7 +586,12 @@ async function main() {
           );
           testSuite = resolved.testSuite;
         } else {
-          throw new Error('Could not find config file. Please use `--config`');
+          // Dummy testsuite for standalone invocation
+          testSuite = {
+            prompts: [],
+            providers: [],
+            tests: [],
+          };
         }
 
         const startTime = Date.now();
@@ -608,9 +613,9 @@ async function main() {
         });
 
         if (output) {
-          const existingYaml = yaml.load(
-            fs.readFileSync(configPath, 'utf8'),
-          ) as Partial<UnifiedConfig>;
+          const existingYaml = configPath
+            ? (yaml.load(fs.readFileSync(configPath, 'utf8')) as Partial<UnifiedConfig>)
+            : {};
           const updatedYaml = {
             ...existingYaml,
             tests: redteamTests,
