@@ -26,35 +26,22 @@ export function redteamCommand(program: Command) {
     .action(async (directory: string | undefined) => {
       telemetry.maybeShowNotice();
       telemetry.record('command_used', {
-        name: 'redteam init',
+        name: 'redteam init - started',
       });
       await telemetry.send();
 
-      // Question 1: Directory
-      const { targetDir } = await inquirer.prompt([
-        {
-          type: 'list',
-          name: 'targetDir',
-          message: 'Where would you like to create the red teaming project?',
-          choices: [
-            { name: 'Current directory', value: '.' },
-            { name: 'Custom directory', value: 'custom' },
-          ],
-        },
-      ]);
-
-      let projectDir = targetDir === '.' ? process.cwd() : directory || '';
-      if (targetDir === 'custom' && !directory) {
-        const { customDir } = await inquirer.prompt([
+      let projectDir = directory;
+      if (!projectDir) {
+        const { chosenDir } = await inquirer.prompt([
           {
             type: 'input',
-            name: 'customDir',
-            message: 'Enter the directory name:',
+            name: 'chosenDir',
+            message: 'Where do you want to create the project?',
+            default: '.',
           },
         ]);
-        projectDir = customDir;
+        projectDir = (chosenDir as string | undefined) || '.';
       }
-
       if (projectDir !== '.' && !fs.existsSync(projectDir)) {
         fs.mkdirSync(projectDir, { recursive: true });
       }
@@ -169,6 +156,11 @@ export function redteamCommand(program: Command) {
         },
       ]);
 
+      telemetry.record('command_used', {
+        name: 'redteam init',
+      });
+      await telemetry.send();
+
       if (readyToGenerate) {
         await doGenerateRedteam({
           plugins,
@@ -179,10 +171,11 @@ export function redteamCommand(program: Command) {
         });
       } else {
         logger.info(
-          chalk.blue(
-            'To generate test cases later, use the command: ' +
-              chalk.bold('promptfoo generate redteam'),
-          ),
+          '\n' +
+            chalk.blue(
+              'To generate test cases later, use the command: ' +
+                chalk.bold('promptfoo generate redteam'),
+            ),
         );
       }
     });
