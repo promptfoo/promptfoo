@@ -65,13 +65,20 @@ export async function doGenerateRedteam({
       defaultConfig,
     );
     testSuite = resolved.testSuite;
-  } else {
-    // Dummy testsuite for standalone invocation
+  } else if (purpose) {
+    // There is a purpose, so we can just have a dummy testsuite for standalone invocation
     testSuite = {
       prompts: [],
       providers: [],
       tests: [],
     };
+  } else {
+    logger.info(
+      chalk.red(
+        `\nCan't generate without configuration - run ${chalk.yellow.bold('promptfoo redteam init')} first`,
+      ),
+    );
+    return;
   }
 
   const startTime = Date.now();
