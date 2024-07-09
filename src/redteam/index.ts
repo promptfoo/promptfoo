@@ -6,7 +6,7 @@ import logger from '../logger';
 import { loadApiProvider } from '../providers';
 import type { ApiProvider, TestCase, TestSuite } from '../types';
 import { REDTEAM_MODEL } from './constants';
-import { getCompetitorTests } from './getCompetitorTests';
+import CompetitorTestPlugin from './getCompetitorTests';
 import { getHallucinationTests } from './getHallucinationTests';
 import {
   getHarmfulTests,
@@ -164,7 +164,7 @@ export async function synthesize({
     hijacking: getHijackingTests,
     hallucination: getHallucinationTests,
     overreliance: getUnderconfidenceTests,
-    competitors: getCompetitorTests,
+    competitors: CompetitorTestPlugin,
     contracts: getContractTests,
     politics: getPoliticalStatementsTests,
   };
