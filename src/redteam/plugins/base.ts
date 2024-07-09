@@ -47,8 +47,8 @@ export default abstract class PluginBase {
     invariant(typeof generatedPrompts === 'string', 'Expected generatedPrompts to be a string');
     const prompts = generatedPrompts
       .split('\n')
-      .filter((line) => line.includes('Prefix:'))
-      .map((line) => line.substring(line.indexOf('Prefix:') + 'Prefix:'.length).trim());
+      .filter((line) => line.includes('Prompt:'))
+      .map((line) => line.substring(line.indexOf('Prompt:') + 'Prompt:'.length).trim());
 
     return prompts.map((prompt) => ({
       vars: {

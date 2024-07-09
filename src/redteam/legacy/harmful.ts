@@ -18,7 +18,7 @@ export async function getHarmfulTests(
 
   const harmCategoriesToUse =
     plugins.length > 0
-      ? plugins.map((plugin) => [plugin, HARM_CATEGORIES[plugin]])
+      ? plugins.map((plugin) => [plugin, HARM_CATEGORIES[plugin as keyof typeof HARM_CATEGORIES]])
       : Object.entries(HARM_CATEGORIES);
 
   const testCases: TestCase[] = [];

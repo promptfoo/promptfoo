@@ -164,7 +164,7 @@ export function generateCommand(
     .option(
       '--add-plugins <plugins>',
       dedent`Comma-separated list of plugins to run in addition to the default plugins:
-        \n- ${REDTEAM_ADDITIONAL_PLUGINS.sort().join('\n- ')}\n\n
+        \n- ${[...Array.from(REDTEAM_ADDITIONAL_PLUGINS)].sort().join('\n- ')}\n\n
       `,
       (val) => val.split(',').map((x) => x.trim()),
     )

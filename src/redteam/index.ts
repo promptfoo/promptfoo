@@ -5,13 +5,19 @@ import invariant from 'tiny-invariant';
 import logger from '../logger';
 import { loadApiProvider } from '../providers';
 import type { ApiProvider, TestCase, TestSuite } from '../types';
-import { REDTEAM_MODEL, ALL_PLUGINS, DEFAULT_PLUGINS } from './constants';
+import {
+  REDTEAM_MODEL,
+  ALL_PLUGINS,
+  DEFAULT_PLUGINS,
+  RedteamProviderHarmCategoriesEnum,
+} from './constants';
 import { getHarmfulTests } from './legacy/harmful';
 import { getPiiTests } from './legacy/pii';
 import CompetitorPlugin from './plugins/competitors';
 import ContractPlugin from './plugins/contracts';
 import ExcessiveAgencyPlugin from './plugins/excessiveAgency';
 import HallucinationPlugin from './plugins/hallucination';
+import HarmfulPlugin from './plugins/harmful';
 import HijackingPlugin from './plugins/hijacking';
 import OverreliancePlugin from './plugins/overreliance';
 import PoliticsPlugin from './plugins/politics';
@@ -167,6 +173,18 @@ export async function synthesize({
     );
     harmfulPrompts.push(...newHarmfulPrompts);
 
+    for (const category of plugins.filter((p) => p.startsWith('harmful:'))) {
+      if (RedteamProviderHarmCategoriesEnum.options.includes(category as never)) {
+        harmfulPrompts.push(
+          ...(await new HarmfulPlugin(
+            redteamProvider,
+            purpose,
+            injectVar,
+            category,
+          ).generateTests()),
+        );
+      }
+    }
     if (addHarmfulCases) {
       testCases.push(...harmfulPrompts);
       logger.debug(`Added ${harmfulPrompts.length} harmful test cases`);
