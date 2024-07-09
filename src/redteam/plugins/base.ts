@@ -6,7 +6,6 @@ import { getNunjucksEngine } from '../../util';
  * Abstract base class for creating plugins that generate test cases.
  */
 export default abstract class PluginBase {
-
   /**
    * Template string used to generate prompts.
    */
