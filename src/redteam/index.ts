@@ -6,20 +6,20 @@ import logger from '../logger';
 import { loadApiProvider } from '../providers';
 import type { ApiProvider, TestCase, TestSuite } from '../types';
 import { REDTEAM_MODEL } from './constants';
-import CompetitorTestPlugin from './getCompetitorTests';
-import { getHallucinationTests } from './getHallucinationTests';
 import {
   getHarmfulTests,
   addInjections,
   addIterativeJailbreaks,
   HARM_CATEGORIES,
 } from './getHarmfulTests';
-import { getHijackingTests } from './getHijackingTests';
 import { getOverconfidenceTests } from './getOverconfidenceTests';
 import { getPiiTests } from './getPiiTests';
 import { getPoliticalStatementsTests } from './getPoliticalStatementsTests';
-import { getUnderconfidenceTests } from './getUnderconfidenceTests';
 import { getContractTests } from './getUnintendedContractTests';
+import CompetitorPlugin from './plugins/competitor';
+import HallucinationPlugin from './plugins/hallucination';
+import HijackingPlugin from './plugins/hijacking';
+import OverreliancePlugin from './plugins/overreliance';
 
 interface SynthesizeOptions {
   injectVar?: string;
@@ -161,10 +161,14 @@ export async function synthesize({
   } = {
     pii: getPiiTests,
     'excessive-agency': getOverconfidenceTests,
-    hijacking: getHijackingTests,
-    hallucination: getHallucinationTests,
-    overreliance: getUnderconfidenceTests,
-    competitors: (provider, purpose, injectVar) => new CompetitorTestPlugin(provider, purpose, injectVar).generateTests(),
+    hijacking: (provider, purpose, injectVar) =>
+      new HijackingPlugin(provider, purpose, injectVar).generateTests(),
+    hallucination: (provider, purpose, injectVar) =>
+      new HallucinationPlugin(provider, purpose, injectVar).generateTests(),
+    overreliance: (provider, purpose, injectVar) =>
+      new OverreliancePlugin(provider, purpose, injectVar).generateTests(),
+    competitors: (provider, purpose, injectVar) =>
+      new CompetitorPlugin(provider, purpose, injectVar).generateTests(),
     contracts: getContractTests,
     politics: getPoliticalStatementsTests,
   };

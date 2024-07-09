@@ -1,4 +1,4 @@
-import { PluginBase } from '../../src/redteam/pluginBase';
+import { PluginBase } from '../../src/redteam/plugins/base';
 import { ApiProvider } from '../../src/types';
 import { getNunjucksEngine } from '../../src/util';
 
