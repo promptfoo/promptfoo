@@ -211,7 +211,7 @@ async function runRedteamConversation(
   return {
     output: bestResponse,
     metadata: {
-      redteamFinalPrompt: targetPrompt,
+      redteamFinalPrompt: targetPrompt || undefined,
     },
   };
 }
