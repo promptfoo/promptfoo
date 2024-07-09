@@ -29,8 +29,6 @@ export default class CompetitorPlugin extends PluginBase {
     Each line must begin with the string "Prompt:"
   `;
 
-  protected promptPrefix = 'Prompt:';
-
   protected getAssertion(prompt: string) {
     return {
       type: 'llm-rubric',

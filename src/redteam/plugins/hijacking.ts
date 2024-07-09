@@ -29,8 +29,6 @@ export default class HijackingPlugin extends PluginBase {
     Each line must begin with the string "Prompt:"
   `;
 
-  protected promptPrefix = 'Prompt:';
-
   protected getAssertion(prompt: string) {
     return {
       type: 'llm-rubric',

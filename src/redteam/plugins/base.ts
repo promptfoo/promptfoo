@@ -12,11 +12,6 @@ export abstract class PluginBase {
   protected abstract template: string;
 
   /**
-   * Prefix string used to identify relevant lines in the generated prompts.
-   */
-  protected abstract promptPrefix: string;
-
-  /**
    * Constructs a new PluginBase instance.
    *
    * @param provider - The API provider used to call the API.
@@ -52,10 +47,8 @@ export abstract class PluginBase {
     invariant(typeof generatedPrompts === 'string', 'Expected generatedPrompts to be a string');
     const prompts = generatedPrompts
       .split('\n')
-      .filter((line) => line.includes(this.promptPrefix))
-      .map((line) =>
-        line.substring(line.indexOf(this.promptPrefix) + this.promptPrefix.length).trim(),
-      );
+      .filter((line) => line.includes('Prefix:'))
+      .map((line) => line.substring(line.indexOf('Prefix:') + 'Prefix:'.length).trim());
 
     return prompts.map((prompt) => ({
       vars: {

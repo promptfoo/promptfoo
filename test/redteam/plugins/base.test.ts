@@ -1,10 +1,9 @@
-import { PluginBase } from '../../src/redteam/plugins/base';
-import { ApiProvider } from '../../src/types';
-import { getNunjucksEngine } from '../../src/util';
+import { PluginBase } from '../../../src/redteam/plugins/base';
+import { ApiProvider } from '../../../src/types';
+import { getNunjucksEngine } from '../../../src/util';
 
 class TestPlugin extends PluginBase {
   protected template = 'Test template with {{ purpose }}';
-  protected promptPrefix = 'PREFIX:';
 
   protected getAssertion(prompt: string): any {
     return { type: 'assertion', value: prompt };
@@ -18,7 +17,7 @@ describe('PluginBase', () => {
   beforeEach(() => {
     provider = {
       callApi: jest.fn().mockResolvedValue({
-        output: 'PREFIX: test prompt\nPREFIX: another prompt\nirrelevant line',
+        output: 'Prefix: test prompt\nPrefix: another prompt\nirrelevant line',
       }),
       id: jest.fn().mockReturnValue('test-provider'),
     };
