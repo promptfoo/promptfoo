@@ -85,7 +85,7 @@ describe('runAssertions', () => {
       prompt: 'Some prompt',
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       test,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: true,
@@ -100,7 +100,7 @@ describe('runAssertions', () => {
       prompt: 'Some prompt',
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       test,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: false,
@@ -115,7 +115,7 @@ describe('runAssertions', () => {
       prompt: 'Some prompt',
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       test,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: false,
@@ -142,7 +142,7 @@ describe('runAssertions', () => {
           },
         ],
       },
-      output: 'Hi there world',
+      providerResponse: { output: 'Hi there world' },
     });
     expect(result).toMatchObject({
       pass: false,
@@ -169,7 +169,7 @@ describe('runAssertions', () => {
           },
         ],
       },
-      output: 'Hi there world',
+      providerResponse: { output: 'Hi there world' },
     });
     expect(result).toMatchObject({
       pass: true,
@@ -201,7 +201,7 @@ describe('runAssertions', () => {
         prompt,
         provider,
         test,
-        output,
+        providerResponse: { output },
       });
       expect(result).toMatchObject({
         pass: true,
@@ -229,7 +229,7 @@ describe('runAssertions', () => {
         prompt,
         provider,
         test,
-        output,
+        providerResponse: { output },
       });
       expect(result).toMatchObject({
         pass: false,
@@ -264,7 +264,7 @@ describe('runAssertions', () => {
         prompt,
         provider,
         test,
-        output,
+        providerResponse: { output },
       });
       expect(result).toMatchObject({
         pass: true,
@@ -299,7 +299,7 @@ describe('runAssertions', () => {
         prompt,
         provider,
         test,
-        output,
+        providerResponse: { output },
       });
       expect(result).toMatchObject({
         pass: false,
@@ -334,7 +334,7 @@ describe('runAssertions', () => {
         prompt,
         provider,
         test,
-        output,
+        providerResponse: { output },
       });
       expect(result.namedScores).toStrictEqual({
         [metric]: 0.5,
@@ -367,7 +367,7 @@ describe('runAssertions', () => {
         prompt,
         provider,
         test,
-        output,
+        providerResponse: { output },
       });
       expect(result.score).toBe(0.9);
     });
@@ -400,7 +400,7 @@ describe('runAssertions', () => {
       prompt: 'foobar',
       provider,
       test,
-      output,
+      providerResponse: { output },
     });
 
     expect(result.pass).toBeTruthy();
@@ -594,7 +594,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: equalityAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: true,
@@ -610,7 +610,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: equalityAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: false,
@@ -630,7 +630,7 @@ describe('runAssertion', () => {
       prompt: 'Some prompt',
       assertion: notEqualsAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -646,7 +646,7 @@ describe('runAssertion', () => {
       prompt: 'Some prompt',
       assertion: notEqualsAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -662,7 +662,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: equalityAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: false,
@@ -678,7 +678,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: equalityAssertionWithObject,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: true,
@@ -694,7 +694,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: equalityAssertionWithObject,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: false,
@@ -717,7 +717,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve('/output.json'), 'utf8');
     expect(result).toMatchObject({
@@ -741,7 +741,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve('/output.json'), 'utf8');
     expect(result).toMatchObject({
@@ -758,7 +758,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: isJsonAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: true,
@@ -774,7 +774,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: isJsonAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: false,
@@ -790,7 +790,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: isJsonAssertionWithSchema,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: true,
@@ -806,7 +806,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: isJsonAssertionWithSchema,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: false,
@@ -822,7 +822,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: isJsonAssertionWithSchemaYamlString,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: true,
@@ -838,7 +838,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: isJsonAssertionWithSchemaYamlString,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: false,
@@ -864,7 +864,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: { type: 'is-json', value: schemaWithFormat },
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
 
     expect(result).toMatchObject({
@@ -891,7 +891,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: { type: 'is-json', value: schemaWithFormat },
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
 
     expect(result).toMatchObject({
@@ -933,7 +933,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve('/schema.json'), 'utf8');
     expect(result).toMatchObject({
@@ -974,7 +974,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve('/schema.json'), 'utf8');
     expect(result).toMatchObject({
@@ -991,7 +991,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: isSqlAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: true,
@@ -1007,7 +1007,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: isSqlAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: false,
@@ -1023,7 +1023,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: notIsSqlAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: true,
@@ -1039,7 +1039,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: notIsSqlAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: false,
@@ -1055,7 +1055,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: isSqlAssertionWithDatabase,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: true,
@@ -1071,7 +1071,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: isSqlAssertionWithDatabase,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: false,
@@ -1087,7 +1087,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: isSqlAssertionWithDatabaseAndWhiteTableList,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: true,
@@ -1103,7 +1103,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: isSqlAssertionWithDatabaseAndWhiteTableList,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: false,
@@ -1119,7 +1119,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: isSqlAssertionWithDatabaseAndWhiteColumnList,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: true,
@@ -1135,7 +1135,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: isSqlAssertionWithDatabaseAndWhiteColumnList,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: false,
@@ -1151,7 +1151,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: isSqlAssertionWithDatabaseAndBothList,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: true,
@@ -1167,7 +1167,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: isSqlAssertionWithDatabaseAndBothList,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: false,
@@ -1183,7 +1183,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: isSqlAssertionWithDatabaseAndBothList,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: false,
@@ -1199,7 +1199,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: isSqlAssertionWithDatabaseAndBothList,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: false,
@@ -1217,7 +1217,7 @@ describe('runAssertion', () => {
         type: 'contains-sql',
       },
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: true,
@@ -1235,7 +1235,7 @@ describe('runAssertion', () => {
         type: 'contains-sql',
       },
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: true,
@@ -1253,7 +1253,7 @@ describe('runAssertion', () => {
         type: 'contains-sql',
       },
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: true,
@@ -1271,7 +1271,7 @@ describe('runAssertion', () => {
         type: 'contains-sql',
       },
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: false,
@@ -1288,7 +1288,7 @@ describe('runAssertion', () => {
         type: 'contains-sql',
       },
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: false,
@@ -1304,7 +1304,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: containsJsonAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: true,
@@ -1321,7 +1321,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: containsJsonAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: true,
@@ -1337,7 +1337,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: containsJsonAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: true,
@@ -1353,7 +1353,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: containsJsonAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: false,
@@ -1369,7 +1369,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: containsJsonAssertionWithSchema,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: true,
@@ -1385,7 +1385,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: containsJsonAssertionWithSchema,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: true,
@@ -1425,7 +1425,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve('/schema.json'), 'utf8');
     expect(result).toMatchObject({
@@ -1466,7 +1466,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve('/schema.json'), 'utf8');
     expect(result).toMatchObject({
@@ -1483,7 +1483,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: containsJsonAssertionWithSchema,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toEqual(
       expect.objectContaining({
@@ -1502,7 +1502,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: javascriptStringAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: true,
@@ -1518,7 +1518,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: javascriptStringAssertionWithNumber,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: true,
@@ -1535,7 +1535,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: javascriptStringAssertionWithNumberAndThreshold,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: true,
@@ -1552,7 +1552,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: javascriptStringAssertionWithNumberAndThreshold,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: false,
@@ -1574,7 +1574,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: false,
@@ -1591,7 +1591,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: javascriptStringAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: false,
@@ -1611,7 +1611,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion,
       test: { vars: { foo: 'Expected output' } } as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: true,
@@ -1631,7 +1631,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: javascriptStringAssertionWithVars,
       test: { vars: { foo: 'bar' } } as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: true,
@@ -1651,7 +1651,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: javascriptStringAssertionWithVars,
       test: { vars: { foo: 'bar' } } as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: false,
@@ -1668,7 +1668,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: javascriptFunctionAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: true,
@@ -1685,7 +1685,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: javascriptFunctionFailAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: false,
@@ -1701,7 +1701,7 @@ describe('runAssertion', () => {
       prompt: 'Some prompt',
       assertion: javascriptMultilineStringAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -1717,7 +1717,7 @@ describe('runAssertion', () => {
       prompt: 'Some prompt',
       assertion: javascriptMultilineStringAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -1738,7 +1738,7 @@ describe('runAssertion', () => {
       prompt: 'Some prompt',
       assertion: notContainsAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -1754,7 +1754,7 @@ describe('runAssertion', () => {
       prompt: 'Some prompt',
       assertion: notContainsAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -1776,7 +1776,7 @@ describe('runAssertion', () => {
       prompt: 'Some prompt',
       assertion: containsLowerAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -1792,7 +1792,7 @@ describe('runAssertion', () => {
       prompt: 'Some prompt',
       assertion: containsLowerAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -1814,7 +1814,7 @@ describe('runAssertion', () => {
       prompt: 'Some prompt',
       assertion: notContainsLowerAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -1830,7 +1830,7 @@ describe('runAssertion', () => {
       prompt: 'Some prompt',
       assertion: notContainsLowerAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -1852,7 +1852,7 @@ describe('runAssertion', () => {
       prompt: 'Some prompt',
       assertion: containsAnyAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -1868,7 +1868,7 @@ describe('runAssertion', () => {
       prompt: 'Some prompt',
       assertion: containsAnyAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -1887,7 +1887,7 @@ describe('runAssertion', () => {
         value: ['option1', 'option2', 'option3'],
       },
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -1906,7 +1906,7 @@ describe('runAssertion', () => {
         value: ['option1', 'option2', 'option3'],
       },
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -1928,7 +1928,7 @@ describe('runAssertion', () => {
       prompt: 'Some prompt',
       assertion: containsAllAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -1944,7 +1944,7 @@ describe('runAssertion', () => {
       prompt: 'Some prompt',
       assertion: containsAllAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -1963,7 +1963,7 @@ describe('runAssertion', () => {
         value: ['option1', 'option2', 'option3'],
       },
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -1982,7 +1982,7 @@ describe('runAssertion', () => {
         value: ['option1', 'option2', 'option3', 'option4'],
       },
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -2004,7 +2004,7 @@ describe('runAssertion', () => {
       prompt: 'Some prompt',
       assertion: containsRegexAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -2020,7 +2020,7 @@ describe('runAssertion', () => {
       prompt: 'Some prompt',
       assertion: containsRegexAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -2042,7 +2042,7 @@ describe('runAssertion', () => {
       prompt: 'Some prompt',
       assertion: notContainsRegexAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -2058,7 +2058,7 @@ describe('runAssertion', () => {
       prompt: 'Some prompt',
       assertion: notContainsRegexAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -2084,7 +2084,7 @@ describe('runAssertion', () => {
       prompt: 'Some prompt',
       assertion: webhookAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -2104,7 +2104,7 @@ describe('runAssertion', () => {
       prompt: 'Some prompt',
       assertion: webhookAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -2122,7 +2122,7 @@ describe('runAssertion', () => {
       prompt: 'Some prompt',
       assertion: webhookAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -2145,7 +2145,7 @@ describe('runAssertion', () => {
       prompt: 'Some prompt',
       assertion: rougeNAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -2161,7 +2161,7 @@ describe('runAssertion', () => {
       prompt: 'Some prompt',
       assertion: rougeNAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -2183,7 +2183,7 @@ describe('runAssertion', () => {
       prompt: 'Some prompt',
       assertion: startsWithAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -2199,7 +2199,7 @@ describe('runAssertion', () => {
       prompt: 'Some prompt',
       assertion: startsWithAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -2238,7 +2238,7 @@ describe('runAssertion', () => {
       prompt: 'Some prompt',
       assertion: assertion,
       test: test,
-      output: output,
+      providerResponse: { output },
       provider: new OpenAiChatCompletionProvider('gpt-4'),
     });
     expect(result).toMatchObject({
@@ -2262,7 +2262,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: levenshteinAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: true,
@@ -2278,7 +2278,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: levenshteinAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(result).toMatchObject({
       pass: false,
@@ -2336,7 +2336,7 @@ describe('runAssertion', () => {
         provider: new OpenAiChatCompletionProvider('gpt-4'),
         assertion: fileAssertion,
         test: {} as AtomicTestCase,
-        output,
+        providerResponse: { output },
       });
 
       expect(mockFn).toHaveBeenCalledWith('Expected output', {
@@ -2367,7 +2367,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: fileAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
 
     expect(mockFn).toHaveBeenCalledWith('Expected output', {
@@ -2399,7 +2399,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: pythonAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
 
     expect(runPythonCode).toHaveBeenCalledTimes(1);
@@ -2471,7 +2471,7 @@ describe('runAssertion', () => {
         provider: new OpenAiChatCompletionProvider('gpt-4'),
         assertion: pythonAssertion,
         test: {} as AtomicTestCase,
-        output,
+        providerResponse: { output },
       });
 
       expect(runPythonCode).toHaveBeenCalledTimes(1);
@@ -2523,7 +2523,7 @@ describe('runAssertion', () => {
         provider: new OpenAiChatCompletionProvider('gpt-4'),
         assertion: fileAssertion,
         test: {} as AtomicTestCase,
-        output,
+        providerResponse: { output },
       });
 
       expect(runPython).toHaveBeenCalledWith(path.resolve('/path/to/assert.py'), 'get_assert', [
@@ -2557,7 +2557,7 @@ describe('runAssertion', () => {
       provider: new OpenAiChatCompletionProvider('gpt-4'),
       assertion: fileAssertion,
       test: {} as AtomicTestCase,
-      output,
+      providerResponse: { output },
     });
     expect(runPython).toHaveBeenCalledTimes(1);
     expect(result).toEqual({
@@ -2584,7 +2584,7 @@ describe('runAssertion', () => {
         },
         latencyMs: 50,
         test: {} as AtomicTestCase,
-        output,
+        providerResponse: { output },
       });
       expect(result).toMatchObject({
         pass: true,
@@ -2604,7 +2604,7 @@ describe('runAssertion', () => {
         },
         latencyMs: 1000,
         test: {} as AtomicTestCase,
-        output,
+        providerResponse: { output },
       });
       expect(result).toMatchObject({
         pass: false,
@@ -2624,7 +2624,7 @@ describe('runAssertion', () => {
             threshold: 100,
           },
           test: {} as AtomicTestCase,
-          output,
+          providerResponse: { output },
         }),
       ).rejects.toThrow(
         'Latency assertion does not support cached results. Rerun the eval with --no-cache',
@@ -2647,8 +2647,7 @@ describe('runAssertion', () => {
           threshold: 2,
         },
         test: {} as AtomicTestCase,
-        output: 'Some output',
-        logProbs,
+        providerResponse: { output: 'Some output', logProbs },
       });
       expect(result).toMatchObject({
         pass: true,
@@ -2670,8 +2669,7 @@ describe('runAssertion', () => {
           threshold: 0.2,
         },
         test: {} as AtomicTestCase,
-        output: 'Some output',
-        logProbs,
+        providerResponse: { output: 'Some output', logProbs },
       });
       expect(result).toMatchObject({
         pass: false,
@@ -2695,8 +2693,7 @@ describe('runAssertion', () => {
           threshold: 0.25,
         },
         test: {} as AtomicTestCase,
-        output: 'Some output',
-        logProbs,
+        providerResponse: { output: 'Some output', logProbs },
       });
       expect(result).toMatchObject({
         pass: true,
@@ -2718,8 +2715,7 @@ describe('runAssertion', () => {
           threshold: 0.5,
         },
         test: {} as AtomicTestCase,
-        output: 'Some output',
-        logProbs,
+        providerResponse: { output: 'Some output', logProbs },
       });
       expect(result).toMatchObject({
         pass: false,
@@ -2743,8 +2739,7 @@ describe('runAssertion', () => {
           threshold: 0.001,
         },
         test: {} as AtomicTestCase,
-        output: 'Some output',
-        cost,
+        providerResponse: { output: 'Some output', cost },
       });
       expect(result).toMatchObject({
         pass: true,
@@ -2766,8 +2761,7 @@ describe('runAssertion', () => {
           threshold: 0.001,
         },
         test: {} as AtomicTestCase,
-        output: 'Some output',
-        cost,
+        providerResponse: { output: 'Some output', cost },
       });
       expect(result).toMatchObject({
         pass: false,
@@ -2803,7 +2797,7 @@ describe('runAssertion', () => {
           type: 'is-valid-openai-function-call',
         },
         test: {} as AtomicTestCase,
-        output,
+        providerResponse: { output },
       });
 
       expect(result).toMatchObject({
@@ -2838,7 +2832,7 @@ describe('runAssertion', () => {
           type: 'is-valid-openai-function-call',
         },
         test: {} as AtomicTestCase,
-        output,
+        providerResponse: { output },
       });
 
       expect(result).toMatchObject({
@@ -2880,7 +2874,7 @@ describe('runAssertion', () => {
           type: 'is-valid-openai-tools-call',
         },
         test: {} as AtomicTestCase,
-        output,
+        providerResponse: { output },
       });
 
       expect(result).toMatchObject({
@@ -2920,7 +2914,7 @@ describe('runAssertion', () => {
           type: 'is-valid-openai-tools-call',
         },
         test: {} as AtomicTestCase,
-        output,
+        providerResponse: { output },
       });
 
       expect(result).toMatchObject({
@@ -2962,7 +2956,7 @@ describe('runAssertion', () => {
           value: 'Similar output',
         },
         test: {} as AtomicTestCase,
-        output,
+        providerResponse: { output },
       });
 
       expect(result).toMatchObject({
@@ -2981,7 +2975,7 @@ describe('runAssertion', () => {
           value: 'Different output',
         },
         test: {} as AtomicTestCase,
-        output,
+        providerResponse: { output },
       });
 
       expect(result).toMatchObject({
@@ -3000,7 +2994,7 @@ describe('runAssertion', () => {
           value: ['Similar output 1', 'Different output 1'],
         },
         test: {} as AtomicTestCase,
-        output,
+        providerResponse: { output },
       });
 
       expect(result).toMatchObject({
@@ -3019,7 +3013,7 @@ describe('runAssertion', () => {
           value: ['Different output 1', 'Different output 2'],
         },
         test: {} as AtomicTestCase,
-        output,
+        providerResponse: { output },
       });
       expect(result).toMatchObject({
         pass: false,

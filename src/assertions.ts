@@ -42,6 +42,7 @@ import {
   type TestCase,
   isGradingResult,
   AssertionValue,
+  ProviderResponse,
 } from './types';
 import { transformOutput, getNunjucksEngine, extractJsonObjects } from './util';
 
@@ -198,20 +199,18 @@ export async function runAssertion({
   provider,
   assertion,
   test,
-  output,
   latencyMs,
-  logProbs,
-  cost,
+  providerResponse,
 }: {
   prompt?: string;
   provider?: ApiProvider;
   assertion: Assertion;
   test: AtomicTestCase;
-  output: string | object;
+  providerResponse: ProviderResponse;
   latencyMs?: number;
-  logProbs?: number[];
-  cost?: number;
 }): Promise<GradingResult> {
+  const { cost, logProbs, output: originalOutput } = providerResponse;
+  let output = originalOutput;
   let pass: boolean = false;
   let score: number = 0.0;
 
@@ -1023,7 +1022,9 @@ ${
   }
 
   if (baseType === 'moderation') {
-    invariant(prompt, 'moderation assertion type must have a prompt');
+    // Some redteam techniques override the actual prompt that is used, so we need to assess that prompt for moderation.
+    const promptToModerate = providerResponse.metadata?.redteamFinalPrompt || prompt;
+    invariant(promptToModerate, 'moderation assertion type must have a prompt');
     invariant(typeof output === 'string', 'moderation assertion type must have a string output');
     invariant(
       !assertion.value ||
@@ -1031,11 +1032,11 @@ ${
       'moderation assertion value must be a string array if set',
     );
 
-    if (prompt[0] === '[' || prompt[0] === '{') {
+    if (promptToModerate[0] === '[' || promptToModerate[0] === '{') {
       // Try to extract the last user message from OpenAI-style prompts.
       try {
         const parsedPrompt = parseChatPrompt<null | { role: string; content: string }[]>(
-          prompt,
+          promptToModerate,
           null,
         );
         if (parsedPrompt && parsedPrompt.length > 0) {
@@ -1048,7 +1049,7 @@ ${
 
     const moderationResult = await matchesModeration(
       {
-        userPrompt: prompt,
+        userPrompt: promptToModerate,
         assistantResponse: output,
         categories: Array.isArray(assertion.value) ? assertion.value : [],
       },
@@ -1259,20 +1260,17 @@ ${
 export async function runAssertions({
   prompt,
   provider,
+  providerResponse,
   test,
-  output,
   latencyMs,
-  logProbs,
-  cost,
 }: {
   prompt?: string;
   provider?: ApiProvider;
+  providerResponse: ProviderResponse;
   test: AtomicTestCase;
-  output: string | object;
   latencyMs?: number;
-  logProbs?: number[];
-  cost?: number;
 }): Promise<GradingResult> {
+  const { cost, logProbs, output } = providerResponse;
   if (!test.assert || test.assert.length < 1) {
     return AssertionsResult.noAssertsResult();
   }
@@ -1323,12 +1321,10 @@ export async function runAssertions({
       const result = await runAssertion({
         prompt,
         provider,
+        providerResponse,
         assertion,
         test,
-        output,
         latencyMs,
-        logProbs,
-        cost,
       });
 
       assertResult.addResult({
