@@ -6,16 +6,16 @@ import logger from '../logger';
 import { loadApiProvider } from '../providers';
 import type { ApiProvider, TestCase, TestSuite } from '../types';
 import { REDTEAM_MODEL } from './constants';
+import CompetitorPlugin from './plugins/competitors';
+import ContractPlugin from './plugins/contracts';
+import ExcessiveAgencyPlugin from './plugins/excessiveAgency';
 import {
   getHarmfulTests,
   addInjections,
   addIterativeJailbreaks,
   HARM_CATEGORIES,
-} from './getHarmfulTests';
-import { getPiiTests } from './getPiiTests';
-import CompetitorPlugin from './plugins/competitors';
-import ContractPlugin from './plugins/contracts';
-import ExcessiveAgencyPlugin from './plugins/excessiveAgency';
+} from './plugins/getHarmfulTests';
+import { getPiiTests } from './plugins/getPiiTests';
 import HallucinationPlugin from './plugins/hallucination';
 import HijackingPlugin from './plugins/hijacking';
 import OverreliancePlugin from './plugins/overreliance';
