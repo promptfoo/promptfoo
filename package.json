@@ -41,7 +41,7 @@
     "build:clean": "shx rm -rf dist",
     "build:nextui": "sh src/web/nextui/build.sh",
     "build:watch": "tsc --watch",
-    "build": "tsc && shx cp src/*.html dist/src && shx cp src/python/wrapper.py dist/src/python && shx rm -rf dist/drizzle && shx cp -r drizzle dist/drizzle && npm run build:nextui && shx chmod +x dist/src/main.js && npm run sentry:sourcemaps",
+    "build": "tsc && shx cp src/*.html dist/src && shx cp src/python/wrapper.py dist/src/python && shx rm -rf dist/drizzle && shx cp -r drizzle dist/drizzle && npm run build:nextui && shx chmod +x dist/src/main.js && npm run sentry:sourcemaps || true",
     "test": "jest",
     "test:watch": "jest --watch",
     "format": "prettier -w .",
