@@ -5,18 +5,13 @@ import invariant from 'tiny-invariant';
 import logger from '../logger';
 import { loadApiProvider } from '../providers';
 import type { ApiProvider, TestCase, TestSuite } from '../types';
-import { REDTEAM_MODEL } from './constants';
+import { REDTEAM_MODEL, ALL_PLUGINS, DEFAULT_PLUGINS } from './constants';
 import CompetitorPlugin from './plugins/competitors';
 import ContractPlugin from './plugins/contracts';
 import ExcessiveAgencyPlugin from './plugins/excessiveAgency';
 import HallucinationPlugin from './plugins/hallucination';
 import HijackingPlugin from './plugins/hijacking';
-import {
-  getHarmfulTests,
-  addInjections,
-  addIterativeJailbreaks,
-  HARM_CATEGORIES,
-} from './plugins/legacy/harmful';
+import { getHarmfulTests, addInjections, addIterativeJailbreaks } from './plugins/legacy/harmful';
 import { getPiiTests } from './plugins/legacy/pii';
 import OverreliancePlugin from './plugins/overreliance';
 import PoliticsPlugin from './plugins/politics';
@@ -28,24 +23,6 @@ interface SynthesizeOptions {
   provider?: string;
   purpose?: string;
 }
-
-const BASE_PLUGINS = [
-  'contracts',
-  'excessive-agency',
-  'hallucination',
-  'harmful',
-  'hijacking',
-  'jailbreak',
-  'overreliance',
-  'pii',
-  'politics',
-  'prompt-injection',
-];
-
-export const ADDITIONAL_PLUGINS = ['competitors', 'experimental-jailbreak'];
-
-export const DEFAULT_PLUGINS = new Set([...BASE_PLUGINS, ...Object.keys(HARM_CATEGORIES)]);
-const ALL_PLUGINS = new Set([...DEFAULT_PLUGINS, ...ADDITIONAL_PLUGINS]);
 
 function validatePlugins(plugins: string[]) {
   for (const plugin of plugins) {
