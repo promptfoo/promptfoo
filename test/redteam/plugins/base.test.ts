@@ -1,12 +1,12 @@
 import PluginBase from '../../../src/redteam/plugins/base';
-import { ApiProvider } from '../../../src/types';
+import { ApiProvider, Assertion } from '../../../src/types';
 import { getNunjucksEngine } from '../../../src/util';
 
 class TestPlugin extends PluginBase {
   protected template = 'Test template with {{ purpose }}';
 
-  protected getAssertion(prompt: string): any {
-    return { type: 'assertion', value: prompt };
+  protected getAssertion(prompt: string): Assertion {
+    return { type: 'equals', value: prompt };
   }
 }
 
@@ -33,11 +33,11 @@ describe('PluginBase', () => {
     await expect(plugin.generateTests()).resolves.toEqual([
       {
         vars: { testVar: 'test prompt' },
-        assert: [{ type: 'assertion', value: 'test prompt' }],
+        assert: [{ type: 'equals', value: 'test prompt' }],
       },
       {
         vars: { testVar: 'another prompt' },
-        assert: [{ type: 'assertion', value: 'another prompt' }],
+        assert: [{ type: 'equals', value: 'another prompt' }],
       },
     ]);
     expect(provider.callApi).toHaveBeenCalledWith(
@@ -59,9 +59,9 @@ describe('PluginBase', () => {
   it('should filter and process prompts correctly', async () => {
     expect.assertions(1);
     await expect(plugin.generateTests()).resolves.toEqual([
-      { assert: [{ type: 'assertion', value: 'test prompt' }], vars: { testVar: 'test prompt' } },
+      { assert: [{ type: 'equals', value: 'test prompt' }], vars: { testVar: 'test prompt' } },
       {
-        assert: [{ type: 'assertion', value: 'another prompt' }],
+        assert: [{ type: 'equals', value: 'another prompt' }],
         vars: { testVar: 'another prompt' },
       },
     ]);
