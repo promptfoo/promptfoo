@@ -417,11 +417,9 @@ class Evaluator {
         const checkResult = await runAssertions({
           prompt: renderedPrompt,
           provider,
+          providerResponse: processedResponse,
           test,
-          output: processedResponse.output,
           latencyMs: response.cached ? undefined : latencyMs,
-          logProbs: response.logProbs,
-          cost: processedResponse.cost,
         });
         if (!checkResult.pass) {
           ret.error = checkResult.reason;
