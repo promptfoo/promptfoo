@@ -12,14 +12,14 @@ import {
   addIterativeJailbreaks,
   HARM_CATEGORIES,
 } from './getHarmfulTests';
-import { getOverconfidenceTests } from './getOverconfidenceTests';
 import { getPiiTests } from './getPiiTests';
-import { getPoliticalStatementsTests } from './getPoliticalStatementsTests';
-import { getContractTests } from './getUnintendedContractTests';
-import CompetitorPlugin from './plugins/competitor';
+import CompetitorPlugin from './plugins/competitors';
+import ContractPlugin from './plugins/contracts';
+import ExcessiveAgencyPlugin from './plugins/excessiveAgency';
 import HallucinationPlugin from './plugins/hallucination';
 import HijackingPlugin from './plugins/hijacking';
 import OverreliancePlugin from './plugins/overreliance';
+import PoliticsPlugin from './plugins/politics';
 
 interface SynthesizeOptions {
   injectVar?: string;
@@ -160,7 +160,8 @@ export async function synthesize({
     ) => Promise<TestCase[]>;
   } = {
     pii: getPiiTests,
-    'excessive-agency': getOverconfidenceTests,
+    'excessive-agency': (provider, purpose, injectVar) =>
+      new ExcessiveAgencyPlugin(provider, purpose, injectVar).generateTests(),
     hijacking: (provider, purpose, injectVar) =>
       new HijackingPlugin(provider, purpose, injectVar).generateTests(),
     hallucination: (provider, purpose, injectVar) =>
@@ -169,8 +170,10 @@ export async function synthesize({
       new OverreliancePlugin(provider, purpose, injectVar).generateTests(),
     competitors: (provider, purpose, injectVar) =>
       new CompetitorPlugin(provider, purpose, injectVar).generateTests(),
-    contracts: getContractTests,
-    politics: getPoliticalStatementsTests,
+    contracts: (provider, purpose, injectVar) =>
+      new ContractPlugin(provider, purpose, injectVar).generateTests(),
+    politics: (provider, purpose, injectVar) =>
+      new PoliticsPlugin(provider, purpose, injectVar).generateTests(),
   };
 
   for (const plugin of plugins) {

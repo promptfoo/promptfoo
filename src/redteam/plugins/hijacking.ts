@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import { PluginBase } from './base';
+import PluginBase from './base';
 
 export default class HijackingPlugin extends PluginBase {
   protected template = dedent`
