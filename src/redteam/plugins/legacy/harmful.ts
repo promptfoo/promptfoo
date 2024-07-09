@@ -1,9 +1,9 @@
 import dedent from 'dedent';
 import invariant from 'tiny-invariant';
-import logger from '../logger';
-import PromptfooHarmfulCompletionProvider from '../providers/promptfoo';
-import type { ApiProvider, TestCase } from '../types';
-import { getNunjucksEngine } from '../util';
+import logger from '../../../logger';
+import PromptfooHarmfulCompletionProvider from '../../../providers/promptfoo';
+import type { ApiProvider, TestCase } from '../../../types';
+import { getNunjucksEngine } from '../../../util';
 
 const LLAMA_GUARD_REPLICATE_PROVIDER =
   'replicate:moderation:meta/meta-llama-guard-2-8b:b063023ee937f28e922982abdbf97b041ffe34ad3b35a53d33e1d74bb19b36c4';

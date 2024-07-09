@@ -6,20 +6,20 @@ import logger from '../logger';
 import { loadApiProvider } from '../providers';
 import type { ApiProvider, TestCase, TestSuite } from '../types';
 import { REDTEAM_MODEL } from './constants';
-import { getCompetitorTests } from './getCompetitorTests';
-import { getHallucinationTests } from './getHallucinationTests';
+import CompetitorPlugin from './plugins/competitors';
+import ContractPlugin from './plugins/contracts';
+import ExcessiveAgencyPlugin from './plugins/excessiveAgency';
+import HallucinationPlugin from './plugins/hallucination';
+import HijackingPlugin from './plugins/hijacking';
 import {
   getHarmfulTests,
   addInjections,
   addIterativeJailbreaks,
   HARM_CATEGORIES,
-} from './getHarmfulTests';
-import { getHijackingTests } from './getHijackingTests';
-import { getOverconfidenceTests } from './getOverconfidenceTests';
-import { getPiiTests } from './getPiiTests';
-import { getPoliticalStatementsTests } from './getPoliticalStatementsTests';
-import { getUnderconfidenceTests } from './getUnderconfidenceTests';
-import { getContractTests } from './getUnintendedContractTests';
+} from './plugins/legacy/harmful';
+import { getPiiTests } from './plugins/legacy/pii';
+import OverreliancePlugin from './plugins/overreliance';
+import PoliticsPlugin from './plugins/politics';
 
 interface SynthesizeOptions {
   injectVar?: string;
@@ -160,13 +160,20 @@ export async function synthesize({
     ) => Promise<TestCase[]>;
   } = {
     pii: getPiiTests,
-    'excessive-agency': getOverconfidenceTests,
-    hijacking: getHijackingTests,
-    hallucination: getHallucinationTests,
-    overreliance: getUnderconfidenceTests,
-    competitors: getCompetitorTests,
-    contracts: getContractTests,
-    politics: getPoliticalStatementsTests,
+    'excessive-agency': (provider, purpose, injectVar) =>
+      new ExcessiveAgencyPlugin(provider, purpose, injectVar).generateTests(),
+    hijacking: (provider, purpose, injectVar) =>
+      new HijackingPlugin(provider, purpose, injectVar).generateTests(),
+    hallucination: (provider, purpose, injectVar) =>
+      new HallucinationPlugin(provider, purpose, injectVar).generateTests(),
+    overreliance: (provider, purpose, injectVar) =>
+      new OverreliancePlugin(provider, purpose, injectVar).generateTests(),
+    competitors: (provider, purpose, injectVar) =>
+      new CompetitorPlugin(provider, purpose, injectVar).generateTests(),
+    contracts: (provider, purpose, injectVar) =>
+      new ContractPlugin(provider, purpose, injectVar).generateTests(),
+    politics: (provider, purpose, injectVar) =>
+      new PoliticsPlugin(provider, purpose, injectVar).generateTests(),
   };
 
   for (const plugin of plugins) {
