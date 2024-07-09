@@ -13,12 +13,12 @@ import TableSortLabel from '@mui/material/TableSortLabel';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { useRouter } from 'next/navigation';
+import { subCategoryDescriptions } from '../../../../../redteam/constants';
 import {
   categoryAliases,
   displayNameOverrides,
   riskCategories,
   riskCategorySeverityMap,
-  subCategoryDescriptions,
 } from './constants';
 import './TestSuites.css';
 
@@ -31,8 +31,7 @@ const getSubCategoryStats = (
       subCategoryStats.push({
         pluginName: subCategory,
         type: categoryAliases[subCategory as keyof typeof categoryAliases] || subCategory,
-        description:
-          subCategoryDescriptions[subCategory as keyof typeof subCategoryDescriptions] || '',
+        description: subCategoryDescriptions[subCategory] || '',
         passRate: categoryStats[subCategory]
           ? ((categoryStats[subCategory].pass / categoryStats[subCategory].total) * 100).toFixed(
               1,

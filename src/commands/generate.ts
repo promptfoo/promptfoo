@@ -113,6 +113,7 @@ export async function doGenerateRedteam({
     existingConfig.tests = [...(existingConfig.tests || []), ...redteamTests];
     fs.writeFileSync(configPath, yaml.dump(existingConfig));
     logger.info(`Wrote ${redteamTests.length} new test cases to ${configPath}`);
+    logger.info(chalk.green(`Run ${chalk.bold('promptfoo eval')} to run the generated tests`));
   } else {
     logger.info(yaml.dump(redteamTests, { skipInvalid: true }));
   }
@@ -214,6 +215,9 @@ export function generateCommand(
           existingConfig.tests = [...(existingConfig.tests || []), ...configAddition.tests];
           fs.writeFileSync(configPath, yaml.dump(existingConfig));
           logger.info(`Wrote ${results.length} new test cases to ${configPath}`);
+          logger.info(
+            chalk.green(`Run ${chalk.bold('promptfoo eval')} to run the generated tests`),
+          );
         } else {
           logger.info(
             `Copy the above test cases or run ${chalk.greenBright(

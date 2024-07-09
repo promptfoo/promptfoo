@@ -1,8 +1,11 @@
+import chalk from 'chalk';
 import { Command } from 'commander';
 import * as fs from 'fs';
 import inquirer from 'inquirer';
 import yaml from 'js-yaml';
 import * as path from 'path';
+import logger from '../logger';
+import { ALL_PLUGINS, DEFAULT_PLUGINS, subCategoryDescriptions } from '../redteam/constants';
 import telemetry from '../telemetry';
 import { doGenerateRedteam } from './generate';
 
@@ -12,14 +15,7 @@ interface RunRedteamOptions {
   envFile: string;
 }
 
-export async function doRunRedteam(cmdObj: RunRedteamOptions) {
-  await doGenerateRedteam({
-    cache: false,
-    write: true,
-    defaultConfig: {},
-    defaultConfigPath: undefined,
-  });
-}
+export async function doRunRedteam(cmdObj: RunRedteamOptions) {}
 
 export function redteamCommand(program: Command) {
   const redteamCommand = program.command('redteam').description('Red team LLM applications');
@@ -131,6 +127,25 @@ export function redteamCommand(program: Command) {
         provider = providerChoice;
       }
 
+      // Question 4: Plugins
+      const pluginChoices = Array.from(ALL_PLUGINS).map((plugin) => ({
+        name: `${plugin} - ${subCategoryDescriptions[plugin] || 'No description available'}`,
+        value: plugin,
+        checked: DEFAULT_PLUGINS.has(plugin),
+      }));
+
+      const { selectedPlugins } = await inquirer.prompt([
+        {
+          type: 'checkbox',
+          name: 'selectedPlugins',
+          message: 'Select the plugins you want to enable:',
+          choices: pluginChoices,
+          pageSize: 20,
+        },
+      ]);
+
+      const plugins = selectedPlugins;
+
       // Create config file
       const config = {
         prompts: [prompt],
@@ -141,11 +156,28 @@ export function redteamCommand(program: Command) {
       const configPath = path.join(projectDir, 'promptfooconfig.yaml');
       fs.writeFileSync(configPath, yaml.dump(config), 'utf8');
 
-      await doRunRedteam({
-        config: configPath,
-        cache: false,
-        envFile: '',
-      });
+      logger.info(chalk.green(`Created red teaming configuration file at ${configPath}`));
+
+      const { readyToGenerate } = await inquirer.prompt([
+        {
+          type: 'confirm',
+          name: 'readyToGenerate',
+          message: 'Are you ready to generate adversarial test cases?',
+          default: true,
+        },
+      ]);
+
+      if (readyToGenerate) {
+        await doGenerateRedteam({
+          plugins,
+          cache: false,
+          write: true,
+          defaultConfig: config,
+          defaultConfigPath: configPath,
+        });
+      } else {
+        console.log('To generate test cases later, use the command: promptfoo generate redteam');
+      }
     });
 
   redteamCommand
