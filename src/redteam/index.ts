@@ -9,15 +9,15 @@ import { REDTEAM_MODEL } from './constants';
 import CompetitorPlugin from './plugins/competitors';
 import ContractPlugin from './plugins/contracts';
 import ExcessiveAgencyPlugin from './plugins/excessiveAgency';
+import HallucinationPlugin from './plugins/hallucination';
+import HijackingPlugin from './plugins/hijacking';
 import {
   getHarmfulTests,
   addInjections,
   addIterativeJailbreaks,
   HARM_CATEGORIES,
-} from './plugins/getHarmfulTests';
-import { getPiiTests } from './plugins/getPiiTests';
-import HallucinationPlugin from './plugins/hallucination';
-import HijackingPlugin from './plugins/hijacking';
+} from './plugins/legacy/harmful';
+import { getPiiTests } from './plugins/legacy/pii';
 import OverreliancePlugin from './plugins/overreliance';
 import PoliticsPlugin from './plugins/politics';
 
