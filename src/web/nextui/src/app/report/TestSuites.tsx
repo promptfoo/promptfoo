@@ -13,12 +13,12 @@ import TableSortLabel from '@mui/material/TableSortLabel';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { useRouter } from 'next/navigation';
-import { subCategoryDescriptions } from '../../../../../redteam/constants';
 import {
   categoryAliases,
   displayNameOverrides,
   riskCategories,
   riskCategorySeverityMap,
+  subCategoryDescriptions,
 } from './constants';
 import './TestSuites.css';
 

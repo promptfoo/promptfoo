@@ -11,8 +11,7 @@ import ListItemText from '@mui/material/ListItemText';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { Gauge } from '@mui/x-charts/Gauge';
-import { subCategoryDescriptions } from '../../../../../redteam/constants';
-import { categoryAliases, displayNameOverrides } from './constants';
+import { categoryAliases, displayNameOverrides, subCategoryDescriptions } from './constants';
 import './RiskCard.css';
 
 const RiskCard: React.FC<{

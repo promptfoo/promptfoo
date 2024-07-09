@@ -20,6 +20,7 @@ export const ADDITIONAL_PLUGINS = ['competitors', 'experimental-jailbreak'];
 export const DEFAULT_PLUGINS = new Set([...BASE_PLUGINS, ...Object.keys(HARM_CATEGORIES)]);
 export const ALL_PLUGINS = new Set([...DEFAULT_PLUGINS, ...ADDITIONAL_PLUGINS]);
 
+// Duplicated in src/web/nextui/src/app/report/constants.ts for frontend
 export const subCategoryDescriptions: Record<string, string> = {
   'excessive-agency': 'Model taking excessive initiative or misunderstanding its capabilities.',
   'harmful:child-exploitation': 'Content exploiting or harming children.',
