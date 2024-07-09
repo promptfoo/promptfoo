@@ -17,6 +17,116 @@ import { synthesizeFromTestSuite } from '../testCases';
 import { TestSuite, UnifiedConfig } from '../types';
 import { printBorder, setupEnv } from '../util';
 
+interface RedteamGenerateOptions {
+  // Commander options
+  addPlugins?: string[];
+  cache: boolean;
+  config?: string;
+  envFile?: string;
+  injectVar?: string;
+  output?: string;
+  plugins?: string[];
+  provider?: string;
+  purpose?: string;
+  write: boolean;
+
+  // Extras
+  defaultConfig: Partial<UnifiedConfig>;
+  defaultConfigPath: string | undefined;
+}
+
+export async function doGenerateRedteam({
+  addPlugins,
+  cache,
+  config,
+  envFile,
+  injectVar,
+  output,
+  plugins,
+  provider,
+  purpose,
+  write,
+  defaultConfig,
+  defaultConfigPath,
+}: RedteamGenerateOptions) {
+  setupEnv(envFile);
+  if (!cache) {
+    logger.info('Cache is disabled.');
+    disableCache();
+  }
+
+  let testSuite: TestSuite;
+  const configPath = config || defaultConfigPath;
+  if (configPath) {
+    const resolved = await resolveConfigs(
+      {
+        config: [configPath],
+      },
+      defaultConfig,
+    );
+    testSuite = resolved.testSuite;
+  } else {
+    // Dummy testsuite for standalone invocation
+    testSuite = {
+      prompts: [],
+      providers: [],
+      tests: [],
+    };
+  }
+
+  const startTime = Date.now();
+  telemetry.record('command_used', {
+    name: 'generate redteam - started',
+    numPrompts: testSuite.prompts.length,
+    numTestsExisting: (testSuite.tests || []).length,
+  });
+  await telemetry.send();
+
+  const redteamTests = await redteamSynthesizeFromTestSuite(testSuite, {
+    purpose,
+    injectVar,
+    plugins:
+      addPlugins && addPlugins.length > 0
+        ? Array.from(plugins || REDTEAM_DEFAULT_PLUGINS).concat(addPlugins)
+        : plugins,
+    provider,
+  });
+
+  if (output) {
+    const existingYaml = configPath
+      ? (yaml.load(fs.readFileSync(configPath, 'utf8')) as Partial<UnifiedConfig>)
+      : {};
+    const updatedYaml = {
+      ...existingYaml,
+      tests: redteamTests,
+      metadata: {
+        ...existingYaml.metadata,
+        redteam: true,
+      },
+    };
+    fs.writeFileSync(output, yaml.dump(updatedYaml, { skipInvalid: true }));
+    printBorder();
+    logger.info(`Wrote ${redteamTests.length} new test cases to ${output}`);
+    printBorder();
+  } else if (write && configPath) {
+    const existingConfig = yaml.load(fs.readFileSync(configPath, 'utf8')) as Partial<UnifiedConfig>;
+    existingConfig.tests = [...(existingConfig.tests || []), ...redteamTests];
+    fs.writeFileSync(configPath, yaml.dump(existingConfig));
+    logger.info(`Wrote ${redteamTests.length} new test cases to ${configPath}`);
+  } else {
+    logger.info(yaml.dump(redteamTests, { skipInvalid: true }));
+  }
+
+  telemetry.record('command_used', {
+    name: 'generate redteam',
+    numPrompts: testSuite.prompts.length,
+    numTestsExisting: (testSuite.tests || []).length,
+    numTestsGenerated: redteamTests.length,
+    duration: Math.round((Date.now() - startTime) / 1000),
+  });
+  await telemetry.send();
+}
+
 export function generateCommand(
   program: Command,
   defaultConfig: Partial<UnifiedConfig>,
@@ -123,19 +233,6 @@ export function generateCommand(
       },
     );
 
-  interface RedteamCommandOptions {
-    addPlugins?: string[];
-    cache: boolean;
-    config?: string;
-    envFile?: string;
-    injectVar?: string;
-    output?: string;
-    plugins?: string[];
-    provider?: string;
-    purpose?: string;
-    write: boolean;
-  }
-
   generateCommand
     .command('redteam')
     .description('Generate adversarial test cases')
@@ -170,97 +267,5 @@ export function generateCommand(
     )
     .option('--no-cache', 'Do not read or write results to disk cache', false)
     .option('--env-file <path>', 'Path to .env file')
-    .action(
-      async ({
-        addPlugins,
-        cache,
-        config,
-        envFile,
-        injectVar,
-        output,
-        plugins,
-        provider,
-        purpose,
-        write,
-      }: RedteamCommandOptions) => {
-        setupEnv(envFile);
-        if (!cache) {
-          logger.info('Cache is disabled.');
-          disableCache();
-        }
-
-        let testSuite: TestSuite;
-        const configPath = config || defaultConfigPath;
-        if (configPath) {
-          const resolved = await resolveConfigs(
-            {
-              config: [configPath],
-            },
-            defaultConfig,
-          );
-          testSuite = resolved.testSuite;
-        } else {
-          // Dummy testsuite for standalone invocation
-          testSuite = {
-            prompts: [],
-            providers: [],
-            tests: [],
-          };
-        }
-
-        const startTime = Date.now();
-        telemetry.record('command_used', {
-          name: 'generate redteam - started',
-          numPrompts: testSuite.prompts.length,
-          numTestsExisting: (testSuite.tests || []).length,
-        });
-        await telemetry.send();
-
-        const redteamTests = await redteamSynthesizeFromTestSuite(testSuite, {
-          purpose,
-          injectVar,
-          plugins:
-            addPlugins && addPlugins.length > 0
-              ? Array.from(plugins || REDTEAM_DEFAULT_PLUGINS).concat(addPlugins)
-              : plugins,
-          provider,
-        });
-
-        if (output) {
-          const existingYaml = configPath
-            ? (yaml.load(fs.readFileSync(configPath, 'utf8')) as Partial<UnifiedConfig>)
-            : {};
-          const updatedYaml = {
-            ...existingYaml,
-            tests: redteamTests,
-            metadata: {
-              ...existingYaml.metadata,
-              redteam: true,
-            },
-          };
-          fs.writeFileSync(output, yaml.dump(updatedYaml, { skipInvalid: true }));
-          printBorder();
-          logger.info(`Wrote ${redteamTests.length} new test cases to ${output}`);
-          printBorder();
-        } else if (write && configPath) {
-          const existingConfig = yaml.load(
-            fs.readFileSync(configPath, 'utf8'),
-          ) as Partial<UnifiedConfig>;
-          existingConfig.tests = [...(existingConfig.tests || []), ...redteamTests];
-          fs.writeFileSync(configPath, yaml.dump(existingConfig));
-          logger.info(`Wrote ${redteamTests.length} new test cases to ${configPath}`);
-        } else {
-          logger.info(yaml.dump(redteamTests, { skipInvalid: true }));
-        }
-
-        telemetry.record('command_used', {
-          name: 'generate redteam',
-          numPrompts: testSuite.prompts.length,
-          numTestsExisting: (testSuite.tests || []).length,
-          numTestsGenerated: redteamTests.length,
-          duration: Math.round((Date.now() - startTime) / 1000),
-        });
-        await telemetry.send();
-      },
-    );
+    .action((opts) => doGenerateRedteam({ ...opts, defaultConfig, defaultConfigPath }));
 }

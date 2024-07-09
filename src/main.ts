@@ -13,6 +13,7 @@ import { exportCommand } from './commands/export';
 import { generateCommand } from './commands/generate';
 import { importCommand } from './commands/import';
 import { listCommand } from './commands/list';
+import { redteamCommand } from './commands/redteam';
 import { showCommand } from './commands/show';
 import { maybeReadConfig } from './config';
 import { getDirectory } from './esm';
@@ -206,6 +207,7 @@ async function main() {
   generateCommand(program, defaultConfig, defaultConfigPath);
   importCommand(program);
   listCommand(program);
+  redteamCommand(program);
   showCommand(program);
 
   program.parse(process.argv);
