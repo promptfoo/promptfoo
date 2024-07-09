@@ -17,7 +17,7 @@ describe('PluginBase', () => {
   beforeEach(() => {
     provider = {
       callApi: jest.fn().mockResolvedValue({
-        output: 'Prefix: test prompt\nPrefix: another prompt\nirrelevant line',
+        output: 'Prompt: test prompt\nPrompt: another prompt\nirrelevant line',
       }),
       id: jest.fn().mockReturnValue('test-provider'),
     };

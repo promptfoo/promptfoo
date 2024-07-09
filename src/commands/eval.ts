@@ -23,6 +23,235 @@ import {
 import { filterProviders } from './eval/filterProviders';
 import { filterTests } from './eval/filterTests';
 
+export async function doEval(
+  cmdObj: CommandLineOptions & Command,
+  defaultConfig: Partial<UnifiedConfig>,
+  defaultConfigPath: string | undefined,
+  evaluateOptions: EvaluateOptions,
+) {
+  setupEnv(cmdObj.envFile);
+  let config: Partial<UnifiedConfig> | undefined = undefined;
+  let testSuite: TestSuite | undefined = undefined;
+  let basePath: string | undefined = undefined;
+
+  const runEvaluation = async (initialization?: boolean) => {
+    const startTime = Date.now();
+    telemetry.record('command_used', {
+      name: 'eval - started',
+      watch: Boolean(cmdObj.watch),
+    });
+    await telemetry.send();
+
+    // Misc settings
+    if (cmdObj.verbose) {
+      setLogLevel('debug');
+    }
+    const iterations = parseInt(cmdObj.repeat || '', 10);
+    const repeat = !isNaN(iterations) && iterations > 0 ? iterations : 1;
+    if (!cmdObj.cache || repeat > 1) {
+      logger.info('Cache is disabled.');
+      disableCache();
+    }
+
+    ({ config, testSuite, basePath } = await resolveConfigs(cmdObj, defaultConfig));
+    cliState.basePath = basePath;
+
+    let maxConcurrency = parseInt(cmdObj.maxConcurrency || '', 10);
+    const delay = parseInt(cmdObj.delay || '', 0);
+
+    if (delay > 0) {
+      maxConcurrency = 1;
+      logger.info(
+        `Running at concurrency=1 because ${delay}ms delay was requested between API calls`,
+      );
+    }
+
+    testSuite.tests = await filterTests(testSuite, {
+      firstN: cmdObj.filterFirstN,
+      pattern: cmdObj.filterPattern,
+      failing: cmdObj.filterFailing,
+    });
+
+    testSuite.providers = filterProviders(testSuite.providers, cmdObj.filterProviders);
+
+    const options: EvaluateOptions = {
+      showProgressBar: getLogLevel() === 'debug' ? false : cmdObj.progressBar,
+      maxConcurrency: !isNaN(maxConcurrency) && maxConcurrency > 0 ? maxConcurrency : undefined,
+      repeat,
+      delay: !isNaN(delay) && delay > 0 ? delay : undefined,
+      interactiveProviders: cmdObj.interactiveProviders,
+      ...evaluateOptions,
+    };
+
+    if (cmdObj.grader) {
+      testSuite.defaultTest = testSuite.defaultTest || {};
+      testSuite.defaultTest.options = testSuite.defaultTest.options || {};
+      testSuite.defaultTest.options.provider = await loadApiProvider(cmdObj.grader);
+    }
+    if (cmdObj.var) {
+      testSuite.defaultTest = testSuite.defaultTest || {};
+      testSuite.defaultTest.vars = { ...testSuite.defaultTest.vars, ...cmdObj.var };
+    }
+    if (cmdObj.generateSuggestions) {
+      options.generateSuggestions = true;
+    }
+
+    const summary = await evaluate(testSuite, {
+      ...options,
+      eventSource: 'cli',
+    });
+
+    const shareableUrl =
+      cmdObj.share && config.sharing ? await createShareableUrl(summary, config) : null;
+
+    if (cmdObj.table && getLogLevel() !== 'debug') {
+      // Output CLI table
+      const table = generateTable(summary, parseInt(cmdObj.tableCellMaxLength || '', 10));
+
+      logger.info('\n' + table.toString());
+      if (summary.table.body.length > 25) {
+        const rowsLeft = summary.table.body.length - 25;
+        logger.info(`... ${rowsLeft} more row${rowsLeft === 1 ? '' : 's'} not shown ...\n`);
+      }
+    } else if (summary.stats.failures !== 0) {
+      logger.debug(
+        `At least one evaluation failure occurred. This might be caused by the underlying call to the provider, or a test failure. Context: \n${JSON.stringify(
+          summary.results,
+        )}`,
+      );
+    }
+
+    await migrateResultsFromFileSystemToDatabase();
+
+    let evalId: string | null = null;
+    if (cmdObj.write) {
+      evalId = await writeResultsToDatabase(summary, config);
+    }
+
+    const { outputPath } = config;
+    if (outputPath) {
+      // Write output to file
+      if (typeof outputPath === 'string') {
+        await writeOutput(outputPath, evalId, summary, config, shareableUrl);
+      } else if (Array.isArray(outputPath)) {
+        await writeMultipleOutputs(outputPath, evalId, summary, config, shareableUrl);
+      }
+      logger.info(chalk.yellow(`Writing output to ${outputPath}`));
+    }
+
+    telemetry.maybeShowNotice();
+
+    printBorder();
+    if (!cmdObj.write) {
+      logger.info(`${chalk.green('✔')} Evaluation complete`);
+    } else {
+      if (shareableUrl) {
+        logger.info(`${chalk.green('✔')} Evaluation complete: ${shareableUrl}`);
+      } else {
+        logger.info(`${chalk.green('✔')} Evaluation complete.\n`);
+        logger.info(
+          `» Run ${chalk.greenBright.bold('promptfoo view')} to use the local web viewer`,
+        );
+        logger.info(`» Run ${chalk.greenBright.bold('promptfoo share')} to create a shareable URL`);
+        logger.info(
+          `» This project needs your feedback. What's one thing we can improve? ${chalk.greenBright.bold(
+            'https://forms.gle/YFLgTe1dKJKNSCsU7',
+          )}`,
+        );
+      }
+    }
+    printBorder();
+    logger.info(chalk.green.bold(`Successes: ${summary.stats.successes}`));
+    logger.info(chalk.red.bold(`Failures: ${summary.stats.failures}`));
+    logger.info(
+      `Token usage: Total ${summary.stats.tokenUsage.total}, Prompt ${summary.stats.tokenUsage.prompt}, Completion ${summary.stats.tokenUsage.completion}, Cached ${summary.stats.tokenUsage.cached}`,
+    );
+
+    telemetry.record('command_used', {
+      name: 'eval',
+      watch: Boolean(cmdObj.watch),
+      duration: Math.round((Date.now() - startTime) / 1000),
+    });
+    await telemetry.send();
+
+    if (cmdObj.watch) {
+      if (initialization) {
+        const configPaths = (cmdObj.config || [defaultConfigPath]).filter(Boolean) as string[];
+        if (!configPaths.length) {
+          logger.error('Could not locate config file(s) to watch');
+          process.exit(1);
+        }
+        const basePath = path.dirname(configPaths[0]);
+        const promptPaths = Array.isArray(config.prompts)
+          ? (config.prompts
+              .map((p) => {
+                if (typeof p === 'string' && p.startsWith('file://')) {
+                  return path.resolve(basePath, p.slice('file://'.length));
+                } else if (typeof p === 'object' && p.id && p.id.startsWith('file://')) {
+                  return path.resolve(basePath, p.id.slice('file://'.length));
+                }
+                return null;
+              })
+              .filter(Boolean) as string[])
+          : [];
+        const providerPaths = Array.isArray(config.providers)
+          ? (config.providers
+              .map((p) =>
+                typeof p === 'string' && p.startsWith('file://')
+                  ? path.resolve(basePath, p.slice('file://'.length))
+                  : null,
+              )
+              .filter(Boolean) as string[])
+          : [];
+        const varPaths = Array.isArray(config.tests)
+          ? config.tests
+              .flatMap((t) => {
+                if (typeof t === 'string' && t.startsWith('file://')) {
+                  return path.resolve(basePath, t.slice('file://'.length));
+                } else if (typeof t !== 'string' && t.vars) {
+                  return Object.values(t.vars).flatMap((v) => {
+                    if (typeof v === 'string' && v.startsWith('file://')) {
+                      return path.resolve(basePath, v.slice('file://'.length));
+                    }
+                    return [];
+                  });
+                }
+                return [];
+              })
+              .filter(Boolean)
+          : [];
+        const watchPaths = Array.from(
+          new Set([...configPaths, ...promptPaths, ...providerPaths, ...varPaths]),
+        );
+        const watcher = chokidar.watch(watchPaths, { ignored: /^\./, persistent: true });
+
+        watcher
+          .on('change', async (path) => {
+            printBorder();
+            logger.info(`File change detected: ${path}`);
+            printBorder();
+            await runEvaluation();
+          })
+          .on('error', (error) => logger.error(`Watcher error: ${error}`))
+          .on('ready', () =>
+            watchPaths.forEach((watchPath) =>
+              logger.info(`Watching for file changes on ${watchPath} ...`),
+            ),
+          );
+      }
+    } else {
+      logger.info('Done.');
+
+      if (summary.stats.failures > 0) {
+        const exitCode = Number(process.env.PROMPTFOO_FAILED_TEST_EXIT_CODE);
+        process.exit(isNaN(exitCode) ? 100 : exitCode);
+      }
+    }
+  };
+
+  await runEvaluation(true /* initialization */);
+}
+
 export function evalCommand(
   program: Command,
   defaultConfig: Partial<UnifiedConfig>,
@@ -138,229 +367,5 @@ export function evalCommand(
       },
       {},
     )
-    .action(async (cmdObj: CommandLineOptions & Command) => {
-      setupEnv(cmdObj.envFile);
-      let config: Partial<UnifiedConfig> | undefined = undefined;
-      let testSuite: TestSuite | undefined = undefined;
-      let basePath: string | undefined = undefined;
-
-      const runEvaluation = async (initialization?: boolean) => {
-        const startTime = Date.now();
-        telemetry.record('command_used', {
-          name: 'eval - started',
-          watch: Boolean(cmdObj.watch),
-        });
-        await telemetry.send();
-
-        // Misc settings
-        if (cmdObj.verbose) {
-          setLogLevel('debug');
-        }
-        const iterations = parseInt(cmdObj.repeat || '', 10);
-        const repeat = !isNaN(iterations) && iterations > 0 ? iterations : 1;
-        if (!cmdObj.cache || repeat > 1) {
-          logger.info('Cache is disabled.');
-          disableCache();
-        }
-
-        ({ config, testSuite, basePath } = await resolveConfigs(cmdObj, defaultConfig));
-        cliState.basePath = basePath;
-
-        let maxConcurrency = parseInt(cmdObj.maxConcurrency || '', 10);
-        const delay = parseInt(cmdObj.delay || '', 0);
-
-        if (delay > 0) {
-          maxConcurrency = 1;
-          logger.info(
-            `Running at concurrency=1 because ${delay}ms delay was requested between API calls`,
-          );
-        }
-
-        testSuite.tests = await filterTests(testSuite, {
-          firstN: cmdObj.filterFirstN,
-          pattern: cmdObj.filterPattern,
-          failing: cmdObj.filterFailing,
-        });
-
-        testSuite.providers = filterProviders(testSuite.providers, cmdObj.filterProviders);
-
-        const options: EvaluateOptions = {
-          showProgressBar: getLogLevel() === 'debug' ? false : cmdObj.progressBar,
-          maxConcurrency: !isNaN(maxConcurrency) && maxConcurrency > 0 ? maxConcurrency : undefined,
-          repeat,
-          delay: !isNaN(delay) && delay > 0 ? delay : undefined,
-          interactiveProviders: cmdObj.interactiveProviders,
-          ...evaluateOptions,
-        };
-
-        if (cmdObj.grader) {
-          testSuite.defaultTest = testSuite.defaultTest || {};
-          testSuite.defaultTest.options = testSuite.defaultTest.options || {};
-          testSuite.defaultTest.options.provider = await loadApiProvider(cmdObj.grader);
-        }
-        if (cmdObj.var) {
-          testSuite.defaultTest = testSuite.defaultTest || {};
-          testSuite.defaultTest.vars = { ...testSuite.defaultTest.vars, ...cmdObj.var };
-        }
-        if (cmdObj.generateSuggestions) {
-          options.generateSuggestions = true;
-        }
-
-        const summary = await evaluate(testSuite, {
-          ...options,
-          eventSource: 'cli',
-        });
-
-        const shareableUrl =
-          cmdObj.share && config.sharing ? await createShareableUrl(summary, config) : null;
-
-        if (cmdObj.table && getLogLevel() !== 'debug') {
-          // Output CLI table
-          const table = generateTable(summary, parseInt(cmdObj.tableCellMaxLength || '', 10));
-
-          logger.info('\n' + table.toString());
-          if (summary.table.body.length > 25) {
-            const rowsLeft = summary.table.body.length - 25;
-            logger.info(`... ${rowsLeft} more row${rowsLeft === 1 ? '' : 's'} not shown ...\n`);
-          }
-        } else if (summary.stats.failures !== 0) {
-          logger.debug(
-            `At least one evaluation failure occurred. This might be caused by the underlying call to the provider, or a test failure. Context: \n${JSON.stringify(
-              summary.results,
-            )}`,
-          );
-        }
-
-        await migrateResultsFromFileSystemToDatabase();
-
-        let evalId: string | null = null;
-        if (cmdObj.write) {
-          evalId = await writeResultsToDatabase(summary, config);
-        }
-
-        const { outputPath } = config;
-        if (outputPath) {
-          // Write output to file
-          if (typeof outputPath === 'string') {
-            await writeOutput(outputPath, evalId, summary, config, shareableUrl);
-          } else if (Array.isArray(outputPath)) {
-            await writeMultipleOutputs(outputPath, evalId, summary, config, shareableUrl);
-          }
-          logger.info(chalk.yellow(`Writing output to ${outputPath}`));
-        }
-
-        telemetry.maybeShowNotice();
-
-        printBorder();
-        if (!cmdObj.write) {
-          logger.info(`${chalk.green('✔')} Evaluation complete`);
-        } else {
-          if (shareableUrl) {
-            logger.info(`${chalk.green('✔')} Evaluation complete: ${shareableUrl}`);
-          } else {
-            logger.info(`${chalk.green('✔')} Evaluation complete.\n`);
-            logger.info(
-              `» Run ${chalk.greenBright.bold('promptfoo view')} to use the local web viewer`,
-            );
-            logger.info(
-              `» Run ${chalk.greenBright.bold('promptfoo share')} to create a shareable URL`,
-            );
-            logger.info(
-              `» This project needs your feedback. What's one thing we can improve? ${chalk.greenBright.bold(
-                'https://forms.gle/YFLgTe1dKJKNSCsU7',
-              )}`,
-            );
-          }
-        }
-        printBorder();
-        logger.info(chalk.green.bold(`Successes: ${summary.stats.successes}`));
-        logger.info(chalk.red.bold(`Failures: ${summary.stats.failures}`));
-        logger.info(
-          `Token usage: Total ${summary.stats.tokenUsage.total}, Prompt ${summary.stats.tokenUsage.prompt}, Completion ${summary.stats.tokenUsage.completion}, Cached ${summary.stats.tokenUsage.cached}`,
-        );
-
-        telemetry.record('command_used', {
-          name: 'eval',
-          watch: Boolean(cmdObj.watch),
-          duration: Math.round((Date.now() - startTime) / 1000),
-        });
-        await telemetry.send();
-
-        if (cmdObj.watch) {
-          if (initialization) {
-            const configPaths = (cmdObj.config || [defaultConfigPath]).filter(Boolean) as string[];
-            if (!configPaths.length) {
-              logger.error('Could not locate config file(s) to watch');
-              process.exit(1);
-            }
-            const basePath = path.dirname(configPaths[0]);
-            const promptPaths = Array.isArray(config.prompts)
-              ? (config.prompts
-                  .map((p) => {
-                    if (typeof p === 'string' && p.startsWith('file://')) {
-                      return path.resolve(basePath, p.slice('file://'.length));
-                    } else if (typeof p === 'object' && p.id && p.id.startsWith('file://')) {
-                      return path.resolve(basePath, p.id.slice('file://'.length));
-                    }
-                    return null;
-                  })
-                  .filter(Boolean) as string[])
-              : [];
-            const providerPaths = Array.isArray(config.providers)
-              ? (config.providers
-                  .map((p) =>
-                    typeof p === 'string' && p.startsWith('file://')
-                      ? path.resolve(basePath, p.slice('file://'.length))
-                      : null,
-                  )
-                  .filter(Boolean) as string[])
-              : [];
-            const varPaths = Array.isArray(config.tests)
-              ? config.tests
-                  .flatMap((t) => {
-                    if (typeof t === 'string' && t.startsWith('file://')) {
-                      return path.resolve(basePath, t.slice('file://'.length));
-                    } else if (typeof t !== 'string' && t.vars) {
-                      return Object.values(t.vars).flatMap((v) => {
-                        if (typeof v === 'string' && v.startsWith('file://')) {
-                          return path.resolve(basePath, v.slice('file://'.length));
-                        }
-                        return [];
-                      });
-                    }
-                    return [];
-                  })
-                  .filter(Boolean)
-              : [];
-            const watchPaths = Array.from(
-              new Set([...configPaths, ...promptPaths, ...providerPaths, ...varPaths]),
-            );
-            const watcher = chokidar.watch(watchPaths, { ignored: /^\./, persistent: true });
-
-            watcher
-              .on('change', async (path) => {
-                printBorder();
-                logger.info(`File change detected: ${path}`);
-                printBorder();
-                await runEvaluation();
-              })
-              .on('error', (error) => logger.error(`Watcher error: ${error}`))
-              .on('ready', () =>
-                watchPaths.forEach((watchPath) =>
-                  logger.info(`Watching for file changes on ${watchPath} ...`),
-                ),
-              );
-          }
-        } else {
-          logger.info('Done.');
-
-          if (summary.stats.failures > 0) {
-            const exitCode = Number(process.env.PROMPTFOO_FAILED_TEST_EXIT_CODE);
-            process.exit(isNaN(exitCode) ? 100 : exitCode);
-          }
-        }
-      };
-
-      await runEvaluation(true /* initialization */);
-    });
+    .action((opts) => doEval(opts, defaultConfig, defaultConfigPath, evaluateOptions));
 }

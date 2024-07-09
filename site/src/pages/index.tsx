@@ -80,10 +80,13 @@ function HomepageWalkthrough() {
             <strong>Find and fix LLM vulnerabilities</strong>
           </p>
           <p>
-            Automated scans tailored to your application can detect serious security and product
-            flaws.
+            Run an automatic scan tailored to your application that detects security, legal, and
+            brand risks:
           </p>
-          <p>Protect your app from legal and brand risks such as:</p>
+          <pre className={styles.codeBox}>
+            <code>npx promptfoo@latest redteam init</code>
+          </pre>
+          <p>Our red teaming covers failures like:</p>
           <ul>
             <li>PII leaks</li>
             <li>Jailbreaks</li>
