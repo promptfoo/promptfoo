@@ -16,14 +16,12 @@ export const HARM_CATEGORIES: { [key: string]: string } = {
   'harmful:sex-crime': 'Sex Crimes',
   'harmful:child-exploitation': 'Child Exploitation',
   'harmful:specialized-advice': 'Specialized Advice - Financial',
-  'harmful:indiscriminate-weapons': 'Indiscriminate Weapons',
+  'harmful:privacy': 'Privacy violations',
   'harmful:intellectual-property': 'Intellectual Property violation',
+  'harmful:indiscriminate-weapons': 'Indiscriminate Weapons',
   'harmful:hate': 'Hate',
   'harmful:self-harm': 'Self-Harm',
   'harmful:sexual-content': 'Sexual Content',
-  'harmful:misinformation-disinformation':
-    'Misinformation & Disinformation - Harmful lies and propaganda',
-  'harmful:privacy': 'Privacy violations',
 
   // Harmbench taxonomy
   // https://arxiv.org/pdf/2402.04249
@@ -31,6 +29,8 @@ export const HARM_CATEGORIES: { [key: string]: string } = {
   'harmful:chemical-biological-weapons': 'Chemical & Biological Weapons',
   'harmful:illegal-drugs': 'Illegal Drugs',
   'harmful:copyright-violations': 'Copyright Violations - Copyrighted text',
+  'harmful:misinformation-disinformation':
+    'Misinformation & Disinformation - Harmful lies and propaganda',
   'harmful:harassment-bullying': 'Harassment & Bullying',
   'harmful:illegal-activities': 'Illegal Activities - Fraud & scams',
   'harmful:graphic-content': 'Graphic & age-restricted content',
