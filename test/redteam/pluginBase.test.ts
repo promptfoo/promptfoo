@@ -30,16 +30,8 @@ describe('PluginBase', () => {
   });
 
   it('should generate test cases correctly', async () => {
-    const nunjucks = getNunjucksEngine();
-
-    const testCases = await plugin.generateTests();
-
-    expect(provider.callApi).toHaveBeenCalledWith(
-      nunjucks.renderString('Test template with {{ purpose }}', {
-        purpose: 'test purpose',
-      }),
-    );
-    expect(testCases).toEqual([
+    expect.assertions(2);
+    await expect(plugin.generateTests()).resolves.toEqual([
       {
         vars: { testVar: 'test prompt' },
         assert: [{ type: 'assertion', value: 'test prompt' }],
@@ -49,10 +41,16 @@ describe('PluginBase', () => {
         assert: [{ type: 'assertion', value: 'another prompt' }],
       },
     ]);
+    expect(provider.callApi).toHaveBeenCalledWith(
+      getNunjucksEngine().renderString('Test template with {{ purpose }}', {
+        purpose: 'test purpose',
+      }),
+    );
   });
 
   it('should throw an error if generatedPrompts is not a string', async () => {
-    (jest.mocked(provider.callApi)).mockResolvedValue({ output: 123 });
+    expect.assertions(1);
+    jest.mocked(provider.callApi).mockResolvedValue({ output: 123 });
 
     await expect(plugin.generateTests()).rejects.toThrow(
       'Expected generatedPrompts to be a string',
@@ -60,12 +58,13 @@ describe('PluginBase', () => {
   });
 
   it('should filter and process prompts correctly', async () => {
-    const nunjucks = getNunjucksEngine();
-
-    const testCases = await plugin.generateTests();
-
-    expect(testCases).toHaveLength(2);
-    expect(testCases[0].vars.testVar).toBe('test prompt');
-    expect(testCases[1].vars.testVar).toBe('another prompt');
+    expect.assertions(1);
+    await expect(plugin.generateTests()).resolves.toEqual([
+      { assert: [{ type: 'assertion', value: 'test prompt' }], vars: { testVar: 'test prompt' } },
+      {
+        assert: [{ type: 'assertion', value: 'another prompt' }],
+        vars: { testVar: 'another prompt' },
+      },
+    ]);
   });
 });
