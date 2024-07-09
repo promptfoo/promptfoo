@@ -6,7 +6,7 @@ import logger from '../logger';
 import { loadApiProvider } from '../providers';
 import type { ApiProvider, TestCase, TestSuite } from '../types';
 import { REDTEAM_MODEL, ALL_PLUGINS, DEFAULT_PLUGINS } from './constants';
-import { getHarmfulTests, addInjections } from './legacy/harmful';
+import { getHarmfulTests } from './legacy/harmful';
 import { getPiiTests } from './legacy/pii';
 import CompetitorPlugin from './plugins/competitors';
 import ContractPlugin from './plugins/contracts';
@@ -15,6 +15,7 @@ import HallucinationPlugin from './plugins/hallucination';
 import HijackingPlugin from './plugins/hijacking';
 import OverreliancePlugin from './plugins/overreliance';
 import PoliticsPlugin from './plugins/politics';
+import { addInjections } from './strategy/injection';
 import { addIterativeJailbreaks } from './strategy/iterative';
 
 interface SynthesizeOptions {
