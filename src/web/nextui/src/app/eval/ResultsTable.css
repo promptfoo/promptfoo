@@ -114,6 +114,29 @@ table.results-table,
   white-space: pre-wrap;
   height: 100%;
   padding: 1rem;
+  min-height: 250px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.1) transparent;
+}
+
+.results-table tr .cell::-webkit-scrollbar {
+  width: 8px;
+}
+
+.results-table tr .cell::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.results-table tr .cell::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.1);
+  border-radius: 4px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+.results-table tr .cell::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(0, 0, 0, 0.7);
 }
 
 .results-table tr .cell img {
