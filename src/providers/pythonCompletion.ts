@@ -21,6 +21,7 @@ export class PythonProvider implements ApiProvider {
   private config: PythonProviderConfig;
   private scriptPath: string;
   private functionName: string | null;
+  public label: string | undefined;
 
   constructor(
     runPath: string,
@@ -33,6 +34,7 @@ export class PythonProvider implements ApiProvider {
     this.scriptPath = path.relative(options?.config.basePath || '', providerPath);
     this.functionName = functionName || null;
     this.id = () => options?.id ?? `python:${this.scriptPath}:${this.functionName || 'default'}`;
+    this.label = options?.label;
     this.config = options?.config ?? {};
   }
 
@@ -81,7 +83,11 @@ export class PythonProvider implements ApiProvider {
           result = (await runPython(absPath, functionName, args, {
             pythonExecutable: this.config.pythonExecutable,
           })) as ProviderResponse;
-          if (!result || (!('output' in result) && !('error' in result))) {
+          if (
+            !result ||
+            typeof result !== 'object' ||
+            (!('output' in result) && !('error' in result))
+          ) {
             throw new Error(
               `The Python script \`${functionName}\` function must return a dict with an \`output\` string/object or \`error\` string, instead got: ${JSON.stringify(
                 result,
@@ -93,7 +99,11 @@ export class PythonProvider implements ApiProvider {
           result = (await runPython(absPath, functionName, args, {
             pythonExecutable: this.config.pythonExecutable,
           })) as ProviderEmbeddingResponse;
-          if (!result || (!('embedding' in result) && !('error' in result))) {
+          if (
+            !result ||
+            typeof result !== 'object' ||
+            (!('embedding' in result) && !('error' in result))
+          ) {
             throw new Error(
               `The Python script \`${functionName}\` function must return a dict with an \`embedding\` array or \`error\` string, instead got ${JSON.stringify(
                 result,
@@ -105,7 +115,11 @@ export class PythonProvider implements ApiProvider {
           result = (await runPython(absPath, functionName, args, {
             pythonExecutable: this.config.pythonExecutable,
           })) as ProviderClassificationResponse;
-          if (!result || (!('classification' in result) && !('error' in result))) {
+          if (
+            !result ||
+            typeof result !== 'object' ||
+            (!('classification' in result) && !('error' in result))
+          ) {
             throw new Error(
               `The Python script \`${functionName}\` function must return a dict with a \`classification\` object or \`error\` string, instead of ${JSON.stringify(
                 result,
