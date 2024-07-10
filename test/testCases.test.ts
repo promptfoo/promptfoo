@@ -167,6 +167,31 @@ describe('readTests', () => {
     ]);
   });
 
+  it('readTests with string input (CSV file path with file:// prefix)', async () => {
+    jest
+      .mocked(fs.readFileSync)
+      .mockReturnValue('var1,var2,__expected\nvalue1,value2,value1\nvalue3,value4,fn:value5');
+    const testsPath = 'file://tests.csv';
+
+    const result = await readTests(testsPath);
+
+    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+    expect(result).toEqual([
+      {
+        description: 'Row #1',
+        vars: { var1: 'value1', var2: 'value2' },
+        assert: [{ type: 'equals', value: 'value1' }],
+        options: {},
+      },
+      {
+        description: 'Row #2',
+        vars: { var1: 'value3', var2: 'value4' },
+        assert: [{ type: 'javascript', value: 'value5' }],
+        options: {},
+      },
+    ]);
+  });
+
   it('readTests with multiple __expected in CSV', async () => {
     jest
       .mocked(fs.readFileSync)

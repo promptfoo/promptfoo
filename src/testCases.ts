@@ -161,6 +161,9 @@ export async function readTests(
   const ret: TestCase[] = [];
 
   const loadTestsFromGlob = async (loadTestsGlob: string) => {
+    if (loadTestsGlob.startsWith('file://')) {
+      loadTestsGlob = loadTestsGlob.slice('file://'.length);
+    }
     const resolvedPath = path.resolve(basePath, loadTestsGlob);
     const testFiles = globSync(resolvedPath, {
       windowsPathsNoEscape: true,
