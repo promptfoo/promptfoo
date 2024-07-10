@@ -1,21 +1,49 @@
----
-sidebar_label: Contributing
----
+# Contributing to promptfoo
 
-# Contributing Guidelines for Promptfoo
+We welcome contributions from the community to help make this project better. This guide will help you get started. If you have any questions, please reach out to us on [Discord](https://discord.gg/gHPS9jjfbs) or [github issue](https://github.com/promptfoo/promptfoo/issues/new).
 
-We welcome contributions from the community to help make this project better. In particular, we welcome:
+## Table of Contents
 
-- bugfixes.
-- documentation updates including examples and guides.
-- updates to providers including capabilities.
-- features that make your use of promptfoo easier.
+- [Contributing to promptfoo](#contributing-to-promptfoo)
+  - [Table of Contents](#table-of-contents)
+  - [Project Overview](#project-overview)
+  - [Code of Conduct](#code-of-conduct)
+  - [Getting Started](#getting-started)
+  - [Development Workflow](#development-workflow)
+  - [Running Tests](#running-tests)
+  - [Linting and Formatting](#linting-and-formatting)
+  - [Building the Project](#building-the-project)
+  - [Contributing to the CLI](#contributing-to-the-cli)
+    - [Running the CLI During Development](#running-the-cli-during-development)
+  - [Contributing to the Web UI](#contributing-to-the-web-ui)
+  - [Database Migrations](#database-migrations)
+  - [Adding a New Provider](#adding-a-new-provider)
+  - [Documentation](#documentation)
+  - [Submitting Changes](#submitting-changes)
+  - [Getting Help](#getting-help)
 
-- If you are not sure where to start, we have a list of [good first issues](https://github.com/promptfoo/promptfoo/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22) to help you get started. You can also join our [Discord community](https://discord.gg/gHPS9jjfbs) to get help from the maintainers.
+## Project Overview
 
-## Background
+promptfoo is a tool for testing and evaluating LLM apps. It allows you to:
 
-Promptfoo is a flexible command line tool for evaluating LLM prompts against a variety of providers. We also have a web interface for viewing the results of evals and running simple evals. The core of this guide focuses on how to contribute to the command line tool.
+- Build reliable prompts, models, and RAGs with benchmarks specific to your use-case
+- Speed up evaluations with caching, concurrency, and live reloading
+- Score outputs automatically by defining metrics and perform automated red teaming
+- Use as a CLI, library, or in CI/CD
+- Use various LLM providers or integrate custom API providers
+
+Our goal is to enable test-driven LLM development instead of trial-and-error.
+
+We particularly welcome contributions in the following areas:
+
+- Bug fixes
+- Documentation updates, including examples and guides
+- Updates to providers and their capabilities
+- Features that improve the user experience of promptfoo
+
+## Code of Conduct
+
+We follow the [Contributor Covenant Code of Conduct](https://www.contributor-covenant.org/). Please read and adhere to it in all interactions within our community.
 
 ## Getting Started
 
@@ -47,6 +75,8 @@ Promptfoo is a flexible command line tool for evaluating LLM prompts against a v
    npm run build
    ```
 
+If you're not sure where to start, check out our [good first issues](https://github.com/promptfoo/promptfoo/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22) or join our [Discord community](https://discord.gg/gHPS9jjfbs) for guidance.
+
 ## Development Workflow
 
 1. Create a new branch for your feature or bugfix:
@@ -63,20 +93,15 @@ Promptfoo is a flexible command line tool for evaluating LLM prompts against a v
    git push origin your-branch-name
    ```
 
-4. Open a pull request against the `main` branch of the promptfoo repository. The PR title should follow the [Conventional Commits](https://www.conventionalcommits.org/) specification, but if it doesn't, don't worry. We can update it for you.
+4. Open a pull request against the `main` branch of the promptfoo repository.
 
-   When opening a pull request:
+When opening a pull request:
 
-   - Address a specific issue or feature request. If there isn't an existing issue, create one first.
-   - Keep changes small and focused. Avoid mixing refactors with new features.
-   - Ensure test coverage for new code or bug fixes.
-   - Provide clear instructions on how to reproduce the problem or test the new feature.
-   - If you're unsure about something, feel free to ask questions in the PR or reach out to maintainers.
-
-   Be responsive to feedback and be prepared to make changes if requested.
-   Once your PR is approved and merged, congratulations on your contribution! We will give you a shoutout in the release notes.
-
-   Remember, successful PRs are typically small, well-documented, and address a specific need. Don't hesitate to communicate with maintainers if you need guidance or have questions about your contribution.
+- Address a specific issue or feature request. If there isn't an existing issue, there's no need to create one.
+- Keep changes small and focused. Avoid mixing refactors with new features.
+- Ensure test coverage for new code or bug fixes.
+- Provide clear instructions on how to reproduce the problem or test the new feature.
+- Be responsive to feedback and be prepared to make changes if requested.
 
 ## Running Tests
 
@@ -101,8 +126,6 @@ npm run format
 npm run lint
 ```
 
-Note that we have minimal linting rules. We would like to ratchet these up in the future.
-
 ## Building the Project
 
 To build the project:
@@ -117,31 +140,24 @@ For continuous building during development:
 npm run build:watch
 ```
 
-This will help you catch TypeScript errors as you make changes to the code.
-
 ## Contributing to the CLI
 
 ### Running the CLI During Development
 
-We recommend using `npm link` to link your local `promptfoo` package to the global `promptfoo` package. This will allow you to run commands like:
+We recommend using `npm link` to link your local `promptfoo` package to the global `promptfoo` package:
 
 ```sh
+npm link
 promptfoo --help
 ```
 
-Note that you should also run `npm run build:watch` to transpile the TypeScript code to JavaScript. When you are done, you can unlink the package by running `npm unlink promptfoo`.
-
-Alternatively, you can run the CLI directly. This takes slightly longer as it transpiles the TypeScript code to JavaScript.
+Alternatively, you can run the CLI directly:
 
 ```sh
 npm run local -- eval --config examples/cloudflare-ai/chat_config.yaml
 ```
 
-Note: Any parts of the command after `--` are passed through to the CLI entrypoint.
-
-We recommend setting up a local `promptfooconfig.yaml`.
-
-Here is a simple example:
+We recommend setting up a local `promptfooconfig.yaml`. Here's a simple example:
 
 ```yaml
 providers:
@@ -149,18 +165,14 @@ providers:
 prompts:
   - Translate "{{input}}" to {{language}}
 tests:
-  - Vars:
+  - vars:
       input: 'Hello, world!'
       language: 'English'
 ```
 
-You can run many commands with `--verbose` or by setting `LOG_LEVEL=debug` as an environment variable.
+## Contributing to the Web UI
 
-### Contributing to the Web UI
-
-## Web UI Development
-
-The web UI is located in `src/web/nextui`. To run it in dev mode:
+To run the web UI in dev mode:
 
 ```sh
 npm run local:web
@@ -200,10 +212,6 @@ If you need help or have questions, you can:
 
 - Open an issue on GitHub.
 - Join our [Discord community](https://discord.gg/gHPS9jjfbs).
-- Email us at [help@promptfoo.com](mailto:help@promptfoo.dev).
+- Email us at [help@promptfoo.dev](mailto:help@promptfoo.dev).
 
 Thank you for contributing to promptfoo!
-
-## Code of Conduct
-
-We follow the [Contributor Covenant Code of Conduct](https://www.contributor-covenant.org/). Please read and adhere to it in all interactions.
