@@ -10,6 +10,9 @@ import {
   ALL_PLUGINS,
   DEFAULT_PLUGINS,
   RedteamProviderHarmCategoriesEnum,
+  REDTEAM_PROVIDER_HARM_CATEGORIES,
+  LLAMA_GUARD_HARM_CATEGORIES,
+  HARM_CATEGORIES,
 } from './constants';
 import { getHarmfulTests } from './legacy/harmful';
 import { getPiiTests } from './legacy/pii';
@@ -162,18 +165,18 @@ export async function synthesize({
     },
   });
 
-  const addHarmfulCases = plugins.some((p) => p.startsWith('harmful'));
-  if (addHarmfulCases || plugins.includes('prompt-injection') || plugins.includes('jailbreak')) {
+  const enabledHarmfulCategories = plugins.filter((p) =>
+    p.startsWith('harmful:'),
+  ) as (keyof typeof HARM_CATEGORIES)[];
+  if (
+    enabledHarmfulCategories.length > 0 ||
+    plugins.includes('prompt-injection') ||
+    plugins.includes('jailbreak')
+  ) {
     logger.debug('Generating harmful test cases');
-    const newHarmfulPrompts = await getHarmfulTests(
-      redteamProvider,
-      purpose,
-      injectVar,
-      plugins.filter((p) => p.startsWith('harmful:')),
-    );
-    harmfulPrompts.push(...newHarmfulPrompts);
 
-    for (const category of plugins.filter((p) => p.startsWith('harmful:'))) {
+    const defaultProviderHarmful: string[] = [];
+    for (const category of enabledHarmfulCategories) {
       if (RedteamProviderHarmCategoriesEnum.options.includes(category as never)) {
         harmfulPrompts.push(
           ...(await new HarmfulPlugin(
@@ -183,9 +186,23 @@ export async function synthesize({
             category,
           ).generateTests()),
         );
+        defaultProviderHarmful.push(category);
       }
     }
-    if (addHarmfulCases) {
+
+    const promptfooHarmfulCompletionProviderCategories = enabledHarmfulCategories.filter((p) =>
+      RedteamProviderHarmCategoriesEnum.options.includes(p as never),
+    ) as (keyof typeof LLAMA_GUARD_HARM_CATEGORIES)[];
+    harmfulPrompts.push(
+      ...(await getHarmfulTests(
+        redteamProvider,
+        purpose,
+        injectVar,
+        promptfooHarmfulCompletionProviderCategories,
+      )),
+    );
+
+    if (harmfulPrompts.length > 0) {
       testCases.push(...harmfulPrompts);
       logger.debug(`Added ${harmfulPrompts.length} harmful test cases`);
     } else {

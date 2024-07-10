@@ -60,6 +60,11 @@ export const REDTEAM_PROVIDER_HARM_CATEGORIES = {
   'harmful:privacy': 'Privacy violations',
 } as const;
 
+export const HARM_CATEGORIES = {
+  ...LLAMA_GUARD_HARM_CATEGORIES,
+  ...REDTEAM_PROVIDER_HARM_CATEGORIES,
+} as const;
+
 export const DEFAULT_PLUGINS = new Set([
   ...BASE_PLUGINS,
   ...Object.keys(LLAMA_GUARD_HARM_CATEGORIES),
