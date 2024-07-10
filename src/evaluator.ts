@@ -521,8 +521,8 @@ class Evaluator {
     }
 
     // Split prompts by provider
-    for (const prompt of testSuite.prompts) {
-      for (const provider of testSuite.providers) {
+    for (const provider of testSuite.providers) {
+      for (const prompt of testSuite.prompts) {
         // Check if providerPromptMap exists and if it contains the current prompt's label
         if (!isAllowedPrompt(prompt, testSuite.providerPromptMap?.[provider.id()])) {
           continue;
@@ -648,8 +648,9 @@ class Evaluator {
       for (let repeatIndex = 0; repeatIndex < numRepeat; repeatIndex++) {
         for (const vars of varCombinations) {
           let colIndex = 0;
-          for (const prompt of testSuite.prompts) {
-            for (const provider of testSuite.providers) {
+          // Order matters - keep provider in outer loop to reduce need to swap models during local inference.
+          for (const provider of testSuite.providers) {
+            for (const prompt of testSuite.prompts) {
               if (!isAllowedPrompt(prompt, testSuite.providerPromptMap?.[provider.id()])) {
                 continue;
               }
