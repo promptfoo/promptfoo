@@ -108,23 +108,22 @@ npm run local -- eval --config examples/cloudflare-ai/chat_config.yaml
 
 Note: Any parts of the command after `--` are passed through to the CLI entrypoint.
 
-We recommend setting up a local `promptfooconfig.yaml`  
+We recommend setting up a local `promptfooconfig.yaml`
 
 Here is a simple example
 
 ```yaml
 providers:
   - name: openai:chat:gpt-4o
-prompts: 
+prompts:
   - Translate "{{input}}" to {{language}}
 tests:
   - Vars:
-      input: "Hello, world!"
-      language: "English"
+      input: 'Hello, world!'
+      language: 'English'
 ```
 
-You can run many commands with --verbose or by setting `LOG_LEVEL=debug` as an enviroment variable. 
-
+You can run many commands with --verbose or by setting `LOG_LEVEL=debug` as an enviroment variable.
 
 ### Contributing to the WebUI
 
