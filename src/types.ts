@@ -779,3 +779,7 @@ export interface Job {
   total: number;
   result: EvaluateSummary | null;
 }
+
+// used for writing eval results
+export const OutputFileExtension = z.enum(['csv', 'html', 'json', 'txt', 'yaml', 'yml']);
+export type OutputFileExtension = z.infer<typeof OutputFileExtension>;
