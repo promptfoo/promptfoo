@@ -47,7 +47,7 @@ We follow the [Contributor Covenant Code of Conduct](https://www.contributor-cov
    git push origin your-branch-name
    ```
 
-4. Open a pull request against the `main` branch of the promptfoo repository.
+4. When you are ready, open a pull request against the `main` branch of the promptfoo repository.
 
 ## Running Tests
 
@@ -55,8 +55,6 @@ We use Jest for testing. To run the test suite:
 
 ```sh
 npm test
-# or
-npm run test:watch
 ```
 
 To run tests in watch mode:
@@ -70,6 +68,7 @@ npm run test:watch
 We use ESLint and Prettier for code linting and formatting. Before submitting a pull request, please run:
 
 ```sh
+npm run format
 npm run lint
 ```
 
@@ -87,15 +86,47 @@ For continuous building during development:
 npm run build:watch
 ```
 
-## Running the CLI During Development
+This will help you catch typescript errors as you make changes to the code.
 
-To run the CLI during development:
+## Contributing to the CLI
+
+### Running the CLI During Development
+
+We recommend using `npm link` to link your local `promptfoo` package to the global `promptfoo` package. This will allow you to run commands like:
 
 ```sh
-npm run local -- eval --config $(readlink -f ./examples/cloudflare-ai/chat_config.yaml)
+promptfoo --help
+```
+
+Note that you should also run `npm run build:watch` to transpile the typescript code to javascript. When you are done, you can unlink the package by running `npm unlink promptfoo`.
+
+Alternatively, you can run the CLI directly. This takes slightly longer as it transpiles the typescript code to javascript.
+
+```sh
+npm run local -- eval --config examples/cloudflare-ai/chat_config.yaml
 ```
 
 Note: Any parts of the command after `--` are passed through to the CLI entrypoint.
+
+We recommend setting up a local `promptfooconfig.yaml`  
+
+Here is a simple example
+
+```yaml
+providers:
+  - name: openai:chat:gpt-4o
+prompts: 
+  - Translate "{{input}}" to {{language}}
+tests:
+  - Vars:
+      input: "Hello, world!"
+      language: "English"
+```
+
+You can run many commands with --verbose or by setting `LOG_LEVEL=debug` as an enviroment variable. 
+
+
+### Contributing to the WebUI
 
 ## Web UI Development
 
