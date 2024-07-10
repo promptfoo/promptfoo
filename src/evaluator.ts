@@ -521,6 +521,7 @@ class Evaluator {
     }
 
     // Split prompts by provider
+    // Order matters - keep provider in outer loop to reduce need to swap models during local inference.
     for (const provider of testSuite.providers) {
       for (const prompt of testSuite.prompts) {
         // Check if providerPromptMap exists and if it contains the current prompt's label
