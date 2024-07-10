@@ -4,7 +4,7 @@ sidebar_label: Contributing
 
 # Contributing Guidelines for Promptfoo
 
-Thank you for your interest in contributing to promptfoo! We welcome contributions from the community to help make this project better.
+Thank you for your interest in contributing to Promptfoo! We welcome contributions from the community to help make this project better.
 
 ## Code of Conduct
 
@@ -25,7 +25,6 @@ We follow the [Contributor Covenant Code of Conduct](https://www.contributor-cov
    ```sh
    # Optionally use the Node.js version specified in the .nvmrc file (ensure node >= 18)
    nvm use
-
    npm install
    ```
 
@@ -43,15 +42,14 @@ We follow the [Contributor Covenant Code of Conduct](https://www.contributor-cov
    git checkout -b bugfix/your-bugfix-name
    ```
 
-2. Make your changes and commit them using [Conventional Commits](https://www.conventionalcommits.org/) specification.
-
+2. Make your changes and commit them using the [Conventional Commits](https://www.conventionalcommits.org/) specification.
 3. Push your branch to your fork:
 
    ```sh
    git push origin your-branch-name
    ```
 
-4. When you are ready, open a pull request against the `main` branch of the promptfoo repository.
+4. Open a pull request against the `main` branch of the promptfoo repository.
 
 ## Running Tests
 
@@ -90,7 +88,7 @@ For continuous building during development:
 npm run build:watch
 ```
 
-This will help you catch typescript errors as you make changes to the code.
+This will help you catch TypeScript errors as you make changes to the code.
 
 ## Contributing to the CLI
 
@@ -102,9 +100,9 @@ We recommend using `npm link` to link your local `promptfoo` package to the glob
 promptfoo --help
 ```
 
-Note that you should also run `npm run build:watch` to transpile the typescript code to javascript. When you are done, you can unlink the package by running `npm unlink promptfoo`.
+Note that you should also run `npm run build:watch` to transpile the TypeScript code to JavaScript. When you are done, you can unlink the package by running `npm unlink promptfoo`.
 
-Alternatively, you can run the CLI directly. This takes slightly longer as it transpiles the typescript code to javascript.
+Alternatively, you can run the CLI directly. This takes slightly longer as it transpiles the TypeScript code to JavaScript.
 
 ```sh
 npm run local -- eval --config examples/cloudflare-ai/chat_config.yaml
@@ -112,9 +110,9 @@ npm run local -- eval --config examples/cloudflare-ai/chat_config.yaml
 
 Note: Any parts of the command after `--` are passed through to the CLI entrypoint.
 
-We recommend setting up a local `promptfooconfig.yaml`
+We recommend setting up a local `promptfooconfig.yaml`.
 
-Here is a simple example
+Here is a simple example:
 
 ```yaml
 providers:
@@ -127,9 +125,9 @@ tests:
       language: 'English'
 ```
 
-You can run many commands with --verbose or by setting `LOG_LEVEL=debug` as an enviroment variable.
+You can run many commands with `--verbose` or by setting `LOG_LEVEL=debug` as an environment variable.
 
-### Contributing to the WebUI
+### Contributing to the Web UI
 
 ## Web UI Development
 
@@ -150,11 +148,11 @@ Note: After generating a new migration, you'll need to run `npm install` to copy
 
 ## Adding a New Provider
 
-1. Create an implementation in `src/providers/SOME_PROVIDER_FILE`
-2. Update `loadApiProvider` in `src/providers.ts` to load your provider via string
-3. Add test cases in `test/providers.test.ts`
-   - Test the actual provider implementation
-   - Test loading the provider via a `loadApiProvider` test
+1. Create an implementation in `src/providers/SOME_PROVIDER_FILE`.
+2. Update `loadApiProvider` in `src/providers.ts` to load your provider via string.
+3. Add test cases in `test/providers.test.ts`:
+   - Test the actual provider implementation.
+   - Test loading the provider via a `loadApiProvider` test.
 
 ## Documentation
 
@@ -163,16 +161,16 @@ If you're adding new features or changing existing ones, please update the relev
 ## Submitting Changes
 
 1. Ensure all tests pass and your code is properly linted.
-2. Update the README.md with details of changes to the interface, if applicable.
-3. Update the CHANGELOG.md following the [Keep a Changelog](https://keepachangelog.com/) format.
+2. Update the `README.md` with details of changes to the interface, if applicable.
+3. Update the `CHANGELOG.md` following the [Keep a Changelog](https://keepachangelog.com/) format.
 4. Submit a pull request with a clear description of your changes.
 
 ## Getting Help
 
 If you need help or have questions, you can:
 
-- Open an issue on GitHub
-- Join our [Discord community](https://discord.gg/gHPS9jjfbs)
-- Email us at [your-email@example.com]
+- Open an issue on GitHub.
+- Join our [Discord community](https://discord.gg/gHPS9jjfbs).
+- Email us at [help@promptfoo.com](mailto:help@promptfoo.dev).
 
 Thank you for contributing to promptfoo!
