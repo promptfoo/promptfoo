@@ -167,7 +167,7 @@ export async function isSql(
     } catch (err) {
       pass = inverse;
       const error = err as Error;
-      failureReasons.push(`SQL validation failed: ${error.message}`);
+      failureReasons.push(`SQL validation failed: ${error.message}.`);
     }
   }
 
@@ -178,7 +178,7 @@ export async function isSql(
     } catch (err) {
       pass = inverse;
       const error = err as Error;
-      failureReasons.push(`SQL validation failed: ${error.message}`);
+      failureReasons.push(`SQL validation failed: ${error.message}.`);
     }
   }
 
