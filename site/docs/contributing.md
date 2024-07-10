@@ -4,11 +4,18 @@ sidebar_label: Contributing
 
 # Contributing Guidelines for Promptfoo
 
-Thank you for your interest in contributing to Promptfoo! We welcome contributions from the community to help make this project better.
+We welcome contributions from the community to help make this project better. In particular, we welcome:
 
-## Code of Conduct
+- bugfixes.
+- documentation updates including examples and guides.
+- updates to providers including capabilities.
+- features that make your use of promptfoo easier.
 
-We follow the [Contributor Covenant Code of Conduct](https://www.contributor-covenant.org/). Please read and adhere to it in all interactions.
+- If you are not sure where to start, we have a list of [good first issues](https://github.com/promptfoo/promptfoo/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22) to help you get started. You can also join our [Discord community](https://discord.gg/gHPS9jjfbs) to get help from the maintainers.
+
+## Background
+
+Promptfoo is a flexible command line tool for evaluating LLM prompts against a variety of providers. We also have a web interface for viewing the results of evals and running simple evals. The core of this guide focuses on how to contribute to the command line tool.
 
 ## Getting Started
 
@@ -23,9 +30,21 @@ We follow the [Contributor Covenant Code of Conduct](https://www.contributor-cov
 3. Set up your development environment:
 
    ```sh
-   # Optionally use the Node.js version specified in the .nvmrc file (ensure node >= 18)
+   # We recommend using the Node.js version specified in the .nvmrc file (ensure node >= 18)
    nvm use
    npm install
+   ```
+
+4. Run the tests to make sure everything is working:
+
+   ```sh
+   npm test
+   ```
+
+5. Build the project:
+
+   ```sh
+   npm run build
    ```
 
 ## Development Workflow
@@ -36,20 +55,27 @@ We follow the [Contributor Covenant Code of Conduct](https://www.contributor-cov
    git checkout -b feature/your-feature-name
    ```
 
-   or
-
-   ```sh
-   git checkout -b bugfix/your-bugfix-name
-   ```
-
 2. Make your changes and commit them using the [Conventional Commits](https://www.conventionalcommits.org/) specification.
+
 3. Push your branch to your fork:
 
    ```sh
    git push origin your-branch-name
    ```
 
-4. Open a pull request against the `main` branch of the promptfoo repository.
+4. Open a pull request against the `main` branch of the promptfoo repository. The PR title should follow the [Conventional Commits](https://www.conventionalcommits.org/) specification, but if it doesn't, don't worry. We can update it for you.
+
+    When opening a pull request:
+      - Address a specific issue or feature request. If there isn't an existing issue, create one first.
+      - Keep changes small and focused. Avoid mixing refactors with new features.
+      - Ensure test coverage for new code or bug fixes.
+      - Provide clear instructions on how to reproduce the problem or test the new feature.
+      - If you're unsure about something, feel free to ask questions in the PR or reach out to maintainers.
+
+    Be responsive to feedback and be prepared to make changes if requested.
+    Once your PR is approved and merged, congratulations on your contribution! We will give you a shoutout in the release notes.
+
+    Remember, successful PRs are typically small, well-documented, and address a specific need. Don't hesitate to communicate with maintainers if you need guidance or have questions about your contribution.
 
 ## Running Tests
 
@@ -73,6 +99,8 @@ We use ESLint and Prettier for code linting and formatting. Before submitting a 
 npm run format
 npm run lint
 ```
+
+Note that we have minimal linting rules. We would like to ratchet these up in the future.
 
 ## Building the Project
 
@@ -174,3 +202,7 @@ If you need help or have questions, you can:
 - Email us at [help@promptfoo.com](mailto:help@promptfoo.dev).
 
 Thank you for contributing to promptfoo!
+
+## Code of Conduct
+
+We follow the [Contributor Covenant Code of Conduct](https://www.contributor-covenant.org/). Please read and adhere to it in all interactions.
