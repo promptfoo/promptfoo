@@ -10,7 +10,6 @@ import {
   ALL_PLUGINS,
   DEFAULT_PLUGINS,
   RedteamProviderHarmCategoriesEnum,
-  REDTEAM_PROVIDER_HARM_CATEGORIES,
   LLAMA_GUARD_HARM_CATEGORIES,
   HARM_CATEGORIES,
 } from './constants';
