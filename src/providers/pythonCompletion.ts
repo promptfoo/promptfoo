@@ -21,6 +21,7 @@ export class PythonProvider implements ApiProvider {
   private config: PythonProviderConfig;
   private scriptPath: string;
   private functionName: string | null;
+  public label: string | undefined;
 
   constructor(
     runPath: string,
@@ -33,6 +34,7 @@ export class PythonProvider implements ApiProvider {
     this.scriptPath = path.relative(options?.config.basePath || '', providerPath);
     this.functionName = functionName || null;
     this.id = () => options?.id ?? `python:${this.scriptPath}:${this.functionName || 'default'}`;
+    this.label = options?.label;
     this.config = options?.config ?? {};
   }
 
