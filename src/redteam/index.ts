@@ -10,10 +10,10 @@ import CompetitorPlugin from './plugins/competitors';
 import ContractPlugin from './plugins/contracts';
 import ExcessiveAgencyPlugin from './plugins/excessiveAgency';
 import HallucinationPlugin from './plugins/hallucination';
+import { getHarmfulTests, addInjections, addIterativeJailbreaks } from './plugins/harmful';
 import HijackingPlugin from './plugins/hijacking';
-import { getHarmfulTests, addInjections, addIterativeJailbreaks } from './plugins/legacy/harmful';
-import { getPiiTests } from './plugins/legacy/pii';
 import OverreliancePlugin from './plugins/overreliance';
+import { getPiiTests } from './plugins/pii';
 import PoliticsPlugin from './plugins/politics';
 
 interface SynthesizeOptions {

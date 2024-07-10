@@ -1,4 +1,4 @@
-import { HARM_CATEGORIES } from './plugins/legacy/harmful';
+import { HARM_CATEGORIES } from './plugins/harmful';
 
 export const REDTEAM_MODEL = 'openai:chat:gpt-4o';
 
