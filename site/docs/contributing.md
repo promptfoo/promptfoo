@@ -65,17 +65,18 @@ Promptfoo is a flexible command line tool for evaluating LLM prompts against a v
 
 4. Open a pull request against the `main` branch of the promptfoo repository. The PR title should follow the [Conventional Commits](https://www.conventionalcommits.org/) specification, but if it doesn't, don't worry. We can update it for you.
 
-    When opening a pull request:
-      - Address a specific issue or feature request. If there isn't an existing issue, create one first.
-      - Keep changes small and focused. Avoid mixing refactors with new features.
-      - Ensure test coverage for new code or bug fixes.
-      - Provide clear instructions on how to reproduce the problem or test the new feature.
-      - If you're unsure about something, feel free to ask questions in the PR or reach out to maintainers.
+   When opening a pull request:
 
-    Be responsive to feedback and be prepared to make changes if requested.
-    Once your PR is approved and merged, congratulations on your contribution! We will give you a shoutout in the release notes.
+   - Address a specific issue or feature request. If there isn't an existing issue, create one first.
+   - Keep changes small and focused. Avoid mixing refactors with new features.
+   - Ensure test coverage for new code or bug fixes.
+   - Provide clear instructions on how to reproduce the problem or test the new feature.
+   - If you're unsure about something, feel free to ask questions in the PR or reach out to maintainers.
 
-    Remember, successful PRs are typically small, well-documented, and address a specific need. Don't hesitate to communicate with maintainers if you need guidance or have questions about your contribution.
+   Be responsive to feedback and be prepared to make changes if requested.
+   Once your PR is approved and merged, congratulations on your contribution! We will give you a shoutout in the release notes.
+
+   Remember, successful PRs are typically small, well-documented, and address a specific need. Don't hesitate to communicate with maintainers if you need guidance or have questions about your contribution.
 
 ## Running Tests
 
