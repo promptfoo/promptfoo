@@ -6,7 +6,7 @@ import type { ApiProvider, TestCase } from '../../types';
 const LLAMA_GUARD_REPLICATE_PROVIDER =
   'replicate:moderation:meta/meta-llama-guard-2-8b:b063023ee937f28e922982abdbf97b041ffe34ad3b35a53d33e1d74bb19b36c4';
 
-export const HARM_CATEGORIES: { [key: string]: string } = {
+export const LLAMA_GUARD_HARM_CATEGORIES: { [key: string]: string } = {
   // MLCommons harm categories
   // https://llama.meta.com/docs/model-cards-and-prompt-formats/meta-llama-guard-2/
   'harmful:violent-crime': 'Violent Crimes',
@@ -14,8 +14,6 @@ export const HARM_CATEGORIES: { [key: string]: string } = {
   'harmful:sex-crime': 'Sex Crimes',
   'harmful:child-exploitation': 'Child Exploitation',
   'harmful:specialized-advice': 'Specialized Advice - Financial',
-  'harmful:privacy': 'Privacy violations',
-  'harmful:intellectual-property': 'Intellectual Property violation',
   'harmful:indiscriminate-weapons': 'Indiscriminate Weapons',
   'harmful:hate': 'Hate',
   'harmful:self-harm': 'Self-Harm',
@@ -27,8 +25,6 @@ export const HARM_CATEGORIES: { [key: string]: string } = {
   'harmful:chemical-biological-weapons': 'Chemical & Biological Weapons',
   'harmful:illegal-drugs': 'Illegal Drugs',
   'harmful:copyright-violations': 'Copyright Violations - Copyrighted text',
-  'harmful:misinformation-disinformation':
-    'Misinformation & Disinformation - Harmful lies and propaganda',
   'harmful:harassment-bullying': 'Harassment & Bullying',
   'harmful:illegal-activities': 'Illegal Activities - Fraud & scams',
   'harmful:graphic-content': 'Graphic & age-restricted content',
@@ -41,6 +37,17 @@ export const HARM_CATEGORIES: { [key: string]: string } = {
   'harmful:insults': 'Insults and personal attacks',
   //'scam_fraud_creation',
   //'locale_specific_illegal (e.g. hate speech in Germany, alcohol in Saudi Arabia)',
+};
+
+export const REDTEAM_PROVIDER_HARM_CATEGORIES: { [key: string]: string } = {
+  'harmful:privacy': 'Privacy violations',
+  'harmful:intellectual-property': 'Intellectual Property violation',
+  'harmful:misinformation-disinformation': 'Misinformation & Disinformation - Harmful lies and propaganda',
+};
+
+export const HARM_CATEGORIES: { [key: string]: string } = {
+  ...LLAMA_GUARD_HARM_CATEGORIES,
+  ...REDTEAM_PROVIDER_HARM_CATEGORIES,
 };
 
 export async function getHarmfulTests(
@@ -57,7 +64,11 @@ export async function getHarmfulTests(
       ? plugins.map((plugin) => HARM_CATEGORIES[plugin]).filter(Boolean)
       : Object.values(HARM_CATEGORIES);
 
-  for (const harmCategory of harmCategoriesToUse) {
+
+  const redteamProviderHarmCategories = Object.keys(REDTEAM_PROVIDER_HARM_CATEGORIES).filter((p) => harmCategoriesToUse.includes(p));
+  const llamaGuardHarmCategories = Object.keys(LLAMA_GUARD_HARM_CATEGORIES).filter((p) => harmCategoriesToUse.includes(p));
+
+  for (const harmCategory of llamaGuardHarmCategories) {
     const adversarialProvider = new PromptfooHarmfulCompletionProvider({ purpose, harmCategory });
     const categoryPromises = Array.from({ length: 3 }, () => adversarialProvider.callApi(''));
     const results = await Promise.all(categoryPromises);
