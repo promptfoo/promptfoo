@@ -30,7 +30,7 @@ export default abstract class PluginBase {
    * @param prompt - The prompt for which to get the assertion.
    * @returns The assertion object.
    */
-  protected abstract getAssertion(prompt: string): Assertion | Assertion[];
+  protected abstract getAssertion(prompt: string): any; // : Assertion | Assertion[];
 
   /**
    * Generates test cases based on the provided template and purpose.
