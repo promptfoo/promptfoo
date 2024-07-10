@@ -22,11 +22,11 @@ jest.mock('../src/util', () => {
 });
 
 describe('PythonProvider', () => {
-  const mockRunPython = runPython as jest.MockedFunction<typeof runPython>;
-  const mockGetCache = getCache as jest.MockedFunction<typeof getCache>;
-  const mockIsCacheEnabled = isCacheEnabled as jest.MockedFunction<typeof isCacheEnabled>;
-  const mockReadFileSync = fs.readFileSync as jest.MockedFunction<typeof fs.readFileSync>;
-  const mockResolve = path.resolve as jest.MockedFunction<typeof path.resolve>;
+  const mockRunPython = jest.mocked(runPython);
+  const mockGetCache = jest.mocked(getCache);
+  const mockIsCacheEnabled = jest.mocked(isCacheEnabled);
+  const mockReadFileSync = jest.mocked(fs.readFileSync);
+  const mockResolve = jest.mocked(path.resolve);
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -62,11 +62,56 @@ describe('PythonProvider', () => {
       expect(result).toEqual({ output: 'test output' });
     });
 
-    it('should throw an error if Python script returns invalid result', async () => {
-      const provider = new PythonProvider('script.py');
-      mockRunPython.mockResolvedValue({ invalidKey: 'invalid value' });
+    describe('error handling', () => {
+      it('should throw a specific error when Python script returns invalid result', async () => {
+        const provider = new PythonProvider('script.py');
+        mockRunPython.mockResolvedValue({ invalidKey: 'invalid value' });
 
-      await expect(provider.callApi('test prompt')).rejects.toThrow();
+        await expect(provider.callApi('test prompt')).rejects.toThrow(
+          'The Python script `call_api` function must return a dict with an `output` string/object or `error` string, instead got: {"invalidKey":"invalid value"}',
+        );
+      });
+
+      it('should throw an error if Python script returns invalid result', async () => {
+        const provider = new PythonProvider('script.py');
+        mockRunPython.mockResolvedValue({ invalidKey: 'invalid value' });
+
+        await expect(provider.callApi('test prompt')).rejects.toThrow(
+          'The Python script `call_api` function must return a dict with an `output` string/object or `error` string, instead got: {"invalidKey":"invalid value"}',
+        );
+      });
+
+      it('should throw an error when Python script returns null', async () => {
+        const provider = new PythonProvider('script.py');
+        mockRunPython.mockResolvedValue(null);
+
+        await expect(provider.callApi('test prompt')).rejects.toThrow(
+          'The Python script `call_api` function must return a dict with an `output` string/object or `error` string, instead got: null',
+        );
+      });
+
+      it('should throw an error when Python script returns a non-object', async () => {
+        const provider = new PythonProvider('script.py');
+        mockRunPython.mockResolvedValue('string result');
+
+        await expect(provider.callApi('test prompt')).rejects.toThrow(
+          'The Python script `call_api` function must return a dict with an `output` string/object or `error` string, instead got: "string result"',
+        );
+      });
+
+      it('should not throw an error when Python script returns a valid output', async () => {
+        const provider = new PythonProvider('script.py');
+        mockRunPython.mockResolvedValue({ output: 'valid output' });
+
+        await expect(provider.callApi('test prompt')).resolves.not.toThrow();
+      });
+
+      it('should not throw an error when Python script returns a valid error', async () => {
+        const provider = new PythonProvider('script.py');
+        mockRunPython.mockResolvedValue({ error: 'valid error message' });
+
+        await expect(provider.callApi('test prompt')).resolves.not.toThrow();
+      });
     });
   });
 
@@ -90,7 +135,9 @@ describe('PythonProvider', () => {
       const provider = new PythonProvider('script.py');
       mockRunPython.mockResolvedValue({ invalidKey: 'invalid value' });
 
-      await expect(provider.callEmbeddingApi('test prompt')).rejects.toThrow();
+      await expect(provider.callEmbeddingApi('test prompt')).rejects.toThrow(
+        'The Python script `call_embedding_api` function must return a dict with an `embedding` array or `error` string, instead got {"invalidKey":"invalid value"}',
+      );
     });
   });
 
@@ -114,7 +161,9 @@ describe('PythonProvider', () => {
       const provider = new PythonProvider('script.py');
       mockRunPython.mockResolvedValue({ invalidKey: 'invalid value' });
 
-      await expect(provider.callClassificationApi('test prompt')).rejects.toThrow();
+      await expect(provider.callClassificationApi('test prompt')).rejects.toThrow(
+        'The Python script `call_classification_api` function must return a dict with a `classification` object or `error` string, instead of {"invalidKey":"invalid value"}',
+      );
     });
   });
 
