@@ -18,6 +18,85 @@ import OverreliancePlugin from './plugins/overreliance';
 import { getPiiTests } from './plugins/pii';
 import PoliticsPlugin from './plugins/politics';
 
+interface Plugin {
+  key: string;
+  action: (provider: ApiProvider, purpose: string, injectVar: string) => Promise<TestCase[]>;
+}
+
+interface Method {
+  key: string;
+  action: (testCases: TestCase[], harmfulPrompts: TestCase[], injectVar: string) => TestCase[];
+}
+
+const Plugins: Plugin[] = [
+  {
+    key: 'competitors',
+    action: (provider, purpose, injectVar) =>
+      new CompetitorPlugin(provider, purpose, injectVar).generateTests(),
+  },
+  {
+    key: 'contracts',
+    action: (provider, purpose, injectVar) =>
+      new ContractPlugin(provider, purpose, injectVar).generateTests(),
+  },
+  {
+    key: 'excessive-agency',
+    action: (provider, purpose, injectVar) =>
+      new ExcessiveAgencyPlugin(provider, purpose, injectVar).generateTests(),
+  },
+  {
+    key: 'hallucination',
+    action: (provider, purpose, injectVar) =>
+      new HallucinationPlugin(provider, purpose, injectVar).generateTests(),
+  },
+  {
+    key: 'hijacking',
+    action: (provider, purpose, injectVar) =>
+      new HijackingPlugin(provider, purpose, injectVar).generateTests(),
+  },
+  {
+    key: 'overreliance',
+    action: (provider, purpose, injectVar) =>
+      new OverreliancePlugin(provider, purpose, injectVar).generateTests(),
+  },
+  { key: 'pii', action: getPiiTests },
+  {
+    key: 'politics',
+    action: (provider, purpose, injectVar) =>
+      new PoliticsPlugin(provider, purpose, injectVar).generateTests(),
+  },
+];
+
+const Methods: Method[] = [
+  {
+    key: 'experimental-jailbreak',
+    action: (testCases) => {
+      logger.debug('Adding experimental jailbreaks to all test cases');
+      const experimentalJailbreaks = addIterativeJailbreaks(testCases);
+      logger.debug(`Added ${experimentalJailbreaks.length} experimental jailbreak test cases`);
+      return experimentalJailbreaks;
+    },
+  },
+  {
+    key: 'jailbreak',
+    action: (_, harmfulPrompts) => {
+      logger.debug('Adding jailbreaks to harmful prompts');
+      const jailbreaks = addIterativeJailbreaks(harmfulPrompts);
+      logger.debug(`Added ${jailbreaks.length} jailbreak test cases`);
+      return jailbreaks;
+    },
+  },
+  {
+    key: 'prompt-injection',
+    action: (_, harmfulPrompts, injectVar) => {
+      logger.debug('Adding prompt injections');
+      const injections = addInjections(harmfulPrompts, injectVar);
+      logger.debug(`Added ${injections.length} prompt injection test cases`);
+      return injections;
+    },
+  },
+];
+
 interface SynthesizeOptions {
   injectVar?: string;
   plugins: string[];
@@ -131,61 +210,22 @@ export async function synthesize({
     }
   }
 
-  const pluginActions: {
-    [key: string]: (
-      provider: ApiProvider,
-      purpose: string,
-      injectVar: string,
-    ) => Promise<TestCase[]>;
-  } = {
-    pii: getPiiTests,
-    'excessive-agency': (provider, purpose, injectVar) =>
-      new ExcessiveAgencyPlugin(provider, purpose, injectVar).generateTests(),
-    hijacking: (provider, purpose, injectVar) =>
-      new HijackingPlugin(provider, purpose, injectVar).generateTests(),
-    hallucination: (provider, purpose, injectVar) =>
-      new HallucinationPlugin(provider, purpose, injectVar).generateTests(),
-    overreliance: (provider, purpose, injectVar) =>
-      new OverreliancePlugin(provider, purpose, injectVar).generateTests(),
-    competitors: (provider, purpose, injectVar) =>
-      new CompetitorPlugin(provider, purpose, injectVar).generateTests(),
-    contracts: (provider, purpose, injectVar) =>
-      new ContractPlugin(provider, purpose, injectVar).generateTests(),
-    politics: (provider, purpose, injectVar) =>
-      new PoliticsPlugin(provider, purpose, injectVar).generateTests(),
-  };
-
-  for (const plugin of plugins) {
-    if (pluginActions[plugin]) {
+  for (const { key, action } of Plugins) {
+    if (plugins.includes(key)) {
       updateProgress();
-      logger.debug(`Generating ${plugin} tests`);
-      const pluginTests = await pluginActions[plugin](redteamProvider, purpose, injectVar);
+      logger.debug(`Generating ${key} tests`);
+      const pluginTests = await action(redteamProvider, purpose, injectVar);
       testCases.push(...pluginTests);
-      logger.debug(`Added ${pluginTests.length} ${plugin} test cases`);
+      logger.debug(`Added ${pluginTests.length} ${key} test cases`);
     }
   }
 
-  if (plugins.includes('experimental-jailbreak')) {
-    // Experimental - adds jailbreaks to ALL test cases
-    logger.debug('Adding experimental jailbreaks to all test cases');
-    const experimentalJailbreaks = addIterativeJailbreaks(testCases);
-    testCases.push(...experimentalJailbreaks);
-    logger.debug(`Added ${experimentalJailbreaks.length} experimental jailbreak test cases`);
-  } else if (plugins.includes('jailbreak')) {
-    // Adds jailbreaks only to harmful prompts
-    logger.debug('Adding jailbreaks to harmful prompts');
-    const jailbreaks = addIterativeJailbreaks(harmfulPrompts);
-    testCases.push(...jailbreaks);
-    logger.debug(`Added ${jailbreaks.length} jailbreak test cases`);
+  for (const { key, action } of Methods) {
+    if (plugins.includes(key)) {
+      const newTestCases = action(testCases, harmfulPrompts, injectVar);
+      testCases.push(...newTestCases);
+    }
   }
-
-  if (plugins.includes('prompt-injection')) {
-    logger.debug('Adding prompt injections');
-    const injections = addInjections(harmfulPrompts, injectVar);
-    testCases.push(...injections);
-    logger.debug(`Added ${injections.length} prompt injection test cases`);
-  }
-
   // Finish progress bar
   if (process.env.LOG_LEVEL !== 'debug') {
     progressBar.update(100);
