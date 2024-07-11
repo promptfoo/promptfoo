@@ -18,6 +18,14 @@ import OverreliancePlugin from './plugins/overreliance';
 import { getPiiTests } from './plugins/pii';
 import PoliticsPlugin from './plugins/politics';
 
+interface SynthesizeOptions {
+  injectVar?: string;
+  plugins: string[];
+  prompts: string[];
+  provider?: string;
+  purpose?: string;
+}
+
 interface Plugin {
   key: string;
   action: (provider: ApiProvider, purpose: string, injectVar: string) => Promise<TestCase[]>;
@@ -96,14 +104,6 @@ const Methods: Method[] = [
     },
   },
 ];
-
-interface SynthesizeOptions {
-  injectVar?: string;
-  plugins: string[];
-  prompts: string[];
-  provider?: string;
-  purpose?: string;
-}
 
 function validatePlugins(plugins: string[]) {
   for (const plugin of plugins) {
