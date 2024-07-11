@@ -6,11 +6,13 @@ import logger from '../logger';
 import { loadApiProvider } from '../providers';
 import type { ApiProvider, TestCase, TestSuite } from '../types';
 import { REDTEAM_MODEL, ALL_PLUGINS, DEFAULT_PLUGINS } from './constants';
+import { addInjections } from './methods/injections';
+import { addIterativeJailbreaks } from './methods/iterative';
 import CompetitorPlugin from './plugins/competitors';
 import ContractPlugin from './plugins/contracts';
 import ExcessiveAgencyPlugin from './plugins/excessiveAgency';
 import HallucinationPlugin from './plugins/hallucination';
-import { getHarmfulTests, addInjections, addIterativeJailbreaks } from './plugins/harmful';
+import { getHarmfulTests } from './plugins/harmful';
 import HijackingPlugin from './plugins/hijacking';
 import OverreliancePlugin from './plugins/overreliance';
 import { getPiiTests } from './plugins/pii';
@@ -166,30 +168,20 @@ export async function synthesize({
   if (plugins.includes('experimental-jailbreak')) {
     // Experimental - adds jailbreaks to ALL test cases
     logger.debug('Adding experimental jailbreaks to all test cases');
-    const experimentalJailbreaks = await addIterativeJailbreaks(
-      redteamProvider,
-      testCases,
-      purpose,
-      injectVar,
-    );
+    const experimentalJailbreaks = addIterativeJailbreaks(testCases);
     testCases.push(...experimentalJailbreaks);
     logger.debug(`Added ${experimentalJailbreaks.length} experimental jailbreak test cases`);
   } else if (plugins.includes('jailbreak')) {
     // Adds jailbreaks only to harmful prompts
     logger.debug('Adding jailbreaks to harmful prompts');
-    const jailbreaks = await addIterativeJailbreaks(
-      redteamProvider,
-      harmfulPrompts,
-      purpose,
-      injectVar,
-    );
+    const jailbreaks = addIterativeJailbreaks(harmfulPrompts);
     testCases.push(...jailbreaks);
     logger.debug(`Added ${jailbreaks.length} jailbreak test cases`);
   }
 
   if (plugins.includes('prompt-injection')) {
     logger.debug('Adding prompt injections');
-    const injections = await addInjections(redteamProvider, harmfulPrompts, purpose, injectVar);
+    const injections = addInjections(harmfulPrompts, injectVar);
     testCases.push(...injections);
     logger.debug(`Added ${injections.length} prompt injection test cases`);
   }
