@@ -1,7 +1,5 @@
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
-import dedent from 'dedent';
-import invariant from 'tiny-invariant';
 import logger from '../logger';
 import { loadApiProvider } from '../providers';
 import type { ApiProvider, TestCase, TestSuite } from '../types';
@@ -106,13 +104,14 @@ const Methods: Method[] = [
   },
 ];
 
-function validatePlugins(plugins: string[]) {
-  for (const plugin of plugins) {
-    if (!ALL_PLUGINS.has(plugin)) {
-      throw new Error(
-        `Invalid plugin: ${plugin}. Must be one of: ${Array.from(ALL_PLUGINS).join(', ')}`,
-      );
-    }
+function validatePlugins(plugins: string[]): void {
+  const invalidPlugins = plugins.filter((plugin) => !ALL_PLUGINS.has(plugin));
+  if (invalidPlugins.length > 0) {
+    const validPluginsString = Array.from(ALL_PLUGINS).join(', ');
+    const invalidPluginsString = invalidPlugins.join(', ');
+    throw new Error(
+      `Invalid plugin(s): ${invalidPluginsString}. Valid plugins are: ${validPluginsString}`,
+    );
   }
 }
 
