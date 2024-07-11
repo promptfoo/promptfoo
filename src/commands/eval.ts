@@ -285,11 +285,11 @@ export function evalCommand(
     )
     .option('-a, --assertions <path>', 'Path to assertions file')
     .option('--model-outputs <path>', 'Path to JSON containing list of LLM output strings')
+    .option('-t, --tests <path>', 'Path to CSV with test cases')
     .option(
       '-o, --output <paths...>',
       'Path to output file (csv, txt, json, yaml, yml, html), default is no output file',
     )
-    .option('-t, --tests <path>', 'Path to CSV with test cases')
     .option(
       '-j, --max-concurrency <number>',
       'Maximum number of concurrent API calls',
