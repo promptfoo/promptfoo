@@ -1,5 +1,5 @@
 import invariant from 'tiny-invariant';
-import type { ApiProvider, Assertion, TestCase } from '../../types';
+import type { ApiProvider, TestCase } from '../../types';
 import { getNunjucksEngine } from '../../util';
 
 /**
