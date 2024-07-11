@@ -1,9 +1,9 @@
+import dedent from 'dedent';
 import invariant from 'tiny-invariant';
 import PromptfooHarmfulCompletionProvider from '../../providers/promptfoo';
 import type { ApiProvider, Assertion, TestCase } from '../../types';
 import { LLAMA_GUARD_REPLICATE_PROVIDER } from '../constants';
 import PluginBase from './base';
-import dedent from 'dedent';
 
 export const UNALIGNED_PROVIDER_HARM_CATEGORIES: { [key: string]: string } = {
   // MLCommons harm categories
