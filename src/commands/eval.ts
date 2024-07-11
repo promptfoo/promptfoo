@@ -2,6 +2,7 @@ import chalk from 'chalk';
 import chokidar from 'chokidar';
 import { Command } from 'commander';
 import * as path from 'path';
+import invariant from 'tiny-invariant';
 import { disableCache } from '../cache';
 import cliState from '../cliState';
 import { resolveConfigs } from '../config';
@@ -11,7 +12,13 @@ import { loadApiProvider } from '../providers';
 import { createShareableUrl } from '../share';
 import { generateTable } from '../table';
 import telemetry from '../telemetry';
-import { CommandLineOptions, EvaluateOptions, OutputFileExtension, TestSuite, UnifiedConfig } from '../types';
+import {
+  CommandLineOptions,
+  EvaluateOptions,
+  OutputFileExtension,
+  TestSuite,
+  UnifiedConfig,
+} from '../types';
 import {
   migrateResultsFromFileSystemToDatabase,
   printBorder,
@@ -22,7 +29,6 @@ import {
 } from '../util';
 import { filterProviders } from './eval/filterProviders';
 import { filterTests } from './eval/filterTests';
-import invariant from 'tiny-invariant';
 
 export async function doEval(
   cmdObj: CommandLineOptions & Command,
@@ -370,8 +376,13 @@ export function evalCommand(
     )
     .action((opts) => {
       for (const maybeFilePath of opts.output ?? []) {
-        const { data: extension } = OutputFileExtension.safeParse(maybeFilePath.split('.').pop()?.toLowerCase());
-        invariant(extension, `Unsupported output file format: ${maybeFilePath}. Please use one of: ${OutputFileExtension.options.join(', ')}.`);
+        const { data: extension } = OutputFileExtension.safeParse(
+          maybeFilePath.split('.').pop()?.toLowerCase(),
+        );
+        invariant(
+          extension,
+          `Unsupported output file format: ${maybeFilePath}. Please use one of: ${OutputFileExtension.options.join(', ')}.`,
+        );
       }
       doEval(opts, defaultConfig, defaultConfigPath, evaluateOptions);
     });

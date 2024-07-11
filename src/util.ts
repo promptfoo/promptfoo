@@ -10,7 +10,6 @@ import nunjucks from 'nunjucks';
 import * as os from 'os';
 import * as path from 'path';
 import invariant from 'tiny-invariant';
-import { z } from 'zod';
 import { getAuthor } from './accounts';
 import cliState from './cliState';
 import { TERMINAL_MAX_WIDTH } from './constants';
