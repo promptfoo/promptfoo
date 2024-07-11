@@ -279,23 +279,11 @@ export function evalCommand(
     )
     .option('-a, --assertions <path>', 'Path to assertions file')
     .option('--model-outputs <path>', 'Path to JSON containing list of LLM output strings')
-    .option('-t, --tests <path>', 'Path to CSV with test cases')
-    // validate output file extensions
     .option(
       '-o, --output <paths...>',
       'Path to output file (csv, txt, json, yaml, yml, html), default is no output file',
-      (...values) => {
-        console.warn('values', values, typeof values);
-        const allowedExtensions = OutputFileExtension.options;
-        invariant(Array.isArray(values), '--output must be an array of paths');
-        for (const maybeFilePath of values) {
-          invariant(typeof maybeFilePath === 'string', '--output must be an array of paths');
-          const { data: extension } = OutputFileExtension.safeParse(maybeFilePath.split('.').pop()?.toLowerCase());
-          invariant(extension, `Unsupported output file format: ${maybeFilePath}. Please use one of: ${allowedExtensions.join(', ')}.`);
-        }
-        return values;
-      },
     )
+    .option('-t, --tests <path>', 'Path to CSV with test cases')
     .option(
       '-j, --max-concurrency <number>',
       'Maximum number of concurrent API calls',
@@ -380,5 +368,11 @@ export function evalCommand(
       },
       {},
     )
-    .action((opts) => doEval(opts, defaultConfig, defaultConfigPath, evaluateOptions));
+    .action((opts) => {
+      for (const maybeFilePath of opts.output ?? []) {
+        const { data: extension } = OutputFileExtension.safeParse(maybeFilePath.split('.').pop()?.toLowerCase());
+        invariant(extension, `Unsupported output file format: ${maybeFilePath}. Please use one of: ${OutputFileExtension.options.join(', ')}.`);
+      }
+      doEval(opts, defaultConfig, defaultConfigPath, evaluateOptions);
+    });
 }
