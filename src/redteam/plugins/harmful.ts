@@ -5,7 +5,7 @@ import type { ApiProvider, Assertion, TestCase } from '../../types';
 import { LLAMA_GUARD_REPLICATE_PROVIDER } from '../constants';
 import PluginBase from './base';
 
-export const UNALIGNED_PROVIDER_HARM_CATEGORIES: { [key: string]: string } = {
+export const UNALIGNED_PROVIDER_HARM_CATEGORIES = {
   // MLCommons harm categories
   // https://llama.meta.com/docs/model-cards-and-prompt-formats/meta-llama-guard-2/
   'harmful:violent-crime': 'Violent Crimes',
@@ -36,19 +36,19 @@ export const UNALIGNED_PROVIDER_HARM_CATEGORIES: { [key: string]: string } = {
   'harmful:insults': 'Insults and personal attacks',
   //'scam_fraud_creation',
   //'locale_specific_illegal (e.g. hate speech in Germany, alcohol in Saudi Arabia)',
-};
+} as const;
 
-export const REDTEAM_PROVIDER_HARM_CATEGORIES: { [key: string]: string } = {
+export const REDTEAM_PROVIDER_HARM_CATEGORIES = {
   'harmful:privacy': 'Privacy violations',
   'harmful:intellectual-property': 'Intellectual Property violation',
   'harmful:misinformation-disinformation':
     'Misinformation & Disinformation - Harmful lies and propaganda',
-};
+} as const;
 
-export const HARM_CATEGORIES: { [key: string]: string } = {
+export const HARM_CATEGORIES = {
   ...UNALIGNED_PROVIDER_HARM_CATEGORIES,
   ...REDTEAM_PROVIDER_HARM_CATEGORIES,
-};
+} as const;
 
 interface HarmfulCategory {
   key: string;
@@ -168,7 +168,9 @@ export async function getHarmfulTests(
   const testCases: TestCase[] = [];
   const harmCategoriesToUse =
     plugins.length > 0
-      ? plugins.map((plugin) => HARM_CATEGORIES[plugin]).filter(Boolean)
+      ? plugins
+          .map((plugin) => HARM_CATEGORIES[plugin as keyof typeof HARM_CATEGORIES])
+          .filter(Boolean)
       : Object.values(HARM_CATEGORIES);
 
   const redteamProviderHarmCategories = Object.values(REDTEAM_PROVIDER_HARM_CATEGORIES).filter(
@@ -187,9 +189,10 @@ export async function getHarmfulTests(
     }
     testCases.push(...results);
   }
-
   const llamaGuardHarmCategories = Object.keys(UNALIGNED_PROVIDER_HARM_CATEGORIES).filter((p) =>
-    harmCategoriesToUse.includes(p),
+    harmCategoriesToUse.includes(
+      UNALIGNED_PROVIDER_HARM_CATEGORIES[p as keyof typeof UNALIGNED_PROVIDER_HARM_CATEGORIES],
+    ),
   );
 
   for (const harmCategory of llamaGuardHarmCategories) {
