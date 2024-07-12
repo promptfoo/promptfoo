@@ -723,28 +723,109 @@ describe('evaluator', () => {
     expect(summary.results[0].response?.output).toBe('First run ');
     expect(summary.results[1].response?.output).toBe('Second run First run ');
   });
-});
 
-test('should use the options from the test if they exist', async () => {
-  const testSuite: TestSuite = {
-    providers: [mockApiProvider],
-    prompts: [toPrompt('Test prompt')],
-    tests: [
-      {
-        vars: { var1: 'value1', var2: 'value2' },
-        options: {
-          transform: 'output + " postprocessed"',
+  it('evaluate with labeled and unlabeled providers and providerPromptMap', async () => {
+    const mockLabeledProvider: ApiProvider = {
+      id: () => 'labeled-provider-id',
+      label: 'Labeled Provider',
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Labeled Provider Output',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+      }),
+    };
+
+    const mockUnlabeledProvider: ApiProvider = {
+      id: () => 'unlabeled-provider-id',
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Unlabeled Provider Output',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockLabeledProvider, mockUnlabeledProvider],
+      prompts: [
+        {
+          raw: 'Prompt 1',
+          label: 'prompt1',
         },
+        {
+          raw: 'Prompt 2',
+          label: 'prompt2',
+        },
+      ],
+      providerPromptMap: {
+        'Labeled Provider': ['prompt1'],
+        'unlabeled-provider-id': ['prompt2'],
       },
-    ],
-  };
+    };
 
-  const summary = await evaluate(testSuite, {});
+    await expect(evaluate(testSuite, {})).resolves.toEqual(
+      expect.objectContaining({
+        stats: expect.objectContaining({
+          successes: 2,
+          failures: 0,
+        }),
+        results: [
+          expect.objectContaining({
+            provider: expect.objectContaining({
+              id: 'labeled-provider-id',
+              label: 'Labeled Provider',
+            }),
+            response: expect.objectContaining({
+              output: 'Labeled Provider Output',
+            }),
+          }),
+          expect.objectContaining({
+            provider: expect.objectContaining({
+              id: 'unlabeled-provider-id',
+              label: undefined,
+            }),
+            response: expect.objectContaining({
+              output: 'Unlabeled Provider Output',
+            }),
+          }),
+        ],
+        table: expect.objectContaining({
+          head: expect.objectContaining({
+            prompts: [
+              expect.objectContaining({
+                provider: 'Labeled Provider',
+              }),
+              expect.objectContaining({
+                provider: 'unlabeled-provider-id',
+              }),
+            ],
+          }),
+        }),
+      }),
+    );
 
-  expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
-  expect(summary.stats.successes).toBe(1);
-  expect(summary.stats.failures).toBe(0);
-  expect(summary.results[0].response?.output).toBe('Test output postprocessed');
+    expect(mockLabeledProvider.callApi).toHaveBeenCalledTimes(1);
+    expect(mockUnlabeledProvider.callApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('should use the options from the test if they exist', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          vars: { var1: 'value1', var2: 'value2' },
+          options: {
+            transform: 'output + " postprocessed"',
+          },
+        },
+      ],
+    };
+
+    const summary = await evaluate(testSuite, {});
+
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
+    expect(summary.stats.successes).toBe(1);
+    expect(summary.stats.failures).toBe(0);
+    expect(summary.results[0].response?.output).toBe('Test output postprocessed');
+  });
 });
 
 describe('renderPrompt', () => {

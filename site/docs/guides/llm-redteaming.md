@@ -32,7 +32,7 @@ First, install [Node 18 or later](https://nodejs.org/en/download/package-manager
 Then create a new project for your red teaming needs:
 
 ```sh
-npx promptfoo@latest init my-redteam-project
+npx promptfoo@latest redteam init my-redteam-project
 cd my-redteam-project
 ```
 
@@ -55,6 +55,8 @@ Then create adversarial test cases:
 ```sh
 npx promptfoo@latest generate redteam -w
 ```
+
+The `-w` option overwrites the `promptfooconfig.yaml` file to include the newly generated test cases.
 
 Run the eval:
 
