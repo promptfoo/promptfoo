@@ -35,6 +35,7 @@ import invariant from 'tiny-invariant';
 import { useDebounce } from 'use-debounce';
 import ConfigModal from './ConfigModal';
 import DownloadMenu from './DownloadMenu';
+import EvalSelector from './EvalSelector';
 import ResultsCharts from './ResultsCharts';
 import ResultsTable from './ResultsTable';
 import SettingsModal from './ResultsViewSettingsModal';
@@ -311,39 +312,6 @@ export default function ResultsView({
       </Box>
       <ResponsiveStack direction="row" spacing={4} alignItems="center">
         <Box>
-          {recentEvals && recentEvals.length > 0 && (
-            <FormControl sx={{ m: 1, minWidth: 200 }} size="small">
-              <Autocomplete
-                size="small"
-                options={recentEvals}
-                renderOption={(props, option) => (
-                  <li {...props} key={option.evalId}>
-                    {option.label} - {option.numTests} tests
-                  </li>
-                )}
-                style={{ width: 350 }}
-                renderInput={(params: AutocompleteRenderInputParams) => (
-                  <TextField {...params} label="Eval run" variant="outlined" />
-                )}
-                defaultValue={
-                  recentEvals.find((evl) => evl.evalId === defaultEvalId) || recentEvals[0]
-                }
-                onChange={(event, newValue: ResultLightweightWithLabel | null) => {
-                  if (newValue && newValue.evalId) {
-                    onRecentEvalSelected(newValue.evalId);
-
-                    // Reset all filters and search
-                    setSearchText('');
-                    setFilterMode('all');
-                    setFailureFilter({});
-                  }
-                }}
-                disableClearable
-              />
-            </FormControl>
-          )}
-        </Box>
-        <Box>
           <FormControl sx={{ m: 1, minWidth: 200, maxWidth: 350 }} size="small">
             <InputLabel id="visible-columns-label">Columns</InputLabel>
             <Select
@@ -394,6 +362,13 @@ export default function ResultsView({
         <Box flexGrow={1} />
         <Box display="flex" justifyContent="flex-end">
           <ResponsiveStack direction="row" spacing={2}>
+            {recentEvals && recentEvals.length > 0 && (
+              <EvalSelector
+                recentEvals={recentEvals}
+                onRecentEvalSelected={onRecentEvalSelected}
+                currentEval={recentEvals.find((evl) => evl.evalId === evalId) || null}
+              />
+            )}
             <Button color="primary" onClick={handleOpenMenu} startIcon={<ArrowDropDownIcon />}>
               Eval actions
             </Button>
