@@ -262,7 +262,7 @@ export function generateCommand(
     )
     .option(
       '--injectVar <varname>',
-      'Override the variable to inject user input into the prompt. If not set, the variable will default to {{query}}',
+      'Override the {{variable}} that represents user input in the prompt. Default value is inferred from your prompts',
     )
     .option(
       '--plugins <plugins>',
