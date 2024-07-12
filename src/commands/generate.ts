@@ -154,6 +154,10 @@ export function generateCommand(
     .option('-c, --config [path]', 'Path to configuration file. Defaults to promptfooconfig.yaml')
     .option('-o, --output [path]', 'Path to output file')
     .option('-w, --write', 'Write results to promptfoo configuration file')
+    .option(
+      '--provider <provider>',
+      `Provider to use for generating adversarial tests. Defaults to: ${REDTEAM_MODEL}`,
+    )
     .option('--numPersonas <number>', 'Number of personas to generate', '5')
     .option('--numTestCasesPerPersona <number>', 'Number of test cases per persona', '3')
     .option('--no-cache', 'Do not read or write results to disk cache', false)

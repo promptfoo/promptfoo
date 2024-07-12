@@ -1,5 +1,5 @@
 import logger from '../logger';
-import type { EnvOverrides } from '../types';
+import type { ApiProvider, EnvOverrides } from '../types';
 import {
   DefaultGradingProvider as AnthropicGradingProvider,
   DefaultGradingJsonProvider as AnthropicGradingJsonProvider,
@@ -19,7 +19,17 @@ import {
 } from './vertex';
 import { hasGoogleDefaultCredentials } from './vertexUtil';
 
-export async function getDefaultProviders(env?: EnvOverrides) {
+interface DefaultProviders {
+  datasetGenerationProvider: ApiProvider;
+  embeddingProvider: ApiProvider;
+  gradingJsonProvider: ApiProvider;
+  gradingProvider: ApiProvider;
+  llmRubricProvider?: ApiProvider;
+  moderationProvider: ApiProvider;
+  suggestionsProvider: ApiProvider;
+}
+
+export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultProviders> {
   const preferAnthropic =
     !process.env.OPENAI_API_KEY &&
     !env?.OPENAI_API_KEY &&
@@ -28,12 +38,13 @@ export async function getDefaultProviders(env?: EnvOverrides) {
   if (preferAnthropic) {
     logger.debug('Using Anthropic default providers');
     return {
+      datasetGenerationProvider: AnthropicGradingProvider,
       embeddingProvider: OpenAiEmbeddingProvider, // TODO(ian): Voyager instead?
-      gradingProvider: AnthropicGradingProvider,
       gradingJsonProvider: AnthropicGradingJsonProvider,
-      suggestionsProvider: AnthropicSuggestionsProvider,
-      moderationProvider: OpenAiModerationProvider,
+      gradingProvider: AnthropicGradingProvider,
       llmRubricProvider: AnthropicLlmRubricProvider,
+      moderationProvider: OpenAiModerationProvider,
+      suggestionsProvider: AnthropicSuggestionsProvider,
     };
   }
 
@@ -42,20 +53,22 @@ export async function getDefaultProviders(env?: EnvOverrides) {
   if (preferGoogle) {
     logger.debug('Using Google default providers');
     return {
+      datasetGenerationProvider: GeminiGradingProvider,
       embeddingProvider: GeminiEmbeddingProvider,
-      gradingProvider: GeminiGradingProvider,
       gradingJsonProvider: GeminiGradingProvider,
-      suggestionsProvider: GeminiGradingProvider,
+      gradingProvider: GeminiGradingProvider,
       moderationProvider: OpenAiModerationProvider,
+      suggestionsProvider: GeminiGradingProvider,
     };
   }
 
   logger.debug('Using OpenAI default providers');
   return {
+    datasetGenerationProvider: OpenAiGradingProvider,
     embeddingProvider: OpenAiEmbeddingProvider,
-    gradingProvider: OpenAiGradingProvider,
     gradingJsonProvider: OpenAiGradingJsonProvider,
-    suggestionsProvider: OpenAiSuggestionsProvider,
+    gradingProvider: OpenAiGradingProvider,
     moderationProvider: OpenAiModerationProvider,
+    suggestionsProvider: OpenAiSuggestionsProvider,
   };
 }
