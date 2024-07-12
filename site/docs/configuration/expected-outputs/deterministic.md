@@ -387,6 +387,18 @@ assert:
     value: hello world
 ```
 
+`value` can reference other variables using template syntax. For example:
+
+```yaml
+tests:
+  - vars:
+      expected: foobar
+    assert:
+      - type: levenshtein
+        threshold: 2
+        value: '{{expected}}'
+```
+
 ### Perplexity
 
 Perplexity is a measurement used in natural language processing to quantify how well a language model predicts a sample of text. It's essentially a measure of the model's uncertainty.

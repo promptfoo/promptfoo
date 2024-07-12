@@ -395,3 +395,68 @@ export class AnthropicCompletionProvider implements ApiProvider {
 export const DefaultGradingProvider = new AnthropicMessagesProvider('claude-3-opus-20240229');
 export const DefaultGradingJsonProvider = new AnthropicMessagesProvider('claude-3-opus-20240229');
 export const DefaultSuggestionsProvider = new AnthropicMessagesProvider('claude-3-opus-20240229');
+
+export class AnthropicLlmRubricProvider extends AnthropicMessagesProvider {
+  constructor(modelName: string) {
+    super(modelName, {
+      config: {
+        tool_choice: { type: 'tool', name: 'grade_output' },
+        tools: [
+          {
+            name: 'grade_output',
+            description: 'Grade the given output based on specific criteria',
+            input_schema: {
+              type: 'object',
+              properties: {
+                pass: {
+                  type: 'boolean',
+                  description: 'Whether the output passes the criteria',
+                },
+                score: {
+                  type: 'number',
+                  description: 'The score assigned to the output',
+                },
+                reason: {
+                  type: 'string',
+                  description: 'The reason for the given grade',
+                },
+              },
+              required: ['pass', 'score', 'reason'],
+            },
+          },
+        ],
+      },
+    });
+  }
+
+  async callApi(prompt: string): Promise<ProviderResponse> {
+    const result = await super.callApi(prompt);
+    if (typeof result.output !== 'string') {
+      return {
+        error: `Anthropic LLM rubric grader - malformed non-string output\n\n${JSON.stringify(result.output)}`,
+      };
+    }
+    try {
+      const functionCall = JSON.parse(result.output) as {
+        type: 'tool_use';
+        id: string;
+        name: 'grade_output';
+        input: {
+          pass: boolean;
+          score: number;
+          reason: string;
+        };
+      };
+      return {
+        output: functionCall.input,
+      };
+    } catch (err) {
+      return {
+        error: `Anthropic LLM rubric grader - invalid JSON: ${err}\n\n${result.output}`,
+      };
+    }
+  }
+}
+export const DefaultLlmRubricProvider = new AnthropicLlmRubricProvider(
+  'claude-3-5-sonnet-20240620',
+);

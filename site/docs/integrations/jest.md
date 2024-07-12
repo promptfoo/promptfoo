@@ -1,5 +1,5 @@
 ---
-sidebar_label: Jest
+sidebar_label: Jest & Vitest
 ---
 
 import Tabs from '@theme/Tabs';
@@ -7,24 +7,25 @@ import TabItem from '@theme/TabItem';
 
 import JestExampleImage from '../assets/jest-example.png';
 
-# Testing prompts with Jest
+# Testing prompts with Jest and Vitest
 
-`promptfoo` can be integrated with test frameworks like [Jest](https://jestjs.io/) in order to evaluate prompts as part of existing testing and CI workflows.
+`promptfoo` can be integrated with test frameworks like [Jest](https://jestjs.io/) and [Vitest](https://vitest.dev/) to evaluate prompts as part of existing testing and CI workflows.
 
-This guide includes examples that show how to create Jest test cases for desired prompt quality using semantic similarity and LLM grading. You can also skip to the [full example code](https://github.com/promptfoo/promptfoo/tree/main/examples/jest-integration).
+This guide includes examples that show how to create test cases for desired prompt quality using semantic similarity and LLM grading. You can also skip to the [full example code](https://github.com/promptfoo/promptfoo/tree/main/examples/jest-integration).
 
-For more information on supported checks, see [Expected Outputs documentation](/docs/configuration/expected-outputs/).
+For more information on supported checks, see the [Expected Outputs documentation](/docs/configuration/expected-outputs/).
 
 ## Prerequisites
 
 Before you begin, make sure you have the following node packages installed:
 
 - [jest](https://jestjs.io/docs/getting-started): `npm install --save-dev jest`
+- [vitest](https://vitest.dev/guide/): `npm install --save-dev vitest`
 - promptfoo: `npm install --save-dev promptfoo`
 
-## Creating custom jest matchers
+## Creating custom matchers
 
-First, we'll create custom jest matchers:
+First, we'll create custom matchers:
 
 - `toMatchSemanticSimilarity`: Compares two strings for semantic similarity.
 - `toPassLLMRubric`: Checks if a string meets the specified LLM Rubric criteria.
@@ -41,7 +42,7 @@ import { assertions } from 'promptfoo';
 
 const { matchesSimilarity, matchesLlmRubric } = assertions;
 
-export function installJestMatchers() {
+export function installMatchers() {
   expect.extend({
     async toMatchSemanticSimilarity(received, expected, threshold = 0.8) {
       const result = await matchesSimilarity(received, expected, threshold);
@@ -129,7 +130,7 @@ declare global {
   }
 }
 
-export function installJestMatchers() {
+export function installMatchers() {
   expect.extend({
     async toMatchSemanticSimilarity(
       received: string,
@@ -180,14 +181,14 @@ export function installJestMatchers() {
 
 ## Writing tests
 
-Our test code will use the custom jest matchers in order to run a few test cases.
+Our test code will use the custom matchers to run a few test cases.
 
 Create a new file called `index.test.js` and add the following code:
 
 ```javascript
-import { installJestMatchers } from './matchers';
+import { installMatchers } from './matchers';
 
-installJestMatchers();
+installMatchers();
 
 const gradingConfig = {
   provider: 'openai:chat:gpt-3.5-turbo',

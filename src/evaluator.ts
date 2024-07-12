@@ -417,11 +417,9 @@ class Evaluator {
         const checkResult = await runAssertions({
           prompt: renderedPrompt,
           provider,
+          providerResponse: processedResponse,
           test,
-          output: processedResponse.output,
           latencyMs: response.cached ? undefined : latencyMs,
-          logProbs: response.logProbs,
-          cost: processedResponse.cost,
         });
         if (!checkResult.pass) {
           ret.error = checkResult.reason;
@@ -430,9 +428,9 @@ class Evaluator {
         ret.score = checkResult.score;
         ret.namedScores = checkResult.namedScores || {};
         if (checkResult.tokensUsed) {
-          this.stats.tokenUsage.total += checkResult.tokensUsed.total;
-          this.stats.tokenUsage.prompt += checkResult.tokensUsed.prompt;
-          this.stats.tokenUsage.completion += checkResult.tokensUsed.completion;
+          this.stats.tokenUsage.total += checkResult.tokensUsed.total || 0;
+          this.stats.tokenUsage.prompt += checkResult.tokensUsed.prompt || 0;
+          this.stats.tokenUsage.completion += checkResult.tokensUsed.completion || 0;
         }
         ret.response = processedResponse;
         ret.gradingResult = checkResult;
@@ -523,16 +521,18 @@ class Evaluator {
     }
 
     // Split prompts by provider
-    for (const prompt of testSuite.prompts) {
-      for (const provider of testSuite.providers) {
+    // Order matters - keep provider in outer loop to reduce need to swap models during local inference.
+    for (const provider of testSuite.providers) {
+      for (const prompt of testSuite.prompts) {
         // Check if providerPromptMap exists and if it contains the current prompt's label
-        if (!isAllowedPrompt(prompt, testSuite.providerPromptMap?.[provider.id()])) {
+        const providerKey = provider.label || provider.id();
+        if (!isAllowedPrompt(prompt, testSuite.providerPromptMap?.[providerKey])) {
           continue;
         }
         const completedPrompt = {
           ...prompt,
           id: sha256(typeof prompt.raw === 'object' ? JSON.stringify(prompt.raw) : prompt.raw),
-          provider: provider.label || provider.id(),
+          provider: providerKey,
           label: prompt.label,
           metrics: {
             score: 0,
@@ -650,9 +650,11 @@ class Evaluator {
       for (let repeatIndex = 0; repeatIndex < numRepeat; repeatIndex++) {
         for (const vars of varCombinations) {
           let colIndex = 0;
-          for (const prompt of testSuite.prompts) {
-            for (const provider of testSuite.providers) {
-              if (!isAllowedPrompt(prompt, testSuite.providerPromptMap?.[provider.id()])) {
+          // Order matters - keep provider in outer loop to reduce need to swap models during local inference.
+          for (const provider of testSuite.providers) {
+            for (const prompt of testSuite.prompts) {
+              const providerKey = provider.label || provider.id();
+              if (!isAllowedPrompt(prompt, testSuite.providerPromptMap?.[providerKey])) {
                 continue;
               }
               runEvalOptions.push({
@@ -724,10 +726,11 @@ class Evaluator {
 
       // Bookkeeping for table
       let resultText: string | undefined;
-      const outputTextDisplay =
+      const outputTextDisplay = (
         typeof row.response?.output === 'object'
           ? JSON.stringify(row.response.output)
-          : row.response?.output || row.error || '';
+          : row.response?.output || row.error || ''
+      ) as string;
       if (isTest) {
         if (row.success) {
           resultText = `${outputTextDisplay || row.error || ''}`;
@@ -807,9 +810,12 @@ class Evaluator {
       metrics.totalLatencyMs += row.latencyMs || 0;
       metrics.tokenUsage.cached =
         (metrics.tokenUsage.cached || 0) + (row.response?.tokenUsage?.cached || 0);
-      metrics.tokenUsage.completion += row.response?.tokenUsage?.completion || 0;
-      metrics.tokenUsage.prompt += row.response?.tokenUsage?.prompt || 0;
-      metrics.tokenUsage.total += row.response?.tokenUsage?.total || 0;
+      metrics.tokenUsage.completion =
+        (metrics.tokenUsage.completion || 0) + (row.response?.tokenUsage?.completion || 0);
+      metrics.tokenUsage.prompt =
+        (metrics.tokenUsage.prompt || 0) + (row.response?.tokenUsage?.prompt || 0);
+      metrics.tokenUsage.total =
+        (metrics.tokenUsage.total || 0) + (row.response?.tokenUsage?.total || 0);
       metrics.cost += row.cost || 0;
     };
 
@@ -958,9 +964,19 @@ class Evaluator {
               prompt: 0,
               completion: 0,
             };
-            output.gradingResult.tokensUsed.total += gradingResult.tokensUsed?.total || 0;
-            output.gradingResult.tokensUsed.prompt += gradingResult.tokensUsed?.prompt || 0;
-            output.gradingResult.tokensUsed.completion += gradingResult.tokensUsed?.completion || 0;
+            output.gradingResult.tokensUsed = output.gradingResult.tokensUsed || {
+              total: 0,
+              prompt: 0,
+              completion: 0,
+            };
+            output.gradingResult.tokensUsed.total =
+              (output.gradingResult.tokensUsed.total || 0) + (gradingResult.tokensUsed?.total || 0);
+            output.gradingResult.tokensUsed.prompt =
+              (output.gradingResult.tokensUsed.prompt || 0) +
+              (gradingResult.tokensUsed?.prompt || 0);
+            output.gradingResult.tokensUsed.completion =
+              (output.gradingResult.tokensUsed.completion || 0) +
+              (gradingResult.tokensUsed?.completion || 0);
             output.pass = output.gradingResult.pass =
               output.gradingResult.pass && gradingResult.pass;
             if (!gradingResult.pass) {

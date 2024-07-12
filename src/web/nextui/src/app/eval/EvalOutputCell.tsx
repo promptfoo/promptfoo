@@ -180,7 +180,7 @@ function EvalOutputCell({
     } catch (error) {
       console.error('Invalid regular expression:', (error as Error).message);
     }
-  } else if (renderMarkdown) {
+  } else if (renderMarkdown && !showDiffs) {
     node = (
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
@@ -345,7 +345,7 @@ function EvalOutputCell({
       {output.prompt && (
         <>
           <span className="action" onClick={handlePromptOpen}>
-            <Tooltip title="View ouput and test details">
+            <Tooltip title="View output and test details">
               <span>🔎</span>
             </Tooltip>
           </span>

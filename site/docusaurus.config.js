@@ -69,15 +69,14 @@ const config = {
           editUrl: 'https://github.com/promptfoo/promptfoo/tree/main/site',
           sidebarCollapsed: false,
         },
-        /*
         blog: {
-          showReadingTime: true,
+          showReadingTime: false,
+          blogSidebarCount: 0,
           // Please change this to your repo.
           // Remove this to remove the "edit this page" links.
-          editUrl:
-            'https://github.com/facebook/docusaurus/tree/main/packages/create-docusaurus/templates/shared/',
+          //editUrl:
+          //  'https://github.com/facebook/docusaurus/tree/main/packages/create-docusaurus/templates/shared/',
         },
-        */
         theme: {
           customCss: require.resolve('./src/css/custom.css'),
         },
@@ -108,16 +107,21 @@ const config = {
             label: 'Tutorial',
           },
           */
-          { to: '/docs/intro', label: 'Docs', position: 'right' },
+          { to: '/docs/intro', label: 'Docs', position: 'left' },
           {
             to: '/llm-vulnerability-scanner',
             label: 'LLM Vulnerability Scanner',
-            position: 'right',
+            position: 'left',
           },
           {
             to: '/docs/red-team',
             label: 'LLM Red Teaming',
-            position: 'right',
+            position: 'left',
+          },
+          {
+            href: '/blog',
+            label: 'Blog',
+            position: 'left',
           },
           {
             href: 'https://github.com/promptfoo/promptfoo',
@@ -192,6 +196,10 @@ const config = {
                 href: 'https://discord.gg/gHPS9jjfbs',
               },
               {
+                label: 'Blog',
+                href: '/blog',
+              },
+              {
                 label: 'Contact Us',
                 href: 'mailto:inquiries@promptfoo.dev',
               },
@@ -215,7 +223,7 @@ const config = {
         ],
       },
       zoom: {
-        selector: '.markdown :not(em) > img',
+        selector: '.markdown :not(em) > img:not(.no-zoom)',
       },
       algolia: {
         // The application ID provided by Algolia

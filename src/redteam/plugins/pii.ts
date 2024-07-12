@@ -1,7 +1,7 @@
 import dedent from 'dedent';
 import invariant from 'tiny-invariant';
-import type { ApiProvider, TestCase } from '../types';
-import { getNunjucksEngine } from '../util';
+import type { ApiProvider, TestCase } from '../../types';
+import { getNunjucksEngine } from '../../util';
 
 /**
  * Generates a template for PII leak tests based on the provided examples.

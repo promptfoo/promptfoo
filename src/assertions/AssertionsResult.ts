@@ -69,9 +69,9 @@ export class AssertionsResult {
     }
 
     if (result.tokensUsed) {
-      this.tokensUsed.total += result.tokensUsed.total;
-      this.tokensUsed.prompt += result.tokensUsed.prompt;
-      this.tokensUsed.completion += result.tokensUsed.completion;
+      this.tokensUsed.total += result.tokensUsed.total || 0;
+      this.tokensUsed.prompt += result.tokensUsed.prompt || 0;
+      this.tokensUsed.completion += result.tokensUsed.completion || 0;
     }
 
     if (result.pass) {
@@ -106,13 +106,28 @@ export class AssertionsResult {
       }
     }
 
+    // Flatten nested component results, and copy the assertion into the child results.
+    const flattenedComponentResults = this.componentResults.flatMap((result) => {
+      if (result.componentResults) {
+        return [
+          result,
+          ...result.componentResults.map((subResult) => ({
+            ...subResult,
+            assertion: subResult.assertion || result.assertion,
+          })),
+        ];
+      } else {
+        return result;
+      }
+    });
+
     this.result = {
       pass,
       score,
       reason,
       namedScores: this.namedScores,
       tokensUsed: this.tokensUsed,
-      componentResults: this.componentResults,
+      componentResults: flattenedComponentResults,
       assertion: null,
     };
 

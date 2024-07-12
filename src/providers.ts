@@ -46,7 +46,11 @@ import {
 import { PalmChatProvider } from './providers/palm';
 import { PortkeyChatCompletionProvider } from './providers/portkey';
 import { PythonProvider } from './providers/pythonCompletion';
-import { ReplicateModerationProvider, ReplicateProvider } from './providers/replicate';
+import {
+  ReplicateImageProvider,
+  ReplicateModerationProvider,
+  ReplicateProvider,
+} from './providers/replicate';
 import { ScriptCompletionProvider } from './providers/scriptCompletion';
 import { VertexChatProvider, VertexEmbeddingProvider } from './providers/vertex';
 import { VoyageEmbeddingProvider } from './providers/voyage';
@@ -70,8 +74,7 @@ export async function loadApiProvider(
 ): Promise<ApiProvider> {
   const { options = {}, basePath, env } = context;
   const providerOptions: ProviderOptions = {
-    // Hack(ian): Override id with label. This makes it so that debug and display info, which rely on id, will use the label instead.
-    id: options.label || options.id,
+    id: options.id,
     config: {
       ...options.config,
       basePath,
@@ -99,7 +102,7 @@ export async function loadApiProvider(
     const scriptPath = providerPath.split(':')[1];
     ret = new ScriptCompletionProvider(scriptPath, providerOptions);
   } else if (providerPath.startsWith('python:')) {
-    const scriptPath = providerPath.split(':')[1];
+    const scriptPath = providerPath.split(':').slice(1).join(':');
     ret = new PythonProvider(scriptPath, providerOptions);
   } else if (providerPath.startsWith('openai:')) {
     // Load OpenAI module
@@ -178,7 +181,7 @@ export async function loadApiProvider(
       ret = new AnthropicCompletionProvider(modelType, providerOptions);
     } else {
       throw new Error(
-        `Unknown Anthropic model type: ${modelType}. Use one of the following providers: anthropic:completion:<model name>`,
+        `Unknown Anthropic model type: ${modelType}. Use one of the following providers: anthropic:messages:<model name>, anthropic:completion:<model name>`,
       );
     }
   } else if (providerPath.startsWith('voyage:')) {
@@ -228,9 +231,14 @@ export async function loadApiProvider(
     const modelName = splits.slice(2).join(':');
     if (modelType === 'moderation') {
       ret = new ReplicateModerationProvider(modelName, providerOptions);
+    } else if (modelType === 'image') {
+      ret = new ReplicateImageProvider(modelName, providerOptions);
     } else {
       // By default, there is no model type.
-      ret = new ReplicateProvider(modelType + ':' + modelName, providerOptions);
+      ret = new ReplicateProvider(
+        modelName ? modelType + ':' + modelName : modelType,
+        providerOptions,
+      );
     }
   } else if (providerPath.startsWith('bam:')) {
     const splits = providerPath.split(':');
@@ -335,6 +343,11 @@ export async function loadApiProvider(
     const RedteamIterativeProvider = (await import(path.join(__dirname, './redteam/iterative')))
       .default;
     ret = new RedteamIterativeProvider(providerOptions);
+  } else if (providerPath === 'promptfoo:redteam:iterative:image') {
+    const RedteamIterativeProvider = (
+      await import(path.join(__dirname, './redteam/iterativeImage'))
+    ).default;
+    ret = new RedteamIterativeProvider(providerOptions);
   } else {
     if (providerPath.startsWith('file://')) {
       providerPath = providerPath.slice('file://'.length);
@@ -345,11 +358,10 @@ export async function loadApiProvider(
       : path.join(basePath || process.cwd(), providerPath);
     const CustomApiProvider = await importModule(modulePath);
     ret = new CustomApiProvider(options);
-    ret.label = ret.label || options.label;
   }
-
   ret.transform = options.transform;
   ret.delay = options.delay;
+  ret.label ||= options.label;
   return ret;
 }
 

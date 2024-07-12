@@ -1,0 +1,29 @@
+description: Code generation with sandboxed verification
+
+prompts: code_generation_prompt.txt
+
+providers:
+  - openai:gpt-4
+  - anthropic:messages:claude-3-5-sonnet-20240620
+
+tests:
+  - vars:
+      problem: 'Write a Python function to calculate the factorial of a number'
+      function_name: 'factorial'
+      test_input: '5'
+      expected_output: '120'
+  - vars:
+      problem: 'Write a Python function to check if a string is a palindrome'
+      function_name: 'is_palindrome'
+      test_input: "'racecar'"
+      expected_output: 'True'
+  - vars:
+      problem: 'Write a Python function to find the largest element in a list'
+      function_name: 'find_largest'
+      test_input: '[1, 5, 3, 9, 2]'
+      expected_output: '9'
+
+defaultTest:
+  assert:
+    - type: python
+      value: file://validate_and_run_code.py

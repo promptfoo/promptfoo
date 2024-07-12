@@ -1,0 +1,25 @@
+providers:
+  - id: llama
+    label: llama3-8b
+    config:
+      baseUrl: http://localhost:8080
+
+prompts:
+  - 'Write a funny tweet about {{topic}}'
+  - "Human: Write a funny tweet about {{topic}}\nAI:"
+  - "Q: Create a humorous tweet about {{topic}}\nA:"
+  - '[INST] Write a funny tweet about {{topic}} [/INST]'
+  - "<human>: Craft a witty tweet about {{topic}}\n<assistant>:"
+  - "### Instruction: Compose a clever tweet on the topic of {{topic}}\n### Response:"
+  - "System: You are a witty AI.\nUser: Tweet about {{topic}}\nAssistant:"
+  - "<s>[INST] <<SYS>>\nYou're a comedy writer.\n<</SYS>>\nWrite a funny tweet about {{topic}} [/INST]"
+  - "{'role': 'system', 'content': 'You specialize in viral tweets.'}\n{'role': 'user', 'content': 'Write a hilarious tweet about {{topic}}'}\n{'role': 'assistant', 'content':"
+  - "# Context: You are a social media expert known for viral content.\n# Human: Create a funny tweet about {{topic}}\n# AI:"
+
+tests:
+  - vars:
+      topic: 'San Francisco'
+    assert:
+      - type: icontains
+        value: 'San Francisco'
+      - type: answer-relevance
