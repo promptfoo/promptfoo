@@ -230,6 +230,13 @@ export async function startServer(
     };
   });
 
+  /**
+   * Health check endpoint.
+   */
+  app.get('/api/health', (req, res) => {
+    res.status(200).send('OK');
+  });
+
   // Must come after the above routes (particularly /api/config) so it doesn't
   // overwrite dynamic routes.
   if (serveApp) app.use(express.static(staticDir));

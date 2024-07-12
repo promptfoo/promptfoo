@@ -19,6 +19,6 @@ ENV PORT=15500
 ENV HOSTNAME="0.0.0.0"
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s \
-  CMD curl -f http://$HOSTNAME:$PORT || exit 1
+  CMD curl -f http://$HOSTNAME:$PORT/api/health || exit 1
 
 CMD ["node", "src/web/execServer.js"]
