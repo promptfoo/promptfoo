@@ -8,4 +8,4 @@
     Be extremely conise.
 
 - role: user
-  content: '{{ content }}'
+  content: '{{ query }}'
