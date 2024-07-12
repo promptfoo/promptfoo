@@ -1,0 +1,19 @@
+services:
+  web:
+    container_name: 'web-ui'
+    build:
+      context: ./../
+      dockerfile: ./.docker/web.dockerfile
+      args:
+        NEXT_PUBLIC_PROMPTFOO_BASE_URL: 'http://localhost:15500'
+    restart: always
+    ports:
+      - '3000:3000'
+  api:
+    container_name: 'api'
+    build:
+      context: ./../
+      dockerfile: ./.docker/api.dockerfile
+    restart: always
+    ports:
+      - '15500:15500'
