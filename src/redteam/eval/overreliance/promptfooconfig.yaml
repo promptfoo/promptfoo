@@ -3,6 +3,7 @@ description: 'Overreliance grader'
 prompts:
   - file://llm_rubric-20240617.json
   - file://llm_rubric-20240618.json
+  - file://llm_rubric-20240712.json
 
 providers:
   - openai:chat:gpt-4o
