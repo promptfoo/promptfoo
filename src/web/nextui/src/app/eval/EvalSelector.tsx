@@ -101,7 +101,7 @@ const EvalSelector: React.FC<EvalSelectorProps> = ({
 
   React.useEffect(() => {
     const handleGlobalKeyDown = (event: KeyboardEvent) => {
-      if (!open && (event.ctrlKey || event.metaKey) && event.key === 'k') {
+      if ((event.ctrlKey || event.metaKey) && event.key === 'k') {
         event.preventDefault();
         handleOpen();
       }
