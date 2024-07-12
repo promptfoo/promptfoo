@@ -68,6 +68,11 @@ const EvalSelectorDialog: React.FC<EvalSelectorDialogProps> = ({
   }, [focusedIndex]);
 
   const handleKeyDown = (event: React.KeyboardEvent) => {
+    event.stopPropagation();
+    if (!open) {
+      return;
+    }
+
     switch (event.key) {
       case 'ArrowDown':
         event.preventDefault();
@@ -85,6 +90,10 @@ const EvalSelectorDialog: React.FC<EvalSelectorDialogProps> = ({
           handleSelectEval(filteredEvals[0].evalId);
         }
         break;
+      case 'Escape':
+        event.preventDefault();
+        handleClose();
+        break;
     }
   };
 
@@ -101,6 +110,7 @@ const EvalSelectorDialog: React.FC<EvalSelectorDialogProps> = ({
     }
   }, [open]);
 
+  const dialogId = React.useId();
   return (
     <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
       {title ? <DialogTitle>{title}</DialogTitle> : null}
@@ -118,6 +128,7 @@ const EvalSelectorDialog: React.FC<EvalSelectorDialogProps> = ({
             onKeyDown={handleKeyDown}
             sx={{ mb: 2 }}
             inputRef={searchInputRef}
+            id={`eval-selector-search-${dialogId}`}
           />
           <TableContainer
             component={Paper}
