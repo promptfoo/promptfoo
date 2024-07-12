@@ -19,5 +19,8 @@
     "src/web/client/**/*",
     "src/web/nextui/**/*",
     "src/workers/**/*"
-  ]
+  ],
+  "ts-node": {
+    "transpileOnly": true
+  }
 }

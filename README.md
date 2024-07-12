@@ -333,7 +333,7 @@ cd path/to/experiment-with-promptfoo   # contains your promptfooconfig.yaml
 npx path/to/promptfoo-source eval
 ```
 
-The web UI is located in `src/web/nextui`. To run it in dev mode, run `npm run local:web`. This will host the web UI at http://localhost:3000. The web UI expects `promptfoo view` to be running separately.
+The web UI is located in `src/web/nextui`. To run it in dev mode, run `npm run local:web`. This will host the web UI at http://localhost:3000.
 
 In order to build the next.js app, you'll have to set some placeholder envars (it is _not_ necessary to sign up for a supabase account). You can edit `src/web/nextui/.env` to include the following placeholders:
 

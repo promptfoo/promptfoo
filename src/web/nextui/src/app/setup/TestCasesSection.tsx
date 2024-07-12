@@ -1,5 +1,4 @@
 import React from 'react';
-import { testCaseFromCsvRow } from '@/../../../../dist/src/csv';
 import type { CsvRow, TestCase } from '@/../../../types';
 import { useStore } from '@/state/evalConfig';
 import Copy from '@mui/icons-material/ContentCopy';
@@ -17,6 +16,7 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import { testCaseFromCsvRow } from '../../../../../csv';
 import TestCaseDialog from './TestCaseDialog';
 
 interface TestCasesSectionProps {
