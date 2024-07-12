@@ -34,7 +34,7 @@ import invariant from 'tiny-invariant';
 import { useDebounce } from 'use-debounce';
 import ConfigModal from './ConfigModal';
 import DownloadMenu from './DownloadMenu';
-import EvalSelector from './EvalSelector';
+import EvalSelectorButton from './EvalSelectorButton';
 import ResultsCharts from './ResultsCharts';
 import ResultsTable from './ResultsTable';
 import SettingsModal from './ResultsViewSettingsModal';
@@ -271,7 +271,7 @@ export default function ResultsView({
         className="eval-header"
       >
         {recentEvals && recentEvals.length > 0 && (
-          <EvalSelector
+          <EvalSelectorButton
             recentEvals={recentEvals}
             onRecentEvalSelected={onRecentEvalSelected}
             currentEval={recentEvals.find((evl) => evl.evalId === evalId) || null}
