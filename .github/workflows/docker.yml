@@ -17,7 +17,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test-api:
+  docker-api:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -62,7 +62,7 @@ jobs:
           docker stop api
           docker rm api
 
-  test-web:
+  docker-web:
     runs-on: ubuntu-latest
 
     steps:
