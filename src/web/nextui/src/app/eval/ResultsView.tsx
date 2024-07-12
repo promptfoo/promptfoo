@@ -264,7 +264,13 @@ export default function ResultsView({
 
   return (
     <div style={{ marginLeft: '1rem', marginRight: '1rem' }}>
-      <Box mb={2} className="eval-header">
+      <ResponsiveStack
+        direction="row"
+        mb={2}
+        spacing={1}
+        alignItems="center"
+        className="eval-header"
+      >
         {recentEvals && recentEvals.length > 0 && (
           <EvalSelector
             recentEvals={recentEvals}
@@ -315,7 +321,7 @@ export default function ResultsView({
             sx={{ opacity: 0.7 }}
           />
         </Tooltip>
-      </Box>
+      </ResponsiveStack>
       <ResponsiveStack direction="row" spacing={4} alignItems="center">
         <Box>
           <FormControl sx={{ m: 1, minWidth: 200, maxWidth: 350 }} size="small">

@@ -15,6 +15,7 @@ import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import TextField from '@mui/material/TextField';
+import Tooltip from '@mui/material/Tooltip';
 import { ResultLightweightWithLabel } from './types';
 
 interface EvalSelectorProps {
@@ -30,10 +31,13 @@ const EvalSelector: React.FC<EvalSelectorProps> = ({
 }) => {
   const [open, setOpen] = useState(false);
   const [searchText, setSearchText] = useState('');
+  const [focusedIndex, setFocusedIndex] = useState(-1);
   const searchInputRef = React.useRef<HTMLInputElement>(null);
+  const tableContainerRef = React.useRef<HTMLDivElement>(null);
 
   const handleOpen = () => {
     setOpen(true);
+    setFocusedIndex(0);
     // Focus the search box when the dialog is opened
     setTimeout(() => {
       searchInputRef.current?.focus();
@@ -43,6 +47,7 @@ const EvalSelector: React.FC<EvalSelectorProps> = ({
   const handleClose = () => {
     setOpen(false);
     setSearchText('');
+    setFocusedIndex(-1);
   };
 
   const filteredEvals = recentEvals.filter(
@@ -56,13 +61,68 @@ const EvalSelector: React.FC<EvalSelectorProps> = ({
     handleClose();
   };
 
+  const scrollToFocusedItem = () => {
+    if (focusedIndex >= 0 && tableContainerRef.current) {
+      const tableRows = tableContainerRef.current.querySelectorAll('tbody tr');
+      const targetIndex = Math.min(focusedIndex + 3, tableRows.length - 1);
+      if (tableRows[targetIndex]) {
+        tableRows[targetIndex].scrollIntoView({
+          behavior: 'smooth',
+          block: 'nearest',
+        });
+      }
+    }
+  };
+
+  const handleKeyDown = (event: React.KeyboardEvent) => {
+    switch (event.key) {
+      case 'ArrowDown':
+        event.preventDefault();
+        setFocusedIndex((prevIndex) => Math.min(prevIndex + 1, filteredEvals.length - 1));
+        break;
+      case 'ArrowUp':
+        event.preventDefault();
+        setFocusedIndex((prevIndex) => Math.max(prevIndex - 1, 0));
+        break;
+      case 'Enter':
+        event.preventDefault();
+        if (focusedIndex >= 0 && focusedIndex < filteredEvals.length) {
+          handleSelectEval(filteredEvals[focusedIndex].evalId);
+        } else if (filteredEvals.length > 0) {
+          handleSelectEval(filteredEvals[0].evalId);
+        }
+        break;
+    }
+  };
+
+  React.useEffect(() => {
+    scrollToFocusedItem();
+  }, [focusedIndex]);
+
+  React.useEffect(() => {
+    const handleGlobalKeyDown = (event: KeyboardEvent) => {
+      if (!open && (event.ctrlKey || event.metaKey) && event.key === 'k') {
+        event.preventDefault();
+        handleOpen();
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalKeyDown);
+
+    return () => {
+      window.removeEventListener('keydown', handleGlobalKeyDown);
+    };
+  }, []);
+
   return (
     <>
-      <IconButton onClick={handleOpen} color="primary">
-        <FolderIcon />
-      </IconButton>
+      <Tooltip title="Search for Evals (Ctrl/Cmd + K)" arrow>
+        <IconButton onClick={handleOpen} color="primary">
+          <FolderIcon />
+        </IconButton>
+      </Tooltip>
       <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
-        <DialogTitle>Select Eval</DialogTitle>
+        <DialogTitle>Open an Eval</DialogTitle>
         <DialogContent>
           <Box sx={{ width: '100%', mt: 2 }}>
             <TextField
@@ -70,11 +130,19 @@ const EvalSelector: React.FC<EvalSelectorProps> = ({
               variant="outlined"
               placeholder="Search"
               value={searchText}
-              onChange={(e) => setSearchText(e.target.value)}
+              onChange={(e) => {
+                setSearchText(e.target.value);
+                setFocusedIndex(0);
+              }}
+              onKeyDown={handleKeyDown}
               sx={{ mb: 2 }}
               inputRef={searchInputRef}
             />
-            <TableContainer component={Paper} sx={{ height: '600px', overflow: 'auto' }}>
+            <TableContainer
+              component={Paper}
+              sx={{ height: '600px', overflow: 'auto' }}
+              ref={tableContainerRef}
+            >
               <Table stickyHeader>
                 <TableHead>
                   <TableRow>
@@ -84,12 +152,16 @@ const EvalSelector: React.FC<EvalSelectorProps> = ({
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {filteredEvals.map((_eval) => (
+                  {filteredEvals.map((_eval, index) => (
                     <TableRow
                       key={_eval.evalId}
                       hover
                       onClick={() => handleSelectEval(_eval.evalId)}
-                      sx={{ cursor: 'pointer' }}
+                      sx={{
+                        cursor: 'pointer',
+                        backgroundColor:
+                          index === focusedIndex ? 'rgba(255, 255, 0, 0.1)' : 'inherit',
+                      }}
                     >
                       <TableCell>{new Date(_eval.createdAt).toLocaleString()}</TableCell>
                       <TableCell>{_eval.description || _eval.label}</TableCell>
