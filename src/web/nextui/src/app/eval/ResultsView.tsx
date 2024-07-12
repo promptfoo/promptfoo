@@ -265,6 +265,13 @@ export default function ResultsView({
   return (
     <div style={{ marginLeft: '1rem', marginRight: '1rem' }}>
       <Box mb={2} className="eval-header">
+        {recentEvals && recentEvals.length > 0 && (
+          <EvalSelector
+            recentEvals={recentEvals}
+            onRecentEvalSelected={onRecentEvalSelected}
+            currentEval={recentEvals.find((evl) => evl.evalId === evalId) || null}
+          />
+        )}
         <Typography variant="h5" sx={{ display: 'flex', alignItems: 'center' }}>
           <Tooltip title="Click to edit description">
             <span className="description" onClick={handleDescriptionClick}>
@@ -283,7 +290,6 @@ export default function ResultsView({
                   </>
                 }
                 sx={{
-                  ml: 1,
                   opacity: 0.7,
                   cursor: 'pointer',
                 }}
@@ -306,7 +312,7 @@ export default function ResultsView({
                 <strong>Author:</strong> {author || 'Unknown'}
               </>
             }
-            sx={{ ml: 1, opacity: 0.7 }}
+            sx={{ opacity: 0.7 }}
           />
         </Tooltip>
       </Box>
@@ -362,13 +368,6 @@ export default function ResultsView({
         <Box flexGrow={1} />
         <Box display="flex" justifyContent="flex-end">
           <ResponsiveStack direction="row" spacing={2}>
-            {recentEvals && recentEvals.length > 0 && (
-              <EvalSelector
-                recentEvals={recentEvals}
-                onRecentEvalSelected={onRecentEvalSelected}
-                currentEval={recentEvals.find((evl) => evl.evalId === evalId) || null}
-              />
-            )}
             <Button color="primary" onClick={handleOpenMenu} startIcon={<ArrowDropDownIcon />}>
               Eval actions
             </Button>

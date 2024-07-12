@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
+import FolderIcon from '@mui/icons-material/FolderOpen';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
+import IconButton from '@mui/material/IconButton';
 import Paper from '@mui/material/Paper';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
@@ -56,9 +58,9 @@ const EvalSelector: React.FC<EvalSelectorProps> = ({
 
   return (
     <>
-      <Button variant="contained" onClick={handleOpen}>
-        Switch Eval
-      </Button>
+      <IconButton onClick={handleOpen} color="primary">
+        <FolderIcon />
+      </IconButton>
       <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
         <DialogTitle>Select Eval</DialogTitle>
         <DialogContent>
