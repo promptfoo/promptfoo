@@ -44,6 +44,7 @@ import {
   type Prompt,
   type CompletedPrompt,
   type CsvRow,
+  type ResultLightweight,
   isApiProvider,
   isProviderOptions,
   OutputFileExtension,
@@ -316,12 +317,14 @@ export async function writeResultsToDatabase(
 export function listPreviousResults(
   limit: number = DEFAULT_QUERY_LIMIT,
   filterDescription?: string,
-): { evalId: string; description?: string | null }[] {
+): ResultLightweight[] {
   const db = getDb();
   let results = db
     .select({
-      name: evals.id,
+      evalId: evals.id,
+      createdAt: evals.createdAt,
       description: evals.description,
+      config: evals.config,
     })
     .from(evals)
     .orderBy(desc(evals.createdAt))
@@ -334,8 +337,10 @@ export function listPreviousResults(
   }
 
   return results.map((result) => ({
-    evalId: result.name,
+    evalId: result.evalId,
+    createdAt: result.createdAt,
     description: result.description,
+    numTests: result.config.tests?.length || 0,
   }));
 }
 
