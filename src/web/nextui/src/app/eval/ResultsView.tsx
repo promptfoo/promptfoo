@@ -9,7 +9,6 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import ShareIcon from '@mui/icons-material/Share';
 import EyeIcon from '@mui/icons-material/Visibility';
 import VisibilityIcon from '@mui/icons-material/Visibility';
-import Autocomplete, { AutocompleteRenderInputParams } from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
@@ -35,12 +34,13 @@ import invariant from 'tiny-invariant';
 import { useDebounce } from 'use-debounce';
 import ConfigModal from './ConfigModal';
 import DownloadMenu from './DownloadMenu';
+import EvalSelector from './EvalSelector';
 import ResultsCharts from './ResultsCharts';
 import ResultsTable from './ResultsTable';
 import SettingsModal from './ResultsViewSettingsModal';
 import ShareModal from './ShareModal';
 import { useStore as useResultsViewStore } from './store';
-import type { FilterMode } from './types';
+import type { FilterMode, ResultLightweightWithLabel } from './types';
 import './ResultsView.css';
 
 const ResponsiveStack = styled(Stack)(({ theme }) => ({
@@ -52,10 +52,7 @@ const ResponsiveStack = styled(Stack)(({ theme }) => ({
 }));
 
 interface ResultsViewProps {
-  recentEvals: {
-    id: string;
-    label: string;
-  }[];
+  recentEvals: ResultLightweightWithLabel[];
   onRecentEvalSelected: (file: string) => void;
   defaultEvalId?: string;
 }
@@ -266,7 +263,20 @@ export default function ResultsView({
 
   return (
     <div style={{ marginLeft: '1rem', marginRight: '1rem' }}>
-      <Box mb={2} className="eval-header">
+      <ResponsiveStack
+        direction="row"
+        mb={2}
+        spacing={1}
+        alignItems="center"
+        className="eval-header"
+      >
+        {recentEvals && recentEvals.length > 0 && (
+          <EvalSelector
+            recentEvals={recentEvals}
+            onRecentEvalSelected={onRecentEvalSelected}
+            currentEval={recentEvals.find((evl) => evl.evalId === evalId) || null}
+          />
+        )}
         <Typography variant="h5" sx={{ display: 'flex', alignItems: 'center' }}>
           <Tooltip title="Click to edit description">
             <span className="description" onClick={handleDescriptionClick}>
@@ -285,7 +295,6 @@ export default function ResultsView({
                   </>
                 }
                 sx={{
-                  ml: 1,
                   opacity: 0.7,
                   cursor: 'pointer',
                 }}
@@ -308,42 +317,11 @@ export default function ResultsView({
                 <strong>Author:</strong> {author || 'Unknown'}
               </>
             }
-            sx={{ ml: 1, opacity: 0.7 }}
+            sx={{ opacity: 0.7 }}
           />
         </Tooltip>
-      </Box>
+      </ResponsiveStack>
       <ResponsiveStack direction="row" spacing={4} alignItems="center">
-        <Box>
-          {recentEvals && recentEvals.length > 0 && (
-            <FormControl sx={{ m: 1, minWidth: 200 }} size="small">
-              <Autocomplete
-                size="small"
-                options={recentEvals}
-                renderOption={(props, option) => (
-                  <li {...props} key={option.id}>
-                    {option.label}
-                  </li>
-                )}
-                style={{ width: 350 }}
-                renderInput={(params: AutocompleteRenderInputParams) => (
-                  <TextField {...params} label="Eval run" variant="outlined" />
-                )}
-                defaultValue={recentEvals.find((evl) => evl.id === defaultEvalId) || recentEvals[0]}
-                onChange={(event, newValue: { label: string; id?: string } | null) => {
-                  if (newValue && newValue.id) {
-                    onRecentEvalSelected(newValue.id);
-
-                    // Reset all filters and search
-                    setSearchText('');
-                    setFilterMode('all');
-                    setFailureFilter({});
-                  }
-                }}
-                disableClearable
-              />
-            </FormControl>
-          )}
-        </Box>
         <Box>
           <FormControl sx={{ m: 1, minWidth: 200, maxWidth: 350 }} size="small">
             <InputLabel id="visible-columns-label">Columns</InputLabel>
