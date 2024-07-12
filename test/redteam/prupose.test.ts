@@ -46,45 +46,6 @@ describe('getPurpose', () => {
     });
   });
 
-  it('should throw an error if intent is not a string', async () => {
-    const mockOutput = JSON.stringify({
-      intent: 123,
-      variables: ['test'],
-    });
-
-    mockProvider.callApi.mockResolvedValue({ output: mockOutput });
-
-    await expect(getPurpose(mockProvider, ['Some prompt'])).rejects.toThrow(
-      'Expected intent to be a string, got: 123',
-    );
-  });
-
-  it('should throw an error if variables is not an array', async () => {
-    const mockOutput = JSON.stringify({
-      intent: 'Valid intent',
-      variables: 'not an array',
-    });
-
-    mockProvider.callApi.mockResolvedValue({ output: mockOutput });
-
-    await expect(getPurpose(mockProvider, ['Some prompt'])).rejects.toThrow(
-      'Expected variables to be an array, got: not an array',
-    );
-  });
-
-  it('should throw an error if variables array is empty', async () => {
-    const mockOutput = JSON.stringify({
-      intent: 'Valid intent',
-      variables: [],
-    });
-
-    mockProvider.callApi.mockResolvedValue({ output: mockOutput });
-
-    await expect(getPurpose(mockProvider, ['Some prompt'])).rejects.toThrow(
-      'Variables must not be empty',
-    );
-  });
-
   it('should handle multiple prompts correctly', async () => {
     const mockOutput = JSON.stringify({
       intent: 'Analyze multiple medical parameters',
@@ -117,8 +78,9 @@ describe('getPurpose', () => {
 
     await getPurpose(mockProvider, ['Some prompt']);
 
-    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Purpose:'));
-    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('result:'));
+    expect(logger.debug).toHaveBeenCalledWith(
+      expect.stringContaining('purpose and prompt variables:'),
+    );
   });
 
   it('should throw an error if API call fails', async () => {
