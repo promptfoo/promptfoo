@@ -1,5 +1,6 @@
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
+import invariant from 'tiny-invariant';
 import logger from '../logger';
 import { loadApiProvider } from '../providers';
 import type { ApiProvider, TestCase, TestSuite } from '../types';
@@ -15,7 +16,7 @@ import HijackingPlugin from './plugins/hijacking';
 import OverreliancePlugin from './plugins/overreliance';
 import { getPiiTests } from './plugins/pii';
 import PoliticsPlugin from './plugins/politics';
-import { getPurpose } from './purpose';
+import { Purpose, getPurpose } from './purpose';
 
 interface SynthesizeOptions {
   injectVar?: string;
@@ -147,14 +148,22 @@ export async function synthesize({
   };
 
   // Get vars
-  injectVar = injectVar || 'query';
-
-  // Get purpose
   updateProgress();
-  const purpose = purposeOverride || (await getPurpose(reasoningProvider, prompts));
+  let purpose = purposeOverride;
+  if (!purpose || !injectVar) {
+    const inferredVars = await getPurpose(reasoningProvider, prompts);
+    purpose = inferredVars.intent;
+    injectVar = inferredVars.variables[0] || 'query';
+  }
+  invariant(
+    purpose,
+    `Generation of inferred purpose was not successful. Try providing a purpose explicitly with --purpose.`,
+  );
+  invariant(
+    injectVar,
+    `Generation of inferred injectVar was not successful. Try providing an injectVar explicitly with --injectVar.`,
+  );
   updateProgress();
-
-  logger.debug(`System purpose: ${purpose}`);
 
   // Get adversarial test cases
   const testCases: TestCase[] = [];
