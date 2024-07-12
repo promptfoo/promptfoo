@@ -1,5 +1,17 @@
+import invariant from 'tiny-invariant';
 import { importModule } from '../../esm';
-import { Prompt } from '../../types';
+import { ApiProvider, Prompt, PromptFunctionContext } from '../../types';
+
+export const transformContext = (context: {
+  vars: Record<string, string | object>;
+  provider?: ApiProvider;
+}): PromptFunctionContext => {
+  invariant(context.provider, 'Provider is required');
+  return {
+    vars: context.vars,
+    provider: { id: context.provider.id(), label: context.provider.label },
+  };
+};
 
 /**
  * Processes a JavaScript file to import and execute a module function as a prompt.
@@ -17,7 +29,7 @@ export async function processJsFile(
     {
       raw: String(promptFunction),
       label: prompt.label ? prompt.label : functionName ? `${filePath}:${functionName}` : filePath,
-      function: promptFunction,
+      function: (context) => promptFunction(transformContext(context)),
     },
   ];
 }

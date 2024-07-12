@@ -124,11 +124,76 @@ interface OpenAiConfig {
 }
 ```
 
-## Images / gpt-4-vision
+## Images
 
-You can include images in the prompt by using content blocks.
+### Sending images in prompts
 
-See [OpenAI vision example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-vision).
+You can include images in the prompt by using content blocks. For example, here's an example config:
+
+```yaml
+prompts:
+  - prompt.json
+
+providers:
+  - openai:gpt-4o
+
+tests:
+  - vars:
+      question: 'What do you see?'
+      url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg'
+  # ...
+```
+
+And an example `prompt.json`:
+
+```json
+[
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "text",
+        "text": "{{question}}"
+      },
+      {
+        "type": "image_url",
+        "image_url": {
+          "url": "{{url}}"
+        }
+      }
+    ]
+  }
+]
+```
+
+See the [OpenAI vision example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-vision).
+
+### Generating images
+
+OpenAI supports Dall-E generations via `openai:image:dalle-3`. See the [OpenAI Dall-E example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-dalle-images).
+
+```yaml
+prompts:
+  - 'In the style of Van Gogh: {{subject}}'
+  - 'In the style of Dali: {{subject}}'
+
+providers:
+  - openai:image:dall-e-3
+
+tests:
+  - vars:
+      subject: bananas
+  - vars:
+      subject: new york city
+```
+
+To display images in the web viewer, wrap vars or outputs in markdown image tags like so:
+
+```markdown
+![](/path/to/myimage.png)
+```
+
+Then, enable 'Render markdown' under Table Settings.
 
 ## Using tools and functions
 
@@ -398,6 +463,7 @@ The following properties can be overwritten in provider config:
 - `thread.messages` - A list of message objects that the thread is created with.
 - `temperature` - Temperature for the model
 - `toolChoice` - Controls whether the AI should use a tool
+- `attachments` - File attachments to include in messages - see [Assistant v2 attachments](https://platform.openai.com/docs/assistants/migration)
 
 Here's an example of a more detailed config:
 

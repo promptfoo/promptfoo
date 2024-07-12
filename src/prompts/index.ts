@@ -8,6 +8,7 @@ import type {
   TestSuite,
   ProviderOptions,
 } from '../types';
+import { parsePathOrGlob } from '../util';
 import { processJsFile } from './processors/javascript';
 import { processJsonFile } from './processors/json';
 import { processJsonlFile } from './processors/jsonl';
@@ -15,7 +16,7 @@ import { processPythonFile } from './processors/python';
 import { processString } from './processors/string';
 import { processTxtFile } from './processors/text';
 import { processYamlFile } from './processors/yaml';
-import { maybeFilePath, normalizeInput, parsePathOrGlob } from './utils';
+import { maybeFilePath, normalizeInput } from './utils';
 
 export * from './grading';
 
@@ -99,20 +100,20 @@ export async function processPrompt(
     extension,
     functionName,
     isPathPattern,
-    promptPath,
+    filePath,
   }: {
-    extension: string;
+    extension?: string;
     functionName?: string;
     isPathPattern: boolean;
-    promptPath: string;
+    filePath: string;
   } = parsePathOrGlob(basePath, prompt.raw);
 
   if (isPathPattern && maxRecursionDepth > 0) {
-    const globbedPath = globSync(promptPath.replace(/\\/g, '/'), {
+    const globbedPath = globSync(filePath.replace(/\\/g, '/'), {
       windowsPathsNoEscape: true,
     });
     logger.debug(
-      `Expanded prompt ${prompt.raw} to ${promptPath} and then to ${JSON.stringify(globbedPath)}`,
+      `Expanded prompt ${prompt.raw} to ${filePath} and then to ${JSON.stringify(globbedPath)}`,
     );
     const prompts: Prompt[] = [];
     for (const globbedFilePath of globbedPath) {
@@ -123,26 +124,33 @@ export async function processPrompt(
       );
       prompts.push(...processedPrompts);
     }
+    if (prompts.length === 0) {
+      // There was nothing at this filepath, so treat it as a prompt string.
+      logger.debug(
+        `Attempted to load file at "${prompt.raw}", but no file found. Using raw string.`,
+      );
+      prompts.push(...processString(prompt));
+    }
     return prompts;
   }
 
   if (extension === '.json') {
-    return processJsonFile(promptPath, prompt);
+    return processJsonFile(filePath, prompt);
   }
   if (extension === '.jsonl') {
-    return processJsonlFile(promptPath, prompt);
+    return processJsonlFile(filePath, prompt);
   }
-  if (['.js', '.cjs', '.mjs'].includes(extension)) {
-    return processJsFile(promptPath, prompt, functionName);
+  if (extension && ['.js', '.cjs', '.mjs'].includes(extension)) {
+    return processJsFile(filePath, prompt, functionName);
   }
   if (extension === '.py') {
-    return processPythonFile(promptPath, prompt, functionName);
+    return processPythonFile(filePath, prompt, functionName);
   }
   if (extension === '.txt') {
-    return processTxtFile(promptPath, prompt);
+    return processTxtFile(filePath, prompt);
   }
-  if (['.yml', '.yaml'].includes(extension)) {
-    return processYamlFile(promptPath, prompt);
+  if (extension && ['.yml', '.yaml'].includes(extension)) {
+    return processYamlFile(filePath, prompt);
   }
   return [];
 }
@@ -158,7 +166,6 @@ export async function readPrompts(
   basePath: string = '',
 ): Promise<Prompt[]> {
   logger.debug(`Reading prompts from ${JSON.stringify(promptPathOrGlobs)}`);
-
   const promptPartials: Partial<Prompt>[] = normalizeInput(promptPathOrGlobs);
   const prompts: Prompt[] = [];
   for (const prompt of promptPartials) {

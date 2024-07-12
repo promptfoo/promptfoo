@@ -1,59 +1,69 @@
 import React from 'react';
-import clsx from 'clsx';
+import Link from '@docusaurus/Link';
 import styles from './styles.module.css';
 
-type FeatureItem = {
-  title: string;
-  Svg: React.ComponentType<React.ComponentProps<'svg'>>;
-  description: JSX.Element;
-};
+export default function HomepageFeatures() {
+  const features = [
+    {
+      title: 'Comprehensive security coverage',
+      description:
+        'Custom probes for your application that identify failures you actually care about, not just generic jailbreaks and prompt injections.',
+      image: '/img/security-coverage.png',
+      image2x: '/img/security-coverage.png',
+      alt: 'promptfoo security coverage examples',
+      link: '/docs/red-team',
+      cta: 'Learn More',
+    },
+    {
+      title: 'Built for developers',
+      description:
+        'Move quickly with a command-line interface, live reloads, and caching. No SDKs, cloud dependencies, or logins.',
+      image:
+        'https://user-images.githubusercontent.com/310310/244891726-480e1114-d049-40b9-bd5f-f81c15060284.gif',
+      image2x:
+        'https://user-images.githubusercontent.com/310310/244891726-480e1114-d049-40b9-bd5f-f81c15060284.gif',
+      alt: 'promptfoo CLI',
+      link: '/docs/getting-started',
+      cta: 'Get Started',
+    },
+    {
+      title: 'Battle-tested, 100% open-source',
+      description:
+        'Used by teams serving millions of users and supported by an active open-source community.',
+      image: '/img/github-repo.png',
+      image2x: '/img/github-repo.png',
+      alt: 'promptfoo github repo',
+      link: 'https://github.com/promptfoo/promptfoo',
+      cta: 'View on GitHub',
+    },
+  ];
 
-const FeatureList: FeatureItem[] = [
-  {
-    title: 'Create a test dataset',
-    Svg: require('@site/static/img/svgrepo_science2.svg').default,
-    description: (
-      <>Use a representative sample of user inputs to reduce subjectivity when tuning prompts.</>
-    ),
-  },
-  {
-    title: 'Set up evaluation metrics',
-    Svg: require('@site/static/img/svgrepo_science.svg').default,
-    description: <>Use built-in metrics, LLM-graded evals, or define your own custom metrics.</>,
-  },
-  {
-    title: 'Select the best prompt & model',
-    Svg: require('@site/static/img/svgrepo_electricity.svg').default,
-    description: (
-      <>
-        Compare prompts and model outputs side-by-side, or integrate the library into your existing
-        test/CI workflow.
-      </>
-    ),
-  },
-];
-
-function Feature({ title, Svg, description }: FeatureItem) {
-  return (
-    <div className={clsx('col col--4')}>
-      <div className="text--center">
-        <Svg className={styles.featureSvg} role="img" />
-      </div>
-      <div className="text--center padding-horiz--md">
-        <h3>{title}</h3>
-        <p>{description}</p>
-      </div>
-    </div>
-  );
-}
-
-export default function HomepageFeatures(): JSX.Element {
   return (
     <section className={styles.features}>
       <div className="container">
-        <div className="row">
-          {FeatureList.map((props, idx) => (
-            <Feature key={idx} {...props} />
+        {/*<h2 className={styles.featuresTitle}>Why Promptfoo?</h2>*/}
+        <div className={styles.featuresList}>
+          {features.map((feature, idx) => (
+            <div key={idx} className={styles.featureItem}>
+              <div className={styles.featureContent}>
+                <h3>{feature.title}</h3>
+                <p>{feature.description}</p>
+                <Link to={feature.link} className="button button--secondary">
+                  {feature.cta}
+                </Link>
+              </div>
+              <div className={styles.featureImageWrapper}>
+                <Link to={feature.link}>
+                  <img
+                    loading="lazy"
+                    src={feature.image}
+                    srcSet={`${feature.image} 1x, ${feature.image2x} 2x`}
+                    alt={feature.alt}
+                    className={styles.featureImage}
+                  />
+                </Link>
+              </div>
+            </div>
           ))}
         </div>
       </div>

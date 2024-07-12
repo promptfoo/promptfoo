@@ -31,6 +31,7 @@ const OPENAI_CHAT_MODELS = [
     'gpt-4-1106-preview',
     'gpt-4-1106-vision-preview',
     'gpt-4-0125-preview',
+    'gpt-4-turbo-2024-04-09',
     'gpt-4-turbo-preview',
     'gpt-4-turbo',
   ].map((model) => ({
@@ -591,6 +592,7 @@ type OpenAiAssistantOptions = OpenAiSharedOptions & {
     | 'auto'
     | { type: 'function'; function?: { name: string } }
     | { type: 'file_search' };
+  attachments?: OpenAI.Beta.Threads.Message.Attachment[];
 };
 
 export class OpenAiAssistantProvider extends OpenAiGenericProvider {
@@ -627,7 +629,13 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
     });
 
     const messages = parseChatPrompt(prompt, [
-      { role: 'user', content: prompt },
+      {
+        role: 'user',
+        content: prompt,
+        ...(this.assistantConfig.attachments
+          ? { attachments: this.assistantConfig.attachments }
+          : {}),
+      },
     ]) as OpenAI.Beta.Threads.ThreadCreateParams.Message[];
     const body: OpenAI.Beta.Threads.ThreadCreateAndRunParams = {
       assistant_id: this.assistantId,
@@ -852,21 +860,26 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
     }
 
     if (!response) {
-      response = await openai.images.generate({
-        model: this.modelName,
-        prompt,
-        n: 1,
-        size:
-          ((this.config.size || process.env.OPENAI_IMAGE_SIZE) as
-            | '1024x1024'
-            | '256x256'
-            | '512x512'
-            | '1792x1024'
-            | '1024x1792'
-            | undefined) || '1024x1024',
-      });
+      try {
+        response = await openai.images.generate({
+          model: this.modelName,
+          prompt,
+          n: 1,
+          size:
+            ((this.config.size || process.env.OPENAI_IMAGE_SIZE) as
+              | '1024x1024'
+              | '256x256'
+              | '512x512'
+              | '1792x1024'
+              | '1024x1792'
+              | undefined) || '1024x1024',
+        });
+      } catch (error) {
+        return {
+          error: `OpenAI threw error: ${(error as Error).message}`,
+        };
+      }
     }
-
     const url = response.data[0].url;
     if (!url) {
       return {

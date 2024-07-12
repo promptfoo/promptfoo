@@ -36,7 +36,7 @@ async function handlePrompt(id: string) {
     table.push({
       'Eval ID': evl.id.slice(0, 6),
       'Dataset ID': evl.datasetId.slice(0, 6),
-      'Raw score': evl.metrics?.score.toFixed(2) || '-',
+      'Raw score': evl.metrics?.score?.toFixed(2) || '-',
       'Pass rate':
         evl.metrics && evl.metrics.testPassCount + evl.metrics.testFailCount > 0
           ? `${(
@@ -116,7 +116,7 @@ async function handleDataset(id: string) {
     table.push({
       'Eval ID': prompt.evalId.slice(0, 6),
       'Prompt ID': prompt.id.slice(0, 6),
-      'Raw score': prompt.prompt.metrics?.score.toFixed(2) || '-',
+      'Raw score': prompt.prompt.metrics?.score?.toFixed(2) || '-',
       'Pass rate':
         prompt.prompt.metrics &&
         prompt.prompt.metrics.testPassCount + prompt.prompt.metrics.testFailCount > 0

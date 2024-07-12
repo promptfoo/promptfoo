@@ -100,6 +100,39 @@ def get_assert(output: str, context) -> Union[bool, float, Dict[str, Any]]:
     }
 ```
 
+You can also return nested metrics and assertions via a `GradingResult` object:
+
+```py
+{
+    'pass': True,
+    'score': 0.75,
+    'reason': 'Looks good to me',
+    'componentResults': [{
+        'pass': 'bananas' in output.lower(),
+        'score': 0.5,
+        'reason': 'Contains banana',
+    }, {
+        'pass': 'yellow' in output.lower(),
+        'score': 0.5,
+        'reason': 'Contains yellow',
+    }]
+}
+```
+
+### GradingResult types
+
+Here's a Python type definition you can use for the [`GradingResult`](/docs/configuration/reference/#gradingresult) object:
+
+```py
+@dataclass
+class GradingResult:
+    pass_: bool  # 'pass' is a reserved keyword in Python
+    score: float
+    reason: str
+    component_results: Optional[List['GradingResult']] = None
+    named_scores: Optional[Dict[str, float]] = None  # Appear as metrics in the UI
+```
+
 ## Overriding the Python binary
 
 By default, promptfoo will run `python` in your shell. Make sure `python` points to the appropriate executable.

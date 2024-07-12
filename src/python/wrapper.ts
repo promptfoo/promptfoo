@@ -17,7 +17,7 @@ export async function runPython(
   method: string,
   args: (string | object | undefined)[],
   options: { pythonExecutable?: string } = {},
-): Promise<any> {
+): Promise<string | object> {
   const absPath = path.resolve(scriptPath);
   const tempJsonPath = path.join(
     os.tmpdir(),

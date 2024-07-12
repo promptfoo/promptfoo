@@ -21,3 +21,7 @@ If you _explicitly_ run the [share command](/docs/usage/sharing), then your inpu
 ### Do you collect any PII?
 
 No, we do not collect any PII (personally identifiable information).
+
+### How do I use a proxy?
+
+Requests to most providers are made via [proxy-agent](https://www.npmjs.com/package/proxy-agent), which respects `HTTP_PROXY` and `HTTPS_PROXY` [environment variables](https://www.npmjs.com/package/proxy-from-env#environment-variables) of the form `[protocol://]<host>[:port]`.

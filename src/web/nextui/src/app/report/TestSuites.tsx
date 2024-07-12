@@ -31,8 +31,7 @@ const getSubCategoryStats = (
       subCategoryStats.push({
         pluginName: subCategory,
         type: categoryAliases[subCategory as keyof typeof categoryAliases] || subCategory,
-        description:
-          subCategoryDescriptions[subCategory as keyof typeof subCategoryDescriptions] || '',
+        description: subCategoryDescriptions[subCategory] || '',
         passRate: categoryStats[subCategory]
           ? ((categoryStats[subCategory].pass / categoryStats[subCategory].total) * 100).toFixed(
               1,
@@ -172,21 +171,20 @@ const TestSuites: React.FC<{
                 return (
                   <TableRow key={index}>
                     <TableCell>
-                      {displayNameOverrides[
-                        subCategory.pluginName as keyof typeof displayNameOverrides
-                      ] || subCategory.type}
+                      <span style={{ fontWeight: 500 }}>
+                        {displayNameOverrides[
+                          subCategory.pluginName as keyof typeof displayNameOverrides
+                        ] || subCategory.type}
+                      </span>
                     </TableCell>
                     <TableCell>{subCategory.description}</TableCell>
                     <TableCell className={passRateClass}>
-                      {subCategory.passRate} (
+                      <strong>{subCategory.passRate}</strong>
                       {subCategory.passRateWithFilter !== subCategory.passRate ? (
                         <>
-                          <strong>{subCategory.passRateWithFilter} with mitigation</strong>
+                          <br />({subCategory.passRateWithFilter} with mitigation)
                         </>
-                      ) : (
-                        subCategory.passRateWithFilter
-                      )}
-                      )
+                      ) : null}
                     </TableCell>
                     <TableCell className={`vuln-${subCategory.severity.toLowerCase()}`}>
                       {subCategory.severity}

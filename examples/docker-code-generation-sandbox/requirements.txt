@@ -1,0 +1,10 @@
+certifi==2024.7.4
+charset-normalizer==3.3.2
+docker==7.1.0
+epicbox==1.1.0
+idna==3.7
+python-dateutil==2.9.0.post0
+requests==2.32.3
+six==1.16.0
+structlog==24.2.0
+urllib3==1.26.19

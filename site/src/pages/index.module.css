@@ -1,13 +1,19 @@
-/**
- * CSS files with the .module.css suffix will be treated as CSS modules
- * and scoped locally.
- */
-
 .heroBanner {
   padding: 4rem 0;
   text-align: center;
   position: relative;
   overflow: hidden;
+}
+
+.heroBanner h1 {
+  font-size: 4rem;
+  margin-bottom: 2rem;
+}
+
+.heroBanner p {
+  font-size: 1.25rem;
+  font-weight: normal;
+  margin-bottom: 2rem;
 }
 
 @media screen and (max-width: 996px) {
@@ -20,4 +26,218 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 1rem;
+}
+
+.walkthroughContainer {
+  max-width: min(1400px, 95%);
+  margin: 2rem auto;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.walkthroughTabs {
+  display: flex;
+  justify-content: center;
+  border-bottom: 1px solid #e0e0e0;
+  margin-bottom: 1rem;
+}
+
+.walkthroughTab {
+  padding: 1rem 1rem;
+  border: none;
+  background: none;
+  font-size: 1.25rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.walkthroughTabActive {
+  border-bottom: 2px solid #1890ff;
+  color: #1890ff;
+}
+
+.walkthroughContent {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.walkthroughDescription {
+  width: 30%;
+}
+
+.walkthroughImageContainer {
+  width: 70%;
+  padding-right: 2rem;
+}
+
+.walkthroughImage {
+  width: 100%;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.codeBox {
+  background-color: #f4f4f4;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 1rem;
+  margin: 1rem 0;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 0.9rem;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  animation: rainbow-glint 5s linear infinite;
+}
+
+@keyframes rainbow-glint {
+  0%,
+  100% {
+    box-shadow: 0 0 5px rgba(255, 0, 0, 0.5);
+  }
+  20% {
+    box-shadow: 0 0 5px rgba(255, 165, 0, 0.5);
+  }
+  40% {
+    box-shadow: 0 0 5px rgba(255, 255, 0, 0.5);
+  }
+  60% {
+    box-shadow: 0 0 5px rgba(0, 128, 0, 0.5);
+  }
+  80% {
+    box-shadow: 0 0 5px rgba(0, 0, 255, 0.5);
+  }
+}
+
+@media screen and (max-width: 768px) {
+  .walkthroughContent {
+    flex-direction: column;
+  }
+
+  .walkthroughDescription,
+  .walkthroughImageContainer {
+    width: 100%;
+    padding: 0;
+    margin-bottom: 1rem;
+  }
+
+  .walkthroughDescription {
+    padding-right: 0;
+    margin-bottom: 1rem;
+  }
+}
+
+.imageSection {
+  text-align: center;
+  padding: 4rem 0;
+}
+
+.featureImage {
+  max-width: min(100%, 1024px);
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transition: transform 0.3s ease;
+}
+
+.featureImage:hover {
+  transform: scale(1.02);
+}
+
+.logoSection {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 2rem;
+  padding: 4rem 0;
+}
+
+.logoSection h2 {
+  text-align: center;
+  font-size: 2rem;
+}
+
+.actionOrientedSection {
+  padding: 4rem 4rem;
+  background-color: #f4f4f4;
+  text-align: center;
+  border-radius: 12px;
+  min-width: min(100%, 1440px);
+}
+
+.actionOrientedSection h2 {
+  font-size: 2rem;
+  color: #333;
+  margin-bottom: 2rem;
+}
+
+.actionOrientedSection p {
+  font-size: 1.125rem;
+  color: #666;
+  margin-bottom: 2rem;
+}
+
+.actionOrientedSection img {
+  border-radius: 12px;
+}
+
+.ctaSection {
+  text-align: center;
+  padding: 6rem 0;
+  /*
+  background-color: #f8f9fa;
+  */
+  margin: 4rem 0;
+}
+
+.ctaSection h3 {
+  font-size: 2rem;
+  margin-bottom: 2rem;
+  color: #333;
+}
+
+@media screen and (max-width: 768px) {
+  .heroBanner h1 {
+    font-size: 2.5rem;
+    margin: 2rem 0;
+  }
+
+  .walkthroughContainer {
+    flex-direction: column;
+  }
+
+  .walkthroughButtons,
+  .walkthroughImageContainer {
+    width: 100%;
+  }
+
+  .walkthroughButtons {
+    margin-bottom: 2rem;
+  }
+
+  .walkthroughButton {
+    align-items: center;
+  }
+
+  .actionOrientedSection {
+    padding: 4rem 0;
+  }
+
+  .actionOrientedSection h2 {
+    font-size: 2rem;
+  }
+
+  .imageSection {
+    padding: 2rem 0;
+  }
+
+  .ctaSection {
+    padding: 4rem 0;
+  }
+
+  .ctaSection h3 {
+    font-size: 1.5rem;
+  }
 }

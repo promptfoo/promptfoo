@@ -1,7 +1,11 @@
 import { AssertionsResult } from '../../src/assertions/AssertionsResult';
-import { AssertionSet } from '../../src/types';
+import { AssertionSet, GradingResult } from '../../src/types';
 
 describe('AssertionsResult', () => {
+  beforeEach(() => {
+    delete process.env.PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES;
+  });
+
   const succeedingResult = {
     pass: true,
     score: 1,
@@ -56,17 +60,13 @@ describe('AssertionsResult', () => {
   });
 
   it('handles PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES', () => {
-    const initialEnv = process.env.PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES;
     process.env.PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES = 'true';
-
     expect(() =>
       assertionsResult.addResult({
         index: 0,
         result: failingResult,
       }),
     ).toThrow(new Error(failingResult.reason));
-
-    process.env.PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES = initialEnv;
   });
 
   it('handles named metrics', () => {
@@ -155,6 +155,50 @@ describe('AssertionsResult', () => {
     assertionsResult = new AssertionsResult({ parentAssertionSet });
 
     expect(assertionsResult.parentAssertionSet).toBe(parentAssertionSet);
+  });
+
+  it('flattens nested componentResults', () => {
+    assertionsResult = new AssertionsResult();
+
+    const nestedResult: GradingResult = {
+      pass: true,
+      score: 0.8,
+      reason: 'Nested assertion passed',
+      componentResults: [
+        {
+          pass: true,
+          score: 0.9,
+          reason: 'Sub-assertion 1 passed',
+          assertion: { type: 'equals', value: 'test' },
+        },
+        {
+          pass: true,
+          score: 0.7,
+          reason: 'Sub-assertion 2 passed',
+          assertion: { type: 'contains', value: 'example' },
+        },
+      ],
+      assertion: { type: 'python', value: 'path/to/file.py' },
+    };
+
+    assertionsResult.addResult({
+      index: 0,
+      result: nestedResult,
+    });
+
+    const result = assertionsResult.testResult();
+
+    expect(result.componentResults).toBeDefined();
+    expect(result.componentResults).toHaveLength(3);
+    expect(result.componentResults?.[0]).toEqual(nestedResult);
+    expect(result.componentResults?.[1]).toEqual({
+      ...nestedResult.componentResults?.[0],
+      assertion: nestedResult.componentResults?.[0].assertion || nestedResult.assertion,
+    });
+    expect(result.componentResults?.[2]).toEqual({
+      ...nestedResult.componentResults?.[1],
+      assertion: nestedResult.componentResults?.[1].assertion || nestedResult.assertion,
+    });
   });
 
   describe('noAssertsResult', () => {
