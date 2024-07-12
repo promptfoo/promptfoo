@@ -47,12 +47,19 @@ export enum BrowserBehavior {
   SKIP = 2,
 }
 
+// TODO:
+// Consider renaming to reflect that this function is strictly invoked from the CLI to serve /
+// service the app.
 export async function startServer(
   port = 15500,
   apiBaseUrl = '',
   browserBehavior = BrowserBehavior.ASK,
   filterDescription?: string,
+  serveApp: boolean = true,
 ) {
+  // TODO:
+  // routes definitions, middleware, sockets, etc. should *not* be defined within this scope
+  // but rather imported and served.
   const app = express();
 
   const staticDir = path.join(getDirectory(), 'web', 'nextui');
@@ -225,7 +232,7 @@ export async function startServer(
 
   // Must come after the above routes (particularly /api/config) so it doesn't
   // overwrite dynamic routes.
-  app.use(express.static(staticDir));
+  if (serveApp) app.use(express.static(staticDir));
 
   httpServer.listen(port, () => {
     const url = `http://localhost:${port}`;
