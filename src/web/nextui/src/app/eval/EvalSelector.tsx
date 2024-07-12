@@ -114,10 +114,16 @@ const EvalSelector: React.FC<EvalSelectorProps> = ({
     };
   }, []);
 
+  const isMac =
+    typeof navigator === 'undefined'
+      ? false
+      : navigator.platform.toUpperCase().indexOf('MAC') !== -1;
+  const tooltipTitle = isMac ? 'Search for Evals (⌘ + K)' : 'Search for Evals (Ctrl + K)';
+
   return (
     <>
-      <Tooltip title="Search for Evals (Ctrl/Cmd + K)" arrow>
-        <IconButton onClick={handleOpen} color="primary">
+      <Tooltip title={tooltipTitle} arrow>
+        <IconButton onClick={handleOpen} color="primary" size="small">
           <FolderIcon />
         </IconButton>
       </Tooltip>
