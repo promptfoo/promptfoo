@@ -156,7 +156,7 @@ export function generateCommand(
     .option('-w, --write', 'Write results to promptfoo configuration file')
     .option(
       '--provider <provider>',
-      `Provider to use for generating adversarial tests. Defaults to: ${REDTEAM_MODEL}`,
+      `Provider to use for generating adversarial tests. Defaults to the default grading provider.`,
     )
     .option('--numPersonas <number>', 'Number of personas to generate', '5')
     .option('--numTestCasesPerPersona <number>', 'Number of test cases per persona', '3')
