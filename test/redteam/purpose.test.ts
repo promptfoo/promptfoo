@@ -5,6 +5,7 @@ import { ApiProvider } from '../../src/types';
 // Mock the logger to avoid console output during tests
 jest.mock('../../src/logger', () => ({
   debug: jest.fn(),
+  error: jest.fn(),
 }));
 
 describe('getPurpose', () => {
@@ -87,5 +88,20 @@ describe('getPurpose', () => {
     mockProvider.callApi.mockRejectedValue(new Error('API call failed'));
 
     await expect(getPurpose(mockProvider, ['Some prompt'])).rejects.toThrow('API call failed');
+  });
+
+  it('should return default object when parsing fails', async () => {
+    const mockOutput = 'Invalid JSON';
+
+    mockProvider.callApi.mockResolvedValue({ output: mockOutput });
+
+    const result = await getPurpose(mockProvider, ['Some prompt']);
+
+    expect(result).toEqual({
+      intent: undefined,
+      variables: undefined,
+    });
+
+    expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Failed to parse purpose:'));
   });
 });

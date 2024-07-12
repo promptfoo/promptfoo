@@ -1,11 +1,13 @@
 import dedent from 'dedent';
+import { z } from 'zod';
 import logger from '../logger';
 import { ApiProvider } from '../types';
 
-export interface Purpose {
-  intent?: string;
-  variables?: string[];
-}
+export const PurposeSchema = z.object({
+  intent: z.string().optional(),
+  variables: z.array(z.string()).optional(),
+});
+export type Purpose = z.infer<typeof PurposeSchema>;
 
 export async function getPurpose(provider: ApiProvider, prompts: string[]): Promise<Purpose> {
   const { output } = await provider.callApi(dedent`
@@ -101,9 +103,15 @@ export async function getPurpose(provider: ApiProvider, prompts: string[]): Prom
     Given the above prompts, output a JSON object that specifies the "system purpose" of the application in a single phrase and lists any variables in an array. Ensure the output is in JSON format. Start with { "intent": "
   `);
   // sometimes the llm returns ```json, find the first { and the last }
-  const result = JSON.parse(
-    output.substring(output.indexOf('{'), output.lastIndexOf('}') + 1),
-  ) as Purpose;
-  logger.debug(`purpose and prompt variables: ${JSON.stringify(result)}`);
-  return result;
+  try {
+    const result = JSON.parse(
+      output.substring(output.indexOf('{'), output.lastIndexOf('}') + 1),
+    ) as Purpose;
+    logger.debug(`purpose and prompt variables: ${JSON.stringify(result)}`);
+    const parsedResult = PurposeSchema.parse(result);
+    return parsedResult;
+  } catch (e) {
+    logger.error(`Failed to parse purpose: ${e}`);
+  }
+  return { intent: undefined, variables: undefined };
 }
