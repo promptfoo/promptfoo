@@ -152,16 +152,12 @@ export async function synthesize({
   let purpose = purposeOverride;
   if (!purpose || !injectVar) {
     const inferredVars = await getPurpose(reasoningProvider, prompts);
-    purpose = inferredVars.intent;
-    injectVar = inferredVars.variables[0] || 'query';
+    purpose = purposeOverride || inferredVars.intent;
+    injectVar = injectVar || inferredVars.variables?.[0] || 'query';
   }
   invariant(
     purpose,
     `Generation of inferred purpose was not successful. Try providing a purpose explicitly with --purpose.`,
-  );
-  invariant(
-    injectVar,
-    `Generation of inferred injectVar was not successful. Try providing an injectVar explicitly with --injectVar.`,
   );
   updateProgress();
 

@@ -1,11 +1,10 @@
 import dedent from 'dedent';
-import invariant from 'tiny-invariant';
 import logger from '../logger';
 import { ApiProvider } from '../types';
 
 export interface Purpose {
-  intent: string;
-  variables: string[];
+  intent?: string;
+  variables?: string[];
 }
 
 export async function getPurpose(provider: ApiProvider, prompts: string[]): Promise<Purpose> {
@@ -101,23 +100,10 @@ export async function getPurpose(provider: ApiProvider, prompts: string[]): Prom
     
     Given the above prompts, output a JSON object that specifies the "system purpose" of the application in a single phrase and lists any variables in an array. Ensure the output is in JSON format. Start with { "intent": "
   `);
-
-  logger.debug(`Purpose: ${output} typeof: ${typeof output}`);
-
   // sometimes the llm returns ```json, find the first { and the last }
-  const start = output.indexOf('{');
-  const end = output.lastIndexOf('}');
-  const json = output.substring(start, end + 1);
-  const result = JSON.parse(json) as Purpose;
-  logger.debug(`result: ${JSON.stringify(result)}`);
-  invariant(
-    typeof result.intent === 'string',
-    `Expected intent to be a string, got: ${result.intent}`,
-  );
-  invariant(
-    Array.isArray(result.variables),
-    `Expected variables to be an array, got: ${result.variables}`,
-  );
-  invariant(result.variables.length > 0, `Variables must not be empty`);
+  const result = JSON.parse(
+    output.substring(output.indexOf('{'), output.lastIndexOf('}') + 1),
+  ) as Purpose;
+  logger.debug(`purpose and prompt variables: ${JSON.stringify(result)}`);
   return result;
 }
