@@ -16,7 +16,7 @@ import HijackingPlugin from './plugins/hijacking';
 import OverreliancePlugin from './plugins/overreliance';
 import { getPiiTests } from './plugins/pii';
 import PoliticsPlugin from './plugins/politics';
-import { Purpose, getPurpose } from './purpose';
+import { getPurpose } from './purpose';
 
 interface SynthesizeOptions {
   injectVar?: string;
