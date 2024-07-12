@@ -40,7 +40,7 @@ import ResultsTable from './ResultsTable';
 import SettingsModal from './ResultsViewSettingsModal';
 import ShareModal from './ShareModal';
 import { useStore as useResultsViewStore } from './store';
-import type { FilterMode } from './types';
+import type { FilterMode, ResultLightweightWithLabel } from './types';
 import './ResultsView.css';
 
 const ResponsiveStack = styled(Stack)(({ theme }) => ({
@@ -52,10 +52,7 @@ const ResponsiveStack = styled(Stack)(({ theme }) => ({
 }));
 
 interface ResultsViewProps {
-  recentEvals: {
-    id: string;
-    label: string;
-  }[];
+  recentEvals: ResultLightweightWithLabel[];
   onRecentEvalSelected: (file: string) => void;
   defaultEvalId?: string;
 }
@@ -320,18 +317,20 @@ export default function ResultsView({
                 size="small"
                 options={recentEvals}
                 renderOption={(props, option) => (
-                  <li {...props} key={option.id}>
-                    {option.label}
+                  <li {...props} key={option.evalId}>
+                    {option.label} - {option.numTests} tests
                   </li>
                 )}
                 style={{ width: 350 }}
                 renderInput={(params: AutocompleteRenderInputParams) => (
                   <TextField {...params} label="Eval run" variant="outlined" />
                 )}
-                defaultValue={recentEvals.find((evl) => evl.id === defaultEvalId) || recentEvals[0]}
-                onChange={(event, newValue: { label: string; id?: string } | null) => {
-                  if (newValue && newValue.id) {
-                    onRecentEvalSelected(newValue.id);
+                defaultValue={
+                  recentEvals.find((evl) => evl.evalId === defaultEvalId) || recentEvals[0]
+                }
+                onChange={(event, newValue: ResultLightweightWithLabel | null) => {
+                  if (newValue && newValue.evalId) {
+                    onRecentEvalSelected(newValue.evalId);
 
                     // Reset all filters and search
                     setSearchText('');
