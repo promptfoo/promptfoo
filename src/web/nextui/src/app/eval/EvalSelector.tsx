@@ -61,7 +61,7 @@ const EvalSelector: React.FC<EvalSelectorProps> = ({
     handleClose();
   };
 
-  const scrollToFocusedItem = () => {
+  const scrollToFocusedItem = React.useCallback(() => {
     if (focusedIndex >= 0 && tableContainerRef.current) {
       const tableRows = tableContainerRef.current.querySelectorAll('tbody tr');
       const targetIndex = Math.min(focusedIndex + 3, tableRows.length - 1);
@@ -72,7 +72,7 @@ const EvalSelector: React.FC<EvalSelectorProps> = ({
         });
       }
     }
-  };
+  }, [focusedIndex]);
 
   const handleKeyDown = (event: React.KeyboardEvent) => {
     switch (event.key) {
@@ -97,7 +97,7 @@ const EvalSelector: React.FC<EvalSelectorProps> = ({
 
   React.useEffect(() => {
     scrollToFocusedItem();
-  }, [focusedIndex]);
+  }, [scrollToFocusedItem]);
 
   React.useEffect(() => {
     const handleGlobalKeyDown = (event: KeyboardEvent) => {
