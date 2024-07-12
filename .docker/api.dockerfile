@@ -11,7 +11,7 @@ WORKDIR /api
 
 COPY --from=builder /api/dist/server ./
 COPY --from=builder /api/node_modules ./node_modules
-COPY --from=builder /api/dist/drizzle ./drizzle
+COPY --from=builder /api/drizzle ./drizzle
 
 EXPOSE 15500
 
