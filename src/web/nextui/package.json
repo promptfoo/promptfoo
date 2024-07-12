@@ -30,6 +30,7 @@
     "encoding": "^0.1.13",
     "eslint": "^8.57.0",
     "eslint-config-next": "13.4.13",
+    "fuzzysearch": "^1.0.3",
     "idb-keyval": "^6.2.1",
     "js-yaml": "^4.1.0",
     "next": "13.4.13",
@@ -55,6 +56,7 @@
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.11",
     "@types/diff": "^5.2.1",
+    "@types/fuzzysearch": "^1.0.2",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "20.14.2",
     "@types/prismjs": "^1.26.4",

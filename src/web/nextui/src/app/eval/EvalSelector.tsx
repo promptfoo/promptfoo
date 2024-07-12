@@ -16,6 +16,7 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
+import fuzzysearch from 'fuzzysearch';
 import { ResultLightweightWithLabel } from './types';
 
 interface EvalSelectorProps {
@@ -52,8 +53,9 @@ const EvalSelector: React.FC<EvalSelectorProps> = ({
 
   const filteredEvals = recentEvals.filter(
     (_eval) =>
-      _eval.label.toLowerCase().includes(searchText.toLowerCase()) ||
-      _eval.description?.toLowerCase().includes(searchText.toLowerCase()),
+      fuzzysearch(searchText.toLowerCase(), _eval.label.toLowerCase()) ||
+      (typeof _eval.description === 'string' &&
+        fuzzysearch(searchText.toLowerCase(), _eval.description.toLowerCase())),
   );
 
   const handleSelectEval = (evalId: string) => {
