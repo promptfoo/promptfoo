@@ -32,6 +32,7 @@ import type { VisibilityState } from '@tanstack/table-core';
 import { useRouter, useSearchParams } from 'next/navigation';
 import invariant from 'tiny-invariant';
 import { useDebounce } from 'use-debounce';
+import CompareEvalMenuItem from './CompareEvalMenuItem';
 import ConfigModal from './ConfigModal';
 import DownloadMenu from './DownloadMenu';
 import EvalSelectorButton from './EvalSelectorButton';
@@ -40,7 +41,7 @@ import ResultsTable from './ResultsTable';
 import SettingsModal from './ResultsViewSettingsModal';
 import ShareModal from './ShareModal';
 import { useStore as useResultsViewStore } from './store';
-import type { FilterMode, ResultLightweightWithLabel } from './types';
+import type { EvaluateTable, FilterMode, ResultLightweightWithLabel } from './types';
 import './ResultsView.css';
 
 const ResponsiveStack = styled(Stack)(({ theme }) => ({
@@ -67,6 +68,7 @@ export default function ResultsView({
   const {
     author,
     table,
+    setTable,
     config,
     setConfig,
     maxTextLength,
@@ -138,6 +140,37 @@ export default function ResultsView({
       alert('Sorry, something went wrong.');
     } finally {
       setShareLoading(false);
+    }
+  };
+
+  const handleComparisonEvalSelected = async (evalId: string) => {
+    try {
+      const response = await fetch(`${await getApiBaseUrl()}/api/results/${evalId}`, {
+        cache: 'no-store',
+      });
+      const body = await response.json();
+      const comparisonTable = body.data.results.table as EvaluateTable;
+
+      // Combine the comparison table with the current table
+      const combinedTable: EvaluateTable = {
+        head: {
+          prompts: [...table.head.prompts, ...comparisonTable.head.prompts],
+          vars: table.head.vars, // Assuming vars are the same
+        },
+        body: table.body.map((row, index) => ({
+          ...row,
+          outputs: [...row.outputs, ...(comparisonTable.body[index]?.outputs || [])],
+        })),
+      };
+
+      // Update the state with the combined table
+      setTable(combinedTable);
+
+      // Update other relevant state if needed
+      setConfig({ ...config, ...body.data.config });
+    } catch (error) {
+      console.error('Error fetching comparison eval:', error);
+      alert('Failed to load comparison eval. Please try again.');
     }
   };
 
@@ -384,6 +417,12 @@ export default function ResultsView({
                 open={Boolean(anchorEl)}
                 onClose={handleMenuClose}
               >
+                <Tooltip title="Combine this eval with another eval run" placement="left">
+                  <CompareEvalMenuItem
+                    recentEvals={recentEvals}
+                    onComparisonEvalSelected={handleComparisonEvalSelected}
+                  />
+                </Tooltip>
                 <Tooltip title="View the configuration that defines this eval" placement="left">
                   <MenuItem onClick={() => setConfigModalOpen(true)}>
                     <ListItemIcon>
