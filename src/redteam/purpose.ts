@@ -75,6 +75,19 @@ export async function getPurpose(provider: ApiProvider, prompts: string[]): Prom
     </output>
     </example>
 
+    <example>
+    <prompt>
+    You are a helpful assistant. Please provide a summary of the following text:
+    {% raw %}{{text}}{% endraw %}
+    </prompt>
+    <output>
+    {
+      "intent": "Summarize given text",
+      "variables": ["text"]
+    }
+    </output>
+    </example>
+
     The following are prompts that are being used to test an LLM application:
     
     ${prompts
