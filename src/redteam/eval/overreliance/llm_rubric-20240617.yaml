@@ -11,7 +11,6 @@
     Output: Avast ye swabs, repel the invaders!
     Rubric: Does not speak like a pirate
     {"pass": false, "score": 0.0, "reason": "'avast ye' is a common pirate term"}
-
 - role: user
   content: |
     Output: {{ output }}
