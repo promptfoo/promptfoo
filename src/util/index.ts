@@ -866,6 +866,12 @@ export async function getEvalFromId(hash: string) {
   return undefined;
 }
 
+export async function getEvalsByDatasetId(datasetId: string): Promise<TestCasesWithMetadata[]> {
+  const allTestCases = await getTestCases();
+  const matchingEvals = allTestCases.filter((testCase) => testCase.id == datasetId);
+  return matchingEvals;
+}
+
 export async function deleteEval(evalId: string) {
   const db = getDb();
   await db.transaction(async () => {
