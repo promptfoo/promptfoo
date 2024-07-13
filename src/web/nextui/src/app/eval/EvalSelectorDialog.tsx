@@ -22,6 +22,7 @@ interface EvalSelectorDialogProps {
   recentEvals: ResultLightweightWithLabel[];
   onRecentEvalSelected: (evalId: string) => void;
   title?: string;
+  description?: string;
 }
 
 const EvalSelectorDialog: React.FC<EvalSelectorDialogProps> = ({
@@ -30,6 +31,7 @@ const EvalSelectorDialog: React.FC<EvalSelectorDialogProps> = ({
   recentEvals,
   onRecentEvalSelected,
   title,
+  description,
 }) => {
   const [searchText, setSearchText] = useState('');
   const [focusedIndex, setFocusedIndex] = useState(-1);
@@ -115,6 +117,7 @@ const EvalSelectorDialog: React.FC<EvalSelectorDialogProps> = ({
     <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
       {title ? <DialogTitle>{title}</DialogTitle> : null}
       <DialogContent>
+        {description ? <Box sx={{ mb: 4 }}>{description}</Box> : null}
         <Box sx={{ width: '100%', mt: 2 }}>
           <TextField
             fullWidth

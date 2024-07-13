@@ -23,16 +23,19 @@ function CompareEvalMenuItem({ initialEvals, onComparisonEvalSelected }: Compare
       const apiBaseUrl = await getApiBaseUrl();
 
       // First, get the dataset for the currentEvalId
-      // TODO(ian): In theory we already have this datasetId because we've fetched the current eval...
-      const currentEvalResponse = await fetch(
-        `${apiBaseUrl}/api/results/${currentEvalId || initialEvals[0].evalId}`,
-        {
-          cache: 'no-store',
-        },
-      );
+      // TODO(ian): In theory we already have this datasetId because we've fetched the current eval...dataset should probably be stored in the store
+      const fetchEvalId = currentEvalId || initialEvals[0].evalId;
+      const currentEvalResponse = await fetch(`${apiBaseUrl}/api/results/${fetchEvalId}`, {
+        cache: 'no-store',
+      });
       const currentEvalData = await currentEvalResponse.json();
-      const datasetId = currentEvalData.data.config.datasetId || '';
+      const datasetId = currentEvalData.data.datasetId;
       console.log('datasetId:', datasetId);
+
+      if (!datasetId) {
+        console.error('No datasetId found for current eval ' + fetchEvalId);
+        return;
+      }
 
       // Then, fetch the results with the obtained datasetId
       const response = await fetch(`${apiBaseUrl}/api/results?datasetId=${datasetId}`, {
@@ -73,6 +76,7 @@ function CompareEvalMenuItem({ initialEvals, onComparisonEvalSelected }: Compare
         recentEvals={recentEvals}
         onRecentEvalSelected={handleEvalSelected}
         title="Select an eval to compare"
+        description="Only evals with the same dataset can be compared."
       />
     </>
   );

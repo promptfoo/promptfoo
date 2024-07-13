@@ -764,6 +764,9 @@ export interface ResultsFile {
   results: EvaluateSummary;
   config: Partial<UnifiedConfig>;
   author: string | null;
+
+  // Included by readResult() in util.
+  datasetId?: string | null;
 }
 
 // The eval results list returned by the server and used for the eval picker

@@ -75,7 +75,6 @@ export default function ResultsView({
     wordBreak,
     showInferenceDetails,
     evalId,
-    datasetId,
   } = useResultsViewStore();
   const { setStateFromConfig } = useMainStore();
 

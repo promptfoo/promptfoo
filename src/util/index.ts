@@ -499,9 +499,7 @@ export function cleanupOldFileResults(remaining = RESULT_HISTORY_LENGTH) {
 
 export async function readResult(
   id: string,
-): Promise<
-  { id: string; result: ResultsFile; createdAt: Date; datasetId: string | null } | undefined
-> {
+): Promise<{ id: string; result: ResultsFile; createdAt: Date } | undefined> {
   const db = getDb();
   try {
     const evalResult = await db
@@ -529,12 +527,12 @@ export async function readResult(
       author,
       results,
       config,
+      datasetId,
     };
     return {
       id: resultId,
       result,
       createdAt: new Date(createdAt),
-      datasetId,
     };
   } catch (err) {
     logger.error(`Failed to read result with ID ${id} from database:\n${err}`);
