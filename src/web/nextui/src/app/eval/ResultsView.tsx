@@ -112,6 +112,19 @@ export default function ResultsView({
   const [shareUrl, setShareUrl] = React.useState('');
   const [shareLoading, setShareLoading] = React.useState(false);
 
+  // State for anchor element
+  const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
+
+  // Handle menu close
+  const handleMenuClose = () => {
+    setAnchorEl(null);
+  };
+
+  // Function to open the eval actions menu
+  const handleOpenMenu = (event: React.MouseEvent<HTMLElement>) => {
+    setAnchorEl(event.currentTarget);
+  };
+
   const handleShareButtonClick = async () => {
     setShareLoading(true);
     try {
@@ -144,6 +157,7 @@ export default function ResultsView({
   };
 
   const handleComparisonEvalSelected = async (evalId: string) => {
+    setAnchorEl(null);
     try {
       const response = await fetch(`${await getApiBaseUrl()}/api/results/${evalId}`, {
         cache: 'no-store',
@@ -167,7 +181,11 @@ export default function ResultsView({
       setTable(combinedTable);
 
       // Update other relevant state if needed
-      setConfig({ ...config, ...body.data.config });
+      setConfig({
+        ...config,
+        ...body.data.config,
+        description: `Combined: "${config?.description || 'Eval A'}" and "${body.data.config?.description || 'Eval B'}"`,
+      });
     } catch (error) {
       console.error('Error fetching comparison eval:', error);
       alert('Failed to load comparison eval. Please try again.');
@@ -266,19 +284,6 @@ export default function ResultsView({
         alert('Failed to delete evaluation');
       }
     }
-  };
-
-  // State for anchor element
-  const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
-
-  // Handle menu close
-  const handleMenuClose = () => {
-    setAnchorEl(null);
-  };
-
-  // Function to open the eval actions menu
-  const handleOpenMenu = (event: React.MouseEvent<HTMLElement>) => {
-    setAnchorEl(event.currentTarget);
   };
 
   const [evalIdCopied, setEvalIdCopied] = React.useState(false);

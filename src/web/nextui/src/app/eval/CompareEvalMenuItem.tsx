@@ -30,7 +30,6 @@ function CompareEvalMenuItem({ initialEvals, onComparisonEvalSelected }: Compare
       });
       const currentEvalData = await currentEvalResponse.json();
       const datasetId = currentEvalData.data.datasetId;
-      console.log('datasetId:', datasetId);
 
       if (!datasetId) {
         console.error('No datasetId found for current eval ' + fetchEvalId);
