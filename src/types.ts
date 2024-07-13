@@ -769,6 +769,7 @@ export interface ResultsFile {
 // The eval results list returned by the server and used for the eval picker
 export interface ResultLightweight {
   evalId: string;
+  datasetId: string | null;
   createdAt: number;
   description: string | null;
   numTests: number;

@@ -172,6 +172,7 @@ export default function Eval({
         setRecentEvals(
           records.map((r) => ({
             evalId: r.id,
+            datasetId: null,
             label: r.createdAt,
             createdAt: new Date(r.createdAt).getTime(),
             description: 'None',

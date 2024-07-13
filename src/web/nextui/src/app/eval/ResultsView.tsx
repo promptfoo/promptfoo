@@ -75,6 +75,7 @@ export default function ResultsView({
     wordBreak,
     showInferenceDetails,
     evalId,
+    datasetId,
   } = useResultsViewStore();
   const { setStateFromConfig } = useMainStore();
 
@@ -419,7 +420,7 @@ export default function ResultsView({
               >
                 <Tooltip title="Combine this eval with another eval run" placement="left">
                   <CompareEvalMenuItem
-                    recentEvals={recentEvals}
+                    initialEvals={recentEvals}
                     onComparisonEvalSelected={handleComparisonEvalSelected}
                   />
                 </Tooltip>
