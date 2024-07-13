@@ -1,9 +1,11 @@
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
+import invariant from 'tiny-invariant';
 import logger from '../logger';
 import { loadApiProvider } from '../providers';
 import type { ApiProvider, TestCase, TestSuite } from '../types';
 import { REDTEAM_MODEL, ALL_PLUGINS, DEFAULT_PLUGINS } from './constants';
+import { extractVariablesFromTemplates } from './injectVar';
 import { addInjections } from './methods/injections';
 import { addIterativeJailbreaks } from './methods/iterative';
 import CompetitorPlugin from './plugins/competitors';
@@ -147,8 +149,18 @@ export async function synthesize({
   };
 
   // Get vars
-  injectVar = injectVar || 'query';
-
+  if (typeof injectVar !== 'string') {
+    const parsedVars = extractVariablesFromTemplates(prompts);
+    if (parsedVars.length > 1) {
+      logger.warn(
+        `Multiple variables found in prompts: ${parsedVars.join(', ')}. Using the first one.`,
+      );
+    } else if (parsedVars.length === 0) {
+      logger.warn('No variables found in prompts. Using "query" as the inject variable.');
+    }
+    injectVar = parsedVars[0] || 'query';
+    invariant(typeof injectVar === 'string', `Inject var must be a string, got ${injectVar}`);
+  }
   // Get purpose
   updateProgress();
   const purpose = purposeOverride || (await getPurpose(reasoningProvider, prompts));
