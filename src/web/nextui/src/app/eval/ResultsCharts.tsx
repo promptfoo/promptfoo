@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
+import { getApiBaseUrl } from '@/api';
 import CloseIcon from '@mui/icons-material/Close';
 import Dialog from '@mui/material/Dialog';
 import DialogContent from '@mui/material/DialogContent';
@@ -25,8 +26,9 @@ import {
   Colors,
   type TooltipItem,
 } from 'chart.js';
+import { createHash } from 'crypto';
 import { useStore } from './store';
-import type { EvaluateTable } from './types';
+import type { EvaluateTable, UnifiedConfig, TestCasesWithMetadata } from './types';
 
 interface ResultsChartsProps {
   columnVisibility: VisibilityState;
@@ -34,6 +36,8 @@ interface ResultsChartsProps {
 
 interface ChartProps {
   table: EvaluateTable;
+  evalId?: string | null;
+  config?: Partial<UnifiedConfig>;
 }
 
 const COLOR_PALETTE = [
@@ -415,13 +419,238 @@ function MetricChart({ table }: ChartProps) {
   return <canvas ref={metricCanvasRef} style={{ maxHeight: '300px' }}></canvas>;
 }
 
+function LineChart({ table, evalId, config }: ChartProps) {
+  const lineCanvasRef = useRef(null);
+  const lineChartInstance = useRef<Chart | null>(null);
+  const [datasetId, setDatasetId] = useState('');
+  const [dataset, setDataset] = useState<TestCasesWithMetadata>();
+
+  interface PointMetadata {
+    evalId: string;
+    highlight: boolean;
+    label: string;
+    date: string;
+    score: string;
+  }
+
+  interface Point {
+    x: number;
+    y: number;
+    metadata: PointMetadata;
+  }
+
+  function ordinalSuffixOf(i: number): string {
+    const j = i % 10,
+      k = i % 100;
+    if (j === 1 && k !== 11) {
+      return i + 'st';
+    }
+    if (j === 2 && k !== 12) {
+      return i + 'nd';
+    }
+    if (j === 3 && k !== 13) {
+      return i + 'rd';
+    }
+    return i + 'th';
+  }
+
+  useEffect(() => {
+    if (config) {
+      const newDatasetId = createHash('sha256').update(JSON.stringify(config.tests)).digest('hex');
+      setDatasetId(newDatasetId);
+    }
+  }, [table, evalId, config]);
+
+  useEffect(() => {
+    if (!datasetId) return;
+    (async () => {
+      fetch(`${await getApiBaseUrl()}/api/evals/${datasetId}`)
+        .then((response) => response.json())
+        .then((data) => {
+          setDataset(data.data[0]);
+        });
+    })();
+  }, [datasetId]);
+
+  useEffect(() => {
+    if (
+      !lineCanvasRef.current ||
+      !evalId ||
+      !datasetId ||
+      !dataset ||
+      dataset.prompts.length <= 1
+    ) {
+      return;
+    }
+
+    if (lineChartInstance.current) {
+      lineChartInstance.current.destroy();
+    }
+
+    const evalIdToIndex = new Map<string, number>();
+    const highestScoreMap = new Map<string, Point>();
+    let currentIndex = 1;
+    const allPoints: Point[] = [];
+
+    dataset.prompts.forEach((promptObject, index) => {
+      const evalIdKey = promptObject.evalId;
+      const isCurrentEval = evalIdKey === evalId;
+
+      if (!evalIdToIndex.has(evalIdKey)) {
+        evalIdToIndex.set(evalIdKey, currentIndex);
+        currentIndex++;
+      }
+
+      if (promptObject.prompt.metrics) {
+        const point: Point = {
+          x: evalIdToIndex.get(evalIdKey)!,
+          y:
+            (promptObject.prompt.metrics.testPassCount /
+              (promptObject.prompt.metrics.testPassCount +
+                promptObject.prompt.metrics.testFailCount)) *
+            100,
+          metadata: {
+            evalId: promptObject.evalId,
+            highlight: isCurrentEval,
+            label: promptObject.prompt.label,
+            date: promptObject.evalId.split('T')[0],
+            score: promptObject.prompt.metrics.score.toFixed(2),
+          },
+        };
+
+        allPoints.push(point);
+
+        if (!highestScoreMap.has(evalIdKey) || highestScoreMap.get(evalIdKey)!.y < point.y) {
+          highestScoreMap.set(evalIdKey, point);
+        }
+      }
+    });
+
+    if (evalIdToIndex.size == 1) {
+      return;
+    }
+
+    const highestScorePoints: Point[] = Array.from(highestScoreMap.values());
+
+    lineChartInstance.current = new Chart(lineCanvasRef.current, {
+      type: 'line',
+      data: {
+        datasets: [
+          {
+            type: 'scatter',
+            data: allPoints,
+            backgroundColor: allPoints.map((point) => (point.metadata.highlight ? 'red' : 'black')),
+            pointRadius: allPoints.map((point) => (point.metadata.highlight ? 3.0 : 2.5)),
+          },
+          {
+            type: 'line',
+            data: highestScorePoints,
+            backgroundColor: 'black',
+            pointRadius: 0,
+            pointHitRadius: 0,
+          },
+        ],
+      },
+
+      options: {
+        animation: false,
+        scales: {
+          x: {
+            title: {
+              display: true,
+              text: `Eval Index`,
+            },
+            type: 'linear',
+            position: 'bottom',
+            ticks: {
+              callback: function (value) {
+                if (Number.isInteger(value)) {
+                  return ordinalSuffixOf(Number(value));
+                }
+                return '';
+              },
+            },
+          },
+          y: {
+            title: {
+              display: true,
+              text: `Pass Rate`,
+            },
+            ticks: {
+              callback: function (value: string | number, index: number, values: any[]) {
+                let ret = String(Math.round(Number(value)));
+                if (index === values.length - 1) {
+                  ret += '%';
+                }
+                return ret;
+              },
+            },
+          },
+        },
+
+        plugins: {
+          legend: {
+            display: true,
+          },
+          tooltip: {
+            callbacks: {
+              title: function (context) {
+                return `Pass Rate: ${context[0].parsed.y.toFixed(2)}%`;
+              },
+              label: function (context) {
+                const point = context.raw as Point;
+                let label = point.metadata.label;
+                if (label && label.length > 30) {
+                  label = label.substring(0, 30) + '...';
+                }
+                return [
+                  `evalId: ${point.metadata.evalId}`,
+                  `Prompt: ${label}`,
+                  `Date: ${point.metadata.date}`,
+                  `Score: ${point.metadata.score}`,
+                ];
+              },
+            },
+          },
+        },
+
+        onClick: function (event, elements) {
+          if (elements.length > 0) {
+            const topMostElement = elements[0];
+            const pointData = (topMostElement.element as any).$context.raw as Point;
+            const evalId = pointData.metadata.evalId;
+            window.open(`/eval/?evalId=${evalId}`, '_blank');
+          }
+        },
+      },
+    });
+  }, [table, evalId, config, datasetId, dataset]);
+
+  return <canvas ref={lineCanvasRef} style={{ maxHeight: '300px', cursor: 'pointer' }}></canvas>;
+}
+
 function ResultsCharts({ columnVisibility }: ResultsChartsProps) {
   const theme = useTheme();
   Chart.defaults.color = theme.palette.mode === 'dark' ? '#aaa' : '#666';
   const [showCharts, setShowCharts] = useState(true);
+  const [showLineChart, setShowLineChart] = useState(false);
 
-  const { table } = useStore();
-  if (!table || !showCharts || table.head.prompts.length < 2) {
+  const { table, evalId, config } = useStore();
+
+  useEffect(() => {
+    const fetchDataset = async () => {
+      if (!config) return;
+      const datasetId = createHash('sha256').update(JSON.stringify(config.tests)).digest('hex');
+      fetch(`${await getApiBaseUrl()}/api/evals/${datasetId}`)
+        .then((response) => response.json())
+        .then((data: { data: TestCasesWithMetadata[] }) => {
+          setShowLineChart(data.data[0].count > 1);
+        });
+    };
+    fetchDataset();
+  }, [table, evalId, config]);
+
+  if (!table || !config || !showCharts || table.head.prompts.length < 2) {
     return null;
   }
 
@@ -431,6 +660,8 @@ function ResultsCharts({ columnVisibility }: ResultsChartsProps) {
     // All scores are the same, charts not useful.
     return null;
   }
+
+  const chartWidth = showLineChart ? '25%' : '33%';
 
   return (
     <ErrorBoundary fallback={null}>
@@ -442,10 +673,10 @@ function ResultsCharts({ columnVisibility }: ResultsChartsProps) {
           <CloseIcon />
         </IconButton>
         <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
-          <div style={{ width: '33%' }}>
+          <div style={{ width: chartWidth }}>
             <PassRateChart table={table} />
           </div>
-          <div style={{ width: '33%' }}>
+          <div style={{ width: chartWidth }}>
             {scoreSet.size <= 3 &&
             Object.keys(table.head.prompts[0].metrics?.namedScores || {}).length > 1 ? (
               <MetricChart table={table} />
@@ -453,9 +684,14 @@ function ResultsCharts({ columnVisibility }: ResultsChartsProps) {
               <HistogramChart table={table} />
             )}
           </div>
-          <div style={{ width: '33%' }}>
+          <div style={{ width: chartWidth }}>
             <ScatterChart table={table} />
           </div>
+          {showLineChart && (
+            <div style={{ width: chartWidth }}>
+              <LineChart table={table} evalId={evalId} config={config} />
+            </div>
+          )}
         </div>
       </Paper>
     </ErrorBoundary>

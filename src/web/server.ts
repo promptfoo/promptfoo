@@ -33,6 +33,7 @@ import {
   migrateResultsFromFileSystemToDatabase,
   getStandaloneEvals,
   deleteEval,
+  getEvalsByDatasetId,
 } from '../util';
 
 // Running jobs
@@ -202,6 +203,11 @@ export async function startServer(
 
   app.get('/api/datasets', async (req, res) => {
     res.json({ data: await getTestCases() });
+  });
+
+  app.get('/api/evals/:datasetId', async (req, res) => {
+    const { datasetId } = req.params;
+    res.json({ data: await getEvalsByDatasetId(datasetId) });
   });
 
   app.get('/api/config', (req, res) => {
