@@ -13,6 +13,7 @@ These metrics are created by logical tests that are run on LLM output.
 | [contains-any](#contains-any)                                   | output contains any of the listed substrings                       |
 | [contains-json](#contains-json)                                 | output contains valid json (optional json schema validation)       |
 | [contains-sql](#contains-sql)                                   | output contains valid sql                                          |
+| [contains-xml](#contains-xml)                                   | output contains valid xml                                          |
 | [cost](#cost)                                                   | Inference cost is below a threshold                                |
 | [equals](#equality)                                             | output matches exactly                                             |
 | [icontains](#contains)                                          | output contains substring, case insensitive                        |
@@ -22,6 +23,7 @@ These metrics are created by logical tests that are run on LLM output.
 | [is-sql](#is-sql)                                               | output is valid SQL statement (optional authority list validation) |
 | [is-valid-openai-function-call](#is-valid-openai-function-call) | Ensure that the function call matches the function's JSON schema   |
 | [is-valid-openai-tools-call](#is-valid-openai-tools-call)       | Ensure all tool calls match the tools JSON schema                  |
+| [is-xml](#is-xml)                                               | output is valid xml                                                |
 | [javascript](/docs/configuration/expected-outputs/javascript)   | provided Javascript function validates the output                  |
 | [latency](#latency)                                             | Latency is below a threshold (milliseconds)                        |
 | [levenshtein](#levenshtein-distance)                            | Levenshtein distance is below a threshold                          |
@@ -273,6 +275,98 @@ assert:
   - type: is-json
     value: file://./path/to/schema.json
 ```
+
+### Is-XML
+
+The `is-xml` assertion checks if the entire LLM output is a valid XML string. It can also verify the presence of specific elements within the XML structure.
+
+Example:
+
+```yaml
+assert:
+  - type: is-xml
+```
+
+This basic usage checks if the output is valid XML.
+
+You can also specify required elements:
+
+```yaml
+assert:
+  - type: is-xml
+    value: 'root.child,root.sibling'
+```
+
+This checks if the XML is valid and contains the specified elements. The elements are specified as dot-separated paths, allowing for nested element checking.
+
+#### How it works
+
+1. The assertion first attempts to parse the entire output as XML using a parser (fast-xml-parser).
+2. If parsing succeeds, it's considered valid XML.
+3. If `value` is specified:
+   - It splits the value by commas to get a list of required elements.
+   - Each element path (e.g., "root.child") is split by dots.
+   - It traverses the parsed XML object following these paths.
+   - If any required element is not found, the assertion fails.
+
+#### Examples
+
+Basic XML validation:
+
+```yaml
+assert:
+  - type: is-xml
+```
+
+Passes for: `<root><child>Content</child></root>`
+Fails for: `<root><child>Content</child></root` (missing closing tag)
+
+Checking for specific elements:
+
+```yaml
+assert:
+  - type: is-xml
+    value: 'analysis.classification,analysis.color'
+```
+
+Passes for: `<analysis><classification>T-shirt</classification><color>Red</color></analysis>`
+Fails for: `<analysis><classification>T-shirt</classification></analysis>` (missing color element)
+
+Checking nested elements:
+
+```yaml
+assert:
+  - type: is-xml
+    value: 'root.parent.child.grandchild'
+```
+
+Passes for: `<root><parent><child><grandchild>Content</grandchild></child></parent></root>`
+Fails for: `<root><parent><child></child></parent></root>` (missing grandchild element)
+
+#### Inverse assertion
+
+You can use the `not-is-xml` assertion to check if the output is not valid XML:
+
+```yaml
+assert:
+  - type: not-is-xml
+```
+
+This will pass for non-XML content and fail for valid XML content.
+
+Note: The `is-xml` assertion requires the entire output to be valid XML. For checking XML content within a larger text, use the `contains-xml` assertion.
+
+### Contains-XML
+
+The `contains-xml` is identical to `is-xml`, except it checks if the LLM output contains valid XML content, even if it's not the entire output. For example:
+
+```xml
+Sure, here is your xml
+<root><child>Content</child></root>
+let me know if you have any other questions!
+```
+
+would be valid.
 
 ### Is-SQL
 
