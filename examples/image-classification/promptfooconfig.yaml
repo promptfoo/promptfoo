@@ -1,0 +1,10 @@
+providers:
+  - id: anthropic:messages:claude-3-5-sonnet-20240620
+    label: claude-3.5-sonnet
+prompts:
+  - id: file://prompt.js
+tests: fashion_mnist_sample_base64.csv
+defaultTest:
+  assert:
+    - type: is-xml
+      value: "classification,color,features,style,confidence,reasoning"
