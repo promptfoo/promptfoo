@@ -1,8 +1,7 @@
 ---
-id: contributing
 title: Contributing to promptfoo
+sidebar_label: Contributing
 ---
-# Contributing to promptfoo
 
 **Note: This guide is a work in progress.**
 
@@ -25,7 +24,7 @@ We particularly welcome contributions in the following areas:
 - Bug fixes
 - Documentation updates, including examples and guides
 - Updates to providers including new models, new capabilities (tool use, function calling, JSON mode, file uploads, etc.)
-- Features that improve the user experience of promptfoo
+- Features that improve the user experience of promptfoo, especially relating to RAGs, Agents, and synthetic data generation.
 
 ## Getting Started
 
@@ -86,33 +85,6 @@ When opening a pull request:
 - Ensure your tests are passing and your code is properly linted.
 
 Don't hesitate to ask for help. We're here to support you. If you're worried about whether your PR will be accepted, please talk to us first.
-
-## Release Steps
-
-Note: releases are only issued by maintainers. When you are ready to release a new version:
-
-1. Update the version in `package.json`.
-2. Run `npm install`.
-3. Add the updated files to Git:
-
-   ```sh
-   git add package.json package-lock.json
-   ```
-
-4. Commit the changes:
-
-   ```sh
-   git commit -m "chore: Bump version to 0.X.Y"
-   ```
-
-5. Push the changes to the main branch:
-
-   ```sh
-   git push origin main
-   ```
-
-6. A version tag will be created automatically by a GitHub Action. After the version tag has been created, generate a new release based on the tagged version.
-7. A GitHub Action should automatically publish the package to npm. If it does not, please publish manually.
 
 ## Tests
 
@@ -234,17 +206,7 @@ Note that this will not update the web UI if you make further changes to the cod
 
 ## Documentation
 
-If you're adding new features or changing existing ones, please update the relevant documentation. We use [Docusaurus](https://docusaurus.io/) for our documentation.
-
-## Getting Help
-
-If you need help or have questions, you can:
-
-- Open an issue on GitHub.
-- Join our [Discord community](https://discord.gg/gHPS9jjfbs).
-- Email us at [help@promptfoo.dev](mailto:help@promptfoo.dev).
-
-Thank you for contributing to promptfoo!
+If you're adding new features or changing existing ones, please update the relevant documentation. We use [Docusaurus](https://docusaurus.io/) for our documentation. We strongly encourage examples and guides as well.
 
 ## Database
 
@@ -311,6 +273,43 @@ You can view the contents of each of these tables by running `npx drizzle-kit st
 2. **Keep Migrations Small**: Focus migrations on specific changes to keep them manageable.
 3. **Test in Development**: Test migrations in a development environment before applying them to production.
 4. **Backup Your Database**: Back up your database before applying migrations in production.
+
+## Release Steps
+
+Note: releases are only issued by maintainers. If you need to to release a new version quickly please send a message on [Discord](https://discord.gg/gHPS9jjfbs).
+
+As a maintainer, when you are ready to release a new version:
+
+1. Update the version in `package.json`.
+2. Run `npm install`.
+3. Add the updated files to Git:
+
+   ```sh
+   git add package.json package-lock.json
+   ```
+
+4. Commit the changes:
+
+   ```sh
+   git commit -m "chore: Bump version to 0.X.Y"
+   ```
+
+5. Push the changes to the main branch:
+
+   ```sh
+   git push origin main
+   ```
+
+6. A version tag will be created automatically by a GitHub Action. After the version tag has been created, generate a new release based on the tagged version.
+7. A GitHub Action should automatically publish the package to npm. If it does not, please publish manually.
+
+## Getting Help
+
+If you need help or have questions, you can:
+
+- Open an issue on GitHub.
+- Join our [Discord community](https://discord.gg/gHPS9jjfbs).
+- Email us at [help@promptfoo.dev](mailto:help@promptfoo.dev).
 
 ## Code of Conduct
 
