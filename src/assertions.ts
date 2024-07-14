@@ -427,6 +427,24 @@ export async function runAssertion({
     };
   }
 
+  if (baseType === 'is-xml' || baseType === 'contains-xml') {
+    const requiredElements =
+      typeof renderedValue === 'string'
+        ? renderedValue.split(',').map((el) => el.trim())
+        : undefined;
+    const result = (baseType === 'is-xml' ? validateXml : containsXml)(
+      outputString,
+      requiredElements,
+    );
+    pass = result.isValid !== inverse;
+    return {
+      pass,
+      score: pass ? 1 : 0,
+      reason: pass ? 'Assertion passed' : result.reason,
+      assertion,
+    };
+  }
+
   if (baseType === 'is-sql') {
     return isSql(outputString, renderedValue, inverse, assertion);
   }
@@ -1315,24 +1333,6 @@ ${
       reason: pass
         ? 'Assertion passed'
         : `Cost ${cost.toPrecision(2)} is greater than threshold ${assertion.threshold}`,
-      assertion,
-    };
-  }
-
-  if (baseType === 'is-xml' || baseType === 'contains-xml') {
-    const requiredElements =
-      typeof renderedValue === 'string'
-        ? renderedValue.split(',').map((el) => el.trim())
-        : undefined;
-    const result = (baseType === 'is-xml' ? validateXml : containsXml)(
-      outputString,
-      requiredElements,
-    );
-    pass = result.isValid !== inverse;
-    return {
-      pass,
-      score: pass ? 1 : 0,
-      reason: pass ? 'Assertion passed' : result.reason,
       assertion,
     };
   }
