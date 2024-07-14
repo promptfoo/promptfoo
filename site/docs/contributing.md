@@ -154,7 +154,7 @@ Here's a simple example:
 
 ```yaml
 providers:
-  - name: openai:chat:gpt-4o
+  - id: openai:chat:gpt-4o
 prompts:
   - Translate "{{input}}" to {{language}}
 tests:
