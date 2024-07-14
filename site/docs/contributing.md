@@ -167,11 +167,7 @@ tests:
 
 ## Adding a New Provider
 
-1. Create an implementation in `src/providers/SOME_PROVIDER_FILE`.
-2. Update `loadApiProvider` in `src/providers.ts` to load your provider via string.
-3. Add test cases in `test/providers.test.ts`:
-   - Test the actual provider implementation.
-   - Test loading the provider via a `loadApiProvider` test.
+Please refer to our [Custom API Provider Docs](/docs/providers/custom-api/) for details on how to implement a custom TypeScript provider.
 
 ## Contributing to the Web UI
 
