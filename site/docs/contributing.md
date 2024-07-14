@@ -1,38 +1,12 @@
+---
+id: contributing
+title: Contributing to promptfoo
+---
 # Contributing to promptfoo
 
-**Note: This guide is a work in progress. We plan to improve it over time.**
+**Note: This guide is a work in progress.**
 
-We welcome contributions from the community to help make this project better. This guide will help you get started. If you have any questions, please reach out to us on [Discord](https://discord.gg/gHPS9jjfbs) or through a [GitHub issue](https://github.com/promptfoo/promptfoo/issues/new).
-
-## Table of Contents
-
-- [Contributing to promptfoo](#contributing-to-promptfoo)
-  - [Table of Contents](#table-of-contents)
-  - [Project Overview](#project-overview)
-  - [Getting Started](#getting-started)
-  - [Development Workflow](#development-workflow)
-  - [Release Steps](#release-steps)
-  - [Tests](#tests)
-    - [Running Tests](#running-tests)
-    - [Writing Tests](#writing-tests)
-  - [Linting and Formatting](#linting-and-formatting)
-  - [Building the Project](#building-the-project)
-  - [Contributing to the CLI](#contributing-to-the-cli)
-    - [Running the CLI During Development](#running-the-cli-during-development)
-  - [Adding a New Provider](#adding-a-new-provider)
-  - [Contributing to the Web UI](#contributing-to-the-web-ui)
-  - [Documentation](#documentation)
-  - [Getting Help](#getting-help)
-  - [Database](#database)
-    - [Main Tables](#main-tables)
-      - [`evals` - Stores evaluation details](#evals---stores-evaluation-details)
-      - [`prompts` - Stores information about different prompts](#prompts---stores-information-about-different-prompts)
-      - [`datasets` - Stores dataset information](#datasets---stores-dataset-information)
-      - [`evalsToPrompts` - Many-to-many relationship between `evals` and `prompts`](#evalstoprompts---many-to-many-relationship-between-evals-and-prompts)
-      - [`evalsToDatasets` - Many-to-many relationship between `evals` and `datasets`](#evalstodatasets---many-to-many-relationship-between-evals-and-datasets)
-    - [Adding a Migration](#adding-a-migration)
-      - [Best Practices](#best-practices)
-  - [Code of Conduct](#code-of-conduct)
+We welcome contributions from the community to help make promptfoo better. This guide will help you get started. If you have any questions, please reach out to us on [Discord](https://discord.gg/gHPS9jjfbs) or through a [GitHub issue](https://github.com/promptfoo/promptfoo/issues/new).
 
 ## Project Overview
 
