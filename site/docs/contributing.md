@@ -307,7 +307,6 @@ If you need help or have questions, you can:
 
 - Open an issue on GitHub.
 - Join our [Discord community](https://discord.gg/gHPS9jjfbs).
-- Email us at [help@promptfoo.dev](mailto:help@promptfoo.dev).
 
 ## Code of Conduct
 
