@@ -197,7 +197,7 @@ To test the entire thing end-to-end, we recommend building the entire project an
 
 ```sh
 npm run build
-npm link
+promptfoo view
 ```
 
 Note that this will not update the web UI if you make further changes to the code. You have to run `npm run build` again.
