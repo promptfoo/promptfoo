@@ -26,7 +26,7 @@
     "csv-stringify": "^6.5.0",
     "debounce": "^1.2.1",
     "diff": "^5.2.0",
-    "drizzle-orm": "^0.29.3",
+    "drizzle-orm": "^0.32.0",
     "encoding": "^0.1.13",
     "eslint": "^8.57.0",
     "eslint-config-next": "13.4.13",
