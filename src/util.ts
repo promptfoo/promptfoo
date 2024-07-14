@@ -9,6 +9,7 @@ import yaml from 'js-yaml';
 import nunjucks from 'nunjucks';
 import * as os from 'os';
 import * as path from 'path';
+import invariant from 'tiny-invariant';
 import { getAuthor } from './accounts';
 import cliState from './cliState';
 import { TERMINAL_MAX_WIDTH } from './constants';
@@ -43,8 +44,10 @@ import {
   type Prompt,
   type CompletedPrompt,
   type CsvRow,
+  type ResultLightweight,
   isApiProvider,
   isProviderOptions,
+  OutputFileExtension,
 } from './types';
 
 const DEFAULT_QUERY_LIMIT = 100;
@@ -75,7 +78,13 @@ export async function writeOutput(
   config: Partial<UnifiedConfig>,
   shareableUrl: string | null,
 ) {
-  const outputExtension = outputPath.split('.').pop()?.toLowerCase();
+  const { data: outputExtension } = OutputFileExtension.safeParse(
+    path.extname(outputPath).slice(1).toLowerCase(),
+  );
+  invariant(
+    outputExtension,
+    `Unsupported output file format ${outputExtension}. Please use one of: ${OutputFileExtension.options.join(', ')}.`,
+  );
 
   const outputToSimpleString = (output: EvaluateTableOutput) => {
     const passFailText = output.pass ? '[PASS]' : '[FAIL]';
@@ -150,10 +159,6 @@ ${gradingResultText}`.trim();
         results: results.results,
       });
       fs.writeFileSync(outputPath, htmlOutput);
-    } else {
-      throw new Error(
-        `Unsupported output file format ${outputExtension}, please use csv, txt, json, yaml, yml, html.`,
-      );
     }
   }
 }
@@ -312,12 +317,14 @@ export async function writeResultsToDatabase(
 export function listPreviousResults(
   limit: number = DEFAULT_QUERY_LIMIT,
   filterDescription?: string,
-): { evalId: string; description?: string | null }[] {
+): ResultLightweight[] {
   const db = getDb();
   let results = db
     .select({
-      name: evals.id,
+      evalId: evals.id,
+      createdAt: evals.createdAt,
       description: evals.description,
+      config: evals.config,
     })
     .from(evals)
     .orderBy(desc(evals.createdAt))
@@ -330,8 +337,10 @@ export function listPreviousResults(
   }
 
   return results.map((result) => ({
-    evalId: result.name,
+    evalId: result.evalId,
+    createdAt: result.createdAt,
     description: result.description,
+    numTests: result.config.tests?.length || 0,
   }));
 }
 

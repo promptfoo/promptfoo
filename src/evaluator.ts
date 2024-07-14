@@ -525,13 +525,14 @@ class Evaluator {
     for (const provider of testSuite.providers) {
       for (const prompt of testSuite.prompts) {
         // Check if providerPromptMap exists and if it contains the current prompt's label
-        if (!isAllowedPrompt(prompt, testSuite.providerPromptMap?.[provider.id()])) {
+        const providerKey = provider.label || provider.id();
+        if (!isAllowedPrompt(prompt, testSuite.providerPromptMap?.[providerKey])) {
           continue;
         }
         const completedPrompt = {
           ...prompt,
           id: sha256(typeof prompt.raw === 'object' ? JSON.stringify(prompt.raw) : prompt.raw),
-          provider: provider.label || provider.id(),
+          provider: providerKey,
           label: prompt.label,
           metrics: {
             score: 0,
@@ -652,7 +653,8 @@ class Evaluator {
           // Order matters - keep provider in outer loop to reduce need to swap models during local inference.
           for (const provider of testSuite.providers) {
             for (const prompt of testSuite.prompts) {
-              if (!isAllowedPrompt(prompt, testSuite.providerPromptMap?.[provider.id()])) {
+              const providerKey = provider.label || provider.id();
+              if (!isAllowedPrompt(prompt, testSuite.providerPromptMap?.[providerKey])) {
                 continue;
               }
               runEvalOptions.push({

@@ -764,6 +764,16 @@ export interface ResultsFile {
   author: string | null;
 }
 
+// The eval results list returned by the server and used for the eval picker
+export interface ResultLightweight {
+  evalId: string;
+  createdAt: number;
+  description: string | null;
+  numTests: number;
+}
+
+export type ResultLightweightWithLabel = ResultLightweight & { label: string };
+
 // File exported as --output option
 export interface OutputFile {
   evalId: string | null;
@@ -779,3 +789,7 @@ export interface Job {
   total: number;
   result: EvaluateSummary | null;
 }
+
+// used for writing eval results
+export const OutputFileExtension = z.enum(['csv', 'html', 'json', 'txt', 'yaml', 'yml']);
+export type OutputFileExtension = z.infer<typeof OutputFileExtension>;

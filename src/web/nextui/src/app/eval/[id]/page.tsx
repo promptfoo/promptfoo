@@ -1,5 +1,10 @@
 import React from 'react';
-import { EvaluateSummary, SharedResults, UnifiedConfig } from '@/../../../types';
+import {
+  EvaluateSummary,
+  ResultLightweightWithLabel,
+  SharedResults,
+  UnifiedConfig,
+} from '@/../../../types';
 import { getApiBaseUrl } from '@/api';
 import { IS_RUNNING_LOCALLY } from '@/constants';
 import { getResult } from '@/database';
@@ -25,7 +30,7 @@ export async function generateStaticParams() {
 
 export default async function Page({ params }: { params: { id: string } }) {
   let sharedResults: SharedResults;
-  let recentEvals: { id: string; label: string }[] = [];
+  let recentEvals: ResultLightweightWithLabel[] = [];
   let defaultEvalId: string | undefined;
   const decodedId = decodeURIComponent(params.id);
   if (decodedId.startsWith('local:')) {
@@ -74,7 +79,13 @@ export default async function Page({ params }: { params: { id: string } }) {
         .order('createdAt', { ascending: false })
         .limit(100);
       if (data) {
-        recentEvals = data.map((row) => ({ id: row.id, label: row.createdAt }));
+        recentEvals = data.map((row) => ({
+          evalId: row.id,
+          label: row.createdAt,
+          createdAt: row.createdAt,
+          description: 'None',
+          numTests: 0,
+        }));
       }
     }
   } else {

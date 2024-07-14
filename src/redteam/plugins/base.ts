@@ -1,5 +1,5 @@
 import invariant from 'tiny-invariant';
-import type { ApiProvider, TestCase } from '../../types';
+import type { ApiProvider, Assertion, TestCase } from '../../types';
 import { getNunjucksEngine } from '../../util';
 
 /**
@@ -30,7 +30,7 @@ export default abstract class PluginBase {
    * @param prompt - The prompt for which to get the assertion.
    * @returns The assertion object.
    */
-  protected abstract getAssertion(prompt: string): any;
+  protected abstract getAssertions(prompt: string): Assertion[];
 
   /**
    * Generates test cases based on the provided template and purpose.
@@ -54,7 +54,7 @@ export default abstract class PluginBase {
       vars: {
         [this.injectVar]: prompt,
       },
-      assert: [this.getAssertion(prompt)],
+      assert: this.getAssertions(prompt),
     }));
   }
 }
