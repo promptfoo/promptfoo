@@ -45,6 +45,7 @@ import {
   ProviderResponse,
 } from './types';
 import { transformOutput, getNunjucksEngine, extractJsonObjects } from './util';
+import { XMLParser } from 'fast-xml-parser';
 
 const ASSERTIONS_MAX_CONCURRENCY = process.env.PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY
   ? parseInt(process.env.PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY, 10)
@@ -110,6 +111,41 @@ function handleRougeScore(
         }`,
     assertion,
   };
+}
+
+export function validateXml(xmlString: string, requiredElements?: string[]): { isValid: boolean; reason: string } {
+  const parser = new XMLParser({
+    allowBooleanAttributes: true,
+    ignoreAttributes: false,
+    parseAttributeValue: true,
+    parseTagValue: true,
+  });
+
+  try {
+    const parsedXml = parser.parse(xmlString);
+
+    if (requiredElements && requiredElements.length > 0) {
+      const missingElements = requiredElements.filter(element => {
+        const path = element.split('.');
+        let current: any = parsedXml;
+        for (const key of path) {
+          if (current[key] === undefined) {
+            return true;
+          }
+          current = current[key];
+        }
+        return false;
+      });
+
+      if (missingElements.length > 0) {
+        return { isValid: false, reason: `XML is missing required elements: ${missingElements.join(', ')}` };
+      }
+    }
+
+    return { isValid: true, reason: 'XML is valid and contains all required elements' };
+  } catch (err) {
+    return { isValid: false, reason: `XML parsing failed: ${(err as Error).message}` };
+  }
 }
 
 export async function isSql(
@@ -1254,6 +1290,18 @@ ${
     };
   }
 
+  if (baseType === 'is-xml') {
+    const requiredElements = typeof renderedValue === 'string' ? renderedValue.split(',').map(el => el.trim()) : undefined;
+    const { isValid, reason } = validateXml(outputString, requiredElements);
+    pass = isValid !== inverse;
+
+    return {
+      pass,
+      score: pass ? 1 : 0,
+      reason: pass ? 'Assertion passed' : reason,
+      assertion,
+    };
+  }
   throw new Error('Unknown assertion type: ' + assertion.type);
 }
 
@@ -1401,3 +1449,4 @@ export default {
   matchesComparisonBoolean: matchesSelectBest,
   matchesModeration,
 };
+

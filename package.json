@@ -96,6 +96,7 @@
     "eslint": "^8.57.0",
     "eslint-plugin-jest": "^28.6.0",
     "eslint-plugin-unused-imports": "^3.2.0",
+    "fast-xml-parser": "^4.4.0",
     "jest": "^29.7.0",
     "jest-watch-typeahead": "^2.2.2",
     "next": "13.4.13",
