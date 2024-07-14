@@ -1319,34 +1319,20 @@ ${
     };
   }
 
-  if (baseType === 'is-xml') {
+  if (baseType === 'is-xml' || baseType === 'contains-xml') {
     const requiredElements =
       typeof renderedValue === 'string'
         ? renderedValue.split(',').map((el) => el.trim())
         : undefined;
-    const { isValid, reason } = validateXml(outputString, requiredElements);
-    pass = isValid !== inverse;
-
+    const result = (baseType === 'is-xml' ? validateXml : containsXml)(
+      outputString,
+      requiredElements,
+    );
+    pass = result.isValid !== inverse;
     return {
       pass,
       score: pass ? 1 : 0,
-      reason: pass ? 'Assertion passed' : reason,
-      assertion,
-    };
-  }
-
-  if (baseType === 'contains-xml') {
-    const requiredElements =
-      typeof renderedValue === 'string'
-        ? renderedValue.split(',').map((el) => el.trim())
-        : undefined;
-    const { isValid, reason } = containsXml(outputString, requiredElements);
-    pass = isValid !== inverse;
-
-    return {
-      pass,
-      score: pass ? 1 : 0,
-      reason: pass ? 'Assertion passed' : reason,
+      reason: pass ? 'Assertion passed' : result.reason,
       assertion,
     };
   }
