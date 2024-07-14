@@ -29,6 +29,7 @@ interface RedteamGenerateOptions {
   provider?: string;
   purpose?: string;
   write: boolean;
+  n: number;
 
   // Extras
   defaultConfig: Partial<UnifiedConfig>;
@@ -42,6 +43,7 @@ export async function doGenerateRedteam({
   envFile,
   injectVar,
   output,
+  n,
   plugins,
   provider,
   purpose,
@@ -97,6 +99,7 @@ export async function doGenerateRedteam({
         ? Array.from(plugins || REDTEAM_DEFAULT_PLUGINS).concat(addPlugins)
         : plugins,
     provider,
+    n,
   });
 
   if (output) {
@@ -279,6 +282,12 @@ export function generateCommand(
       (val) => val.split(',').map((x) => x.trim()),
     )
     .option('--no-cache', 'Do not read or write results to disk cache', false)
+    .option(
+      '-n, --num-tests <number>',
+      'Number of test cases to generate per plugin. Defaults to 5',
+      parseInt,
+      5,
+    )
     .option('--env-file <path>', 'Path to .env file')
     .action((opts) => doGenerateRedteam({ ...opts, defaultConfig, defaultConfigPath }));
 }
