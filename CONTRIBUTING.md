@@ -1,8 +1,8 @@
 # Contributing to promptfoo
 
-**Note: this guide is incomplete. We plan to improve it in the coming weeks. It should be considered a work in progress.**
+**Note: This guide is a work in progress. We plan to improve it over time.**
 
-We welcome contributions from the community to help make this project better. This guide will help you get started. If you have any questions, please reach out to us on [Discord](https://discord.gg/gHPS9jjfbs) or [github issue](https://github.com/promptfoo/promptfoo/issues/new).
+We welcome contributions from the community to help make this project better. This guide will help you get started. If you have any questions, please reach out to us on [Discord](https://discord.gg/gHPS9jjfbs) or through a [GitHub issue](https://github.com/promptfoo/promptfoo/issues/new).
 
 ## Table of Contents
 
@@ -36,13 +36,13 @@ We welcome contributions from the community to help make this project better. Th
 
 ## Project Overview
 
-promptfoo is a MIT licensed tool for testing and evaluating LLM apps. It allows you to:
+promptfoo is an MIT licensed tool for testing and evaluating LLM apps. It allows you to:
 
-- Build reliable prompts, models, RAGs, and agents with benchmarks specific to your use-case
-- Speed up evaluations with caching, concurrency, and live reloading
-- Score outputs automatically by defining metrics and perform automated red teaming
-- Use as a CLI, library, or in CI/CD
-- Use various LLM providers or integrate custom API providers
+- Build reliable prompts, models, RAGs, and agents with benchmarks specific to your use case.
+- Speed up evaluations with caching, concurrency, and live reloading.
+- Score outputs automatically by defining metrics and perform automated red teaming.
+- Use as a CLI, library, or in CI/CD.
+- Use various LLM providers or integrate custom API providers.
 
 Our goal is to enable test-driven LLM development instead of trial-and-error.
 
@@ -50,7 +50,7 @@ We particularly welcome contributions in the following areas:
 
 - Bug fixes
 - Documentation updates, including examples and guides
-- Updates to providers including new models, new capabilities (tool use, function calling, json mode, file uploads, etc.)
+- Updates to providers including new models, new capabilities (tool use, function calling, JSON mode, file uploads, etc.)
 - Features that improve the user experience of promptfoo
 
 ## Getting Started
@@ -87,13 +87,13 @@ If you're not sure where to start, check out our [good first issues](https://git
 
 ## Development Workflow
 
-1. Create a new branch for your feature or bugfix:
+1. Create a new branch for your feature or bug fix:
 
    ```sh
    git checkout -b feature/your-feature-name
    ```
 
-2. We try to follow the [Conventional Commits](https://www.conventionalcommits.org/) specification. This is not required for feature branches. We merge all PRs into `main` with a squash merge with a conventional commit message.
+2. We try to follow the [Conventional Commits](https://www.conventionalcommits.org/) specification. This is not required for feature branches. We merge all PRs into `main` with a squash merge and a conventional commit message.
 
 3. Push your branch to your fork:
 
@@ -111,19 +111,34 @@ When opening a pull request:
 - Be responsive to feedback and be prepared to make changes if requested.
 - Ensure your tests are passing and your code is properly linted.
 
-Don't be shy about asking for help. We're here to help you. If you are worried about whether or not your PR will be accepted, please talk to us first.
+Don't hesitate to ask for help. We're here to support you. If you're worried about whether your PR will be accepted, please talk to us first.
 
 ## Release Steps
 
-Note: releases are only issued by maintainers. When you are ready to release a new version
+Note: releases are only issued by maintainers. When you are ready to release a new version:
 
-1. update the version in `package.json`
-2. run `npm install`
-3. `git add package.json package-lock.json`
-4. `git commit -m "chore: Bump version to 0.X.Y`
-5. `git push origin main`
-6. A version tag will be created automatically by a github action. After the version tag has been created, generate a new release based on the tagged version.
-7. A github action should automatically publish the package to npm. If it does not, please publish manually.
+1. Update the version in `package.json`.
+2. Run `npm install`.
+3. Add the updated files to Git:
+
+   ```sh
+   git add package.json package-lock.json
+   ```
+
+4. Commit the changes:
+
+   ```sh
+   git commit -m "chore: Bump version to 0.X.Y"
+   ```
+
+5. Push the changes to the main branch:
+
+   ```sh
+   git push origin main
+   ```
+
+6. A version tag will be created automatically by a GitHub Action. After the version tag has been created, generate a new release based on the tagged version.
+7. A GitHub Action should automatically publish the package to npm. If it does not, please publish manually.
 
 ## Tests
 
@@ -141,15 +156,19 @@ To run tests in watch mode:
 npm run test:watch
 ```
 
-You can also run it with `npx jest [pattern]` to run tests matching a pattern. The tests are very fast (~2s) so you can run them often. We have high test coverage of the cli app. We have low test coverage of the web app. This will be improved in the future.
+You can also run specific tests with:
+
+```sh
+npx jest [pattern]
+```
 
 ### Writing Tests
 
 When writing tests, please:
 
-- try running them with the `--randomize` flag to ensure your mocks setup and teardown are not affecting other tests.
-- check the coverage report to ensure your changes are covered.
-- try not to add additional logs to the console.
+- Run them with the `--randomize` flag to ensure your mocks setup and teardown are not affecting other tests.
+- Check the coverage report to ensure your changes are covered.
+- Avoid adding additional logs to the console.
 
 ## Linting and Formatting
 
@@ -193,7 +212,7 @@ Alternatively, you can run the CLI directly:
 npm run local -- eval --config examples/cloudflare-ai/chat_config.yaml
 ```
 
-When working on a new feature, we recommend setting up a local `promptfooconfig.yaml` that tests your feature. Think of this as a e2e test for your feature.
+When working on a new feature, we recommend setting up a local `promptfooconfig.yaml` that tests your feature. Think of this as an end-to-end test for your feature.
 
 Here's a simple example:
 
@@ -220,7 +239,7 @@ tests:
 
 ## Contributing to the Web UI
 
-The web ui is written as a [Next.js](https://nextjs.org/) app. It is exported as a static site and hosted by a local express server when bundled.
+The web UI is written as a [Next.js](https://nextjs.org/) app. It is exported as a static site and hosted by a local express server when bundled.
 
 To run the web UI in dev mode:
 
@@ -228,7 +247,7 @@ To run the web UI in dev mode:
 npm run local:web
 ```
 
-This will host the web UI at http://localhost:3000. This allows you to hack on the next.js app quickly (with fast refresh) but does not cover all features (such as running evals from a web browser) because that relies on a separate server process.
+This will host the web UI at http://localhost:3000. This allows you to hack on the Next.js app quickly (with fast refresh) but does not cover all features (such as running evals from a web browser) because that relies on a separate server process.
 
 To test the entire thing end-to-end, we recommend building the entire project and linking it to promptfoo:
 
@@ -237,7 +256,7 @@ npm run build
 npm link
 ```
 
-Note that this will not update the web UI if you make further changes to code. You have to run `npm run build` again.
+Note that this will not update the web UI if you make further changes to the code. You have to run `npm run build` again.
 
 ## Documentation
 
@@ -255,7 +274,7 @@ Thank you for contributing to promptfoo!
 
 ## Database
 
-Promptfoo uses SQLite as its default database, managed through the Drizzle ORM. By default, the database is stored in `/.promptfoo/`. You can override this location by setting `PROMPTFOO_CONFIG_DIR`. The database schema is defined in `src/database.ts` and migrations are stored in `drizzle`. Note that the migrations are all generated and you should not access these files directly.
+promptfoo uses SQLite as its default database, managed through the Drizzle ORM. By default, the database is stored in `/.promptfoo/`. You can override this location by setting `PROMPTFOO_CONFIG_DIR`. The database schema is defined in `src/database.ts` and migrations are stored in `drizzle`. Note that the migrations are all generated and you should not access these files directly.
 
 ### Main Tables
 
