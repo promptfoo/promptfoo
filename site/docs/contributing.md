@@ -3,8 +3,6 @@ title: Contributing to promptfoo
 sidebar_label: Contributing
 ---
 
-**Note: This guide is a work in progress.**
-
 We welcome contributions from the community to help make promptfoo better. This guide will help you get started. If you have any questions, please reach out to us on [Discord](https://discord.gg/gHPS9jjfbs) or through a [GitHub issue](https://github.com/promptfoo/promptfoo/issues/new).
 
 ## Project Overview
