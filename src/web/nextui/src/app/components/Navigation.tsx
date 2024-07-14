@@ -26,9 +26,9 @@ export default function Navigation({
   darkMode: boolean;
   onToggleDarkMode: () => void;
 }) {
-  const [showModal, setShowModal] = useState<boolean>(false);
+  const [showInfoModal, setShowInfoModal] = useState<boolean>(false);
 
-  const handleModalToggle = () => setShowModal(!showModal);
+  const handleModalToggle = () => setShowInfoModal(!showInfoModal);
 
   const navigationContent = (
     <>
@@ -54,7 +54,7 @@ export default function Navigation({
 
   return (
     <>
-      <InfoModal open={showModal} onClose={handleModalToggle} />
+      <InfoModal open={showInfoModal} onClose={handleModalToggle} />
       <Stack direction="row" spacing={2} className="nav">
         {navigationContent}
       </Stack>
