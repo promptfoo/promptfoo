@@ -14,7 +14,6 @@ Promptfoo uses SQLite as its default database, managed through the Drizzle ORM. 
 - `description`: Description of the evaluation set from the description tag in `promptfooconfig.yaml`.
 - `results`: JSON object storing evaluation results.
 - `config`: JSON object storing partial unified configuration.
-- `version`: Promptfoo version from when the evaluation was run.
 
 #### `prompts` - Stores information about different prompts
 
