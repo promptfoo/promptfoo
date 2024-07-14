@@ -1,0 +1,72 @@
+.info-modal {
+  outline: none;
+}
+
+.info-modal-content {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  max-width: 350px;
+  width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+  background-color: var(--background-color);
+  color: var(--text-color);
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  transition: all 0.3s ease;
+  padding: 24px;
+}
+
+.info-modal-title {
+  margin-bottom: 8px;
+  font-size: 1.25rem;
+  font-weight: 500;
+}
+
+.info-modal-version {
+  font-size: 0.9em;
+  color: var(--text-secondary-color);
+  margin-bottom: 16px;
+}
+
+.info-modal-links {
+  margin-bottom: 16px;
+}
+
+.info-modal-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--primary-color);
+  text-decoration: none;
+  transition: color 0.2s ease;
+  font-size: 0.875rem;
+  margin-bottom: 8px;
+}
+
+.info-modal-link:hover {
+  color: var(--primary-color-dark);
+  text-decoration: underline;
+}
+
+.info-modal-description {
+  font-size: 0.9em;
+  line-height: 1.5;
+  color: var(--text-secondary-color);
+}
+
+/* Dark mode adjustments */
+.dark-mode .info-modal-content {
+  background-color: var(--background-color-dark);
+  color: var(--text-color-dark);
+}
+
+.dark-mode .info-modal-link {
+  color: var(--primary-color-light);
+}
+
+.dark-mode .info-modal-link:hover {
+  color: var(--primary-color-lighter);
+}
