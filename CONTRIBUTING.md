@@ -11,7 +11,9 @@ We welcome contributions from the community to help make this project better. Th
   - [Project Overview](#project-overview)
   - [Getting Started](#getting-started)
   - [Development Workflow](#development-workflow)
-  - [Running Tests](#running-tests)
+  - [Release Steps](#release-steps)
+  - [Tests](#tests)
+    - [Running Tests](#running-tests)
     - [Writing Tests](#writing-tests)
   - [Linting and Formatting](#linting-and-formatting)
   - [Building the Project](#building-the-project)
@@ -111,7 +113,21 @@ When opening a pull request:
 
 Don't be shy about asking for help. We're here to help you. If you are worried about whether or not your PR will be accepted, please talk to us first.
 
-## Running Tests
+## Release Steps
+
+Note: releases are only issued by maintainers. When you are ready to release a new version
+
+1. update the version in `package.json`
+2. run `npm install`
+3. `git add package.json package-lock.json`
+4. `git commit -m "chore: Bump version to 0.X.Y`
+5. `git push origin main`
+6. A version tag will be created automatically by a github action. After the version tag has been created, generate a new release based on the tagged version.
+7. A github action should automatically publish the package to npm. If it does not, please publish manually.
+
+## Tests
+
+### Running Tests
 
 We use Jest for testing. To run the test suite:
 
@@ -125,9 +141,9 @@ To run tests in watch mode:
 npm run test:watch
 ```
 
-You can also run it with `npx jest [pattern]` to run tests matching a pattern. The tests are very fast (~2s) so you can run them often. 
+You can also run it with `npx jest [pattern]` to run tests matching a pattern. The tests are very fast (~2s) so you can run them often. We have high test coverage of the cli app. We have low test coverage of the web app. This will be improved in the future.
 
-### Writing Tests 
+### Writing Tests
 
 When writing tests, please:
 
@@ -179,7 +195,7 @@ npm run local -- eval --config examples/cloudflare-ai/chat_config.yaml
 
 When working on a new feature, we recommend setting up a local `promptfooconfig.yaml` that tests your feature. Think of this as a e2e test for your feature.
 
- Here's a simple example:
+Here's a simple example:
 
 ```yaml
 providers:
