@@ -1,6 +1,7 @@
 import Ajv, { ValidateFunction } from 'ajv';
 import addFormats from 'ajv-formats';
 import async from 'async';
+import { XMLParser } from 'fast-xml-parser';
 import { distance as levenshtein } from 'fastest-levenshtein';
 import fs from 'fs';
 import yaml from 'js-yaml';
@@ -45,7 +46,6 @@ import {
   ProviderResponse,
 } from './types';
 import { transformOutput, getNunjucksEngine, extractJsonObjects } from './util';
-import { XMLParser } from 'fast-xml-parser';
 
 const ASSERTIONS_MAX_CONCURRENCY = process.env.PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY
   ? parseInt(process.env.PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY, 10)
@@ -113,7 +113,13 @@ function handleRougeScore(
   };
 }
 
-export function validateXml(xmlString: string, requiredElements?: string[]): { isValid: boolean; reason: string } {
+export function validateXml(
+  xmlString: string,
+  requiredElements?: string[],
+): { isValid: boolean; reason: string } {
+  if (!xmlString.startsWith('<')) {
+    return { isValid: false, reason: 'XML is missing opening tag' };
+  }
   const parser = new XMLParser({
     allowBooleanAttributes: true,
     ignoreAttributes: false,
@@ -123,9 +129,8 @@ export function validateXml(xmlString: string, requiredElements?: string[]): { i
 
   try {
     const parsedXml = parser.parse(xmlString);
-
     if (requiredElements && requiredElements.length > 0) {
-      const missingElements = requiredElements.filter(element => {
+      const missingElements = requiredElements.filter((element) => {
         const path = element.split('.');
         let current: any = parsedXml;
         for (const key of path) {
@@ -138,7 +143,10 @@ export function validateXml(xmlString: string, requiredElements?: string[]): { i
       });
 
       if (missingElements.length > 0) {
-        return { isValid: false, reason: `XML is missing required elements: ${missingElements.join(', ')}` };
+        return {
+          isValid: false,
+          reason: `XML is missing required elements: ${missingElements.join(', ')}`,
+        };
       }
     }
 
@@ -146,6 +154,27 @@ export function validateXml(xmlString: string, requiredElements?: string[]): { i
   } catch (err) {
     return { isValid: false, reason: `XML parsing failed: ${(err as Error).message}` };
   }
+}
+
+export function containsXml(
+  outputString: string,
+  requiredElements?: string[],
+): { isValid: boolean; reason: string } {
+  const xmlRegex = /<\?xml.*?>[\s\S]*<\/[^>]+>|\S*<[^>]+>[\s\S]*<\/[^>]+>/;
+  const xmlMatches = outputString.match(xmlRegex);
+
+  if (!xmlMatches) {
+    return { isValid: false, reason: 'No XML content found in the output' };
+  }
+
+  for (const xmlMatch of xmlMatches) {
+    const { isValid, reason } = validateXml(xmlMatch, requiredElements);
+    if (isValid) {
+      return { isValid: true, reason: 'Valid XML content found' };
+    }
+  }
+
+  return { isValid: false, reason: 'No valid XML content found matching the requirements' };
 }
 
 export async function isSql(
@@ -1291,7 +1320,10 @@ ${
   }
 
   if (baseType === 'is-xml') {
-    const requiredElements = typeof renderedValue === 'string' ? renderedValue.split(',').map(el => el.trim()) : undefined;
+    const requiredElements =
+      typeof renderedValue === 'string'
+        ? renderedValue.split(',').map((el) => el.trim())
+        : undefined;
     const { isValid, reason } = validateXml(outputString, requiredElements);
     pass = isValid !== inverse;
 
@@ -1302,6 +1334,23 @@ ${
       assertion,
     };
   }
+
+  if (baseType === 'contains-xml') {
+    const requiredElements =
+      typeof renderedValue === 'string'
+        ? renderedValue.split(',').map((el) => el.trim())
+        : undefined;
+    const { isValid, reason } = containsXml(outputString, requiredElements);
+    pass = isValid !== inverse;
+
+    return {
+      pass,
+      score: pass ? 1 : 0,
+      reason: pass ? 'Assertion passed' : reason,
+      assertion,
+    };
+  }
+
   throw new Error('Unknown assertion type: ' + assertion.type);
 }
 
@@ -1449,4 +1498,3 @@ export default {
   matchesComparisonBoolean: matchesSelectBest,
   matchesModeration,
 };
-

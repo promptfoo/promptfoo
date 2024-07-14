@@ -2,7 +2,9 @@ const dedent = require('dedent');
 
 module.exports = (context) => {
   return [
-    { role: 'system', content: `
+    {
+      role: 'system',
+      content: `
     You are an AI assistant tasked with analyzing and classifying images. Your goal is to determine the type of clothing item depicted in the image and provide additional relevant information.
 
     Please perform the following tasks:
@@ -40,7 +42,8 @@ module.exports = (context) => {
     Remember to base your analysis solely on the provided image. Do not make assumptions about information that is not explicitly stated or strongly implied by the description.
 
     Begin with <analysis>
-    ` },
+    `,
+    },
     {
       role: 'user',
       content: [
