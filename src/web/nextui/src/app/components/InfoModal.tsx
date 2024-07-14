@@ -13,9 +13,9 @@ export function InfoModal({ open, onClose }: { open: boolean; onClose: () => voi
       <div className="info-modal-content">
         <h2 className="info-modal-title">About Promptfoo</h2>
         <p className="info-modal-description">
-          Promptfoo is a MIT licensed open-source tool for evaluating LLMs. We make it easy to track the
-          performance of your models and prompts over time with automated support for dataset generation and
-          grading.
+          Promptfoo is a MIT licensed open-source tool for evaluating LLMs. We make it easy to track
+          the performance of your models and prompts over time with automated support for dataset
+          generation and grading.
         </p>
         <p className="info-modal-version">
           <Link
