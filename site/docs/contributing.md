@@ -7,15 +7,7 @@ We welcome contributions from the community to help make promptfoo better. This 
 
 ## Project Overview
 
-promptfoo is an MIT licensed tool for testing and evaluating LLM apps. It allows you to:
-
-- Build reliable prompts, models, RAGs, and agents with benchmarks specific to your use case.
-- Speed up evaluations with caching, concurrency, and live reloading.
-- Score outputs automatically by defining metrics and perform automated red teaming.
-- Use as a CLI, library, or in CI/CD.
-- Use various LLM providers or integrate custom API providers.
-
-Our goal is to enable test-driven LLM development instead of trial-and-error.
+promptfoo is an MIT licensed tool for testing and evaluating LLM apps.
 
 We particularly welcome contributions in the following areas:
 
