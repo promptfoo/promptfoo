@@ -1,8 +1,6 @@
 {
-  "version": "5",
+  "version": "6",
   "dialect": "sqlite",
-  "id": "8b53403f-5b6f-436a-862e-9fd17a52204e",
-  "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "datasets": {
       "name": "datasets",
@@ -103,28 +101,28 @@
         "evals_to_datasets_eval_id_evals_id_fk": {
           "name": "evals_to_datasets_eval_id_evals_id_fk",
           "tableFrom": "evals_to_datasets",
-          "tableTo": "evals",
           "columnsFrom": [
             "eval_id"
           ],
+          "tableTo": "evals",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "evals_to_datasets_dataset_id_datasets_id_fk": {
           "name": "evals_to_datasets_dataset_id_datasets_id_fk",
           "tableFrom": "evals_to_datasets",
-          "tableTo": "datasets",
           "columnsFrom": [
             "dataset_id"
           ],
+          "tableTo": "datasets",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -161,28 +159,28 @@
         "evals_to_prompts_eval_id_evals_id_fk": {
           "name": "evals_to_prompts_eval_id_evals_id_fk",
           "tableFrom": "evals_to_prompts",
-          "tableTo": "evals",
           "columnsFrom": [
             "eval_id"
           ],
+          "tableTo": "evals",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "evals_to_prompts_prompt_id_prompts_id_fk": {
           "name": "evals_to_prompts_prompt_id_prompts_id_fk",
           "tableFrom": "evals_to_prompts",
-          "tableTo": "prompts",
           "columnsFrom": [
             "prompt_id"
           ],
+          "tableTo": "prompts",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -237,8 +235,9 @@
   },
   "enums": {},
   "_meta": {
-    "schemas": {},
     "tables": {},
     "columns": {}
-  }
+  },
+  "id": "8b53403f-5b6f-436a-862e-9fd17a52204e",
+  "prevId": "00000000-0000-0000-0000-000000000000"
 }
