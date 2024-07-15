@@ -1,6 +1,6 @@
 import invariant from 'tiny-invariant';
 import type { ApiProvider, Assertion, TestCase } from '../../types';
-import { getNunjucksEngine } from '../../util';
+import { getNunjucksEngine } from '../../util/templates';
 
 /**
  * Abstract base class for creating plugins that generate test cases.

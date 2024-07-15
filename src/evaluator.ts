@@ -31,7 +31,8 @@ import type {
   ProviderResponse,
   Assertion,
 } from './types';
-import { getNunjucksEngine, transformOutput, sha256, renderVarsInObject } from './util';
+import { transformOutput, sha256, renderVarsInObject } from './util';
+import { getNunjucksEngine } from './util/templates';
 
 export const DEFAULT_MAX_CONCURRENCY = 4;
 

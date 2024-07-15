@@ -10,9 +10,9 @@ import nunjucks from 'nunjucks';
 import * as os from 'os';
 import * as path from 'path';
 import invariant from 'tiny-invariant';
-import { getAuthor } from './accounts';
-import cliState from './cliState';
-import { TERMINAL_MAX_WIDTH } from './constants';
+import { getAuthor } from '../accounts';
+import cliState from '../cliState';
+import { TERMINAL_MAX_WIDTH } from '../constants';
 import {
   datasets,
   getDb,
@@ -21,12 +21,12 @@ import {
   evalsToPrompts,
   prompts,
   getDbSignalPath,
-} from './database';
-import { getDirectory, importModule } from './esm';
-import { writeCsvToGoogleSheet } from './googleSheets';
-import logger from './logger';
-import { runDbMigrations } from './migrate';
-import { runPython } from './python/wrapper';
+} from '../database';
+import { getDirectory, importModule } from '../esm';
+import { writeCsvToGoogleSheet } from '../googleSheets';
+import logger from '../logger';
+import { runDbMigrations } from '../migrate';
+import { runPython } from '../python/wrapper';
 import {
   type EvalWithMetadata,
   type EvaluateResult,
@@ -48,28 +48,10 @@ import {
   isApiProvider,
   isProviderOptions,
   OutputFileExtension,
-} from './types';
+} from '../types';
+import { getNunjucksEngine } from './templates';
 
 const DEFAULT_QUERY_LIMIT = 100;
-
-export function getNunjucksEngine(filters?: NunjucksFilterMap) {
-  if (process.env.PROMPTFOO_DISABLE_TEMPLATING) {
-    return {
-      renderString: (template: string) => template,
-    };
-  }
-
-  const env = nunjucks.configure({
-    autoescape: false,
-  });
-
-  if (filters) {
-    for (const [name, filter] of Object.entries(filters)) {
-      env.addFilter(name, filter);
-    }
-  }
-  return env;
-}
 
 export async function writeOutput(
   outputPath: string,
@@ -1085,6 +1067,15 @@ export function renderVarsInObject<T>(obj: T, vars?: Record<string, string | obj
     return renderVarsInObject(fn({ vars }) as T);
   }
   return obj;
+}
+
+export function isValidJson(str: string): boolean {
+  try {
+    JSON.parse(str);
+    return true;
+  } catch (e) {
+    return false;
+  }
 }
 
 export function extractJsonObjects(str: string): object[] {
