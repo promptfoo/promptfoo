@@ -10,7 +10,8 @@ import { configCommand } from './commands/config';
 import { deleteCommand } from './commands/delete';
 import { evalCommand } from './commands/eval';
 import { exportCommand } from './commands/export';
-import { generateCommand } from './commands/generate';
+import { generateDatasetCommand } from './commands/generate/dataset';
+import { generateRedteamCommand } from './commands/generate/redteam';
 import { importCommand } from './commands/import';
 import { listCommand } from './commands/list';
 import { redteamCommand } from './commands/redteam';
@@ -204,11 +205,15 @@ async function main() {
   deleteCommand(program);
   evalCommand(program, defaultConfig, defaultConfigPath, evaluateOptions);
   exportCommand(program);
-  generateCommand(program, defaultConfig, defaultConfigPath);
+
   importCommand(program);
   listCommand(program);
   redteamCommand(program);
   showCommand(program);
+
+  const generateCommand = program.command('generate').description('Generate synthetic data');
+  generateDatasetCommand(generateCommand, defaultConfig, defaultConfigPath);
+  generateRedteamCommand(generateCommand, defaultConfig, defaultConfigPath);
 
   program.parse(process.argv);
 

@@ -3,19 +3,18 @@ import { Command } from 'commander';
 import dedent from 'dedent';
 import * as fs from 'fs';
 import yaml from 'js-yaml';
-import { disableCache } from '../cache';
-import { resolveConfigs } from '../config';
-import logger from '../logger';
-import { synthesizeFromTestSuite as redteamSynthesizeFromTestSuite } from '../redteam';
+import { disableCache } from '../../cache';
+import { resolveConfigs } from '../../config';
+import logger from '../../logger';
+import { synthesizeFromTestSuite as redteamSynthesizeFromTestSuite } from '../../redteam';
 import {
   REDTEAM_MODEL,
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
   ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
-} from '../redteam/constants';
-import telemetry from '../telemetry';
-import { synthesizeFromTestSuite } from '../testCases';
-import { TestSuite, UnifiedConfig } from '../types';
-import { printBorder, setupEnv } from '../util';
+} from '../../redteam/constants';
+import telemetry from '../../telemetry';
+import { TestSuite, UnifiedConfig } from '../../types';
+import { printBorder, setupEnv } from '../../util';
 
 interface RedteamGenerateOptions {
   // Commander options
@@ -137,120 +136,12 @@ export async function doGenerateRedteam({
   await telemetry.send();
 }
 
-export function generateCommand(
+export function generateRedteamCommand(
   program: Command,
   defaultConfig: Partial<UnifiedConfig>,
   defaultConfigPath: string | undefined,
 ) {
-  const generateCommand = program.command('generate').description('Generate synthetic data');
-
-  generateCommand
-    .command('dataset')
-    .description('Generate test cases')
-    .option(
-      '-i, --instructions [instructions]',
-      'Additional instructions to follow while generating test cases',
-    )
-    .option('-c, --config [path]', 'Path to configuration file. Defaults to promptfooconfig.yaml')
-    .option('-o, --output [path]', 'Path to output file')
-    .option('-w, --write', 'Write results to promptfoo configuration file')
-    .option(
-      '--provider <provider>',
-      `Provider to use for generating adversarial tests. Defaults to the default grading provider.`,
-    )
-    .option('--numPersonas <number>', 'Number of personas to generate', '5')
-    .option('--numTestCasesPerPersona <number>', 'Number of test cases per persona', '3')
-    .option('--no-cache', 'Do not read or write results to disk cache', false)
-    .option('--env-file <path>', 'Path to .env file')
-    .action(
-      async (options: {
-        config?: string;
-        instructions?: string;
-        output?: string;
-        numPersonas: string;
-        numTestCasesPerPersona: string;
-        write: boolean;
-        cache: boolean;
-        envFile?: string;
-      }) => {
-        setupEnv(options.envFile);
-        if (!options.cache) {
-          logger.info('Cache is disabled.');
-          disableCache();
-        }
-
-        let testSuite: TestSuite;
-        const configPath = options.config || defaultConfigPath;
-        if (configPath) {
-          const resolved = await resolveConfigs(
-            {
-              config: [configPath],
-            },
-            defaultConfig,
-          );
-          testSuite = resolved.testSuite;
-        } else {
-          throw new Error('Could not find config file. Please use `--config`');
-        }
-
-        const startTime = Date.now();
-        telemetry.record('command_used', {
-          name: 'generate_dataset - started',
-          numPrompts: testSuite.prompts.length,
-          numTestsExisting: (testSuite.tests || []).length,
-        });
-        await telemetry.send();
-
-        const results = await synthesizeFromTestSuite(testSuite, {
-          instructions: options.instructions,
-          numPersonas: parseInt(options.numPersonas, 10),
-          numTestCasesPerPersona: parseInt(options.numTestCasesPerPersona, 10),
-        });
-        const configAddition = { tests: results.map((result) => ({ vars: result })) };
-        const yamlString = yaml.dump(configAddition);
-        if (options.output) {
-          fs.writeFileSync(options.output, yamlString);
-          printBorder();
-          logger.info(`Wrote ${results.length} new test cases to ${options.output}`);
-          printBorder();
-        } else {
-          printBorder();
-          logger.info('New test Cases');
-          printBorder();
-          logger.info(yamlString);
-        }
-
-        printBorder();
-        if (options.write && configPath) {
-          const existingConfig = yaml.load(
-            fs.readFileSync(configPath, 'utf8'),
-          ) as Partial<UnifiedConfig>;
-          existingConfig.tests = [...(existingConfig.tests || []), ...configAddition.tests];
-          fs.writeFileSync(configPath, yaml.dump(existingConfig));
-          logger.info(`Wrote ${results.length} new test cases to ${configPath}`);
-          logger.info(
-            chalk.green(`Run ${chalk.bold('promptfoo eval')} to run the generated tests`),
-          );
-        } else {
-          logger.info(
-            `Copy the above test cases or run ${chalk.greenBright(
-              'promptfoo generate dataset --write',
-            )} to write directly to the config`,
-          );
-        }
-
-        telemetry.record('command_used', {
-          name: 'generate_dataset',
-          numPrompts: testSuite.prompts.length,
-          numTestsExisting: (testSuite.tests || []).length,
-          numTestsGenerated: results.length,
-          duration: Math.round((Date.now() - startTime) / 1000),
-        });
-        await telemetry.send();
-      },
-    );
-
-  generateCommand
+  program
     .command('redteam')
     .description('Generate adversarial test cases')
     .option('-c, --config [path]', 'Path to configuration file. Defaults to promptfooconfig.yaml')
