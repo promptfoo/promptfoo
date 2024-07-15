@@ -1,6 +1,6 @@
 description: 'LM Studio Eval Example'
 prompts:
-  - file://prompts.js
+  - file://prompts.json
 providers:
   - id: 'http://localhost:1234/v1/chat/completions'
     config:
