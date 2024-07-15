@@ -645,7 +645,7 @@ function ResultsCharts({ columnVisibility }: ResultsChartsProps) {
           setShowLineChart(data.data[0].count > 1);
         });
     };
-    if (!!config) {
+    if (config) {
       fetchDataset();
     }
   }, [table, evalId, config]);
