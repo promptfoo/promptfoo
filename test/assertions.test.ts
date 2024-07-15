@@ -3158,6 +3158,95 @@ describe('runAssertion', () => {
         assertion,
       });
     });
+
+    it('should pass when required elements are specified as an array', async () => {
+      const output = '<root><element1>Content1</element1><element2>Content2</element2></root>';
+      const assertion: Assertion = {
+        type: 'is-xml',
+        value: ['root.element1', 'root.element2'],
+      };
+
+      const result = await runAssertion({
+        prompt: 'Generate XML',
+        provider,
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result).toEqual({
+        pass: true,
+        score: 1,
+        reason: 'Assertion passed',
+        assertion,
+      });
+    });
+
+    it('should pass when required elements are specified as an object', async () => {
+      const output = '<root><element1>Content1</element1><element2>Content2</element2></root>';
+      const assertion: Assertion = {
+        type: 'contains-xml',
+        value: {
+          requiredElements: ['root.element1', 'root.element2'],
+        },
+      };
+
+      const result = await runAssertion({
+        prompt: 'Generate XML',
+        provider,
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result).toEqual({
+        pass: true,
+        score: 1,
+        reason: 'Assertion passed',
+        assertion,
+      });
+    });
+
+    it('should throw an error when xml assertion value is invalid', async () => {
+      const output = '<root><element1>Content1</element1><element2>Content2</element2></root>';
+      const assertion: Assertion = {
+        type: 'is-xml',
+        value: { invalidKey: ['root.element1', 'root.element2'] },
+      };
+
+      await expect(
+        runAssertion({
+          prompt: 'Generate XML',
+          provider,
+          assertion,
+          test: {} as AtomicTestCase,
+          providerResponse: { output },
+        }),
+      ).rejects.toThrow('xml assertion must contain a string, array value, or no value');
+    });
+
+    it('should handle multiple XML blocks in contains-xml assertion', async () => {
+      const output = 'Some text <xml1>content1</xml1> more text <xml2>content2</xml2>';
+      const assertion: Assertion = {
+        type: 'contains-xml',
+        value: ['xml1', 'xml2'],
+      };
+
+      const result = await runAssertion({
+        prompt: 'Generate text with multiple XML blocks',
+        provider,
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result).toEqual({
+        pass: true,
+        score: 1,
+        reason: 'Assertion passed',
+        assertion,
+      });
+    });
   });
 
   describe('contains-xml', () => {
