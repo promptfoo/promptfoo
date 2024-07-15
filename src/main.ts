@@ -61,20 +61,21 @@ async function main() {
   }
 
   const program = new Command();
-  versionCommand(program);
-  initCommand(program);
-  configCommand(program);
+
   cacheCommand(program);
+  configCommand(program);
   deleteCommand(program);
   evalCommand(program, defaultConfig, defaultConfigPath, evaluateOptions);
   exportCommand(program);
   feedbackCommand(program);
   generateCommand(program, defaultConfig, defaultConfigPath);
   importCommand(program);
+  initCommand(program);
   listCommand(program);
   redteamCommand(program);
   shareCommand(program);
   showCommand(program);
+  versionCommand(program);
   viewCommand(program);
 
   program.parse(process.argv);
