@@ -1,3 +1,4 @@
+import yaml from 'js-yaml';
 import invariant from 'tiny-invariant';
 import { fetchWithCache } from '../cache';
 import logger from '../logger';
@@ -18,6 +19,15 @@ function createResponseParser(parser: any): (data: any) => ProviderResponse {
     return new Function('json', `return ${parser}`) as (data: any) => ProviderResponse;
   }
   return (data) => ({ output: data });
+}
+
+function isValidJson(str: string): boolean {
+  try {
+    JSON.parse(str);
+    return true;
+  } catch (e) {
+    return false;
+  }
 }
 
 export class HttpProvider implements ApiProvider {
@@ -43,14 +53,16 @@ export class HttpProvider implements ApiProvider {
     // Render all nested strings
     const nunjucks = getNunjucksEngine();
     const stringifiedConfig = safeJsonStringify(this.config);
-    const renderedConfig: { method: string; headers: Record<string, string>; body: any } =
-      JSON.parse(
-        nunjucks.renderString(stringifiedConfig, {
-          prompt,
-          ...context?.vars,
-        }),
-      );
-
+    const renderedConfigString = nunjucks.renderString(stringifiedConfig, {
+      // escape prompt if it's a JSON because nunjucks does not escape it
+      prompt: isValidJson(prompt) ? prompt.replace(/"/g, '\\"') : prompt,
+      ...context?.vars,
+    });
+    const renderedConfig = yaml.load(renderedConfigString) as {
+      method: string;
+      headers: Record<string, string>;
+      body: Record<string, any>;
+    };
     const method = renderedConfig.method || 'POST';
     const headers = renderedConfig.headers || { 'Content-Type': 'application/json' };
     invariant(typeof method === 'string', 'Expected method to be a string');
