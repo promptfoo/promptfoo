@@ -253,6 +253,7 @@ The adversarial tests include:
 - Competitor recommendations (when the LLM suggests alternatives to your business)
 - Unintended contracts (when the LLM makes unintended commitments or agreements)
 - Political statements
+- Imitation of a person, brand, or organization
 
 It also tests for a variety of harmful input and output scenarios from the [ML Commons Safety Working Group](https://arxiv.org/abs/2404.12241) and [HarmBench](https://www.harmbench.org/) framework:
 
