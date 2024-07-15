@@ -14,11 +14,11 @@ import ExcessiveAgencyPlugin from './plugins/excessiveAgency';
 import HallucinationPlugin from './plugins/hallucination';
 import { getHarmfulTests } from './plugins/harmful';
 import HijackingPlugin from './plugins/hijacking';
+import ImitationPlugin from './plugins/imitation';
 import OverreliancePlugin from './plugins/overreliance';
 import { getPiiTests } from './plugins/pii';
 import PoliticsPlugin from './plugins/politics';
 import { getPurpose } from './purpose';
-import ImitationPlugin from './plugins/imitation';
 
 interface SynthesizeOptions {
   injectVar?: string;
@@ -75,7 +75,7 @@ const Plugins: Plugin[] = [
   },
   {
     key: 'imitation',
-    action: (provider, purpose, injectVar, n) => 
+    action: (provider, purpose, injectVar, n) =>
       new ImitationPlugin(provider, purpose, injectVar).generateTests(n),
   },
   {
