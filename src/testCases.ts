@@ -20,6 +20,7 @@ import type {
   TestSuiteConfig,
   VarMapping,
 } from './types';
+import { extractVariablesFromTemplates } from './redteam/injectVar';
 
 function parseJson(json: string): any | undefined {
   try {
@@ -295,16 +296,10 @@ export async function synthesize({
   }
 
   // Extract variable names from the nunjucks template in the prompts
-  const variableRegex = /{{\s*(\w+)\s*}}/g;
-  const variables = new Set();
-  for (const prompt of prompts) {
-    let match;
-    while ((match = variableRegex.exec(prompt)) !== null) {
-      variables.add(match[1]);
-    }
-  }
+  const variables = extractVariablesFromTemplates(prompts);
+
   logger.debug(
-    `\nExtracted ${variables.size} variables from prompts:\n${Array.from(variables)
+    `\nExtracted ${variables.length} variables from prompts:\n${variables
       .map((v) => `  - ${v}`)
       .join('\n')}`,
   );
@@ -358,6 +353,7 @@ export async function synthesize({
     const parsed = JSON.parse(personaResponse.output as string) as {
       vars: VarMapping[];
     };
+    logger.debug(`parsed: ${JSON.stringify(parsed, null, 2)}`);
     for (const vars of parsed.vars) {
       logger.debug(`${JSON.stringify(vars, null, 2)}`);
       testCaseVars.push(vars);
