@@ -3310,7 +3310,7 @@ describe('runAssertion', () => {
       expect(result).toEqual({
         pass: false,
         score: 0,
-        reason: 'Valid XML content found',
+        reason: 'XML is valid and contains all required elements',
         assertion,
       });
     });

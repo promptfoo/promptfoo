@@ -171,7 +171,7 @@ export function containsXml(
   for (const xmlMatch of xmlMatches) {
     const { isValid, reason } = validateXml(xmlMatch, requiredElements);
     if (isValid) {
-      return { isValid: true, reason: 'Valid XML content found' };
+      return { isValid: true, reason: reason };
     }
   }
 
@@ -185,7 +185,7 @@ export async function isSql(
   assertion: Assertion,
 ): Promise<GradingResult> {
   let pass = false;
-  let parsedSql;
+  let parsedSql: any;
   let databaseType: string = 'MySQL';
   let whiteTableList: string[] | undefined;
   let whiteColumnList: string[] | undefined;
@@ -429,10 +429,19 @@ export async function runAssertion({
   }
 
   if (baseType === 'is-xml' || baseType === 'contains-xml') {
-    const requiredElements =
-      typeof renderedValue === 'string'
-        ? renderedValue.split(',').map((el) => el.trim())
-        : undefined;
+    let requiredElements: string[] | undefined;
+    if (typeof renderedValue === 'string') {
+      requiredElements = renderedValue.split(',').map((el) => el.trim());
+    } else if (Array.isArray(renderedValue) && renderedValue.length > 0) {
+      requiredElements = renderedValue.map((el) => el.toString());
+    } else if (typeof renderedValue === 'object' && Object.keys(renderedValue).length > 0) {
+      if ('requiredElements' in renderedValue && Array.isArray(renderedValue.requiredElements)) {
+        requiredElements = renderedValue.requiredElements.map((el) => el.toString());
+      } else {
+        throw new Error('xml assertion must contain a string, array value, or no value');
+      }
+    }
+
     const result = (baseType === 'is-xml' ? validateXml : containsXml)(
       outputString,
       requiredElements,
