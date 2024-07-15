@@ -11,7 +11,6 @@ import { fetchCsvFromGoogleSheet } from './googleSheets';
 import logger from './logger';
 import { loadApiProvider } from './providers';
 import { getDefaultProviders } from './providers/defaults';
-import { OpenAiChatCompletionProvider } from './providers/openai';
 import type {
   ApiProvider,
   CsvRow,
