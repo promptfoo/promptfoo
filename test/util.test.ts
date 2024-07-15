@@ -35,11 +35,11 @@ jest.mock('fs', () => ({
 jest.mock('../src/esm');
 jest.mock('../src/database');
 
-beforeEach(() => {
-  jest.clearAllMocks();
-});
-
 describe('util', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   describe('writeOutput', () => {
     it('writeOutput with CSV output', () => {
       const outputPath = 'output.csv';

@@ -33,10 +33,6 @@ jest.mock('fs', () => ({
 jest.mock('../src/esm');
 jest.mock('../src/database');
 
-beforeEach(() => {
-  jest.clearAllMocks();
-});
-
 const mockApiProvider: ApiProvider = {
   id: jest.fn().mockReturnValue('test-provider'),
   callApi: jest.fn().mockResolvedValue({
@@ -66,6 +62,10 @@ function toPrompt(text: string): Prompt {
 }
 
 describe('evaluator', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   afterEach(() => {
     jest.clearAllMocks();
   });

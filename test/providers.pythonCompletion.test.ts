@@ -179,7 +179,9 @@ describe('PythonProvider', () => {
 
       const result = await provider.callApi('test prompt');
 
-      expect(mockCache.get).toHaveBeenCalled();
+      expect(mockCache.get).toHaveBeenCalledWith(
+        'python:undefined:call_api:5633d479dfae75ba7a78914ee380fa202bd6126e7c6b7c22e3ebc9e1a6ddc871:test prompt:undefined',
+      );
       expect(mockRunPython).not.toHaveBeenCalled();
       expect(result).toEqual({ output: 'cached result' });
     });
@@ -193,7 +195,10 @@ describe('PythonProvider', () => {
 
       await provider.callApi('test prompt');
 
-      expect(mockCache.set).toHaveBeenCalled();
+      expect(mockCache.set).toHaveBeenCalledWith(
+        'python:undefined:call_api:5633d479dfae75ba7a78914ee380fa202bd6126e7c6b7c22e3ebc9e1a6ddc871:test prompt:undefined',
+        '{"output":"new result"}',
+      );
     });
   });
 });
