@@ -31,6 +31,6 @@ This example demonstrates how to use PromptFoo for image classification tasks us
    ```
 
 4. Modify the prompt to see how it affects the model's performance. For example, try:
-    - adding `Begin with <analysis>` to the end of the prompt to make the `is-xml` assertion pass.
-    - changing the prompt to output JSON instead of XML.
-    - Modifying the prompt to include the classification within the xml `<classification>[T-shirt/top, Trouser, Pullover, Dress, Coat, Sandal, Shirt, Sneaker, Bag, Ankle boot]</classification>`.
+   - adding `Begin with <analysis>` to the end of the prompt to make the `is-xml` assertion pass.
+   - changing the prompt to output JSON instead of XML.
+   - Modifying the prompt to include the classification within the xml `<classification>[T-shirt/top, Trouser, Pullover, Dress, Coat, Sandal, Shirt, Sneaker, Bag, Ankle boot]</classification>`.
