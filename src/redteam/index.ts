@@ -28,9 +28,6 @@ interface SynthesizeOptions {
   numTests: number;
 }
 
-// n is assigned a default value by commander. Require that it exists in the type
-type PartialSynthesizeOptions = Partial<Omit<SynthesizeOptions, 'numTests'>> & { numTests: number };
-
 interface Plugin {
   key: string;
   action: (
@@ -162,7 +159,6 @@ export async function synthesize({
     invariant(typeof injectVar === 'string', `Inject var must be a string, got ${injectVar}`);
   }
 
-
   // Initialize progress bar
   const progressBar = new cliProgress.SingleBar({}, cliProgress.Presets.shades_classic);
   const totalSteps = plugins.length + 2; // +2 for initial setup steps
@@ -231,16 +227,4 @@ export async function synthesize({
   }
 
   return testCases;
-}
-
-export async function synthesizeFromTestSuite(
-  testSuite: TestSuite,
-  options: PartialSynthesizeOptions,
-) {
-  return synthesize({
-    ...options,
-    plugins:
-      options.plugins && options.plugins.length > 0 ? options.plugins : Array.from(DEFAULT_PLUGINS),
-    prompts: testSuite.prompts.map((prompt) => prompt.raw),
-  });
 }

@@ -3,10 +3,11 @@ import { Command } from 'commander';
 import dedent from 'dedent';
 import * as fs from 'fs';
 import yaml from 'js-yaml';
+import invariant from 'tiny-invariant';
 import { disableCache } from '../../cache';
 import { resolveConfigs } from '../../config';
 import logger from '../../logger';
-import { synthesizeFromTestSuite as redteamSynthesizeFromTestSuite } from '../../redteam';
+import { synthesize } from '../../redteam';
 import {
   REDTEAM_MODEL,
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
@@ -89,14 +90,18 @@ export async function doGenerateRedteam({
   });
   await telemetry.send();
 
-  const redteamTests = await redteamSynthesizeFromTestSuite(testSuite, {
+  const defaultPlugins = Array.from(REDTEAM_DEFAULT_PLUGINS);
+  plugins = plugins || defaultPlugins;
+  if (addPlugins && addPlugins.length > 0) {
+    plugins = [...new Set([...plugins, ...addPlugins])];
+  }
+  invariant(plugins && Array.isArray(plugins) && plugins.length > 0, 'No plugins found');
+  const redteamTests = await synthesize({
     purpose,
     injectVar,
-    plugins:
-      addPlugins && addPlugins.length > 0
-        ? Array.from(plugins || REDTEAM_DEFAULT_PLUGINS).concat(addPlugins)
-        : plugins,
+    plugins,
     provider,
+    prompts: testSuite.prompts.map((prompt) => prompt.raw),
     numTests,
   });
 
