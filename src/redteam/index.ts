@@ -25,11 +25,20 @@ interface SynthesizeOptions {
   prompts: string[];
   provider?: string;
   purpose?: string;
+  numTests: number;
 }
+
+// n is assigned a default value by commander. Require that it exists in the type
+type PartialSynthesizeOptions = Partial<Omit<SynthesizeOptions, 'numTests'>> & { numTests: number };
 
 interface Plugin {
   key: string;
-  action: (provider: ApiProvider, purpose: string, injectVar: string) => Promise<TestCase[]>;
+  action: (
+    provider: ApiProvider,
+    purpose: string,
+    injectVar: string,
+    n: number,
+  ) => Promise<TestCase[]>;
 }
 
 interface Method {
@@ -40,39 +49,39 @@ interface Method {
 const Plugins: Plugin[] = [
   {
     key: 'competitors',
-    action: (provider, purpose, injectVar) =>
-      new CompetitorPlugin(provider, purpose, injectVar).generateTests(),
+    action: (provider, purpose, injectVar, n) =>
+      new CompetitorPlugin(provider, purpose, injectVar).generateTests(n),
   },
   {
     key: 'contracts',
-    action: (provider, purpose, injectVar) =>
-      new ContractPlugin(provider, purpose, injectVar).generateTests(),
+    action: (provider, purpose, injectVar, n) =>
+      new ContractPlugin(provider, purpose, injectVar).generateTests(n),
   },
   {
     key: 'excessive-agency',
-    action: (provider, purpose, injectVar) =>
-      new ExcessiveAgencyPlugin(provider, purpose, injectVar).generateTests(),
+    action: (provider, purpose, injectVar, n) =>
+      new ExcessiveAgencyPlugin(provider, purpose, injectVar).generateTests(n),
   },
   {
     key: 'hallucination',
-    action: (provider, purpose, injectVar) =>
-      new HallucinationPlugin(provider, purpose, injectVar).generateTests(),
+    action: (provider, purpose, injectVar, n) =>
+      new HallucinationPlugin(provider, purpose, injectVar).generateTests(n),
   },
   {
     key: 'hijacking',
-    action: (provider, purpose, injectVar) =>
-      new HijackingPlugin(provider, purpose, injectVar).generateTests(),
+    action: (provider, purpose, injectVar, n) =>
+      new HijackingPlugin(provider, purpose, injectVar).generateTests(n),
   },
   {
     key: 'overreliance',
-    action: (provider, purpose, injectVar) =>
-      new OverreliancePlugin(provider, purpose, injectVar).generateTests(),
+    action: (provider, purpose, injectVar, n) =>
+      new OverreliancePlugin(provider, purpose, injectVar).generateTests(n),
   },
   { key: 'pii', action: getPiiTests },
   {
     key: 'politics',
-    action: (provider, purpose, injectVar) =>
-      new PoliticsPlugin(provider, purpose, injectVar).generateTests(),
+    action: (provider, purpose, injectVar, n) =>
+      new PoliticsPlugin(provider, purpose, injectVar).generateTests(n),
   },
 ];
 
@@ -123,6 +132,7 @@ export async function synthesize({
   injectVar,
   purpose: purposeOverride,
   plugins,
+  numTests,
 }: SynthesizeOptions) {
   validatePlugins(plugins);
   const reasoningProvider = await loadApiProvider(provider || REDTEAM_MODEL);
@@ -202,7 +212,7 @@ export async function synthesize({
     if (plugins.includes(key)) {
       updateProgress();
       logger.debug(`Generating ${key} tests`);
-      const pluginTests = await action(redteamProvider, purpose, injectVar);
+      const pluginTests = await action(redteamProvider, purpose, injectVar, numTests);
       testCases.push(...pluginTests);
       logger.debug(`Added ${pluginTests.length} ${key} test cases`);
     }
@@ -225,7 +235,7 @@ export async function synthesize({
 
 export async function synthesizeFromTestSuite(
   testSuite: TestSuite,
-  options: Partial<SynthesizeOptions>,
+  options: PartialSynthesizeOptions,
 ) {
   return synthesize({
     ...options,

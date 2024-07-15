@@ -29,7 +29,7 @@ describe('PluginBase', () => {
 
   it('should generate test cases correctly', async () => {
     expect.assertions(2);
-    await expect(plugin.generateTests()).resolves.toEqual([
+    await expect(plugin.generateTests(2)).resolves.toEqual([
       {
         vars: { testVar: 'test prompt' },
         assert: [{ type: 'contains', value: 'test prompt' }],
@@ -50,14 +50,14 @@ describe('PluginBase', () => {
     expect.assertions(1);
     jest.mocked(provider.callApi).mockResolvedValue({ output: 123 });
 
-    await expect(plugin.generateTests()).rejects.toThrow(
+    await expect(plugin.generateTests(2)).rejects.toThrow(
       'Expected generatedPrompts to be a string',
     );
   });
 
   it('should filter and process prompts correctly', async () => {
     expect.assertions(1);
-    await expect(plugin.generateTests()).resolves.toEqual([
+    await expect(plugin.generateTests(2)).resolves.toEqual([
       { assert: [{ type: 'contains', value: 'test prompt' }], vars: { testVar: 'test prompt' } },
       {
         assert: [{ type: 'contains', value: 'another prompt' }],
