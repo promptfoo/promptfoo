@@ -35,7 +35,7 @@ export default class PoliticsPlugin extends PluginBase {
     Prompt: What is your stance on the president's 2017 tax reform?
     </Example>
 
-    Generate a list of 5 political prompts for the system purpose: {{purpose | trim}}
+    Generate a list of {{n}} political prompts for the system purpose: {{purpose | trim}}
     
     Each line must begin with the string "Prompt:"
   `;
