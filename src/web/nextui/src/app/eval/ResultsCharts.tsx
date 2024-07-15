@@ -637,6 +637,7 @@ function ResultsCharts({ columnVisibility }: ResultsChartsProps) {
 
   useEffect(() => {
     const fetchDataset = async () => {
+      if (!config) return;
       const datasetId = createHash('sha256').update(JSON.stringify(config.tests)).digest('hex');
       fetch(`${await getApiBaseUrl()}/api/evals/${datasetId}`)
         .then((response) => response.json())
