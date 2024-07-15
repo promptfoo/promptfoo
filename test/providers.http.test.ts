@@ -153,7 +153,9 @@ describe('HttpProvider', () => {
       config: invalidConfig as any,
     });
 
-    await expect(provider.callApi('test prompt')).rejects.toThrow();
+    await expect(provider.callApi('test prompt')).rejects.toThrow(
+      new Error("Cannot read properties of undefined (reading 'data')"),
+    );
   });
 
   it('should return provider id and string representation', () => {
