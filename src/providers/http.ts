@@ -8,7 +8,8 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../types.js';
-import { getNunjucksEngine, isValidJson, safeJsonStringify } from '../util';
+import { isValidJson, safeJsonStringify } from '../util';
+import { getNunjucksEngine } from '../util/templates';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
 function createResponseParser(parser: any): (data: any) => ProviderResponse {

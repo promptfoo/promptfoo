@@ -8,7 +8,8 @@ import { deleteCommand } from './commands/delete';
 import { evalCommand } from './commands/eval';
 import { exportCommand } from './commands/export';
 import { feedbackCommand } from './commands/feedback';
-import { generateCommand } from './commands/generate';
+import { generateDatasetCommand } from './commands/generate/dataset';
+import { generateRedteamCommand } from './commands/generate/redteam';
 import { importCommand } from './commands/import';
 import { initCommand } from './commands/init';
 import { listCommand } from './commands/list';
@@ -50,6 +51,8 @@ export async function loadDefaultConfig(): Promise<{
 async function main() {
   await checkForUpdates();
 
+  const program = new Command();
+
   const { defaultConfig, defaultConfigPath } = await loadDefaultConfig();
 
   const evaluateOptions: EvaluateOptions = {};
@@ -60,15 +63,12 @@ async function main() {
     evaluateOptions.interactiveProviders = defaultConfig.evaluateOptions.interactiveProviders;
   }
 
-  const program = new Command();
-
   cacheCommand(program);
   configCommand(program);
   deleteCommand(program);
   evalCommand(program, defaultConfig, defaultConfigPath, evaluateOptions);
   exportCommand(program);
   feedbackCommand(program);
-  generateCommand(program, defaultConfig, defaultConfigPath);
   importCommand(program);
   initCommand(program);
   listCommand(program);
@@ -78,11 +78,15 @@ async function main() {
   versionCommand(program);
   viewCommand(program);
 
-  program.parse(process.argv);
+  const generateCommand = program.command('generate').description('Generate synthetic data');
+  generateDatasetCommand(generateCommand, defaultConfig, defaultConfigPath);
+  generateRedteamCommand(generateCommand, defaultConfig, defaultConfigPath);
 
   if (!process.argv.slice(2).length) {
     program.outputHelp();
+    process.exit(0);
   }
+  program.parse(process.argv);
 }
 
 if (require.main === module) {
