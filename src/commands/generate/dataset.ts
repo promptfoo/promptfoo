@@ -11,14 +11,15 @@ import { TestSuite, UnifiedConfig } from '../../types';
 import { printBorder, setupEnv } from '../../util';
 
 interface DatasetGenerateOptions {
+  cache: boolean;
   config?: string;
+  envFile?: string;
   instructions?: string;
-  output?: string;
   numPersonas: string;
   numTestCasesPerPersona: string;
+  output?: string;
+  provider?: string;
   write: boolean;
-  cache: boolean;
-  envFile?: string;
   defaultConfig: Partial<UnifiedConfig>;
   defaultConfigPath: string | undefined;
 }
@@ -56,6 +57,7 @@ async function doGenerateDataset(options: DatasetGenerateOptions): Promise<void>
     instructions: options.instructions,
     numPersonas: parseInt(options.numPersonas, 10),
     numTestCasesPerPersona: parseInt(options.numTestCasesPerPersona, 10),
+    provider: options.provider,
   });
   const configAddition = { tests: results.map((result) => ({ vars: result })) };
   const yamlString = yaml.dump(configAddition);
@@ -87,11 +89,12 @@ async function doGenerateDataset(options: DatasetGenerateOptions): Promise<void>
   }
 
   telemetry.record('command_used', {
+    duration: Math.round((Date.now() - startTime) / 1000),
     name: 'generate_dataset',
     numPrompts: testSuite.prompts.length,
     numTestsExisting: (testSuite.tests || []).length,
     numTestsGenerated: results.length,
-    duration: Math.round((Date.now() - startTime) / 1000),
+    provider: options.provider || 'default',
   });
   await telemetry.send();
 }

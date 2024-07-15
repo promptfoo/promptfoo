@@ -27,6 +27,7 @@ interface DefaultProviders {
   llmRubricProvider?: ApiProvider;
   moderationProvider: ApiProvider;
   suggestionsProvider: ApiProvider;
+  synthesizeProvider: ApiProvider;
 }
 
 export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultProviders> {
@@ -45,6 +46,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       llmRubricProvider: AnthropicLlmRubricProvider,
       moderationProvider: OpenAiModerationProvider,
       suggestionsProvider: AnthropicSuggestionsProvider,
+      synthesizeProvider: AnthropicGradingJsonProvider,
     };
   }
 
@@ -59,6 +61,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       gradingProvider: GeminiGradingProvider,
       moderationProvider: OpenAiModerationProvider,
       suggestionsProvider: GeminiGradingProvider,
+      synthesizeProvider: GeminiGradingProvider,
     };
   }
 
@@ -70,5 +73,6 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     gradingProvider: OpenAiGradingProvider,
     moderationProvider: OpenAiModerationProvider,
     suggestionsProvider: OpenAiSuggestionsProvider,
+    synthesizeProvider: OpenAiGradingJsonProvider,
   };
 }
