@@ -74,7 +74,7 @@ When opening a pull request:
 - Be responsive to feedback and be prepared to make changes if requested.
 - Ensure your tests are passing and your code is properly linted.
 
-Don't hesitate to ask for help. We're here to support you. If you're worried about whether your PR will be accepted, please talk to us first.
+Don't hesitate to ask for help. We're here to support you. If you're worried about whether your PR will be accepted, please talk to us first (see [Getting Help](#getting-help)).
 
 ## Tests
 
