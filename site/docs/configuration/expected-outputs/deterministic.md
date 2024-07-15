@@ -294,7 +294,10 @@ You can also specify required elements:
 ```yaml
 assert:
   - type: is-xml
-    value: 'root.child,root.sibling'
+    value:
+      requiredElements:
+        - root.child
+        - root.sibling
 ```
 
 This checks if the XML is valid and contains the specified elements. The elements are specified as dot-separated paths, allowing for nested element checking.
@@ -304,7 +307,7 @@ This checks if the XML is valid and contains the specified elements. The element
 1. The assertion first attempts to parse the entire output as XML using a parser (fast-xml-parser).
 2. If parsing succeeds, it's considered valid XML.
 3. If `value` is specified:
-   - It splits the value by commas to get a list of required elements.
+   - It checks for a requiredElements key with an array of required elements.
    - Each element path (e.g., "root.child") is split by dots.
    - It traverses the parsed XML object following these paths.
    - If any required element is not found, the assertion fails.
@@ -326,7 +329,10 @@ Checking for specific elements:
 ```yaml
 assert:
   - type: is-xml
-    value: 'analysis.classification,analysis.color'
+    value:
+      requiredElements:
+        - analysis.classification
+        - analysis.color
 ```
 
 Passes for: `<analysis><classification>T-shirt</classification><color>Red</color></analysis>`
@@ -337,7 +343,9 @@ Checking nested elements:
 ```yaml
 assert:
   - type: is-xml
-    value: 'root.parent.child.grandchild'
+    value:
+      requiredElements:
+        - root.parent.child.grandchild
 ```
 
 Passes for: `<root><parent><child><grandchild>Content</grandchild></child></parent></root>`
