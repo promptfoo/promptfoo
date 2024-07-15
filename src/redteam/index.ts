@@ -135,7 +135,12 @@ export async function synthesize({
   numTests,
 }: SynthesizeOptions) {
   validatePlugins(plugins);
-  const reasoningProvider = await loadApiProvider(provider || REDTEAM_MODEL);
+  const redteamProvider: ApiProvider = await loadApiProvider(provider || REDTEAM_MODEL, {
+    options: {
+      config: { temperature: 0.5 },
+    },
+  });
+
   logger.info(
     `Synthesizing test cases for ${prompts.length} ${
       prompts.length === 1 ? 'prompt' : 'prompts'
@@ -157,6 +162,7 @@ export async function synthesize({
     invariant(typeof injectVar === 'string', `Inject var must be a string, got ${injectVar}`);
   }
 
+
   // Initialize progress bar
   const progressBar = new cliProgress.SingleBar({}, cliProgress.Presets.shades_classic);
   const totalSteps = plugins.length + 2; // +2 for initial setup steps
@@ -174,7 +180,7 @@ export async function synthesize({
 
   // Get purpose
   updateProgress();
-  const purpose = purposeOverride || (await getPurpose(reasoningProvider, prompts));
+  const purpose = purposeOverride || (await getPurpose(redteamProvider, prompts));
   updateProgress();
 
   logger.debug(`System purpose: ${purpose}`);
@@ -182,12 +188,6 @@ export async function synthesize({
   // Get adversarial test cases
   const testCases: TestCase[] = [];
   const harmfulPrompts: TestCase[] = [];
-
-  const redteamProvider: ApiProvider = await loadApiProvider(provider || REDTEAM_MODEL, {
-    options: {
-      config: { temperature: 0.5 },
-    },
-  });
 
   const addHarmfulCases = plugins.some((p) => p.startsWith('harmful'));
   if (plugins.includes('prompt-injection') || plugins.includes('jailbreak') || addHarmfulCases) {
