@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import { testCaseFromCsvRow } from '../src/csv';
+import { loadApiProvider } from '../src/providers';
 import { readStandaloneTestsFile, readTest, readTests } from '../src/testCases';
 import type { AssertionType, TestCase } from '../src/types';
 
@@ -11,6 +12,9 @@ jest.mock('proxy-agent', () => ({
 }));
 jest.mock('glob', () => ({
   globSync: jest.fn(),
+}));
+jest.mock('../src/providers', () => ({
+  loadApiProvider: jest.fn(),
 }));
 
 jest.mock('fs', () => ({
@@ -27,11 +31,11 @@ jest.mock('fs', () => ({
 
 jest.mock('../src/database');
 
-beforeEach(() => {
-  jest.clearAllMocks();
-});
-
 describe('readStandaloneTestsFile', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   it('readStandaloneTestsFile with CSV input', async () => {
     jest.mocked(fs.readFileSync).mockReturnValue('var1,var2\nvalue1,value2\nvalue3,value4');
     const varsPath = 'vars.csv';
@@ -76,6 +80,10 @@ describe('readStandaloneTestsFile', () => {
 });
 
 describe('readTest', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   it('readTest with string input (path to test config)', async () => {
     const testPath = 'test1.yaml';
     const testContent = {
@@ -135,10 +143,47 @@ describe('readTest', () => {
       assert: [{ type: 'equals', value: 'value1' }],
     });
   });
+
+  describe('readTest with provider', () => {
+    it('should load provider when provider is a string', async () => {
+      const mockProvider = { callApi: jest.fn(), id: jest.fn().mockReturnValue('mock-provider') };
+      jest.mocked(loadApiProvider).mockResolvedValue(mockProvider);
+
+      const testCase: TestCase = {
+        description: 'Test with string provider',
+        provider: 'mock-provider',
+        assert: [{ type: 'equals', value: 'expected' }],
+      };
+
+      const result = await readTest(testCase);
+
+      expect(loadApiProvider).toHaveBeenCalledWith('mock-provider');
+      expect(result.provider).toBe(mockProvider);
+    });
+
+    it('should load provider when provider is an object with id', async () => {
+      const mockProvider = { callApi: jest.fn(), id: jest.fn().mockReturnValue('mock-provider') };
+      jest.mocked(loadApiProvider).mockResolvedValue(mockProvider);
+
+      const testCase: TestCase = {
+        description: 'Test with provider object',
+        provider: { id: 'mock-provider' },
+        assert: [{ type: 'equals', value: 'expected' }],
+      };
+
+      const result = await readTest(testCase);
+
+      expect(loadApiProvider).toHaveBeenCalledWith('mock-provider', {
+        options: { id: 'mock-provider' },
+        basePath: '',
+      });
+      expect(result.provider).toBe(mockProvider);
+    });
+  });
 });
 
 describe('readTests', () => {
-  afterEach(() => {
+  beforeEach(() => {
     jest.resetAllMocks();
   });
 

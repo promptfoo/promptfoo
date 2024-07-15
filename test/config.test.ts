@@ -23,11 +23,11 @@ jest.mock('fs', () => ({
 
 jest.mock('../src/database');
 
-beforeEach(() => {
-  jest.clearAllMocks();
-});
-
 describe('readConfigs', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   it('reads from existing configs', async () => {
     const config1 = {
       description: 'test1',

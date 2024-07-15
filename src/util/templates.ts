@@ -1,3 +1,25 @@
+import nunjucks from 'nunjucks';
+import { NunjucksFilterMap } from '../types';
+
+export function getNunjucksEngine(filters?: NunjucksFilterMap) {
+  if (process.env.PROMPTFOO_DISABLE_TEMPLATING) {
+    return {
+      renderString: (template: string) => template,
+    };
+  }
+
+  const env = nunjucks.configure({
+    autoescape: false,
+  });
+
+  if (filters) {
+    for (const [name, filter] of Object.entries(filters)) {
+      env.addFilter(name, filter);
+    }
+  }
+  return env;
+}
+
 /**
  * Parse Nunjucks template to extract variables.
  * @param template - The Nunjucks template string.

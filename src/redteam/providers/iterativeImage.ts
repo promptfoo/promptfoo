@@ -2,7 +2,7 @@ import dedent from 'dedent';
 import invariant from 'tiny-invariant';
 import logger from '../../logger';
 import type { ApiProvider, CallApiContextParams, CallApiOptionsParams } from '../../types';
-import { getNunjucksEngine } from '../../util';
+import { getNunjucksEngine } from '../../util/templates';
 
 const ATTACKER_MODEL = 'gpt-4o';
 
