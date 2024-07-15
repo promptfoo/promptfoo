@@ -362,7 +362,6 @@ export async function synthesize({
     const parsed = personaResponseObjects[0] as {
       vars: VarMapping[];
     };
-    logger.debug(`parsed: ${JSON.stringify(parsed, null, 2)}`);
     for (const vars of parsed.vars) {
       logger.debug(`${JSON.stringify(vars, null, 2)}`);
       testCaseVars.push(vars);
