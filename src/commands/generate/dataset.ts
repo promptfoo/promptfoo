@@ -5,12 +5,94 @@ import yaml from 'js-yaml';
 import { disableCache } from '../../cache';
 import { resolveConfigs } from '../../config';
 import logger from '../../logger';
-
-
 import telemetry from '../../telemetry';
 import { synthesizeFromTestSuite } from '../../testCases';
 import { TestSuite, UnifiedConfig } from '../../types';
 import { printBorder, setupEnv } from '../../util';
+
+async function doGenerateDataset(options: {
+  config?: string;
+  instructions?: string;
+  output?: string;
+  numPersonas: string;
+  numTestCasesPerPersona: string;
+  write: boolean;
+  cache: boolean;
+  envFile?: string;
+  defaultConfig: Partial<UnifiedConfig>;
+  defaultConfigPath: string | undefined;
+}): Promise<void> {
+  setupEnv(options.envFile);
+  if (!options.cache) {
+    logger.info('Cache is disabled.');
+    disableCache();
+  }
+
+  let testSuite: TestSuite;
+  const configPath = options.config || options.defaultConfigPath;
+  if (configPath) {
+    const resolved = await resolveConfigs(
+      {
+        config: [configPath],
+      },
+      options.defaultConfig,
+    );
+    testSuite = resolved.testSuite;
+  } else {
+    throw new Error('Could not find config file. Please use `--config`');
+  }
+
+  const startTime = Date.now();
+  telemetry.record('command_used', {
+    name: 'generate_dataset - started',
+    numPrompts: testSuite.prompts.length,
+    numTestsExisting: (testSuite.tests || []).length,
+  });
+  await telemetry.send();
+
+  const results = await synthesizeFromTestSuite(testSuite, {
+    instructions: options.instructions,
+    numPersonas: parseInt(options.numPersonas, 10),
+    numTestCasesPerPersona: parseInt(options.numTestCasesPerPersona, 10),
+  });
+  const configAddition = { tests: results.map((result) => ({ vars: result })) };
+  const yamlString = yaml.dump(configAddition);
+  if (options.output) {
+    fs.writeFileSync(options.output, yamlString);
+    printBorder();
+    logger.info(`Wrote ${results.length} new test cases to ${options.output}`);
+    printBorder();
+  } else {
+    printBorder();
+    logger.info('New test Cases');
+    printBorder();
+    logger.info(yamlString);
+  }
+
+  printBorder();
+  if (options.write && configPath) {
+    const existingConfig = yaml.load(fs.readFileSync(configPath, 'utf8')) as Partial<UnifiedConfig>;
+    existingConfig.tests = [...(existingConfig.tests || []), ...configAddition.tests];
+    fs.writeFileSync(configPath, yaml.dump(existingConfig));
+    logger.info(`Wrote ${results.length} new test cases to ${configPath}`);
+    logger.info(chalk.green(`Run ${chalk.bold('promptfoo eval')} to run the generated tests`));
+  } else {
+    logger.info(
+      `Copy the above test cases or run ${chalk.greenBright(
+        'promptfoo generate dataset --write',
+      )} to write directly to the config`,
+    );
+  }
+
+  telemetry.record('command_used', {
+    name: 'generate_dataset',
+    numPrompts: testSuite.prompts.length,
+    numTestsExisting: (testSuite.tests || []).length,
+    numTestsGenerated: results.length,
+    duration: Math.round((Date.now() - startTime) / 1000),
+  });
+  await telemetry.send();
+}
 
 export function generateDatasetCommand(
   program: Command,
@@ -35,91 +117,5 @@ export function generateDatasetCommand(
     .option('--numTestCasesPerPersona <number>', 'Number of test cases per persona', '3')
     .option('--no-cache', 'Do not read or write results to disk cache', false)
     .option('--env-file <path>', 'Path to .env file')
-    .action(
-      async (options: {
-        config?: string;
-        instructions?: string;
-        output?: string;
-        numPersonas: string;
-        numTestCasesPerPersona: string;
-        write: boolean;
-        cache: boolean;
-        envFile?: string;
-      }) => {
-        setupEnv(options.envFile);
-        if (!options.cache) {
-          logger.info('Cache is disabled.');
-          disableCache();
-        }
-
-        let testSuite: TestSuite;
-        const configPath = options.config || defaultConfigPath;
-        if (configPath) {
-          const resolved = await resolveConfigs(
-            {
-              config: [configPath],
-            },
-            defaultConfig,
-          );
-          testSuite = resolved.testSuite;
-        } else {
-          throw new Error('Could not find config file. Please use `--config`');
-        }
-
-        const startTime = Date.now();
-        telemetry.record('command_used', {
-          name: 'generate_dataset - started',
-          numPrompts: testSuite.prompts.length,
-          numTestsExisting: (testSuite.tests || []).length,
-        });
-        await telemetry.send();
-
-        const results = await synthesizeFromTestSuite(testSuite, {
-          instructions: options.instructions,
-          numPersonas: parseInt(options.numPersonas, 10),
-          numTestCasesPerPersona: parseInt(options.numTestCasesPerPersona, 10),
-        });
-        const configAddition = { tests: results.map((result) => ({ vars: result })) };
-        const yamlString = yaml.dump(configAddition);
-        if (options.output) {
-          fs.writeFileSync(options.output, yamlString);
-          printBorder();
-          logger.info(`Wrote ${results.length} new test cases to ${options.output}`);
-          printBorder();
-        } else {
-          printBorder();
-          logger.info('New test Cases');
-          printBorder();
-          logger.info(yamlString);
-        }
-
-        printBorder();
-        if (options.write && configPath) {
-          const existingConfig = yaml.load(
-            fs.readFileSync(configPath, 'utf8'),
-          ) as Partial<UnifiedConfig>;
-          existingConfig.tests = [...(existingConfig.tests || []), ...configAddition.tests];
-          fs.writeFileSync(configPath, yaml.dump(existingConfig));
-          logger.info(`Wrote ${results.length} new test cases to ${configPath}`);
-          logger.info(
-            chalk.green(`Run ${chalk.bold('promptfoo eval')} to run the generated tests`),
-          );
-        } else {
-          logger.info(
-            `Copy the above test cases or run ${chalk.greenBright(
-              'promptfoo generate dataset --write',
-            )} to write directly to the config`,
-          );
-        }
-
-        telemetry.record('command_used', {
-          name: 'generate_dataset',
-          numPrompts: testSuite.prompts.length,
-          numTestsExisting: (testSuite.tests || []).length,
-          numTestsGenerated: results.length,
-          duration: Math.round((Date.now() - startTime) / 1000),
-        });
-        await telemetry.send();
-      },
-    );
+    .action((opts) => doGenerateDataset({ ...opts, defaultConfig, defaultConfigPath }));
 }
