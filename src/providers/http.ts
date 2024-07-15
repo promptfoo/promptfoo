@@ -8,7 +8,7 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../types.js';
-import { getNunjucksEngine, safeJsonStringify } from '../util';
+import { getNunjucksEngine, isValidJson, safeJsonStringify } from '../util';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
 function createResponseParser(parser: any): (data: any) => ProviderResponse {
@@ -19,15 +19,6 @@ function createResponseParser(parser: any): (data: any) => ProviderResponse {
     return new Function('json', `return ${parser}`) as (data: any) => ProviderResponse;
   }
   return (data) => ({ output: data });
-}
-
-function isValidJson(str: string): boolean {
-  try {
-    JSON.parse(str);
-    return true;
-  } catch (e) {
-    return false;
-  }
 }
 
 export class HttpProvider implements ApiProvider {

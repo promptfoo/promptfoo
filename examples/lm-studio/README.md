@@ -1,6 +1,6 @@
-# LM Studio Example with PromptFoo
+# LM Studio Example with Promptfoo
 
-This example demonstrates how to use PromptFoo with LM Studio for prompt evaluation. It showcases configuration for interacting with the LM Studio API using a locally hosted language model.
+This example demonstrates how to use Promptfoo with LM Studio for prompt evaluation. It showcases configuration for interacting with the LM Studio API using a locally hosted language model.
 
 ## Prerequisites
 
@@ -14,7 +14,7 @@ This example demonstrates how to use PromptFoo with LM Studio for prompt evaluat
    - Open LM Studio and load the `bartowski/gemma-2-9b-it-GGUF` model.
    - Start a local server to host the model (usually at `http://localhost:1234`).
 
-2. **Configure PromptFoo**:
+2. **Configure Promptfoo**:
 
    Create a `promptfooconfig.yaml` file with the following content:
 
@@ -49,4 +49,4 @@ This example demonstrates how to use PromptFoo with LM Studio for prompt evaluat
    npx promptfoo view
    ```
 
-For more information, see the [PromptFoo documentation](https://www.promptfoo.dev/docs/providers/http) on how to set up a custom HTTP provider.
+For more information, see the [Promptfoo documentation](https://www.promptfoo.dev/docs/providers/http) on how to set up a custom HTTP provider.
