@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
 import { getApiBaseUrl } from '@/api';
 import CloseIcon from '@mui/icons-material/Close';
@@ -422,7 +422,6 @@ function MetricChart({ table }: ChartProps) {
 function LineChart({ table, evalId, config }: ChartProps) {
   const lineCanvasRef = useRef(null);
   const lineChartInstance = useRef<Chart | null>(null);
-  const [datasetId, setDatasetId] = useState('');
   const [dataset, setDataset] = useState<TestCasesWithMetadata>();
 
   interface PointMetadata {
@@ -454,12 +453,11 @@ function LineChart({ table, evalId, config }: ChartProps) {
     return i + 'th';
   }
 
-  useEffect(() => {
+  const datasetId = useMemo(() => {
     if (config) {
-      const newDatasetId = createHash('sha256').update(JSON.stringify(config.tests)).digest('hex');
-      setDatasetId(newDatasetId);
+      return createHash('sha256').update(JSON.stringify(config.tests)).digest('hex');
     }
-  }, [table, evalId, config]);
+  }, [config]);
 
   useEffect(() => {
     if (!datasetId) return;
@@ -626,7 +624,7 @@ function LineChart({ table, evalId, config }: ChartProps) {
     });
   }, [table, evalId, config, datasetId, dataset]);
 
-  return <canvas ref={lineCanvasRef} style={{ maxHeight: '300px', cursor: 'pointer' }}></canvas>;
+  return <canvas ref={lineCanvasRef} style={{ maxHeight: '300px', cursor: 'pointer' }} />;
 }
 
 function ResultsCharts({ columnVisibility }: ResultsChartsProps) {
@@ -639,7 +637,6 @@ function ResultsCharts({ columnVisibility }: ResultsChartsProps) {
 
   useEffect(() => {
     const fetchDataset = async () => {
-      if (!config) return;
       const datasetId = createHash('sha256').update(JSON.stringify(config.tests)).digest('hex');
       fetch(`${await getApiBaseUrl()}/api/evals/${datasetId}`)
         .then((response) => response.json())
@@ -647,7 +644,9 @@ function ResultsCharts({ columnVisibility }: ResultsChartsProps) {
           setShowLineChart(data.data[0].count > 1);
         });
     };
-    fetchDataset();
+    if (!!config) {
+      fetchDataset();
+    }
   }, [table, evalId, config]);
 
   if (!table || !config || !showCharts || table.head.prompts.length < 2) {
