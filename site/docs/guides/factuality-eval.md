@@ -4,7 +4,7 @@ sidebar_position: 1
 
 # Evaluating factuality
 
-promptfoo implements OpenAI's evaluation methodology for factuality, using the [`factuality`](/docs/configuration/expected-outputs#model-graded-evals) assertion type.
+promptfoo implements OpenAI's evaluation methodology for factuality, using the [`factuality`](/docs/configuration/expected-outputs#model-assisted-eval-metrics) assertion type.
 
 The model-graded factuality check takes the following three inputs:
 
@@ -76,4 +76,4 @@ The above configuration marks the eval as failed if the LLM output is a superset
 
 In general, grading should be done by a model that is proficient in reasoning. By default, promptfoo uses GPT-4 to run model-graded evals.
 
-However, you can use any model you want to grade the evals. To use something other than GPT-4, see [overriding the LLM grader](/docs/configuration/expected-outputs#overriding-the-llm-grader).
+However, you can use any model you want to grade the evals. To use something other than GPT-4, see [overriding the LLM grader](/docs/configuration/expected-outputs/model-graded/#overriding-the-llm-grader).

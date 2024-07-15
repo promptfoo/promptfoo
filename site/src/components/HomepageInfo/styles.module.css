@@ -1,48 +1,85 @@
+.infoContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  margin: 4rem 0 6rem 0;
+}
+
+.infoContainer h2 {
+  font-size: 2rem;
+}
+
 .section {
-  padding: 4rem 0 0 0;
   text-align: center;
 }
 
-.codeExample {
+.blurb {
+  font-size: 2.5rem;
+  margin-bottom: 2rem;
+  color: #333;
+}
+
+.codeExample,
+.webviewExample {
   flex: 1;
-  max-width: 50%;
+  max-width: 48%;
+  background: white;
+  border-radius: 8px;
 }
 
-.codeExample div {
-  text-align: left;
-}
-
-.codeBlock {
-  font-size: 0.8rem;
+.codeExample {
+  padding-left: 1rem;
 }
 
 .webviewExample {
-  flex: 1;
-  justify-self: start;
+  padding-right: 1rem;
+}
+
+.codeBlock {
+  text-align: left;
+  font-size: 0.9rem;
 }
 
 .configToWebview {
   display: flex;
-  flex-wrap: wrap;
-  flex-direction: row;
-  align-items: start;
+  justify-content: center;
+  align-items: flex-start;
   margin-top: 4rem;
-  margin-bottom: 2rem;
   gap: 1rem;
-
-  font-size: var(--ifm-h2-font-size);
 }
 
-@media (max-width: 723px) {
-  .logoContainer {
-    margin-top: 4rem;
-  }
+.featureTitle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  font-weight: 500;
+  margin-bottom: 1.5rem;
+  color: #2c3e50;
+}
 
+.featureTitle svg {
+  margin-right: 0.5rem;
+}
+
+.resultImage {
+  max-width: 100%;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+@media (max-width: 768px) {
   .configToWebview {
     flex-direction: column;
   }
 
-  .codeExample {
+  .codeExample,
+  .webviewExample {
     max-width: 100%;
+    padding: 0 1rem;
+  }
+
+  .blurb {
+    font-size: 2rem;
   }
 }

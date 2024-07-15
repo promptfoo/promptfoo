@@ -119,6 +119,10 @@ Or a list of paths:
 tests: ['tests/accuracy', 'tests/creativity', 'tests/hallucination']
 ```
 
+:::tip
+We also support CSV datasets from [local file](/docs/configuration/parameters/#import-from-csv) and [Google Sheets](/docs/integrations/google-sheets).
+:::
+
 ## Import vars from separate files
 
 The `vars` attribute can point to a file or directory. For example:
@@ -258,22 +262,22 @@ tests:
       language: French
       input: Hello world
     assert:
-      - $ref: '#assertionTemplates/startsUpperCase'
+      - $ref: '#/assertionTemplates/startsUpperCase'
   - vars:
       language: German
       input: How's it going?
     assert:
-      - $ref: '#assertionTemplates/noAIreference'
-      - $ref: '#assertionTemplates/startsUpperCase'
+      - $ref: '#/assertionTemplates/noAIreference'
+      - $ref: '#/assertionTemplates/startsUpperCase'
 
 // highlight-start
 assertionTemplates:
     noAIreference:
-      - type: llm-rubric
-        value: does not describe self as an AI, model, or chatbot
+      type: llm-rubric
+      value: does not describe self as an AI, model, or chatbot
     startsUpperCase:
-      - type: javascript
-        value: output[0] === output[0].toUpperCase()
+      type: javascript
+      value: output[0] === output[0].toUpperCase()
 // highlight-end
 ```
 

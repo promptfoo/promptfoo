@@ -1,6 +1,3 @@
-import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
-
 import type {
   EnvOverrides,
   EvaluateOptions,
@@ -8,7 +5,10 @@ import type {
   ProviderOptions,
   TestCase,
   UnifiedConfig,
+  Scenario,
 } from '@/../../../types';
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
 export interface State {
   env: EnvOverrides;
@@ -18,6 +18,7 @@ export interface State {
   prompts: string[];
   defaultTest: TestCase;
   evaluateOptions: EvaluateOptions;
+  scenarios: Scenario[];
   setEnv: (env: EnvOverrides) => void;
   setTestCases: (testCases: TestCase[]) => void;
   setDescription: (description: string) => void;
@@ -25,6 +26,7 @@ export interface State {
   setPrompts: (prompts: string[]) => void;
   setDefaultTest: (testCase: TestCase) => void;
   setEvaluateOptions: (options: EvaluateOptions) => void;
+  setScenarios: (scenarios: Scenario[]) => void;
   setStateFromConfig: (config: Partial<UnifiedConfig>) => void;
   getTestSuite: () => EvaluateTestSuite;
 }
@@ -39,6 +41,7 @@ export const useStore = create<State>()(
       prompts: [],
       defaultTest: {},
       evaluateOptions: {},
+      scenarios: [],
       setEnv: (env) => set({ env }),
       setTestCases: (testCases) => set({ testCases }),
       setDescription: (description) => set({ description }),
@@ -46,6 +49,7 @@ export const useStore = create<State>()(
       setPrompts: (prompts) => set({ prompts }),
       setDefaultTest: (testCase) => set({ defaultTest: testCase }),
       setEvaluateOptions: (options) => set({ evaluateOptions: options }),
+      setScenarios: (scenarios) => set({ scenarios }),
       setStateFromConfig: (config: Partial<UnifiedConfig>) => {
         const updates: Partial<State> = {};
         if (config.description) {
@@ -79,16 +83,20 @@ export const useStore = create<State>()(
         if (config.evaluateOptions) {
           updates.evaluateOptions = config.evaluateOptions;
         }
+        if (config.scenarios) {
+          updates.scenarios = config.scenarios as Scenario[];
+        }
         set(updates);
       },
       getTestSuite: () => {
-        const { description, testCases, providers, prompts, env } = get();
+        const { description, testCases, providers, prompts, env, scenarios } = get();
         return {
           env,
           description,
           providers,
           prompts,
           tests: testCases,
+          scenarios,
         };
       },
     }),

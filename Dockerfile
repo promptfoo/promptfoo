@@ -1,12 +1,12 @@
 # https://github.com/vercel/next.js/blob/canary/examples/with-docker/Dockerfile
 
 # ---- Build ----
-FROM node:18-alpine AS builder
+FROM node:20-alpine AS builder
 
 ARG NEXT_PUBLIC_PROMPTFOO_BASE_URL
 ENV NEXT_PUBLIC_PROMPTFOO_BASE_URL=${NEXT_PUBLIC_PROMPTFOO_BASE_URL}
 ENV NEXT_PUBLIC_PROMPTFOO_BUILD_STANDALONE_SERVER=1
-ENV NEXT_TELEMETRY_DISABLED 1
+ENV NEXT_TELEMETRY_DISABLED=1
 
 # TODO(ian): Backwards compatibility, 2024-04-01
 ARG NEXT_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL
@@ -24,7 +24,7 @@ WORKDIR /app
 COPY . .
 
 # Necessary for node-gyp deps
-RUN apk update && apk add python3 build-base --no-cache
+RUN apk update && apk add --no-cache python3 build-base
 
 # Envars are read in from src/web/nextui/.env.production
 RUN echo "*** Building with env vars from .env.production"
@@ -33,12 +33,12 @@ RUN npm install
 RUN npm run build
 
 WORKDIR /app/src/web/nextui
-RUN npm prune --production
+RUN npm prune --omit=dev
 
 # ---- Final Stage ----
-FROM node:18-alpine
+FROM node:20-alpine
 
-ENV NEXT_TELEMETRY_DISABLED 1
+ENV NEXT_TELEMETRY_DISABLED=1
 
 WORKDIR /app
 
@@ -63,7 +63,9 @@ RUN chmod +x entrypoint.sh
 
 EXPOSE 3000
 
-ENV PORT 3000
-ENV HOSTNAME "0.0.0.0"
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s CMD curl -f http://$HOSTNAME:$PORT || exit 1
 
 CMD ["sh", "entrypoint.sh"]

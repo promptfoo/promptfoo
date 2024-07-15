@@ -1,8 +1,7 @@
-import logger from '../logger';
 import { fetchWithCache } from '../cache';
-import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
-
+import logger from '../logger';
 import type { ApiProvider, ProviderEmbeddingResponse, ProviderResponse } from '../types.js';
+import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
 
 interface OllamaCompletionOptions {
   // From https://github.com/jmorganca/ollama/blob/v0.1.0/api/types.go#L161
@@ -333,7 +332,7 @@ export class OllamaEmbeddingProvider extends OllamaCompletionProvider {
     logger.debug(`\tOllama embeddings API response: ${JSON.stringify(response.data)}`);
 
     try {
-      const embedding = response.data.embeddings as number[];
+      const embedding = response.data.embedding as number[];
       if (!embedding) {
         throw new Error('No embedding found in Ollama embeddings API response');
       }

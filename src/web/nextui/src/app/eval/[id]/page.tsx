@@ -1,15 +1,18 @@
 import React from 'react';
-import { Metadata } from 'next';
-import { notFound } from 'next/navigation';
-import { cookies } from 'next/headers';
-import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
-
+import {
+  EvaluateSummary,
+  ResultLightweightWithLabel,
+  SharedResults,
+  UnifiedConfig,
+} from '@/../../../types';
 import { getApiBaseUrl } from '@/api';
 import { IS_RUNNING_LOCALLY } from '@/constants';
 import { getResult } from '@/database';
-import { EvaluateSummary, SharedResults, UnifiedConfig } from '@/../../../types';
+import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
+import { Metadata } from 'next';
+import { cookies } from 'next/headers';
+import { notFound } from 'next/navigation';
 import Eval from '../Eval';
-
 import './page.css';
 
 export const metadata: Metadata = {
@@ -27,7 +30,7 @@ export async function generateStaticParams() {
 
 export default async function Page({ params }: { params: { id: string } }) {
   let sharedResults: SharedResults;
-  let recentEvals: { id: string; label: string }[] = [];
+  let recentEvals: ResultLightweightWithLabel[] = [];
   let defaultEvalId: string | undefined;
   const decodedId = decodeURIComponent(params.id);
   if (decodedId.startsWith('local:')) {
@@ -58,6 +61,7 @@ export default async function Page({ params }: { params: { id: string } }) {
       data: {
         version: result.version,
         createdAt: result.createdAt,
+        author: 'Remote User',
         results: result.results as unknown as EvaluateSummary,
         config: result.config as unknown as UnifiedConfig,
       },
@@ -75,7 +79,13 @@ export default async function Page({ params }: { params: { id: string } }) {
         .order('createdAt', { ascending: false })
         .limit(100);
       if (data) {
-        recentEvals = data.map((row) => ({ id: row.id, label: row.createdAt }));
+        recentEvals = data.map((row) => ({
+          evalId: row.id,
+          label: row.createdAt,
+          createdAt: row.createdAt,
+          description: 'None',
+          numTests: 0,
+        }));
       }
     }
   } else {

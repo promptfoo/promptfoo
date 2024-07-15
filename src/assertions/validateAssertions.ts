@@ -9,18 +9,6 @@ export class AssertValiationError extends Error {
   }
 }
 
-export function validateAssertions(tests: TestCase<Record<string, string | object | string[]>>[]) {
-  for (const test of tests) {
-    if (test.assert) {
-      for (const assertion of test.assert) {
-        if (assertion.type === 'assert-set') {
-          validateAssertSet(assertion, test);
-        }
-      }
-    }
-  }
-}
-
 function validateAssertSet(assertion: object, test: TestCase) {
   if (!('assert' in assertion)) {
     throw new AssertValiationError('assert-set must have an `assert` property', test);
@@ -32,5 +20,17 @@ function validateAssertSet(assertion: object, test: TestCase) {
 
   if (assertion.assert.some((assertion) => assertion.type === 'assert-set')) {
     throw new AssertValiationError('assert-set must not have child assert-sets', test);
+  }
+}
+
+export function validateAssertions(tests: TestCase<Record<string, string | object | string[]>>[]) {
+  for (const test of tests) {
+    if (test.assert) {
+      for (const assertion of test.assert) {
+        if (assertion.type === 'assert-set') {
+          validateAssertSet(assertion, test);
+        }
+      }
+    }
   }
 }

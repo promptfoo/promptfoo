@@ -1,6 +1,6 @@
 import { Command } from 'commander';
-import { getDb, evals } from '../database';
 import fs from 'fs';
+import { getDb, evals } from '../database';
 import logger from '../logger';
 import telemetry from '../telemetry';
 
@@ -19,6 +19,7 @@ export function importCommand(program: Command) {
           .values({
             id: evalData.id,
             createdAt: evalData.createdAt,
+            author: evalData.author || 'Unknown',
             description: evalData.description,
             results: evalData.results,
             config: evalData.config,

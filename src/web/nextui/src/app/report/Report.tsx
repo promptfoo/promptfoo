@@ -1,20 +1,17 @@
 'use client';
 
 import React from 'react';
-import Container from '@mui/material/Container';
-import Typography from '@mui/material/Typography';
-import Grid from '@mui/material/Grid';
-import Chip from '@mui/material/Chip';
-
-import RiskCategories from './RiskCategories';
-import Overview from './Overview';
-import TestSuites from './TestSuites';
 import { getApiBaseUrl } from '@/api';
-
+import Chip from '@mui/material/Chip';
+import Container from '@mui/material/Container';
+import Grid from '@mui/material/Grid';
+import Typography from '@mui/material/Typography';
 import type { ResultsFile, SharedResults } from '../eval/types';
-
-import './Report.css';
+import Overview from './Overview';
+import RiskCategories from './RiskCategories';
+import TestSuites from './TestSuites';
 import { categoryAliases, categoryAliasesReverse } from './constants';
+import './Report.css';
 
 const App: React.FC = () => {
   const [evalId, setEvalId] = React.useState<string | null>(null);
@@ -49,35 +46,33 @@ const App: React.FC = () => {
 
   const categoryStats = evalData.results.results.reduce(
     (acc, row) => {
-      const category =
-        row.vars['harmCategory'] ||
-        row.gradingResult?.componentResults?.find((result) => result.assertion?.metric)?.assertion
-          ?.metric;
-      const label = categoryAliasesReverse[category as keyof typeof categoryAliases];
-      if (!label) {
-        console.log(
-          'Unknown harm category:',
-          category,
-          'for',
-          row.vars['harmCategory'] || row.gradingResult?.assertion?.metric,
-        );
-        return acc;
-      }
+      const harm = row.vars['harmCategory'];
+      const metricNames =
+        row.gradingResult?.componentResults?.map((result) => result.assertion?.metric) || [];
 
-      const pass = row.success;
-      acc[label] = acc[label] || { pass: 0, total: 0, passWithFilter: 0 };
-      acc[label].total++;
-      if (pass) {
-        acc[label].pass++;
-        acc[label].passWithFilter++;
-      } else if (
-        row.gradingResult?.componentResults?.some((result) => {
-          const isModeration = result.assertion?.type === 'moderation';
-          const isNotPass = !result.pass;
-          return isModeration && isNotPass;
-        })
-      ) {
-        acc[label].passWithFilter++;
+      const categoriesToCount = [harm, ...metricNames].filter((c) => c);
+      for (const category of categoriesToCount) {
+        const pluginName = categoryAliasesReverse[category as keyof typeof categoryAliases];
+        if (!pluginName) {
+          console.log('Unknown harm category:', category);
+          return acc;
+        }
+
+        const pass = row.success;
+        acc[pluginName] = acc[pluginName] || { pass: 0, total: 0, passWithFilter: 0 };
+        acc[pluginName].total++;
+        if (pass) {
+          acc[pluginName].pass++;
+          acc[pluginName].passWithFilter++;
+        } else if (
+          row.gradingResult?.componentResults?.some((result) => {
+            const isModeration = result.assertion?.type === 'moderation';
+            const isNotPass = !result.pass;
+            return isModeration && isNotPass;
+          })
+        ) {
+          acc[pluginName].passWithFilter++;
+        }
       }
       return acc;
     },
@@ -89,7 +84,7 @@ const App: React.FC = () => {
       <Grid container direction="column" spacing={1} pt={6} pb={8}>
         <Grid item className="report-header">
           <Typography variant="h4">
-            <strong>LLM Risk Report</strong>
+            <strong>LLM Risk Assessment</strong>
             {evalData.config.description && `: ${evalData.config.description}`}
           </Typography>
           <Typography variant="subtitle1" mb={2}>

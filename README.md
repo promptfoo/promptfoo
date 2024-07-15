@@ -2,8 +2,8 @@
 
 [![npm](https://img.shields.io/npm/v/promptfoo)](https://npmjs.com/package/promptfoo)
 [![npm](https://img.shields.io/npm/dm/promptfoo)](https://npmjs.com/package/promptfoo)
-[![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/typpo/promptfoo/main.yml)](https://github.com/typpo/promptfoo/actions/workflows/main.yml)
-![MIT license](https://img.shields.io/github/license/typpo/promptfoo)
+[![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/typpo/promptfoo/main.yml)](https://github.com/promptfoo/promptfoo/actions/workflows/main.yml)
+![MIT license](https://img.shields.io/github/license/promptfoo/promptfoo)
 [![Discord](https://dcbadge.vercel.app/api/server/gHPS9jjfbs?style=flat&compact=true)](https://discord.gg/gHPS9jjfbs)
 
 `promptfoo` is a tool for testing and evaluating LLM apps.
@@ -30,7 +30,7 @@ promptfoo produces matrix views that let you quickly evaluate outputs across man
 
 It works on the command line too:
 
-![Prompt evaluation](https://github.com/typpo/promptfoo/assets/310310/480e1114-d049-40b9-bd5f-f81c15060284)
+![Prompt evaluation](https://github.com/promptfoo/promptfoo/assets/310310/480e1114-d049-40b9-bd5f-f81c15060284)
 
 ## Why choose promptfoo?
 
@@ -52,7 +52,7 @@ As you explore modifications to the prompt, use `promptfoo eval` to rate all out
 
 As you collect more examples and establish a user feedback loop, continue to build the pool of test cases.
 
-<img width="772" alt="LLM ops" src="https://github.com/typpo/promptfoo/assets/310310/cf0461a7-2832-4362-9fbb-4ebd911d06ff">
+<img width="772" alt="LLM ops" src="https://github.com/promptfoo/promptfoo/assets/310310/cf0461a7-2832-4362-9fbb-4ebd911d06ff">
 
 ## Usage
 
@@ -120,6 +120,8 @@ Deterministic eval metrics
 | `icontains-all`                 | output contains all list of substrings, case insensitive          |
 | `is-json`                       | output is valid json (optional json schema validation)            |
 | `contains-json`                 | output contains valid json (optional json schema validation)      |
+| `is-sql`                        | output is valid sql                                               |
+| `contains-sql`                  | output contains valid sql                                         |
 | `javascript`                    | provided Javascript function validates the output                 |
 | `python`                        | provided Python function validates the output                     |
 | `webhook`                       | provided webhook returns `{pass: true}`                           |
@@ -159,7 +161,7 @@ providers: [openai:gpt-3.5-turbo]
 tests: tests.csv
 ```
 
-See [example CSV](https://github.com/typpo/promptfoo/blob/main/examples/simple-test/tests.csv).
+See [example CSV](https://github.com/promptfoo/promptfoo/blob/main/examples/simple-test/tests.csv).
 
 ### Command-line
 
@@ -167,7 +169,7 @@ If you're looking to customize your usage, you have a wide set of parameters at 
 
 | Option                              | Description                                                                                                                                                                            |
 | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `-p, --prompts <paths...>`          | Paths to [prompt files](https://www.promptfoo.dev/docs/configuration/parameters#prompt-files), directory, or glob                                                                      |
+| `-p, --prompts <paths...>`          | Paths to [prompt files](https://www.promptfoo.dev/docs/configuration/parameters#prompts), directory, or glob                                                                           |
 | `-r, --providers <name or path...>` | One of: openai:chat, openai:completion, openai:model-name, localai:chat:model-name, localai:completion:model-name. See [API providers][providers-docs]                                 |
 | `-o, --output <path>`               | Path to [output file](https://www.promptfoo.dev/docs/configuration/parameters#output-file) (csv, json, yaml, html)                                                                     |
 | `--tests <path>`                    | Path to [external test file](https://www.promptfoo.dev/docs/configurationexpected-outputsassertions#load-an-external-tests-file)                                                       |
@@ -188,7 +190,7 @@ npx promptfoo view
 
 #### Prompt quality
 
-In [this example](https://github.com/typpo/promptfoo/tree/main/examples/assistant-cli), we evaluate whether adding adjectives to the personality of an assistant bot affects the responses:
+In [this example](https://github.com/promptfoo/promptfoo/tree/main/examples/assistant-cli), we evaluate whether adding adjectives to the personality of an assistant bot affects the responses:
 
 ```
 npx promptfoo eval -p prompts.txt -r openai:gpt-3.5-turbo -t tests.csv
@@ -202,13 +204,13 @@ npx promptfoo eval -p prompts.txt -r openai:gpt-3.5-turbo -t tests.csv
 
 This command will evaluate the prompts in `prompts.txt`, substituting the variable values from `vars.csv`, and output results in your terminal.
 
-You can also output a nice [spreadsheet](https://docs.google.com/spreadsheets/d/1nanoj3_TniWrDl1Sj-qYqIMD6jwm5FBy15xPFdUTsmI/edit?usp=sharing), [JSON](https://github.com/typpo/promptfoo/blob/main/examples/simple-cli/output.json), YAML, or an HTML file:
+You can also output a nice [spreadsheet](https://docs.google.com/spreadsheets/d/1nanoj3_TniWrDl1Sj-qYqIMD6jwm5FBy15xPFdUTsmI/edit?usp=sharing), [JSON](https://github.com/promptfoo/promptfoo/blob/main/examples/simple-cli/output.json), YAML, or an HTML file:
 
 ![Table output](https://user-images.githubusercontent.com/310310/235483444-4ddb832d-e103-4b9c-a862-b0d6cc11cdc0.png)
 
 #### Model quality
 
-In the [next example](https://github.com/typpo/promptfoo/tree/main/examples/gpt-3.5-vs-4), we evaluate the difference between GPT 3 and GPT 4 outputs for a given prompt:
+In the [next example](https://github.com/promptfoo/promptfoo/tree/main/examples/gpt-3.5-vs-4), we evaluate the difference between GPT 3 and GPT 4 outputs for a given prompt:
 
 ```
 npx promptfoo eval -p prompts.txt -r openai:gpt-3.5-turbo openai:gpt-4 -o output.html
@@ -300,7 +302,7 @@ const results = await promptfoo.evaluate({
 
 This code imports the `promptfoo` library, defines the evaluation options, and then calls the `evaluate` function with these options.
 
-See the full example [here](https://github.com/typpo/promptfoo/tree/main/examples/simple-import), which includes an example results object.
+See the full example [here](https://github.com/promptfoo/promptfoo/tree/main/examples/simple-import), which includes an example results object.
 
 ## Configuration
 

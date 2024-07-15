@@ -1,12 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk';
-import dedent from 'dedent';
-
-import logger from '../logger';
-import { getCache, isCacheEnabled } from '../cache';
-import { parseMessages } from './anthropic';
-
 import type { BedrockRuntime } from '@aws-sdk/client-bedrock-runtime';
-
+import dedent from 'dedent';
+import { getCache, isCacheEnabled } from '../cache';
+import logger from '../logger';
 import type {
   ApiProvider,
   ApiEmbeddingProvider,
@@ -14,6 +10,7 @@ import type {
   ProviderResponse,
   ProviderEmbeddingResponse,
 } from '../types.js';
+import { parseMessages } from './anthropic';
 import { parseChatPrompt } from './shared';
 
 interface BedrockOptions {
@@ -168,6 +165,13 @@ interface IBedrockModel {
   output: (responseJson: any) => any;
 }
 
+export function parseValue(value: string, defaultValue: any) {
+  if (typeof defaultValue === 'number') {
+    return Number.isNaN(parseFloat(value)) ? defaultValue : parseFloat(value);
+  }
+  return value;
+}
+
 export function addConfigParam(
   params: any,
   key: string,
@@ -181,12 +185,116 @@ export function addConfigParam(
   }
 }
 
-function parseValue(value: string, defaultValue: any) {
-  if (typeof defaultValue === 'number') {
-    return parseFloat(value);
-  }
-  return value;
+export enum LlamaVersion {
+  V2 = 2,
+  V3 = 3,
 }
+
+export interface LlamaMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+}
+
+// see https://github.com/meta-llama/llama/blob/main/llama/generation.py#L284-L395
+export const formatPromptLlama2Chat = (messages: LlamaMessage[]): string => {
+  if (messages.length === 0) return '';
+
+  let formattedPrompt = '<s>';
+  let systemMessageIncluded = false;
+
+  for (let i = 0; i < messages.length; i++) {
+    const message = messages[i];
+
+    switch (message.role) {
+      case 'system':
+        if (!systemMessageIncluded) {
+          formattedPrompt += `[INST] <<SYS>>\n${message.content.trim()}\n<</SYS>>\n\n`;
+          systemMessageIncluded = true;
+        }
+        break;
+
+      case 'user':
+        if (i === 0 && !systemMessageIncluded) {
+          formattedPrompt += `[INST] ${message.content.trim()} [/INST]`;
+        } else if (i === 0 && systemMessageIncluded) {
+          formattedPrompt += `${message.content.trim()} [/INST]`;
+        } else if (i > 0 && messages[i - 1].role === 'assistant') {
+          formattedPrompt += `<s>[INST] ${message.content.trim()} [/INST]`;
+        } else {
+          formattedPrompt += `${message.content.trim()} [/INST]`;
+        }
+        break;
+
+      case 'assistant':
+        formattedPrompt += ` ${message.content.trim()} </s>`;
+        break;
+
+      default:
+        throw new Error(`Unexpected role: ${message.role}`);
+    }
+  }
+
+  return formattedPrompt;
+};
+
+const formatPromptLlama3Instruct = (messages: LlamaMessage[]): string => {
+  let formattedPrompt = '<|begin_of_text|>';
+
+  for (const message of messages) {
+    formattedPrompt += dedent`
+      <|start_header_id|>${message.role}<|end_header_id|>
+
+      ${message.content.trim()}<|eot_id|>`;
+  }
+
+  formattedPrompt += '<|start_header_id|>assistant<|end_header_id|>';
+  return formattedPrompt;
+};
+
+export const getLlamaModelHandler = (version: LlamaVersion) => {
+  if (version !== LlamaVersion.V2 && version !== LlamaVersion.V3) {
+    throw new Error(`Unsupported LLAMA version: ${version}`);
+  }
+
+  return {
+    params: (config: BedrockLlamaGenerationOptions, prompt: string) => {
+      const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
+
+      let finalPrompt: string;
+      switch (version) {
+        case LlamaVersion.V2:
+          finalPrompt = formatPromptLlama2Chat(messages as LlamaMessage[]);
+          break;
+        case LlamaVersion.V3:
+          finalPrompt = formatPromptLlama3Instruct(messages as LlamaMessage[]);
+          break;
+        default:
+          throw new Error(`Unsupported LLAMA version: ${version}`);
+      }
+      const params: { prompt: string; temperature?: number; top_p?: number; max_gen_len?: number } =
+        {
+          prompt: finalPrompt,
+        };
+      addConfigParam(
+        params,
+        'temperature',
+        config?.temperature,
+        process.env.AWS_BEDROCK_TEMPERATURE,
+        0.01,
+      );
+      addConfigParam(params, 'top_p', config?.top_p, process.env.AWS_BEDROCK_TOP_P, 1);
+      addConfigParam(
+        params,
+        'max_gen_len',
+        config?.max_gen_len,
+        process.env.AWS_BEDROCK_MAX_GEN_LEN,
+        1024,
+      );
+      return params;
+    },
+    output: (responseJson: any) => responseJson?.generation,
+  };
+};
 
 const BEDROCK_MODEL = {
   CLAUDE_COMPLETION: {
@@ -272,47 +380,8 @@ const BEDROCK_MODEL = {
     },
     output: (responseJson: any) => responseJson?.results[0]?.outputText,
   },
-  LLAMA: {
-    params: (config: BedrockLlamaGenerationOptions, prompt: string) => {
-      const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
-      let finalPrompt: string;
-      if (messages.length > 0 && messages[0].role === 'system') {
-        const userMessages = messages
-          .slice(1)
-          .map((m) => `${m.content}`)
-          .join('\n');
-        finalPrompt = dedent`
-          <s>[INST] <<SYS>>
-          ${messages[0].content}
-          <</SYS>>
-
-          ${userMessages} [/INST]
-        `;
-      } else {
-        finalPrompt = `<s>[INST] ${messages.map((m) => `${m.content}`).join('\n')} [/INST]`;
-      }
-
-      const params: { prompt: string; temperature?: number; top_p?: number; max_gen_len?: number } =
-        { prompt: finalPrompt };
-      addConfigParam(
-        params,
-        'temperature',
-        config?.temperature,
-        process.env.AWS_BEDROCK_TEMPERATURE,
-        0.01,
-      );
-      addConfigParam(params, 'top_p', config?.top_p, process.env.AWS_BEDROCK_TOP_P, 1);
-      addConfigParam(
-        params,
-        'max_gen_len',
-        config?.max_gen_len,
-        process.env.AWS_BEDROCK_MAX_GEN_LEN,
-        1024,
-      );
-      return params;
-    },
-    output: (responseJson: any) => responseJson?.generation,
-  },
+  LLAMA2: getLlamaModelHandler(LlamaVersion.V2),
+  LLAMA3: getLlamaModelHandler(LlamaVersion.V3), // Prompt format of llama3 instruct differs from llama2.
   COHERE_COMMAND: {
     params: (config: BedrockCohereCommandGenerationOptions, prompt: string, stop: string[]) => {
       const params: any = { prompt: prompt };
@@ -330,7 +399,6 @@ const BEDROCK_MODEL = {
     },
     output: (responseJson: any) => responseJson?.generations[0]?.text,
   },
-
   COHERE_COMMAND_R: {
     params: (config: BedrockCohereCommandRGenerationOptions, prompt: string, stop: string[]) => {
       const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
@@ -391,13 +459,29 @@ const BEDROCK_MODEL = {
 };
 
 const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
+  'amazon.titan-text-express-v1': BEDROCK_MODEL.TITAN_TEXT,
+  'amazon.titan-text-lite-v1': BEDROCK_MODEL.TITAN_TEXT,
+  'amazon.titan-text-premier-v1:0': BEDROCK_MODEL.TITAN_TEXT,
+  'anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'anthropic.claude-3-opus-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'anthropic.claude-3-sonnet-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-instant-v1': BEDROCK_MODEL.CLAUDE_COMPLETION,
   'anthropic.claude-v1': BEDROCK_MODEL.CLAUDE_COMPLETION,
-  'anthropic.claude-v2': BEDROCK_MODEL.CLAUDE_COMPLETION,
   'anthropic.claude-v2:1': BEDROCK_MODEL.CLAUDE_COMPLETION,
-  'amazon.titan-text-lite-v1': BEDROCK_MODEL.TITAN_TEXT,
-  'amazon.titan-text-express-v1': BEDROCK_MODEL.TITAN_TEXT,
-  'amazon.titan-text-premier-v1:0': BEDROCK_MODEL.TITAN_TEXT,
+  'anthropic.claude-v2': BEDROCK_MODEL.CLAUDE_COMPLETION,
+  'cohere.command-light-text-v14': BEDROCK_MODEL.COHERE_COMMAND,
+  'cohere.command-r-plus-v1:0': BEDROCK_MODEL.COHERE_COMMAND_R,
+  'cohere.command-r-v1:0': BEDROCK_MODEL.COHERE_COMMAND_R,
+  'cohere.command-text-v14': BEDROCK_MODEL.COHERE_COMMAND,
+  'meta.llama2-13b-chat-v1': BEDROCK_MODEL.LLAMA2,
+  'meta.llama2-70b-chat-v1': BEDROCK_MODEL.LLAMA2,
+  'meta.llama3-70b-instruct-v1:0': BEDROCK_MODEL.LLAMA3,
+  'meta.llama3-8b-instruct-v1:0': BEDROCK_MODEL.LLAMA3,
+  'mistral.mistral-7b-instruct-v0:2': BEDROCK_MODEL.MISTRAL,
+  'mistral.mistral-large-2402-v1:0': BEDROCK_MODEL.MISTRAL,
+  'mistral.mistral-small-2402-v1:0': BEDROCK_MODEL.MISTRAL,
+  'mistral.mixtral-8x7b-instruct-v0:1': BEDROCK_MODEL.MISTRAL,
 };
 
 // See https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html
@@ -409,8 +493,11 @@ function getHandlerForModel(modelName: string) {
   if (modelName.startsWith('anthropic.claude')) {
     return BEDROCK_MODEL.CLAUDE_MESSAGES;
   }
-  if (modelName.startsWith('meta.llama')) {
-    return BEDROCK_MODEL.LLAMA;
+  if (modelName.startsWith('meta.llama2')) {
+    return BEDROCK_MODEL.LLAMA2;
+  }
+  if (modelName.startsWith('meta.llama3')) {
+    return BEDROCK_MODEL.LLAMA3;
   }
   if (modelName.startsWith('cohere.command-r')) {
     return BEDROCK_MODEL.COHERE_COMMAND_R;
@@ -451,9 +538,26 @@ export abstract class AwsBedrockGenericProvider {
 
   async getBedrockInstance() {
     if (!this.bedrock) {
+      let handler;
+      // set from https://www.npmjs.com/package/proxy-agent
+      if (process.env.HTTP_PROXY || process.env.HTTPS_PROXY) {
+        try {
+          const { NodeHttpHandler } = await import('@smithy/node-http-handler');
+          const { ProxyAgent } = await import('proxy-agent');
+          handler = new NodeHttpHandler({ httpsAgent: new ProxyAgent() });
+        } catch (err) {
+          throw new Error(
+            `The @smithy/node-http-handler package is required as a peer dependency. Please install it in your project or globally.`,
+          );
+        }
+      }
       try {
         const { BedrockRuntime } = await import('@aws-sdk/client-bedrock-runtime');
-        this.bedrock = new BedrockRuntime({ region: this.getRegion() });
+        const bedrock = new BedrockRuntime({
+          region: this.getRegion(),
+          ...(handler ? { requestHandler: handler } : {}),
+        });
+        this.bedrock = bedrock;
       } catch (err) {
         throw new Error(
           'The @aws-sdk/client-bedrock-runtime package is required as a peer dependency. Please install it in your project or globally.',
@@ -524,20 +628,23 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
         error: `API call error: ${String(err)}`,
       };
     }
-    logger.debug(
-      `\tAmazon Bedrock API response: ${JSON.stringify(JSON.parse(response.body.transformToString()))}`,
-    );
+    logger.debug(`\tAmazon Bedrock API response: ${response.body.transformToString()}`);
     if (isCacheEnabled()) {
       try {
-        await cache.set(cacheKey, response.body.transformToString());
+        await cache.set(cacheKey, new TextDecoder().decode(response.body));
       } catch (err) {
         logger.error(`Failed to cache response: ${String(err)}`);
       }
     }
     try {
+      const output = JSON.parse(new TextDecoder().decode(response.body));
       return {
-        output: model.output(JSON.parse(response.body.transformToString())),
-        tokenUsage: {}, // TODO: add token usage once Amazon Bedrock API supports it
+        output: model.output(output),
+        tokenUsage: {
+          total: output.prompt_token_count + output.generation_token_count,
+          prompt: output.prompt_token_count,
+          completion: output.generation_token_count,
+        },
       };
     } catch (err) {
       return {

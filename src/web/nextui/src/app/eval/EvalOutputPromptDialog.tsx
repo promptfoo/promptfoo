@@ -1,22 +1,21 @@
 import { useState, useEffect } from 'react';
+import CheckIcon from '@mui/icons-material/Check';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
-import TextareaAutosize from '@mui/material/TextareaAutosize';
 import IconButton from '@mui/material/IconButton';
-import ContentCopyIcon from '@mui/icons-material/ContentCopy';
-import CheckIcon from '@mui/icons-material/Check';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
 import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
+import TextareaAutosize from '@mui/material/TextareaAutosize';
 import Typography from '@mui/material/Typography';
-
 import type { GradingResult } from './types';
 
 interface EvalOutputPromptDialogProps {
@@ -26,6 +25,7 @@ interface EvalOutputPromptDialogProps {
   provider?: string;
   output?: string;
   gradingResults?: GradingResult[];
+  metadata?: Record<string, any>;
 }
 
 function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[] }) {
@@ -48,17 +48,20 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
             </TableRow>
           </TableHead>
           <TableBody>
-            {gradingResults.map((result, i) => (
-              <TableRow key={i}>
-                <TableCell>{result.pass ? '✅' : '❌'}</TableCell>
-                <TableCell>{result.score.toFixed(2)}</TableCell>
-                <TableCell>{result.assertion?.type || ''}</TableCell>
-                <TableCell style={{ whiteSpace: 'pre-wrap' }}>
-                  {result.assertion?.value ? String(result.assertion.value) : '-'}
-                </TableCell>
-                <TableCell style={{ whiteSpace: 'pre-wrap' }}>{result.reason}</TableCell>
-              </TableRow>
-            ))}
+            {gradingResults.map((result, i) => {
+              if (!result) return null;
+              return (
+                <TableRow key={i}>
+                  <TableCell>{result.pass ? '✅' : '❌'}</TableCell>
+                  <TableCell>{result.score?.toFixed(2)}</TableCell>
+                  <TableCell>{result.assertion?.type || ''}</TableCell>
+                  <TableCell style={{ whiteSpace: 'pre-wrap' }}>
+                    {result.assertion?.value ? String(result.assertion.value) : '-'}
+                  </TableCell>
+                  <TableCell style={{ whiteSpace: 'pre-wrap' }}>{result.reason}</TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </TableContainer>
@@ -73,6 +76,7 @@ export default function EvalOutputPromptDialog({
   provider,
   output,
   gradingResults,
+  metadata,
 }: EvalOutputPromptDialogProps) {
   const [copied, setCopied] = useState(false);
 
@@ -106,6 +110,19 @@ export default function EvalOutputPromptDialog({
             {copied ? <CheckIcon /> : <ContentCopyIcon />}
           </IconButton>
         </Box>
+        {metadata?.redteamFinalPrompt && (
+          <Box my={2}>
+            <Typography variant="subtitle1" style={{ marginBottom: '1rem', marginTop: '1rem' }}>
+              Modified User Input (Red Team)
+            </Typography>
+            <TextareaAutosize
+              readOnly
+              maxRows={20}
+              value={metadata.redteamFinalPrompt}
+              style={{ width: '100%', padding: '0.75rem' }}
+            />
+          </Box>
+        )}
         {output && (
           <Box my={2}>
             <Typography variant="subtitle1" style={{ marginBottom: '1rem', marginTop: '1rem' }}>

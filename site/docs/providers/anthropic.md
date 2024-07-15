@@ -31,12 +31,13 @@ export ANTHROPIC_API_KEY=your_api_key_here
 
 The `anthropic` provider supports the following models via the messages API:
 
-- `anthropic:messages:claude-instant-1.2`
-- `anthropic:messages:claude-2.0`
-- `anthropic:messages:claude-2.1`
+- `anthropic:messages:claude-3-5-sonnet-20240620`
 - `anthropic:messages:claude-3-haiku-20240307`
 - `anthropic:messages:claude-3-sonnet-20240229`
 - `anthropic:messages:claude-3-opus-20240229`
+- `anthropic:messages:claude-2.0`
+- `anthropic:messages:claude-2.1`
+- `anthropic:messages:claude-instant-1.2`
 
 ### Prompt Template
 
@@ -72,6 +73,7 @@ The Anthropic provider supports several options to customize the behavior of the
 - `top_p`: Controls nucleus sampling, affecting the randomness of the output.
 - `top_k`: Only sample from the top K options for each subsequent token.
 - `tools`: An array of tool or function definitions for the model to call.
+- `tool_choice`: An object specifying the tool to call.
 
 Example configuration with options and prompts:
 
@@ -116,12 +118,12 @@ See the [Anthropic Tool Use Guide](https://docs.anthropic.com/en/docs/tool-use) 
 
 You can include images in the prompts in Claude 3 models.
 
-See the [Claude vision example](https://github.com/typpo/promptfoo/tree/main/examples/claude-vision).
+See the [Claude vision example](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-vision).
 
 One important note: The Claude API only supports base64 representations of images.
 This is different from how OpenAI's vision works, as it supports grabbing images from a URL. As a result, if you are trying to compare Claude 3 and OpenAI vision capabilities, you will need to have separate prompts for each.
 
-See the [OpenAI vision example](https://github.com/typpo/promptfoo/tree/main/examples/openai-vision) to understand the differences.
+See the [OpenAI vision example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-vision) to understand the differences.
 
 ### Additional Capabilities
 

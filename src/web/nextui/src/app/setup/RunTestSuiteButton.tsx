@@ -1,16 +1,23 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { Button, CircularProgress } from '@mui/material';
-
-import { useStore } from '@/state/evalConfig';
 import { NEXTJS_BASE_URL, USE_SUPABASE } from '@/constants';
+import { useStore } from '@/state/evalConfig';
+import { Button, CircularProgress } from '@mui/material';
+import { useRouter } from 'next/navigation';
 
 const RunTestSuiteButton: React.FC = () => {
   const router = useRouter();
-  const { env, description, providers, prompts, testCases, defaultTest, evaluateOptions } =
-    useStore();
+  const {
+    defaultTest,
+    description,
+    env,
+    evaluateOptions,
+    prompts,
+    providers,
+    scenarios,
+    testCases,
+  } = useStore();
   const [isRunning, setIsRunning] = useState(false);
   const [progressPercent, setProgressPercent] = useState(0);
 
@@ -18,13 +25,14 @@ const RunTestSuiteButton: React.FC = () => {
     setIsRunning(true);
 
     const testSuite = {
-      env,
-      description,
-      providers,
-      prompts,
-      tests: testCases,
       defaultTest,
+      description,
+      env,
       evaluateOptions,
+      prompts,
+      providers,
+      scenarios,
+      tests: testCases,
     };
 
     try {

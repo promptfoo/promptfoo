@@ -1,106 +1,114 @@
-import type logger from './logger';
-import type { fetchWithCache, getCache } from './cache';
+import { z } from 'zod';
 
 export type FilePath = string;
 
-export interface CommandLineOptions {
+export const CommandLineOptionsSchema = z.object({
   // Shared with TestSuite
-  prompts?: FilePath[];
-  providers: FilePath[];
-  output: FilePath[];
+  prompts: z.array(z.string()).optional(),
+  providers: z.array(z.string()),
+  output: z.array(z.string()),
 
   // Shared with EvaluateOptions
-  maxConcurrency: string;
-  repeat: string;
-  delay: string;
+  maxConcurrency: z.string(),
+  repeat: z.string(),
+  delay: z.string(),
 
   // Command line only
-  vars?: FilePath;
-  tests?: FilePath;
-  config?: FilePath[];
-  assertions?: FilePath;
-  modelOutputs?: FilePath;
-  verbose?: boolean;
-  grader?: string;
-  tableCellMaxLength?: string;
-  write?: boolean;
-  cache?: boolean;
-  table?: boolean;
-  share?: boolean;
-  progressBar?: boolean;
-  watch?: boolean;
-  interactiveProviders?: boolean;
-  filterFailing?: string;
-  filterFirstN?: string;
-  filterPattern?: string;
-  var?: Record<string, string>;
+  vars: z.string().optional(),
+  tests: z.string().optional(),
+  config: z.array(z.string()).optional(),
+  assertions: z.string().optional(),
+  modelOutputs: z.string().optional(),
+  verbose: z.boolean().optional(),
+  grader: z.string().optional(),
+  tableCellMaxLength: z.string().optional(),
+  write: z.boolean().optional(),
+  cache: z.boolean().optional(),
+  table: z.boolean().optional(),
+  share: z.boolean().optional(),
+  progressBar: z.boolean().optional(),
+  watch: z.boolean().optional(),
+  interactiveProviders: z.boolean().optional(),
+  filterFailing: z.string().optional(),
+  filterFirstN: z.string().optional(),
+  filterPattern: z.string().optional(),
+  filterProviders: z.string().optional(),
+  var: z.record(z.string()).optional(),
 
-  generateSuggestions?: boolean;
-  promptPrefix?: string;
-  promptSuffix?: string;
+  generateSuggestions: z.boolean().optional(),
+  promptPrefix: z.string().optional(),
+  promptSuffix: z.string().optional(),
 
-  envFile?: FilePath;
-}
+  envFile: z.string().optional(),
+});
 
-export interface EnvOverrides {
-  ANTHROPIC_API_KEY?: string;
-  BAM_API_KEY?: string;
-  BAM_API_HOST?: string;
-  AZURE_OPENAI_API_HOST?: string;
-  AZURE_OPENAI_API_KEY?: string;
-  AZURE_OPENAI_API_BASE_URL?: string;
-  AZURE_OPENAI_BASE_URL?: string;
-  AWS_BEDROCK_REGION?: string;
-  COHERE_API_KEY?: string;
-  OPENAI_API_KEY?: string;
-  OPENAI_API_HOST?: string;
-  OPENAI_API_BASE_URL?: string;
-  OPENAI_BASE_URL?: string;
-  OPENAI_ORGANIZATION?: string;
-  REPLICATE_API_KEY?: string;
-  REPLICATE_API_TOKEN?: string;
-  LOCALAI_BASE_URL?: string;
-  MISTRAL_API_HOST?: string;
-  MISTRAL_API_BASE_URL?: string;
-  PALM_API_KEY?: string;
-  PALM_API_HOST?: string;
-  GOOGLE_API_KEY?: string;
-  GOOGLE_API_HOST?: string;
-  VERTEX_API_KEY?: string;
-  VERTEX_API_HOST?: string;
-  VERTEX_PROJECT_ID?: string;
-  VERTEX_REGION?: string;
-  VERTEX_PUBLISHER?: string;
-  MISTRAL_API_KEY?: string;
-  CLOUDFLARE_API_KEY?: string;
-  CLOUDFLARE_ACCOUNT_ID?: string;
-}
+export type CommandLineOptions = z.infer<typeof CommandLineOptionsSchema>;
 
-export interface ProviderOptions {
-  id?: ProviderId;
-  label?: ProviderLabel;
-  config?: any;
-  prompts?: string[]; // List of prompt display strings
-  transform?: string;
-  delay?: number;
-  env?: EnvOverrides;
-}
+export const EnvOverridesSchema = z.object({
+  ANTHROPIC_API_KEY: z.string().optional(),
+  BAM_API_KEY: z.string().optional(),
+  BAM_API_HOST: z.string().optional(),
+  AZURE_OPENAI_API_HOST: z.string().optional(),
+  AZURE_OPENAI_API_KEY: z.string().optional(),
+  AZURE_OPENAI_API_BASE_URL: z.string().optional(),
+  AZURE_OPENAI_BASE_URL: z.string().optional(),
+  AWS_BEDROCK_REGION: z.string().optional(),
+  COHERE_API_KEY: z.string().optional(),
+  OPENAI_API_KEY: z.string().optional(),
+  OPENAI_API_HOST: z.string().optional(),
+  OPENAI_API_BASE_URL: z.string().optional(),
+  OPENAI_BASE_URL: z.string().optional(),
+  OPENAI_ORGANIZATION: z.string().optional(),
+  REPLICATE_API_KEY: z.string().optional(),
+  REPLICATE_API_TOKEN: z.string().optional(),
+  LOCALAI_BASE_URL: z.string().optional(),
+  MISTRAL_API_HOST: z.string().optional(),
+  MISTRAL_API_BASE_URL: z.string().optional(),
+  PALM_API_KEY: z.string().optional(),
+  PALM_API_HOST: z.string().optional(),
+  GOOGLE_API_KEY: z.string().optional(),
+  GOOGLE_API_HOST: z.string().optional(),
+  VERTEX_API_KEY: z.string().optional(),
+  VERTEX_API_HOST: z.string().optional(),
+  VERTEX_PROJECT_ID: z.string().optional(),
+  VERTEX_REGION: z.string().optional(),
+  VERTEX_PUBLISHER: z.string().optional(),
+  MISTRAL_API_KEY: z.string().optional(),
+  CLOUDFLARE_API_KEY: z.string().optional(),
+  CLOUDFLARE_ACCOUNT_ID: z.string().optional(),
+});
 
-export function isProviderOptions(provider: any): provider is ProviderOptions {
-  return !isApiProvider(provider) && typeof provider === 'object';
-}
+export type EnvOverrides = z.infer<typeof EnvOverridesSchema>;
 
-export interface CallApiContextParams {
-  vars: Record<string, string | object>;
-  logger?: typeof logger;
-  fetchWithCache?: typeof fetchWithCache;
-  getCache?: typeof getCache;
-}
+export const ProviderOptionsSchema = z
+  .object({
+    id: z.custom<ProviderId>().optional(),
+    label: z.custom<ProviderLabel>().optional(),
+    config: z.any().optional(),
+    prompts: z.array(z.string()).optional(), // List of prompt display strings
+    transform: z.string().optional(),
+    delay: z.number().optional(),
+    env: EnvOverridesSchema.optional(),
+  })
+  .strict();
 
-export interface CallApiOptionsParams {
-  includeLogProbs?: boolean;
-  originalProvider?: ApiProvider;
-}
+export type ProviderOptions = z.infer<typeof ProviderOptionsSchema>;
+
+export const CallApiContextParamsSchema = z.object({
+  vars: z.record(z.union([z.string(), z.object({})])),
+  logger: z.optional(z.any()),
+  fetchWithCache: z.optional(z.any()),
+  getCache: z.optional(z.any()),
+});
+
+export type CallApiContextParams = z.infer<typeof CallApiContextParamsSchema>;
+
+export const CallApiOptionsParamsSchema = z.object({
+  includeLogProbs: z.optional(z.boolean()),
+  originalProvider: z.optional(z.any()), // Assuming ApiProvider is not a zod schema, using z.any()
+});
+
+export type CallApiOptionsParams = z.infer<typeof CallApiOptionsParamsSchema>;
 
 type CallApiFunction = {
   (
@@ -111,31 +119,38 @@ type CallApiFunction = {
   label?: string;
 };
 
-export interface ApiProvider {
-  // Unique identifier for the provider
-  id: () => string;
+export const ApiProviderSchema = z.object({
+  id: z.function().returns(z.string()),
 
-  // Text generation function
-  callApi: CallApiFunction;
+  callApi: z.custom<CallApiFunction>(),
 
-  // Embedding function
-  callEmbeddingApi?: (prompt: string) => Promise<ProviderEmbeddingResponse>;
+  callEmbeddingApi: z
+    .function()
+    .args(z.string())
+    .returns(z.promise(z.custom<ProviderEmbeddingResponse>()))
+    .optional(),
 
-  // Classification function
-  callClassificationApi?: (prompt: string) => Promise<ProviderClassificationResponse>;
+  callClassificationApi: z
+    .function()
+    .args(z.string())
+    .returns(z.promise(z.custom<ProviderClassificationResponse>()))
+    .optional(),
 
-  // Shown on output
-  label?: ProviderLabel;
+  label: z.custom<ProviderLabel>().optional(),
 
-  // Applied by the evaluator on provider response
-  transform?: string;
+  transform: z.string().optional(),
 
-  // Custom delay for the provider.
-  delay?: number;
-}
+  delay: z.number().optional(),
+});
+
+export type ApiProvider = z.infer<typeof ApiProviderSchema>;
 
 export function isApiProvider(provider: any): provider is ApiProvider {
   return typeof provider === 'object' && 'id' in provider && typeof provider.id === 'function';
+}
+
+export function isProviderOptions(provider: any): provider is ProviderOptions {
+  return !isApiProvider(provider) && typeof provider === 'object';
 }
 
 export interface ApiEmbeddingProvider extends ApiProvider {
@@ -154,38 +169,54 @@ export interface ApiModerationProvider extends ApiProvider {
   callModerationApi: (prompt: string, response: string) => Promise<ProviderModerationResponse>;
 }
 
-export interface TokenUsage {
-  total: number;
-  prompt: number;
-  completion: number;
-  cached?: number;
-}
+const TokenUsageSchema = z.object({
+  cached: z.number().optional(),
+  completion: z.number().optional(),
+  prompt: z.number().optional(),
+  total: z.number().optional(),
+});
 
-export interface ProviderResponse {
-  error?: string;
-  output?: string | object;
-  tokenUsage?: Partial<TokenUsage>;
-  cost?: number;
-  cached?: boolean;
-  logProbs?: number[];
-}
+export type TokenUsage = z.infer<typeof TokenUsageSchema>;
 
-export interface ProviderEmbeddingResponse {
-  error?: string;
-  embedding?: number[];
-  tokenUsage?: Partial<TokenUsage>;
-}
+const ProviderResponseSchema = z.object({
+  cached: z.boolean().optional(),
+  cost: z.number().optional(),
+  error: z.string().optional(),
+  logProbs: z.array(z.number()).optional(),
+  metadata: z
+    .object({
+      redteamFinalPrompt: z.string().optional(),
+    })
+    .catchall(z.any())
+    .optional(),
+  output: z.union([z.string(), z.any()]).optional(),
+  tokenUsage: TokenUsageSchema.optional(),
+});
 
-export interface ProviderSimilarityResponse {
-  error?: string;
-  similarity?: number;
-  tokenUsage?: Partial<TokenUsage>;
-}
+export type ProviderResponse = z.infer<typeof ProviderResponseSchema>;
 
-export interface ProviderClassificationResponse {
-  error?: string;
-  classification?: Record<string, number>;
-}
+const ProviderEmbeddingResponseSchema = z.object({
+  error: z.string().optional(),
+  embedding: z.array(z.number()).optional(),
+  tokenUsage: TokenUsageSchema.partial().optional(),
+});
+
+export type ProviderEmbeddingResponse = z.infer<typeof ProviderEmbeddingResponseSchema>;
+
+const ProviderSimilarityResponseSchema = z.object({
+  error: z.string().optional(),
+  similarity: z.number().optional(),
+  tokenUsage: TokenUsageSchema.partial().optional(),
+});
+
+export type ProviderSimilarityResponse = z.infer<typeof ProviderSimilarityResponseSchema>;
+
+const ProviderClassificationResponseSchema = z.object({
+  error: z.string().optional(),
+  classification: z.record(z.number()).optional(),
+});
+
+export type ProviderClassificationResponse = z.infer<typeof ProviderClassificationResponseSchema>;
 
 export interface ModerationFlag {
   code: string;
@@ -208,17 +239,23 @@ export type ProviderType = 'embedding' | 'classification' | 'text' | 'moderation
 
 export type ProviderTypeMap = Partial<Record<ProviderType, string | ProviderOptions | ApiProvider>>;
 
-export interface GradingConfig {
-  rubricPrompt?: string | string[];
-  provider?: string | ProviderOptions | ApiProvider | ProviderTypeMap;
-  factuality?: {
-    subset?: number;
-    superset?: number;
-    agree?: number;
-    disagree?: number;
-    differButFactual?: number;
-  };
-}
+const GradingConfigSchema = z.object({
+  rubricPrompt: z.union([z.string(), z.array(z.string())]).optional(),
+  provider: z
+    .union([z.string(), z.any(), z.record(z.string(), z.union([z.string(), z.any()])).optional()])
+    .optional(),
+  factuality: z
+    .object({
+      subset: z.number().optional(),
+      superset: z.number().optional(),
+      agree: z.number().optional(),
+      disagree: z.number().optional(),
+      differButFactual: z.number().optional(),
+    })
+    .optional(),
+});
+
+export type GradingConfig = z.infer<typeof GradingConfigSchema>;
 
 export interface PromptConfig {
   prefix?: string;
@@ -267,6 +304,19 @@ export interface EvaluateOptions {
   interactiveProviders?: boolean;
 }
 
+export type PromptFunctionContext = {
+  vars: Record<string, string | object>;
+  provider: {
+    id: string;
+    label?: string;
+  };
+};
+
+export type PromptFunction = (context: {
+  vars: Record<string, string | object>;
+  provider?: ApiProvider;
+}) => Promise<string | object>;
+
 export interface Prompt {
   id?: string;
   raw: string;
@@ -275,10 +325,7 @@ export interface Prompt {
    */
   display?: string;
   label: string;
-  function?: (context: {
-    vars: Record<string, string | object>;
-    provider?: ApiProvider;
-  }) => Promise<string | object>;
+  function?: PromptFunction;
 }
 
 // Used for final prompt display
@@ -323,6 +370,7 @@ export interface EvaluateResult {
   gradingResult?: GradingResult;
   namedScores: Record<string, number>;
   cost?: number;
+  metadata?: Record<string, any>;
 }
 
 export interface EvaluateTableOutput {
@@ -336,6 +384,7 @@ export interface EvaluateTableOutput {
   tokenUsage?: Partial<TokenUsage>;
   gradingResult?: GradingResult;
   cost: number;
+  metadata?: Record<string, any>;
 }
 
 export interface EvaluateTableRow {
@@ -410,43 +459,48 @@ export function isGradingResult(result: any): result is GradingResult {
   );
 }
 
-type BaseAssertionTypes =
-  | 'human'
-  | 'equals'
-  | 'contains'
-  | 'icontains'
-  | 'contains-all'
-  | 'contains-any'
-  | 'icontains-all'
-  | 'icontains-any'
-  | 'starts-with'
-  | 'regex'
-  | 'is-json'
-  | 'contains-json'
-  | 'javascript'
-  | 'python'
-  | 'similar'
-  | 'answer-relevance'
-  | 'context-faithfulness'
-  | 'context-recall'
-  | 'context-relevance'
-  | 'llm-rubric'
-  | 'model-graded-closedqa'
-  | 'factuality'
-  | 'model-graded-factuality'
-  | 'webhook'
-  | 'rouge-n'
-  | 'rouge-s'
-  | 'rouge-l'
-  | 'levenshtein'
-  | 'is-valid-openai-function-call'
-  | 'is-valid-openai-tools-call'
-  | 'latency'
-  | 'perplexity'
-  | 'perplexity-score'
-  | 'cost'
-  | 'select-best'
-  | 'moderation';
+export const BaseAssertionTypesSchema = z.enum([
+  'answer-relevance',
+  'contains-all',
+  'contains-any',
+  'contains-json',
+  'contains-sql',
+  'contains',
+  'context-faithfulness',
+  'context-recall',
+  'context-relevance',
+  'cost',
+  'equals',
+  'factuality',
+  'human',
+  'icontains-all',
+  'icontains-any',
+  'icontains',
+  'is-json',
+  'is-sql',
+  'is-valid-openai-function-call',
+  'is-valid-openai-tools-call',
+  'javascript',
+  'latency',
+  'levenshtein',
+  'llm-rubric',
+  'model-graded-closedqa',
+  'model-graded-factuality',
+  'moderation',
+  'perplexity-score',
+  'perplexity',
+  'python',
+  'regex',
+  'rouge-l',
+  'rouge-n',
+  'rouge-s',
+  'select-best',
+  'similar',
+  'starts-with',
+  'webhook',
+]);
+
+export type BaseAssertionTypes = z.infer<typeof BaseAssertionTypesSchema>;
 
 type NotPrefixed<T extends string> = `not-${T}`;
 
@@ -526,6 +580,9 @@ export interface TestCasesWithMetadata {
   prompts: TestCasesWithMetadataPrompt[];
 }
 
+export const ProviderSchema = z.union([z.string(), ProviderOptionsSchema, ApiProviderSchema]);
+export type Provider = z.infer<typeof ProviderSchema>;
+
 // Each test case is graded pass/fail with a score.  A test case represents a unique input to the LLM after substituting `vars` in the prompt.
 export interface TestCase<Vars = Record<string, string | string[] | object>> {
   // Optional description of what you're testing
@@ -535,7 +592,7 @@ export interface TestCase<Vars = Record<string, string | string[] | object>> {
   vars?: Vars;
 
   // Override the provider.
-  provider?: string | ProviderOptions | ApiProvider;
+  provider?: Provider;
 
   // Output related from running values in Vars with provider. Having this value would skip running the prompt through the provider, and go straight to the assertions
   providerOutput?: string | object;
@@ -664,6 +721,9 @@ export interface TestSuiteConfig {
   // Envar overrides
   env?: EnvOverrides;
 
+  // Metrics to calculate after the eval has been completed
+  derivedMetrics?: DerivedMetric[];
+
   // Any other information about this configuration.
   metadata?: Record<string, any>;
 }
@@ -680,10 +740,6 @@ export interface EvalWithMetadata {
   results: EvaluateSummary;
   description?: string;
 }
-
-export type PromptFunction = (context: {
-  vars: Record<string, string | object>;
-}) => Promise<string | object>;
 
 // node.js package interface
 export type EvaluateTestSuite = {
@@ -705,7 +761,18 @@ export interface ResultsFile {
   createdAt: string;
   results: EvaluateSummary;
   config: Partial<UnifiedConfig>;
+  author: string | null;
 }
+
+// The eval results list returned by the server and used for the eval picker
+export interface ResultLightweight {
+  evalId: string;
+  createdAt: number;
+  description: string | null;
+  numTests: number;
+}
+
+export type ResultLightweightWithLabel = ResultLightweight & { label: string };
 
 // File exported as --output option
 export interface OutputFile {
@@ -722,3 +789,7 @@ export interface Job {
   total: number;
   result: EvaluateSummary | null;
 }
+
+// used for writing eval results
+export const OutputFileExtension = z.enum(['csv', 'html', 'json', 'txt', 'yaml', 'yml']);
+export type OutputFileExtension = z.infer<typeof OutputFileExtension>;

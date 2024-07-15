@@ -1,10 +1,60 @@
 import Anthropic, { APIError } from '@anthropic-ai/sdk';
-import logger from '../logger';
-
-import type { ApiProvider, EnvOverrides, ProviderResponse, TokenUsage } from '../types.js';
-
 import { getCache, isCacheEnabled } from '../cache';
+import logger from '../logger';
+import type { ApiProvider, EnvOverrides, ProviderResponse, TokenUsage } from '../types.js';
 import { parseChatPrompt } from './shared';
+
+const ANTHROPIC_MODELS = [
+  ...['claude-instant-1.2'].map((model) => ({
+    id: model,
+    cost: {
+      input: 0.0008 / 1000,
+      output: 0.0024 / 1000,
+    },
+  })),
+  ...['claude-2.0'].map((model) => ({
+    id: model,
+    cost: {
+      input: 0.008 / 1000,
+      output: 0.024 / 1000,
+    },
+  })),
+  ...['claude-2.1'].map((model) => ({
+    id: model,
+    cost: {
+      input: 0.008 / 1000,
+      output: 0.024 / 1000,
+    },
+  })),
+  ...['claude-3-haiku-20240307'].map((model) => ({
+    id: model,
+    cost: {
+      input: 0.00025 / 1000,
+      output: 0.00125 / 1000,
+    },
+  })),
+  ...['claude-3-sonnet-20240229'].map((model) => ({
+    id: model,
+    cost: {
+      input: 0.003 / 1000,
+      output: 0.015 / 1000,
+    },
+  })),
+  ...['claude-3-opus-20240229'].map((model) => ({
+    id: model,
+    cost: {
+      input: 0.015 / 1000,
+      output: 0.075 / 1000,
+    },
+  })),
+  ...['claude-3-5-sonnet-20240620'].map((model) => ({
+    id: model,
+    cost: {
+      input: 3 / 1e6,
+      output: 15 / 1e6,
+    },
+  })),
+];
 
 interface AnthropicMessageOptions {
   apiKey?: string;
@@ -16,6 +66,10 @@ interface AnthropicMessageOptions {
   model?: string;
   cost?: number;
   tools?: Anthropic.Tool[];
+  tool_choice?:
+    | Anthropic.MessageCreateParams.ToolChoiceAny
+    | Anthropic.MessageCreateParams.ToolChoiceAuto
+    | Anthropic.MessageCreateParams.ToolChoiceTool;
 }
 
 function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
@@ -53,26 +107,6 @@ export function outputFromMessage(message: Anthropic.Messages.Message) {
     .join('\n\n');
 }
 
-export function calculateCost(
-  modelName: string,
-  config: AnthropicMessageOptions,
-  promptTokens?: number,
-  completionTokens?: number,
-): number | undefined {
-  if (!promptTokens || !completionTokens) {
-    return undefined;
-  }
-
-  const model = [...AnthropicMessagesProvider.ANTHROPIC_MODELS].find((m) => m.id === modelName);
-  if (!model || !model.cost) {
-    return undefined;
-  }
-
-  const inputCost = config.cost ?? model.cost.input;
-  const outputCost = config.cost ?? model.cost.output;
-  return inputCost * promptTokens + outputCost * completionTokens || undefined;
-}
-
 interface AnthropicMessageInput {
   role: 'user' | 'assistant' | 'system';
   content: string | Array<Anthropic.ImageBlockParam | Anthropic.TextBlockParam>;
@@ -104,6 +138,26 @@ export function parseMessages(messages: string) {
   return { system, extractedMessages };
 }
 
+export function calculateCost(
+  modelName: string,
+  config: AnthropicMessageOptions,
+  promptTokens?: number,
+  completionTokens?: number,
+): number | undefined {
+  if (!promptTokens || !completionTokens) {
+    return undefined;
+  }
+
+  const model = ANTHROPIC_MODELS.find((m) => m.id === modelName);
+  if (!model || !model.cost) {
+    return undefined;
+  }
+
+  const inputCost = config.cost ?? model.cost.input;
+  const outputCost = config.cost ?? model.cost.output;
+  return inputCost * promptTokens + outputCost * completionTokens || undefined;
+}
+
 export class AnthropicMessagesProvider implements ApiProvider {
   modelName: string;
   config: AnthropicMessageOptions;
@@ -111,54 +165,9 @@ export class AnthropicMessagesProvider implements ApiProvider {
   apiKey?: string;
   anthropic: Anthropic;
 
-  static ANTHROPIC_MODELS = [
-    ...['claude-instant-1.2'].map((model) => ({
-      id: model,
-      cost: {
-        input: 0.0008 / 1000,
-        output: 0.0024 / 1000,
-      },
-    })),
-    ...['claude-2.0'].map((model) => ({
-      id: model,
-      cost: {
-        input: 0.008 / 1000,
-        output: 0.024 / 1000,
-      },
-    })),
-    ...['claude-2.1'].map((model) => ({
-      id: model,
-      cost: {
-        input: 0.008 / 1000,
-        output: 0.024 / 1000,
-      },
-    })),
-    ...['claude-3-haiku-20240307'].map((model) => ({
-      id: model,
-      cost: {
-        input: 0.00025 / 1000,
-        output: 0.00125 / 1000,
-      },
-    })),
-    ...['claude-3-sonnet-20240229'].map((model) => ({
-      id: model,
-      cost: {
-        input: 0.003 / 1000,
-        output: 0.015 / 1000,
-      },
-    })),
-    ...['claude-3-opus-20240229'].map((model) => ({
-      id: model,
-      cost: {
-        input: 0.015 / 1000,
-        output: 0.075 / 1000,
-      },
-    })),
-  ];
+  static ANTHROPIC_MODELS = ANTHROPIC_MODELS;
 
-  static ANTHROPIC_MODELS_NAMES = AnthropicMessagesProvider.ANTHROPIC_MODELS.map(
-    (model) => model.id,
-  );
+  static ANTHROPIC_MODELS_NAMES = ANTHROPIC_MODELS.map((model) => model.id);
 
   constructor(
     modelName: string,
@@ -195,11 +204,13 @@ export class AnthropicMessagesProvider implements ApiProvider {
     const params: Anthropic.MessageCreateParams = {
       model: this.modelName,
       ...(system ? { system } : {}),
-      max_tokens: this.config?.max_tokens || 1024,
+      max_tokens:
+        this.config?.max_tokens || parseInt(process.env.ANTHROPIC_MAX_TOKENS || '1024', 10),
       messages: extractedMessages,
       stream: false,
-      temperature: this.config.temperature || 0,
+      temperature: this.config.temperature || parseFloat(process.env.ANTHROPIC_TEMPERATURE || '0'),
       ...(this.config.tools ? { tools: this.config.tools } : {}),
+      ...(this.config.tool_choice ? { tool_choice: this.config.tool_choice } : {}),
     };
 
     logger.debug(`Calling Anthropic Messages API: ${JSON.stringify(params)}`);
@@ -384,3 +395,68 @@ export class AnthropicCompletionProvider implements ApiProvider {
 export const DefaultGradingProvider = new AnthropicMessagesProvider('claude-3-opus-20240229');
 export const DefaultGradingJsonProvider = new AnthropicMessagesProvider('claude-3-opus-20240229');
 export const DefaultSuggestionsProvider = new AnthropicMessagesProvider('claude-3-opus-20240229');
+
+export class AnthropicLlmRubricProvider extends AnthropicMessagesProvider {
+  constructor(modelName: string) {
+    super(modelName, {
+      config: {
+        tool_choice: { type: 'tool', name: 'grade_output' },
+        tools: [
+          {
+            name: 'grade_output',
+            description: 'Grade the given output based on specific criteria',
+            input_schema: {
+              type: 'object',
+              properties: {
+                pass: {
+                  type: 'boolean',
+                  description: 'Whether the output passes the criteria',
+                },
+                score: {
+                  type: 'number',
+                  description: 'The score assigned to the output',
+                },
+                reason: {
+                  type: 'string',
+                  description: 'The reason for the given grade',
+                },
+              },
+              required: ['pass', 'score', 'reason'],
+            },
+          },
+        ],
+      },
+    });
+  }
+
+  async callApi(prompt: string): Promise<ProviderResponse> {
+    const result = await super.callApi(prompt);
+    if (typeof result.output !== 'string') {
+      return {
+        error: `Anthropic LLM rubric grader - malformed non-string output\n\n${JSON.stringify(result.output)}`,
+      };
+    }
+    try {
+      const functionCall = JSON.parse(result.output) as {
+        type: 'tool_use';
+        id: string;
+        name: 'grade_output';
+        input: {
+          pass: boolean;
+          score: number;
+          reason: string;
+        };
+      };
+      return {
+        output: functionCall.input,
+      };
+    } catch (err) {
+      return {
+        error: `Anthropic LLM rubric grader - invalid JSON: ${err}\n\n${result.output}`,
+      };
+    }
+  }
+}
+export const DefaultLlmRubricProvider = new AnthropicLlmRubricProvider(
+  'claude-3-5-sonnet-20240620',
+);

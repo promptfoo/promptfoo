@@ -1,22 +1,18 @@
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
 import { createHash } from 'crypto';
-
-import dotenv from 'dotenv';
-import $RefParser from '@apidevtools/json-schema-ref-parser';
-import invariant from 'tiny-invariant';
-import nunjucks from 'nunjucks';
-import yaml from 'js-yaml';
-import deepEqual from 'fast-deep-equal';
 import { stringify } from 'csv-stringify/sync';
-import { globSync } from 'glob';
+import dotenv from 'dotenv';
 import { desc, eq } from 'drizzle-orm';
-
+import deepEqual from 'fast-deep-equal';
+import * as fs from 'fs';
+import { globSync } from 'glob';
+import yaml from 'js-yaml';
+import nunjucks from 'nunjucks';
+import * as os from 'os';
+import * as path from 'path';
+import invariant from 'tiny-invariant';
+import { getAuthor } from './accounts';
 import cliState from './cliState';
-import logger from './logger';
-import { getDirectory, importModule } from './esm';
-import { readTests } from './testCases';
+import { TERMINAL_MAX_WIDTH } from './constants';
 import {
   datasets,
   getDb,
@@ -26,9 +22,11 @@ import {
   prompts,
   getDbSignalPath,
 } from './database';
+import { getDirectory, importModule } from './esm';
+import { writeCsvToGoogleSheet } from './googleSheets';
+import logger from './logger';
 import { runDbMigrations } from './migrate';
 import { runPython } from './python/wrapper';
-
 import {
   type EvalWithMetadata,
   type EvaluateResult,
@@ -43,334 +41,34 @@ import {
   type TestCasesWithMetadataPrompt,
   type UnifiedConfig,
   type OutputFile,
-  type ProviderOptions,
   type Prompt,
   type CompletedPrompt,
   type CsvRow,
+  type ResultLightweight,
   isApiProvider,
   isProviderOptions,
+  OutputFileExtension,
 } from './types';
-import { writeCsvToGoogleSheet } from './googleSheets';
 
 const DEFAULT_QUERY_LIMIT = 100;
 
-let globalConfigCache: any = null;
-
-export function resetGlobalConfig(): void {
-  globalConfigCache = null;
-}
-
-export function readGlobalConfig(): any {
-  if (!globalConfigCache) {
-    const configDir = getConfigDirectoryPath();
-    const configFilePath = path.join(configDir, 'promptfoo.yaml');
-
-    if (fs.existsSync(configFilePath)) {
-      globalConfigCache = yaml.load(fs.readFileSync(configFilePath, 'utf-8'));
-    } else {
-      if (!fs.existsSync(configDir)) {
-        fs.mkdirSync(configDir, { recursive: true });
-      }
-      globalConfigCache = { hasRun: false };
-      fs.writeFileSync(configFilePath, yaml.dump(globalConfigCache));
-    }
+export function getNunjucksEngine(filters?: NunjucksFilterMap) {
+  if (process.env.PROMPTFOO_DISABLE_TEMPLATING) {
+    return {
+      renderString: (template: string) => template,
+    };
   }
 
-  return globalConfigCache;
-}
-
-export function maybeRecordFirstRun(): boolean {
-  // Return true if first run
-  try {
-    const config = readGlobalConfig();
-    if (!config.hasRun) {
-      config.hasRun = true;
-      fs.writeFileSync(
-        path.join(getConfigDirectoryPath(true /* createIfNotExists */), 'promptfoo.yaml'),
-        yaml.dump(config),
-      );
-      return true;
-    }
-    return false;
-  } catch (err) {
-    return false;
-  }
-}
-
-export async function maybeReadConfig(configPath: string): Promise<UnifiedConfig | undefined> {
-  if (!fs.existsSync(configPath)) {
-    return undefined;
-  }
-  return readConfig(configPath);
-}
-
-export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<UnifiedConfig> {
-  if (process.env.PROMPTFOO_DISABLE_REF_PARSER) {
-    return rawConfig;
-  }
-
-  // Track and delete tools[i].function for each tool, preserving the rest of the properties
-  // https://github.com/promptfoo/promptfoo/issues/364
-
-  // Remove parameters from functions and tools to prevent dereferencing
-  const extractFunctionParameters = (functions: { parameters?: object }[]) => {
-    return functions.map((func) => {
-      const { parameters } = func;
-      delete func.parameters;
-      return { parameters };
-    });
-  };
-
-  const extractToolParameters = (tools: { function?: { parameters?: object } }[]) => {
-    return tools.map((tool) => {
-      const { parameters } = tool.function || {};
-      if (tool.function?.parameters) {
-        delete tool.function.parameters;
-      }
-      return { parameters };
-    });
-  };
-
-  // Restore parameters to functions and tools after dereferencing
-  const restoreFunctionParameters = (
-    functions: { parameters?: object }[],
-    parametersList: { parameters?: object }[],
-  ) => {
-    functions.forEach((func, index) => {
-      if (parametersList[index]?.parameters) {
-        func.parameters = parametersList[index].parameters;
-      }
-    });
-  };
-
-  const restoreToolParameters = (
-    tools: { function?: { parameters?: object } }[],
-    parametersList: { parameters?: object }[],
-  ) => {
-    tools.forEach((tool, index) => {
-      if (parametersList[index]?.parameters) {
-        tool.function = tool.function || {};
-        tool.function.parameters = parametersList[index].parameters;
-      }
-    });
-  };
-
-  const functionsParametersList: { parameters?: object }[][] = [];
-  const toolsParametersList: { parameters?: object }[][] = [];
-
-  if (Array.isArray(rawConfig.providers)) {
-    rawConfig.providers.forEach((provider, providerIndex) => {
-      if (typeof provider === 'string') return;
-      if (typeof provider === 'function') return;
-      if (!provider.config) {
-        // Handle when provider is a map
-        provider = Object.values(provider)[0] as ProviderOptions;
-      }
-
-      if (provider.config?.functions) {
-        functionsParametersList[providerIndex] = extractFunctionParameters(
-          provider.config.functions,
-        );
-      }
-
-      if (provider.config?.tools) {
-        toolsParametersList[providerIndex] = extractToolParameters(provider.config.tools);
-      }
-    });
-  }
-
-  // Dereference JSON
-  const config = (await $RefParser.dereference(rawConfig)) as unknown as UnifiedConfig;
-
-  // Restore functions and tools parameters
-  if (Array.isArray(config.providers)) {
-    config.providers.forEach((provider, index) => {
-      if (typeof provider === 'string') return;
-      if (typeof provider === 'function') return;
-      if (!provider.config) {
-        // Handle when provider is a map
-        provider = Object.values(provider)[0] as ProviderOptions;
-      }
-
-      if (functionsParametersList[index]) {
-        provider.config.functions = provider.config.functions || [];
-        restoreFunctionParameters(provider.config.functions, functionsParametersList[index]);
-      }
-
-      if (toolsParametersList[index]) {
-        provider.config.tools = provider.config.tools || [];
-        restoreToolParameters(provider.config.tools, toolsParametersList[index]);
-      }
-    });
-  }
-  return config;
-}
-
-export async function readConfig(configPath: string): Promise<UnifiedConfig> {
-  const ext = path.parse(configPath).ext;
-  switch (ext) {
-    case '.json':
-    case '.yaml':
-    case '.yml':
-      const rawConfig = yaml.load(fs.readFileSync(configPath, 'utf-8')) as UnifiedConfig;
-      return dereferenceConfig(rawConfig);
-    case '.js':
-    case '.cjs':
-    case '.mjs':
-      return (await importModule(configPath)) as UnifiedConfig;
-    default:
-      throw new Error(`Unsupported configuration file format: ${ext}`);
-  }
-}
-
-/**
- * Reads multiple configuration files and combines them into a single UnifiedConfig.
- *
- * @param {string[]} configPaths - An array of paths to configuration files. Supports glob patterns.
- * @returns {Promise<UnifiedConfig>} A promise that resolves to a unified configuration object.
- */
-export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig> {
-  const configs: UnifiedConfig[] = [];
-  for (const configPath of configPaths) {
-    const globPaths = globSync(configPath, {
-      windowsPathsNoEscape: true,
-    });
-    if (globPaths.length === 0) {
-      throw new Error(`No configuration file found at ${configPath}`);
-    }
-    for (const globPath of globPaths) {
-      const config = await readConfig(globPath);
-      configs.push(config);
-    }
-  }
-
-  const providers: UnifiedConfig['providers'] = [];
-  const seenProviders = new Set<string>();
-  configs.forEach((config) => {
-    invariant(
-      typeof config.providers !== 'function',
-      'Providers cannot be a function for multiple configs',
-    );
-    if (typeof config.providers === 'string') {
-      if (!seenProviders.has(config.providers)) {
-        providers.push(config.providers);
-        seenProviders.add(config.providers);
-      }
-    } else if (Array.isArray(config.providers)) {
-      config.providers.forEach((provider) => {
-        if (!seenProviders.has(JSON.stringify(provider))) {
-          providers.push(provider);
-          seenProviders.add(JSON.stringify(provider));
-        }
-      });
-    }
+  const env = nunjucks.configure({
+    autoescape: false,
   });
 
-  const tests: UnifiedConfig['tests'] = [];
-  for (const config of configs) {
-    if (typeof config.tests === 'string') {
-      const newTests = await readTests(config.tests, path.dirname(configPaths[0]));
-      tests.push(...newTests);
-    } else if (Array.isArray(config.tests)) {
-      tests.push(...config.tests);
+  if (filters) {
+    for (const [name, filter] of Object.entries(filters)) {
+      env.addFilter(name, filter);
     }
   }
-
-  const configsAreStringOrArray = configs.every(
-    (config) => typeof config.prompts === 'string' || Array.isArray(config.prompts),
-  );
-  const configsAreObjects = configs.every((config) => typeof config.prompts === 'object');
-  let prompts: UnifiedConfig['prompts'] = configsAreStringOrArray ? [] : {};
-
-  const makeAbsolute = (configPath: string, relativePath: string | Prompt) => {
-    if (typeof relativePath === 'string') {
-      if (relativePath.startsWith('file://')) {
-        relativePath =
-          'file://' + path.resolve(path.dirname(configPath), relativePath.slice('file://'.length));
-      }
-      return relativePath;
-    } else if (typeof relativePath === 'object' && relativePath.id) {
-      if (relativePath.id.startsWith('file://')) {
-        relativePath.id =
-          'file://' +
-          path.resolve(path.dirname(configPath), relativePath.id.slice('file://'.length));
-      }
-      return relativePath;
-    } else {
-      throw new Error('Invalid prompt object');
-    }
-  };
-
-  const seenPrompts = new Set<string>();
-  const addSeenPrompt = (prompt: string | Prompt) => {
-    if (typeof prompt === 'string') {
-      seenPrompts.add(prompt);
-    } else if (typeof prompt === 'object' && prompt.id) {
-      seenPrompts.add(prompt.id);
-    } else {
-      throw new Error('Invalid prompt object');
-    }
-  };
-  configs.forEach((config, idx) => {
-    if (typeof config.prompts === 'string') {
-      invariant(Array.isArray(prompts), 'Cannot mix string and map-type prompts');
-      const absolutePrompt = makeAbsolute(configPaths[idx], config.prompts);
-      addSeenPrompt(absolutePrompt);
-    } else if (Array.isArray(config.prompts)) {
-      invariant(Array.isArray(prompts), 'Cannot mix configs with map and array-type prompts');
-      config.prompts
-        .map((prompt) => makeAbsolute(configPaths[idx], prompt))
-        .forEach((prompt) => addSeenPrompt(prompt));
-    } else {
-      // Object format such as { 'prompts/prompt1.txt': 'foo', 'prompts/prompt2.txt': 'bar' }
-      invariant(typeof prompts === 'object', 'Cannot mix configs with map and array-type prompts');
-      prompts = { ...prompts, ...config.prompts };
-    }
-  });
-  if (Array.isArray(prompts)) {
-    prompts.push(...Array.from(seenPrompts));
-  }
-
-  // Combine all configs into a single UnifiedConfig
-  const combinedConfig: UnifiedConfig = {
-    description: configs.map((config) => config.description).join(', '),
-    providers,
-    prompts,
-    tests,
-    scenarios: configs.flatMap((config) => config.scenarios || []),
-    defaultTest: configs.reduce((prev: Partial<TestCase> | undefined, curr) => {
-      return {
-        ...prev,
-        ...curr.defaultTest,
-        vars: { ...prev?.vars, ...curr.defaultTest?.vars },
-        assert: [...(prev?.assert || []), ...(curr.defaultTest?.assert || [])],
-        options: { ...prev?.options, ...curr.defaultTest?.options },
-      };
-    }, {}),
-    nunjucksFilters: configs.reduce((prev, curr) => ({ ...prev, ...curr.nunjucksFilters }), {}),
-    env: configs.reduce((prev, curr) => ({ ...prev, ...curr.env }), {}),
-    evaluateOptions: configs.reduce((prev, curr) => ({ ...prev, ...curr.evaluateOptions }), {}),
-    commandLineOptions: configs.reduce(
-      (prev, curr) => ({ ...prev, ...curr.commandLineOptions }),
-      {},
-    ),
-    metadata: configs.reduce((prev, curr) => ({ ...prev, ...curr.metadata }), {}),
-    sharing: !configs.some((config) => config.sharing === false),
-  };
-
-  return combinedConfig;
-}
-
-export async function writeMultipleOutputs(
-  outputPaths: string[],
-  evalId: string | null,
-  results: EvaluateSummary,
-  config: Partial<UnifiedConfig>,
-  shareableUrl: string | null,
-) {
-  await Promise.all(
-    outputPaths.map((outputPath) => writeOutput(outputPath, evalId, results, config, shareableUrl)),
-  );
+  return env;
 }
 
 export async function writeOutput(
@@ -380,17 +78,23 @@ export async function writeOutput(
   config: Partial<UnifiedConfig>,
   shareableUrl: string | null,
 ) {
-  const outputExtension = outputPath.split('.').pop()?.toLowerCase();
+  const { data: outputExtension } = OutputFileExtension.safeParse(
+    path.extname(outputPath).slice(1).toLowerCase(),
+  );
+  invariant(
+    outputExtension,
+    `Unsupported output file format ${outputExtension}. Please use one of: ${OutputFileExtension.options.join(', ')}.`,
+  );
 
   const outputToSimpleString = (output: EvaluateTableOutput) => {
     const passFailText = output.pass ? '[PASS]' : '[FAIL]';
     const namedScoresText = Object.entries(output.namedScores)
-      .map(([name, value]) => `${name}: ${value.toFixed(2)}`)
+      .map(([name, value]) => `${name}: ${value?.toFixed(2)}`)
       .join(', ');
     const scoreText =
       namedScoresText.length > 0
-        ? `(${output.score.toFixed(2)}, ${namedScoresText})`
-        : `(${output.score.toFixed(2)})`;
+        ? `(${output.score?.toFixed(2)}, ${namedScoresText})`
+        : `(${output.score?.toFixed(2)})`;
     const gradingResultText = output.gradingResult
       ? `${output.pass ? 'Pass' : 'Fail'} Reason: ${output.gradingResult.reason}`
       : '';
@@ -455,12 +159,24 @@ ${gradingResultText}`.trim();
         results: results.results,
       });
       fs.writeFileSync(outputPath, htmlOutput);
-    } else {
-      throw new Error(
-        `Unsupported output file format ${outputExtension}, please use csv, txt, json, yaml, yml, html.`,
-      );
     }
   }
+}
+
+export async function writeMultipleOutputs(
+  outputPaths: string[],
+  evalId: string | null,
+  results: EvaluateSummary,
+  config: Partial<UnifiedConfig>,
+  shareableUrl: string | null,
+) {
+  await Promise.all(
+    outputPaths.map((outputPath) => writeOutput(outputPath, evalId, results, config, shareableUrl)),
+  );
+}
+
+export function sha256(str: string) {
+  return createHash('sha256').update(str).digest('hex');
 }
 
 export async function readOutput(outputPath: string): Promise<OutputFile> {
@@ -512,6 +228,7 @@ export async function writeResultsToDatabase(
       .values({
         id: evalId,
         createdAt: createdAt.getTime(),
+        author: getAuthor(),
         description: config.description,
         config,
         results,
@@ -600,12 +317,14 @@ export async function writeResultsToDatabase(
 export function listPreviousResults(
   limit: number = DEFAULT_QUERY_LIMIT,
   filterDescription?: string,
-): { evalId: string; description?: string | null }[] {
+): ResultLightweight[] {
   const db = getDb();
   let results = db
     .select({
-      name: evals.id,
+      evalId: evals.id,
+      createdAt: evals.createdAt,
       description: evals.description,
+      config: evals.config,
     })
     .from(evals)
     .orderBy(desc(evals.createdAt))
@@ -618,8 +337,10 @@ export function listPreviousResults(
   }
 
   return results.map((result) => ({
-    evalId: result.name,
+    evalId: result.evalId,
+    createdAt: result.createdAt,
     description: result.description,
+    numTests: result.config.tests?.length || 0,
   }));
 }
 
@@ -668,7 +389,58 @@ export function listPreviousResults_fileSystem(): { fileName: string; descriptio
   });
 }
 
+export function filenameToDate(filename: string) {
+  const dateString = filename.slice('eval-'.length, filename.length - '.json'.length);
+
+  // Replace hyphens with colons where necessary (Windows compatibility).
+  const dateParts = dateString.split('T');
+  const timePart = dateParts[1].replace(/-/g, ':');
+  const formattedDateString = `${dateParts[0]}T${timePart}`;
+
+  const date = new Date(formattedDateString);
+  return date;
+  /*
+  return date.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    timeZoneName: 'short',
+  });
+  */
+}
+
+export function dateToFilename(date: Date) {
+  return `eval-${date.toISOString().replace(/:/g, '-')}.json`;
+}
+
+/**
+ * @deprecated Used only for migration to sqlite
+ */
+export function readResult_fileSystem(
+  name: string,
+): { id: string; result: ResultsFile; createdAt: Date } | undefined {
+  const resultsDirectory = path.join(getConfigDirectoryPath(), 'output');
+  const resultsPath = path.join(resultsDirectory, name);
+  try {
+    const result = JSON.parse(
+      fs.readFileSync(fs.realpathSync(resultsPath), 'utf-8'),
+    ) as ResultsFile;
+    const createdAt = filenameToDate(name);
+    return {
+      id: sha256(JSON.stringify(result.config)),
+      result,
+      createdAt,
+    };
+  } catch (err) {
+    logger.error(`Failed to read results from ${resultsPath}:\n${err}`);
+  }
+}
+
 let attemptedMigration = false;
+
 export async function migrateResultsFromFileSystemToDatabase() {
   if (attemptedMigration) {
     // TODO(ian): Record this bit in the database.
@@ -739,33 +511,6 @@ export function cleanupOldFileResults(remaining = RESULT_HISTORY_LENGTH) {
   }
 }
 
-export function filenameToDate(filename: string) {
-  const dateString = filename.slice('eval-'.length, filename.length - '.json'.length);
-
-  // Replace hyphens with colons where necessary (Windows compatibility).
-  const dateParts = dateString.split('T');
-  const timePart = dateParts[1].replace(/-/g, ':');
-  const formattedDateString = `${dateParts[0]}T${timePart}`;
-
-  const date = new Date(formattedDateString);
-  return date;
-  /*
-  return date.toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    timeZoneName: 'short',
-  });
-  */
-}
-
-export function dateToFilename(date: Date) {
-  return `eval-${date.toISOString().replace(/:/g, '-')}.json`;
-}
-
 export async function readResult(
   id: string,
 ): Promise<{ id: string; result: ResultsFile; createdAt: Date } | undefined> {
@@ -775,6 +520,7 @@ export async function readResult(
       .select({
         id: evals.id,
         createdAt: evals.createdAt,
+        author: evals.author,
         results: evals.results,
         config: evals.config,
       })
@@ -786,10 +532,11 @@ export async function readResult(
       return undefined;
     }
 
-    const { id: resultId, createdAt, results, config } = evalResult[0];
+    const { id: resultId, createdAt, results, config, author } = evalResult[0];
     const result: ResultsFile = {
       version: 3,
       createdAt: new Date(createdAt).toISOString().slice(0, 10),
+      author,
       results,
       config,
     };
@@ -800,29 +547,6 @@ export async function readResult(
     };
   } catch (err) {
     logger.error(`Failed to read result with ID ${id} from database:\n${err}`);
-  }
-}
-
-/**
- * @deprecated Used only for migration to sqlite
- */
-export function readResult_fileSystem(
-  name: string,
-): { id: string; result: ResultsFile; createdAt: Date } | undefined {
-  const resultsDirectory = path.join(getConfigDirectoryPath(), 'output');
-  const resultsPath = path.join(resultsDirectory, name);
-  try {
-    const result = JSON.parse(
-      fs.readFileSync(fs.realpathSync(resultsPath), 'utf-8'),
-    ) as ResultsFile;
-    const createdAt = filenameToDate(name);
-    return {
-      id: sha256(JSON.stringify(result.config)),
-      result,
-      createdAt,
-    };
-  } catch (err) {
-    logger.error(`Failed to read results from ${resultsPath}:\n${err}`);
   }
 }
 
@@ -881,6 +605,7 @@ export async function readLatestResults(
     .select({
       id: evals.id,
       createdAt: evals.createdAt,
+      author: evals.author,
       description: evals.description,
       results: evals.results,
       config: evals.config,
@@ -902,34 +627,10 @@ export async function readLatestResults(
   return {
     version: 3,
     createdAt: new Date(latestResult.createdAt).toISOString(),
+    author: latestResult.author,
     results: latestResult.results,
     config: latestResult.config,
   };
-}
-
-export function getPromptsForTestCases(testCases: TestCase[]) {
-  const testCasesJson = JSON.stringify(testCases);
-  const testCasesSha256 = sha256(testCasesJson);
-  return getPromptsForTestCasesHash(testCasesSha256);
-}
-
-export function getPromptsForTestCasesHash(
-  testCasesSha256: string,
-  limit: number = DEFAULT_QUERY_LIMIT,
-) {
-  return getPromptsWithPredicate((result) => {
-    const testsJson = JSON.stringify(result.config.tests);
-    const hash = sha256(testsJson);
-    return hash === testCasesSha256;
-  }, limit);
-}
-
-export function sha256(str: string) {
-  return createHash('sha256').update(str).digest('hex');
-}
-
-export function getPrompts(limit: number = DEFAULT_QUERY_LIMIT) {
-  return getPromptsWithPredicate(() => true, limit);
 }
 
 export async function getPromptsWithPredicate(
@@ -942,6 +643,7 @@ export async function getPromptsWithPredicate(
     .select({
       id: evals.id,
       createdAt: evals.createdAt,
+      author: evals.author,
       results: evals.results,
       config: evals.config,
     })
@@ -956,6 +658,7 @@ export async function getPromptsWithPredicate(
     const resultWrapper: ResultsFile = {
       version: 3,
       createdAt,
+      author: eval_.author,
       results: eval_.results,
       config: eval_.config,
     };
@@ -1001,8 +704,21 @@ export async function getPromptsWithPredicate(
   return Object.values(groupedPrompts);
 }
 
-export async function getTestCases(limit: number = DEFAULT_QUERY_LIMIT) {
-  return getTestCasesWithPredicate(() => true, limit);
+export function getPromptsForTestCasesHash(
+  testCasesSha256: string,
+  limit: number = DEFAULT_QUERY_LIMIT,
+) {
+  return getPromptsWithPredicate((result) => {
+    const testsJson = JSON.stringify(result.config.tests);
+    const hash = sha256(testsJson);
+    return hash === testCasesSha256;
+  }, limit);
+}
+
+export function getPromptsForTestCases(testCases: TestCase[]) {
+  const testCasesJson = JSON.stringify(testCases);
+  const testCasesSha256 = sha256(testCasesJson);
+  return getPromptsForTestCasesHash(testCasesSha256);
 }
 
 export async function getTestCasesWithPredicate(
@@ -1014,6 +730,7 @@ export async function getTestCasesWithPredicate(
     .select({
       id: evals.id,
       createdAt: evals.createdAt,
+      author: evals.author,
       results: evals.results,
       config: evals.config,
     })
@@ -1028,6 +745,7 @@ export async function getTestCasesWithPredicate(
     const resultWrapper: ResultsFile = {
       version: 3,
       createdAt,
+      author: eval_.author,
       results: eval_.results,
       config: eval_.config,
     };
@@ -1079,6 +797,14 @@ export async function getTestCasesWithPredicate(
   return Object.values(groupedTestCases);
 }
 
+export function getPrompts(limit: number = DEFAULT_QUERY_LIMIT) {
+  return getPromptsWithPredicate(() => true, limit);
+}
+
+export async function getTestCases(limit: number = DEFAULT_QUERY_LIMIT) {
+  return getTestCasesWithPredicate(() => true, limit);
+}
+
 export async function getPromptFromHash(hash: string) {
   const prompts = await getPrompts();
   for (const prompt of prompts) {
@@ -1099,20 +825,6 @@ export async function getDatasetFromHash(hash: string) {
   return undefined;
 }
 
-export async function getEvals(limit: number = DEFAULT_QUERY_LIMIT) {
-  return getEvalsWithPredicate(() => true, limit);
-}
-
-export async function getEvalFromId(hash: string) {
-  const evals_ = await getEvals();
-  for (const eval_ of evals_) {
-    if (eval_.id.startsWith(hash)) {
-      return eval_;
-    }
-  }
-  return undefined;
-}
-
 export async function getEvalsWithPredicate(
   predicate: (result: ResultsFile) => boolean,
   limit: number,
@@ -1122,6 +834,7 @@ export async function getEvalsWithPredicate(
     .select({
       id: evals.id,
       createdAt: evals.createdAt,
+      author: evals.author,
       results: evals.results,
       config: evals.config,
       description: evals.description,
@@ -1138,6 +851,7 @@ export async function getEvalsWithPredicate(
     const resultWrapper: ResultsFile = {
       version: 3,
       createdAt: createdAt,
+      author: eval_.author,
       results: eval_.results,
       config: eval_.config,
     };
@@ -1154,6 +868,20 @@ export async function getEvalsWithPredicate(
   }
 
   return ret;
+}
+
+export async function getEvals(limit: number = DEFAULT_QUERY_LIMIT) {
+  return getEvalsWithPredicate(() => true, limit);
+}
+
+export async function getEvalFromId(hash: string) {
+  const evals_ = await getEvals();
+  for (const eval_ of evals_) {
+    if (eval_.id.startsWith(hash)) {
+      return eval_;
+    }
+  }
+  return undefined;
 }
 
 export async function deleteEval(evalId: string) {
@@ -1187,27 +915,8 @@ export async function readFilters(filters: Record<string, string>): Promise<Nunj
   return ret;
 }
 
-export function getNunjucksEngine(filters?: NunjucksFilterMap) {
-  if (process.env.PROMPTFOO_DISABLE_TEMPLATING) {
-    return {
-      renderString: (template: string) => template,
-    };
-  }
-
-  const env = nunjucks.configure({
-    autoescape: false,
-  });
-
-  if (filters) {
-    for (const [name, filter] of Object.entries(filters)) {
-      env.addFilter(name, filter);
-    }
-  }
-  return env;
-}
-
 export function printBorder() {
-  const border = '='.repeat((process.stdout.columns || 80) - 10);
+  const border = '='.repeat(TERMINAL_MAX_WIDTH);
   logger.info(border);
 }
 
@@ -1370,4 +1079,88 @@ export function renderVarsInObject<T>(obj: T, vars?: Record<string, string | obj
     return renderVarsInObject(fn({ vars }) as T);
   }
   return obj;
+}
+
+export function extractJsonObjects(str: string): object[] {
+  // This will extract all json objects from a string
+
+  const jsonObjects = [];
+  let openBracket = str.indexOf('{');
+  let closeBracket = str.indexOf('}', openBracket);
+  // Iterate over the string until we find a valid JSON-like pattern
+  // Iterate over all trailing } until the contents parse as json
+  while (openBracket !== -1) {
+    const jsonStr = str.slice(openBracket, closeBracket + 1);
+    try {
+      jsonObjects.push(JSON.parse(jsonStr));
+      // This is a valid JSON object, so start looking for
+      // an opening bracket after the last closing bracket
+      openBracket = str.indexOf('{', closeBracket + 1);
+      closeBracket = str.indexOf('}', openBracket);
+    } catch (err) {
+      // Not a valid object, move on to the next closing bracket
+      closeBracket = str.indexOf('}', closeBracket + 1);
+      while (closeBracket === -1) {
+        // No closing brackets made a valid json object, so
+        // start looking with the next opening bracket
+        openBracket = str.indexOf('{', openBracket + 1);
+        closeBracket = str.indexOf('}', openBracket);
+      }
+    }
+  }
+  return jsonObjects;
+}
+
+/**
+ * Parses a file path or glob pattern to extract function names and file extensions.
+ * Function names can be specified in the filename like this:
+ * prompt.py:myFunction or prompts.js:myFunction.
+ * @param basePath - The base path for file resolution.
+ * @param promptPath - The path or glob pattern.
+ * @returns Parsed details including function name, file extension, and directory status.
+ */
+export function parsePathOrGlob(
+  basePath: string,
+  promptPath: string,
+): {
+  extension?: string;
+  functionName?: string;
+  isPathPattern: boolean;
+  filePath: string;
+} {
+  if (promptPath.startsWith('file://')) {
+    promptPath = promptPath.slice(7);
+  }
+  const filePath = path.resolve(basePath, promptPath);
+
+  let stats;
+  try {
+    stats = fs.statSync(filePath);
+  } catch (err) {
+    if (process.env.PROMPTFOO_STRICT_FILES) {
+      throw err;
+    }
+  }
+
+  let filename = path.relative(basePath, filePath);
+  let functionName: string | undefined;
+
+  if (filename.includes(':')) {
+    const splits = filename.split(':');
+    if (splits[0] && ['.js', '.cjs', '.mjs', '.py'].some((ext) => splits[0].endsWith(ext))) {
+      [filename, functionName] = splits;
+    }
+  }
+
+  const isPathPattern = stats?.isDirectory() || /[*?{}\[\]]/.test(filePath); // glob pattern
+  const safeFilename = path.relative(
+    basePath,
+    path.isAbsolute(filename) ? filename : path.resolve(basePath, filename),
+  );
+  return {
+    extension: isPathPattern ? undefined : path.parse(safeFilename).ext,
+    filePath: safeFilename.startsWith(basePath) ? safeFilename : path.join(basePath, safeFilename),
+    functionName,
+    isPathPattern,
+  };
 }

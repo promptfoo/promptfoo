@@ -1,7 +1,3 @@
-import * as React from 'react';
-
-import ReactMarkdown from 'react-markdown';
-import invariant from 'tiny-invariant';
 import {
   createColumnHelper,
   flexRender,
@@ -9,31 +5,31 @@ import {
   getPaginationRowModel,
   useReactTable,
 } from '@tanstack/react-table';
+import * as React from 'react';
+import ReactMarkdown from 'react-markdown';
+import { getApiBaseUrl } from '@/api';
+import CustomMetrics from '@/app/eval/CustomMetrics';
+import EvalOutputPromptDialog from '@/app/eval/EvalOutputPromptDialog';
+import GenerateTestCases from '@/app/eval/GenerateTestCases';
+import TruncatedText, { TruncatedTextProps } from '@/app/eval/TruncatedText';
+import { useStore as useMainStore } from '@/app/eval/store';
+import { useStore as useResultsViewStore } from '@/app/eval/store';
+import { EvaluateTableRow, EvaluateTableOutput, FilterMode, EvaluateTable } from '@/app/eval/types';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import MenuItem from '@mui/material/MenuItem';
-import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import Select from '@mui/material/Select';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import Link from 'next/link';
-
-import CustomMetrics from '@/app/eval/CustomMetrics';
-import EvalOutputCell from './EvalOutputCell';
-import EvalOutputPromptDialog from '@/app/eval/EvalOutputPromptDialog';
-import GenerateTestCases from '@/app/eval/GenerateTestCases';
-import TruncatedText, { TruncatedTextProps } from '@/app/eval/TruncatedText';
-import { getApiBaseUrl } from '@/api';
-import { useStore as useMainStore } from '@/app/eval/store';
-import { useStore as useResultsViewStore } from '@/app/eval/store';
-
 import type { CellContext, ColumnDef, VisibilityState } from '@tanstack/table-core';
-
-import { EvaluateTableRow, EvaluateTableOutput, FilterMode, EvaluateTable } from '@/app/eval/types';
-
+import Link from 'next/link';
+import remarkGfm from 'remark-gfm';
+import invariant from 'tiny-invariant';
+import EvalOutputCell from './EvalOutputCell';
 import './ResultsTable.css';
 
 function formatRowOutput(output: EvaluateTableOutput | string) {
@@ -281,6 +277,8 @@ function ResultsTable({
     searchRegex,
   ]);
 
+  const [pagination, setPagination] = React.useState({ pageIndex: 0, pageSize: 50 });
+
   React.useEffect(() => {
     setPagination((prev) => ({ ...prev, pageIndex: 0 }));
   }, [failureFilter, filterMode, searchText]);
@@ -310,7 +308,7 @@ function ResultsTable({
       head.prompts.map((_, idx) =>
         body.reduce((acc, row) => {
           const componentResults = row.outputs[idx].gradingResult?.componentResults;
-          return acc + (componentResults ? componentResults.filter((r) => r.pass).length : 0);
+          return acc + (componentResults ? componentResults.filter((r) => r?.pass).length : 0);
         }, 0),
       ),
     [head.prompts, body],
@@ -345,7 +343,7 @@ function ResultsTable({
                 return (
                   <div className="cell">
                     {renderMarkdown ? (
-                      <ReactMarkdown>{value}</ReactMarkdown>
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{value}</ReactMarkdown>
                     ) : (
                       <TruncatedText text={value} maxLength={maxTextLength} />
                     )}
@@ -374,6 +372,25 @@ function ResultsTable({
     },
     [filteredBody],
   );
+
+  const metricTotals = React.useMemo(() => {
+    const totals: Record<string, number> = {};
+    table?.body.forEach((row) => {
+      row.test.assert?.forEach((assertion) => {
+        if (assertion.metric) {
+          totals[assertion.metric] = (totals[assertion.metric] || 0) + 1;
+        }
+        if ('assert' in assertion && Array.isArray(assertion.assert)) {
+          assertion.assert.forEach((subAssertion) => {
+            if ('metric' in subAssertion && subAssertion.metric) {
+              totals[subAssertion.metric] = (totals[subAssertion.metric] || 0) + 1;
+            }
+          });
+        }
+      });
+    });
+    return totals;
+  }, [table]);
 
   const promptColumns = React.useMemo(() => {
     return [
@@ -458,6 +475,7 @@ function ResultsTable({
                     Object.keys(prompt.metrics.namedScores).length > 0 ? (
                       <CustomMetrics
                         lookup={prompt.metrics.namedScores}
+                        metricTotals={metricTotals}
                         onSearchTextChange={onSearchTextChange}
                       />
                     ) : null}
@@ -517,23 +535,24 @@ function ResultsTable({
       }),
     ];
   }, [
-    columnHelper,
-    head.prompts,
-    numGoodTests,
     body.length,
-    highestPassingCount,
+    columnHelper,
     failureFilter,
-    showStats,
+    filterMode,
+    getFirstOutput,
+    getOutput,
+    handleRating,
+    head.prompts,
+    highestPassingCount,
+    maxTextLength,
+    metricTotals,
     numAsserts,
     numGoodAsserts,
-    maxTextLength,
+    numGoodTests,
     onFailureFilterToggle,
-    filterMode,
-    searchText,
-    getOutput,
-    getFirstOutput,
-    handleRating,
     onSearchTextChange,
+    searchText,
+    showStats,
   ]);
 
   const descriptionColumn = React.useMemo(() => {
@@ -544,7 +563,9 @@ function ResultsTable({
         id: 'description',
         header: () => <span className="font-bold">Description</span>,
         cell: (info: CellContext<EvaluateTableRow, unknown>) => (
-          <TruncatedText text={String(info.getValue())} maxLength={maxTextLength} />
+          <div className="cell">
+            <TruncatedText text={String(info.getValue())} maxLength={maxTextLength} />
+          </div>
         ),
         size: 50,
       };
@@ -560,8 +581,6 @@ function ResultsTable({
     cols.push(...variableColumns, ...promptColumns);
     return cols;
   }, [descriptionColumn, variableColumns, promptColumns]);
-
-  const [pagination, setPagination] = React.useState({ pageIndex: 0, pageSize: 50 });
 
   const reactTable = useReactTable({
     data: filteredBody,
@@ -640,7 +659,7 @@ function ResultsTable({
         </tbody>
       </table>
       {reactTable.getPageCount() > 1 && (
-        <Box className="pagination" sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+        <Box className="pagination" mx={1} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <Button
             onClick={() => {
               setPagination((old) => ({ ...old, pageIndex: Math.max(old.pageIndex - 1, 0) }));

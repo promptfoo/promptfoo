@@ -1,7 +1,6 @@
 import fetch from 'node-fetch';
-import { ProxyAgent } from 'proxy-agent';
-
 import type { RequestInfo, RequestInit, Response } from 'node-fetch';
+import { ProxyAgent } from 'proxy-agent';
 
 export async function fetchWithProxy(
   url: RequestInfo,
@@ -19,14 +18,15 @@ export function fetchWithTimeout(
   return new Promise((resolve, reject) => {
     const controller = new AbortController();
     const { signal } = controller;
-    options.signal = signal;
-
     const timeoutId = setTimeout(() => {
       controller.abort();
       reject(new Error(`Request timed out after ${timeout} ms`));
     }, timeout);
 
-    fetchWithProxy(url, options)
+    fetchWithProxy(url, {
+      ...options,
+      signal: signal as never, // AbortSignal type is not exported by node-fetch 2.x
+    })
       .then((response) => {
         clearTimeout(timeoutId);
         resolve(response);

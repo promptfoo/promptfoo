@@ -1,9 +1,9 @@
 import React from 'react';
-import Box from '@mui/material/Box';
 import CancelIcon from '@mui/icons-material/Cancel';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import Grid from '@mui/material/Grid';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
@@ -11,9 +11,7 @@ import ListItemText from '@mui/material/ListItemText';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { Gauge } from '@mui/x-charts/Gauge';
-
-import { categoryAliases, subCategoryDescriptions } from './constants';
-
+import { categoryAliases, displayNameOverrides, subCategoryDescriptions } from './constants';
 import './RiskCard.css';
 
 const RiskCard: React.FC<{
@@ -82,7 +80,7 @@ const RiskCard: React.FC<{
             {testTypes.map((test, index) => (
               <Tooltip
                 key={index}
-                title={subCategoryDescriptions[test.name as keyof typeof subCategoryDescriptions]}
+                title={subCategoryDescriptions[test.name]}
                 placement="left"
                 arrow
               >
@@ -98,7 +96,10 @@ const RiskCard: React.FC<{
                   style={{ cursor: 'pointer' }}
                 >
                   <ListItemText
-                    primary={categoryAliases[test.name as keyof typeof categoryAliases]}
+                    primary={
+                      displayNameOverrides[test.name as keyof typeof displayNameOverrides] ||
+                      categoryAliases[test.name as keyof typeof categoryAliases]
+                    }
                     primaryTypographyProps={{ variant: 'body2' }}
                   />
                   {test.passed ? (

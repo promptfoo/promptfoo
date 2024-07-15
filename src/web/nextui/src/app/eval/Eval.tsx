@@ -1,23 +1,25 @@
 'use client';
 
 import * as React from 'react';
-import invariant from 'tiny-invariant';
-import CircularProgress from '@mui/material/CircularProgress';
-import { io as SocketIOClient } from 'socket.io-client';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
-
-import ResultsView from './ResultsView';
-import { getApiBaseUrl } from '@/api';
-import { IS_RUNNING_LOCALLY, USE_SUPABASE } from '@/constants';
 import { REMOTE_API_BASE_URL } from '@/../../../constants';
+import type {
+  EvaluateSummary,
+  UnifiedConfig,
+  SharedResults,
+  ResultLightweightWithLabel,
+} from '@/../../../types';
+import { getApiBaseUrl } from '@/api';
 import { ShiftKeyProvider } from '@/app/contexts/ShiftKeyContext';
-import { useStore } from './store';
-
-import type { EvaluateSummary, UnifiedConfig, SharedResults } from '@/../../../types';
+import { IS_RUNNING_LOCALLY, USE_SUPABASE } from '@/constants';
 import type { Database } from '@/types/supabase';
+import CircularProgress from '@mui/material/CircularProgress';
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { io as SocketIOClient } from 'socket.io-client';
+import invariant from 'tiny-invariant';
+import ResultsView from './ResultsView';
+import { useStore } from './store';
 import type { EvaluateTable } from './types';
-
 import './Eval.css';
 
 async function fetchEvalsFromSupabase(): Promise<{ id: string; createdAt: string }[]> {
@@ -46,7 +48,7 @@ async function fetchEvalFromSupabase(
 interface EvalOptions {
   fetchId?: string;
   preloadedData?: SharedResults;
-  recentEvals?: { id: string; label: string }[];
+  recentEvals?: ResultLightweightWithLabel[];
   defaultEvalId?: string;
 }
 
@@ -57,10 +59,10 @@ export default function Eval({
   defaultEvalId: defaultEvalIdProp,
 }: EvalOptions) {
   const router = useRouter();
-  const { table, setTable, setConfig, setEvalId } = useStore();
+  const { table, setTable, setConfig, setEvalId, setAuthor } = useStore();
   const [loaded, setLoaded] = React.useState(false);
   const [failed, setFailed] = React.useState(false);
-  const [recentEvals, setRecentEvals] = React.useState<{ id: string; label: string }[]>(
+  const [recentEvals, setRecentEvals] = React.useState<ResultLightweightWithLabel[]>(
     recentEvalsProp || [],
   );
 
@@ -77,9 +79,10 @@ export default function Eval({
       const body = await resp.json();
       setTable(body.data.results.table);
       setConfig(body.data.config);
+      setAuthor(body.data.author);
       setEvalId(id);
     },
-    [setTable, setConfig, setEvalId],
+    [setTable, setConfig, setEvalId, setAuthor],
   );
 
   const handleRecentEvalSelection = async (id: string) => {
@@ -92,7 +95,7 @@ export default function Eval({
   };
 
   const [defaultEvalId, setDefaultEvalId] = React.useState<string>(
-    defaultEvalIdProp || recentEvals[0]?.id,
+    defaultEvalIdProp || recentEvals[0]?.evalId,
   );
 
   const searchParams = useSearchParams();
@@ -111,6 +114,7 @@ export default function Eval({
     } else if (preloadedData) {
       setTable(preloadedData.data.results?.table as EvaluateTable);
       setConfig(preloadedData.data.config);
+      setAuthor(preloadedData.data.author || null);
       setLoaded(true);
     } else if (fetchId) {
       const run = async () => {
@@ -124,6 +128,7 @@ export default function Eval({
         const results = await response.json();
         setTable(results.data.results?.table as EvaluateTable);
         setConfig(results.data.config);
+        setAuthor(results.data.author || null);
         setLoaded(true);
       };
       run();
@@ -136,6 +141,7 @@ export default function Eval({
           setLoaded(true);
           setTable(data?.results.table);
           setConfig(data?.config);
+          setAuthor(data?.author || null);
           fetchRecentFileEvals().then((newRecentEvals) => {
             setDefaultEvalId(newRecentEvals[0]?.id);
             setEvalId(newRecentEvals[0]?.id);
@@ -146,6 +152,7 @@ export default function Eval({
           console.log('Received data update', data);
           setTable(data.results.table);
           setConfig(data.config);
+          setAuthor(data.author || null);
           fetchRecentFileEvals().then((newRecentEvals) => {
             const newId = newRecentEvals[0]?.id;
             if (newId) {
@@ -164,8 +171,11 @@ export default function Eval({
       fetchEvalsFromSupabase().then((records) => {
         setRecentEvals(
           records.map((r) => ({
-            id: r.id,
+            evalId: r.id,
             label: r.createdAt,
+            createdAt: new Date(r.createdAt).getTime(),
+            description: 'None',
+            numTests: -1,
           })),
         );
         if (records.length > 0) {
@@ -176,6 +186,7 @@ export default function Eval({
             setDefaultEvalId(records[0].id);
             setTable(results.table);
             setConfig(config);
+            setAuthor(null);
             setLoaded(true);
           });
         }
@@ -191,6 +202,7 @@ export default function Eval({
           const body = await resp.json();
           setTable(body.data.results.table);
           setConfig(body.data.config);
+          setAuthor(body.data.author || null);
           setLoaded(true);
           setDefaultEvalId(defaultEvalId);
           setEvalId(defaultEvalId);
@@ -208,6 +220,7 @@ export default function Eval({
     fetchId,
     setTable,
     setConfig,
+    setAuthor,
     setEvalId,
     fetchEvalById,
     preloadedData,
@@ -225,7 +238,7 @@ export default function Eval({
         <div>
           <CircularProgress size={22} />
         </div>
-        <div>Loading eval data</div>
+        <div>Waiting for eval data</div>
       </div>
     );
   }

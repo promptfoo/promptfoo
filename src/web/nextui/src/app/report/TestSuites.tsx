@@ -12,15 +12,15 @@ import TableRow from '@mui/material/TableRow';
 import TableSortLabel from '@mui/material/TableSortLabel';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-
+import { useRouter } from 'next/navigation';
 import {
-  riskCategories,
-  subCategoryDescriptions,
   categoryAliases,
+  displayNameOverrides,
+  riskCategories,
   riskCategorySeverityMap,
+  subCategoryDescriptions,
 } from './constants';
 import './TestSuites.css';
-import { useRouter } from 'next/navigation';
 
 const getSubCategoryStats = (
   categoryStats: Record<string, { pass: number; total: number; passWithFilter: number }>,
@@ -29,9 +29,9 @@ const getSubCategoryStats = (
   for (const [category, subCategories] of Object.entries(riskCategories)) {
     for (const subCategory of subCategories) {
       subCategoryStats.push({
+        pluginName: subCategory,
         type: categoryAliases[subCategory as keyof typeof categoryAliases] || subCategory,
-        description:
-          subCategoryDescriptions[subCategory as keyof typeof subCategoryDescriptions] || '',
+        description: subCategoryDescriptions[subCategory] || '',
         passRate: categoryStats[subCategory]
           ? ((categoryStats[subCategory].pass / categoryStats[subCategory].total) * 100).toFixed(
               1,
@@ -170,23 +170,26 @@ const TestSuites: React.FC<{
                 }
                 return (
                   <TableRow key={index}>
-                    <TableCell>{subCategory.type}</TableCell>
+                    <TableCell>
+                      <span style={{ fontWeight: 500 }}>
+                        {displayNameOverrides[
+                          subCategory.pluginName as keyof typeof displayNameOverrides
+                        ] || subCategory.type}
+                      </span>
+                    </TableCell>
                     <TableCell>{subCategory.description}</TableCell>
                     <TableCell className={passRateClass}>
-                      {subCategory.passRate} (
+                      <strong>{subCategory.passRate}</strong>
                       {subCategory.passRateWithFilter !== subCategory.passRate ? (
                         <>
-                          <strong>{subCategory.passRateWithFilter} with filter</strong>
+                          <br />({subCategory.passRateWithFilter} with mitigation)
                         </>
-                      ) : (
-                        subCategory.passRateWithFilter
-                      )}
-                      )
+                      ) : null}
                     </TableCell>
                     <TableCell className={`vuln-${subCategory.severity.toLowerCase()}`}>
                       {subCategory.severity}
                     </TableCell>
-                    <TableCell>
+                    <TableCell style={{ minWidth: 270 }}>
                       <Button
                         variant="contained"
                         size="small"

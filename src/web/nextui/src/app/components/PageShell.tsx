@@ -1,17 +1,17 @@
 'use client';
 
 import React from 'react';
-import useMediaQuery from '@mui/material/useMediaQuery';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
-
-import { AuthProvider } from '@/supabase-client';
 import Navigation from '@/app/components/Navigation';
-
+import { AuthProvider } from '@/supabase-client';
+import { ThemeProvider, createTheme } from '@mui/material/styles';
+import useMediaQuery from '@mui/material/useMediaQuery';
 import './PageShell.css';
 
-export { PageShell };
+function Layout({ children }: { children: React.ReactNode }) {
+  return <div>{children}</div>;
+}
 
-function PageShell({ children }: { children: React.ReactNode }) {
+export function PageShell({ children }: { children: React.ReactNode }) {
   const prefersDarkMode = useMediaQuery('(prefers-color-scheme: dark)');
   const [darkMode, setDarkMode] = React.useState(prefersDarkMode);
 
@@ -53,8 +53,4 @@ function PageShell({ children }: { children: React.ReactNode }) {
       </ThemeProvider>
     </React.StrictMode>
   );
-}
-
-function Layout({ children }: { children: React.ReactNode }) {
-  return <div>{children}</div>;
 }

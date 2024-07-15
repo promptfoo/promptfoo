@@ -1,14 +1,13 @@
 import * as fs from 'fs';
-import * as path from 'path';
 import glob from 'glob';
-
+import * as path from 'path';
 import {
   evaluate,
   renderPrompt,
   resolveVariables,
   generateVarCombinations,
+  isAllowedPrompt,
 } from '../src/evaluator';
-
 import type { ApiProvider, TestSuite, Prompt } from '../src/types';
 
 jest.mock('node-fetch', () => jest.fn());
@@ -33,6 +32,10 @@ jest.mock('fs', () => ({
 
 jest.mock('../src/esm');
 jest.mock('../src/database');
+
+beforeEach(() => {
+  jest.clearAllMocks();
+});
 
 const mockApiProvider: ApiProvider = {
   id: jest.fn().mockReturnValue('test-provider'),
@@ -63,7 +66,7 @@ function toPrompt(text: string): Prompt {
 }
 
 describe('evaluator', () => {
-  beforeEach(() => {
+  afterEach(() => {
     jest.clearAllMocks();
   });
 
@@ -533,6 +536,44 @@ describe('evaluator', () => {
     expect(summary.results[0].response?.output).toBe('Test output');
   });
 
+  it('evaluate with allowed prompts filtering', async () => {
+    const mockApiProvider: ApiProvider = {
+      id: jest.fn().mockReturnValue('test-provider'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Test output',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [
+        { raw: 'Test prompt 1', label: 'prompt1' },
+        { raw: 'Test prompt 2', label: 'prompt2' },
+        { raw: 'Test prompt 3', label: 'group1:prompt3' },
+      ],
+      providerPromptMap: {
+        'test-provider': ['prompt1', 'group1'],
+      },
+      tests: [
+        {
+          vars: { var1: 'value1', var2: 'value2' },
+        },
+      ],
+    };
+
+    const summary = await evaluate(testSuite, {});
+
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
+    expect(summary).toMatchObject({
+      stats: {
+        successes: 2,
+        failures: 0,
+      },
+      results: [{ prompt: { label: 'prompt1' } }, { prompt: { label: 'group1:prompt3' } }],
+    });
+  });
+
   it('evaluate with scenarios', async () => {
     const mockApiProvider: ApiProvider = {
       id: jest.fn().mockReturnValue('test-provider'),
@@ -683,6 +724,87 @@ describe('evaluator', () => {
     expect(summary.results[1].response?.output).toBe('Second run First run ');
   });
 
+  it('evaluate with labeled and unlabeled providers and providerPromptMap', async () => {
+    const mockLabeledProvider: ApiProvider = {
+      id: () => 'labeled-provider-id',
+      label: 'Labeled Provider',
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Labeled Provider Output',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+      }),
+    };
+
+    const mockUnlabeledProvider: ApiProvider = {
+      id: () => 'unlabeled-provider-id',
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Unlabeled Provider Output',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockLabeledProvider, mockUnlabeledProvider],
+      prompts: [
+        {
+          raw: 'Prompt 1',
+          label: 'prompt1',
+        },
+        {
+          raw: 'Prompt 2',
+          label: 'prompt2',
+        },
+      ],
+      providerPromptMap: {
+        'Labeled Provider': ['prompt1'],
+        'unlabeled-provider-id': ['prompt2'],
+      },
+    };
+
+    await expect(evaluate(testSuite, {})).resolves.toEqual(
+      expect.objectContaining({
+        stats: expect.objectContaining({
+          successes: 2,
+          failures: 0,
+        }),
+        results: [
+          expect.objectContaining({
+            provider: expect.objectContaining({
+              id: 'labeled-provider-id',
+              label: 'Labeled Provider',
+            }),
+            response: expect.objectContaining({
+              output: 'Labeled Provider Output',
+            }),
+          }),
+          expect.objectContaining({
+            provider: expect.objectContaining({
+              id: 'unlabeled-provider-id',
+              label: undefined,
+            }),
+            response: expect.objectContaining({
+              output: 'Unlabeled Provider Output',
+            }),
+          }),
+        ],
+        table: expect.objectContaining({
+          head: expect.objectContaining({
+            prompts: [
+              expect.objectContaining({
+                provider: 'Labeled Provider',
+              }),
+              expect.objectContaining({
+                provider: 'unlabeled-provider-id',
+              }),
+            ],
+          }),
+        }),
+      }),
+    );
+
+    expect(mockLabeledProvider.callApi).toHaveBeenCalledTimes(1);
+    expect(mockUnlabeledProvider.callApi).toHaveBeenCalledTimes(1);
+  });
+
   it('should use the options from the test if they exist', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
@@ -707,10 +829,6 @@ describe('evaluator', () => {
 });
 
 describe('renderPrompt', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
-
   it('should render a prompt with a single variable', async () => {
     const prompt = toPrompt('Test prompt {{ var1 }}');
     const renderedPrompt = await renderPrompt(prompt, { var1: 'value1' }, {});
@@ -806,10 +924,6 @@ describe('renderPrompt', () => {
 });
 
 describe('resolveVariables', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
-
   it('should replace placeholders with corresponding variable values', () => {
     const variables = { final: '{{ my_greeting }}, {{name}}!', my_greeting: 'Hello', name: 'John' };
     const expected = { final: 'Hello, John!', my_greeting: 'Hello', name: 'John' };
@@ -843,10 +957,6 @@ describe('resolveVariables', () => {
 });
 
 describe('generateVarCombinations', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
-
   it('should generate combinations for simple variables', () => {
     const vars = { language: 'English', greeting: 'Hello' };
     const expected = [{ language: 'English', greeting: 'Hello' }];
@@ -894,5 +1004,41 @@ describe('generateVarCombinations', () => {
     const vars = {};
     const expected = [{}];
     expect(generateVarCombinations(vars)).toEqual(expected);
+  });
+});
+
+describe('isAllowedPrompt', () => {
+  const prompt1: Prompt = {
+    label: 'prompt1',
+    raw: '',
+  };
+  const prompt2: Prompt = {
+    label: 'group1:prompt2',
+    raw: '',
+  };
+  const prompt3: Prompt = {
+    label: 'group2:prompt3',
+    raw: '',
+  };
+
+  it('should return true if allowedPrompts is undefined', () => {
+    expect(isAllowedPrompt(prompt1, undefined)).toBe(true);
+  });
+
+  it('should return true if allowedPrompts includes the prompt label', () => {
+    expect(isAllowedPrompt(prompt1, ['prompt1', 'prompt2'])).toBe(true);
+  });
+
+  it('should return true if allowedPrompts includes a label that matches the start of the prompt label followed by a colon', () => {
+    expect(isAllowedPrompt(prompt2, ['group1'])).toBe(true);
+  });
+
+  it('should return false if allowedPrompts does not include the prompt label or any matching start label with a colon', () => {
+    expect(isAllowedPrompt(prompt3, ['group1', 'prompt2'])).toBe(false);
+  });
+
+  // TODO: What should the expected behavior of this test be?
+  it('should return false if allowedPrompts is an empty array', () => {
+    expect(isAllowedPrompt(prompt1, [])).toBe(false);
   });
 });

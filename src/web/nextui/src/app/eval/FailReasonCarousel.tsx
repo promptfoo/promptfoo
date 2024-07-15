@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
-import IconButton from '@mui/material/IconButton';
 import ArrowBackIosIcon from '@mui/icons-material/ArrowBackIos';
 import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
-
+import IconButton from '@mui/material/IconButton';
 import './FailReasonCarousel.css';
 
 interface FailReasonCarouselProps {
@@ -19,6 +18,10 @@ const FailReasonCarousel: React.FC<FailReasonCarouselProps> = ({ failReasons }) 
   const handleNext = () => {
     setCurrentIndex((prevIndex) => (prevIndex < failReasons.length - 1 ? prevIndex + 1 : 0));
   };
+
+  if (failReasons.length < 1) {
+    return null;
+  }
 
   return (
     <div className="fail-reason">

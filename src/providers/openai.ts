@@ -1,14 +1,7 @@
-import OpenAI from 'openai';
-
-import logger from '../logger';
-import { fetchWithCache, getCache, isCacheEnabled } from '../cache';
-import { renderVarsInObject } from '../util';
-import { REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase } from './shared';
-import { OpenAiFunction, OpenAiTool } from './openaiUtil';
-import { safeJsonStringify } from '../util';
-
 import type { Cache } from 'cache-manager';
-
+import OpenAI from 'openai';
+import { fetchWithCache, getCache, isCacheEnabled } from '../cache';
+import logger from '../logger';
 import type {
   ApiModerationProvider,
   ApiProvider,
@@ -21,6 +14,95 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../types.js';
+import { renderVarsInObject } from '../util';
+import { safeJsonStringify } from '../util';
+import { OpenAiFunction, OpenAiTool } from './openaiUtil';
+import { REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase } from './shared';
+
+const OPENAI_CHAT_MODELS = [
+  ...['gpt-4', 'gpt-4-0314', 'gpt-4-0613'].map((model) => ({
+    id: model,
+    cost: {
+      input: 0.03 / 1000,
+      output: 0.06 / 1000,
+    },
+  })),
+  ...[
+    'gpt-4-1106-preview',
+    'gpt-4-1106-vision-preview',
+    'gpt-4-0125-preview',
+    'gpt-4-turbo-2024-04-09',
+    'gpt-4-turbo-preview',
+    'gpt-4-turbo',
+  ].map((model) => ({
+    id: model,
+    cost: {
+      input: 0.01 / 1000,
+      output: 0.03 / 1000,
+    },
+  })),
+  ...['gpt-4-32k', 'gpt-4-32k-0314'].map((model) => ({
+    id: model,
+    cost: {
+      input: 0.06 / 1000,
+      output: 0.12 / 1000,
+    },
+  })),
+  ...['gpt-4o', 'gpt-4o-2024-05-13'].map((model) => ({
+    id: model,
+    cost: {
+      input: 0.005 / 1000,
+      output: 0.015 / 1000,
+    },
+  })),
+  ...[
+    'gpt-3.5-turbo',
+    'gpt-3.5-turbo-0301',
+    'gpt-3.5-turbo-0613',
+    'gpt-3.5-turbo-1106',
+    'gpt-3.5-turbo-0125',
+    'gpt-3.5-turbo-16k',
+    'gpt-3.5-turbo-16k-0613',
+  ].map((model) => ({
+    id: model,
+    cost: {
+      input: 0.0005 / 1000,
+      output: 0.0015 / 1000,
+    },
+  })),
+];
+
+const OPENAI_COMPLETION_MODELS = [
+  {
+    id: 'gpt-3.5-turbo-instruct',
+    cost: {
+      input: 0.0015 / 1000,
+      output: 0.002 / 1000,
+    },
+  },
+  {
+    id: 'gpt-3.5-turbo-instruct-0914',
+    cost: {
+      input: 0.0015 / 1000,
+      output: 0.002 / 1000,
+    },
+  },
+  {
+    id: 'text-davinci-003',
+  },
+  {
+    id: 'text-davinci-002',
+  },
+  {
+    id: 'text-curie-001',
+  },
+  {
+    id: 'text-babbage-001',
+  },
+  {
+    id: 'text-ada-001',
+  },
+];
 
 interface OpenAiSharedOptions {
   apiKey?: string;
@@ -207,42 +289,46 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
   }
 }
 
-export class OpenAiCompletionProvider extends OpenAiGenericProvider {
-  static OPENAI_COMPLETION_MODELS = [
-    {
-      id: 'gpt-3.5-turbo-instruct',
-      cost: {
-        input: 0.0015 / 1000,
-        output: 0.002 / 1000,
-      },
-    },
-    {
-      id: 'gpt-3.5-turbo-instruct-0914',
-      cost: {
-        input: 0.0015 / 1000,
-        output: 0.002 / 1000,
-      },
-    },
-    {
-      id: 'text-davinci-003',
-    },
-    {
-      id: 'text-davinci-002',
-    },
-    {
-      id: 'text-curie-001',
-    },
-    {
-      id: 'text-babbage-001',
-    },
-    {
-      id: 'text-ada-001',
-    },
-  ];
+function formatOpenAiError(data: {
+  error: { message: string; type?: string; code?: string };
+}): string {
+  let errorMessage = `API error: ${data.error.message}`;
+  if (data.error.type) {
+    errorMessage += `, Type: ${data.error.type}`;
+  }
+  if (data.error.code) {
+    errorMessage += `, Code: ${data.error.code}`;
+  }
+  errorMessage += '\n\n' + safeJsonStringify(data, true /* prettyPrint */);
+  return errorMessage;
+}
 
-  static OPENAI_COMPLETION_MODEL_NAMES = OpenAiCompletionProvider.OPENAI_COMPLETION_MODELS.map(
-    (model) => model.id,
+function calculateCost(
+  modelName: string,
+  config: OpenAiSharedOptions,
+  promptTokens?: number,
+  completionTokens?: number,
+): number | undefined {
+  if (!promptTokens || !completionTokens) {
+    return undefined;
+  }
+
+  const model = [...OPENAI_CHAT_MODELS, ...OPENAI_COMPLETION_MODELS].find(
+    (m) => m.id === modelName,
   );
+  if (!model || !model.cost) {
+    return undefined;
+  }
+
+  const inputCost = config.cost ?? model.cost.input;
+  const outputCost = config.cost ?? model.cost.output;
+  return inputCost * promptTokens + outputCost * completionTokens || undefined;
+}
+
+export class OpenAiCompletionProvider extends OpenAiGenericProvider {
+  static OPENAI_COMPLETION_MODELS = OPENAI_COMPLETION_MODELS;
+
+  static OPENAI_COMPLETION_MODEL_NAMES = OPENAI_COMPLETION_MODELS.map((model) => model.id);
 
   config: OpenAiCompletionOptions;
 
@@ -345,61 +431,9 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
 }
 
 export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
-  static OPENAI_CHAT_MODELS = [
-    ...['gpt-4', 'gpt-4-0314', 'gpt-4-0613'].map((model) => ({
-      id: model,
-      cost: {
-        input: 0.03 / 1000,
-        output: 0.06 / 1000,
-      },
-    })),
-    ...[
-      'gpt-4-1106-preview',
-      'gpt-4-1106-vision-preview',
-      'gpt-4-0125-preview',
-      'gpt-4-turbo-preview',
-      'gpt-4-turbo',
-    ].map((model) => ({
-      id: model,
-      cost: {
-        input: 0.01 / 1000,
-        output: 0.03 / 1000,
-      },
-    })),
-    ...['gpt-4-32k', 'gpt-4-32k-0314'].map((model) => ({
-      id: model,
-      cost: {
-        input: 0.06 / 1000,
-        output: 0.12 / 1000,
-      },
-    })),
-    ...['gpt-4o', 'gpt-4o-2024-05-13'].map((model) => ({
-      id: model,
-      cost: {
-        input: 0.005 / 1000,
-        output: 0.015 / 1000,
-      },
-    })),
-    ...[
-      'gpt-3.5-turbo',
-      'gpt-3.5-turbo-0301',
-      'gpt-3.5-turbo-0613',
-      'gpt-3.5-turbo-1106',
-      'gpt-3.5-turbo-0125',
-      'gpt-3.5-turbo-16k',
-      'gpt-3.5-turbo-16k-0613',
-    ].map((model) => ({
-      id: model,
-      cost: {
-        input: 0.0005 / 1000,
-        output: 0.0015 / 1000,
-      },
-    })),
-  ];
+  static OPENAI_CHAT_MODELS = OPENAI_CHAT_MODELS;
 
-  static OPENAI_CHAT_MODEL_NAMES = OpenAiChatCompletionProvider.OPENAI_CHAT_MODELS.map(
-    (model) => model.id,
-  );
+  static OPENAI_CHAT_MODEL_NAMES = OPENAI_CHAT_MODELS.map((model) => model.id);
 
   config: OpenAiCompletionOptions;
 
@@ -482,8 +516,14 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     }
     try {
       const message = data.choices[0].message;
-      const output =
-        message.content === null ? message.function_call || message.tool_calls : message.content;
+      let output = '';
+      if (message.content && (message.function_call || message.tool_calls)) {
+        output = message;
+      } else if (message.content === null) {
+        output = message.function_call || message.tool_calls;
+      } else {
+        output = message.content;
+      }
       const logProbs = data.choices[0].logprobs?.content?.map(
         (logProbObj: { token: string; logprob: number }) => logProbObj.logprob,
       );
@@ -533,43 +573,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   }
 }
 
-function formatOpenAiError(data: {
-  error: { message: string; type?: string; code?: string };
-}): string {
-  let errorMessage = `API error: ${data.error.message}`;
-  if (data.error.type) {
-    errorMessage += `, Type: ${data.error.type}`;
-  }
-  if (data.error.code) {
-    errorMessage += `, Code: ${data.error.code}`;
-  }
-  errorMessage += '\n\n' + safeJsonStringify(data, true /* prettyPrint */);
-  return errorMessage;
-}
-
-function calculateCost(
-  modelName: string,
-  config: OpenAiSharedOptions,
-  promptTokens?: number,
-  completionTokens?: number,
-): number | undefined {
-  if (!promptTokens || !completionTokens) {
-    return undefined;
-  }
-
-  const model = [
-    ...OpenAiChatCompletionProvider.OPENAI_CHAT_MODELS,
-    ...OpenAiCompletionProvider.OPENAI_COMPLETION_MODELS,
-  ].find((m) => m.id === modelName);
-  if (!model || !model.cost) {
-    return undefined;
-  }
-
-  const inputCost = config.cost ?? model.cost.input;
-  const outputCost = config.cost ?? model.cost.output;
-  return inputCost * promptTokens + outputCost * completionTokens || undefined;
-}
-
 type OpenAiAssistantOptions = OpenAiSharedOptions & {
   modelName?: string;
   instructions?: string;
@@ -589,6 +592,7 @@ type OpenAiAssistantOptions = OpenAiSharedOptions & {
     | 'auto'
     | { type: 'function'; function?: { name: string } }
     | { type: 'file_search' };
+  attachments?: OpenAI.Beta.Threads.Message.Attachment[];
 };
 
 export class OpenAiAssistantProvider extends OpenAiGenericProvider {
@@ -625,7 +629,13 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
     });
 
     const messages = parseChatPrompt(prompt, [
-      { role: 'user', content: prompt },
+      {
+        role: 'user',
+        content: prompt,
+        ...(this.assistantConfig.attachments
+          ? { attachments: this.assistantConfig.attachments }
+          : {}),
+      },
     ]) as OpenAI.Beta.Threads.ThreadCreateParams.Message[];
     const body: OpenAI.Beta.Threads.ThreadCreateAndRunParams = {
       assistant_id: this.assistantId,
@@ -850,21 +860,26 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
     }
 
     if (!response) {
-      response = await openai.images.generate({
-        model: this.modelName,
-        prompt,
-        n: 1,
-        size:
-          ((this.config.size || process.env.OPENAI_IMAGE_SIZE) as
-            | '1024x1024'
-            | '256x256'
-            | '512x512'
-            | '1792x1024'
-            | '1024x1792'
-            | undefined) || '1024x1024',
-      });
+      try {
+        response = await openai.images.generate({
+          model: this.modelName,
+          prompt,
+          n: 1,
+          size:
+            ((this.config.size || process.env.OPENAI_IMAGE_SIZE) as
+              | '1024x1024'
+              | '256x256'
+              | '512x512'
+              | '1792x1024'
+              | '1024x1792'
+              | undefined) || '1024x1024',
+        });
+      } catch (error) {
+        return {
+          error: `OpenAI threw error: ${(error as Error).message}`,
+        };
+      }
     }
-
     const url = response.data[0].url;
     if (!url) {
       return {

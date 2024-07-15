@@ -65,10 +65,6 @@ jobs:
         run: |
           npm ci
 
-      - name: Check Dependency Versions
-        run: |
-          npm exec check-dependency-version-consistency
-
       - name: Test
         run: npm run test --ci --coverage --maxWorkers=2
 
@@ -104,3 +100,52 @@ jobs:
       - name: Run Style Check
         run: |
           npm run format:check
+
+      - name: Check Dependency Versions
+        run: |
+          npm exec check-dependency-version-consistency
+
+  python:
+    name: Check Python
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Use Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.12
+
+      - name: Install Dependencies
+        run: |
+          pip install ruff
+
+      - name: Check Formatting
+        run: |
+          ruff check .
+
+  docs:
+    name: Build Docs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Use Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        working-directory: site
+        run: npm install
+
+      - name: Type Check
+        working-directory: site
+        run: npm run typecheck
+
+      - name: Build Documentation
+        working-directory: site
+        run: npm run build

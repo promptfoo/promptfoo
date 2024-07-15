@@ -32,7 +32,7 @@ First, install [Node 18 or later](https://nodejs.org/en/download/package-manager
 Then create a new project for your red teaming needs:
 
 ```sh
-npx promptfoo@latest init my-redteam-project
+npx promptfoo@latest redteam init my-redteam-project
 cd my-redteam-project
 ```
 
@@ -55,6 +55,8 @@ Then create adversarial test cases:
 ```sh
 npx promptfoo@latest generate redteam -w
 ```
+
+The `-w` option overwrites the `promptfooconfig.yaml` file to include the newly generated test cases.
 
 Run the eval:
 
@@ -124,7 +126,7 @@ prompts:
 
 The equivalent Javascript is also supported:
 
-```yaml
+```js
 function getPrompt(context) {
   if (context.vars.destination === 'Australia') {
     return `Act as a travel agent, mate: ${context.query}`;
@@ -198,7 +200,7 @@ If your API responds with a JSON object and you want to pick out a specific valu
 
 For example, `json.nested.output` will reference the output in the following API response:
 
-```yaml
+```js
 { 'nested': { 'output': '...' } }
 ```
 
@@ -289,24 +291,24 @@ npx promptfoo@latest generate redteam -w --plugins 'harmful,jailbreak,hijacking'
 
 The following plugins are enabled by default:
 
-| Plugin Name      | Description                                                                  | Enabled by Default |
-| ---------------- | ---------------------------------------------------------------------------- | ------------------ |
-| contracts        | Tests if the model makes unintended commitments or agreements.               | Yes                |
-| excessive-agency | Tests if the model exhibits too much autonomy or makes decisions on its own. | Yes                |
-| hallucination    | Tests if the model generates false or misleading content.                    | Yes                |
-| harmful          | Tests for the generation of harmful or offensive content.                    | Yes                |
-| hijacking        | Tests the model's vulnerability to being used for unintended tasks.          | Yes                |
-| jailbreak        | Tests if the model can be manipulated to bypass its safety mechanisms.       | Yes                |
-| overreliance     | Tests for excessive trust in LLM output without oversight.                   | Yes                |
-| pii              | Tests for inadvertent disclosure of personally identifiable information.     | Yes                |
-| politics         | Tests for political opinions and statements about political figures.         | Yes                |
-| prompt-injection | Tests the model's susceptibility to prompt injection attacks.                | Yes                |
+| Plugin Name      | Description                                                                  |
+| ---------------- | ---------------------------------------------------------------------------- |
+| contracts        | Tests if the model makes unintended commitments or agreements.               |
+| excessive-agency | Tests if the model exhibits too much autonomy or makes decisions on its own. |
+| hallucination    | Tests if the model generates false or misleading content.                    |
+| harmful          | Tests for the generation of harmful or offensive content.                    |
+| hijacking        | Tests the model's vulnerability to being used for unintended tasks.          |
+| jailbreak        | Tests if the model can be manipulated to bypass its safety mechanisms.       |
+| overreliance     | Tests for excessive trust in LLM output without oversight.                   |
+| pii              | Tests for inadvertent disclosure of personally identifiable information.     |
+| politics         | Tests for political opinions and statements about political figures.         |
+| prompt-injection | Tests the model's susceptibility to prompt injection attacks.                |
 
 These additional plugins can be optionally enabled:
 
-| Plugin Name | Description                                                 | Enabled by Default |
-| ----------- | ----------------------------------------------------------- | ------------------ |
-| competitors | Tests if the model recommends alternatives to your service. | No                 |
+| Plugin Name | Description                                                 |
+| ----------- | ----------------------------------------------------------- |
+| competitors | Tests if the model recommends alternatives to your service. |
 
 The adversarial test cases will be written to `promptfooconfig.yaml`.
 

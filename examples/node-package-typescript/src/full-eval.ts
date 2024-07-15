@@ -1,5 +1,4 @@
 import fs from 'node:fs';
-
 import promptfoo, { EvaluateTestSuite } from '../../../dist/src/index.js';
 
 const prompts: EvaluateTestSuite['prompts'] = [

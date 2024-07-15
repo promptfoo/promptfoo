@@ -1,14 +1,12 @@
-import fs from 'fs';
-import path from 'path';
-
 import chalk from 'chalk';
+import fs from 'fs';
 import inquirer from 'inquirer';
-
+import path from 'path';
 import logger from './logger';
 import { getNunjucksEngine } from './util';
 
 export const CONFIG_TEMPLATE = `# Learn more about building a configuration: https://promptfoo.dev/docs/configuration/guide
-description: 'My eval'
+description: "My eval"
 
 prompts:
   {% for prompt in prompts -%}
@@ -316,7 +314,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
       {
         name: '[Anthropic] Claude Opus, Sonnet, Haiku, ...',
         value: [
-          'anthropic:messages:claude-3-haiku-20240307',
+          'anthropic:messages:claude-3-5-sonnet-20240620',
           'anthropic:messages:claude-3-opus-20240307',
         ],
       },

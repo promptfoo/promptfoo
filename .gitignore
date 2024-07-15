@@ -1,3 +1,5 @@
+.env
+
 scratch
 *.sw[op]
 *.log

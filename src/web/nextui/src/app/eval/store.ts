@@ -1,7 +1,6 @@
+import { get, set, del } from 'idb-keyval';
 import { create } from 'zustand';
 import { persist, createJSONStorage, StateStorage } from 'zustand/middleware';
-import { get, set, del } from 'idb-keyval';
-
 import type { EvaluateTable, UnifiedConfig } from './types';
 
 const storage: StateStorage = {
@@ -19,6 +18,9 @@ const storage: StateStorage = {
 interface TableState {
   evalId: string | null;
   setEvalId: (evalId: string) => void;
+
+  author: string | null;
+  setAuthor: (author: string | null) => void;
 
   table: EvaluateTable | null;
   setTable: (table: EvaluateTable | null) => void;
@@ -47,6 +49,9 @@ export const useStore = create<TableState>()(
     (set, get) => ({
       evalId: null,
       setEvalId: (evalId: string) => set(() => ({ evalId })),
+
+      author: null,
+      setAuthor: (author: string | null) => set(() => ({ author })),
 
       table: null,
       setTable: (table: EvaluateTable | null) => set(() => ({ table })),

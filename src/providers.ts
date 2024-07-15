@@ -1,10 +1,40 @@
 import fs from 'fs';
-import path from 'path';
-
-import invariant from 'tiny-invariant';
 import yaml from 'js-yaml';
-
+import path from 'path';
+import invariant from 'tiny-invariant';
+import { importModule } from './esm';
 import logger from './logger';
+import { AnthropicCompletionProvider, AnthropicMessagesProvider } from './providers/anthropic';
+import {
+  AzureOpenAiAssistantProvider,
+  AzureOpenAiChatCompletionProvider,
+  AzureOpenAiCompletionProvider,
+  AzureOpenAiEmbeddingProvider,
+} from './providers/azureopenai';
+import { BAMChatProvider, BAMEmbeddingProvider } from './providers/bam';
+import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './providers/bedrock';
+import * as CloudflareAiProviders from './providers/cloudflare-ai';
+import { CohereChatCompletionProvider } from './providers/cohere';
+import { HttpProvider } from './providers/http';
+import {
+  HuggingfaceFeatureExtractionProvider,
+  HuggingfaceSentenceSimilarityProvider,
+  HuggingfaceTextClassificationProvider,
+  HuggingfaceTextGenerationProvider,
+  HuggingfaceTokenExtractionProvider,
+} from './providers/huggingface';
+import { LlamaProvider } from './providers/llama';
+import {
+  LocalAiCompletionProvider,
+  LocalAiChatProvider,
+  LocalAiEmbeddingProvider,
+} from './providers/localai';
+import { MistralChatCompletionProvider } from './providers/mistral';
+import {
+  OllamaEmbeddingProvider,
+  OllamaCompletionProvider,
+  OllamaChatProvider,
+} from './providers/ollama';
 import {
   OpenAiAssistantProvider,
   OpenAiCompletionProvider,
@@ -13,46 +43,18 @@ import {
   OpenAiImageProvider,
   OpenAiModerationProvider,
 } from './providers/openai';
-import { AnthropicCompletionProvider, AnthropicMessagesProvider } from './providers/anthropic';
-import { ReplicateModerationProvider, ReplicateProvider } from './providers/replicate';
-import {
-  LocalAiCompletionProvider,
-  LocalAiChatProvider,
-  LocalAiEmbeddingProvider,
-} from './providers/localai';
 import { PalmChatProvider } from './providers/palm';
-import { LlamaProvider } from './providers/llama';
-import {
-  OllamaEmbeddingProvider,
-  OllamaCompletionProvider,
-  OllamaChatProvider,
-} from './providers/ollama';
-import { VertexChatProvider } from './providers/vertex';
-import { MistralChatCompletionProvider } from './providers/mistral';
-import { WebhookProvider } from './providers/webhook';
-import { ScriptCompletionProvider } from './providers/scriptCompletion';
-import {
-  AzureOpenAiAssistantProvider,
-  AzureOpenAiChatCompletionProvider,
-  AzureOpenAiCompletionProvider,
-  AzureOpenAiEmbeddingProvider,
-} from './providers/azureopenai';
-import {
-  HuggingfaceFeatureExtractionProvider,
-  HuggingfaceSentenceSimilarityProvider,
-  HuggingfaceTextClassificationProvider,
-  HuggingfaceTextGenerationProvider,
-  HuggingfaceTokenExtractionProvider,
-} from './providers/huggingface';
-import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './providers/bedrock';
-import { PythonProvider } from './providers/pythonCompletion';
-import { CohereChatCompletionProvider } from './providers/cohere';
-import * as CloudflareAiProviders from './providers/cloudflare-ai';
-import { BAMChatProvider, BAMEmbeddingProvider } from './providers/bam';
 import { PortkeyChatCompletionProvider } from './providers/portkey';
-import { HttpProvider } from './providers/http';
-import { importModule } from './esm';
-
+import { PythonProvider } from './providers/pythonCompletion';
+import {
+  ReplicateImageProvider,
+  ReplicateModerationProvider,
+  ReplicateProvider,
+} from './providers/replicate';
+import { ScriptCompletionProvider } from './providers/scriptCompletion';
+import { VertexChatProvider, VertexEmbeddingProvider } from './providers/vertex';
+import { VoyageEmbeddingProvider } from './providers/voyage';
+import { WebhookProvider } from './providers/webhook';
 import type {
   ApiProvider,
   EnvOverrides,
@@ -60,54 +62,6 @@ import type {
   ProviderOptionsMap,
   TestSuiteConfig,
 } from './types';
-import { VoyageEmbeddingProvider } from './providers/voyage';
-
-export async function loadApiProviders(
-  providerPaths: TestSuiteConfig['providers'],
-  options: {
-    basePath?: string;
-    env?: EnvOverrides;
-  } = {},
-): Promise<ApiProvider[]> {
-  const { basePath, env } = options;
-  if (typeof providerPaths === 'string') {
-    return [await loadApiProvider(providerPaths, { basePath, env })];
-  } else if (typeof providerPaths === 'function') {
-    return [
-      {
-        id: () => 'custom-function',
-        callApi: providerPaths,
-      },
-    ];
-  } else if (Array.isArray(providerPaths)) {
-    return Promise.all(
-      providerPaths.map((provider, idx) => {
-        if (typeof provider === 'string') {
-          return loadApiProvider(provider, { basePath, env });
-        } else if (typeof provider === 'function') {
-          return {
-            id: provider.label ? () => provider.label! : () => `custom-function-${idx}`,
-            callApi: provider,
-          };
-        } else if (provider.id) {
-          // List of ProviderConfig objects
-          return loadApiProvider((provider as ProviderOptions).id!, {
-            options: provider,
-            basePath,
-            env,
-          });
-        } else {
-          // List of { id: string, config: ProviderConfig } objects
-          const id = Object.keys(provider)[0];
-          const providerObject = (provider as ProviderOptionsMap)[id];
-          const context = { ...providerObject, id: providerObject.id || id };
-          return loadApiProvider(id, { options: context, basePath, env });
-        }
-      }),
-    );
-  }
-  throw new Error('Invalid providers list');
-}
 
 // FIXME(ian): Make loadApiProvider handle all the different provider types (string, ProviderOptions, ApiProvider, etc), rather than the callers.
 export async function loadApiProvider(
@@ -120,8 +74,7 @@ export async function loadApiProvider(
 ): Promise<ApiProvider> {
   const { options = {}, basePath, env } = context;
   const providerOptions: ProviderOptions = {
-    // Hack(ian): Override id with label. This makes it so that debug and display info, which rely on id, will use the label instead.
-    id: options.label || options.id,
+    id: options.id,
     config: {
       ...options.config,
       basePath,
@@ -149,7 +102,7 @@ export async function loadApiProvider(
     const scriptPath = providerPath.split(':')[1];
     ret = new ScriptCompletionProvider(scriptPath, providerOptions);
   } else if (providerPath.startsWith('python:')) {
-    const scriptPath = providerPath.split(':')[1];
+    const scriptPath = providerPath.split(':').slice(1).join(':');
     ret = new PythonProvider(scriptPath, providerOptions);
   } else if (providerPath.startsWith('openai:')) {
     // Load OpenAI module
@@ -228,7 +181,7 @@ export async function loadApiProvider(
       ret = new AnthropicCompletionProvider(modelType, providerOptions);
     } else {
       throw new Error(
-        `Unknown Anthropic model type: ${modelType}. Use one of the following providers: anthropic:completion:<model name>`,
+        `Unknown Anthropic model type: ${modelType}. Use one of the following providers: anthropic:messages:<model name>, anthropic:completion:<model name>`,
       );
     }
   } else if (providerPath.startsWith('voyage:')) {
@@ -278,9 +231,14 @@ export async function loadApiProvider(
     const modelName = splits.slice(2).join(':');
     if (modelType === 'moderation') {
       ret = new ReplicateModerationProvider(modelName, providerOptions);
+    } else if (modelType === 'image') {
+      ret = new ReplicateImageProvider(modelName, providerOptions);
     } else {
       // By default, there is no model type.
-      ret = new ReplicateProvider(modelType + ':' + modelName, providerOptions);
+      ret = new ReplicateProvider(
+        modelName ? modelType + ':' + modelName : modelType,
+        providerOptions,
+      );
     }
   } else if (providerPath.startsWith('bam:')) {
     const splits = providerPath.split(':');
@@ -348,9 +306,17 @@ export async function loadApiProvider(
   } else if (providerPath.startsWith('palm:') || providerPath.startsWith('google:')) {
     const modelName = providerPath.split(':')[1];
     ret = new PalmChatProvider(modelName, providerOptions);
-  } else if (providerPath.startsWith('vertex')) {
-    const modelName = providerPath.split(':')[1];
-    ret = new VertexChatProvider(modelName, providerOptions);
+  } else if (providerPath.startsWith('vertex:')) {
+    const splits = providerPath.split(':');
+    const firstPart = splits[1];
+    if (firstPart === 'chat') {
+      ret = new VertexChatProvider(splits.slice(2).join(':'), providerOptions);
+    } else if (firstPart === 'embedding' || firstPart === 'embeddings') {
+      ret = new VertexEmbeddingProvider(splits.slice(2).join(':'), providerOptions);
+    } else {
+      // Default to chat provider
+      ret = new VertexChatProvider(splits.slice(1).join(':'), providerOptions);
+    }
   } else if (providerPath.startsWith('mistral:')) {
     const modelName = providerPath.split(':')[1];
     ret = new MistralChatCompletionProvider(modelName, providerOptions);
@@ -377,20 +343,73 @@ export async function loadApiProvider(
     const RedteamIterativeProvider = (await import(path.join(__dirname, './redteam/iterative')))
       .default;
     ret = new RedteamIterativeProvider(providerOptions);
+  } else if (providerPath === 'promptfoo:redteam:iterative:image') {
+    const RedteamIterativeProvider = (
+      await import(path.join(__dirname, './redteam/iterativeImage'))
+    ).default;
+    ret = new RedteamIterativeProvider(providerOptions);
   } else {
     if (providerPath.startsWith('file://')) {
       providerPath = providerPath.slice('file://'.length);
     }
     // Load custom module
-    const modulePath = path.join(basePath || process.cwd(), providerPath);
+    const modulePath = path.isAbsolute(providerPath)
+      ? providerPath
+      : path.join(basePath || process.cwd(), providerPath);
     const CustomApiProvider = await importModule(modulePath);
     ret = new CustomApiProvider(options);
-    ret.label = ret.label || options.label;
   }
-
   ret.transform = options.transform;
   ret.delay = options.delay;
+  ret.label ||= options.label;
   return ret;
+}
+
+export async function loadApiProviders(
+  providerPaths: TestSuiteConfig['providers'],
+  options: {
+    basePath?: string;
+    env?: EnvOverrides;
+  } = {},
+): Promise<ApiProvider[]> {
+  const { basePath, env } = options;
+  if (typeof providerPaths === 'string') {
+    return [await loadApiProvider(providerPaths, { basePath, env })];
+  } else if (typeof providerPaths === 'function') {
+    return [
+      {
+        id: () => 'custom-function',
+        callApi: providerPaths,
+      },
+    ];
+  } else if (Array.isArray(providerPaths)) {
+    return Promise.all(
+      providerPaths.map((provider, idx) => {
+        if (typeof provider === 'string') {
+          return loadApiProvider(provider, { basePath, env });
+        } else if (typeof provider === 'function') {
+          return {
+            id: provider.label ? () => provider.label! : () => `custom-function-${idx}`,
+            callApi: provider,
+          };
+        } else if (provider.id) {
+          // List of ProviderConfig objects
+          return loadApiProvider((provider as ProviderOptions).id!, {
+            options: provider,
+            basePath,
+            env,
+          });
+        } else {
+          // List of { id: string, config: ProviderConfig } objects
+          const id = Object.keys(provider)[0];
+          const providerObject = (provider as ProviderOptionsMap)[id];
+          const context = { ...providerObject, id: providerObject.id || id };
+          return loadApiProvider(id, { options: context, basePath, env });
+        }
+      }),
+    );
+  }
+  throw new Error('Invalid providers list');
 }
 
 export default {
@@ -398,6 +417,7 @@ export default {
   OpenAiChatCompletionProvider,
   OpenAiAssistantProvider,
   AnthropicCompletionProvider,
+  AnthropicMessagesProvider,
   ReplicateProvider,
   LocalAiCompletionProvider,
   LocalAiChatProvider,

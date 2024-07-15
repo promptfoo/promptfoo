@@ -8,12 +8,9 @@ pre {
 
 table.results-table,
 .divTable {
-  border: 1px solid var(--table-border-color);
   border-collapse: collapse;
   width: 100%;
-
   margin: 1rem 0;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .results-table ins {
@@ -45,7 +42,7 @@ table.results-table,
 .results-table td,
 .td {
   position: relative;
-  box-shadow: inset 0 0 0 1px var(--border-color);
+  border: 1px solid var(--border-color);
   vertical-align: top;
 }
 
@@ -61,6 +58,11 @@ table.results-table,
 .results-table td.variable,
 .td.variable {
   background-color: var(--variable-background-color);
+}
+
+.variable .cell {
+  max-height: 100%;
+  overflow-y: auto;
 }
 
 .results-table tr.header {
@@ -181,6 +183,34 @@ table.results-table,
   cursor: pointer;
 }
 
+/* Table-within-a-cell, used for markdown tables */
+.results-table tr .cell table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+}
+
+.results-table tr .cell table th,
+.results-table tr .cell table td {
+  border: 1px solid var(--border-color);
+  padding: 0.5rem;
+  text-align: left;
+}
+
+.results-table tr .cell table th {
+  background-color: var(--header-background-color);
+  font-weight: bold;
+}
+
+.results-table tr .cell table tr:nth-child(even) {
+  background-color: var(--row-background-color);
+}
+
+.results-table tr .cell table tr:hover {
+  background-color: var(--hover-background-color);
+}
+/* End Table-within-a-cell */
+
 .results-table th .output-header {
   display: flex;
   flex-direction: column;
@@ -297,11 +327,11 @@ table.results-table,
   cursor: pointer;
 }
 
-.first-prompt-col {
+.results-table td.first-prompt-col {
   border-left: 2px solid #888;
 }
 
-.first-prompt-row {
+.results-table td.first-prompt-row {
   border-top: 2px solid #888;
 }
 

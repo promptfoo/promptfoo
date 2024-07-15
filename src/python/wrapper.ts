@@ -1,9 +1,7 @@
+import { promises as fs } from 'fs';
 import os from 'os';
 import path from 'path';
-import { promises as fs } from 'fs';
-
 import { PythonShell, Options as PythonShellOptions } from 'python-shell';
-
 import logger from '../logger';
 import { safeJsonStringify } from '../util';
 
@@ -19,7 +17,7 @@ export async function runPython(
   method: string,
   args: (string | object | undefined)[],
   options: { pythonExecutable?: string } = {},
-): Promise<any> {
+): Promise<string | object> {
   const absPath = path.resolve(scriptPath);
   const tempJsonPath = path.join(
     os.tmpdir(),
@@ -34,6 +32,7 @@ export async function runPython(
 
   try {
     await fs.writeFile(tempJsonPath, safeJsonStringify(args));
+    logger.debug(`Running Python wrapper with args: ${safeJsonStringify(args)}`);
     const results = await PythonShell.run('wrapper.py', pythonOptions);
     logger.debug(`Python script ${absPath} returned: ${results.join('\n')}`);
     let result: { type: 'final_result'; data: any } | undefined;

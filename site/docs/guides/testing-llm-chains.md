@@ -165,4 +165,4 @@ For more detail on testing RAG pipelines, see [RAG evaluations](/docs/guides/eva
 
 ## Other tips
 
-To reference the outputs of previous test cases, use the built-in [`_conversation` variable](/docs/providers/openai#using-the-_conversation-variable).
+To reference the outputs of previous test cases, use the built-in [`_conversation` variable](/docs/configuration/chat#using-the-conversation-variable).

@@ -43,6 +43,7 @@ const sidebars = {
         { type: 'doc', id: 'configuration/guide' },
         { type: 'doc', id: 'configuration/reference' },
         { type: 'doc', id: 'configuration/parameters' },
+        { type: 'doc', id: 'configuration/chat' },
         { type: 'doc', id: 'configuration/datasets' },
         { type: 'doc', id: 'configuration/scenarios' },
         { type: 'doc', id: 'configuration/caching' },

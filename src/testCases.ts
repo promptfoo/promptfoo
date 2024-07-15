@@ -1,16 +1,15 @@
-import * as path from 'path';
-import * as fs from 'fs';
-
-import yaml from 'js-yaml';
-import { parse as parsePath } from 'path';
+import $RefParser from '@apidevtools/json-schema-ref-parser';
 import { parse as parseCsv } from 'csv-parse/sync';
+import * as fs from 'fs';
 import { globSync } from 'glob';
-
-import logger from './logger';
-import { OpenAiChatCompletionProvider } from './providers/openai';
+import yaml from 'js-yaml';
+import * as path from 'path';
+import { parse as parsePath } from 'path';
 import { testCaseFromCsvRow } from './csv';
 import { fetchCsvFromGoogleSheet } from './googleSheets';
-
+import logger from './logger';
+import { loadApiProvider } from './providers';
+import { OpenAiChatCompletionProvider } from './providers/openai';
 import type {
   CsvRow,
   ProviderOptions,
@@ -19,7 +18,6 @@ import type {
   TestSuiteConfig,
   VarMapping,
 } from './types';
-import { loadApiProvider } from './providers';
 
 const SYNTHESIZE_DEFAULT_PROVIDER = 'gpt-4-0125-preview';
 
@@ -163,23 +161,40 @@ export async function readTests(
   const ret: TestCase[] = [];
 
   const loadTestsFromGlob = async (loadTestsGlob: string) => {
+    if (loadTestsGlob.startsWith('file://')) {
+      loadTestsGlob = loadTestsGlob.slice('file://'.length);
+    }
     const resolvedPath = path.resolve(basePath, loadTestsGlob);
     const testFiles = globSync(resolvedPath, {
       windowsPathsNoEscape: true,
     });
-    const ret = [];
+    const _deref = async (testCases: TestCase[], file: string) => {
+      logger.debug(`Dereferencing testfile ${file}`);
+      return (await $RefParser.dereference(testCases)) as TestCase[];
+    };
+
+    const ret: TestCase<Record<string, string | string[] | object>>[] = [];
+    if (testFiles.length < 1) {
+      logger.error(`No test files found for path: ${loadTestsGlob}`);
+      return ret;
+    }
     for (const testFile of testFiles) {
       let testCases: TestCase[] | undefined;
       if (testFile.endsWith('.csv')) {
         testCases = await readStandaloneTestsFile(testFile, basePath);
       } else if (testFile.endsWith('.yaml') || testFile.endsWith('.yml')) {
         testCases = yaml.load(fs.readFileSync(testFile, 'utf-8')) as TestCase[];
+        testCases = await _deref(testCases, testFile);
       } else if (testFile.endsWith('.json')) {
-        testCases = require(testFile);
+        testCases = await _deref(require(testFile), testFile);
       } else {
         throw new Error(`Unsupported file type for test file: ${testFile}`);
       }
+
       if (testCases) {
+        if (!Array.isArray(testCases) && typeof testCases === 'object') {
+          testCases = [testCases];
+        }
         for (const testCase of testCases) {
           ret.push(await readTest(testCase, path.dirname(testFile)));
         }
@@ -217,17 +232,6 @@ interface SynthesizeOptions {
   tests: TestCase[];
   numPersonas?: number;
   numTestCasesPerPersona?: number;
-}
-
-export async function synthesizeFromTestSuite(
-  testSuite: TestSuite,
-  options: Partial<SynthesizeOptions>,
-) {
-  return synthesize({
-    ...options,
-    prompts: testSuite.prompts.map((prompt) => prompt.raw),
-    tests: testSuite.tests || [],
-  });
 }
 
 export async function synthesize({
@@ -371,4 +375,15 @@ Your response should contain a JSON map of variable names to values, of the form
     JSON.parse(testCase),
   );
   return dedupedTestCaseVars;
+}
+
+export async function synthesizeFromTestSuite(
+  testSuite: TestSuite,
+  options: Partial<SynthesizeOptions>,
+) {
+  return synthesize({
+    ...options,
+    prompts: testSuite.prompts.map((prompt) => prompt.raw),
+    tests: testSuite.tests || [],
+  });
 }

@@ -1,17 +1,16 @@
 import * as React from 'react';
-
 import ReactMarkdown from 'react-markdown';
-import { diffSentences, diffJson, diffWords } from 'diff';
-import Tooltip from '@mui/material/Tooltip';
-
-import CommentDialog from '@/app/eval/TableCommentDialog';
 import CustomMetrics from '@/app/eval/CustomMetrics';
 import EvalOutputPromptDialog from '@/app/eval/EvalOutputPromptDialog';
 import FailReasonCarousel from '@/app/eval/FailReasonCarousel';
+import CommentDialog from '@/app/eval/TableCommentDialog';
 import TruncatedText from '@/app/eval/TruncatedText';
+import { useStore as useResultsViewStore } from '@/app/eval/store';
 import { EvaluateTableOutput } from '@/app/eval/types';
 import { useShiftKey } from '@/app/hooks/useShiftKey';
-import { useStore as useResultsViewStore } from '@/app/eval/store';
+import Tooltip from '@mui/material/Tooltip';
+import { diffSentences, diffJson, diffWords } from 'diff';
+import remarkGfm from 'remark-gfm';
 
 function scoreToString(score: number | null) {
   if (score === null || score === 0 || score === 1) {
@@ -96,7 +95,7 @@ function EvalOutputCell({
   // Handle failure messages by splitting the text at '---'
   if (!output.pass && text.includes('---')) {
     failReasons = (output.gradingResult?.componentResults || [])
-      .filter((result) => !result.pass)
+      .filter((result) => (result ? !result.pass : false))
       .map((result) => result.reason);
     text = text.split('---').slice(1).join('---');
   }
@@ -181,9 +180,10 @@ function EvalOutputCell({
     } catch (error) {
       console.error('Invalid regular expression:', (error as Error).message);
     }
-  } else if (renderMarkdown) {
+  } else if (renderMarkdown && !showDiffs) {
     node = (
       <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
         components={{
           img: ({ src, alt }) => (
             <img
@@ -345,7 +345,7 @@ function EvalOutputCell({
       {output.prompt && (
         <>
           <span className="action" onClick={handlePromptOpen}>
-            <Tooltip title="View ouput and test details">
+            <Tooltip title="View output and test details">
               <span>🔎</span>
             </Tooltip>
           </span>
@@ -356,6 +356,7 @@ function EvalOutputCell({
             provider={output.provider}
             gradingResults={output.gradingResult?.componentResults}
             output={text}
+            metadata={output.metadata}
           />
         </>
       )}
@@ -395,7 +396,7 @@ function EvalOutputCell({
   if (gradingResult) {
     if (gradingResult.componentResults) {
       gradingResult.componentResults.forEach((result) => {
-        if (result.pass) {
+        if (result?.pass) {
           passCount++;
         } else {
           failCount++;

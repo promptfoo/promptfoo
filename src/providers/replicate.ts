@@ -1,19 +1,19 @@
-import Replicate from 'replicate';
-
-import fetch from 'node-fetch';
-import logger from '../logger';
-import { getCache, isCacheEnabled } from '../cache';
-
 import type { Cache } from 'cache-manager';
-
+import fetch from 'node-fetch';
+import Replicate from 'replicate';
+import { getCache, isCacheEnabled } from '../cache';
+import logger from '../logger';
 import type {
   ApiModerationProvider,
   ApiProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
   EnvOverrides,
   ModerationFlag,
   ProviderModerationResponse,
   ProviderResponse,
-} from '../types.js';
+} from '../types';
+import { safeJsonStringify } from '../util';
 
 interface ReplicateCompletionOptions {
   apiKey?: string;
@@ -281,3 +281,91 @@ export class ReplicateModerationProvider
 export const DefaultModerationProvider = new ReplicateModerationProvider(
   'meta/meta-llama-guard-2-8b:b063023ee937f28e922982abdbf97b041ffe34ad3b35a53d33e1d74bb19b36c4',
 );
+
+interface ReplicateImageOptions {
+  width?: number;
+  height?: number;
+  refine?: string;
+  apply_watermark?: boolean;
+  num_inference_steps?: number;
+}
+
+export class ReplicateImageProvider extends ReplicateProvider {
+  config: ReplicateImageOptions;
+
+  constructor(
+    modelName: string,
+    options: { config?: ReplicateImageOptions; id?: string; env?: EnvOverrides } = {},
+  ) {
+    super(modelName, options);
+    this.config = options.config || {};
+  }
+
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    callApiOptions?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    const cache = getCache();
+    const cacheKey = `replicate:image:${safeJsonStringify({ context, prompt })}`;
+
+    if (!this.apiKey) {
+      throw new Error(
+        'Replicate API key is not set. Set the REPLICATE_API_TOKEN environment variable or add `apiKey` to the provider config.',
+      );
+    }
+
+    const replicate = new Replicate({
+      auth: this.apiKey,
+    });
+
+    let response: any | undefined;
+    let cached = false;
+    if (isCacheEnabled()) {
+      const cachedResponse = await cache.get(cacheKey);
+      if (cachedResponse) {
+        console.log(cachedResponse);
+        logger.debug(`Retrieved cached response for ${prompt}: ${cachedResponse}`);
+        response = JSON.parse(cachedResponse as string);
+        cached = true;
+      }
+    }
+
+    if (!response) {
+      const data = {
+        input: {
+          width: this.config.width || 768,
+          height: this.config.height || 768,
+          prompt,
+        },
+      };
+      response = await replicate.run(this.modelName as any, data);
+    }
+
+    const url = response[0];
+    if (!url) {
+      return {
+        error: `No image URL found in response: ${JSON.stringify(response)}`,
+      };
+    }
+
+    if (!cached && isCacheEnabled()) {
+      try {
+        await cache.set(cacheKey, JSON.stringify(response));
+      } catch (err) {
+        logger.error(`Failed to cache response: ${String(err)}`);
+      }
+    }
+
+    const sanitizedPrompt = prompt
+      .replace(/\r?\n|\r/g, ' ')
+      .replace(/\[/g, '(')
+      .replace(/\]/g, ')');
+    const ellipsizedPrompt =
+      sanitizedPrompt.length > 50 ? `${sanitizedPrompt.substring(0, 47)}...` : sanitizedPrompt;
+    return {
+      output: `![${ellipsizedPrompt}](${url})`,
+      cached,
+    };
+  }
+}
