@@ -7,4 +7,8 @@ tests: fashion_mnist_sample_base64.csv
 defaultTest:
   assert:
     - type: is-xml
-      value: 'classification,color,features,style,confidence,reasoning'
+      value: 'analysis.classification,analysis.color,analysis.features,analysis.style,analysis.confidence,analysis.reasoning'
+    - type: contains-xml
+      value: 'analysis.classification,analysis.color,analysis.features,analysis.style,analysis.confidence,analysis.reasoning'
+    - type: contains
+      value: '<classification>{{label}}</classification>'
