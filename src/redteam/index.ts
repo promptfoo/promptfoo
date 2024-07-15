@@ -25,8 +25,11 @@ interface SynthesizeOptions {
   prompts: string[];
   provider?: string;
   purpose?: string;
-  n: number;
+  numTests: number;
 }
+
+// n is assigned a default value by commander. Require that it exists in the type
+type PartialSynthesizeOptions = Partial<Omit<SynthesizeOptions, 'numTests'>> & { numTests: number };
 
 interface Plugin {
   key: string;
@@ -129,7 +132,7 @@ export async function synthesize({
   injectVar,
   purpose: purposeOverride,
   plugins,
-  n,
+  numTests,
 }: SynthesizeOptions) {
   validatePlugins(plugins);
   const reasoningProvider = await loadApiProvider(provider || REDTEAM_MODEL);
@@ -208,7 +211,7 @@ export async function synthesize({
     if (plugins.includes(key)) {
       updateProgress();
       logger.debug(`Generating ${key} tests`);
-      const pluginTests = await action(redteamProvider, purpose, injectVar, n);
+      const pluginTests = await action(redteamProvider, purpose, injectVar, numTests);
       testCases.push(...pluginTests);
       logger.debug(`Added ${pluginTests.length} ${key} test cases`);
     }
@@ -231,7 +234,7 @@ export async function synthesize({
 
 export async function synthesizeFromTestSuite(
   testSuite: TestSuite,
-  options: Partial<SynthesizeOptions> & { n: number },
+  options: PartialSynthesizeOptions,
 ) {
   return synthesize({
     ...options,
