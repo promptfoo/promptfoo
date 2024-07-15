@@ -28,7 +28,7 @@ export default function Navigation({
 }) {
   const [showInfoModal, setShowInfoModal] = useState<boolean>(false);
 
-  const handleModalToggle = () => setShowInfoModal(!showInfoModal);
+  const handleModalToggle = () => setShowInfoModal((prevState) => !prevState);
 
   const navigationContent = (
     <>
