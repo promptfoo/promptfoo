@@ -27,11 +27,11 @@ jest.mock('fs', () => ({
 
 jest.mock('../src/database');
 
-beforeEach(() => {
-  jest.clearAllMocks();
-});
-
 describe('readStandaloneTestsFile', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   it('readStandaloneTestsFile with CSV input', async () => {
     jest.mocked(fs.readFileSync).mockReturnValue('var1,var2\nvalue1,value2\nvalue3,value4');
     const varsPath = 'vars.csv';
@@ -76,6 +76,10 @@ describe('readStandaloneTestsFile', () => {
 });
 
 describe('readTest', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   it('readTest with string input (path to test config)', async () => {
     const testPath = 'test1.yaml';
     const testContent = {
@@ -138,7 +142,7 @@ describe('readTest', () => {
 });
 
 describe('readTests', () => {
-  afterEach(() => {
+  beforeEach(() => {
     jest.resetAllMocks();
   });
 
