@@ -358,15 +358,13 @@ Note: The `is-xml` assertion requires the entire output to be valid XML. For che
 
 ### Contains-XML
 
-The `contains-xml` is identical to `is-xml`, except it checks if the LLM output contains valid XML content, even if it's not the entire output. For example:
+The `contains-xml` is identical to `is-xml`, except it checks if the LLM output contains valid XML content, even if it's not the entire output. For example, the following is valid.
 
 ```xml
-Sure, here is your xml
+Sure, here is your xml:
 <root><child>Content</child></root>
 let me know if you have any other questions!
 ```
-
-would be valid.
 
 ### Is-SQL
 
