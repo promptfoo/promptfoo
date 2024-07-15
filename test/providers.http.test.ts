@@ -35,7 +35,7 @@ describe('HttpProvider', () => {
         body: JSON.stringify({ key: 'test prompt' }),
       }),
       expect.any(Number),
-      'json'
+      'json',
     );
   });
 
@@ -61,7 +61,7 @@ describe('HttpProvider', () => {
     provider = new HttpProvider(mockUrl, {
       config: {
         method: 'GET',
-        headers: { 'Authorization': 'Bearer token' },
+        headers: { Authorization: 'Bearer token' },
         responseParser: (data: any) => data,
       },
     });
@@ -73,10 +73,10 @@ describe('HttpProvider', () => {
       mockUrl,
       expect.objectContaining({
         method: 'GET',
-        headers: { 'Authorization': 'Bearer token' },
+        headers: { Authorization: 'Bearer token' },
       }),
       expect.any(Number),
-      'json'
+      'json',
     );
   });
 
@@ -119,7 +119,7 @@ describe('HttpProvider', () => {
         body: JSON.stringify({ key: 'test prompt' }),
       },
       expect.any(Number),
-      'json'
+      'json',
     );
   });
 
@@ -143,7 +143,7 @@ describe('HttpProvider', () => {
         body: JSON.stringify({ key: '{"key": "value"}' }),
       }),
       expect.any(Number),
-      'json'
+      'json',
     );
   });
 
