@@ -20,7 +20,7 @@ import type {
   TestSuiteConfig,
   VarMapping,
 } from './types';
-import { extractVariablesFromTemplates } from './redteam/injectVar';
+import { extractVariablesFromTemplates } from './util/templates';
 
 function parseJson(json: string): any | undefined {
   try {
