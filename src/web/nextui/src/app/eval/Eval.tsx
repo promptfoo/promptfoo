@@ -2,7 +2,12 @@
 
 import * as React from 'react';
 import { REMOTE_API_BASE_URL } from '@/../../../constants';
-import type { EvaluateSummary, UnifiedConfig, SharedResults } from '@/../../../types';
+import type {
+  EvaluateSummary,
+  UnifiedConfig,
+  SharedResults,
+  ResultLightweightWithLabel,
+} from '@/../../../types';
 import { getApiBaseUrl } from '@/api';
 import { ShiftKeyProvider } from '@/app/contexts/ShiftKeyContext';
 import { IS_RUNNING_LOCALLY, USE_SUPABASE } from '@/constants';
@@ -43,7 +48,7 @@ async function fetchEvalFromSupabase(
 interface EvalOptions {
   fetchId?: string;
   preloadedData?: SharedResults;
-  recentEvals?: { id: string; label: string }[];
+  recentEvals?: ResultLightweightWithLabel[];
   defaultEvalId?: string;
 }
 
@@ -57,7 +62,7 @@ export default function Eval({
   const { table, setTable, setConfig, setEvalId, setAuthor } = useStore();
   const [loaded, setLoaded] = React.useState(false);
   const [failed, setFailed] = React.useState(false);
-  const [recentEvals, setRecentEvals] = React.useState<{ id: string; label: string }[]>(
+  const [recentEvals, setRecentEvals] = React.useState<ResultLightweightWithLabel[]>(
     recentEvalsProp || [],
   );
 
@@ -90,7 +95,7 @@ export default function Eval({
   };
 
   const [defaultEvalId, setDefaultEvalId] = React.useState<string>(
-    defaultEvalIdProp || recentEvals[0]?.id,
+    defaultEvalIdProp || recentEvals[0]?.evalId,
   );
 
   const searchParams = useSearchParams();
@@ -166,8 +171,11 @@ export default function Eval({
       fetchEvalsFromSupabase().then((records) => {
         setRecentEvals(
           records.map((r) => ({
-            id: r.id,
+            evalId: r.id,
             label: r.createdAt,
+            createdAt: new Date(r.createdAt).getTime(),
+            description: 'None',
+            numTests: -1,
           })),
         );
         if (records.length > 0) {
