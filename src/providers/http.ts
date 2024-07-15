@@ -46,7 +46,7 @@ export class HttpProvider implements ApiProvider {
     const stringifiedConfig = safeJsonStringify(this.config);
     const renderedConfigString = nunjucks.renderString(stringifiedConfig, {
       // nunjucks does not escape JSON strings, so we need to escape them manually
-      prompt: isValidJson(prompt) ? prompt.replace(/"/g, '\\"') : prompt,
+      prompt: isValidJson(prompt) ? JSON.stringify(prompt).slice(1, -1) : prompt,
       ...context?.vars,
     });
     // use yaml over json.parse because of trailing commas, quotes, and comments
