@@ -625,7 +625,9 @@ describe('matchesAnswerRelevance', () => {
         completion: expect.any(Number),
       },
     });
-    expect(mockCallApi).toHaveBeenCalledWith(expect.stringContaining(ANSWER_RELEVANCY_GENERATE.slice(0, 50)));
+    expect(mockCallApi).toHaveBeenCalledWith(
+      expect.stringContaining(ANSWER_RELEVANCY_GENERATE.slice(0, 50)),
+    );
     expect(mockCallEmbeddingApi).toHaveBeenCalledWith('Input text');
 
     mockCallApi.mockRestore();
@@ -671,8 +673,12 @@ describe('matchesAnswerRelevance', () => {
         completion: expect.any(Number),
       },
     });
-    expect(mockCallApi).toHaveBeenCalledWith(expect.stringContaining(ANSWER_RELEVANCY_GENERATE.slice(0, 50)));
-    expect(mockCallEmbeddingApi).toHaveBeenCalledWith(expect.stringContaining(ANSWER_RELEVANCY_GENERATE.slice(0, 50)));
+    expect(mockCallApi).toHaveBeenCalledWith(
+      expect.stringContaining(ANSWER_RELEVANCY_GENERATE.slice(0, 50)),
+    );
+    expect(mockCallEmbeddingApi).toHaveBeenCalledWith(
+      expect.stringContaining(ANSWER_RELEVANCY_GENERATE.slice(0, 50)),
+    );
 
     mockCallApi.mockRestore();
     mockCallEmbeddingApi.mockRestore();
@@ -806,7 +812,9 @@ describe('matchesContextRelevance', () => {
         completion: expect.any(Number),
       },
     });
-    expect(mockCallApi).toHaveBeenCalledWith(expect.stringContaining(CONTEXT_RELEVANCE.slice(0, 100)));
+    expect(mockCallApi).toHaveBeenCalledWith(
+      expect.stringContaining(CONTEXT_RELEVANCE.slice(0, 100)),
+    );
 
     mockCallApi.mockRestore();
   });
@@ -834,7 +842,9 @@ describe('matchesContextRelevance', () => {
         completion: expect.any(Number),
       },
     });
-    expect(mockCallApi).toHaveBeenCalledWith(expect.stringContaining(CONTEXT_RELEVANCE.slice(0, 100)));
+    expect(mockCallApi).toHaveBeenCalledWith(
+      expect.stringContaining(CONTEXT_RELEVANCE.slice(0, 100)),
+    );
 
     mockCallApi.mockRestore();
   });
