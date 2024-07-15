@@ -6,6 +6,7 @@ import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import * as path from 'path';
 import { parse as parsePath } from 'path';
+import invariant from 'tiny-invariant';
 import { testCaseFromCsvRow } from './csv';
 import { fetchCsvFromGoogleSheet } from './googleSheets';
 import logger from './logger';
@@ -20,6 +21,7 @@ import type {
   TestSuiteConfig,
   VarMapping,
 } from './types';
+import { extractJsonObjects } from './util';
 import { extractVariablesFromTemplates } from './util/templates';
 
 function parseJson(json: string): any | undefined {
@@ -285,8 +287,9 @@ export async function synthesize({
 
       List up to ${numPersonas} user personas that would send ${prompts.length > 1 ? 'these prompts' : 'this prompt'}. Your response should be JSON of the form {personas: string[]}`,
   );
-
-  const personas = (JSON.parse(resp.output as string) as { personas: string[] }).personas;
+  const respObjects = extractJsonObjects(resp.output as string);
+  invariant(respObjects.length === 1, 'Expected exactly one JSON object in the response');
+  const personas = (respObjects[0] as { personas: string[] }).personas;
   logger.debug(
     `\nGenerated ${personas.length} personas:\n${personas.map((p) => `  - ${p}`).join('\n')}`,
   );
@@ -350,7 +353,13 @@ export async function synthesize({
         .join(', ')}}[]}`;
     // Call the LLM API with the constructed prompt
     const personaResponse = await providerModel.callApi(personaPrompt);
-    const parsed = JSON.parse(personaResponse.output as string) as {
+
+    const personaResponseObjects = extractJsonObjects(personaResponse.output as string);
+    invariant(
+      personaResponseObjects.length === 1,
+      `Expected exactly one JSON object in the response for persona ${i + 1}`,
+    );
+    const parsed = personaResponseObjects[0] as {
       vars: VarMapping[];
     };
     logger.debug(`parsed: ${JSON.stringify(parsed, null, 2)}`);
