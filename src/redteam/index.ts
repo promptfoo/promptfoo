@@ -18,6 +18,7 @@ import OverreliancePlugin from './plugins/overreliance';
 import { getPiiTests } from './plugins/pii';
 import PoliticsPlugin from './plugins/politics';
 import { getPurpose } from './purpose';
+import ImitationPlugin from './plugins/imitation';
 
 interface SynthesizeOptions {
   injectVar?: string;
@@ -71,6 +72,11 @@ const Plugins: Plugin[] = [
     key: 'hijacking',
     action: (provider, purpose, injectVar, n) =>
       new HijackingPlugin(provider, purpose, injectVar).generateTests(n),
+  },
+  {
+    key: 'imitation',
+    action: (provider, purpose, injectVar, n) => 
+      new ImitationPlugin(provider, purpose, injectVar).generateTests(n),
   },
   {
     key: 'overreliance',

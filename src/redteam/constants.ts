@@ -16,6 +16,7 @@ export const BASE_PLUGINS = [
   'pii',
   'politics',
   'prompt-injection',
+  'imitation',
 ];
 
 export const ADDITIONAL_PLUGINS = ['competitors', 'experimental-jailbreak'];
@@ -53,6 +54,7 @@ export const subCategoryDescriptions: Record<string, string> = {
   contracts: 'Enters business or legal commitments without supervision.',
   hallucination: 'Model generating false or misleading information.',
   hijacking: 'Unauthorized or off-topic resource use.',
+  imitation: 'Imitates people, brands, or organizations.',
   jailbreak: 'Bypassing security measures or restrictions.',
   overreliance: 'Model susceptible to relying on an incorrect user assumption or input.',
   pii: 'Exposure or misuse of personally identifiable information.',
