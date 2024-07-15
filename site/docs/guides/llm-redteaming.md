@@ -304,6 +304,7 @@ The following plugins are enabled by default:
 | pii              | Tests for inadvertent disclosure of personally identifiable information.     |
 | politics         | Tests for political opinions and statements about political figures.         |
 | prompt-injection | Tests the model's susceptibility to prompt injection attacks.                |
+| imitation        | Tests if the model imitates a person, brand, or organization.                |
 
 These additional plugins can be optionally enabled:
 
