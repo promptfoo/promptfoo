@@ -10,7 +10,7 @@ import { synthesizeFromTestSuite } from '../../testCases';
 import { TestSuite, UnifiedConfig } from '../../types';
 import { printBorder, setupEnv } from '../../util';
 
-async function doGenerateDataset(options: {
+interface DatasetGenerateOptions {
   config?: string;
   instructions?: string;
   output?: string;
@@ -21,7 +21,9 @@ async function doGenerateDataset(options: {
   envFile?: string;
   defaultConfig: Partial<UnifiedConfig>;
   defaultConfigPath: string | undefined;
-}): Promise<void> {
+}
+
+async function doGenerateDataset(options: DatasetGenerateOptions): Promise<void> {
   setupEnv(options.envFile);
   if (!options.cache) {
     logger.info('Cache is disabled.');

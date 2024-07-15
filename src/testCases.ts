@@ -1,5 +1,6 @@
 import $RefParser from '@apidevtools/json-schema-ref-parser';
 import { parse as parseCsv } from 'csv-parse/sync';
+import dedent from 'dedent';
 import * as fs from 'fs';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
@@ -270,16 +271,18 @@ export async function synthesize({
       },
     },
   });
-  const promptsString = `<Prompts>
-${prompts.map((prompt) => `<Prompt>\n${prompt}\n</Prompt>`).join('\n')}
-</Prompts>`;
-  const resp = await provider.callApi(
-    `Consider the following prompt${prompts.length > 1 ? 's' : ''} for an LLM application:
-${promptsString}
 
-List up to ${numPersonas} user personas that would send ${
-      prompts.length > 1 ? 'these prompts' : 'this prompt'
-    }. Your response should be JSON of the form {personas: string[]}`,
+  const promptsString = dedent`<Prompts>
+    ${prompts.map((prompt) => `<Prompt>\n${prompt}\n</Prompt>`).join('\n')}
+    </Prompts>`;
+
+  const resp = await provider.callApi(
+    dedent`
+      Consider the following prompt${prompts.length > 1 ? 's' : ''} for an LLM application:
+
+      ${promptsString}
+
+      List up to ${numPersonas} user personas that would send ${prompts.length > 1 ? 'these prompts' : 'this prompt'}. Your response should be JSON of the form {personas: string[]}`,
   );
 
   const personas = (JSON.parse(resp.output as string) as { personas: string[] }).personas;
@@ -307,16 +310,15 @@ List up to ${numPersonas} user personas that would send ${
   );
 
   const existingTests =
-    `Here are some existing tests:` +
+    dedent`Here are some existing tests:` +
     tests
       .map((test) => {
         if (!test.vars) {
           return;
         }
-        return `<Test>
-${JSON.stringify(test.vars, null, 2)}
-</Test>
-    `;
+        return dedent`<Test>
+                ${JSON.stringify(test.vars, null, 2)}
+              </Test>`;
       })
       .filter(Boolean)
       .slice(0, 100)
@@ -328,29 +330,29 @@ ${JSON.stringify(test.vars, null, 2)}
     const persona = personas[i];
     logger.debug(`\nGenerating test cases for persona ${i + 1}...`);
     // Construct the prompt for the LLM to generate variable values
-    const personaPrompt = `Consider ${
-      prompts.length > 1 ? 'these prompts' : 'this prompt'
-    }, which contains some {{variables}}: 
-${promptsString}
+    const personaPrompt = dedent`
+    
+      Consider ${prompts.length > 1 ? 'these prompts' : 'this prompt'}, which contains some {{variables}}: 
+      ${promptsString}
 
-This is your persona:
-<Persona>
-${persona}
-</Persona>
+      This is your persona:
+      <Persona>
+      ${persona}
+      </Persona>
 
-${existingTests}
+      ${existingTests}
 
-Fully embody this persona and determine a value for each variable, such that the prompt would be sent by this persona.
+      Fully embody this persona and determine a value for each variable, such that the prompt would be sent by this persona.
 
-You are a tester, so try to think of ${numTestCasesPerPersona} sets of values that would be interesting or unusual to test. ${
-      instructions || ''
-    }
+      You are a tester, so try to think of ${numTestCasesPerPersona} sets of values that would be interesting or unusual to test. ${
+        instructions || ''
+      }
 
-Your response should contain a JSON map of variable names to values, of the form {vars: {${Array.from(
-      variables,
-    )
-      .map((varName) => `${varName}: string`)
-      .join(', ')}}[]}`;
+      Your response should contain a JSON map of variable names to values, of the form {vars: {${Array.from(
+        variables,
+      )
+        .map((varName) => `${varName}: string`)
+        .join(', ')}}[]}`;
     // Call the LLM API with the constructed prompt
     const personaResponse = await provider.callApi(personaPrompt);
     const parsed = JSON.parse(personaResponse.output as string) as {
