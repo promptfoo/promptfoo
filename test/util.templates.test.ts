@@ -1,7 +1,4 @@
-import {
-  extractVariablesFromTemplate,
-  extractVariablesFromTemplates,
-} from '../../src/redteam/injectVar';
+import { extractVariablesFromTemplate, extractVariablesFromTemplates } from '../src/util/templates';
 
 describe('extractVariablesFromTemplate', () => {
   it('should extract simple variables', () => {

@@ -108,6 +108,10 @@ const sidebars = {
     },
     {
       type: 'doc',
+      id: 'contributing',
+    },
+    {
+      type: 'doc',
       id: 'faq',
     },
   ],

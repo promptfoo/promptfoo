@@ -1,6 +1,6 @@
 import PluginBase from '../../../src/redteam/plugins/base';
 import { ApiProvider, Assertion } from '../../../src/types';
-import { getNunjucksEngine } from '../../../src/util';
+import { getNunjucksEngine } from '../../../src/util/templates';
 
 class TestPlugin extends PluginBase {
   protected template = 'Test template with {{ purpose }}';

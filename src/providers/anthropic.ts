@@ -392,9 +392,13 @@ export class AnthropicCompletionProvider implements ApiProvider {
   }
 }
 
-export const DefaultGradingProvider = new AnthropicMessagesProvider('claude-3-opus-20240229');
-export const DefaultGradingJsonProvider = new AnthropicMessagesProvider('claude-3-opus-20240229');
-export const DefaultSuggestionsProvider = new AnthropicMessagesProvider('claude-3-opus-20240229');
+export const DefaultGradingProvider = new AnthropicMessagesProvider('claude-3-5-sonnet-20240620');
+export const DefaultGradingJsonProvider = new AnthropicMessagesProvider(
+  'claude-3-5-sonnet-20240620',
+);
+export const DefaultSuggestionsProvider = new AnthropicMessagesProvider(
+  'claude-3-5-sonnet-20240620',
+);
 
 export class AnthropicLlmRubricProvider extends AnthropicMessagesProvider {
   constructor(modelName: string) {

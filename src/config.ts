@@ -345,7 +345,7 @@ export async function resolveConfigs(
     sharing:
       process.env.PROMPTFOO_DISABLE_SHARING === '1'
         ? false
-        : fileConfig.sharing ?? defaultConfig.sharing ?? true,
+        : (fileConfig.sharing ?? defaultConfig.sharing ?? true),
     defaultTest: defaultTestRaw ? await readTest(defaultTestRaw, basePath) : undefined,
     derivedMetrics: fileConfig.derivedMetrics || defaultConfig.derivedMetrics,
     outputPath: cmdObj.output || fileConfig.outputPath || defaultConfig.outputPath,

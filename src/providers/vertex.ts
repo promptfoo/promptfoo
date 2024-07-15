@@ -10,7 +10,7 @@ import type {
   ProviderEmbeddingResponse,
   TokenUsage,
 } from '../types.js';
-import { getNunjucksEngine } from '../util';
+import { getNunjucksEngine } from '../util/templates';
 import { parseChatPrompt } from './shared';
 import {
   GeminiErrorResponse,
