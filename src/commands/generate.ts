@@ -284,7 +284,7 @@ export function generateCommand(
     .option('--no-cache', 'Do not read or write results to disk cache', false)
     .option(
       '-n, --num-tests <number>',
-      'Number of test cases to generate per plugin. Defaults to 5',
+      'Number of test cases to generate per plugin',
       parseInt,
       5,
     )
