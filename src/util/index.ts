@@ -1063,6 +1063,15 @@ export function renderVarsInObject<T>(obj: T, vars?: Record<string, string | obj
   return obj;
 }
 
+export function isValidJson(str: string): boolean {
+  try {
+    JSON.parse(str);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
 export function extractJsonObjects(str: string): object[] {
   // This will extract all json objects from a string
 

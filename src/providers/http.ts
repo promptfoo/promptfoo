@@ -1,3 +1,4 @@
+import yaml from 'js-yaml';
 import invariant from 'tiny-invariant';
 import { fetchWithCache } from '../cache';
 import logger from '../logger';
@@ -7,7 +8,7 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../types.js';
-import { safeJsonStringify } from '../util';
+import { isValidJson, safeJsonStringify } from '../util';
 import { getNunjucksEngine } from '../util/templates';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
@@ -44,14 +45,17 @@ export class HttpProvider implements ApiProvider {
     // Render all nested strings
     const nunjucks = getNunjucksEngine();
     const stringifiedConfig = safeJsonStringify(this.config);
-    const renderedConfig: { method: string; headers: Record<string, string>; body: any } =
-      JSON.parse(
-        nunjucks.renderString(stringifiedConfig, {
-          prompt,
-          ...context?.vars,
-        }),
-      );
-
+    const renderedConfigString = nunjucks.renderString(stringifiedConfig, {
+      // nunjucks does not escape JSON strings, so we need to escape them manually
+      prompt: isValidJson(prompt) ? JSON.stringify(prompt).slice(1, -1) : prompt,
+      ...context?.vars,
+    });
+    // use yaml over json.parse because of trailing commas, quotes, and comments
+    const renderedConfig = yaml.load(renderedConfigString) as {
+      method: string;
+      headers: Record<string, string>;
+      body: Record<string, any>;
+    };
     const method = renderedConfig.method || 'POST';
     const headers = renderedConfig.headers || { 'Content-Type': 'application/json' };
     invariant(typeof method === 'string', 'Expected method to be a string');
