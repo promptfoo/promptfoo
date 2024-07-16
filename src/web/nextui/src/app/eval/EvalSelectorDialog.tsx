@@ -13,6 +13,7 @@ import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import TextField from '@mui/material/TextField';
+import Typography from '@mui/material/Typography';
 import fuzzysearch from 'fuzzysearch';
 import type { ResultLightweightWithLabel } from './types';
 
@@ -147,22 +148,38 @@ const EvalSelectorDialog: React.FC<EvalSelectorDialogProps> = ({
                 </TableRow>
               </TableHead>
               <TableBody>
-                {filteredEvals.map((_eval, index) => (
-                  <TableRow
-                    key={_eval.evalId}
-                    hover
-                    onClick={() => handleSelectEval(_eval.evalId)}
-                    sx={{
-                      cursor: 'pointer',
-                      backgroundColor:
-                        index === focusedIndex ? 'rgba(255, 255, 0, 0.1)' : 'inherit',
-                    }}
-                  >
-                    <TableCell>{new Date(_eval.createdAt).toLocaleString()}</TableCell>
-                    <TableCell>{_eval.description || _eval.label}</TableCell>
-                    <TableCell>{_eval.numTests}</TableCell>
+                {filteredEvals.length > 0 ? (
+                  filteredEvals.map((_eval, index) => (
+                    <TableRow
+                      key={_eval.evalId}
+                      hover
+                      onClick={() => handleSelectEval(_eval.evalId)}
+                      sx={{
+                        cursor: 'pointer',
+                        backgroundColor:
+                          index === focusedIndex ? 'rgba(255, 255, 0, 0.1)' : 'inherit',
+                      }}
+                    >
+                      <TableCell>{new Date(_eval.createdAt).toLocaleString()}</TableCell>
+                      <TableCell>{_eval.description || _eval.label}</TableCell>
+                      <TableCell>{_eval.numTests}</TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={3} align="center" sx={{ py: 4 }}>
+                      <Box sx={{ textAlign: 'center', color: 'text.secondary' }}>
+                        <Box sx={{ fontSize: '3rem', mb: 2 }}>🔍</Box>
+                        <Typography variant="h6" gutterBottom>
+                          No evaluations found
+                        </Typography>
+                        <Typography variant="body2">
+                          Try adjusting your search or create a new evaluation
+                        </Typography>
+                      </Box>
+                    </TableCell>
                   </TableRow>
-                ))}
+                )}
               </TableBody>
             </Table>
           </TableContainer>

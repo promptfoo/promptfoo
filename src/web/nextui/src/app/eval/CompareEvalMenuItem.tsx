@@ -40,8 +40,8 @@ function CompareEvalMenuItem({ initialEvals, onComparisonEvalSelected }: Compare
       const response = await fetch(`${apiBaseUrl}/api/results?datasetId=${datasetId}`, {
         cache: 'no-store',
       });
-      const body = await response.json();
-      setRecentEvals(body.data);
+      const body = (await response.json()) as { data: ResultLightweightWithLabel[] };
+      setRecentEvals(body.data.filter((_eval) => _eval.evalId !== fetchEvalId));
     } catch (error) {
       console.error('Error fetching recent evals:', error);
     }
