@@ -340,12 +340,13 @@ export async function loadApiProvider(
   } else if (providerPath.startsWith('http:') || providerPath.startsWith('https:')) {
     ret = new HttpProvider(providerPath, providerOptions);
   } else if (providerPath === 'promptfoo:redteam:iterative') {
-    const RedteamIterativeProvider = (await import(path.join(__dirname, './redteam/iterative')))
-      .default;
+    const RedteamIterativeProvider = (
+      await import(path.join(__dirname, './redteam/providers/iterative'))
+    ).default;
     ret = new RedteamIterativeProvider(providerOptions);
   } else if (providerPath === 'promptfoo:redteam:iterative:image') {
     const RedteamIterativeProvider = (
-      await import(path.join(__dirname, './redteam/iterativeImage'))
+      await import(path.join(__dirname, './redteam/providers/iterativeImage'))
     ).default;
     ret = new RedteamIterativeProvider(providerOptions);
   } else {
