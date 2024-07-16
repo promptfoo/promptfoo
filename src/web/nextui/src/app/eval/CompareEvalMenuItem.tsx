@@ -4,6 +4,7 @@ import CompareIcon from '@mui/icons-material/Compare';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
 import MenuItem from '@mui/material/MenuItem';
+import Tooltip from '@mui/material/Tooltip';
 import EvalSelectorDialog from './EvalSelectorDialog';
 import { useStore } from './store';
 import { ResultLightweightWithLabel } from './types';
@@ -63,12 +64,14 @@ function CompareEvalMenuItem({ initialEvals, onComparisonEvalSelected }: Compare
 
   return (
     <>
-      <MenuItem onClick={handleOpenDialog}>
-        <ListItemIcon>
-          <CompareIcon fontSize="small" />
-        </ListItemIcon>
-        <ListItemText>Compare with another eval</ListItemText>
-      </MenuItem>
+      <Tooltip title="Combine this eval with another eval run" placement="left">
+        <MenuItem onClick={handleOpenDialog}>
+          <ListItemIcon>
+            <CompareIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Compare with another eval</ListItemText>
+        </MenuItem>
+      </Tooltip>
       <EvalSelectorDialog
         open={dialogOpen}
         onClose={handleCloseDialog}

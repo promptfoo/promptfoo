@@ -427,12 +427,10 @@ export default function ResultsView({
                 open={Boolean(anchorEl)}
                 onClose={handleMenuClose}
               >
-                <Tooltip title="Combine this eval with another eval run" placement="left">
-                  <CompareEvalMenuItem
-                    initialEvals={recentEvals}
-                    onComparisonEvalSelected={handleComparisonEvalSelected}
-                  />
-                </Tooltip>
+                <CompareEvalMenuItem
+                  initialEvals={recentEvals}
+                  onComparisonEvalSelected={handleComparisonEvalSelected}
+                />
                 <Tooltip title="View the configuration that defines this eval" placement="left">
                   <MenuItem onClick={() => setConfigModalOpen(true)}>
                     <ListItemIcon>
