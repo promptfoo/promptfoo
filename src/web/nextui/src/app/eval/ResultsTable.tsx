@@ -8,6 +8,7 @@ import {
 import * as React from 'react';
 import ReactMarkdown from 'react-markdown';
 import { getApiBaseUrl } from '@/api';
+import { useToast } from '@/app/contexts/ToastContext';
 import CustomMetrics from '@/app/eval/CustomMetrics';
 import EvalOutputPromptDialog from '@/app/eval/EvalOutputPromptDialog';
 import GenerateTestCases from '@/app/eval/GenerateTestCases';
@@ -127,7 +128,8 @@ function ResultsTable({
   onFailureFilterToggle,
   onSearchTextChange,
 }: ResultsTableProps) {
-  const { evalId: filePath, table, setTable } = useMainStore();
+  const { evalId: filePath, table, setTable, inComparisonMode } = useMainStore();
+  const { showToast } = useToast();
 
   invariant(table, 'Table should be defined');
   const { head, body } = table;
@@ -187,19 +189,23 @@ function ResultsTable({
         body: updatedData,
       };
       setTable(newTable);
-      try {
-        const response = await fetch(`${await getApiBaseUrl()}/api/eval/${filePath}`, {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ table: newTable }),
-        });
-        if (!response.ok) {
-          throw new Error('Network response was not ok');
+      if (inComparisonMode) {
+        showToast('Ratings are not saved in comparison mode', 'warning');
+      } else {
+        try {
+          const response = await fetch(`${await getApiBaseUrl()}/api/eval/${filePath}`, {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ table: newTable }),
+          });
+          if (!response.ok) {
+            throw new Error('Network response was not ok');
+          }
+        } catch (error) {
+          console.error('Failed to update table:', error);
         }
-      } catch (error) {
-        console.error('Failed to update table:', error);
       }
     },
     [body, head, setTable, filePath],

@@ -75,6 +75,8 @@ export default function ResultsView({
     wordBreak,
     showInferenceDetails,
     evalId,
+    inComparisonMode,
+    setInComparisonMode,
   } = useResultsViewStore();
   const { setStateFromConfig } = useMainStore();
 
@@ -186,6 +188,7 @@ export default function ResultsView({
         ...body.data.config,
         description: `Combined: "${config?.description || 'Eval A'}" and "${body.data.config?.description || 'Eval B'}"`,
       });
+      setInComparisonMode(true);
     } catch (error) {
       console.error('Error fetching comparison eval:', error);
       alert('Failed to load comparison eval. Please try again.');
@@ -315,13 +318,15 @@ export default function ResultsView({
             currentEval={recentEvals.find((evl) => evl.evalId === evalId) || null}
           />
         )}
-        <Typography variant="h5" sx={{ display: 'flex', alignItems: 'center' }}>
-          <Tooltip title="Click to edit description">
-            <span className="description" onClick={handleDescriptionClick}>
-              {config?.description || evalId}
-            </span>
-          </Tooltip>
-        </Typography>
+        {!inComparisonMode && (
+          <Typography variant="h5" sx={{ display: 'flex', alignItems: 'center' }}>
+            <Tooltip title="Click to edit description">
+              <span className="description" onClick={handleDescriptionClick}>
+                {config?.description || evalId}
+              </span>
+            </Tooltip>
+          </Typography>
+        )}
         {config?.description && evalId && (
           <>
             <Tooltip title="Click to copy">
