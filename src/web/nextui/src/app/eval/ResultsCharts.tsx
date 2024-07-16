@@ -38,6 +38,7 @@ interface ChartProps {
   table: EvaluateTable;
   evalId?: string | null;
   config?: Partial<UnifiedConfig>;
+  datasetId?: string | null;
 }
 
 const COLOR_PALETTE = [
@@ -419,7 +420,17 @@ function MetricChart({ table }: ChartProps) {
   return <canvas ref={metricCanvasRef} style={{ maxHeight: '300px' }}></canvas>;
 }
 
-function LineChart({ table, evalId, config }: ChartProps) {
+const fetchDataset = async (id: string) => {
+  try {
+    const res = await fetch(`${await getApiBaseUrl()}/api/evals/${id}`);
+    return await res.json();
+  } catch (err) {
+    const error = err as Error;
+    throw new Error(`Fetch dataset data using given id failed: ${error.message}.`);
+  }
+};
+
+function LineChart({ table, evalId, config, datasetId }: ChartProps) {
   const lineCanvasRef = useRef(null);
   const lineChartInstance = useRef<Chart | null>(null);
   const [dataset, setDataset] = useState<TestCasesWithMetadata>();
@@ -453,20 +464,11 @@ function LineChart({ table, evalId, config }: ChartProps) {
     return i + 'th';
   }
 
-  const datasetId = useMemo(() => {
-    if (config) {
-      return createHash('sha256').update(JSON.stringify(config.tests)).digest('hex');
-    }
-  }, [config]);
-
   useEffect(() => {
     if (!datasetId) return;
     (async () => {
-      fetch(`${await getApiBaseUrl()}/api/evals/${datasetId}`)
-        .then((response) => response.json())
-        .then((data) => {
-          setDataset(data.data[0]);
-        });
+      const data = await fetchDataset(datasetId);
+      setDataset(data.data[0]);
     })();
   }, [datasetId]);
 
@@ -635,20 +637,20 @@ function ResultsCharts({ columnVisibility }: ResultsChartsProps) {
 
   const { table, evalId, config } = useStore();
 
-  useEffect(() => {
-    const fetchDataset = async () => {
-      if (!config) return;
-      const datasetId = createHash('sha256').update(JSON.stringify(config.tests)).digest('hex');
-      fetch(`${await getApiBaseUrl()}/api/evals/${datasetId}`)
-        .then((response) => response.json())
-        .then((data: { data: TestCasesWithMetadata[] }) => {
-          setShowLineChart(data.data[0].count > 1);
-        });
-    };
+  const datasetId = useMemo(() => {
     if (config) {
-      fetchDataset();
+      return createHash('sha256').update(JSON.stringify(config.tests)).digest('hex');
     }
-  }, [table, evalId, config]);
+  }, [config]);
+
+  useMemo(async () => {
+    if (datasetId) {
+      const data = await fetchDataset(datasetId);
+      setShowLineChart(data.data[0].count > 1);
+    } else {
+      setShowCharts(false);
+    }
+  }, [datasetId]);
 
   if (!table || !config || !showCharts || table.head.prompts.length < 2) {
     return null;
@@ -689,7 +691,7 @@ function ResultsCharts({ columnVisibility }: ResultsChartsProps) {
           </div>
           {showLineChart && (
             <div style={{ width: chartWidth }}>
-              <LineChart table={table} evalId={evalId} config={config} />
+              <LineChart table={table} evalId={evalId} config={config} datasetId={datasetId} />
             </div>
           )}
         </div>
