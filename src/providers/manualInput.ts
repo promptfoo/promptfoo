@@ -1,10 +1,17 @@
 import inquirer from 'inquirer';
 import { ApiProvider, ProviderResponse } from '../types';
 
-export class ManualInputProvider implements ApiProvider {
-  private config: { multiline?: boolean };
+interface ManualInputProviderOptions {
+  id?: string;
+  config?: {
+    multiline?: boolean;
+  };
+}
 
-  constructor(options: { id?: string; config?: { multiline?: boolean } } = {}) {
+export class ManualInputProvider implements ApiProvider {
+  private config: ManualInputProviderOptions['config'];
+
+  constructor(options: ManualInputProviderOptions = {}) {
     this.config = options.config || {};
     this.id = () => options.id || 'manual-input';
   }
