@@ -3,7 +3,6 @@ import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import ForumIcon from '@mui/icons-material/Forum';
 import GitHubIcon from '@mui/icons-material/GitHub';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
-import TagIcon from '@mui/icons-material/Tag';
 import {
   Button,
   Dialog,
@@ -17,7 +16,7 @@ import {
 } from '@mui/material';
 import Link from 'next/link';
 
-const links = [
+const links: { icon: React.ReactNode; text: string; href: string }[] = [
   {
     icon: <MenuBookIcon fontSize="small" />,
     text: 'Documentation',
@@ -45,7 +44,10 @@ const links = [
   },
 ];
 
-export function InfoModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+export default function InfoModal<T extends { open: boolean; onClose: () => void }>({
+  open,
+  onClose,
+}: T) {
   const theme = useTheme();
 
   return (
@@ -55,19 +57,30 @@ export function InfoModal({ open, onClose }: { open: boolean; onClose: () => voi
       maxWidth="xs"
       fullWidth
       aria-labelledby="about-promptfoo-dialog-title"
-      PaperProps={{
-        sx: {
-          bgcolor: theme.palette.background.paper,
-          color: theme.palette.text.primary,
-        },
-      }}
     >
       <DialogTitle id="about-promptfoo-dialog-title">
         <Stack>
-          <Typography variant="h6">About Promptfoo</Typography>
-          <Typography variant="subtitle2">
-            <Link href='https://github.com/promptfoo/promptfoo/releases'>Version {process.env.PROMPTFOO_VERSION}</Link>
+          <Typography variant="h6" color="text.primary">
+            About Promptfoo
           </Typography>
+          <Link
+            href="https://github.com/promptfoo/promptfoo/releases"
+            passHref
+            style={{ color: 'inherit', textDecoration: 'none' }}
+          >
+            <MuiLink
+              underline="none"
+              sx={{
+                '&:hover': {
+                  textDecoration: 'underline',
+                },
+              }}
+            >
+              <Typography variant="subtitle2" color="text.primary">
+                Version {process.env.PROMPTFOO_VERSION}
+              </Typography>
+            </MuiLink>
+          </Link>
         </Stack>
       </DialogTitle>
       <DialogContent>
@@ -78,39 +91,46 @@ export function InfoModal({ open, onClose }: { open: boolean; onClose: () => voi
         </Typography>
         <Stack spacing={2} mt={2}>
           {links.map((item, index) => (
-            <Link key={index} href={item.href} target="_blank" passHref>
-              <MuiLink
-                color="inherit"
-                underline="none"
-                sx={{
-                  '&:hover': {
-                    textDecoration: 'underline',
-                  },
-                }}
+            <Stack
+              key={index}
+              direction="row"
+              spacing={1}
+              alignItems="center"
+              sx={{
+                flexWrap: 'wrap',
+                '& .MuiSvgIcon-root': {
+                  fontSize: '1rem',
+                  color: 'text.primary',
+                },
+              }}
+            >
+              {item.icon}
+              <Link
+                href={item.href}
+                target="_blank"
+                passHref
+                style={{ color: 'inherit', textDecoration: 'none' }}
               >
-                <Stack
-                  direction="row"
-                  spacing={1}
-                  alignItems="center"
+                <MuiLink
+                  color="text.primary"
+                  underline="none"
                   sx={{
-                    flexWrap: 'wrap',
-                    '& .MuiSvgIcon-root': {
-                      fontSize: '1rem',
+                    '&:hover': {
+                      textDecoration: 'underline',
                     },
                   }}
                 >
-                  {item.icon}
-                  <Typography variant="body2">{item.text}</Typography>
-                </Stack>
-              </MuiLink>
-            </Link>
+                  <Typography variant="body2" color="text.primary">
+                    {item.text}
+                  </Typography>
+                </MuiLink>
+              </Link>
+            </Stack>
           ))}
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose} variant="contained">
-          Close
-        </Button>
+        <Button onClick={onClose}>Close</Button>
       </DialogActions>
     </Dialog>
   );

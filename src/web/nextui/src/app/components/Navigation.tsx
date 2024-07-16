@@ -5,7 +5,7 @@ import { Stack, IconButton } from '@mui/material';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import DarkMode from './DarkMode';
-import { InfoModal } from './InfoModal';
+import InfoModal from './InfoModal';
 import LoggedInAs from './LoggedInAs';
 import Logo from './Logo';
 import './Navigation.css';
