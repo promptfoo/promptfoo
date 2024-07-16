@@ -191,7 +191,7 @@ async function runRedteamConversation(
 
 class RedteamIterativeJailbreaks implements ApiProvider {
   id() {
-    return 'redteam-iterative-jailbreaks';
+    return 'promptfoo:redteam:iterative';
   }
 
   async callApi(prompt: string, context?: CallApiContextParams, options?: CallApiOptionsParams) {
