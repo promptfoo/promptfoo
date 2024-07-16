@@ -53,6 +53,13 @@ const MISTRAL_CHAT_MODELS = [
       output: 0.006 / 1000,
     },
   })),
+  ...['codestral-mamba-2407'].map((model) => ({
+    id: model,
+    cost: {
+      input: 0.001 / 1000,
+      output: 0.003 / 1000,
+    },
+  })),
 ];
 
 interface MistralChatCompletionOptions {
