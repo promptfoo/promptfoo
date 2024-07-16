@@ -113,7 +113,7 @@ const Methods: Method[] = [
 ];
 
 function validatePlugins(plugins: string[]): void {
-  const invalidPlugins = plugins.filter((plugin) => !ALL_PLUGINS.has(plugin));
+  const invalidPlugins = plugins.filter((plugin) => !ALL_PLUGINS.includes(plugin));
   if (invalidPlugins.length > 0) {
     const validPluginsString = Array.from(ALL_PLUGINS).join(', ');
     const invalidPluginsString = invalidPlugins.join(', ');
