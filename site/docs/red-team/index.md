@@ -207,7 +207,7 @@ npx promptfoo@latest generate redteam -w --provider openai:chat:gpt-4o
 ```
 
 :::warning
-Note that some providers such as Anthropic may disable your account for generate harmful test cases. We recommend using the default OpenAI provider.
+Note that some providers such as Anthropic may disable your account for generating harmful test cases. We recommend using the default OpenAI provider.
 :::
 
 ### Run the eval
