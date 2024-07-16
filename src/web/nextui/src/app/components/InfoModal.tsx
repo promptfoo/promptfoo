@@ -12,7 +12,6 @@ import {
   Link as MuiLink,
   Stack,
   Typography,
-  useTheme,
 } from '@mui/material';
 import Link from 'next/link';
 

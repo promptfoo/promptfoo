@@ -7,30 +7,32 @@ import { ThemeProvider, createTheme } from '@mui/material/styles';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import './PageShell.css';
 
+const createAppTheme = (darkMode: boolean) =>
+  createTheme({
+    typography: {
+      fontFamily: 'inherit',
+    },
+    palette: {
+      mode: darkMode ? 'dark' : 'light',
+    },
+  });
+
+const lightTheme = createAppTheme(false);
+const darkTheme = createAppTheme(true);
+
 function Layout({ children }: { children: React.ReactNode }) {
   return <div>{children}</div>;
 }
 
 export function PageShell({ children }: { children: React.ReactNode }) {
   const prefersDarkMode = useMediaQuery('(prefers-color-scheme: dark)');
-  const [darkMode, setDarkMode] = useState(prefersDarkMode);
+  const [darkMode, setDarkMode] = useState<boolean | null>(null);
 
   useEffect(() => {
     // Initialize from localStorage, fallback to system preference
     const savedMode = localStorage.getItem('darkMode');
     setDarkMode(savedMode !== null ? savedMode === 'true' : prefersDarkMode);
   }, [prefersDarkMode]);
-
-  const theme = React.useMemo(() => {
-    return createTheme({
-      typography: {
-        fontFamily: 'inherit',
-      },
-      palette: {
-        mode: darkMode ? 'dark' : 'light',
-      },
-    });
-  }, [darkMode]);
 
   const toggleDarkMode = useCallback(() => {
     setDarkMode((prevMode) => {
@@ -41,6 +43,8 @@ export function PageShell({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
+    if (darkMode === null) return;
+
     if (darkMode) {
       document.documentElement.setAttribute('data-theme', 'dark');
     } else {
@@ -48,16 +52,17 @@ export function PageShell({ children }: { children: React.ReactNode }) {
     }
   }, [darkMode]);
 
+  // Render null until darkMode is determined
+  if (darkMode === null) return null;
+
   return (
-    <React.StrictMode>
-      <ThemeProvider theme={theme}>
-        <AuthProvider>
-          <Layout>
-            <Navigation darkMode={darkMode} onToggleDarkMode={toggleDarkMode} />
-            <div>{children}</div>
-          </Layout>
-        </AuthProvider>
-      </ThemeProvider>
-    </React.StrictMode>
+    <ThemeProvider theme={darkMode ? darkTheme : lightTheme}>
+      <AuthProvider>
+        <Layout>
+          <Navigation darkMode={darkMode} onToggleDarkMode={toggleDarkMode} />
+          <div>{children}</div>
+        </Layout>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
