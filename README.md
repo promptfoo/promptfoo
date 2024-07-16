@@ -122,6 +122,8 @@ Deterministic eval metrics
 | `contains-json`                 | output contains valid json (optional json schema validation)      |
 | `is-sql`                        | output is valid sql                                               |
 | `contains-sql`                  | output contains valid sql                                         |
+| `is-xml`                        | output is valid xml                                               |
+| `contains-xml`                  | output contains valid xml                                         |
 | `javascript`                    | provided Javascript function validates the output                 |
 | `python`                        | provided Python function validates the output                     |
 | `webhook`                       | provided webhook returns `{pass: true}`                           |

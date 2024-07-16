@@ -168,6 +168,7 @@ export function redteamCommand(program: Command) {
           write: true,
           defaultConfig: config,
           defaultConfigPath: configPath,
+          numTests: 5,
         });
       } else {
         logger.info(
