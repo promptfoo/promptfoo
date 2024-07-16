@@ -9,11 +9,10 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  Link as MuiLink,
   Stack,
+  Link,
   Typography,
 } from '@mui/material';
-import Link from 'next/link';
 
 const links: { icon: React.ReactNode; text: string; href: string }[] = [
   {
@@ -57,26 +56,15 @@ export default function InfoModal<T extends { open: boolean; onClose: () => void
     >
       <DialogTitle id="about-promptfoo-dialog-title">
         <Stack>
-          <Typography variant="h6" color="text.primary">
-            About Promptfoo
-          </Typography>
+          <Typography variant="h6">About Promptfoo</Typography>
           <Link
             href="https://github.com/promptfoo/promptfoo/releases"
-            passHref
-            style={{ color: 'inherit', textDecoration: 'none' }}
+            underline="none"
+            sx={{
+              color: 'inherit',
+            }}
           >
-            <MuiLink
-              underline="none"
-              sx={{
-                '&:hover': {
-                  textDecoration: 'underline',
-                },
-              }}
-            >
-              <Typography variant="subtitle2" color="text.primary">
-                Version {process.env.PROMPTFOO_VERSION}
-              </Typography>
-            </MuiLink>
+            <Typography variant="subtitle2">Version {process.env.PROMPTFOO_VERSION}</Typography>
           </Link>
         </Stack>
       </DialogTitle>
@@ -96,31 +84,20 @@ export default function InfoModal<T extends { open: boolean; onClose: () => void
               sx={{
                 flexWrap: 'wrap',
                 '& .MuiSvgIcon-root': {
-                  fontSize: '1rem',
                   color: 'text.primary',
                 },
               }}
             >
               {item.icon}
               <Link
-                href={item.href}
+                underline="none"
                 target="_blank"
-                passHref
-                style={{ color: 'inherit', textDecoration: 'none' }}
+                href={item.href}
+                sx={{
+                  color: 'inherit',
+                }}
               >
-                <MuiLink
-                  color="text.primary"
-                  underline="none"
-                  sx={{
-                    '&:hover': {
-                      textDecoration: 'underline',
-                    },
-                  }}
-                >
-                  <Typography variant="body2" color="text.primary">
-                    {item.text}
-                  </Typography>
-                </MuiLink>
+                <Typography variant="body2">{item.text}</Typography>
               </Link>
             </Stack>
           ))}
