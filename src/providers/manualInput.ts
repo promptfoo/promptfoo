@@ -4,12 +4,13 @@ import { ApiProvider, ProviderResponse } from '../types';
 export class ManualInputProvider implements ApiProvider {
   private config: { multiline?: boolean };
 
-  constructor(config: { multiline?: boolean } = {}) {
-    this.config = config;
+  constructor(options: { id?: string; config?: { multiline?: boolean } } = {}) {
+    this.config = options.config || {};
+    this.id = () => options.id || 'manual-input';
   }
 
   id() {
-    return 'manual-input';
+    return 'promptfoo:manual-input';
   }
 
   async callApi(prompt: string): Promise<ProviderResponse> {
@@ -28,7 +29,7 @@ export class ManualInputProvider implements ApiProvider {
         {
           type: 'editor',
           name: 'multilineOutput',
-          message: 'Output (press Ctrl+D or Cmd+D when finished):',
+          message: 'Output:',
         },
       ]);
       output = multilineOutput;

@@ -347,7 +347,7 @@ export async function loadApiProvider(
   } else if (providerPath === 'promptfoo:redteam:iterative:image') {
     ret = new RedteamImageIterativeProvider();
   } else if (providerPath === 'promptfoo:manual-input') {
-    ret = new ManualInputProvider();
+    ret = new ManualInputProvider(providerOptions);
   } else {
     if (providerPath.startsWith('file://')) {
       providerPath = providerPath.slice('file://'.length);
