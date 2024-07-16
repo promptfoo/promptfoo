@@ -29,6 +29,7 @@ import {
   LocalAiChatProvider,
   LocalAiEmbeddingProvider,
 } from './providers/localai';
+import { ManualInputProvider } from './providers/manualInput';
 import { MistralChatCompletionProvider } from './providers/mistral';
 import {
   OllamaEmbeddingProvider,
@@ -345,6 +346,8 @@ export async function loadApiProvider(
     ret = new RedteamIterativeProvider();
   } else if (providerPath === 'promptfoo:redteam:iterative:image') {
     ret = new RedteamImageIterativeProvider();
+  } else if (providerPath === 'promptfoo:manual-input') {
+    ret = new ManualInputProvider(providerOptions);
   } else {
     if (providerPath.startsWith('file://')) {
       providerPath = providerPath.slice('file://'.length);
