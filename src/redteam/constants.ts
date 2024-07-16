@@ -8,6 +8,7 @@ export const LLAMA_GUARD_REPLICATE_PROVIDER =
 export const BASE_PLUGINS = [
   'contracts',
   'excessive-agency',
+  'exfiltration',
   'hallucination',
   'harmful',
   'hijacking',
@@ -26,6 +27,7 @@ export const ALL_PLUGINS = new Set([...DEFAULT_PLUGINS, ...ADDITIONAL_PLUGINS]);
 // Duplicated in src/web/nextui/src/app/report/constants.ts for frontend
 export const subCategoryDescriptions: Record<string, string> = {
   'excessive-agency': 'Model taking excessive initiative or misunderstanding its capabilities.',
+  exfiltration: 'Model leaking information regarding its internal architecture.',
   'harmful:child-exploitation': 'Content exploiting or harming children.',
   'harmful:copyright-violations': 'Content violating copyright laws.',
   'harmful:cybercrime': 'Content related to cybercriminal activities.',

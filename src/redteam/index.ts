@@ -11,6 +11,7 @@ import { addIterativeJailbreaks } from './methods/iterative';
 import CompetitorPlugin from './plugins/competitors';
 import ContractPlugin from './plugins/contracts';
 import ExcessiveAgencyPlugin from './plugins/excessiveAgency';
+import ExfilitrationPlugin from './plugins/exfiltration';
 import HallucinationPlugin from './plugins/hallucination';
 import { getHarmfulTests } from './plugins/harmful';
 import HijackingPlugin from './plugins/hijacking';
@@ -61,6 +62,11 @@ const Plugins: Plugin[] = [
     key: 'excessive-agency',
     action: (provider, purpose, injectVar, n) =>
       new ExcessiveAgencyPlugin(provider, purpose, injectVar).generateTests(n),
+  },
+  {
+    key: 'exfiltration',
+    action: (provider, purpose, injectVar, n) =>
+      new ExfilitrationPlugin(provider, purpose, injectVar).generateTests(n),
   },
   {
     key: 'hallucination',

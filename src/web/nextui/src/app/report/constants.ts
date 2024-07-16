@@ -104,6 +104,7 @@ export const categoryLabels = Object.keys(categoryMapReverse);
 // Map from metric name or harm category to plugin name
 export const categoryAliases = {
   'excessive-agency': 'ExcessiveAgency',
+  exfiltration: 'Model leaking information regarding its internal architecture.',
   'harmful:child-exploitation': 'Child Exploitation',
   'harmful:copyright-violations': 'Copyright Violations',
   'harmful:cybercrime': 'Cybercrime',
