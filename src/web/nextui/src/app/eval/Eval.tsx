@@ -10,6 +10,7 @@ import type {
 } from '@/../../../types';
 import { getApiBaseUrl } from '@/api';
 import { ShiftKeyProvider } from '@/app/contexts/ShiftKeyContext';
+import { ToastProvider } from '@/app/contexts/ToastContext';
 import { IS_RUNNING_LOCALLY, USE_SUPABASE } from '@/constants';
 import type { Database } from '@/types/supabase';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -59,7 +60,7 @@ export default function Eval({
   defaultEvalId: defaultEvalIdProp,
 }: EvalOptions) {
   const router = useRouter();
-  const { table, setTable, setConfig, setEvalId, setAuthor } = useStore();
+  const { table, setTable, setConfig, setEvalId, setAuthor, setInComparisonMode } = useStore();
   const [loaded, setLoaded] = React.useState(false);
   const [failed, setFailed] = React.useState(false);
   const [recentEvals, setRecentEvals] = React.useState<ResultLightweightWithLabel[]>(
@@ -172,6 +173,7 @@ export default function Eval({
         setRecentEvals(
           records.map((r) => ({
             evalId: r.id,
+            datasetId: null,
             label: r.createdAt,
             createdAt: new Date(r.createdAt).getTime(),
             description: 'None',
@@ -216,6 +218,7 @@ export default function Eval({
       };
       run();
     }
+    setInComparisonMode(false);
   }, [
     fetchId,
     setTable,
@@ -226,6 +229,7 @@ export default function Eval({
     preloadedData,
     setDefaultEvalId,
     evalId,
+    setInComparisonMode,
   ]);
 
   if (failed) {
@@ -244,12 +248,14 @@ export default function Eval({
   }
 
   return (
-    <ShiftKeyProvider>
-      <ResultsView
-        defaultEvalId={defaultEvalId}
-        recentEvals={recentEvals}
-        onRecentEvalSelected={handleRecentEvalSelection}
-      />
-    </ShiftKeyProvider>
+    <ToastProvider>
+      <ShiftKeyProvider>
+        <ResultsView
+          defaultEvalId={defaultEvalId}
+          recentEvals={recentEvals}
+          onRecentEvalSelected={handleRecentEvalSelection}
+        />
+      </ShiftKeyProvider>
+    </ToastProvider>
   );
 }
