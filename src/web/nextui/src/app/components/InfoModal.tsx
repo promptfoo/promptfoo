@@ -48,8 +48,6 @@ export default function InfoModal<T extends { open: boolean; onClose: () => void
   open,
   onClose,
 }: T) {
-  const theme = useTheme();
-
   return (
     <Dialog
       open={open}

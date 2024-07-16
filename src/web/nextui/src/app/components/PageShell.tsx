@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import Navigation from '@/app/components/Navigation';
 import { AuthProvider } from '@/supabase-client';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
@@ -13,7 +13,13 @@ function Layout({ children }: { children: React.ReactNode }) {
 
 export function PageShell({ children }: { children: React.ReactNode }) {
   const prefersDarkMode = useMediaQuery('(prefers-color-scheme: dark)');
-  const [darkMode, setDarkMode] = React.useState(prefersDarkMode);
+  const [darkMode, setDarkMode] = useState(prefersDarkMode);
+
+  useEffect(() => {
+    // Initialize from localStorage, fallback to system preference
+    const savedMode = localStorage.getItem('darkMode');
+    setDarkMode(savedMode !== null ? savedMode === 'true' : prefersDarkMode);
+  }, [prefersDarkMode]);
 
   const theme = React.useMemo(() => {
     return createTheme({
@@ -21,25 +27,26 @@ export function PageShell({ children }: { children: React.ReactNode }) {
         fontFamily: 'inherit',
       },
       palette: {
-        mode: darkMode || prefersDarkMode ? 'dark' : 'light',
+        mode: darkMode ? 'dark' : 'light',
       },
     });
-  }, [darkMode, prefersDarkMode]);
+  }, [darkMode]);
 
-  const toggleDarkMode = () => {
-    setDarkMode(!darkMode);
-    if (!darkMode) {
+  const toggleDarkMode = useCallback(() => {
+    setDarkMode((prevMode) => {
+      const newMode = !prevMode;
+      localStorage.setItem('darkMode', String(newMode));
+      return newMode;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (darkMode) {
       document.documentElement.setAttribute('data-theme', 'dark');
     } else {
       document.documentElement.removeAttribute('data-theme');
     }
-  };
-
-  React.useEffect(() => {
-    if (prefersDarkMode) {
-      document.documentElement.setAttribute('data-theme', 'dark');
-    }
-  }, [prefersDarkMode]);
+  }, [darkMode]);
 
   return (
     <React.StrictMode>
