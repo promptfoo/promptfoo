@@ -12,7 +12,7 @@ export class ManualInputProvider implements ApiProvider {
   private config: ManualInputProviderOptions['config'];
 
   constructor(options: ManualInputProviderOptions = {}) {
-    this.config = options.config || {};
+    this.config = options.config;
     this.id = () => options.id || 'manual-input';
   }
 
@@ -31,7 +31,7 @@ export class ManualInputProvider implements ApiProvider {
 
     let output: string;
 
-    if (this.config.multiline) {
+    if (this.config?.multiline) {
       const { multilineOutput } = await inquirer.prompt([
         {
           type: 'editor',
