@@ -109,7 +109,7 @@ export async function doGenerateRedteam({
     const existingYaml = configPath
       ? (yaml.load(fs.readFileSync(configPath, 'utf8')) as Partial<UnifiedConfig>)
       : {};
-    const updatedYaml = {
+    const updatedYaml: Partial<UnifiedConfig> = {
       ...existingYaml,
       tests: redteamTests,
       metadata: {
@@ -134,11 +134,11 @@ export async function doGenerateRedteam({
   }
 
   telemetry.record('command_used', {
+    duration: Math.round((Date.now() - startTime) / 1000),
     name: 'generate redteam',
     numPrompts: testSuite.prompts.length,
     numTestsExisting: (testSuite.tests || []).length,
     numTestsGenerated: redteamTests.length,
-    duration: Math.round((Date.now() - startTime) / 1000),
   });
   await telemetry.send();
 }
@@ -180,8 +180,8 @@ export function generateRedteamCommand(
       `,
       (val) => val.split(',').map((x) => x.trim()),
     )
-    .option('--no-cache', 'Do not read or write results to disk cache', false)
     .option('-n, --num-tests <number>', 'Number of test cases to generate per plugin', parseInt, 5)
+    .option('--no-cache', 'Do not read or write results to disk cache', false)
     .option('--env-file <path>', 'Path to .env file')
     .action((opts: RedteamGenerateOptions): void => {
       doGenerateRedteam({ ...opts, defaultConfig, defaultConfigPath });
