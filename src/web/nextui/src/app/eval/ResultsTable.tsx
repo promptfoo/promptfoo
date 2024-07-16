@@ -208,7 +208,7 @@ function ResultsTable({
         }
       }
     },
-    [body, head, setTable, filePath],
+    [body, head, setTable, filePath, inComparisonMode, showToast],
   );
 
   const columnVisibilityIsSet = Object.keys(columnVisibility).length > 0;
