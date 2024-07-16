@@ -229,6 +229,7 @@ export default function Eval({
     preloadedData,
     setDefaultEvalId,
     evalId,
+    setInComparisonMode,
   ]);
 
   if (failed) {
