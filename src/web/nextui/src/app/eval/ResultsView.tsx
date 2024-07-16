@@ -158,10 +158,10 @@ export default function ResultsView({
     }
   };
 
-  const handleComparisonEvalSelected = async (evalId: string) => {
+  const handleComparisonEvalSelected = async (compareEvalId: string) => {
     setAnchorEl(null);
     try {
-      const response = await fetch(`${await getApiBaseUrl()}/api/results/${evalId}`, {
+      const response = await fetch(`${await getApiBaseUrl()}/api/results/${compareEvalId}`, {
         cache: 'no-store',
       });
       const body = await response.json();
@@ -170,7 +170,16 @@ export default function ResultsView({
       // Combine the comparison table with the current table
       const combinedTable: EvaluateTable = {
         head: {
-          prompts: [...table.head.prompts, ...comparisonTable.head.prompts],
+          prompts: [
+            ...table.head.prompts.map((prompt) => ({
+              ...prompt,
+              label: `[${evalId || defaultEvalId || recentEvals[0]?.evalId || 'Eval A'}] ${prompt.label || ''}`,
+            })),
+            ...comparisonTable.head.prompts.map((prompt) => ({
+              ...prompt,
+              label: `[${compareEvalId}] ${prompt.label || ''}`,
+            })),
+          ],
           vars: table.head.vars, // Assuming vars are the same
         },
         body: table.body.map((row, index) => ({
