@@ -3,63 +3,115 @@ import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import ForumIcon from '@mui/icons-material/Forum';
 import GitHubIcon from '@mui/icons-material/GitHub';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
-import { Box, Modal, Typography } from '@mui/material';
+import TagIcon from '@mui/icons-material/Tag';
+import {
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Link as MuiLink,
+  Stack,
+  Typography,
+  useTheme,
+} from '@mui/material';
 import Link from 'next/link';
-import './InfoModal.css';
+
+const links = [
+  {
+    icon: <MenuBookIcon fontSize="small" />,
+    text: 'Documentation',
+    href: 'https://www.promptfoo.dev/docs/intro',
+  },
+  {
+    icon: <GitHubIcon fontSize="small" />,
+    text: 'GitHub Repository',
+    href: 'https://github.com/promptfoo/promptfoo',
+  },
+  {
+    icon: <BugReportIcon fontSize="small" />,
+    text: 'File an Issue',
+    href: 'https://github.com/promptfoo/promptfoo/issues',
+  },
+  {
+    icon: <ForumIcon fontSize="small" />,
+    text: 'Join Our Discord Community',
+    href: 'https://discord.gg/gHPS9jjfbs',
+  },
+  {
+    icon: <CalendarTodayIcon fontSize="small" />,
+    text: 'Book a Meeting',
+    href: 'https://cal.com/team/promptfoo/intro',
+  },
+];
 
 export function InfoModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const theme = useTheme();
+
   return (
-    <Modal open={open} onClose={onClose} className="info-modal">
-      <Box className="info-modal-content">
-        <Typography component="h2" variant="h5" className="info-modal-title">
-          About Promptfoo
-        </Typography>
-        <Typography component="p" variant="body2" className="info-modal-description">
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth="xs"
+      fullWidth
+      aria-labelledby="about-promptfoo-dialog-title"
+      PaperProps={{
+        sx: {
+          bgcolor: theme.palette.background.paper,
+          color: theme.palette.text.primary,
+        },
+      }}
+    >
+      <DialogTitle id="about-promptfoo-dialog-title">
+        <Stack>
+          <Typography variant="h6">About Promptfoo</Typography>
+          <Typography variant="subtitle2">
+            <Link href='https://github.com/promptfoo/promptfoo/releases'>Version {process.env.PROMPTFOO_VERSION}</Link>
+          </Typography>
+        </Stack>
+      </DialogTitle>
+      <DialogContent>
+        <Typography variant="body2" gutterBottom>
           Promptfoo is a MIT licensed open-source tool for evaluating LLMs. We make it easy to track
           the performance of your models and prompts over time with automated support for dataset
           generation and grading.
         </Typography>
-        <Typography component="h5" variant="h6" sx={{ marginTop: '.2em' }}>
-          <Link
-            href="https://github.com/promptfoo/promptfoo/releases"
-            target="_blank"
-            className="info-modal-link"
-          >
-            Version {process.env.PROMPTFOO_VERSION}
-          </Link>
-        </Typography>
-        <Link
-          href="https://www.promptfoo.dev/docs/intro"
-          target="_blank"
-          className="info-modal-link"
-        >
-          <MenuBookIcon fontSize="small" /> Documentation
-        </Link>
-        <Link
-          href="https://github.com/promptfoo/promptfoo"
-          target="_blank"
-          className="info-modal-link"
-        >
-          <GitHubIcon fontSize="small" /> GitHub Repository
-        </Link>
-        <Link
-          href="https://github.com/promptfoo/promptfoo/issues"
-          target="_blank"
-          className="info-modal-link"
-        >
-          <BugReportIcon fontSize="small" /> File an Issue
-        </Link>
-        <Link href="https://discord.gg/gHPS9jjfbs" target="_blank" className="info-modal-link">
-          <ForumIcon fontSize="small" /> Join Our Discord Community
-        </Link>
-        <Link
-          href="https://cal.com/team/promptfoo/intro"
-          target="_blank"
-          className="info-modal-link"
-        >
-          <CalendarTodayIcon fontSize="small" /> Book a Meeting
-        </Link>
-      </Box>
-    </Modal>
+        <Stack spacing={2} mt={2}>
+          {links.map((item, index) => (
+            <Link key={index} href={item.href} target="_blank" passHref>
+              <MuiLink
+                color="inherit"
+                underline="none"
+                sx={{
+                  '&:hover': {
+                    textDecoration: 'underline',
+                  },
+                }}
+              >
+                <Stack
+                  direction="row"
+                  spacing={1}
+                  alignItems="center"
+                  sx={{
+                    flexWrap: 'wrap',
+                    '& .MuiSvgIcon-root': {
+                      fontSize: '1rem',
+                    },
+                  }}
+                >
+                  {item.icon}
+                  <Typography variant="body2">{item.text}</Typography>
+                </Stack>
+              </MuiLink>
+            </Link>
+          ))}
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose} variant="contained">
+          Close
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 }
