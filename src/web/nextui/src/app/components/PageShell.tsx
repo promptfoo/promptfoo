@@ -1,24 +1,11 @@
 'use client';
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React from 'react';
 import Navigation from '@/app/components/Navigation';
 import { AuthProvider } from '@/supabase-client';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import './PageShell.css';
-
-const createAppTheme = (darkMode: boolean) =>
-  createTheme({
-    typography: {
-      fontFamily: 'inherit',
-    },
-    palette: {
-      mode: darkMode ? 'dark' : 'light',
-    },
-  });
-
-const lightTheme = createAppTheme(false);
-const darkTheme = createAppTheme(true);
 
 function Layout({ children }: { children: React.ReactNode }) {
   return <div>{children}</div>;
@@ -26,43 +13,44 @@ function Layout({ children }: { children: React.ReactNode }) {
 
 export function PageShell({ children }: { children: React.ReactNode }) {
   const prefersDarkMode = useMediaQuery('(prefers-color-scheme: dark)');
-  const [darkMode, setDarkMode] = useState<boolean | null>(null);
+  const [darkMode, setDarkMode] = React.useState(prefersDarkMode);
 
-  useEffect(() => {
-    // Initialize from localStorage, fallback to system preference
-    const savedMode = localStorage.getItem('darkMode');
-    setDarkMode(savedMode !== null ? savedMode === 'true' : prefersDarkMode);
-  }, [prefersDarkMode]);
-
-  const toggleDarkMode = useCallback(() => {
-    setDarkMode((prevMode) => {
-      const newMode = !prevMode;
-      localStorage.setItem('darkMode', String(newMode));
-      return newMode;
+  const theme = React.useMemo(() => {
+    return createTheme({
+      typography: {
+        fontFamily: 'inherit',
+      },
+      palette: {
+        mode: darkMode || prefersDarkMode ? 'dark' : 'light',
+      },
     });
-  }, []);
+  }, [darkMode, prefersDarkMode]);
 
-  useEffect(() => {
-    if (darkMode === null) return;
-
-    if (darkMode) {
+  const toggleDarkMode = () => {
+    setDarkMode(!darkMode);
+    if (!darkMode) {
       document.documentElement.setAttribute('data-theme', 'dark');
     } else {
       document.documentElement.removeAttribute('data-theme');
     }
-  }, [darkMode]);
+  };
 
-  // Render null until darkMode is determined
-  if (darkMode === null) return null;
+  React.useEffect(() => {
+    if (prefersDarkMode) {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    }
+  }, [prefersDarkMode]);
 
   return (
-    <ThemeProvider theme={darkMode ? darkTheme : lightTheme}>
-      <AuthProvider>
-        <Layout>
-          <Navigation darkMode={darkMode} onToggleDarkMode={toggleDarkMode} />
-          <div>{children}</div>
-        </Layout>
-      </AuthProvider>
-    </ThemeProvider>
+    <React.StrictMode>
+      <ThemeProvider theme={theme}>
+        <AuthProvider>
+          <Layout>
+            <Navigation darkMode={darkMode} onToggleDarkMode={toggleDarkMode} />
+            <div>{children}</div>
+          </Layout>
+        </AuthProvider>
+      </ThemeProvider>
+    </React.StrictMode>
   );
 }
