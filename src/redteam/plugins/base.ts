@@ -1,6 +1,6 @@
 import invariant from 'tiny-invariant';
 import type { ApiProvider, Assertion, TestCase } from '../../types';
-import { getNunjucksEngine } from '../../util';
+import { getNunjucksEngine } from '../../util/templates';
 
 /**
  * Abstract base class for creating plugins that generate test cases.
@@ -33,15 +33,17 @@ export default abstract class PluginBase {
   protected abstract getAssertions(prompt: string): Assertion[];
 
   /**
-   * Generates test cases based on the provided template and purpose.
+   * Generates test cases based on the provided template, purpose, and number of prompts.
    *
+   * @param n - The number of prompts to generate.
    * @returns A promise that resolves to an array of test cases.
    */
-  async generateTests(): Promise<TestCase[]> {
+  async generateTests(n: number): Promise<TestCase[]> {
     const nunjucks = getNunjucksEngine();
     const { output: generatedPrompts } = await this.provider.callApi(
       nunjucks.renderString(this.template, {
         purpose: this.purpose,
+        n: n,
       }),
     );
     invariant(typeof generatedPrompts === 'string', 'Expected generatedPrompts to be a string');

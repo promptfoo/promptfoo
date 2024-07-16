@@ -7,7 +7,7 @@ import * as path from 'path';
 import logger from '../logger';
 import { ALL_PLUGINS, DEFAULT_PLUGINS, subCategoryDescriptions } from '../redteam/constants';
 import telemetry from '../telemetry';
-import { doGenerateRedteam } from './generate';
+import { doGenerateRedteam } from './generate/redteam';
 
 interface RunRedteamOptions {
   config: string;
@@ -168,6 +168,7 @@ export function redteamCommand(program: Command) {
           write: true,
           defaultConfig: config,
           defaultConfigPath: configPath,
+          numTests: 5,
         });
       } else {
         logger.info(
