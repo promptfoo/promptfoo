@@ -1,6 +1,7 @@
 import chalk from 'chalk';
 import chokidar from 'chokidar';
 import { Command } from 'commander';
+import dedent from 'dedent';
 import * as path from 'path';
 import invariant from 'tiny-invariant';
 import { disableCache } from '../cache';
@@ -30,7 +31,6 @@ import {
 } from '../util';
 import { filterProviders } from './eval/filterProviders';
 import { filterTests } from './eval/filterTests';
-import dedent from 'dedent';
 
 export async function doEval(
   cmdObj: CommandLineOptions & Command,

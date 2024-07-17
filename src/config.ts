@@ -1,6 +1,5 @@
 import $RefParser from '@apidevtools/json-schema-ref-parser';
 import chalk from 'chalk';
-import dedent from 'dedent';
 import * as fs from 'fs';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
@@ -18,7 +17,6 @@ import {
   CommandLineOptions,
   Prompt,
   ProviderOptions,
-  ProviderSchema,
   TestCase,
   TestSuite,
   UnifiedConfig,
