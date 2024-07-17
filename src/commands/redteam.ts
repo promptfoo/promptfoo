@@ -9,12 +9,6 @@ import { ALL_PLUGINS, DEFAULT_PLUGINS, subCategoryDescriptions } from '../redtea
 import telemetry from '../telemetry';
 import { doGenerateRedteam } from './generate/redteam';
 
-interface RunRedteamOptions {
-  config: string;
-  cache: boolean;
-  envFile: string;
-}
-
 export function redteamCommand(program: Command) {
   const redteamCommand = program.command('redteam').description('Red team LLM applications');
 
