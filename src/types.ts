@@ -273,6 +273,35 @@ export interface OutputConfig {
   storeOutputAs?: string;
 }
 
+export type PromptFunctionContext = {
+  vars: Record<string, string | object>;
+  provider: {
+    id: string;
+    label?: string;
+  };
+};
+
+export const PromptFunctionSchema = z
+  .function()
+  .args(
+    z.object({
+      vars: z.record(z.union([z.string(), z.any()])),
+      provider: z.custom<ApiProvider>().optional(),
+    }),
+  )
+  .returns(z.promise(z.union([z.string(), z.any()])));
+
+export type PromptFunction = z.infer<typeof PromptFunctionSchema>;
+
+export const PromptSchema = z.object({
+  id: z.string().optional(),
+  raw: z.string(),
+  display: z.string().optional(), // deprecated
+  label: z.string(),
+  function: PromptFunctionSchema.optional(),
+});
+export type Prompt = z.infer<typeof PromptSchema>;
+
 export interface RunEvalOptions {
   provider: ApiProvider;
   prompt: Prompt;
@@ -287,15 +316,17 @@ export interface RunEvalOptions {
   repeatIndex: number;
 }
 
+type progressCallback = (
+  progress: number,
+  total: number,
+  index: number,
+  evalStep: RunEvalOptions,
+) => void;
+
 export interface EvaluateOptions {
   maxConcurrency?: number;
   showProgressBar?: boolean;
-  progressCallback?: (
-    progress: number,
-    total: number,
-    index: number,
-    evalStep: RunEvalOptions,
-  ) => void;
+  progressCallback?: progressCallback;
   generateSuggestions?: boolean;
   repeat?: number;
   delay?: number;
@@ -303,33 +334,6 @@ export interface EvaluateOptions {
   eventSource?: string;
   interactiveProviders?: boolean;
 }
-
-export type PromptFunctionContext = {
-  vars: Record<string, string | object>;
-  provider: {
-    id: string;
-    label?: string;
-  };
-};
-
-export const PromptFunctionSchema = z.function()
-  .args(z.object({
-    vars: z.record(z.union([z.string(), z.any()])),
-    provider: z.custom<ApiProvider>().optional()
-  }))
-  .returns(z.promise(z.union([z.string(), z.any()])));
-
-export type PromptFunction = z.infer<typeof PromptFunctionSchema>;
-
-export const PromptSchema = z.object({
-  id: z.string().optional(),
-  raw: z.string(),
-  display: z.string().optional(), // deprecated
-  label: z.string(),
-  function: PromptFunctionSchema.optional(),
-});
-
-export type Prompt = z.infer<typeof PromptSchema>;
 
 // Used for final prompt display
 export type CompletedPrompt = Prompt & {
@@ -528,38 +532,40 @@ export interface AssertionSet {
 }
 
 // TODO(ian): maybe Assertion should support {type: config} to make the yaml cleaner
-export interface Assertion {
+export const AssertionSchema = z.object({
   // Type of assertion
-  type: AssertionType;
+  type: z.custom<AssertionType>(),
 
   // The expected value, if applicable
-  value?: AssertionValue;
+  value: z.custom<AssertionValue>().optional(),
 
   // The threshold value, only applicable for similarity (cosine distance)
-  threshold?: number;
+  threshold: z.number().optional(),
 
   // The weight of this assertion compared to other assertions in the test case. Defaults to 1.
-  weight?: number;
+  weight: z.number().optional(),
 
   // Some assertions (similarity, llm-rubric) require an LLM provider
-  provider?: GradingConfig['provider'];
+  provider: z.custom<GradingConfig['provider']>().optional(),
 
   // Override the grading rubric
-  rubricPrompt?: GradingConfig['rubricPrompt'];
+  rubricPrompt: z.custom<GradingConfig['rubricPrompt']>().optional(),
 
   // Tag this assertion result as a named metric
-  metric?: string;
+  metric: z.string().optional(),
 
   // Process the output before running the assertion
-  transform?: string;
-}
+  transform: z.string().optional(),
+});
 
-export type AssertionValue = string | string[] | object | AssertionValueFunction;
+export type Assertion = z.infer<typeof AssertionSchema>;
 
 export type AssertionValueFunction = (
   output: string,
   context: AssertionValueFunctionContext,
 ) => AssertionValueFunctionResult | Promise<AssertionValueFunctionResult>;
+
+export type AssertionValue = string | string[] | object | AssertionValueFunction;
 
 export interface AssertionValueFunctionContext {
   prompt: string | undefined;
