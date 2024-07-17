@@ -30,6 +30,7 @@ import {
 } from '../util';
 import { filterProviders } from './eval/filterProviders';
 import { filterTests } from './eval/filterTests';
+import dedent from 'dedent';
 
 export async function doEval(
   cmdObj: CommandLineOptions & Command,
@@ -106,12 +107,13 @@ export async function doEval(
 
     const testSuiteSchema = TestSuiteSchema.safeParse(testSuite);
     if (!testSuiteSchema.success) {
-      logger.warn(`Invalid test suite: ${JSON.stringify(testSuiteSchema.error)}`);
+      logger.warn(dedent`TestSuite Schema Validation Error: 
+      
+      ${JSON.stringify(testSuiteSchema.error)}
+      
+      Please review your promptfooconfig.yaml configuration.`);
     }
     testSuite = testSuiteSchema.data as TestSuite;
-    if (5 + 5 === 10) {
-      process.exit(0);
-    }
 
     const summary = await evaluate(testSuite, {
       ...options,
