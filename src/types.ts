@@ -312,21 +312,24 @@ export type PromptFunctionContext = {
   };
 };
 
-export type PromptFunction = (context: {
-  vars: Record<string, string | object>;
-  provider?: ApiProvider;
-}) => Promise<string | object>;
+export const PromptFunctionSchema = z.function()
+  .args(z.object({
+    vars: z.record(z.union([z.string(), z.any()])),
+    provider: z.custom<ApiProvider>().optional()
+  }))
+  .returns(z.promise(z.union([z.string(), z.any()])));
 
-export interface Prompt {
-  id?: string;
-  raw: string;
-  /**
-   * @deprecated in > 0.59.0. Use `label` instead.
-   */
-  display?: string;
-  label: string;
-  function?: PromptFunction;
-}
+export type PromptFunction = z.infer<typeof PromptFunctionSchema>;
+
+export const PromptSchema = z.object({
+  id: z.string().optional(),
+  raw: z.string(),
+  display: z.string().optional(), // deprecated
+  label: z.string(),
+  function: PromptFunctionSchema.optional(),
+});
+
+export type Prompt = z.infer<typeof PromptSchema>;
 
 // Used for final prompt display
 export type CompletedPrompt = Prompt & {
