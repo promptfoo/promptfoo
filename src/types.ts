@@ -1,7 +1,5 @@
 import { z } from 'zod';
 
-export type FilePath = string;
-
 export const CommandLineOptionsSchema = z.object({
   // Shared with TestSuite
   prompts: z.array(z.string()).optional(),
@@ -42,8 +40,6 @@ export const CommandLineOptionsSchema = z.object({
   envFile: z.string().optional(),
 });
 
-export type CommandLineOptions = z.infer<typeof CommandLineOptionsSchema>;
-
 export const EnvOverridesSchema = z.object({
   ANTHROPIC_API_KEY: z.string().optional(),
   BAM_API_KEY: z.string().optional(),
@@ -78,8 +74,6 @@ export const EnvOverridesSchema = z.object({
   CLOUDFLARE_ACCOUNT_ID: z.string().optional(),
 });
 
-export type EnvOverrides = z.infer<typeof EnvOverridesSchema>;
-
 export const ProviderOptionsSchema = z
   .object({
     id: z.custom<ProviderId>().optional(),
@@ -92,8 +86,6 @@ export const ProviderOptionsSchema = z
   })
   .strict();
 
-export type ProviderOptions = z.infer<typeof ProviderOptionsSchema>;
-
 export const CallApiContextParamsSchema = z.object({
   vars: z.record(z.union([z.string(), z.object({})])),
   logger: z.optional(z.any()),
@@ -101,23 +93,27 @@ export const CallApiContextParamsSchema = z.object({
   getCache: z.optional(z.any()),
 });
 
-export type CallApiContextParams = z.infer<typeof CallApiContextParamsSchema>;
-
 export const CallApiOptionsParamsSchema = z.object({
   includeLogProbs: z.optional(z.boolean()),
   originalProvider: z.optional(z.any()), // Assuming ApiProvider is not a zod schema, using z.any()
 });
 
-export type CallApiOptionsParams = z.infer<typeof CallApiOptionsParamsSchema>;
-
-type CallApiFunction = {
-  (
-    prompt: string,
-    context?: CallApiContextParams,
-    options?: CallApiOptionsParams,
-  ): Promise<ProviderResponse>;
-  label?: string;
-};
+const CallApiFunctionSchema = z.union([
+  z
+    .function()
+    .args(
+      z.string().describe('prompt'),
+      CallApiContextParamsSchema.optional(),
+      CallApiOptionsParamsSchema.optional(),
+    )
+    .returns(z.promise(z.custom<ProviderResponse>()))
+    .and(z.object({ label: z.string().optional() })),
+  z
+    .function()
+    .args(z.string().describe('prompt'), CallApiOptionsParamsSchema.optional())
+    .returns(z.promise(z.custom<ProviderResponse>()))
+    .and(z.object({ label: z.string().optional() })),
+]);
 
 export const ApiProviderSchema = z.object({
   id: z.function().returns(z.string()),
@@ -142,8 +138,6 @@ export const ApiProviderSchema = z.object({
 
   delay: z.number().optional(),
 });
-
-export type ApiProvider = z.infer<typeof ApiProviderSchema>;
 
 export function isApiProvider(provider: any): provider is ApiProvider {
   return typeof provider === 'object' && 'id' in provider && typeof provider.id === 'function';
@@ -176,8 +170,6 @@ const TokenUsageSchema = z.object({
   total: z.number().optional(),
 });
 
-export type TokenUsage = z.infer<typeof TokenUsageSchema>;
-
 const ProviderResponseSchema = z.object({
   cached: z.boolean().optional(),
   cost: z.number().optional(),
@@ -193,15 +185,11 @@ const ProviderResponseSchema = z.object({
   tokenUsage: TokenUsageSchema.optional(),
 });
 
-export type ProviderResponse = z.infer<typeof ProviderResponseSchema>;
-
 const ProviderEmbeddingResponseSchema = z.object({
   error: z.string().optional(),
   embedding: z.array(z.number()).optional(),
   tokenUsage: TokenUsageSchema.partial().optional(),
 });
-
-export type ProviderEmbeddingResponse = z.infer<typeof ProviderEmbeddingResponseSchema>;
 
 const ProviderSimilarityResponseSchema = z.object({
   error: z.string().optional(),
@@ -209,14 +197,24 @@ const ProviderSimilarityResponseSchema = z.object({
   tokenUsage: TokenUsageSchema.partial().optional(),
 });
 
-export type ProviderSimilarityResponse = z.infer<typeof ProviderSimilarityResponseSchema>;
-
 const ProviderClassificationResponseSchema = z.object({
   error: z.string().optional(),
   classification: z.record(z.number()).optional(),
 });
 
+export type ApiProvider = z.infer<typeof ApiProviderSchema>;
+export type CallApiContextParams = z.infer<typeof CallApiContextParamsSchema>;
+export type CallApiOptionsParams = z.infer<typeof CallApiOptionsParamsSchema>;
+export type CommandLineOptions = z.infer<typeof CommandLineOptionsSchema>;
+export type EnvOverrides = z.infer<typeof EnvOverridesSchema>;
+export type FilePath = string;
 export type ProviderClassificationResponse = z.infer<typeof ProviderClassificationResponseSchema>;
+export type ProviderEmbeddingResponse = z.infer<typeof ProviderEmbeddingResponseSchema>;
+export type ProviderOptions = z.infer<typeof ProviderOptionsSchema>;
+export type ProviderResponse = z.infer<typeof ProviderResponseSchema>;
+export type ProviderSimilarityResponse = z.infer<typeof ProviderSimilarityResponseSchema>;
+export type TokenUsage = z.infer<typeof TokenUsageSchema>;
+type CallApiFunction = z.infer<typeof CallApiFunctionSchema>;
 
 export interface ModerationFlag {
   code: string;
