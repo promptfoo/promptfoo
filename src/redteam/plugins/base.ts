@@ -1,4 +1,5 @@
 import invariant from 'tiny-invariant';
+import type { SynthesizeOptions } from '..';
 import type { ApiProvider, Assertion, TestCase } from '../../types';
 import { getNunjucksEngine } from '../../util/templates';
 
@@ -17,11 +18,13 @@ export default abstract class PluginBase {
    * @param provider - The API provider used to call the API.
    * @param purpose - The purpose of the system being tested.
    * @param injectVar - The variable to inject into the test cases.
+   * @param prompts - The user-provided prompts for validation.
    */
   constructor(
     protected provider: ApiProvider,
     protected purpose: string,
     protected injectVar: string,
+    protected prompts: SynthesizeOptions['prompts'],
   ) {}
 
   /**

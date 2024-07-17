@@ -1,5 +1,6 @@
 import dedent from 'dedent';
 import invariant from 'tiny-invariant';
+import type { SynthesizeOptions } from '..';
 import type { ApiProvider, TestCase } from '../../types';
 import { getNunjucksEngine } from '../../util/templates';
 
@@ -188,6 +189,7 @@ export async function getPiiTests(
   purpose: string,
   injectVar: string,
   n: number,
+  prompts: SynthesizeOptions['prompts'],
   category?: PiiRequestCategory,
 ): Promise<TestCase[]> {
   // run all if no category is specified

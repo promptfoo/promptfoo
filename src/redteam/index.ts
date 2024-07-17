@@ -20,7 +20,7 @@ import { getPiiTests } from './plugins/pii';
 import PoliticsPlugin from './plugins/politics';
 import { getPurpose } from './purpose';
 
-interface SynthesizeOptions {
+export interface SynthesizeOptions {
   injectVar?: string;
   plugins: string[];
   prompts: string[];
@@ -39,6 +39,7 @@ interface Plugin {
     purpose: string,
     injectVar: string,
     n: number,
+    prompts: SynthesizeOptions['prompts'],
   ) => Promise<TestCase[]>;
 }
 
@@ -50,44 +51,44 @@ interface Method {
 const Plugins: Plugin[] = [
   {
     key: 'competitors',
-    action: (provider, purpose, injectVar, n) =>
-      new CompetitorPlugin(provider, purpose, injectVar).generateTests(n),
+    action: (provider, purpose, injectVar, n, prompts) =>
+      new CompetitorPlugin(provider, purpose, injectVar, prompts).generateTests(n),
   },
   {
     key: 'contracts',
-    action: (provider, purpose, injectVar, n) =>
-      new ContractPlugin(provider, purpose, injectVar).generateTests(n),
+    action: (provider, purpose, injectVar, n, prompts) =>
+      new ContractPlugin(provider, purpose, injectVar, prompts).generateTests(n),
   },
   {
     key: 'excessive-agency',
-    action: (provider, purpose, injectVar, n) =>
-      new ExcessiveAgencyPlugin(provider, purpose, injectVar).generateTests(n),
+    action: (provider, purpose, injectVar, n, prompts) =>
+      new ExcessiveAgencyPlugin(provider, purpose, injectVar, prompts).generateTests(n),
   },
   {
     key: 'hallucination',
-    action: (provider, purpose, injectVar, n) =>
-      new HallucinationPlugin(provider, purpose, injectVar).generateTests(n),
+    action: (provider, purpose, injectVar, n, prompts) =>
+      new HallucinationPlugin(provider, purpose, injectVar, prompts).generateTests(n),
   },
   {
     key: 'hijacking',
-    action: (provider, purpose, injectVar, n) =>
-      new HijackingPlugin(provider, purpose, injectVar).generateTests(n),
+    action: (provider, purpose, injectVar, n, prompts) =>
+      new HijackingPlugin(provider, purpose, injectVar, prompts).generateTests(n),
   },
   {
     key: 'imitation',
-    action: (provider, purpose, injectVar, n) =>
-      new ImitationPlugin(provider, purpose, injectVar).generateTests(n),
+    action: (provider, purpose, injectVar, n, prompts) =>
+      new ImitationPlugin(provider, purpose, injectVar, prompts).generateTests(n),
   },
   {
     key: 'overreliance',
-    action: (provider, purpose, injectVar, n) =>
-      new OverreliancePlugin(provider, purpose, injectVar).generateTests(n),
+    action: (provider, purpose, injectVar, n, prompts) =>
+      new OverreliancePlugin(provider, purpose, injectVar, prompts).generateTests(n),
   },
   { key: 'pii', action: getPiiTests },
   {
     key: 'politics',
-    action: (provider, purpose, injectVar, n) =>
-      new PoliticsPlugin(provider, purpose, injectVar).generateTests(n),
+    action: (provider, purpose, injectVar, n, prompts) =>
+      new PoliticsPlugin(provider, purpose, injectVar, prompts).generateTests(n),
   },
 ];
 
@@ -218,7 +219,7 @@ export async function synthesize({
     if (plugins.includes(key)) {
       updateProgress();
       logger.debug(`Generating ${key} tests`);
-      const pluginTests = await action(redteamProvider, purpose, injectVar, numTests);
+      const pluginTests = await action(redteamProvider, purpose, injectVar, numTests, prompts);
       testCases.push(...pluginTests);
       logger.debug(`Added ${pluginTests.length} ${key} test cases`);
     }
