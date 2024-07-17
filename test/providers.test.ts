@@ -759,7 +759,7 @@ config:
     expect(provider.id()).toBe('openai:gpt-4');
     expect(fs.readFileSync).toHaveBeenCalledTimes(1);
     expect(fs.readFileSync).toHaveBeenCalledWith(
-      expect.stringContaining('path/to/mock-provider-file.yaml'),
+      expect.stringMatching(/path[\\\/]to[\\\/]mock-provider-file\.yaml/),
       'utf8',
     );
   });
