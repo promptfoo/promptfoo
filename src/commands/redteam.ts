@@ -9,14 +9,6 @@ import { ALL_PLUGINS, DEFAULT_PLUGINS, subCategoryDescriptions } from '../redtea
 import telemetry from '../telemetry';
 import { doGenerateRedteam } from './generate/redteam';
 
-interface RunRedteamOptions {
-  config: string;
-  cache: boolean;
-  envFile: string;
-}
-
-export async function doRunRedteam(cmdObj: RunRedteamOptions) {}
-
 export function redteamCommand(program: Command) {
   const redteamCommand = program.command('redteam').description('Red team LLM applications');
 
@@ -91,7 +83,7 @@ export function redteamCommand(program: Command) {
           message: 'Choose a provider:',
           choices: [
             'openai:gpt-3.5-turbo',
-            'openai:gpt-4',
+            'openai:gpt-4o',
             'anthropic:messages:claude-3-5-sonnet-20240620',
             'anthropic:messages:claude-3-opus-20240307',
             'vertex:gemini-pro',
@@ -121,7 +113,7 @@ export function redteamCommand(program: Command) {
         checked: DEFAULT_PLUGINS.has(plugin),
       }));
 
-      const { selectedPlugins } = await inquirer.prompt([
+      const { selectedPlugins: plugins } = await inquirer.prompt([
         {
           type: 'checkbox',
           name: 'selectedPlugins',
@@ -130,8 +122,6 @@ export function redteamCommand(program: Command) {
           pageSize: 20,
         },
       ]);
-
-      const plugins = selectedPlugins;
 
       // Create config file
       const config = {
@@ -180,12 +170,4 @@ export function redteamCommand(program: Command) {
         );
       }
     });
-
-  redteamCommand
-    .command('run')
-    .description('Run red teaming evaluation')
-    .option('-c, --config <path>', 'Path to configuration file')
-    .option('--no-cache', 'Disable cache', false)
-    .option('--env-file <path>', 'Path to .env file')
-    .action(doRunRedteam);
 }
