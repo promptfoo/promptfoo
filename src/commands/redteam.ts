@@ -90,11 +90,13 @@ export function redteamCommand(program: Command) {
       }
 
       // Question 4: Plugins
-      const pluginChoices = Array.from(ALL_PLUGINS).map((plugin) => ({
-        name: `${plugin} - ${subCategoryDescriptions[plugin] || 'No description available'}`,
-        value: plugin,
-        checked: DEFAULT_PLUGINS.has(plugin),
-      }));
+      const pluginChoices = Array.from(ALL_PLUGINS)
+        .sort()
+        .map((plugin) => ({
+          name: `${plugin} - ${subCategoryDescriptions[plugin] || 'No description available'}`,
+          value: plugin,
+          checked: DEFAULT_PLUGINS.has(plugin),
+        }));
 
       const plugins = await checkbox({
         message: 'Select the plugins you want to enable:',
