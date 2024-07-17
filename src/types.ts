@@ -255,21 +255,25 @@ const GradingConfigSchema = z.object({
 
 export type GradingConfig = z.infer<typeof GradingConfigSchema>;
 
-export interface PromptConfig {
-  prefix?: string;
-  suffix?: string;
-}
+export const PromptConfigSchema = z.object({
+  prefix: z.string().optional(),
+  suffix: z.string().optional(),
+});
 
-export interface OutputConfig {
+export type PromptConfig = z.infer<typeof PromptConfigSchema>;
+
+export const OutputConfigSchema = z.object({
   /**
    * @deprecated in > 0.38.0. Use `transform` instead.
    */
-  postprocess?: string;
-  transform?: string;
+  postprocess: z.string().optional(),
+  transform: z.string().optional(),
 
   // The name of the variable to store the output of this test case
-  storeOutputAs?: string;
-}
+  storeOutputAs: z.string().optional(),
+});
+
+export type OutputConfig = z.infer<typeof OutputConfigSchema>;
 
 export type PromptFunctionContext = {
   vars: Record<string, string | object>;
@@ -301,6 +305,7 @@ export const PromptSchema = z.object({
   label: z.string(),
   function: PromptFunctionSchema.optional(),
 });
+
 export type Prompt = z.infer<typeof PromptSchema>;
 
 export interface RunEvalOptions {
@@ -337,20 +342,24 @@ export interface EvaluateOptions {
 }
 
 // Used for final prompt display
-export type CompletedPrompt = Prompt & {
-  provider: string;
-  metrics?: {
-    score: number;
-    testPassCount: number;
-    testFailCount: number;
-    assertPassCount: number;
-    assertFailCount: number;
-    totalLatencyMs: number;
-    tokenUsage: TokenUsage;
-    namedScores: Record<string, number>;
-    cost: number;
-  };
-};
+export const CompletedPromptSchema = PromptSchema.extend({
+  provider: z.string(),
+  metrics: z
+    .object({
+      score: z.number(),
+      testPassCount: z.number(),
+      testFailCount: z.number(),
+      assertPassCount: z.number(),
+      assertFailCount: z.number(),
+      totalLatencyMs: z.number(),
+      tokenUsage: TokenUsageSchema,
+      namedScores: z.record(z.string(), z.number()),
+      cost: z.number(),
+    })
+    .optional(),
+});
+
+export type CompletedPrompt = z.infer<typeof CompletedPromptSchema>;
 
 // Used when building prompts index from files.
 export interface PromptWithMetadata {
@@ -516,21 +525,19 @@ type NotPrefixed<T extends string> = `not-${T}`;
 
 export type AssertionType = BaseAssertionTypes | NotPrefixed<BaseAssertionTypes>;
 
-export interface AssertionSet {
-  type: 'assert-set';
-
+const AssertionSetSchema = z.object({
+  type: z.literal('assert-set'),
   // Sub assertions to be run for this assertion set
-  assert: Assertion[];
-
+  assert: z.array(z.lazy(() => AssertionSchema)),
   // The weight of this assertion compared to other assertions in the test case. Defaults to 1.
-  weight?: number;
-
+  weight: z.number().optional(),
   // Tag this assertion result as a named metric
-  metric?: string;
-
+  metric: z.string().optional(),
   // The required score for this assert set. If not provided, the test case is graded pass/fail.
-  threshold?: number;
-}
+  threshold: z.number().optional(),
+});
+
+export type AssertionSet = z.infer<typeof AssertionSetSchema>;
 
 // TODO(ian): maybe Assertion should support {type: config} to make the yaml cleaner
 export const AssertionSchema = z.object({
@@ -561,6 +568,12 @@ export const AssertionSchema = z.object({
 
 export type Assertion = z.infer<typeof AssertionSchema>;
 
+export interface AssertionValueFunctionContext {
+  prompt: string | undefined;
+  vars: Record<string, string | object>;
+  test: AtomicTestCase<Record<string, string | object>>;
+}
+
 export type AssertionValueFunction = (
   output: string,
   context: AssertionValueFunctionContext,
@@ -568,122 +581,150 @@ export type AssertionValueFunction = (
 
 export type AssertionValue = string | string[] | object | AssertionValueFunction;
 
-export interface AssertionValueFunctionContext {
-  prompt: string | undefined;
-  vars: Record<string, string | object>;
-  test: AtomicTestCase<Record<string, string | object>>;
-}
-
 export type AssertionValueFunctionResult = boolean | number | GradingResult;
 
 // Used when building prompts index from files.
-export interface TestCasesWithMetadataPrompt {
-  prompt: CompletedPrompt;
-  id: string;
-  evalId: string;
-}
+export const TestCasesWithMetadataPromptSchema = z.object({
+  prompt: CompletedPromptSchema,
+  id: z.string(),
+  evalId: z.string(),
+});
 
-export interface TestCasesWithMetadata {
-  id: string;
-  testCases: FilePath | (FilePath | TestCase)[];
-  recentEvalDate: Date;
-  recentEvalId: string;
-  count: number;
-  prompts: TestCasesWithMetadataPrompt[];
-}
+export type TestCasesWithMetadataPrompt = z.infer<typeof TestCasesWithMetadataPromptSchema>;
 
 export const ProviderSchema = z.union([z.string(), ProviderOptionsSchema, ApiProviderSchema]);
 export type Provider = z.infer<typeof ProviderSchema>;
 
 // Each test case is graded pass/fail with a score.  A test case represents a unique input to the LLM after substituting `vars` in the prompt.
-export interface TestCase<Vars = Record<string, string | string[] | object>> {
+export const TestCaseSchema = z.object({
   // Optional description of what you're testing
-  description?: string;
+  description: z.string().optional(),
 
   // Key-value pairs to substitute in the prompt
-  vars?: Vars;
+  vars: z.record(z.union([z.string(), z.array(z.string()), z.object({})])).optional(),
 
   // Override the provider.
-  provider?: Provider;
+  provider: z.union([z.string(), ProviderOptionsSchema, ApiProviderSchema]).optional(),
 
   // Output related from running values in Vars with provider. Having this value would skip running the prompt through the provider, and go straight to the assertions
-  providerOutput?: string | object;
+  providerOutput: z.union([z.string(), z.object({})]).optional(),
 
   // Optional list of automatic checks to run on the LLM output
-  assert?: (AssertionSet | Assertion)[];
+  assert: z.array(z.union([AssertionSetSchema, AssertionSchema])).optional(),
 
   // Additional configuration settings for the prompt
-  options?: PromptConfig &
-    OutputConfig &
-    GradingConfig & {
-      // If true, do not expand arrays of variables into multiple eval cases.
-      disableVarExpansion?: boolean;
-      // If true, do not include an implicit `_conversation` variable in the prompt.
-      disableConversationVar?: boolean;
-    };
+  options: z
+    .intersection(
+      z.intersection(PromptConfigSchema, OutputConfigSchema),
+      z.intersection(
+        GradingConfigSchema,
+        z.object({
+          // If true, do not expand arrays of variables into multiple eval cases.
+          disableVarExpansion: z.boolean().optional(),
+          // If true, do not include an implicit `_conversation` variable in the prompt.
+          disableConversationVar: z.boolean().optional(),
+        }),
+      ),
+    )
+    .optional(),
 
   // The required score for this test case.  If not provided, the test case is graded pass/fail.
-  threshold?: number;
-}
+  threshold: z.number().optional(),
+});
 
-export interface Scenario {
+export type TestCase<Vars = Record<string, string | string[] | object>> = z.infer<
+  typeof TestCaseSchema
+>;
+
+export const TestCasesWithMetadataSchema = z.object({
+  id: z.string(),
+  testCases: z.union([z.string(), z.array(z.union([z.string(), TestCaseSchema]))]),
+  recentEvalDate: z.date(),
+  recentEvalId: z.string(),
+  count: z.number(),
+  prompts: z.array(TestCasesWithMetadataPromptSchema),
+});
+
+export type TestCasesWithMetadata = z.infer<typeof TestCasesWithMetadataSchema>;
+
+export const ScenarioSchema = z.object({
   // Optional description of what you're testing
-  description?: string;
+  description: z.string().optional(),
 
   // Default test case config
-  config: Partial<TestCase>[];
+  config: z.array(TestCaseSchema.partial()),
 
   // Optional list of automatic checks to run on the LLM output
-  tests: TestCase[];
-}
+  tests: z.array(TestCaseSchema),
+});
+
+export type Scenario = z.infer<typeof ScenarioSchema>;
 
 // Same as a TestCase, except the `vars` object has been flattened into its final form.
-export interface AtomicTestCase<Vars = Record<string, string | object>> extends TestCase {
-  vars?: Record<string, string | object>;
-}
+export const AtomicTestCaseSchema = TestCaseSchema.extend({
+  vars: z.record(z.union([z.string(), z.object({})])).optional(),
+}).strict();
+export type AtomicTestCase<Vars = Record<string, string | object>> = z.infer<
+  typeof AtomicTestCaseSchema
+>;
 
-export type NunjucksFilterMap = Record<string, (...args: any[]) => string>;
+export const NunjucksFilterMapSchema = z.record(
+  z.string(),
+  z.function(z.tuple([z.any()]).rest(z.any()), z.string()),
+);
+// Define the type using the schema
+export type NunjucksFilterMap = z.infer<typeof NunjucksFilterMapSchema>;
 
-export type DerivedMetric = {
+export const DerivedMetricSchema = z.object({
   // The name of this metric
-  name: string;
-  // The function to calculate the metric - either a mathematical expression or a function that takes the results and returns a number
-  value: string | ((scores: Record<string, number>, context: RunEvalOptions) => number);
-};
+  name: z.string(),
+
+  // The function to calculate the metric - either a mathematical expression or a function that takes the scores and returns a number
+  value: z.union([
+    z.string(),
+    z
+      .function()
+      .args(z.record(z.string(), z.number()), z.custom<RunEvalOptions>())
+      .returns(z.number()),
+  ]),
+});
+export type DerivedMetric = z.infer<typeof DerivedMetricSchema>;
 
 // The test suite defines the "knobs" that we are tuning in prompt engineering: providers and prompts
-export interface TestSuite {
+export const TestSuiteSchema = z.object({
   // Optional description of what your LLM is trying to do
-  description?: string;
+  description: z.string().optional(),
 
   // One or more LLM APIs to use
-  providers: ApiProvider[];
+  providers: z.array(ApiProviderSchema),
 
   // One or more prompt strings
-  prompts: Prompt[];
+  prompts: z.array(PromptSchema),
 
   // Optional mapping of provider to prompt display strings.  If not provided,
   // all prompts are used for all providers.
-  providerPromptMap?: Record<string, string[]>;
+  providerPromptMap: z.record(z.string(), z.array(z.string())).optional(),
 
   // Test cases
-  tests?: TestCase[];
+  tests: z.array(TestCaseSchema).optional(),
 
   // scenarios
-  scenarios?: Scenario[];
+  scenarios: z.array(ScenarioSchema).optional(),
 
   // Default test case config
-  defaultTest?: Partial<TestCase>;
+  defaultTest: TestCaseSchema.partial().optional(),
 
   // Nunjucks filters
-  nunjucksFilters?: NunjucksFilterMap;
+  nunjucksFilters: NunjucksFilterMapSchema.optional(),
 
   // Envar overrides
-  env?: EnvOverrides;
+  env: EnvOverridesSchema.optional(),
 
   // Metrics to calculate after the eval has been completed
-  derivedMetrics?: DerivedMetric[];
-}
+  derivedMetrics: z.array(DerivedMetricSchema).optional(),
+});
+
+export type TestSuite = z.infer<typeof TestSuiteSchema>;
 
 export type ProviderId = string;
 
