@@ -79,7 +79,7 @@ export const ProviderOptionsSchema = z
     id: z.custom<ProviderId>().optional(),
     label: z.custom<ProviderLabel>().optional(),
     config: z.any().optional(),
-    prompts: z.array(z.string()).optional(), // z.union([z.string(), z.array(z.string())]).optional(), // List of prompt display strings
+    prompts: z.union([z.string().transform((value) => [value]), z.array(z.string())]).optional(),
     transform: z.string().optional(),
     delay: z.number().optional(),
     env: EnvOverridesSchema.optional(),
@@ -606,6 +606,11 @@ export const TestCasesWithMetadataPromptSchema = z.object({
 
 export type TestCasesWithMetadataPrompt = z.infer<typeof TestCasesWithMetadataPromptSchema>;
 
+const ProviderPromptMapSchema = z.record(
+  z.string(),
+  z.union([z.string().transform((value) => [value]), z.array(z.string())]),
+);
+
 export const ProviderSchema = z.union([z.string(), ProviderOptionsSchema, ApiProviderSchema]);
 export type Provider = z.infer<typeof ProviderSchema>;
 
@@ -713,8 +718,6 @@ export const DerivedMetricSchema = z.object({
 });
 export type DerivedMetric = z.infer<typeof DerivedMetricSchema>;
 
-const ProviderPromptMapSchema = z.record(z.union([z.string(), z.array(z.string())]));
-
 // The test suite defines the "knobs" that we are tuning in prompt engineering: providers and prompts
 export const TestSuiteSchema = z.object({
   // Optional description of what your LLM is trying to do
@@ -728,8 +731,7 @@ export const TestSuiteSchema = z.object({
 
   // Optional mapping of provider to prompt display strings.  If not provided,
   // all prompts are used for all providers.
-  // providerPromptMap: ProviderPromptMapSchema.optional(),
-  providerPromptMap: z.record(z.string(), z.array(z.string())).optional(),
+  providerPromptMap: ProviderPromptMapSchema.optional(),
   // Test cases
   tests: z.array(TestCaseSchema).optional(),
 

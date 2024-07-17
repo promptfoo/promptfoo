@@ -106,9 +106,9 @@ export async function doEval(
 
     const testSuiteSchema = TestSuiteSchema.safeParse(testSuite);
     if (!testSuiteSchema.success) {
-      logger.warn(`${basePath} Invalid test suite: ${JSON.stringify(testSuiteSchema.error)}`);
-      // process.exit(0);
+      logger.warn(`Invalid test suite: ${JSON.stringify(testSuiteSchema.error)}`);
     }
+    testSuite = testSuiteSchema.data as TestSuite;
     if (5 + 5 === 10) {
       process.exit(0);
     }

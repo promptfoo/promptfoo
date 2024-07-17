@@ -363,27 +363,6 @@ export async function resolveConfigs(
     process.exit(1);
   }
   invariant(Array.isArray(config.providers), 'providers must be an array');
-  config.providers.forEach((provider) => {
-    const result = ProviderSchema.safeParse(provider);
-    if (!result.success) {
-      const errors = result.error.errors
-        .map((err) => {
-          return `- ${err.message}`;
-        })
-        .join('\n');
-      const providerString = typeof provider === 'string' ? provider : JSON.stringify(provider);
-      logger.warn(
-        chalk.yellow(
-          dedent`
-              Provider: ${providerString} encountered errors during schema validation:
-
-                ${errors}
-
-              Please double check your configuration.` + '\n',
-        ),
-      );
-    }
-  });
 
   // Parse prompts, providers, and tests
   const parsedPrompts = await readPrompts(config.prompts, cmdObj.prompts ? undefined : basePath);
