@@ -2,6 +2,7 @@ import checkbox from '@inquirer/checkbox';
 import confirm from '@inquirer/confirm';
 import editor from '@inquirer/editor';
 import input from '@inquirer/input';
+import number from '@inquirer/number';
 import rawlist from '@inquirer/rawlist';
 import chalk from 'chalk';
 import { Command } from 'commander';
@@ -35,6 +36,17 @@ export function redteamCommand(program: Command) {
       }
       if (projectDir !== '.' && !fs.existsSync(projectDir)) {
         fs.mkdirSync(projectDir, { recursive: true });
+      }
+
+      const configPath = path.join(projectDir, 'promptfooconfig.yaml');
+      if (fs.existsSync(configPath)) {
+        const overwrite = await confirm({
+          message: 'A promptfoo configuration file already exists. Do you want to overwrite it?',
+          default: false,
+        });
+        if (!overwrite) {
+          return;
+        }
       }
 
       // Question 2: Prompt
@@ -104,6 +116,14 @@ export function redteamCommand(program: Command) {
         pageSize: 20,
       });
 
+      const numTests =
+        (await number({
+          message: 'How many test cases do you want to generate per plugin?',
+          default: 5,
+          min: 0,
+          max: 1000,
+        })) ?? 5;
+
       // Create config file
       const config = {
         prompts: [prompt],
@@ -111,7 +131,6 @@ export function redteamCommand(program: Command) {
         tests: [],
       };
 
-      const configPath = path.join(projectDir, 'promptfooconfig.yaml');
       fs.writeFileSync(configPath, yaml.dump(config), 'utf8');
 
       logger.info(
@@ -135,7 +154,7 @@ export function redteamCommand(program: Command) {
           write: true,
           defaultConfig: config,
           defaultConfigPath: configPath,
-          numTests: 5,
+          numTests,
         });
       } else {
         logger.info(
