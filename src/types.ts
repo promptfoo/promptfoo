@@ -294,7 +294,10 @@ export type PromptFunction = z.infer<typeof PromptFunctionSchema>;
 export const PromptSchema = z.object({
   id: z.string().optional(),
   raw: z.string(),
-  display: z.string().optional(), // deprecated
+  /**
+   * @deprecated in > 0.59.0. Use `label` instead.
+   */
+  display: z.string().optional(),
   label: z.string(),
   function: PromptFunctionSchema.optional(),
 });
