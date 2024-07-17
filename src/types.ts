@@ -742,7 +742,7 @@ export type ProviderFunction = ApiProvider['callApi'];
 export type ProviderOptionsMap = Record<ProviderId, ProviderOptions>;
 
 const pluginSchema = z.union([
-  z.string(),
+  z.enum(REDTEAM_ALL_PLUGINS),
   z.object({
     name: z.enum(REDTEAM_ALL_PLUGINS),
     numTests: z.number().int().positive().optional(),
@@ -759,7 +759,7 @@ export const redTeamSchema = z
       .default(() => Array.from(REDTEAM_DEFAULT_PLUGINS).map((name) => ({ name }))),
   })
   .transform((data) => ({
-    ...data,
+    ...(data.purpose ? { purpose: data.purpose } : {}),
     plugins: data.plugins.map((plugin) =>
       typeof plugin === 'string'
         ? { name: plugin, numTests: data.numTests }
