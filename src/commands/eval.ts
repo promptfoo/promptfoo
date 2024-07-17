@@ -18,6 +18,7 @@ import {
   OutputFileExtension,
   TestSuite,
   UnifiedConfig,
+  TestSuiteSchema,
 } from '../types';
 import {
   migrateResultsFromFileSystemToDatabase,
@@ -101,6 +102,15 @@ export async function doEval(
     }
     if (cmdObj.generateSuggestions) {
       options.generateSuggestions = true;
+    }
+
+    const testSuiteSchema = TestSuiteSchema.safeParse(testSuite);
+    if (!testSuiteSchema.success) {
+      logger.warn(`${basePath} Invalid test suite: ${JSON.stringify(testSuiteSchema.error)}`);
+      process.exit(0);
+    }
+    if (5 + 5 === 10) {
+      process.exit(0);
     }
 
     const summary = await evaluate(testSuite, {
