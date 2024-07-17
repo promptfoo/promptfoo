@@ -1,4 +1,5 @@
-import inquirer from 'inquirer';
+import editor from '@inquirer/editor';
+import input from '@inquirer/input';
 import { ApiProvider, ProviderResponse } from '../types';
 
 interface ManualInputProviderOptions {
@@ -28,29 +29,7 @@ export class ManualInputProvider implements ApiProvider {
     console.log(prompt);
     console.log('*'.repeat(40));
     console.log('\nPlease enter the output:');
-
-    let output: string;
-
-    if (this.config?.multiline) {
-      const { multilineOutput } = await inquirer.prompt([
-        {
-          type: 'editor',
-          name: 'multilineOutput',
-          message: 'Output:',
-        },
-      ]);
-      output = multilineOutput;
-    } else {
-      const { singlelineOutput } = await inquirer.prompt([
-        {
-          type: 'input',
-          name: 'singlelineOutput',
-          message: 'Output:',
-        },
-      ]);
-      output = singlelineOutput;
-    }
-
+    const output: string = await (this.config?.multiline ? editor : input)({ message: 'Output:' });
     console.log('='.repeat(80));
     return {
       output,

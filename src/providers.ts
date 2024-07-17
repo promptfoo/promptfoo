@@ -98,7 +98,7 @@ export async function loadApiProvider(
   } else if (providerPath === 'echo') {
     ret = {
       id: () => 'echo',
-      callApi: async (input) => ({ output: input }),
+      callApi: async (input: string) => ({ output: input }),
     };
   } else if (providerPath.startsWith('exec:')) {
     // Load script module
