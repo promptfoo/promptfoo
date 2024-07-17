@@ -29,6 +29,7 @@ import {
   LocalAiChatProvider,
   LocalAiEmbeddingProvider,
 } from './providers/localai';
+import { ManualInputProvider } from './providers/manualInput';
 import { MistralChatCompletionProvider } from './providers/mistral';
 import {
   OllamaEmbeddingProvider,
@@ -55,6 +56,8 @@ import { ScriptCompletionProvider } from './providers/scriptCompletion';
 import { VertexChatProvider, VertexEmbeddingProvider } from './providers/vertex';
 import { VoyageEmbeddingProvider } from './providers/voyage';
 import { WebhookProvider } from './providers/webhook';
+import RedteamIterativeProvider from './redteam/providers/iterative';
+import RedteamImageIterativeProvider from './redteam/providers/iterativeImage';
 import type {
   ApiProvider,
   EnvOverrides,
@@ -340,15 +343,11 @@ export async function loadApiProvider(
   } else if (providerPath.startsWith('http:') || providerPath.startsWith('https:')) {
     ret = new HttpProvider(providerPath, providerOptions);
   } else if (providerPath === 'promptfoo:redteam:iterative') {
-    const RedteamIterativeProvider = (
-      await import(path.join(__dirname, './redteam/providers/iterative'))
-    ).default;
-    ret = new RedteamIterativeProvider(providerOptions);
+    ret = new RedteamIterativeProvider();
   } else if (providerPath === 'promptfoo:redteam:iterative:image') {
-    const RedteamIterativeProvider = (
-      await import(path.join(__dirname, './redteam/providers/iterativeImage'))
-    ).default;
-    ret = new RedteamIterativeProvider(providerOptions);
+    ret = new RedteamImageIterativeProvider();
+  } else if (providerPath === 'promptfoo:manual-input') {
+    ret = new ManualInputProvider(providerOptions);
   } else {
     if (providerPath.startsWith('file://')) {
       providerPath = providerPath.slice('file://'.length);
