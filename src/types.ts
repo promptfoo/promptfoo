@@ -79,7 +79,7 @@ export const ProviderOptionsSchema = z
     id: z.custom<ProviderId>().optional(),
     label: z.custom<ProviderLabel>().optional(),
     config: z.any().optional(),
-    prompts: z.array(z.string()).optional(), // List of prompt display strings
+    prompts: z.union([z.string(), z.array(z.string())]).optional(), // List of prompt display strings
     transform: z.string().optional(),
     delay: z.number().optional(),
     env: EnvOverridesSchema.optional(),
@@ -238,10 +238,18 @@ export type ProviderType = 'embedding' | 'classification' | 'text' | 'moderation
 export type ProviderTypeMap = Partial<Record<ProviderType, string | ProviderOptions | ApiProvider>>;
 
 const GradingConfigSchema = z.object({
-  rubricPrompt: z.union([z.string(), z.array(z.string()), z.array(z.object({
-    role: z.string(),
-    content: z.string()
-  }))]).optional(),
+  rubricPrompt: z
+    .union([
+      z.string(),
+      z.array(z.string()),
+      z.array(
+        z.object({
+          role: z.string(),
+          content: z.string(),
+        }),
+      ),
+    ])
+    .optional(),
   provider: z
     .union([z.string(), z.any(), z.record(z.string(), z.union([z.string(), z.any()])).optional()])
     .optional(),
@@ -607,8 +615,17 @@ export const TestCaseSchema = z.object({
   description: z.string().optional(),
 
   // Key-value pairs to substitute in the prompt
-  vars: z.record(z.union([z.string(), z.array(z.string()), z.object({})])).optional(),
-
+  vars: z
+    .record(
+      z.union([
+        z.string(),
+        z.number(),
+        z.array(z.union([z.string(), z.number()])),
+        z.object({}),
+        z.array(z.any()),
+      ]),
+    )
+    .optional(),
   // Override the provider.
   provider: z.union([z.string(), ProviderOptionsSchema, ApiProviderSchema]).optional(),
 
@@ -696,6 +713,9 @@ export const DerivedMetricSchema = z.object({
 });
 export type DerivedMetric = z.infer<typeof DerivedMetricSchema>;
 
+const ProviderPromptMapSchema = z.record(z.union([z.string(), z.array(z.string())]));
+
+
 // The test suite defines the "knobs" that we are tuning in prompt engineering: providers and prompts
 export const TestSuiteSchema = z.object({
   // Optional description of what your LLM is trying to do
@@ -709,7 +729,7 @@ export const TestSuiteSchema = z.object({
 
   // Optional mapping of provider to prompt display strings.  If not provided,
   // all prompts are used for all providers.
-  providerPromptMap: z.record(z.string(), z.array(z.string())).optional(),
+  providerPromptMap: ProviderPromptMapSchema.optional(),
 
   // Test cases
   tests: z.array(TestCaseSchema).optional(),

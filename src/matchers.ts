@@ -733,7 +733,7 @@ export async function matchesContextFaithfulness(
   const longformPrompt = grading?.rubricPrompt?.[0] || CONTEXT_FAITHFULNESS_LONGFORM;
   const nliPrompt = grading?.rubricPrompt?.[1] || CONTEXT_FAITHFULNESS_NLI_STATEMENTS;
 
-  let promptText = nunjucks.renderString(longformPrompt, {
+  let promptText = nunjucks.renderString(longformPrompt as string, {
     question: JSON.stringify(query).slice(1, -1),
     answer: JSON.stringify(output).slice(1, -1),
     ...fromVars(vars),
@@ -747,7 +747,7 @@ export async function matchesContextFaithfulness(
   invariant(typeof resp.output === 'string', 'context-faithfulness produced malformed response');
 
   const statements = resp.output.split('\n');
-  promptText = nunjucks.renderString(nliPrompt, {
+  promptText = nunjucks.renderString(nliPrompt as string, {
     context: JSON.stringify(context).slice(1, -1),
     statements: JSON.stringify(statements.join('\n')).slice(1, -1),
     ...fromVars(vars),

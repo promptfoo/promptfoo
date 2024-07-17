@@ -611,7 +611,12 @@ class Evaluator {
         const varWithSpecialColsRemoved: Record<string, string | string[] | object> = {};
         for (const varName of Object.keys(testCase.vars)) {
           varNames.add(varName);
-          varWithSpecialColsRemoved[varName] = testCase.vars[varName];
+          const value = testCase.vars[varName];
+          if (typeof value === 'string' || Array.isArray(value) || typeof value === 'object') {
+            varWithSpecialColsRemoved[varName] = value;
+          } else if (typeof value === 'number') {
+            varWithSpecialColsRemoved[varName] = value.toString();
+          }
         }
         varsWithSpecialColsRemoved.push(varWithSpecialColsRemoved);
       }
