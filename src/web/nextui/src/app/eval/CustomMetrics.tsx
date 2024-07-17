@@ -21,7 +21,7 @@ const CustomMetrics: React.FC<CustomMetricsProps> = ({
         metric && typeof score !== 'undefined' ? (
           <span
             key={metric}
-            onClick={() => onSearchTextChange && onSearchTextChange(`metric=${metric}:[^0]`)}
+            onClick={() => onSearchTextChange && onSearchTextChange(`metric=${metric}:`)}
             className={onSearchTextChange ? 'clickable' : ''}
           >
             {metric}:{' '}
