@@ -76,8 +76,11 @@ const Plugins: Plugin[] = [
   },
   {
     key: 'imitation',
-    action: (provider, purpose, injectVar, n, prompts) =>
-      new ImitationPlugin(provider, purpose, injectVar, prompts).generateTests(n),
+    action: async (provider, purpose, injectVar, n, prompts) => {
+      const plugin = new ImitationPlugin(provider, purpose, injectVar, prompts);
+      await plugin.buildEntityWhitelist();
+      return plugin.generateTests(n);
+    },
   },
   {
     key: 'overreliance',
