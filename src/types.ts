@@ -238,7 +238,10 @@ export type ProviderType = 'embedding' | 'classification' | 'text' | 'moderation
 export type ProviderTypeMap = Partial<Record<ProviderType, string | ProviderOptions | ApiProvider>>;
 
 const GradingConfigSchema = z.object({
-  rubricPrompt: z.union([z.string(), z.array(z.string())]).optional(),
+  rubricPrompt: z.union([z.string(), z.array(z.string()), z.array(z.object({
+    role: z.string(),
+    content: z.string()
+  }))]).optional(),
   provider: z
     .union([z.string(), z.any(), z.record(z.string(), z.union([z.string(), z.any()])).optional()])
     .optional(),
