@@ -1,4 +1,8 @@
 import { z } from 'zod';
+import {
+  ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
+  DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
+} from './redteam/constants';
 
 export const CommandLineOptionsSchema = z.object({
   // Shared with TestSuite
@@ -736,6 +740,32 @@ export type ProviderLabel = string;
 export type ProviderFunction = ApiProvider['callApi'];
 
 export type ProviderOptionsMap = Record<ProviderId, ProviderOptions>;
+
+const pluginSchema = z.union([
+  z.string(),
+  z.object({
+    name: z.enum(REDTEAM_ALL_PLUGINS),
+    numTests: z.number().int().positive().optional(),
+  }),
+]);
+
+export const redTeamSchema = z
+  .object({
+    purpose: z.string().optional(),
+    numTests: z.number().int().positive().default(5),
+    plugins: z
+      .array(pluginSchema)
+      .optional()
+      .default(() => Array.from(REDTEAM_DEFAULT_PLUGINS).map((name) => ({ name }))),
+  })
+  .transform((data) => ({
+    ...data,
+    plugins: data.plugins.map((plugin) =>
+      typeof plugin === 'string'
+        ? { name: plugin, numTests: data.numTests }
+        : { ...plugin, numTests: plugin.numTests ?? data.numTests },
+    ),
+  }));
 
 // TestSuiteConfig = Test Suite, but before everything is parsed and resolved.  Providers are just strings, prompts are filepaths, tests can be filepath or inline.
 export const TestSuiteConfigSchema = z.object({
