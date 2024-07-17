@@ -44,6 +44,7 @@
     "build": "tsc && shx cp src/*.html dist/src && shx cp src/python/wrapper.py dist/src/python && shx rm -rf dist/drizzle && shx cp -r drizzle dist/drizzle && npm run build:nextui && shx chmod +x dist/src/main.js",
     "test": "jest",
     "test:watch": "jest --watch",
+    "test:webui": "npm run test --prefix src/web/nextui",
     "format": "prettier -w .",
     "format:check": "prettier --check .",
     "db:migrate": "npx tsx src/migrate.ts",

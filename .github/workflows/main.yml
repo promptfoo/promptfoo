@@ -149,3 +149,22 @@ jobs:
       - name: Build Documentation
         working-directory: site
         run: npm run build
+
+  webui:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Use Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run Vitest
+        run: npm run test:webui
