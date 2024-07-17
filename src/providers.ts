@@ -360,10 +360,6 @@ export async function loadApiProvider(
       ? providerPath
       : path.join(basePath || process.cwd(), providerPath);
 
-    console.error('providerPath', providerPath);
-    console.error('modulePath', modulePath);
-    console.error('basePath', basePath);
-    console.error('process.cwd()', process.cwd());
     const CustomApiProvider = await importModule(modulePath);
     ret = new CustomApiProvider(options);
   }
