@@ -1,7 +1,11 @@
+import checkbox from '@inquirer/checkbox';
+import confirm from '@inquirer/confirm';
+import editor from '@inquirer/editor';
+import input from '@inquirer/input';
+import rawlist from '@inquirer/rawlist';
 import chalk from 'chalk';
 import { Command } from 'commander';
 import * as fs from 'fs';
-import inquirer from 'inquirer';
 import yaml from 'js-yaml';
 import * as path from 'path';
 import logger from '../logger';
@@ -24,84 +28,63 @@ export function redteamCommand(program: Command) {
 
       let projectDir = directory;
       if (!projectDir) {
-        const { chosenDir } = await inquirer.prompt([
-          {
-            type: 'input',
-            name: 'chosenDir',
-            message: 'Where do you want to create the project?',
-            default: '.',
-          },
-        ]);
-        projectDir = (chosenDir as string | undefined) || '.';
+        projectDir = await input({
+          message: 'Where do you want to create the project?',
+          default: '.',
+        });
       }
       if (projectDir !== '.' && !fs.existsSync(projectDir)) {
         fs.mkdirSync(projectDir, { recursive: true });
       }
 
       // Question 2: Prompt
-      const { promptChoice } = await inquirer.prompt([
-        {
-          type: 'list',
-          name: 'promptChoice',
-          message: 'How would you like to specify the prompt?',
-          choices: [
-            { name: 'Enter a prompt', value: 'enter' },
-            { name: 'Reference a prompt file', value: 'file' },
-          ],
-        },
-      ]);
+      const promptChoice = await rawlist({
+        message: 'How would you like to specify the prompt?',
+        choices: [
+          { name: 'Enter a prompt', value: 'enter' },
+          { name: 'Reference a prompt file', value: 'file' },
+        ],
+      });
 
       let prompt: string;
       if (promptChoice === 'enter') {
-        const { enteredPrompt } = await inquirer.prompt([
-          {
-            type: 'editor',
-            name: 'enteredPrompt',
-            message: 'Enter your prompt:',
-            default:
-              'You are a helpful concise assistant.\n\nUser query: {{query}}\n\n(NOTE: your prompt must include "{{query}}" as a placeholder for user input)',
-          },
-        ]);
-        prompt = enteredPrompt;
+        prompt = await editor({
+          message: 'Enter your prompt:',
+          default:
+            'You are a helpful concise assistant.\n\nUser query: {{query}}\n\n(NOTE: your prompt must include "{{query}}" as a placeholder for user input)',
+        });
       } else {
-        const { promptFile } = await inquirer.prompt([
-          {
-            type: 'input',
-            name: 'promptFile',
-            message: 'Enter the path to your prompt file (text or JSON):',
-          },
-        ]);
+        const promptFile = await input({
+          message: 'Enter the path to your prompt file (text or JSON):',
+        });
         prompt = `file://${promptFile}`;
       }
 
       // Question 3: Provider
       let provider: string;
-      const { providerChoice } = await inquirer.prompt([
-        {
-          type: 'list',
-          name: 'providerChoice',
-          message: 'Choose a provider:',
-          choices: [
-            'openai:gpt-3.5-turbo',
-            'openai:gpt-4o',
-            'anthropic:messages:claude-3-5-sonnet-20240620',
-            'anthropic:messages:claude-3-opus-20240307',
-            'vertex:gemini-pro',
-            'Other',
-          ],
-        },
-      ]);
+      const providerChoice = await rawlist({
+        message: 'Choose a provider:',
+        choices: [
+          { name: 'openai:gpt-3.5-turbo', value: 'openai:gpt-3.5-turbo' },
+          { name: 'openai:gpt-4o', value: 'openai:gpt-4o' },
+          {
+            name: 'anthropic:messages:claude-3-5-sonnet-20240620',
+            value: 'anthropic:messages:claude-3-5-sonnet-20240620',
+          },
+          {
+            name: 'anthropic:claude-3-opus-20240307',
+            value: 'anthropic:messages:claude-3-opus-20240307',
+          },
+          { name: 'vertex:gemini-pro', value: 'vertex:gemini-pro' },
+          { name: 'Other', value: 'Other' },
+        ],
+      });
 
       if (providerChoice === 'Other') {
-        const { customProvider } = await inquirer.prompt([
-          {
-            type: 'input',
-            name: 'customProvider',
-            message:
-              'Enter the provider ID (see https://www.promptfoo.dev/docs/providers/ for options):',
-          },
-        ]);
-        provider = customProvider;
+        provider = await input({
+          message:
+            'Enter the provider ID (see https://www.promptfoo.dev/docs/providers/ for options):',
+        });
       } else {
         provider = providerChoice;
       }
@@ -113,15 +96,11 @@ export function redteamCommand(program: Command) {
         checked: DEFAULT_PLUGINS.has(plugin),
       }));
 
-      const { selectedPlugins: plugins } = await inquirer.prompt([
-        {
-          type: 'checkbox',
-          name: 'selectedPlugins',
-          message: 'Select the plugins you want to enable:',
-          choices: pluginChoices,
-          pageSize: 20,
-        },
-      ]);
+      const plugins = await checkbox({
+        message: 'Select the plugins you want to enable:',
+        choices: pluginChoices,
+        pageSize: 20,
+      });
 
       // Create config file
       const config = {
@@ -137,14 +116,10 @@ export function redteamCommand(program: Command) {
         '\n' + chalk.green(`Created red teaming configuration file at ${configPath}`) + '\n',
       );
 
-      const { readyToGenerate } = await inquirer.prompt([
-        {
-          type: 'confirm',
-          name: 'readyToGenerate',
-          message: 'Are you ready to generate adversarial test cases?',
-          default: true,
-        },
-      ]);
+      const readyToGenerate = await confirm({
+        message: 'Are you ready to generate adversarial test cases?',
+        default: true,
+      });
 
       telemetry.record('command_used', {
         name: 'redteam init',
