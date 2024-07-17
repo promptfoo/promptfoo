@@ -329,17 +329,20 @@ type progressCallback = (
   evalStep: RunEvalOptions,
 ) => void;
 
-export interface EvaluateOptions {
-  maxConcurrency?: number;
-  showProgressBar?: boolean;
-  progressCallback?: progressCallback;
-  generateSuggestions?: boolean;
-  repeat?: number;
-  delay?: number;
-  cache?: boolean;
-  eventSource?: string;
-  interactiveProviders?: boolean;
-}
+const EvaluateOptionsSchema = z.object({
+  maxConcurrency: z.number().optional(),
+  showProgressBar: z.boolean().optional(),
+  progressCallback: z
+    .function(z.tuple([z.number(), z.number(), z.number(), z.custom<RunEvalOptions>()]), z.void())
+    .optional(),
+  generateSuggestions: z.boolean().optional(),
+  repeat: z.number().optional(),
+  delay: z.number().optional(),
+  cache: z.boolean().optional(),
+  eventSource: z.string().optional(),
+  interactiveProviders: z.boolean().optional(),
+});
+export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema>;
 
 // Used for final prompt display
 export const CompletedPromptSchema = PromptSchema.extend({
@@ -528,7 +531,7 @@ export type AssertionType = BaseAssertionTypes | NotPrefixed<BaseAssertionTypes>
 const AssertionSetSchema = z.object({
   type: z.literal('assert-set'),
   // Sub assertions to be run for this assertion set
-  assert: z.array(z.lazy(() => AssertionSchema)),
+  assert: z.array(z.lazy(() => AssertionSchema)), // eslint-disable-line @typescript-eslint/no-use-before-define
   // The weight of this assertion compared to other assertions in the test case. Defaults to 1.
   weight: z.number().optional(),
   // Tag this assertion result as a named metric
@@ -735,56 +738,74 @@ export type ProviderFunction = ApiProvider['callApi'];
 export type ProviderOptionsMap = Record<ProviderId, ProviderOptions>;
 
 // TestSuiteConfig = Test Suite, but before everything is parsed and resolved.  Providers are just strings, prompts are filepaths, tests can be filepath or inline.
-export interface TestSuiteConfig {
+export const TestSuiteConfigSchema = z.object({
   // Optional description of what you're trying to test
-  description?: string;
+  description: z.string().optional(),
 
   // One or more LLM APIs to use, for example: openai:gpt-3.5-turbo, openai:gpt-4, localai:chat:vicuna
-  providers:
-    | ProviderId
-    | ProviderFunction
-    | (ProviderId | ProviderOptionsMap | ProviderOptions | ProviderFunction)[];
+  providers: z.union([
+    z.string(),
+    CallApiFunctionSchema,
+    z.array(
+      z.union([
+        z.string(),
+        z.record(z.string(), ProviderOptionsSchema),
+        ProviderOptionsSchema,
+        CallApiFunctionSchema,
+      ]),
+    ),
+  ]),
 
   // One or more prompt files to load
-  prompts: FilePath | (FilePath | Prompt)[] | Record<FilePath, string>;
+  prompts: z.union([
+    z.string(),
+    z.array(z.union([z.string(), PromptSchema])),
+    z.record(z.string(), z.string()),
+  ]),
 
   // Path to a test file, OR list of LLM prompt variations (aka "test case")
-  tests: FilePath | (FilePath | TestCase)[];
+  tests: z.union([z.string(), z.array(z.union([z.string(), TestCaseSchema]))]),
 
   // Scenarios, groupings of data and tests to be evaluated
-  scenarios?: Scenario[];
+  scenarios: z.array(ScenarioSchema).optional(),
 
   // Sets the default properties for each test case. Useful for setting an assertion, on all test cases, for example.
-  defaultTest?: Omit<TestCase, 'description'>;
+  defaultTest: TestCaseSchema.partial().omit({ description: true }).optional(),
 
   // Path to write output. Writes to console/web viewer if not set.
-  outputPath?: FilePath | FilePath[];
+  outputPath: z.union([z.string(), z.array(z.string())]).optional(),
 
   // Determines whether or not sharing is enabled.
-  sharing?:
-    | boolean
-    | {
-        apiBaseUrl?: string;
-        appBaseUrl?: string;
-      };
+  sharing: z
+    .union([
+      z.boolean(),
+      z.object({
+        apiBaseUrl: z.string().optional(),
+        appBaseUrl: z.string().optional(),
+      }),
+    ])
+    .optional(),
 
   // Nunjucks filters
-  nunjucksFilters?: Record<string, FilePath>;
+  nunjucksFilters: z.record(z.string(), z.string()).optional(),
 
   // Envar overrides
-  env?: EnvOverrides;
+  env: EnvOverridesSchema.optional(),
 
   // Metrics to calculate after the eval has been completed
-  derivedMetrics?: DerivedMetric[];
+  derivedMetrics: z.array(DerivedMetricSchema).optional(),
 
   // Any other information about this configuration.
-  metadata?: Record<string, any>;
-}
+  metadata: z.record(z.string(), z.any()).optional(),
+});
 
-export type UnifiedConfig = TestSuiteConfig & {
-  evaluateOptions: EvaluateOptions;
-  commandLineOptions: Partial<CommandLineOptions>;
-};
+export type TestSuiteConfig = z.infer<typeof TestSuiteConfigSchema>;
+export const UnifiedConfigSchema = TestSuiteConfigSchema.extend({
+  evaluateOptions: EvaluateOptionsSchema,
+  commandLineOptions: CommandLineOptionsSchema.partial(),
+});
+
+export type UnifiedConfig = z.infer<typeof UnifiedConfigSchema>;
 
 export interface EvalWithMetadata {
   id: string;
