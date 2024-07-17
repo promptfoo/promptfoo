@@ -141,7 +141,7 @@ export function generateRedteamCommand(
     .description('Generate adversarial test cases')
     .option('-c, --config [path]', 'Path to configuration file. Defaults to promptfooconfig.yaml')
     .option('-o, --output [path]', 'Path to output file')
-    .option('-w, --write', 'Write results to promptfoo configuration file')
+    .option('-w, --write', 'Write results to promptfoo configuration file', false)
     .option(
       '--purpose <purpose>',
       'Set the system purpose. If not set, the system purpose will be inferred from the config file',
