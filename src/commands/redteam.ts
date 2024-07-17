@@ -15,8 +15,6 @@ interface RunRedteamOptions {
   envFile: string;
 }
 
-export async function doRunRedteam(cmdObj: RunRedteamOptions) {}
-
 export function redteamCommand(program: Command) {
   const redteamCommand = program.command('redteam').description('Red team LLM applications');
 
@@ -180,12 +178,3 @@ export function redteamCommand(program: Command) {
         );
       }
     });
-
-  redteamCommand
-    .command('run')
-    .description('Run red teaming evaluation')
-    .option('-c, --config <path>', 'Path to configuration file')
-    .option('--no-cache', 'Disable cache', false)
-    .option('--env-file <path>', 'Path to .env file')
-    .action(doRunRedteam);
-}
