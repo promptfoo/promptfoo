@@ -58,16 +58,22 @@ export function readProviderPromptMap(
           rawProvider.id,
           'You must specify an `id` on the Provider when you override options.prompts',
         );
-        ret[rawProvider.id] = rawProvider.prompts || allPrompts;
+        const rawProviderPrompts = typeof rawProvider.prompts === 'string' ? [rawProvider.prompts] : rawProvider.prompts;
+        ret[rawProvider.id] = rawProviderPrompts || allPrompts;
         if (rawProvider.label) {
-          ret[rawProvider.label] = rawProvider.prompts || allPrompts;
+          ret[rawProvider.label] = rawProviderPrompts || allPrompts;
         }
       } else {
         const rawProvider = provider as ProviderOptionsMap;
         const originalId = Object.keys(rawProvider)[0];
         const providerObject = rawProvider[originalId];
         const id = providerObject.id || originalId;
-        ret[id] = rawProvider[originalId].prompts || allPrompts;
+        let rawProviderPrompts = (typeof rawProvider[originalId].prompts === 'string') ? [rawProvider[originalId].prompts] : rawProvider[originalId].prompts;
+        if (rawProviderPrompts && Array.isArray(rawProviderPrompts)) {
+          rawProviderPrompts = rawProviderPrompts.flat().filter(Boolean);
+        }
+        invariant(rawProviderPrompts && Array.isArray(rawProviderPrompts) && rawProviderPrompts.length > 0, `Provider ${id} must have at least one prompt`);
+        ret[id] = rawProviderPrompts || allPrompts;
       }
     }
   }

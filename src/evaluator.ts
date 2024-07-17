@@ -527,7 +527,8 @@ class Evaluator {
       for (const prompt of testSuite.prompts) {
         // Check if providerPromptMap exists and if it contains the current prompt's label
         const providerKey = provider.label || provider.id();
-        if (!isAllowedPrompt(prompt, testSuite.providerPromptMap?.[providerKey])) {
+        const providerPromptMap = testSuite.providerPromptMap?.[providerKey];
+        if (!isAllowedPrompt(prompt, providerPromptMap)) {
           continue;
         }
         const completedPrompt = {
