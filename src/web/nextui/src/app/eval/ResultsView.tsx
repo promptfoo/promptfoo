@@ -500,7 +500,11 @@ export default function ResultsView({
                 <Button
                   color="primary"
                   startIcon={<EyeIcon />}
-                  onClick={() => router.push(`/report/?evalId=${evalId}`)}
+                  onClick={() =>
+                    router.push(
+                      `/report/?evalId=${evalId || defaultEvalId || recentEvals[0]?.evalId}`,
+                    )
+                  }
                 >
                   Vulnerability Report
                 </Button>
