@@ -1026,7 +1026,12 @@ export function resultIsForTestCase(result: EvaluateResult, testCase: TestCase):
     ? providerToIdentifier(testCase.provider) === providerToIdentifier(result.provider)
     : true;
 
-  return varsMatch(testCase.vars as Record<string, string | object | string[]> | undefined, result.vars) && providersMatch;
+  return (
+    varsMatch(
+      testCase.vars as Record<string, string | object | string[]> | undefined,
+      result.vars,
+    ) && providersMatch
+  );
 }
 
 export function safeJsonStringify(value: any, prettyPrint: boolean = false): string {

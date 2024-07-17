@@ -527,8 +527,7 @@ class Evaluator {
       for (const prompt of testSuite.prompts) {
         // Check if providerPromptMap exists and if it contains the current prompt's label
         const providerKey = provider.label || provider.id();
-        const providerPromptMap = testSuite.providerPromptMap?.[providerKey];
-        if (!isAllowedPrompt(prompt, providerPromptMap)) {
+        if (!isAllowedPrompt(prompt, testSuite.providerPromptMap?.[providerKey])) {
           continue;
         }
         const completedPrompt = {
@@ -612,12 +611,7 @@ class Evaluator {
         const varWithSpecialColsRemoved: Record<string, string | string[] | object> = {};
         for (const varName of Object.keys(testCase.vars)) {
           varNames.add(varName);
-          const value = testCase.vars[varName];
-          if (typeof value === 'string' || Array.isArray(value) || typeof value === 'object') {
-            varWithSpecialColsRemoved[varName] = value;
-          } else if (typeof value === 'number') {
-            varWithSpecialColsRemoved[varName] = value.toString();
-          }
+          varWithSpecialColsRemoved[varName] = testCase.vars[varName];
         }
         varsWithSpecialColsRemoved.push(varWithSpecialColsRemoved);
       }
