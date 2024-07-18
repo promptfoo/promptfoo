@@ -1,7 +1,7 @@
 import dedent from 'dedent';
 import invariant from 'tiny-invariant';
-import type { ApiProvider, CallApiContextParams, CallApiOptionsParams } from '../types';
-import { getNunjucksEngine } from '../util';
+import type { ApiProvider, CallApiContextParams, CallApiOptionsParams } from '../../types';
+import { getNunjucksEngine } from '../../util/templates';
 
 const ATTACKER_MODEL = 'gpt-4o';
 
@@ -92,7 +92,7 @@ async function runRedteamConversation(
   vars: Record<string, string | object>,
   provider: ApiProvider,
 ) {
-  const { OpenAiChatCompletionProvider } = await import('../providers/openai');
+  const { OpenAiChatCompletionProvider } = await import('../../providers/openai');
   const redteamProvider = new OpenAiChatCompletionProvider(ATTACKER_MODEL, {
     config: {
       temperature: TEMPERATURE,
@@ -184,14 +184,14 @@ async function runRedteamConversation(
   return {
     output: bestResponse,
     metadata: {
-      redteamFinalPrompt: targetPrompt,
+      redteamFinalPrompt: targetPrompt || undefined,
     },
   };
 }
 
 class RedteamIterativeJailbreaks implements ApiProvider {
   id() {
-    return 'redteam-iterative-jailbreaks';
+    return 'promptfoo:redteam:iterative';
   }
 
   async callApi(prompt: string, context?: CallApiContextParams, options?: CallApiOptionsParams) {

@@ -31,8 +31,7 @@ const getSubCategoryStats = (
       subCategoryStats.push({
         pluginName: subCategory,
         type: categoryAliases[subCategory as keyof typeof categoryAliases] || subCategory,
-        description:
-          subCategoryDescriptions[subCategory as keyof typeof subCategoryDescriptions] || '',
+        description: subCategoryDescriptions[subCategory] || '',
         passRate: categoryStats[subCategory]
           ? ((categoryStats[subCategory].pass / categoryStats[subCategory].total) * 100).toFixed(
               1,
@@ -117,7 +116,7 @@ const TestSuites: React.FC<{
                   Severity
                 </TableSortLabel>
               </TableCell>
-              <TableCell>Actions</TableCell>
+              <TableCell style={{ minWidth: '275px' }}>Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>

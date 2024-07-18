@@ -122,7 +122,7 @@ const { data, cached } = await promptfoo.cache.fetchWithCache(
     },
     body: JSON.stringify(body),
   },
-  10_000 /* 10 second timeout */,
+  10_000, // 10 second timeout
 );
 
 console.log('Got from OpenAI:', data);
@@ -140,7 +140,7 @@ providers: ['file://relative/path/to/customApiProvider.js']
 Alternatively, you can pass the path to the custom API provider directly in the CLI:
 
 ```
-promptfoo eval -p prompt1.txt prompt2.txt -o results.csv  -v vars.csv -r ./customApiProvider.js
+promptfoo eval -p prompt1.txt prompt2.txt -o results.csv -v vars.csv -r ./customApiProvider.js
 ```
 
 This command will evaluate the prompts using the custom API provider and save the results to the specified CSV file.

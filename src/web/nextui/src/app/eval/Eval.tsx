@@ -2,9 +2,15 @@
 
 import * as React from 'react';
 import { REMOTE_API_BASE_URL } from '@/../../../constants';
-import type { EvaluateSummary, UnifiedConfig, SharedResults } from '@/../../../types';
+import type {
+  EvaluateSummary,
+  UnifiedConfig,
+  SharedResults,
+  ResultLightweightWithLabel,
+} from '@/../../../types';
 import { getApiBaseUrl } from '@/api';
 import { ShiftKeyProvider } from '@/app/contexts/ShiftKeyContext';
+import { ToastProvider } from '@/app/contexts/ToastContext';
 import { IS_RUNNING_LOCALLY, USE_SUPABASE } from '@/constants';
 import type { Database } from '@/types/supabase';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -43,7 +49,7 @@ async function fetchEvalFromSupabase(
 interface EvalOptions {
   fetchId?: string;
   preloadedData?: SharedResults;
-  recentEvals?: { id: string; label: string }[];
+  recentEvals?: ResultLightweightWithLabel[];
   defaultEvalId?: string;
 }
 
@@ -54,10 +60,10 @@ export default function Eval({
   defaultEvalId: defaultEvalIdProp,
 }: EvalOptions) {
   const router = useRouter();
-  const { table, setTable, setConfig, setEvalId, setAuthor } = useStore();
+  const { table, setTable, setConfig, setEvalId, setAuthor, setInComparisonMode } = useStore();
   const [loaded, setLoaded] = React.useState(false);
   const [failed, setFailed] = React.useState(false);
-  const [recentEvals, setRecentEvals] = React.useState<{ id: string; label: string }[]>(
+  const [recentEvals, setRecentEvals] = React.useState<ResultLightweightWithLabel[]>(
     recentEvalsProp || [],
   );
 
@@ -90,7 +96,7 @@ export default function Eval({
   };
 
   const [defaultEvalId, setDefaultEvalId] = React.useState<string>(
-    defaultEvalIdProp || recentEvals[0]?.id,
+    defaultEvalIdProp || recentEvals[0]?.evalId,
   );
 
   const searchParams = useSearchParams();
@@ -166,8 +172,12 @@ export default function Eval({
       fetchEvalsFromSupabase().then((records) => {
         setRecentEvals(
           records.map((r) => ({
-            id: r.id,
+            evalId: r.id,
+            datasetId: null,
             label: r.createdAt,
+            createdAt: new Date(r.createdAt).getTime(),
+            description: 'None',
+            numTests: -1,
           })),
         );
         if (records.length > 0) {
@@ -208,6 +218,7 @@ export default function Eval({
       };
       run();
     }
+    setInComparisonMode(false);
   }, [
     fetchId,
     setTable,
@@ -218,6 +229,7 @@ export default function Eval({
     preloadedData,
     setDefaultEvalId,
     evalId,
+    setInComparisonMode,
   ]);
 
   if (failed) {
@@ -236,12 +248,14 @@ export default function Eval({
   }
 
   return (
-    <ShiftKeyProvider>
-      <ResultsView
-        defaultEvalId={defaultEvalId}
-        recentEvals={recentEvals}
-        onRecentEvalSelected={handleRecentEvalSelection}
-      />
-    </ShiftKeyProvider>
+    <ToastProvider>
+      <ShiftKeyProvider>
+        <ResultsView
+          defaultEvalId={defaultEvalId}
+          recentEvals={recentEvals}
+          onRecentEvalSelected={handleRecentEvalSelection}
+        />
+      </ShiftKeyProvider>
+    </ToastProvider>
   );
 }

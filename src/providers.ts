@@ -29,6 +29,7 @@ import {
   LocalAiChatProvider,
   LocalAiEmbeddingProvider,
 } from './providers/localai';
+import { ManualInputProvider } from './providers/manualInput';
 import { MistralChatCompletionProvider } from './providers/mistral';
 import {
   OllamaEmbeddingProvider,
@@ -55,6 +56,8 @@ import { ScriptCompletionProvider } from './providers/scriptCompletion';
 import { VertexChatProvider, VertexEmbeddingProvider } from './providers/vertex';
 import { VoyageEmbeddingProvider } from './providers/voyage';
 import { WebhookProvider } from './providers/webhook';
+import RedteamIterativeProvider from './redteam/providers/iterative';
+import RedteamImageIterativeProvider from './redteam/providers/iterativeImage';
 import type {
   ApiProvider,
   EnvOverrides,
@@ -87,7 +90,10 @@ export async function loadApiProvider(
     (providerPath.endsWith('.yaml') || providerPath.endsWith('.yml'))
   ) {
     const filePath = providerPath.slice('file://'.length);
-    const yamlContent = yaml.load(fs.readFileSync(filePath, 'utf8')) as ProviderOptions;
+    const modulePath = path.isAbsolute(filePath)
+      ? filePath
+      : path.join(basePath || process.cwd(), filePath);
+    const yamlContent = yaml.load(fs.readFileSync(modulePath, 'utf8')) as ProviderOptions;
     invariant(yamlContent, `Provider config ${filePath} is undefined`);
     invariant(yamlContent.id, `Provider config ${filePath} must have an id`);
     logger.info(`Loaded provider ${yamlContent.id} from ${filePath}`);
@@ -95,7 +101,7 @@ export async function loadApiProvider(
   } else if (providerPath === 'echo') {
     ret = {
       id: () => 'echo',
-      callApi: async (input) => ({ output: input }),
+      callApi: async (input: string) => ({ output: input }),
     };
   } else if (providerPath.startsWith('exec:')) {
     // Load script module
@@ -283,12 +289,6 @@ export async function loadApiProvider(
   } else if (providerPath === 'llama' || providerPath.startsWith('llama:')) {
     const modelName = providerPath.split(':')[1];
     ret = new LlamaProvider(modelName, providerOptions);
-  } else if (
-    providerPath.startsWith('ollama:embeddings:') ||
-    providerPath.startsWith('ollama:embedding:')
-  ) {
-    const modelName = providerPath.split(':')[2];
-    ret = new OllamaEmbeddingProvider(modelName, providerOptions);
   } else if (providerPath.startsWith('ollama:')) {
     const splits = providerPath.split(':');
     const firstPart = splits[1];
@@ -298,6 +298,9 @@ export async function loadApiProvider(
     } else if (firstPart === 'completion') {
       const modelName = splits.slice(2).join(':');
       ret = new OllamaCompletionProvider(modelName, providerOptions);
+    } else if (firstPart === 'embedding' || firstPart === 'embeddings') {
+      const modelName = splits.slice(2).join(':');
+      ret = new OllamaEmbeddingProvider(modelName, providerOptions);
     } else {
       // Default to completion provider
       const modelName = splits.slice(1).join(':');
@@ -340,14 +343,11 @@ export async function loadApiProvider(
   } else if (providerPath.startsWith('http:') || providerPath.startsWith('https:')) {
     ret = new HttpProvider(providerPath, providerOptions);
   } else if (providerPath === 'promptfoo:redteam:iterative') {
-    const RedteamIterativeProvider = (await import(path.join(__dirname, './redteam/iterative')))
-      .default;
-    ret = new RedteamIterativeProvider(providerOptions);
+    ret = new RedteamIterativeProvider();
   } else if (providerPath === 'promptfoo:redteam:iterative:image') {
-    const RedteamIterativeProvider = (
-      await import(path.join(__dirname, './redteam/iterativeImage'))
-    ).default;
-    ret = new RedteamIterativeProvider(providerOptions);
+    ret = new RedteamImageIterativeProvider();
+  } else if (providerPath === 'promptfoo:manual-input') {
+    ret = new ManualInputProvider(providerOptions);
   } else {
     if (providerPath.startsWith('file://')) {
       providerPath = providerPath.slice('file://'.length);
@@ -356,6 +356,7 @@ export async function loadApiProvider(
     const modulePath = path.isAbsolute(providerPath)
       ? providerPath
       : path.join(basePath || process.cwd(), providerPath);
+
     const CustomApiProvider = await importModule(modulePath);
     ret = new CustomApiProvider(options);
   }

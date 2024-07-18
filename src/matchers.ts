@@ -28,7 +28,8 @@ import type {
   ProviderType,
   ApiModerationProvider,
 } from './types';
-import { extractJsonObjects, getNunjucksEngine } from './util';
+import { extractJsonObjects } from './util';
+import { getNunjucksEngine } from './util/templates';
 
 const nunjucks = getNunjucksEngine();
 
@@ -729,8 +730,14 @@ export async function matchesContextFaithfulness(
   if (grading?.rubricPrompt) {
     invariant(Array.isArray(grading.rubricPrompt), 'rubricPrompt must be an array');
   }
-  const longformPrompt = grading?.rubricPrompt?.[0] || CONTEXT_FAITHFULNESS_LONGFORM;
-  const nliPrompt = grading?.rubricPrompt?.[1] || CONTEXT_FAITHFULNESS_NLI_STATEMENTS;
+  const longformPrompt: string =
+    (typeof grading?.rubricPrompt?.[0] === 'string'
+      ? grading?.rubricPrompt?.[0]
+      : grading?.rubricPrompt?.[0].content) || CONTEXT_FAITHFULNESS_LONGFORM;
+  const nliPrompt: string =
+    (typeof grading?.rubricPrompt?.[1] === 'string'
+      ? grading?.rubricPrompt?.[1]
+      : grading?.rubricPrompt?.[1].content) || CONTEXT_FAITHFULNESS_NLI_STATEMENTS;
 
   let promptText = nunjucks.renderString(longformPrompt, {
     question: JSON.stringify(query).slice(1, -1),

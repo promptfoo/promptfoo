@@ -157,7 +157,7 @@ You can begin red teaming your application in less than 5 minutes.
 ### Initialize the project
 
 ```sh
-npx promptfoo@latest init --no-interactive my-project
+npx promptfoo@latest redteam init my-project
 cd my-project
 ```
 
@@ -207,7 +207,7 @@ npx promptfoo@latest generate redteam -w --provider openai:chat:gpt-4o
 ```
 
 :::warning
-Note that some providers such as Anthropic may disable your account for generate harmful test cases. We recommend using the default OpenAI provider.
+Note that some providers such as Anthropic may disable your account for generating harmful test cases. We recommend using the default OpenAI provider.
 :::
 
 ### Run the eval

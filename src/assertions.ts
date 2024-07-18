@@ -1,6 +1,7 @@
 import Ajv, { ValidateFunction } from 'ajv';
 import addFormats from 'ajv-formats';
 import async from 'async';
+import { XMLParser } from 'fast-xml-parser';
 import { distance as levenshtein } from 'fastest-levenshtein';
 import fs from 'fs';
 import yaml from 'js-yaml';
@@ -42,8 +43,10 @@ import {
   type TestCase,
   isGradingResult,
   AssertionValue,
+  ProviderResponse,
 } from './types';
-import { transformOutput, getNunjucksEngine, extractJsonObjects } from './util';
+import { transformOutput, extractJsonObjects } from './util';
+import { getNunjucksEngine } from './util/templates';
 
 const ASSERTIONS_MAX_CONCURRENCY = process.env.PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY
   ? parseInt(process.env.PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY, 10)
@@ -111,6 +114,70 @@ function handleRougeScore(
   };
 }
 
+export function validateXml(
+  xmlString: string,
+  requiredElements?: string[],
+): { isValid: boolean; reason: string } {
+  if (!xmlString.startsWith('<')) {
+    return { isValid: false, reason: 'XML is missing opening tag' };
+  }
+  const parser = new XMLParser({
+    allowBooleanAttributes: true,
+    ignoreAttributes: false,
+    parseAttributeValue: true,
+    parseTagValue: true,
+  });
+
+  try {
+    const parsedXml = parser.parse(xmlString);
+    if (requiredElements && requiredElements.length > 0) {
+      const missingElements = requiredElements.filter((element) => {
+        const path = element.split('.');
+        let current: any = parsedXml;
+        for (const key of path) {
+          if (current[key] === undefined) {
+            return true;
+          }
+          current = current[key];
+        }
+        return false;
+      });
+
+      if (missingElements.length > 0) {
+        return {
+          isValid: false,
+          reason: `XML is missing required elements: ${missingElements.join(', ')}`,
+        };
+      }
+    }
+
+    return { isValid: true, reason: 'XML is valid and contains all required elements' };
+  } catch (err) {
+    return { isValid: false, reason: `XML parsing failed: ${(err as Error).message}` };
+  }
+}
+
+export function containsXml(
+  outputString: string,
+  requiredElements?: string[],
+): { isValid: boolean; reason: string } {
+  const xmlRegex = /<\?xml.*?>[\s\S]*<\/[^>]+>|\S*<[^>]+>[\s\S]*<\/[^>]+>/;
+  const xmlMatches = outputString.match(xmlRegex);
+
+  if (!xmlMatches) {
+    return { isValid: false, reason: 'No XML content found in the output' };
+  }
+
+  for (const xmlMatch of xmlMatches) {
+    const { isValid, reason } = validateXml(xmlMatch, requiredElements);
+    if (isValid) {
+      return { isValid: true, reason: reason };
+    }
+  }
+
+  return { isValid: false, reason: 'No valid XML content found matching the requirements' };
+}
+
 export async function isSql(
   outputString: string,
   renderedValue: AssertionValue | undefined,
@@ -118,7 +185,7 @@ export async function isSql(
   assertion: Assertion,
 ): Promise<GradingResult> {
   let pass = false;
-  let parsedSql;
+  let parsedSql: any;
   let databaseType: string = 'MySQL';
   let whiteTableList: string[] | undefined;
   let whiteColumnList: string[] | undefined;
@@ -198,20 +265,18 @@ export async function runAssertion({
   provider,
   assertion,
   test,
-  output,
   latencyMs,
-  logProbs,
-  cost,
+  providerResponse,
 }: {
   prompt?: string;
   provider?: ApiProvider;
   assertion: Assertion;
   test: AtomicTestCase;
-  output: string | object;
+  providerResponse: ProviderResponse;
   latencyMs?: number;
-  logProbs?: number[];
-  cost?: number;
 }): Promise<GradingResult> {
+  const { cost, logProbs, output: originalOutput } = providerResponse;
+  let output = originalOutput;
   let pass: boolean = false;
   let score: number = 0.0;
 
@@ -359,6 +424,33 @@ export async function runAssertion({
       pass,
       score: pass ? 1 : 0,
       reason: pass ? 'Assertion passed' : 'Expected output to be valid JSON',
+      assertion,
+    };
+  }
+
+  if (baseType === 'is-xml' || baseType === 'contains-xml') {
+    let requiredElements: string[] | undefined;
+    if (typeof renderedValue === 'string') {
+      requiredElements = renderedValue.split(',').map((el) => el.trim());
+    } else if (Array.isArray(renderedValue) && renderedValue.length > 0) {
+      requiredElements = renderedValue.map((el) => el.toString());
+    } else if (typeof renderedValue === 'object' && Object.keys(renderedValue).length > 0) {
+      if ('requiredElements' in renderedValue && Array.isArray(renderedValue.requiredElements)) {
+        requiredElements = renderedValue.requiredElements.map((el) => el.toString());
+      } else {
+        throw new Error('xml assertion must contain a string, array value, or no value');
+      }
+    }
+
+    const result = (baseType === 'is-xml' ? validateXml : containsXml)(
+      outputString,
+      requiredElements,
+    );
+    pass = result.isValid !== inverse;
+    return {
+      pass,
+      score: pass ? 1 : 0,
+      reason: pass ? 'Assertion passed' : result.reason,
       assertion,
     };
   }
@@ -1023,7 +1115,9 @@ ${
   }
 
   if (baseType === 'moderation') {
-    invariant(prompt, 'moderation assertion type must have a prompt');
+    // Some redteam techniques override the actual prompt that is used, so we need to assess that prompt for moderation.
+    const promptToModerate = providerResponse.metadata?.redteamFinalPrompt || prompt;
+    invariant(promptToModerate, 'moderation assertion type must have a prompt');
     invariant(typeof output === 'string', 'moderation assertion type must have a string output');
     invariant(
       !assertion.value ||
@@ -1031,11 +1125,11 @@ ${
       'moderation assertion value must be a string array if set',
     );
 
-    if (prompt[0] === '[' || prompt[0] === '{') {
+    if (promptToModerate[0] === '[' || promptToModerate[0] === '{') {
       // Try to extract the last user message from OpenAI-style prompts.
       try {
         const parsedPrompt = parseChatPrompt<null | { role: string; content: string }[]>(
-          prompt,
+          promptToModerate,
           null,
         );
         if (parsedPrompt && parsedPrompt.length > 0) {
@@ -1048,7 +1142,7 @@ ${
 
     const moderationResult = await matchesModeration(
       {
-        userPrompt: prompt,
+        userPrompt: promptToModerate,
         assistantResponse: output,
         categories: Array.isArray(assertion.value) ? assertion.value : [],
       },
@@ -1259,20 +1353,17 @@ ${
 export async function runAssertions({
   prompt,
   provider,
+  providerResponse,
   test,
-  output,
   latencyMs,
-  logProbs,
-  cost,
 }: {
   prompt?: string;
   provider?: ApiProvider;
+  providerResponse: ProviderResponse;
   test: AtomicTestCase;
-  output: string | object;
   latencyMs?: number;
-  logProbs?: number[];
-  cost?: number;
 }): Promise<GradingResult> {
+  const { cost, logProbs, output } = providerResponse;
   if (!test.assert || test.assert.length < 1) {
     return AssertionsResult.noAssertsResult();
   }
@@ -1323,12 +1414,10 @@ export async function runAssertions({
       const result = await runAssertion({
         prompt,
         provider,
+        providerResponse,
         assertion,
         test,
-        output,
         latencyMs,
-        logProbs,
-        cost,
       });
 
       assertResult.addResult({

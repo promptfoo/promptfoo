@@ -39,9 +39,7 @@ tests:
   - vars:
       question: "Which genus of moth in the world's seventh-largest country contains only one species?"
   - vars:
-      question:
-        'Who was once considered the best kick boxer in the world, however he has been involved in a number of controversies relating to his "unsportsm
-        nlike conducts" in the sport and crimes of violence outside of the ring.'
+      question: 'Who was once considered the best kick boxer in the world, however he has been involved in a number of controversies relating to his "unsportsmanlike conducts" in the sport and crimes of violence outside of the ring.'
   - vars:
       question: 'The Dutch-Belgian television series that "House of Anubis" was based on first aired in what year?'
   - vars:
@@ -94,14 +92,10 @@ tests:
       question: 'Who was inducted into the Rock and Roll Hall of Fame, David Lee Roth or Cia Berg?'
   - vars:
       question: "Zimbabwe's Guwe Secondary School has a sister school in what New York county?"
-    assert:
   - vars:
-      question: 'Who is the director of the 2003 film which has scenes in it fi
-        med at the Quality Cafe in Los Angeles?'
+      question: 'Who is the director of the 2003 film which has scenes in it filmed at the Quality Cafe in Los Angeles?'
   - vars:
-      question: "Which actress played the part of fictitious character Kimberly
-        Ann Hart, in the franchise built around a live action superhero television seri
-        s taking much of its footage from the Japanese tokusatsu 'Super Sentai'?"
+      question: "Which actress played the part of fictitious character Kimberly Ann Hart, in the franchise built around a live action superhero television series taking much of its footage from the Japanese tokusatsu 'Super Sentai'?"
   - vars:
       question: 'Who was born first, Pablo Trapero or Aleksander Ford?'
   - vars:
@@ -111,8 +105,7 @@ tests:
   - vars:
       question: 'Where is the company that purchased Aixam based in?'
   - vars:
-      question: 'Which documentary is about Finnish rock groups, Adam Clayton P
-        well or The Saimaa Gesture?'
+      question: 'Which documentary is about Finnish rock groups, Adam Clayton Powell or The Saimaa Gesture?'
   - vars:
       question: 'Who was inducted into the Rock and Roll Hall of Fame, David LeRoth or Cia Berg?'
   - vars:

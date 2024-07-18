@@ -31,6 +31,9 @@ const nextConfig = {
 
     return config;
   },
+  env: {
+    PROMPTFOO_VERSION: require('../../../package.json').version,
+  },
 };
 
 module.exports = nextConfig;
