@@ -18,12 +18,26 @@ describe('RedteamGenerateOptionsSchema', () => {
       injectVar: 'query',
       numTests: 50,
       output: 'sample-results.json',
-      plugins: ['harmful:hate'],
+      plugins: [{ name: 'harmful:hate' }],
       provider: 'openai:gpt-4',
       purpose: 'You are an expert content moderator',
       write: true,
     };
-    expect(RedteamGenerateOptionsSchema.safeParse(input).success).toBe(true);
+    expect(RedteamGenerateOptionsSchema.safeParse(input)).toEqual({
+      success: true,
+      data: {
+        cache: true,
+        config: 'promptfooconfig.yaml',
+        defaultConfig: { temperature: 0.7 },
+        injectVar: 'query',
+        numTests: 50,
+        output: 'sample-results.json',
+        plugins: [{ name: 'harmful:hate' }],
+        provider: 'openai:gpt-4',
+        purpose: 'You are an expert content moderator',
+        write: true,
+      },
+    });
   });
 
   it('should reject invalid plugin names', () => {
