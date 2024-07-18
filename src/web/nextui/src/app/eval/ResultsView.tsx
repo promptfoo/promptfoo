@@ -173,7 +173,7 @@ export default function ResultsView({
           prompts: [
             ...table.head.prompts.map((prompt) => ({
               ...prompt,
-              label: `[${evalId || defaultEvalId || recentEvals[0]?.evalId || 'Eval A'}] ${prompt.label || ''}`,
+              label: `[${evalId || defaultEvalId || 'Eval A'}] ${prompt.label || ''}`,
             })),
             ...comparisonTable.head.prompts.map((prompt) => ({
               ...prompt,
@@ -500,11 +500,7 @@ export default function ResultsView({
                 <Button
                   color="primary"
                   startIcon={<EyeIcon />}
-                  onClick={() =>
-                    router.push(
-                      `/report/?evalId=${evalId || defaultEvalId || recentEvals[0]?.evalId}`,
-                    )
-                  }
+                  onClick={() => router.push(`/report/?evalId=${evalId || defaultEvalId}`)}
                 >
                   Vulnerability Report
                 </Button>
