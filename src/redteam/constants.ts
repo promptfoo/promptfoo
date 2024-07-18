@@ -18,10 +18,16 @@ export const BASE_PLUGINS = [
   'prompt-injection',
 ];
 
-export const ADDITIONAL_PLUGINS = ['competitors', 'experimental-jailbreak'];
+export const ADDITIONAL_PLUGINS = ['competitors', 'experimental-jailbreak'] as [
+  string,
+  ...string[],
+];
 
 export const DEFAULT_PLUGINS = new Set([...BASE_PLUGINS, ...Object.keys(HARM_CATEGORIES)]);
-export const ALL_PLUGINS = new Set([...DEFAULT_PLUGINS, ...ADDITIONAL_PLUGINS]);
+export const ALL_PLUGINS = [...new Set([...DEFAULT_PLUGINS, ...ADDITIONAL_PLUGINS])].sort() as [
+  string,
+  ...string[],
+];
 
 // Duplicated in src/web/nextui/src/app/report/constants.ts for frontend
 export const subCategoryDescriptions: Record<string, string> = {

@@ -3,9 +3,9 @@ import cliProgress from 'cli-progress';
 import invariant from 'tiny-invariant';
 import logger from '../logger';
 import { loadApiProvider } from '../providers';
-import type { ApiProvider, TestCase, TestSuite } from '../types';
+import type { ApiProvider, TestCase } from '../types';
 import { extractVariablesFromTemplates } from '../util/templates';
-import { REDTEAM_MODEL, ALL_PLUGINS, DEFAULT_PLUGINS } from './constants';
+import { REDTEAM_MODEL, ALL_PLUGINS } from './constants';
 import { addInjections } from './methods/injections';
 import { addIterativeJailbreaks } from './methods/iterative';
 import CompetitorPlugin from './plugins/competitors';
@@ -27,9 +27,6 @@ interface SynthesizeOptions {
   purpose?: string;
   numTests: number;
 }
-
-// n is assigned a default value by commander. Require that it exists in the type
-type PartialSynthesizeOptions = Partial<Omit<SynthesizeOptions, 'numTests'>> & { numTests: number };
 
 interface Plugin {
   key: string;
@@ -116,7 +113,7 @@ const Methods: Method[] = [
 ];
 
 function validatePlugins(plugins: string[]): void {
-  const invalidPlugins = plugins.filter((plugin) => !ALL_PLUGINS.has(plugin));
+  const invalidPlugins = plugins.filter((plugin) => !ALL_PLUGINS.includes(plugin));
   if (invalidPlugins.length > 0) {
     const validPluginsString = Array.from(ALL_PLUGINS).join(', ');
     const invalidPluginsString = invalidPlugins.join(', ');
@@ -135,7 +132,12 @@ export async function synthesize({
   numTests,
 }: SynthesizeOptions) {
   validatePlugins(plugins);
-  const reasoningProvider = await loadApiProvider(provider || REDTEAM_MODEL);
+  const redteamProvider: ApiProvider = await loadApiProvider(provider || REDTEAM_MODEL, {
+    options: {
+      config: { temperature: 0.5 },
+    },
+  });
+
   logger.info(
     `Synthesizing test cases for ${prompts.length} ${
       prompts.length === 1 ? 'prompt' : 'prompts'
@@ -174,7 +176,7 @@ export async function synthesize({
 
   // Get purpose
   updateProgress();
-  const purpose = purposeOverride || (await getPurpose(reasoningProvider, prompts));
+  const purpose = purposeOverride || (await getPurpose(redteamProvider, prompts));
   updateProgress();
 
   logger.debug(`System purpose: ${purpose}`);
@@ -182,12 +184,6 @@ export async function synthesize({
   // Get adversarial test cases
   const testCases: TestCase[] = [];
   const harmfulPrompts: TestCase[] = [];
-
-  const redteamProvider: ApiProvider = await loadApiProvider(provider || REDTEAM_MODEL, {
-    options: {
-      config: { temperature: 0.5 },
-    },
-  });
 
   const addHarmfulCases = plugins.some((p) => p.startsWith('harmful'));
   if (plugins.includes('prompt-injection') || plugins.includes('jailbreak') || addHarmfulCases) {
@@ -217,7 +213,6 @@ export async function synthesize({
       logger.debug(`Added ${pluginTests.length} ${key} test cases`);
     }
   }
-
   for (const { key, action } of Methods) {
     if (plugins.includes(key)) {
       const newTestCases = action(testCases, harmfulPrompts, injectVar);
@@ -231,16 +226,4 @@ export async function synthesize({
   }
 
   return testCases;
-}
-
-export async function synthesizeFromTestSuite(
-  testSuite: TestSuite,
-  options: PartialSynthesizeOptions,
-) {
-  return synthesize({
-    ...options,
-    plugins:
-      options.plugins && options.plugins.length > 0 ? options.plugins : Array.from(DEFAULT_PLUGINS),
-    prompts: testSuite.prompts.map((prompt) => prompt.raw),
-  });
 }

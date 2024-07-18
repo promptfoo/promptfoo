@@ -39,8 +39,12 @@ export function shareCommand(program: Command) {
           output: process.stdout,
         });
 
+        const hostname = process.env.PROMPTFOO_SHARING_APP_BASE_URL
+          ? new URL(process.env.PROMPTFOO_SHARING_APP_BASE_URL).hostname
+          : 'app.promptfoo.dev';
+
         reader.question(
-          'Create a private shareable URL of your most recent eval?\n\nTo proceed, please confirm [Y/n] ',
+          `Create a private shareable URL of your most recent eval on ${hostname}?\n\nTo proceed, please confirm [Y/n] `,
           async function (answer: string) {
             if (answer.toLowerCase() !== 'yes' && answer.toLowerCase() !== 'y' && answer !== '') {
               reader.close();
