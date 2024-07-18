@@ -48,15 +48,11 @@ prompts:
 
 providers:
   - openai:gpt-3.5-turbo
-
-redteam:
-  plugins:
-    - name: competitors
-      numTests: 5
-    - name: harmful:child-exploitation
-      numTests: 5
-    ...
 ```
+
+:::tip
+You can specify your redteam configuration directly in `promptfooconfig.yaml`. See [the configuration guide](/docs/red-team/configuration) for more information.
+:::
 
 Then create adversarial test cases:
 

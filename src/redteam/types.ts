@@ -20,10 +20,6 @@ const redteamPluginObjectSchema = z.object({
  * Schema for `promptfoo generate redteam` command options
  */
 export const RedteamGenerateOptionsSchema = z.object({
-  addPlugins: z
-    .array(z.enum(REDTEAM_ADDITIONAL_PLUGINS))
-    .optional()
-    .describe('Additional plugins to include'),
   cache: z.boolean().describe('Whether to use caching'),
   config: z.string().optional().describe('Path to the configuration file'),
   defaultConfig: z.record(z.unknown()).describe('Default configuration object'),
@@ -33,6 +29,10 @@ export const RedteamGenerateOptionsSchema = z.object({
   numTests: z.number().int().positive().describe('Number of tests to generate'),
   output: z.string().optional().describe('Output file path'),
   plugins: z.array(redteamPluginObjectSchema).optional().describe('Plugins to use'),
+  addPlugins: z
+    .array(z.enum(REDTEAM_ADDITIONAL_PLUGINS))
+    .optional()
+    .describe('Additional plugins to include'),
   provider: z.string().optional().describe('Provider to use'),
   purpose: z.string().optional().describe('Purpose of the redteam generation'),
   write: z.boolean().describe('Whether to write the output'),

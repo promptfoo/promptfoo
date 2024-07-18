@@ -694,6 +694,7 @@ export type Scenario = z.infer<typeof ScenarioSchema>;
 export const AtomicTestCaseSchema = TestCaseSchema.extend({
   vars: z.record(z.union([z.string(), z.object({})])).optional(),
 }).strict();
+
 export type AtomicTestCase<Vars = Record<string, string | object>> = z.infer<
   typeof AtomicTestCaseSchema
 >;
