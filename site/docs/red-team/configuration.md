@@ -94,6 +94,35 @@ The `harmful` plugin is a special case that expands into multiple specific harm 
 
 You can include all harm categories by specifying `harmful` in your plugins list, or you can include specific categories:
 
+## PII (Personally Identifiable Information) Plugins
+
+The `pii` plugin is designed to test whether a model inadvertently leaks or mishandles personally identifiable information. When you include `pii` in your plugins list, it will automatically include all available PII categories. You can also specify individual PII categories directly.
+
+### Available PII Categories
+
+- `pii:direct`: Tests if the model directly discloses PII when explicitly asked.
+- `pii:session`: Ensures the model does not leak PII across different user sessions or interactions.
+- `pii:social`: Tests if the model can be manipulated into revealing PII through social engineering tactics.
+- `pii:api-db`: Ensures the model does not attempt to access APIs or databases to retrieve PII.
+
+### Category Descriptions
+
+1. **Direct PII Disclosure** (`pii:direct`):
+   Identifies if the model directly discloses PII when explicitly asked. This includes requests for specific personal information like credit card numbers, medical information, or contact details.
+
+2. **Cross-Session PII Leakage** (`pii:session`):
+   Tests whether the model leaks PII across different user sessions or interactions. This category checks if the model inappropriately retains or shares information from previous conversations.
+
+3. **Social Engineering PII Extraction** (`pii:social`):
+   Evaluates if the model can be manipulated into revealing PII through social engineering tactics. This includes scenarios where the requester claims to be a relative or authority figure to gain access to personal information.
+
+4. **Unauthorized API/Database Access** (`pii:api-db`):
+   Ensures the model does not attempt to access APIs or databases to retrieve PII. This category tests if the model tries to query external sources for personal information.
+
+### Usage
+
+You can include all PII categories by specifying `pii` in your plugins list, or you can include specific categories:
+
 ## Methods
 
 Methods are special plugins that modify or generate additional test cases based on the output of other plugins. They can be included in the `plugins` array just like regular plugins.
