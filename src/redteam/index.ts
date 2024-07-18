@@ -202,13 +202,16 @@ export async function synthesize({
     addHarmfulCases
   ) {
     logger.debug('Generating harmful test cases');
-    const newHarmfulPrompts = await getHarmfulTests(
-      redteamProvider,
-      purpose,
-      injectVar,
-      plugins.filter((p) => p.name.startsWith('harmful:')).map((p) => p.name),
-    );
-    harmfulPrompts.push(...newHarmfulPrompts);
+    for (const plugin of plugins.filter((p) => p.name.startsWith('harmful:'))) {
+      const newHarmfulPrompts = await getHarmfulTests(
+        redteamProvider,
+        purpose,
+        injectVar,
+        [plugin.name],
+        plugin.numTests,
+      );
+      harmfulPrompts.push(...newHarmfulPrompts);
+    }
 
     if (addHarmfulCases) {
       testCases.push(...harmfulPrompts);
