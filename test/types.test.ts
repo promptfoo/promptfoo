@@ -213,4 +213,67 @@ describe('redTeamSchema', () => {
     };
     expect(redTeamSchema.safeParse(input).success).toBe(false);
   });
+
+  it('should accept and transform a single injectVar string', () => {
+    const input = {
+      injectVar: 'system',
+      plugins: ['jailbreak'],
+    };
+    expect(redTeamSchema.safeParse(input)).toEqual({
+      success: true,
+      data: {
+        injectVar: ['system'],
+        plugins: [{ name: 'jailbreak', numTests: 5 }],
+      },
+    });
+  });
+
+  it('should accept an array of injectVar strings', () => {
+    const input = {
+      injectVar: ['system', 'user'],
+      plugins: ['jailbreak'],
+    };
+    expect(redTeamSchema.safeParse(input)).toEqual({
+      success: true,
+      data: {
+        injectVar: ['system', 'user'],
+        plugins: [{ name: 'jailbreak', numTests: 5 }],
+      },
+    });
+  });
+
+  it('should accept a provider string', () => {
+    const input = {
+      provider: 'openai:gpt-3.5-turbo',
+      plugins: ['jailbreak'],
+    };
+    expect(redTeamSchema.safeParse(input)).toEqual({
+      success: true,
+      data: {
+        provider: 'openai:gpt-3.5-turbo',
+        plugins: [{ name: 'jailbreak', numTests: 5 }],
+      },
+    });
+  });
+
+  it('should include injectVar, provider, and purpose when all are provided', () => {
+    const input = {
+      injectVar: ['system', 'user'],
+      provider: 'openai:gpt-4',
+      purpose: 'Test adversarial inputs',
+      plugins: ['jailbreak', 'prompt-injection'],
+    };
+    expect(redTeamSchema.safeParse(input)).toEqual({
+      success: true,
+      data: {
+        injectVar: ['system', 'user'],
+        provider: 'openai:gpt-4',
+        purpose: 'Test adversarial inputs',
+        plugins: [
+          { name: 'jailbreak', numTests: 5 },
+          { name: 'prompt-injection', numTests: 5 },
+        ],
+      },
+    });
+  });
 });

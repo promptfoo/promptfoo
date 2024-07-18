@@ -708,7 +708,12 @@ const redteamPluginSchema = z.union([
 
 export const redTeamSchema = z
   .object({
+    // string or array of strings, transform to array if string. Can be inferred from the prompts
+    injectVar: z.union([z.string().transform((s) => [s]), z.array(z.string())]).optional(),
+    // purpose override string - describes the prompt templates
     purpose: z.string().optional(),
+    // used for generating adversarial inputs
+    provider: z.string().optional(),
     numTests: z.number().int().positive().default(5),
     plugins: z
       .array(redteamPluginSchema)
@@ -740,6 +745,8 @@ export const redTeamSchema = z
 
     return {
       ...(data.purpose ? { purpose: data.purpose } : {}),
+      ...(data.injectVar ? { injectVar: data.injectVar } : {}),
+      ...(data.provider ? { provider: data.provider } : {}),
       plugins: uniquePlugins,
     };
   });
