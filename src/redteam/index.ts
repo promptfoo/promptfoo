@@ -15,7 +15,7 @@ import HallucinationPlugin from './plugins/hallucination';
 import { HARM_CATEGORIES, getHarmfulTests } from './plugins/harmful';
 import HijackingPlugin from './plugins/hijacking';
 import OverreliancePlugin from './plugins/overreliance';
-import { getPiiTests } from './plugins/pii';
+import { PII_REQUEST_CATEGORIES, getPiiLeakTestsForCategory } from './plugins/pii';
 import PoliticsPlugin from './plugins/politics';
 import { getPurpose } from './purpose';
 
@@ -65,6 +65,11 @@ const Plugins: Plugin[] = [
     action: (provider, purpose, injectVar, n) =>
       new HallucinationPlugin(provider, purpose, injectVar).generateTests(n),
   },
+  ...(Object.keys(HARM_CATEGORIES).map((category) => ({
+    key: category,
+    action: (provider, purpose, injectVar, n) =>
+      getHarmfulTests(provider, purpose, injectVar, [category], n),
+  })) as Plugin[]),
   {
     key: 'hijacking',
     action: (provider, purpose, injectVar, n) =>
@@ -75,22 +80,22 @@ const Plugins: Plugin[] = [
     action: (provider, purpose, injectVar, n) =>
       new OverreliancePlugin(provider, purpose, injectVar).generateTests(n),
   },
-  { key: 'pii', action: getPiiTests },
+  ...(PII_REQUEST_CATEGORIES.map((category) => ({
+    key: category,
+    action: (provider, purpose, injectVar, n) =>
+      getPiiLeakTestsForCategory(provider, purpose, injectVar, category, n),
+  })) as Plugin[]),
   {
     key: 'politics',
     action: (provider, purpose, injectVar, n) =>
       new PoliticsPlugin(provider, purpose, injectVar).generateTests(n),
   },
-  ...(Object.keys(HARM_CATEGORIES).map((category) => ({
-    key: category,
-    action: (provider, purpose, injectVar, n) =>
-      getHarmfulTests(provider, purpose, injectVar, [category], n),
-  })) as Plugin[]),
 ];
 
 // These plugins refer to a collection of tests.
 const categories = {
   harmful: Object.keys(HARM_CATEGORIES),
+  pii: PII_REQUEST_CATEGORIES,
 } as const;
 
 const Methods: Method[] = [
@@ -212,30 +217,7 @@ export async function synthesize({
   updateProgress();
 
   logger.debug(`System purpose: ${purpose}`);
-  /*
-  const addHarmfulCases = plugins.some((p) => p.startsWith('harmful'));
-  if (plugins.includes('prompt-injection') || plugins.includes('jailbreak') || addHarmfulCases) {
-    logger.debug('Generating harmful test cases');
-    for (const plugin of plugins.filter((p) => p.startsWith('harmful:'))) {
-      const newHarmfulPrompts = await getHarmfulTests(
-        redteamProvider,
-        purpose,
-        injectVar,
-        [plugin],
-        numTests,
-      );
-      harmfulPrompts.push(...newHarmfulPrompts);
-    }
 
-    if (addHarmfulCases) {
-      testCases.push(...harmfulPrompts);
-      logger.debug(`Added ${harmfulPrompts.length} harmful test cases`);
-    } else {
-      logger.debug(`Generated ${harmfulPrompts.length} harmful test cases`);
-    }
-  } */
-
-  // Get adversarial test cases
   const testCases: (TestCase & { plugin: string })[] = [];
   for (const { key, action } of Plugins) {
     if (plugins.includes(key)) {
@@ -246,12 +228,14 @@ export async function synthesize({
       logger.debug(`Added ${pluginTests.length} ${key} test cases`);
     }
   }
+
   for (const { key, action } of Methods) {
     if (plugins.includes(key)) {
       const newTestCases = action(testCases, injectVar);
       testCases.push(...newTestCases.map((t) => ({ ...t, plugin: key })));
     }
   }
+
   // Finish progress bar
   if (process.env.LOG_LEVEL !== 'debug') {
     progressBar.update(100);
