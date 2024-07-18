@@ -27,7 +27,11 @@ import {
   HuggingfaceTextClassificationProvider,
 } from '../src/providers/huggingface';
 import { LlamaProvider } from '../src/providers/llama';
-import { OllamaChatProvider, OllamaCompletionProvider } from '../src/providers/ollama';
+import {
+  OllamaChatProvider,
+  OllamaCompletionProvider,
+  OllamaEmbeddingProvider,
+} from '../src/providers/ollama';
 import {
   OpenAiAssistantProvider,
   OpenAiCompletionProvider,
@@ -758,7 +762,10 @@ config:
     const provider = await loadApiProvider('file://path/to/mock-provider-file.yaml');
     expect(provider.id()).toBe('openai:gpt-4');
     expect(fs.readFileSync).toHaveBeenCalledTimes(1);
-    expect(fs.readFileSync).toHaveBeenCalledWith('path/to/mock-provider-file.yaml', 'utf8');
+    expect(fs.readFileSync).toHaveBeenCalledWith(
+      expect.stringMatching(/path[\\\/]to[\\\/]mock-provider-file\.yaml/),
+      'utf8',
+    );
   });
 
   it('loadApiProvider with openai:chat', async () => {
@@ -822,6 +829,16 @@ config:
     const provider = await loadApiProvider('ollama:completion:llama2:13b');
     expect(provider).toBeInstanceOf(OllamaCompletionProvider);
     expect(provider.id()).toBe('ollama:completion:llama2:13b');
+  });
+
+  it('loadApiProvider with ollama:embedding:modelName', async () => {
+    const provider = await loadApiProvider('ollama:embedding:llama2:13b');
+    expect(provider).toBeInstanceOf(OllamaEmbeddingProvider);
+  });
+
+  it('loadApiProvider with ollama:embeddings:modelName', async () => {
+    const provider = await loadApiProvider('ollama:embeddings:llama2:13b');
+    expect(provider).toBeInstanceOf(OllamaEmbeddingProvider);
   });
 
   it('loadApiProvider with ollama:chat:modelName', async () => {

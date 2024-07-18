@@ -12,3 +12,5 @@ __pycache__
 
 # jest
 .coverage
+.ruff_cache
+.vscode

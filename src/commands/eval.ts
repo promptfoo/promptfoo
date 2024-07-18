@@ -1,6 +1,7 @@
 import chalk from 'chalk';
 import chokidar from 'chokidar';
 import { Command } from 'commander';
+import dedent from 'dedent';
 import * as path from 'path';
 import invariant from 'tiny-invariant';
 import { disableCache } from '../cache';
@@ -18,6 +19,7 @@ import {
   OutputFileExtension,
   TestSuite,
   UnifiedConfig,
+  TestSuiteSchema,
 } from '../types';
 import {
   migrateResultsFromFileSystemToDatabase,
@@ -102,6 +104,19 @@ export async function doEval(
     if (cmdObj.generateSuggestions) {
       options.generateSuggestions = true;
     }
+
+    const testSuiteSchema = TestSuiteSchema.safeParse(testSuite);
+    if (!testSuiteSchema.success) {
+      logger.warn(
+        chalk.yellow(dedent`
+      TestSuite Schema Validation Error:
+      
+        ${JSON.stringify(testSuiteSchema.error.format())}
+      
+      Please review your promptfooconfig.yaml configuration.`),
+      );
+    }
+    testSuite = testSuiteSchema.data as TestSuite;
 
     const summary = await evaluate(testSuite, {
       ...options,
