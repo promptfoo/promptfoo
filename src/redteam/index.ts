@@ -122,6 +122,13 @@ function validatePlugins(plugins: string[]): void {
   }
 }
 
+const formatTestCount = (numTests: number) => {
+  if (numTests === 1) {
+    return '1 test';
+  }
+  return `${numTests} tests`;
+};
+
 export async function synthesize({
   prompts,
   provider,
@@ -139,7 +146,12 @@ export async function synthesize({
   logger.info(
     `Synthesizing test cases for ${prompts.length} ${
       prompts.length === 1 ? 'prompt' : 'prompts'
-    }...\nUsing plugins:\n\t${chalk.yellow(plugins.sort().join('\n\t'))}`,
+    }...\nUsing plugins:\n\n${chalk.yellow(
+      plugins
+        .map((p) => `${p.name} (${formatTestCount(p.numTests)})`)
+        .sort()
+        .join('\n'),
+    )}\n`,
   );
   logger.info('Generating...');
 
