@@ -1,7 +1,6 @@
 ---
 sidebar_position: 2
 sidebar_label: 'Configuration'
-sidebar: redTeamSidebar
 ---
 
 # Redteam Configuration

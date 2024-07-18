@@ -1,7 +1,6 @@
 ---
 sidebar_position: 1
 sidebar_label: Intro
-sidebar: redTeamSidebar
 ---
 
 import Tabs from '@theme/Tabs';
