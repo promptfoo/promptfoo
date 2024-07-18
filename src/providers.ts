@@ -289,12 +289,6 @@ export async function loadApiProvider(
   } else if (providerPath === 'llama' || providerPath.startsWith('llama:')) {
     const modelName = providerPath.split(':')[1];
     ret = new LlamaProvider(modelName, providerOptions);
-  } else if (
-    providerPath.startsWith('ollama:embeddings:') ||
-    providerPath.startsWith('ollama:embedding:')
-  ) {
-    const modelName = providerPath.split(':')[2];
-    ret = new OllamaEmbeddingProvider(modelName, providerOptions);
   } else if (providerPath.startsWith('ollama:')) {
     const splits = providerPath.split(':');
     const firstPart = splits[1];
@@ -304,6 +298,9 @@ export async function loadApiProvider(
     } else if (firstPart === 'completion') {
       const modelName = splits.slice(2).join(':');
       ret = new OllamaCompletionProvider(modelName, providerOptions);
+    } else if (firstPart === 'embedding' || firstPart === 'embeddings') {
+      const modelName = splits.slice(2).join(':');
+      ret = new OllamaEmbeddingProvider(modelName, providerOptions);
     } else {
       // Default to completion provider
       const modelName = splits.slice(1).join(':');
