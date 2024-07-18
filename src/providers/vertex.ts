@@ -315,22 +315,35 @@ export class VertexChatProvider extends VertexGenericProvider {
     logger.debug(`Gemini API response: ${JSON.stringify(data)}`);
     try {
       const dataWithError = data as GeminiErrorResponse[];
-      const error = dataWithError[0].error;
+      const error = dataWithError[0]?.error;
       if (error) {
         return {
           error: `Error ${error.code}: ${error.message}`,
         };
       }
       const dataWithResponse = data as GeminiResponseData[];
-      const output = dataWithResponse
-        .map((datum: GeminiResponseData) => {
+      let output = '';
+      for (const datum of dataWithResponse) {
+        if (datum.candidates && datum.candidates[0]?.content?.parts) {
           const part = datum.candidates[0].content.parts[0];
           if ('text' in part) {
-            return part.text;
+            output += part.text;
+          } else {
+            output += JSON.stringify(part);
           }
-          return JSON.stringify(part);
-        })
-        .join('');
+        } else if (datum.candidates && datum.candidates[0]?.finishReason === 'SAFETY') {
+          return {
+            error: 'Content was blocked due to safety concerns.',
+          };
+        }
+      }
+
+      if (!output) {
+        return {
+          error: `No output found in response: ${JSON.stringify(data)}`,
+        };
+      }
+
       const lastData = dataWithResponse[dataWithResponse.length - 1];
       const tokenUsage = {
         total: lastData.usageMetadata?.totalTokenCount || 0,
@@ -350,7 +363,7 @@ export class VertexChatProvider extends VertexGenericProvider {
       return response;
     } catch (err) {
       return {
-        error: `Gemini API response error: ${String(err)}: ${JSON.stringify(data)}`,
+        error: `Gemini API response error: ${String(err)}. Response data: ${JSON.stringify(data)}`,
       };
     }
   }
