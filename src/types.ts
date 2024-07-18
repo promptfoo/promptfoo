@@ -761,22 +761,22 @@ export const redTeamSchema = z
   })
   .transform((data) => {
     const plugins = data.plugins
-      .flatMap((plugin) => {
-        const pluginObj =
-          typeof plugin === 'string'
-            ? { name: plugin, numTests: data.numTests }
-            : { ...plugin, numTests: plugin.numTests ?? data.numTests };
-
+      .map((plugin) =>
+        typeof plugin === 'string'
+          ? { name: plugin, numTests: data.numTests }
+          : { ...plugin, numTests: plugin.numTests ?? data.numTests },
+      )
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .flatMap((pluginObj) => {
         if (pluginObj.name === 'harmful') {
           return Object.keys(HARM_CATEGORIES).map((category) => ({
             name: category,
             numTests: pluginObj.numTests,
           }));
         }
-
         return pluginObj;
       })
-      .filter((plugin) => plugin.name !== 'harmful');
+      .filter((plugin) => plugin.name !== 'harmful'); // category plugins are handled above
 
     const uniquePlugins = Array.from(
       plugins.reduce((map, plugin) => map.set(plugin.name, plugin), new Map()).values(),

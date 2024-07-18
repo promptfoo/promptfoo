@@ -2,6 +2,7 @@ import {
   ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
 } from '../src/redteam/constants';
+import { HARM_CATEGORIES } from '../src/redteam/plugins/harmful';
 import { redTeamSchema } from '../src/types';
 
 describe('redTeamSchema', () => {
@@ -95,7 +96,7 @@ describe('redTeamSchema', () => {
     const input = {
       plugins: ['invalid-plugin-name'],
     };
-    expect(redTeamSchema.safeParse(input).success).toEqual(false);
+    expect(redTeamSchema.safeParse(input).success).toBe(false);
   });
 
   it('should reject negative numTests', () => {
@@ -125,5 +126,91 @@ describe('redTeamSchema', () => {
         })),
       },
     });
+  });
+
+  it('should expand harmful plugin to all harm categories', () => {
+    const input = {
+      plugins: ['harmful'],
+      numTests: 3,
+    };
+    expect(redTeamSchema.safeParse(input)).toEqual({
+      success: true,
+      data: {
+        plugins: Object.keys(HARM_CATEGORIES)
+          .sort()
+          .map((category) => ({
+            name: category,
+            numTests: 3,
+          })),
+      },
+    });
+  });
+
+  it('should allow overriding specific harm categories', () => {
+    const input = {
+      plugins: [
+        { name: 'harmful:hate', numTests: 10 },
+        'harmful',
+        { name: 'harmful:violent-crime', numTests: 5 },
+      ],
+      numTests: 3,
+    };
+    expect(redTeamSchema.safeParse(input)).toEqual({
+      success: true,
+      data: {
+        plugins: [
+          { name: 'harmful:hate', numTests: 10 },
+          { name: 'harmful:violent-crime', numTests: 5 },
+          ...Object.keys(HARM_CATEGORIES)
+            .filter((category) => !['harmful:hate', 'harmful:violent-crime'].includes(category))
+            .map((category) => ({ name: category, numTests: 3 })),
+        ].sort((a, b) => a.name.localeCompare(b.name)),
+      },
+    });
+    expect(redTeamSchema.safeParse(input)?.data?.plugins).toHaveLength(
+      Object.keys(HARM_CATEGORIES).length,
+    );
+  });
+
+  it('should not duplicate harm categories when specified individually', () => {
+    const input = {
+      plugins: ['harmful', 'harmful:hate', { name: 'harmful:violent-crime', numTests: 5 }],
+      numTests: 3,
+    };
+    expect(redTeamSchema.safeParse(input)).toEqual({
+      success: true,
+      data: {
+        plugins: expect.arrayContaining([
+          { name: 'harmful:hate', numTests: 3 },
+          { name: 'harmful:violent-crime', numTests: 5 },
+          ...Object.keys(HARM_CATEGORIES)
+            .filter((category) => !['harmful:hate', 'harmful:violent-crime'].includes(category))
+            .map((category) => ({ name: category, numTests: 3 })),
+        ]),
+      },
+    });
+  });
+
+  it('should handle harmful categories without specifying harmful plugin', () => {
+    const input = {
+      plugins: [{ name: 'harmful:hate', numTests: 10 }, 'harmful:violent-crime'],
+      numTests: 3,
+    };
+    expect(redTeamSchema.safeParse(input)).toEqual({
+      success: true,
+      data: {
+        plugins: expect.arrayContaining([
+          { name: 'harmful:hate', numTests: 10 },
+          { name: 'harmful:violent-crime', numTests: 3 },
+        ]),
+      },
+    });
+  });
+
+  it('should reject invalid harm categories', () => {
+    const input = {
+      plugins: ['harmful:invalid-category'],
+    };
+    expect(redTeamSchema.safeParse(input).success).toBe(false);
   });
 });
