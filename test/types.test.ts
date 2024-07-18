@@ -21,8 +21,8 @@ describe('redTeamSchema', () => {
         purpose: 'You are a travel agent',
         plugins: [
           { name: 'harmful:non-violent-crime', numTests: 5 },
-          { name: 'prompt-injection', numTests: 3 },
           { name: 'hijacking', numTests: 3 },
+          { name: 'prompt-injection', numTests: 3 },
         ],
       },
     });
@@ -33,7 +33,10 @@ describe('redTeamSchema', () => {
     expect(redTeamSchema.safeParse(input)).toEqual({
       success: true,
       data: {
-        plugins: Array.from(REDTEAM_DEFAULT_PLUGINS).map((name) => ({ name, numTests: 5 })),
+        plugins: Array.from(REDTEAM_DEFAULT_PLUGINS)
+          .sort()
+          .filter((name) => name !== 'harmful')
+          .map((name) => ({ name, numTests: 5 })),
       },
     });
   });
@@ -44,7 +47,10 @@ describe('redTeamSchema', () => {
       success: true,
       data: {
         purpose: undefined,
-        plugins: Array.from(REDTEAM_DEFAULT_PLUGINS).map((name) => ({ name, numTests: 10 })),
+        plugins: Array.from(REDTEAM_DEFAULT_PLUGINS)
+          .sort()
+          .filter((name) => name !== 'harmful')
+          .map((name) => ({ name, numTests: 10 })),
       },
     });
   });
@@ -77,9 +83,9 @@ describe('redTeamSchema', () => {
       success: true,
       data: {
         plugins: [
+          { name: 'harmful:non-violent-crime', numTests: 7 },
           { name: 'jailbreak', numTests: 3 },
           { name: 'prompt-injection', numTests: 7 },
-          { name: 'harmful:non-violent-crime', numTests: 7 },
         ],
       },
     });
@@ -113,7 +119,10 @@ describe('redTeamSchema', () => {
     expect(redTeamSchema.safeParse(input)).toEqual({
       success: true,
       data: {
-        plugins: expect.arrayContaining(REDTEAM_ALL_PLUGINS.map((name) => ({ name, numTests: 5 }))),
+        plugins: REDTEAM_ALL_PLUGINS.filter((name) => name !== 'harmful').map((name) => ({
+          name,
+          numTests: 5,
+        })),
       },
     });
   });

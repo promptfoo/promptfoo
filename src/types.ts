@@ -3,6 +3,7 @@ import {
   ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
 } from './redteam/constants';
+import { HARM_CATEGORIES } from './redteam/plugins/harmful';
 
 export const CommandLineOptionsSchema = z.object({
   // Shared with TestSuite
@@ -758,14 +759,34 @@ export const redTeamSchema = z
       .optional()
       .default(() => Array.from(REDTEAM_DEFAULT_PLUGINS).map((name) => ({ name }))),
   })
-  .transform((data) => ({
-    ...(data.purpose ? { purpose: data.purpose } : {}),
-    plugins: data.plugins.map((plugin) =>
-      typeof plugin === 'string'
-        ? { name: plugin, numTests: data.numTests }
-        : { ...plugin, numTests: plugin.numTests ?? data.numTests },
-    ),
-  }));
+  .transform((data) => {
+    const plugins = data.plugins
+      .flatMap((plugin) => {
+        const pluginObj =
+          typeof plugin === 'string'
+            ? { name: plugin, numTests: data.numTests }
+            : { ...plugin, numTests: plugin.numTests ?? data.numTests };
+
+        if (pluginObj.name === 'harmful') {
+          return Object.keys(HARM_CATEGORIES).map((category) => ({
+            name: category,
+            numTests: pluginObj.numTests,
+          }));
+        }
+
+        return pluginObj;
+      })
+      .filter((plugin) => plugin.name !== 'harmful');
+
+    const uniquePlugins = Array.from(
+      plugins.reduce((map, plugin) => map.set(plugin.name, plugin), new Map()).values(),
+    ).sort((a, b) => a.name.localeCompare(b.name));
+
+    return {
+      ...(data.purpose ? { purpose: data.purpose } : {}),
+      plugins: uniquePlugins,
+    };
+  });
 
 // TestSuiteConfig = Test Suite, but before everything is parsed and resolved.  Providers are just strings, prompts are filepaths, tests can be filepath or inline.
 export const TestSuiteConfigSchema = z.object({

@@ -9,7 +9,7 @@ export const BASE_PLUGINS = [
   'contracts',
   'excessive-agency',
   'hallucination',
-  'harmful',
+  'harmful', // NOTE: harmful is a group of plugins, not a single plugin
   'hijacking',
   'jailbreak',
   'overreliance',
