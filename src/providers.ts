@@ -90,7 +90,10 @@ export async function loadApiProvider(
     (providerPath.endsWith('.yaml') || providerPath.endsWith('.yml'))
   ) {
     const filePath = providerPath.slice('file://'.length);
-    const yamlContent = yaml.load(fs.readFileSync(filePath, 'utf8')) as ProviderOptions;
+    const modulePath = path.isAbsolute(filePath)
+      ? filePath
+      : path.join(basePath || process.cwd(), filePath);
+    const yamlContent = yaml.load(fs.readFileSync(modulePath, 'utf8')) as ProviderOptions;
     invariant(yamlContent, `Provider config ${filePath} is undefined`);
     invariant(yamlContent.id, `Provider config ${filePath} must have an id`);
     logger.info(`Loaded provider ${yamlContent.id} from ${filePath}`);
@@ -353,6 +356,7 @@ export async function loadApiProvider(
     const modulePath = path.isAbsolute(providerPath)
       ? providerPath
       : path.join(basePath || process.cwd(), providerPath);
+
     const CustomApiProvider = await importModule(modulePath);
     ret = new CustomApiProvider(options);
   }
