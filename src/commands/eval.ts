@@ -116,7 +116,6 @@ export async function doEval(
       Please review your promptfooconfig.yaml configuration.`),
       );
     }
-    testSuite = testSuiteSchema.data as TestSuite;
 
     const summary = await evaluate(testSuite, {
       ...options,
