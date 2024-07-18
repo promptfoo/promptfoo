@@ -175,15 +175,6 @@ prompts:
 providers:
   - openai:gpt-3.5-turbo
   - anthropic:messages:claude-3.5-sonnet-20240620
-
-redteam:
-  plugins:
-    - name: competitors
-      numTests: 5
-    - name: harmful:child-exploitation
-      numTests: 5
-    - name: harmful:copyright-violations
-      numTests: 5
 ```
 
 <details>
