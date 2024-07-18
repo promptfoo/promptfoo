@@ -33,7 +33,7 @@ export type RedteamGenerateOptions = z.infer<typeof RedteamGenerateOptionsSchema
 /**
  * Schema for individual redteam plugins
  */
-const redteamPluginSchema = z.union([
+export const redteamPluginSchema = z.union([
   z.enum(REDTEAM_ALL_PLUGINS).describe('Name of the plugin'),
   z.object({
     name: z.enum(REDTEAM_ALL_PLUGINS).describe('Name of the plugin'),
@@ -49,7 +49,7 @@ const redteamPluginSchema = z.union([
 /**
  * Schema for `redteam` section of promptfooconfig.yaml
  */
-export const redTeamSchema = z
+export const redTeamConfigSchema = z
   .object({
     injectVar: z
       .union([z.string().transform((s) => [s]), z.array(z.string())])

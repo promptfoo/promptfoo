@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { redTeamSchema } from './redteam/types';
+import { redTeamConfigSchema } from './redteam/types';
 
 export const CommandLineOptionsSchema = z.object({
   // Shared with TestSuite
@@ -753,7 +753,7 @@ export const TestSuiteSchema = z.object({
   derivedMetrics: z.array(DerivedMetricSchema).optional(),
 
   // Redteam configuration - used only when generating redteam tests
-  redteam: redTeamSchema.optional(),
+  redteam: redTeamConfigSchema.optional(),
 });
 
 export type TestSuite = z.infer<typeof TestSuiteSchema>;

@@ -3,9 +3,80 @@ import {
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
 } from '../../src/redteam/constants';
 import { HARM_CATEGORIES } from '../../src/redteam/plugins/harmful';
-import { redTeamSchema } from '../../src/redteam/types';
+import {
+  RedteamGenerateOptionsSchema,
+  redTeamConfigSchema,
+  redteamPluginSchema,
+} from '../../src/redteam/types';
 
-describe('redTeamSchema', () => {
+describe('RedteamGenerateOptionsSchema', () => {
+  it('should accept valid options for a redteam test', () => {
+    const input = {
+      cache: true,
+      config: 'promptfooconfig.yaml',
+      defaultConfig: { temperature: 0.7 },
+      injectVar: 'query',
+      numTests: 50,
+      output: 'sample-results.json',
+      plugins: ['harmful:hate'],
+      provider: 'openai:gpt-4',
+      purpose: 'You are an expert content moderator',
+      write: true,
+    };
+    expect(RedteamGenerateOptionsSchema.safeParse(input).success).toBe(true);
+  });
+
+  it('should reject invalid plugin names', () => {
+    const input = {
+      plugins: ['harmful:medical'],
+      numTests: 10,
+    };
+    expect(RedteamGenerateOptionsSchema.safeParse(input).success).toBe(false);
+  });
+
+  it('should require numTests to be a positive integer', () => {
+    const input = {
+      numTests: -5,
+      plugins: ['harmful:hate'],
+    };
+    expect(RedteamGenerateOptionsSchema.safeParse(input).success).toBe(false);
+  });
+});
+
+describe('redteamPluginSchema', () => {
+  it('should accept a valid plugin name as a string', () => {
+    expect(redteamPluginSchema.safeParse('hijacking').success).toBe(true);
+  });
+
+  it('should accept a valid plugin object', () => {
+    const input = {
+      name: 'harmful:hate',
+      numTests: 30,
+    };
+    expect(redteamPluginSchema.safeParse(input).success).toBe(true);
+  });
+
+  it('should reject an invalid plugin name', () => {
+    expect(redteamPluginSchema.safeParse('medical').success).toBe(false);
+  });
+
+  it('should reject a plugin object with negative numTests', () => {
+    const input = {
+      name: 'jailbreak',
+      numTests: -10,
+    };
+    expect(redteamPluginSchema.safeParse(input).success).toBe(false);
+  });
+
+  it('should allow omitting numTests in a plugin object', () => {
+    const input = {
+      name: 'prompt-injection',
+    };
+    expect(redteamPluginSchema.safeParse(input).success).toBe(true);
+  });
+});
+
+describe('redTeamConfigSchema', () => {
   it('should accept a valid configuration with all fields', () => {
     const input = {
       purpose: 'You are a travel agent',
@@ -16,7 +87,7 @@ describe('redTeamSchema', () => {
         { name: 'hijacking' },
       ],
     };
-    expect(redTeamSchema.safeParse(input)).toEqual({
+    expect(redTeamConfigSchema.safeParse(input)).toEqual({
       success: true,
       data: {
         purpose: 'You are a travel agent',
@@ -31,7 +102,7 @@ describe('redTeamSchema', () => {
 
   it('should use default values when fields are omitted', () => {
     const input = {};
-    expect(redTeamSchema.safeParse(input)).toEqual({
+    expect(redTeamConfigSchema.safeParse(input)).toEqual({
       success: true,
       data: {
         plugins: Array.from(REDTEAM_DEFAULT_PLUGINS)
@@ -44,7 +115,7 @@ describe('redTeamSchema', () => {
 
   it('should allow omitting the purpose field', () => {
     const input = { numTests: 10 };
-    expect(redTeamSchema.safeParse(input)).toEqual({
+    expect(redTeamConfigSchema.safeParse(input)).toEqual({
       success: true,
       data: {
         purpose: undefined,
@@ -60,7 +131,7 @@ describe('redTeamSchema', () => {
     const input = {
       plugins: ['jailbreak', 'prompt-injection'],
     };
-    expect(redTeamSchema.safeParse(input)).toEqual({
+    expect(redTeamConfigSchema.safeParse(input)).toEqual({
       success: true,
       data: {
         plugins: [
@@ -80,7 +151,7 @@ describe('redTeamSchema', () => {
         'harmful:non-violent-crime',
       ],
     };
-    expect(redTeamSchema.safeParse(input)).toEqual({
+    expect(redTeamConfigSchema.safeParse(input)).toEqual({
       success: true,
       data: {
         plugins: [
@@ -96,28 +167,28 @@ describe('redTeamSchema', () => {
     const input = {
       plugins: ['invalid-plugin-name'],
     };
-    expect(redTeamSchema.safeParse(input).success).toBe(false);
+    expect(redTeamConfigSchema.safeParse(input).success).toBe(false);
   });
 
   it('should reject negative numTests', () => {
     const input = {
       numTests: -1,
     };
-    expect(redTeamSchema.safeParse(input).success).toBe(false);
+    expect(redTeamConfigSchema.safeParse(input).success).toBe(false);
   });
 
   it('should reject non-integer numTests', () => {
     const input = {
       numTests: 3.5,
     };
-    expect(redTeamSchema.safeParse(input).success).toBe(false);
+    expect(redTeamConfigSchema.safeParse(input).success).toBe(false);
   });
 
   it('should allow all valid plugin names', () => {
     const input = {
       plugins: REDTEAM_ALL_PLUGINS,
     };
-    expect(redTeamSchema.safeParse(input)).toEqual({
+    expect(redTeamConfigSchema.safeParse(input)).toEqual({
       success: true,
       data: {
         plugins: REDTEAM_ALL_PLUGINS.filter((name) => name !== 'harmful').map((name) => ({
@@ -133,7 +204,7 @@ describe('redTeamSchema', () => {
       plugins: ['harmful'],
       numTests: 3,
     };
-    expect(redTeamSchema.safeParse(input)).toEqual({
+    expect(redTeamConfigSchema.safeParse(input)).toEqual({
       success: true,
       data: {
         plugins: Object.keys(HARM_CATEGORIES)
@@ -155,7 +226,7 @@ describe('redTeamSchema', () => {
       ],
       numTests: 3,
     };
-    expect(redTeamSchema.safeParse(input)).toEqual({
+    expect(redTeamConfigSchema.safeParse(input)).toEqual({
       success: true,
       data: {
         plugins: [
@@ -167,7 +238,7 @@ describe('redTeamSchema', () => {
         ].sort((a, b) => a.name.localeCompare(b.name)),
       },
     });
-    expect(redTeamSchema.safeParse(input)?.data?.plugins).toHaveLength(
+    expect(redTeamConfigSchema.safeParse(input)?.data?.plugins).toHaveLength(
       Object.keys(HARM_CATEGORIES).length,
     );
   });
@@ -177,7 +248,7 @@ describe('redTeamSchema', () => {
       plugins: ['harmful', 'harmful:hate', { name: 'harmful:violent-crime', numTests: 5 }],
       numTests: 3,
     };
-    expect(redTeamSchema.safeParse(input)).toEqual({
+    expect(redTeamConfigSchema.safeParse(input)).toEqual({
       success: true,
       data: {
         plugins: expect.arrayContaining([
@@ -196,7 +267,7 @@ describe('redTeamSchema', () => {
       plugins: [{ name: 'harmful:hate', numTests: 10 }, 'harmful:violent-crime'],
       numTests: 3,
     };
-    expect(redTeamSchema.safeParse(input)).toEqual({
+    expect(redTeamConfigSchema.safeParse(input)).toEqual({
       success: true,
       data: {
         plugins: expect.arrayContaining([
@@ -211,7 +282,7 @@ describe('redTeamSchema', () => {
     const input = {
       plugins: ['harmful:invalid-category'],
     };
-    expect(redTeamSchema.safeParse(input).success).toBe(false);
+    expect(redTeamConfigSchema.safeParse(input).success).toBe(false);
   });
 
   it('should accept and transform a single injectVar string', () => {
@@ -219,7 +290,7 @@ describe('redTeamSchema', () => {
       injectVar: 'system',
       plugins: ['jailbreak'],
     };
-    expect(redTeamSchema.safeParse(input)).toEqual({
+    expect(redTeamConfigSchema.safeParse(input)).toEqual({
       success: true,
       data: {
         injectVar: ['system'],
@@ -233,7 +304,7 @@ describe('redTeamSchema', () => {
       injectVar: ['system', 'user'],
       plugins: ['jailbreak'],
     };
-    expect(redTeamSchema.safeParse(input)).toEqual({
+    expect(redTeamConfigSchema.safeParse(input)).toEqual({
       success: true,
       data: {
         injectVar: ['system', 'user'],
@@ -247,7 +318,7 @@ describe('redTeamSchema', () => {
       provider: 'openai:gpt-3.5-turbo',
       plugins: ['jailbreak'],
     };
-    expect(redTeamSchema.safeParse(input)).toEqual({
+    expect(redTeamConfigSchema.safeParse(input)).toEqual({
       success: true,
       data: {
         provider: 'openai:gpt-3.5-turbo',
@@ -263,7 +334,7 @@ describe('redTeamSchema', () => {
       purpose: 'Test adversarial inputs',
       plugins: ['jailbreak', 'prompt-injection'],
     };
-    expect(redTeamSchema.safeParse(input)).toEqual({
+    expect(redTeamConfigSchema.safeParse(input)).toEqual({
       success: true,
       data: {
         injectVar: ['system', 'user'],

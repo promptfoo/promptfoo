@@ -12,7 +12,7 @@ import * as path from 'path';
 import logger from '../logger';
 import { ALL_PLUGINS, DEFAULT_PLUGINS, subCategoryDescriptions } from '../redteam/constants';
 import telemetry from '../telemetry';
-import { redTeamSchema } from '../types';
+import { redTeamConfigSchema } from '../types';
 import { doGenerateRedteam } from './generate/redteam';
 
 export function redteamCommand(program: Command) {
@@ -130,7 +130,7 @@ export function redteamCommand(program: Command) {
         prompts: [prompt],
         providers: [provider],
         tests: [],
-        redteam: redTeamSchema.safeParse({
+        redteam: redTeamConfigSchema.safeParse({
           plugins: plugins,
           numTests,
         }).data,
