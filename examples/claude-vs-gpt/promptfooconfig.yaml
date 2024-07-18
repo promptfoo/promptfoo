@@ -1,11 +1,11 @@
-description: 'Claude 3 vs GPT 4'
+description: 'Claude 3.5 vs GPT 4o'
 
 prompts:
   - file://prompt.yaml
 
 providers:
-  - anthropic:messages:claude-3-opus-20240229
-  - openai:chat:gpt-4-0125-preview
+  - anthropic:messages:claude-3-5-sonnet-20240620
+  - openai:chat:gpt-4o
 
 defaultTest:
   assert:
