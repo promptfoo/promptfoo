@@ -30,26 +30,30 @@ export const RedteamGenerateOptionsSchema = z.object({
 /** Type definition for RedteamGenerateOptions */
 export type RedteamGenerateOptions = z.infer<typeof RedteamGenerateOptionsSchema>;
 
+const redteamPluginObjectSchema = z.object({
+  name: z.enum(REDTEAM_ALL_PLUGINS).describe('Name of the plugin'),
+  numTests: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe('Number of tests to generate for this plugin'),
+});
+
+export type RedteamPluginObject = z.infer<typeof redteamPluginObjectSchema>;
+
 /**
  * Schema for individual redteam plugins
  */
 export const redteamPluginSchema = z.union([
   z.enum(REDTEAM_ALL_PLUGINS).describe('Name of the plugin'),
-  z.object({
-    name: z.enum(REDTEAM_ALL_PLUGINS).describe('Name of the plugin'),
-    numTests: z
-      .number()
-      .int()
-      .positive()
-      .optional()
-      .describe('Number of tests to generate for this plugin'),
-  }),
+  redteamPluginObjectSchema,
 ]);
 
 /**
  * Schema for `redteam` section of promptfooconfig.yaml
  */
-export const redTeamConfigSchema = z
+export const redteamConfigSchema = z
   .object({
     injectVar: z
       .union([z.string().transform((s) => [s]), z.array(z.string())])
@@ -99,3 +103,5 @@ export const redTeamConfigSchema = z
       plugins: uniquePlugins,
     };
   });
+
+export type RedteamConfig = z.infer<typeof redteamConfigSchema>;

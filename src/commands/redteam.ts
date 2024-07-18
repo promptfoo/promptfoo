@@ -11,8 +11,8 @@ import yaml from 'js-yaml';
 import * as path from 'path';
 import logger from '../logger';
 import { ALL_PLUGINS, DEFAULT_PLUGINS, subCategoryDescriptions } from '../redteam/constants';
+import { redteamConfigSchema } from '../redteam/types';
 import telemetry from '../telemetry';
-import { redTeamConfigSchema } from '../types';
 import { doGenerateRedteam } from './generate/redteam';
 
 export function redteamCommand(program: Command) {
@@ -130,7 +130,7 @@ export function redteamCommand(program: Command) {
         prompts: [prompt],
         providers: [provider],
         tests: [],
-        redteam: redTeamConfigSchema.safeParse({
+        redteam: redteamConfigSchema.safeParse({
           plugins: plugins,
           numTests,
         }).data,

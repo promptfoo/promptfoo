@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { redTeamConfigSchema } from './redteam/types';
+import { redteamConfigSchema } from './redteam/types';
 
 export const CommandLineOptionsSchema = z.object({
   // Shared with TestSuite
@@ -753,7 +753,7 @@ export const TestSuiteSchema = z.object({
   derivedMetrics: z.array(DerivedMetricSchema).optional(),
 
   // Redteam configuration - used only when generating redteam tests
-  redteam: redTeamConfigSchema.optional(),
+  redteam: redteamConfigSchema.optional(),
 });
 
 export type TestSuite = z.infer<typeof TestSuiteSchema>;
@@ -826,6 +826,9 @@ export const TestSuiteConfigSchema = z.object({
 
   // Any other information about this configuration.
   metadata: z.record(z.string(), z.any()).optional(),
+
+  // Redteam configuration - used only when generating redteam tests
+  redteam: redteamConfigSchema.optional(),
 });
 
 export type TestSuiteConfig = z.infer<typeof TestSuiteConfigSchema>;

@@ -21,11 +21,10 @@ import { getPurpose } from './purpose';
 
 interface SynthesizeOptions {
   injectVar?: string;
-  plugins: string[];
+  plugins: { name: string; numTests: number }[];
   prompts: string[];
   provider?: string;
   purpose?: string;
-  numTests: number;
 }
 
 interface Plugin {
@@ -129,9 +128,8 @@ export async function synthesize({
   injectVar,
   purpose: purposeOverride,
   plugins,
-  numTests,
 }: SynthesizeOptions) {
-  validatePlugins(plugins);
+  validatePlugins(plugins.map((p) => p.name));
   const redteamProvider: ApiProvider = await loadApiProvider(provider || REDTEAM_MODEL, {
     options: {
       config: { temperature: 0.5 },
@@ -185,14 +183,18 @@ export async function synthesize({
   const testCases: TestCase[] = [];
   const harmfulPrompts: TestCase[] = [];
 
-  const addHarmfulCases = plugins.some((p) => p.startsWith('harmful'));
-  if (plugins.includes('prompt-injection') || plugins.includes('jailbreak') || addHarmfulCases) {
+  const addHarmfulCases = plugins.some((p) => p.name.startsWith('harmful'));
+  if (
+    plugins.map((p) => p.name).includes('prompt-injection') ||
+    plugins.map((p) => p.name).includes('jailbreak') ||
+    addHarmfulCases
+  ) {
     logger.debug('Generating harmful test cases');
     const newHarmfulPrompts = await getHarmfulTests(
       redteamProvider,
       purpose,
       injectVar,
-      plugins.filter((p) => p.startsWith('harmful:')),
+      plugins.filter((p) => p.name.startsWith('harmful:')).map((p) => p.name),
     );
     harmfulPrompts.push(...newHarmfulPrompts);
 
@@ -205,16 +207,18 @@ export async function synthesize({
   }
 
   for (const { key, action } of Plugins) {
-    if (plugins.includes(key)) {
+    const plugin = plugins.find((p) => p.name === key);
+    if (plugin) {
       updateProgress();
       logger.debug(`Generating ${key} tests`);
-      const pluginTests = await action(redteamProvider, purpose, injectVar, numTests);
+      const pluginTests = await action(redteamProvider, purpose, injectVar, plugin.numTests);
       testCases.push(...pluginTests);
       logger.debug(`Added ${pluginTests.length} ${key} test cases`);
     }
   }
   for (const { key, action } of Methods) {
-    if (plugins.includes(key)) {
+    const plugin = plugins.find((p) => p.name === key);
+    if (plugin) {
       const newTestCases = action(testCases, harmfulPrompts, injectVar);
       testCases.push(...newTestCases);
     }

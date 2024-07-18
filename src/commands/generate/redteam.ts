@@ -14,7 +14,11 @@ import {
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
   ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
 } from '../../redteam/constants';
-import { RedteamGenerateOptions, RedteamGenerateOptionsSchema } from '../../redteam/types';
+import {
+  RedteamConfig,
+  RedteamGenerateOptions,
+  RedteamGenerateOptionsSchema,
+} from '../../redteam/types';
 import telemetry from '../../telemetry';
 import { TestSuite, UnifiedConfig } from '../../types';
 import { printBorder, setupEnv } from '../../util';
@@ -27,6 +31,7 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
   }
 
   let testSuite: TestSuite;
+  let redteamConfig: RedteamConfig | undefined;
   const configPath = options.config || options.defaultConfigPath;
   if (configPath) {
     const resolved = await resolveConfigs(
@@ -36,6 +41,7 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
       options.defaultConfig,
     );
     testSuite = resolved.testSuite;
+    redteamConfig = resolved.config.redteam;
   } else if (options.purpose) {
     // There is a purpose, so we can just have a dummy test suite for standalone invocation
     testSuite = {
@@ -60,19 +66,39 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
   });
   await telemetry.send();
 
-  const defaultPlugins = Array.from(REDTEAM_DEFAULT_PLUGINS);
-  let plugins = options.plugins || defaultPlugins;
+  let plugins: { name: string; numTests: number }[] =
+    redteamConfig?.plugins ||
+    Array.from(REDTEAM_DEFAULT_PLUGINS).map((plugin) => ({
+      name: plugin,
+      numTests: options.numTests,
+    }));
+
+  // override plugins with command line options
+  if (options.plugins) {
+    plugins = options.plugins.map((plugin) => ({
+      name: plugin,
+      numTests: options.numTests,
+    }));
+  }
   if (options.addPlugins && options.addPlugins.length > 0) {
-    plugins = [...new Set([...plugins, ...options.addPlugins])];
+    plugins = [
+      ...new Set([
+        ...plugins,
+        ...options.addPlugins.map((plugin) => ({
+          name: plugin,
+          numTests: options.numTests,
+        })),
+      ]),
+    ];
   }
   invariant(plugins && Array.isArray(plugins) && plugins.length > 0, 'No plugins found');
+
   const redteamTests = await synthesize({
     purpose: options.purpose,
     injectVar: options.injectVar,
     plugins,
     provider: options.provider,
     prompts: testSuite.prompts.map((prompt) => prompt.raw),
-    numTests: options.numTests,
   });
 
   if (options.output) {
