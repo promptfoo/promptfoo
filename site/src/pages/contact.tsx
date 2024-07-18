@@ -39,10 +39,10 @@ export default function Contact(): JSX.Element {
             Chat with us
           </Typography>
         </Box>
-        <Box sx={{ mb: 4 }}>
+        <Box mb={4}>
           <ContactForm />
         </Box>
-        <Box mt={4}>
+        <Box my={4}>
           <Typography variant="body1" gutterBottom>
             Email us at <Link href="mailto:inquiries@promptfoo.dev">inquiries@promptfoo.dev</Link>
           </Typography>
