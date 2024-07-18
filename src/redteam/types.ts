@@ -6,43 +6,66 @@ import {
 } from './constants';
 import { HARM_CATEGORIES } from './plugins/harmful';
 
+/**
+ * Schema for `promptfoo generate redteam` command options
+ */
 export const RedteamGenerateOptionsSchema = z.object({
-  addPlugins: z.array(z.enum(REDTEAM_ADDITIONAL_PLUGINS)).optional(),
-  cache: z.boolean(),
-  config: z.string().optional(),
-  defaultConfig: z.record(z.unknown()),
-  defaultConfigPath: z.string().optional(),
-  envFile: z.string().optional(),
-  injectVar: z.string().optional(),
-  numTests: z.number().int().positive(),
-  output: z.string().optional(),
-  plugins: z.array(z.enum(REDTEAM_ALL_PLUGINS)).optional(),
-  provider: z.string().optional(),
-  purpose: z.string().optional(),
-  write: z.boolean(),
+  addPlugins: z
+    .array(z.enum(REDTEAM_ADDITIONAL_PLUGINS))
+    .optional()
+    .describe('Additional plugins to include'),
+  cache: z.boolean().describe('Whether to use caching'),
+  config: z.string().optional().describe('Path to the configuration file'),
+  defaultConfig: z.record(z.unknown()).describe('Default configuration object'),
+  defaultConfigPath: z.string().optional().describe('Path to the default configuration file'),
+  envFile: z.string().optional().describe('Path to the environment file'),
+  injectVar: z.string().optional().describe('Variable to inject'),
+  numTests: z.number().int().positive().describe('Number of tests to generate'),
+  output: z.string().optional().describe('Output file path'),
+  plugins: z.array(z.enum(REDTEAM_ALL_PLUGINS)).optional().describe('Plugins to use'),
+  provider: z.string().optional().describe('Provider to use'),
+  purpose: z.string().optional().describe('Purpose of the redteam generation'),
+  write: z.boolean().describe('Whether to write the output'),
 });
-
+/** Type definition for RedteamGenerateOptions */
 export type RedteamGenerateOptions = z.infer<typeof RedteamGenerateOptionsSchema>;
 
+/**
+ * Schema for individual redteam plugins
+ */
 const redteamPluginSchema = z.union([
-  z.enum(REDTEAM_ALL_PLUGINS),
+  z.enum(REDTEAM_ALL_PLUGINS).describe('Name of the plugin'),
   z.object({
-    name: z.enum(REDTEAM_ALL_PLUGINS),
-    numTests: z.number().int().positive().optional(),
+    name: z.enum(REDTEAM_ALL_PLUGINS).describe('Name of the plugin'),
+    numTests: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe('Number of tests to generate for this plugin'),
   }),
 ]);
 
+/**
+ * Schema for `redteam` section of promptfooconfig.yaml
+ */
 export const redTeamSchema = z
   .object({
-    // string or array of strings, transform to array if string. Can be inferred from the prompts
-    injectVar: z.union([z.string().transform((s) => [s]), z.array(z.string())]).optional(),
-    // purpose override string - describes the prompt templates
-    purpose: z.string().optional(),
-    // used for generating adversarial inputs
-    provider: z.string().optional(),
-    numTests: z.number().int().positive().default(5),
+    injectVar: z
+      .union([z.string().transform((s) => [s]), z.array(z.string())])
+      .optional()
+      .describe(
+        "Variable to inject. Can be a string or array of strings. If string, it's transformed to an array. Inferred from the prompts by default.",
+      ),
+    purpose: z
+      .string()
+      .optional()
+      .describe('Purpose override string - describes the prompt templates'),
+    provider: z.string().optional().describe('Provider used for generating adversarial inputs'),
+    numTests: z.number().int().positive().default(5).describe('Number of tests to generate'),
     plugins: z
       .array(redteamPluginSchema)
+      .describe('Plugins to use for redteam generation')
       .optional()
       .default(() => Array.from(REDTEAM_DEFAULT_PLUGINS).map((name) => ({ name }))),
   })
