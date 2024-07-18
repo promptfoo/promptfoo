@@ -1,3 +1,6 @@
+import packageJson from '../package.json';
+
+export const VERSION = packageJson.version;
 // This is used for fetching and sharing evals.
 export const REMOTE_API_BASE_URL =
   // TODO(ian): Backwards compatibility, 2024-04-01

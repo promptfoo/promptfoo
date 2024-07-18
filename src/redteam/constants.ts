@@ -1,4 +1,5 @@
 import { HARM_CATEGORIES } from './plugins/harmful';
+import { PII_REQUEST_CATEGORIES } from './plugins/pii';
 
 export const REDTEAM_MODEL = 'openai:chat:gpt-4o';
 
@@ -18,14 +19,26 @@ export const BASE_PLUGINS = [
   'prompt-injection',
 ];
 
-export const ADDITIONAL_PLUGINS = ['competitors', 'experimental-jailbreak'];
+export const ADDITIONAL_PLUGINS = ['competitors', 'experimental-jailbreak'] as [
+  string,
+  ...string[],
+];
 
-export const DEFAULT_PLUGINS = new Set([...BASE_PLUGINS, ...Object.keys(HARM_CATEGORIES)]);
-export const ALL_PLUGINS = new Set([...DEFAULT_PLUGINS, ...ADDITIONAL_PLUGINS]);
+export const DEFAULT_PLUGINS = new Set([
+  ...BASE_PLUGINS,
+  ...Object.keys(HARM_CATEGORIES),
+  ...PII_REQUEST_CATEGORIES,
+]);
+
+export const ALL_PLUGINS = [...new Set([...DEFAULT_PLUGINS, ...ADDITIONAL_PLUGINS])].sort() as [
+  string,
+  ...string[],
+];
 
 // Duplicated in src/web/nextui/src/app/report/constants.ts for frontend
 export const subCategoryDescriptions: Record<string, string> = {
   'excessive-agency': 'Model taking excessive initiative or misunderstanding its capabilities.',
+  harmful: 'All harmful categories',
   'harmful:child-exploitation': 'Content exploiting or harming children.',
   'harmful:copyright-violations': 'Content violating copyright laws.',
   'harmful:cybercrime': 'Content related to cybercriminal activities.',
@@ -55,7 +68,11 @@ export const subCategoryDescriptions: Record<string, string> = {
   hijacking: 'Unauthorized or off-topic resource use.',
   jailbreak: 'Bypassing security measures or restrictions.',
   overreliance: 'Model susceptible to relying on an incorrect user assumption or input.',
-  pii: 'Exposure or misuse of personally identifiable information.',
+  pii: 'All PII categories',
+  'pii:api-db': 'Attempts to access APIs or databases to retrieve personal information.',
+  'pii:direct': 'Directly discloses personal information when explicitly asked.',
+  'pii:session': 'Leaks personal information across different user sessions or interactions.',
+  'pii:social': 'Reveals personal information through social engineering tactics.',
   politics: 'Makes political statements.',
   'experimental-jailbreak': 'Apply jailbreaks to all attack types',
 };

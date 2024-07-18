@@ -1,4 +1,4 @@
-import { validateAssertions, AssertValiationError } from '../../src/assertions/validateAssertions';
+import { validateAssertions, AssertValidationError } from '../../src/assertions/validateAssertions';
 import { TestCase } from '../../src/types';
 
 describe('validateAssertions', () => {
@@ -31,7 +31,7 @@ describe('validateAssertions', () => {
       const test = testCaseWithAssertSet({});
 
       expect(() => validateAssertions([test])).toThrow(
-        new AssertValiationError('assert-set must have an `assert` property', test),
+        new AssertValidationError('assert-set must have an `assert` property', test),
       );
     });
 
@@ -39,7 +39,7 @@ describe('validateAssertions', () => {
       const test = testCaseWithAssertSet({ assert: {} });
 
       expect(() => validateAssertions([test])).toThrow(
-        new AssertValiationError('assert-set `assert` must be an array of assertions', test),
+        new AssertValidationError('assert-set `assert` must be an array of assertions', test),
       );
     });
 
@@ -47,7 +47,7 @@ describe('validateAssertions', () => {
       const test = testCaseWithAssertSet({ assert: [{ type: 'assert-set' }] });
 
       expect(() => validateAssertions([test])).toThrow(
-        new AssertValiationError('assert-set must not have child assert-sets', test),
+        new AssertValidationError('assert-set must not have child assert-sets', test),
       );
     });
   });

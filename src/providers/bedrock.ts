@@ -600,7 +600,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
     logger.debug(`Calling Amazon Bedrock API: ${JSON.stringify(params)}`);
 
     const cache = await getCache();
-    const cacheKey = `bedrock:${JSON.stringify(params)}`;
+    const cacheKey = `bedrock:${this.modelName}:${JSON.stringify(params)}`;
 
     if (isCacheEnabled()) {
       // Try to get the cached response

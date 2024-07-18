@@ -86,7 +86,12 @@ export async function startServer(
   });
 
   app.get('/api/results', (req, res) => {
-    const previousResults = listPreviousResults(undefined /* limit */, filterDescription);
+    const datasetId = req.query.datasetId as string | undefined;
+    const previousResults = listPreviousResults(
+      undefined /* limit */,
+      filterDescription,
+      datasetId,
+    );
     res.json({
       data: previousResults.map((meta) => {
         return {
