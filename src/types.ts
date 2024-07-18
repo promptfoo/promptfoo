@@ -1,9 +1,5 @@
 import { z } from 'zod';
-import {
-  ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
-  DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
-} from './redteam/constants';
-import { HARM_CATEGORIES } from './redteam/plugins/harmful';
+import { redTeamSchema } from './redteam/types';
 
 export const CommandLineOptionsSchema = z.object({
   // Shared with TestSuite
@@ -723,59 +719,6 @@ export const DerivedMetricSchema = z.object({
   ]),
 });
 export type DerivedMetric = z.infer<typeof DerivedMetricSchema>;
-
-const redteamPluginSchema = z.union([
-  z.enum(REDTEAM_ALL_PLUGINS),
-  z.object({
-    name: z.enum(REDTEAM_ALL_PLUGINS),
-    numTests: z.number().int().positive().optional(),
-  }),
-]);
-
-export const redTeamSchema = z
-  .object({
-    // string or array of strings, transform to array if string. Can be inferred from the prompts
-    injectVar: z.union([z.string().transform((s) => [s]), z.array(z.string())]).optional(),
-    // purpose override string - describes the prompt templates
-    purpose: z.string().optional(),
-    // used for generating adversarial inputs
-    provider: z.string().optional(),
-    numTests: z.number().int().positive().default(5),
-    plugins: z
-      .array(redteamPluginSchema)
-      .optional()
-      .default(() => Array.from(REDTEAM_DEFAULT_PLUGINS).map((name) => ({ name }))),
-  })
-  .transform((data) => {
-    const plugins = data.plugins
-      .map((plugin) =>
-        typeof plugin === 'string'
-          ? { name: plugin, numTests: data.numTests }
-          : { ...plugin, numTests: plugin.numTests ?? data.numTests },
-      )
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .flatMap((pluginObj) => {
-        if (pluginObj.name === 'harmful') {
-          return Object.keys(HARM_CATEGORIES).map((category) => ({
-            name: category,
-            numTests: pluginObj.numTests,
-          }));
-        }
-        return pluginObj;
-      })
-      .filter((plugin) => plugin.name !== 'harmful'); // category plugins are handled above
-
-    const uniquePlugins = Array.from(
-      plugins.reduce((map, plugin) => map.set(plugin.name, plugin), new Map()).values(),
-    ).sort((a, b) => a.name.localeCompare(b.name));
-
-    return {
-      ...(data.purpose ? { purpose: data.purpose } : {}),
-      ...(data.injectVar ? { injectVar: data.injectVar } : {}),
-      ...(data.provider ? { provider: data.provider } : {}),
-      plugins: uniquePlugins,
-    };
-  });
 
 // The test suite defines the "knobs" that we are tuning in prompt engineering: providers and prompts
 export const TestSuiteSchema = z.object({

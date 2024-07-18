@@ -11,7 +11,6 @@ import logger from '../../logger';
 import { synthesize } from '../../redteam';
 import {
   REDTEAM_MODEL,
-  ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
   ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
 } from '../../redteam/constants';

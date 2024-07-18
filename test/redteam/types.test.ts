@@ -1,9 +1,9 @@
 import {
   ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
-} from '../src/redteam/constants';
-import { HARM_CATEGORIES } from '../src/redteam/plugins/harmful';
-import { redTeamSchema } from '../src/types';
+} from '../../src/redteam/constants';
+import { HARM_CATEGORIES } from '../../src/redteam/plugins/harmful';
+import { redTeamSchema } from '../../src/redteam/types';
 
 describe('redTeamSchema', () => {
   it('should accept a valid configuration with all fields', () => {
