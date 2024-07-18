@@ -698,50 +698,6 @@ export const DerivedMetricSchema = z.object({
 });
 export type DerivedMetric = z.infer<typeof DerivedMetricSchema>;
 
-// The test suite defines the "knobs" that we are tuning in prompt engineering: providers and prompts
-export const TestSuiteSchema = z.object({
-  // Optional description of what your LLM is trying to do
-  description: z.string().optional(),
-
-  // One or more LLM APIs to use
-  providers: z.array(ApiProviderSchema),
-
-  // One or more prompt strings
-  prompts: z.array(PromptSchema),
-
-  // Optional mapping of provider to prompt display strings.  If not provided,
-  // all prompts are used for all providers.
-  providerPromptMap: z.record(z.string(), z.array(z.string())).optional(),
-
-  // Test cases
-  tests: z.array(TestCaseSchema).optional(),
-
-  // scenarios
-  scenarios: z.array(ScenarioSchema).optional(),
-
-  // Default test case config
-  defaultTest: TestCaseSchema.partial().optional(),
-
-  // Nunjucks filters
-  nunjucksFilters: NunjucksFilterMapSchema.optional(),
-
-  // Envar overrides
-  env: EnvOverridesSchema.optional(),
-
-  // Metrics to calculate after the eval has been completed
-  derivedMetrics: z.array(DerivedMetricSchema).optional(),
-});
-
-export type TestSuite = z.infer<typeof TestSuiteSchema>;
-
-export type ProviderId = string;
-
-export type ProviderLabel = string;
-
-export type ProviderFunction = ApiProvider['callApi'];
-
-export type ProviderOptionsMap = Record<ProviderId, ProviderOptions>;
-
 const redteamPluginSchema = z.union([
   z.enum(REDTEAM_ALL_PLUGINS),
   z.object({
@@ -787,6 +743,53 @@ export const redTeamSchema = z
       plugins: uniquePlugins,
     };
   });
+
+// The test suite defines the "knobs" that we are tuning in prompt engineering: providers and prompts
+export const TestSuiteSchema = z.object({
+  // Optional description of what your LLM is trying to do
+  description: z.string().optional(),
+
+  // One or more LLM APIs to use
+  providers: z.array(ApiProviderSchema),
+
+  // One or more prompt strings
+  prompts: z.array(PromptSchema),
+
+  // Optional mapping of provider to prompt display strings.  If not provided,
+  // all prompts are used for all providers.
+  providerPromptMap: z.record(z.string(), z.array(z.string())).optional(),
+
+  // Test cases
+  tests: z.array(TestCaseSchema).optional(),
+
+  // scenarios
+  scenarios: z.array(ScenarioSchema).optional(),
+
+  // Default test case config
+  defaultTest: TestCaseSchema.partial().optional(),
+
+  // Nunjucks filters
+  nunjucksFilters: NunjucksFilterMapSchema.optional(),
+
+  // Envar overrides
+  env: EnvOverridesSchema.optional(),
+
+  // Metrics to calculate after the eval has been completed
+  derivedMetrics: z.array(DerivedMetricSchema).optional(),
+
+  // Redteam configuration - used only when generating redteam tests
+  redteam: redTeamSchema.optional(),
+});
+
+export type TestSuite = z.infer<typeof TestSuiteSchema>;
+
+export type ProviderId = string;
+
+export type ProviderLabel = string;
+
+export type ProviderFunction = ApiProvider['callApi'];
+
+export type ProviderOptionsMap = Record<ProviderId, ProviderOptions>;
 
 // TestSuiteConfig = Test Suite, but before everything is parsed and resolved.  Providers are just strings, prompts are filepaths, tests can be filepath or inline.
 export const TestSuiteConfigSchema = z.object({
@@ -848,7 +851,6 @@ export const TestSuiteConfigSchema = z.object({
 
   // Any other information about this configuration.
   metadata: z.record(z.string(), z.any()).optional(),
-  redteam: redTeamSchema.optional(),
 });
 
 export type TestSuiteConfig = z.infer<typeof TestSuiteConfigSchema>;
