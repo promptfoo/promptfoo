@@ -12,10 +12,10 @@ import CompetitorPlugin from './plugins/competitors';
 import ContractPlugin from './plugins/contracts';
 import ExcessiveAgencyPlugin from './plugins/excessiveAgency';
 import HallucinationPlugin from './plugins/hallucination';
-import { getHarmfulTests } from './plugins/harmful';
+import { HARM_CATEGORIES, getHarmfulTests } from './plugins/harmful';
 import HijackingPlugin from './plugins/hijacking';
 import OverreliancePlugin from './plugins/overreliance';
-import { getPiiTests } from './plugins/pii';
+import { PII_REQUEST_CATEGORIES, getPiiLeakTestsForCategory } from './plugins/pii';
 import PoliticsPlugin from './plugins/politics';
 import { getPurpose } from './purpose';
 
@@ -39,7 +39,8 @@ interface Plugin {
 
 interface Method {
   key: string;
-  action: (testCases: TestCase[], harmfulPrompts: TestCase[], injectVar: string) => TestCase[];
+  action: (testCases: (TestCase & { plugin: string })[], injectVar: string) => TestCase[];
+  requiredPlugins?: string[];
 }
 
 const Plugins: Plugin[] = [
@@ -63,6 +64,11 @@ const Plugins: Plugin[] = [
     action: (provider, purpose, injectVar, n) =>
       new HallucinationPlugin(provider, purpose, injectVar).generateTests(n),
   },
+  ...(Object.keys(HARM_CATEGORIES).map((category) => ({
+    key: category,
+    action: (provider, purpose, injectVar, n) =>
+      getHarmfulTests(provider, purpose, injectVar, [category], n),
+  })) as Plugin[]),
   {
     key: 'hijacking',
     action: (provider, purpose, injectVar, n) =>
@@ -73,13 +79,23 @@ const Plugins: Plugin[] = [
     action: (provider, purpose, injectVar, n) =>
       new OverreliancePlugin(provider, purpose, injectVar).generateTests(n),
   },
-  { key: 'pii', action: getPiiTests },
+  ...(PII_REQUEST_CATEGORIES.map((category) => ({
+    key: category,
+    action: (provider, purpose, injectVar, n) =>
+      getPiiLeakTestsForCategory(provider, purpose, injectVar, category, n),
+  })) as Plugin[]),
   {
     key: 'politics',
     action: (provider, purpose, injectVar, n) =>
       new PoliticsPlugin(provider, purpose, injectVar).generateTests(n),
   },
 ];
+
+// These plugins refer to a collection of tests.
+const categories = {
+  harmful: Object.keys(HARM_CATEGORIES),
+  pii: PII_REQUEST_CATEGORIES,
+} as const;
 
 const Methods: Method[] = [
   {
@@ -93,21 +109,25 @@ const Methods: Method[] = [
   },
   {
     key: 'jailbreak',
-    action: (_, harmfulPrompts) => {
+    action: (testCases) => {
+      const harmfulPrompts = testCases.filter((t) => t.plugin.startsWith('harmful:'));
       logger.debug('Adding jailbreaks to harmful prompts');
       const jailbreaks = addIterativeJailbreaks(harmfulPrompts);
       logger.debug(`Added ${jailbreaks.length} jailbreak test cases`);
       return jailbreaks;
     },
+    requiredPlugins: Object.keys(HARM_CATEGORIES),
   },
   {
     key: 'prompt-injection',
-    action: (_, harmfulPrompts, injectVar) => {
+    action: (testCases, injectVar) => {
+      const harmfulPrompts = testCases.filter((t) => t.plugin.startsWith('harmful:'));
       logger.debug('Adding prompt injections');
       const injections = addInjections(harmfulPrompts, injectVar);
       logger.debug(`Added ${injections.length} prompt injection test cases`);
       return injections;
     },
+    requiredPlugins: Object.keys(HARM_CATEGORIES),
   },
 ];
 
@@ -169,6 +189,25 @@ export async function synthesize({
     invariant(typeof injectVar === 'string', `Inject var must be a string, got ${injectVar}`);
   }
 
+  // if a category is included in the user selected plugins, add all of its plugins
+  for (const [category, categoryPlugins] of Object.entries(categories)) {
+    const plugin = plugins.find((p) => p.name === category);
+    if (plugin) {
+      plugins.push(...categoryPlugins.map((p) => ({ name: p, numTests: plugin.numTests })));
+    }
+  }
+
+  // if a method is included in the user selected plugins, add all of its required plugins
+  for (const { key, requiredPlugins } of Methods) {
+    const plugin = plugins.find((p) => p.name === key);
+    if (plugin && requiredPlugins) {
+      plugins.push(...requiredPlugins.map((p) => ({ name: p, numTests: plugin.numTests })));
+    }
+  }
+
+  // Deduplicate, filter out the category names, and sort
+  plugins = [...new Set(plugins)].filter((p) => !Object.keys(categories).includes(p.name)).sort();
+
   // Initialize progress bar
   const progressBar = new cliProgress.SingleBar({}, cliProgress.Presets.shades_classic);
   const totalSteps = plugins.length + 2; // +2 for initial setup steps
@@ -191,53 +230,28 @@ export async function synthesize({
 
   logger.debug(`System purpose: ${purpose}`);
 
-  // Get adversarial test cases
-  const testCases: TestCase[] = [];
-  const harmfulPrompts: TestCase[] = [];
-
-  const addHarmfulCases = plugins.some((p) => p.name.startsWith('harmful'));
-  if (
-    plugins.map((p) => p.name).includes('prompt-injection') ||
-    plugins.map((p) => p.name).includes('jailbreak') ||
-    addHarmfulCases
-  ) {
-    logger.debug('Generating harmful test cases');
-    for (const plugin of plugins.filter((p) => p.name.startsWith('harmful:'))) {
-      const newHarmfulPrompts = await getHarmfulTests(
-        redteamProvider,
-        purpose,
-        injectVar,
-        [plugin.name],
-        plugin.numTests,
-      );
-      harmfulPrompts.push(...newHarmfulPrompts);
-    }
-
-    if (addHarmfulCases) {
-      testCases.push(...harmfulPrompts);
-      logger.debug(`Added ${harmfulPrompts.length} harmful test cases`);
-    } else {
-      logger.debug(`Generated ${harmfulPrompts.length} harmful test cases`);
-    }
-  }
-
+  const testCases: (TestCase & { plugin: string })[] = [];
   for (const { key, action } of Plugins) {
     const plugin = plugins.find((p) => p.name === key);
     if (plugin) {
       updateProgress();
       logger.debug(`Generating ${key} tests`);
       const pluginTests = await action(redteamProvider, purpose, injectVar, plugin.numTests);
-      testCases.push(...pluginTests);
+      testCases.push(...pluginTests.map((t) => ({ ...t, plugin: key })));
       logger.debug(`Added ${pluginTests.length} ${key} test cases`);
     }
   }
+
   for (const { key, action } of Methods) {
     const plugin = plugins.find((p) => p.name === key);
     if (plugin) {
-      const newTestCases = action(testCases, harmfulPrompts, injectVar);
-      testCases.push(...newTestCases);
+      updateProgress();
+      logger.debug(`Generating ${key} tests`);
+      const newTestCases = action(testCases, injectVar);
+      testCases.push(...newTestCases.map((t) => ({ ...t, plugin: key })));
     }
   }
+
   // Finish progress bar
   if (process.env.LOG_LEVEL !== 'debug') {
     progressBar.update(100);
