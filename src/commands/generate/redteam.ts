@@ -15,10 +15,10 @@ import {
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
   ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
 } from '../../redteam/constants';
+import { RedteamGenerateOptions, RedteamGenerateOptionsSchema } from '../../redteam/types';
 import telemetry from '../../telemetry';
 import { TestSuite, UnifiedConfig } from '../../types';
 import { printBorder, setupEnv } from '../../util';
-
 
 export async function doGenerateRedteam(options: RedteamGenerateOptions) {
   setupEnv(options.envFile);
@@ -38,7 +38,7 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
     );
     testSuite = resolved.testSuite;
   } else if (options.purpose) {
-    // There is a purpose, so we can just have a dummy testsuite for standalone invocation
+    // There is a purpose, so we can just have a dummy test suite for standalone invocation
     testSuite = {
       prompts: [],
       providers: [],
