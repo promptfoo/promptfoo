@@ -303,7 +303,7 @@ export async function resolveConfigs(
   // Standalone assertion mode
   if (cmdObj.assertions) {
     if (!cmdObj.modelOutputs) {
-      logger.error(chalk.red('You must provide --model-outputs when using --assertions'));
+      logger.error('You must provide --model-outputs when using --assertions');
       process.exit(1);
     }
     const modelOutputs = JSON.parse(
@@ -354,12 +354,12 @@ export async function resolveConfigs(
 
   // Validation
   if (!config.prompts || config.prompts.length === 0) {
-    logger.error(chalk.red('You must provide at least 1 prompt'));
+    logger.error('You must provide at least 1 prompt');
     process.exit(1);
   }
 
   if (!config.providers || config.providers.length === 0) {
-    logger.error(chalk.red('You must specify at least 1 provider (for example, openai:gpt-4o)'));
+    logger.error('You must specify at least 1 provider (for example, openai:gpt-4o)');
     process.exit(1);
   }
   invariant(Array.isArray(config.providers), 'providers must be an array');
@@ -373,14 +373,12 @@ export async function resolveConfigs(
         .join('\n');
       const providerString = typeof provider === 'string' ? provider : JSON.stringify(provider);
       logger.warn(
-        chalk.yellow(
-          dedent`
+        dedent`
               Provider: ${providerString} encountered errors during schema validation:
 
                 ${errors}
 
               Please double check your configuration.` + '\n',
-        ),
       );
     }
   });
@@ -424,7 +422,7 @@ export async function resolveConfigs(
   const parsedProviderPromptMap = readProviderPromptMap(config, parsedPrompts);
 
   if (parsedPrompts.length === 0) {
-    logger.error(chalk.red('No prompts found'));
+    logger.error('No prompts found');
     process.exit(1);
   }
 
