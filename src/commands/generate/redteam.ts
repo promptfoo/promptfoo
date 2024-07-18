@@ -95,10 +95,10 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
   invariant(plugins && Array.isArray(plugins) && plugins.length > 0, 'No plugins found');
 
   const redteamTests = await synthesize({
-    purpose: options.purpose,
-    injectVar: options.injectVar,
+    purpose: redteamConfig?.purpose || options.purpose,
+    injectVar: redteamConfig?.injectVar?.[0] || options.injectVar,
     plugins,
-    provider: options.provider,
+    provider: redteamConfig?.provider || options.provider,
     prompts: testSuite.prompts.map((prompt) => prompt.raw),
   });
 
