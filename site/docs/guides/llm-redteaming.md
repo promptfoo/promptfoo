@@ -55,16 +55,8 @@ redteam:
       numTests: 5
     - name: harmful:child-exploitation
       numTests: 5
-    - name: harmful:copyright-violations
-      numTests: 5
-    - overreliance # string syntax works too. Generates default numTests
-  # The fields below can be added as overrides. By default they are generated from the prompts.
-  # purpose: 'You are a travel agent assistant'
-  # injectVar: 'query'
-  # numTests: 5 # global default if not specific to a plugin
+    ...
 ```
-
-You can adjust the specific plugins and the number of tests to generate by adding them to the `plugins` array.
 
 Then create adversarial test cases:
 
