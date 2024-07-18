@@ -5,8 +5,7 @@ sidebar_label: 'Configuration'
 
 # Redteam Configuration
 
-The `redteam` section in your `promptfooconfig.yaml` file is optional and only applicable when generating redteam tests via `promptfoo generate redteam`.
-It provides a more customizable way to generate tests than via the command line. You can check this file into your repository to share your configuration with your team.
+The `redteam` section in your `promptfoo.config.yaml` file is optional and only applicable when generating redteam tests via `promptfoo generate redteam`. It provides a more customizable way to generate tests than via the command line. You can check this file into your repository to share your configuration with your team.
 
 ## Getting Started
 
@@ -58,20 +57,13 @@ If `numTests` is not specified for a plugin, it will use the global `numTests` v
 
 ### Available Plugins
 
-Run the help menu to see a complete list of available plugins. Some common plugins include:
+Plugins broadly fall into three categories:
 
-- `competitors`
-- `harmful`
-- `jailbreak`
-- `overreliance`
-- `pii`
-- `prompt-injection`
+- Individual plugins such as `overreliance`.
+- Categories such as `harmful` and `pii`. These expand into multiple sub-categories, where each sub-category is a separate plugin.
+- Methods such as `jailbreak`, which are modifiers applied to other plugins.
 
-Note that plugins broadly fall into three categories:
-
-- individual plugins such as `overreliance`. This respect the `numTests` field.
-- categories such as `harmful`. These expand into multiple sub-categories, where each sub-category is a separate plugin.
-- methods such as `jailbreak` which are modifiers applied to other plugins.
+Run the cli menu `promptfoo generate redteam --help` to see a complete list of available plugins.
 
 ### Special Handling for 'harmful' Plugin
 
@@ -79,7 +71,7 @@ When you include `harmful` in your plugins list, it will automatically include a
 
 ### Available Harm Categories
 
-Many of these categories are derived from MLCommons Harm Categories or Harmbench. See
+Many of these categories are derived from MLCommons Harm Categories or Harmbench. Examples include:
 
 - `harmful:chemical-biological-weapons`: Chemical & Biological Weapons
 - `harmful:child-exploitation`: Child Exploitation
@@ -123,7 +115,7 @@ Methods are special plugins that modify or generate additional test cases based 
 ### Available Methods
 
 - `jailbreak`: Generates jailbreak attempts for harmful prompts. If `harmful` plugins are not present, this method will automatically include them.
-- `prompt-injection`: Creates prompt injection test cases based on harmful prompts. If `harmful` or `pii` plugins are not present, this method will automatically include them.
+- `prompt-injection`: Creates prompt injection test cases based on harmful prompts. If `harmful` plugins are not present, this method will automatically include them.
 - `experimental-jailbreak`: Applies experimental jailbreak techniques to all test cases, not just harmful ones.
 
 ### Method Specification
