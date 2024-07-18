@@ -11,7 +11,6 @@ import * as os from 'os';
 import * as path from 'path';
 import invariant from 'tiny-invariant';
 import { getAuthor } from '../accounts';
-import cliState from '../cliState';
 import { TERMINAL_MAX_WIDTH } from '../constants';
 import {
   datasets,
@@ -888,9 +887,11 @@ export async function deleteEval(evalId: string) {
   });
 }
 
-export async function readFilters(filters: Record<string, string>): Promise<NunjucksFilterMap> {
+export async function readFilters(
+  filters: Record<string, string>,
+  basePath: string = '',
+): Promise<NunjucksFilterMap> {
   const ret: NunjucksFilterMap = {};
-  const basePath = cliState.basePath || '';
   for (const [name, filterPath] of Object.entries(filters)) {
     const globPath = path.join(basePath, filterPath);
     const filePaths = globSync(globPath, {
