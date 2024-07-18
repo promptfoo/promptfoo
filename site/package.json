@@ -16,6 +16,7 @@
     "format": "prettier --ignore-path .gitignore -w ."
   },
   "dependencies": {
+    "@calcom/embed-react": "^1.5.0",
     "@docusaurus/core": "^3.4.0",
     "@docusaurus/plugin-google-gtag": "^3.4.0",
     "@docusaurus/preset-classic": "^3.4.0",
