@@ -9,6 +9,7 @@ import HomepageInfo from '@site/src/components/HomepageInfo';
 import LogoContainer from '@site/src/components/LogoContainer';
 import Layout from '@theme/Layout';
 import clsx from 'clsx';
+import NewsletterForm from '../components/NewsletterForm';
 import styles from './index.module.css';
 
 function HomepageHeader() {
@@ -206,6 +207,7 @@ export default function Home(): JSX.Element {
             </Link>
           </div>
         </div>
+        <NewsletterForm />
       </main>
     </Layout>
   );
