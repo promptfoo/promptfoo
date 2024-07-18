@@ -174,6 +174,15 @@ prompts:
 providers:
   - openai:gpt-3.5-turbo
   - anthropic:messages:claude-3.5-sonnet-20240620
+
+redteam:
+  plugins:
+    - name: competitors
+      numTests: 5
+    - name: harmful:child-exploitation
+      numTests: 5
+    - name: harmful:copyright-violations
+      numTests: 5
 ```
 
 <details>
@@ -237,3 +246,21 @@ That view includes a breakdown of specific test types that are connected to the 
 ## Detailed guide
 
 See [the full guide](/docs/guides/llm-redteaming) for detailed info on configuring more complex prompts, dynamically generated prompts and RAG/chain/agents, and more.
+
+## redteam promptfooconfig.yaml
+
+The `redteam` section in your `promptfooconfig.yaml` file allows you to configure red teaming options for your prompts. Red teaming helps identify potential vulnerabilities or unexpected behaviors in your prompt templates.
+
+### Fields
+
+| Field       | Type               | Description                                              | Default               |
+| ----------- | ------------------ | -------------------------------------------------------- | --------------------- |
+| `injectVar` | string \| string[] | Variable(s) to inject.                                   | Inferred from prompts |
+| `purpose`   | string             | Purpose override string describing the prompt templates. | Optional              |
+| `provider`  | string             | Provider used for generating adversarial inputs.         | Optional              |
+| `numTests`  | number             | Number of tests to generate.                             | 5                     |
+| `plugins`   | array              | Plugins to use for redteam generation.                   | Default plugins       |
+
+### Plugins
+
+Plugins are specified as an array of either strings (plugin names) or objects with `name` and optional `numTests` properties. They must exactly match the plugin names in the `plugins` array in the `prompts` section. Run the help menu to see a complete list of available plugins.
