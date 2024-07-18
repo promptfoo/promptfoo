@@ -19,23 +19,6 @@ import telemetry from '../../telemetry';
 import { TestSuite, UnifiedConfig } from '../../types';
 import { printBorder, setupEnv } from '../../util';
 
-const RedteamGenerateOptionsSchema = z.object({
-  addPlugins: z.array(z.enum(REDTEAM_ADDITIONAL_PLUGINS)).optional(),
-  cache: z.boolean(),
-  config: z.string().optional(),
-  defaultConfig: z.record(z.unknown()),
-  defaultConfigPath: z.string().optional(),
-  envFile: z.string().optional(),
-  injectVar: z.string().optional(),
-  numTests: z.number().int().positive(),
-  output: z.string().optional(),
-  plugins: z.array(z.enum(REDTEAM_ALL_PLUGINS)).optional(),
-  provider: z.string().optional(),
-  purpose: z.string().optional(),
-  write: z.boolean(),
-});
-
-type RedteamGenerateOptions = z.infer<typeof RedteamGenerateOptionsSchema>;
 
 export async function doGenerateRedteam(options: RedteamGenerateOptions) {
   setupEnv(options.envFile);
