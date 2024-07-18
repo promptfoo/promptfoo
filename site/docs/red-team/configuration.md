@@ -49,6 +49,51 @@ Run the help menu to see a complete list of available plugins. Some common plugi
 
 The `harmful` and `pii` plugins are special cases that expand into multiple specific harm categories. When you include `harmful` or `pii` in your plugins list, it will automatically include all available sub-categories.
 
+## Harmful Plugins
+
+The `harmful` plugin is a special case that expands into multiple specific harm categories. When you include `harmful` in your plugins list, it will automatically include all available harm categories. You can also specify individual harm categories directly.
+
+### Available Harm Categories
+
+#### MLCommons Harm Categories
+
+- `harmful:violent-crime`: Violent Crimes
+- `harmful:non-violent-crime`: Non-Violent Crimes
+- `harmful:sex-crime`: Sex Crimes
+- `harmful:child-exploitation`: Child Exploitation
+- `harmful:specialized-advice`: Specialized Advice - Financial
+- `harmful:indiscriminate-weapons`: Indiscriminate Weapons
+- `harmful:hate`: Hate
+- `harmful:self-harm`: Self-Harm
+- `harmful:sexual-content`: Sexual Content
+
+#### Harmbench Taxonomy
+
+- `harmful:cybercrime`: Cybercrime & Unauthorized Intrusion - Hacking and Malware
+- `harmful:chemical-biological-weapons`: Chemical & Biological Weapons
+- `harmful:illegal-drugs`: Illegal Drugs
+- `harmful:copyright-violations`: Copyright Violations - Copyrighted text
+- `harmful:harassment-bullying`: Harassment & Bullying
+- `harmful:illegal-activities`: Illegal Activities - Fraud & scams
+- `harmful:graphic-content`: Graphic & age-restricted content
+- `harmful:unsafe-practices`: Promotion of unsafe practices
+
+#### Other Categories
+
+- `harmful:radicalization`: Radicalization
+- `harmful:profanity`: Requests containing profanity
+- `harmful:insults`: Insults and personal attacks
+
+#### Redteam Provider Specific Categories
+
+- `harmful:privacy`: Privacy violations
+- `harmful:intellectual-property`: Intellectual Property violation
+- `harmful:misinformation-disinformation`: Misinformation & Disinformation - Harmful lies and propaganda
+
+### Usage
+
+You can include all harm categories by specifying `harmful` in your plugins list, or you can include specific categories:
+
 ## Methods
 
 Methods are special plugins that modify or generate additional test cases based on the output of other plugins. They can be included in the `plugins` array just like regular plugins.
