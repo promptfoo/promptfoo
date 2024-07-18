@@ -12,7 +12,7 @@ import CompetitorPlugin from './plugins/competitors';
 import ContractPlugin from './plugins/contracts';
 import ExcessiveAgencyPlugin from './plugins/excessiveAgency';
 import HallucinationPlugin from './plugins/hallucination';
-import { getHarmfulTests } from './plugins/harmful';
+import { HARM_CATEGORIES, getHarmfulTests } from './plugins/harmful';
 import HijackingPlugin from './plugins/hijacking';
 import OverreliancePlugin from './plugins/overreliance';
 import { getPiiTests } from './plugins/pii';
@@ -40,7 +40,8 @@ interface Plugin {
 
 interface Method {
   key: string;
-  action: (testCases: TestCase[], harmfulPrompts: TestCase[], injectVar: string) => TestCase[];
+  action: (testCases: (TestCase & { plugin: string })[], injectVar: string) => TestCase[];
+  requiredPlugins?: string[];
 }
 
 const Plugins: Plugin[] = [
@@ -80,7 +81,17 @@ const Plugins: Plugin[] = [
     action: (provider, purpose, injectVar, n) =>
       new PoliticsPlugin(provider, purpose, injectVar).generateTests(n),
   },
+  ...(Object.keys(HARM_CATEGORIES).map((category) => ({
+    key: category,
+    action: (provider, purpose, injectVar, n) =>
+      getHarmfulTests(provider, purpose, injectVar, [category], n),
+  })) as Plugin[]),
 ];
+
+// These plugins refer to a collection of tests.
+const categories = {
+  harmful: Object.keys(HARM_CATEGORIES),
+} as const;
 
 const Methods: Method[] = [
   {
@@ -94,21 +105,25 @@ const Methods: Method[] = [
   },
   {
     key: 'jailbreak',
-    action: (_, harmfulPrompts) => {
+    action: (testCases) => {
+      const harmfulPrompts = testCases.filter((t) => t.plugin.startsWith('harmful:'));
       logger.debug('Adding jailbreaks to harmful prompts');
       const jailbreaks = addIterativeJailbreaks(harmfulPrompts);
       logger.debug(`Added ${jailbreaks.length} jailbreak test cases`);
       return jailbreaks;
     },
+    requiredPlugins: Object.keys(HARM_CATEGORIES),
   },
   {
     key: 'prompt-injection',
-    action: (_, harmfulPrompts, injectVar) => {
+    action: (testCases, injectVar) => {
+      const harmfulPrompts = testCases.filter((t) => t.plugin.startsWith('harmful:'));
       logger.debug('Adding prompt injections');
       const injections = addInjections(harmfulPrompts, injectVar);
       logger.debug(`Added ${injections.length} prompt injection test cases`);
       return injections;
     },
+    requiredPlugins: Object.keys(HARM_CATEGORIES),
   },
 ];
 
@@ -159,6 +174,23 @@ export async function synthesize({
     invariant(typeof injectVar === 'string', `Inject var must be a string, got ${injectVar}`);
   }
 
+  // if a category is included in the user selected plugins, add all of its plugins
+  for (const [category, categoryPlugins] of Object.entries(categories)) {
+    if (plugins.includes(category)) {
+      plugins.push(...categoryPlugins);
+    }
+  }
+
+  // if a method is included in the user selected plugins, add all of its required plugins
+  for (const { key, requiredPlugins } of Methods) {
+    if (plugins.includes(key) && requiredPlugins) {
+      plugins.push(...requiredPlugins);
+    }
+  }
+
+  // Deduplicate, filter out the category names, and sort
+  plugins = [...new Set(plugins)].filter((p) => !Object.keys(categories).includes(p)).sort();
+
   // Initialize progress bar
   const progressBar = new cliProgress.SingleBar({}, cliProgress.Presets.shades_classic);
   const totalSteps = plugins.length + 2; // +2 for initial setup steps
@@ -180,11 +212,7 @@ export async function synthesize({
   updateProgress();
 
   logger.debug(`System purpose: ${purpose}`);
-
-  // Get adversarial test cases
-  const testCases: TestCase[] = [];
-  const harmfulPrompts: TestCase[] = [];
-
+  /*
   const addHarmfulCases = plugins.some((p) => p.startsWith('harmful'));
   if (plugins.includes('prompt-injection') || plugins.includes('jailbreak') || addHarmfulCases) {
     logger.debug('Generating harmful test cases');
@@ -205,21 +233,23 @@ export async function synthesize({
     } else {
       logger.debug(`Generated ${harmfulPrompts.length} harmful test cases`);
     }
-  }
+  } */
 
+  // Get adversarial test cases
+  const testCases: (TestCase & { plugin: string })[] = [];
   for (const { key, action } of Plugins) {
     if (plugins.includes(key)) {
       updateProgress();
       logger.debug(`Generating ${key} tests`);
       const pluginTests = await action(redteamProvider, purpose, injectVar, numTests);
-      testCases.push(...pluginTests);
+      testCases.push(...pluginTests.map((t) => ({ ...t, plugin: key })));
       logger.debug(`Added ${pluginTests.length} ${key} test cases`);
     }
   }
   for (const { key, action } of Methods) {
     if (plugins.includes(key)) {
-      const newTestCases = action(testCases, harmfulPrompts, injectVar);
-      testCases.push(...newTestCases);
+      const newTestCases = action(testCases, injectVar);
+      testCases.push(...newTestCases.map((t) => ({ ...t, plugin: key })));
     }
   }
   // Finish progress bar
