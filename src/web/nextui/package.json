@@ -9,6 +9,7 @@
     "lint": "next lint --max-warnings=0"
   },
   "dependencies": {
+    "@calcom/embed-react": "^1.5.0",
     "@emotion/react": "^11.11.4",
     "@emotion/styled": "^11.11.5",
     "@mui/icons-material": "^5.16.1",

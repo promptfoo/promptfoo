@@ -133,6 +133,11 @@ const config = {
             label: 'Discord',
             position: 'right',
           },
+          {
+            href: '/contact/',
+            label: 'Contact',
+            position: 'right',
+          },
         ],
       },
       footer: {
@@ -201,7 +206,7 @@ const config = {
               },
               {
                 label: 'Contact Us',
-                href: 'mailto:inquiries@promptfoo.dev',
+                href: '/contact/',
               },
             ],
           },
