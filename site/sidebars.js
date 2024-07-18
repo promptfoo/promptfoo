@@ -96,6 +96,7 @@ const sidebars = {
       items: [
         { type: 'doc', id: 'red-team/index' },
         { type: 'doc', id: 'guides/llm-redteaming' },
+        { type: 'doc', id: 'red-team/configuration' },
       ],
     },
     {

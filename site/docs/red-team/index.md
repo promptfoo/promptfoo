@@ -1,5 +1,7 @@
 ---
+sidebar_position: 1
 sidebar_label: Intro
+sidebar: redTeamSidebar
 ---
 
 import Tabs from '@theme/Tabs';
@@ -247,6 +249,6 @@ That view includes a breakdown of specific test types that are connected to the 
 
 See [the full guide](/docs/guides/llm-redteaming) for detailed info on configuring more complex prompts, dynamically generated prompts and RAG/chain/agents, and more.
 
-## redteam promptfooconfig.yaml
+## Configuration File
 
 The `redteam` section in your `promptfooconfig.yaml` file allows you to configure red teaming options for your prompts. To learn more about the available options, see [the configuration guide](/docs/red-team/configuration).

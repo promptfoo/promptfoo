@@ -1,3 +1,9 @@
+---
+sidebar_position: 2
+sidebar_label: 'Configuration'
+sidebar: redTeamSidebar
+---
+
 # Redteam Configuration
 
 The `redteam` section in your `promptfooconfig.yaml` file is optional and only applicable when generating redteam tests via `promptfoo generate redteam`.
