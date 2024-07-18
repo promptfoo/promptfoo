@@ -128,7 +128,7 @@ function ResultsTable({
   onFailureFilterToggle,
   onSearchTextChange,
 }: ResultsTableProps) {
-  const { evalId: filePath, table, setTable, inComparisonMode } = useMainStore();
+  const { evalId, table, setTable, inComparisonMode } = useMainStore();
   const { showToast } = useToast();
 
   invariant(table, 'Table should be defined');
@@ -193,7 +193,7 @@ function ResultsTable({
         showToast('Ratings are not saved in comparison mode', 'warning');
       } else {
         try {
-          const response = await fetch(`${await getApiBaseUrl()}/api/eval/${filePath}`, {
+          const response = await fetch(`${await getApiBaseUrl()}/api/eval/${evalId}`, {
             method: 'PATCH',
             headers: {
               'Content-Type': 'application/json',
@@ -208,7 +208,7 @@ function ResultsTable({
         }
       }
     },
-    [body, head, setTable, filePath, inComparisonMode, showToast],
+    [body, head, setTable, evalId, inComparisonMode, showToast],
   );
 
   const columnVisibilityIsSet = Object.keys(columnVisibility).length > 0;
