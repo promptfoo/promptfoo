@@ -186,10 +186,11 @@ class HarmfulPlugin extends PluginBase {
 }
 
 export async function getHarmfulTests(
-  provider: ApiProvider, // unused
+  provider: ApiProvider,
   purpose: string,
   injectVar: string,
   plugins: string[],
+  numTests: number,
 ): Promise<TestCase[]> {
   // Map from injectValue to its corresponding harmCategory
   const injectVars = new Map<string, string>();
@@ -213,7 +214,9 @@ export async function getHarmfulTests(
 
   for (const harmCategory of unalignedProviderHarmCategories) {
     const adversarialProvider = new PromptfooHarmfulCompletionProvider({ purpose, harmCategory });
-    const categoryPromises = Array.from({ length: 3 }, () => adversarialProvider.callApi(''));
+    const categoryPromises = Array.from({ length: numTests }, () =>
+      adversarialProvider.callApi(''),
+    );
     const results = await Promise.all(categoryPromises);
     results.forEach((result) => {
       const { output: generatedPrompt } = result;
@@ -258,7 +261,7 @@ export async function getHarmfulTests(
 
   for (const harmCategory of redteamProviderHarmCategories) {
     const plugin = new HarmfulPlugin(provider, purpose, injectVar, harmCategory);
-    const results = await plugin.generateTests(3);
+    const results = await plugin.generateTests(numTests);
     // NOTE: harmCategory is necessary for the moderation assertion and not supported
     // by the base model.
     for (const result of results) {
