@@ -151,7 +151,7 @@ jobs:
         run: npm run build
 
   webui:
-    name: Run Tests
+    name: webui tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
