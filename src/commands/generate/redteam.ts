@@ -18,6 +18,7 @@ import {
   RedteamConfig,
   RedteamGenerateOptions,
   RedteamGenerateOptionsSchema,
+  redteamConfigSchema,
 } from '../../redteam/types';
 import telemetry from '../../telemetry';
 import { TestSuite, UnifiedConfig } from '../../types';
@@ -76,8 +77,8 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
   // override plugins with command line options
   if (options.plugins) {
     plugins = options.plugins.map((plugin) => ({
-      name: plugin,
-      numTests: options.numTests,
+      name: plugin.name,
+      numTests: plugin.numTests || options.numTests,
     }));
   }
   if (options.addPlugins && options.addPlugins.length > 0) {
@@ -181,12 +182,18 @@ export function generateRedteamCommand(
     .option('--env-file <path>', 'Path to .env file')
     .action((opts: Partial<RedteamGenerateOptions>): void => {
       try {
+        const plugins = redteamConfigSchema.safeParse({
+          plugins: opts.plugins,
+        }).data?.plugins;
         const validatedOpts = RedteamGenerateOptionsSchema.parse({
           ...opts,
           defaultConfig,
           defaultConfigPath,
         });
-        doGenerateRedteam(validatedOpts);
+        doGenerateRedteam({
+          ...validatedOpts,
+          plugins,
+        });
       } catch (error) {
         if (error instanceof z.ZodError) {
           logger.error('Invalid options:');

@@ -154,7 +154,7 @@ export function redteamCommand(program: Command) {
 
       if (readyToGenerate) {
         await doGenerateRedteam({
-          plugins,
+          plugins: config?.redteam?.plugins,
           cache: false,
           write: true,
           defaultConfig: config,

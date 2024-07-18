@@ -6,6 +6,16 @@ import {
 } from './constants';
 import { HARM_CATEGORIES } from './plugins/harmful';
 
+const redteamPluginObjectSchema = z.object({
+  name: z.enum(REDTEAM_ALL_PLUGINS).describe('Name of the plugin'),
+  numTests: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe('Number of tests to generate for this plugin'),
+});
+
 /**
  * Schema for `promptfoo generate redteam` command options
  */
@@ -22,23 +32,13 @@ export const RedteamGenerateOptionsSchema = z.object({
   injectVar: z.string().optional().describe('Variable to inject'),
   numTests: z.number().int().positive().describe('Number of tests to generate'),
   output: z.string().optional().describe('Output file path'),
-  plugins: z.array(z.enum(REDTEAM_ALL_PLUGINS)).optional().describe('Plugins to use'),
+  plugins: z.array(redteamPluginObjectSchema).optional().describe('Plugins to use'),
   provider: z.string().optional().describe('Provider to use'),
   purpose: z.string().optional().describe('Purpose of the redteam generation'),
   write: z.boolean().describe('Whether to write the output'),
 });
 /** Type definition for RedteamGenerateOptions */
 export type RedteamGenerateOptions = z.infer<typeof RedteamGenerateOptionsSchema>;
-
-const redteamPluginObjectSchema = z.object({
-  name: z.enum(REDTEAM_ALL_PLUGINS).describe('Name of the plugin'),
-  numTests: z
-    .number()
-    .int()
-    .positive()
-    .optional()
-    .describe('Number of tests to generate for this plugin'),
-});
 
 export type RedteamPluginObject = z.infer<typeof redteamPluginObjectSchema>;
 
