@@ -51,7 +51,7 @@ providers:
 ```
 
 :::tip
-You can specify your redteam configuration directly in `promptfooconfig.yaml`. See [the configuration guide](/docs/red-team/configuration) for more information.
+You can specify your redteam configuration directly in `promptfooconfig.yaml`. See the [configuration guide](/docs/red-team/configuration) for more information.
 :::
 
 Then create adversarial test cases:

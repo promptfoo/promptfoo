@@ -40,14 +40,9 @@ export const ALL_PLUGINS = [...new Set([...DEFAULT_PLUGINS, ...ADDITIONAL_PLUGIN
   ...string[],
 ];
 
-export const DEFAULT_STRATEGIES = [
-  'jailbreak',
-  'prompt-injection',
-] as const;
+export const DEFAULT_STRATEGIES = ['jailbreak', 'prompt-injection'] as const;
 
-export const ADDITIONAL_STRATEGIES = [
-  'experimental-jailbreak',
-] as const;
+export const ADDITIONAL_STRATEGIES = ['experimental-jailbreak'] as const;
 
 export const ALL_STRATEGIES = [...DEFAULT_STRATEGIES, ...ADDITIONAL_STRATEGIES] as const;
 

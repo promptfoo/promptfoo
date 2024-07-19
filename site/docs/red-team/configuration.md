@@ -21,7 +21,8 @@ The following YAML structure outlines the configuration options available for re
 
 ```yaml
 redteam:
-  plugins: Array<string | { name: string, numTests?: number }>
+  plugins: Array<string | { id: string, numTests?: number }>
+  strategies: Array<string | { id: string }>
   numTests: number # default number of tests to generate per plugin
   injectVar: string | string[] # variables to inject
   provider: string # test generation provider
@@ -36,13 +37,14 @@ providers:
 
 ### Fields
 
-| Field       | Type               | Description                                              | Default               |
-| ----------- | ------------------ | -------------------------------------------------------- | --------------------- |
-| `injectVar` | string \| string[] | Variable(s) to inject.                                   | Inferred from prompts |
-| `numTests`  | number             | Default number of tests to generate per plugin.          | 5                     |
-| `plugins`   | array              | Plugins to use for redteam generation.                   | Default plugins       |
-| `provider`  | string             | Provider used for generating adversarial inputs.         | Optional              |
-| `purpose`   | string             | Purpose override string describing the prompt templates. | Optional              |
+| Field        | Type               | Description                                              | Default                        |
+| ------------ | ------------------ | -------------------------------------------------------- | ------------------------------ |
+| `injectVar`  | string \| string[] | Variable(s) to inject.                                   | Inferred from prompts          |
+| `numTests`   | number             | Default number of tests to generate per plugin.          | 5                              |
+| `plugins`    | array              | Plugins to use for redteam generation.                   | many common plugins            |
+| `provider`   | string             | Provider used for generating adversarial inputs.         | Optional                       |
+| `purpose`    | string             | Purpose override string describing the prompt templates. | Optional                       |
+| `strategies` | array              | Strategies are applied to other plugins.                 | jailbreak and prompt-injection |
 
 ## Plugins
 
@@ -51,7 +53,7 @@ Plugins are specified as an array of either strings (plugin names) or objects wi
 ### Plugin Specification
 
 - **As a string**: `"plugin-name"`
-- **As an object**: `{ name: "plugin-name", numTests: 10 }`
+- **As an object**: `{ id: "plugin-name", numTests: 10 }`
 
 If `numTests` is not specified for a plugin, it will use the global `numTests` value.
 
@@ -61,7 +63,7 @@ Plugins broadly fall into three categories:
 
 - Individual plugins such as `overreliance`.
 - Categories such as `harmful` and `pii`. These expand into multiple sub-categories, where each sub-category is a separate plugin.
-- Methods such as `jailbreak`, which are modifiers applied to other plugins.
+- Strategies such as `jailbreak`, which are modifiers applied to other plugins.
 
 Run the cli menu `promptfoo generate redteam --help` to see a complete list of available plugins.
 
@@ -108,28 +110,26 @@ The `pii` plugin is designed to test whether a model inadvertently leaks or mish
 - `pii:session`: Ensures the model does not leak PII across different user sessions or interactions.
 - `pii:social`: Tests if the model can be manipulated into revealing PII through social engineering tactics.
 
-## Methods
+## Strategies
 
-Methods are special plugins that modify or generate additional test cases based on the output of other plugins. They can be included in the `plugins` array just like regular plugins.
+Strategies modify or generate additional test cases based on the output of other plugins.
 
-### Available Methods
+### Available Strategies
 
-- `jailbreak`: Generates jailbreak attempts for harmful prompts. If `harmful` plugins are not present, this method will automatically include them.
-- `prompt-injection`: Creates prompt injection test cases based on harmful prompts. If `harmful` plugins are not present, this method will automatically include them.
+- `jailbreak`: Generates jailbreak attempts for harmful prompts. If `harmful` plugins are not present, this strategy will automatically include them.
+- `prompt-injection`: Creates prompt injection test cases based on harmful prompts. If `harmful` plugins are not present, this strategy will automatically include them.
 - `experimental-jailbreak`: Applies experimental jailbreak techniques to all test cases, not just harmful ones.
 
-### Method Specification
-
-Methods can be specified in the same way as regular plugins:
+### Strategies Specification
 
 - **As a string**: `"jailbreak"`
-- **As an object**: `{ name: "prompt-injection", numTests: 10 }`
+- **As an object**: `{ id: "prompt-injection" }`
 
-### Special Handling for Methods
+### Special Handling for Strategies
 
-1. When a method is included in the plugins list, it automatically adds its required plugins if they're not already present.
-2. Methods are applied after all regular plugins have generated their test cases.
-3. The `numTests` value for a method is ignored.
+1. When a strategy is included, it automatically adds its required plugins if they're not already present.
+2. Strategies are applied after all regular plugins have generated their test cases.
+3. Strategies do not support `numTests` at this time. The number of additional test cases generated by a strategy varies depending on the specific strategy and the number of test cases generated by the plugins it modifies.
 
 ## Example Configurations
 
@@ -139,9 +139,10 @@ Methods can be specified in the same way as regular plugins:
 redteam:
   numTests: 10
   plugins:
-    - 'jailbreak'
     - 'harmful:hate'
     - 'competitors'
+  strategies:
+    - 'jailbreak'
 ```
 
 ### Advanced Configuration
@@ -153,13 +154,14 @@ redteam:
   provider: 'anthropic:claude-3-opus-20240229'
   numTests: 20
   plugins:
-    - name: 'jailbreak'
+    - id: 'harmful:child-exploitation'
       numTests: 15
-    - name: 'harmful:child-exploitation'
-    - name: 'harmful:copyright-violations'
+    - id: 'harmful:copyright-violations'
       numTests: 10
-    - name: 'competitors'
-    - name: 'overreliance'
+    - id: 'competitors'
+    - id: 'overreliance'
+  strategies:
+    - id: 'jailbreak'
 ```
 
 ## Notes
