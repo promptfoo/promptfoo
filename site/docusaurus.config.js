@@ -165,8 +165,8 @@ const config = {
               {
                 html: `
                 <div style="position: relative; margin-top:8px">
-                  <span style="position: absolute; left: 65px; top: 25px; font-size: 10px; font-weight: bold; background-color: #25842c; padding: 2px 4px; border-radius: 4px;">Pending</span>
-                  <img src="/img/badges/soc2.png" alt="SOC2 Compliance pending" style="width:80px; height: auto"/>
+                  <span style="position: absolute; left: 65px; top: 25px; font-size: 10px; font-weight: bold; background-color: #25842c; padding: 2px 4px; border-radius: 4px;">In Progress</span>
+                  <img src="/img/badges/soc2.png" alt="SOC2 Compliance in progress" style="width:80px; height: auto"/>
                 </div>
                 `,
               },
