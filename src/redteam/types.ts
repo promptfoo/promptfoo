@@ -7,7 +7,7 @@ import {
 import { HARM_CATEGORIES } from './plugins/harmful';
 
 const redteamPluginObjectSchema = z.object({
-  name: z.enum(REDTEAM_ALL_PLUGINS).describe('Name of the plugin'),
+  id: z.enum(REDTEAM_ALL_PLUGINS).describe('Name of the plugin'),
   numTests: z
     .number()
     .int()
@@ -71,30 +71,30 @@ export const redteamConfigSchema = z
       .array(redteamPluginSchema)
       .describe('Plugins to use for redteam generation')
       .optional()
-      .default(() => Array.from(REDTEAM_DEFAULT_PLUGINS).map((name) => ({ name }))),
+      .default(() => Array.from(REDTEAM_DEFAULT_PLUGINS).map((name) => ({ id: name }))),
   })
   .transform((data) => {
     const plugins = data.plugins
       .map((plugin) =>
         typeof plugin === 'string'
-          ? { name: plugin, numTests: data.numTests }
+          ? { id: plugin, numTests: data.numTests }
           : { ...plugin, numTests: plugin.numTests ?? data.numTests },
       )
-      .sort((a, b) => a.name.localeCompare(b.name))
+      .sort((a, b) => a.id.localeCompare(b.id))
       .flatMap((pluginObj) => {
-        if (pluginObj.name === 'harmful') {
+        if (pluginObj.id === 'harmful') {
           return Object.keys(HARM_CATEGORIES).map((category) => ({
-            name: category,
+            id: category,
             numTests: pluginObj.numTests,
           }));
         }
         return pluginObj;
       })
-      .filter((plugin) => plugin.name !== 'harmful'); // category plugins are handled above
+      .filter((plugin) => plugin.id !== 'harmful'); // category plugins are handled above
 
     const uniquePlugins = Array.from(
-      plugins.reduce((map, plugin) => map.set(plugin.name, plugin), new Map()).values(),
-    ).sort((a, b) => a.name.localeCompare(b.name));
+      plugins.reduce((map, plugin) => map.set(plugin.id, plugin), new Map()).values(),
+    ).sort((a, b) => a.id.localeCompare(b.id));
 
     return {
       ...(data.purpose ? { purpose: data.purpose } : {}),

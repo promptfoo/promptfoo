@@ -77,7 +77,7 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
   // override plugins with command line options
   if (options.plugins) {
     plugins = options.plugins.map((plugin) => ({
-      name: plugin.name,
+      name: plugin.id,
       numTests: plugin.numTests || options.numTests,
     }));
   }
