@@ -1,4 +1,5 @@
 import React from 'react';
+import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import CompareIcon from '@mui/icons-material/Compare';
@@ -172,6 +173,10 @@ export default function Home(): JSX.Element {
       title="Secure & reliable LLMs"
       description="Custom LLM evals and red-teaming for your app. Find and fix vulnerabilities, maximize output quality, catch regressions."
     >
+      <Head>
+        <meta property="og:image" content="/img/meta/homepage.png" />
+        <meta name="twitter:card" content="summary_large_image" />
+      </Head>
       <HomepageHeader />
       <HomepageWalkthrough />
       <main>
