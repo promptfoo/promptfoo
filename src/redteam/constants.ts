@@ -14,12 +14,9 @@ const BASE_PLUGINS = [
   'contracts',
   'excessive-agency',
   'hallucination',
-  'harmful', // NOTE: harmful is a group of plugins, not a single plugin
   'hijacking',
-  'jailbreak',
   'overreliance',
   'politics',
-  'prompt-injection',
 ] as const;
 
 export const ADDITIONAL_PLUGINS = [
@@ -42,6 +39,17 @@ export const ALL_PLUGINS = [...new Set([...DEFAULT_PLUGINS, ...ADDITIONAL_PLUGIN
   string,
   ...string[],
 ];
+
+export const DEFAULT_STRATEGIES = [
+  'jailbreak',
+  'prompt-injection',
+] as const;
+
+export const ADDITIONAL_STRATEGIES = [
+  'experimental-jailbreak',
+] as const;
+
+export const ALL_STRATEGIES = [...DEFAULT_STRATEGIES, ...ADDITIONAL_STRATEGIES] as const;
 
 // Duplicated in src/web/nextui/src/app/report/constants.ts for frontend
 export const subCategoryDescriptions: Record<(typeof ALL_PLUGINS)[number], string> = {
