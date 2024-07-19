@@ -1,5 +1,5 @@
 prompts: [prompt.json]
-providers: [openai:chat:gpt-4o-mini]
+providers: [openai:chat:gpt-4o]
 
 tests:
   - vars:
