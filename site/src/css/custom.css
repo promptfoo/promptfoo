@@ -62,7 +62,3 @@
 .navbar__logo img {
   filter: invert(0);
 }
-
-[data-theme='dark'] .navbar__logo img {
-  filter: invert(0.7);
-}
