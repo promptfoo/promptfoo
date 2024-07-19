@@ -19,7 +19,7 @@ function HomepageHeader() {
     <header className={clsx('hero hero--primary', styles.heroBanner)}>
       <div className="container">
         <h1>Ship LLM apps with confidence</h1>
-        <p>Open-source LLM testing used by 20,000+ developers</p>
+        <p>Open-source LLM testing used by 25,000+ developers</p>
         <div className={styles.buttons}>
           <Link
             className="button button--primary button--lg"
@@ -30,6 +30,12 @@ function HomepageHeader() {
             }
           >
             Get Started
+          </Link>
+          <Link
+            className={clsx('button button--secondary button--lg', styles.buttonSecondary)}
+            to="/contact/"
+          >
+            Contact Us
           </Link>
         </div>
       </div>
@@ -209,6 +215,12 @@ export default function Home(): JSX.Element {
           <div className={styles.buttons}>
             <Link className="button button--primary button--lg" to="/docs/intro">
               Read Start Guide
+            </Link>
+            <Link
+              className={clsx('button button--secondary button--lg', styles.buttonSecondary)}
+              to="/contact/"
+            >
+              Contact Us
             </Link>
           </div>
         </div>

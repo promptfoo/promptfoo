@@ -39,19 +39,32 @@ export default function Contact(): JSX.Element {
             Chat with us
           </Typography>
         </Box>
-        <Box mb={4}>
-          <ContactForm />
-        </Box>
         <Box my={4}>
           <Typography variant="body1" gutterBottom>
-            Email us at <Link href="mailto:inquiries@promptfoo.dev">inquiries@promptfoo.dev</Link>
+            <strong>Ways to get in touch:</strong>
           </Typography>
-          <Typography variant="body1">
-            Join our{' '}
-            <Link href="https://discord.gg/gHPS9jjfbs" target="_blank" rel="noopener noreferrer">
+          <Typography variant="body1" gutterBottom>
+            💬 Join our{' '}
+            <Link href="https://discord.gg/gHPS9jjfbs" target="_blank">
               Discord
             </Link>
           </Typography>
+          <Typography variant="body1" gutterBottom>
+            🐙 Visit our{' '}
+            <Link href="https://github.com/promptfoo/promptfoo" target="_blank">
+              GitHub
+            </Link>
+          </Typography>
+          <Typography variant="body1" gutterBottom>
+            ✉️ Email us at{' '}
+            <Link href="mailto:inquiries@promptfoo.dev">inquiries@promptfoo.dev</Link>
+          </Typography>
+          <Typography variant="body1" gutterBottom>
+            📅 Or book a time below
+          </Typography>
+        </Box>
+        <Box mb={8}>
+          <ContactForm />
         </Box>
       </Container>
     </Layout>
