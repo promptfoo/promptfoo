@@ -14,10 +14,11 @@ export default function Careers(): JSX.Element {
         <h2>Shaping the Future of LLMs</h2>
 
         <p>
-          At Promptfoo, we're dedicated to advancing the field of Large Language Models (LLMs)
-          through open collaboration and innovation. Our mission is to empower developers and
-          businesses with robust tools for LLM testing and prompt engineering, fostering a more
-          reliable and transparent AI ecosystem.
+          At Promptfoo, we're dedicated to revolutionizing the way developers interact with and
+          optimize AI language models. Our open-source tool is at the forefront of prompt
+          engineering, helping companies and individuals harness the full potential of AI. Our
+          mission is to empower developers and businesses with robust tools for LLM testing and
+          prompt engineering, fostering a more reliable and transparent AI ecosystem.
         </p>
 
         <h2>Why Work with Us?</h2>
@@ -41,6 +42,25 @@ export default function Careers(): JSX.Element {
           <li>
             <strong>Meaningful Impact:</strong> Develop tools and solutions that help ensure LLMs
             are used responsibly and effectively across industries.
+          </li>
+          <li>
+            <strong>Remote-First Culture:</strong> Work from anywhere, anytime.
+          </li>
+        </ul>
+
+        <h2>Our Values</h2>
+        <ul>
+          <li>
+            <strong>Transparency:</strong> We believe in open communication and sharing knowledge.
+          </li>
+          <li>
+            <strong>Collaboration:</strong> We thrive on teamwork and diverse perspectives.
+          </li>
+          <li>
+            <strong>User-Centric:</strong> Our users' needs drive our innovation.
+          </li>
+          <li>
+            <strong>Excellence:</strong> We strive for the highest quality in everything we do.
           </li>
         </ul>
 
@@ -88,11 +108,19 @@ export default function Careers(): JSX.Element {
           </li>
           <li>Have experience with or a strong desire to work on LLM-related projects</li>
         </ul>
+
+        <h2>Open Positions</h2>
         <p>
-          We welcome contributions from individuals with diverse backgrounds and skill sets. If
-          you're passionate about LLMs and open source, we'd love to hear from you, even if you
-          don't see a specific role that matches your exact profile.
+          While we don't have specific job titles listed, we're always interested in talking to
+          talented individuals who align with our mission and values. Some areas where we often need
+          expertise include:
         </p>
+        <ul>
+          <li>Software Engineering (Backend and Frontend)</li>
+          <li>AI Research</li>
+          <li>Technical Writing</li>
+          <li>Developer Advocacy</li>
+        </ul>
 
         <h2>How to Join Us</h2>
         <p>
@@ -115,6 +143,11 @@ export default function Careers(): JSX.Element {
         <p>
           We look forward to hearing from you and exploring how we can work together to advance the
           field of LLM technology and create tools that benefit the entire AI community.
+        </p>
+
+        <p>
+          Promptfoo is an equal opportunity employer. We celebrate diversity and are committed to
+          creating an inclusive environment for all employees.
         </p>
 
         <div className={styles.ctaSection}>
