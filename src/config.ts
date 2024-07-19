@@ -427,6 +427,7 @@ export async function resolveConfigs(
     derivedMetrics: config.derivedMetrics,
     nunjucksFilters: await readFilters(
       fileConfig.nunjucksFilters || defaultConfig.nunjucksFilters || {},
+      basePath,
     ),
   };
 
