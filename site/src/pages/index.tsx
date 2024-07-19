@@ -1,4 +1,5 @@
 import React from 'react';
+import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import CompareIcon from '@mui/icons-material/Compare';
@@ -18,7 +19,7 @@ function HomepageHeader() {
     <header className={clsx('hero hero--primary', styles.heroBanner)}>
       <div className="container">
         <h1>Ship LLM apps with confidence</h1>
-        <p>Open-source LLM testing used by 20,000+ developers</p>
+        <p>Open-source LLM testing used by 25,000+ developers</p>
         <div className={styles.buttons}>
           <Link
             className="button button--primary button--lg"
@@ -29,6 +30,12 @@ function HomepageHeader() {
             }
           >
             Get Started
+          </Link>
+          <Link
+            className={clsx('button button--secondary button--lg', styles.buttonSecondary)}
+            to="/contact/"
+          >
+            Contact Us
           </Link>
         </div>
       </div>
@@ -172,6 +179,10 @@ export default function Home(): JSX.Element {
       title="Secure & reliable LLMs"
       description="Custom LLM evals and red-teaming for your app. Find and fix vulnerabilities, maximize output quality, catch regressions."
     >
+      <Head>
+        <meta property="og:image" content="/img/meta/homepage.png" />
+        <meta name="twitter:card" content="summary_large_image" />
+      </Head>
       <HomepageHeader />
       <HomepageWalkthrough />
       <main>
@@ -204,6 +215,12 @@ export default function Home(): JSX.Element {
           <div className={styles.buttons}>
             <Link className="button button--primary button--lg" to="/docs/intro">
               Read Start Guide
+            </Link>
+            <Link
+              className={clsx('button button--secondary button--lg', styles.buttonSecondary)}
+              to="/contact/"
+            >
+              Contact Us
             </Link>
           </div>
         </div>
