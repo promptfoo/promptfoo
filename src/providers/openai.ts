@@ -55,6 +55,13 @@ const OPENAI_CHAT_MODELS = [
       output: 0.015 / 1000,
     },
   })),
+  ...['gpt-4o-mini', 'gpt-4o-mini-2024-07-18'].map((model) => ({
+    id: model,
+    cost: {
+      input: 0.0015 / 1000,
+      output: 0.006 / 1000,
+    },
+  })),
   ...[
     'gpt-3.5-turbo',
     'gpt-3.5-turbo-0301',
