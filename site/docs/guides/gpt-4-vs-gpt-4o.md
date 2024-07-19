@@ -2,7 +2,7 @@
 sidebar_label: GPT-4o vs GPT-4o-mini
 ---
 
-# GPT-4o vs GPT-4o-mini: benchmark on your own data
+# GPT-4o vs GPT-4o-mini: Benchmark on Your Own Data
 
 OpenAI released [gpt-4o-mini](https://openai.com/index/gpt-4o-mini-advancing-cost-efficient-intelligence/), a highly cost-efficient small model designed to expand the range of applications built with AI by making intelligence more affordable. GPT-4o mini surpasses GPT-3.5 Turbo in performance and affordability, and while it is more cost-effective than GPT-4o, it maintains strong capabilities in both textual intelligence and multimodal reasoning.
 
@@ -37,142 +37,43 @@ providers:
   - openai:gpt-4o-mini
 ```
 
-## Step 2: Crafting the prompts
+## Step 2: Crafting the Prompts
 
-For our comparison, we'll use a simple prompt:
+In this example, we consider a custom binary image classification task. If you're working on an application that involves classifying images into two categories (e.g., cat vs. dog), you can set up a similar comparison using promptfoo.
 
-```yaml title=promptfooconfig.yaml
-prompts:
-  - 'Solve this riddle: {{riddle}}'
-```
-
-Feel free to add multiple prompts and tailor them to your use case.
-
-## Step 3: Create test cases
-
-Above, we have a `{{riddle}}` placeholder variable. Each test case runs the prompts with a different riddle:
+First, adjust your `promptfooconfig.yaml` to include the prompts and test cases relevant to your image classification task:
 
 ```yaml title=promptfooconfig.yaml
-tests:
-  - vars:
-      riddle: 'I speak without a mouth and hear without ears. I have no body, but I come alive with wind. What am I?'
-  - vars:
-      riddle: 'You see a boat filled with people. It has not sunk, but when you look again you don’t see a single person on the boat. Why?'
-  - vars:
-      riddle: 'The more of this there is, the less you see. What is it?'
-```
-
-## Step 4: Run the comparison
-
-Execute the comparison with the following command:
-
-```
-npx promptfoo@latest eval
-```
-
-This will process the riddles against both GPT-4o and GPT-4o-mini, providing you with side-by-side results in your command line interface:
-
-```sh
-npx promptfoo@latest view
-```
-
-## Step 5: Automatic evaluation
-
-To streamline the evaluation process, you can add various types of assertions to your test cases. Assertions verify if the model's output meets certain criteria, marking the test as pass or fail accordingly:
-
-```yaml
-tests:
-  - vars:
-      riddle: 'I speak without a mouth and hear without ears. I have no body, but I come alive with wind. What am I?'
-    assert:
-      # Make sure the LLM output contains this word
-      - type: contains
-        value: echo
-      # Inference should always cost less than this (USD)
-      - type: cost
-        threshold: 0.001
-      # Inference should always be faster than this (milliseconds)
-      - type: latency
-        threshold: 5000
-      # Use model-graded assertions to enforce free-form instructions
-      - type: llm-rubric
-        value: Do not apologize
-  - vars:
-      riddle: 'You see a boat filled with people. It has not sunk, but when you look again you don’t see a single person on the boat. Why?'
-    assert:
-      - type: cost
-        threshold: 0.002
-      - type: latency
-        threshold: 3000
-      - type: llm-rubric
-        value: explains that the people are below deck
-  - vars:
-      riddle: 'The more of this there is, the less you see. What is it?'
-    assert:
-      - type: contains
-        value: darkness
-      - type: cost
-        threshold: 0.0015
-      - type: latency
-        threshold: 4000
-```
-
-After setting up your assertions, rerun the `promptfoo eval` command. This automated process helps quickly determine which model best fits your reasoning task requirements.
-
-For more info on available assertion types, see [assertions & metrics](/docs/configuration/expected-outputs/).
-
-### Cleanup
-
-Finally, we'll use `defaultTest` to clean things up a bit and apply global `latency` and `cost` requirements. Here's the final eval config:
-
-```yaml
 providers:
   - openai:gpt-4o
   - openai:gpt-4o-mini
 
 prompts:
-  - 'Solve this riddle: {{riddle}}'
-
-// highlight-start
-defaultTest:
-  assert:
-    # Inference should always cost less than this (USD)
-    - type: cost
-      threshold: 0.001
-    # Inference should always be faster than this (milliseconds)
-      threshold: 3000
-// highlight-end
-
+  - |
+    role: user
+    content:
+      - type: text
+        text: Please classify this image as a cat or a dog in one word in lower case.
+      - type: image_url
+        image_url:
+          url: "{{url}}"
 tests:
   - vars:
-      riddle: "I speak without a mouth and hear without ears. I have no body, but I come alive with wind. What am I?"
+      url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b6/Felis_catus-cat_on_snow.jpg/640px-Felis_catus-cat_on_snow.jpg'
     assert:
-      - type: contains
-        value: echo
+      - type: equals
+        value: 'cat'
   - vars:
-      riddle: "You see a boat filled with people. It has not sunk, but when you look again you don’t see a single person on the boat. Why?"
+      url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/47/American_Eskimo_Dog.jpg/612px-American_Eskimo_Dog.jpg'
     assert:
-      - type: llm-rubric
-        value: explains that the people are below deck
-  - vars:
-      riddle: "The more of this there is, the less you see. What is it?"
-    assert:
-      - type: contains
-        value: darkness
+      - type: equals
+        value: 'dog'
 ```
 
-For more info on setting up the config, see the [configuration guide](/docs/configuration/guide).
-
-## Conclusion
-
-In the end, you will see a result like this:
-
-![gpt-4o vs gpt-4o-mini](/img/docs/gpt-4o-vs-gpt-4o-mini.png)
-
-In this particular eval, it looks like GPT-4o-mini got all the riddles correct except for one (it misinterprets the meaning of "single"!). But, GPT-4o failed to meet our cost requirements so it scored lower overall.
+Run the comparison with the `promptfoo eval` command to see how each model performs on your binary image classification task. While GPT-4o may provide higher accuracy, GPT-4o-mini's lower cost makes it an attractive option for applications where cost-efficiency is crucial.
 
 GPT-4o mini is designed to be cost-efficient and excels in various reasoning tasks, making it an excellent choice for applications requiring affordable and fast responses. It supports text and vision in the API and will soon extend to text, image, video, and audio inputs and outputs, making it versatile for a wide range of use cases.
 
-The tradeoff between cost, latency, and accuracy is going to be tailored for each application. That's why it's important to run your own eval.
+The tradeoff between cost, latency, and accuracy is going to be tailored for each application. That's why it's important to run your own evaluation.
 
-I encourage you to experiment with your own test cases and use this guide as a starting point. To learn more, see [Getting Started](/docs/getting-started).
+Experiment with your own test cases and use this guide as a starting point. To learn more, see [Getting Started](/docs/getting-started).
