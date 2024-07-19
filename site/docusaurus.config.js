@@ -96,7 +96,7 @@ const config = {
         title: 'promptfoo',
         logo: {
           alt: 'promptfoo logo',
-          src: 'img/logo.svg',
+          src: 'img/logo-panda.svg',
         },
         items: [
           /*
