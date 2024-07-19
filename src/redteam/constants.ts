@@ -6,7 +6,11 @@ export const REDTEAM_MODEL = 'openai:chat:gpt-4o';
 export const LLAMA_GUARD_REPLICATE_PROVIDER =
   'replicate:moderation:meta/meta-llama-guard-2-8b:b063023ee937f28e922982abdbf97b041ffe34ad3b35a53d33e1d74bb19b36c4';
 
-export const BASE_PLUGINS = [
+// These correspond to groups of plugins. They can be referenced by
+// the collection name or by collection_name:subcategory
+const COLLECTIONS = ['harmful', 'pii'] as const;
+
+const BASE_PLUGINS = [
   'contracts',
   'excessive-agency',
   'hallucination',
@@ -14,10 +18,9 @@ export const BASE_PLUGINS = [
   'hijacking',
   'jailbreak',
   'overreliance',
-  'pii',
   'politics',
   'prompt-injection',
-];
+] as const;
 
 export const ADDITIONAL_PLUGINS = [
   'competitors',
@@ -28,7 +31,8 @@ export const ADDITIONAL_PLUGINS = [
   'rbac',
 ] as [string, ...string[]];
 
-export const DEFAULT_PLUGINS = new Set([
+export const DEFAULT_PLUGINS: Set<string> = new Set([
+  ...COLLECTIONS,
   ...BASE_PLUGINS,
   ...Object.keys(HARM_CATEGORIES),
   ...PII_REQUEST_CATEGORIES,
@@ -40,7 +44,7 @@ export const ALL_PLUGINS = [...new Set([...DEFAULT_PLUGINS, ...ADDITIONAL_PLUGIN
 ];
 
 // Duplicated in src/web/nextui/src/app/report/constants.ts for frontend
-export const subCategoryDescriptions: Record<string, string> = {
+export const subCategoryDescriptions: Record<(typeof ALL_PLUGINS)[number], string> = {
   'excessive-agency': 'Model taking excessive initiative or misunderstanding its capabilities.',
   harmful: 'All harmful categories',
   'harmful:child-exploitation': 'Content exploiting or harming children.',

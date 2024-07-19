@@ -1,3 +1,7 @@
+import { ALL_PLUGINS } from '@/../../../redteam/constants';
+
+export { subCategoryDescriptions } from '@/../../../redteam/constants';
+
 export const riskCategories = {
   'Brand Risk': [
     'competitors',
@@ -56,7 +60,7 @@ export enum Severity {
   Low = 'Low',
 }
 
-export const riskCategorySeverityMap: Record<string, Severity> = {
+export const riskCategorySeverityMap: Record<(typeof ALL_PLUGINS)[number], Severity> = {
   'debug-access': Severity.High,
   'excessive-agency': Severity.Medium,
   'harmful:child-exploitation': Severity.Critical,
@@ -110,7 +114,7 @@ export const categoryMapReverse = Object.entries(riskCategories).reduce(
 export const categoryLabels = Object.keys(categoryMapReverse);
 
 // Map from metric name or harm category to plugin name
-export const categoryAliases = {
+export const categoryAliases: Record<(typeof ALL_PLUGINS)[number], string> = {
   'debug-access': 'DebugInterface',
   'excessive-agency': 'ExcessiveAgency',
   'harmful:child-exploitation': 'Child Exploitation',
@@ -149,12 +153,14 @@ export const categoryAliases = {
   rbac: 'RbacEnforcement',
 };
 
-export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
+export const categoryAliasesReverse: Record<string, (typeof ALL_PLUGINS)[number]> = Object.entries(
+  categoryAliases,
+).reduce(
   (acc, [key, value]) => {
     acc[value] = key;
     return acc;
   },
-  {} as Record<string, string>,
+  {} as Record<string, (typeof ALL_PLUGINS)[number]>,
 );
 
 // These names are displayed in risk cards and in the table
@@ -170,45 +176,4 @@ export const displayNameOverrides = {
   'sql-injection': 'SQL Injection',
   rbac: 'RBAC Enforcement',
   'debug-access': 'Debug Access',
-};
-
-// Duplicated in src/redteam/constants.ts for backend
-export const subCategoryDescriptions: Record<string, string> = {
-  'excessive-agency': 'Model taking excessive initiative or misunderstanding its capabilities.',
-  'harmful:child-exploitation': 'Content exploiting or harming children.',
-  'harmful:copyright-violations': 'Content violating copyright laws.',
-  'harmful:cybercrime': 'Content related to cybercriminal activities.',
-  'harmful:graphic-content': 'Displaying graphic or violent content.',
-  'harmful:harassment-bullying': 'Content that harasses or bullies individuals.',
-  'harmful:hate': 'Content that promotes hate or discrimination.',
-  'harmful:illegal-activities': 'Content promoting illegal activities.',
-  'harmful:illegal-drugs': 'Content related to illegal drug use or trade.',
-  'harmful:indiscriminate-weapons': 'Content related to weapons without context.',
-  'harmful:insults': 'Content that insults or demeans individuals.',
-  'harmful:intellectual-property': 'Content violating intellectual property rights.',
-  'harmful:misinformation-disinformation': 'Spreading false or misleading information.',
-  'harmful:non-violent-crime': 'Content related to non-violent criminal activities.',
-  'harmful:privacy': 'Content violating privacy rights.',
-  'harmful:profanity': 'Content containing profane or inappropriate language.',
-  'harmful:radicalization': 'Content that promotes radical or extremist views.',
-  'harmful:self-harm': 'Content that encourages self-harm or suicide.',
-  'harmful:sex-crime': 'Content related to sexual crimes.',
-  'harmful:sexual-content': 'Explicit or inappropriate sexual content.',
-  'harmful:specialized-advice': 'Providing advice in specialized fields without expertise.',
-  'harmful:unsafe-practices': 'Content promoting unsafe or harmful practices.',
-  'harmful:violent-crime': 'Content related to violent criminal activities.',
-  'prompt-injection': "Malicious inputs designed to manipulate the model's behavior.",
-  competitors: 'Competitor mentions and endorsements',
-  contracts: 'Enters business or legal commitments without supervision.',
-  hallucination: 'Model generating false or misleading information.',
-  hijacking: 'Unauthorized or off-topic resource use.',
-  jailbreak: 'Bypassing security measures or restrictions.',
-  overreliance: 'Model susceptible to relying on an incorrect user assumption or input.',
-  pii: 'Exposure or misuse of personally identifiable information.',
-  politics: 'Makes political statements.',
-  'experimental-jailbreak': 'Apply jailbreaks to all attack types',
-  'sql-injection': 'Attempts to perform SQL injection attacks to manipulate database queries.',
-  'shell-injection': 'Attempts to execute shell commands through the model.',
-  'debug-access': 'Attempts to access or use debugging commands.',
-  rbac: 'Tests whether the model properly implements Role-Based Access Control (RBAC).',
 };
