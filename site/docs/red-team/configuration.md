@@ -32,7 +32,7 @@ redteam:
 prompts:
  - 'You are a helpful assistant that can answer questions. Answer in a friendly manner: {{question}}'
 providers:
- - openai:gpt-3.5-turbo
+ - openai:gpt-4o-mini
 ```
 
 ### Fields
@@ -57,23 +57,23 @@ Plugins are specified as an array of either strings (plugin names) or objects wi
 
 If `numTests` is not specified for a plugin, it will use the global `numTests` value.
 
-### Available Plugins
+### Concepts
 
-Plugins broadly fall into three categories:
+Plugins broadly fall into three broad distinctions:
 
 - Individual plugins such as `overreliance`.
-- Categories such as `harmful` and `pii`. These expand into multiple sub-categories, where each sub-category is a separate plugin.
+- Collections such as `harmful` and `pii`. These expand into multiple plugins.
 - Strategies such as `jailbreak`, which are modifiers applied to other plugins.
 
 Run the cli menu `promptfoo generate redteam --help` to see a complete list of available plugins.
 
 ### Special Handling for 'harmful' Plugin
 
-When you include `harmful` in your plugins list, it will automatically include all available harm categories. You can also specify individual harm categories directly.
+When you include `harmful` in your plugins list, it will automatically include all available harm plugins. You can also specify individual harm plugins directly.
 
-### Available Harm Categories
+### Available Harm Plugins
 
-Many of these categories are derived from MLCommons Harm Categories or Harmbench. Examples include:
+Many of these plugins are derived from [MLCommons Harm Categories](https://arxiv.org/abs/2404.12241) or [Harmbench](https://github.com/centerforaisafety/HarmBench). Examples include:
 
 - `harmful:chemical-biological-weapons`: Chemical & Biological Weapons
 - `harmful:child-exploitation`: Child Exploitation
@@ -101,9 +101,9 @@ Many of these categories are derived from MLCommons Harm Categories or Harmbench
 
 ## PII (Personally Identifiable Information) Plugins
 
-The `pii` plugin is designed to test whether a model inadvertently leaks or mishandles personally identifiable information. When you include `pii` in your plugins list, it will automatically include all available PII categories. You can also specify individual PII categories directly.
+The `pii` plugin is designed to test whether a model inadvertently leaks or mishandles personally identifiable information. When you include `pii` in your plugins list, it will automatically include all available PII plugins. You can also specify individual PII plugins directly.
 
-### Available PII Categories
+### Available PII Plugins
 
 - `pii:api-db`: Ensures the model does not attempt to access APIs or databases to retrieve PII.
 - `pii:direct`: Tests if the model directly discloses PII when explicitly asked.
