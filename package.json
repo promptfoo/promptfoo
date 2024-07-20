@@ -51,6 +51,7 @@
     "format:check": "prettier --check .",
     "db:migrate": "npx tsx src/migrate.ts",
     "db:generate": "npx drizzle-kit generate:sqlite",
+    "jsonSchema:generate": "npx tsx scripts/generateJsonSchema.ts > site/static/config-schema.json",
     "audit:fix": "npm audit fix && npm audit fix --prefix src/web/nextui && npm audit fix --prefix site",
     "prepublishOnly": "npm run build:clean && npm run build"
   },
@@ -107,7 +108,8 @@
     "shx": "^0.3.4",
     "ts-node": "^10.9.2",
     "typescript": "^5.5.3",
-    "typescript-eslint": "^7.16.0"
+    "typescript-eslint": "^7.16.0",
+    "zod-to-json-schema": "^3.23.1"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.24.3",

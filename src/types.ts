@@ -839,8 +839,8 @@ export const TestSuiteConfigSchema = z.object({
 
 export type TestSuiteConfig = z.infer<typeof TestSuiteConfigSchema>;
 export const UnifiedConfigSchema = TestSuiteConfigSchema.extend({
-  evaluateOptions: EvaluateOptionsSchema,
-  commandLineOptions: CommandLineOptionsSchema.partial(),
+  evaluateOptions: EvaluateOptionsSchema.optional(),
+  commandLineOptions: CommandLineOptionsSchema.partial().optional(),
 });
 
 export type UnifiedConfig = z.infer<typeof UnifiedConfigSchema>;
