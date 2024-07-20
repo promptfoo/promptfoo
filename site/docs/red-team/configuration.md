@@ -5,7 +5,7 @@ sidebar_label: 'Configuration'
 
 # Redteam Configuration
 
-The `redteam` section in your `promptfoo.config.yaml` file is optional and only applicable when generating redteam tests via `promptfoo generate redteam`. It is a more powerful way to generate tests than via the command line. You can also check the configuration into your repository to track changes and to share your configuration with your team.
+The `redteam` section in your `promptfoo.config.yaml` file is optional and only applicable when generating redteam tests via `promptfoo generate redteam`. It offers more configuration options, as well as the convenience of checking the configuration into your repository to track changes and share with others.
 
 ## Getting Started
 
