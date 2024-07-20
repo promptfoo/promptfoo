@@ -150,7 +150,7 @@ redteam:
 redteam:
   injectVar: 'user_input'
   purpose: 'Evaluate chatbot safety and robustness'
-  provider: 'anthropic:claude-3-opus-20240229'
+  provider: 'openai:chat:gpt-4o-mini'
   numTests: 20
   plugins:
     - id: 'harmful:child-exploitation'
