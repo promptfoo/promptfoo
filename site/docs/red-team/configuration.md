@@ -48,7 +48,7 @@ providers:
 
 ## Plugins
 
-Plugins are specified as an array of either strings (plugin ids) or objects with `id` and optional `numTests` properties. They must exactly match the plugin ids available in the redteam system.
+Plugins are specified as an array of either strings (plugin IDs) or objects with `id` and optional `numTests` properties. They must exactly match the plugin IDs available in the redteam system.
 
 ### Plugin Specification
 
@@ -57,37 +57,44 @@ Plugins are specified as an array of either strings (plugin ids) or objects with
 
 If `numTests` is not specified for a plugin, it will use the global `numTests` value.
 
-### Concepts
+### Core Concepts
 
-There are three concepts in the redteam configuration, individual plugins, a collection of related plugins, and strategies.
+There are three core concepts that affect the number of generated redteam tests: individual plugins, collections of related plugins, and strategies.
 
-- Individual plugins such as `overreliance` or `hijacking`.
-- Collections such as `harmful` and `pii`. These expand into multiple plugins.
-- Strategies such as `jailbreak`, which are modifiers applied to other plugins.
+#### Individual Plugins
 
-Run the cli menu `promptfoo generate redteam --help` to see a complete list of available plugins.
+- `overreliance`
+- `hijacking`
+...
+
+#### Collections
+
+- `harmful`: Automatically includes all available harm plugins.
+- `pii`: Automatically includes all available PII plugins.
+
+Run the CLI menu `promptfoo generate redteam --help` to see a complete list of available plugins.
 
 #### Special Handling for 'harmful' Plugin
 
 When you include `harmful` in your plugins list, it will automatically include all available harm plugins. You can also specify individual harm plugins directly.
 
-### Available Harm Plugins
+#### Available Harm Plugins
 
 Many of these plugins are derived from [MLCommons Harm Categories](https://arxiv.org/abs/2404.12241) or [Harmbench](https://github.com/centerforaisafety/HarmBench). Examples include:
 
 - `harmful:chemical-biological-weapons`: Chemical & Biological Weapons
 - `harmful:child-exploitation`: Child Exploitation
-- `harmful:copyright-violations`: Copyright Violations - Copyrighted text
-- `harmful:cybercrime`: Cybercrime & Unauthorized Intrusion - Hacking and Malware
+- `harmful:copyright-violations`: Copyright Violations
+- `harmful:cybercrime`: Cybercrime & Unauthorized Intrusion
 - `harmful:graphic-content`: Graphic & age-restricted content
 - `harmful:harassment-bullying`: Harassment & Bullying
 - `harmful:hate`: Hate
-- `harmful:illegal-activities`: Illegal Activities - Fraud & scams
+- `harmful:illegal-activities`: Illegal Activities
 - `harmful:illegal-drugs`: Illegal Drugs
 - `harmful:indiscriminate-weapons`: Indiscriminate Weapons
 - `harmful:insults`: Insults and personal attacks
 - `harmful:intellectual-property`: Intellectual Property violation
-- `harmful:misinformation-disinformation`: Misinformation & Disinformation - Harmful lies and propaganda
+- `harmful:misinformation-disinformation`: Misinformation & Disinformation
 - `harmful:non-violent-crime`: Non-Violent Crimes
 - `harmful:privacy`: Privacy violations
 - `harmful:profanity`: Requests containing profanity
@@ -95,15 +102,11 @@ Many of these plugins are derived from [MLCommons Harm Categories](https://arxiv
 - `harmful:self-harm`: Self-Harm
 - `harmful:sex-crime`: Sex Crimes
 - `harmful:sexual-content`: Sexual Content
-- `harmful:specialized-advice`: Specialized Advice - Financial
+- `harmful:specialized-advice`: Specialized Advice
 - `harmful:unsafe-practices`: Promotion of unsafe practices
 - `harmful:violent-crime`: Violent Crimes
 
-## PII (Personally Identifiable Information) Plugins
-
-The `pii` plugin is designed to test whether a model inadvertently leaks or mishandles personally identifiable information. When you include `pii` in your plugins list, it will automatically include all available PII plugins. You can also specify individual PII plugins directly.
-
-### Available PII Plugins
+#### Available PII (Personally Identifiable Information) Plugins
 
 - `pii:api-db`: Ensures the model does not attempt to access APIs or databases to retrieve PII.
 - `pii:direct`: Tests if the model directly discloses PII when explicitly asked.
