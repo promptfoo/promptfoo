@@ -3,7 +3,7 @@ import { ApiProvider, Assertion } from '../../../src/types';
 import { getNunjucksEngine } from '../../../src/util/templates';
 
 class TestPlugin extends PluginBase {
-  protected template = 'Test template with {{ purpose }}';
+  protected template = 'Test template with {{ purpose }} for {{ n }} prompts';
   protected getAssertions(prompt: string): Assertion[] {
     return [{ type: 'contains', value: prompt }];
   }
@@ -40,8 +40,9 @@ describe('PluginBase', () => {
       },
     ]);
     expect(provider.callApi).toHaveBeenCalledWith(
-      getNunjucksEngine().renderString('Test template with {{ purpose }}', {
+      getNunjucksEngine().renderString('Test template with {{ purpose }} for {{ n }} prompts', {
         purpose: 'test purpose',
+        n: 2,
       }),
     );
   });
@@ -64,5 +65,90 @@ describe('PluginBase', () => {
         vars: { testVar: 'another prompt' },
       },
     ]);
+  });
+
+  it('should handle batching when requesting more than 20 tests', async () => {
+    const largeBatchSize = 25;
+    const mockResponses = [
+      {
+        output: Array(20)
+          .fill(0)
+          .map((_, i) => `Prompt: test prompt ${i}`)
+          .join('\n'),
+      },
+      {
+        output: Array(5)
+          .fill(0)
+          .map((_, i) => `Prompt: test prompt ${i + 20}`)
+          .join('\n'),
+      },
+    ];
+
+    provider.callApi = jest
+      .fn()
+      .mockResolvedValueOnce(mockResponses[0])
+      .mockResolvedValueOnce(mockResponses[1]);
+
+    const result = await plugin.generateTests(largeBatchSize);
+
+    expect(result.length).toBe(largeBatchSize);
+    expect(provider.callApi).toHaveBeenCalledTimes(2);
+    expect(provider.callApi).toHaveBeenNthCalledWith(1, expect.stringContaining('for 20 prompts'));
+    expect(provider.callApi).toHaveBeenNthCalledWith(2, expect.stringContaining('for 5 prompts'));
+  });
+
+  it('should deduplicate prompts', async () => {
+    provider.callApi = jest.fn().mockResolvedValue({
+      output: 'Prompt: duplicate\nPrompt: unique\nPrompt: duplicate',
+    });
+
+    const result = await plugin.generateTests(2);
+
+    expect(result.length).toBe(2);
+    expect(result[0].vars.testVar).not.toBe(result[1].vars.testVar);
+  });
+
+  it('should retry when not enough unique prompts are generated', async () => {
+    const mockResponses = [
+      { output: 'Prompt: test1\nPrompt: test2' },
+      { output: 'Prompt: test2\nPrompt: test3' },
+      { output: 'Prompt: test4' },
+    ];
+
+    provider.callApi = jest
+      .fn()
+      .mockResolvedValueOnce(mockResponses[0])
+      .mockResolvedValueOnce(mockResponses[1])
+      .mockResolvedValueOnce(mockResponses[2]);
+
+    const result = await plugin.generateTests(4);
+
+    expect(result.length).toBe(4);
+    expect(provider.callApi).toHaveBeenCalledTimes(3);
+  });
+
+  it('should bail after 2 retries if no new prompts are generated', async () => {
+    const mockResponse = { output: 'Prompt: test1\nPrompt: test2' };
+
+    provider.callApi = jest.fn().mockResolvedValue(mockResponse);
+
+    const result = await plugin.generateTests(5);
+
+    expect(result.length).toBe(2);
+    expect(provider.callApi).toHaveBeenCalledTimes(4); // Changed from 3 to 4
+  });
+
+  it('should sample prompts when more are generated than requested', async () => {
+    provider.callApi = jest.fn().mockResolvedValue({
+      output: Array(10)
+        .fill(0)
+        .map((_, i) => `Prompt: test prompt ${i}`)
+        .join('\n'),
+    });
+
+    const result = await plugin.generateTests(5);
+
+    expect(result.length).toBe(5);
+    expect(new Set(result.map((r) => r.vars.testVar)).size).toBe(5);
   });
 });
