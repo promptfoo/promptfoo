@@ -67,7 +67,7 @@ There are three core concepts that affect the number of generated redteam tests:
 - `hijacking`
   ...
 
-#### Collections
+#### Plugin Collections
 
 - `harmful`: Automatically includes all available harm plugins.
 - `pii`: Automatically includes all available PII plugins.
