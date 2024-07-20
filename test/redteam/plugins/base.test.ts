@@ -84,27 +84,28 @@ describe('PluginBase', () => {
       },
     ];
 
-    provider.callApi = jest
-      .fn()
+    jest
+      .spyOn(provider, 'callApi')
+      .mockImplementation()
       .mockResolvedValueOnce(mockResponses[0])
       .mockResolvedValueOnce(mockResponses[1]);
 
     const result = await plugin.generateTests(largeBatchSize);
 
-    expect(result.length).toBe(largeBatchSize);
+    expect(result).toHaveLength(largeBatchSize);
     expect(provider.callApi).toHaveBeenCalledTimes(2);
     expect(provider.callApi).toHaveBeenNthCalledWith(1, expect.stringContaining('for 20 prompts'));
     expect(provider.callApi).toHaveBeenNthCalledWith(2, expect.stringContaining('for 5 prompts'));
   });
 
   it('should deduplicate prompts', async () => {
-    provider.callApi = jest.fn().mockResolvedValue({
+    jest.spyOn(provider, 'callApi').mockImplementation().mockResolvedValue({
       output: 'Prompt: duplicate\nPrompt: unique\nPrompt: duplicate',
     });
 
     const result = await plugin.generateTests(2);
 
-    expect(result.length).toBe(2);
+    expect(result).toHaveLength(2);
     expect(result[0].vars.testVar).not.toBe(result[1].vars.testVar);
   });
 
@@ -115,40 +116,44 @@ describe('PluginBase', () => {
       { output: 'Prompt: test4' },
     ];
 
-    provider.callApi = jest
-      .fn()
+    jest
+      .spyOn(provider, 'callApi')
+      .mockImplementation()
       .mockResolvedValueOnce(mockResponses[0])
       .mockResolvedValueOnce(mockResponses[1])
       .mockResolvedValueOnce(mockResponses[2]);
 
     const result = await plugin.generateTests(4);
 
-    expect(result.length).toBe(4);
+    expect(result).toHaveLength(4);
     expect(provider.callApi).toHaveBeenCalledTimes(3);
   });
 
   it('should bail after 2 retries if no new prompts are generated', async () => {
     const mockResponse = { output: 'Prompt: test1\nPrompt: test2' };
 
-    provider.callApi = jest.fn().mockResolvedValue(mockResponse);
+    jest.spyOn(provider, 'callApi').mockImplementation().mockResolvedValue(mockResponse);
 
     const result = await plugin.generateTests(5);
 
-    expect(result.length).toBe(2);
+    expect(result).toHaveLength(2);
     expect(provider.callApi).toHaveBeenCalledTimes(4); // Changed from 3 to 4
   });
 
   it('should sample prompts when more are generated than requested', async () => {
-    provider.callApi = jest.fn().mockResolvedValue({
-      output: Array(10)
-        .fill(0)
-        .map((_, i) => `Prompt: test prompt ${i}`)
-        .join('\n'),
-    });
+    jest
+      .spyOn(provider, 'callApi')
+      .mockImplementation()
+      .mockResolvedValue({
+        output: Array(10)
+          .fill(0)
+          .map((_, i) => `Prompt: test prompt ${i}`)
+          .join('\n'),
+      });
 
     const result = await plugin.generateTests(5);
 
-    expect(result.length).toBe(5);
+    expect(result).toHaveLength(5);
     expect(new Set(result.map((r) => r.vars.testVar)).size).toBe(5);
   });
 });
