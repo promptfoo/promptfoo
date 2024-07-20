@@ -30,7 +30,7 @@ export const redteamPluginSchema = z.union([
  * Schema for individual redteam strategies
  */
 export const redteamStrategySchema = z.union([
-  z.enum(ALL_STRATEGIES).describe('Name of the strategy'),
+  z.enum(ALL_STRATEGIES).describe('Name of the strategy').transform((s) => ({ id: s })),
   z.object({
     id: z.enum(ALL_STRATEGIES).describe('Name of the strategy'),
   }),
