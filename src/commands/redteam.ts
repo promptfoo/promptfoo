@@ -179,7 +179,33 @@ export function redteamCommand(program: Command) {
         }).data,
       };
 
-      fs.writeFileSync(configPath, yaml.dump(config), 'utf8');
+      // Write the simplified form to the config file to make it easier
+      // for people to play with. Writes 1 in the { id: ..., numTests }
+      // and then the rest as strings.
+      const configPlugins =
+        plugins.length >= 2
+          ? [
+              redteamConfigSchema.safeParse({
+                plugins: plugins,
+                strategies: strategies,
+                numTests,
+              })?.data?.plugins[0],
+              ...plugins.slice(1),
+            ]
+          : plugins;
+
+      fs.writeFileSync(
+        configPath,
+        yaml.dump({
+          ...config,
+          redteam: {
+            numTests,
+            plugins: configPlugins,
+            strategies,
+          },
+        }),
+        'utf8',
+      );
 
       logger.info(
         '\n' + chalk.green(`Created red teaming configuration file at ${configPath}`) + '\n',
