@@ -3,7 +3,7 @@ import logger from '../../logger';
 import type { ApiProvider, Assertion, TestCase } from '../../types';
 import { sampleArray } from '../../util';
 import { getNunjucksEngine } from '../../util/templates';
-import { retryWithDeduplication } from '../utils';
+import { retryWithDeduplication } from '../util';
 
 /**
  * Abstract base class for creating plugins that generate test cases.
