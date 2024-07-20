@@ -16,6 +16,33 @@ export function sampleArray<T>(array: T[], n: number): T[] {
   return shuffled.slice(0, n);
 }
 
+export async function retryWithDeduplication<T>(
+  operation: (currentItems: T[]) => Promise<T[]>,
+  targetCount: number,
+  maxConsecutiveRetries: number = 2,
+  dedupFn: (items: T[]) => T[] = (items) => Array.from(new Set(items)),
+): Promise<T[]> {
+  const allItems: T[] = [];
+  let consecutiveRetries = 0;
+
+  while (allItems.length < targetCount && consecutiveRetries <= maxConsecutiveRetries) {
+    const newItems = await operation(allItems);
+    const uniqueNewItems = dedupFn([...allItems, ...newItems]).slice(allItems.length);
+    allItems.push(...uniqueNewItems);
+
+    logger.debug(`Added ${uniqueNewItems.length} unique items. Total: ${allItems.length}`);
+
+    if (uniqueNewItems.length === 0) {
+      consecutiveRetries++;
+      logger.debug(`No new unique items. Consecutive retries: ${consecutiveRetries}`);
+    } else {
+      consecutiveRetries = 0;
+    }
+  }
+
+  return allItems;
+}
+
 /**
  * Abstract base class for creating plugins that generate test cases.
  */
@@ -62,39 +89,27 @@ export default abstract class PluginBase {
   async generateTests(n: number): Promise<TestCase[]> {
     logger.debug(`Generating ${n} test cases`);
     const batchSize = 20;
-    const uniquePrompts = new Set<string>();
-    let consecutiveRetries = 0;
-    const maxConsecutiveRetries = 2;
 
-    while (uniquePrompts.size < n && consecutiveRetries <= maxConsecutiveRetries) {
-      const remainingPrompts = n - uniquePrompts.size;
-      const batchN = Math.min(remainingPrompts, batchSize);
-      const newPrompts = await this.generateBatch(batchN);
+    const generateBatch = async (remainingCount: number) => {
+      const currentBatchSize = Math.min(remainingCount, batchSize);
+      return this.generateBatch(currentBatchSize);
+    };
 
-      const initialSize = uniquePrompts.size;
-      newPrompts.forEach((prompt) => uniquePrompts.add(prompt));
-
-      const addedPrompts = uniquePrompts.size - initialSize;
-      logger.debug(`Added ${addedPrompts} unique prompts. Total: ${uniquePrompts.size}`);
-
-      if (addedPrompts === 0) {
-        consecutiveRetries++;
-        logger.debug(`No new unique prompts. Consecutive retries: ${consecutiveRetries}`);
-      } else {
-        consecutiveRetries = 0;
-      }
-    }
-
-    let allPrompts = Array.from(uniquePrompts);
+    const allPrompts = await retryWithDeduplication(
+      async (currentItems: string[]) => {
+        const remainingCount = n - currentItems.length;
+        return generateBatch(remainingCount);
+      },
+      n,
+      2,
+      (items) => Array.from(new Set(items)),
+    );
 
     // If we have more prompts than requested, randomly sample to get exact number
-    if (allPrompts.length > n) {
-      logger.debug(`Sampling ${n} prompts from ${allPrompts.length} total prompts`);
-      allPrompts = sampleArray(allPrompts, n);
-    }
+    const finalPrompts = allPrompts.length > n ? sampleArray(allPrompts, n) : allPrompts;
 
-    logger.debug(`Generating test cases from ${allPrompts.length} prompts`);
-    return allPrompts.map((prompt) => ({
+    logger.debug(`Generating test cases from ${finalPrompts.length} prompts`);
+    return finalPrompts.map((prompt) => ({
       vars: {
         [this.injectVar]: prompt,
       },
