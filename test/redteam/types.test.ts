@@ -302,13 +302,15 @@ describe('redteamConfigSchema', () => {
   it('should accept and transform a single injectVar string', () => {
     const input = {
       injectVar: 'system',
-      plugins: ['jailbreak'],
+      plugins: ['contracts'],
+      strategies: ['jailbreak'],
     };
     expect(redteamConfigSchema.safeParse(input)).toEqual({
       success: true,
       data: {
         injectVar: ['system'],
-        plugins: [{ id: 'jailbreak', numTests: 5 }],
+        plugins: [{ id: 'contracts', numTests: 5 }],
+        strategies: [{ id: 'jailbreak' }],
       },
     });
   });
