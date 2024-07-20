@@ -52,8 +52,7 @@ export function redteamCommand(program: Command) {
       let existingConfig: TestSuite | undefined;
       if (previousConfigExists) {
         const overwrite = await confirm({
-          message:
-            'A promptfoo configuration file already exists. Do you want to modify it or overwrite it?',
+          message: `A promptfoo configuration file already exists at: ${configPath} Do you want to overwrite it?`,
           default: false,
         });
         if (!overwrite) {
@@ -67,7 +66,7 @@ export function redteamCommand(program: Command) {
         { name: 'Reference a prompt file', value: 'file' },
       ];
       if (previousConfigExists) {
-        promptChoices.push({ name: 'Use existing prompts', value: 'existing' });
+        promptChoices.push({ name: 'Use prompts from existing config', value: 'existing' });
       }
       // Question 2: Prompt
       const promptChoice = await rawlist({
