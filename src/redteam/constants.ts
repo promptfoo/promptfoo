@@ -1,5 +1,5 @@
-import { HARM_CATEGORIES } from './plugins/harmful';
-import { PII_REQUEST_CATEGORIES } from './plugins/pii';
+import { HARM_PLUGINS } from './plugins/harmful';
+import { PII_PLUGINS } from './plugins/pii';
 
 export const REDTEAM_MODEL = 'openai:chat:gpt-4o';
 
@@ -8,7 +8,7 @@ export const LLAMA_GUARD_REPLICATE_PROVIDER =
 
 // These correspond to groups of plugins. They can be referenced by
 // the collection name or by collection_name:subcategory
-const COLLECTIONS = ['harmful', 'pii'] as const;
+export const COLLECTIONS = ['harmful', 'pii'];
 
 const BASE_PLUGINS = [
   'contracts',
@@ -31,8 +31,8 @@ export const ADDITIONAL_PLUGINS = [
 export const DEFAULT_PLUGINS: Set<string> = new Set([
   ...COLLECTIONS,
   ...BASE_PLUGINS,
-  ...Object.keys(HARM_CATEGORIES),
-  ...PII_REQUEST_CATEGORIES,
+  ...Object.keys(HARM_PLUGINS),
+  ...PII_PLUGINS,
 ]);
 
 export const ALL_PLUGINS = [...new Set([...DEFAULT_PLUGINS, ...ADDITIONAL_PLUGINS])].sort() as [

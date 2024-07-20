@@ -5,8 +5,10 @@ import {
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
   DEFAULT_STRATEGIES,
   ALL_STRATEGIES,
+  COLLECTIONS,
 } from './constants';
-import { HARM_CATEGORIES } from './plugins/harmful';
+import { HARM_PLUGINS } from './plugins/harmful';
+import { PII_PLUGINS } from './plugins/pii';
 
 const redteamPluginObjectSchema = z.object({
   id: z.enum(REDTEAM_ALL_PLUGINS).describe('Name of the plugin'),
@@ -30,7 +32,10 @@ export const redteamPluginSchema = z.union([
  * Schema for individual redteam strategies
  */
 export const redteamStrategySchema = z.union([
-  z.enum(ALL_STRATEGIES).describe('Name of the strategy').transform((s) => ({ id: s })),
+  z
+    .enum(ALL_STRATEGIES)
+    .describe('Name of the strategy')
+    .transform((s) => ({ id: s })),
   z.object({
     id: z.enum(ALL_STRATEGIES).describe('Name of the strategy'),
   }),
@@ -99,16 +104,19 @@ export const redteamConfigSchema = z
           : { ...plugin, numTests: plugin.numTests ?? data.numTests },
       )
       .sort((a, b) => a.id.localeCompare(b.id))
-      .flatMap((pluginObj) => {
+      .flatMap((pluginObj: { id: string; numTests?: number }) => {
         if (pluginObj.id === 'harmful') {
-          return Object.keys(HARM_CATEGORIES).map((category) => ({
+          return Object.keys(HARM_PLUGINS).map((category) => ({
             id: category,
             numTests: pluginObj.numTests,
           }));
         }
+        if (pluginObj.id === 'pii') {
+          return PII_PLUGINS.map((id) => ({ id }));
+        }
         return pluginObj;
       })
-      .filter((plugin) => plugin.id !== 'harmful'); // category plugins are handled above
+      .filter((plugin) => !COLLECTIONS.includes(plugin.id)); // category plugins are handled above
 
     const uniquePlugins = Array.from(
       plugins.reduce((map, plugin) => map.set(plugin.id, plugin), new Map()).values(),

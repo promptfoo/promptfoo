@@ -1,8 +1,10 @@
 import {
   ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
+  ALL_STRATEGIES as REDTEAM_ALL_STRATEGIES,
+  COLLECTIONS,
 } from '../../src/redteam/constants';
-import { HARM_CATEGORIES } from '../../src/redteam/plugins/harmful';
+import { HARM_PLUGINS } from '../../src/redteam/plugins/harmful';
 import {
   RedteamGenerateOptionsSchema,
   redteamConfigSchema,
@@ -84,7 +86,7 @@ describe('redteamPluginSchema', () => {
 
   it('should allow omitting numTests in a plugin object', () => {
     const input = {
-      id: 'prompt-injection',
+      id: 'hijacking',
     };
     expect(redteamPluginSchema.safeParse(input).success).toBe(true);
   });
@@ -95,11 +97,8 @@ describe('redteamConfigSchema', () => {
     const input = {
       purpose: 'You are a travel agent',
       numTests: 3,
-      plugins: [
-        { id: 'harmful:non-violent-crime', numTests: 5 },
-        'prompt-injection',
-        { id: 'hijacking' },
-      ],
+      plugins: [{ id: 'harmful:non-violent-crime', numTests: 5 }, { id: 'hijacking' }],
+      strategies: ['prompt-injection'],
     };
     expect(redteamConfigSchema.safeParse(input)).toEqual({
       success: true,
@@ -108,8 +107,8 @@ describe('redteamConfigSchema', () => {
         plugins: [
           { id: 'harmful:non-violent-crime', numTests: 5 },
           { id: 'hijacking', numTests: 3 },
-          { id: 'prompt-injection', numTests: 3 },
         ],
+        strategies: [{ id: 'prompt-injection' }],
       },
     });
   });
@@ -121,8 +120,9 @@ describe('redteamConfigSchema', () => {
       data: {
         plugins: Array.from(REDTEAM_DEFAULT_PLUGINS)
           .sort()
-          .filter((name) => name !== 'harmful')
-          .map((name) => ({ name, numTests: 5 })),
+          .filter((id) => !COLLECTIONS.includes(id))
+          .map((id) => ({ id, numTests: 5 })),
+        strategies: [{ id: 'jailbreak' }, { id: 'prompt-injection' }],
       },
     });
   });
@@ -135,23 +135,25 @@ describe('redteamConfigSchema', () => {
         purpose: undefined,
         plugins: Array.from(REDTEAM_DEFAULT_PLUGINS)
           .sort()
-          .filter((name) => name !== 'harmful')
-          .map((name) => ({ name, numTests: 10 })),
+          .filter((id) => !COLLECTIONS.includes(id))
+          .map((id) => ({ id, numTests: 10 })),
+        strategies: [{ id: 'jailbreak' }, { id: 'prompt-injection' }],
       },
     });
   });
 
   it('should transform string plugins to objects', () => {
     const input = {
-      plugins: ['jailbreak', 'prompt-injection'],
+      plugins: ['hijacking', 'overreliance'],
     };
     expect(redteamConfigSchema.safeParse(input)).toEqual({
       success: true,
       data: {
         plugins: [
-          { id: 'jailbreak', numTests: 5 },
-          { id: 'prompt-injection', numTests: 5 },
+          { id: 'hijacking', numTests: 5 },
+          { id: 'overreliance', numTests: 5 },
         ],
+        strategies: [{ id: 'jailbreak' }, { id: 'prompt-injection' }],
       },
     });
   });
@@ -160,19 +162,21 @@ describe('redteamConfigSchema', () => {
     const input = {
       numTests: 7,
       plugins: [
-        { id: 'jailbreak', numTests: 3 },
-        { id: 'prompt-injection' },
+        { id: 'hijacking', numTests: 3 },
+        { id: 'overreliance' },
         'harmful:non-violent-crime',
       ],
+      strategies: ['jailbreak'],
     };
     expect(redteamConfigSchema.safeParse(input)).toEqual({
       success: true,
       data: {
         plugins: [
           { id: 'harmful:non-violent-crime', numTests: 7 },
-          { id: 'jailbreak', numTests: 3 },
-          { id: 'prompt-injection', numTests: 7 },
+          { id: 'hijacking', numTests: 3 },
+          { id: 'overreliance', numTests: 7 },
         ],
+        strategies: [{ id: 'jailbreak' }],
       },
     });
   });
@@ -198,17 +202,19 @@ describe('redteamConfigSchema', () => {
     expect(redteamConfigSchema.safeParse(input).success).toBe(false);
   });
 
-  it('should allow all valid plugin names', () => {
+  it('should allow all valid plugin and strategy names', () => {
     const input = {
       plugins: REDTEAM_ALL_PLUGINS,
+      strategies: REDTEAM_ALL_STRATEGIES,
     };
     expect(redteamConfigSchema.safeParse(input)).toEqual({
       success: true,
       data: {
-        plugins: REDTEAM_ALL_PLUGINS.filter((name) => name !== 'harmful').map((name) => ({
-          name,
+        plugins: REDTEAM_ALL_PLUGINS.filter((id) => !COLLECTIONS.includes(id)).map((id) => ({
+          id,
           numTests: 5,
         })),
+        strategies: REDTEAM_ALL_STRATEGIES.map((id) => ({ id })),
       },
     });
   });
@@ -221,12 +227,13 @@ describe('redteamConfigSchema', () => {
     expect(redteamConfigSchema.safeParse(input)).toEqual({
       success: true,
       data: {
-        plugins: Object.keys(HARM_CATEGORIES)
+        plugins: Object.keys(HARM_PLUGINS)
           .sort()
           .map((category) => ({
             id: category,
             numTests: 3,
           })),
+        strategies: [{ id: 'jailbreak' }, { id: 'prompt-injection' }],
       },
     });
   });
@@ -246,14 +253,15 @@ describe('redteamConfigSchema', () => {
         plugins: [
           { id: 'harmful:hate', numTests: 10 },
           { id: 'harmful:violent-crime', numTests: 5 },
-          ...Object.keys(HARM_CATEGORIES)
+          ...Object.keys(HARM_PLUGINS)
             .filter((category) => !['harmful:hate', 'harmful:violent-crime'].includes(category))
             .map((category) => ({ id: category, numTests: 3 })),
-        ].sort((a, b) => a.name.localeCompare(b.name)),
+        ].sort((a, b) => a.id.localeCompare(b.id)),
+        strategies: [{ id: 'jailbreak' }, { id: 'prompt-injection' }],
       },
     });
     expect(redteamConfigSchema.safeParse(input)?.data?.plugins).toHaveLength(
-      Object.keys(HARM_CATEGORIES).length,
+      Object.keys(HARM_PLUGINS).length,
     );
   });
 
@@ -268,10 +276,11 @@ describe('redteamConfigSchema', () => {
         plugins: expect.arrayContaining([
           { id: 'harmful:hate', numTests: 3 },
           { id: 'harmful:violent-crime', numTests: 5 },
-          ...Object.keys(HARM_CATEGORIES)
+          ...Object.keys(HARM_PLUGINS)
             .filter((category) => !['harmful:hate', 'harmful:violent-crime'].includes(category))
             .map((category) => ({ id: category, numTests: 3 })),
         ]),
+        strategies: [{ id: 'jailbreak' }, { id: 'prompt-injection' }],
       },
     });
   });
@@ -288,6 +297,7 @@ describe('redteamConfigSchema', () => {
           { id: 'harmful:hate', numTests: 10 },
           { id: 'harmful:violent-crime', numTests: 3 },
         ]),
+        strategies: [{ id: 'jailbreak' }, { id: 'prompt-injection' }],
       },
     });
   });
@@ -364,10 +374,7 @@ describe('redteamConfigSchema', () => {
           { id: 'overreliance', numTests: 5 },
           { id: 'politics', numTests: 5 },
         ],
-        strategies: [
-          { id: 'jailbreak' },
-          { id: 'prompt-injection' },
-        ],
+        strategies: [{ id: 'jailbreak' }, { id: 'prompt-injection' }],
       },
     });
   });

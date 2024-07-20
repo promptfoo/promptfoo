@@ -11,10 +11,10 @@ import ContractPlugin from './plugins/contracts';
 import DebugAccessPlugin from './plugins/debugInterface';
 import ExcessiveAgencyPlugin from './plugins/excessiveAgency';
 import HallucinationPlugin from './plugins/hallucination';
-import { HARM_CATEGORIES, getHarmfulTests } from './plugins/harmful';
+import { HARM_PLUGINS, getHarmfulTests } from './plugins/harmful';
 import HijackingPlugin from './plugins/hijacking';
 import OverreliancePlugin from './plugins/overreliance';
-import { PII_REQUEST_CATEGORIES, getPiiLeakTestsForCategory } from './plugins/pii';
+import { PII_PLUGINS, getPiiLeakTestsForCategory } from './plugins/pii';
 import PoliticsPlugin from './plugins/politics';
 import RbacPlugin from './plugins/rbac';
 import ShellInjectionPlugin from './plugins/shellInjection';
@@ -70,7 +70,7 @@ const Plugins: Plugin[] = [
     action: (provider, purpose, injectVar, n) =>
       new HallucinationPlugin(provider, purpose, injectVar).generateTests(n),
   },
-  ...(Object.keys(HARM_CATEGORIES).map((category) => ({
+  ...(Object.keys(HARM_PLUGINS).map((category) => ({
     key: category,
     action: (provider, purpose, injectVar, n) =>
       getHarmfulTests(provider, purpose, injectVar, [category], n),
@@ -110,7 +110,7 @@ const Plugins: Plugin[] = [
     action: (provider, purpose, injectVar, n) =>
       new PoliticsPlugin(provider, purpose, injectVar).generateTests(n),
   },
-  ...(PII_REQUEST_CATEGORIES.map((category) => ({
+  ...(PII_PLUGINS.map((category) => ({
     key: category,
     action: (provider, purpose, injectVar, n) =>
       getPiiLeakTestsForCategory(provider, purpose, injectVar, category, n),
@@ -119,8 +119,8 @@ const Plugins: Plugin[] = [
 
 // These plugins refer to a collection of tests.
 const categories = {
-  harmful: Object.keys(HARM_CATEGORIES),
-  pii: PII_REQUEST_CATEGORIES,
+  harmful: Object.keys(HARM_PLUGINS),
+  pii: PII_PLUGINS,
 } as const;
 
 const Strategies: Method[] = [
@@ -142,7 +142,7 @@ const Strategies: Method[] = [
       logger.debug(`Added ${jailbreaks.length} jailbreak test cases`);
       return jailbreaks;
     },
-    requiredPlugins: Object.keys(HARM_CATEGORIES),
+    requiredPlugins: Object.keys(HARM_PLUGINS),
   },
   {
     key: 'prompt-injection',
@@ -153,7 +153,7 @@ const Strategies: Method[] = [
       logger.debug(`Added ${injections.length} prompt injection test cases`);
       return injections;
     },
-    requiredPlugins: Object.keys(HARM_CATEGORIES),
+    requiredPlugins: Object.keys(HARM_PLUGINS),
   },
 ];
 
