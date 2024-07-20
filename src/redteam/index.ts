@@ -31,7 +31,7 @@ interface SynthesizeOptions {
   purpose?: string;
 }
 
-type TestCaseWithPlugin = TestCase & { metadata: { plugin: string } };
+type TestCaseWithPlugin = TestCase & { metadata: { pluginId: string } };
 
 interface Plugin {
   key: string;
@@ -136,7 +136,7 @@ const Strategies: Method[] = [
   {
     key: 'jailbreak',
     action: (testCases) => {
-      const harmfulPrompts = testCases.filter((t) => t.metadata?.plugin?.startsWith('harmful:'));
+      const harmfulPrompts = testCases.filter((t) => t.metadata.pluginId.startsWith('harmful:'));
       logger.debug('Adding jailbreaks to harmful prompts');
       const jailbreaks = addIterativeJailbreaks(harmfulPrompts);
       logger.debug(`Added ${jailbreaks.length} jailbreak test cases`);
@@ -147,7 +147,7 @@ const Strategies: Method[] = [
   {
     key: 'prompt-injection',
     action: (testCases, injectVar) => {
-      const harmfulPrompts = testCases.filter((t) => t.metadata?.plugin?.startsWith('harmful:'));
+      const harmfulPrompts = testCases.filter((t) => t.metadata.pluginId.startsWith('harmful:'));
       logger.debug('Adding prompt injections');
       const injections = addInjections(harmfulPrompts, injectVar);
       logger.debug(`Added ${injections.length} prompt injection test cases`);
@@ -268,7 +268,7 @@ export async function synthesize({
           ...t,
           metadata: {
             ...(t.metadata || {}),
-            plugin: key,
+            pluginId: key,
           },
         })),
       );
@@ -287,7 +287,7 @@ export async function synthesize({
           ...t,
           metadata: {
             ...(t.metadata || {}),
-            plugin: key,
+            pluginId: key,
           },
         })),
       );
