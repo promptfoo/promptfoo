@@ -375,7 +375,7 @@ describe('runAssertions', () => {
   });
 
   it('preserves default provider', async () => {
-    const provider = new OpenAiChatCompletionProvider('gpt-3.5-turbo');
+    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
     const output = 'Expected output';
     const test: AtomicTestCase = {
       assert: [
