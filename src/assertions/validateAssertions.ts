@@ -1,25 +1,25 @@
 import { TestCase } from '../types';
 
-export class AssertValiationError extends Error {
+export class AssertValidationError extends Error {
   constructor(message: string, testCase: TestCase) {
     const testCaseDescription = testCase.description || JSON.stringify(testCase);
 
     super(`${message} in:\n${testCaseDescription}`);
-    this.name = 'AssertValiationError';
+    this.name = 'AssertValidationError';
   }
 }
 
 function validateAssertSet(assertion: object, test: TestCase) {
   if (!('assert' in assertion)) {
-    throw new AssertValiationError('assert-set must have an `assert` property', test);
+    throw new AssertValidationError('assert-set must have an `assert` property', test);
   }
 
   if (!Array.isArray(assertion.assert)) {
-    throw new AssertValiationError('assert-set `assert` must be an array of assertions', test);
+    throw new AssertValidationError('assert-set `assert` must be an array of assertions', test);
   }
 
   if (assertion.assert.some((assertion) => assertion.type === 'assert-set')) {
-    throw new AssertValiationError('assert-set must not have child assert-sets', test);
+    throw new AssertValidationError('assert-set must not have child assert-sets', test);
   }
 }
 

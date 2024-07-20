@@ -1,7 +1,7 @@
 import { createHash } from 'crypto';
 import { stringify } from 'csv-stringify/sync';
 import dotenv from 'dotenv';
-import { desc, eq } from 'drizzle-orm';
+import { desc, eq, like, and } from 'drizzle-orm';
 import deepEqual from 'fast-deep-equal';
 import * as fs from 'fs';
 import { globSync } from 'glob';
@@ -10,9 +10,8 @@ import nunjucks from 'nunjucks';
 import * as os from 'os';
 import * as path from 'path';
 import invariant from 'tiny-invariant';
-import { getAuthor } from './accounts';
-import cliState from './cliState';
-import { TERMINAL_MAX_WIDTH } from './constants';
+import { getAuthor } from '../accounts';
+import { TERMINAL_MAX_WIDTH } from '../constants';
 import {
   datasets,
   getDb,
@@ -21,12 +20,12 @@ import {
   evalsToPrompts,
   prompts,
   getDbSignalPath,
-} from './database';
-import { getDirectory, importModule } from './esm';
-import { writeCsvToGoogleSheet } from './googleSheets';
-import logger from './logger';
-import { runDbMigrations } from './migrate';
-import { runPython } from './python/wrapper';
+} from '../database';
+import { getDirectory, importModule } from '../esm';
+import { writeCsvToGoogleSheet } from '../googleSheets';
+import logger from '../logger';
+import { runDbMigrations } from '../migrate';
+import { runPython } from '../python/wrapper';
 import {
   type EvalWithMetadata,
   type EvaluateResult,
@@ -44,31 +43,14 @@ import {
   type Prompt,
   type CompletedPrompt,
   type CsvRow,
+  type ResultLightweight,
   isApiProvider,
   isProviderOptions,
   OutputFileExtension,
-} from './types';
+} from '../types';
+import { getNunjucksEngine } from './templates';
 
 const DEFAULT_QUERY_LIMIT = 100;
-
-export function getNunjucksEngine(filters?: NunjucksFilterMap) {
-  if (process.env.PROMPTFOO_DISABLE_TEMPLATING) {
-    return {
-      renderString: (template: string) => template,
-    };
-  }
-
-  const env = nunjucks.configure({
-    autoescape: false,
-  });
-
-  if (filters) {
-    for (const [name, filter] of Object.entries(filters)) {
-      env.addFilter(name, filter);
-    }
-  }
-  return env;
-}
 
 export async function writeOutput(
   outputPath: string,
@@ -316,26 +298,34 @@ export async function writeResultsToDatabase(
 export function listPreviousResults(
   limit: number = DEFAULT_QUERY_LIMIT,
   filterDescription?: string,
-): { evalId: string; description?: string | null }[] {
+  datasetId?: string,
+): ResultLightweight[] {
   const db = getDb();
-  let results = db
+  const query = db
     .select({
-      name: evals.id,
+      evalId: evals.id,
+      createdAt: evals.createdAt,
       description: evals.description,
+      config: evals.config,
+      datasetId: evalsToDatasets.datasetId,
     })
     .from(evals)
-    .orderBy(desc(evals.createdAt))
-    .limit(limit)
-    .all();
+    .leftJoin(evalsToDatasets, eq(evals.id, evalsToDatasets.evalId))
+    .where(
+      and(
+        datasetId ? eq(evalsToDatasets.datasetId, datasetId) : undefined,
+        filterDescription ? like(evals.description, `%${filterDescription}%`) : undefined,
+      ),
+    );
 
-  if (filterDescription) {
-    const regex = new RegExp(filterDescription, 'i');
-    results = results.filter((result) => regex.test(result.description || ''));
-  }
+  const results = query.orderBy(desc(evals.createdAt)).limit(limit).all();
 
   return results.map((result) => ({
-    evalId: result.name,
+    evalId: result.evalId,
+    createdAt: result.createdAt,
     description: result.description,
+    numTests: result.config.tests?.length || 0,
+    datasetId: result.datasetId,
   }));
 }
 
@@ -518,8 +508,10 @@ export async function readResult(
         author: evals.author,
         results: evals.results,
         config: evals.config,
+        datasetId: evalsToDatasets.datasetId,
       })
       .from(evals)
+      .leftJoin(evalsToDatasets, eq(evals.id, evalsToDatasets.evalId))
       .where(eq(evals.id, id))
       .execute();
 
@@ -527,13 +519,14 @@ export async function readResult(
       return undefined;
     }
 
-    const { id: resultId, createdAt, results, config, author } = evalResult[0];
+    const { id: resultId, createdAt, results, config, author, datasetId } = evalResult[0];
     const result: ResultsFile = {
       version: 3,
       createdAt: new Date(createdAt).toISOString().slice(0, 10),
       author,
       results,
       config,
+      datasetId,
     };
     return {
       id: resultId,
@@ -894,9 +887,11 @@ export async function deleteEval(evalId: string) {
   });
 }
 
-export async function readFilters(filters: Record<string, string>): Promise<NunjucksFilterMap> {
+export async function readFilters(
+  filters: Record<string, string>,
+  basePath: string = '',
+): Promise<NunjucksFilterMap> {
   const ret: NunjucksFilterMap = {};
-  const basePath = cliState.basePath || '';
   for (const [name, filterPath] of Object.entries(filters)) {
     const globPath = path.join(basePath, filterPath);
     const filePaths = globSync(globPath, {
@@ -1074,6 +1069,15 @@ export function renderVarsInObject<T>(obj: T, vars?: Record<string, string | obj
     return renderVarsInObject(fn({ vars }) as T);
   }
   return obj;
+}
+
+export function isValidJson(str: string): boolean {
+  try {
+    JSON.parse(str);
+    return true;
+  } catch (e) {
+    return false;
+  }
 }
 
 export function extractJsonObjects(str: string): object[] {

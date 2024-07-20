@@ -1,9 +1,10 @@
+import checkbox from '@inquirer/checkbox';
+import rawlist from '@inquirer/rawlist';
 import chalk from 'chalk';
 import fs from 'fs';
-import inquirer from 'inquirer';
 import path from 'path';
 import logger from './logger';
-import { getNunjucksEngine } from './util';
+import { getNunjucksEngine } from './util/templates';
 
 export const CONFIG_TEMPLATE = `# Learn more about building a configuration: https://promptfoo.dev/docs/configuration/guide
 description: "My eval"
@@ -245,36 +246,25 @@ export async function createDummyFiles(directory: string | null, interactive: bo
   let language: string;
   if (interactive) {
     // Choose use case
-    let resp = await inquirer.prompt([
-      {
-        type: 'list',
-        name: 'action',
-        message: 'What would you like to do?',
-        choices: [
-          { name: 'Not sure yet', value: 'compare' },
-          { name: 'Improve prompt and model performance', value: 'compare' },
-          { name: 'Improve RAG performance', value: 'rag' },
-          { name: 'Improve agent/chain of thought performance', value: 'agent' },
-        ],
-      },
-    ]);
-    action = resp.action;
-
+    action = await rawlist({
+      message: 'What would you like to do?',
+      choices: [
+        { name: 'Not sure yet', value: 'compare' },
+        { name: 'Improve prompt and model performance', value: 'compare' },
+        { name: 'Improve RAG performance', value: 'rag' },
+        { name: 'Improve agent/chain of thought performance', value: 'agent' },
+      ],
+    });
     language = 'not_sure';
     if (action === 'rag' || action === 'agent') {
-      resp = await inquirer.prompt([
-        {
-          type: 'list',
-          name: 'language',
-          message: 'What programming language are you developing the app in?',
-          choices: [
-            { name: 'Not sure yet', value: 'not_sure' },
-            { name: 'Python', value: 'python' },
-            { name: 'Javascript', value: 'javascript' },
-          ],
-        },
-      ]);
-      language = resp.language;
+      language = await rawlist({
+        message: 'What programming language are you developing the app in?',
+        choices: [
+          { name: 'Not sure yet', value: 'not_sure' },
+          { name: 'Python', value: 'python' },
+          { name: 'Javascript', value: 'javascript' },
+        ],
+      });
     }
 
     const choices: { name: string; value: (string | object)[] }[] = [
@@ -359,15 +349,10 @@ export async function createDummyFiles(directory: string | null, interactive: bo
         value: ['ollama:chat:llama3', 'ollama:chat:mixtral:8x22b'],
       },
     ];
-    const { providerChoices } = (await inquirer.prompt([
-      {
-        type: 'checkbox',
-        name: 'providerChoices',
-        message: 'Which model providers would you like to use? (press enter to skip)',
-        choices,
-      },
-    ])) as { providerChoices: (string | object)[] };
-
+    const providerChoices: (string | object)[] = await checkbox({
+      message: 'Which model providers would you like to use? (press enter to skip)',
+      choices,
+    });
     if (providerChoices.length > 0) {
       const flatProviders = providerChoices.flat();
       if (flatProviders.length > 3) {

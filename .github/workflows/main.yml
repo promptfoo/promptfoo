@@ -25,13 +25,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: ['18.x', '20.x', '22.x']
+        node: ['18.x', '20.x'] # Note: '22.x' is temporarily disabled
         python: ['3.9']
         os: [ubuntu-latest, windows-latest, macOS-latest]
-        exclude:
-          # Remove when https://github.com/nodejs/node/issues/51766 is resolved
-          - node: '22.x'
-            os: windows-latest
+        # exclude:
+        # Remove when https://github.com/nodejs/node/issues/51766 is resolved
+        # - node: '22.x'
+        #  os: windows-latest
 
     steps:
       - name: Checkout repo
@@ -149,3 +149,22 @@ jobs:
       - name: Build Documentation
         working-directory: site
         run: npm run build
+
+  webui:
+    name: webui tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Use Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run Vitest
+        run: npm run test:webui

@@ -32,7 +32,7 @@ The OpenAI provider supports a handful of [configuration options](https://github
 
 ```yaml title=promptfooconfig.yaml
 providers:
-  - id: openai:gpt-3.5-turbo
+  - id: openai:gpt-4o-mini
     config:
       temperature: 0
       max_tokens: 1024
