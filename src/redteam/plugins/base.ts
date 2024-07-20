@@ -58,6 +58,12 @@ export default abstract class PluginBase {
    */
   protected abstract template: string;
 
+  /**
+   * Creates an instance of PluginBase.
+   * @param provider - The API provider used for generating prompts.
+   * @param purpose - The purpose of the plugin.
+   * @param injectVar - The variable name to inject the generated prompt into.
+   */
   constructor(
     protected provider: ApiProvider,
     protected purpose: string,
@@ -66,12 +72,27 @@ export default abstract class PluginBase {
     logger.debug(`PluginBase initialized with purpose: ${purpose}, injectVar: ${injectVar}`);
   }
 
+  /**
+   * Abstract method to get assertions for a given prompt.
+   * @param prompt - The prompt to generate assertions for.
+   * @returns An array of Assertion objects.
+   */
   protected abstract getAssertions(prompt: string): Assertion[];
 
+  /**
+   * Generates test cases based on the plugin's configuration.
+   * @param n - The number of test cases to generate.
+   * @returns A promise that resolves to an array of TestCase objects.
+   */
   async generateTests(n: number): Promise<TestCase[]> {
     logger.debug(`Generating ${n} test cases`);
     const batchSize = 20;
 
+    /**
+     * Generates a batch of prompts using the API provider.
+     * @param currentPrompts - The current list of prompts.
+     * @returns A promise that resolves to an array of new prompts.
+     */
     const generatePrompts = async (currentPrompts: string[]): Promise<string[]> => {
       const remainingCount = n - currentPrompts.length;
       const currentBatchSize = Math.min(remainingCount, batchSize);
