@@ -4,6 +4,19 @@ import type { ApiProvider, Assertion, TestCase } from '../../types';
 import { getNunjucksEngine } from '../../util/templates';
 
 /**
+ * Randomly samples n items from an array.
+ *
+ * @param array The array to sample from
+ * @param n The number of items to sample
+ * @returns A new array with n randomly sampled items
+ */
+export function sampleArray<T>(array: T[], n: number): T[] {
+  logger.debug(`Sampling ${n} items from array of length ${array.length}`);
+  const shuffled = array.slice().sort(() => 0.5 - Math.random());
+  return shuffled.slice(0, n);
+}
+
+/**
  * Abstract base class for creating plugins that generate test cases.
  */
 export default abstract class PluginBase {
@@ -77,7 +90,7 @@ export default abstract class PluginBase {
     // If we have more prompts than requested, randomly sample to get exact number
     if (allPrompts.length > n) {
       logger.debug(`Sampling ${n} prompts from ${allPrompts.length} total prompts`);
-      allPrompts = this.sampleArray(allPrompts, n);
+      allPrompts = sampleArray(allPrompts, n);
     }
 
     logger.debug(`Generating test cases from ${allPrompts.length} prompts`);
@@ -87,11 +100,5 @@ export default abstract class PluginBase {
       },
       assert: this.getAssertions(prompt),
     }));
-  }
-
-  private sampleArray<T>(array: T[], n: number): T[] {
-    logger.debug(`Sampling ${n} items from array of length ${array.length}`);
-    const shuffled = array.slice().sort(() => 0.5 - Math.random());
-    return shuffled.slice(0, n);
   }
 }
