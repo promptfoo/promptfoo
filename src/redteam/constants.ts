@@ -21,7 +21,6 @@ const BASE_PLUGINS = [
 
 export const ADDITIONAL_PLUGINS = [
   'competitors',
-  'experimental-jailbreak',
   'sql-injection',
   'shell-injection',
   'debug-access',
@@ -40,7 +39,7 @@ export const ALL_PLUGINS = [...new Set([...DEFAULT_PLUGINS, ...ADDITIONAL_PLUGIN
   ...string[],
 ];
 
-export const DEFAULT_STRATEGIES = ['jailbreak', 'prompt-injection'] as const;
+export const DEFAULT_STRATEGIES = ['jailbreak', 'prompt-injection'];
 
 export const ADDITIONAL_STRATEGIES = ['experimental-jailbreak'] as const;
 

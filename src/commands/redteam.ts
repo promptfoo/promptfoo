@@ -11,9 +11,16 @@ import yaml from 'js-yaml';
 import * as path from 'path';
 import invariant from 'tiny-invariant';
 import logger from '../logger';
-import { ALL_PLUGINS, DEFAULT_PLUGINS, subCategoryDescriptions } from '../redteam/constants';
-import { redteamConfigSchema } from '../redteam/types';
+import {
+  ALL_PLUGINS,
+  ALL_STRATEGIES,
+  DEFAULT_PLUGINS,
+  DEFAULT_STRATEGIES,
+  subCategoryDescriptions,
+} from '../redteam/constants';
+import { RedteamConfig, redteamConfigSchema } from '../redteam/types';
 import telemetry from '../telemetry';
+import { Prompt, TestSuite } from '../types';
 import { doGenerateRedteam } from './generate/redteam';
 
 export function redteamCommand(program: Command) {
@@ -42,7 +49,7 @@ export function redteamCommand(program: Command) {
 
       const configPath = path.join(projectDir, 'promptfooconfig.yaml');
       const previousConfigExists = fs.existsSync(configPath);
-      let existingConfig: { prompts: string[]; providers: string[] } | undefined;
+      let existingConfig: TestSuite | undefined;
       if (previousConfigExists) {
         const overwrite = await confirm({
           message:
@@ -52,10 +59,7 @@ export function redteamCommand(program: Command) {
         if (!overwrite) {
           return;
         }
-        existingConfig = yaml.load(fs.readFileSync(configPath, 'utf8')) as {
-          prompts: string[];
-          providers: string[];
-        };
+        existingConfig = yaml.load(fs.readFileSync(configPath, 'utf8')) as TestSuite;
       }
 
       const promptChoices = [
@@ -71,7 +75,7 @@ export function redteamCommand(program: Command) {
         choices: promptChoices,
       });
 
-      let prompts: string[] = [];
+      let prompts: (Prompt | string)[] = [];
       if (promptChoice === 'enter') {
         prompts.push(
           await editor({
@@ -126,12 +130,33 @@ export function redteamCommand(program: Command) {
         .map((plugin) => ({
           name: `${plugin} - ${subCategoryDescriptions[plugin] || 'No description available'}`,
           value: plugin,
-          checked: DEFAULT_PLUGINS.has(plugin),
+          checked:
+            existingConfig?.redteam?.plugins.some((p) => p.id === plugin || p === plugin) ||
+            DEFAULT_PLUGINS.has(plugin),
         }));
 
       const plugins = await checkbox({
         message: 'Select the plugins you want to enable:',
         choices: pluginChoices,
+        pageSize: 20,
+      });
+
+      // select strategies
+
+      const strategyChoices = Array.from(ALL_STRATEGIES)
+        .sort()
+        .map((strategy) => ({
+          name: strategy,
+          value: strategy,
+          checked:
+            existingConfig?.redteam?.strategies?.some(
+              (s) => s.id === strategy || (typeof s === 'string' && s === strategy),
+            ) || DEFAULT_STRATEGIES.includes(strategy),
+        }));
+
+      const strategies = await checkbox({
+        message: 'Select the strategies you want to enable:',
+        choices: strategyChoices,
         pageSize: 20,
       });
 
@@ -150,6 +175,7 @@ export function redteamCommand(program: Command) {
         tests: [],
         redteam: redteamConfigSchema.safeParse({
           plugins: plugins,
+          strategies: strategies,
           numTests,
         }).data,
       };

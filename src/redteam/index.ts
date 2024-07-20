@@ -1,5 +1,6 @@
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
+import { s } from 'rouge';
 import invariant from 'tiny-invariant';
 import logger from '../logger';
 import { loadApiProvider } from '../providers';
@@ -25,6 +26,7 @@ import { addIterativeJailbreaks } from './strategies/iterative';
 
 interface SynthesizeOptions {
   injectVar?: string;
+  numTests: number;
   plugins: { id: string; numTests: number }[];
   prompts: string[];
   provider?: string;
@@ -44,7 +46,7 @@ interface Plugin {
   ) => Promise<TestCase[]>;
 }
 
-interface Method {
+interface Strategy {
   key: string;
   action: (testCases: TestCaseWithPlugin[], injectVar: string) => TestCase[];
   requiredPlugins?: string[];
@@ -124,7 +126,7 @@ const categories = {
   pii: PII_PLUGINS,
 } as const;
 
-const Strategies: Method[] = [
+const Strategies: Strategy[] = [
   {
     key: 'experimental-jailbreak',
     action: (testCases) => {
@@ -180,7 +182,9 @@ export async function synthesize({
   prompts,
   provider,
   injectVar,
+  numTests,
   purpose: purposeOverride,
+  strategies,
   plugins,
 }: SynthesizeOptions) {
   validatePlugins(plugins.map((p) => p.id));
@@ -200,6 +204,7 @@ export async function synthesize({
         .join('\n'),
     )}\n`,
   );
+  logger.info(`Using strategies: ${strategies.map((s) => s.id).join(', ')}`);
   logger.info('Generating...');
 
   // Get vars
@@ -224,11 +229,12 @@ export async function synthesize({
     }
   }
 
-  // if a method is included in the user selected plugins, add all of its required plugins
+  // if a strategy is included in the user selected plugins, add all of its required plugins
   for (const { key, requiredPlugins } of Strategies) {
-    const plugin = plugins.find((p) => p.id === key);
-    if (plugin && requiredPlugins) {
-      plugins.push(...requiredPlugins.map((p) => ({ id: p, numTests: plugin.numTests })));
+    const strategy = strategies.find((s) => s.id === key);
+    if (strategy && requiredPlugins) {
+      logger.debug(`Adding required plugins for strategy: ${key}: ${requiredPlugins.join(', ')}`);
+      plugins.push(...requiredPlugins.map((p) => ({ id: p, numTests: numTests })));
     }
   }
 
@@ -278,8 +284,8 @@ export async function synthesize({
   }
 
   for (const { key, action } of Strategies) {
-    const plugin = plugins.find((p) => p.id === key);
-    if (plugin) {
+    const strategy = strategies.find((s) => s.id === key);
+    if (strategy) {
       updateProgress();
       logger.debug(`Generating ${key} tests`);
       const newTestCases = action(testCases, injectVar);

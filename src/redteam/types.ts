@@ -34,11 +34,11 @@ export const redteamPluginSchema = z.union([
  */
 export const redteamStrategySchema = z.union([
   z
-    .enum(ALL_STRATEGIES)
+    .enum(ALL_STRATEGIES as unknown as [string, ...string[]])
     .describe('Name of the strategy')
     .transform((s) => ({ id: s })),
   z.object({
-    id: z.enum(ALL_STRATEGIES).describe('Name of the strategy'),
+    id: z.enum(ALL_STRATEGIES as unknown as [string, ...string[]]).describe('Name of the strategy'),
   }),
 ]);
 
@@ -90,7 +90,7 @@ export const redteamConfigSchema = z
       .array(redteamPluginSchema)
       .describe('Plugins to use for redteam generation')
       .optional()
-      .default(() => Array.from(REDTEAM_DEFAULT_PLUGINS).map((name) => ({ id: name }))),
+      .default(() => []),
     strategies: z
       .array(redteamStrategySchema)
       .describe(

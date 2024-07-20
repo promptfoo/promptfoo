@@ -69,20 +69,19 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
   await telemetry.send();
 
   let plugins: { id: string; numTests: number }[] =
-    redteamConfig?.plugins ||
+    redteamConfig?.plugins ??
     Array.from(REDTEAM_DEFAULT_PLUGINS).map((plugin) => ({
       id: plugin,
       numTests: options.numTests,
     }));
-
   // override plugins with command line options
-  if (options.plugins) {
+  if (Array.isArray(options.plugins) && options.plugins.length > 0) {
     plugins = options.plugins.map((plugin) => ({
       id: plugin.id,
       numTests: plugin.numTests || options.numTests,
     }));
   }
-  if (options.addPlugins && options.addPlugins.length > 0) {
+  if (Array.isArray(options.addPlugins) && options.addPlugins.length > 0) {
     plugins = [
       ...new Set([
         ...plugins,
@@ -105,12 +104,13 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
   ) as { id: string }[];
 
   const redteamTests = await synthesize({
-    purpose: redteamConfig?.purpose || options.purpose,
     injectVar: redteamConfig?.injectVar?.[0] || options.injectVar,
+    numTests: options.numTests,
     plugins,
-    strategies: strategyObjs,
-    provider: redteamConfig?.provider || options.provider,
     prompts: testSuite.prompts.map((prompt) => prompt.raw),
+    provider: redteamConfig?.provider || options.provider,
+    purpose: redteamConfig?.purpose || options.purpose,
+    strategies: strategyObjs,
   });
 
   if (options.output) {
