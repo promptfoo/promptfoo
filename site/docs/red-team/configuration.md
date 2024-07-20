@@ -74,10 +74,6 @@ There are three core concepts that affect the number of generated redteam tests:
 
 Run the CLI menu `promptfoo generate redteam --help` to see a complete list of available plugins.
 
-#### Special Handling for 'harmful' Plugin
-
-When you include `harmful` in your plugins list, it will automatically include all available harm plugins. You can also specify individual harm plugins directly.
-
 #### Available Harm Plugins
 
 Many of these plugins are derived from [MLCommons Harm Categories](https://arxiv.org/abs/2404.12241) or [Harmbench](https://github.com/centerforaisafety/HarmBench). Examples include:
