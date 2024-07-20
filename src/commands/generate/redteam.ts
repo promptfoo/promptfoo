@@ -13,6 +13,7 @@ import {
   REDTEAM_MODEL,
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
   ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
+  DEFAULT_STRATEGIES,
 } from '../../redteam/constants';
 import {
   RedteamConfig,
@@ -67,17 +68,17 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
   });
   await telemetry.send();
 
-  let plugins: { name: string; numTests: number }[] =
+  let plugins: { id: string; numTests: number }[] =
     redteamConfig?.plugins ||
     Array.from(REDTEAM_DEFAULT_PLUGINS).map((plugin) => ({
-      name: plugin,
+      id: plugin,
       numTests: options.numTests,
     }));
 
   // override plugins with command line options
   if (options.plugins) {
     plugins = options.plugins.map((plugin) => ({
-      name: plugin.id,
+      id: plugin.id,
       numTests: plugin.numTests || options.numTests,
     }));
   }
@@ -86,7 +87,7 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
       ...new Set([
         ...plugins,
         ...options.addPlugins.map((plugin) => ({
-          name: plugin,
+          id: plugin,
           numTests: options.numTests,
         })),
       ]),
@@ -94,10 +95,20 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
   }
   invariant(plugins && Array.isArray(plugins) && plugins.length > 0, 'No plugins found');
 
+  let strategies: (string | { id: string })[] =
+    redteamConfig?.strategies ?? DEFAULT_STRATEGIES.map((s) => ({ id: s }));
+  if (options.strategies) {
+    strategies = options.strategies;
+  }
+  const strategyObjs: { id: string }[] = strategies.map((s) =>
+    typeof s === 'string' ? { id: s } : s,
+  ) as { id: string }[];
+
   const redteamTests = await synthesize({
     purpose: redteamConfig?.purpose || options.purpose,
     injectVar: redteamConfig?.injectVar?.[0] || options.injectVar,
     plugins,
+    strategies: strategyObjs,
     provider: redteamConfig?.provider || options.provider,
     prompts: testSuite.prompts.map((prompt) => prompt.raw),
   });

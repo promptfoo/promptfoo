@@ -25,10 +25,11 @@ import { addIterativeJailbreaks } from './strategies/iterative';
 
 interface SynthesizeOptions {
   injectVar?: string;
-  plugins: { name: string; numTests: number }[];
+  plugins: { id: string; numTests: number }[];
   prompts: string[];
   provider?: string;
   purpose?: string;
+  strategies: { id: string }[];
 }
 
 type TestCaseWithPlugin = TestCase & { metadata: { pluginId: string } };
@@ -182,7 +183,7 @@ export async function synthesize({
   purpose: purposeOverride,
   plugins,
 }: SynthesizeOptions) {
-  validatePlugins(plugins.map((p) => p.name));
+  validatePlugins(plugins.map((p) => p.id));
   const redteamProvider: ApiProvider = await loadApiProvider(provider || REDTEAM_MODEL, {
     options: {
       config: { temperature: 0.5 },
@@ -194,7 +195,7 @@ export async function synthesize({
       prompts.length === 1 ? 'prompt' : 'prompts'
     }...\nUsing plugins:\n\n${chalk.yellow(
       plugins
-        .map((p) => `${p.name} (${formatTestCount(p.numTests)})`)
+        .map((p) => `${p.id} (${formatTestCount(p.numTests)})`)
         .sort()
         .join('\n'),
     )}\n`,
@@ -217,22 +218,22 @@ export async function synthesize({
 
   // if a category is included in the user selected plugins, add all of its plugins
   for (const [category, categoryPlugins] of Object.entries(categories)) {
-    const plugin = plugins.find((p) => p.name === category);
+    const plugin = plugins.find((p) => p.id === category);
     if (plugin) {
-      plugins.push(...categoryPlugins.map((p) => ({ name: p, numTests: plugin.numTests })));
+      plugins.push(...categoryPlugins.map((p) => ({ id: p, numTests: plugin.numTests })));
     }
   }
 
   // if a method is included in the user selected plugins, add all of its required plugins
   for (const { key, requiredPlugins } of Strategies) {
-    const plugin = plugins.find((p) => p.name === key);
+    const plugin = plugins.find((p) => p.id === key);
     if (plugin && requiredPlugins) {
-      plugins.push(...requiredPlugins.map((p) => ({ name: p, numTests: plugin.numTests })));
+      plugins.push(...requiredPlugins.map((p) => ({ id: p, numTests: plugin.numTests })));
     }
   }
 
   // Deduplicate, filter out the category names, and sort
-  plugins = [...new Set(plugins)].filter((p) => !Object.keys(categories).includes(p.name)).sort();
+  plugins = [...new Set(plugins)].filter((p) => !Object.keys(categories).includes(p.id)).sort();
 
   // Initialize progress bar
   const progressBar = new cliProgress.SingleBar({}, cliProgress.Presets.shades_classic);
@@ -258,7 +259,7 @@ export async function synthesize({
 
   const testCases: TestCaseWithPlugin[] = [];
   for (const { key, action } of Plugins) {
-    const plugin = plugins.find((p) => p.name === key);
+    const plugin = plugins.find((p) => p.id === key);
     if (plugin) {
       updateProgress();
       logger.debug(`Generating ${key} tests`);
@@ -277,7 +278,7 @@ export async function synthesize({
   }
 
   for (const { key, action } of Strategies) {
-    const plugin = plugins.find((p) => p.name === key);
+    const plugin = plugins.find((p) => p.id === key);
     if (plugin) {
       updateProgress();
       logger.debug(`Generating ${key} tests`);

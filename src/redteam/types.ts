@@ -1,3 +1,4 @@
+import dedent from 'dedent';
 import { z } from 'zod';
 import {
   ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
@@ -92,7 +93,13 @@ export const redteamConfigSchema = z
       .default(() => Array.from(REDTEAM_DEFAULT_PLUGINS).map((name) => ({ id: name }))),
     strategies: z
       .array(redteamStrategySchema)
-      .describe('Strategies to use for redteam generation')
+      .describe(
+        dedent`Strategies to use for redteam generation.
+
+        Defaults to ${DEFAULT_STRATEGIES.join(', ')}
+        Supports ${ALL_STRATEGIES.join(', ')}
+        `,
+      )
       .optional()
       .default(() => Array.from(DEFAULT_STRATEGIES).map((name) => ({ id: name }))),
   })
