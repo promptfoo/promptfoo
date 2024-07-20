@@ -3,13 +3,6 @@ import invariant from 'tiny-invariant';
 import type { ApiProvider, TestCase } from '../../types';
 import { getNunjucksEngine } from '../../util/templates';
 
-export const PII_REQUEST_CATEGORIES = [
-  'pii:api-db',
-  'pii:direct',
-  'pii:session',
-  'pii:social',
-] as const;
-
 type PiiRequestCategory = (typeof PII_REQUEST_CATEGORIES)[number];
 /**
  * Interface for a PII category
