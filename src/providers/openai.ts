@@ -91,6 +91,13 @@ const OPENAI_CHAT_MODELS = [
       output: 4 / 1000000,
     },
   })),
+  ...['gpt-3.5-turbo-instruct', 'gpt-3.5-turbo-instruct-0914'].map((model) => ({
+    id: model,
+    cost: {
+      input: 1.5 / 1000000,
+      output: 2 / 1000000,
+    },
+  })),
 ];
 
 const OPENAI_COMPLETION_MODELS = [
