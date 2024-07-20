@@ -9,6 +9,7 @@ import { Command } from 'commander';
 import * as fs from 'fs';
 import yaml from 'js-yaml';
 import * as path from 'path';
+import invariant from 'tiny-invariant';
 import logger from '../logger';
 import { ALL_PLUGINS, DEFAULT_PLUGINS, subCategoryDescriptions } from '../redteam/constants';
 import { redteamConfigSchema } from '../redteam/types';
@@ -40,37 +41,53 @@ export function redteamCommand(program: Command) {
       }
 
       const configPath = path.join(projectDir, 'promptfooconfig.yaml');
-      if (fs.existsSync(configPath)) {
+      const previousConfigExists = fs.existsSync(configPath);
+      let existingConfig: { prompts: string[]; providers: string[] } | undefined;
+      if (previousConfigExists) {
         const overwrite = await confirm({
-          message: 'A promptfoo configuration file already exists. Do you want to overwrite it?',
+          message:
+            'A promptfoo configuration file already exists. Do you want to modify it or overwrite it?',
           default: false,
         });
         if (!overwrite) {
           return;
         }
+        existingConfig = yaml.load(fs.readFileSync(configPath, 'utf8')) as {
+          prompts: string[];
+          providers: string[];
+        };
       }
 
+      const promptChoices = [
+        { name: 'Enter a prompt', value: 'enter' },
+        { name: 'Reference a prompt file', value: 'file' },
+      ];
+      if (previousConfigExists) {
+        promptChoices.push({ name: 'Use existing prompts', value: 'existing' });
+      }
       // Question 2: Prompt
       const promptChoice = await rawlist({
         message: 'How would you like to specify the prompt?',
-        choices: [
-          { name: 'Enter a prompt', value: 'enter' },
-          { name: 'Reference a prompt file', value: 'file' },
-        ],
+        choices: promptChoices,
       });
 
-      let prompt: string;
+      let prompts: string[] = [];
       if (promptChoice === 'enter') {
-        prompt = await editor({
-          message: 'Enter your prompt:',
-          default:
-            'You are a helpful concise assistant.\n\nUser query: {{query}}\n\n(NOTE: your prompt must include "{{query}}" as a placeholder for user input)',
-        });
-      } else {
+        prompts.push(
+          await editor({
+            message: 'Enter your prompt:',
+            default:
+              'You are a helpful concise assistant.\n\nUser query: {{query}}\n\n(NOTE: your prompt must include "{{query}}" as a placeholder for user input)',
+          }),
+        );
+      } else if (promptChoice === 'file') {
         const promptFile = await input({
           message: 'Enter the path to your prompt file (text or JSON):',
         });
-        prompt = `file://${promptFile}`;
+        prompts.push(`file://${promptFile}`);
+      } else if (promptChoice === 'existing') {
+        invariant(existingConfig?.prompts, 'No prompts found in existing configuration');
+        prompts = existingConfig?.prompts;
       }
 
       // Question 3: Provider
@@ -79,9 +96,10 @@ export function redteamCommand(program: Command) {
         message: 'Choose a provider:',
         choices: [
           { name: 'openai:gpt-3.5-turbo', value: 'openai:gpt-3.5-turbo' },
+          { name: 'openai:gpt-4o-mini', value: 'openai:gpt-4o-mini' },
           { name: 'openai:gpt-4o', value: 'openai:gpt-4o' },
           {
-            name: 'anthropic:messages:claude-3-5-sonnet-20240620',
+            name: 'anthropic:claude-3-5-sonnet-20240620',
             value: 'anthropic:messages:claude-3-5-sonnet-20240620',
           },
           {
@@ -127,7 +145,7 @@ export function redteamCommand(program: Command) {
 
       // Create config file
       const config = {
-        prompts: [prompt],
+        prompts,
         providers: [provider],
         tests: [],
         redteam: redteamConfigSchema.safeParse({

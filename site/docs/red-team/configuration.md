@@ -65,7 +65,7 @@ There are three core concepts that affect the number of generated redteam tests:
 
 - `overreliance`
 - `hijacking`
-...
+  ...
 
 #### Collections
 
