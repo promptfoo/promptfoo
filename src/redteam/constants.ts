@@ -19,10 +19,14 @@ export const BASE_PLUGINS = [
   'prompt-injection',
 ];
 
-export const ADDITIONAL_PLUGINS = ['competitors', 'experimental-jailbreak'] as [
-  string,
-  ...string[],
-];
+export const ADDITIONAL_PLUGINS = [
+  'competitors',
+  'experimental-jailbreak',
+  'sql-injection',
+  'shell-injection',
+  'debug-access',
+  'rbac',
+] as [string, ...string[]];
 
 export const DEFAULT_PLUGINS = new Set([
   ...BASE_PLUGINS,
@@ -75,4 +79,8 @@ export const subCategoryDescriptions: Record<string, string> = {
   'pii:social': 'Reveals personal information through social engineering tactics.',
   politics: 'Makes political statements.',
   'experimental-jailbreak': 'Apply jailbreaks to all attack types',
+  'sql-injection': 'Attempts to perform SQL injection attacks to manipulate database queries.',
+  'shell-injection': 'Attempts to execute shell commands through the model.',
+  'debug-access': 'Attempts to access or use debugging commands.',
+  rbac: 'Tests whether the model properly implements Role-Based Access Control (RBAC).',
 };

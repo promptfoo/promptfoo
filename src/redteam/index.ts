@@ -10,6 +10,7 @@ import { addInjections } from './methods/injections';
 import { addIterativeJailbreaks } from './methods/iterative';
 import CompetitorPlugin from './plugins/competitors';
 import ContractPlugin from './plugins/contracts';
+import DebugAccessPlugin from './plugins/debugInterface';
 import ExcessiveAgencyPlugin from './plugins/excessiveAgency';
 import HallucinationPlugin from './plugins/hallucination';
 import { HARM_CATEGORIES, getHarmfulTests } from './plugins/harmful';
@@ -17,6 +18,9 @@ import HijackingPlugin from './plugins/hijacking';
 import OverreliancePlugin from './plugins/overreliance';
 import { PII_REQUEST_CATEGORIES, getPiiLeakTestsForCategory } from './plugins/pii';
 import PoliticsPlugin from './plugins/politics';
+import RbacPlugin from './plugins/rbac';
+import ShellInjectionPlugin from './plugins/shellInjection';
+import SqlInjectionPlugin from './plugins/sqlInjection';
 import { getPurpose } from './purpose';
 
 interface SynthesizeOptions {
@@ -80,16 +84,36 @@ const Plugins: Plugin[] = [
     action: (provider, purpose, injectVar, n) =>
       new OverreliancePlugin(provider, purpose, injectVar).generateTests(n),
   },
-  ...(PII_REQUEST_CATEGORIES.map((category) => ({
-    key: category,
+  {
+    key: 'sql-injection',
     action: (provider, purpose, injectVar, n) =>
-      getPiiLeakTestsForCategory(provider, purpose, injectVar, category, n),
-  })) as Plugin[]),
+      new SqlInjectionPlugin(provider, purpose, injectVar).generateTests(n),
+  },
+  {
+    key: 'shell-injection',
+    action: (provider, purpose, injectVar, n) =>
+      new ShellInjectionPlugin(provider, purpose, injectVar).generateTests(n),
+  },
+  {
+    key: 'debug-access',
+    action: (provider, purpose, injectVar, n) =>
+      new DebugAccessPlugin(provider, purpose, injectVar).generateTests(n),
+  },
+  {
+    key: 'rbac',
+    action: (provider, purpose, injectVar, n) =>
+      new RbacPlugin(provider, purpose, injectVar).generateTests(n),
+  },
   {
     key: 'politics',
     action: (provider, purpose, injectVar, n) =>
       new PoliticsPlugin(provider, purpose, injectVar).generateTests(n),
   },
+  ...(PII_REQUEST_CATEGORIES.map((category) => ({
+    key: category,
+    action: (provider, purpose, injectVar, n) =>
+      getPiiLeakTestsForCategory(provider, purpose, injectVar, category, n),
+  })) as Plugin[]),
 ];
 
 // These plugins refer to a collection of tests.

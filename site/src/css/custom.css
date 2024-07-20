@@ -57,13 +57,8 @@
 
 .navbar__brand {
   font-family: var(--ifm-font-family-monospace);
-  margin-top: 0.25rem;
 }
 
 .navbar__logo img {
   filter: invert(0);
-}
-
-[data-theme='dark'] .navbar__logo img {
-  filter: invert(0.7);
 }

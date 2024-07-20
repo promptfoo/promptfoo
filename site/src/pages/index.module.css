@@ -92,6 +92,12 @@
   animation: rainbow-glint 5s linear infinite;
 }
 
+[data-theme='dark'] .codeBox {
+  background-color: #2d2d2d;
+  border-color: #444;
+  color: #e0e0e0;
+}
+
 @keyframes rainbow-glint {
   0%,
   100% {
