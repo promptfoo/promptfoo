@@ -1,21 +1,20 @@
 import invariant from 'tiny-invariant';
 import logger from '../../logger';
 import type { ApiProvider, Assertion, TestCase } from '../../types';
+import { sampleArray } from '../../util';
 import { getNunjucksEngine } from '../../util/templates';
 
 /**
- * Randomly samples n items from an array.
+ * Retries an operation with deduplication until the target count is reached or max retries are exhausted.
  *
- * @param array The array to sample from
- * @param n The number of items to sample
- * @returns A new array with n randomly sampled items
+ * @param operation - A function that takes the current items and returns a Promise of new items.
+ * @param targetCount - The desired number of unique items to collect.
+ * @param maxConsecutiveRetries - Maximum number of consecutive retries allowed when no new items are found. Defaults to 2.
+ * @param dedupFn - A function to deduplicate items. Defaults to using a Set for uniqueness.
+ * @returns A Promise that resolves to an array of unique items.
+ *
+ * @typeParam T - The type of items being collected.
  */
-export function sampleArray<T>(array: T[], n: number): T[] {
-  logger.debug(`Sampling ${n} items from array of length ${array.length}`);
-  const shuffled = array.slice().sort(() => 0.5 - Math.random());
-  return shuffled.slice(0, n);
-}
-
 export async function retryWithDeduplication<T>(
   operation: (currentItems: T[]) => Promise<T[]>,
   targetCount: number,
@@ -27,6 +26,13 @@ export async function retryWithDeduplication<T>(
 
   while (allItems.length < targetCount && consecutiveRetries <= maxConsecutiveRetries) {
     const newItems = await operation(allItems);
+
+    if (!Array.isArray(newItems)) {
+      logger.warn('Operation returned non-iterable result. Skipping this iteration.');
+      consecutiveRetries++;
+      continue;
+    }
+
     const uniqueNewItems = dedupFn([...allItems, ...newItems]).slice(allItems.length);
     allItems.push(...uniqueNewItems);
 
@@ -62,54 +68,32 @@ export default abstract class PluginBase {
 
   protected abstract getAssertions(prompt: string): Assertion[];
 
-  /**
-   * Generates a batch of prompts.
-   *
-   * @param batchN - The number of prompts to generate in this batch.
-   * @returns A promise that resolves to an array of generated prompts.
-   */
-  protected async generateBatch(batchN: number): Promise<string[]> {
-    logger.debug(`Generating batch of ${batchN} prompts`);
-    const nunjucks = getNunjucksEngine();
-    const { output: generatedPrompts } = await this.provider.callApi(
-      nunjucks.renderString(this.template, {
-        purpose: this.purpose,
-        n: batchN,
-      }),
-    );
-    invariant(typeof generatedPrompts === 'string', 'Expected generatedPrompts to be a string');
-    const prompts = generatedPrompts
-      .split('\n')
-      .filter((line) => line.includes('Prompt:'))
-      .map((line) => line.substring(line.indexOf('Prompt:') + 'Prompt:'.length).trim());
-    logger.debug(`Generated ${prompts.length} prompts in this batch`);
-    return prompts;
-  }
-
   async generateTests(n: number): Promise<TestCase[]> {
     logger.debug(`Generating ${n} test cases`);
     const batchSize = 20;
 
-    const generateBatch = async (remainingCount: number) => {
+    const generatePrompts = async (currentPrompts: string[]): Promise<string[]> => {
+      const remainingCount = n - currentPrompts.length;
       const currentBatchSize = Math.min(remainingCount, batchSize);
-      return this.generateBatch(currentBatchSize);
+      logger.debug(`Generating batch of ${currentBatchSize} prompts`);
+
+      const nunjucks = getNunjucksEngine();
+      const { output: generatedPrompts } = await this.provider.callApi(
+        nunjucks.renderString(this.template, {
+          purpose: this.purpose,
+          n: currentBatchSize,
+        }),
+      );
+
+      invariant(typeof generatedPrompts === 'string', 'Expected generatedPrompts to be a string');
+      return generatedPrompts
+        .split('\n')
+        .filter((line) => line.includes('Prompt:'))
+        .map((line) => line.substring(line.indexOf('Prompt:') + 'Prompt:'.length).trim());
     };
-
-    const allPrompts = await retryWithDeduplication(
-      async (currentItems: string[]) => {
-        const remainingCount = n - currentItems.length;
-        return generateBatch(remainingCount);
-      },
-      n,
-      2,
-      (items) => Array.from(new Set(items)),
-    );
-
-    // If we have more prompts than requested, randomly sample to get exact number
-    const finalPrompts = allPrompts.length > n ? sampleArray(allPrompts, n) : allPrompts;
-
-    logger.debug(`Generating test cases from ${finalPrompts.length} prompts`);
-    return finalPrompts.map((prompt) => ({
+    const allPrompts = sampleArray(await retryWithDeduplication(generatePrompts, n), n);
+    logger.debug(`Generating test cases from ${allPrompts.length} prompts`);
+    return allPrompts.sort().map((prompt) => ({
       vars: {
         [this.injectVar]: prompt,
       },

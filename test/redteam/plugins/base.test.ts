@@ -1,4 +1,4 @@
-import PluginBase from '../../../src/redteam/plugins/base';
+import PluginBase, { retryWithDeduplication } from '../../../src/redteam/plugins/base';
 import { ApiProvider, Assertion } from '../../../src/types';
 import { getNunjucksEngine } from '../../../src/util/templates';
 
@@ -31,12 +31,12 @@ describe('PluginBase', () => {
     expect.assertions(2);
     await expect(plugin.generateTests(2)).resolves.toEqual([
       {
-        vars: { testVar: 'test prompt' },
-        assert: [{ type: 'contains', value: 'test prompt' }],
-      },
-      {
         vars: { testVar: 'another prompt' },
         assert: [{ type: 'contains', value: 'another prompt' }],
+      },
+      {
+        vars: { testVar: 'test prompt' },
+        assert: [{ type: 'contains', value: 'test prompt' }],
       },
     ]);
     expect(provider.callApi).toHaveBeenCalledWith(
@@ -59,11 +59,11 @@ describe('PluginBase', () => {
   it('should filter and process prompts correctly', async () => {
     expect.assertions(1);
     await expect(plugin.generateTests(2)).resolves.toEqual([
-      { assert: [{ type: 'contains', value: 'test prompt' }], vars: { testVar: 'test prompt' } },
       {
         assert: [{ type: 'contains', value: 'another prompt' }],
         vars: { testVar: 'another prompt' },
       },
+      { assert: [{ type: 'contains', value: 'test prompt' }], vars: { testVar: 'test prompt' } },
     ]);
   });
 
@@ -146,7 +146,7 @@ describe('PluginBase', () => {
     const result = await plugin.generateTests(5);
 
     expect(result).toHaveLength(2);
-    expect(provider.callApi).toHaveBeenCalledTimes(4); // Changed from 3 to 4
+    expect(provider.callApi).toHaveBeenCalledTimes(4);
   });
 
   it('should sample prompts when more are generated than requested', async () => {
@@ -162,7 +162,81 @@ describe('PluginBase', () => {
 
     const result = await plugin.generateTests(5);
 
-    expect(result).toHaveLength(5);
-    expect(new Set(result.map((r) => r.vars.testVar)).size).toBe(5);
+    expect(result).toEqual(
+      expect.objectContaining({
+        length: 5,
+        [Symbol.iterator]: expect.any(Function),
+      }),
+    );
+    expect(new Set(result.map((r) => r.vars?.testVar)).size).toBe(5);
+  });
+});
+
+describe('retryWithDeduplication', () => {
+  it('should collect unique items until target count is reached', async () => {
+    const operation = jest
+      .fn()
+      .mockResolvedValueOnce([1, 2, 3])
+      .mockResolvedValueOnce([3, 4, 5])
+      .mockResolvedValueOnce([5, 6, 7]);
+
+    const result = await retryWithDeduplication(operation, 5);
+
+    expect(result).toEqual([1, 2, 3, 4, 5]);
+    expect(operation).toHaveBeenCalledTimes(2);
+  });
+
+  it('should stop after max consecutive retries', async () => {
+    const operation = jest
+      .fn()
+      .mockResolvedValueOnce([1, 2])
+      .mockResolvedValueOnce([1, 2])
+      .mockResolvedValueOnce([1, 2]);
+
+    const result = await retryWithDeduplication(operation, 5, 2);
+
+    expect(result).toEqual([1, 2]);
+    expect(operation).toHaveBeenCalledTimes(4);
+  });
+
+  it('should use custom deduplication function', async () => {
+    const operation = jest
+      .fn()
+      .mockResolvedValueOnce([{ id: 1 }, { id: 2 }])
+      .mockResolvedValueOnce([{ id: 2 }, { id: 3 }]);
+
+    const customDedupFn = (items: { id: number }[]) =>
+      Array.from(new Set(items.map((item) => item.id))).map((id) => ({ id }));
+
+    const result = await retryWithDeduplication(operation, 3, 2, customDedupFn);
+
+    expect(result).toEqual([{ id: 1 }, { id: 2 }, { id: 3 }]);
+    expect(operation).toHaveBeenCalledTimes(2);
+  });
+
+  it('should handle empty results from operation', async () => {
+    const operation = jest
+      .fn()
+      .mockResolvedValueOnce([1, 2])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([3]);
+
+    const result = await retryWithDeduplication(operation, 3);
+
+    expect(result).toEqual([1, 2, 3]);
+    expect(operation).toHaveBeenCalledTimes(3);
+  });
+
+  it('should return all unique items even if target count is not reached', async () => {
+    const operation = jest
+      .fn()
+      .mockResolvedValueOnce([1, 2])
+      .mockResolvedValueOnce([2, 3])
+      .mockResolvedValueOnce([3, 4]);
+
+    const result = await retryWithDeduplication(operation, 10, 2);
+
+    expect(result).toEqual([1, 2, 3, 4]);
+    expect(operation).toHaveBeenCalledTimes(6);
   });
 });
