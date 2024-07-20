@@ -23,58 +23,72 @@ const OPENAI_CHAT_MODELS = [
   ...['gpt-4', 'gpt-4-0314', 'gpt-4-0613'].map((model) => ({
     id: model,
     cost: {
-      input: 0.03 / 1000,
-      output: 0.06 / 1000,
+      input: 30 / 1000000,
+      output: 60 / 1000000,
+    },
+  })),
+  ...['gpt-4-32k', 'gpt-4-32k-0314', 'gpt-4-32k-0613'].map((model) => ({
+    id: model,
+    cost: {
+      input: 60 / 1000000,
+      output: 120 / 1000000,
     },
   })),
   ...[
     'gpt-4-1106-preview',
     'gpt-4-1106-vision-preview',
+    'gpt-4-vision-preview',
     'gpt-4-0125-preview',
-    'gpt-4-turbo-2024-04-09',
     'gpt-4-turbo-preview',
     'gpt-4-turbo',
+    'gpt-4-turbo-2024-04-09',
   ].map((model) => ({
     id: model,
     cost: {
-      input: 0.01 / 1000,
-      output: 0.03 / 1000,
-    },
-  })),
-  ...['gpt-4-32k', 'gpt-4-32k-0314'].map((model) => ({
-    id: model,
-    cost: {
-      input: 0.06 / 1000,
-      output: 0.12 / 1000,
+      input: 10 / 1000000,
+      output: 30 / 1000000,
     },
   })),
   ...['gpt-4o', 'gpt-4o-2024-05-13'].map((model) => ({
     id: model,
     cost: {
-      input: 0.005 / 1000,
-      output: 0.015 / 1000,
+      input: 5 / 1000000,
+      output: 15 / 1000000,
     },
   })),
   ...['gpt-4o-mini', 'gpt-4o-mini-2024-07-18'].map((model) => ({
     id: model,
     cost: {
-      input: 0.0015 / 1000,
-      output: 0.006 / 1000,
+      input: 0.15 / 1000000,
+      output: 0.6 / 1000000,
     },
   })),
-  ...[
-    'gpt-3.5-turbo',
-    'gpt-3.5-turbo-0301',
-    'gpt-3.5-turbo-0613',
-    'gpt-3.5-turbo-1106',
-    'gpt-3.5-turbo-0125',
-    'gpt-3.5-turbo-16k',
-    'gpt-3.5-turbo-16k-0613',
-  ].map((model) => ({
+  ...['gpt-3.5-turbo', 'gpt-3.5-turbo-0301', 'gpt-3.5-turbo-0613'].map((model) => ({
     id: model,
     cost: {
-      input: 0.0005 / 1000,
-      output: 0.0015 / 1000,
+      input: 1.5 / 1000000,
+      output: 2 / 1000000,
+    },
+  })),
+  {
+    id: 'gpt-3.5-turbo-1106',
+    cost: {
+      input: 1 / 1000000,
+      output: 2 / 1000000,
+    },
+  },
+  {
+    id: 'gpt-3.5-turbo-0125',
+    cost: {
+      input: 0.5 / 1000000,
+      output: 1.5 / 1000000,
+    },
+  },
+  ...['gpt-3.5-turbo-16k', 'gpt-3.5-turbo-16k-0613'].map((model) => ({
+    id: model,
+    cost: {
+      input: 3 / 1000000,
+      output: 4 / 1000000,
     },
   })),
 ];
@@ -83,15 +97,15 @@ const OPENAI_COMPLETION_MODELS = [
   {
     id: 'gpt-3.5-turbo-instruct',
     cost: {
-      input: 0.0015 / 1000,
-      output: 0.002 / 1000,
+      input: 0.0015 / 1000000,
+      output: 0.002 / 1000000,
     },
   },
   {
     id: 'gpt-3.5-turbo-instruct-0914',
     cost: {
-      input: 0.0015 / 1000,
-      output: 0.002 / 1000,
+      input: 0.0015 / 1000000,
+      output: 0.002 / 1000000,
     },
   },
   {
