@@ -1,6 +1,5 @@
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
-import { s } from 'rouge';
 import invariant from 'tiny-invariant';
 import logger from '../logger';
 import { loadApiProvider } from '../providers';

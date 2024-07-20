@@ -1,6 +1,5 @@
 import {
   ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
-  DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
   ALL_STRATEGIES as REDTEAM_ALL_STRATEGIES,
   COLLECTIONS,
 } from '../../src/redteam/constants';
@@ -118,10 +117,7 @@ describe('redteamConfigSchema', () => {
     expect(redteamConfigSchema.safeParse(input)).toEqual({
       success: true,
       data: {
-        plugins: Array.from(REDTEAM_DEFAULT_PLUGINS)
-          .sort()
-          .filter((id) => !COLLECTIONS.includes(id))
-          .map((id) => ({ id, numTests: 5 })),
+        plugins: [],
         strategies: [{ id: 'jailbreak' }, { id: 'prompt-injection' }],
       },
     });
@@ -133,10 +129,7 @@ describe('redteamConfigSchema', () => {
       success: true,
       data: {
         purpose: undefined,
-        plugins: Array.from(REDTEAM_DEFAULT_PLUGINS)
-          .sort()
-          .filter((id) => !COLLECTIONS.includes(id))
-          .map((id) => ({ id, numTests: 10 })),
+        plugins: [],
         strategies: [{ id: 'jailbreak' }, { id: 'prompt-injection' }],
       },
     });
