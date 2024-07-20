@@ -8,24 +8,24 @@ export const LLAMA_GUARD_REPLICATE_PROVIDER =
 
 // These correspond to groups of plugins. They can be referenced by
 // the collection name or by collection_name:subcategory
-export const COLLECTIONS = ['harmful', 'pii'];
+export const COLLECTIONS: string[] = ['harmful', 'pii'];
 
-const BASE_PLUGINS = [
+const BASE_PLUGINS: string[] = [
   'contracts',
   'excessive-agency',
   'hallucination',
   'hijacking',
   'overreliance',
   'politics',
-] as const;
+];
 
-export const ADDITIONAL_PLUGINS = [
+export const ADDITIONAL_PLUGINS: string[] = [
   'competitors',
   'sql-injection',
   'shell-injection',
   'debug-access',
   'rbac',
-] as [string, ...string[]];
+];
 
 export const DEFAULT_PLUGINS: Set<string> = new Set([
   ...COLLECTIONS,
@@ -34,10 +34,9 @@ export const DEFAULT_PLUGINS: Set<string> = new Set([
   ...PII_PLUGINS,
 ]);
 
-export const ALL_PLUGINS = [...new Set([...DEFAULT_PLUGINS, ...ADDITIONAL_PLUGINS])].sort() as [
-  string,
-  ...string[],
-];
+export const ALL_PLUGINS: string[] = [
+  ...new Set([...DEFAULT_PLUGINS, ...ADDITIONAL_PLUGINS]),
+].sort();
 
 export const DEFAULT_STRATEGIES = ['jailbreak', 'prompt-injection'];
 

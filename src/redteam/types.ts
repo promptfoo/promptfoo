@@ -11,7 +11,7 @@ import { HARM_PLUGINS } from './plugins/harmful';
 import { PII_PLUGINS } from './plugins/pii';
 
 const redteamPluginObjectSchema = z.object({
-  id: z.enum(REDTEAM_ALL_PLUGINS).describe('Name of the plugin'),
+  id: z.enum(REDTEAM_ALL_PLUGINS as [string, ...string[]]).describe('Name of the plugin'),
   numTests: z
     .number()
     .int()
@@ -24,7 +24,7 @@ const redteamPluginObjectSchema = z.object({
  * Schema for individual redteam plugins
  */
 export const redteamPluginSchema = z.union([
-  z.enum(REDTEAM_ALL_PLUGINS).describe('Name of the plugin'),
+  z.enum(REDTEAM_ALL_PLUGINS as [string, ...string[]]).describe('Name of the plugin'),
   redteamPluginObjectSchema,
 ]);
 
@@ -55,7 +55,7 @@ export const RedteamGenerateOptionsSchema = z.object({
   output: z.string().optional().describe('Output file path'),
   plugins: z.array(redteamPluginObjectSchema).optional().describe('Plugins to use'),
   addPlugins: z
-    .array(z.enum(REDTEAM_ADDITIONAL_PLUGINS))
+    .array(z.enum(REDTEAM_ADDITIONAL_PLUGINS as [string, ...string[]]))
     .optional()
     .describe('Additional plugins to include'),
   provider: z.string().optional().describe('Provider to use'),
