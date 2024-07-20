@@ -5,7 +5,7 @@ sidebar_label: 'Configuration'
 
 # Redteam Configuration
 
-The `redteam` section in your `promptfoo.config.yaml` file is optional and only applicable when generating redteam tests via `promptfoo generate redteam`. It provides a more customizable way to generate tests than via the command line. You can check this file into your repository to share your configuration with your team.
+The `redteam` section in your `promptfoo.config.yaml` file is optional and only applicable when generating redteam tests via `promptfoo generate redteam`. It is a more powerful way to generate tests than via the command line. You can also check the configuration into your repository to track changes and to share your configuration with your team.
 
 ## Getting Started
 
@@ -48,20 +48,20 @@ providers:
 
 ## Plugins
 
-Plugins are specified as an array of either strings (plugin names) or objects with `name` and optional `numTests` properties. They must exactly match the plugin names available in the redteam system.
+Plugins are specified as an array of either strings (plugin ids) or objects with `id` and optional `numTests` properties. They must exactly match the plugin ids available in the redteam system.
 
 ### Plugin Specification
 
-- **As a string**: `"plugin-name"`
-- **As an object**: `{ id: "plugin-name", numTests: 10 }`
+- **As a string**: `"plugin-id"`
+- **As an object**: `{ id: "plugin-id", numTests: 10 }`
 
 If `numTests` is not specified for a plugin, it will use the global `numTests` value.
 
 ### Concepts
 
-Plugins broadly fall into three broad distinctions:
+There are three concepts in the redteam configuration, individual plugins, a collection of related plugins, and strategies.
 
-- Individual plugins such as `overreliance`.
+- Individual plugins such as `overreliance` or `hijacking`.
 - Collections such as `harmful` and `pii`. These expand into multiple plugins.
 - Strategies such as `jailbreak`, which are modifiers applied to other plugins.
 
