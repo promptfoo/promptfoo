@@ -61,7 +61,7 @@ If `numTests` is not specified for a plugin, it will use the global `numTests` v
 
 There are three core concepts that affect the number of generated redteam tests: individual plugins, collections of related plugins, and strategies.
 
-#### Individual Plugins
+#### Plugins
 
 - `overreliance`
 - `hijacking`
