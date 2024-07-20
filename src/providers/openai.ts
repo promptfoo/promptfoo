@@ -27,20 +27,6 @@ const OPENAI_CHAT_MODELS = [
       output: 60 / 1000000,
     },
   })),
-  ...['gpt-4o', 'gpt-4o-2024-05-13'].map((model) => ({
-    id: model,
-    cost: {
-      input: 5 / 1000000,
-      output: 15 / 1000000,
-    },
-  })),
-  ...['gpt-4o-mini', 'gpt-4o-mini-2024-07-18'].map((model) => ({
-    id: model,
-    cost: {
-      input: 0.15 / 1000000,
-      output: 0.6 / 1000000,
-    },
-  })),
   ...[
     'gpt-4-0125-preview',
     'gpt-4-1106-preview',
@@ -61,6 +47,20 @@ const OPENAI_CHAT_MODELS = [
     cost: {
       input: 60 / 1000000,
       output: 120 / 1000000,
+    },
+  })),
+  ...['gpt-4o', 'gpt-4o-2024-05-13'].map((model) => ({
+    id: model,
+    cost: {
+      input: 5 / 1000000,
+      output: 15 / 1000000,
+    },
+  })),
+  ...['gpt-4o-mini', 'gpt-4o-mini-2024-07-18'].map((model) => ({
+    id: model,
+    cost: {
+      input: 0.15 / 1000000,
+      output: 0.6 / 1000000,
     },
   })),
   ...['gpt-3.5-turbo', 'gpt-3.5-turbo-0301', 'gpt-3.5-turbo-0613'].map((model) => ({
