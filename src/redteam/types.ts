@@ -74,7 +74,7 @@ export type RedteamPluginObject = z.infer<typeof redteamPluginObjectSchema>;
 export const redteamConfigSchema = z
   .object({
     injectVar: z
-      .union([z.string().transform((s) => [s]), z.array(z.string())])
+      .string()
       .optional()
       .describe(
         "Variable to inject. Can be a string or array of strings. If string, it's transformed to an array. Inferred from the prompts by default.",

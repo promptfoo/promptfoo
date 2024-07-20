@@ -104,7 +104,7 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
   ) as { id: string }[];
 
   const redteamTests = await synthesize({
-    injectVar: redteamConfig?.injectVar?.[0] || options.injectVar,
+    injectVar: redteamConfig?.injectVar || options.injectVar,
     numTests: options.numTests,
     plugins,
     prompts: testSuite.prompts.map((prompt) => prompt.raw),

@@ -302,32 +302,16 @@ describe('redteamConfigSchema', () => {
     expect(redteamConfigSchema.safeParse(input).success).toBe(false);
   });
 
-  it('should accept and transform a single injectVar string', () => {
-    const input = {
-      injectVar: 'system',
-      plugins: ['contracts'],
-      strategies: ['jailbreak'],
-    };
-    expect(redteamConfigSchema.safeParse(input)).toEqual({
-      success: true,
-      data: {
-        injectVar: ['system'],
-        plugins: [{ id: 'contracts', numTests: 5 }],
-        strategies: [{ id: 'jailbreak' }],
-      },
-    });
-  });
-
   it('should accept an array of injectVar strings', () => {
     const input = {
-      injectVar: ['system', 'user'],
+      injectVar: 'system',
       plugins: ['harmful:insults'],
       strategies: ['jailbreak'],
     };
     expect(redteamConfigSchema.safeParse(input)).toEqual({
       success: true,
       data: {
-        injectVar: ['system', 'user'],
+        injectVar: 'system',
         plugins: [{ id: 'harmful:insults', numTests: 5 }],
         strategies: [{ id: 'jailbreak' }],
       },
@@ -352,7 +336,7 @@ describe('redteamConfigSchema', () => {
 
   it('should include injectVar, provider, and purpose when all are provided', () => {
     const input = {
-      injectVar: ['system', 'user'],
+      injectVar: 'system',
       provider: 'openai:gpt-4',
       purpose: 'Test adversarial inputs',
       plugins: ['overreliance', 'politics'],
@@ -360,7 +344,7 @@ describe('redteamConfigSchema', () => {
     expect(redteamConfigSchema.safeParse(input)).toEqual({
       success: true,
       data: {
-        injectVar: ['system', 'user'],
+        injectVar: 'system',
         provider: 'openai:gpt-4',
         purpose: 'Test adversarial inputs',
         plugins: [

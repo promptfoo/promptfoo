@@ -24,7 +24,7 @@ redteam:
   plugins: Array<string | { id: string, numTests?: number }>
   strategies: Array<string | { id: string }>
   numTests: number # default number of tests to generate per plugin
-  injectVar: string | string[] # variables to inject
+  injectVar: string # variable to inject
   provider: string # test generation provider
   purpose: string # purpose override string
 
@@ -37,14 +37,14 @@ providers:
 
 ### Fields
 
-| Field        | Type               | Description                                              | Default                        |
-| ------------ | ------------------ | -------------------------------------------------------- | ------------------------------ |
-| `injectVar`  | string \| string[] | Variable(s) to inject.                                   | Inferred from prompts          |
-| `numTests`   | number             | Default number of tests to generate per plugin.          | 5                              |
-| `plugins`    | array              | Plugins to use for redteam generation.                   | many common plugins            |
-| `provider`   | string             | Provider used for generating adversarial inputs.         | Optional                       |
-| `purpose`    | string             | Purpose override string describing the prompt templates. | Optional                       |
-| `strategies` | array              | Strategies are applied to other plugins.                 | jailbreak and prompt-injection |
+| Field        | Type                                            | Description                                                                                                      | Default                        |
+| ------------ | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| `injectVar`  | string                                          | Variable to inject adversarial inputs into.                                                                      | Inferred from prompts          |
+| `numTests`   | number                                          | Default number of tests to generate per plugin. Can be overridden for individual plugins.                        | 5                              |
+| `plugins`    | string[] \| { id: string, numTests?: number }[] | Plugins to use for redteam generation. Can be specified as strings or objects with optional `numTests` property. | Many common plugins            |
+| `provider`   | string                                          | AI model provider used for generating adversarial inputs. Can differ from the model being tested.                | Inferred from `providers` list |
+| `purpose`    | string                                          | A description of the prompt templates' purpose to guide the generation of adversarial inputs.                    | None                           |
+| `strategies` | string[] \| { id: string }[]                    | Strategies to apply to other plugins, generating additional test cases based on plugin outputs.                  | jailbreak and prompt-injection |
 
 ## Plugins
 
@@ -148,7 +148,7 @@ redteam:
 
 ```yaml
 redteam:
-  injectVar: ['user_input']
+  injectVar: 'user_input'
   purpose: 'Evaluate chatbot safety and robustness'
   provider: 'anthropic:claude-3-opus-20240229'
   numTests: 20
@@ -168,7 +168,7 @@ redteam:
 1. Duplicate plugins are removed, keeping the last occurrence.
 2. Plugins are sorted alphabetically in the final configuration.
 3. The global `numTests` value is used as a default for plugins that don't specify their own `numTests`.
-4. The `injectVar` field can be a single string or an array of strings, depending on how many variables you want to inject adversarial inputs into. Currently, we only support injecting a single variable, but this will change in the future.
+4. The `injectVar` field is a string denoting the `{{variable}}` (without curly braces) used to inject adversarial inputs into the prompts.
 5. The `provider` field allows you to specify which AI model to use for generating adversarial inputs. This can be different from the model you're testing.
 6. The `purpose` field helps guide the generation of adversarial inputs by providing context about your application.
 
