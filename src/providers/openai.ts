@@ -27,28 +27,6 @@ const OPENAI_CHAT_MODELS = [
       output: 60 / 1000000,
     },
   })),
-  ...['gpt-4-32k', 'gpt-4-32k-0314', 'gpt-4-32k-0613'].map((model) => ({
-    id: model,
-    cost: {
-      input: 60 / 1000000,
-      output: 120 / 1000000,
-    },
-  })),
-  ...[
-    'gpt-4-1106-preview',
-    'gpt-4-1106-vision-preview',
-    'gpt-4-vision-preview',
-    'gpt-4-0125-preview',
-    'gpt-4-turbo-preview',
-    'gpt-4-turbo',
-    'gpt-4-turbo-2024-04-09',
-  ].map((model) => ({
-    id: model,
-    cost: {
-      input: 10 / 1000000,
-      output: 30 / 1000000,
-    },
-  })),
   ...['gpt-4o', 'gpt-4o-2024-05-13'].map((model) => ({
     id: model,
     cost: {
@@ -61,6 +39,28 @@ const OPENAI_CHAT_MODELS = [
     cost: {
       input: 0.15 / 1000000,
       output: 0.6 / 1000000,
+    },
+  })),
+  ...[
+    'gpt-4-0125-preview',
+    'gpt-4-1106-preview',
+    'gpt-4-1106-vision-preview',
+    'gpt-4-turbo',
+    'gpt-4-turbo-2024-04-09',
+    'gpt-4-turbo-preview',
+    'gpt-4-vision-preview',
+  ].map((model) => ({
+    id: model,
+    cost: {
+      input: 10 / 1000000,
+      output: 30 / 1000000,
+    },
+  })),
+  ...['gpt-4-32k', 'gpt-4-32k-0314', 'gpt-4-32k-0613'].map((model) => ({
+    id: model,
+    cost: {
+      input: 60 / 1000000,
+      output: 120 / 1000000,
     },
   })),
   ...['gpt-3.5-turbo', 'gpt-3.5-turbo-0301', 'gpt-3.5-turbo-0613'].map((model) => ({
