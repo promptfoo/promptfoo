@@ -12,13 +12,6 @@ export default abstract class PluginBase {
    */
   protected abstract template: string;
 
-  /**
-   * Constructs a new PluginBase instance.
-   *
-   * @param provider - The API provider used to call the API.
-   * @param purpose - The purpose of the system being tested.
-   * @param injectVar - The variable to inject into the test cases.
-   */
   constructor(
     protected provider: ApiProvider,
     protected purpose: string,
@@ -27,62 +20,59 @@ export default abstract class PluginBase {
     logger.debug(`PluginBase initialized with purpose: ${purpose}, injectVar: ${injectVar}`);
   }
 
-  /**
-   * Abstract method to get the assertion for a given prompt.
-   *
-   * @param prompt - The prompt for which to get the assertion.
-   * @returns The assertion object.
-   */
   protected abstract getAssertions(prompt: string): Assertion[];
 
   /**
-   * Generates test cases based on the provided template, purpose, and number of prompts.
+   * Generates a batch of prompts.
    *
-   * @param n - The number of prompts to generate.
-   * @returns A promise that resolves to an array of test cases.
+   * @param batchN - The number of prompts to generate in this batch.
+   * @returns A promise that resolves to an array of generated prompts.
    */
+  protected async generateBatch(batchN: number): Promise<string[]> {
+    logger.debug(`Generating batch of ${batchN} prompts`);
+    const nunjucks = getNunjucksEngine();
+    const { output: generatedPrompts } = await this.provider.callApi(
+      nunjucks.renderString(this.template, {
+        purpose: this.purpose,
+        n: batchN,
+      }),
+    );
+    invariant(typeof generatedPrompts === 'string', 'Expected generatedPrompts to be a string');
+    const prompts = generatedPrompts
+      .split('\n')
+      .filter((line) => line.includes('Prompt:'))
+      .map((line) => line.substring(line.indexOf('Prompt:') + 'Prompt:'.length).trim());
+    logger.debug(`Generated ${prompts.length} prompts in this batch`);
+    return prompts;
+  }
+
   async generateTests(n: number): Promise<TestCase[]> {
     logger.debug(`Generating ${n} test cases`);
-    const nunjucks = getNunjucksEngine();
     const batchSize = 20;
-    let allPrompts: string[] = [];
+    const uniquePrompts = new Set<string>();
     let consecutiveRetries = 0;
     const maxConsecutiveRetries = 2;
 
-    const generateBatch = async (batchN: number): Promise<string[]> => {
-      logger.debug(`Generating batch of ${batchN} prompts`);
-      const { output: generatedPrompts } = await this.provider.callApi(
-        nunjucks.renderString(this.template, {
-          purpose: this.purpose,
-          n: batchN,
-        }),
-      );
-      invariant(typeof generatedPrompts === 'string', 'Expected generatedPrompts to be a string');
-      const prompts = generatedPrompts
-        .split('\n')
-        .filter((line) => line.includes('Prompt:'))
-        .map((line) => line.substring(line.indexOf('Prompt:') + 'Prompt:'.length).trim());
-      logger.debug(`Generated ${prompts.length} prompts in this batch`);
-      return prompts;
-    };
-
-    while (allPrompts.length < n && consecutiveRetries <= maxConsecutiveRetries) {
-      const remainingPrompts = n - allPrompts.length;
+    while (uniquePrompts.size < n && consecutiveRetries <= maxConsecutiveRetries) {
+      const remainingPrompts = n - uniquePrompts.size;
       const batchN = Math.min(remainingPrompts, batchSize);
-      const newPrompts = await generateBatch(batchN);
+      const newPrompts = await this.generateBatch(batchN);
 
-      const uniqueNewPrompts = newPrompts.filter((prompt) => !allPrompts.includes(prompt));
-      allPrompts.push(...uniqueNewPrompts);
+      const initialSize = uniquePrompts.size;
+      newPrompts.forEach((prompt) => uniquePrompts.add(prompt));
 
-      logger.debug(`Added ${uniqueNewPrompts.length} unique prompts. Total: ${allPrompts.length}`);
+      const addedPrompts = uniquePrompts.size - initialSize;
+      logger.debug(`Added ${addedPrompts} unique prompts. Total: ${uniquePrompts.size}`);
 
-      if (uniqueNewPrompts.length === 0) {
+      if (addedPrompts === 0) {
         consecutiveRetries++;
         logger.debug(`No new unique prompts. Consecutive retries: ${consecutiveRetries}`);
       } else {
         consecutiveRetries = 0;
       }
     }
+
+    let allPrompts = Array.from(uniquePrompts);
 
     // If we have more prompts than requested, randomly sample to get exact number
     if (allPrompts.length > n) {

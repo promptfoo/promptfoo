@@ -99,14 +99,23 @@ describe('PluginBase', () => {
   });
 
   it('should deduplicate prompts', async () => {
-    jest.spyOn(provider, 'callApi').mockImplementation().mockResolvedValue({
-      output: 'Prompt: duplicate\nPrompt: unique\nPrompt: duplicate',
-    });
+    jest
+      .spyOn(provider, 'callApi')
+      .mockImplementation()
+      .mockResolvedValueOnce({
+        output: 'Prompt: duplicate\nPrompt: duplicate',
+      })
+      .mockResolvedValueOnce({
+        output: 'Prompt: unique',
+      });
 
     const result = await plugin.generateTests(2);
 
-    expect(result).toHaveLength(2);
-    expect(result[0].vars.testVar).not.toBe(result[1].vars.testVar);
+    expect(result).toEqual([
+      { vars: { testVar: 'duplicate' }, assert: expect.any(Array) },
+      { vars: { testVar: 'unique' }, assert: expect.any(Array) },
+    ]);
+    expect(provider.callApi).toHaveBeenCalledTimes(2);
   });
 
   it('should retry when not enough unique prompts are generated', async () => {
