@@ -146,7 +146,7 @@ LLMs are configured with the `providers` property in `promptfooconfig.yaml`. An 
 
 ### LLM APIs
 
-Promptfoo supports [many LLM providers](https://www.notion.so/docs/providers) including OpenAI, Anthropic, Mistral, Azure, Groq, Perplexity, Cohere, and more. In most cases all you need to do is set the appropriate API key environment variable.
+Promptfoo supports [many LLM providers](/docs/providers) including OpenAI, Anthropic, Mistral, Azure, Groq, Perplexity, Cohere, and more. In most cases all you need to do is set the appropriate API key environment variable.
 
 You should choose at least one provider. If desired, set multiple in order to compare their performance in the red team eval. In this example, we’re comparing performance of GPT, Claude, and Llama:
 
@@ -177,10 +177,10 @@ providers:
 
 To learn more, see:
 
-- [Javascript provider](https://www.notion.so/docs/providers/custom-api)
-- [Python provider](https://www.notion.so/docs/providers/python)
-- [Exec provider](https://www.notion.so/docs/providers/custom-script) (Used to run any executable from any programming language)
-- [Webhook provider](https://www.notion.so/docs/providers/webhook) (HTTP requests, useful for testing an app that is online or running locally)
+- [Javascript provider](/docs/providers/custom-api/)
+- [Python provider](/docs/providers/python)
+- [Exec provider](/docs/providers/custom-script) (Used to run any executable from any programming language)
+- [Webhook provider](/docs/providers/webhook) (HTTP requests, useful for testing an app that is online or running locally)
 
 ### HTTP endpoints
 

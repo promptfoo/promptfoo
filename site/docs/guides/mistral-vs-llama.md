@@ -232,9 +232,9 @@ Contrast this with generic public benchmarks, which show that Llama3 >> Mixtral 
 | Model                                                                                     | Average | ARC   | HellaSwag | MMLU  | TruthfulQA | Winogrande | GSM8k | GPQA | MATH | HumanEval | DROP |
 | ----------------------------------------------------------------------------------------- | ------- | ----- | --------- | ----- | ---------- | ---------- | ----- | ---- | ---- | --------- | ---- |
 | [Mixtral-8x7B-Instruct-v0.1](https://huggingface.co/mistralai/Mixtral-8x7B-Instruct-v0.1) | 72.70   | 70.14 | 87.55     | 71.40 | 64.98      | 81.06      | 61.11 |      |      |           |      |
-| [llama2_70b_mmlu](https://huggingface.co/itsliupeng/llama2_70b_mmlu)                      | 68.24   | 65.61 | 87.37     | 71.89 | 49.15      | 82.40      | 52.99 |      |      |           |      |
+| [Llama 2 70B](https://huggingface.co/meta-llama/Llama-2-70b-hf)                           | 68.24   | 65.61 | 87.37     | 71.89 | 49.15      | 82.40      | 52.99 |      |      |           |      |
 | [Mistral-7B-Instruct-v0.2](https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.2)     | 65.71   | 63.14 | 84.88     | 60.78 | 68.26      | 77.19      | 40.03 |      |      |           |      |
-| [llama2_7b_mmlu](https://huggingface.co/itsliupeng/llama2_7b_mmlu)                        | 53.10   | 56.14 | 79.13     | 60.04 | 40.95      | 74.43      | 7.88  |      |      |           |      |
+| [Llama 2 7B](https://huggingface.co/meta-llama/Llama-2-7b-hf)                             | 53.10   | 56.14 | 79.13     | 60.04 | 40.95      | 74.43      | 7.88  |      |      |           |      |
 | [Llama 3 8B](https://huggingface.co/meta-llama/Meta-Llama-3-8B-Instruct)                  |         |       |           | 68.4  | 34.2       |            |       | 34.2 | 30.0 | 62.2      | 58.4 |
 | [Llama 3 70B](https://huggingface.co/meta-llama/Meta-Llama-3-70B-Instruct)                |         |       |           | 82.0  | 39.5       |            |       | 39.5 | 50.4 | 81.7      | 79.7 |
 
