@@ -616,6 +616,9 @@ const ProviderPromptMapSchema = z.record(
 export const ProviderSchema = z.union([z.string(), ProviderOptionsSchema, ApiProviderSchema]);
 export type Provider = z.infer<typeof ProviderSchema>;
 
+// Metadata is a key-value store for arbitrary data
+const MetadataSchema = z.record(z.string(), z.any());
+
 // Each test case is graded pass/fail with a score.  A test case represents a unique input to the LLM after substituting `vars` in the prompt.
 export const TestCaseSchema = z.object({
   // Optional description of what you're testing
@@ -660,6 +663,8 @@ export const TestCaseSchema = z.object({
 
   // The required score for this test case.  If not provided, the test case is graded pass/fail.
   threshold: z.number().optional(),
+
+  metadata: MetadataSchema.optional(),
 });
 
 export type TestCase<Vars = Record<string, string | string[] | object>> = z.infer<
@@ -826,7 +831,7 @@ export const TestSuiteConfigSchema = z.object({
   derivedMetrics: z.array(DerivedMetricSchema).optional(),
 
   // Any other information about this configuration.
-  metadata: z.record(z.string(), z.any()).optional(),
+  metadata: MetadataSchema.optional(),
 
   // Redteam configuration - used only when generating redteam tests
   redteam: redteamConfigSchema.optional(),

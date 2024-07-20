@@ -3,6 +3,8 @@ import {
   ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
   ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
+  DEFAULT_STRATEGIES,
+  ALL_STRATEGIES,
 } from './constants';
 import { HARM_CATEGORIES } from './plugins/harmful';
 
@@ -15,6 +17,24 @@ const redteamPluginObjectSchema = z.object({
     .optional()
     .describe('Number of tests to generate for this plugin'),
 });
+
+/**
+ * Schema for individual redteam plugins
+ */
+export const redteamPluginSchema = z.union([
+  z.enum(REDTEAM_ALL_PLUGINS).describe('Name of the plugin'),
+  redteamPluginObjectSchema,
+]);
+
+/**
+ * Schema for individual redteam strategies
+ */
+export const redteamStrategySchema = z.union([
+  z.enum(ALL_STRATEGIES).describe('Name of the strategy'),
+  z.object({
+    id: z.enum(ALL_STRATEGIES).describe('Name of the strategy'),
+  }),
+]);
 
 /**
  * Schema for `promptfoo generate redteam` command options
@@ -35,20 +55,13 @@ export const RedteamGenerateOptionsSchema = z.object({
     .describe('Additional plugins to include'),
   provider: z.string().optional().describe('Provider to use'),
   purpose: z.string().optional().describe('Purpose of the redteam generation'),
+  strategies: z.array(redteamStrategySchema).optional().describe('Strategies to use'),
   write: z.boolean().describe('Whether to write the output'),
 });
 /** Type definition for RedteamGenerateOptions */
 export type RedteamGenerateOptions = z.infer<typeof RedteamGenerateOptionsSchema>;
 
 export type RedteamPluginObject = z.infer<typeof redteamPluginObjectSchema>;
-
-/**
- * Schema for individual redteam plugins
- */
-export const redteamPluginSchema = z.union([
-  z.enum(REDTEAM_ALL_PLUGINS).describe('Name of the plugin'),
-  redteamPluginObjectSchema,
-]);
 
 /**
  * Schema for `redteam` section of promptfooconfig.yaml
@@ -72,6 +85,11 @@ export const redteamConfigSchema = z
       .describe('Plugins to use for redteam generation')
       .optional()
       .default(() => Array.from(REDTEAM_DEFAULT_PLUGINS).map((name) => ({ id: name }))),
+    strategies: z
+      .array(redteamStrategySchema)
+      .describe('Strategies to use for redteam generation')
+      .optional()
+      .default(() => Array.from(DEFAULT_STRATEGIES).map((name) => ({ id: name }))),
   })
   .transform((data) => {
     const plugins = data.plugins
@@ -101,6 +119,7 @@ export const redteamConfigSchema = z
       ...(data.injectVar ? { injectVar: data.injectVar } : {}),
       ...(data.provider ? { provider: data.provider } : {}),
       plugins: uniquePlugins,
+      strategies: data.strategies,
     };
   });
 

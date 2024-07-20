@@ -6,8 +6,6 @@ import { loadApiProvider } from '../providers';
 import type { ApiProvider, TestCase } from '../types';
 import { extractVariablesFromTemplates } from '../util/templates';
 import { REDTEAM_MODEL, ALL_PLUGINS } from './constants';
-import { addInjections } from './methods/injections';
-import { addIterativeJailbreaks } from './methods/iterative';
 import CompetitorPlugin from './plugins/competitors';
 import ContractPlugin from './plugins/contracts';
 import DebugAccessPlugin from './plugins/debugInterface';
@@ -22,6 +20,8 @@ import RbacPlugin from './plugins/rbac';
 import ShellInjectionPlugin from './plugins/shellInjection';
 import SqlInjectionPlugin from './plugins/sqlInjection';
 import { getPurpose } from './purpose';
+import { addInjections } from './strategies/injections';
+import { addIterativeJailbreaks } from './strategies/iterative';
 
 interface SynthesizeOptions {
   injectVar?: string;
@@ -30,6 +30,8 @@ interface SynthesizeOptions {
   provider?: string;
   purpose?: string;
 }
+
+type TestCaseWithPlugin = TestCase & { metadata: { plugin: string } };
 
 interface Plugin {
   key: string;
@@ -43,7 +45,7 @@ interface Plugin {
 
 interface Method {
   key: string;
-  action: (testCases: (TestCase & { plugin: string })[], injectVar: string) => TestCase[];
+  action: (testCases: TestCaseWithPlugin[], injectVar: string) => TestCase[];
   requiredPlugins?: string[];
 }
 
@@ -121,7 +123,7 @@ const categories = {
   pii: PII_REQUEST_CATEGORIES,
 } as const;
 
-const Methods: Method[] = [
+const Strategies: Method[] = [
   {
     key: 'experimental-jailbreak',
     action: (testCases) => {
@@ -134,7 +136,7 @@ const Methods: Method[] = [
   {
     key: 'jailbreak',
     action: (testCases) => {
-      const harmfulPrompts = testCases.filter((t) => t.plugin.startsWith('harmful:'));
+      const harmfulPrompts = testCases.filter((t) => t.metadata?.plugin?.startsWith('harmful:'));
       logger.debug('Adding jailbreaks to harmful prompts');
       const jailbreaks = addIterativeJailbreaks(harmfulPrompts);
       logger.debug(`Added ${jailbreaks.length} jailbreak test cases`);
@@ -145,7 +147,7 @@ const Methods: Method[] = [
   {
     key: 'prompt-injection',
     action: (testCases, injectVar) => {
-      const harmfulPrompts = testCases.filter((t) => t.plugin.startsWith('harmful:'));
+      const harmfulPrompts = testCases.filter((t) => t.metadata?.plugin?.startsWith('harmful:'));
       logger.debug('Adding prompt injections');
       const injections = addInjections(harmfulPrompts, injectVar);
       logger.debug(`Added ${injections.length} prompt injection test cases`);
@@ -222,7 +224,7 @@ export async function synthesize({
   }
 
   // if a method is included in the user selected plugins, add all of its required plugins
-  for (const { key, requiredPlugins } of Methods) {
+  for (const { key, requiredPlugins } of Strategies) {
     const plugin = plugins.find((p) => p.name === key);
     if (plugin && requiredPlugins) {
       plugins.push(...requiredPlugins.map((p) => ({ name: p, numTests: plugin.numTests })));
@@ -254,25 +256,41 @@ export async function synthesize({
 
   logger.debug(`System purpose: ${purpose}`);
 
-  const testCases: (TestCase & { plugin: string })[] = [];
+  const testCases: TestCaseWithPlugin[] = [];
   for (const { key, action } of Plugins) {
     const plugin = plugins.find((p) => p.name === key);
     if (plugin) {
       updateProgress();
       logger.debug(`Generating ${key} tests`);
       const pluginTests = await action(redteamProvider, purpose, injectVar, plugin.numTests);
-      testCases.push(...pluginTests.map((t) => ({ ...t, plugin: key })));
+      testCases.push(
+        ...pluginTests.map((t) => ({
+          ...t,
+          metadata: {
+            ...(t.metadata || {}),
+            plugin: key,
+          },
+        })),
+      );
       logger.debug(`Added ${pluginTests.length} ${key} test cases`);
     }
   }
 
-  for (const { key, action } of Methods) {
+  for (const { key, action } of Strategies) {
     const plugin = plugins.find((p) => p.name === key);
     if (plugin) {
       updateProgress();
       logger.debug(`Generating ${key} tests`);
       const newTestCases = action(testCases, injectVar);
-      testCases.push(...newTestCases.map((t) => ({ ...t, plugin: key })));
+      testCases.push(
+        ...newTestCases.map((t) => ({
+          ...t,
+          metadata: {
+            ...(t.metadata || {}),
+            plugin: key,
+          },
+        })),
+      );
     }
   }
 
