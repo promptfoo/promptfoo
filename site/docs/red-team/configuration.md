@@ -67,7 +67,7 @@ Plugins broadly fall into three broad distinctions:
 
 Run the cli menu `promptfoo generate redteam --help` to see a complete list of available plugins.
 
-### Special Handling for 'harmful' Plugin
+#### Special Handling for 'harmful' Plugin
 
 When you include `harmful` in your plugins list, it will automatically include all available harm plugins. You can also specify individual harm plugins directly.
 
