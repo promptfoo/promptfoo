@@ -178,7 +178,7 @@ redteam:
 
 ## Best Practices
 
-1. Start with a basic configuration.
+1. Start with a configuration created by `promptfoo redteam init`
 2. Remove the plugins that are not relevant to your use case.
 3. Adjust `numTests` for individual plugins based on their importance to your use case.
 4. Run a redteam evaluation and see how well you perform. Generate additional tests as needed.
