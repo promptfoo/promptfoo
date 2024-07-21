@@ -44,7 +44,7 @@ export default function Navigation({
       )}
       <div className="right-aligned">
         {USE_SUPABASE ? <LoggedInAs /> : null}
-        <IconButton onClick={handleModalToggle} color="inherit">
+        <IconButton onClick={handleModalToggle} sx={{ color: '#f0f0f0' }}>
           <InfoIcon />
         </IconButton>
         <DarkMode darkMode={darkMode} onToggleDarkMode={onToggleDarkMode} />

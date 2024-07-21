@@ -2,8 +2,8 @@ import {
   ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
   ALL_STRATEGIES as REDTEAM_ALL_STRATEGIES,
   COLLECTIONS,
+  HARM_PLUGINS,
 } from '../../src/redteam/constants';
-import { HARM_PLUGINS } from '../../src/redteam/plugins/harmful';
 import {
   RedteamGenerateOptionsSchema,
   redteamConfigSchema,

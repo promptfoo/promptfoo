@@ -2,8 +2,7 @@ import dedent from 'dedent';
 import invariant from 'tiny-invariant';
 import type { ApiProvider, TestCase } from '../../types';
 import { getNunjucksEngine } from '../../util/templates';
-
-export const PII_PLUGINS = ['pii:api-db', 'pii:direct', 'pii:session', 'pii:social'] as const;
+import { PII_PLUGINS } from '../constants';
 
 type PiiRequestCategory = (typeof PII_PLUGINS)[number];
 /**

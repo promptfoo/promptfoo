@@ -619,23 +619,22 @@ export type Provider = z.infer<typeof ProviderSchema>;
 // Metadata is a key-value store for arbitrary data
 const MetadataSchema = z.record(z.string(), z.any());
 
+const VarsSchema = z.record(
+  z.union([
+    z.string(),
+    z.number().transform(String),
+    z.array(z.union([z.string(), z.number().transform(String)])),
+    z.object({}),
+    z.array(z.any()),
+  ]),
+);
 // Each test case is graded pass/fail with a score.  A test case represents a unique input to the LLM after substituting `vars` in the prompt.
 export const TestCaseSchema = z.object({
   // Optional description of what you're testing
   description: z.string().optional(),
 
   // Key-value pairs to substitute in the prompt
-  vars: z
-    .record(
-      z.union([
-        z.string(),
-        z.number().transform(String),
-        z.array(z.union([z.string(), z.number().transform(String)])),
-        z.object({}),
-        z.array(z.any()),
-      ]),
-    )
-    .optional(),
+  vars: VarsSchema.optional(),
   // Override the provider.
   provider: z.union([z.string(), ProviderOptionsSchema, ApiProviderSchema]).optional(),
 
@@ -670,6 +669,12 @@ export const TestCaseSchema = z.object({
 export type TestCase<Vars = Record<string, string | string[] | object>> = z.infer<
   typeof TestCaseSchema
 >;
+
+export const TestCaseWithVarsFileSchema = TestCaseSchema.extend({
+  vars: z.union([VarsSchema, z.string(), z.array(z.string())]).optional(),
+});
+
+export type TestCaseWithVarsFile = z.infer<typeof TestCaseWithVarsFileSchema>;
 
 export const TestCasesWithMetadataSchema = z.object({
   id: z.string(),

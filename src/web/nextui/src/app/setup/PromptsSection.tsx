@@ -72,7 +72,7 @@ const PromptsSection: React.FC = () => {
 
   return (
     <div>
-      <Stack direction="row" spacing={2} justifyContent="space-between">
+      <Stack direction="row" spacing={2} mb={2} justifyContent="space-between">
         <Typography variant="h5">Prompts</Typography>
         <div>
           <label htmlFor={`file-input-add-prompt`}>
