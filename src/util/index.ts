@@ -48,6 +48,7 @@ import {
   isProviderOptions,
   OutputFileExtension,
 } from '../types';
+import { getConfigDirectoryPath, setConfigDirectoryPath } from './config';
 import { getNunjucksEngine } from './templates';
 
 const DEFAULT_QUERY_LIMIT = 100;
@@ -169,20 +170,6 @@ export async function readOutput(outputPath: string): Promise<OutputFile> {
     default:
       throw new Error(`Unsupported output file format: ${ext} currently only supports json`);
   }
-}
-
-let configDirectoryPath: string | undefined = process.env.PROMPTFOO_CONFIG_DIR;
-
-export function getConfigDirectoryPath(createIfNotExists: boolean = false): string {
-  const p = configDirectoryPath || path.join(os.homedir(), '.promptfoo');
-  if (createIfNotExists && !fs.existsSync(p)) {
-    fs.mkdirSync(p, { recursive: true });
-  }
-  return p;
-}
-
-export function setConfigDirectoryPath(newPath: string): void {
-  configDirectoryPath = newPath;
 }
 
 /**
