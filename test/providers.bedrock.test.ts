@@ -43,7 +43,7 @@ jest.mock('../src/logger', () => ({
 }));
 
 describe('AwsBedrockGenericProvider', () => {
-  let BedrockRuntime;
+  let BedrockRuntime: any;
 
   beforeEach(() => {
     jest.resetModules();

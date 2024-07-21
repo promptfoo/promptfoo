@@ -314,6 +314,10 @@ describe('Anthropic', () => {
     it('should return output for default behavior', async () => {
       const provider = new AnthropicCompletionProvider('claude-1');
       jest.spyOn(provider.anthropic.completions, 'create').mockImplementation().mockResolvedValue({
+        id: 'test-id',
+        model: 'claude-1',
+        stop_reason: 'stop_sequence',
+        type: 'completion',
         completion: 'Test output',
       });
       const result = await provider.callApi('Test prompt');
@@ -328,6 +332,10 @@ describe('Anthropic', () => {
     it('should return cached output with caching enabled', async () => {
       const provider = new AnthropicCompletionProvider('claude-1');
       jest.spyOn(provider.anthropic.completions, 'create').mockImplementation().mockResolvedValue({
+        id: 'test-id',
+        model: 'claude-1',
+        stop_reason: 'stop_sequence',
+        type: 'completion',
         completion: 'Test output',
       });
       const result = await provider.callApi('Test prompt');
@@ -351,6 +359,10 @@ describe('Anthropic', () => {
     it('should return fresh output with caching disabled', async () => {
       const provider = new AnthropicCompletionProvider('claude-1');
       jest.spyOn(provider.anthropic.completions, 'create').mockImplementation().mockResolvedValue({
+        id: 'test-id',
+        model: 'claude-1',
+        stop_reason: 'stop_sequence',
+        type: 'completion',
         completion: 'Test output',
       });
       const result = await provider.callApi('Test prompt');
