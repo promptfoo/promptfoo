@@ -6,10 +6,8 @@ import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import Chip from '@mui/material/Chip';
 import Container from '@mui/material/Container';
-import CssBaseline from '@mui/material/CssBaseline';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
-import { ThemeProvider, createTheme, useTheme } from '@mui/material/styles';
 import type { ResultsFile, SharedResults } from '../eval/types';
 import Overview from './Overview';
 import RiskCategories from './RiskCategories';
@@ -17,47 +15,7 @@ import TestSuites from './TestSuites';
 import { categoryAliases, categoryAliasesReverse } from './constants';
 import './Report.css';
 
-const theme = (darkMode: boolean) =>
-  createTheme({
-    palette: {
-      mode: darkMode ? 'dark' : 'light',
-      primary: {
-        main: '#3f51b5',
-      },
-      secondary: {
-        main: '#f50057',
-      },
-      background: {
-        default: darkMode ? '#303030' : '#f5f5f5',
-      },
-    },
-    typography: {
-      fontFamily: 'inherit',
-    },
-    components: {
-      MuiCard: {
-        styleOverrides: {
-          root: {
-            backgroundColor: darkMode ? '#121212' : '#fff',
-            boxShadow: darkMode ? 'none' : '0 4px 6px rgba(0, 0, 0, 0.1)',
-            borderRadius: '12px',
-          },
-        },
-      },
-      MuiTableContainer: {
-        styleOverrides: {
-          root: {
-            backgroundColor: darkMode ? '#121212' : '#fff',
-            boxShadow: darkMode ? 'none' : '0 4px 6px rgba(0, 0, 0, 0.1)',
-            borderRadius: '12px',
-          },
-        },
-      },
-    },
-  });
-
 const App: React.FC = () => {
-  const darkMode = useTheme().palette.mode === 'dark';
   const [evalId, setEvalId] = React.useState<string | null>(null);
   const [evalData, setEvalData] = React.useState<ResultsFile | null>(null);
 
@@ -124,62 +82,59 @@ const App: React.FC = () => {
   );
 
   return (
-    <ThemeProvider theme={theme.bind(null, darkMode)}>
-      <CssBaseline />
-      <Container>
-        <Stack spacing={4} pb={8} pt={2}>
-          <Card className="report-header">
-            <Typography variant="h4">
-              <strong>LLM Risk Assessment</strong>
-              {evalData.config.description && `: ${evalData.config.description}`}
-            </Typography>
-            <Typography variant="subtitle1" mb={2}>
-              {new Date(evalData.createdAt).toLocaleDateString('en-US', {
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-              })}
-            </Typography>
-            <Box className="report-details">
-              <Chip
-                size="small"
-                label={
-                  <>
-                    <strong>Model:</strong> {prompt.provider}
-                  </>
-                }
-              />
-              <Chip
-                size="small"
-                label={
-                  <>
-                    <strong>Dataset:</strong> {tableData.length} probes
-                  </>
-                }
-              />
-              <Chip
-                size="small"
-                label={
-                  <>
-                    <strong>Prompt:</strong> &quot;
-                    {prompt.raw.length > 20 ? `${prompt.raw.substring(0, 20)}...` : prompt.raw}
-                    &quot;
-                  </>
-                }
-              />
-            </Box>
-          </Card>
-          <Overview categoryStats={categoryStats} />
-          <RiskCategories categoryStats={categoryStats} />
-          <TestSuites evalId={evalId} categoryStats={categoryStats} />
-          {/*
+    <Container>
+      <Stack spacing={4} pb={8} pt={2}>
+        <Card className="report-header">
+          <Typography variant="h4">
+            <strong>LLM Risk Assessment</strong>
+            {evalData.config.description && `: ${evalData.config.description}`}
+          </Typography>
+          <Typography variant="subtitle1" mb={2}>
+            {new Date(evalData.createdAt).toLocaleDateString('en-US', {
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
+            })}
+          </Typography>
+          <Box className="report-details">
+            <Chip
+              size="small"
+              label={
+                <>
+                  <strong>Model:</strong> {prompt.provider}
+                </>
+              }
+            />
+            <Chip
+              size="small"
+              label={
+                <>
+                  <strong>Dataset:</strong> {tableData.length} probes
+                </>
+              }
+            />
+            <Chip
+              size="small"
+              label={
+                <>
+                  <strong>Prompt:</strong> &quot;
+                  {prompt.raw.length > 20 ? `${prompt.raw.substring(0, 20)}...` : prompt.raw}
+                  &quot;
+                </>
+              }
+            />
+          </Box>
+        </Card>
+        <Overview categoryStats={categoryStats} />
+        <RiskCategories categoryStats={categoryStats} />
+        <TestSuites evalId={evalId} categoryStats={categoryStats} />
+        {/*
         <div>
           <Vulnerabilities />
         </div>
             */}
-        </Stack>
-      </Container>
-    </ThemeProvider>
+      </Stack>
+    </Container>
   );
 };
 
