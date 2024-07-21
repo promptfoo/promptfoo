@@ -79,7 +79,7 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
 
   return (
     <>
-      <Stack direction="row" spacing={2} justifyContent="space-between">
+      <Stack direction="row" spacing={2} mb={2} justifyContent="space-between">
         <Typography variant="h5">Test Cases</Typography>
         <div>
           <label htmlFor={`file-input-add-test-case`}>

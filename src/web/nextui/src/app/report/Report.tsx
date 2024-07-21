@@ -2,9 +2,11 @@
 
 import React from 'react';
 import { getApiBaseUrl } from '@/api';
+import Box from '@mui/material/Box';
+import Card from '@mui/material/Card';
 import Chip from '@mui/material/Chip';
 import Container from '@mui/material/Container';
-import Grid from '@mui/material/Grid';
+import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import type { ResultsFile, SharedResults } from '../eval/types';
 import Overview from './Overview';
@@ -81,8 +83,8 @@ const App: React.FC = () => {
 
   return (
     <Container>
-      <Grid container direction="column" spacing={1} pt={6} pb={8}>
-        <Grid item className="report-header">
+      <Stack spacing={4} pb={8} pt={2}>
+        <Card className="report-header">
           <Typography variant="h4">
             <strong>LLM Risk Assessment</strong>
             {evalData.config.description && `: ${evalData.config.description}`}
@@ -94,7 +96,7 @@ const App: React.FC = () => {
               day: 'numeric',
             })}
           </Typography>
-          <Typography variant="body1" gutterBottom className="report-details">
+          <Box className="report-details">
             <Chip
               size="small"
               label={
@@ -116,27 +118,22 @@ const App: React.FC = () => {
               label={
                 <>
                   <strong>Prompt:</strong> &quot;
-                  {prompt.raw.length > 20 ? `${prompt.raw.substring(0, 20)}...` : prompt.raw}&quot;
+                  {prompt.raw.length > 20 ? `${prompt.raw.substring(0, 20)}...` : prompt.raw}
+                  &quot;
                 </>
               }
             />
-          </Typography>
-        </Grid>
-        <Grid item>
-          <Overview categoryStats={categoryStats} />
-        </Grid>
-        <Grid item>
-          <RiskCategories categoryStats={categoryStats} />
-        </Grid>
-        <Grid item>
-          <TestSuites evalId={evalId} categoryStats={categoryStats} />
-        </Grid>
+          </Box>
+        </Card>
+        <Overview categoryStats={categoryStats} />
+        <RiskCategories categoryStats={categoryStats} />
+        <TestSuites evalId={evalId} categoryStats={categoryStats} />
         {/*
-        <Grid item>
+        <div>
           <Vulnerabilities />
-        </Grid>
+        </div>
             */}
-      </Grid>
+      </Stack>
     </Container>
   );
 };
