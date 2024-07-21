@@ -177,7 +177,7 @@ export default function Home(): JSX.Element {
   return (
     <Layout
       title="Secure & reliable LLMs"
-      description="Custom LLM evals and red-teaming for your app. Find and fix vulnerabilities, maximize output quality, catch regressions."
+      description="Eliminate risk with AI red-teaming and evals used by 25,000 developers. Find and fix vulnerabilities, maximize output quality, catch regressions."
     >
       <Head>
         <meta property="og:image" content="/img/meta/homepage.png" />
