@@ -2077,9 +2077,11 @@ describe('runAssertion', () => {
   it('should pass when the webhook assertion passes', async () => {
     const output = 'Expected output';
 
-    fetchWithRetries.mockImplementation(() =>
-      Promise.resolve(new Response(JSON.stringify({ pass: true }), { status: 200 })),
-    );
+    jest
+      .mocked(fetchWithRetries)
+      .mockImplementation(() =>
+        Promise.resolve(new Response(JSON.stringify({ pass: true }), { status: 200 })),
+      );
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
@@ -2096,10 +2098,11 @@ describe('runAssertion', () => {
 
   it('should fail when the webhook assertion fails', async () => {
     const output = 'Different output';
-
-    fetchWithRetries.mockImplementation(() =>
-      Promise.resolve(new Response(JSON.stringify({ pass: false }), { status: 200 })),
-    );
+    jest
+      .mocked(fetchWithRetries)
+      .mockImplementation(() =>
+        Promise.resolve(new Response(JSON.stringify({ pass: false }), { status: 200 })),
+      );
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
@@ -2117,7 +2120,9 @@ describe('runAssertion', () => {
   it('should fail when the webhook returns an error', async () => {
     const output = 'Expected output';
 
-    fetchWithRetries.mockImplementation(() => Promise.resolve(new Response('', { status: 500 })));
+    jest
+      .mocked(fetchWithRetries)
+      .mockImplementation(() => Promise.resolve(new Response('', { status: 500 })));
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
@@ -2385,7 +2390,7 @@ describe('runAssertion', () => {
   it('should handle output strings with both single and double quotes correctly in python assertion', async () => {
     const expectedPythonValue = '0.5';
 
-    runPythonCode.mockResolvedValueOnce(expectedPythonValue);
+    jest.mocked(runPythonCode).mockResolvedValueOnce(expectedPythonValue);
 
     const output =
       'This is a string with "double quotes"\n and \'single quotes\' \n\n and some \n\t newlines.';
@@ -2465,7 +2470,7 @@ describe('runAssertion', () => {
         threshold,
       };
 
-      runPythonCode.mockResolvedValueOnce(resolvedValue);
+      jest.mocked(runPythonCode).mockResolvedValueOnce(resolvedValue);
 
       const result: GradingResult = await runAssertion({
         prompt: 'Some prompt',
@@ -2512,7 +2517,7 @@ describe('runAssertion', () => {
     'should handle when the file:// assertion with .py file returns a %s',
     async (type, pythonOutput, expectedPass, expectedReason) => {
       const output = 'Expected output';
-      runPython.mockResolvedValueOnce(pythonOutput);
+      jest.mocked(runPython).mockResolvedValueOnce(pythonOutput as string | object);
 
       const fileAssertion: Assertion = {
         type: 'python',
@@ -2546,9 +2551,11 @@ describe('runAssertion', () => {
 
   it('should handle when python file assertions throw an error', async () => {
     const output = 'Expected output';
-    runPython.mockRejectedValue(
-      new Error('The Python script `call_api` function must return a dict with an `output`'),
-    );
+    jest
+      .mocked(runPython)
+      .mockRejectedValue(
+        new Error('The Python script `call_api` function must return a dict with an `output`'),
+      );
     const fileAssertion: Assertion = {
       type: 'python',
       value: 'file:///path/to/assert.py',

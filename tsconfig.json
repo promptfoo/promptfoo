@@ -12,7 +12,7 @@
     "strict": true,
     "resolveJsonModule": true
   },
-  "include": ["src/", "typings/**/*"],
+  "include": ["src/", "typings/**/*", "test/"],
   "exclude": [
     "node_modules",
     "dist",
