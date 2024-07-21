@@ -53,7 +53,7 @@ const ReportSettingsDialogButton: React.FC = () => {
           <Typography component="div" sx={{ padding: '16px 0' }}>
             <label>Plugin Pass Rate Threshold</label>
             <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>
-              Sets the threshold for considering a plugin as "passed" on the risk cards.
+              Sets the threshold for considering a plugin as passed on the risk cards.
             </Typography>
             <Slider
               value={pluginPassRateThreshold}
