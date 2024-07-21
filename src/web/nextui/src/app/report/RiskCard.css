@@ -17,6 +17,15 @@
 
 .risk-card-list-item {
   padding: 0;
+  transition:
+    background-color 0.3s,
+    box-shadow 0.3s;
+}
+
+.risk-card-list-item:hover {
+  background-color: #f0f8ff;
+  box-shadow: 0 0 0 1px #add8e6;
+  border-radius: 4px;
 }
 
 .risk-card-icon-passed {
