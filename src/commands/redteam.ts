@@ -159,13 +159,13 @@ export function redteamCommand(program: Command) {
         pageSize: 20,
       });
 
-      const numTests =
-        (await number({
-          message: 'How many test cases do you want to generate per plugin?',
-          default: 5,
-          min: 0,
-          max: 1000,
-        })) ?? 5;
+      const numTests = await number({
+        message: 'How many test cases do you want to generate per plugin?',
+        default: 5,
+        min: 0,
+        max: 1000,
+      });
+      invariant(numTests, 'No number of tests provided');
 
       // Create config file
       const config = {

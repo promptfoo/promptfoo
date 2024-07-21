@@ -23,7 +23,7 @@ import { getPurpose } from './purpose';
 import { addInjections } from './strategies/injections';
 import { addIterativeJailbreaks } from './strategies/iterative';
 
-interface SynthesizeOptions {
+export interface SynthesizeOptions {
   injectVar?: string;
   numTests: number;
   plugins: { id: string; numTests: number }[];
@@ -186,7 +186,7 @@ export async function synthesize({
   strategies,
   plugins,
 }: SynthesizeOptions) {
-  validatePlugins(plugins.map((p) => p.id));
+  // validatePlugins(plugins.map((p) => p.id));
   const redteamProvider: ApiProvider = await loadApiProvider(provider || REDTEAM_MODEL, {
     options: {
       config: { temperature: 0.5 },

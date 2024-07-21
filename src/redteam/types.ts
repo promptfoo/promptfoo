@@ -103,22 +103,31 @@ export const redteamConfigSchema = z
       .default(() => Array.from(DEFAULT_STRATEGIES).map((name) => ({ id: name }))),
   })
   .transform((data) => {
-    const plugins = data.plugins
+    const pluginObjs = data.plugins
       .map((plugin) =>
         typeof plugin === 'string'
           ? { id: plugin, numTests: data.numTests }
           : { ...plugin, numTests: plugin.numTests ?? data.numTests },
       )
-      .sort((a, b) => a.id.localeCompare(b.id))
+      .sort((a, b) => a.id.localeCompare(b.id));
+
+    const plugins = pluginObjs
       .flatMap((pluginObj: { id: string; numTests?: number }) => {
         if (pluginObj.id === 'harmful') {
           return Object.keys(HARM_PLUGINS).map((category) => ({
             id: category,
-            numTests: pluginObj.numTests,
+            numTests:
+              pluginObjs.find((p) => p.id === category)?.numTests ??
+              pluginObj.numTests ??
+              data.numTests,
           }));
         }
         if (pluginObj.id === 'pii') {
-          return PII_PLUGINS.map((id) => ({ id }));
+          return PII_PLUGINS.map((id) => ({
+            id,
+            numTests:
+              pluginObjs.find((p) => p.id === id)?.numTests ?? pluginObj.numTests ?? data.numTests,
+          }));
         }
         return pluginObj;
       })

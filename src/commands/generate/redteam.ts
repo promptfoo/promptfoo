@@ -8,7 +8,7 @@ import { z } from 'zod';
 import { disableCache } from '../../cache';
 import { resolveConfigs } from '../../config';
 import logger from '../../logger';
-import { synthesize } from '../../redteam';
+import { SynthesizeOptions, synthesize } from '../../redteam';
 import {
   REDTEAM_MODEL,
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
@@ -103,15 +103,27 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
     typeof s === 'string' ? { id: s } : s,
   ) as { id: string }[];
 
-  const redteamTests = await synthesize({
+  logger.error(`plugins: ${plugins.map((p) => p.id).join(', ')}`);
+  logger.error(`strategies: ${strategyObjs.map((s) => s.id).join(', ')}`);
+
+  const config = {
     injectVar: redteamConfig?.injectVar || options.injectVar,
     numTests: options.numTests,
     plugins,
-    prompts: testSuite.prompts.map((prompt) => prompt.raw),
     provider: redteamConfig?.provider || options.provider,
     purpose: redteamConfig?.purpose || options.purpose,
     strategies: strategyObjs,
-  });
+  };
+  // parse the config again to see if there are any errors
+  const parsedConfig = redteamConfigSchema.safeParse(config);
+  logger.error(`parsedConfig: ${parsedConfig.success}`);
+  logger.error(`parsedConfig: ${JSON.stringify(parsedConfig, null, 2)}`);
+
+  const redteamTests = await synthesize({
+    ...parsedConfig.data,
+    prompts: testSuite.prompts.map((prompt) => prompt.raw),
+    numTests: options.numTests,
+  } as SynthesizeOptions);
 
   if (options.output) {
     const existingYaml = configPath

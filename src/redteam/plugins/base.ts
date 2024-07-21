@@ -1,9 +1,8 @@
 import invariant from 'tiny-invariant';
 import logger from '../../logger';
 import type { ApiProvider, Assertion, TestCase } from '../../types';
-import { sampleArray } from '../../util';
 import { getNunjucksEngine } from '../../util/templates';
-import { retryWithDeduplication } from '../util';
+import { retryWithDeduplication, sampleArray } from '../util';
 
 /**
  * Abstract base class for creating plugins that generate test cases.
@@ -68,9 +67,10 @@ export default abstract class PluginBase {
         .filter((line) => line.includes('Prompt:'))
         .map((line) => line.substring(line.indexOf('Prompt:') + 'Prompt:'.length).trim());
     };
-    const allPrompts = sampleArray(await retryWithDeduplication(generatePrompts, n), n);
-    logger.debug(`Generating test cases from ${allPrompts.length} prompts`);
-    return allPrompts.sort().map((prompt) => ({
+    const allPrompts = await retryWithDeduplication(generatePrompts, n);
+    const prompts = sampleArray(allPrompts, n);
+    logger.debug(`Generating test cases from ${prompts.length} prompts`);
+    return prompts.sort().map((prompt) => ({
       vars: {
         [this.injectVar]: prompt,
       },
