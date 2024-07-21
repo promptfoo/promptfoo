@@ -2,6 +2,7 @@
   display: flex;
   font-family: monospace, monospace;
   font-size: 0.8rem;
+  font-weight: bold;
   align-items: center;
   gap: 8px;
   background-color: #f0f0f0;

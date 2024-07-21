@@ -15,6 +15,12 @@
   align-self: center;
 }
 
+@media (max-width: 760px) {
+  .nav {
+    font-size: 0.75rem;
+  }
+}
+
 .nav .active {
   font-weight: bold;
 }
