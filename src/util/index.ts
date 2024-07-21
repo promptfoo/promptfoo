@@ -7,20 +7,12 @@ import * as fs from 'fs';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import nunjucks from 'nunjucks';
-import * as os from 'os';
 import * as path from 'path';
 import invariant from 'tiny-invariant';
 import { getAuthor } from '../accounts';
 import { TERMINAL_MAX_WIDTH } from '../constants';
-import {
-  datasets,
-  getDb,
-  evals,
-  evalsToDatasets,
-  evalsToPrompts,
-  prompts,
-  getDbSignalPath,
-} from '../database';
+import { getDbSignalPath, getDb } from '../database';
+import { datasets, evals, evalsToDatasets, evalsToPrompts, prompts } from '../database/operations';
 import { getDirectory, importModule } from '../esm';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
@@ -48,7 +40,7 @@ import {
   isProviderOptions,
   OutputFileExtension,
 } from '../types';
-import { getConfigDirectoryPath, setConfigDirectoryPath } from './config';
+import { getConfigDirectoryPath } from './config';
 import { getNunjucksEngine } from './templates';
 
 const DEFAULT_QUERY_LIMIT = 100;

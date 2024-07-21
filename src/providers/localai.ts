@@ -5,7 +5,7 @@ import type {
   EnvOverrides,
   ProviderEmbeddingResponse,
   ProviderResponse,
-} from '../types.js';
+} from '../types/index.js';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
 
 interface LocalAiCompletionOptions {

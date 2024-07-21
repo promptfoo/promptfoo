@@ -5,7 +5,7 @@ import type {
 } from '@ibm-generative-ai/node-sdk';
 import { getCache, isCacheEnabled } from '../cache';
 import logger from '../logger';
-import type { ApiProvider, EnvOverrides, ProviderResponse, TokenUsage } from '../types.js';
+import type { ApiProvider, EnvOverrides, ProviderResponse, TokenUsage } from '../types/index.js';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
 interface BAMGenerationParameters {

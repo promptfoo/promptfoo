@@ -7,7 +7,7 @@ import type {
   CallApiContextParams,
   ProviderOptions,
   ProviderResponse,
-} from '../types.js';
+} from '../types/index.js';
 import { isValidJson, safeJsonStringify } from '../util';
 import { getNunjucksEngine } from '../util/templates';
 import { REQUEST_TIMEOUT_MS } from './shared';

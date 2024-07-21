@@ -9,7 +9,7 @@ import type {
   EnvOverrides,
   ProviderResponse,
   ProviderEmbeddingResponse,
-} from '../types.js';
+} from '../types/index.js';
 import { parseMessages } from './anthropic';
 import { parseChatPrompt } from './shared';
 

@@ -2,6 +2,7 @@ import dedent from 'dedent';
 import invariant from 'tiny-invariant';
 import type { ApiProvider, TestCase } from '../../types';
 import { getNunjucksEngine } from '../../util/templates';
+import { PII_REQUEST_CATEGORIES } from '../constants';
 
 type PiiRequestCategory = (typeof PII_REQUEST_CATEGORIES)[number];
 /**
