@@ -30,6 +30,7 @@ jest.mock('fs', () => ({
 }));
 
 jest.mock('../src/database');
+jest.mock('../src/database/operations');
 
 describe('readStandaloneTestsFile', () => {
   beforeEach(() => {

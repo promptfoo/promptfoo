@@ -2,9 +2,9 @@ import fs from 'fs';
 import path from 'path';
 import { getCache, isCacheEnabled } from '../src/cache';
 import { PythonProvider } from '../src/providers/pythonCompletion';
-import { runPython } from '../src/python/wrapper';
+import { runPython } from '../src/python/pythonUtils';
 
-jest.mock('../src/python/wrapper');
+jest.mock('../src/python/pythonUtils');
 jest.mock('../src/cache');
 jest.mock('fs');
 jest.mock('path');

@@ -1,6 +1,7 @@
 import { promises as fs } from 'fs';
 import { PythonShell } from 'python-shell';
-import * as pythonWrapper from '../src/python/wrapper';
+import { runPythonCode } from '../src/python/wrapper';
+import { runPython } from '../src/python/pythonUtils'
 
 jest.mock('../src/esm');
 

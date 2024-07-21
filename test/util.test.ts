@@ -35,6 +35,7 @@ jest.mock('fs', () => ({
 
 jest.mock('../src/esm');
 jest.mock('../src/database');
+jest.mock('../src/database/operations');
 
 describe('util', () => {
   beforeEach(() => {
