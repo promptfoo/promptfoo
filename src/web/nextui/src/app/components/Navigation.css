@@ -1,17 +1,17 @@
 .nav {
   padding: 0.25rem 0 0.25rem 1rem;
   gap: 1rem;
-  background-color: #eee;
+  background-color: #333;
   margin-bottom: 1rem;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
 
 [data-theme='dark'] .nav {
-  background-color: #333;
+  background-color: #121212;
 }
 
 .nav a {
   text-decoration: none;
-  color: #000;
   align-self: center;
 }
 
@@ -25,7 +25,7 @@
   font-weight: bold;
 }
 
-[data-theme='dark'] .nav a {
+.nav a {
   color: #f0f0f0;
 }
 
@@ -41,6 +41,6 @@
   text-decoration: underline;
 }
 
-[data-theme='dark'] .nav a:hover {
+.nav a:hover {
   color: #ddd;
 }
