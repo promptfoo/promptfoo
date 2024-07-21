@@ -86,7 +86,9 @@ jest.mock('glob', () => ({
   globSync: jest.fn(),
 }));
 
-jest.mock('../src/database');
+jest.mock('../src/database', () => ({
+  getDb: jest.fn(),
+}));
 
 describe('call provider apis', () => {
   afterEach(async () => {

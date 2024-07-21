@@ -34,8 +34,9 @@ jest.mock('fs', () => ({
 }));
 
 jest.mock('../src/esm');
-jest.mock('../src/database');
-jest.mock('../src/database/operations');
+jest.mock('../src/database', () => ({
+  getDb: jest.fn(),
+}));
 
 describe('util', () => {
   beforeEach(() => {

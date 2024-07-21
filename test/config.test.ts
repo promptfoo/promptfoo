@@ -4,6 +4,10 @@ import * as path from 'path';
 import { dereferenceConfig, readConfigs } from '../src/config';
 import { UnifiedConfig } from '../src/types';
 
+jest.mock('../src/database', () => ({
+  getDb: jest.fn(),
+}));
+
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
 }));
@@ -20,8 +24,6 @@ jest.mock('fs', () => ({
   existsSync: jest.fn(),
   mkdirSync: jest.fn(),
 }));
-
-jest.mock('../src/database');
 
 describe('readConfigs', () => {
   beforeEach(() => {

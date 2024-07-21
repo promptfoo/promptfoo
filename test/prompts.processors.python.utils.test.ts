@@ -1,13 +1,13 @@
 import { PythonShell } from 'python-shell';
 import logger from '../src/logger';
 import { pythonPromptFunction, pythonPromptFunctionLegacy } from '../src/prompts/processors/python';
-import { runPython } from '../src/python/wrapper';
+import { runPython } from '../src/python/pythonUtils';
 import type { ApiProvider } from '../src/types';
 
 jest.mock('fs');
 jest.mock('python-shell');
 jest.mock('../src/logger');
-jest.mock('../src/python/wrapper');
+jest.mock('../src/python/pythonUtils');
 
 describe('pythonPromptFunction', () => {
   interface PythonContext {

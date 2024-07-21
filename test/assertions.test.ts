@@ -10,8 +10,8 @@ import {
   OpenAiChatCompletionProvider,
 } from '../src/providers/openai';
 import { ReplicateModerationProvider } from '../src/providers/replicate';
+import { runPython } from '../src/python/pythonUtils';
 import { runPythonCode } from '../src/python/wrapper';
-import { runPython } from '../src/python/pythonUtils'
 import type {
   Assertion,
   ApiProvider,
@@ -61,8 +61,9 @@ jest.mock('fs', () => ({
 }));
 
 jest.mock('../src/esm');
-jest.mock('../src/database');
-jest.mock('../src/database/operations');
+jest.mock('../src/database', () => ({
+  getDb: jest.fn(),
+}));
 
 jest.mock('../src/cliState', () => ({
   basePath: '/config_path',
