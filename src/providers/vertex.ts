@@ -9,7 +9,7 @@ import type {
   ProviderResponse,
   ProviderEmbeddingResponse,
   TokenUsage,
-} from '../types.js';
+} from '../types';
 import { getNunjucksEngine } from '../util/templates';
 import { parseChatPrompt } from './shared';
 import {

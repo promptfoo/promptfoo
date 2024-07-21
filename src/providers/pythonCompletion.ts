@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { getCache, isCacheEnabled } from '../cache';
 import logger from '../logger';
-import { runPython } from '../python/wrapper';
+import { runPython } from '../python/pythonUtils';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -11,7 +11,8 @@ import type {
   ProviderEmbeddingResponse,
   ProviderClassificationResponse,
 } from '../types';
-import { parsePathOrGlob, safeJsonStringify, sha256 } from '../util';
+import { parsePathOrGlob, sha256 } from '../util';
+import { safeJsonStringify } from '../util/json';
 
 interface PythonProviderConfig {
   pythonExecutable?: string;

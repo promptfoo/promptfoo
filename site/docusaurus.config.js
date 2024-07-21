@@ -173,8 +173,12 @@ const config = {
             ],
           },
           {
-            title: 'Guides',
+            title: 'Guides & Tools',
             items: [
+              {
+                label: 'LLM red teaming',
+                to: '/docs/red-team',
+              },
               {
                 label: 'Running benchmarks',
                 to: '/docs/guides/llama2-uncensored-benchmark-ollama',
@@ -192,8 +196,8 @@ const config = {
                 to: '/docs/guides/prevent-llm-hallucations',
               },
               {
-                label: 'LLM red teaming',
-                to: '/docs/red-team',
+                label: 'Promptfoo Config Validator',
+                to: '/validator',
               },
             ],
           },

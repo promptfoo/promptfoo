@@ -13,6 +13,7 @@ import {
   writeOutput,
   extractJsonObjects,
   parsePathOrGlob,
+  sampleArray,
 } from '../src/util';
 
 jest.mock('proxy-agent', () => ({
@@ -33,7 +34,9 @@ jest.mock('fs', () => ({
 }));
 
 jest.mock('../src/esm');
-jest.mock('../src/database');
+jest.mock('../src/database', () => ({
+  getDb: jest.fn(),
+}));
 
 describe('util', () => {
   beforeEach(() => {
@@ -359,7 +362,7 @@ describe('util', () => {
     const mockFilter = jest.fn();
     jest.doMock(path.resolve('filter.js'), () => mockFilter, { virtual: true });
 
-    jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob]);
+    jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob].flat());
 
     const filters = await readFilters({ testFilter: 'filter.js' });
 
@@ -511,7 +514,7 @@ describe('extractJsonObjects', () => {
 
   it('should return an empty array if no JSON objects are found', () => {
     const input = 'no json here';
-    const expectedOutput = [];
+    const expectedOutput: any[] = [];
     expect(extractJsonObjects(input)).toEqual(expectedOutput);
   });
 
@@ -716,5 +719,60 @@ describe('parsePathOrGlob', () => {
       isPathPattern: false,
       filePath: expect.stringMatching(/^relative[/\\]base[/\\]file\.txt$/),
     });
+  });
+});
+
+describe('sampleArray', () => {
+  it('should return n random items when n is less than array length', () => {
+    const array = [1, 2, 3, 4, 5];
+    const result = sampleArray(array, 3);
+
+    expect(result).toHaveLength(3);
+    expect(new Set(result).size).toBe(3); // All items are unique
+    result.forEach((item) => expect(array).toContain(item));
+  });
+
+  it('should return all items when n is equal to array length', () => {
+    const array = [1, 2, 3, 4, 5];
+    const result = sampleArray(array, 5);
+
+    expect(result).toHaveLength(5);
+    expect(new Set(result).size).toBe(5);
+    expect(result).toEqual(expect.arrayContaining(array));
+  });
+
+  it('should return all items when n is greater than array length', () => {
+    const array = [1, 2, 3];
+    const result = sampleArray(array, 5);
+
+    expect(result).toHaveLength(3);
+    expect(result).toEqual(expect.arrayContaining(array));
+  });
+
+  it('should return an empty array when input array is empty', () => {
+    const result = sampleArray([], 3);
+    expect(result).toEqual([]);
+  });
+
+  it('should return a new array, not modifying the original', () => {
+    const array = [1, 2, 3, 4, 5];
+    const originalArray = [...array];
+    sampleArray(array, 3);
+
+    expect(array).toEqual(originalArray);
+  });
+
+  it('should return random samples across multiple calls', () => {
+    const array = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    const samples = new Set();
+
+    for (let i = 0; i < 100; i++) {
+      const result = sampleArray(array, 5);
+      samples.add(result.join(','));
+    }
+
+    // With 100 samples, it's extremely unlikely to get the same sample every time
+    // unless the randomization is not working
+    expect(samples.size).toBeGreaterThan(1);
   });
 });
