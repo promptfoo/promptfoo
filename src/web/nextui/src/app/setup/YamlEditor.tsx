@@ -106,6 +106,7 @@ const YamlEditorComponent: React.FC = () => {
         highlight={(code) => highlight(code, languages.yaml)}
         padding={10}
         style={{
+          backgroundColor: '#fff',
           fontFamily: '"Fira code", "Fira Mono", monospace',
           fontSize: 14,
         }}
