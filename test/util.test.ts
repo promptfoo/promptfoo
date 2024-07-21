@@ -360,7 +360,7 @@ describe('util', () => {
     const mockFilter = jest.fn();
     jest.doMock(path.resolve('filter.js'), () => mockFilter, { virtual: true });
 
-    jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob]);
+    jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob].flat());
 
     const filters = await readFilters({ testFilter: 'filter.js' });
 
@@ -512,7 +512,7 @@ describe('extractJsonObjects', () => {
 
   it('should return an empty array if no JSON objects are found', () => {
     const input = 'no json here';
-    const expectedOutput = [];
+    const expectedOutput: any[] = [];
     expect(extractJsonObjects(input)).toEqual(expectedOutput);
   });
 

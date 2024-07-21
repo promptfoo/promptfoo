@@ -311,7 +311,7 @@ describe('readTests', () => {
       .mocked(fs.readFileSync)
       .mockReturnValueOnce(yaml.dump(test1Content))
       .mockReturnValueOnce(yaml.dump(test2Content));
-    jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob]);
+    jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob].flat());
 
     const result = await readTests(testsPaths);
 
@@ -336,7 +336,7 @@ describe('readTests', () => {
       .mocked(fs.readFileSync)
       .mockReturnValueOnce(yaml.dump(test1Content))
       .mockReturnValueOnce(yaml.dump(vars1Content));
-    jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob]);
+    jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob].flat());
 
     const result = await readTests(testsPaths);
 
@@ -351,7 +351,7 @@ describe('readTests', () => {
       assert: [{ type: 'equals', value: 'value1' }],
     };
     jest.mocked(fs.readFileSync).mockReturnValueOnce(yaml.dump(test1Content));
-    jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob]);
+    jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob].flat());
 
     const result = await readTests(testsPaths);
 

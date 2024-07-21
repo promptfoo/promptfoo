@@ -64,7 +64,7 @@ describe('readConfigs', () => {
       sharing: true,
     };
 
-    jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob]);
+    jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob].flat());
     jest
       .mocked(fs.readFileSync)
       .mockReturnValueOnce(JSON.stringify(config1))
