@@ -158,7 +158,7 @@ describe('readConfigs', () => {
 
   it('makeAbsolute should resolve file:// syntax and plaintext prompts', async () => {
     jest.mocked(fs.existsSync).mockReturnValue(true);
-    (jest.mocked(fs.readFileSync)).mockImplementation((path: string) => {
+    jest.mocked(fs.readFileSync).mockImplementation((path: string) => {
       if (path === 'config1.json') {
         return JSON.stringify({
           description: 'test1',
@@ -186,7 +186,7 @@ describe('readConfigs', () => {
 
   it('dedupes prompts when reading configs', async () => {
     jest.mocked(fs.existsSync).mockReturnValue(true);
-    (jest.mocked(fs.readFileSync)).mockImplementation((path: string) => {
+    jest.mocked(fs.readFileSync).mockImplementation((path: string) => {
       if (path === 'config1.json') {
         return JSON.stringify({
           description: 'test1',
