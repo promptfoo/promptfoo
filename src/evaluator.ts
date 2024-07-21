@@ -13,7 +13,7 @@ import cliState from './cliState';
 import { importModule } from './esm';
 import logger from './logger';
 import { maybeEmitAzureOpenAiWarning } from './providers/azureopenaiUtil';
-import { runPython } from './python/wrapper';
+import { runPython } from './python/pythonUtils';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
 import type {

@@ -17,7 +17,7 @@ import { getDirectory, importModule } from '../esm';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
 import { runDbMigrations } from '../migrate';
-import { runPython } from '../python/wrapper';
+import { runPython } from '../python/pythonUtils';
 import {
   type EvalWithMetadata,
   type EvaluateResult,
@@ -1009,23 +1009,6 @@ export function resultIsForTestCase(result: EvaluateResult, testCase: TestCase):
   return varsMatch(testCase.vars, result.vars) && providersMatch;
 }
 
-export function safeJsonStringify(value: any, prettyPrint: boolean = false): string {
-  // Prevent circular references
-  const cache = new Set();
-  const space = prettyPrint ? 2 : undefined;
-  return JSON.stringify(
-    value,
-    (key, val) => {
-      if (typeof val === 'object' && val !== null) {
-        if (cache.has(val)) return;
-        cache.add(val);
-      }
-      return val;
-    },
-    space,
-  );
-}
-
 export function renderVarsInObject<T>(obj: T, vars?: Record<string, string | object>): T {
   // Renders nunjucks template strings with context variables
   if (!vars || process.env.PROMPTFOO_DISABLE_TEMPLATING) {
@@ -1048,15 +1031,6 @@ export function renderVarsInObject<T>(obj: T, vars?: Record<string, string | obj
     return renderVarsInObject(fn({ vars }) as T);
   }
   return obj;
-}
-
-export function isValidJson(str: string): boolean {
-  try {
-    JSON.parse(str);
-    return true;
-  } catch (e) {
-    return false;
-  }
 }
 
 export function extractJsonObjects(str: string): object[] {

@@ -168,3 +168,6 @@ jobs:
 
       - name: Run Vitest
         run: npm run test:webui
+
+      - name: check for circular dependencies
+        run: npx madge $(git ls-files '*.ts') --circular

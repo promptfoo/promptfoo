@@ -8,7 +8,7 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../types/index.js';
-import { isValidJson, safeJsonStringify } from '../util';
+import { isValidJson, safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
 import { REQUEST_TIMEOUT_MS } from './shared';
 

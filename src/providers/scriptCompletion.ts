@@ -8,7 +8,7 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../types';
-import { safeJsonStringify } from '../util';
+import { safeJsonStringify } from '../util/json';
 
 const ANSI_ESCAPE = /\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;
 

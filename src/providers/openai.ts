@@ -15,7 +15,7 @@ import type {
   TokenUsage,
 } from '../types/index.js';
 import { renderVarsInObject } from '../util';
-import { safeJsonStringify } from '../util';
+import { safeJsonStringify } from '../util/json';
 import { OpenAiFunction, OpenAiTool } from './openaiUtil';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase } from './shared';
 
