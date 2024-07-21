@@ -38,7 +38,7 @@ const theme = (darkMode: boolean) =>
       MuiCard: {
         styleOverrides: {
           root: {
-            backgroundColor: darkMode ? '#121212' : 'initial',
+            backgroundColor: darkMode ? '#121212' : '#fff',
             boxShadow: darkMode ? 'none' : '0 4px 6px rgba(0, 0, 0, 0.1)',
             borderRadius: '12px',
           },
@@ -47,7 +47,7 @@ const theme = (darkMode: boolean) =>
       MuiTableContainer: {
         styleOverrides: {
           root: {
-            backgroundColor: darkMode ? '#121212' : 'initial',
+            backgroundColor: darkMode ? '#121212' : '#fff',
             boxShadow: darkMode ? 'none' : '0 4px 6px rgba(0, 0, 0, 0.1)',
             borderRadius: '12px',
           },
