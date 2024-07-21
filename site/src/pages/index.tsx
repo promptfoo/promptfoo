@@ -211,7 +211,7 @@ export default function Home(): JSX.Element {
         </section>
 
         <div className={styles.ctaSection}>
-          <h3>Make your LLM app reliable & secure</h3>
+          <h2>Make your LLM app reliable & secure</h2>
           <div className={styles.buttons}>
             <Link className="button button--primary button--lg" to="/docs/intro">
               Read Start Guide
