@@ -29,7 +29,9 @@ jest.mock('fs', () => ({
   },
 }));
 
-jest.mock('../src/database');
+jest.mock('../src/database', () => ({
+  getDb: jest.fn(),
+}));
 
 describe('readStandaloneTestsFile', () => {
   beforeEach(() => {

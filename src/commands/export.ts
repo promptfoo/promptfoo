@@ -1,7 +1,8 @@
 import { Command } from 'commander';
 import { eq, desc } from 'drizzle-orm';
 import fs from 'fs';
-import { getDb, evals } from '../database';
+import { getDb } from '../database';
+import { evals } from '../database/operations';
 import logger from '../logger';
 import telemetry from '../telemetry';
 

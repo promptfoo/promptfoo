@@ -2,53 +2,13 @@ import dedent from 'dedent';
 import invariant from 'tiny-invariant';
 import PromptfooHarmfulCompletionProvider from '../../providers/promptfoo';
 import type { ApiProvider, Assertion, TestCase } from '../../types';
-import { LLAMA_GUARD_REPLICATE_PROVIDER } from '../constants';
+import {
+  HARM_CATEGORIES,
+  LLAMA_GUARD_REPLICATE_PROVIDER,
+  REDTEAM_PROVIDER_HARM_CATEGORIES,
+  UNALIGNED_PROVIDER_HARM_CATEGORIES,
+} from '../constants';
 import PluginBase from './base';
-
-export const UNALIGNED_PROVIDER_HARM_CATEGORIES = {
-  // MLCommons harm categories
-  // https://llama.meta.com/docs/model-cards-and-prompt-formats/meta-llama-guard-2/
-  'harmful:violent-crime': 'Violent Crimes',
-  'harmful:non-violent-crime': 'Non-Violent Crimes',
-  'harmful:sex-crime': 'Sex Crimes',
-  'harmful:child-exploitation': 'Child Exploitation',
-  'harmful:specialized-advice': 'Specialized Advice - Financial',
-  'harmful:indiscriminate-weapons': 'Indiscriminate Weapons',
-  'harmful:hate': 'Hate',
-  'harmful:self-harm': 'Self-Harm',
-  'harmful:sexual-content': 'Sexual Content',
-
-  // Harmbench taxonomy
-  // https://arxiv.org/pdf/2402.04249
-  'harmful:cybercrime': 'Cybercrime & Unauthorized Intrusion - Hacking and Malware',
-  'harmful:chemical-biological-weapons': 'Chemical & Biological Weapons',
-  'harmful:illegal-drugs': 'Illegal Drugs',
-  'harmful:copyright-violations': 'Copyright Violations - Copyrighted text',
-  'harmful:harassment-bullying': 'Harassment & Bullying',
-  'harmful:illegal-activities': 'Illegal Activities - Fraud & scams',
-  'harmful:graphic-content': 'Graphic & age-restricted content',
-  'harmful:unsafe-practices': 'Promotion of unsafe practices',
-  //'harmful:privacy-violations': 'Privacy violations & data exploitation',  // redundant with MLCommons category
-
-  // Other
-  'harmful:radicalization': 'Radicalization',
-  'harmful:profanity': 'Requests containing profanity',
-  'harmful:insults': 'Insults and personal attacks',
-  //'scam_fraud_creation',
-  //'locale_specific_illegal (e.g. hate speech in Germany, alcohol in Saudi Arabia)',
-} as const;
-
-export const REDTEAM_PROVIDER_HARM_CATEGORIES = {
-  'harmful:privacy': 'Privacy violations',
-  'harmful:intellectual-property': 'Intellectual Property violation',
-  'harmful:misinformation-disinformation':
-    'Misinformation & Disinformation - Harmful lies and propaganda',
-} as const;
-
-export const HARM_CATEGORIES = {
-  ...UNALIGNED_PROVIDER_HARM_CATEGORIES,
-  ...REDTEAM_PROVIDER_HARM_CATEGORIES,
-} as const;
 
 interface HarmfulCategory {
   key: string;
