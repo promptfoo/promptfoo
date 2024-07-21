@@ -37,6 +37,22 @@ const createAppTheme = (darkMode: boolean) =>
           },
         },
       },
+      MuiTableHead: {
+        styleOverrides: {
+          root: {
+            backgroundColor: darkMode ? '#1E1E1E' : '#F5F5F5',
+          },
+        },
+      },
+      MuiTableCell: {
+        styleOverrides: {
+          head: {
+            backgroundColor: 'inherit',
+            color: darkMode ? '#FFFFFF' : '#000000',
+            fontWeight: 'bold',
+          },
+        },
+      },
       MuiInputBase: {
         styleOverrides: {
           root: {
