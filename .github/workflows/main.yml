@@ -146,6 +146,9 @@ jobs:
         working-directory: site
         run: npm run typecheck
 
+      - name: check for circular dependencies
+        run: npx madge $(git ls-files '*.ts') --circular
+
       - name: Build Documentation
         working-directory: site
         run: npm run build
@@ -168,6 +171,3 @@ jobs:
 
       - name: Run Vitest
         run: npm run test:webui
-
-      - name: check for circular dependencies
-        run: npx madge $(git ls-files '*.ts') --circular
