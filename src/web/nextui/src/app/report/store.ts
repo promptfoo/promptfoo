@@ -22,7 +22,7 @@ interface ReportState {
 export const useReportStore = create<ReportState>()(
   persist(
     (set) => ({
-      showPercentagesOnRiskCards: true,
+      showPercentagesOnRiskCards: false,
       setShowPercentagesOnRiskCards: (show: boolean) =>
         set(() => ({ showPercentagesOnRiskCards: show })),
     }),
