@@ -5,7 +5,7 @@ export const LLAMA_GUARD_REPLICATE_PROVIDER =
 
 export const COLLECTIONS = ['harmful', 'pii'];
 
-export const UNALIGNED_PROVIDER_HARM_CATEGORIES = {
+export const UNALIGNED_PROVIDER_HARM_PLUGINS = {
   // MLCommons harm categories
   // https://llama.meta.com/docs/model-cards-and-prompt-formats/meta-llama-guard-2/
   'harmful:violent-crime': 'Violent Crimes',
@@ -38,7 +38,7 @@ export const UNALIGNED_PROVIDER_HARM_CATEGORIES = {
   //'locale_specific_illegal (e.g. hate speech in Germany, alcohol in Saudi Arabia)',
 } as const;
 
-export const REDTEAM_PROVIDER_HARM_CATEGORIES = {
+export const REDTEAM_PROVIDER_HARM_PLUGINS = {
   'harmful:privacy': 'Privacy violations',
   'harmful:intellectual-property': 'Intellectual Property violation',
   'harmful:misinformation-disinformation':
@@ -46,8 +46,8 @@ export const REDTEAM_PROVIDER_HARM_CATEGORIES = {
 } as const;
 
 export const HARM_PLUGINS = {
-  ...UNALIGNED_PROVIDER_HARM_CATEGORIES,
-  ...REDTEAM_PROVIDER_HARM_CATEGORIES,
+  ...UNALIGNED_PROVIDER_HARM_PLUGINS,
+  ...REDTEAM_PROVIDER_HARM_PLUGINS,
 } as const;
 
 export const PII_PLUGINS = ['pii:api-db', 'pii:direct', 'pii:session', 'pii:social'] as const;

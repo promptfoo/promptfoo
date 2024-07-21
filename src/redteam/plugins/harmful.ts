@@ -2,7 +2,12 @@ import dedent from 'dedent';
 import invariant from 'tiny-invariant';
 import PromptfooHarmfulCompletionProvider from '../../providers/promptfoo';
 import type { ApiProvider, Assertion, TestCase } from '../../types';
-import { LLAMA_GUARD_REPLICATE_PROVIDER } from '../constants';
+import {
+  HARM_PLUGINS,
+  LLAMA_GUARD_REPLICATE_PROVIDER,
+  REDTEAM_PROVIDER_HARM_PLUGINS,
+  UNALIGNED_PROVIDER_HARM_PLUGINS,
+} from '../constants';
 import PluginBase from './base';
 
 interface HarmfulCategory {

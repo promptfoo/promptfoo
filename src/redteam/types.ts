@@ -6,9 +6,9 @@ import {
   DEFAULT_STRATEGIES,
   ALL_STRATEGIES,
   COLLECTIONS,
+  HARM_PLUGINS,
+  PII_PLUGINS,
 } from './constants';
-import { HARM_PLUGINS } from './plugins/harmful';
-import { PII_PLUGINS } from './plugins/pii';
 
 const redteamPluginObjectSchema = z.object({
   id: z.enum(REDTEAM_ALL_PLUGINS as [string, ...string[]]).describe('Name of the plugin'),
