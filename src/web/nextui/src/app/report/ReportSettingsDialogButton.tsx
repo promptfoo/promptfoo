@@ -6,11 +6,17 @@ import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import IconButton from '@mui/material/IconButton';
+import Slider from '@mui/material/Slider';
 import Typography from '@mui/material/Typography';
 import { useReportStore } from './store';
 
 const ReportSettingsDialogButton: React.FC = () => {
-  const { showPercentagesOnRiskCards, setShowPercentagesOnRiskCards } = useReportStore();
+  const {
+    showPercentagesOnRiskCards,
+    setShowPercentagesOnRiskCards,
+    pluginPassRateThreshold,
+    setPluginPassRateThreshold,
+  } = useReportStore();
   const [open, setOpen] = React.useState(false);
 
   const handleOpen = () => {
@@ -43,6 +49,23 @@ const ReportSettingsDialogButton: React.FC = () => {
               />
               Show percentages on risk cards
             </label>
+          </Typography>
+          <Typography component="div" sx={{ padding: '16px 0' }}>
+            <label>Plugin Pass Rate Threshold: {(pluginPassRateThreshold * 100).toFixed(0)}%</label>
+            <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>
+              Sets the threshold for considering a plugin as passed on the risk cards.
+            </Typography>
+            <Slider
+              value={pluginPassRateThreshold}
+              onChange={(_, newValue) => setPluginPassRateThreshold(newValue as number)}
+              aria-labelledby="plugin-pass-rate-threshold-slider"
+              step={0.05}
+              marks
+              min={0}
+              max={1}
+              valueLabelDisplay="auto"
+              valueLabelFormat={(value) => `${(value * 100).toFixed(0)}%`}
+            />
           </Typography>
         </DialogContent>
         <DialogActions>

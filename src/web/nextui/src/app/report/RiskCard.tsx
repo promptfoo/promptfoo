@@ -23,7 +23,7 @@ const RiskCard: React.FC<{
   numTestsFailed: number;
   testTypes: { name: string; passed: boolean; percentage: number }[];
 }> = ({ title, subtitle, progressValue, numTestsPassed, numTestsFailed, testTypes }) => {
-  const { showPercentagesOnRiskCards } = useReportStore();
+  const { showPercentagesOnRiskCards, pluginPassRateThreshold } = useReportStore();
   return (
     <Card>
       <CardContent className="risk-card-container">
@@ -122,7 +122,7 @@ const RiskCard: React.FC<{
                       >
                         {`${Math.round(test.percentage * 100)}%`}
                       </Typography>
-                    ) : test.passed ? (
+                    ) : test.percentage > pluginPassRateThreshold ? (
                       <CheckCircleIcon className="risk-card-icon-passed" />
                     ) : (
                       <CancelIcon className="risk-card-icon-failed" />

@@ -17,14 +17,19 @@ const storage: StateStorage = {
 interface ReportState {
   showPercentagesOnRiskCards: boolean;
   setShowPercentagesOnRiskCards: (show: boolean) => void;
+  pluginPassRateThreshold: number;
+  setPluginPassRateThreshold: (threshold: number) => void;
 }
 
 export const useReportStore = create<ReportState>()(
   persist(
     (set) => ({
-      showPercentagesOnRiskCards: true,
+      showPercentagesOnRiskCards: false,
       setShowPercentagesOnRiskCards: (show: boolean) =>
         set(() => ({ showPercentagesOnRiskCards: show })),
+      pluginPassRateThreshold: 1.0,
+      setPluginPassRateThreshold: (threshold: number) =>
+        set(() => ({ pluginPassRateThreshold: threshold })),
     }),
     {
       name: 'ReportViewStorage',
