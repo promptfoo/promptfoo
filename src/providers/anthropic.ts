@@ -1,7 +1,7 @@
 import Anthropic, { APIError } from '@anthropic-ai/sdk';
 import { getCache, isCacheEnabled } from '../cache';
 import logger from '../logger';
-import type { ApiProvider, EnvOverrides, ProviderResponse, TokenUsage } from '../types/index.js';
+import type { ApiProvider, EnvOverrides, ProviderResponse, TokenUsage } from '../types';
 import { parseChatPrompt } from './shared';
 
 const ANTHROPIC_MODELS = [

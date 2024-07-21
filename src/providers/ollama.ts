@@ -1,6 +1,6 @@
 import { fetchWithCache } from '../cache';
 import logger from '../logger';
-import type { ApiProvider, ProviderEmbeddingResponse, ProviderResponse } from '../types/index.js';
+import type { ApiProvider, ProviderEmbeddingResponse, ProviderResponse } from '../types';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
 
 interface OllamaCompletionOptions {

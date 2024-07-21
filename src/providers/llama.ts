@@ -1,5 +1,5 @@
 import { fetchWithCache } from '../cache';
-import type { ApiProvider, ProviderResponse } from '../types/index.js';
+import type { ApiProvider, ProviderResponse } from '../types';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
 interface LlamaCompletionOptions {

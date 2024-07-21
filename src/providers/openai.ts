@@ -13,7 +13,7 @@ import type {
   ProviderModerationResponse,
   ProviderResponse,
   TokenUsage,
-} from '../types/index.js';
+} from '../types';
 import { renderVarsInObject } from '../util';
 import { safeJsonStringify } from '../util/json';
 import { OpenAiFunction, OpenAiTool } from './openaiUtil';
