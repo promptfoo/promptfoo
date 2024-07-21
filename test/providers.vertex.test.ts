@@ -34,6 +34,10 @@ describe('VertexChatProvider.callGeminiApi', () => {
     jest.mocked(getCache).mockReturnValue({
       get: jest.fn(),
       set: jest.fn(),
+      wrap: jest.fn(),
+      del: jest.fn(),
+      reset: jest.fn(),
+      store: {} as any,
     });
 
     jest.mocked(isCacheEnabled).mockReturnValue(true);

@@ -648,7 +648,7 @@ describe('call provider apis', () => {
           ok: true,
         };
 
-        jest.mocked(fetchMock).mockResolvedValue(mockResponse);
+        fetchMock.mockResolvedValue(mockResponse as never);
         const result = await provider.callApi('Test chat prompt');
 
         expect(fetch).toHaveBeenCalledTimes(1);
