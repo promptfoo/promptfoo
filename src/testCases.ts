@@ -17,6 +17,7 @@ import type {
   CsvRow,
   ProviderOptions,
   TestCase,
+  TestCaseWithVarsFile,
   TestSuite,
   TestSuiteConfig,
   VarMapping,
@@ -83,9 +84,6 @@ export async function readStandaloneTestsFile(
   });
 }
 
-type TestCaseWithVarsFile = TestCase<
-  Record<string, string | string[] | object> | string | string[]
->;
 export async function readTest(
   test: string | TestCaseWithVarsFile,
   basePath: string = '',

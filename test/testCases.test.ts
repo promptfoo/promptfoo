@@ -4,7 +4,7 @@ import yaml from 'js-yaml';
 import { testCaseFromCsvRow } from '../src/csv';
 import { loadApiProvider } from '../src/providers';
 import { readStandaloneTestsFile, readTest, readTests } from '../src/testCases';
-import type { AssertionType, TestCase } from '../src/types';
+import type { AssertionType, TestCase, TestCaseWithVarsFile } from '../src/types';
 
 jest.mock('node-fetch', () => jest.fn());
 jest.mock('proxy-agent', () => ({
@@ -120,7 +120,7 @@ describe('readTest', () => {
   });
 
   it('readTest with TestCase that contains a vars glob input', async () => {
-    const input = {
+    const input: TestCaseWithVarsFile = {
       description: 'Test 1',
       vars: 'vars/*.yaml',
       assert: [{ type: 'equals' as AssertionType, value: 'value1' }],

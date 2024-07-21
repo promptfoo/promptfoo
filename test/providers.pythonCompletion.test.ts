@@ -30,7 +30,7 @@ describe('PythonProvider', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    mockGetCache.mockResolvedValue({ get: jest.fn(), set: jest.fn() });
+    (jest.mocked(mockGetCache)).mockResolvedValue({ get: jest.fn(), set: jest.fn() });
     mockIsCacheEnabled.mockReturnValue(false);
     mockReadFileSync.mockReturnValue('mock file content');
     mockResolve.mockReturnValue('/absolute/path/to/script.py');
@@ -51,7 +51,7 @@ describe('PythonProvider', () => {
       const provider = new PythonProvider('script.py');
       mockRunPython.mockResolvedValue({ output: 'test output' });
 
-      const result = await provider.callApi('test prompt', { someContext: true });
+      const result = await provider.callApi('test prompt', { someContext: true } as any);
 
       expect(mockRunPython).toHaveBeenCalledWith(
         expect.any(String),
@@ -83,7 +83,7 @@ describe('PythonProvider', () => {
 
       it('should throw an error when Python script returns null', async () => {
         const provider = new PythonProvider('script.py');
-        mockRunPython.mockResolvedValue(null);
+        (jest.mocked(mockRunPython)).mockResolvedValue(null);
 
         await expect(provider.callApi('test prompt')).rejects.toThrow(
           'The Python script `call_api` function must return a dict with an `output` string/object or `error` string, instead got: null',
@@ -175,7 +175,7 @@ describe('PythonProvider', () => {
         get: jest.fn().mockResolvedValue(JSON.stringify({ output: 'cached result' })),
         set: jest.fn(),
       };
-      mockGetCache.mockResolvedValue(mockCache);
+      (jest.mocked(mockGetCache)).mockResolvedValue(mockCache);
 
       const result = await provider.callApi('test prompt');
 
@@ -190,7 +190,7 @@ describe('PythonProvider', () => {
       const provider = new PythonProvider('script.py');
       mockIsCacheEnabled.mockReturnValue(true);
       const mockCache = { get: jest.fn().mockResolvedValue(null), set: jest.fn() };
-      mockGetCache.mockResolvedValue(mockCache);
+      (jest.mocked(mockGetCache)).mockResolvedValue(mockCache);
       mockRunPython.mockResolvedValue({ output: 'new result' });
 
       await provider.callApi('test prompt');

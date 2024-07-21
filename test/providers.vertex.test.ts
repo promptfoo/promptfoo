@@ -31,8 +31,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
         topK: 40,
       },
     });
-
-    jest.mocked(getCache).mockReturnValue({
+    (jest.mocked(getCache)).mockReturnValue({
       get: jest.fn(),
       set: jest.fn(),
     });
