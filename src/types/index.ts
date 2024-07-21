@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { redteamConfigSchema } from '../redteam/types';
 
 export const CommandLineOptionsSchema = z.object({
   // Shared with TestSuite
@@ -615,6 +616,9 @@ const ProviderPromptMapSchema = z.record(
 export const ProviderSchema = z.union([z.string(), ProviderOptionsSchema, ApiProviderSchema]);
 export type Provider = z.infer<typeof ProviderSchema>;
 
+// Metadata is a key-value store for arbitrary data
+const MetadataSchema = z.record(z.string(), z.any());
+
 const VarsSchema = z.record(
   z.union([
     z.string(),
@@ -658,6 +662,8 @@ export const TestCaseSchema = z.object({
 
   // The required score for this test case.  If not provided, the test case is graded pass/fail.
   threshold: z.number().optional(),
+
+  metadata: MetadataSchema.optional(),
 });
 
 export type TestCase<Vars = Record<string, string | string[] | object>> = z.infer<
@@ -698,6 +704,7 @@ export type Scenario = z.infer<typeof ScenarioSchema>;
 export const AtomicTestCaseSchema = TestCaseSchema.extend({
   vars: z.record(z.union([z.string(), z.object({})])).optional(),
 }).strict();
+
 export type AtomicTestCase<Vars = Record<string, string | object>> = z.infer<
   typeof AtomicTestCaseSchema
 >;
@@ -755,6 +762,9 @@ export const TestSuiteSchema = z.object({
 
   // Metrics to calculate after the eval has been completed
   derivedMetrics: z.array(DerivedMetricSchema).optional(),
+
+  // Redteam configuration - used only when generating redteam tests
+  redteam: redteamConfigSchema.optional(),
 });
 
 export type TestSuite = z.infer<typeof TestSuiteSchema>;
@@ -826,7 +836,10 @@ export const TestSuiteConfigSchema = z.object({
   derivedMetrics: z.array(DerivedMetricSchema).optional(),
 
   // Any other information about this configuration.
-  metadata: z.record(z.string(), z.any()).optional(),
+  metadata: MetadataSchema.optional(),
+
+  // Redteam configuration - used only when generating redteam tests
+  redteam: redteamConfigSchema.optional(),
 });
 
 export type TestSuiteConfig = z.infer<typeof TestSuiteConfigSchema>;

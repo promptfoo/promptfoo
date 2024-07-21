@@ -50,6 +50,10 @@ providers:
   - openai:gpt-3.5-turbo
 ```
 
+:::tip
+You can specify your redteam configuration directly in `promptfooconfig.yaml`. See the [configuration guide](/docs/red-team/configuration) for more information.
+:::
+
 Then create adversarial test cases:
 
 ```sh

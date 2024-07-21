@@ -34,6 +34,8 @@
   "scripts": {
     "bin": "dist/src/main.js",
     "tsc": "tsc",
+    "l": "git diff --name-only --diff-filter=ACMRTUXB origin/main | grep -E '\\.(js|ts|tsx)$' | xargs eslint --max-warnings=0 --fix",
+    "f": "git diff --name-only --diff-filter=ACMRTUXB origin/main | xargs prettier --write",
     "lint": "eslint . --max-warnings=0",
     "local": "ts-node --cwdMode --transpileOnly src/main.ts",
     "local:web": "npm run dev --prefix src/web/nextui",
