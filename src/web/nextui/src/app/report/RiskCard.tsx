@@ -20,7 +20,7 @@ const RiskCard: React.FC<{
   progressValue: number;
   numTestsPassed: number;
   numTestsFailed: number;
-  testTypes: { name: string; passed: boolean }[];
+  testTypes: { name: string; passed: boolean; percentage: number }[];
 }> = ({ title, subtitle, progressValue, numTestsPassed, numTestsFailed, testTypes }) => (
   <Card>
     <CardContent className="risk-card-container">
@@ -102,11 +102,25 @@ const RiskCard: React.FC<{
                     }
                     primaryTypographyProps={{ variant: 'body2' }}
                   />
+                  {/*
                   {test.passed ? (
                     <CheckCircleIcon className="risk-card-icon-passed" />
                   ) : (
                     <CancelIcon className="risk-card-icon-failed" />
                   )}
+                  */}
+                  <Typography
+                    variant="body2"
+                    className={`risk-card-percentage ${
+                      test.percentage >= 0.8
+                        ? 'risk-card-percentage-high'
+                        : test.percentage >= 0.5
+                          ? 'risk-card-percentage-medium'
+                          : 'risk-card-percentage-low'
+                    }`}
+                  >
+                    {`${Math.round(test.percentage * 100)}%`}
+                  </Typography>
                 </ListItem>
               </Tooltip>
             ))}
