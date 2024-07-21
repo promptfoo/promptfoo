@@ -28,20 +28,19 @@ const Overview: React.FC<OverviewProps> = ({ categoryStats }) => {
   );
 
   return (
-    <Stack spacing={2} mb={4} direction="row">
+    <Stack spacing={2} direction={{ xs: 'column', sm: 'row' }}>
       {severities.map((severity) => (
-        <Box
-          key={severity}
-          width={{ xs: '100%', sm: 'calc(50% - 8px)', md: 'calc(25% - 8px)' }}
-          mb={2}
-        >
-          <Card className={`card-${severity.toLowerCase()}`}>
+        <Box key={severity} flex={1}>
+          <Card className={`severity-card card-${severity.toLowerCase()}`}>
             <CardContent onClick={() => (window.location.hash = '#table')}>
-              <Typography variant="body2" component="div">
+              <Typography variant="h6" gutterBottom>
                 {severity}
               </Typography>
-              <Typography variant="h6" color="text.primary">
-                {severityCounts[severity]} issues
+              <Typography variant="h4" color="text.primary">
+                {severityCounts[severity]}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                issues
               </Typography>
             </CardContent>
           </Card>

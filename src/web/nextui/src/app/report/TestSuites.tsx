@@ -89,10 +89,10 @@ const TestSuites: React.FC<{
 
   return (
     <Box>
-      <Typography variant="h6" gutterBottom id="table">
+      <Typography variant="h5" gutterBottom id="table">
         Vulnerabilities and Mitigations
       </Typography>
-      <TableContainer component={Paper}>
+      <TableContainer>
         <Table>
           <TableHead>
             <TableRow>

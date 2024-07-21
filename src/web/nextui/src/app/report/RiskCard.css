@@ -28,6 +28,12 @@
   border-radius: 4px;
 }
 
+[data-theme='dark'] .risk-card-list-item:hover {
+  background-color: #2a2a2a;
+  box-shadow: 0 0 0 1px #555555;
+  border-radius: 4px;
+}
+
 .risk-card-icon-passed {
   color: green;
   font-size: 16px;

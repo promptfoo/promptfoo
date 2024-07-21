@@ -1,13 +1,19 @@
-.report-header strong {
-  font-weight: 500;
+.report-header {
+  padding: 24px;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+[data-theme='dark'] .report-header {
+  box-shadow: none;
 }
 
 .report-details {
   display: flex;
-  flex-direction: row;
-  gap: 10px;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
-.report-details strong {
-  font-weight: 500;
+.report-details .MuiChip-root {
+  font-size: 0.875rem;
 }
