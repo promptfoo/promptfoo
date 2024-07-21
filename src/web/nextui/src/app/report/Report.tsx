@@ -10,6 +10,7 @@ import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import type { ResultsFile, SharedResults } from '../eval/types';
 import Overview from './Overview';
+import ReportSettingsDialogButton from './ReportSettingsDialogButton';
 import RiskCategories from './RiskCategories';
 import TestSuites from './TestSuites';
 import { categoryAliases, categoryAliasesReverse } from './constants';
@@ -40,7 +41,7 @@ const App: React.FC = () => {
   }, []);
 
   if (!evalData || !evalId) {
-    return <div>Loading...</div>;
+    return <Box sx={{ width: '100%', textAlign: 'center' }}>Loading...</Box>;
   }
 
   const prompt = evalData.results.table.head.prompts[0];
@@ -84,7 +85,8 @@ const App: React.FC = () => {
   return (
     <Container>
       <Stack spacing={4} pb={8} pt={2}>
-        <Card className="report-header">
+        <Card className="report-header" sx={{ position: 'relative' }}>
+          <ReportSettingsDialogButton />
           <Typography variant="h4">
             <strong>LLM Risk Assessment</strong>
             {evalData.config.description && `: ${evalData.config.description}`}
@@ -118,7 +120,7 @@ const App: React.FC = () => {
               label={
                 <>
                   <strong>Prompt:</strong> &quot;
-                  {prompt.raw.length > 20 ? `${prompt.raw.substring(0, 20)}...` : prompt.raw}
+                  {prompt.raw.length > 40 ? `${prompt.raw.substring(0, 40)}...` : prompt.raw}
                   &quot;
                 </>
               }

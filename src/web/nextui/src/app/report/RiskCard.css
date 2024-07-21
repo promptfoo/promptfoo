@@ -43,3 +43,32 @@
   color: red;
   font-size: 16px;
 }
+
+.risk-card-percentage {
+  margin-left: 8px;
+  font-weight: bold;
+}
+
+.risk-card-percentage-high {
+  color: #4caf50;
+}
+
+.risk-card-percentage-medium {
+  color: #ff9800;
+}
+
+.risk-card-percentage-low {
+  color: #f44336;
+}
+
+[data-theme='dark'] .risk-card-percentage-high {
+  color: #81c784;
+}
+
+[data-theme='dark'] .risk-card-percentage-medium {
+  color: #ffb74d;
+}
+
+[data-theme='dark'] .risk-card-percentage-low {
+  color: #e57373;
+}
