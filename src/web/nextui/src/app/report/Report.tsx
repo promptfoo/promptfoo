@@ -72,11 +72,16 @@ const App: React.FC = () => {
           const isPass = result.pass;
           return isLlmRubric && isPass;
         });
+        const rowPassedHuman = row.gradingResult?.componentResults?.some((result) => {
+          const isHuman = result.assertion?.type === 'human';
+          const isPass = result.pass;
+          return isHuman && isPass;
+        });
 
         acc[pluginName] = acc[pluginName] || { pass: 0, total: 0, passWithFilter: 0 };
         acc[pluginName].total++;
-        if (rowPassedLlmRubric) {
-          // Note: We count the row as passed if it passed the LLM rubric, even if it failed moderation
+        if (rowPassedLlmRubric || rowPassedHuman) {
+          // Note: We count the row as passed if it passed the LLM rubric or human, even if it failed moderation
           acc[pluginName].pass++;
           acc[pluginName].passWithFilter++;
         } else if (!rowPassedModeration) {
