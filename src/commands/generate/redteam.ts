@@ -14,6 +14,7 @@ import {
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
   ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
   DEFAULT_STRATEGIES,
+  ADDITIONAL_STRATEGIES,
 } from '../../redteam/constants';
 import {
   RedteamConfig,
@@ -103,8 +104,8 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
     typeof s === 'string' ? { id: s } : s,
   ) as { id: string }[];
 
-  logger.error(`plugins: ${plugins.map((p) => p.id).join(', ')}`);
-  logger.error(`strategies: ${strategyObjs.map((s) => s.id).join(', ')}`);
+  logger.debug(`plugins: ${plugins.map((p) => p.id ?? p).join(', ')}`);
+  logger.debug(`strategies: ${strategyObjs.map((s) => s.id ?? s).join(', ')}`);
 
   const config = {
     injectVar: redteamConfig?.injectVar || options.injectVar,
@@ -114,11 +115,7 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
     purpose: redteamConfig?.purpose || options.purpose,
     strategies: strategyObjs,
   };
-  // parse the config again to see if there are any errors
   const parsedConfig = redteamConfigSchema.safeParse(config);
-  logger.error(`parsedConfig: ${parsedConfig.success}`);
-  logger.error(`parsedConfig: ${JSON.stringify(parsedConfig, null, 2)}`);
-
   const redteamTests = await synthesize({
     ...parsedConfig.data,
     prompts: testSuite.prompts.map((prompt) => prompt.raw),
@@ -201,6 +198,20 @@ export function generateRedteamCommand(
       (val) => val.split(',').map((x) => x.trim()),
     )
     .option(
+      '--strategies <strategies>',
+      dedent`Comma-separated list of strategies to use. Use 'none' to disable all strategies. Defaults to:
+        \n- ${DEFAULT_STRATEGIES.sort().join('\n- ')}\n\n
+      `,
+      (val) => (val.toLowerCase() === 'none' ? [] : val.split(',').map((x) => x.trim())),
+    )
+    .option(
+      '--add-strategies <strategies>',
+      dedent`Comma-separated list of strategies to run in addition to the default strategies:
+        \n- ${ADDITIONAL_STRATEGIES.sort().join('\n- ')}\n\n
+      `,
+      (val) => val.split(',').map((x) => x.trim()),
+    )
+    .option(
       '-n, --num-tests <number>',
       'Number of test cases to generate per plugin',
       (val) => (Number.isInteger(val) ? val : parseInt(val, 10)),
@@ -210,18 +221,31 @@ export function generateRedteamCommand(
     .option('--env-file <path>', 'Path to .env file')
     .action((opts: Partial<RedteamGenerateOptions>): void => {
       try {
-        const plugins = redteamConfigSchema.safeParse({
-          plugins: opts.plugins,
-        }).data?.plugins;
+        let overrides: Record<string, any> = {};
+        if (opts.plugins && opts.plugins.length > 0) {
+          logger.warn(`Overriding plugins: ${opts.plugins.join(', ')}`);
+          const parsed = redteamConfigSchema.safeParse({
+            plugins: opts.plugins,
+            strategies: opts.strategies,
+            numTests: opts.numTests,
+          });
+          if (!parsed.success) {
+            logger.error('Invalid options:');
+            parsed.error.errors.forEach((err: z.ZodIssue) => {
+              logger.error(`  ${err.path.join('.')}: ${err.message}`);
+            });
+            process.exit(1);
+          }
+          overrides = parsed.data;
+        }
         const validatedOpts = RedteamGenerateOptionsSchema.parse({
           ...opts,
           defaultConfig,
           defaultConfigPath,
+          ...(overrides.plugins ? { plugins: overrides.plugins } : {}),
+          ...(overrides.strategies ? { strategies: overrides.strategies } : {}),
         });
-        doGenerateRedteam({
-          ...validatedOpts,
-          plugins,
-        });
+        doGenerateRedteam(validatedOpts);
       } catch (error) {
         if (error instanceof z.ZodError) {
           logger.error('Invalid options:');

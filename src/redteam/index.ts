@@ -5,7 +5,7 @@ import logger from '../logger';
 import { loadApiProvider } from '../providers';
 import type { ApiProvider, TestCase } from '../types';
 import { extractVariablesFromTemplates } from '../util/templates';
-import { REDTEAM_MODEL, ALL_PLUGINS, HARM_PLUGINS, PII_PLUGINS } from './constants';
+import { REDTEAM_MODEL, HARM_PLUGINS, PII_PLUGINS } from './constants';
 import CompetitorPlugin from './plugins/competitors';
 import ContractPlugin from './plugins/contracts';
 import DebugAccessPlugin from './plugins/debugInterface';
@@ -159,14 +159,31 @@ const Strategies: Strategy[] = [
   },
 ];
 
-function validatePlugins(plugins: string[]): void {
-  const invalidPlugins = plugins.filter((plugin) => !ALL_PLUGINS.includes(plugin));
+function validatePlugins(plugins: { id: string; numTests: number }[]): void {
+  logger.error(`Plugins: ${plugins.map((p) => `${p.id} (${p.numTests})`).join('\n')}`);
+  const invalidPlugins = plugins.filter((plugin) => !Plugins.map((p) => p.key).includes(plugin.id));
   if (invalidPlugins.length > 0) {
-    const validPluginsString = Array.from(ALL_PLUGINS).join(', ');
-    const invalidPluginsString = invalidPlugins.join(', ');
+    const validPluginsString = Plugins.map((p) => p.key).join(', ');
+    const invalidPluginsString = invalidPlugins.map((p) => p.id).join(', ');
     throw new Error(
       `Invalid plugin(s): ${invalidPluginsString}. Valid plugins are: ${validPluginsString}`,
     );
+  }
+  const pluginsWithoutNumTests = plugins.filter(
+    (plugin) => !Number.isSafeInteger(plugin.numTests) || plugin.numTests <= 0,
+  );
+  if (pluginsWithoutNumTests.length > 0) {
+    const pluginsWithoutNumTestsString = pluginsWithoutNumTests.map((p) => p.id).join(', ');
+    throw new Error(`Plugins without a numTests: ${pluginsWithoutNumTestsString}`);
+  }
+}
+
+function validateStrategies(strategies: { id: string }[]): void {
+  const invalidStrategies = strategies.filter(
+    (strategy) => !Strategies.map((s) => s.key).includes(strategy.id),
+  );
+  if (invalidStrategies.length > 0) {
+    throw new Error(`Invalid strategy(s): ${invalidStrategies.join(', ')}`);
   }
 }
 
@@ -186,7 +203,8 @@ export async function synthesize({
   strategies,
   plugins,
 }: SynthesizeOptions) {
-  // validatePlugins(plugins.map((p) => p.id));
+  validatePlugins(plugins);
+  validateStrategies(strategies);
   const redteamProvider: ApiProvider = await loadApiProvider(provider || REDTEAM_MODEL, {
     options: {
       config: { temperature: 0.5 },
