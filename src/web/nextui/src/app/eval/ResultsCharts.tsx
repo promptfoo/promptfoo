@@ -28,10 +28,16 @@ import {
 } from 'chart.js';
 import { createHash } from 'crypto';
 import { useStore } from './store';
-import type { EvaluateTable, UnifiedConfig, TestCasesWithMetadata } from './types';
+import type {
+  EvaluateTable,
+  UnifiedConfig,
+  TestCasesWithMetadata,
+  ResultLightweightWithLabel,
+} from './types';
 
 interface ResultsChartsProps {
   columnVisibility: VisibilityState;
+  recentEvals: ResultLightweightWithLabel[];
 }
 
 interface ChartProps {
@@ -420,17 +426,7 @@ function MetricChart({ table }: ChartProps) {
   return <canvas ref={metricCanvasRef} style={{ maxHeight: '300px' }}></canvas>;
 }
 
-const fetchDataset = async (id: string) => {
-  try {
-    const res = await fetch(`${await getApiBaseUrl()}/api/evals/${id}`);
-    return await res.json();
-  } catch (err) {
-    const error = err as Error;
-    throw new Error(`Fetch dataset data using given id failed: ${error.message}.`);
-  }
-};
-
-function LineChart({ table, evalId, config, datasetId }: ChartProps) {
+function PerformanceOverTimeChart({ table, evalId, config, datasetId }: ChartProps) {
   const lineCanvasRef = useRef(null);
   const lineChartInstance = useRef<Chart | null>(null);
   const [dataset, setDataset] = useState<TestCasesWithMetadata>();
@@ -448,6 +444,16 @@ function LineChart({ table, evalId, config, datasetId }: ChartProps) {
     y: number;
     metadata: PointMetadata;
   }
+
+  const fetchDataset = async (id: string) => {
+    try {
+      const res = await fetch(`${await getApiBaseUrl()}/api/evals/${id}`);
+      return await res.json();
+    } catch (err) {
+      const error = err as Error;
+      throw new Error(`Fetch dataset data using given id failed: ${error.message}.`);
+    }
+  };
 
   function ordinalSuffixOf(i: number): string {
     const j = i % 10,
@@ -629,11 +635,11 @@ function LineChart({ table, evalId, config, datasetId }: ChartProps) {
   return <canvas ref={lineCanvasRef} style={{ maxHeight: '300px', cursor: 'pointer' }} />;
 }
 
-function ResultsCharts({ columnVisibility }: ResultsChartsProps) {
+function ResultsCharts({ columnVisibility, recentEvals }: ResultsChartsProps) {
   const theme = useTheme();
   Chart.defaults.color = theme.palette.mode === 'dark' ? '#aaa' : '#666';
   const [showCharts, setShowCharts] = useState(true);
-  const [showLineChart, setShowLineChart] = useState(false);
+  const [showPerformanceOverTimeChart, setShowPerformanceOverTimeChart] = useState(false);
 
   const { table, evalId, config } = useStore();
 
@@ -645,14 +651,44 @@ function ResultsCharts({ columnVisibility }: ResultsChartsProps) {
 
   useMemo(async () => {
     if (datasetId) {
-      const data = await fetchDataset(datasetId);
-      setShowLineChart(data.data[0].count > 1);
+      const filteredEvals = recentEvals.filter((evaluation) => evaluation.datasetId === datasetId);
+      console.log(filteredEvals);
+      setShowPerformanceOverTimeChart(filteredEvals.length > 1);
     } else {
       setShowCharts(false);
     }
-  }, [datasetId]);
+  }, [datasetId, recentEvals]);
 
-  if (!table || !config || !showCharts || table.head.prompts.length < 2) {
+  if (!table || !config || !showCharts) {
+    return null;
+  }
+
+  console.log(datasetId);
+
+  if (table.head.prompts.length < 2) {
+    if (showPerformanceOverTimeChart) {
+      return (
+        <ErrorBoundary fallback={null}>
+          <Paper style={{ padding: theme.spacing(3) }}>
+            <IconButton
+              style={{ position: 'absolute', right: 0, top: 0 }}
+              onClick={() => setShowCharts(false)}
+            >
+              <CloseIcon />
+            </IconButton>
+
+            <div style={{ width: '100%' }}>
+              <PerformanceOverTimeChart
+                table={table}
+                evalId={evalId}
+                config={config}
+                datasetId={datasetId}
+              />
+            </div>
+          </Paper>
+        </ErrorBoundary>
+      );
+    }
     return null;
   }
 
@@ -663,7 +699,7 @@ function ResultsCharts({ columnVisibility }: ResultsChartsProps) {
     return null;
   }
 
-  const chartWidth = showLineChart ? '25%' : '33%';
+  const chartWidth = showPerformanceOverTimeChart ? '25%' : '33%';
 
   return (
     <ErrorBoundary fallback={null}>
@@ -689,9 +725,14 @@ function ResultsCharts({ columnVisibility }: ResultsChartsProps) {
           <div style={{ width: chartWidth }}>
             <ScatterChart table={table} />
           </div>
-          {showLineChart && (
+          {showPerformanceOverTimeChart && (
             <div style={{ width: chartWidth }}>
-              <LineChart table={table} evalId={evalId} config={config} datasetId={datasetId} />
+              <PerformanceOverTimeChart
+                table={table}
+                evalId={evalId}
+                config={config}
+                datasetId={datasetId}
+              />
             </div>
           )}
         </div>
