@@ -2,9 +2,9 @@ import * as fs from 'fs';
 import { PythonShell, Options as PythonShellOptions } from 'python-shell';
 import invariant from 'tiny-invariant';
 import logger from '../../logger';
-import { runPython } from '../../python/wrapper';
+import { runPython } from '../../python/pythonUtils';
 import type { Prompt, ApiProvider, PromptFunctionContext } from '../../types';
-import { safeJsonStringify } from '../../util';
+import { safeJsonStringify } from '../../util/json';
 
 /**
  * Python prompt function. Runs a specific function from the python file.

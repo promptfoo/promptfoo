@@ -9,6 +9,7 @@ interface SafetyRating {
     | 'HARM_CATEGORY_SEXUALLY_EXPLICIT'
     | 'HARM_CATEGORY_DANGEROUS_CONTENT';
   probability: Probability;
+  blocked: boolean;
 }
 
 interface PartText {
@@ -31,7 +32,7 @@ interface Content {
 
 interface Candidate {
   content: Content;
-  finishReason?: 'FINISH_REASON_STOP' | 'STOP';
+  finishReason?: 'FINISH_REASON_STOP' | 'STOP' | 'SAFETY';
   safetyRatings: SafetyRating[];
 }
 

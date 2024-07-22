@@ -6,7 +6,7 @@ import type { RequestInfo, RequestInit } from 'node-fetch';
 import path from 'path';
 import { fetchWithRetries } from './fetch';
 import logger from './logger';
-import { getConfigDirectoryPath } from './util';
+import { getConfigDirectoryPath } from './util/config';
 
 let cacheInstance: Cache | undefined;
 

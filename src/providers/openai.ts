@@ -13,13 +13,27 @@ import type {
   ProviderModerationResponse,
   ProviderResponse,
   TokenUsage,
-} from '../types.js';
+} from '../types';
 import { renderVarsInObject } from '../util';
-import { safeJsonStringify } from '../util';
+import { safeJsonStringify } from '../util/json';
 import { OpenAiFunction, OpenAiTool } from './openaiUtil';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase } from './shared';
 
 const OPENAI_CHAT_MODELS = [
+  ...['gpt-4o-mini', 'gpt-4o-mini-2024-07-18'].map((model) => ({
+    id: model,
+    cost: {
+      input: 0.15 / 1000000,
+      output: 0.6 / 1000000,
+    },
+  })),
+  ...['gpt-4o', 'gpt-4o-2024-05-13'].map((model) => ({
+    id: model,
+    cost: {
+      input: 5 / 1000000,
+      output: 15 / 1000000,
+    },
+  })),
   ...['gpt-4', 'gpt-4-0314', 'gpt-4-0613'].map((model) => ({
     id: model,
     cost: {
@@ -47,20 +61,6 @@ const OPENAI_CHAT_MODELS = [
     cost: {
       input: 60 / 1000000,
       output: 120 / 1000000,
-    },
-  })),
-  ...['gpt-4o', 'gpt-4o-2024-05-13'].map((model) => ({
-    id: model,
-    cost: {
-      input: 5 / 1000000,
-      output: 15 / 1000000,
-    },
-  })),
-  ...['gpt-4o-mini', 'gpt-4o-mini-2024-07-18'].map((model) => ({
-    id: model,
-    cost: {
-      input: 0.15 / 1000000,
-      output: 0.6 / 1000000,
     },
   })),
   ...['gpt-3.5-turbo', 'gpt-3.5-turbo-0301', 'gpt-3.5-turbo-0613'].map((model) => ({

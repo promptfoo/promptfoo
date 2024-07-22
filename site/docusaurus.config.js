@@ -173,8 +173,12 @@ const config = {
             ],
           },
           {
-            title: 'Guides',
+            title: 'Guides & Tools',
             items: [
+              {
+                label: 'LLM red teaming',
+                to: '/docs/red-team',
+              },
               {
                 label: 'Running benchmarks',
                 to: '/docs/guides/llama2-uncensored-benchmark-ollama',
@@ -192,8 +196,8 @@ const config = {
                 to: '/docs/guides/prevent-llm-hallucations',
               },
               {
-                label: 'LLM red teaming',
-                to: '/docs/red-team',
+                label: 'Promptfoo Config Validator',
+                to: '/validator',
               },
             ],
           },
@@ -201,20 +205,20 @@ const config = {
             title: 'Community',
             items: [
               {
-                label: 'GitHub',
-                href: 'https://github.com/promptfoo/promptfoo',
-              },
-              {
-                label: 'Discord',
-                href: 'https://discord.gg/gHPS9jjfbs',
-              },
-              {
                 label: 'Blog',
                 href: '/blog',
               },
               {
                 label: 'Contact Us',
                 href: '/contact/',
+              },
+              {
+                label: 'GitHub',
+                href: 'https://github.com/promptfoo/promptfoo',
+              },
+              {
+                label: 'Discord',
+                href: 'https://discord.gg/gHPS9jjfbs',
               },
             ],
           },
