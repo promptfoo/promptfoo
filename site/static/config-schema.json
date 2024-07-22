@@ -216,10 +216,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "raw",
-                      "label"
-                    ],
+                    "required": ["raw", "label"],
                     "additionalProperties": false
                   }
                 ]
@@ -367,10 +364,7 @@
                                   "type": "number"
                                 }
                               },
-                              "required": [
-                                "type",
-                                "assert"
-                              ],
+                              "required": ["type", "assert"],
                               "additionalProperties": false
                             },
                             {
@@ -432,10 +426,7 @@
                                           "type": "string"
                                         }
                                       },
-                                      "required": [
-                                        "role",
-                                        "content"
-                                      ],
+                                      "required": ["role", "content"],
                                       "additionalProperties": false
                                     }
                                   }
@@ -566,10 +557,7 @@
                 }
               }
             },
-            "required": [
-              "config",
-              "tests"
-            ],
+            "required": ["config", "tests"],
             "additionalProperties": false
           }
         },
@@ -657,10 +645,7 @@
                 ]
               }
             },
-            "required": [
-              "name",
-              "value"
-            ],
+            "required": ["name", "value"],
             "additionalProperties": false
           }
         },
@@ -793,9 +778,7 @@
                         "description": "Number of tests to generate for this plugin"
                       }
                     },
-                    "required": [
-                      "id"
-                    ],
+                    "required": ["id"],
                     "additionalProperties": false
                   }
                 ]
@@ -809,11 +792,7 @@
                 "anyOf": [
                   {
                     "type": "string",
-                    "enum": [
-                      "jailbreak",
-                      "prompt-injection",
-                      "experimental-jailbreak"
-                    ],
+                    "enum": ["jailbreak", "prompt-injection", "experimental-jailbreak"],
                     "description": "Name of the strategy"
                   },
                   {
@@ -821,17 +800,11 @@
                     "properties": {
                       "id": {
                         "type": "string",
-                        "enum": [
-                          "jailbreak",
-                          "prompt-injection",
-                          "experimental-jailbreak"
-                        ],
+                        "enum": ["jailbreak", "prompt-injection", "experimental-jailbreak"],
                         "description": "Name of the strategy"
                       }
                     },
-                    "required": [
-                      "id"
-                    ],
+                    "required": ["id"],
                     "additionalProperties": false
                   }
                 ]
@@ -991,11 +964,7 @@
           "additionalProperties": false
         }
       },
-      "required": [
-        "providers",
-        "prompts",
-        "tests"
-      ],
+      "required": ["providers", "prompts", "tests"],
       "additionalProperties": false
     }
   },
