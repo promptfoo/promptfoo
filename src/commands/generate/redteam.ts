@@ -141,6 +141,8 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
   } else if (options.write && configPath) {
     const existingConfig = yaml.load(fs.readFileSync(configPath, 'utf8')) as Partial<UnifiedConfig>;
     existingConfig.tests = [...(existingConfig.tests || []), ...redteamTests];
+    existingConfig.metadata = existingConfig.metadata || {};
+    existingConfig.metadata.redteam = true;
     fs.writeFileSync(configPath, yaml.dump(existingConfig));
     logger.info(`\nWrote ${redteamTests.length} new test cases to ${configPath}`);
     logger.info(
