@@ -20,13 +20,6 @@ import { OpenAiFunction, OpenAiTool } from './openaiUtil';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase } from './shared';
 
 const OPENAI_CHAT_MODELS = [
-  ...['gpt-4o-mini', 'gpt-4o-mini-2024-07-18'].map((model) => ({
-    id: model,
-    cost: {
-      input: 0.15 / 1000000,
-      output: 0.6 / 1000000,
-    },
-  })),
   ...['gpt-4o', 'gpt-4o-2024-05-13'].map((model) => ({
     id: model,
     cost: {
@@ -34,7 +27,14 @@ const OPENAI_CHAT_MODELS = [
       output: 15 / 1000000,
     },
   })),
-  ...['gpt-4', 'gpt-4-0314', 'gpt-4-0613'].map((model) => ({
+  ...['gpt-4o-mini', 'gpt-4o-mini-2024-07-18'].map((model) => ({
+    id: model,
+    cost: {
+      input: 0.15 / 1000000,
+      output: 0.6 / 1000000,
+    },
+  })),
+  ...['gpt-4', 'gpt-4-0613'].map((model) => ({
     id: model,
     cost: {
       input: 30 / 1000000,
@@ -42,13 +42,11 @@ const OPENAI_CHAT_MODELS = [
     },
   })),
   ...[
-    'gpt-4-0125-preview',
-    'gpt-4-1106-preview',
-    'gpt-4-1106-vision-preview',
     'gpt-4-turbo',
     'gpt-4-turbo-2024-04-09',
     'gpt-4-turbo-preview',
-    'gpt-4-vision-preview',
+    'gpt-4-0125-preview',
+    'gpt-4-1106-preview',
   ].map((model) => ({
     id: model,
     cost: {
@@ -56,25 +54,11 @@ const OPENAI_CHAT_MODELS = [
       output: 30 / 1000000,
     },
   })),
-  ...['gpt-4-32k', 'gpt-4-32k-0314', 'gpt-4-32k-0613'].map((model) => ({
-    id: model,
-    cost: {
-      input: 60 / 1000000,
-      output: 120 / 1000000,
-    },
-  })),
-  ...['gpt-3.5-turbo', 'gpt-3.5-turbo-0301', 'gpt-3.5-turbo-0613'].map((model) => ({
-    id: model,
-    cost: {
-      input: 1.5 / 1000000,
-      output: 2 / 1000000,
-    },
-  })),
   {
-    id: 'gpt-3.5-turbo-1106',
+    id: 'gpt-3.5-turbo',
     cost: {
-      input: 1 / 1000000,
-      output: 2 / 1000000,
+      input: 0.5 / 1000000,
+      output: 1.5 / 1000000,
     },
   },
   {
@@ -84,20 +68,35 @@ const OPENAI_CHAT_MODELS = [
       output: 1.5 / 1000000,
     },
   },
-  ...['gpt-3.5-turbo-16k', 'gpt-3.5-turbo-16k-0613'].map((model) => ({
-    id: model,
+  {
+    id: 'gpt-3.5-turbo-1106',
     cost: {
-      input: 3 / 1000000,
-      output: 4 / 1000000,
+      input: 1 / 1000000,
+      output: 2 / 1000000,
     },
-  })),
-  ...['gpt-3.5-turbo-instruct', 'gpt-3.5-turbo-instruct-0914'].map((model) => ({
+  },
+  ...['gpt-3.5-turbo-instruct'].map((model) => ({
     id: model,
     cost: {
       input: 1.5 / 1000000,
       output: 2 / 1000000,
     },
   })),
+  // Commented out deprecated models
+  // ...['gpt-4-32k', 'gpt-4-32k-0314', 'gpt-4-32k-0613'].map((model) => ({
+  //   id: model,
+  //   cost: {
+  //     input: 60 / 1000000,
+  //     output: 120 / 1000000,
+  //   },
+  // })),
+  // ...['gpt-3.5-turbo-16k', 'gpt-3.5-turbo-16k-0613'].map((model) => ({
+  //   id: model,
+  //   cost: {
+  //     input: 3 / 1000000,
+  //     output: 4 / 1000000,
+  //   },
+  // })),
 ];
 
 const OPENAI_COMPLETION_MODELS = [
