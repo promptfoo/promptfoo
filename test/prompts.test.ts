@@ -272,7 +272,7 @@ describe('readPrompts', () => {
     jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
     await expect(readPrompts('prompts.yaml')).resolves.toEqual([
       {
-        raw: JSON.stringify(yaml.load(yamlContent)),
+        raw: yamlContent,
         label: `prompts.yaml: ${yamlContent}`,
       },
     ]);
@@ -300,7 +300,7 @@ describe('readPrompts', () => {
       ]),
     ).resolves.toEqual([
       {
-        raw: JSON.stringify(yaml.load(ymlContent)),
+        raw: ymlContent,
         label: `image-summary`,
       },
     ]);
