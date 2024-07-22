@@ -19,6 +19,7 @@ import { safeJsonStringify } from '../util/json';
 import { OpenAiFunction, OpenAiTool } from './openaiUtil';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase } from './shared';
 
+// see https://platform.openai.com/docs/models
 const OPENAI_CHAT_MODELS = [
   ...['gpt-4o', 'gpt-4o-2024-05-13'].map((model) => ({
     id: model,
@@ -82,52 +83,22 @@ const OPENAI_CHAT_MODELS = [
       output: 2 / 1000000,
     },
   })),
-  // Commented out deprecated models
-  // ...['gpt-4-32k', 'gpt-4-32k-0314', 'gpt-4-32k-0613'].map((model) => ({
-  //   id: model,
-  //   cost: {
-  //     input: 60 / 1000000,
-  //     output: 120 / 1000000,
-  //   },
-  // })),
-  // ...['gpt-3.5-turbo-16k', 'gpt-3.5-turbo-16k-0613'].map((model) => ({
-  //   id: model,
-  //   cost: {
-  //     input: 3 / 1000000,
-  //     output: 4 / 1000000,
-  //   },
-  // })),
 ];
 
+// See https://platform.openai.com/docs/models/model-endpoint-compatibility
 const OPENAI_COMPLETION_MODELS = [
   {
     id: 'gpt-3.5-turbo-instruct',
     cost: {
-      input: 0.0015 / 1000000,
-      output: 0.002 / 1000000,
+      input: 1.5 / 1000000,
+      output: 2 / 1000000,
     },
-  },
-  {
-    id: 'gpt-3.5-turbo-instruct-0914',
-    cost: {
-      input: 0.0015 / 1000000,
-      output: 0.002 / 1000000,
-    },
-  },
-  {
-    id: 'text-davinci-003',
   },
   {
     id: 'text-davinci-002',
   },
   {
-    id: 'text-curie-001',
-  },
-  {
-    id: 'text-babbage-001',
-  },
-  {
-    id: 'text-ada-001',
+    id: 'text-babbage-002',
   },
 ];
 
