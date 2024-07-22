@@ -1,5 +1,5 @@
 prompts: [prompts.txt]
-providers: [openai:gpt-3.5-turbo]
+providers: [openai:gpt-4o-mini]
 defaultTest:
   options:
     # ---

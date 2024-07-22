@@ -235,7 +235,7 @@ describe('matchesLlmRubric', () => {
     const options: GradingConfig = {
       rubricPrompt: 'Grading prompt',
       provider: {
-        id: 'openai:gpt-3.5-turbo',
+        id: 'openai:gpt-4o-mini',
         config: {
           apiKey: 'abc123',
           temperature: 3.1415926,
