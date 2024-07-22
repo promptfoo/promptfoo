@@ -10,7 +10,7 @@ import type {
   ProviderResponse,
   ProviderEmbeddingResponse,
 } from '../types';
-import { parseMessages } from './anthropic';
+import { outputFromMessage, parseMessages } from './anthropic';
 import { parseChatPrompt } from './shared';
 
 interface BedrockOptions {
@@ -39,6 +39,11 @@ interface BedrockClaudeMessagesCompletionOptions extends BedrockOptions {
   max_tokens?: number;
   temperature?: number;
   anthropic_version?: string;
+  tools?: {
+    name: string;
+    description: string;
+    input_schema: any;
+  }[];
 }
 
 interface BedrockLlamaGenerationOptions extends BedrockOptions {
@@ -340,10 +345,13 @@ const BEDROCK_MODEL = {
         undefined,
         'bedrock-2023-05-31',
       );
+      addConfigParam(params, 'tools', config?.tools, undefined, undefined);
       addConfigParam(params, 'system', system, undefined, undefined);
       return params;
     },
-    output: (responseJson: any) => responseJson?.content[0].text,
+    output: (responseJson: any) => {
+      return outputFromMessage(responseJson);
+    },
   },
   TITAN_TEXT: {
     params: (config: BedrockTextGenerationOptions, prompt: string, stop: string[]) => {
