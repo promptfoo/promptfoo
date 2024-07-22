@@ -117,7 +117,7 @@ export async function loadApiProvider(
     const modelName = splits.slice(2).join(':');
 
     if (modelType === 'chat') {
-      ret = new OpenAiChatCompletionProvider(modelName || 'gpt-3.5-turbo', providerOptions);
+      ret = new OpenAiChatCompletionProvider(modelName || 'gpt-4o-mini', providerOptions);
     } else if (modelType === 'embedding' || modelType === 'embeddings') {
       ret = new OpenAiEmbeddingProvider(modelName || 'text-embedding-3-large', providerOptions);
     } else if (modelType === 'completion') {
