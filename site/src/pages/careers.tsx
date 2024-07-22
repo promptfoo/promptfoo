@@ -11,22 +11,20 @@ export default function Careers(): JSX.Element {
     >
       <main className={styles.careersContainer}>
         <h1>Join the Promptfoo Team</h1>
-        <h2>Shaping the Future of LLMs</h2>
+        <h2>Open-Source and Developer-First GenAI Tools</h2>
 
         <p>
-          PromptFoo is set to be the go-to platform for developers to iterate on LLM and Gen AI applications. 
-          Our open-source evaluation tool is widely adopted for prompt engineering and LLM evaluations, 
-          helping companies and individuals harness the full potential of AI. Our mission is to empower 
-          developers and businesses with robust tools for optimizing LLM development, testing and evaluating 
-          Gen AI applications, and fostering a more reliable and transparent AI ecosystem.
+          Our open-source LLM evaluation tool is loved by application developers everywhere. We empower 
+          teams and companies to develop safe, reliable LLM applications through our evaluation tools and automated red-teaming.
+          Join us in our mission to create a more reliable and transparent AI ecosystem.
         </p>
 
-        <h2>Why Work with Us?</h2>
-        <p>Of the developers, for the developers, by the developers–And with the developers everywhere.</p>
+        <h2>Why Work at Promptfoo?</h2>
+        <p>Of the developers, for the developers, by the developers - and with the developers everywhere.</p>
         <ul>
-          <li>We are open-source at heart.</li>
+          <li>We are open-source. We believe the future of AI is open-source.</li>
           <li>We put developers first.</li>
-          <li>We are pioneering the riskiest rocks in LLM development.</li>
+          <li>We are committed to building secure and reliable tools for ethical AI.</li>
         </ul>
 
         <h3>Join our mission.</h3>
@@ -45,90 +43,82 @@ export default function Careers(): JSX.Element {
         <h2>Our Values</h2>
         <ul>
           <li>
-            <strong>Open-source:</strong> We believe in open communication and sharing knowledge–both in product and team cultures.
+            <strong>Openness:</strong> We foster open communication and knowledge sharing in our products and team culture.
           </li>
           <li>
-            <strong>Bottom-up:</strong> We believe in horizontal teams where everyone's voices make a meaningful impact.
+            <strong>Collaboration:</strong> We believe in horizontal teams where every voice matters.
           </li>
           <li>
-            <strong>Developer-first:</strong> We are committed to putting developer experience as the first and foremost top priority–everything else follows.
+            <strong>Innovation:</strong> We continuously push the boundaries of what's possible in AI development.
           </li>
           <li>
-            <strong>Biggest-rock:</strong> We tackle the hardest, most challenging problems in safe, responsible, effective Gen AI development.
+            <strong>Responsibility:</strong> We're committed to safe, ethical, and effective Gen AI development.
           </li>
         </ul>
 
-        <h2>Our Focus Areas</h2>
-        <p>We're deeply involved in several key aspects of LLM developer workflows and ecosystem:</p>
+        <h2>What We're Working On</h2>
+        <p>Our team is deeply involved in key aspects of LLM developer workflows:</p>
         <ul>
-          <li>
-            <strong>Prompt Engineering:</strong> Develop innovative methods to optimize prompt performance for diverse LLM applications.
-          </li>
-          <li>
-            <strong>Gen AI Testing and Evaluation:</strong> Create sophisticated tools for rigorous testing of LLM outputs and behaviors.
-          </li>
-          <li>
-            <strong>Open Source LLM Tools:</strong> Build and maintain open source libraries that empower the wider AI community.
-          </li>
-          <li>
-            <strong>LLM Security and AI Ethics:</strong> Work on solutions to identify and mitigate potential risks in LLM deployments.
-          </li>
+          <li>Advanced prompt engineering techniques</li>
+          <li>Sophisticated Gen AI testing and evaluation tools</li>
+          <li>Open-source LLM libraries and frameworks</li>
+          <li>LLM security and AI ethics solutions</li>
         </ul>
 
         <h2>Our Team</h2>
         <p>
-          We are a small, dedicated group of individual contributors (ICs) who are passionate about
-          open source and committed to advancing LLM technology. We value collaboration, creativity,
-          and a shared commitment to excellence.
+          We're a small, dedicated group of innovators passionate about open source and advancing LLM technology. 
+          Our collaborative environment fosters creativity and excellence, driving us to push the boundaries of what's possible.
         </p>
 
-        <h2>The Ideal Contributor</h2>
-        <p>We're looking for talented individuals who:</p>
+        <h2>The Ideal Promptfoo Contributor</h2>
+        <p>We're looking for individuals who:</p>
         <ul>
-          <li>
-            Have a deep interest in and understanding of LLMs and their potential applications
-          </li>
-          <li>
-            Are committed to open source principles and contributing to the wider AI community
-          </li>
-          <li>Demonstrate strong problem-solving skills and technical aptitude</li>
-          <li>Are self-motivated and can work effectively in a distributed team environment</li>
-          <li>
-            Show versatility in adapting to new challenges in the rapidly evolving field of AI
-          </li>
-          <li>Have experience with or a strong desire to work on LLM-related projects</li>
+          <li>Are deeply passionate about LLMs and their applications</li>
+          <li>Embrace open-source principles and community contribution</li>
+          <li>Excel at problem-solving and demonstrate strong technical aptitude</li>
+          <li>Thrive in a self-driven, distributed team environment</li>
+          <li>Adapt quickly to the evolving landscape of AI technology</li>
+        </ul>
+
+        <h2>Benefits</h2>
+        <ul>
+          <li>Flexible, remote-first work environment</li>
+          <li>Opportunity to work on cutting-edge AI technology</li>
+          <li>Collaborative and inclusive team culture</li>
+          <li>Professional development and learning opportunities</li>
+          <li>Competitive compensation and equity options</li>
         </ul>
 
         <h2>Open Positions</h2>
         <p>
-          We want to hear from you! If our missions, values, and problems sound good to you, 
-          we want to discuss how we might work together in the following areas:
+          We're always looking for talented individuals to join our team. Current areas of focus include:
         </p>
         <ul>
           <li>Software Engineering (Backend and Frontend)</li>
           <li>AI Research</li>
           <li>Technical Writing</li>
           <li>Developer Advocacy</li>
-          <li>...and Other Areas we don't yet know</li>
         </ul>
+        <p>Don't see your exact role? We're open to exploring how your unique skills can contribute to our mission.</p>
 
         <h2>How to Join Us</h2>
         <p>
-          If you're excited about the work we're doing and want to contribute, please reach out to us at:{' '}
+          If you're excited about the work we're doing and want to contribute, please reach out to us at:
           <a href="mailto:careers@promptfoo.dev">careers@promptfoo.dev</a>
         </p>
-
-        <p>We want to hear about...</p>
+        <p>We want to hear about:</p>
         <ul>
           <li>Problems you solved using LLMs and Gen AI.</li>
           <li>Challenges you encountered therein.</li>
           <li>Any open source projects you've contributed to or personal projects you're proud of.</li>
           <li>Your thoughts on PromptFoo and how you would contribute to our mission.</li>
         </ul>
+        <p>Send your resume and thoughts to <a href="mailto:careers@promptfoo.dev">careers@promptfoo.dev</a>. We'll review your application and reach out to discuss next steps.</p>
 
         <p>
-          We look forward to hearing from you and exploring how we can work together to advance the field of 
-          LLM technology and create tools that benefit the entire AI community.
+          We're excited to learn about your unique perspective and explore how we can advance 
+          LLM technology together, creating tools that benefit the entire AI community.
         </p>
 
         <p>
