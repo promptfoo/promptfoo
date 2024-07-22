@@ -205,20 +205,20 @@ const config = {
             title: 'Community',
             items: [
               {
-                label: 'GitHub',
-                href: 'https://github.com/promptfoo/promptfoo',
-              },
-              {
-                label: 'Discord',
-                href: 'https://discord.gg/gHPS9jjfbs',
-              },
-              {
                 label: 'Blog',
                 href: '/blog',
               },
               {
                 label: 'Contact Us',
                 href: '/contact/',
+              },
+              {
+                label: 'GitHub',
+                href: 'https://github.com/promptfoo/promptfoo',
+              },
+              {
+                label: 'Discord',
+                href: 'https://discord.gg/gHPS9jjfbs',
               },
             ],
           },

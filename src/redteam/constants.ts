@@ -3,7 +3,9 @@ export const REDTEAM_MODEL = 'openai:chat:gpt-4o';
 export const LLAMA_GUARD_REPLICATE_PROVIDER =
   'replicate:moderation:meta/meta-llama-guard-2-8b:b063023ee937f28e922982abdbf97b041ffe34ad3b35a53d33e1d74bb19b36c4';
 
-export const UNALIGNED_PROVIDER_HARM_CATEGORIES = {
+export const COLLECTIONS = ['harmful', 'pii'];
+
+export const UNALIGNED_PROVIDER_HARM_PLUGINS = {
   // MLCommons harm categories
   // https://llama.meta.com/docs/model-cards-and-prompt-formats/meta-llama-guard-2/
   'harmful:violent-crime': 'Violent Crimes',
@@ -36,60 +38,56 @@ export const UNALIGNED_PROVIDER_HARM_CATEGORIES = {
   //'locale_specific_illegal (e.g. hate speech in Germany, alcohol in Saudi Arabia)',
 } as const;
 
-export const REDTEAM_PROVIDER_HARM_CATEGORIES = {
+export const REDTEAM_PROVIDER_HARM_PLUGINS = {
   'harmful:privacy': 'Privacy violations',
   'harmful:intellectual-property': 'Intellectual Property violation',
   'harmful:misinformation-disinformation':
     'Misinformation & Disinformation - Harmful lies and propaganda',
 } as const;
 
-export const HARM_CATEGORIES = {
-  ...UNALIGNED_PROVIDER_HARM_CATEGORIES,
-  ...REDTEAM_PROVIDER_HARM_CATEGORIES,
+export const HARM_PLUGINS = {
+  ...UNALIGNED_PROVIDER_HARM_PLUGINS,
+  ...REDTEAM_PROVIDER_HARM_PLUGINS,
 } as const;
 
-export const PII_REQUEST_CATEGORIES = [
-  'pii:api-db',
-  'pii:direct',
-  'pii:session',
-  'pii:social',
-] as const;
+export const PII_PLUGINS = ['pii:api-db', 'pii:direct', 'pii:session', 'pii:social'] as const;
 
 export const BASE_PLUGINS = [
   'contracts',
   'excessive-agency',
   'hallucination',
-  'harmful',
   'hijacking',
-  'jailbreak',
   'overreliance',
-  'pii',
   'politics',
-  'prompt-injection',
 ];
 
-export const ADDITIONAL_PLUGINS = [
+export const ADDITIONAL_PLUGINS: string[] = [
   'competitors',
-  'experimental-jailbreak',
   'sql-injection',
   'shell-injection',
   'debug-access',
   'rbac',
-] as [string, ...string[]];
-
-export const DEFAULT_PLUGINS = new Set([
-  ...BASE_PLUGINS,
-  ...Object.keys(HARM_CATEGORIES),
-  ...PII_REQUEST_CATEGORIES,
-]);
-
-export const ALL_PLUGINS = [...new Set([...DEFAULT_PLUGINS, ...ADDITIONAL_PLUGINS])].sort() as [
-  string,
-  ...string[],
 ];
 
+export const DEFAULT_PLUGINS: Set<string> = new Set([
+  ...COLLECTIONS,
+  ...BASE_PLUGINS,
+  ...Object.keys(HARM_PLUGINS),
+  ...PII_PLUGINS,
+]);
+
+export const ALL_PLUGINS: string[] = [
+  ...new Set([...DEFAULT_PLUGINS, ...ADDITIONAL_PLUGINS]),
+].sort();
+
+export const DEFAULT_STRATEGIES = ['jailbreak', 'prompt-injection'];
+
+export const ADDITIONAL_STRATEGIES = ['experimental-jailbreak'];
+
+export const ALL_STRATEGIES = [...DEFAULT_STRATEGIES, ...ADDITIONAL_STRATEGIES] as const;
+
 // Duplicated in src/web/nextui/src/app/report/constants.ts for frontend
-export const subCategoryDescriptions: Record<string, string> = {
+export const subCategoryDescriptions: Record<(typeof ALL_PLUGINS)[number], string> = {
   'excessive-agency': 'Model taking excessive initiative or misunderstanding its capabilities.',
   harmful: 'All harmful categories',
   'harmful:child-exploitation': 'Content exploiting or harming children.',
