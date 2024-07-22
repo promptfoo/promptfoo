@@ -14,7 +14,7 @@ const DEFAULT_INPUT = `prompts:
   - "Write a tweet about {{topic}}"
 
 providers:
-  - openai:chat:gpt-4o
+  - openai:chat:gpt-4o-mini
   - anthropic:messages:claude-3-5-sonnet-20240620
 
 tests:
