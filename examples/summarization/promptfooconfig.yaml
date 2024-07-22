@@ -3,7 +3,7 @@ prompts:
   - 'Summarize this article concisely: {{article}}'
 
 providers:
-  - openai:gpt-3.5-turbo
+  - openai:gpt-4o-mini
 
 tests:
   - vars:
