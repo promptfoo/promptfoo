@@ -22,12 +22,12 @@ tests:
       topic: bananas
     assert:
       - type: contains
-        text: "banana"
+        value: "banana"
   - vars:
       topic: pineapples
     assert:
       - type: llm-rubric
-        text: "mentions health benefits"
+        value: "mentions health benefits"
         
 defaultTest:
   assert:
