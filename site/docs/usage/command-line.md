@@ -215,7 +215,7 @@ prompts:
   - 'Act as a trip planner and help the user plan their trip'
 
 providers:
-  - openai:gpt-3.5-turbo
+  - openai:gpt-4o-mini
   - openai:gpt-4o
 ```
 
