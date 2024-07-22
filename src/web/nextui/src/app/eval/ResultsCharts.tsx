@@ -669,7 +669,7 @@ function ResultsCharts({ columnVisibility, recentEvals }: ResultsChartsProps) {
     if (showPerformanceOverTimeChart) {
       return (
         <ErrorBoundary fallback={null}>
-          <Paper style={{ padding: theme.spacing(3) }}>
+          <Paper style={{ position: 'relative', padding: theme.spacing(3) }}>
             <IconButton
               style={{ position: 'absolute', right: 0, top: 0 }}
               onClick={() => setShowCharts(false)}
