@@ -45,7 +45,7 @@ describe('Telemetry', () => {
   });
 
   it('should send events and clear events array when telemetry is enabled and send is called', async () => {
-    jest.mocked(fetchWithTimeout).mockResolvedValue({ ok: true });
+    jest.mocked(fetchWithTimeout).mockResolvedValue({ ok: true } as any);
 
     const telemetry = new Telemetry();
     telemetry.record('eval_ran', { foo: 'bar' });

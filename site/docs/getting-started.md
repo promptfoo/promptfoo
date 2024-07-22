@@ -40,7 +40,7 @@ This will create a `promptfooconfig.yaml` file in your current directory.
 
    ```yaml
    providers:
-     - openai:gpt-3.5-turbo
+     - openai:gpt-4o-mini
      - openai:gpt-4
    ```
 

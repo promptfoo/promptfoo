@@ -78,7 +78,7 @@ See the [Configuration docs](https://www.promptfoo.dev/docs/configuration/guide)
 
 ```yaml
 prompts: [prompt1.txt, prompt2.txt]
-providers: [openai:gpt-3.5-turbo, ollama:llama2:70b]
+providers: [openai:gpt-4o-mini, ollama:llama2:70b]
 tests:
   - description: 'Test translation to French'
     vars:
@@ -159,7 +159,7 @@ Some people prefer to configure their LLM tests in a CSV. In that case, the conf
 
 ```yaml
 prompts: [prompts.txt]
-providers: [openai:gpt-3.5-turbo]
+providers: [openai:gpt-4o-mini]
 tests: tests.csv
 ```
 
@@ -195,7 +195,7 @@ npx promptfoo view
 In [this example](https://github.com/promptfoo/promptfoo/tree/main/examples/assistant-cli), we evaluate whether adding adjectives to the personality of an assistant bot affects the responses:
 
 ```
-npx promptfoo eval -p prompts.txt -r openai:gpt-3.5-turbo -t tests.csv
+npx promptfoo eval -p prompts.txt -r openai:gpt-4o-mini -t tests.csv
 ```
 
 <!--
@@ -230,7 +230,7 @@ You can also use `promptfoo` as a library in your project by importing the `eval
 
   ```typescript
   interface EvaluateTestSuite {
-    providers: string[]; // Valid provider name (e.g. openai:gpt-3.5-turbo)
+    providers: string[]; // Valid provider name (e.g. openai:gpt-4o-mini)
     prompts: string[]; // List of prompts
     tests: string | TestCase[]; // Path to a CSV file, or list of test cases
 
@@ -286,7 +286,7 @@ import promptfoo from 'promptfoo';
 
 const results = await promptfoo.evaluate({
   prompts: ['Rephrase this in French: {{body}}', 'Rephrase this like a pirate: {{body}}'],
-  providers: ['openai:gpt-3.5-turbo'],
+  providers: ['openai:gpt-4o-mini'],
   tests: [
     {
       vars: {

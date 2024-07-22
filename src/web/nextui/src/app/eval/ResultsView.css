@@ -7,6 +7,10 @@
   background-color: #f0f0f0;
 }
 
+[data-theme='dark'] .description:hover {
+  background-color: #2a2a2a;
+}
+
 .eval-header {
   display: flex;
   align-items: center;

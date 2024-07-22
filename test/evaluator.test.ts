@@ -31,7 +31,9 @@ jest.mock('fs', () => ({
 }));
 
 jest.mock('../src/esm');
-jest.mock('../src/database');
+jest.mock('../src/database', () => ({
+  getDb: jest.fn(),
+}));
 
 const mockApiProvider: ApiProvider = {
   id: jest.fn().mockReturnValue('test-provider'),
