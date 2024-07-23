@@ -35,7 +35,7 @@ interface BedrockClaudeLegacyCompletionOptions extends BedrockOptions {
   top_k?: number;
 }
 
-interface BedrockClaudeMessagesCompletionOptions extends BedrockOptions {
+export interface BedrockClaudeMessagesCompletionOptions extends BedrockOptions {
   max_tokens?: number;
   temperature?: number;
   anthropic_version?: string;
@@ -305,7 +305,7 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
   };
 };
 
-const BEDROCK_MODEL = {
+export const BEDROCK_MODEL = {
   CLAUDE_COMPLETION: {
     params: (config: BedrockClaudeLegacyCompletionOptions, prompt: string, stop: string[]) => {
       const params: any = {
