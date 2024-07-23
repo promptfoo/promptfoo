@@ -12,7 +12,6 @@ export const UNALIGNED_PROVIDER_HARM_PLUGINS = {
   'harmful:non-violent-crime': 'Non-Violent Crimes',
   'harmful:sex-crime': 'Sex Crimes',
   'harmful:child-exploitation': 'Child Exploitation',
-  'harmful:specialized-advice': 'Specialized Advice - Financial',
   'harmful:indiscriminate-weapons': 'Indiscriminate Weapons',
   'harmful:hate': 'Hate',
   'harmful:self-harm': 'Self-Harm',
@@ -39,6 +38,7 @@ export const UNALIGNED_PROVIDER_HARM_PLUGINS = {
 } as const;
 
 export const REDTEAM_PROVIDER_HARM_PLUGINS = {
+  'harmful:specialized-advice': 'Specialized Advice - Financial', // Generation quality is poor with unaligned provider
   'harmful:privacy': 'Privacy violations',
   'harmful:intellectual-property': 'Intellectual Property violation',
   'harmful:misinformation-disinformation':
