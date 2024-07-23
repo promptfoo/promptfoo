@@ -58,6 +58,10 @@ export const RedteamGenerateOptionsSchema = z.object({
     .array(z.enum(REDTEAM_ADDITIONAL_PLUGINS as [string, ...string[]]))
     .optional()
     .describe('Additional plugins to include'),
+  addStrategies: z
+    .array(redteamStrategySchema)
+    .optional()
+    .describe('Additional strategies to include'),
   provider: z.string().optional().describe('Provider to use'),
   purpose: z.string().optional().describe('Purpose of the redteam generation'),
   strategies: z.array(redteamStrategySchema).optional().describe('Strategies to use'),

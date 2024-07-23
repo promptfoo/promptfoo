@@ -2,6 +2,8 @@ import dedent from 'dedent';
 import {
   addConfigParam,
   AwsBedrockGenericProvider,
+  BEDROCK_MODEL,
+  BedrockClaudeMessagesCompletionOptions,
   formatPromptLlama2Chat,
   getLlamaModelHandler,
   LlamaMessage,
@@ -86,6 +88,81 @@ describe('AwsBedrockGenericProvider', () => {
     await expect(provider.getBedrockInstance()).rejects.toThrow(
       'The @smithy/node-http-handler package is required as a peer dependency. Please install it in your project or globally.',
     );
+  });
+
+  describe('BEDROCK_MODEL CLAUDE_MESSAGES', () => {
+    const modelHandler = BEDROCK_MODEL.CLAUDE_MESSAGES;
+
+    it('should include tools and tool_choice in params when provided', () => {
+      const config: BedrockClaudeMessagesCompletionOptions = {
+        region: 'us-east-1',
+        tools: [
+          {
+            name: 'get_current_weather',
+            description: 'Get the current weather in a given location',
+            input_schema: {
+              type: 'object',
+              properties: {
+                location: { type: 'string' },
+                unit: { type: 'string', enum: ['celsius', 'fahrenheit'] },
+              },
+              required: ['location'],
+            },
+          },
+        ],
+        tool_choice: {
+          type: 'auto',
+        },
+      };
+
+      const params = modelHandler.params(config, 'Test prompt');
+
+      expect(params).toHaveProperty('tools');
+      expect(params.tools).toHaveLength(1);
+      expect(params.tools[0]).toHaveProperty('name', 'get_current_weather');
+      expect(params).toHaveProperty('tool_choice');
+      expect(params.tool_choice).toEqual({ type: 'auto' });
+    });
+
+    it('should not include tools and tool_choice in params when not provided', () => {
+      const config: BedrockClaudeMessagesCompletionOptions = {
+        region: 'us-east-1',
+      };
+
+      const params = modelHandler.params(config, 'Test prompt');
+
+      expect(params).not.toHaveProperty('tools');
+      expect(params).not.toHaveProperty('tool_choice');
+    });
+
+    it('should include specific tool_choice when provided', () => {
+      const config: BedrockClaudeMessagesCompletionOptions = {
+        region: 'us-east-1',
+        tools: [
+          {
+            name: 'get_current_weather',
+            description: 'Get the current weather in a given location',
+            input_schema: {
+              type: 'object',
+              properties: {
+                location: { type: 'string' },
+                unit: { type: 'string', enum: ['celsius', 'fahrenheit'] },
+              },
+              required: ['location'],
+            },
+          },
+        ],
+        tool_choice: {
+          type: 'tool',
+          name: 'get_current_weather',
+        },
+      };
+
+      const params = modelHandler.params(config, 'Test prompt');
+
+      expect(params).toHaveProperty('tool_choice');
+      expect(params.tool_choice).toEqual({ type: 'tool', name: 'get_current_weather' });
+    });
   });
 });
 

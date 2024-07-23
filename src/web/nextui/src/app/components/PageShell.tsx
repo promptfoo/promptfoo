@@ -51,6 +51,9 @@ const createAppTheme = (darkMode: boolean) =>
             color: darkMode ? '#FFFFFF' : '#000000',
             fontWeight: 'bold',
           },
+          stickyHeader: {
+            backgroundColor: darkMode ? '#1E1E1E' : '#F5F5F5',
+          },
         },
       },
       MuiInputBase: {

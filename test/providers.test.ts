@@ -1017,7 +1017,7 @@ config:
   });
 
   it('loadApiProviders with ProviderFunction', async () => {
-    const providerFunction: ProviderFunction = async (prompt: string) => {
+    const providerFunction: ProviderFunction = async (prompt) => {
       return {
         output: `Output for ${prompt}`,
         tokenUsage: { total: 10, prompt: 5, completion: 5 },

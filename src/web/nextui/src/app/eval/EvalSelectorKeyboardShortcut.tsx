@@ -1,21 +1,13 @@
 import React, { useState } from 'react';
-import FolderIcon from '@mui/icons-material/FolderOpen';
-import IconButton from '@mui/material/IconButton';
-import Tooltip from '@mui/material/Tooltip';
 import EvalSelectorDialog from './EvalSelectorDialog';
 import type { ResultLightweightWithLabel } from './types';
 
 interface EvalSelectorProps {
   recentEvals: ResultLightweightWithLabel[];
   onRecentEvalSelected: (evalId: string) => void;
-  currentEval: ResultLightweightWithLabel | null;
 }
 
-const EvalSelector: React.FC<EvalSelectorProps> = ({
-  recentEvals,
-  onRecentEvalSelected,
-  currentEval,
-}) => {
+const EvalSelector: React.FC<EvalSelectorProps> = ({ recentEvals, onRecentEvalSelected }) => {
   const [open, setOpen] = useState(false);
   const isMac =
     typeof navigator === 'undefined'
@@ -48,11 +40,6 @@ const EvalSelector: React.FC<EvalSelectorProps> = ({
 
   return (
     <>
-      <Tooltip title={tooltipTitle} arrow>
-        <IconButton onClick={handleOpen} color="primary" size="small">
-          <FolderIcon />
-        </IconButton>
-      </Tooltip>
       <EvalSelectorDialog
         title="Open an Eval"
         open={open}

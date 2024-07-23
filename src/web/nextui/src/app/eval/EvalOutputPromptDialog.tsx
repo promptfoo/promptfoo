@@ -56,7 +56,11 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
                   <TableCell>{result.score?.toFixed(2)}</TableCell>
                   <TableCell>{result.assertion?.type || ''}</TableCell>
                   <TableCell style={{ whiteSpace: 'pre-wrap' }}>
-                    {result.assertion?.value ? String(result.assertion.value) : '-'}
+                    {result.assertion?.value
+                      ? typeof result.assertion.value === 'object'
+                        ? JSON.stringify(result.assertion.value, null, 2)
+                        : String(result.assertion.value)
+                      : '-'}
                   </TableCell>
                   <TableCell style={{ whiteSpace: 'pre-wrap' }}>{result.reason}</TableCell>
                 </TableRow>

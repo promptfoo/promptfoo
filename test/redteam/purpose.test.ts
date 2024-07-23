@@ -46,7 +46,7 @@ describe('getPurpose', () => {
     mockProvider.callApi.mockResolvedValue({ output: 123 });
 
     await expect(getPurpose(mockProvider, ['Some prompt'])).rejects.toThrow(
-      'Expected purpose to be a string',
+      'Invalid system purpose: expected string, got: 123',
     );
   });
 });
