@@ -38,11 +38,11 @@ export const UNALIGNED_PROVIDER_HARM_PLUGINS = {
 } as const;
 
 export const REDTEAM_PROVIDER_HARM_PLUGINS = {
-  'harmful:specialized-advice': 'Specialized Advice - Financial', // Generation quality is poor with unaligned provider
   'harmful:privacy': 'Privacy violations',
   'harmful:intellectual-property': 'Intellectual Property violation',
   'harmful:misinformation-disinformation':
     'Misinformation & Disinformation - Harmful lies and propaganda',
+  'harmful:specialized-advice': 'Specialized Advice - Financial',
 } as const;
 
 export const HARM_PLUGINS = {
