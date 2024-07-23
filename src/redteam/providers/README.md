@@ -44,6 +44,44 @@ flowchart TB
     class Start,End start_end;
 ```
 
+## Iterative Tree Provider
+
+The Iterative Tree Provider is an advanced red teaming approach that uses a tree search algorithm to generate and refine adversarial prompts. This method systematically explores different variations of prompts to identify the most effective ones for bypassing language model safety measures. It:
+
+- Initializes with a root node representing the initial prompt.
+- Iteratively selects the best unexplored node and generates child prompts.
+- Evaluates each prompt based on its relevance and effectiveness.
+- Updates the tree with new nodes and their scores.
+- Continues the process until a stopping condition is met, such as reaching a maximum number of iterations or achieving a high score.
+
+```mermaid
+graph TD
+    A[Start] --> B[Initialize Root Node]
+    B --> C[Tree Search Loop]
+    C --> D[Select Best Unexplored Node]
+    D --> E[Generate Child Prompts]
+    E --> F[Evaluate Prompts]
+    F --> G[Update Tree]
+    G --> H{Stop Condition Met?}
+    H -->|No| C
+    H -->|Yes| I[Return Best Result]
+    I --> J[End]
+
+    subgraph Evaluation Process
+    F --> F1[Check On-Topic]
+    F1 --> F2[Get Model Response]
+    F2 --> F3[Check Non-Refusal]
+    F3 --> F4[Judge Response]
+    F4 --> F5[Calculate Score]
+    end
+```
+
+### Key Features
+
+- **Systematic Exploration**: Uses a tree search algorithm to explore different prompt variations.
+- **Evaluation Process**: Each prompt is evaluated for relevance and effectiveness, ensuring only the best prompts are refined further.
+- **Stopping Conditions**: The process continues until a predefined stopping condition is met, ensuring efficient use of resources.
+
 ## IterativeImage Provider
 
 The image-based iterative provider extends the concept to image generation models. It generates prompts that attempt to create images that bypass safety filters, then uses a vision model to interpret the results.
@@ -82,3 +120,4 @@ flowchart TB
 ## References
 
 - Based on research from: [Jailbroken: How Does LLM Safety Training Fail?](https://arxiv.org/abs/2307.02483)
+- Based on research from: [A STRONGREJECT for Empty Jailbreaks](https://arxiv.org/pdf/2402.10260)
