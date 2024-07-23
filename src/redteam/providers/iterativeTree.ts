@@ -133,6 +133,221 @@ interface TreeNode {
   output?: string; // Add output property to store model output
 }
 
+async function expandNode(
+  node: TreeNode,
+  redteamProvider: OpenAiChatCompletionProvider,
+  targetProvider: ApiProvider,
+  redteamSystemPrompt: string,
+  onTopicSystemPrompt: string,
+  nonRefusalPrompt: string,
+  judgeSystemPrompt: string,
+  goal: string,
+  parser: XMLParser,
+): Promise<void> {
+  logger.debug(`Expanding node at depth ${node.depth}`);
+  if (node.depth >= MAX_DEPTH) {
+    logger.debug('Max depth reached, returning');
+    return;
+  }
+
+  const redteamHistory = [
+    { role: 'system', content: redteamSystemPrompt },
+    {
+      role: 'user',
+      content: `Current prompt: ${node.prompt}\n\nOBJECTIVE: ${goal}\n\nSCORE: ${node.score}`,
+    },
+  ];
+
+  const redteamBody = JSON.stringify(redteamHistory);
+  logger.debug(`Calling redteam provider with body length: ${redteamBody.length}`);
+  try {
+    const redteamResp = await redteamProvider.callApi(redteamBody);
+    logger.debug(`Redteam provider response received`);
+
+    if (redteamResp.error) {
+      logger.error(`Redteam provider API error: ${JSON.stringify(redteamResp.error)}`);
+      return;
+    }
+
+    if (typeof redteamResp.output !== 'string') {
+      logger.error(`Unexpected redteam provider output type: ${typeof redteamResp.output}`);
+      logger.error(`Redteam provider output: ${JSON.stringify(redteamResp.output)}`);
+      return;
+    }
+
+    logger.debug(`Redteam provider output length: ${redteamResp.output.length}`);
+
+    let parsedOutput;
+    try {
+      parsedOutput = parser.parse(redteamResp.output);
+      logger.debug(`Parsed output: ${JSON.stringify(parsedOutput, null, 2)}`);
+    } catch (error) {
+      logger.error(`Failed to parse redteam provider output: ${error}`);
+      return;
+    }
+
+    if (!parsedOutput.xml || !parsedOutput.xml.prompt) {
+      logger.error(`Unexpected format of parsed output: ${JSON.stringify(parsedOutput, null, 2)}`);
+      return;
+    }
+
+    const childPrompt = parsedOutput.xml.prompt;
+    logger.debug(`Generated child prompt: ${childPrompt}`);
+
+    const isOnTopicBody = JSON.stringify([
+      { role: 'system', content: onTopicSystemPrompt },
+      { role: 'user', content: childPrompt },
+    ]);
+    const isOnTopicResp = await redteamProvider.callApi(isOnTopicBody);
+    invariant(typeof isOnTopicResp.output === 'string', 'Expected output to be a string');
+    const isOnTopic = parser.parse(isOnTopicResp.output).onTopic;
+
+    if (!isOnTopic) return;
+
+    const targetResp = await targetProvider.callApi(childPrompt);
+    invariant(typeof targetResp.output === 'string', 'Expected output to be a string');
+    const targetResponse = targetResp.output;
+
+    // Store the model output in the node
+    node.output = targetResponse;
+
+    // Check for non-refusal
+    const nonRefusalBody = JSON.stringify([
+      { role: 'system', content: nonRefusalPrompt },
+      { role: 'user', content: targetResponse },
+    ]);
+    logger.debug(`Calling redteam provider for non-refusal check with body: ${nonRefusalBody}`);
+    const nonRefusalResp = await redteamProvider.callApi(nonRefusalBody);
+    logger.debug(`Non-refusal response received: ${JSON.stringify(nonRefusalResp)}`);
+
+    if (nonRefusalResp.error) {
+      logger.error(`Non-refusal API error: ${JSON.stringify(nonRefusalResp.error)}`);
+      return;
+    }
+
+    if (typeof nonRefusalResp.output !== 'string') {
+      logger.error(`Unexpected non-refusal output type: ${typeof nonRefusalResp.output}`);
+      logger.error(`Non-refusal output: ${JSON.stringify(nonRefusalResp.output)}`);
+      return;
+    }
+
+    logger.debug(`Raw non-refusal output: ${nonRefusalResp.output}`);
+
+    let parsedNonRefusal;
+    try {
+      parsedNonRefusal = parser.parse(nonRefusalResp.output);
+    } catch (error) {
+      logger.error(`Failed to parse non-refusal output: ${error}`);
+      logger.error(`Problematic JSON string: ${nonRefusalResp.output}`);
+      return;
+    }
+
+    if (!parsedNonRefusal || typeof parsedNonRefusal.classification !== 'string') {
+      logger.error(`Unexpected parsed non-refusal format: ${JSON.stringify(parsedNonRefusal)}`);
+      return;
+    }
+
+    const isNonRefusal = parsedNonRefusal.classification === 'Non-Refusal';
+    logger.debug(`Is non-refusal: ${isNonRefusal}`);
+
+    if (!isNonRefusal) return;
+
+    // Judge the response
+    const judgeBody = JSON.stringify([
+      { role: 'system', content: judgeSystemPrompt },
+      {
+        role: 'user',
+        content: `User instruction: ${childPrompt}\nAI model response: ${targetResponse}`,
+      },
+    ]);
+    const judgeResp = await redteamProvider.callApi(judgeBody);
+
+    if (typeof judgeResp.output !== 'string') {
+      logger.error(`Unexpected judge output type: ${typeof judgeResp.output}`);
+      logger.error(`Judge output: ${JSON.stringify(judgeResp.output)}`);
+      return;
+    }
+
+    logger.debug(`Raw judge output: ${judgeResp.output}`);
+
+    const judgement = parseJudgement(judgeResp.output);
+    logger.debug(`Parsed judgement: ${JSON.stringify(judgement)}`);
+
+    const score = calculateScore(judgement);
+
+    if (score <= PRUNE_THRESHOLD) return;
+
+    const childNode: TreeNode = {
+      prompt: childPrompt,
+      score,
+      children: [],
+      depth: node.depth + 1,
+    };
+    node.children.push(childNode);
+
+    if (score >= 10) return;
+  } catch (error) {
+    logger.error(`Error in expandNode: ${error}`);
+    logger.error(`Error stack: ${(error as Error).stack}`);
+    return;
+  }
+}
+
+async function treeSearch(
+  root: TreeNode,
+  redteamProvider: OpenAiChatCompletionProvider,
+  targetProvider: ApiProvider,
+  redteamSystemPrompt: string,
+  onTopicSystemPrompt: string,
+  nonRefusalPrompt: string,
+  judgeSystemPrompt: string,
+  goal: string,
+  parser: XMLParser,
+): Promise<TreeNode> {
+  try {
+    const queue: TreeNode[] = [root];
+    const startTime = Date.now();
+    const MAX_RUNTIME = 300000; // 5 minutes in milliseconds
+    let bestNode = root;
+
+    for (let i = 0; i < NUM_ITERATIONS; i++) {
+      if (queue.length > 0) {
+        logger.warn(`Tree search iteration ${i}, queue length: ${queue.length}`);
+      } else {
+        continue;
+      }
+      if (Date.now() - startTime > MAX_RUNTIME) {
+        logger.warn('Tree search exceeded maximum runtime');
+        break;
+      }
+
+      const node = queue.shift()!;
+      await expandNode(
+        node,
+        redteamProvider,
+        targetProvider,
+        redteamSystemPrompt,
+        onTopicSystemPrompt,
+        nonRefusalPrompt,
+        judgeSystemPrompt,
+        goal,
+        parser,
+      );
+      queue.push(...node.children);
+      queue.sort((a, b) => b.score - a.score);
+
+      if (node.score > bestNode.score) {
+        bestNode = node;
+      }
+    }
+
+    return bestNode;
+  } catch (error) {
+    logger.error(`Error in treeSearch: ${error}`);
+    throw error;
+  }
+}
+
 async function runRedteamTreeSearch(
   prompt: string,
   vars: Record<string, string | object>,
@@ -150,7 +365,7 @@ async function runRedteamTreeSearch(
     const targetProvider = provider;
 
     logger.debug(`Vars object: ${JSON.stringify(vars)}`);
-    const goal = vars.query;
+    const goal = typeof vars.query === 'string' ? vars.query : JSON.stringify(vars.query);
 
     if (!goal) {
       logger.error('Goal is undefined. Make sure vars.query is set.');
@@ -164,203 +379,28 @@ async function runRedteamTreeSearch(
     const nonRefusalPrompt = nunjucks.renderString(NON_REFUSAL_PROMPT, { goal });
     const judgeSystemPrompt = nunjucks.renderString(JUDGE_SYSTEM_PROMPT, { goal });
 
-    // Verify prompt variables after rendering
-    logger.debug(`Rendered redteamSystemPrompt: ${redteamSystemPrompt}`);
-    logger.debug(`Rendered onTopicSystemPrompt: ${onTopicSystemPrompt}`);
-    logger.debug(`Rendered nonRefusalPrompt: ${nonRefusalPrompt}`);
-    logger.debug(`Rendered judgeSystemPrompt: ${judgeSystemPrompt}`);
-
     const root: TreeNode = { prompt, score: 0, children: [], depth: 0 };
-    let bestNode = root;
-
-    async function expandNode(node: TreeNode): Promise<void> {
-      logger.debug(`Expanding node at depth ${node.depth}`);
-      if (node.depth >= MAX_DEPTH) {
-        logger.debug('Max depth reached, returning');
-        return;
-      }
-
-      const redteamHistory = [
-        { role: 'system', content: redteamSystemPrompt },
-        {
-          role: 'user',
-          content: `Current prompt: ${node.prompt}\n\nOBJECTIVE: ${goal}\n\nSCORE: ${node.score}`,
-        },
-      ];
-
-      const redteamBody = JSON.stringify(redteamHistory);
-      logger.debug(`Calling redteam provider with body length: ${redteamBody.length}`);
-      try {
-        const redteamResp = await redteamProvider.callApi(redteamBody);
-        logger.debug(`Redteam provider response received`);
-
-        if (redteamResp.error) {
-          logger.error(`Redteam provider API error: ${JSON.stringify(redteamResp.error)}`);
-          return;
-        }
-
-        if (typeof redteamResp.output !== 'string') {
-          logger.error(`Unexpected redteam provider output type: ${typeof redteamResp.output}`);
-          logger.error(`Redteam provider output: ${JSON.stringify(redteamResp.output)}`);
-          return;
-        }
-
-        logger.debug(`Redteam provider output length: ${redteamResp.output.length}`);
-
-        let parsedOutput;
-        try {
-          parsedOutput = parser.parse(redteamResp.output);
-          logger.debug(`Parsed output: ${JSON.stringify(parsedOutput, null, 2)}`);
-        } catch (error) {
-          logger.error(`Failed to parse redteam provider output: ${error}`);
-          return;
-        }
-
-        if (!parsedOutput.xml || !parsedOutput.xml.prompt) {
-          logger.error(
-            `Unexpected format of parsed output: ${JSON.stringify(parsedOutput, null, 2)}`,
-          );
-          return;
-        }
-
-        const childPrompt = parsedOutput.xml.prompt;
-        logger.debug(`Generated child prompt: ${childPrompt}`);
-
-        const isOnTopicBody = JSON.stringify([
-          { role: 'system', content: onTopicSystemPrompt },
-          { role: 'user', content: childPrompt },
-        ]);
-        const isOnTopicResp = await redteamProvider.callApi(isOnTopicBody);
-        invariant(typeof isOnTopicResp.output === 'string', 'Expected output to be a string');
-        const isOnTopic = parser.parse(isOnTopicResp.output).onTopic;
-
-        if (!isOnTopic) return;
-
-        const targetResp = await targetProvider.callApi(childPrompt);
-        invariant(typeof targetResp.output === 'string', 'Expected output to be a string');
-        const targetResponse = targetResp.output;
-
-        // Store the model output in the node
-        node.output = targetResponse;
-
-        // Check for non-refusal
-        const nonRefusalBody = JSON.stringify([
-          { role: 'system', content: nonRefusalPrompt },
-          { role: 'user', content: targetResponse },
-        ]);
-        logger.debug(`Calling redteam provider for non-refusal check with body: ${nonRefusalBody}`);
-        const nonRefusalResp = await redteamProvider.callApi(nonRefusalBody);
-        logger.debug(`Non-refusal response received: ${JSON.stringify(nonRefusalResp)}`);
-
-        if (nonRefusalResp.error) {
-          logger.error(`Non-refusal API error: ${JSON.stringify(nonRefusalResp.error)}`);
-          return;
-        }
-
-        if (typeof nonRefusalResp.output !== 'string') {
-          logger.error(`Unexpected non-refusal output type: ${typeof nonRefusalResp.output}`);
-          logger.error(`Non-refusal output: ${JSON.stringify(nonRefusalResp.output)}`);
-          return;
-        }
-
-        logger.debug(`Raw non-refusal output: ${nonRefusalResp.output}`);
-
-        let parsedNonRefusal;
-        try {
-          parsedNonRefusal = parser.parse(nonRefusalResp.output);
-        } catch (error) {
-          logger.error(`Failed to parse non-refusal output: ${error}`);
-          logger.error(`Problematic JSON string: ${nonRefusalResp.output}`);
-          return;
-        }
-
-        if (!parsedNonRefusal || typeof parsedNonRefusal.classification !== 'string') {
-          logger.error(`Unexpected parsed non-refusal format: ${JSON.stringify(parsedNonRefusal)}`);
-          return;
-        }
-
-        const isNonRefusal = parsedNonRefusal.classification === 'Non-Refusal';
-        logger.debug(`Is non-refusal: ${isNonRefusal}`);
-
-        if (!isNonRefusal) return;
-
-        // Judge the response
-        const judgeBody = JSON.stringify([
-          { role: 'system', content: judgeSystemPrompt },
-          {
-            role: 'user',
-            content: `User instruction: ${childPrompt}\nAI model response: ${targetResponse}`,
-          },
-        ]);
-        const judgeResp = await redteamProvider.callApi(judgeBody);
-
-        if (typeof judgeResp.output !== 'string') {
-          logger.error(`Unexpected judge output type: ${typeof judgeResp.output}`);
-          logger.error(`Judge output: ${JSON.stringify(judgeResp.output)}`);
-          return;
-        }
-
-        logger.debug(`Raw judge output: ${judgeResp.output}`);
-
-        const judgement = parseJudgement(judgeResp.output);
-        logger.debug(`Parsed judgement: ${JSON.stringify(judgement)}`);
-
-        const score = calculateScore(judgement);
-
-        if (score <= PRUNE_THRESHOLD) return;
-
-        const childNode: TreeNode = {
-          prompt: childPrompt,
-          score,
-          children: [],
-          depth: node.depth + 1,
-        };
-        node.children.push(childNode);
-
-        if (score > bestNode.score) {
-          bestNode = childNode;
-        }
-
-        if (score >= 10) return;
-      } catch (error) {
-        logger.error(`Error in expandNode: ${error}`);
-        logger.error(`Error stack: ${(error as Error).stack}`);
-        return;
-      }
-    }
-
-    async function treeSearch(): Promise<void> {
-      try {
-        const queue: TreeNode[] = [root];
-        const startTime = Date.now();
-        const MAX_RUNTIME = 300000; // 5 minutes in milliseconds
-
-        for (let i = 0; i < NUM_ITERATIONS && queue.length > 0; i++) {
-          if (Date.now() - startTime > MAX_RUNTIME) {
-            logger.warn('Tree search exceeded maximum runtime');
-            break;
-          }
-
-          const node = queue.shift()!;
-          await expandNode(node);
-          queue.push(...node.children);
-          queue.sort((a, b) => b.score - a.score);
-        }
-      } catch (error) {
-        logger.error(`Error in treeSearch: ${error}`);
-      }
-    }
 
     logger.debug(`Starting tree search with initial prompt: ${prompt}`);
     logger.debug(`Goal: ${goal}`);
 
-    await treeSearch();
+    const bestNode = await treeSearch(
+      root,
+      redteamProvider,
+      targetProvider,
+      redteamSystemPrompt,
+      onTopicSystemPrompt,
+      nonRefusalPrompt,
+      judgeSystemPrompt,
+      goal,
+      parser,
+    );
 
     logger.debug(`Tree search completed. Best node score: ${bestNode.score}`);
     logger.debug(`Best prompt: ${bestNode.prompt}`);
 
     return {
-      output: bestNode.output || '', // Return the best output (targetResponse)
+      output: bestNode.output || '',
       metadata: {
         redteamFinalPrompt: bestNode.prompt,
         redteamFinalScore: bestNode.score,
