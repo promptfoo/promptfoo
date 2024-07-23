@@ -111,6 +111,16 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
   if (options.strategies) {
     strategies = options.strategies;
   }
+  if (Array.isArray(options.addStrategies) && options.addStrategies.length > 0) {
+    strategies = [
+      ...new Set([
+        ...strategies,
+        ...options.addStrategies.map((strategy) =>
+          typeof strategy === 'string' ? { id: strategy } : strategy,
+        ),
+      ]),
+    ];
+  }
   const strategyObjs: { id: string }[] = strategies.map((s) =>
     typeof s === 'string' ? { id: s } : s,
   ) as { id: string }[];

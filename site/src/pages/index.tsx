@@ -19,7 +19,7 @@ function HomepageHeader() {
   return (
     <header className={clsx('hero hero--primary', styles.heroBanner)}>
       <div className="container">
-        <h1>Ship LLM apps with confidence</h1>
+        <h1>Find and fix LLM vulnerabilities</h1>
         <p>Open-source LLM testing used by 25,000+ developers</p>
         <div className={styles.buttons}>
           <Link
@@ -47,10 +47,10 @@ function HomepageHeader() {
 function HomepageWalkthrough() {
   const { isDarkTheme } = useColorMode();
   const [selectedStep, setSelectedStep] = React.useState(() => {
-    if (typeof window !== 'undefined' && window.location.hash === '#redteam') {
-      return 2;
+    if (typeof window !== 'undefined' && window.location.hash === '#evals') {
+      return 1;
     }
-    return 1;
+    return 2;
   });
   const steps = [
     {
@@ -91,7 +91,7 @@ function HomepageWalkthrough() {
       description: (
         <>
           <p>
-            <strong>Find and fix LLM vulnerabilities</strong>
+            <strong>Automated pentesting for your app</strong>
           </p>
           <p>
             Run an automatic scan tailored to your application that detects security, legal, and
@@ -100,14 +100,15 @@ function HomepageWalkthrough() {
           <pre className={styles.codeBox}>
             <code>npx promptfoo@latest redteam init</code>
           </pre>
-          <p>Our red teaming covers failures like:</p>
+          <p>Our probes cover common failures like:</p>
           <ul>
             <li>PII leaks</li>
+            <li>Insecure tool use</li>
             <li>Jailbreaks</li>
             <li>Harmful content</li>
-            <li>Specialized medical and legal advice</li>
             <li>Competitor endorsements</li>
             <li>Political statements</li>
+            <li>Specialized medical and legal advice</li>
             <li>
               and <Link to="/docs/guides/llm-redteaming">much more</Link>
             </li>
