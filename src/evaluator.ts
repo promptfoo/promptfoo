@@ -680,6 +680,19 @@ class Evaluator {
       }
     }
 
+    if (testSuite.extensions) {
+      for (const extension of testSuite.extensions) {
+        logger.info(`Running extension ${extension}`);
+        if (extension.startsWith('python:')) {
+          const filePath = path.resolve(cliState.basePath || '', extension.slice('python:'.length)); 
+          await runPython(filePath, 'extension_hook', [
+            "evalsFinalized",
+            runEvalOptions,
+          ])
+        }
+      }
+    }
+
     // Set up table...
     const isTest = tests.some((t) => !!t.assert);
 
