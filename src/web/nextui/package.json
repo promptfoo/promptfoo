@@ -55,7 +55,7 @@
     "zustand": "^4.5.4"
   },
   "devDependencies": {
-    "@testing-library/jest-dom": "^6.4.6",
+    "@testing-library/jest-dom": "^6.4.7",
     "@testing-library/react": "^16.0.0",
     "@types/better-sqlite3": "^7.6.11",
     "@types/diff": "^5.2.1",
@@ -68,7 +68,7 @@
     "@types/react-syntax-highlighter": "^15.5.13",
     "@types/uuid": "^10.0.0",
     "@vitejs/plugin-react": "^4.3.1",
-    "jsdom": "^24.1.0",
-    "vitest": "^2.0.3"
+    "jsdom": "^24.1.1",
+    "vitest": "^2.0.4"
   }
 }
