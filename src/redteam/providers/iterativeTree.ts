@@ -129,6 +129,7 @@ interface TreeNode {
   score: number;
   children: TreeNode[];
   depth: number;
+  output?: string; // Add output property to store model output
 }
 
 async function runRedteamTreeSearch(
@@ -137,7 +138,7 @@ async function runRedteamTreeSearch(
   provider: ApiProvider,
 ): Promise<{
   output: string;
-  metadata: { redteamFinalPrompt: string; redteamFinalScore: number };
+  metadata: { redteamFinalPrompt: string; redteamFinalScore: number; bestOutput: string };
 }> {
   try {
     const { OpenAiChatCompletionProvider } = await import('../../providers/openai');
@@ -246,6 +247,9 @@ async function runRedteamTreeSearch(
         const targetResp = await targetProvider.callApi(childPrompt);
         invariant(typeof targetResp.output === 'string', 'Expected output to be a string');
         const targetResponse = targetResp.output;
+
+        // Store the model output in the node
+        node.output = targetResponse;
 
         // Check for non-refusal
         const nonRefusalBody = JSON.stringify([
@@ -368,6 +372,7 @@ async function runRedteamTreeSearch(
       metadata: {
         redteamFinalPrompt: bestNode.prompt,
         redteamFinalScore: bestNode.score,
+        bestOutput: bestNode.output || '', // Return the best output (targetResponse)
       },
     };
   } catch (error) {
@@ -413,15 +418,19 @@ class RedteamIterativeTreeJailbreaks implements ApiProvider {
         options?.originalProvider,
       );
       logger.debug(`runRedteamTreeSearch result: ${JSON.stringify(result)}`);
-      return result;
+      return {
+        output: result.metadata.bestOutput, // Return the best output (targetResponse)
+        metadata: result.metadata,
+      };
     } catch (error) {
       logger.error(`Error in RedteamIterativeTreeJailbreaks callApi: ${error}`);
       // Return a default response instead of throwing
       return {
-        output: prompt,
+        output: '',
         metadata: {
           redteamFinalPrompt: prompt,
           redteamFinalScore: 0,
+          bestOutput: '', // Default empty output
         },
       };
     }
