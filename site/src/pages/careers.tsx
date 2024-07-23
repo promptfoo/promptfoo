@@ -4,18 +4,13 @@ import styles from './careers.module.css';
 
 export default function Careers(): JSX.Element {
   return (
-    <Layout
-      title="Careers at Promptfoo"
-      description="Join the Promptfoo team and shape the future of LLMs"
-    >
+    <Layout title="Careers at Promptfoo" description="Shape the future of LLM Security">
       <main className={styles.careersContainer}>
-        <h1>Join the Promptfoo Team</h1>
+        <h1>Join Promptfoo</h1>
         <p>
           Our mission is to create a more transparent and secure AI ecosystem by developing
           open-source tools that empower teams to build safe, reliable LLM applications.
         </p>
-
-        <h2>What We're Building</h2>
         <p>
           We are building sophisticated generative AI evaluation tools for secure and ethical AI
           applications. Our core products are an open-source evaluation framework used by over
