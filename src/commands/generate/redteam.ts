@@ -69,6 +69,17 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
   });
   await telemetry.send();
 
+  if (!process.env.OPENAI_API_KEY && !redteamConfig?.provider) {
+    logger.warn(
+      dedent`\n${chalk.bold('Warning: OPENAI_API_KEY environment variable is not set.')}
+      
+      Please set this environment variable in order to generate tests.
+      
+      For more info on configuring custom providers, see the documentation: https://www.promptfoo.dev/docs/red-team/configuration/\n
+      `,
+    );
+  }
+
   let plugins: { id: string; numTests: number }[] =
     redteamConfig?.plugins ??
     Array.from(REDTEAM_DEFAULT_PLUGINS).map((plugin) => ({

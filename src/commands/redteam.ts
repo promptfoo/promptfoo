@@ -96,7 +96,7 @@ export function redteamCommand(program: Command) {
       // Question 3: Provider
       let provider: string;
       const providerChoice = await rawlist({
-        message: 'Choose a provider:',
+        message: 'Choose a provider to target:',
         choices: [
           { name: 'openai:gpt-3.5-turbo', value: 'openai:gpt-3.5-turbo' },
           { name: 'openai:gpt-4o-mini', value: 'openai:gpt-4o-mini' },
