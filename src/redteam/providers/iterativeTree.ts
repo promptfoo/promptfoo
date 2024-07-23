@@ -312,12 +312,12 @@ async function treeSearch(
 
     for (let i = 0; i < NUM_ITERATIONS; i++) {
       if (queue.length > 0) {
-        logger.warn(`Tree search iteration ${i}, queue length: ${queue.length}`);
+        logger.debug(`Tree search iteration ${i}, queue length: ${queue.length}`);
       } else {
         continue;
       }
       if (Date.now() - startTime > MAX_RUNTIME) {
-        logger.warn('Tree search exceeded maximum runtime');
+        logger.debug('Tree search exceeded maximum runtime');
         break;
       }
 
