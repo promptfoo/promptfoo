@@ -308,7 +308,7 @@ export async function synthesize({
     }
   }
 
-  let newTestCases: TestCaseWithPlugin[] = [];
+  const newTestCases: TestCaseWithPlugin[] = [];
 
   for (const { key, action } of Strategies) {
     const strategy = strategies.find((s) => s.id === key);
