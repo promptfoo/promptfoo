@@ -1,4 +1,4 @@
-description: 'End to end test'
+description: 'RAG - End to end test with comparison'
 
 prompts:
   - '{{question}}'

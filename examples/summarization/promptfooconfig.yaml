@@ -1,9 +1,11 @@
+description: 'Summarization'
+
 prompts:
-  - 'Summarize this article: {{article}}'
   - 'Summarize this article concisely: {{article}}'
 
 providers:
   - openai:gpt-4o-mini
+  - openai:gpt-4o
 
 tests:
   - vars:
@@ -15,4 +17,4 @@ tests:
         value: AI language model
       # Prefer shorter summaries
       - type: javascript
-        value: output.length < 500
+        value: output.length < 1000

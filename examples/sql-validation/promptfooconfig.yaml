@@ -7,7 +7,7 @@ prompts:
     Database schema:
     {{database}}
 
-    Only output SQL code.
+    Only output raw SQL code without markdown.
 
 providers:
   - openai:gpt-4o-mini
@@ -17,9 +17,12 @@ tests:
   - vars:
       product: bananas
       database: file://database.sql
+
     assert:
       # Ensure output is a valid SQL query
       - type: is-sql
+      - type: icontains
+        value: 'Select'
 
   - vars:
       product: apples
