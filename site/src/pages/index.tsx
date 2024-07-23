@@ -36,7 +36,7 @@ function HomepageHeader() {
             className={clsx('button button--secondary button--lg', styles.buttonSecondary)}
             to="/contact/"
           >
-            Contact Us
+            Request a Demo
           </Link>
         </div>
       </div>
@@ -164,20 +164,22 @@ function HomepageWalkthrough() {
       </div>
       <div className={styles.walkthroughContent}>
         <div className={styles.walkthroughImageContainer}>
-          <img
-            src={
-              isDarkTheme && selectedStepData?.imageDark
-                ? selectedStepData.imageDark
-                : selectedStepData?.image
-            }
-            srcSet={
-              isDarkTheme && selectedStepData?.image2xDark
-                ? `${selectedStepData.imageDark} 1x, ${selectedStepData.image2xDark} 2x`
-                : `${selectedStepData?.image} 1x, ${selectedStepData?.image2x} 2x`
-            }
-            alt={`Walkthrough step ${selectedStep}`}
-            className={styles.walkthroughImage}
-          />
+          <Link to={selectedStepData?.destinationUrl || '#'}>
+            <img
+              src={
+                isDarkTheme && selectedStepData?.imageDark
+                  ? selectedStepData.imageDark
+                  : selectedStepData?.image
+              }
+              srcSet={
+                isDarkTheme && selectedStepData?.image2xDark
+                  ? `${selectedStepData.imageDark} 1x, ${selectedStepData.image2xDark} 2x`
+                  : `${selectedStepData?.image} 1x, ${selectedStepData?.image2x} 2x`
+              }
+              alt={`Walkthrough step ${selectedStep}`}
+              className={styles.walkthroughImage}
+            />
+          </Link>
         </div>
         <div className={styles.walkthroughDescription}>
           {steps.find((step) => step.id === selectedStep)?.description}
