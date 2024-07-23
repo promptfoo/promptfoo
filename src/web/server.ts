@@ -232,32 +232,44 @@ export async function startServer(
   // overwrite dynamic routes.
   app.use(express.static(staticDir));
 
-  httpServer.listen(port, () => {
-    const url = `http://localhost:${port}`;
-    logger.info(`Server running at ${url} and monitoring for new evals.`);
+  httpServer
+    .listen(port, () => {
+      const url = `http://localhost:${port}`;
+      logger.info(`Server running at ${url} and monitoring for new evals.`);
 
-    const openUrl = async () => {
-      try {
-        logger.info('Press Ctrl+C to stop the server');
-        await opener(url);
-      } catch (err) {
-        logger.error(`Failed to open browser: ${String(err)}`);
-      }
-    };
-
-    if (browserBehavior === BrowserBehavior.OPEN) {
-      openUrl();
-    } else if (browserBehavior === BrowserBehavior.ASK) {
-      const rl = readline.createInterface({
-        input: process.stdin,
-        output: process.stdout,
-      });
-      rl.question('Open URL in browser? (y/N): ', async (answer) => {
-        if (answer.toLowerCase().startsWith('y')) {
-          openUrl();
+      const openUrl = async () => {
+        try {
+          logger.info('Press Ctrl+C to stop the server');
+          await opener(url);
+        } catch (err) {
+          logger.error(`Failed to open browser: ${String(err)}`);
         }
-        rl.close();
-      });
-    }
-  });
+      };
+
+      if (browserBehavior === BrowserBehavior.OPEN) {
+        openUrl();
+      } else if (browserBehavior === BrowserBehavior.ASK) {
+        const rl = readline.createInterface({
+          input: process.stdin,
+          output: process.stdout,
+        });
+        rl.question('Open URL in browser? (y/N): ', async (answer) => {
+          if (answer.toLowerCase().startsWith('y')) {
+            openUrl();
+          }
+          rl.close();
+        });
+      }
+    })
+    .on('error', (error: NodeJS.ErrnoException) => {
+      if (error.code === 'EADDRINUSE') {
+        logger.error(
+          `Unable to start server on port ${port}. It's currently in use. Check for existing promptfoo instances.`,
+        );
+        process.exit(1);
+      } else {
+        logger.error(`Failed to start server: ${error.message}`);
+        process.exit(1);
+      }
+    });
 }
