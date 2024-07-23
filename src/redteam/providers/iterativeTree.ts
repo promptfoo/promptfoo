@@ -157,17 +157,7 @@ async function runRedteamTreeSearch(
       throw new Error('Goal is undefined');
     }
 
-    // logger.debug(`Goal: ${goal}`);
-
     const nunjucks = getNunjucksEngine();
-
-    // Verify prompt variables before rendering
-    /*
-    logger.debug(`ATTACKER_SYSTEM_PROMPT template: ${ATTACKER_SYSTEM_PROMPT}`);
-    logger.debug(`ON_TOPIC_SYSTEM_PROMPT template: ${ON_TOPIC_SYSTEM_PROMPT}`);
-    logger.debug(`NON_REFUSAL_PROMPT template: ${NON_REFUSAL_PROMPT}`);
-    logger.debug(`JUDGE_SYSTEM_PROMPT template: ${JUDGE_SYSTEM_PROMPT}`);
-    */
 
     const redteamSystemPrompt = nunjucks.renderString(ATTACKER_SYSTEM_PROMPT, { goal });
     const onTopicSystemPrompt = nunjucks.renderString(ON_TOPIC_SYSTEM_PROMPT, { goal });
