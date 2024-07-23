@@ -13,30 +13,14 @@
               "type": "string"
             },
             {
-              "anyOf": [
+              "allOf": [
                 {
-                  "allOf": [
-                    {
-                      "type": "object",
-                      "properties": {
-                        "label": {
-                          "type": "string"
-                        }
-                      }
+                  "type": "object",
+                  "properties": {
+                    "label": {
+                      "type": "string"
                     }
-                  ]
-                },
-                {
-                  "allOf": [
-                    {
-                      "type": "object",
-                      "properties": {
-                        "label": {
-                          "type": "string"
-                        }
-                      }
-                    }
-                  ]
+                  }
                 }
               ]
             },
@@ -792,7 +776,12 @@
                 "anyOf": [
                   {
                     "type": "string",
-                    "enum": ["jailbreak", "prompt-injection", "experimental-jailbreak"],
+                    "enum": [
+                      "jailbreak",
+                      "prompt-injection",
+                      "experimental-jailbreak",
+                      "experimental-tree-jailbreak"
+                    ],
                     "description": "Name of the strategy"
                   },
                   {
@@ -800,7 +789,12 @@
                     "properties": {
                       "id": {
                         "type": "string",
-                        "enum": ["jailbreak", "prompt-injection", "experimental-jailbreak"],
+                        "enum": [
+                          "jailbreak",
+                          "prompt-injection",
+                          "experimental-jailbreak",
+                          "experimental-tree-jailbreak"
+                        ],
                         "description": "Name of the strategy"
                       }
                     },
@@ -809,7 +803,7 @@
                   }
                 ]
               },
-              "description": "Strategies to use for redteam generation.\n\nDefaults to jailbreak, prompt-injection\nSupports jailbreak, prompt-injection, experimental-jailbreak",
+              "description": "Strategies to use for redteam generation.\n\nDefaults to jailbreak, prompt-injection\nSupports jailbreak, prompt-injection, experimental-jailbreak, experimental-tree-jailbreak",
               "default": [
                 {
                   "id": "jailbreak"
