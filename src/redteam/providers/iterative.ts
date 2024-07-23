@@ -166,7 +166,7 @@ async function runRedteamConversation(
       },
       {
         role: 'user',
-        content: `Prompt: ${targetPrompt}\n\nResponse: ${targetResponse}`,
+        content: targetResponse,
       },
     ]);
     const judgeResp = await redteamProvider.callApi(judgeBody);
