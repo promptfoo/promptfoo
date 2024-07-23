@@ -45,7 +45,7 @@ function HomepageHeader() {
 }
 
 function HomepageWalkthrough() {
-  const { isDarkTheme } = useColorMode();
+  const isDarkTheme = useColorMode().colorMode === 'dark';
   const [selectedStep, setSelectedStep] = React.useState(() => {
     if (typeof window !== 'undefined' && window.location.hash === '#evals') {
       return 1;
