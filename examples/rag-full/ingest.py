@@ -5,8 +5,10 @@ from langchain_community.vectorstores import Chroma
 from langchain_openai import OpenAIEmbeddings
 
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
-DATA_DIR = "./data"
 CHROMA_PATH = "db"
+
+# Base URL for the PDF files
+BASE_URL = "https://storage.googleapis.com/promptfoo-public-1/examples/rag-sec/"
 
 # List of PDF files to process
 pdf_files = [
@@ -25,10 +27,10 @@ all_chunks = []
 # Process each PDF file
 for pdf_file in pdf_files:
     print(f'Ingesting {pdf_file}...')
-    doc_path = os.path.join(DATA_DIR, pdf_file)
+    doc_url = BASE_URL + pdf_file.replace(' ', '%20')
     
-    # Load PDF document
-    loader = PyPDFLoader(doc_path)
+    # Load PDF document from URL
+    loader = PyPDFLoader(doc_url)
     pages = loader.load()
     
     # Split the document into chunks

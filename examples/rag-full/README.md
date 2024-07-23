@@ -2,8 +2,10 @@ This RAG example allows you to ask questions over a number of public company SEC
 
 There are 3 parts:
 
-1. `ingest.py`: Chunks and loads PDFs into a vector database.
+1. `ingest.py`: Chunks and loads PDFs into a vector database (PDFs are pulled from a public Google Cloud bucket)
+
 1. `retrieve.py`: Promptfoo-compatible provider that answers RAG questions using the database.
+
 1. `promptfooconfig.yaml`: Test inputs and requirements.
 
 To get started:
