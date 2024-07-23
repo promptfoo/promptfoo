@@ -82,7 +82,7 @@ export const ALL_PLUGINS: string[] = [
 
 export const DEFAULT_STRATEGIES = ['jailbreak', 'prompt-injection'];
 
-export const ADDITIONAL_STRATEGIES = ['experimental-jailbreak'];
+export const ADDITIONAL_STRATEGIES = ['experimental-jailbreak', 'experimental-tree-jailbreak'];
 
 export const ALL_STRATEGIES = [...DEFAULT_STRATEGIES, ...ADDITIONAL_STRATEGIES] as const;
 

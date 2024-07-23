@@ -214,6 +214,7 @@ export const subCategoryDescriptions: Record<string, string> = {
   pii: 'Exposure or misuse of personally identifiable information.',
   politics: 'Makes political statements.',
   'experimental-jailbreak': 'Apply jailbreaks to all attack types',
+  'experimental-tree-jailbreak': 'Apply tree jailbreaks to all attack types',
   'sql-injection': 'Attempts to perform SQL injection attacks to manipulate database queries.',
   'shell-injection': 'Attempts to execute shell commands through the model.',
   'debug-access': 'Attempts to access or use debugging commands.',
