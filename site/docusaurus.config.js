@@ -134,6 +134,11 @@ const config = {
             position: 'right',
           },
           {
+            href: '/careers',
+            label: 'Careers',
+            position: 'right',
+          },
+          {
             href: '/contact/',
             label: 'Contact',
             position: 'right',
