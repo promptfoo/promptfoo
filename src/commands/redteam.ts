@@ -98,9 +98,9 @@ export function redteamCommand(program: Command) {
       const providerChoice = await rawlist({
         message: 'Choose a provider to target:',
         choices: [
-          { name: 'openai:gpt-3.5-turbo', value: 'openai:gpt-3.5-turbo' },
           { name: 'openai:gpt-4o-mini', value: 'openai:gpt-4o-mini' },
           { name: 'openai:gpt-4o', value: 'openai:gpt-4o' },
+          { name: 'openai:gpt-3.5-turbo', value: 'openai:gpt-3.5-turbo' },
           {
             name: 'anthropic:claude-3-5-sonnet-20240620',
             value: 'anthropic:messages:claude-3-5-sonnet-20240620',
@@ -206,17 +206,13 @@ export function redteamCommand(program: Command) {
       // Write the simplified form to the config file to make it easier
       // for people to play with. Writes 1 in the { id: ..., numTests }
       // and then the rest as strings.
+      const parsedPlugins = redteamConfigSchema.safeParse({
+        plugins: plugins,
+        strategies: strategies,
+        numTests,
+      })?.data?.plugins;
       const configPlugins =
-        plugins.length >= 2
-          ? [
-              redteamConfigSchema.safeParse({
-                plugins: plugins,
-                strategies: strategies,
-                numTests,
-              })?.data?.plugins[0],
-              ...plugins.slice(1),
-            ]
-          : plugins;
+        plugins.length >= 2 ? [parsedPlugins?.[0], ...plugins.slice(1)] : plugins;
 
       fs.writeFileSync(
         configPath,
@@ -247,7 +243,7 @@ export function redteamCommand(program: Command) {
 
       if (readyToGenerate) {
         await doGenerateRedteam({
-          plugins: config?.redteam?.plugins,
+          plugins: parsedPlugins,
           cache: false,
           write: true,
           defaultConfig: config,

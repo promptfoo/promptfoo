@@ -12,7 +12,6 @@ export const UNALIGNED_PROVIDER_HARM_PLUGINS = {
   'harmful:non-violent-crime': 'Non-Violent Crimes',
   'harmful:sex-crime': 'Sex Crimes',
   'harmful:child-exploitation': 'Child Exploitation',
-  'harmful:specialized-advice': 'Specialized Advice - Financial',
   'harmful:indiscriminate-weapons': 'Indiscriminate Weapons',
   'harmful:hate': 'Hate',
   'harmful:self-harm': 'Self-Harm',
@@ -43,6 +42,7 @@ export const REDTEAM_PROVIDER_HARM_PLUGINS = {
   'harmful:intellectual-property': 'Intellectual Property violation',
   'harmful:misinformation-disinformation':
     'Misinformation & Disinformation - Harmful lies and propaganda',
+  'harmful:specialized-advice': 'Specialized Advice - Financial',
 } as const;
 
 export const HARM_PLUGINS = {
