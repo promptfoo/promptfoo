@@ -7,25 +7,17 @@ import * as fs from 'fs';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import nunjucks from 'nunjucks';
-import * as os from 'os';
 import * as path from 'path';
 import invariant from 'tiny-invariant';
 import { getAuthor } from '../accounts';
 import { TERMINAL_MAX_WIDTH } from '../constants';
-import {
-  datasets,
-  getDb,
-  evals,
-  evalsToDatasets,
-  evalsToPrompts,
-  prompts,
-  getDbSignalPath,
-} from '../database';
+import { getDbSignalPath, getDb } from '../database';
+import { datasets, evals, evalsToDatasets, evalsToPrompts, prompts } from '../database/operations';
 import { getDirectory, importModule } from '../esm';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
 import { runDbMigrations } from '../migrate';
-import { runPython } from '../python/wrapper';
+import { runPython } from '../python/pythonUtils';
 import {
   type EvalWithMetadata,
   type EvaluateResult,
@@ -48,6 +40,7 @@ import {
   isProviderOptions,
   OutputFileExtension,
 } from '../types';
+import { getConfigDirectoryPath } from './config';
 import { getNunjucksEngine } from './templates';
 
 const DEFAULT_QUERY_LIMIT = 100;
@@ -169,20 +162,6 @@ export async function readOutput(outputPath: string): Promise<OutputFile> {
     default:
       throw new Error(`Unsupported output file format: ${ext} currently only supports json`);
   }
-}
-
-let configDirectoryPath: string | undefined = process.env.PROMPTFOO_CONFIG_DIR;
-
-export function getConfigDirectoryPath(createIfNotExists: boolean = false): string {
-  const p = configDirectoryPath || path.join(os.homedir(), '.promptfoo');
-  if (createIfNotExists && !fs.existsSync(p)) {
-    fs.mkdirSync(p, { recursive: true });
-  }
-  return p;
-}
-
-export function setConfigDirectoryPath(newPath: string): void {
-  configDirectoryPath = newPath;
 }
 
 /**
@@ -1030,23 +1009,6 @@ export function resultIsForTestCase(result: EvaluateResult, testCase: TestCase):
   return varsMatch(testCase.vars, result.vars) && providersMatch;
 }
 
-export function safeJsonStringify(value: any, prettyPrint: boolean = false): string {
-  // Prevent circular references
-  const cache = new Set();
-  const space = prettyPrint ? 2 : undefined;
-  return JSON.stringify(
-    value,
-    (key, val) => {
-      if (typeof val === 'object' && val !== null) {
-        if (cache.has(val)) return;
-        cache.add(val);
-      }
-      return val;
-    },
-    space,
-  );
-}
-
 export function renderVarsInObject<T>(obj: T, vars?: Record<string, string | object>): T {
   // Renders nunjucks template strings with context variables
   if (!vars || process.env.PROMPTFOO_DISABLE_TEMPLATING) {
@@ -1069,15 +1031,6 @@ export function renderVarsInObject<T>(obj: T, vars?: Record<string, string | obj
     return renderVarsInObject(fn({ vars }) as T);
   }
   return obj;
-}
-
-export function isValidJson(str: string): boolean {
-  try {
-    JSON.parse(str);
-    return true;
-  } catch (e) {
-    return false;
-  }
 }
 
 export function extractJsonObjects(str: string): object[] {

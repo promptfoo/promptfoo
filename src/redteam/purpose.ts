@@ -1,9 +1,9 @@
 import dedent from 'dedent';
-import invariant from 'tiny-invariant';
+import logger from '../logger';
 import { ApiProvider } from '../types';
 
 export async function getPurpose(provider: ApiProvider, prompts: string[]): Promise<string> {
-  const { output: purpose } = await provider.callApi(dedent`
+  const { output: purpose, error } = await provider.callApi(dedent`
       The following are prompts that are being used to test an LLM application:
       
       ${prompts
@@ -23,6 +23,12 @@ export async function getPurpose(provider: ApiProvider, prompts: string[]): Prom
       - Ecommerce chatbot that sells shoes
     `);
 
-  invariant(typeof purpose === 'string', `Expected purpose to be a string, got: ${purpose}`);
+  if (error) {
+    logger.error(`Error determining system purpose: ${error}`);
+    throw new Error(`Failed to determine system purpose: ${error}`);
+  } else if (typeof purpose !== 'string') {
+    logger.error(`Could not determine system purpose. Got: ${purpose}`);
+    throw new Error(`Invalid system purpose: expected string, got: ${purpose}`);
+  }
   return purpose;
 }

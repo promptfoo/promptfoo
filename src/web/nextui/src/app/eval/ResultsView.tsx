@@ -499,6 +499,7 @@ export default function ResultsView({
               <Tooltip title="View vulnerability scan report" placement="bottom">
                 <Button
                   color="primary"
+                  variant="contained"
                   startIcon={<EyeIcon />}
                   onClick={() => router.push(`/report/?evalId=${evalId || defaultEvalId}`)}
                 >

@@ -1,4 +1,5 @@
 ---
+sidebar_position: 1
 sidebar_label: Intro
 ---
 
@@ -180,7 +181,7 @@ prompts:
   - 'Act as a travel agent and help the user plan their trip. User query: {{query}}'
 
 providers:
-  - openai:gpt-3.5-turbo
+  - openai:gpt-4o-mini
   - anthropic:messages:claude-3.5-sonnet-20240620
 ```
 
@@ -251,3 +252,7 @@ That view includes a breakdown of specific test types that are connected to the 
 ## Detailed guide
 
 See [the full guide](/docs/guides/llm-redteaming) for detailed info on configuring more complex prompts, dynamically generated prompts and RAG/chain/agents, and more.
+
+## Configuration File
+
+The `redteam` section in your `promptfooconfig.yaml` file allows you to configure red teaming options for your prompts. To learn more about the available options, see [the configuration guide](/docs/red-team/configuration).

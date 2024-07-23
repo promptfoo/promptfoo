@@ -13,7 +13,7 @@ import type {
   ProviderModerationResponse,
   ProviderResponse,
 } from '../types';
-import { safeJsonStringify } from '../util';
+import { safeJsonStringify } from '../util/json';
 
 interface ReplicateCompletionOptions {
   apiKey?: string;

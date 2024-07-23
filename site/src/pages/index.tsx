@@ -1,6 +1,7 @@
 import React from 'react';
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
+import { useColorMode } from '@docusaurus/theme-common';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import CompareIcon from '@mui/icons-material/Compare';
 import DescriptionIcon from '@mui/icons-material/Description';
@@ -44,6 +45,7 @@ function HomepageHeader() {
 }
 
 function HomepageWalkthrough() {
+  const { isDarkTheme } = useColorMode();
   const [selectedStep, setSelectedStep] = React.useState(() => {
     if (typeof window !== 'undefined' && window.location.hash === '#redteam') {
       return 2;
@@ -56,6 +58,8 @@ function HomepageWalkthrough() {
       caption: 'Evaluations',
       image: '/img/claude-vs-gpt-example.png',
       image2x: '/img/claude-vs-gpt-example@2x.png',
+      imageDark: '/img/claude-vs-gpt-example-dark.png',
+      image2xDark: '/img/claude-vs-gpt-example-dark@2x.png',
       description: (
         <>
           <p>
@@ -82,6 +86,8 @@ function HomepageWalkthrough() {
       caption: 'Security & Red Teaming',
       image: '/img/riskreport-1.png',
       image2x: '/img/riskreport-1@2x.png',
+      imageDark: '/img/riskreport-1-dark.png',
+      image2xDark: '/img/riskreport-1-dark@2x.png',
       description: (
         <>
           <p>
@@ -158,8 +164,16 @@ function HomepageWalkthrough() {
       <div className={styles.walkthroughContent}>
         <div className={styles.walkthroughImageContainer}>
           <img
-            src={selectedStepData?.image}
-            srcSet={`${selectedStepData?.image} 1x, ${selectedStepData?.image2x} 2x`}
+            src={
+              isDarkTheme && selectedStepData?.imageDark
+                ? selectedStepData.imageDark
+                : selectedStepData?.image
+            }
+            srcSet={
+              isDarkTheme && selectedStepData?.image2xDark
+                ? `${selectedStepData.imageDark} 1x, ${selectedStepData.image2xDark} 2x`
+                : `${selectedStepData?.image} 1x, ${selectedStepData?.image2x} 2x`
+            }
             alt={`Walkthrough step ${selectedStep}`}
             className={styles.walkthroughImage}
           />
@@ -177,7 +191,7 @@ export default function Home(): JSX.Element {
   return (
     <Layout
       title="Secure & reliable LLMs"
-      description="Custom LLM evals and red-teaming for your app. Find and fix vulnerabilities, maximize output quality, catch regressions."
+      description="Eliminate risk with AI red-teaming and evals used by 25,000 developers. Find and fix vulnerabilities, maximize output quality, catch regressions."
     >
       <Head>
         <meta property="og:image" content="/img/meta/homepage.png" />
@@ -211,7 +225,7 @@ export default function Home(): JSX.Element {
         </section>
 
         <div className={styles.ctaSection}>
-          <h3>Make your LLM app reliable & secure</h3>
+          <h2>Make your LLM app reliable & secure</h2>
           <div className={styles.buttons}>
             <Link className="button button--primary button--lg" to="/docs/intro">
               Read Start Guide

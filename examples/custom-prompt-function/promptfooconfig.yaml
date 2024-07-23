@@ -51,7 +51,7 @@ prompts:
   - file://prompt_python.py:prompt1
 
 providers:
-  - openai:gpt-3.5-turbo
+  - openai:gpt-4o-mini
 
 tests:
   - vars:

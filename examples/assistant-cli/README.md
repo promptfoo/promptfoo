@@ -9,5 +9,5 @@ promptfoo eval
 Full command-line equivalent:
 
 ```
-promptfoo eval --prompts prompts.txt --tests tests.csv --providers openai:gpt-3.5-turbo --output output.json
+promptfoo eval --prompts prompts.txt --tests tests.csv --providers openai:gpt-4o-mini --output output.json
 ```

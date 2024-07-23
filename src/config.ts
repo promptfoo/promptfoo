@@ -348,6 +348,7 @@ export async function resolveConfigs(
     derivedMetrics: fileConfig.derivedMetrics || defaultConfig.derivedMetrics,
     outputPath: cmdObj.output || fileConfig.outputPath || defaultConfig.outputPath,
     metadata: fileConfig.metadata || defaultConfig.metadata,
+    redteam: fileConfig.redteam || defaultConfig.redteam,
   };
 
   // Validation
