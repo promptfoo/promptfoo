@@ -26,6 +26,8 @@ There are several criteria used to evaluate RAG applications:
 
 This guide shows how to use promptfoo to evaluate your RAG app. If you're new to promptfoo, head to [Getting Started](/docs/getting-started).
 
+You can also jump to the [full RAG example](https://github.com/promptfoo/promptfoo/tree/main/examples/rag-full) on GitHub.
+
 ## Evaluating document retrieval
 
 Document retrieval is the first step of a RAG. It is possible to eval the retrieval step in isolation, in order to ensure that you are fetching the best documents.
@@ -319,3 +321,5 @@ tests:
 ```
 
 By following this approach and setting up tests on [expected outputs](/docs/configuration/expected-outputs), you can ensure that the quality of your RAG pipeline is improving, and prevent regressions.
+
+See the [RAG example](https://github.com/promptfoo/promptfoo/tree/main/examples/rag-full) on GitHub for a fully functioning end-to-end example.

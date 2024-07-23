@@ -1,4 +1,3 @@
-import chalk from 'chalk';
 import * as fs from 'fs';
 import * as path from 'path';
 import logger from './logger';
@@ -23,9 +22,7 @@ export const checkNodeVersion = (): void => {
   const versionMatch = process.version.match(/^v(\d+)\.(\d+)\.(\d+)/);
   if (!versionMatch) {
     logger.warn(
-      chalk.yellow(
-        `Unexpected Node.js version format: ${process.version}. Please use Node.js ${requiredVersion}.`,
-      ),
+      `Unexpected Node.js version format: ${process.version}. Please use Node.js ${requiredVersion}.`,
     );
     return;
   }
@@ -42,9 +39,7 @@ export const checkNodeVersion = (): void => {
     (major === requiredMajor && minor === requiredMinor && patch < requiredPatch)
   ) {
     logger.warn(
-      chalk.yellow(
-        `You are using Node.js ${major}.${minor}.${patch}. This version is not supported. Please use Node.js ${requiredVersion}.`,
-      ),
+      `You are using Node.js ${major}.${minor}.${patch}. This version is not supported. Please use Node.js ${requiredVersion}.`,
     );
     process.exit(1);
   }

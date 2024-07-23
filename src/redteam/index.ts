@@ -130,8 +130,17 @@ const Strategies: Strategy[] = [
     key: 'experimental-jailbreak',
     action: (testCases) => {
       logger.debug('Adding experimental jailbreaks to all test cases');
-      const experimentalJailbreaks = addIterativeJailbreaks(testCases);
+      const experimentalJailbreaks = addIterativeJailbreaks(testCases, 'iterative');
       logger.debug(`Added ${experimentalJailbreaks.length} experimental jailbreak test cases`);
+      return experimentalJailbreaks;
+    },
+  },
+  {
+    key: 'experimental-tree-jailbreak',
+    action: (testCases) => {
+      logger.debug('Adding experimental tree jailbreaks to all test cases');
+      const experimentalJailbreaks = addIterativeJailbreaks(testCases, 'iterative:tree');
+      logger.debug(`Added ${experimentalJailbreaks.length} experimental tree jailbreak test cases`);
       return experimentalJailbreaks;
     },
   },
@@ -299,14 +308,16 @@ export async function synthesize({
     }
   }
 
+  const newTestCases: TestCaseWithPlugin[] = [];
+
   for (const { key, action } of Strategies) {
     const strategy = strategies.find((s) => s.id === key);
     if (strategy) {
       updateProgress();
       logger.debug(`Generating ${key} tests`);
-      const newTestCases = action(testCases, injectVar);
-      testCases.push(
-        ...newTestCases.map((t) => ({
+      const strategyTestCases = action(testCases, injectVar);
+      newTestCases.push(
+        ...strategyTestCases.map((t) => ({
           ...t,
           metadata: {
             ...(t.metadata || {}),
@@ -316,6 +327,8 @@ export async function synthesize({
       );
     }
   }
+
+  testCases.push(...newTestCases);
 
   // Finish progress bar
   if (process.env.LOG_LEVEL !== 'debug') {

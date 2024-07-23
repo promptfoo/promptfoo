@@ -151,15 +151,15 @@ const config = {
                 to: '/docs/intro',
               },
               {
-                label: 'Command line',
+                label: 'Command Line',
                 to: '/docs/getting-started',
               },
               {
-                label: 'Node package',
+                label: 'Node Package',
                 to: '/docs/usage/node-package',
               },
               {
-                label: 'Privacy policy',
+                label: 'Privacy Policy',
                 to: '/privacy',
               },
               {
@@ -176,15 +176,15 @@ const config = {
             title: 'Guides & Tools',
             items: [
               {
-                label: 'LLM red teaming',
+                label: 'LLM Red Teaming',
                 to: '/docs/red-team',
               },
               {
-                label: 'Running benchmarks',
+                label: 'Running Benchmarks',
                 to: '/docs/guides/llama2-uncensored-benchmark-ollama',
               },
               {
-                label: 'Evaluating factuality',
+                label: 'Evaluating Factuality',
                 to: '/docs/guides/factuality-eval',
               },
               {
@@ -192,7 +192,7 @@ const config = {
                 to: '/docs/guides/evaluate-rag',
               },
               {
-                label: 'Minimizing hallucinations',
+                label: 'Minimizing Hallucinations',
                 to: '/docs/guides/prevent-llm-hallucations',
               },
               {
