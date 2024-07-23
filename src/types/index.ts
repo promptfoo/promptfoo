@@ -100,22 +100,15 @@ export const CallApiOptionsParamsSchema = z.object({
   originalProvider: z.optional(z.any()), // Assuming ApiProvider is not a zod schema, using z.any()
 });
 
-const CallApiFunctionSchema = z.union([
-  z
-    .function()
-    .args(
-      z.string().describe('prompt'),
-      CallApiContextParamsSchema.optional(),
-      CallApiOptionsParamsSchema.optional(),
-    )
-    .returns(z.promise(z.custom<ProviderResponse>()))
-    .and(z.object({ label: z.string().optional() })),
-  z
-    .function()
-    .args(z.string().describe('prompt'), CallApiOptionsParamsSchema.optional())
-    .returns(z.promise(z.custom<ProviderResponse>()))
-    .and(z.object({ label: z.string().optional() })),
-]);
+const CallApiFunctionSchema = z
+  .function()
+  .args(
+    z.string().describe('prompt'),
+    CallApiContextParamsSchema.optional(),
+    CallApiOptionsParamsSchema.optional(),
+  )
+  .returns(z.promise(z.custom<ProviderResponse>()))
+  .and(z.object({ label: z.string().optional() }));
 
 export const ApiProviderSchema = z.object({
   id: z.function().returns(z.string()),
