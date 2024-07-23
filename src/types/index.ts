@@ -209,7 +209,20 @@ export type ProviderOptions = z.infer<typeof ProviderOptionsSchema>;
 export type ProviderResponse = z.infer<typeof ProviderResponseSchema>;
 export type ProviderSimilarityResponse = z.infer<typeof ProviderSimilarityResponseSchema>;
 export type TokenUsage = z.infer<typeof TokenUsageSchema>;
-type CallApiFunction = z.infer<typeof CallApiFunctionSchema>;
+
+// The z.infer type is not as good as a manually created type
+type CallApiFunction = {
+  (
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse>;
+  label?: string;
+};
+// Confirm that manually created type is equivalent to z.infer type
+function assert<T extends never>() {}
+type TypeEqualityGuard<A, B> = Exclude<A, B> | Exclude<B, A>;
+assert<TypeEqualityGuard<CallApiFunction, z.infer<typeof CallApiFunctionSchema>>>();
 
 export interface ModerationFlag {
   code: string;
