@@ -24,7 +24,8 @@ Do not say "according to the context" or "mentioned in the context" or similar.
 """
 
 def call_api(prompt, options, context):
-    docs_chroma = db_chroma.similarity_search_with_score(prompt, k=5)
+    k = options.get('config', {}).get('topK', 5)
+    docs_chroma = db_chroma.similarity_search_with_score(prompt, k=k)
     context_text = "\n\n".join([doc.page_content for doc, _score in docs_chroma])
 
     # Generate prompt using the template

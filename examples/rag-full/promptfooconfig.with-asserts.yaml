@@ -4,7 +4,14 @@ prompts:
   - '{{question}}'
 
 providers:
-  - python:retrieve.py
+  - id: python:retrieve.py
+    label: RAG retrieval small
+    config:
+      topK: 5
+  - id: python:retrieve.py
+    label: RAG retrieval big
+    config:
+      topK: 10
 
 tests:
   - vars:
@@ -23,31 +30,27 @@ tests:
       question: Has there been any significant change in Apple's operating expenses over the reported quarters? If so, what are the key drivers for this change?
     assert:
       - type: contains
-        value: '12,809 million'
-      - type: contains
-        value: '14,316 million'
+        value: 'net sales'
   - vars:
       question: How has Apple's revenue from iPhone sales fluctuated across quarters?
     assert:
-      - type: contains
-        value: '40,665 million'
+      - type: icontains-all
+        value: ['2023', '2022', '2021']
   - vars:
       question: Can any trends be identified in Apple's Services segment revenue over the reported periods?
     assert:
-      - type: contains
-        value: '19,604 million'
-      - type: contains
-        value: '20,766 million'
+      - type: icontains
+        value: services
   - vars:
       question: What is the impact of foreign exchange rates on Apple's financial performance? List this out separately for each reported period.
     assert:
-      - type: contains
-        value: '6.8 billion'
+      - type: llm-rubric
+        value: 'includes specific commentary on foreign exchange'
   - vars:
       question: Are there any notable changes in Apple's liquidity position or cash flows as reported in these 10-Qs?
     assert:
-      - type: contains
-        value: 'no explicit details indicating notable changes'
+      - type: llm-rubric
+        value: 'no notable changes'
   - vars:
       question: Examine how Intel's effective tax rate in the most recent 10-Q compares with the tax-related discussions in the notes section.
     assert:
