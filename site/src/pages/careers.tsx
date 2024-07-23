@@ -42,8 +42,7 @@ export default function Careers(): JSX.Element {
         <p>
           We are looking for talented individuals with skills in Software Engineering, AI Research,
           Technical Writing, and Developer Advocacy. If you're excited about our work, please reach
-          out to us at: <a href="mailto:careers@promptfoo.dev">careers@promptfoo.dev</a>. We review
-          every application thoroughly and will get back to you promptly if we see a good fit.
+          out to us at: <a href="mailto:careers@promptfoo.dev">careers@promptfoo.dev</a>.
         </p>
         <p>
           Promptfoo is an equal opportunity employer committed to creating an inclusive environment
