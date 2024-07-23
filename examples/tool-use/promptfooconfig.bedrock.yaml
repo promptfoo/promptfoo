@@ -1,6 +1,10 @@
 providers:
   - id: bedrock:anthropic.claude-3-haiku-20240307-v1:0
     config:
+      # optional block to force specific tool to be used
+      tool_choice:
+        type: tool
+        name: get_weather
       tools:
         - name: get_weather
           description: Get the current weather in a given location
@@ -17,6 +21,16 @@ providers:
                   - fahrenheit
             required:
               - location
+        # irrelevant tool
+        - name: add
+          description: Add two numbers
+          input_schema:
+            type: object
+            properties:
+              a:
+                type: number
+              b:
+                type: number
 
 prompts:
   - Tell me about the weather in {{city}}.
