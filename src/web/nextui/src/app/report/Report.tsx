@@ -2,12 +2,15 @@
 
 import React from 'react';
 import { getApiBaseUrl } from '@/api';
+import Box from '@mui/material/Box';
+import Card from '@mui/material/Card';
 import Chip from '@mui/material/Chip';
 import Container from '@mui/material/Container';
-import Grid from '@mui/material/Grid';
+import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import type { ResultsFile, SharedResults } from '../eval/types';
 import Overview from './Overview';
+import ReportSettingsDialogButton from './ReportSettingsDialogButton';
 import RiskCategories from './RiskCategories';
 import TestSuites from './TestSuites';
 import { categoryAliases, categoryAliasesReverse } from './constants';
@@ -38,7 +41,7 @@ const App: React.FC = () => {
   }, []);
 
   if (!evalData || !evalId) {
-    return <div>Loading...</div>;
+    return <Box sx={{ width: '100%', textAlign: 'center' }}>Loading...</Box>;
   }
 
   const prompt = evalData.results.table.head.prompts[0];
@@ -59,18 +62,29 @@ const App: React.FC = () => {
         }
 
         const pass = row.success;
+        const rowPassedModeration = row.gradingResult?.componentResults?.some((result) => {
+          const isModeration = result.assertion?.type === 'moderation';
+          const isPass = result.pass;
+          return isModeration && isPass;
+        });
+        const rowPassedLlmRubric = row.gradingResult?.componentResults?.some((result) => {
+          const isLlmRubric = result.assertion?.type === 'llm-rubric';
+          const isPass = result.pass;
+          return isLlmRubric && isPass;
+        });
+        const rowPassedHuman = row.gradingResult?.componentResults?.some((result) => {
+          const isHuman = result.assertion?.type === 'human';
+          const isPass = result.pass;
+          return isHuman && isPass;
+        });
+
         acc[pluginName] = acc[pluginName] || { pass: 0, total: 0, passWithFilter: 0 };
         acc[pluginName].total++;
-        if (pass) {
+        if (rowPassedLlmRubric || rowPassedHuman) {
+          // Note: We count the row as passed if it passed the LLM rubric or human, even if it failed moderation
           acc[pluginName].pass++;
           acc[pluginName].passWithFilter++;
-        } else if (
-          row.gradingResult?.componentResults?.some((result) => {
-            const isModeration = result.assertion?.type === 'moderation';
-            const isNotPass = !result.pass;
-            return isModeration && isNotPass;
-          })
-        ) {
+        } else if (!rowPassedModeration) {
           acc[pluginName].passWithFilter++;
         }
       }
@@ -81,8 +95,9 @@ const App: React.FC = () => {
 
   return (
     <Container>
-      <Grid container direction="column" spacing={1} pt={6} pb={8}>
-        <Grid item className="report-header">
+      <Stack spacing={4} pb={8} pt={2}>
+        <Card className="report-header" sx={{ position: 'relative' }}>
+          <ReportSettingsDialogButton />
           <Typography variant="h4">
             <strong>LLM Risk Assessment</strong>
             {evalData.config.description && `: ${evalData.config.description}`}
@@ -94,7 +109,7 @@ const App: React.FC = () => {
               day: 'numeric',
             })}
           </Typography>
-          <Typography variant="body1" gutterBottom className="report-details">
+          <Box className="report-details">
             <Chip
               size="small"
               label={
@@ -116,27 +131,22 @@ const App: React.FC = () => {
               label={
                 <>
                   <strong>Prompt:</strong> &quot;
-                  {prompt.raw.length > 20 ? `${prompt.raw.substring(0, 20)}...` : prompt.raw}&quot;
+                  {prompt.raw.length > 40 ? `${prompt.raw.substring(0, 40)}...` : prompt.raw}
+                  &quot;
                 </>
               }
             />
-          </Typography>
-        </Grid>
-        <Grid item>
-          <Overview categoryStats={categoryStats} />
-        </Grid>
-        <Grid item>
-          <RiskCategories categoryStats={categoryStats} />
-        </Grid>
-        <Grid item>
-          <TestSuites evalId={evalId} categoryStats={categoryStats} />
-        </Grid>
+          </Box>
+        </Card>
+        <Overview categoryStats={categoryStats} />
+        <RiskCategories categoryStats={categoryStats} />
+        <TestSuites evalId={evalId} categoryStats={categoryStats} />
         {/*
-        <Grid item>
+        <div>
           <Vulnerabilities />
-        </Grid>
+        </div>
             */}
-      </Grid>
+      </Stack>
     </Container>
   );
 };

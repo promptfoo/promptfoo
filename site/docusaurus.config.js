@@ -96,7 +96,7 @@ const config = {
         title: 'promptfoo',
         logo: {
           alt: 'promptfoo logo',
-          src: 'img/logo.svg',
+          src: 'img/logo-panda.svg',
         },
         items: [
           /*
@@ -133,6 +133,11 @@ const config = {
             label: 'Discord',
             position: 'right',
           },
+          {
+            href: '/contact/',
+            label: 'Contact',
+            position: 'right',
+          },
         ],
       },
       footer: {
@@ -157,11 +162,23 @@ const config = {
                 label: 'Privacy policy',
                 to: '/privacy',
               },
+              {
+                html: `
+                <div style="position: relative; margin-top:8px">
+                  <span style="position: absolute; left: 65px; top: 25px; font-size: 10px; font-weight: bold; background-color: #25842c; padding: 2px 4px; border-radius: 4px;">In Progress</span>
+                  <img src="/img/badges/soc2.png" alt="SOC2 Compliance in progress" style="width:80px; height: auto"/>
+                </div>
+                `,
+              },
             ],
           },
           {
-            title: 'Guides',
+            title: 'Guides & Tools',
             items: [
+              {
+                label: 'LLM red teaming',
+                to: '/docs/red-team',
+              },
               {
                 label: 'Running benchmarks',
                 to: '/docs/guides/llama2-uncensored-benchmark-ollama',
@@ -179,8 +196,8 @@ const config = {
                 to: '/docs/guides/prevent-llm-hallucations',
               },
               {
-                label: 'LLM red teaming',
-                to: '/docs/red-team',
+                label: 'Promptfoo Config Validator',
+                to: '/validator',
               },
             ],
           },
@@ -188,20 +205,20 @@ const config = {
             title: 'Community',
             items: [
               {
+                label: 'Blog',
+                href: '/blog',
+              },
+              {
+                label: 'Contact Us',
+                href: '/contact/',
+              },
+              {
                 label: 'GitHub',
                 href: 'https://github.com/promptfoo/promptfoo',
               },
               {
                 label: 'Discord',
                 href: 'https://discord.gg/gHPS9jjfbs',
-              },
-              {
-                label: 'Blog',
-                href: '/blog',
-              },
-              {
-                label: 'Contact Us',
-                href: 'mailto:inquiries@promptfoo.dev',
               },
             ],
           },

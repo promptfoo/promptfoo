@@ -40,6 +40,9 @@ const RiskCategories: React.FC<{
             testTypes={subCategories.map((subCategory) => ({
               name: subCategory,
               passed: categoryStats[subCategory]?.pass === categoryStats[subCategory]?.total,
+              // If there are no tests, default to 100% pass rate
+              percentage:
+                (categoryStats[subCategory]?.pass || 1) / (categoryStats[subCategory]?.total || 1),
             }))}
           />
         );

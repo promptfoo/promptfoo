@@ -1,6 +1,4 @@
 import $RefParser from '@apidevtools/json-schema-ref-parser';
-import chalk from 'chalk';
-import dedent from 'dedent';
 import * as fs from 'fs';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
@@ -18,7 +16,6 @@ import {
   CommandLineOptions,
   Prompt,
   ProviderOptions,
-  ProviderSchema,
   TestCase,
   TestSuite,
   UnifiedConfig,
@@ -350,6 +347,7 @@ export async function resolveConfigs(
     derivedMetrics: fileConfig.derivedMetrics || defaultConfig.derivedMetrics,
     outputPath: cmdObj.output || fileConfig.outputPath || defaultConfig.outputPath,
     metadata: fileConfig.metadata || defaultConfig.metadata,
+    redteam: fileConfig.redteam || defaultConfig.redteam,
   };
 
   // Validation
@@ -363,26 +361,6 @@ export async function resolveConfigs(
     process.exit(1);
   }
   invariant(Array.isArray(config.providers), 'providers must be an array');
-  config.providers.forEach((provider) => {
-    const result = ProviderSchema.safeParse(provider);
-    if (!result.success) {
-      const errors = result.error.errors
-        .map((err) => {
-          return `- ${err.message}`;
-        })
-        .join('\n');
-      const providerString = typeof provider === 'string' ? provider : JSON.stringify(provider);
-      logger.warn(
-        dedent`
-              Provider: ${providerString} encountered errors during schema validation:
-
-                ${errors}
-
-              Please double check your configuration.` + '\n',
-      );
-    }
-  });
-
   // Parse prompts, providers, and tests
   const parsedPrompts = await readPrompts(config.prompts, cmdObj.prompts ? undefined : basePath);
   const parsedProviders = await loadApiProviders(config.providers, {
@@ -448,6 +426,7 @@ export async function resolveConfigs(
     derivedMetrics: config.derivedMetrics,
     nunjucksFilters: await readFilters(
       fileConfig.nunjucksFilters || defaultConfig.nunjucksFilters || {},
+      basePath,
     ),
   };
 

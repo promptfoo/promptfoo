@@ -63,6 +63,7 @@ export default function InfoModal<T extends { open: boolean; onClose: () => void
             sx={{
               color: 'inherit',
             }}
+            target="_blank"
           >
             <Typography variant="subtitle2">Version {process.env.PROMPTFOO_VERSION}</Typography>
           </Link>

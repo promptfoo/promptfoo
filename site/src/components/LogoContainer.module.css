@@ -10,3 +10,13 @@
 .logoContainer img {
   max-width: 150px;
 }
+
+[data-theme='dark'] .logoContainer img {
+  filter: grayscale(100%);
+}
+
+/* Override specific logo filters for dark mode */
+[data-theme='dark'] .logoContainer .anthropic,
+[data-theme='dark'] .logoContainer .shopify {
+  filter: grayscale(100%) invert(0.7);
+}

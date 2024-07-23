@@ -1,7 +1,8 @@
 import React from 'react';
+import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
-import Grid from '@mui/material/Grid';
+import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { Severity, riskCategorySeverityMap } from './constants';
 import './Overview.css';
@@ -27,22 +28,25 @@ const Overview: React.FC<OverviewProps> = ({ categoryStats }) => {
   );
 
   return (
-    <Grid container spacing={2} mb={4}>
+    <Stack spacing={2} direction={{ xs: 'column', sm: 'row' }}>
       {severities.map((severity) => (
-        <Grid item xs={12} sm={6} md={3} key={severity}>
-          <Card className={`card-${severity.toLowerCase()}`}>
+        <Box key={severity} flex={1}>
+          <Card className={`severity-card card-${severity.toLowerCase()}`}>
             <CardContent onClick={() => (window.location.hash = '#table')}>
-              <Typography variant="body2" component="div">
+              <Typography variant="h6" gutterBottom>
                 {severity}
               </Typography>
-              <Typography variant="h6" color="text.primary">
-                {severityCounts[severity]} issues
+              <Typography variant="h4" color="text.primary">
+                {severityCounts[severity]}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                issues
               </Typography>
             </CardContent>
           </Card>
-        </Grid>
+        </Box>
       ))}
-    </Grid>
+    </Stack>
   );
 };
 

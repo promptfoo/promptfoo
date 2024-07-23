@@ -5,7 +5,8 @@ import './Logo.css';
 export default function Logo() {
   return (
     <Box className="logo">
-      <Image width={25} height={25} src="/logo.svg" alt="Promptfoo logo" /> <span>promptfoo</span>
+      <Image width={25} height={25} src="/logo-panda.svg" alt="Promptfoo logo" />{' '}
+      <span>promptfoo</span>
     </Box>
   );
 }
