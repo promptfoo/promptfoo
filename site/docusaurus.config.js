@@ -58,6 +58,13 @@ const config = {
     },
   ],
 
+  scripts: [
+    {
+      src: '/js/scripts.js',
+      async: true,
+    },
+  ],
+
   presets: [
     [
       'classic',
