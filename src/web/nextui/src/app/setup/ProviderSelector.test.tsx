@@ -40,26 +40,19 @@ describe('ProviderSelector', () => {
   it('opens the config dialog when a provider is clicked', () => {
     const providerChip = screen.getByText(mockProviders[0].id);
     fireEvent.click(providerChip);
-
     expect(screen.getByText('Click a provider to configure its settings.')).toBeInTheDocument();
   });
 
   it('closes the config dialog when Cancel is clicked', async () => {
     const providerChip = screen.getByText(mockProviders[0].id);
     fireEvent.click(providerChip);
-
-    // Ensure the dialog is open
     expect(screen.getByRole('dialog')).toBeInTheDocument();
-
-    // Click the Cancel button
     fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
-
-    // Wait for the dialog to close
     await waitFor(
       () => {
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
       },
       { timeout: 3000 },
-    ); // Increase timeout to 3 seconds
+    );
   });
 });
