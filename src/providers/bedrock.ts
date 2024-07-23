@@ -44,6 +44,10 @@ interface BedrockClaudeMessagesCompletionOptions extends BedrockOptions {
     description: string;
     input_schema: any;
   }[];
+  tool_choice?: {
+    type: 'any' | 'auto' | 'tool';
+    name?: string;
+  };
 }
 
 interface BedrockLlamaGenerationOptions extends BedrockOptions {
@@ -346,6 +350,7 @@ const BEDROCK_MODEL = {
         'bedrock-2023-05-31',
       );
       addConfigParam(params, 'tools', config?.tools, undefined, undefined);
+      addConfigParam(params, 'tool_choice', config?.tool_choice, undefined, undefined);
       addConfigParam(params, 'system', system, undefined, undefined);
       return params;
     },
