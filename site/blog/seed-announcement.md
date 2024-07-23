@@ -40,9 +40,9 @@ We believe that AI thrives on open-source. The best security and evaluation tool
 
 With this in mind, we are developing Promptfoo as the [open-source](https://github.com/promptfoo/promptfoo) standard for performing AI pentests and red team evaluations.
 
-We're honored to have the support of Andreessen Horowitz, who share our vision for open-source, application-focused AI security.  We're also grateful for the participation of industry veterans like <......>, and other top executives in the technology, security, and financial industries. Their belief in Promptfoo validates our approach, and their expertise strengthens our mission.
+We're honored to have the support of Andreessen Horowitz, who share our vision for open-source, application-focused AI security. We're also grateful for the participation of industry leaders like Tobi Lutke (CEO, Shopify), Stanislav Vishnevskiy (CTO, Discord), Frederic Kerrest (Vice-Chairman & Co-Founder, Okta), and many other top executives in the technology, security, and financial industries. Their belief in Promptfoo validates our approach, and their expertise strengthens our mission.
 
-We also acknowledge the collaborative efforts of the open-source community, whose contributions have been invaluable in advancing our mission.
+We also acknowledge with gratitude the collaborative efforts of the open-source community. We remain deeply committed to Promptfoo's roots as an open-source project. Our contributors continue to be a driving force behind Promptfoo's development and success.
 
 ## Take control of AI security with Promptfoo
 
