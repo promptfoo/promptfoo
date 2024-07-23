@@ -134,11 +134,6 @@ const config = {
             position: 'right',
           },
           {
-            href: '/careers',
-            label: 'Careers',
-            position: 'right',
-          },
-          {
             href: '/contact/',
             label: 'Contact',
             position: 'right',
@@ -207,7 +202,7 @@ const config = {
             ],
           },
           {
-            title: 'Community',
+            title: 'About',
             items: [
               {
                 label: 'Blog',
@@ -216,6 +211,10 @@ const config = {
               {
                 label: 'Contact Us',
                 href: '/contact/',
+              },
+              {
+                label: 'Careers',
+                href: '/careers/',
               },
               {
                 label: 'GitHub',
