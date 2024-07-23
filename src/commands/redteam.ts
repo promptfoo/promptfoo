@@ -3,7 +3,6 @@ import confirm from '@inquirer/confirm';
 import editor from '@inquirer/editor';
 import input from '@inquirer/input';
 import number from '@inquirer/number';
-import password from '@inquirer/password';
 import rawlist from '@inquirer/rawlist';
 import chalk from 'chalk';
 import { Command } from 'commander';
@@ -136,7 +135,7 @@ export function redteamCommand(program: Command) {
         });
 
         if (apiKeyChoice === 'enter') {
-          const apiKey = await password({
+          const apiKey = await input({
             message: 'Enter your OpenAI API key:',
           });
           process.env.OPENAI_API_KEY = apiKey;
