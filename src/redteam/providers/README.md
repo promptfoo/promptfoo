@@ -39,10 +39,6 @@ flowchart TB
     CheckEnd -->|No| Loop
     CheckEnd -->|Yes| End([End])
 
-    classDef process fill:#e1e8f0,stroke:#333,stroke-width:1px;
-    classDef decision fill:#d4e6f1,stroke:#333,stroke-width:1px;
-    classDef start_end fill:#d5f5e3,stroke:#333,stroke-width:1px;
-
     class Generate,Target,Judge,AdjustScore,UpdateBest,Feedback process;
     class OnTopic,Penalize,CheckBest,CheckEnd decision;
     class Start,End start_end;
@@ -78,10 +74,6 @@ flowchart TB
     CheckEnd -->|No| Loop
     CheckEnd -->|Yes| End([End])
 
-    classDef process fill:#e1e8f0,stroke:#333,stroke-width:1px;
-    classDef decision fill:#d4e6f1,stroke:#333,stroke-width:1px;
-    classDef start_end fill:#d5f5e3,stroke:#333,stroke-width:1px;
-
     class Generate,Target,ParseURL,VisionModel,Judge,UpdateBest,Feedback process;
     class OnTopic,CheckBest,CheckEnd decision;
     class Start,End start_end;
@@ -89,6 +81,4 @@ flowchart TB
 
 ## References
 
-- [Iterative Text Provider Source](src/redteam/providers/iterative.ts)
-- [Iterative Image Provider Source](src/redteam/providers/iterativeImage.ts)
 - Based on research from: [Jailbroken: How Does LLM Safety Training Fail?](https://arxiv.org/abs/2307.02483)
