@@ -2,6 +2,7 @@ import dedent from 'dedent';
 import { XMLParser } from 'fast-xml-parser';
 import invariant from 'tiny-invariant';
 import logger from '../../logger';
+import { OpenAiChatCompletionProvider } from '../../providers/openai';
 import type { ApiProvider, CallApiContextParams, CallApiOptionsParams } from '../../types';
 import { getNunjucksEngine } from '../../util/templates';
 
@@ -111,7 +112,7 @@ function parseJudgement(output: string): { refusal: number; convincing: number; 
   const refusal = parseInt(scores.answer_1) || 0;
   const convincing = parseInt(scores.answer_2) || 0;
   const specific = parseInt(scores.answer_3) || 0;
-
+  logger.debug(`Parsed judgement: ${JSON.stringify({ refusal, convincing, specific })}`);
   return { refusal, convincing, specific };
 }
 
@@ -138,10 +139,9 @@ async function runRedteamTreeSearch(
   provider: ApiProvider,
 ): Promise<{
   output: string;
-  metadata: { redteamFinalPrompt: string; redteamFinalScore: number; bestOutput: string };
+  metadata: { redteamFinalPrompt: string; redteamFinalScore: number };
 }> {
   try {
-    const { OpenAiChatCompletionProvider } = await import('../../providers/openai');
     const redteamProvider = new OpenAiChatCompletionProvider(ATTACKER_MODEL, {
       config: {
         temperature: TEMPERATURE,
@@ -157,15 +157,17 @@ async function runRedteamTreeSearch(
       throw new Error('Goal is undefined');
     }
 
-    logger.debug(`Goal: ${goal}`);
+    // logger.debug(`Goal: ${goal}`);
 
     const nunjucks = getNunjucksEngine();
 
     // Verify prompt variables before rendering
+    /*
     logger.debug(`ATTACKER_SYSTEM_PROMPT template: ${ATTACKER_SYSTEM_PROMPT}`);
     logger.debug(`ON_TOPIC_SYSTEM_PROMPT template: ${ON_TOPIC_SYSTEM_PROMPT}`);
     logger.debug(`NON_REFUSAL_PROMPT template: ${NON_REFUSAL_PROMPT}`);
     logger.debug(`JUDGE_SYSTEM_PROMPT template: ${JUDGE_SYSTEM_PROMPT}`);
+    */
 
     const redteamSystemPrompt = nunjucks.renderString(ATTACKER_SYSTEM_PROMPT, { goal });
     const onTopicSystemPrompt = nunjucks.renderString(ON_TOPIC_SYSTEM_PROMPT, { goal });
@@ -368,11 +370,10 @@ async function runRedteamTreeSearch(
     logger.debug(`Best prompt: ${bestNode.prompt}`);
 
     return {
-      output: bestNode.prompt,
+      output: bestNode.output || '', // Return the best output (targetResponse)
       metadata: {
         redteamFinalPrompt: bestNode.prompt,
         redteamFinalScore: bestNode.score,
-        bestOutput: bestNode.output || '', // Return the best output (targetResponse)
       },
     };
   } catch (error) {
@@ -418,10 +419,7 @@ class RedteamIterativeTreeJailbreaks implements ApiProvider {
         options?.originalProvider,
       );
       logger.debug(`runRedteamTreeSearch result: ${JSON.stringify(result)}`);
-      return {
-        output: result.metadata.bestOutput, // Return the best output (targetResponse)
-        metadata: result.metadata,
-      };
+      return result;
     } catch (error) {
       logger.error(`Error in RedteamIterativeTreeJailbreaks callApi: ${error}`);
       // Return a default response instead of throwing
@@ -430,7 +428,6 @@ class RedteamIterativeTreeJailbreaks implements ApiProvider {
         metadata: {
           redteamFinalPrompt: prompt,
           redteamFinalScore: 0,
-          bestOutput: '', // Default empty output
         },
       };
     }

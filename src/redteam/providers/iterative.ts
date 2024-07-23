@@ -1,5 +1,6 @@
 import dedent from 'dedent';
 import invariant from 'tiny-invariant';
+import { OpenAiChatCompletionProvider } from '../../providers/openai';
 import type { ApiProvider, CallApiContextParams, CallApiOptionsParams } from '../../types';
 import { getNunjucksEngine } from '../../util/templates';
 
@@ -92,7 +93,6 @@ async function runRedteamConversation(
   vars: Record<string, string | object>,
   provider: ApiProvider,
 ) {
-  const { OpenAiChatCompletionProvider } = await import('../../providers/openai');
   const redteamProvider = new OpenAiChatCompletionProvider(ATTACKER_MODEL, {
     config: {
       temperature: TEMPERATURE,
@@ -100,7 +100,7 @@ async function runRedteamConversation(
     },
   });
   const targetProvider = provider;
-  const goal = vars.query;
+  const goal = vars.query; // TODO: change to inject var
   const nunjucks = getNunjucksEngine();
 
   const redteamSystemPrompt = nunjucks.renderString(ATTACKER_SYSTEM_PROMPT, { goal });
