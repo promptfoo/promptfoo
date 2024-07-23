@@ -160,7 +160,6 @@ const Strategies: Strategy[] = [
 ];
 
 function validatePlugins(plugins: { id: string; numTests: number }[]): void {
-  logger.error(`Plugins: ${plugins.map((p) => `${p.id} (${p.numTests})`).join('\n')}`);
   const invalidPlugins = plugins.filter((plugin) => !Plugins.map((p) => p.key).includes(plugin.id));
   if (invalidPlugins.length > 0) {
     const validPluginsString = Plugins.map((p) => p.key).join(', ');
