@@ -308,14 +308,16 @@ export async function synthesize({
     }
   }
 
+  let newTestCases: TestCaseWithPlugin[] = [];
+
   for (const { key, action } of Strategies) {
     const strategy = strategies.find((s) => s.id === key);
     if (strategy) {
       updateProgress();
       logger.debug(`Generating ${key} tests`);
-      const newTestCases = action(testCases, injectVar);
-      testCases.push(
-        ...newTestCases.map((t) => ({
+      const strategyTestCases = action(testCases, injectVar);
+      newTestCases.push(
+        ...strategyTestCases.map((t) => ({
           ...t,
           metadata: {
             ...(t.metadata || {}),
@@ -325,6 +327,8 @@ export async function synthesize({
       );
     }
   }
+
+  testCases.push(...newTestCases);
 
   // Finish progress bar
   if (process.env.LOG_LEVEL !== 'debug') {
