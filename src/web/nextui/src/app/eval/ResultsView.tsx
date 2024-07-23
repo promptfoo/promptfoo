@@ -319,8 +319,7 @@ export default function ResultsView({
     <div style={{ marginLeft: '1rem', marginRight: '1rem' }}>
       <ResponsiveStack
         direction="row"
-        ml={1}
-        mb={2}
+        mb={3}
         spacing={1}
         alignItems="center"
         className="eval-header"
@@ -395,7 +394,7 @@ export default function ResultsView({
       </ResponsiveStack>
       <ResponsiveStack direction="row" spacing={1} alignItems="center">
         <Box>
-          <FormControl sx={{ m: 1, minWidth: 200, maxWidth: 350 }} size="small">
+          <FormControl sx={{ minWidth: 200, maxWidth: 350 }} size="small">
             <InputLabel id="visible-columns-label">Columns</InputLabel>
             <Select
               labelId="visible-columns-label"
