@@ -30,3 +30,5 @@ promptfoo eval
 ```
 
 Afterwards, you can view the results by running `promptfoo view`
+
+See `promptfooconfig.with-asserts.yaml` for a more complete example that compares the performance of two RAG configurations.
