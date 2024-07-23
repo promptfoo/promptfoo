@@ -92,9 +92,7 @@ const defaultProviders: ProviderOptions[] = ([] as (ProviderOptions & { id: stri
   )
   .concat(
     [
-      'anthropic:messages:claude-instant-1.2',
-      'anthropic:messages:claude-2.0',
-      'anthropic:messages:claude-2.1',
+      'anthropic:messages:claude-3-5-sonnet-20240620',
       'anthropic:messages:claude-3-haiku-20240307',
       'anthropic:messages:claude-3-sonnet-20240229',
       'anthropic:messages:claude-3-opus-20240229',
@@ -102,9 +100,9 @@ const defaultProviders: ProviderOptions[] = ([] as (ProviderOptions & { id: stri
   )
   .concat(
     [
-      'bedrock:anthropic.claude-instant-v1',
-      'bedrock:anthropic.claude-v1',
-      'bedrock:anthropic.claude-v2',
+      'bedrock:anthropic.claude-3-haiku-20240307-v1:0',
+      'bedrock:anthropic.claude-3-sonnet-20240229-v1:0',
+      'bedrock:anthropic.claude-3-opus-20240307-v1:0',
     ].map((id) => ({ id, config: { max_tokens_to_sample: 256, temperature: 0.5 } })),
   )
   .concat(
@@ -114,16 +112,8 @@ const defaultProviders: ProviderOptions[] = ([] as (ProviderOptions & { id: stri
       'openai:gpt-4o-mini',
       'openai:gpt-4o-mini-2024-07-18',
       'openai:gpt-4-turbo',
-      'openai:gpt-4-turbo-2024-04-09',
-      'openai:gpt-4-turbo-preview',
-      'openai:gpt-4-0125-preview',
-      'openai:gpt-4-1106-preview',
       'openai:gpt-4',
-      'openai:gpt-4-0613',
       'openai:gpt-3.5-turbo',
-      'openai:gpt-3.5-turbo-0125',
-      'openai:gpt-3.5-turbo-1106',
-      'openai:gpt-3.5-turbo-instruct',
     ].map((id) => ({
       id,
       config: {
