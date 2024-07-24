@@ -545,7 +545,18 @@ export type BaseAssertionTypes = z.infer<typeof BaseAssertionTypesSchema>;
 
 type NotPrefixed<T extends string> = `not-${T}`;
 
-export type AssertionType = BaseAssertionTypes | NotPrefixed<BaseAssertionTypes>;
+export const RedteamAssertionTypesSchema = z.enum([
+  'promptfoo:redteam:harmful',
+  'promptfoo:redteam:overreliance',
+  // ...
+]);
+
+export type RedteamAssertionTypes = z.infer<typeof RedteamAssertionTypesSchema>;
+
+export type AssertionType =
+  | BaseAssertionTypes
+  | NotPrefixed<BaseAssertionTypes>
+  | RedteamAssertionTypes;
 
 const AssertionSetSchema = z.object({
   type: z.literal('assert-set'),
