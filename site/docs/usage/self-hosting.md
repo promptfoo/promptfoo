@@ -23,11 +23,11 @@ promptfoo provides a Docker image that allows you to host a central server that 
 
 The self-hosted app consists of:
 
-- Next.js application that runs the web ui.
-- filesystem store that persists the eval results.
-- key-value (KV) store that persists shared data (redis, filesystem, or memory).
+- Next.js application that runs the web UI.
+- Filesystem store that persists the eval results.
+- Key-value (KV) store that persists shared data (redis, filesystem, or memory).
 
-## Setup
+## Building from Source
 
 ### 1. Clone the Repository
 
@@ -65,13 +65,33 @@ Key points:
 
 ### 4. Set API Credentials
 
-You can also set API credentials on the running Docker instance so that evals can be run on the server. For example, we'll set the OpenAI API key so users can run evals directly from the web ui:
+You can also set API credentials on the running Docker instance so that evals can be run on the server. For example, we'll set the OpenAI API key so users can run evals directly from the web UI:
 
 ```sh
 docker run -d --name promptfoo_container -p 3000:3000 -e OPENAI_API_KEY=sk-abc123 promptfoo-ui
 ```
 
 Replace `sk-abc123` with your actual API key.
+
+## Using Pre-built Docker Images
+
+As an alternative to building from source, we also publish pre-built Docker images on GitHub Container Registry. This can be a quicker way to get started if you don't need to customize the image. However, we generally recommend building from source due to static variable inlining in the pre-built image. Some features, such as the `promptfoo share` command, may not work out of the box with the pre-built image (by default, `promptfoo share` will point to `localhost:3000`).
+
+To use a pre-built image:
+
+1. Pull the image:
+
+```bash
+docker pull ghcr.io/promptfoo/promptfoo:main
+```
+
+2. Run the container:
+
+```bash
+docker run -d --name promptfoo_container -p 3000:3000 -v /path/to/local_promptfoo:/root/.promptfoo ghcr.io/promptfoo/promptfoo:main
+```
+
+You can use specific version tags instead of `main` for more stable releases.
 
 ## Advanced Configuration
 
