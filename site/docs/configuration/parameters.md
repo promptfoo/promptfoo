@@ -273,7 +273,7 @@ module.exports = function (str) {
 };
 ```
 
-To use a custom Nunjucks filter in PromptFoo, add it to your configuration file (`promptfooconfig.yaml`). The `nunjucksFilters` field should contain a mapping of filter names to the paths of the JavaScript files that define them:
+To use a custom Nunjucks filter in Promptfoo, add it to your configuration file (`promptfooconfig.yaml`). The `nunjucksFilters` field should contain a mapping of filter names to the paths of the JavaScript files that define them:
 
 ```yaml
 prompts: [prompts.txt]

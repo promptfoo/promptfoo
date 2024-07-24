@@ -1,7 +1,6 @@
 import React from 'react';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import Paper from '@mui/material/Paper';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
@@ -89,10 +88,10 @@ const TestSuites: React.FC<{
 
   return (
     <Box>
-      <Typography variant="h6" gutterBottom id="table">
+      <Typography variant="h5" gutterBottom id="table">
         Vulnerabilities and Mitigations
       </Typography>
-      <TableContainer component={Paper}>
+      <TableContainer>
         <Table>
           <TableHead>
             <TableRow>

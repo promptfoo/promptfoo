@@ -32,7 +32,8 @@ import {
 import { OpenAiChatCompletionProvider } from './providers/openai';
 import { validateFunctionCall } from './providers/openaiUtil';
 import { parseChatPrompt } from './providers/shared';
-import { runPython, runPythonCode } from './python/wrapper';
+import { runPython } from './python/pythonUtils';
+import { runPythonCode } from './python/wrapper';
 import telemetry from './telemetry';
 import {
   type ApiProvider,

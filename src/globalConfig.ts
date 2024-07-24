@@ -5,14 +5,8 @@
 import * as fs from 'fs';
 import yaml from 'js-yaml';
 import * as path from 'path';
-import { getConfigDirectoryPath } from './util';
-
-interface GlobalConfig {
-  hasRun?: boolean;
-  account?: {
-    email?: string;
-  };
-}
+import { GlobalConfig } from './configTypes';
+import { getConfigDirectoryPath } from './util/config';
 
 let globalConfigCache: GlobalConfig | null = null;
 
@@ -41,7 +35,7 @@ export function readGlobalConfig(): GlobalConfig {
 
 export function writeGlobalConfig(config: GlobalConfig): void {
   fs.writeFileSync(
-    path.join(getConfigDirectoryPath(true /* createIfNotExists */), 'promptfoo.yaml'),
+    path.join(getConfigDirectoryPath(true), 'promptfoo.yaml') /* createIfNotExists */,
     yaml.dump(config),
   );
 }

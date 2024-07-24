@@ -1,7 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import dedent from 'dedent';
 import { clearCache, disableCache, enableCache, getCache } from '../src/cache';
-import { loadApiProvider } from '../src/providers';
 import {
   AnthropicCompletionProvider,
   AnthropicLlmRubricProvider,
@@ -10,7 +9,6 @@ import {
   outputFromMessage,
   parseMessages,
 } from '../src/providers/anthropic';
-import { AwsBedrockCompletionProvider } from '../src/providers/bedrock';
 
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
@@ -314,6 +312,10 @@ describe('Anthropic', () => {
     it('should return output for default behavior', async () => {
       const provider = new AnthropicCompletionProvider('claude-1');
       jest.spyOn(provider.anthropic.completions, 'create').mockImplementation().mockResolvedValue({
+        id: 'test-id',
+        model: 'claude-1',
+        stop_reason: 'stop_sequence',
+        type: 'completion',
         completion: 'Test output',
       });
       const result = await provider.callApi('Test prompt');
@@ -328,6 +330,10 @@ describe('Anthropic', () => {
     it('should return cached output with caching enabled', async () => {
       const provider = new AnthropicCompletionProvider('claude-1');
       jest.spyOn(provider.anthropic.completions, 'create').mockImplementation().mockResolvedValue({
+        id: 'test-id',
+        model: 'claude-1',
+        stop_reason: 'stop_sequence',
+        type: 'completion',
         completion: 'Test output',
       });
       const result = await provider.callApi('Test prompt');
@@ -351,6 +357,10 @@ describe('Anthropic', () => {
     it('should return fresh output with caching disabled', async () => {
       const provider = new AnthropicCompletionProvider('claude-1');
       jest.spyOn(provider.anthropic.completions, 'create').mockImplementation().mockResolvedValue({
+        id: 'test-id',
+        model: 'claude-1',
+        stop_reason: 'stop_sequence',
+        type: 'completion',
         completion: 'Test output',
       });
       const result = await provider.callApi('Test prompt');
@@ -593,13 +603,4 @@ describe('Anthropic', () => {
       ]);
     });
   });
-});
-
-// NOTE: test suite fails with: ReferenceError: Cannot access 'AnthropicCompletionProvider' before initialization
-// if this is removed. The test can even be skipped. This is likely due to a circular dependency.
-// eslint-disable-next-line jest/require-top-level-describe
-test('loadApiProvider with bedrock:completion', async () => {
-  await expect(loadApiProvider('bedrock:completion:anthropic.claude-v2:1')).resolves.toBeInstanceOf(
-    AwsBedrockCompletionProvider,
-  );
 });

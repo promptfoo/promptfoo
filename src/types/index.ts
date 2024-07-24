@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { redteamConfigSchema } from '../redteam/types';
 
 export const CommandLineOptionsSchema = z.object({
   // Shared with TestSuite
@@ -99,22 +100,15 @@ export const CallApiOptionsParamsSchema = z.object({
   originalProvider: z.optional(z.any()), // Assuming ApiProvider is not a zod schema, using z.any()
 });
 
-const CallApiFunctionSchema = z.union([
-  z
-    .function()
-    .args(
-      z.string().describe('prompt'),
-      CallApiContextParamsSchema.optional(),
-      CallApiOptionsParamsSchema.optional(),
-    )
-    .returns(z.promise(z.custom<ProviderResponse>()))
-    .and(z.object({ label: z.string().optional() })),
-  z
-    .function()
-    .args(z.string().describe('prompt'), CallApiOptionsParamsSchema.optional())
-    .returns(z.promise(z.custom<ProviderResponse>()))
-    .and(z.object({ label: z.string().optional() })),
-]);
+const CallApiFunctionSchema = z
+  .function()
+  .args(
+    z.string().describe('prompt'),
+    CallApiContextParamsSchema.optional(),
+    CallApiOptionsParamsSchema.optional(),
+  )
+  .returns(z.promise(z.custom<ProviderResponse>()))
+  .and(z.object({ label: z.string().optional() }));
 
 export const ApiProviderSchema = z.object({
   id: z.function().returns(z.string()),
@@ -215,7 +209,20 @@ export type ProviderOptions = z.infer<typeof ProviderOptionsSchema>;
 export type ProviderResponse = z.infer<typeof ProviderResponseSchema>;
 export type ProviderSimilarityResponse = z.infer<typeof ProviderSimilarityResponseSchema>;
 export type TokenUsage = z.infer<typeof TokenUsageSchema>;
-type CallApiFunction = z.infer<typeof CallApiFunctionSchema>;
+
+// The z.infer type is not as good as a manually created type
+type CallApiFunction = {
+  (
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse>;
+  label?: string;
+};
+// Confirm that manually created type is equivalent to z.infer type
+function assert<T extends never>() {}
+type TypeEqualityGuard<A, B> = Exclude<A, B> | Exclude<B, A>;
+assert<TypeEqualityGuard<CallApiFunction, z.infer<typeof CallApiFunctionSchema>>>();
 
 export interface ModerationFlag {
   code: string;
@@ -615,23 +622,25 @@ const ProviderPromptMapSchema = z.record(
 export const ProviderSchema = z.union([z.string(), ProviderOptionsSchema, ApiProviderSchema]);
 export type Provider = z.infer<typeof ProviderSchema>;
 
+// Metadata is a key-value store for arbitrary data
+const MetadataSchema = z.record(z.string(), z.any());
+
+const VarsSchema = z.record(
+  z.union([
+    z.string(),
+    z.number().transform(String),
+    z.array(z.union([z.string(), z.number().transform(String)])),
+    z.object({}),
+    z.array(z.any()),
+  ]),
+);
 // Each test case is graded pass/fail with a score.  A test case represents a unique input to the LLM after substituting `vars` in the prompt.
 export const TestCaseSchema = z.object({
   // Optional description of what you're testing
   description: z.string().optional(),
 
   // Key-value pairs to substitute in the prompt
-  vars: z
-    .record(
-      z.union([
-        z.string(),
-        z.number().transform(String),
-        z.array(z.union([z.string(), z.number().transform(String)])),
-        z.object({}),
-        z.array(z.any()),
-      ]),
-    )
-    .optional(),
+  vars: VarsSchema.optional(),
   // Override the provider.
   provider: z.union([z.string(), ProviderOptionsSchema, ApiProviderSchema]).optional(),
 
@@ -659,11 +668,19 @@ export const TestCaseSchema = z.object({
 
   // The required score for this test case.  If not provided, the test case is graded pass/fail.
   threshold: z.number().optional(),
+
+  metadata: MetadataSchema.optional(),
 });
 
 export type TestCase<Vars = Record<string, string | string[] | object>> = z.infer<
   typeof TestCaseSchema
 >;
+
+export const TestCaseWithVarsFileSchema = TestCaseSchema.extend({
+  vars: z.union([VarsSchema, z.string(), z.array(z.string())]).optional(),
+});
+
+export type TestCaseWithVarsFile = z.infer<typeof TestCaseWithVarsFileSchema>;
 
 export const TestCasesWithMetadataSchema = z.object({
   id: z.string(),
@@ -693,6 +710,7 @@ export type Scenario = z.infer<typeof ScenarioSchema>;
 export const AtomicTestCaseSchema = TestCaseSchema.extend({
   vars: z.record(z.union([z.string(), z.object({})])).optional(),
 }).strict();
+
 export type AtomicTestCase<Vars = Record<string, string | object>> = z.infer<
   typeof AtomicTestCaseSchema
 >;
@@ -754,6 +772,8 @@ export const TestSuiteSchema = z.object({
   // Extensions that are called at various plugin points
   extensions: z.array(z.string()).optional(),
 
+  // Redteam configuration - used only when generating redteam tests
+  redteam: redteamConfigSchema.optional(),
 });
 
 export type TestSuite = z.infer<typeof TestSuiteSchema>;
@@ -828,13 +848,16 @@ export const TestSuiteConfigSchema = z.object({
   extensions: z.array(z.string()).optional(),
   
   // Any other information about this configuration.
-  metadata: z.record(z.string(), z.any()).optional(),
+  metadata: MetadataSchema.optional(),
+
+  // Redteam configuration - used only when generating redteam tests
+  redteam: redteamConfigSchema.optional(),
 });
 
 export type TestSuiteConfig = z.infer<typeof TestSuiteConfigSchema>;
 export const UnifiedConfigSchema = TestSuiteConfigSchema.extend({
-  evaluateOptions: EvaluateOptionsSchema,
-  commandLineOptions: CommandLineOptionsSchema.partial(),
+  evaluateOptions: EvaluateOptionsSchema.optional(),
+  commandLineOptions: CommandLineOptionsSchema.partial().optional(),
 });
 
 export type UnifiedConfig = z.infer<typeof UnifiedConfigSchema>;
