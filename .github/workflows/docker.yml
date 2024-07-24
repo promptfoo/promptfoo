@@ -111,3 +111,5 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             NEXT_PUBLIC_PROMPTFOO_BASE_URL=http://localhost:3000
+          outputs: |
+            type=image,name=target,annotation-index.org.opencontainers.image.description=promptfoo is a tool for testing, evaluating, and red-teaming LLM apps.
