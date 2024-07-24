@@ -31,8 +31,8 @@ export default function Careers(): JSX.Element {
         <p>
           If you're interested in exploring opportunities, please reach out to{' '}
           <a href="mailto:careers@promptfoo.dev">careers@promptfoo.dev</a>. Include a link to your
-          LinkedIn or GitHub profile in your email. Strong applicants will have already made a
-          meaningful contribution to our open source project.
+          LinkedIn or GitHub profile in your email. We carefully review all applications. We will
+          give preference to applicants who have already made contributions to promptfoo.
         </p>
       </main>
     </Layout>
