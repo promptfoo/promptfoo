@@ -1,7 +1,7 @@
 description: 'Cohere benchmark'
 
 providers:
-  - id: cohere:command-r
+  - id: cohere:command-r-plus
     config:
       temperature: 0
   - id: openai:gpt-4-0125-preview

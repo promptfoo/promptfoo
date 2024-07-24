@@ -14,11 +14,11 @@ Examples:
 
 Output: Hello world
 Rubric: Content contains a greeting
-{"pass": true, "score": 1.0, "reason": "the content contains the word 'world'"}
+{"reason": "the content contains the word 'world'", "pass": true, "score": 1.0}
 
 Output: Avast ye swabs, repel the invaders!
 Rubric: Does not speak like a pirate
-{"pass": false, "score": 0.0, "reason": "'avast ye' is a common pirate term"}`,
+{"reason": "'avast ye' is a common pirate term", "pass": false, "score": 0.0}`,
   },
   {
     role: 'user',

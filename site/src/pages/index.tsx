@@ -1,5 +1,7 @@
 import React from 'react';
+import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
+import { useColorMode } from '@docusaurus/theme-common';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import CompareIcon from '@mui/icons-material/Compare';
 import DescriptionIcon from '@mui/icons-material/Description';
@@ -9,6 +11,7 @@ import HomepageInfo from '@site/src/components/HomepageInfo';
 import LogoContainer from '@site/src/components/LogoContainer';
 import Layout from '@theme/Layout';
 import clsx from 'clsx';
+import NewsletterForm from '../components/NewsletterForm';
 import styles from './index.module.css';
 
 function HomepageHeader() {
@@ -16,8 +19,8 @@ function HomepageHeader() {
   return (
     <header className={clsx('hero hero--primary', styles.heroBanner)}>
       <div className="container">
-        <h1>Ship LLM apps with confidence</h1>
-        <p>Open-source LLM testing used by 20,000+ developers</p>
+        <h1>Find and fix LLM vulnerabilities</h1>
+        <p>Open-source LLM testing used by 25,000+ developers</p>
         <div className={styles.buttons}>
           <Link
             className="button button--primary button--lg"
@@ -29,6 +32,12 @@ function HomepageHeader() {
           >
             Get Started
           </Link>
+          <Link
+            className={clsx('button button--secondary button--lg', styles.buttonSecondary)}
+            to="/contact/"
+          >
+            Request a Demo
+          </Link>
         </div>
       </div>
     </header>
@@ -36,11 +45,12 @@ function HomepageHeader() {
 }
 
 function HomepageWalkthrough() {
+  const isDarkTheme = useColorMode().colorMode === 'dark';
   const [selectedStep, setSelectedStep] = React.useState(() => {
-    if (typeof window !== 'undefined' && window.location.hash === '#redteam') {
-      return 2;
+    if (typeof window !== 'undefined' && window.location.hash === '#evals') {
+      return 1;
     }
-    return 1;
+    return 2;
   });
   const steps = [
     {
@@ -48,6 +58,8 @@ function HomepageWalkthrough() {
       caption: 'Evaluations',
       image: '/img/claude-vs-gpt-example.png',
       image2x: '/img/claude-vs-gpt-example@2x.png',
+      imageDark: '/img/claude-vs-gpt-example-dark.png',
+      image2xDark: '/img/claude-vs-gpt-example-dark@2x.png',
       description: (
         <>
           <p>
@@ -74,10 +86,12 @@ function HomepageWalkthrough() {
       caption: 'Security & Red Teaming',
       image: '/img/riskreport-1.png',
       image2x: '/img/riskreport-1@2x.png',
+      imageDark: '/img/riskreport-1-dark.png',
+      image2xDark: '/img/riskreport-1-dark@2x.png',
       description: (
         <>
           <p>
-            <strong>Find and fix LLM vulnerabilities</strong>
+            <strong>Automated pentesting for your app</strong>
           </p>
           <p>
             Run an automatic scan tailored to your application that detects security, legal, and
@@ -86,14 +100,15 @@ function HomepageWalkthrough() {
           <pre className={styles.codeBox}>
             <code>npx promptfoo@latest redteam init</code>
           </pre>
-          <p>Our red teaming covers failures like:</p>
+          <p>Our probes cover common failures like:</p>
           <ul>
             <li>PII leaks</li>
+            <li>Insecure tool use</li>
             <li>Jailbreaks</li>
             <li>Harmful content</li>
-            <li>Specialized medical and legal advice</li>
             <li>Competitor endorsements</li>
             <li>Political statements</li>
+            <li>Specialized medical and legal advice</li>
             <li>
               and <Link to="/docs/guides/llm-redteaming">much more</Link>
             </li>
@@ -149,12 +164,22 @@ function HomepageWalkthrough() {
       </div>
       <div className={styles.walkthroughContent}>
         <div className={styles.walkthroughImageContainer}>
-          <img
-            src={selectedStepData?.image}
-            srcSet={`${selectedStepData?.image} 1x, ${selectedStepData?.image2x} 2x`}
-            alt={`Walkthrough step ${selectedStep}`}
-            className={styles.walkthroughImage}
-          />
+          <Link to={selectedStepData?.destinationUrl || '#'}>
+            <img
+              src={
+                isDarkTheme && selectedStepData?.imageDark
+                  ? selectedStepData.imageDark
+                  : selectedStepData?.image
+              }
+              srcSet={
+                isDarkTheme && selectedStepData?.image2xDark
+                  ? `${selectedStepData.imageDark} 1x, ${selectedStepData.image2xDark} 2x`
+                  : `${selectedStepData?.image} 1x, ${selectedStepData?.image2x} 2x`
+              }
+              alt={`Walkthrough step ${selectedStep}`}
+              className={styles.walkthroughImage}
+            />
+          </Link>
         </div>
         <div className={styles.walkthroughDescription}>
           {steps.find((step) => step.id === selectedStep)?.description}
@@ -169,8 +194,12 @@ export default function Home(): JSX.Element {
   return (
     <Layout
       title="Secure & reliable LLMs"
-      description="Custom LLM evals and red-teaming for your app. Find and fix vulnerabilities, maximize output quality, catch regressions."
+      description="Eliminate risk with AI red-teaming and evals used by 25,000 developers. Find and fix vulnerabilities, maximize output quality, catch regressions."
     >
+      <Head>
+        <meta property="og:image" content="https://www.promptfoo.dev/img/meta/homepage.png" />
+        <meta name="twitter:card" content="summary_large_image" />
+      </Head>
       <HomepageHeader />
       <HomepageWalkthrough />
       <main>
@@ -199,13 +228,20 @@ export default function Home(): JSX.Element {
         </section>
 
         <div className={styles.ctaSection}>
-          <h3>Make your LLM app reliable & secure</h3>
+          <h2>Make your LLM app reliable & secure</h2>
           <div className={styles.buttons}>
             <Link className="button button--primary button--lg" to="/docs/intro">
               Read Start Guide
             </Link>
+            <Link
+              className={clsx('button button--secondary button--lg', styles.buttonSecondary)}
+              to="/contact/"
+            >
+              Contact Us
+            </Link>
           </div>
         </div>
+        <NewsletterForm />
       </main>
     </Layout>
   );

@@ -25,6 +25,7 @@ export const riskCategories = {
     'harmful:specialized-advice',
     'harmful:violent-crime',
     'harmful:self-harm',
+    'rbac',
     'contracts',
   ],
   'Malicious Attacks': [
@@ -36,6 +37,9 @@ export const riskCategories = {
     'jailbreak',
     'pii',
     'prompt-injection',
+    'shell-injection',
+    'sql-injection',
+    'debug-access',
   ],
 };
 
@@ -53,6 +57,7 @@ export enum Severity {
 }
 
 export const riskCategorySeverityMap: Record<string, Severity> = {
+  'debug-access': Severity.High,
   'excessive-agency': Severity.Medium,
   'harmful:child-exploitation': Severity.Critical,
   'harmful:copyright-violations': Severity.Medium,
@@ -77,6 +82,8 @@ export const riskCategorySeverityMap: Record<string, Severity> = {
   'harmful:unsafe-practices': Severity.Low,
   'harmful:violent-crime': Severity.Critical,
   'prompt-injection': Severity.Medium,
+  'shell-injection': Severity.High,
+  'sql-injection': Severity.High,
   competitors: Severity.Low,
   contracts: Severity.Medium,
   hallucination: Severity.Medium,
@@ -85,6 +92,7 @@ export const riskCategorySeverityMap: Record<string, Severity> = {
   overreliance: Severity.Low,
   pii: Severity.High,
   politics: Severity.Low,
+  rbac: Severity.High,
 };
 
 export type TopLevelCategory = keyof typeof riskCategories;
@@ -103,31 +111,36 @@ export const categoryLabels = Object.keys(categoryMapReverse);
 
 // Map from metric name or harm category to plugin name
 export const categoryAliases = {
+  'debug-access': 'DebugInterface',
   'excessive-agency': 'ExcessiveAgency',
   exfiltration: 'Model leaking information regarding its internal architecture.',
   'harmful:child-exploitation': 'Child Exploitation',
-  'harmful:copyright-violations': 'Copyright Violations',
-  'harmful:cybercrime': 'Cybercrime',
-  'harmful:graphic-content': 'Graphic Content',
+  'harmful:cybercrime': 'Cybercrime & Unauthorized Intrusion - Hacking and Malware',
+  'harmful:graphic-content': 'Graphic & age-restricted content',
   'harmful:harassment-bullying': 'Harassment & Bullying',
   'harmful:hate': 'Hate',
-  'harmful:illegal-activities': 'Illegal Activities',
+  'harmful:illegal-activities': 'Illegal Activities - Fraud & scams',
   'harmful:illegal-drugs': 'Illegal Drugs',
   'harmful:indiscriminate-weapons': 'Indiscriminate Weapons',
-  'harmful:insults': 'Insults',
-  'harmful:intellectual-property': 'Intellectual Property',
-  'harmful:misinformation-disinformation': 'Misinformation & Disinformation',
-  'harmful:non-violent-crime': 'Non-Violent Crime',
-  'harmful:privacy': 'Privacy',
-  'harmful:profanity': 'Profanity',
+  'harmful:insults': 'Insults and personal attacks',
+  'harmful:intellectual-property': 'Intellectual Property violation',
+  'harmful:misinformation-disinformation':
+    'Misinformation & Disinformation - Harmful lies and propaganda',
+  'harmful:non-violent-crime': 'Non-Violent Crimes',
+  'harmful:privacy': 'Privacy violations',
+  'harmful:profanity': 'Requests containing profanity',
   'harmful:radicalization': 'Radicalization',
   'harmful:self-harm': 'Self-Harm',
   'harmful:sex-crime': 'Sex Crimes',
   'harmful:sexual-content': 'Sexual Content',
-  'harmful:specialized-advice': 'Specialized Advice',
-  'harmful:unsafe-practices': 'Other Unsafe Practices',
+  'harmful:specialized-advice': 'Specialized Advice - Financial',
+  'harmful:unsafe-practices': 'Promotion of unsafe practices',
   'harmful:violent-crime': 'Violent Crimes',
+  'harmful:chemical-biological-weapons': 'Chemical & Biological Weapons',
+  'harmful:copyright-violations': 'Copyright Violations - Copyrighted text',
   'prompt-injection': 'Harmful/Injection',
+  'shell-injection': 'ShellInjection',
+  'sql-injection': 'SqlInjection',
   competitors: 'CompetitorEndorsement',
   contracts: 'ContractualCommitment',
   hallucination: 'Hallucination',
@@ -136,6 +149,7 @@ export const categoryAliases = {
   overreliance: 'Overreliance',
   pii: 'PIILeak',
   politics: 'PoliticalStatement',
+  rbac: 'RbacEnforcement',
 };
 
 export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
@@ -155,6 +169,15 @@ export const displayNameOverrides = {
   jailbreak: 'Jailbreak',
   pii: 'PII Leaks',
   politics: 'Political Opinions',
+  'shell-injection': 'Shell Injection',
+  'sql-injection': 'SQL Injection',
+  rbac: 'RBAC Enforcement',
+  'debug-access': 'Debug Access',
+  'harmful:specialized-advice': 'Specialized Advice',
+  'harmful:illegal-activities': 'Illegal Activities',
+  'harmful:cybercrime': 'Cybercrime',
+  'harmful:copyright-violations': 'Copyright Violations',
+  'harmful:misinformation-disinformation': 'Misinformation & disinformation',
 };
 
 // Duplicated in src/redteam/constants.ts for backend
@@ -192,4 +215,9 @@ export const subCategoryDescriptions: Record<string, string> = {
   pii: 'Exposure or misuse of personally identifiable information.',
   politics: 'Makes political statements.',
   'experimental-jailbreak': 'Apply jailbreaks to all attack types',
+  'experimental-tree-jailbreak': 'Apply tree jailbreaks to all attack types',
+  'sql-injection': 'Attempts to perform SQL injection attacks to manipulate database queries.',
+  'shell-injection': 'Attempts to execute shell commands through the model.',
+  'debug-access': 'Attempts to access or use debugging commands.',
+  rbac: 'Tests whether the model properly implements Role-Based Access Control (RBAC).',
 };

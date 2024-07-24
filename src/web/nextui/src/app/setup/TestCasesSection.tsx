@@ -56,7 +56,8 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
         if (text) {
           const { parse: parseCsv } = await import('csv-parse/sync');
           const rows: CsvRow[] = parseCsv(text, { columns: true });
-          setTestCases([...testCases, ...rows.map((row) => testCaseFromCsvRow(row))]);
+          const newTestCases: TestCase[] = rows.map((row) => testCaseFromCsvRow(row) as TestCase);
+          setTestCases([...testCases, ...newTestCases]);
         }
       };
       reader.readAsText(file);
@@ -79,7 +80,7 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
 
   return (
     <>
-      <Stack direction="row" spacing={2} justifyContent="space-between">
+      <Stack direction="row" spacing={2} mb={2} justifyContent="space-between">
         <Typography variant="h5">Test Cases</Typography>
         <div>
           <label htmlFor={`file-input-add-test-case`}>

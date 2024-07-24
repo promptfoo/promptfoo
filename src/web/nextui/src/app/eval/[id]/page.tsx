@@ -81,6 +81,7 @@ export default async function Page({ params }: { params: { id: string } }) {
       if (data) {
         recentEvals = data.map((row) => ({
           evalId: row.id,
+          datasetId: null,
           label: row.createdAt,
           createdAt: row.createdAt,
           description: 'None',

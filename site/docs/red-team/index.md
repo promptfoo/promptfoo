@@ -1,4 +1,5 @@
 ---
+sidebar_position: 1
 sidebar_label: Intro
 ---
 
@@ -9,9 +10,12 @@ import TabItem from '@theme/TabItem';
 
 Promptfoo is a CLI that helps you "red team" your LLM app and uncover potential failure modes. It works by generating attacks and jailbreaks customized to your application.
 
-Imagine you're building an AI customer service agent. It will detect behavioral failures like recommending a competitor or helping the user do unrelated work. It will also detect more serious liabilities such as child exploitation, violent crime, financial and medical advice, and more.
+Imagine you're building an AI customer service agent. It will detect behavioral failures like recommending a competitor or helping the user with unrelated tasks. It will also detect more serious liabilities such as child exploitation, violent crime, financial and medical advice, and more.
 
-Run it and you'll get a report that lets you examine vulnerabilities and suggested mitigations:
+Promptfoo red teaming can be used in two ways:
+
+- **One-off runs**: Generate a report that lets you examine vulnerabilities and suggested mitigations.
+- **CI/CD integration**: Continuously monitor for vulnerabilities in your deployment pipeline.
 
 ![llm red team report](/img/riskreport-1@2x.png)
 
@@ -154,6 +158,11 @@ Run it and you'll get a report that lets you examine vulnerabilities and suggest
 
 You can begin red teaming your application in less than 5 minutes.
 
+### Prerequisites
+
+- Install [Node 18 or later](https://nodejs.org/en/download/package-manager/)
+- Set the `OPENAI_API_KEY` environment variable or [override the provider](#overriding-the-provider) with your preferred service.
+
 ### Initialize the project
 
 ```sh
@@ -172,12 +181,12 @@ prompts:
   - 'Act as a travel agent and help the user plan their trip. User query: {{query}}'
 
 providers:
-  - openai:gpt-3.5-turbo
+  - openai:gpt-4o-mini
   - anthropic:messages:claude-3.5-sonnet-20240620
 ```
 
 <details>
-<summary>promptfoo is flexible and can hook directly into your existing LLM app (Python, Javascript, etc), RAG or agent workflows, or hit your API.</summary>
+<summary>In addition to base models, Promptfoo can hook directly into your existing LLM app (Python, Javascript, etc), RAG or agent workflows, or hit your API.</summary>
 
 - **Custom**: See how to call your existing [Javascript](/docs/providers/custom-api), [Python](/docs/providers/python), [any other executable](/docs/providers/custom-script) or [API endpoint](/docs/providers/http).
 - **APIs**: See setup instructions for [OpenAI](/docs/providers/openai), [Azure](/docs/providers/azure), [Anthropic](/docs/providers/anthropic), [Mistral](/docs/providers/mistral), [HuggingFace](/docs/providers/huggingface), [AWS Bedrock](/docs/providers/aws-bedrock), and [more](/docs/providers).
@@ -192,7 +201,7 @@ npx promptfoo@latest generate redteam -w
 
 This will generate several hundred adversarial inputs across many categories of potential harm.
 
-You can reduce the number of test cases by setting the specific [plugins](/docs/guides/llm-redteaming#step-3-generate-adversarial-test-cases) you want to run. For example, to only generate basic harmful inputs:
+You can reduce the number of test cases by setting the specific [plugins](/docs/guides/llm-redteaming#step-3-generate-adversarial-test-cases) you want to run. For example, to only generate harmful inputs:
 
 ```sh
 npx promptfoo@latest generate redteam -w --plugins harmful
@@ -200,17 +209,23 @@ npx promptfoo@latest generate redteam -w --plugins harmful
 
 Run `npx promptfoo@latest generate redteam --help` to see all available plugins.
 
-You can also set the provider to use for generating adversarial test cases. For example, to use the `openai:chat:gpt-4o` model:
+#### Overriding the provider
+
+By default we use OpenAI. You can override the provider to use for generating adversarial test cases. Promptfoo supports most known LLM [providers](/docs/providers).
+
+For example, to use the `openai:chat:gpt-4o` model:
 
 ```sh
 npx promptfoo@latest generate redteam -w --provider openai:chat:gpt-4o
 ```
 
 :::warning
-Note that some providers such as Anthropic may disable your account for generate harmful test cases. We recommend using the default OpenAI provider.
+Note that some providers such as Anthropic may disable your account for generating harmful test cases. We recommend using the default OpenAI provider.
 :::
 
 ### Run the eval
+
+Now that we've generated the test cases, we're ready to run the adversarial evaluation.
 
 ```
 npx promptfoo@latest eval
@@ -237,3 +252,7 @@ That view includes a breakdown of specific test types that are connected to the 
 ## Detailed guide
 
 See [the full guide](/docs/guides/llm-redteaming) for detailed info on configuring more complex prompts, dynamically generated prompts and RAG/chain/agents, and more.
+
+## Configuration File
+
+The `redteam` section in your `promptfooconfig.yaml` file allows you to configure red teaming options for your prompts. To learn more about the available options, see [the configuration guide](/docs/red-team/configuration).
