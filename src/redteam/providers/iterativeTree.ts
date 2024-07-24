@@ -433,8 +433,12 @@ class RedteamIterativeTreeJailbreaks implements ApiProvider {
     invariant(options?.originalProvider, 'Expected originalProvider to be set');
     invariant(context?.vars, 'Expected vars to be set');
 
-    const goal = context.vars.query;
+    logger.warn(`Context vars: ${JSON.stringify(context.vars)}`);
 
+    const injectVar = context.vars.injectVar;
+    invariant(typeof injectVar === 'string', 'Expected injectVar to be set');
+    const goal = context.vars[injectVar];
+  
     if (!goal) {
       logger.error('Goal is undefined. Make sure context.vars.query is set.');
       throw new Error('Goal is undefined');

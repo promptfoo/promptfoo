@@ -3,6 +3,7 @@ import invariant from 'tiny-invariant';
 import { OpenAiChatCompletionProvider } from '../../providers/openai';
 import type { ApiProvider, CallApiContextParams, CallApiOptionsParams } from '../../types';
 import { getNunjucksEngine } from '../../util/templates';
+import logger from '../../logger';
 
 const ATTACKER_MODEL = 'gpt-4o';
 
@@ -92,6 +93,7 @@ async function runRedteamConversation(
   prompt: string,
   vars: Record<string, string | object>,
   provider: ApiProvider,
+  injectVar: string,
 ) {
   const redteamProvider = new OpenAiChatCompletionProvider(ATTACKER_MODEL, {
     config: {
@@ -100,9 +102,8 @@ async function runRedteamConversation(
     },
   });
   const targetProvider = provider;
-  const goal = vars.query; // TODO: change to inject var
   const nunjucks = getNunjucksEngine();
-
+  const goal = vars[injectVar];
   const redteamSystemPrompt = nunjucks.renderString(ATTACKER_SYSTEM_PROMPT, { goal });
   const onTopicSystemPrompt = nunjucks.renderString(ON_TOPIC_SYSTEM_PROMPT, { goal });
   const judgeSystemPrompt = nunjucks.renderString(JUDGE_SYSTEM_PROMPT, { goal });
@@ -113,7 +114,7 @@ async function runRedteamConversation(
       content: redteamSystemPrompt,
     },
   ];
-  const targetHistory: { role: 'user' | 'assistant' | 'system'; content: string }[] = [];
+
   let highestScore = 0;
   let bestResponse = '';
 
@@ -123,12 +124,11 @@ async function runRedteamConversation(
 
     // Get new prompt
     const redteamResp = await redteamProvider.callApi(redteamBody);
-    const redteamResponse = redteamResp.output || redteamResp.error;
     invariant(
       typeof redteamResp.output === 'string',
       `Expected output to be a string, but got response: ${JSON.stringify(redteamResp)}`,
     );
-    const { improvement, prompt: newPrompt } = JSON.parse(redteamResp.output) as {
+    const { prompt: newPrompt } = JSON.parse(redteamResp.output) as {
       improvement: string;
       prompt: string;
     };
@@ -203,7 +203,16 @@ async function runRedteamConversation(
   };
 }
 
-class RedteamIterativeJailbreaks implements ApiProvider {
+class RedteamIterativeProvider implements ApiProvider {
+
+  private readonly injectVar: string;
+
+  constructor(private readonly config: Record<string, string | object>) {
+    logger.debug(`RedteamIterativeProvider config: ${JSON.stringify(config)}`);
+    invariant(typeof config.injectVar === 'string', 'Expected injectVar to be set');
+    this.injectVar = config.injectVar;
+  }
+
   id() {
     return 'promptfoo:redteam:iterative';
   }
@@ -211,8 +220,8 @@ class RedteamIterativeJailbreaks implements ApiProvider {
   async callApi(prompt: string, context?: CallApiContextParams, options?: CallApiOptionsParams) {
     invariant(options?.originalProvider, 'Expected originalProvider to be set');
     invariant(context?.vars, 'Expected vars to be set');
-    return runRedteamConversation(prompt, context.vars, options?.originalProvider);
+    return runRedteamConversation(prompt, context.vars, options?.originalProvider, this.injectVar);
   }
 }
 
-export default RedteamIterativeJailbreaks;
+export default RedteamIterativeProvider;
