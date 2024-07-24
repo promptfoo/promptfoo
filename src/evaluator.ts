@@ -154,6 +154,8 @@ export async function renderPrompt(
       logger.debug(`Loading var ${varName} from file: ${filePath}`);
       switch (fileExtension) {
         case 'js':
+        case 'cjs':
+        case 'mjs':
           const javascriptOutput = (await (
             await importModule(filePath)
           )(varName, basePrompt, vars, provider)) as {
