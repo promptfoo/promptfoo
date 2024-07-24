@@ -48,6 +48,7 @@ import { VoyageEmbeddingProvider } from '../src/providers/voyage';
 import { WebhookProvider } from '../src/providers/webhook';
 import RedteamIterativeProvider from '../src/redteam/providers/iterative';
 import RedteamImageIterativeProvider from '../src/redteam/providers/iterativeImage';
+import RedteamIterativeTreeProvider from '../src/redteam/providers/iterativeTree';
 import type { ProviderOptionsMap, ProviderFunction } from '../src/types';
 
 jest.mock('fs', () => ({
@@ -992,9 +993,19 @@ config:
   });
 
   it('loadApiProvider with promptfoo:redteam:iterative', async () => {
-    const provider = await loadApiProvider('promptfoo:redteam:iterative');
+    const provider = await loadApiProvider('promptfoo:redteam:iterative', {
+      options: { config: { injectVar: 'foo' } },
+    });
     expect(provider).toBeInstanceOf(RedteamIterativeProvider);
     expect(provider.id()).toBe('promptfoo:redteam:iterative');
+  });
+
+  it('loadApiProvider with promptfoo:redteam:iterative:tree', async () => {
+    const provider = await loadApiProvider('promptfoo:redteam:iterative:tree', {
+      options: { config: { injectVar: 'foo' } },
+    });
+    expect(provider).toBeInstanceOf(RedteamIterativeTreeProvider);
+    expect(provider.id()).toBe('promptfoo:redteam:iterative:tree');
   });
 
   it('loadApiProvider with promptfoo:redteam:iterative:image', async () => {
