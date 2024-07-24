@@ -122,18 +122,22 @@ docker run -d --name promptfoo_container -p 3000:3000 \
   -e PROMPTFOO_SHARE_REDIS_HOST=redis_host \
   -e PROMPTFOO_SHARE_REDIS_PORT=6379 \
   -e PROMPTFOO_SHARE_REDIS_PASSWORD=your_password \
-  ghcr.io/promptfoo/promptfoo:main
+  promptfoo-ui
 ```
 
 ## Pointing the promptfoo client to your hosted instance
 
-When self-hosting, set the environment variables so that the `promptfoo share` command knows how to reach your hosted application:
+When self-hosting, you need to set the environment variables so that the `promptfoo share` command knows how to reach your hosted application. Here's an example:
 
 ```sh
 PROMPTFOO_REMOTE_API_BASE_URL=http://localhost:3000 PROMPTFOO_REMOTE_APP_BASE_URL=http://localhost:3000 promptfoo share -y
 ```
 
 This will create a shareable URL using your self-hosted service.
+
+The `PROMPTFOO_REMOTE_API_BASE_URL` environment variable specifies the base URL for the API endpoints of your self-hosted service. This is where the `promptfoo share` command sends data to create a shareable URL.
+
+Similarly, the `PROMPTFOO_REMOTE_APP_BASE_URL` environment variable sets the base URL for the UI of your self-hosted service. This will be a visible part of the shareable URL.
 
 These configuration options can also be set under the `sharing` property of your promptfoo config:
 
