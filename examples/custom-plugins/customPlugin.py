@@ -18,19 +18,15 @@ def extract_unique_var_values(evals: List[dict], var_name: str) -> Set[str]:
         
   return values
 
-def suite_start(suite: dict):
-  print(f"Suite started: {suite}")
-
-def suite_end(suite: dict):
-  print(f"Suite ended: {suite}")
-
-def evals_ran_hook(evals: List[dict], results, table):
+def evals_ran_hook(evals: List[dict], results, table, suite):
+  print(f"evals_ran suite: {suite}")
   teardown_commands = extract_unique_var_values(evals, "teardown")
   for command in teardown_commands:
     print(f"Running teardown command: {command}")
     subprocess.run(command, shell=True, check=True)
 
-def evals_prepared_hook(evals: List[dict]):
+def evals_prepared_hook(evals: List[dict], suite: dict):
+  print(f"evals_prepared suite: {suite} ")
   setup_commands = extract_unique_var_values(evals, "setup")
   for command in setup_commands:
     print(f"Running setup command: {command}")
@@ -39,11 +35,7 @@ def evals_prepared_hook(evals: List[dict]):
 
 # Note: promptfoo swallows the output by default - run with LOG_LEVEL=debug if you need to see output
 def extension_hook(hook_name, context):
-  if hook_name == "suite_start":
-    suite_start(context["suite"])
-  if hook_name == "suite_end":
-    suite_end(context["suite"])
   if hook_name == "evals_prepared":
-    evals_prepared_hook(context["evals"])
+    evals_prepared_hook(context["evals"], context["suite"])
   if hook_name == "evals_ran":
-    evals_ran_hook(context["evals"], context["results"], context["table"])
+    evals_ran_hook(context["evals"], context["results"], context["table"], context["suite"])

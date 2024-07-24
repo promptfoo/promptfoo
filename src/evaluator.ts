@@ -494,8 +494,6 @@ class Evaluator {
       }
     }
 
-    await runExtensionHook('suite_start', { 'suite': testSuite });
-
     if (options.generateSuggestions) {
       // TODO(ian): Move this into its own command/file
       logger.info(`Generating prompt variations...`);
@@ -703,7 +701,7 @@ class Evaluator {
       }
     }
 
-    await runExtensionHook('evals_prepared', { 'evals': runEvalOptions });
+    await runExtensionHook('evals_prepared', { 'evals': runEvalOptions, 'suite': testSuite });
 
     // Set up table...
     const isTest = tests.some((t) => !!t.assert);
@@ -1035,8 +1033,7 @@ class Evaluator {
       progressBar.stop();
     }
 
-    await runExtensionHook('evals_ran', { 'evals': runEvalOptions, 'results': results, 'table': table });
-    await runExtensionHook('suite_end', { 'suite': testSuite });
+    await runExtensionHook('evals_ran', { 'evals': runEvalOptions, 'results': results, 'table': table, 'suite': testSuite });
 
     telemetry.record('eval_ran', {
       numPrompts: prompts.length,
