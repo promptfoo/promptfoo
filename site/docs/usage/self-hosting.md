@@ -27,52 +27,11 @@ The self-hosted app consists of:
 - Filesystem store that persists the eval results.
 - Key-value (KV) store that persists shared data (redis, filesystem, or memory).
 
-## Using the pre-built Docker image
-
-promptfoo is available as a Docker image published on GitHub Container Registry. This is the easiest way to get started with self-hosting.
-
-### 1. Pull the Docker image
-
-Pull the latest version of the promptfoo image:
-
-```bash
-docker pull ghcr.io/promptfoo/promptfoo:main
-```
-
-For a specific version, use a tag:
-
-```bash
-docker pull ghcr.io/promptfoo/promptfoo:v0.x.x
-```
-
-### 2. Run the Docker container
-
-Launch the Docker container using this command:
-
-```bash
-docker run -d --name promptfoo_container -p 3000:3000 -v /path/to/local_promptfoo:/root/.promptfoo ghcr.io/promptfoo/promptfoo:main
-```
-
-Key points:
-
-- `-v /path/to/local_promptfoo:/root/.promptfoo` maps the container's working directory to your local filesystem. Replace `/path/to/local_promptfoo` with your preferred path.
-- Omitting the `-v` argument will result in non-persistent evals.
-
-### 3. Set API Credentials (Optional)
-
-To run evals on the server, set API credentials:
-
-```bash
-docker run -d --name promptfoo_container -p 3000:3000 -e OPENAI_API_KEY=sk-abc123 ghcr.io/promptfoo/promptfoo:main
-```
-
-Replace `sk-abc123` with your actual API key.
-
-## Building your own Docker image
-
-If you need to customize the image, you can build it yourself.
+## Building from Source
 
 ### 1. Clone the Repository
+
+First, clone the promptfoo repository from GitHub:
 
 ```sh
 git clone https://github.com/promptfoo/promptfoo.git
@@ -81,15 +40,58 @@ cd promptfoo
 
 ### 2. Build the Docker Image
 
+Build the Docker image with the following command:
+
 ```sh
 docker build --build-arg NEXT_PUBLIC_PROMPTFOO_BASE_URL=http://localhost:3000 -t promptfoo-ui .
 ```
+
+`NEXT_PUBLIC_PROMPTFOO_BASE_URL` tells the web app where to send the API request when the user clicks the 'Share' button. This should be configured to match the URL of your self-hosted instance.
 
 Replace `http://localhost:3000` with your instance's URL if you're not running it locally.
 
 ### 3. Run the Docker Container
 
-Follow the same steps as in the pre-built image section, but use your custom image name (`promptfoo-ui`) instead of `ghcr.io/promptfoo/promptfoo:main`.
+Launch the Docker container using this command:
+
+```sh
+docker run -d --name promptfoo_container -p 3000:3000 -v /path/to/local_promptfoo:/root/.promptfoo promptfoo-ui
+```
+
+Key points:
+
+- `-v /path/to/local_promptfoo:/root/.promptfoo` maps the container's working directory to your local filesystem. Replace `/path/to/local_promptfoo` with your preferred path.
+- Omitting the `-v` argument will result in non-persistent evals.
+
+### 4. Set API Credentials
+
+You can also set API credentials on the running Docker instance so that evals can be run on the server. For example, we'll set the OpenAI API key so users can run evals directly from the web UI:
+
+```sh
+docker run -d --name promptfoo_container -p 3000:3000 -e OPENAI_API_KEY=sk-abc123 promptfoo-ui
+```
+
+Replace `sk-abc123` with your actual API key.
+
+## Using Pre-built Docker Images
+
+As an alternative to building from source, we also publish pre-built Docker images on GitHub Container Registry. This can be a quicker way to get started if you don't need to customize the image. However, we generally recommend building from source due to static variable inlining in the pre-built image. Some features, such as the `promptfoo share` command, may not work out of the box with the pre-built image (by default, `promptfoo share` will point to `localhost:3000`).
+
+To use a pre-built image:
+
+1. Pull the image:
+
+```bash
+docker pull ghcr.io/promptfoo/promptfoo:main
+```
+
+2. Run the container:
+
+```bash
+docker run -d --name promptfoo_container -p 3000:3000 -v /path/to/local_promptfoo:/root/.promptfoo ghcr.io/promptfoo/promptfoo:main
+```
+
+You can use specific version tags instead of `main` for more stable releases.
 
 ## Advanced Configuration
 
@@ -146,14 +148,3 @@ sharing:
   apiBaseUrl: http://localhost:3000
   appBaseUrl: http://localhost:3000
 ```
-
-## Troubleshooting
-
-If you encounter issues:
-
-1. Check Docker logs: `docker logs promptfoo_container`
-2. Ensure all required environment variables are set
-3. Verify the volume mounting is correct for persistent storage
-4. Check your firewall settings if you can't access the web UI
-
-For more help, visit our [GitHub issues page](https://github.com/promptfoo/promptfoo/issues) or join our community Discord.
