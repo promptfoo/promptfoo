@@ -22,7 +22,7 @@ Rubric: Does not speak like a pirate
   },
   {
     role: 'user',
-    content: 'Output: {{ output }}\nRubric: {{ rubric }}',
+    content: '<Output>\n{{ output }}\n</Output>\n<Rubric>\n{{ rubric }}\n</Rubric>',
   },
 ]);
 
