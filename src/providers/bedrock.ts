@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { BedrockRuntime } from '@aws-sdk/client-bedrock-runtime';
 import dedent from 'dedent';
+import { Agent } from 'http';
 import { getCache, isCacheEnabled } from '../cache';
 import logger from '../logger';
 import type {
@@ -557,7 +558,9 @@ export abstract class AwsBedrockGenericProvider {
         try {
           const { NodeHttpHandler } = await import('@smithy/node-http-handler');
           const { ProxyAgent } = await import('proxy-agent');
-          handler = new NodeHttpHandler({ httpsAgent: new ProxyAgent() });
+          handler = new NodeHttpHandler({
+            httpsAgent: new ProxyAgent() as unknown as Agent,
+          });
         } catch (err) {
           throw new Error(
             `The @smithy/node-http-handler package is required as a peer dependency. Please install it in your project or globally.`,
