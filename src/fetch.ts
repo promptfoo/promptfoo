@@ -6,7 +6,7 @@ export async function fetchWithProxy(
   url: RequestInfo,
   options: RequestInit = {},
 ): Promise<Response> {
-  options.agent = new ProxyAgent();
+  options.agent = new ProxyAgent() as unknown as RequestInit['agent'];
   return fetch(url, options);
 }
 
