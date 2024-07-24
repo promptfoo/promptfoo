@@ -14,6 +14,7 @@ import type {
   ProviderResponse,
 } from '../types';
 import { safeJsonStringify } from '../util/json';
+import { parseChatPrompt } from './shared';
 
 interface ReplicateCompletionOptions {
   apiKey?: string;
@@ -101,23 +102,29 @@ export class ReplicateProvider implements ApiProvider {
       fetch: fetch as any,
     });
 
+    const getValue = (
+      configValue: number | string | undefined,
+      envVar: string,
+      parseFunc = (val: any) => val,
+    ) => {
+      const envValue = process.env[envVar];
+      if (configValue !== undefined) {
+        return configValue;
+      } else if (envValue !== undefined) {
+        return parseFunc(envValue);
+      }
+      return undefined;
+    };
+
+    const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
+    const systemPrompt =
+      messages.find((message) => message.role === 'system')?.content ||
+      getValue(this.config.system_prompt, 'REPLICATE_SYSTEM_PROMPT');
+    const userPrompt = messages.find((message) => message.role === 'user')?.content || prompt;
+
     logger.debug(`Calling Replicate: ${prompt}`);
     let response;
     try {
-      const getValue = (
-        configValue: number | string | undefined,
-        envVar: string,
-        parseFunc = (val: any) => val,
-      ) => {
-        const envValue = process.env[envVar];
-        if (configValue !== undefined) {
-          return configValue;
-        } else if (envValue !== undefined) {
-          return parseFunc(envValue);
-        }
-        return undefined;
-      };
-
       const inputOptions = {
         max_length: getValue(this.config.max_length, 'REPLICATE_MAX_LENGTH', parseInt),
         max_new_tokens: getValue(this.config.max_new_tokens, 'REPLICATE_MAX_NEW_TOKENS', parseInt),
@@ -129,15 +136,15 @@ export class ReplicateProvider implements ApiProvider {
           'REPLICATE_REPETITION_PENALTY',
           parseFloat,
         ),
-        system_prompt: getValue(this.config.system_prompt, 'REPLICATE_SYSTEM_PROMPT'),
         stop_sequences: getValue(this.config.stop_sequences, 'REPLICATE_STOP_SEQUENCES'),
         seed: getValue(this.config.seed, 'REPLICATE_SEED', parseInt),
+        system_prompt: systemPrompt,
+        prompt: userPrompt,
       };
 
       const data = {
         input: {
           ...this.config,
-          prompt,
           ...Object.fromEntries(Object.entries(inputOptions).filter(([_, v]) => v !== undefined)),
         },
       };
