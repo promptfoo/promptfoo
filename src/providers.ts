@@ -345,10 +345,10 @@ export async function loadApiProvider(
     ret = new HttpProvider(providerPath, providerOptions);
   } else if (providerPath === 'promptfoo:redteam:iterative') {
     ret = new RedteamIterativeProvider(providerOptions.config);
+  } else if (providerPath === 'promptfoo:redteam:iterative:tree') {
+    ret = new RedteamIterativeTreeProvider(providerOptions.config);
   } else if (providerPath === 'promptfoo:redteam:iterative:image') {
     ret = new RedteamImageIterativeProvider();
-  } else if (providerPath === 'promptfoo:redteam:iterative:tree') {
-    ret = new RedteamIterativeTreeProvider();
   } else if (providerPath === 'promptfoo:manual-input') {
     ret = new ManualInputProvider(providerOptions);
   } else {

@@ -412,13 +412,21 @@ async function runRedteamTreeSearch(
   }
 }
 
-class RedteamIterativeTreeJailbreaks implements ApiProvider {
+class RedteamIterativeTreeProvider implements ApiProvider {
+  private readonly injectVar: string;
+
+  constructor(private readonly config: Record<string, string | object>) {
+    logger.debug(`RedteamIterativeTreeProvider config: ${JSON.stringify(config)}`);
+    invariant(typeof config.injectVar === 'string', 'Expected injectVar to be set');
+    this.injectVar = config.injectVar;
+  }
+
   id() {
     return 'promptfoo:redteam:iterative:tree';
   }
 
   async callApi(prompt: string, context?: CallApiContextParams, options?: CallApiOptionsParams) {
-    logger.debug(`RedteamIterativeTreeJailbreaks callApi called with prompt: ${prompt}`);
+    logger.debug(`RedteamIterativeTreeProvider callApi called with prompt: ${prompt}`);
 
     if (context) {
       logger.debug(`Context vars: ${JSON.stringify(context.vars)}`);
@@ -432,14 +440,8 @@ class RedteamIterativeTreeJailbreaks implements ApiProvider {
 
     invariant(options?.originalProvider, 'Expected originalProvider to be set');
     invariant(context?.vars, 'Expected vars to be set');
-
-    logger.warn(`Context vars: ${JSON.stringify(context.vars)}`);
-
-    const injectVar = context.vars.injectVar;
-    invariant(typeof injectVar === 'string', 'Expected injectVar to be set');
-    const goal = context.vars[injectVar];
-  
-    if (!goal) {
+    const goal = context.vars[this.injectVar];
+    if (typeof goal !== 'string') {
       logger.error('Goal is undefined. Make sure context.vars.query is set.');
       throw new Error('Goal is undefined');
     }
@@ -455,7 +457,7 @@ class RedteamIterativeTreeJailbreaks implements ApiProvider {
       logger.debug(`runRedteamTreeSearch result: ${JSON.stringify(result)}`);
       return result;
     } catch (error) {
-      logger.error(`Error in RedteamIterativeTreeJailbreaks callApi: ${error}`);
+      logger.error(`Error in RedteamIterativeTreeProvider callApi: ${error}`);
       // Return a default response instead of throwing
       return {
         output: '',
@@ -468,5 +470,5 @@ class RedteamIterativeTreeJailbreaks implements ApiProvider {
   }
 }
 
-export default RedteamIterativeTreeJailbreaks;
+export default RedteamIterativeTreeProvider;
 export { parseJudgement, calculateScore };

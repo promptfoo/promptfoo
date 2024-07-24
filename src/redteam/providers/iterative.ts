@@ -1,9 +1,9 @@
 import dedent from 'dedent';
 import invariant from 'tiny-invariant';
+import logger from '../../logger';
 import { OpenAiChatCompletionProvider } from '../../providers/openai';
 import type { ApiProvider, CallApiContextParams, CallApiOptionsParams } from '../../types';
 import { getNunjucksEngine } from '../../util/templates';
-import logger from '../../logger';
 
 const ATTACKER_MODEL = 'gpt-4o';
 
@@ -204,7 +204,6 @@ async function runRedteamConversation(
 }
 
 class RedteamIterativeProvider implements ApiProvider {
-
   private readonly injectVar: string;
 
   constructor(private readonly config: Record<string, string | object>) {
