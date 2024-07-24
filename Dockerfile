@@ -49,20 +49,29 @@ COPY --from=builder /app/drizzle ./src/web/nextui/.next/server/drizzle
 
 RUN mkdir -p /root/.promptfoo/output
 
+# Permissions
+RUN addgroup -g 1001 -S nodejs
+RUN adduser -S nextjs -u 1001
+RUN mkdir -p /root/.promptfoo/output
+RUN chown -R nextjs:nodejs /app /root/.promptfoo
+
 # Install curl for the healthcheck
 RUN apk add --no-cache curl
 
 # Create a script to write environment variables to .env file
 RUN echo -e '#!/bin/sh\n\
-echo "Writing environment variables to .env file..."\n\
-env > .env\n\
-echo "Loaded environment variables:"\n\
-cat .env\n\
-echo "Starting server..."\n\
-node src/web/nextui/server.js' > entrypoint.sh
+    echo "Writing environment variables to .env file..."\n\
+    env > src/web/nextui/.env\n\
+    echo "Loaded environment variables:"\n\
+    cat src/web/nextui/.env\n\
+    echo "Starting server..."\n\
+    node src/web/nextui/server.js' > entrypoint.sh
 
 # Make the script executable
 RUN chmod +x entrypoint.sh
+
+# Switch to non-root user
+USER nextjs
 
 EXPOSE 3000
 
