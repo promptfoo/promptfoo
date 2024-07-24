@@ -693,6 +693,65 @@ describe('evaluator', () => {
     expect(summary.results[3].response?.output).toBe('French Bonjour');
   });
 
+  it('evaluate with scenarios and defaultTest', async () => {
+    const mockApiProvider: ApiProvider = {
+      id: jest.fn().mockReturnValue('test-provider'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Hello, World',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      defaultTest: {
+        assert: [
+          {
+            type: 'starts-with',
+            value: 'Hello',
+          },
+        ],
+      },
+      scenarios: [
+        {
+          config: [{}],
+          tests: [{}],
+        },
+        {
+          config: [
+            {
+              assert: [
+                {
+                  type: 'contains',
+                  value: ',',
+                },
+              ],
+            },
+          ],
+          tests: [
+            {
+              assert: [
+                {
+                  type: 'icontains',
+                  value: 'world',
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const summary = await evaluate(testSuite, {});
+
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
+    expect(summary.stats.successes).toBe(2);
+    expect(summary.stats.failures).toBe(0);
+    expect(summary.results[0].gradingResult?.componentResults?.length).toBe(1);
+    expect(summary.results[1].gradingResult?.componentResults?.length).toBe(3);
+  });
+
   it('evaluate with _conversation variable', async () => {
     const mockApiProvider: ApiProvider = {
       id: jest.fn().mockReturnValue('test-provider'),
