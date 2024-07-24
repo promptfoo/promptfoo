@@ -3,6 +3,7 @@ import Editor from 'react-simple-code-editor';
 import { useStore } from '@/state/evalConfig';
 import EditIcon from '@mui/icons-material/Edit';
 import SaveIcon from '@mui/icons-material/Save';
+import { useTheme } from '@mui/material';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
@@ -15,6 +16,7 @@ import './YamlEditor.css';
 import 'prismjs/themes/prism.css';
 
 const YamlEditorComponent: React.FC = () => {
+  const darkMode = useTheme().palette.mode === 'dark';
   const {
     defaultTest,
     setDefaultTest,
@@ -106,6 +108,7 @@ const YamlEditorComponent: React.FC = () => {
         highlight={(code) => highlight(code, languages.yaml)}
         padding={10}
         style={{
+          backgroundColor: darkMode ? '#1e1e1e' : '#fff',
           fontFamily: '"Fira code", "Fira Mono", monospace',
           fontSize: 14,
         }}

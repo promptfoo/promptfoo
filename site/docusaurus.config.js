@@ -58,6 +58,13 @@ const config = {
     },
   ],
 
+  scripts: [
+    {
+      src: '/js/scripts.js',
+      async: true,
+    },
+  ],
+
   presets: [
     [
       'classic',
@@ -96,7 +103,7 @@ const config = {
         title: 'promptfoo',
         logo: {
           alt: 'promptfoo logo',
-          src: 'img/logo.svg',
+          src: 'img/logo-panda.svg',
         },
         items: [
           /*
@@ -133,6 +140,11 @@ const config = {
             label: 'Discord',
             position: 'right',
           },
+          {
+            href: '/contact/',
+            label: 'Contact',
+            position: 'right',
+          },
         ],
       },
       footer: {
@@ -146,28 +158,40 @@ const config = {
                 to: '/docs/intro',
               },
               {
-                label: 'Command line',
+                label: 'Command Line',
                 to: '/docs/getting-started',
               },
               {
-                label: 'Node package',
+                label: 'Node Package',
                 to: '/docs/usage/node-package',
               },
               {
-                label: 'Privacy policy',
+                label: 'Privacy Policy',
                 to: '/privacy',
+              },
+              {
+                html: `
+                <div style="position: relative; margin-top:8px">
+                  <span style="position: absolute; left: 65px; top: 25px; font-size: 10px; font-weight: bold; background-color: #25842c; padding: 2px 4px; border-radius: 4px;">In Progress</span>
+                  <img src="/img/badges/soc2.png" alt="SOC2 Compliance in progress" style="width:80px; height: auto"/>
+                </div>
+                `,
               },
             ],
           },
           {
-            title: 'Guides',
+            title: 'Guides & Tools',
             items: [
               {
-                label: 'Running benchmarks',
+                label: 'LLM Red Teaming',
+                to: '/docs/red-team',
+              },
+              {
+                label: 'Running Benchmarks',
                 to: '/docs/guides/llama2-uncensored-benchmark-ollama',
               },
               {
-                label: 'Evaluating factuality',
+                label: 'Evaluating Factuality',
                 to: '/docs/guides/factuality-eval',
               },
               {
@@ -175,18 +199,30 @@ const config = {
                 to: '/docs/guides/evaluate-rag',
               },
               {
-                label: 'Minimizing hallucinations',
+                label: 'Minimizing Hallucinations',
                 to: '/docs/guides/prevent-llm-hallucations',
               },
               {
-                label: 'LLM red teaming',
-                to: '/docs/red-team',
+                label: 'Promptfoo Config Validator',
+                to: '/validator',
               },
             ],
           },
           {
-            title: 'Community',
+            title: 'About',
             items: [
+              {
+                label: 'Blog',
+                href: '/blog',
+              },
+              {
+                label: 'Contact Us',
+                href: '/contact/',
+              },
+              {
+                label: 'Careers',
+                href: '/careers/',
+              },
               {
                 label: 'GitHub',
                 href: 'https://github.com/promptfoo/promptfoo',
@@ -194,14 +230,6 @@ const config = {
               {
                 label: 'Discord',
                 href: 'https://discord.gg/gHPS9jjfbs',
-              },
-              {
-                label: 'Blog',
-                href: '/blog',
-              },
-              {
-                label: 'Contact Us',
-                href: 'mailto:inquiries@promptfoo.dev',
               },
             ],
           },

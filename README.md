@@ -6,13 +6,14 @@
 ![MIT license](https://img.shields.io/github/license/promptfoo/promptfoo)
 [![Discord](https://dcbadge.vercel.app/api/server/gHPS9jjfbs?style=flat&compact=true)](https://discord.gg/gHPS9jjfbs)
 
-`promptfoo` is a tool for testing and evaluating LLM apps.
+`promptfoo` is a tool for testing, evaluating, and red-teaming LLM apps.
 
 With promptfoo, you can:
 
 - **Build reliable prompts, models, and RAGs** with benchmarks specific to your use-case
+- **Secure your apps** with automated [red teaming](https://www.promptfoo.dev/docs/red-team/) and pentesting
 - **Speed up evaluations** with caching, concurrency, and live reloading
-- **Score outputs automatically** by defining [metrics](https://www.promptfoo.dev/docs/configuration/expected-outputs) and perform automated [red teaming](https://www.promptfoo.dev/docs/red-team/)
+- **Score outputs automatically** by defining [metrics](https://www.promptfoo.dev/docs/configuration/expected-outputs)
 - Use as a [CLI](https://www.promptfoo.dev/docs/usage/command-line), [library](https://www.promptfoo.dev/docs/usage/node-package), or in [CI/CD](https://www.promptfoo.dev/docs/integrations/github-action)
 - Use OpenAI, Anthropic, Azure, Google, HuggingFace, open-source models like Llama, or integrate custom API providers for [any LLM API](https://www.promptfoo.dev/docs/providers)
 
@@ -54,7 +55,7 @@ As you collect more examples and establish a user feedback loop, continue to bui
 
 <img width="772" alt="LLM ops" src="https://github.com/promptfoo/promptfoo/assets/310310/cf0461a7-2832-4362-9fbb-4ebd911d06ff">
 
-## Usage
+## Usage - evals
 
 To get started, run this command:
 
@@ -62,13 +63,23 @@ To get started, run this command:
 npx promptfoo@latest init
 ```
 
-This will create some placeholders in your current directory: `prompts.txt` and `promptfooconfig.yaml`.
+This will create a `promptfooconfig.yaml` placeholder in your current directory.
 
 After editing the prompts and variables to your liking, run the eval command to kick off an evaluation:
 
 ```
 npx promptfoo@latest eval
 ```
+
+## Usage - red teaming/pentesting
+
+Run this command:
+
+```sh
+npx promptfoo@latest redteam init
+```
+
+This will ask you questions about what types of vulnerabilities you want to find and walk you through running your first scan.
 
 ### Configuration
 
@@ -78,7 +89,7 @@ See the [Configuration docs](https://www.promptfoo.dev/docs/configuration/guide)
 
 ```yaml
 prompts: [prompt1.txt, prompt2.txt]
-providers: [openai:gpt-3.5-turbo, ollama:llama2:70b]
+providers: [openai:gpt-4o-mini, ollama:llama2:70b]
 tests:
   - description: 'Test translation to French'
     vars:
@@ -159,7 +170,7 @@ Some people prefer to configure their LLM tests in a CSV. In that case, the conf
 
 ```yaml
 prompts: [prompts.txt]
-providers: [openai:gpt-3.5-turbo]
+providers: [openai:gpt-4o-mini]
 tests: tests.csv
 ```
 
@@ -195,7 +206,7 @@ npx promptfoo view
 In [this example](https://github.com/promptfoo/promptfoo/tree/main/examples/assistant-cli), we evaluate whether adding adjectives to the personality of an assistant bot affects the responses:
 
 ```
-npx promptfoo eval -p prompts.txt -r openai:gpt-3.5-turbo -t tests.csv
+npx promptfoo eval -p prompts.txt -r openai:gpt-4o-mini -t tests.csv
 ```
 
 <!--
@@ -230,7 +241,7 @@ You can also use `promptfoo` as a library in your project by importing the `eval
 
   ```typescript
   interface EvaluateTestSuite {
-    providers: string[]; // Valid provider name (e.g. openai:gpt-3.5-turbo)
+    providers: string[]; // Valid provider name (e.g. openai:gpt-4o-mini)
     prompts: string[]; // List of prompts
     tests: string | TestCase[]; // Path to a CSV file, or list of test cases
 
@@ -286,7 +297,7 @@ import promptfoo from 'promptfoo';
 
 const results = await promptfoo.evaluate({
   prompts: ['Rephrase this in French: {{body}}', 'Rephrase this like a pirate: {{body}}'],
-  providers: ['openai:gpt-3.5-turbo'],
+  providers: ['openai:gpt-4o-mini'],
   tests: [
     {
       vars: {

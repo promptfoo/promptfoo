@@ -5,8 +5,10 @@ import { useStore as useMainStore } from '@/state/evalConfig';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import SettingsIcon from '@mui/icons-material/Settings';
 import ShareIcon from '@mui/icons-material/Share';
+import SearchIcon from '@mui/icons-material/Source';
 import EyeIcon from '@mui/icons-material/Visibility';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import Box from '@mui/material/Box';
@@ -15,6 +17,7 @@ import Checkbox from '@mui/material/Checkbox';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
 import FormControl from '@mui/material/FormControl';
+import InputAdornment from '@mui/material/InputAdornment';
 import InputLabel from '@mui/material/InputLabel';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
@@ -26,7 +29,6 @@ import Snackbar from '@mui/material/Snackbar';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
-import Typography from '@mui/material/Typography';
 import { styled } from '@mui/system';
 import type { VisibilityState } from '@tanstack/table-core';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -35,7 +37,8 @@ import { useDebounce } from 'use-debounce';
 import CompareEvalMenuItem from './CompareEvalMenuItem';
 import ConfigModal from './ConfigModal';
 import DownloadMenu from './DownloadMenu';
-import EvalSelectorButton from './EvalSelectorButton';
+import EvalSelectorDialog from './EvalSelectorDialog';
+import EvalSelectorKeyboardShortcut from './EvalSelectorKeyboardShortcut';
 import ResultsCharts from './ResultsCharts';
 import ResultsTable from './ResultsTable';
 import SettingsModal from './ResultsViewSettingsModal';
@@ -173,7 +176,7 @@ export default function ResultsView({
           prompts: [
             ...table.head.prompts.map((prompt) => ({
               ...prompt,
-              label: `[${evalId || defaultEvalId || recentEvals[0]?.evalId || 'Eval A'}] ${prompt.label || ''}`,
+              label: `[${evalId || defaultEvalId || 'Eval A'}] ${prompt.label || ''}`,
             })),
             ...comparisonTable.head.prompts.map((prompt) => ({
               ...prompt,
@@ -299,6 +302,7 @@ export default function ResultsView({
   };
 
   const [evalIdCopied, setEvalIdCopied] = React.useState(false);
+  const [evalSelectorDialogOpen, setEvalSelectorDialogOpen] = React.useState(false);
 
   const handleEvalIdCopyClick = async () => {
     if (!evalId) {
@@ -315,27 +319,42 @@ export default function ResultsView({
     <div style={{ marginLeft: '1rem', marginRight: '1rem' }}>
       <ResponsiveStack
         direction="row"
-        mb={2}
+        mb={3}
         spacing={1}
         alignItems="center"
         className="eval-header"
       >
-        {recentEvals && recentEvals.length > 0 && (
-          <EvalSelectorButton
+        <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', maxWidth: 250 }}>
+          <TextField
+            variant="outlined"
+            size="small"
+            fullWidth
+            value={config?.description || evalId || ''}
+            InputProps={{
+              readOnly: true,
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon />
+                </InputAdornment>
+              ),
+              endAdornment: (
+                <InputAdornment position="end">
+                  <ArrowDropDownIcon />
+                </InputAdornment>
+              ),
+            }}
+            onClick={() => setEvalSelectorDialogOpen(true)}
+            placeholder="Search or select an eval..."
+            sx={{ cursor: 'pointer' }}
+          />
+          <EvalSelectorDialog
+            open={evalSelectorDialogOpen}
+            onClose={() => setEvalSelectorDialogOpen(false)}
             recentEvals={recentEvals}
             onRecentEvalSelected={onRecentEvalSelected}
-            currentEval={recentEvals.find((evl) => evl.evalId === evalId) || null}
+            title="Select an Eval"
           />
-        )}
-        {!inComparisonMode && (
-          <Typography variant="h5" sx={{ display: 'flex', alignItems: 'center' }}>
-            <Tooltip title="Click to edit description">
-              <span className="description" onClick={handleDescriptionClick}>
-                {config?.description || evalId}
-              </span>
-            </Tooltip>
-          </Typography>
-        )}
+        </Box>
         {config?.description && evalId && (
           <>
             <Tooltip title="Click to copy">
@@ -373,9 +392,9 @@ export default function ResultsView({
           />
         </Tooltip>
       </ResponsiveStack>
-      <ResponsiveStack direction="row" spacing={4} alignItems="center">
+      <ResponsiveStack direction="row" spacing={1} alignItems="center">
         <Box>
-          <FormControl sx={{ m: 1, minWidth: 200, maxWidth: 350 }} size="small">
+          <FormControl sx={{ minWidth: 200, maxWidth: 350 }} size="small">
             <InputLabel id="visible-columns-label">Columns</InputLabel>
             <Select
               labelId="visible-columns-label"
@@ -436,16 +455,12 @@ export default function ResultsView({
                 open={Boolean(anchorEl)}
                 onClose={handleMenuClose}
               >
-                <CompareEvalMenuItem
-                  initialEvals={recentEvals}
-                  onComparisonEvalSelected={handleComparisonEvalSelected}
-                />
-                <Tooltip title="View the configuration that defines this eval" placement="left">
-                  <MenuItem onClick={() => setConfigModalOpen(true)}>
+                <Tooltip title="Edit the name of this eval" placement="left">
+                  <MenuItem onClick={handleDescriptionClick}>
                     <ListItemIcon>
-                      <VisibilityIcon fontSize="small" />
+                      <EditIcon fontSize="small" />
                     </ListItemIcon>
-                    View YAML
+                    Edit name
                   </MenuItem>
                 </Tooltip>
                 <Tooltip title="Edit this eval in the web UI" placement="left">
@@ -456,9 +471,21 @@ export default function ResultsView({
                     }}
                   >
                     <ListItemIcon>
-                      <EditIcon fontSize="small" />
+                      <PlayArrowIcon fontSize="small" />
                     </ListItemIcon>
-                    Edit Eval
+                    Edit and re-run
+                  </MenuItem>
+                </Tooltip>
+                <CompareEvalMenuItem
+                  initialEvals={recentEvals}
+                  onComparisonEvalSelected={handleComparisonEvalSelected}
+                />
+                <Tooltip title="View the configuration that defines this eval" placement="left">
+                  <MenuItem onClick={() => setConfigModalOpen(true)}>
+                    <ListItemIcon>
+                      <VisibilityIcon fontSize="small" />
+                    </ListItemIcon>
+                    View YAML
                   </MenuItem>
                 </Tooltip>
                 <DownloadMenu />
@@ -499,12 +526,9 @@ export default function ResultsView({
               <Tooltip title="View vulnerability scan report" placement="bottom">
                 <Button
                   color="primary"
+                  variant="contained"
                   startIcon={<EyeIcon />}
-                  onClick={() =>
-                    router.push(
-                      `/report/?evalId=${evalId || defaultEvalId || recentEvals[0]?.evalId}`,
-                    )
-                  }
+                  onClick={() => router.push(`/report/?evalId=${evalId || defaultEvalId}`)}
                 >
                   Vulnerability Report
                 </Button>
@@ -532,6 +556,10 @@ export default function ResultsView({
         shareUrl={shareUrl}
       />
       <SettingsModal open={viewSettingsModalOpen} onClose={() => setViewSettingsModalOpen(false)} />
+      <EvalSelectorKeyboardShortcut
+        recentEvals={recentEvals}
+        onRecentEvalSelected={onRecentEvalSelected}
+      />
     </div>
   );
 }

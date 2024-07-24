@@ -58,6 +58,7 @@ import { VoyageEmbeddingProvider } from './providers/voyage';
 import { WebhookProvider } from './providers/webhook';
 import RedteamIterativeProvider from './redteam/providers/iterative';
 import RedteamImageIterativeProvider from './redteam/providers/iterativeImage';
+import RedteamIterativeTreeProvider from './redteam/providers/iterativeTree';
 import type {
   ApiProvider,
   EnvOverrides,
@@ -117,7 +118,7 @@ export async function loadApiProvider(
     const modelName = splits.slice(2).join(':');
 
     if (modelType === 'chat') {
-      ret = new OpenAiChatCompletionProvider(modelName || 'gpt-3.5-turbo', providerOptions);
+      ret = new OpenAiChatCompletionProvider(modelName || 'gpt-4o-mini', providerOptions);
     } else if (modelType === 'embedding' || modelType === 'embeddings') {
       ret = new OpenAiEmbeddingProvider(modelName || 'text-embedding-3-large', providerOptions);
     } else if (modelType === 'completion') {
@@ -346,6 +347,8 @@ export async function loadApiProvider(
     ret = new RedteamIterativeProvider();
   } else if (providerPath === 'promptfoo:redteam:iterative:image') {
     ret = new RedteamImageIterativeProvider();
+  } else if (providerPath === 'promptfoo:redteam:iterative:tree') {
+    ret = new RedteamIterativeTreeProvider();
   } else if (providerPath === 'promptfoo:manual-input') {
     ret = new ManualInputProvider(providerOptions);
   } else {

@@ -1,42 +1,93 @@
-import { HARM_CATEGORIES } from './plugins/harmful';
-import { PII_REQUEST_CATEGORIES } from './plugins/pii';
-
 export const REDTEAM_MODEL = 'openai:chat:gpt-4o';
 
 export const LLAMA_GUARD_REPLICATE_PROVIDER =
   'replicate:moderation:meta/meta-llama-guard-2-8b:b063023ee937f28e922982abdbf97b041ffe34ad3b35a53d33e1d74bb19b36c4';
 
+export const COLLECTIONS = ['harmful', 'pii'];
+
+export const UNALIGNED_PROVIDER_HARM_PLUGINS = {
+  // MLCommons harm categories
+  // https://llama.meta.com/docs/model-cards-and-prompt-formats/meta-llama-guard-2/
+  'harmful:violent-crime': 'Violent Crimes',
+  'harmful:non-violent-crime': 'Non-Violent Crimes',
+  'harmful:sex-crime': 'Sex Crimes',
+  'harmful:child-exploitation': 'Child Exploitation',
+  'harmful:indiscriminate-weapons': 'Indiscriminate Weapons',
+  'harmful:hate': 'Hate',
+  'harmful:self-harm': 'Self-Harm',
+  'harmful:sexual-content': 'Sexual Content',
+
+  // Harmbench taxonomy
+  // https://arxiv.org/pdf/2402.04249
+  'harmful:cybercrime': 'Cybercrime & Unauthorized Intrusion - Hacking and Malware',
+  'harmful:chemical-biological-weapons': 'Chemical & Biological Weapons',
+  'harmful:illegal-drugs': 'Illegal Drugs',
+  'harmful:copyright-violations': 'Copyright Violations - Copyrighted text',
+  'harmful:harassment-bullying': 'Harassment & Bullying',
+  'harmful:illegal-activities': 'Illegal Activities - Fraud & scams',
+  'harmful:graphic-content': 'Graphic & age-restricted content',
+  'harmful:unsafe-practices': 'Promotion of unsafe practices',
+  //'harmful:privacy-violations': 'Privacy violations & data exploitation',  // redundant with MLCommons category
+
+  // Other
+  'harmful:radicalization': 'Radicalization',
+  'harmful:profanity': 'Requests containing profanity',
+  'harmful:insults': 'Insults and personal attacks',
+  //'scam_fraud_creation',
+  //'locale_specific_illegal (e.g. hate speech in Germany, alcohol in Saudi Arabia)',
+} as const;
+
+export const REDTEAM_PROVIDER_HARM_PLUGINS = {
+  'harmful:privacy': 'Privacy violations',
+  'harmful:intellectual-property': 'Intellectual Property violation',
+  'harmful:misinformation-disinformation':
+    'Misinformation & Disinformation - Harmful lies and propaganda',
+  'harmful:specialized-advice': 'Specialized Advice - Financial',
+} as const;
+
+export const HARM_PLUGINS = {
+  ...UNALIGNED_PROVIDER_HARM_PLUGINS,
+  ...REDTEAM_PROVIDER_HARM_PLUGINS,
+} as const;
+
+export const PII_PLUGINS = ['pii:api-db', 'pii:direct', 'pii:session', 'pii:social'] as const;
+
 export const BASE_PLUGINS = [
   'contracts',
   'excessive-agency',
   'hallucination',
-  'harmful',
   'hijacking',
-  'jailbreak',
   'overreliance',
-  'pii',
   'politics',
-  'prompt-injection',
 ];
 
-export const ADDITIONAL_PLUGINS = ['competitors', 'experimental-jailbreak'] as [
-  string,
-  ...string[],
+export const ADDITIONAL_PLUGINS: string[] = [
+  'competitors',
+  'sql-injection',
+  'shell-injection',
+  'debug-access',
+  'rbac',
 ];
 
-export const DEFAULT_PLUGINS = new Set([
+export const DEFAULT_PLUGINS: Set<string> = new Set([
+  ...COLLECTIONS,
   ...BASE_PLUGINS,
-  ...Object.keys(HARM_CATEGORIES),
-  ...PII_REQUEST_CATEGORIES,
+  ...Object.keys(HARM_PLUGINS),
+  ...PII_PLUGINS,
 ]);
 
-export const ALL_PLUGINS = [...new Set([...DEFAULT_PLUGINS, ...ADDITIONAL_PLUGINS])].sort() as [
-  string,
-  ...string[],
-];
+export const ALL_PLUGINS: string[] = [
+  ...new Set([...DEFAULT_PLUGINS, ...ADDITIONAL_PLUGINS]),
+].sort();
+
+export const DEFAULT_STRATEGIES = ['jailbreak', 'prompt-injection'];
+
+export const ADDITIONAL_STRATEGIES = ['experimental-jailbreak', 'experimental-tree-jailbreak'];
+
+export const ALL_STRATEGIES = [...DEFAULT_STRATEGIES, ...ADDITIONAL_STRATEGIES] as const;
 
 // Duplicated in src/web/nextui/src/app/report/constants.ts for frontend
-export const subCategoryDescriptions: Record<string, string> = {
+export const subCategoryDescriptions: Record<(typeof ALL_PLUGINS)[number], string> = {
   'excessive-agency': 'Model taking excessive initiative or misunderstanding its capabilities.',
   harmful: 'All harmful categories',
   'harmful:child-exploitation': 'Content exploiting or harming children.',
@@ -75,4 +126,8 @@ export const subCategoryDescriptions: Record<string, string> = {
   'pii:social': 'Reveals personal information through social engineering tactics.',
   politics: 'Makes political statements.',
   'experimental-jailbreak': 'Apply jailbreaks to all attack types',
+  'sql-injection': 'Attempts to perform SQL injection attacks to manipulate database queries.',
+  'shell-injection': 'Attempts to execute shell commands through the model.',
+  'debug-access': 'Attempts to access or use debugging commands.',
+  rbac: 'Tests whether the model properly implements Role-Based Access Control (RBAC).',
 };

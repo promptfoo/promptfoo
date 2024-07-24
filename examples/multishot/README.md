@@ -7,5 +7,5 @@ promptfoo eval
 To override prompts, providers, output, etc. you can run:
 
 ```
-promptfoo eval --prompts prompt1.json prompt2.json --providers openai:chat:gpt-3.5-turbo --output output.json
+promptfoo eval --prompts prompt1.json prompt2.json --providers openai:chat:gpt-4o-mini --output output.json
 ```

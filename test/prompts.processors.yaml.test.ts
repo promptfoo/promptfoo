@@ -13,11 +13,10 @@ describe('processYamlFile', () => {
   it('should process a valid YAML file without a label', () => {
     const filePath = 'file.yaml';
     const fileContent = 'key: value';
-    const parsedYaml = { key: 'value' };
     mockReadFileSync.mockReturnValue(fileContent);
     expect(processYamlFile(filePath, {})).toEqual([
       {
-        raw: JSON.stringify(parsedYaml),
+        raw: fileContent,
         label: `${filePath}: ${fileContent}`,
       },
     ]);
@@ -27,11 +26,10 @@ describe('processYamlFile', () => {
   it('should process a valid YAML file with a label', () => {
     const filePath = 'file.yaml';
     const fileContent = 'key: value';
-    const parsedYaml = { key: 'value' };
     mockReadFileSync.mockReturnValue(fileContent);
     expect(processYamlFile(filePath, { label: 'Label' })).toEqual([
       {
-        raw: JSON.stringify(parsedYaml),
+        raw: fileContent,
         label: `Label`,
       },
     ]);
@@ -45,14 +43,6 @@ describe('processYamlFile', () => {
     });
 
     expect(() => processYamlFile(filePath, {})).toThrow('File not found');
-    expect(mockReadFileSync).toHaveBeenCalledWith(filePath, 'utf8');
-  });
-
-  it('should throw an error if the YAML content is invalid', () => {
-    const filePath = 'invalid.yaml';
-    const fileContent = 'invalid: yaml: content';
-    mockReadFileSync.mockReturnValue(fileContent);
-    expect(() => processYamlFile(filePath, {})).toThrow(/bad indentation of a mapping entry/);
     expect(mockReadFileSync).toHaveBeenCalledWith(filePath, 'utf8');
   });
 });

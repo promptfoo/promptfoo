@@ -1,3 +1,4 @@
+import { GlobalConfig } from './configTypes';
 import { readGlobalConfig, writeGlobalConfig } from './globalConfig';
 
 export function getUserEmail(): string | null {
@@ -6,7 +7,8 @@ export function getUserEmail(): string | null {
 }
 
 export function setUserEmail(email: string) {
-  writeGlobalConfig({ account: { email } });
+  const config: GlobalConfig = { account: { email } };
+  writeGlobalConfig(config);
 }
 
 export function getAuthor(): string | null {

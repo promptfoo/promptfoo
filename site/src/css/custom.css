@@ -33,11 +33,6 @@
   --docusaurus-highlighted-code-line-bg: #353531;
 }
 
-[data-theme='dark'] .button {
-  background-color: var(--ifm-color-primary-darker);
-  border-color: var(--ifm-color-primary-darker);
-}
-
 .hero--primary {
   --ifm-hero-background-color: var(--ifm-background-color);
   --ifm-hero-text-color: var(--ifm-heading-color);
@@ -57,13 +52,8 @@
 
 .navbar__brand {
   font-family: var(--ifm-font-family-monospace);
-  margin-top: 0.25rem;
 }
 
 .navbar__logo img {
   filter: invert(0);
-}
-
-[data-theme='dark'] .navbar__logo img {
-  filter: invert(0.7);
 }
