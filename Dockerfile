@@ -55,15 +55,19 @@ RUN adduser -S nextjs -u 1001
 RUN mkdir -p /root/.promptfoo/output
 RUN chown -R nextjs:nodejs /app /root/.promptfoo
 
+# Create the .env file directory with correct permissions
+RUN mkdir -p /app/src/web/nextui
+RUN chown nextjs:nodejs /app/src/web/nextui
+
 # Install curl for the healthcheck
 RUN apk add --no-cache curl
 
 # Create a script to write environment variables to .env file
 RUN echo -e '#!/bin/sh\n\
     echo "Writing environment variables to .env file..."\n\
-    env > src/web/nextui/.env\n\
+    env > /app/src/web/nextui/.env\n\
     echo "Loaded environment variables:"\n\
-    cat src/web/nextui/.env\n\
+    cat /app/src/web/nextui/.env\n\
     echo "Starting server..."\n\
     node src/web/nextui/server.js' > entrypoint.sh
 
