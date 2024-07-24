@@ -10,6 +10,7 @@ import CompetitorPlugin from './plugins/competitors';
 import ContractPlugin from './plugins/contracts';
 import DebugAccessPlugin from './plugins/debugInterface';
 import ExcessiveAgencyPlugin from './plugins/excessiveAgency';
+import ExfiltrationPlugin from './plugins/exfiltration';
 import HallucinationPlugin from './plugins/hallucination';
 import { getHarmfulTests } from './plugins/harmful';
 import HijackingPlugin from './plugins/hijacking';
@@ -66,6 +67,11 @@ const Plugins: Plugin[] = [
     key: 'excessive-agency',
     action: (provider, purpose, injectVar, n) =>
       new ExcessiveAgencyPlugin(provider, purpose, injectVar).generateTests(n),
+  },
+  {
+    key: 'exfiltration',
+    action: (provider, purpose, injectVar, n) =>
+      new ExfiltrationPlugin(provider, purpose, injectVar).generateTests(n),
   },
   {
     key: 'hallucination',

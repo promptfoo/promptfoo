@@ -113,6 +113,7 @@ export const categoryLabels = Object.keys(categoryMapReverse);
 export const categoryAliases = {
   'debug-access': 'DebugInterface',
   'excessive-agency': 'ExcessiveAgency',
+  exfiltration: 'Model leaking information regarding its internal architecture.',
   'harmful:child-exploitation': 'Child Exploitation',
   'harmful:cybercrime': 'Cybercrime & Unauthorized Intrusion - Hacking and Malware',
   'harmful:graphic-content': 'Graphic & age-restricted content',

@@ -63,10 +63,11 @@ export const BASE_PLUGINS = [
 
 export const ADDITIONAL_PLUGINS: string[] = [
   'competitors',
-  'sql-injection',
-  'shell-injection',
   'debug-access',
+  'exfiltration',
   'rbac',
+  'shell-injection',
+  'sql-injection',
 ];
 
 export const DEFAULT_PLUGINS: Set<string> = new Set([
@@ -89,6 +90,7 @@ export const ALL_STRATEGIES = [...DEFAULT_STRATEGIES, ...ADDITIONAL_STRATEGIES] 
 // Duplicated in src/web/nextui/src/app/report/constants.ts for frontend
 export const subCategoryDescriptions: Record<(typeof ALL_PLUGINS)[number], string> = {
   'excessive-agency': 'Model taking excessive initiative or misunderstanding its capabilities.',
+  exfiltration: 'Model leaking information regarding its internal architecture.',
   harmful: 'All harmful categories',
   'harmful:child-exploitation': 'Content exploiting or harming children.',
   'harmful:copyright-violations': 'Content violating copyright laws.',
