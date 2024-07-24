@@ -1,9 +1,9 @@
 # This GitHub Action builds the Docker image for the Next.js application,
 # runs the Docker container, performs a health check to ensure the application
-# is running correctly, and then stops and removes the container. This action
-# is exclusively triggered via workflow dispatch.
+# is running correctly, and then publishes the image to GitHub Container Registry
+# if all checks pass. This action is exclusively triggered via workflow dispatch.
 
-name: Test Docker Image
+name: Test and Publish Docker Image
 
 on:
   workflow_dispatch:
@@ -12,9 +12,16 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
 jobs:
-  test:
+  test-and-publish:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
 
     steps:
       - name: Checkout repository
@@ -24,12 +31,18 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build Docker image
-        run: docker build --build-arg NEXT_PUBLIC_PROMPTFOO_BASE_URL=http://localhost:3000 -t promptfoo-ui:ci .
+        uses: docker/build-push-action@3b5e8027fcad23fda98b2e3ac259d8d67585f671
+        with:
+          context: .
+          push: false
+          load: true
+          tags: local-test-image:latest
+          build-args: |
+            NEXT_PUBLIC_PROMPTFOO_BASE_URL=http://localhost:3000
 
-      - name: Run Docker container
+      - name: Run Docker container and health check
         run: |
-          # Start the Docker container in detached mode
-          docker run -d --name promptfoo-container -p 3000:3000 promptfoo-ui:ci
+          docker run -d --name promptfoo-container -p 3000:3000 local-test-image:latest
 
           # Loop to check if the server is up
           for i in {1..10}; do
@@ -43,14 +56,38 @@ jobs:
             fi
           done
 
-          # If health check did not pass after retries, exit with an error
-          if [ -z "$HEALTH_CHECK_PASS" ]; then
-            echo -e "\nHealth check failed after multiple attempts" >&2
-            docker stop promptfoo-container
-            docker rm promptfoo-container
-            exit 1
-          fi
-
           # Stop and remove the Docker container
           docker stop promptfoo-container
           docker rm promptfoo-container
+
+          # If health check did not pass after retries, exit with an error
+          if [ -z "$HEALTH_CHECK_PASS" ]; then
+            echo -e "\nHealth check failed after multiple attempts" >&2
+            exit 1
+          fi
+
+      - name: Log in to the Container registry
+        if: success()
+        uses: docker/login-action@65b78e6e13532edd9afa3aa52ac7964289d1a9c1
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for Docker
+        if: success()
+        id: meta
+        uses: docker/metadata-action@9ec57ed1fcdbf14dcef7dfbe97b2010124a938b7
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+
+      - name: Build and push Docker image
+        if: success()
+        uses: docker/build-push-action@3b5e8027fcad23fda98b2e3ac259d8d67585f671
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            NEXT_PUBLIC_PROMPTFOO_BASE_URL=http://localhost:3000
