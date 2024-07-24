@@ -18,6 +18,12 @@ def extract_unique_var_values(evals: List[dict], var_name: str) -> Set[str]:
         
   return values
 
+def suite_start(suite: dict):
+  print(f"Suite started: {suite}")
+
+def suite_end(suite: dict):
+  print(f"Suite ended: {suite}")
+
 def evals_ran_hook(evals: List[dict], results, table):
   teardown_commands = extract_unique_var_values(evals, "teardown")
   for command in teardown_commands:
@@ -33,6 +39,10 @@ def evals_prepared_hook(evals: List[dict]):
 
 # Note: promptfoo swallows the output by default - run with LOG_LEVEL=debug if you need to see output
 def extension_hook(hook_name, context):
+  if hook_name == "suite_start":
+    suite_start(context["suite"])
+  if hook_name == "suite_end":
+    suite_end(context["suite"])
   if hook_name == "evals_prepared":
     evals_prepared_hook(context["evals"])
   if hook_name == "evals_ran":

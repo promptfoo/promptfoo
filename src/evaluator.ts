@@ -479,19 +479,22 @@ class Evaluator {
     const prompts: CompletedPrompt[] = [];
 
     const runExtensionHook = async (hookName: string, context: any) => {
-      if (testSuite.extensions) {
-        for (const extension of testSuite.extensions) {
-          logger.info(`Running extension ${extension}`);
-          if (extension.startsWith('python:')) {
-            const filePath = path.resolve(cliState.basePath || '', extension.slice('python:'.length)); 
-            await runPython(filePath, 'extension_hook', [
-              hookName,
-              context,
-            ])
-          }
+      if (!testSuite.extensions) {
+        return;
+      }
+      for (const extension of testSuite.extensions) {
+        logger.info(`Running extension ${extension}`);
+        if (extension.startsWith('python:')) {
+          const filePath = path.resolve(cliState.basePath || '', extension.slice('python:'.length)); 
+          await runPython(filePath, 'extension_hook', [
+            hookName,
+            context,
+          ])
         }
       }
     }
+
+    await runExtensionHook('suite_start', { 'suite': testSuite });
 
     if (options.generateSuggestions) {
       // TODO(ian): Move this into its own command/file
@@ -1033,6 +1036,7 @@ class Evaluator {
     }
 
     await runExtensionHook('evals_ran', { 'evals': runEvalOptions, 'results': results, 'table': table });
+    await runExtensionHook('suite_end', { 'suite': testSuite });
 
     telemetry.record('eval_ran', {
       numPrompts: prompts.length,
