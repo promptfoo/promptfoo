@@ -55,7 +55,6 @@ export const PII_PLUGINS = ['pii:api-db', 'pii:direct', 'pii:session', 'pii:soci
 export const BASE_PLUGINS = [
   'contracts',
   'excessive-agency',
-  'exfiltration',
   'hallucination',
   'hijacking',
   'overreliance',
@@ -64,10 +63,11 @@ export const BASE_PLUGINS = [
 
 export const ADDITIONAL_PLUGINS: string[] = [
   'competitors',
-  'sql-injection',
-  'shell-injection',
   'debug-access',
+  'exfiltration',
   'rbac',
+  'shell-injection',
+  'sql-injection',
 ];
 
 export const DEFAULT_PLUGINS: Set<string> = new Set([
