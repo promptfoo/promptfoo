@@ -197,7 +197,7 @@ export default function Home(): JSX.Element {
       description="Eliminate risk with AI red-teaming and evals used by 25,000 developers. Find and fix vulnerabilities, maximize output quality, catch regressions."
     >
       <Head>
-        <meta property="og:image" content="/img/meta/homepage.png" />
+        <meta property="og:image" content="https://www.promptfoo.dev/img/meta/homepage.png" />
         <meta name="twitter:card" content="summary_large_image" />
       </Head>
       <HomepageHeader />

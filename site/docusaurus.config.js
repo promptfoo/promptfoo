@@ -58,6 +58,13 @@ const config = {
     },
   ],
 
+  scripts: [
+    {
+      src: '/js/scripts.js',
+      async: true,
+    },
+  ],
+
   presets: [
     [
       'classic',
@@ -202,7 +209,7 @@ const config = {
             ],
           },
           {
-            title: 'Community',
+            title: 'About',
             items: [
               {
                 label: 'Blog',
@@ -211,6 +218,10 @@ const config = {
               {
                 label: 'Contact Us',
                 href: '/contact/',
+              },
+              {
+                label: 'Careers',
+                href: '/careers/',
               },
               {
                 label: 'GitHub',
