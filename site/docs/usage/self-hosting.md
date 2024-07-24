@@ -23,15 +23,56 @@ promptfoo provides a Docker image that allows you to host a central server that 
 
 The self-hosted app consists of:
 
-- Next.js application that runs the web ui.
-- filesystem store that persists the eval results.
-- key-value (KV) store that persists shared data (redis, filesystem, or memory).
+- Next.js application that runs the web UI.
+- Filesystem store that persists the eval results.
+- Key-value (KV) store that persists shared data (redis, filesystem, or memory).
 
-## Setup
+## Using the pre-built Docker image
+
+promptfoo is available as a Docker image published on GitHub Container Registry. This is the easiest way to get started with self-hosting.
+
+### 1. Pull the Docker image
+
+Pull the latest version of the promptfoo image:
+
+```bash
+docker pull ghcr.io/promptfoo/promptfoo:main
+```
+
+For a specific version, use a tag:
+
+```bash
+docker pull ghcr.io/promptfoo/promptfoo:v0.x.x
+```
+
+### 2. Run the Docker container
+
+Launch the Docker container using this command:
+
+```bash
+docker run -d --name promptfoo_container -p 3000:3000 -v /path/to/local_promptfoo:/root/.promptfoo ghcr.io/promptfoo/promptfoo:main
+```
+
+Key points:
+
+- `-v /path/to/local_promptfoo:/root/.promptfoo` maps the container's working directory to your local filesystem. Replace `/path/to/local_promptfoo` with your preferred path.
+- Omitting the `-v` argument will result in non-persistent evals.
+
+### 3. Set API Credentials (Optional)
+
+To run evals on the server, set API credentials:
+
+```bash
+docker run -d --name promptfoo_container -p 3000:3000 -e OPENAI_API_KEY=sk-abc123 ghcr.io/promptfoo/promptfoo:main
+```
+
+Replace `sk-abc123` with your actual API key.
+
+## Building your own Docker image
+
+If you need to customize the image, you can build it yourself.
 
 ### 1. Clone the Repository
-
-First, clone the promptfoo repository from GitHub:
 
 ```sh
 git clone https://github.com/promptfoo/promptfoo.git
@@ -40,38 +81,15 @@ cd promptfoo
 
 ### 2. Build the Docker Image
 
-Build the Docker image with the following command:
-
 ```sh
 docker build --build-arg NEXT_PUBLIC_PROMPTFOO_BASE_URL=http://localhost:3000 -t promptfoo-ui .
 ```
-
-`NEXT_PUBLIC_PROMPTFOO_BASE_URL` tells the web app where to send the API request when the user clicks the 'Share' button. This should be configured to match the URL of your self-hosted instance.
 
 Replace `http://localhost:3000` with your instance's URL if you're not running it locally.
 
 ### 3. Run the Docker Container
 
-Launch the Docker container using this command:
-
-```sh
-docker run -d --name promptfoo_container -p 3000:3000 -v /path/to/local_promptfoo:/root/.promptfoo promptfoo-ui
-```
-
-Key points:
-
-- `-v /path/to/local_promptfoo:/root/.promptfoo` maps the container's working directory to your local filesystem. Replace `/path/to/local_promptfoo` with your preferred path.
-- Omitting the `-v` argument will result in non-persistent evals.
-
-### 4. Set API Credentials
-
-You can also set API credentials on the running Docker instance so that evals can be run on the server. For example, we'll set the OpenAI API key so users can run evals directly from the web ui:
-
-```sh
-docker run -d --name promptfoo_container -p 3000:3000 -e OPENAI_API_KEY=sk-abc123 promptfoo-ui
-```
-
-Replace `sk-abc123` with your actual API key.
+Follow the same steps as in the pre-built image section, but use your custom image name (`promptfoo-ui`) instead of `ghcr.io/promptfoo/promptfoo:main`.
 
 ## Advanced Configuration
 
@@ -104,22 +122,18 @@ docker run -d --name promptfoo_container -p 3000:3000 \
   -e PROMPTFOO_SHARE_REDIS_HOST=redis_host \
   -e PROMPTFOO_SHARE_REDIS_PORT=6379 \
   -e PROMPTFOO_SHARE_REDIS_PASSWORD=your_password \
-  promptfoo-ui
+  ghcr.io/promptfoo/promptfoo:main
 ```
 
 ## Pointing the promptfoo client to your hosted instance
 
-When self-hosting, you need to set the environment variables so that the `promptfoo share` command knows how to reach your hosted application. Here's an example:
+When self-hosting, set the environment variables so that the `promptfoo share` command knows how to reach your hosted application:
 
 ```sh
 PROMPTFOO_REMOTE_API_BASE_URL=http://localhost:3000 PROMPTFOO_REMOTE_APP_BASE_URL=http://localhost:3000 promptfoo share -y
 ```
 
 This will create a shareable URL using your self-hosted service.
-
-The `PROMPTFOO_REMOTE_API_BASE_URL` environment variable specifies the base URL for the API endpoints of your self-hosted service. This is where the `promptfoo share` command sends data to create a shareable URL.
-
-Similarly, the `PROMPTFOO_REMOTE_APP_BASE_URL` environment variable sets the base URL for the UI of your self-hosted service. This will be a visible part of the shareable URL.
 
 These configuration options can also be set under the `sharing` property of your promptfoo config:
 
@@ -128,3 +142,14 @@ sharing:
   apiBaseUrl: http://localhost:3000
   appBaseUrl: http://localhost:3000
 ```
+
+## Troubleshooting
+
+If you encounter issues:
+
+1. Check Docker logs: `docker logs promptfoo_container`
+2. Ensure all required environment variables are set
+3. Verify the volume mounting is correct for persistent storage
+4. Check your firewall settings if you can't access the web UI
+
+For more help, visit our [GitHub issues page](https://github.com/promptfoo/promptfoo/issues) or join our community Discord.
