@@ -14,11 +14,11 @@ const CustomMetrics: React.FC<CustomMetricsProps> = ({
   metricTotals,
   onSearchTextChange,
 }) => {
+  const [showAll, setShowAll] = React.useState(false);
   if (!lookup || !Object.keys(lookup).length) {
     return null;
   }
 
-  const [showAll, setShowAll] = React.useState(false);
   const metrics = Object.entries(lookup);
   const displayMetrics = showAll ? metrics : metrics.slice(0, NUM_METRICS_TO_DISPLAY_ABOVE_FOLD);
 
