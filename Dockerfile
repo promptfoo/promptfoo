@@ -38,6 +38,10 @@ RUN npm prune --omit=dev
 # ---- Final Stage ----
 FROM node:20-alpine
 
+LABEL org.opencontainers.image.source="https://github.com/promptfoo/promptfoo"
+LABEL org.opencontainers.image.description="promptfoo is a tool for testing, evaluating, and red-teaming LLM apps."
+LABEL org.opencontainers.image.licenses="MIT"
+
 ENV NEXT_TELEMETRY_DISABLED=1
 
 WORKDIR /app
