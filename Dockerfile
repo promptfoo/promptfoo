@@ -1,7 +1,8 @@
 # https://github.com/vercel/next.js/blob/canary/examples/with-docker/Dockerfile
 
 # ---- Build ----
-FROM --platform=$BUILDPLATFORM node:20-alpine AS builder
+ARG BUILDPLATFORM=linux/amd64
+FROM --platform=${BUILDPLATFORM} node:20-alpine AS builder
 
 ARG NEXT_PUBLIC_PROMPTFOO_BASE_URL
 ENV NEXT_PUBLIC_PROMPTFOO_BASE_URL=${NEXT_PUBLIC_PROMPTFOO_BASE_URL}
@@ -36,7 +37,8 @@ WORKDIR /app/src/web/nextui
 RUN npm prune --omit=dev
 
 # ---- Final Stage ----
-FROM --platform=$TARGETPLATFORM node:20-alpine
+ARG TARGETPLATFORM=linux/amd64
+FROM --platform=${TARGETPLATFORM} node:20-alpine
 
 LABEL org.opencontainers.image.source="https://github.com/promptfoo/promptfoo"
 LABEL org.opencontainers.image.description="promptfoo is a tool for testing, evaluating, and red-teaming LLM apps."
