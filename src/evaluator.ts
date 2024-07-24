@@ -478,6 +478,21 @@ class Evaluator {
     const { testSuite, options } = this;
     const prompts: CompletedPrompt[] = [];
 
+    const runExtensionHook = async (hookName: string, context: any) => {
+      if (testSuite.extensions) {
+        for (const extension of testSuite.extensions) {
+          logger.info(`Running extension ${extension}`);
+          if (extension.startsWith('python:')) {
+            const filePath = path.resolve(cliState.basePath || '', extension.slice('python:'.length)); 
+            await runPython(filePath, 'extension_hook', [
+              hookName,
+              context,
+            ])
+          }
+        }
+      }
+    }
+
     if (options.generateSuggestions) {
       // TODO(ian): Move this into its own command/file
       logger.info(`Generating prompt variations...`);
@@ -680,18 +695,7 @@ class Evaluator {
       }
     }
 
-    if (testSuite.extensions) {
-      for (const extension of testSuite.extensions) {
-        logger.info(`Running extension ${extension}`);
-        if (extension.startsWith('python:')) {
-          const filePath = path.resolve(cliState.basePath || '', extension.slice('python:'.length)); 
-          await runPython(filePath, 'extension_hook', [
-            "evalsFinalized",
-            runEvalOptions,
-          ])
-        }
-      }
-    }
+    await runExtensionHook('evals_prepared', { 'evals': runEvalOptions });
 
     // Set up table...
     const isTest = tests.some((t) => !!t.assert);
@@ -1022,6 +1026,8 @@ class Evaluator {
     if (progressBar) {
       progressBar.stop();
     }
+
+    await runExtensionHook('evals_ran', { 'evals': runEvalOptions, 'results': results, 'table': table });
 
     telemetry.record('eval_ran', {
       numPrompts: prompts.length,
