@@ -593,6 +593,11 @@ class Evaluator {
                 ...testSuite.defaultTest?.options,
                 ...test.options,
               },
+              assert: [
+                // defaultTest.assert is omitted because it will be added to each test case later
+                ...(data.assert || []),
+                ...(test.assert || []),
+              ],
             };
           });
           // Add scenario tests to tests
