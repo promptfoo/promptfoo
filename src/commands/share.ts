@@ -21,27 +21,28 @@ export function shareCommand(program: Command) {
         });
         await telemetry.send();
 
-        const createPublicUrl = async () => {
-          let results;
-          if (evalId) {
-            results = (await readResult(evalId))?.result;
-            if (!results) {
-              logger.error(`Could not load results for eval ID ${evalId}.`);
-              process.exit(1);
-            }
-          } else {
-            results = await readLatestResults();
-            if (!results) {
-              logger.error('Could not load results. Do you need to run `promptfoo eval` first?');
-              process.exit(1);
-            }
+        let results;
+        if (evalId) {
+          results = (await readResult(evalId))?.result;
+          if (!results) {
+            logger.error(`Could not load results for eval ID ${evalId}.`);
+            process.exit(1);
           }
+        } else {
+          results = await readLatestResults();
+          if (!results) {
+            logger.error('Could not load results. Do you need to run `promptfoo eval` first?');
+            process.exit(1);
+          }
+        }
+
+        const createPublicUrl = async () => {
           const url = await createShareableUrl(results.results, results.config);
           logger.info(`View results: ${chalk.greenBright.bold(url)}`);
         };
 
         if (cmdObj.yes || process.env.PROMPTFOO_DISABLE_SHARE_WARNING) {
-          createPublicUrl();
+          await createPublicUrl();
         } else {
           const reader = readline.createInterface({
             input: process.stdin,
@@ -61,7 +62,7 @@ export function shareCommand(program: Command) {
               }
               reader.close();
 
-              createPublicUrl();
+              await createPublicUrl();
             },
           );
         }
