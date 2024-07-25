@@ -210,9 +210,15 @@ export async function startServer(
     res.json({ data: await getTestCases() });
   });
 
-  app.get('/api/evals/:datasetId', async (req, res) => {
-    const { datasetId } = req.params;
-    res.json({ data: await getEvalsByDatasetId(datasetId) });
+  app.get('/api/evals', async (req, res) => {
+    const datasetId = req.query.datasetId;
+    if (typeof datasetId !== 'string') {
+      res.status(400).send('datasetId is required and must be a string');
+      return;
+    }
+    const limit = typeof req.query.limit === 'string' ? parseInt(req.query.limit, 10) : undefined;
+    const data = await getEvalsByDatasetId(datasetId, limit);
+    res.json({ data });
   });
 
   app.get('/api/config', (req, res) => {

@@ -851,8 +851,11 @@ export async function getEvalFromId(hash: string) {
   return undefined;
 }
 
-export async function getEvalsByDatasetId(datasetId: string): Promise<TestCasesWithMetadata[]> {
-  const allTestCases = await getTestCases();
+export async function getEvalsByDatasetId(
+  datasetId: string,
+  limit: number = DEFAULT_QUERY_LIMIT,
+): Promise<TestCasesWithMetadata[]> {
+  const allTestCases = await getTestCasesWithPredicate(() => true, limit);
   const matchingEvals = allTestCases.filter((testCase) => testCase.id == datasetId);
   return matchingEvals;
 }

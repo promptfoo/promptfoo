@@ -426,6 +426,31 @@ function MetricChart({ table }: ChartProps) {
   return <canvas ref={metricCanvasRef} style={{ maxHeight: '300px' }}></canvas>;
 }
 
+function ordinalSuffixOf(i: number): string {
+  const j = i % 10,
+    k = i % 100;
+  if (j === 1 && k !== 11) {
+    return i + 'st';
+  }
+  if (j === 2 && k !== 12) {
+    return i + 'nd';
+  }
+  if (j === 3 && k !== 13) {
+    return i + 'rd';
+  }
+  return i + 'th';
+}
+
+const fetchDataset = async (id: string) => {
+  try {
+    const res = await fetch(`${await getApiBaseUrl()}/api/evals/?datasetId=${id}`);
+    return await res.json();
+  } catch (err) {
+    const error = err as Error;
+    throw new Error(`Fetch dataset data using given id failed: ${error.message}.`);
+  }
+};
+
 function PerformanceOverTimeChart({ table, evalId, config, datasetId }: ChartProps) {
   const lineCanvasRef = useRef(null);
   const lineChartInstance = useRef<Chart | null>(null);
@@ -443,31 +468,6 @@ function PerformanceOverTimeChart({ table, evalId, config, datasetId }: ChartPro
     x: number;
     y: number;
     metadata: PointMetadata;
-  }
-
-  const fetchDataset = async (id: string) => {
-    try {
-      const res = await fetch(`${await getApiBaseUrl()}/api/evals/${id}`);
-      return await res.json();
-    } catch (err) {
-      const error = err as Error;
-      throw new Error(`Fetch dataset data using given id failed: ${error.message}.`);
-    }
-  };
-
-  function ordinalSuffixOf(i: number): string {
-    const j = i % 10,
-      k = i % 100;
-    if (j === 1 && k !== 11) {
-      return i + 'st';
-    }
-    if (j === 2 && k !== 12) {
-      return i + 'nd';
-    }
-    if (j === 3 && k !== 13) {
-      return i + 'rd';
-    }
-    return i + 'th';
   }
 
   useEffect(() => {
@@ -652,44 +652,43 @@ function ResultsCharts({ columnVisibility, recentEvals }: ResultsChartsProps) {
   useMemo(async () => {
     if (datasetId) {
       const filteredEvals = recentEvals.filter((evaluation) => evaluation.datasetId === datasetId);
-      console.log(filteredEvals);
       setShowPerformanceOverTimeChart(filteredEvals.length > 1);
     } else {
       setShowCharts(false);
     }
   }, [datasetId, recentEvals]);
 
-  if (!table || !config || !showCharts) {
+  if (
+    !table ||
+    !config ||
+    !showCharts ||
+    (table.head.prompts.length < 2 && !showPerformanceOverTimeChart)
+  ) {
     return null;
   }
 
-  console.log(datasetId);
+  if (table.head.prompts.length < 2 && showPerformanceOverTimeChart) {
+    return (
+      <ErrorBoundary fallback={null}>
+        <Paper style={{ position: 'relative', padding: theme.spacing(3) }}>
+          <IconButton
+            style={{ position: 'absolute', right: 0, top: 0 }}
+            onClick={() => setShowCharts(false)}
+          >
+            <CloseIcon />
+          </IconButton>
 
-  if (table.head.prompts.length < 2) {
-    if (showPerformanceOverTimeChart) {
-      return (
-        <ErrorBoundary fallback={null}>
-          <Paper style={{ position: 'relative', padding: theme.spacing(3) }}>
-            <IconButton
-              style={{ position: 'absolute', right: 0, top: 0 }}
-              onClick={() => setShowCharts(false)}
-            >
-              <CloseIcon />
-            </IconButton>
-
-            <div style={{ width: '100%' }}>
-              <PerformanceOverTimeChart
-                table={table}
-                evalId={evalId}
-                config={config}
-                datasetId={datasetId}
-              />
-            </div>
-          </Paper>
-        </ErrorBoundary>
-      );
-    }
-    return null;
+          <div style={{ width: '100%' }}>
+            <PerformanceOverTimeChart
+              table={table}
+              evalId={evalId}
+              config={config}
+              datasetId={datasetId}
+            />
+          </div>
+        </Paper>
+      </ErrorBoundary>
+    );
   }
 
   const scores = table.body.flatMap((row) => row.outputs.map((output) => output.score));
