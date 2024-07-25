@@ -190,4 +190,4 @@ tests:
 
 The OWASP LLM Top 10 is rapidly evoling, but the above examples should give you a good starting point for testing your LLM applications. Regular testing with Promptfoo can help ensure your LLM applications remain secure and robust against a wide range of potential threats.
 
-To learn more about setting up Promptfoo and finding LLM vulnerabilities, see [Introduction to LLM red teaming](/docs/introduction) and [Configuration details](/docs/red-team/configuration).
+To learn more about setting up Promptfoo and finding LLM vulnerabilities, see [Introduction to LLM red teaming](/docs/red-team/) and [Configuration details](/docs/red-team/configuration/).
