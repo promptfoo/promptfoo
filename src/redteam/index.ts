@@ -48,7 +48,6 @@ interface Plugin {
 interface Strategy {
   key: string;
   action: (testCases: TestCaseWithPlugin[], injectVar: string) => TestCase[];
-  requiredPlugins?: string[];
 }
 
 const Plugins: Plugin[] = [
@@ -127,7 +126,7 @@ const categories = {
 
 const Strategies: Strategy[] = [
   {
-    key: 'experimental-jailbreak',
+    key: 'jailbreak',
     action: (testCases, injectVar) => {
       logger.debug('Adding experimental jailbreaks to all test cases');
       const experimentalJailbreaks = addIterativeJailbreaks(testCases, injectVar, 'iterative');
@@ -145,17 +144,6 @@ const Strategies: Strategy[] = [
     },
   },
   {
-    key: 'jailbreak',
-    action: (testCases, injectVar) => {
-      const harmfulPrompts = testCases.filter((t) => t.metadata.pluginId.startsWith('harmful:'));
-      logger.debug('Adding jailbreaks to harmful prompts');
-      const jailbreaks = addIterativeJailbreaks(harmfulPrompts, injectVar, 'iterative');
-      logger.debug(`Added ${jailbreaks.length} jailbreak test cases`);
-      return jailbreaks;
-    },
-    requiredPlugins: Object.keys(HARM_PLUGINS),
-  },
-  {
     key: 'prompt-injection',
     action: (testCases, injectVar) => {
       const harmfulPrompts = testCases.filter((t) => t.metadata.pluginId.startsWith('harmful:'));
@@ -164,7 +152,6 @@ const Strategies: Strategy[] = [
       logger.debug(`Added ${injections.length} prompt injection test cases`);
       return injections;
     },
-    requiredPlugins: Object.keys(HARM_PLUGINS),
   },
 ];
 

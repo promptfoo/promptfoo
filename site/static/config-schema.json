@@ -779,7 +779,7 @@
                     "enum": [
                       "jailbreak",
                       "prompt-injection",
-                      "experimental-jailbreak",
+                      "jailbreak",
                       "experimental-tree-jailbreak"
                     ],
                     "description": "Name of the strategy"
@@ -792,7 +792,7 @@
                         "enum": [
                           "jailbreak",
                           "prompt-injection",
-                          "experimental-jailbreak",
+                          "jailbreak",
                           "experimental-tree-jailbreak"
                         ],
                         "description": "Name of the strategy"
@@ -803,7 +803,7 @@
                   }
                 ]
               },
-              "description": "Strategies to use for redteam generation.\n\nDefaults to jailbreak, prompt-injection\nSupports jailbreak, prompt-injection, experimental-jailbreak, experimental-tree-jailbreak",
+              "description": "Strategies to use for redteam generation.\n\nDefaults to jailbreak, prompt-injection\nSupports jailbreak, prompt-injection, jailbreak, experimental-tree-jailbreak",
               "default": [
                 {
                   "id": "jailbreak"
