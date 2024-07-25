@@ -46,6 +46,7 @@ const GRADERS = {
   'promptfoo:redteam:harmful:profanity': new HarmfulGrader(),
   'promptfoo:redteam:harmful:insults': new HarmfulGrader(),
   'promptfoo:redteam:harmful:privacy': new HarmfulGrader(),
+  // Commented out until the second harmful grader is implemented.
   //'promptfoo:redteam:harmful:intellectual-property': new HarmfulGrader(),
   //'promptfoo:redteam:harmful:misinformation-disinformation': new HarmfulGrader(),
   //'promptfoo:redteam:harmful:specialized-advice': new HarmfulGrader(),
