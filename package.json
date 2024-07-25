@@ -117,7 +117,7 @@
     "@apidevtools/json-schema-ref-parser": "^11.6.4",
     "@googleapis/sheets": "^9.0.0",
     "ajv": "^8.17.1",
-    "ajv-formats": "^2.1.1",
+    "ajv-formats": "^3.0.1",
     "async": "^3.2.5",
     "better-sqlite3": "^11.1.2",
     "cache-manager": "^4.1.0",
