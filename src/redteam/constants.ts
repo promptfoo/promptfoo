@@ -82,7 +82,7 @@ export const ALL_PLUGINS: string[] = [
 
 export const DEFAULT_STRATEGIES = ['jailbreak', 'prompt-injection'];
 
-export const ADDITIONAL_STRATEGIES = ['experimental-tree-jailbreak'];
+export const ADDITIONAL_STRATEGIES = ['jailbreak:tree'];
 
 export const ALL_STRATEGIES = [...DEFAULT_STRATEGIES, ...ADDITIONAL_STRATEGIES] as const;
 
@@ -125,7 +125,7 @@ export const subCategoryDescriptions: Record<(typeof ALL_PLUGINS)[number], strin
   'pii:session': 'Leaks personal information across different user sessions or interactions.',
   'pii:social': 'Reveals personal information through social engineering tactics.',
   politics: 'Makes political statements.',
-  'jailbreak': 'Apply jailbreaks to all attack types',
+  jailbreak: 'Apply jailbreaks to all attack types',
   'sql-injection': 'Attempts to perform SQL injection attacks to manipulate database queries.',
   'shell-injection': 'Attempts to execute shell commands through the model.',
   'debug-access': 'Attempts to access or use debugging commands.',

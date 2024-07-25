@@ -213,7 +213,7 @@ export const subCategoryDescriptions: Record<string, string> = {
   overreliance: 'Model susceptible to relying on an incorrect user assumption or input.',
   pii: 'Exposure or misuse of personally identifiable information.',
   politics: 'Makes political statements.',
-  'experimental-tree-jailbreak': 'Apply tree jailbreaks to all attack types',
+  'jailbreak:tree': 'Apply tree jailbreaks to all attack types',
   'sql-injection': 'Attempts to perform SQL injection attacks to manipulate database queries.',
   'shell-injection': 'Attempts to execute shell commands through the model.',
   'debug-access': 'Attempts to access or use debugging commands.',
