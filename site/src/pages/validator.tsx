@@ -6,6 +6,7 @@ import Container from '@mui/material/Container';
 import Grid from '@mui/material/Grid';
 import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
+import { AggregateAjvError } from '@segment/ajv-human-errors';
 import Layout from '@theme/Layout';
 import Ajv from 'ajv';
 import yaml from 'js-yaml';
@@ -14,7 +15,7 @@ const DEFAULT_INPUT = `prompts:
   - "Write a tweet about {{topic}}"
 
 providers:
-  - openai:chat:gpt-4o
+  - openai:chat:gpt-4o-mini
   - anthropic:messages:claude-3-5-sonnet-20240620
 
 tests:
@@ -22,12 +23,12 @@ tests:
       topic: bananas
     assert:
       - type: contains
-        text: "banana"
+        value: "banana"
   - vars:
       topic: pineapples
     assert:
       - type: llm-rubric
-        text: "mentions health benefits"
+        value: "mentions health benefits"
         
 defaultTest:
   assert:
@@ -61,30 +62,42 @@ const ConfigValidator = () => {
         parsedConfig = yaml.load(value);
       }
 
-      const ajv = new Ajv();
-      const validate = ajv.compile(schema);
-      const valid = validate(parsedConfig);
+      const ajv = new Ajv({
+        allErrors: false,
+        verbose: true,
+      });
 
-      if (valid) {
+      ajv.validate(schema, parsedConfig);
+
+      const errors = new AggregateAjvError(ajv.errors);
+      const errorsByPath: Record<string, string[]> = {};
+
+      for (const error of Array.from(errors)) {
+        if (!errorsByPath[error.path]) {
+          errorsByPath[error.path] = [];
+        }
+        errorsByPath[error.path].push(error.message);
+      }
+
+      if (Object.keys(errorsByPath).length === 0) {
         setValidationOutput('Configuration is valid.');
       } else {
-        const errorsByPath = validate.errors.reduce<Record<string, string[]>>((acc, error) => {
-          const path = error.instancePath || 'root';
-          if (!acc[path]) {
-            acc[path] = [];
-          }
-          acc[path].push(error.message);
-          return acc;
-        }, {});
-
-        const formattedErrors = Object.entries(errorsByPath)
-          .map(([path, messages]) => {
-            const location = path === 'root' ? 'In root' : `At ${path}`;
-            return `• ${location}:\n  ${messages.join('\n  ')}`;
-          })
-          .join('\n\n');
-
-        setValidationOutput(`Validation errors:\n\n${formattedErrors}`);
+        let output = 'Validation errors:\n\n';
+        // Only show the deepest errors for each path, otherwise it's too verbose
+        const deepestPaths = Object.keys(errorsByPath).filter(
+          (path) =>
+            !Object.keys(errorsByPath).some(
+              (otherPath) => otherPath !== path && otherPath.startsWith(path),
+            ),
+        );
+        for (const path of deepestPaths) {
+          output += `${path}:\n`;
+          errorsByPath[path].forEach((message) => {
+            output += `  - ${message}\n`;
+          });
+          output += '\n';
+        }
+        setValidationOutput(output.trim());
       }
     } catch (error) {
       setValidationOutput(`Error parsing input: ${error.message}`);
@@ -125,7 +138,9 @@ const ConfigValidator = () => {
           </Grid>
           <Grid item xs={12} md={6}>
             <Paper elevation={3} sx={{ height: '80vh', p: 2, overflow: 'auto' }}>
-              <pre>{validationOutput}</pre>
+              <pre style={{ whiteSpace: 'pre-wrap', wordWrap: 'break-word' }}>
+                {validationOutput}
+              </pre>
             </Paper>
           </Grid>
         </Grid>

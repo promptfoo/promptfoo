@@ -69,6 +69,17 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
   });
   await telemetry.send();
 
+  if (!process.env.OPENAI_API_KEY && !redteamConfig?.provider) {
+    logger.warn(
+      dedent`\n${chalk.bold('Warning: OPENAI_API_KEY environment variable is not set.')}
+      
+      Please set this environment variable in order to generate tests.
+      
+      For more info on configuring custom providers, see the documentation: https://www.promptfoo.dev/docs/red-team/configuration/\n
+      `,
+    );
+  }
+
   let plugins: { id: string; numTests: number }[] =
     redteamConfig?.plugins ??
     Array.from(REDTEAM_DEFAULT_PLUGINS).map((plugin) => ({
@@ -99,6 +110,16 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
     redteamConfig?.strategies ?? DEFAULT_STRATEGIES.map((s) => ({ id: s }));
   if (options.strategies) {
     strategies = options.strategies;
+  }
+  if (Array.isArray(options.addStrategies) && options.addStrategies.length > 0) {
+    strategies = [
+      ...new Set([
+        ...strategies,
+        ...options.addStrategies.map((strategy) =>
+          typeof strategy === 'string' ? { id: strategy } : strategy,
+        ),
+      ]),
+    ];
   }
   const strategyObjs: { id: string }[] = strategies.map((s) =>
     typeof s === 'string' ? { id: s } : s,
@@ -141,6 +162,8 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
   } else if (options.write && configPath) {
     const existingConfig = yaml.load(fs.readFileSync(configPath, 'utf8')) as Partial<UnifiedConfig>;
     existingConfig.tests = [...(existingConfig.tests || []), ...redteamTests];
+    existingConfig.metadata = existingConfig.metadata || {};
+    existingConfig.metadata.redteam = true;
     fs.writeFileSync(configPath, yaml.dump(existingConfig));
     logger.info(`\nWrote ${redteamTests.length} new test cases to ${configPath}`);
     logger.info(

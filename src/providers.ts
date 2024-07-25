@@ -58,6 +58,7 @@ import { VoyageEmbeddingProvider } from './providers/voyage';
 import { WebhookProvider } from './providers/webhook';
 import RedteamIterativeProvider from './redteam/providers/iterative';
 import RedteamImageIterativeProvider from './redteam/providers/iterativeImage';
+import RedteamIterativeTreeProvider from './redteam/providers/iterativeTree';
 import type {
   ApiProvider,
   EnvOverrides,
@@ -343,7 +344,9 @@ export async function loadApiProvider(
   } else if (providerPath.startsWith('http:') || providerPath.startsWith('https:')) {
     ret = new HttpProvider(providerPath, providerOptions);
   } else if (providerPath === 'promptfoo:redteam:iterative') {
-    ret = new RedteamIterativeProvider();
+    ret = new RedteamIterativeProvider(providerOptions.config);
+  } else if (providerPath === 'promptfoo:redteam:iterative:tree') {
+    ret = new RedteamIterativeTreeProvider(providerOptions.config);
   } else if (providerPath === 'promptfoo:redteam:iterative:image') {
     ret = new RedteamImageIterativeProvider();
   } else if (providerPath === 'promptfoo:manual-input') {

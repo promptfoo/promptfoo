@@ -128,19 +128,28 @@ const categories = {
 const Strategies: Strategy[] = [
   {
     key: 'experimental-jailbreak',
-    action: (testCases) => {
+    action: (testCases, injectVar) => {
       logger.debug('Adding experimental jailbreaks to all test cases');
-      const experimentalJailbreaks = addIterativeJailbreaks(testCases);
+      const experimentalJailbreaks = addIterativeJailbreaks(testCases, injectVar, 'iterative');
       logger.debug(`Added ${experimentalJailbreaks.length} experimental jailbreak test cases`);
       return experimentalJailbreaks;
     },
   },
   {
+    key: 'experimental-tree-jailbreak',
+    action: (testCases, injectVar) => {
+      logger.debug('Adding experimental tree jailbreaks to all test cases');
+      const experimentalJailbreaks = addIterativeJailbreaks(testCases, injectVar, 'iterative:tree');
+      logger.debug(`Added ${experimentalJailbreaks.length} experimental tree jailbreak test cases`);
+      return experimentalJailbreaks;
+    },
+  },
+  {
     key: 'jailbreak',
-    action: (testCases) => {
+    action: (testCases, injectVar) => {
       const harmfulPrompts = testCases.filter((t) => t.metadata.pluginId.startsWith('harmful:'));
       logger.debug('Adding jailbreaks to harmful prompts');
-      const jailbreaks = addIterativeJailbreaks(harmfulPrompts);
+      const jailbreaks = addIterativeJailbreaks(harmfulPrompts, injectVar, 'iterative');
       logger.debug(`Added ${jailbreaks.length} jailbreak test cases`);
       return jailbreaks;
     },
@@ -160,7 +169,6 @@ const Strategies: Strategy[] = [
 ];
 
 function validatePlugins(plugins: { id: string; numTests: number }[]): void {
-  logger.error(`Plugins: ${plugins.map((p) => `${p.id} (${p.numTests})`).join('\n')}`);
   const invalidPlugins = plugins.filter((plugin) => !Plugins.map((p) => p.key).includes(plugin.id));
   if (invalidPlugins.length > 0) {
     const validPluginsString = Plugins.map((p) => p.key).join(', ');
@@ -300,14 +308,16 @@ export async function synthesize({
     }
   }
 
+  const newTestCases: TestCaseWithPlugin[] = [];
+
   for (const { key, action } of Strategies) {
     const strategy = strategies.find((s) => s.id === key);
     if (strategy) {
       updateProgress();
       logger.debug(`Generating ${key} tests`);
-      const newTestCases = action(testCases, injectVar);
-      testCases.push(
-        ...newTestCases.map((t) => ({
+      const strategyTestCases = action(testCases, injectVar);
+      newTestCases.push(
+        ...strategyTestCases.map((t) => ({
           ...t,
           metadata: {
             ...(t.metadata || {}),
@@ -317,6 +327,8 @@ export async function synthesize({
       );
     }
   }
+
+  testCases.push(...newTestCases);
 
   // Finish progress bar
   if (process.env.LOG_LEVEL !== 'debug') {

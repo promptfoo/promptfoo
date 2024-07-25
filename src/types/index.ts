@@ -100,22 +100,15 @@ export const CallApiOptionsParamsSchema = z.object({
   originalProvider: z.optional(z.any()), // Assuming ApiProvider is not a zod schema, using z.any()
 });
 
-const CallApiFunctionSchema = z.union([
-  z
-    .function()
-    .args(
-      z.string().describe('prompt'),
-      CallApiContextParamsSchema.optional(),
-      CallApiOptionsParamsSchema.optional(),
-    )
-    .returns(z.promise(z.custom<ProviderResponse>()))
-    .and(z.object({ label: z.string().optional() })),
-  z
-    .function()
-    .args(z.string().describe('prompt'), CallApiOptionsParamsSchema.optional())
-    .returns(z.promise(z.custom<ProviderResponse>()))
-    .and(z.object({ label: z.string().optional() })),
-]);
+const CallApiFunctionSchema = z
+  .function()
+  .args(
+    z.string().describe('prompt'),
+    CallApiContextParamsSchema.optional(),
+    CallApiOptionsParamsSchema.optional(),
+  )
+  .returns(z.promise(z.custom<ProviderResponse>()))
+  .and(z.object({ label: z.string().optional() }));
 
 export const ApiProviderSchema = z.object({
   id: z.function().returns(z.string()),
@@ -216,7 +209,20 @@ export type ProviderOptions = z.infer<typeof ProviderOptionsSchema>;
 export type ProviderResponse = z.infer<typeof ProviderResponseSchema>;
 export type ProviderSimilarityResponse = z.infer<typeof ProviderSimilarityResponseSchema>;
 export type TokenUsage = z.infer<typeof TokenUsageSchema>;
-type CallApiFunction = z.infer<typeof CallApiFunctionSchema>;
+
+// The z.infer type is not as good as a manually created type
+type CallApiFunction = {
+  (
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse>;
+  label?: string;
+};
+// Confirm that manually created type is equivalent to z.infer type
+function assert<T extends never>() {}
+type TypeEqualityGuard<A, B> = Exclude<A, B> | Exclude<B, A>;
+assert<TypeEqualityGuard<CallApiFunction, z.infer<typeof CallApiFunctionSchema>>>();
 
 export interface ModerationFlag {
   code: string;

@@ -216,7 +216,7 @@ async function runRedteamConversation(
   };
 }
 
-class RedteamIterativeJailbreaks implements ApiProvider {
+class RedteamIterativeProvider implements ApiProvider {
   id() {
     return 'promptfoo:redteam:iterative:image';
   }
@@ -228,4 +228,4 @@ class RedteamIterativeJailbreaks implements ApiProvider {
   }
 }
 
-export default RedteamIterativeJailbreaks;
+export default RedteamIterativeProvider;

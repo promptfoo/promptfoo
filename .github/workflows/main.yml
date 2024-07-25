@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
@@ -20,18 +20,18 @@ env:
 jobs:
   build:
     name: Build and test on Node ${{ matrix.node }} and ${{ matrix.os }}
-
+    timeout-minutes: 12
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        node: ['18.x', '20.x'] # Note: '22.x' is temporarily disabled
+        node: ['18.x', '20.x', '22.x']
         python: ['3.9']
         os: [ubuntu-latest, windows-latest, macOS-latest]
-        # exclude:
-        # Remove when https://github.com/nodejs/node/issues/51766 is resolved
-        # - node: '22.x'
-        #  os: windows-latest
+        exclude:
+          # Remove when https://github.com/nodejs/node/issues/51766 is resolved
+          - node: '22.x'
+            os: windows-latest
 
     steps:
       - name: Checkout repo
@@ -73,6 +73,7 @@ jobs:
 
   style-check:
     name: Style Check
+    timeout-minutes: 5
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
@@ -107,6 +108,7 @@ jobs:
 
   python:
     name: Check Python
+    timeout-minutes: 5
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
@@ -127,6 +129,7 @@ jobs:
 
   docs:
     name: Build Docs
+    timeout-minutes: 5
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
@@ -146,7 +149,7 @@ jobs:
         working-directory: site
         run: npm run typecheck
 
-      - name: check for circular dependencies
+      - name: Check for circular dependencies
         run: npx madge $(git ls-files '*.ts') --circular
 
       - name: Build Documentation
@@ -155,6 +158,7 @@ jobs:
 
   webui:
     name: webui tests
+    timeout-minutes: 5
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo

@@ -68,7 +68,7 @@ export function redteamCommand(program: Command) {
       if (previousConfigExists) {
         promptChoices.push({ name: 'Use prompts from existing config', value: 'existing' });
       }
-      // Question 2: Prompt
+      // Question: Prompt
       const promptChoice = await rawlist({
         message: 'How would you like to specify the prompt?',
         choices: promptChoices,
@@ -93,14 +93,14 @@ export function redteamCommand(program: Command) {
         prompts = existingConfig?.prompts;
       }
 
-      // Question 3: Provider
+      // Question: Provider
       let provider: string;
       const providerChoice = await rawlist({
-        message: 'Choose a provider:',
+        message: 'Choose a provider to target:',
         choices: [
-          { name: 'openai:gpt-3.5-turbo', value: 'openai:gpt-3.5-turbo' },
           { name: 'openai:gpt-4o-mini', value: 'openai:gpt-4o-mini' },
           { name: 'openai:gpt-4o', value: 'openai:gpt-4o' },
+          { name: 'openai:gpt-3.5-turbo', value: 'openai:gpt-3.5-turbo' },
           {
             name: 'anthropic:claude-3-5-sonnet-20240620',
             value: 'anthropic:messages:claude-3-5-sonnet-20240620',
@@ -123,7 +123,31 @@ export function redteamCommand(program: Command) {
         provider = providerChoice;
       }
 
-      // Question 4: Plugins
+      // Question: OpenAI API key
+      if (!process.env.OPENAI_API_KEY) {
+        const apiKeyChoice = await rawlist({
+          message:
+            'An OpenAI API key is required to generate the adversarial dataset. How would you like to proceed?',
+          choices: [
+            { name: 'Enter API key now (sets the environment variable)', value: 'enter' },
+            { name: "I'll set it later", value: 'later' },
+          ],
+        });
+
+        if (apiKeyChoice === 'enter') {
+          const apiKey = await input({
+            message: 'Enter your OpenAI API key:',
+          });
+          process.env.OPENAI_API_KEY = apiKey;
+          logger.info('OPENAI_API_KEY environment variable has been set for this session.');
+        } else {
+          logger.warn(
+            'Remember to set the OPENAI_API_KEY environment variable before generating the dataset.',
+          );
+        }
+      }
+
+      // Question: Plugins
       const pluginChoices = Array.from(ALL_PLUGINS)
         .sort()
         .map((plugin) => ({
@@ -182,17 +206,13 @@ export function redteamCommand(program: Command) {
       // Write the simplified form to the config file to make it easier
       // for people to play with. Writes 1 in the { id: ..., numTests }
       // and then the rest as strings.
+      const parsedPlugins = redteamConfigSchema.safeParse({
+        plugins: plugins,
+        strategies: strategies,
+        numTests,
+      })?.data?.plugins;
       const configPlugins =
-        plugins.length >= 2
-          ? [
-              redteamConfigSchema.safeParse({
-                plugins: plugins,
-                strategies: strategies,
-                numTests,
-              })?.data?.plugins[0],
-              ...plugins.slice(1),
-            ]
-          : plugins;
+        plugins.length >= 2 ? [parsedPlugins?.[0], ...plugins.slice(1)] : plugins;
 
       fs.writeFileSync(
         configPath,
@@ -223,7 +243,7 @@ export function redteamCommand(program: Command) {
 
       if (readyToGenerate) {
         await doGenerateRedteam({
-          plugins: config?.redteam?.plugins,
+          plugins: parsedPlugins,
           cache: false,
           write: true,
           defaultConfig: config,

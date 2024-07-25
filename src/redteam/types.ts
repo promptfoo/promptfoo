@@ -3,6 +3,7 @@ import { z } from 'zod';
 import {
   ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
   ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
+  ADDITIONAL_STRATEGIES as REDTEAM_ADDITIONAL_STRATEGIES,
   DEFAULT_STRATEGIES,
   ALL_STRATEGIES,
   COLLECTIONS,
@@ -58,6 +59,10 @@ export const RedteamGenerateOptionsSchema = z.object({
     .array(z.enum(REDTEAM_ADDITIONAL_PLUGINS as [string, ...string[]]))
     .optional()
     .describe('Additional plugins to include'),
+  addStrategies: z
+    .array(z.enum(REDTEAM_ADDITIONAL_STRATEGIES as [string, ...string[]]))
+    .optional()
+    .describe('Additional strategies to include'),
   provider: z.string().optional().describe('Provider to use'),
   purpose: z.string().optional().describe('Purpose of the redteam generation'),
   strategies: z.array(redteamStrategySchema).optional().describe('Strategies to use'),

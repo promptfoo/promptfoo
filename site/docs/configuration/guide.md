@@ -168,7 +168,9 @@ tests:
 module.exports = function (varName, prompt, otherVars) {
   // Example logic to return a value based on the varName
   if (varName === 'context') {
-    return `Processed ${otherVars.input} for prompt: ${prompt}`;
+    return {
+      output: `Processed ${otherVars.input} for prompt: ${prompt}`,
+    };
   }
   return {
     output: 'default value',

@@ -1,6 +1,6 @@
-# Image Classification Example with PromptFoo
+# Image Classification Example with Promptfoo
 
-This example demonstrates how to use PromptFoo for image classification tasks using the Fashion MNIST dataset. It showcases prompt engineering, configuration, and evaluation of AI models for image analysis. We use a prompt designed to output XML and compare class labels from the dataset with the model's output. Additional attributes in the XML illustrate how to extract more information using multi-modal models. This example is set up to use Anthropic, but you can easily switch to GPT-4 or other models by modifying the provider in the config file. You may need to adjust the prompt to match your model's output format and experiment with different prompts to see how they affect performance.
+This example demonstrates how to use Promptfoo for image classification tasks using the Fashion MNIST dataset. It showcases prompt engineering, configuration, and evaluation of AI models for image analysis. We use a prompt designed to output XML and compare class labels from the dataset with the model's output. Additional attributes in the XML illustrate how to extract more information using multi-modal models. This example is set up to use Anthropic, but you can easily switch to GPT-4 or other models by modifying the provider in the config file. You may need to adjust the prompt to match your model's output format and experiment with different prompts to see how they affect performance.
 
 ## Getting Started
 

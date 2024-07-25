@@ -703,7 +703,7 @@ function ResultsCharts({ columnVisibility, recentEvals }: ResultsChartsProps) {
 
   return (
     <ErrorBoundary fallback={null}>
-      <Paper style={{ position: 'relative', padding: theme.spacing(3) }}>
+      <Paper sx={{ position: 'relative', padding: 3, mt: 2 }}>
         <IconButton
           style={{ position: 'absolute', right: 0, top: 0 }}
           onClick={() => setShowCharts(false)}
