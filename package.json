@@ -71,7 +71,7 @@
     "@eslint/js": "^9.7.0",
     "@libsql/client": "^0.7.0",
     "@swc/cli": "^0.4.0",
-    "@swc/core": "^1.7.0",
+    "@swc/core": "^1.7.1",
     "@swc/jest": "^0.2.36",
     "@trivago/prettier-plugin-sort-imports": "^4.3.0",
     "@types/async": "^3.2.24",
