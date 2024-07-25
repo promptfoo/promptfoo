@@ -21,7 +21,7 @@ export const BASE_PLUGINS = [
 export const ADDITIONAL_PLUGINS = ['competitors', 'experimental-jailbreak', 'imitation'];
 
 export const DEFAULT_PLUGINS = new Set([...BASE_PLUGINS, ...Object.keys(HARM_CATEGORIES)]);
-export const ALL_PLUGINS = new Set([...DEFAULT_PLUGINS, ...ADDITIONAL_PLUGINS]);
+export const ALL_PLUGINS = Array.from(new Set([...DEFAULT_PLUGINS, ...ADDITIONAL_PLUGINS])).sort();
 
 // Duplicated in src/web/nextui/src/app/report/constants.ts for frontend
 export const subCategoryDescriptions: Record<string, string> = {
