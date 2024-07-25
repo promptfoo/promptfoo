@@ -30,7 +30,8 @@ const getSubCategoryStats = (
       subCategoryStats.push({
         pluginName: subCategory,
         type: categoryAliases[subCategory as keyof typeof categoryAliases] || subCategory,
-        description: subCategoryDescriptions[subCategory] || '',
+        description:
+          subCategoryDescriptions[subCategory as keyof typeof subCategoryDescriptions] || '',
         passRate: categoryStats[subCategory]
           ? ((categoryStats[subCategory].pass / categoryStats[subCategory].total) * 100).toFixed(
               1,

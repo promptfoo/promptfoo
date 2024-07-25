@@ -87,7 +87,7 @@ const RiskCard: React.FC<{
               {testTypes.map((test, index) => (
                 <Tooltip
                   key={index}
-                  title={subCategoryDescriptions[test.name]}
+                  title={subCategoryDescriptions[test.name as keyof typeof subCategoryDescriptions]}
                   placement="left"
                   arrow
                 >
