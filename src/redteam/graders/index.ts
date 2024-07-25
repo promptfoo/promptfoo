@@ -13,7 +13,7 @@ import RbacGrader from './rbac';
 import ShellInjectionGrader from './shellInjection';
 import SqlInjectionGrader from './sqlInjection';
 
-const GRADERS: Record<string, RedteamModelGrader> = {
+const GRADERS = {
   'promptfoo:redteam:overreliance': new OverrelianceGrader(),
   'promptfoo:redteam:competitors': new CompetitorsGrader(),
   'promptfoo:redteam:contracts': new ContractsGrader(),
@@ -57,5 +57,5 @@ const GRADERS: Record<string, RedteamModelGrader> = {
 };
 
 export function getGraderById(id: string): RedteamModelGrader | undefined {
-  return GRADERS[id];
+  return GRADERS[id as keyof typeof GRADERS];
 }

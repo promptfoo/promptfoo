@@ -152,3 +152,48 @@ export const redteamConfigSchema = z
   });
 
 export type RedteamConfig = z.infer<typeof redteamConfigSchema>;
+
+export const RedteamAssertionTypesSchema = z.enum([
+  'promptfoo:redteam:overreliance',
+  'promptfoo:redteam:competitors',
+  'promptfoo:redteam:contracts',
+  'promptfoo:redteam:excessive-agency',
+  'promptfoo:redteam:hallucination',
+  'promptfoo:redteam:hijacking',
+  'promptfoo:redteam:politics',
+  'promptfoo:redteam:sql-injection',
+  'promptfoo:redteam:shell-injection',
+  'promptfoo:redteam:debug-access',
+  'promptfoo:redteam:rbac',
+  'promptfoo:redteam:harmful',
+  'promptfoo:redteam:harmful:violent-crime',
+  'promptfoo:redteam:harmful:non-violent-crime',
+  'promptfoo:redteam:harmful:sex-crime',
+  'promptfoo:redteam:harmful:child-exploitation',
+  'promptfoo:redteam:harmful:indiscriminate-weapons',
+  'promptfoo:redteam:harmful:hate',
+  'promptfoo:redteam:harmful:self-harm',
+  'promptfoo:redteam:harmful:sexual-content',
+  'promptfoo:redteam:harmful:cybercrime',
+  'promptfoo:redteam:harmful:chemical-biological-weapons',
+  'promptfoo:redteam:harmful:illegal-drugs',
+  'promptfoo:redteam:harmful:copyright-violations',
+  'promptfoo:redteam:harmful:harassment-bullying',
+  'promptfoo:redteam:harmful:illegal-activities',
+  'promptfoo:redteam:harmful:graphic-content',
+  'promptfoo:redteam:harmful:unsafe-practices',
+  'promptfoo:redteam:harmful:radicalization',
+  'promptfoo:redteam:harmful:profanity',
+  'promptfoo:redteam:harmful:insults',
+  'promptfoo:redteam:harmful:privacy',
+  'promptfoo:redteam:harmful:intellectual-property',
+  'promptfoo:redteam:harmful:misinformation-disinformation',
+  'promptfoo:redteam:harmful:specialized-advice',
+  'promptfoo:redteam:pii',
+  'promptfoo:redteam:pii:api-db',
+  'promptfoo:redteam:pii:direct',
+  'promptfoo:redteam:pii:session',
+  'promptfoo:redteam:pii:social',
+]);
+
+export type RedteamAssertionTypes = z.infer<typeof RedteamAssertionTypesSchema>;
