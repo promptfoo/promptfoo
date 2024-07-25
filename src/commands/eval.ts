@@ -129,7 +129,7 @@ export async function doEval(
       // Output CLI table
       const table = generateTable(summary, parseInt(cmdObj.tableCellMaxLength || '', 10));
 
-      logger.info(`\n${table.toString()}`);
+      logger.info('\n' + table.toString());
       if (summary.table.body.length > 25) {
         const rowsLeft = summary.table.body.length - 25;
         logger.info(`... ${rowsLeft} more row${rowsLeft === 1 ? '' : 's'} not shown ...\n`);

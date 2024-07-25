@@ -121,7 +121,7 @@ export default function Prompts() {
                   onClick={() => handleClickOpen(index)}
                 >
                   {promptRow.prompt.raw.length > MAX_CELL_LENGTH
-                    ? `${promptRow.prompt.raw.slice(0, MAX_CELL_LENGTH)}...`
+                    ? promptRow.prompt.raw.slice(0, MAX_CELL_LENGTH) + '...'
                     : promptRow.prompt.raw}
                 </TableCell>
                 <TableCell style={{ width: '20%' }}>

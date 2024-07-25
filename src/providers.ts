@@ -243,7 +243,7 @@ export async function loadApiProvider(
     } else {
       // By default, there is no model type.
       ret = new ReplicateProvider(
-        modelName ? `${modelType}:${modelName}` : modelType,
+        modelName ? modelType + ':' + modelName : modelType,
         providerOptions,
       );
     }

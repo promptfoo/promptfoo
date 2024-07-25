@@ -202,7 +202,7 @@ export async function matchesSimilarity(
     if (similarityResp.error) {
       return fail(similarityResp.error, tokensUsed);
     }
-    if (similarityResp.similarity === null || similarityResp.similarity === undefined) {
+    if (similarityResp.similarity == null) {
       return fail('Unknown error fetching similarity', tokensUsed);
     }
     similarity = similarityResp.similarity;

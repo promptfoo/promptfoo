@@ -47,7 +47,7 @@ export const AuthProvider = ({ children }: AuthProviderProps): JSX.Element => {
   useEffect(() => {
     fetchUser();
     const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'PASSWORD_RECOVERY') {
+      if (event == 'PASSWORD_RECOVERY') {
         setLoggedIn(false);
       } else if (event === 'SIGNED_IN' && session) {
         setUser(session.user);

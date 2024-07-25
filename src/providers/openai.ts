@@ -297,7 +297,7 @@ function formatOpenAiError(data: {
   if (data.error.code) {
     errorMessage += `, Code: ${data.error.code}`;
   }
-  errorMessage += `\n\n${safeJsonStringify(data, true /* prettyPrint */)}`;
+  errorMessage += '\n\n' + safeJsonStringify(data, true /* prettyPrint */);
   return errorMessage;
 }
 

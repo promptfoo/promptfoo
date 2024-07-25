@@ -417,8 +417,8 @@ export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvide
           )?.message
         : data.choices[0].message;
       const output =
-        message.content === null
-          ? message.tool_calls === null
+        message.content == null
+          ? message.tool_calls == null
             ? message.function_call
             : message.tool_calls
           : message.content;

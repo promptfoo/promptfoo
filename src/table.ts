@@ -5,7 +5,7 @@ import type { EvaluateSummary } from './types';
 
 function ellipsize(str: string, maxLen: number) {
   if (str.length > maxLen) {
-    return `${str.slice(0, maxLen - 3)}...`;
+    return str.slice(0, maxLen - 3) + '...';
   }
   return str;
 }

@@ -930,7 +930,7 @@ export async function transformOutput(
     );
   }
   const ret = await Promise.resolve(postprocessFn(output, context));
-  if (ret === null) {
+  if (ret == null) {
     throw new Error(`Transform function did not return a value\n\n${codeOrFilepath}`);
   }
   return ret;

@@ -32,15 +32,15 @@ const getSubCategoryStats = (
         type: categoryAliases[subCategory as keyof typeof categoryAliases] || subCategory,
         description: subCategoryDescriptions[subCategory] || '',
         passRate: categoryStats[subCategory]
-          ? `${((categoryStats[subCategory].pass / categoryStats[subCategory].total) * 100).toFixed(
+          ? ((categoryStats[subCategory].pass / categoryStats[subCategory].total) * 100).toFixed(
               1,
-            )}%`
+            ) + '%'
           : 'N/A',
         passRateWithFilter: categoryStats[subCategory]
-          ? `${(
+          ? (
               (categoryStats[subCategory].passWithFilter / categoryStats[subCategory].total) *
               100
-            ).toFixed(1)}%`
+            ).toFixed(1) + '%'
           : 'N/A',
         severity:
           riskCategorySeverityMap[subCategory as keyof typeof riskCategorySeverityMap] || 'Unknown',

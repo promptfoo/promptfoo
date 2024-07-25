@@ -416,7 +416,7 @@ class Evaluator {
           });
         }
 
-        invariant(processedResponse.output !== null, 'Response output should not be null');
+        invariant(processedResponse.output != null, 'Response output should not be null');
         const checkResult = await runAssertions({
           prompt: renderedPrompt,
           provider,
@@ -467,7 +467,7 @@ class Evaluator {
       this.stats.failures++;
       return {
         ...setup,
-        error: `${String(err)}\n\n${(err as Error).stack}`,
+        error: String(err) + '\n\n' + (err as Error).stack,
         success: false,
         score: 0,
         namedScores: {},

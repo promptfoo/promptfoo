@@ -186,7 +186,7 @@ export async function startServer(
   });
 
   app.get('/api/prompts', async (req, res) => {
-    if (allPrompts === null) {
+    if (allPrompts == null) {
       allPrompts = await getPrompts();
     }
     res.json({ data: allPrompts });

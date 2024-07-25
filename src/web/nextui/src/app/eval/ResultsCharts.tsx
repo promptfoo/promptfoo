@@ -259,10 +259,10 @@ function ScatterChart({ table }: ChartProps) {
                 let prompt1Text = row.outputs[0].text;
                 let prompt2Text = row.outputs[1].text;
                 if (prompt1Text.length > 30) {
-                  prompt1Text = `${prompt1Text.substring(0, 30)}...`;
+                  prompt1Text = prompt1Text.substring(0, 30) + '...';
                 }
                 if (prompt2Text.length > 30) {
-                  prompt2Text = `${prompt2Text.substring(0, 30)}...`;
+                  prompt2Text = prompt2Text.substring(0, 30) + '...';
                 }
                 return `Output 1: ${prompt1Text}\nOutput 2: ${prompt2Text}`;
               },

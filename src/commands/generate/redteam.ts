@@ -167,7 +167,7 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
     fs.writeFileSync(configPath, yaml.dump(existingConfig));
     logger.info(`\nWrote ${redteamTests.length} new test cases to ${configPath}`);
     logger.info(
-      `\n${chalk.green(`Run ${chalk.bold('promptfoo eval')} to run the generated tests`)}`,
+      '\n' + chalk.green(`Run ${chalk.bold('promptfoo eval')} to run the generated tests`),
     );
   } else {
     logger.info(yaml.dump(redteamTests, { skipInvalid: true }));

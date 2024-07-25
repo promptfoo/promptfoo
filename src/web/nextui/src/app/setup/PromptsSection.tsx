@@ -126,7 +126,7 @@ const PromptsSection: React.FC = () => {
                   <TableCell>
                     <Typography variant="body2">
                       {`Prompt #${index + 1}: `}
-                      {(prompt.length > 250 ? `${prompt.slice(0, 250)} ...` : prompt)
+                      {(prompt.length > 250 ? prompt.slice(0, 250) + ' ...' : prompt)
                         .split(/({{\w+}})/g)
                         .map((part, i) =>
                           /{{\s*(\w+)\s*}}/g.test(part) ? (
