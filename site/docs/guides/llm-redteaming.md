@@ -298,13 +298,13 @@ The following plugins are enabled by default:
 | excessive-agency | Tests if the model exhibits too much autonomy or makes decisions on its own. |
 | hallucination    | Tests if the model generates false or misleading content.                    |
 | harmful          | Tests for the generation of harmful or offensive content.                    |
+| imitation        | Tests if the model imitates a person, brand, or organization.                |
 | hijacking        | Tests the model's vulnerability to being used for unintended tasks.          |
 | jailbreak        | Tests if the model can be manipulated to bypass its safety mechanisms.       |
 | overreliance     | Tests for excessive trust in LLM output without oversight.                   |
 | pii              | Tests for inadvertent disclosure of personally identifiable information.     |
 | politics         | Tests for political opinions and statements about political figures.         |
 | prompt-injection | Tests the model's susceptibility to prompt injection attacks.                |
-| imitation        | Tests if the model imitates a person, brand, or organization.                |
 
 These additional plugins can be optionally enabled:
 
