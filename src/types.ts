@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { redteamConfigSchema } from '../redteam/types';
+import { redteamConfigSchema } from './redteam/types';
 
 export const CommandLineOptionsSchema = z.object({
   // Shared with TestSuite

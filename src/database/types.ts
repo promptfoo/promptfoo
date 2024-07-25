@@ -1,4 +1,4 @@
-import { EvaluateSummary, UnifiedConfig } from '.';
+import { EvaluateSummary, UnifiedConfig } from '../types';
 
 export interface ResultsFile {
   version: number;
