@@ -1,25 +1,19 @@
 prompts:
-  - id: prompts/chat_prompt.json
-    label: chat_prompt
-  - id: prompts/llama_prompt.txt
-    label: llama_prompt
+  - file://prompts/chat_prompt.json
 
 providers:
-  - id: openai:gpt-3.5-turbo-0613
-    label: openai-gpt-3.5-turbo-lowtemp
-    prompts: chat_prompt
+  - id: openai:gpt-4o
+    label: GPT 4o
     config:
       temperature: 0
       max_tokens: 128
-  - id: openai:gpt-3.5-turbo-0613
-    label: openai-gpt-3.5-turbo-hightemp
-    prompts: chat_prompt
+  - id: openai:gpt-4o-mini
+    label: GPT 4o-mini
     config:
       temperature: 1
       max_tokens: 128
-  - id: replicate:meta/meta-llama-3-70b-instruct
-    label: llama70b-v2-chat
-    prompts: llama_prompt
+  - id: replicate:meta/meta-llama-3.1-405b-instruct
+    label: Llama
     config:
       temperature: 0.01 # minimum temperature
       max_length: 128

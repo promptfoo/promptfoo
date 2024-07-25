@@ -25,7 +25,7 @@ function getImageBase64(imageUrl) {
   return new Promise((resolve, reject) => {
     https
       .get(imageUrl, (response) => {
-        let data = [];
+        const data = [];
         response.on('data', (chunk) => {
           data.push(chunk);
         });

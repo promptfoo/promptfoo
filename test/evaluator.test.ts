@@ -943,8 +943,12 @@ describe('renderPrompt', () => {
   });
 
   it('should load external js files in renderPrompt and execute the exported function', async () => {
-    const prompt = toPrompt('Test prompt with {{ var1 }}');
-    const vars = { var1: 'file:///path/to/testFunction.js' };
+    const prompt = toPrompt('Test prompt with {{ var1 }} {{ var2 }} {{ var3 }}');
+    const vars = {
+      var1: 'file:///path/to/testFunction.js',
+      var2: 'file:///path/to/testFunction.cjs',
+      var3: 'file:///path/to/testFunction.mjs',
+    };
     const evaluateOptions = {};
 
     jest.doMock(
@@ -952,9 +956,19 @@ describe('renderPrompt', () => {
       () => (varName: any, prompt: any, vars: any) => ({ output: `Dynamic value for ${varName}` }),
       { virtual: true },
     );
+    jest.doMock(
+      path.resolve('/path/to/testFunction.cjs'),
+      () => (varName: any, prompt: any, vars: any) => ({ output: `and ${varName}` }),
+      { virtual: true },
+    );
+    jest.doMock(
+      path.resolve('/path/to/testFunction.mjs'),
+      () => (varName: any, prompt: any, vars: any) => ({ output: `and ${varName}` }),
+      { virtual: true },
+    );
 
     const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions);
-    expect(renderedPrompt).toBe('Test prompt with Dynamic value for var1');
+    expect(renderedPrompt).toBe('Test prompt with Dynamic value for var1 and var2 and var3');
   });
 
   it('should load external json files in renderPrompt and parse the JSON content', async () => {

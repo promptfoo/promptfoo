@@ -199,9 +199,9 @@ describe('readConfigs', () => {
     const result = await readConfigs(configPaths);
 
     expect(result.prompts).toEqual([
-      'file://' + path.resolve(path.dirname(configPaths[0]), 'prompt1.txt'),
+      `file://${path.resolve(path.dirname(configPaths[0]), 'prompt1.txt')}`,
       'prompt2',
-      'file://' + path.resolve(path.dirname(configPaths[1]), 'prompt3.txt'),
+      `file://${path.resolve(path.dirname(configPaths[1]), 'prompt3.txt')}`,
       'prompt4',
     ]);
   });
@@ -235,7 +235,7 @@ describe('readConfigs', () => {
 
     expect(result.prompts).toEqual([
       'prompt1',
-      'file://' + path.resolve(path.dirname(configPaths[0]), 'prompt2.txt'),
+      `file://${path.resolve(path.dirname(configPaths[0]), 'prompt2.txt')}`,
       'prompt3',
       'prompt4',
     ]);

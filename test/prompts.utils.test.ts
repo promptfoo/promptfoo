@@ -85,12 +85,12 @@ describe('maybeFilePath', () => {
   });
 
   it('should return true for very long valid file paths', () => {
-    const longPath = 'a/'.repeat(100) + 'file.txt';
+    const longPath = `${'a/'.repeat(100)}file.txt`;
     expect(maybeFilePath(longPath)).toBe(true);
   });
 
   it('should return false for very long invalid file paths', () => {
-    const longInvalidPath = 'a/'.repeat(100) + 'file\n.txt';
+    const longInvalidPath = `${'a/'.repeat(100)}file\n.txt`;
     expect(maybeFilePath(longInvalidPath)).toBe(false);
   });
 

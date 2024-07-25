@@ -1,7 +1,8 @@
 # https://github.com/vercel/next.js/blob/canary/examples/with-docker/Dockerfile
 
 # ---- Build ----
-FROM node:20-alpine AS builder
+ARG BUILDPLATFORM=linux/amd64
+FROM --platform=${BUILDPLATFORM} node:20-alpine AS builder
 
 ARG NEXT_PUBLIC_PROMPTFOO_BASE_URL
 ENV NEXT_PUBLIC_PROMPTFOO_BASE_URL=${NEXT_PUBLIC_PROMPTFOO_BASE_URL}
@@ -36,7 +37,12 @@ WORKDIR /app/src/web/nextui
 RUN npm prune --omit=dev
 
 # ---- Final Stage ----
-FROM node:20-alpine
+ARG TARGETPLATFORM=linux/amd64
+FROM --platform=${TARGETPLATFORM} node:20-alpine
+
+LABEL org.opencontainers.image.source="https://github.com/promptfoo/promptfoo"
+LABEL org.opencontainers.image.description="promptfoo is a tool for testing evaluating and red-teaming LLM apps."
+LABEL org.opencontainers.image.licenses="MIT"
 
 ENV NEXT_TELEMETRY_DISABLED=1
 
@@ -49,20 +55,33 @@ COPY --from=builder /app/drizzle ./src/web/nextui/.next/server/drizzle
 
 RUN mkdir -p /root/.promptfoo/output
 
+# Permissions
+RUN addgroup -g 1001 -S nodejs
+RUN adduser -S nextjs -u 1001
+RUN mkdir -p /root/.promptfoo/output
+RUN chown -R nextjs:nodejs /app /root/.promptfoo
+
+# Create the .env file directory with correct permissions
+RUN mkdir -p /app/src/web/nextui
+RUN chown nextjs:nodejs /app/src/web/nextui
+
 # Install curl for the healthcheck
 RUN apk add --no-cache curl
 
 # Create a script to write environment variables to .env file
 RUN echo -e '#!/bin/sh\n\
-echo "Writing environment variables to .env file..."\n\
-env > .env\n\
-echo "Loaded environment variables:"\n\
-cat .env\n\
-echo "Starting server..."\n\
-node src/web/nextui/server.js' > entrypoint.sh
+    echo "Writing environment variables to .env file..."\n\
+    env > /app/src/web/nextui/.env\n\
+    echo "Loaded environment variables:"\n\
+    cat /app/src/web/nextui/.env\n\
+    echo "Starting server..."\n\
+    node src/web/nextui/server.js' > entrypoint.sh
 
 # Make the script executable
 RUN chmod +x entrypoint.sh
+
+# Switch to non-root user
+USER nextjs
 
 EXPOSE 3000
 

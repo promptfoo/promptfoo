@@ -116,7 +116,9 @@ export default function Cols() {
 
   const sortedCols = React.useMemo(() => {
     return filteredCols.sort((a, b) => {
-      if (!sortField) return 0;
+      if (!sortField) {
+        return 0;
+      }
       if (sortField === 'passRate') {
         const aValue = parseFloat(calculatePassRate(a.metrics));
         const bValue = parseFloat(calculatePassRate(b.metrics));

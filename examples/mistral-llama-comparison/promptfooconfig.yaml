@@ -8,7 +8,7 @@ providers:
   - id: openrouter:mistralai/mixtral-8x7b-instruct
     config:
       temperature: 0.5
-  - id: openrouter:meta-llama/llama-3-8b-instruct
+  - id: openrouter:meta-llama/llama-3.1-8b-instruct
     config:
       temperature: 0.5
 

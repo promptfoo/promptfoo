@@ -18,7 +18,7 @@ export async function GET() {
   return NextResponse.json({
     data: previousResults.map((meta) => {
       return {
-        id: meta.evalId,
+        ...meta,
         label: meta.description ? `${meta.description} (${meta.evalId})` : meta.evalId,
       };
     }),
