@@ -301,6 +301,7 @@ export async function synthesize({
           metadata: {
             ...(t.metadata || {}),
             pluginId: key,
+            purpose,
           },
         })),
       );
