@@ -75,6 +75,9 @@ export default abstract class PluginBase {
         [this.injectVar]: prompt,
       },
       assert: this.getAssertions(prompt),
+      metadata: {
+        purpose: this.purpose,
+      },
     }));
   }
 }

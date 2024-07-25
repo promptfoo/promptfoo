@@ -1356,7 +1356,7 @@ ${
 
     return {
       assertion,
-      ...(await grader.getResult(prompt, outputString)),
+      ...(await grader.getResult(prompt, outputString, test)),
     };
   }
 
