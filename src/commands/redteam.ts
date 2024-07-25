@@ -1,4 +1,5 @@
 import checkbox from '@inquirer/checkbox';
+import { Separator } from '@inquirer/checkbox';
 import confirm from '@inquirer/confirm';
 import editor from '@inquirer/editor';
 import input from '@inquirer/input';
@@ -12,8 +13,8 @@ import * as path from 'path';
 import invariant from 'tiny-invariant';
 import logger from '../logger';
 import {
+  ADDITIONAL_STRATEGIES,
   ALL_PLUGINS,
-  ALL_STRATEGIES,
   DEFAULT_PLUGINS,
   DEFAULT_STRATEGIES,
   Strategy,
@@ -166,20 +167,26 @@ export function redteamCommand(program: Command) {
       });
 
       // select strategies
-
-      const strategyChoices = Array.from(ALL_STRATEGIES)
-        .sort()
-        .map((strategy: Strategy) => ({
-          name: strategy,
-          value: strategy,
-          checked:
-            existingConfig?.redteam?.strategies?.some(
-              (s) => s.id === strategy || (typeof s === 'string' && s === strategy),
-            ) || DEFAULT_STRATEGIES.includes(strategy as any),
-        }));
+      const strategyChoices = [
+        ...Array.from(DEFAULT_STRATEGIES).sort(),
+        new Separator(),
+        ...Array.from(ADDITIONAL_STRATEGIES).sort(),
+      ].map((strategy: Strategy | Separator) =>
+        typeof strategy === 'string'
+          ? {
+              name: `${strategy} - ${subCategoryDescriptions[strategy] || 'No description available'}`,
+              value: strategy,
+              checked:
+                existingConfig?.redteam?.strategies?.some(
+                  (s) => s.id === strategy || (typeof s === 'string' && s === strategy),
+                ) || DEFAULT_STRATEGIES.includes(strategy as any),
+            }
+          : strategy,
+      );
 
       const strategies = await checkbox({
-        message: 'Select the strategies you want to enable:',
+        message:
+          'Select the strategies you want to enable (Note: Each strategy will add as many test cases as all plugins combined):',
         choices: strategyChoices,
         pageSize: 20,
       });

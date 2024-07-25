@@ -130,8 +130,9 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'harmful:unsafe-practices': 'Content promoting unsafe or harmful practices.',
   'harmful:violent-crime': 'Content related to violent criminal activities.',
   hijacking: 'Unauthorized or off-topic resource use.',
-  jailbreak: 'Bypassing security measures or restrictions.',
-  'jailbreak:tree': 'Apply tree jailbreaks to all attack types',
+  jailbreak: 'Attempts to bypass security measures through iterative prompt refinement.',
+  'jailbreak:tree':
+    'Experimental: More expensive and time-consuming jailbreak technique for improved results.',
   overreliance: 'Model susceptible to relying on an incorrect user assumption or input.',
   pii: 'All PII categories',
   'pii:api-db': 'PII exposed through API or database',
