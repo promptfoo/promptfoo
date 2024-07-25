@@ -1,9 +1,9 @@
 import os
-from langchain_community.vectorstores import Chroma
-from langchain_openai import OpenAIEmbeddings
+
 from langchain.prompts import ChatPromptTemplate
-from langchain_openai import ChatOpenAI
 from langchain.schema import HumanMessage
+from langchain_community.vectorstores import Chroma
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 CHROMA_PATH = "db"
