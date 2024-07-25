@@ -216,21 +216,21 @@ export function generateRedteamCommand(
     .option(
       '--add-plugins <plugins>',
       dedent`Comma-separated list of plugins to run in addition to the default plugins:
-        \n- ${REDTEAM_ADDITIONAL_PLUGINS.sort().join('\n- ')}\n\n
+        \n- ${Array.from(REDTEAM_ADDITIONAL_PLUGINS).sort().join('\n- ')}\n\n
       `,
       (val) => val.split(',').map((x) => x.trim()),
     )
     .option(
       '--strategies <strategies>',
       dedent`Comma-separated list of strategies to use. Use 'none' to disable all strategies. Defaults to:
-        \n- ${DEFAULT_STRATEGIES.sort().join('\n- ')}\n\n
+        \n- ${Array.from(DEFAULT_STRATEGIES).sort().join('\n- ')}\n\n
       `,
       (val) => (val.toLowerCase() === 'none' ? [] : val.split(',').map((x) => x.trim())),
     )
     .option(
       '--add-strategies <strategies>',
       dedent`Comma-separated list of strategies to run in addition to the default strategies:
-        \n- ${ADDITIONAL_STRATEGIES.sort().join('\n- ')}\n\n
+        \n- ${Array.from(ADDITIONAL_STRATEGIES).sort().join('\n- ')}\n\n
       `,
       (val) => val.split(',').map((x) => x.trim()),
     )

@@ -9,6 +9,7 @@ import {
   COLLECTIONS,
   HARM_PLUGINS,
   PII_PLUGINS,
+  Collection,
 } from './constants';
 
 const redteamPluginObjectSchema = z.object({
@@ -56,11 +57,11 @@ export const RedteamGenerateOptionsSchema = z.object({
   output: z.string().optional().describe('Output file path'),
   plugins: z.array(redteamPluginObjectSchema).optional().describe('Plugins to use'),
   addPlugins: z
-    .array(z.enum(REDTEAM_ADDITIONAL_PLUGINS as [string, ...string[]]))
+    .array(z.enum(REDTEAM_ADDITIONAL_PLUGINS as readonly string[] as [string, ...string[]]))
     .optional()
     .describe('Additional plugins to include'),
   addStrategies: z
-    .array(z.enum(REDTEAM_ADDITIONAL_STRATEGIES as [string, ...string[]]))
+    .array(z.enum(REDTEAM_ADDITIONAL_STRATEGIES as readonly string[] as [string, ...string[]]))
     .optional()
     .describe('Additional strategies to include'),
   provider: z.string().optional().describe('Provider to use'),
@@ -136,7 +137,7 @@ export const redteamConfigSchema = z
         }
         return pluginObj;
       })
-      .filter((plugin) => !COLLECTIONS.includes(plugin.id)); // category plugins are handled above
+      .filter((plugin) => !COLLECTIONS.includes(plugin.id as Collection)); // category plugins are handled above
 
     const uniquePlugins = Array.from(
       plugins.reduce((map, plugin) => map.set(plugin.id, plugin), new Map()).values(),
