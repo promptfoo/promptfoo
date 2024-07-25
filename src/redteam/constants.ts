@@ -18,7 +18,7 @@ export const BASE_PLUGINS = [
   'prompt-injection',
 ];
 
-export const ADDITIONAL_PLUGINS = ['competitors', 'experimental-jailbreak'];
+export const ADDITIONAL_PLUGINS = ['competitors', 'experimental-jailbreak', 'imitation'];
 
 export const DEFAULT_PLUGINS = new Set([...BASE_PLUGINS, ...Object.keys(HARM_CATEGORIES)]);
 export const ALL_PLUGINS = new Set([...DEFAULT_PLUGINS, ...ADDITIONAL_PLUGINS]);
