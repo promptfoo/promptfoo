@@ -16,7 +16,6 @@ export const BASE_PLUGINS = [
   'pii',
   'politics',
   'prompt-injection',
-  'imitation',
 ];
 
 export const ADDITIONAL_PLUGINS = ['competitors', 'experimental-jailbreak'];
