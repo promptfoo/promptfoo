@@ -1102,7 +1102,10 @@ export function parsePathOrGlob(
 
   if (filename.includes(':')) {
     const splits = filename.split(':');
-    if (splits[0] && ['.js', '.cjs', '.mjs', '.ts', '.cts', '.mts', '.py'].some((ext) => splits[0].endsWith(ext))) {
+    if (
+      splits[0] &&
+      ['.js', '.cjs', '.mjs', '.ts', '.cts', '.mts', '.py'].some((ext) => splits[0].endsWith(ext))
+    ) {
       [filename, functionName] = splits;
     }
   }
