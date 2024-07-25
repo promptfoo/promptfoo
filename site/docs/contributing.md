@@ -190,6 +190,17 @@ promptfoo view
 
 Note that this will not update the web UI if you make further changes to the code. You have to run `npm run build` again.
 
+## Python Contributions
+
+While promptfoo is primarily written in TypeScript, we support custom Python prompts, providers, asserts, and many examples include Python. If making a Python contribution, please follow these guidelines:
+
+- Use Python 3.9+
+- For Python-specific linting and formatting, we use `ruff`. Run `ruff check --fix` and `ruff format` before submitting your changes.
+- Follow the [Google Python Style Guide](https://google.github.io/styleguide/pyguide.html)
+- Use type hints where possible to improve code readability and catch potential errors.
+- Write unit tests for new Python functions using pytest.
+- When adding new Python dependencies in an example, update the relevant `requirements.txt` file.
+
 ## Documentation
 
 If you're adding new features or changing existing ones, please update the relevant documentation. We use [Docusaurus](https://docusaurus.io/) for our documentation. We strongly encourage examples and guides as well.
