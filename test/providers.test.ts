@@ -90,6 +90,7 @@ jest.mock('glob', () => ({
 jest.mock('../src/database', () => ({
   getDb: jest.fn(),
 }));
+jest.mock('../src/logger');
 
 describe('call provider apis', () => {
   afterEach(async () => {

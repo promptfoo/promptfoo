@@ -4,6 +4,7 @@ import { runPython } from '../src/python/pythonUtils';
 import { runPythonCode } from '../src/python/wrapper';
 
 jest.mock('../src/esm');
+jest.mock('../src/logger');
 
 jest.mock('python-shell');
 

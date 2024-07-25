@@ -23,6 +23,7 @@ import type {
 import { TestGrader } from './utils';
 
 jest.mock('../src/esm');
+jest.mock('../src/logger');
 
 const Grader = new TestGrader();
 
