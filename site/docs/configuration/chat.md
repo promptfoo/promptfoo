@@ -32,7 +32,7 @@ One way to do this, if you are using the OpenAI format, is by creating a list of
 ```yaml
 prompts: [prompt.json]
 
-providers: [openai:gpt-3.5-turbo]
+providers: [openai:gpt-4o-mini]
 
 tests:
   - vars:
@@ -241,7 +241,7 @@ Here's the associated config:
 
 ```yaml
 prompts: [prompt.json]
-providers: [openai:gpt-3.5-turbo-0613]
+providers: [openai:gpt-4o-mini]
 tests:
   - vars:
       query: how you doing

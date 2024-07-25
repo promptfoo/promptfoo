@@ -14,7 +14,7 @@ export OPENAI_API_KEY=your_api_key_here
 
 The OpenAI provider supports the following model formats:
 
-- `openai:chat` - defaults to `gpt-3.5-turbo`
+- `openai:chat` - defaults to `gpt-4o-mini`
 - `openai:completion` - defaults to `text-davinci-003`
 - `openai:<model name>` - uses a specific model name (mapped automatically to chat or completion endpoint)
 - `openai:chat:<model name>` - uses any model name against the `/v1/chat/completions` endpoint
@@ -48,7 +48,7 @@ The `providers` list takes a `config` key that allows you to set parameters like
 
 ```yaml
 providers:
-  - id: openai:gpt-3.5-turbo-0613
+  - id: openai:gpt-4o-mini
     config:
       temperature: 0
       max_tokens: 128
@@ -206,7 +206,7 @@ To set `tools` on an OpenAI provider, use the provider's `config` key. Add your 
 ```yaml
 prompts: [prompt.txt]
 providers:
-  - id: openai:chat:gpt-3.5-turbo-0613
+  - id: openai:chat:gpt-4o-mini
     // highlight-start
     config:
       tools: [
@@ -323,7 +323,7 @@ Use the `functions` config to define custom functions. Each function should be a
 ```yaml
 prompts: [prompt.txt]
 providers:
-  - id: openai:chat:gpt-3.5-turbo-0613
+  - id: openai:chat:gpt-4o-mini
     // highlight-start
     config:
       functions:
@@ -398,7 +398,7 @@ providers:
 Here's an example of how your `provider_with_function.yaml` might look:
 
 ```yaml
-id: openai:chat:gpt-3.5-turbo-0613
+id: openai:chat:gpt-4o-mini
 config:
   functions:
     - name: get_current_weather

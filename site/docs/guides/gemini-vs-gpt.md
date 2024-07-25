@@ -35,6 +35,7 @@ Edit the `promptfooconfig.yaml` file to include the `gemini-pro` model from Goog
 
 ```yaml title=promptfooconfig.yaml
 providers:
+  - vertex:gemini-pro
   - openai:gpt-3.5-turbo
   - openai:gpt-4
 ```
