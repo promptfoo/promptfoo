@@ -88,17 +88,24 @@ export async function loadApiProvider(
   let ret: ApiProvider;
   if (
     providerPath.startsWith('file://') &&
-    (providerPath.endsWith('.yaml') || providerPath.endsWith('.yml'))
+    (providerPath.endsWith('.yaml') ||
+      providerPath.endsWith('.yml') ||
+      providerPath.endsWith('.json'))
   ) {
     const filePath = providerPath.slice('file://'.length);
     const modulePath = path.isAbsolute(filePath)
       ? filePath
       : path.join(basePath || process.cwd(), filePath);
-    const yamlContent = yaml.load(fs.readFileSync(modulePath, 'utf8')) as ProviderOptions;
-    invariant(yamlContent, `Provider config ${filePath} is undefined`);
-    invariant(yamlContent.id, `Provider config ${filePath} must have an id`);
-    logger.info(`Loaded provider ${yamlContent.id} from ${filePath}`);
-    ret = await loadApiProvider(yamlContent.id, { ...context, options: yamlContent });
+    let fileContent: ProviderOptions;
+    if (providerPath.endsWith('.json')) {
+      fileContent = JSON.parse(fs.readFileSync(modulePath, 'utf8')) as ProviderOptions;
+    } else {
+      fileContent = yaml.load(fs.readFileSync(modulePath, 'utf8')) as ProviderOptions;
+    }
+    invariant(fileContent, `Provider config ${filePath} is undefined`);
+    invariant(fileContent.id, `Provider config ${filePath} must have an id`);
+    logger.info(`Loaded provider ${fileContent.id} from ${filePath}`);
+    ret = await loadApiProvider(fileContent.id, { ...context, options: fileContent });
   } else if (providerPath === 'echo') {
     ret = {
       id: () => 'echo',

@@ -15,7 +15,7 @@ Let's imagine we're building an app that does language translation. This config 
 
 ```yaml
 prompts: [prompt1.txt, prompt2.txt]
-providers: [openai:gpt-3.5-turbo, vertex:gemini-pro]
+providers: [openai:gpt-4o-mini, vertex:gemini-pro]
 tests:
   - vars:
       language: French
@@ -39,7 +39,7 @@ Next, let's add an assertion. This automatically rejects any outputs that don't 
 
 ```yaml
 prompts: [prompt1.txt, prompt2.txt]
-providers: [openai:gpt-3.5-turbo, vertex:gemini-pro]
+providers: [openai:gpt-4o-mini, vertex:gemini-pro]
 tests:
   - vars:
       language: French
@@ -59,7 +59,7 @@ In this example, the `javascript` assertion runs Javascript against the LLM outp
 
 ```yaml
 prompts: [prompt1.txt, prompt2.txt]
-providers: [openai:gpt-3.5-turbo, vertex:gemini-pro]
+providers: [openai:gpt-4o-mini, vertex:gemini-pro]
 tests:
   - vars:
       language: French
@@ -85,13 +85,32 @@ tests:
 To learn more about assertions, see docs on configuring [expected outputs](/docs/configuration/expected-outputs).
 :::
 
+## Import providers from separate files
+
+The `providers` config property can point to a list of files. For example:
+
+```yaml
+providers:
+  - file://path/to/provider1.yaml
+  - file://path/to/provider2.json
+```
+
+Where the provider file looks like this:
+
+```yaml
+id: openai:gpt-4o-mini
+label: Foo bar
+config:
+  temperature: 0.9
+```
+
 ## Import tests from separate files
 
-The `tests` config attribute takes a list of paths to files or directories. For example:
+The `tests` config property takes a list of paths to files or directories. For example:
 
 ```yaml
 prompts: prompts.txt
-providers: openai:gpt-3.5-turbo
+providers: openai:gpt-4o-mini
 
 # Load & runs all test cases matching these filepaths
 tests:
@@ -125,7 +144,7 @@ We also support CSV datasets from [local file](/docs/configuration/parameters/#i
 
 ## Import vars from separate files
 
-The `vars` attribute can point to a file or directory. For example:
+The `vars` property can point to a file or directory. For example:
 
 ```yaml
 tests:
@@ -218,7 +237,7 @@ In this example, we use a `llm-rubric` assertion to ensure that the LLM does not
 
 ```yaml
 prompts: [prompt1.txt, prompt2.txt]
-providers: [openai:gpt-3.5-turbo, vertex:gemini-pro]
+providers: [openai:gpt-4o-mini, vertex:gemini-pro]
 // highlight-start
 defaultTest:
   assert:
@@ -247,7 +266,7 @@ You can also use `defaultTest` to override the model used for each test. This ca
 ```yaml
 defaultTest:
   options:
-    provider: openai:gpt-3.5-turbo-0613
+    provider: openai:gpt-4o-mini-0613
 ```
 
 ### YAML references
@@ -258,7 +277,7 @@ Use the `$ref` key to re-use assertions without having to fully define them more
 
 ```yaml
 prompts: [prompt1.txt, prompt2.txt]
-providers: [openai:gpt-3.5-turbo, vertex:gemini-pro]
+providers: [openai:gpt-4o-mini, vertex:gemini-pro]
 tests:
   - vars:
       language: French
@@ -295,7 +314,7 @@ For example:
 
 ```yaml
 prompts: prompts.txt
-providers: [openai:gpt-3.5-turbo, openai:gpt-4]
+providers: [openai:gpt-4o-mini, openai:gpt-4]
 tests:
   - vars:
       // highlight-start
@@ -582,7 +601,7 @@ YAML is nice, but some organizations maintain their LLM tests in spreadsheets fo
 
 ```yaml
 prompts: [prompt1.txt, prompt2.txt]
-providers: [openai:gpt-3.5-turbo, vertex:gemini-pro]
+providers: [openai:gpt-4o-mini, vertex:gemini-pro]
 // highlight-next-line
 tests: tests.csv
 ```
@@ -591,7 +610,7 @@ promptfoo also has built-in ability to pull test cases from a Google Sheet. The 
 
 ```yaml
 prompts: [prompt1.txt, prompt2.txt]
-providers: [openai:gpt-3.5-turbo, vertex:gemini-pro]
+providers: [openai:gpt-4o-mini, vertex:gemini-pro]
 // highlight-next-line
 tests: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit?usp=sharing
 ```

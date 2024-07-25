@@ -759,7 +759,7 @@ describe('call provider apis', () => {
 });
 
 describe('loadApiProvider', () => {
-  it('loadApiProvider with filepath', async () => {
+  it('loadApiProvider with yaml filepath', async () => {
     const mockYamlContent = `id: 'openai:gpt-4'
 config:
   key: 'value'`;
@@ -770,6 +770,23 @@ config:
     expect(fs.readFileSync).toHaveBeenCalledTimes(1);
     expect(fs.readFileSync).toHaveBeenCalledWith(
       expect.stringMatching(/path[\\\/]to[\\\/]mock-provider-file\.yaml/),
+      'utf8',
+    );
+  });
+
+  it('loadApiProvider with json filepath', async () => {
+    const mockJsonContent = `{
+  "id": "openai:gpt-4",
+  "config": {
+    "key": "value"
+  }
+}`;
+    jest.mocked(fs.readFileSync).mockReturnValueOnce(mockJsonContent);
+
+    const provider = await loadApiProvider('file://path/to/mock-provider-file.json');
+    expect(provider.id()).toBe('openai:gpt-4');
+    expect(fs.readFileSync).toHaveBeenCalledWith(
+      expect.stringMatching(/path[\\\/]to[\\\/]mock-provider-file\.json/),
       'utf8',
     );
   });
