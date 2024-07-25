@@ -52,8 +52,12 @@ const getSubCategoryStats = (
     subCategoryStats
       //.filter((subCategory) => subCategory.passRate !== 'N/A')
       .sort((a, b) => {
-        if (a.passRate === 'N/A') return 1;
-        if (b.passRate === 'N/A') return -1;
+        if (a.passRate === 'N/A') {
+          return 1;
+        }
+        if (b.passRate === 'N/A') {
+          return -1;
+        }
         return parseFloat(a.passRate) - parseFloat(b.passRate);
       })
   );
@@ -123,14 +127,22 @@ const TestSuites: React.FC<{
             {subCategoryStats
               .sort((a, b) => {
                 if (orderBy === 'passRate') {
-                  if (a.passRate === 'N/A') return 1;
-                  if (b.passRate === 'N/A') return -1;
+                  if (a.passRate === 'N/A') {
+                    return 1;
+                  }
+                  if (b.passRate === 'N/A') {
+                    return -1;
+                  }
                   return order === 'asc'
                     ? parseFloat(a.passRate) - parseFloat(b.passRate)
                     : parseFloat(b.passRate) - parseFloat(a.passRate);
                 } else if (orderBy === 'severity') {
-                  if (a.passRate === 'N/A') return 1;
-                  if (b.passRate === 'N/A') return -1;
+                  if (a.passRate === 'N/A') {
+                    return 1;
+                  }
+                  if (b.passRate === 'N/A') {
+                    return -1;
+                  }
                   const severityOrder = {
                     Critical: 4,
                     High: 3,
