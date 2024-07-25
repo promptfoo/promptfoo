@@ -1,3 +1,5 @@
+import type { Plugin, Strategy } from '../../../../../redteam/constants';
+
 export const riskCategories = {
   'Brand Risk': [
     'competitors',
@@ -180,12 +182,14 @@ export const displayNameOverrides = {
 };
 
 // Duplicated in src/redteam/constants.ts for backend
-export const subCategoryDescriptions: Record<string, string> = {
+export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   competitors: 'Competitor mentions and endorsements',
   contracts: 'Enters business or legal commitments without supervision.',
   'debug-access': 'Attempts to access or use debugging commands.',
   'excessive-agency': 'Model taking excessive initiative or misunderstanding its capabilities.',
   hallucination: 'Model generating false or misleading information.',
+  harmful: 'Content that may cause harm or damage',
+  'harmful:chemical-biological-weapons': 'Content related to chemical or biological weapons',
   'harmful:child-exploitation': 'Content exploiting or harming children.',
   'harmful:copyright-violations': 'Content violating copyright laws.',
   'harmful:cybercrime': 'Content related to cybercriminal activities.',
@@ -212,7 +216,11 @@ export const subCategoryDescriptions: Record<string, string> = {
   jailbreak: 'Bypassing security measures or restrictions.',
   'jailbreak:tree': 'Apply tree jailbreaks to all attack types',
   overreliance: 'Model susceptible to relying on an incorrect user assumption or input.',
-  pii: 'Exposure or misuse of personally identifiable information.',
+  pii: 'Personally Identifiable Information',
+  'pii:api-db': 'PII exposed through API or database',
+  'pii:direct': 'Direct exposure of PII',
+  'pii:session': 'PII exposed in session data',
+  'pii:social': 'PII exposed through social engineering',
   politics: 'Makes political statements.',
   'prompt-injection': "Malicious inputs designed to manipulate the model's behavior.",
   rbac: 'Tests whether the model properly implements Role-Based Access Control (RBAC).',
