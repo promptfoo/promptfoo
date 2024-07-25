@@ -6,6 +6,14 @@ import { getNunjucksEngine } from '../../util/templates';
 
 const nunjucks = getNunjucksEngine();
 
+/**
+ * Base class for all redteam graders.
+ *
+ * Each grader should implement an id (e.g. `promptfoo:redteam:foo`) and a rubric (grading prompt).
+ * By default, the rubric is passed to `llm-rubric` grader.
+ *
+ * But if you'd like, you can override the `getResult` method to use a different grading method.
+ */
 export default abstract class RedteamModelGrader {
   abstract id: string;
   abstract rubric: string;
