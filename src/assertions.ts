@@ -315,7 +315,14 @@ export async function runAssertion({
       const basePath = cliState.basePath || '';
       const filePath = path.resolve(basePath, renderedValue.slice('file://'.length));
 
-      if (filePath.endsWith('.js') || filePath.endsWith('.cjs') || filePath.endsWith('.mjs')) {
+      if (
+        filePath.endsWith('.js') ||
+        filePath.endsWith('.cjs') ||
+        filePath.endsWith('.mjs') ||
+        filePath.endsWith('.ts') ||
+        filePath.endsWith('.cts') ||
+        filePath.endsWith('.mts')
+      ) {
         const requiredModule = await importModule(filePath);
         if (typeof requiredModule === 'function') {
           valueFromScript = await Promise.resolve(requiredModule(output, context));
