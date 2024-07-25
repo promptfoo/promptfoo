@@ -150,7 +150,9 @@ class HarmfulPlugin extends PluginBase {
 
   constructor(provider: ApiProvider, purpose: string, injectVar: string, categoryLabel: string) {
     const category = REDTEAM_MODEL_CATEGORIES.find((cat) => cat.label === categoryLabel);
-    if (!category) {throw new Error(`Category ${categoryLabel} not found`);}
+    if (!category) {
+      throw new Error(`Category ${categoryLabel} not found`);
+    }
     super(provider, purpose, injectVar);
     this.category = category;
     this.template = this.category.prompt;

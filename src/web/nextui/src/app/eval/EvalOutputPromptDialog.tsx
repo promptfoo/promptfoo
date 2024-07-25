@@ -49,7 +49,9 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
           </TableHead>
           <TableBody>
             {gradingResults.map((result, i) => {
-              if (!result) {return null;}
+              if (!result) {
+                return null;
+              }
               return (
                 <TableRow key={i}>
                   <TableCell>{result.pass ? '✅' : '❌'}</TableCell>

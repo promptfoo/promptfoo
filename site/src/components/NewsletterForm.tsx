@@ -5,7 +5,9 @@ const NewsletterForm: React.FC = () => {
   const containerRef = React.useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!containerRef.current) {return;}
+    if (!containerRef.current) {
+      return;
+    }
 
     const script = document.createElement('script');
     script.src = 'https://eocampaign1.com/form/f3ae5b98-452e-11ef-bf73-e58938252fdd.js';

@@ -78,8 +78,12 @@ export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<Unifi
 
   if (Array.isArray(rawConfig.providers)) {
     rawConfig.providers.forEach((provider, providerIndex) => {
-      if (typeof provider === 'string') {return;}
-      if (typeof provider === 'function') {return;}
+      if (typeof provider === 'string') {
+        return;
+      }
+      if (typeof provider === 'function') {
+        return;
+      }
       if (!provider.config) {
         // Handle when provider is a map
         provider = Object.values(provider)[0] as ProviderOptions;
@@ -103,8 +107,12 @@ export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<Unifi
   // Restore functions and tools parameters
   if (Array.isArray(config.providers)) {
     config.providers.forEach((provider, index) => {
-      if (typeof provider === 'string') {return;}
-      if (typeof provider === 'function') {return;}
+      if (typeof provider === 'string') {
+        return;
+      }
+      if (typeof provider === 'function') {
+        return;
+      }
       if (!provider.config) {
         // Handle when provider is a map
         provider = Object.values(provider)[0] as ProviderOptions;
@@ -210,15 +218,15 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
   const makeAbsolute = (configPath: string, relativePath: string | Prompt) => {
     if (typeof relativePath === 'string') {
       if (relativePath.startsWith('file://')) {
-        relativePath =
-          'file://' + path.resolve(path.dirname(configPath), relativePath.slice('file://'.length));
+        relativePath = `file://${path.resolve(path.dirname(configPath), relativePath.slice('file://'.length))}`;
       }
       return relativePath;
     } else if (typeof relativePath === 'object' && relativePath.id) {
       if (relativePath.id.startsWith('file://')) {
-        relativePath.id =
-          'file://' +
-          path.resolve(path.dirname(configPath), relativePath.id.slice('file://'.length));
+        relativePath.id = `file://${path.resolve(
+          path.dirname(configPath),
+          relativePath.id.slice('file://'.length),
+        )}`;
       }
       return relativePath;
     } else {

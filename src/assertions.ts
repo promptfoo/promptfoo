@@ -769,7 +769,7 @@ export async function runAssertion({
           ret.assertion = {
             type: 'javascript',
             value:
-              functionString.length > 50 ? functionString.slice(0, 50) + '...' : functionString,
+              functionString.length > 50 ? `${functionString.slice(0, 50)}...` : functionString,
           };
         }
         return ret;
@@ -1348,7 +1348,7 @@ ${
     };
   }
 
-  throw new Error('Unknown assertion type: ' + assertion.type);
+  throw new Error(`Unknown assertion type: ${assertion.type}`);
 }
 
 export async function runAssertions({

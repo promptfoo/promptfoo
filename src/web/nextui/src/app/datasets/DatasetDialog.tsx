@@ -81,19 +81,19 @@ export default function DatasetDialog({ openDialog, handleClose, testCase }: Dat
                     promptData.prompt.metrics.testPassCount +
                       promptData.prompt.metrics.testFailCount >
                       0
-                      ? (
+                      ? `${(
                           (promptData.prompt.metrics.testPassCount /
                             (promptData.prompt.metrics.testPassCount +
                               promptData.prompt.metrics.testFailCount)) *
                           100.0
-                        ).toFixed(2) + '%'
+                        ).toFixed(2)}%`
                       : '-'}
                   </TableCell>
                   <TableCell>{promptData.prompt.metrics?.testPassCount ?? '-'}</TableCell>
                   <TableCell>{promptData.prompt.metrics?.testFailCount ?? '-'}</TableCell>
                   <TableCell>
                     {promptData.prompt.raw.length > 250
-                      ? promptData.prompt.raw.slice(0, 250) + '...'
+                      ? `${promptData.prompt.raw.slice(0, 250)}...`
                       : promptData.prompt.raw}
                   </TableCell>
                 </TableRow>

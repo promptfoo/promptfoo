@@ -56,7 +56,7 @@ const PromptDialog: React.FC<PromptDialogProps> = ({ openDialog, handleClose, se
                 const failCount = evalData.metrics?.testFailCount ?? 0;
                 const passRate =
                   passCount + failCount > 0
-                    ? ((passCount / (passCount + failCount)) * 100.0).toFixed(2) + '%'
+                    ? `${((passCount / (passCount + failCount)) * 100.0).toFixed(2)}%`
                     : '-';
                 return (
                   <TableRow key={`eval-${evalData.id}`}>

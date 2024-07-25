@@ -83,7 +83,7 @@ function EvalOutputCell({
       newCommentText = commentText.slice('!highlight'.length).trim();
       onRating(undefined, undefined, newCommentText);
     } else {
-      newCommentText = ('!highlight ' + commentText).trim();
+      newCommentText = `!highlight ${commentText}`.trim();
       onRating(undefined, undefined, newCommentText);
     }
     setCommentText(newCommentText);
@@ -161,10 +161,10 @@ function EvalOutputCell({
               <span key="text-before">{text.substring(0, matches[0].start)}</span>
               {matches.map((range, index) => (
                 <>
-                  <span className="search-highlight" key={'match-' + index}>
+                  <span className="search-highlight" key={`match-${index}`}>
                     {text.substring(range.start, range.end)}
                   </span>
-                  <span key={'text-after-' + index}>
+                  <span key={`text-after-${index}`}>
                     {text.substring(
                       range.end,
                       matches[index + 1] ? matches[index + 1].start : text.length,

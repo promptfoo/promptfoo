@@ -227,9 +227,7 @@ export function redteamCommand(program: Command) {
         'utf8',
       );
 
-      logger.info(
-        '\n' + chalk.green(`Created red teaming configuration file at ${configPath}`) + '\n',
-      );
+      logger.info(`\n${chalk.green(`Created red teaming configuration file at ${configPath}`)}\n`);
 
       const readyToGenerate = await confirm({
         message: 'Are you ready to generate adversarial test cases?',
@@ -252,11 +250,11 @@ export function redteamCommand(program: Command) {
         });
       } else {
         logger.info(
-          '\n' +
-            chalk.blue(
-              'To generate test cases later, use the command: ' +
-                chalk.bold('promptfoo generate redteam'),
-            ),
+          `\n${chalk.blue(
+            `To generate test cases later, use the command: ${chalk.bold(
+              'promptfoo generate redteam',
+            )}`,
+          )}`,
         );
       }
     });

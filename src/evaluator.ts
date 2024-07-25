@@ -467,7 +467,7 @@ class Evaluator {
       this.stats.failures++;
       return {
         ...setup,
-        error: String(err) + '\n\n' + (err as Error).stack,
+        error: `${String(err)}\n\n${(err as Error).stack}`,
         success: false,
         score: 0,
         namedScores: {},

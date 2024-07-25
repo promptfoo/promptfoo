@@ -37,7 +37,7 @@ const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
       <DialogTitle>
-        Edit {providerId.length > 50 ? providerId.slice(0, 50) + '...' : providerId}
+        Edit {providerId.length > 50 ? `${providerId.slice(0, 50)}...` : providerId}
       </DialogTitle>
       <DialogContent>
         {Object.keys(localConfig).map((key) => {

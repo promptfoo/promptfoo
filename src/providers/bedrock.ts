@@ -207,7 +207,9 @@ export interface LlamaMessage {
 
 // see https://github.com/meta-llama/llama/blob/main/llama/generation.py#L284-L395
 export const formatPromptLlama2Chat = (messages: LlamaMessage[]): string => {
-  if (messages.length === 0) {return '';}
+  if (messages.length === 0) {
+    return '';
+  }
 
   let formattedPrompt = '<s>';
   let systemMessageIncluded = false;

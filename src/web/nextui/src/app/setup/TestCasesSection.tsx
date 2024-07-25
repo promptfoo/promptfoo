@@ -144,7 +144,7 @@ const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
                   <TableCell>{testCase.assert?.length || 0} assertions</TableCell>
                   <TableCell>
                     {Object.entries(testCase.vars || {})
-                      .map(([k, v]) => k + '=' + v)
+                      .map(([k, v]) => `${k}=${v}`)
                       .join(', ')}
                   </TableCell>
                   <TableCell align="right" sx={{ minWidth: 150 }}>

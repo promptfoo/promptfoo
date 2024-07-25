@@ -144,18 +144,14 @@ export class CohereChatCompletionProvider implements ApiProvider {
 
       let output = data.text;
       if (this.config.showSearchQueries && data.search_queries) {
-        output +=
-          '\n\nSearch Queries:\n' +
-          data.search_queries
-            .map((query: { text: string; generation_id: string }) => query.text)
-            .join('\n');
+        output += `\n\nSearch Queries:\n${data.search_queries
+          .map((query: { text: string; generation_id: string }) => query.text)
+          .join('\n')}`;
       }
       if (this.config.showDocuments && data.documents) {
-        output +=
-          '\n\nDocuments:\n' +
-          data.documents
-            .map((doc: { id: string; additionalProp: string }) => JSON.stringify(doc))
-            .join('\n');
+        output += `\n\nDocuments:\n${data.documents
+          .map((doc: { id: string; additionalProp: string }) => JSON.stringify(doc))
+          .join('\n')}`;
       }
       return {
         cached,

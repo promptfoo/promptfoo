@@ -218,7 +218,7 @@ export default function ResultsView({
       ...head.vars.map((_, idx) => ({
         value: `Variable ${idx + 1}`,
         label: `Var ${idx + 1}: ${
-          head.vars[idx].length > 100 ? head.vars[idx].slice(0, 97) + '...' : head.vars[idx]
+          head.vars[idx].length > 100 ? `${head.vars[idx].slice(0, 97)}...` : head.vars[idx]
         }`,
         group: 'Variables',
       })),
@@ -227,7 +227,7 @@ export default function ResultsView({
         const label = prompt.label || prompt.display || prompt.raw;
         return {
           value: `Prompt ${idx + 1}`,
-          label: `Prompt ${idx + 1}: ${label.length > 100 ? label.slice(0, 97) + '...' : label}`,
+          label: `Prompt ${idx + 1}: ${label.length > 100 ? `${label.slice(0, 97)}...` : label}`,
           group: 'Prompts',
         };
       }),

@@ -33,7 +33,7 @@ function CompareEvalMenuItem({ initialEvals, onComparisonEvalSelected }: Compare
       const datasetId = currentEvalData.data.datasetId;
 
       if (!datasetId) {
-        console.error('No datasetId found for current eval ' + fetchEvalId);
+        console.error(`No datasetId found for current eval ${fetchEvalId}`);
         return;
       }
 

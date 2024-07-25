@@ -32,15 +32,15 @@ const getSubCategoryStats = (
         type: categoryAliases[subCategory as keyof typeof categoryAliases] || subCategory,
         description: subCategoryDescriptions[subCategory] || '',
         passRate: categoryStats[subCategory]
-          ? ((categoryStats[subCategory].pass / categoryStats[subCategory].total) * 100).toFixed(
+          ? `${((categoryStats[subCategory].pass / categoryStats[subCategory].total) * 100).toFixed(
               1,
-            ) + '%'
+            )}%`
           : 'N/A',
         passRateWithFilter: categoryStats[subCategory]
-          ? (
+          ? `${(
               (categoryStats[subCategory].passWithFilter / categoryStats[subCategory].total) *
               100
-            ).toFixed(1) + '%'
+            ).toFixed(1)}%`
           : 'N/A',
         severity:
           riskCategorySeverityMap[subCategory as keyof typeof riskCategorySeverityMap] || 'Unknown',
@@ -51,8 +51,12 @@ const getSubCategoryStats = (
     subCategoryStats
       //.filter((subCategory) => subCategory.passRate !== 'N/A')
       .sort((a, b) => {
-        if (a.passRate === 'N/A') {return 1;}
-        if (b.passRate === 'N/A') {return -1;}
+        if (a.passRate === 'N/A') {
+          return 1;
+        }
+        if (b.passRate === 'N/A') {
+          return -1;
+        }
         return parseFloat(a.passRate) - parseFloat(b.passRate);
       })
   );
@@ -122,14 +126,22 @@ const TestSuites: React.FC<{
             {subCategoryStats
               .sort((a, b) => {
                 if (orderBy === 'passRate') {
-                  if (a.passRate === 'N/A') {return 1;}
-                  if (b.passRate === 'N/A') {return -1;}
+                  if (a.passRate === 'N/A') {
+                    return 1;
+                  }
+                  if (b.passRate === 'N/A') {
+                    return -1;
+                  }
                   return order === 'asc'
                     ? parseFloat(a.passRate) - parseFloat(b.passRate)
                     : parseFloat(b.passRate) - parseFloat(a.passRate);
                 } else if (orderBy === 'severity') {
-                  if (a.passRate === 'N/A') {return 1;}
-                  if (b.passRate === 'N/A') {return -1;}
+                  if (a.passRate === 'N/A') {
+                    return 1;
+                  }
+                  if (b.passRate === 'N/A') {
+                    return -1;
+                  }
                   const severityOrder = {
                     Critical: 4,
                     High: 3,
