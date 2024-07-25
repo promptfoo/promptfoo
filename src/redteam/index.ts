@@ -48,7 +48,6 @@ interface Plugin {
 interface Strategy {
   key: string;
   action: (testCases: TestCaseWithPlugin[], injectVar: string) => TestCase[];
-  requiredPlugins?: string[];
 }
 
 const Plugins: Plugin[] = [
@@ -127,44 +126,32 @@ const categories = {
 
 const Strategies: Strategy[] = [
   {
-    key: 'experimental-jailbreak',
-    action: (testCases, injectVar) => {
-      logger.debug('Adding experimental jailbreaks to all test cases');
-      const experimentalJailbreaks = addIterativeJailbreaks(testCases, injectVar, 'iterative');
-      logger.debug(`Added ${experimentalJailbreaks.length} experimental jailbreak test cases`);
-      return experimentalJailbreaks;
-    },
-  },
-  {
-    key: 'experimental-tree-jailbreak',
-    action: (testCases, injectVar) => {
-      logger.debug('Adding experimental tree jailbreaks to all test cases');
-      const experimentalJailbreaks = addIterativeJailbreaks(testCases, injectVar, 'iterative:tree');
-      logger.debug(`Added ${experimentalJailbreaks.length} experimental tree jailbreak test cases`);
-      return experimentalJailbreaks;
-    },
-  },
-  {
     key: 'jailbreak',
     action: (testCases, injectVar) => {
-      const harmfulPrompts = testCases.filter((t) => t.metadata.pluginId.startsWith('harmful:'));
-      logger.debug('Adding jailbreaks to harmful prompts');
-      const jailbreaks = addIterativeJailbreaks(harmfulPrompts, injectVar, 'iterative');
-      logger.debug(`Added ${jailbreaks.length} jailbreak test cases`);
-      return jailbreaks;
+      logger.debug('Adding experimental jailbreaks to all test cases');
+      const newTestCases = addIterativeJailbreaks(testCases, injectVar, 'iterative');
+      logger.debug(`Added ${newTestCases.length} experimental jailbreak test cases`);
+      return newTestCases;
     },
-    requiredPlugins: Object.keys(HARM_PLUGINS),
   },
   {
     key: 'prompt-injection',
     action: (testCases, injectVar) => {
       const harmfulPrompts = testCases.filter((t) => t.metadata.pluginId.startsWith('harmful:'));
       logger.debug('Adding prompt injections');
-      const injections = addInjections(harmfulPrompts, injectVar);
-      logger.debug(`Added ${injections.length} prompt injection test cases`);
-      return injections;
+      const newTestCases = addInjections(harmfulPrompts, injectVar);
+      logger.debug(`Added ${newTestCases.length} prompt injection test cases`);
+      return newTestCases;
     },
-    requiredPlugins: Object.keys(HARM_PLUGINS),
+  },
+  {
+    key: 'jailbreak:tree',
+    action: (testCases, injectVar) => {
+      logger.debug('Adding experimental tree jailbreaks to all test cases');
+      const newTestCases = addIterativeJailbreaks(testCases, injectVar, 'iterative:tree');
+      logger.debug(`Added ${newTestCases.length} experimental tree jailbreak test cases`);
+      return newTestCases;
+    },
   },
 ];
 
@@ -251,15 +238,6 @@ export async function synthesize({
     const plugin = plugins.find((p) => p.id === category);
     if (plugin) {
       plugins.push(...categoryPlugins.map((p) => ({ id: p, numTests: plugin.numTests })));
-    }
-  }
-
-  // if a strategy is included in the user selected plugins, add all of its required plugins
-  for (const { key, requiredPlugins } of Strategies) {
-    const strategy = strategies.find((s) => s.id === key);
-    if (strategy && requiredPlugins) {
-      logger.debug(`Adding required plugins for strategy: ${key}: ${requiredPlugins.join(', ')}`);
-      plugins.push(...requiredPlugins.map((p) => ({ id: p, numTests: numTests })));
     }
   }
 

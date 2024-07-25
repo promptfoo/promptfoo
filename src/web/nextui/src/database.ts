@@ -26,7 +26,9 @@ export async function createJob(supabase: SupabaseClient): Promise<SupabaseEvalu
     .select()
     .single();
 
-  if (error) throw error;
+  if (error) {
+    throw error;
+  }
   return job;
 }
 
@@ -44,13 +46,17 @@ export async function updateJob(
     })
     .eq('id', id);
 
-  if (error) throw error;
+  if (error) {
+    throw error;
+  }
 }
 
 export async function getJob(supabase: SupabaseClient, id: string): Promise<SupabaseEvaluationJob> {
   const { data: job, error } = await supabase.from('EvaluationJob').select().eq('id', id).single();
 
-  if (error) throw error;
+  if (error) {
+    throw error;
+  }
   return job;
 }
 
@@ -64,7 +70,9 @@ export async function getResult(
     .eq('id', id)
     .single();
 
-  if (error) throw error;
+  if (error) {
+    throw error;
+  }
   return result;
 }
 
@@ -93,7 +101,9 @@ export async function createResult(
     .select()
     .single();
 
-  if (error) throw error;
+  if (error) {
+    throw error;
+  }
 
   const { error: jobUpdateError } = await supabase
     .from('EvaluationJob')

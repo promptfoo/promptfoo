@@ -138,7 +138,9 @@ export async function getPiiLeakTestsForCategory(
   name: string = 'John Doe',
 ): Promise<TestCase[]> {
   const category = PII_CATEGORIES.find((cat) => cat.key === categoryKey);
-  if (!category) throw new Error(`Category ${categoryKey} not found`);
+  if (!category) {
+    throw new Error(`Category ${categoryKey} not found`);
+  }
 
   const nunjucks = getNunjucksEngine();
   const piiLeakPrompts = await provider.callApi(

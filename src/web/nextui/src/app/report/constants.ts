@@ -1,3 +1,5 @@
+import type { Plugin, Strategy } from '../../../../../redteam/constants';
+
 export const riskCategories = {
   'Brand Risk': [
     'competitors',
@@ -180,8 +182,14 @@ export const displayNameOverrides = {
 };
 
 // Duplicated in src/redteam/constants.ts for backend
-export const subCategoryDescriptions: Record<string, string> = {
+export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
+  competitors: 'Competitor mentions and endorsements',
+  contracts: 'Enters business or legal commitments without supervision.',
+  'debug-access': 'Attempts to access or use debugging commands.',
   'excessive-agency': 'Model taking excessive initiative or misunderstanding its capabilities.',
+  hallucination: 'Model generating false or misleading information.',
+  harmful: 'All harmful categories',
+  'harmful:chemical-biological-weapons': 'Content related to chemical or biological weapons',
   'harmful:child-exploitation': 'Content exploiting or harming children.',
   'harmful:copyright-violations': 'Content violating copyright laws.',
   'harmful:cybercrime': 'Content related to cybercriminal activities.',
@@ -204,19 +212,19 @@ export const subCategoryDescriptions: Record<string, string> = {
   'harmful:specialized-advice': 'Providing advice in specialized fields without expertise.',
   'harmful:unsafe-practices': 'Content promoting unsafe or harmful practices.',
   'harmful:violent-crime': 'Content related to violent criminal activities.',
-  'prompt-injection': "Malicious inputs designed to manipulate the model's behavior.",
-  competitors: 'Competitor mentions and endorsements',
-  contracts: 'Enters business or legal commitments without supervision.',
-  hallucination: 'Model generating false or misleading information.',
   hijacking: 'Unauthorized or off-topic resource use.',
-  jailbreak: 'Bypassing security measures or restrictions.',
+  jailbreak: 'Attempts to bypass security measures through iterative prompt refinement.',
+  'jailbreak:tree':
+    'Experimental: More expensive and time-consuming jailbreak technique for improved results.',
   overreliance: 'Model susceptible to relying on an incorrect user assumption or input.',
-  pii: 'Exposure or misuse of personally identifiable information.',
+  pii: 'All PII categories',
+  'pii:api-db': 'PII exposed through API or database',
+  'pii:direct': 'Direct exposure of PII',
+  'pii:session': 'PII exposed in session data',
+  'pii:social': 'PII exposed through social engineering',
   politics: 'Makes political statements.',
-  'experimental-jailbreak': 'Apply jailbreaks to all attack types',
-  'experimental-tree-jailbreak': 'Apply tree jailbreaks to all attack types',
-  'sql-injection': 'Attempts to perform SQL injection attacks to manipulate database queries.',
-  'shell-injection': 'Attempts to execute shell commands through the model.',
-  'debug-access': 'Attempts to access or use debugging commands.',
+  'prompt-injection': "Malicious inputs designed to manipulate the model's behavior.",
   rbac: 'Tests whether the model properly implements Role-Based Access Control (RBAC).',
+  'shell-injection': 'Attempts to execute shell commands through the model.',
+  'sql-injection': 'Attempts to perform SQL injection attacks to manipulate database queries.',
 };
