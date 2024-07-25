@@ -128,6 +128,10 @@ jobs:
           ruff check --select I --fix
           ruff format
           git diff --exit-code || (echo "Files were modified by ruff. Please commit these changes." && exit 1)
+ 
+      - name: Run Tests
+        run: |
+          python -m unittest discover -s src/python -p '*_test.py'
 
   docs:
     name: Build Docs
