@@ -241,15 +241,6 @@ export async function synthesize({
     }
   }
 
-  // if a strategy is included in the user selected plugins, add all of its required plugins
-  for (const { key, requiredPlugins } of Strategies) {
-    const strategy = strategies.find((s) => s.id === key);
-    if (strategy && requiredPlugins) {
-      logger.debug(`Adding required plugins for strategy: ${key}: ${requiredPlugins.join(', ')}`);
-      plugins.push(...requiredPlugins.map((p) => ({ id: p, numTests: numTests })));
-    }
-  }
-
   // Deduplicate, filter out the category names, and sort
   plugins = [...new Set(plugins)].filter((p) => !Object.keys(categories).includes(p.id)).sort();
 

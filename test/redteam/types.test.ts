@@ -203,7 +203,7 @@ describe('redteamConfigSchema', () => {
     expect(redteamConfigSchema.safeParse(input)).toEqual({
       success: true,
       data: {
-        plugins: REDTEAM_ALL_PLUGINS.filter((id) => !COLLECTIONS.includes(id)).map((id) => ({
+        plugins: REDTEAM_ALL_PLUGINS.filter((id) => !COLLECTIONS.includes(id as any)).map((id) => ({
           id,
           numTests: 5,
         })),

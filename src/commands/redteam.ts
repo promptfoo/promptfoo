@@ -16,6 +16,7 @@ import {
   ALL_STRATEGIES,
   DEFAULT_PLUGINS,
   DEFAULT_STRATEGIES,
+  Strategy,
   subCategoryDescriptions,
 } from '../redteam/constants';
 import { redteamConfigSchema } from '../redteam/types';
@@ -168,13 +169,13 @@ export function redteamCommand(program: Command) {
 
       const strategyChoices = Array.from(ALL_STRATEGIES)
         .sort()
-        .map((strategy) => ({
+        .map((strategy: Strategy) => ({
           name: strategy,
           value: strategy,
           checked:
             existingConfig?.redteam?.strategies?.some(
               (s) => s.id === strategy || (typeof s === 'string' && s === strategy),
-            ) || DEFAULT_STRATEGIES.includes(strategy),
+            ) || DEFAULT_STRATEGIES.includes(strategy as any),
         }));
 
       const strategies = await checkbox({
