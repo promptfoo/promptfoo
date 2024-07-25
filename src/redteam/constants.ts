@@ -3,7 +3,8 @@ export const REDTEAM_MODEL = 'openai:chat:gpt-4o';
 export const LLAMA_GUARD_REPLICATE_PROVIDER =
   'replicate:moderation:meta/meta-llama-guard-2-8b:b063023ee937f28e922982abdbf97b041ffe34ad3b35a53d33e1d74bb19b36c4';
 
-export const COLLECTIONS = ['harmful', 'pii'];
+export const COLLECTIONS = ['harmful', 'pii'] as const;
+export type Collection = (typeof COLLECTIONS)[number];
 
 export const UNALIGNED_PROVIDER_HARM_PLUGINS = {
   // MLCommons harm categories
@@ -36,6 +37,7 @@ export const UNALIGNED_PROVIDER_HARM_PLUGINS = {
   //'scam_fraud_creation',
   //'locale_specific_illegal (e.g. hate speech in Germany, alcohol in Saudi Arabia)',
 } as const;
+export type UnalignedProviderHarmPlugin = keyof typeof UNALIGNED_PROVIDER_HARM_PLUGINS;
 
 export const REDTEAM_PROVIDER_HARM_PLUGINS = {
   'harmful:privacy': 'Privacy violations',
@@ -44,13 +46,16 @@ export const REDTEAM_PROVIDER_HARM_PLUGINS = {
     'Misinformation & Disinformation - Harmful lies and propaganda',
   'harmful:specialized-advice': 'Specialized Advice - Financial',
 } as const;
+export type RedTeamProviderHarmPlugin = keyof typeof REDTEAM_PROVIDER_HARM_PLUGINS;
 
 export const HARM_PLUGINS = {
   ...UNALIGNED_PROVIDER_HARM_PLUGINS,
   ...REDTEAM_PROVIDER_HARM_PLUGINS,
 } as const;
+export type HarmPlugin = keyof typeof HARM_PLUGINS;
 
 export const PII_PLUGINS = ['pii:api-db', 'pii:direct', 'pii:session', 'pii:social'] as const;
+export type PIIPlugin = (typeof PII_PLUGINS)[number];
 
 export const BASE_PLUGINS = [
   'contracts',
@@ -59,40 +64,49 @@ export const BASE_PLUGINS = [
   'hijacking',
   'overreliance',
   'politics',
-];
+] as const;
+export type BasePlugin = (typeof BASE_PLUGINS)[number];
 
-export const ADDITIONAL_PLUGINS: string[] = [
+export const ADDITIONAL_PLUGINS = [
   'competitors',
   'sql-injection',
   'shell-injection',
   'debug-access',
   'rbac',
-];
+] as const;
+export type AdditionalPlugin = (typeof ADDITIONAL_PLUGINS)[number];
 
-export const DEFAULT_PLUGINS: Set<string> = new Set([
+export type Plugin = Collection | HarmPlugin | PIIPlugin | BasePlugin | AdditionalPlugin;
+
+export const DEFAULT_PLUGINS: ReadonlySet<Plugin> = new Set([
   ...COLLECTIONS,
   ...BASE_PLUGINS,
-  ...Object.keys(HARM_PLUGINS),
+  ...(Object.keys(HARM_PLUGINS) as HarmPlugin[]),
   ...PII_PLUGINS,
-]);
+] as const satisfies readonly Plugin[]);
 
-export const ALL_PLUGINS: string[] = [
+export const ALL_PLUGINS: readonly Plugin[] = [
   ...new Set([...DEFAULT_PLUGINS, ...ADDITIONAL_PLUGINS]),
-].sort();
+].sort() as Plugin[];
 
-export const DEFAULT_STRATEGIES = ['jailbreak', 'prompt-injection'];
+export const DEFAULT_STRATEGIES = ['jailbreak', 'prompt-injection'] as const;
+export type DefaultStrategy = (typeof DEFAULT_STRATEGIES)[number];
 
-export const ADDITIONAL_STRATEGIES = ['jailbreak:tree'];
+export const ADDITIONAL_STRATEGIES = ['jailbreak:tree'] as const;
+export type AdditionalStrategy = (typeof ADDITIONAL_STRATEGIES)[number];
 
 export const ALL_STRATEGIES = [...DEFAULT_STRATEGIES, ...ADDITIONAL_STRATEGIES] as const;
+export type Strategy = (typeof ALL_STRATEGIES)[number];
 
 // Duplicated in src/web/nextui/src/app/report/constants.ts for frontend
-export const subCategoryDescriptions: Record<(typeof ALL_PLUGINS)[number], string> = {
+export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   competitors: 'Competitor mentions and endorsements',
   contracts: 'Enters business or legal commitments without supervision.',
   'debug-access': 'Attempts to access or use debugging commands.',
   'excessive-agency': 'Model taking excessive initiative or misunderstanding its capabilities.',
   hallucination: 'Model generating false or misleading information.',
+  harmful: 'Content that may cause harm or damage',
+  'harmful:chemical-biological-weapons': 'Content related to chemical or biological weapons',
   'harmful:child-exploitation': 'Content exploiting or harming children.',
   'harmful:copyright-violations': 'Content violating copyright laws.',
   'harmful:cybercrime': 'Content related to cybercriminal activities.',
@@ -119,7 +133,11 @@ export const subCategoryDescriptions: Record<(typeof ALL_PLUGINS)[number], strin
   jailbreak: 'Bypassing security measures or restrictions.',
   'jailbreak:tree': 'Apply tree jailbreaks to all attack types',
   overreliance: 'Model susceptible to relying on an incorrect user assumption or input.',
-  pii: 'Exposure or misuse of personally identifiable information.',
+  pii: 'Personally Identifiable Information',
+  'pii:api-db': 'PII exposed through API or database',
+  'pii:direct': 'Direct exposure of PII',
+  'pii:session': 'PII exposed in session data',
+  'pii:social': 'PII exposed through social engineering',
   politics: 'Makes political statements.',
   'prompt-injection': "Malicious inputs designed to manipulate the model's behavior.",
   rbac: 'Tests whether the model properly implements Role-Based Access Control (RBAC).',
