@@ -99,7 +99,7 @@ function handleRougeScore(
   const fnName = baseType[baseType.length - 1] as 'n' | 'l' | 's';
   const rougeMethod = rouge[fnName];
   const score = rougeMethod(output, expected);
-  const pass = score >= (assertion.threshold || 0.75) != inverted;
+  const pass = score >= (assertion.threshold || 0.75) !== inverted;
 
   return {
     pass,
@@ -368,7 +368,7 @@ export async function runAssertion({
       pass = util.isDeepStrictEqual(renderedValue, JSON.parse(outputString)) !== inverse;
       renderedValue = JSON.stringify(renderedValue);
     } else {
-      pass = (renderedValue == outputString) !== inverse;
+      pass = (renderedValue === outputString) !== inverse;
     }
 
     return {

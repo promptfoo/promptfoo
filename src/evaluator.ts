@@ -416,7 +416,7 @@ class Evaluator {
           });
         }
 
-        invariant(processedResponse.output != null, 'Response output should not be null');
+        invariant(processedResponse.output !== null, 'Response output should not be null');
         const checkResult = await runAssertions({
           prompt: renderedPrompt,
           provider,

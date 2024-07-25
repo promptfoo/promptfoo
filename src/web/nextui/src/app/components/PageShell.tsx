@@ -92,7 +92,7 @@ export function PageShell({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (darkMode === null) return;
+    if (darkMode === null) {return;}
 
     if (darkMode) {
       document.documentElement.setAttribute('data-theme', 'dark');
@@ -102,7 +102,7 @@ export function PageShell({ children }: { children: React.ReactNode }) {
   }, [darkMode]);
 
   // Render null until darkMode is determined
-  if (darkMode === null) return null;
+  if (darkMode === null) {return null;}
 
   return (
     <ThemeProvider theme={darkMode ? darkTheme : lightTheme}>

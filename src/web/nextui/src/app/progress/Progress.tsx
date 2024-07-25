@@ -57,7 +57,7 @@ export default function Cols() {
   const calculatePassRate = (
     metrics: { testPassCount: number; testFailCount: number } | undefined,
   ) => {
-    if (metrics?.testPassCount != null && metrics?.testFailCount != null) {
+    if (metrics !== undefined && metrics?.testPassCount !== null && metrics?.testFailCount !== null) {
       return (
         (metrics.testPassCount / (metrics.testPassCount + metrics.testFailCount)) *
         100
@@ -83,9 +83,9 @@ export default function Cols() {
       col.provider ?? '',
       (col.promptId?.slice(0, 6) ?? '') + ' ' + (col.raw ?? ''),
       calculatePassRate(col.metrics),
-      col.metrics?.testPassCount == null ? '-' : `${col.metrics.testPassCount}`,
-      col.metrics?.testFailCount == null ? '-' : `${col.metrics.testFailCount}`,
-      col.metrics?.score == null ? '-' : col.metrics.score?.toFixed(2),
+      col.metrics?.testPassCount === null ? '-' : `${col.metrics.testPassCount}`,
+      col.metrics?.testFailCount === null ? '-' : `${col.metrics.testFailCount}`,
+      col.metrics?.score === null ? '-' : col.metrics.score?.toFixed(2),
     ]);
     return [headers]
       .concat(rows)
@@ -116,7 +116,7 @@ export default function Cols() {
 
   const sortedCols = React.useMemo(() => {
     return filteredCols.sort((a, b) => {
-      if (!sortField) return 0;
+      if (!sortField) {return 0;}
       if (sortField === 'passRate') {
         const aValue = parseFloat(calculatePassRate(a.metrics));
         const bValue = parseFloat(calculatePassRate(b.metrics));
@@ -319,13 +319,13 @@ export default function Cols() {
                 </TableCell>
                 <TableCell>{calculatePassRate(col.metrics)}</TableCell>
                 <TableCell>
-                  {col.metrics?.testPassCount == null ? '-' : `${col.metrics.testPassCount}`}
+                  {col.metrics?.testPassCount === null ? '-' : `${col.metrics.testPassCount}`}
                 </TableCell>
                 <TableCell>
-                  {col.metrics?.testFailCount == null ? '-' : `${col.metrics.testFailCount}`}
+                  {col.metrics?.testFailCount === null ? '-' : `${col.metrics.testFailCount}`}
                 </TableCell>
                 <TableCell>
-                  {col.metrics?.score == null ? '-' : col.metrics.score?.toFixed(2)}
+                  {col.metrics?.score === null ? '-' : col.metrics.score?.toFixed(2)}
                 </TableCell>
               </TableRow>
             ))}
