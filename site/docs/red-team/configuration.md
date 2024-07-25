@@ -115,8 +115,9 @@ Strategies modify or generate additional test cases based on the output of other
 
 ### Available Strategies
 
-- `prompt-injection`: Creates prompt injection test cases based on harmful prompts. If `harmful` plugins are not present, this strategy will automatically include them.
-- `jailbreak`: Applies experimental jailbreak techniques to all test cases.
+- `prompt-injection`: Creates prompt injection test cases based on harmful plugins. (Default)
+- `jailbreak`: Applies a linear probe jailbreak technique to all test cases. (Default)
+- `jailbreak:tree`: Applies a more advanced and expensive tree jailbreak technique to all test cases.
 
 ### Strategies Specification
 
