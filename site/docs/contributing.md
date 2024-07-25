@@ -192,14 +192,14 @@ Note that this will not update the web UI if you make further changes to the cod
 
 ## Python Contributions
 
-While promptfoo is primarily written in TypeScript, we support custom Python prompts, providers, asserts, and many examples include Python. If making a Python contribution, please follow these guidelines:
+While promptfoo is primarily written in TypeScript, we support custom Python prompts, providers, asserts, and many examples in Python. We strive to keep our Python codebase simple and minimal, without external dependencies. Please adhere to these guidelines:
 
-- Use Python 3.9+
-- For Python-specific linting and formatting, we use `ruff`. Run `ruff check --fix` and `ruff format` before submitting your changes.
+- Use Python 3.9 or later
+- For linting and formatting, use `ruff`. Run `ruff check --fix` and `ruff format` before submitting changes
 - Follow the [Google Python Style Guide](https://google.github.io/styleguide/pyguide.html)
-- Use type hints where possible to improve code readability and catch potential errors.
-- Write unit tests for new Python functions using pytest.
-- When adding new Python dependencies in an example, update the relevant `requirements.txt` file.
+- Use type hints to improve code readability and catch potential errors
+- Write unit tests for new Python functions using the built-in `unittest` module
+- When adding new Python dependencies to an example, update the relevant `requirements.txt` file
 
 ## Documentation
 
