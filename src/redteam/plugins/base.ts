@@ -64,8 +64,8 @@ export default abstract class PluginBase {
       invariant(typeof generatedPrompts === 'string', 'Expected generatedPrompts to be a string');
       return generatedPrompts
         .split('\n')
-        .filter((line) => line.includes('Prompt:'))
-        .map((line) => line.substring(line.indexOf('Prompt:') + 'Prompt:'.length).trim());
+        .filter((line: string) => line.includes('Prompt:'))
+        .map((line: string) => line.substring(line.indexOf('Prompt:') + 'Prompt:'.length).trim());
     };
     const allPrompts = await retryWithDeduplication(generatePrompts, n);
     const prompts = sampleArray(allPrompts, n);

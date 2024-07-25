@@ -8,7 +8,7 @@ import { extractVariablesFromTemplates } from '../util/templates';
 import { REDTEAM_MODEL, HARM_PLUGINS, PII_PLUGINS } from './constants';
 import CompetitorPlugin from './plugins/competitors';
 import ContractPlugin from './plugins/contracts';
-import DebugAccessPlugin from './plugins/debugInterface';
+import DebugAccessPlugin from './plugins/debugAccess';
 import ExcessiveAgencyPlugin from './plugins/excessiveAgency';
 import HallucinationPlugin from './plugins/hallucination';
 import { getHarmfulTests } from './plugins/harmful';
@@ -279,6 +279,7 @@ export async function synthesize({
           metadata: {
             ...(t.metadata || {}),
             pluginId: key,
+            purpose,
           },
         })),
       );

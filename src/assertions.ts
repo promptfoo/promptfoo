@@ -34,6 +34,7 @@ import { validateFunctionCall } from './providers/openaiUtil';
 import { parseChatPrompt } from './providers/shared';
 import { runPython } from './python/pythonUtils';
 import { runPythonCode } from './python/wrapper';
+import { getGraderById } from './redteam/graders';
 import telemetry from './telemetry';
 import {
   type ApiProvider,
@@ -1345,6 +1346,17 @@ ${
         ? 'Assertion passed'
         : `Cost ${cost.toPrecision(2)} is greater than threshold ${assertion.threshold}`,
       assertion,
+    };
+  }
+
+  if (baseType.startsWith('promptfoo:redteam:')) {
+    const grader = getGraderById(baseType);
+    invariant(grader, `Unknown promptfoo grader: ${baseType}`);
+    invariant(prompt, `Promptfoo grader ${baseType} must have a prompt`);
+
+    return {
+      assertion,
+      ...(await grader.getResult(prompt, outputString, test)),
     };
   }
 
