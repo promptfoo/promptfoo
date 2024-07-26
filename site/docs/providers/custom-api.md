@@ -56,7 +56,6 @@ See also: [ProviderResponse](/docs/configuration/reference/#providerresponse)
 Here's an example of a custom API provider that returns a predefined output along with token usage:
 
 ```javascript
-// customApiProvider.js
 import fetch from 'node-fetch';
 
 class CustomApiProvider {
@@ -89,6 +88,46 @@ class CustomApiProvider {
         completion: 5,
       },
     };
+  }
+}
+
+module.exports = CustomApiProvider;
+```
+
+## Example - Embedding
+
+Here's an example of a custom API provider that returns embeddings along with token usage:
+
+```javascript
+const fetch = require('node-fetch');
+
+class CustomApiProvider {
+  constructor(options) {
+    // The caller may override Provider ID (e.g. when using multiple instances of the same provider)
+    this.providerId = options.id || 'custom provider';
+
+    // The config object contains any options passed to the provider in the config file.
+    this.config = options.config;
+  }
+
+  id() {
+    return this.providerId;
+  }
+
+  async callEmbeddingApi(prompt) {
+    // Add your custom API logic here
+
+    const ret = {
+      //required
+      embedding: embedding,
+      //optional
+      tokenUsage: {
+        total: 10,
+        prompt: 1,
+        completion: 0,
+      },
+    };
+    return ret;
   }
 }
 
@@ -146,6 +185,7 @@ promptfoo eval -p prompt1.txt prompt2.txt -o results.csv -v vars.csv -r ./custom
 This command will evaluate the prompts using the custom API provider and save the results to the specified CSV file.
 
 A full working example is available in the [examples directory](https://github.com/promptfoo/promptfoo/tree/main/examples/custom-provider).
+A full working example for an embedding provider can also be found in the [examples directory](https://github.com/promptfoo/promptfoo/tree/main/examples/custom-provider-embeddings).
 
 ## Multiple instances of the same provider
 
