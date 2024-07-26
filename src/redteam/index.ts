@@ -75,8 +75,8 @@ const Plugins: Plugin[] = [
   },
   ...(Object.keys(HARM_PLUGINS).map((category) => ({
     key: category,
-    action: (provider, purpose, injectVar, n) =>
-      getHarmfulTests(provider, purpose, injectVar, [category], n),
+    action: (provider, purpose, injectVar, n, prompts) =>
+      getHarmfulTests(provider, purpose, injectVar, [category], n, prompts),
   })) as Plugin[]),
   {
     key: 'hijacking',

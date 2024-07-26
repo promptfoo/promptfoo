@@ -1,5 +1,6 @@
 import dedent from 'dedent';
 import invariant from 'tiny-invariant';
+import type { SynthesizeOptions } from '..';
 import PromptfooHarmfulCompletionProvider from '../../providers/promptfoo';
 import type { ApiProvider, Assertion, TestCase } from '../../types';
 import {
@@ -148,12 +149,18 @@ class HarmfulPlugin extends PluginBase {
   private category: HarmfulCategory;
   protected template: string;
 
-  constructor(provider: ApiProvider, purpose: string, injectVar: string, categoryLabel: string) {
+  constructor(
+    provider: ApiProvider,
+    purpose: string,
+    injectVar: string,
+    categoryLabel: string,
+    prompts: SynthesizeOptions['prompts'],
+  ) {
     const category = REDTEAM_MODEL_CATEGORIES.find((cat) => cat.label === categoryLabel);
     if (!category) {
       throw new Error(`Category ${categoryLabel} not found`);
     }
-    super(provider, purpose, injectVar);
+    super(provider, purpose, injectVar, prompts);
     this.category = category;
     this.template = this.category.prompt;
   }
@@ -183,6 +190,7 @@ export async function getHarmfulTests(
   injectVar: string,
   plugins: string[],
   numTests: number,
+  prompts: SynthesizeOptions['prompts'],
 ): Promise<TestCase[]> {
   // Map from injectValue to its corresponding harmCategory
   const injectVars = new Map<string, string>();
@@ -248,7 +256,7 @@ export async function getHarmfulTests(
   );
 
   for (const harmCategory of redteamProviderHarmCategories) {
-    const plugin = new HarmfulPlugin(provider, purpose, injectVar, harmCategory);
+    const plugin = new HarmfulPlugin(provider, purpose, injectVar, harmCategory, prompts);
     const results = await plugin.generateTests(numTests);
     // NOTE: harmCategory is necessary for the moderation assertion and not supported
     // by the base model.
