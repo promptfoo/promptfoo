@@ -9,8 +9,14 @@ dist
 .aider*
 
 __pycache__
+.ruff_cache
 
 # jest
 .coverage
-.ruff_cache
+
+# Sentry Config File
+.sentryclirc
+
 .vscode
+
+

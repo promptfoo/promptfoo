@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import './instrument';
 import { Command } from 'commander';
 import path from 'path';
 import { checkNodeVersion } from './checkNodeVersion';
