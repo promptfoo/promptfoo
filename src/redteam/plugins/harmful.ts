@@ -1,6 +1,5 @@
 import dedent from 'dedent';
 import invariant from 'tiny-invariant';
-import type { SynthesizeOptions } from '..';
 import PromptfooHarmfulCompletionProvider from '../../providers/promptfoo';
 import type { ApiProvider, Assertion, TestCase } from '../../types';
 import {
@@ -9,6 +8,7 @@ import {
   REDTEAM_PROVIDER_HARM_PLUGINS,
   UNALIGNED_PROVIDER_HARM_PLUGINS,
 } from '../constants';
+import type { SynthesizeOptions } from '../types';
 import PluginBase from './base';
 
 interface HarmfulCategory {

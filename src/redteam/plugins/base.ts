@@ -1,8 +1,8 @@
 import invariant from 'tiny-invariant';
-import type { SynthesizeOptions } from '..';
 import logger from '../../logger';
 import type { ApiProvider, Assertion, TestCase } from '../../types';
 import { getNunjucksEngine } from '../../util/templates';
+import type { SynthesizeOptions } from '../types';
 import { retryWithDeduplication, sampleArray } from '../util';
 
 /**

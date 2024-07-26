@@ -160,3 +160,13 @@ export const RedteamAssertionTypesSchema = z.enum([
 ]);
 
 export type RedteamAssertionTypes = z.infer<typeof RedteamAssertionTypesSchema>;
+
+export interface SynthesizeOptions {
+  injectVar?: string;
+  numTests: number;
+  plugins: { id: string; numTests: number }[];
+  prompts: string[];
+  provider?: string;
+  purpose?: string;
+  strategies: { id: string }[];
+}

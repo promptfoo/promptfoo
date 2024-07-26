@@ -23,16 +23,7 @@ import SqlInjectionPlugin from './plugins/sqlInjection';
 import { getPurpose } from './purpose';
 import { addInjections } from './strategies/injections';
 import { addIterativeJailbreaks } from './strategies/iterative';
-
-export interface SynthesizeOptions {
-  injectVar?: string;
-  numTests: number;
-  plugins: { id: string; numTests: number }[];
-  prompts: string[];
-  provider?: string;
-  purpose?: string;
-  strategies: { id: string }[];
-}
+import type { SynthesizeOptions } from './types';
 
 type TestCaseWithPlugin = TestCase & { metadata: { pluginId: string } };
 
