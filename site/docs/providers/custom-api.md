@@ -55,7 +55,6 @@ See also: [ProviderResponse](/docs/configuration/reference/#providerresponse)
 Here's an example of a custom API provider that returns a predefined output along with token usage:
 
 ```javascript
-// customApiProvider.js
 import fetch from 'node-fetch';
 
 class CustomApiProvider {
@@ -92,6 +91,40 @@ class CustomApiProvider {
 }
 
 module.exports = CustomApiProvider;
+```
+
+Custom API providers can also be used for embeddings or classification.
+
+```javascript
+module.exports = class CustomApiProvider {
+  constructor(options) {
+    this.providerId = options.id || 'custom provider';
+    this.config = options.config;
+  }
+
+  id() {
+    return this.providerId;
+  }
+
+  // or embeddings:
+  async callEmbeddingApi(prompt) {
+    // Add your custom embedding logic here
+    return {
+      embedding: [], // Your embedding array
+      tokenUsage: { total: 10, prompt: 1, completion: 0 },
+    };
+  }
+  // or classification
+  async callClassificationApi(prompt) {
+    // Add your custom classification logic here
+    return {
+      classification: {
+        classA: 0.6,
+        classB: 0.4,
+      },
+    };
+  }
+};
 ```
 
 ### Caching
@@ -144,7 +177,7 @@ promptfoo eval -p prompt1.txt prompt2.txt -o results.csv -v vars.csv -r ./custom
 
 This command will evaluate the prompts using the custom API provider and save the results to the specified CSV file.
 
-A full working example is available in the [examples directory](https://github.com/promptfoo/promptfoo/tree/main/examples/custom-provider).
+Full working examples of a [custom provider](https://github.com/promptfoo/promptfoo/tree/main/examples/custom-provider) and [custom provider embeddings](https://github.com/promptfoo/promptfoo/tree/main/examples/custom-provider-embeddings) are available in the [examples directory](https://github.com/promptfoo/promptfoo/tree/main/examples).
 
 ## Multiple instances of the same provider
 
