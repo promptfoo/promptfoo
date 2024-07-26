@@ -112,7 +112,7 @@ export const categoryMapReverse = Object.entries(riskCategories).reduce(
 export const categoryLabels = Object.keys(categoryMapReverse);
 
 // Map from metric name or harm category to plugin name
-export const categoryAliases: Record<string, string> = {
+export const categoryAliases = {
   'debug-access': 'DebugInterface',
   'excessive-agency': 'ExcessiveAgency',
   'harmful:child-exploitation': 'Child Exploitation',
@@ -147,15 +147,10 @@ export const categoryAliases: Record<string, string> = {
   hallucination: 'Hallucination',
   hijacking: 'Hijacking',
   jailbreak: 'Harmful/Iterative',
-  'jailbreak:tree': 'Harmful/IterativeTree',
   overreliance: 'Overreliance',
   pii: 'PIILeak',
   politics: 'PoliticalStatement',
   rbac: 'RbacEnforcement',
-  'pii:api-db': 'PIILeak/Database',
-  'pii:direct': 'PIILeak/Direct',
-  'pii:session': 'PIILeak/Session',
-  'pii:social': 'PIILeak/Social',
 };
 
 export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
