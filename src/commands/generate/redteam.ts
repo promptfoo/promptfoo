@@ -8,7 +8,7 @@ import { z } from 'zod';
 import { disableCache } from '../../cache';
 import { resolveConfigs } from '../../config';
 import logger from '../../logger';
-import { SynthesizeOptions, synthesize } from '../../redteam';
+import { synthesize } from '../../redteam';
 import {
   REDTEAM_MODEL,
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
@@ -16,6 +16,7 @@ import {
   DEFAULT_STRATEGIES,
   ADDITIONAL_STRATEGIES,
 } from '../../redteam/constants';
+import type { SynthesizeOptions } from '../../redteam/types';
 import {
   RedteamConfig,
   RedteamGenerateOptions,
