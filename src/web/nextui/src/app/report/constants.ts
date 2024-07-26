@@ -26,6 +26,7 @@ export const riskCategories = {
     'harmful:specialized-advice',
     'harmful:violent-crime',
     'harmful:self-harm',
+    'rbac',
     'contracts',
   ],
   'Malicious Attacks': [
@@ -37,6 +38,9 @@ export const riskCategories = {
     'jailbreak',
     'pii',
     'prompt-injection',
+    'shell-injection',
+    'sql-injection',
+    'debug-access',
   ],
 };
 
@@ -54,6 +58,7 @@ export enum Severity {
 }
 
 export const riskCategorySeverityMap: Record<string, Severity> = {
+  'debug-access': Severity.High,
   'excessive-agency': Severity.Medium,
   'harmful:child-exploitation': Severity.Critical,
   'harmful:copyright-violations': Severity.Medium,
@@ -78,6 +83,8 @@ export const riskCategorySeverityMap: Record<string, Severity> = {
   'harmful:unsafe-practices': Severity.Low,
   'harmful:violent-crime': Severity.Critical,
   'prompt-injection': Severity.Medium,
+  'shell-injection': Severity.High,
+  'sql-injection': Severity.High,
   competitors: Severity.Low,
   contracts: Severity.Medium,
   hallucination: Severity.Medium,
@@ -87,6 +94,7 @@ export const riskCategorySeverityMap: Record<string, Severity> = {
   overreliance: Severity.Low,
   pii: Severity.High,
   politics: Severity.Low,
+  rbac: Severity.High,
 };
 
 export type TopLevelCategory = keyof typeof riskCategories;
@@ -105,6 +113,7 @@ export const categoryLabels = Object.keys(categoryMapReverse);
 
 // Map from metric name or harm category to plugin name
 export const categoryAliases = {
+  'debug-access': 'DebugInterface',
   'excessive-agency': 'ExcessiveAgency',
   'harmful:child-exploitation': 'Child Exploitation',
   'harmful:copyright-violations': 'Copyright Violations',
@@ -129,6 +138,8 @@ export const categoryAliases = {
   'harmful:unsafe-practices': 'Other Unsafe Practices',
   'harmful:violent-crime': 'Violent Crimes',
   'prompt-injection': 'Harmful/Injection',
+  'shell-injection': 'ShellInjection',
+  'sql-injection': 'SqlInjection',
   competitors: 'CompetitorEndorsement',
   contracts: 'ContractualCommitment',
   hallucination: 'Hallucination',
@@ -138,6 +149,7 @@ export const categoryAliases = {
   overreliance: 'Overreliance',
   pii: 'PIILeak',
   politics: 'PoliticalStatement',
+  rbac: 'RbacEnforcement',
 };
 
 export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
@@ -157,6 +169,10 @@ export const displayNameOverrides = {
   jailbreak: 'Jailbreak',
   pii: 'PII Leaks',
   politics: 'Political Opinions',
+  'shell-injection': 'Shell Injection',
+  'sql-injection': 'SQL Injection',
+  rbac: 'RBAC Enforcement',
+  'debug-access': 'Debug Access',
 };
 
 // Duplicated in src/redteam/constants.ts for backend
@@ -195,4 +211,8 @@ export const subCategoryDescriptions: Record<string, string> = {
   pii: 'Exposure or misuse of personally identifiable information.',
   politics: 'Makes political statements.',
   'experimental-jailbreak': 'Apply jailbreaks to all attack types',
+  'sql-injection': 'Attempts to perform SQL injection attacks to manipulate database queries.',
+  'shell-injection': 'Attempts to execute shell commands through the model.',
+  'debug-access': 'Attempts to access or use debugging commands.',
+  rbac: 'Tests whether the model properly implements Role-Based Access Control (RBAC).',
 };

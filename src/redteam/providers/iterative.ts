@@ -123,7 +123,11 @@ async function runRedteamConversation(
 
     // Get new prompt
     const redteamResp = await redteamProvider.callApi(redteamBody);
-    invariant(typeof redteamResp.output === 'string', 'Expected output to be a string');
+    const redteamResponse = redteamResp.output || redteamResp.error;
+    invariant(
+      typeof redteamResp.output === 'string',
+      `Expected output to be a string, but got response: ${JSON.stringify(redteamResp)}`,
+    );
     const { improvement, prompt: newPrompt } = JSON.parse(redteamResp.output) as {
       improvement: string;
       prompt: string;
@@ -191,7 +195,7 @@ async function runRedteamConversation(
 
 class RedteamIterativeJailbreaks implements ApiProvider {
   id() {
-    return 'redteam-iterative-jailbreaks';
+    return 'promptfoo:redteam:iterative';
   }
 
   async callApi(prompt: string, context?: CallApiContextParams, options?: CallApiOptionsParams) {

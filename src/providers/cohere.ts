@@ -41,8 +41,11 @@ export class CohereChatCompletionProvider implements ApiProvider {
   static COHERE_CHAT_MODELS = [
     'command',
     'command-light',
-    'command-nightly',
     'command-light-nightly',
+    'command-nightly',
+    'command-r',
+    'command-r-plus',
+    'command-r-v1',
   ];
 
   private apiKey: string;

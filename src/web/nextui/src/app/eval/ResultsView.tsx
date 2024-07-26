@@ -32,15 +32,16 @@ import type { VisibilityState } from '@tanstack/table-core';
 import { useRouter, useSearchParams } from 'next/navigation';
 import invariant from 'tiny-invariant';
 import { useDebounce } from 'use-debounce';
+import CompareEvalMenuItem from './CompareEvalMenuItem';
 import ConfigModal from './ConfigModal';
 import DownloadMenu from './DownloadMenu';
-import EvalSelector from './EvalSelector';
+import EvalSelectorButton from './EvalSelectorButton';
 import ResultsCharts from './ResultsCharts';
 import ResultsTable from './ResultsTable';
 import SettingsModal from './ResultsViewSettingsModal';
 import ShareModal from './ShareModal';
 import { useStore as useResultsViewStore } from './store';
-import type { FilterMode, ResultLightweightWithLabel } from './types';
+import type { EvaluateTable, FilterMode, ResultLightweightWithLabel } from './types';
 import './ResultsView.css';
 
 const ResponsiveStack = styled(Stack)(({ theme }) => ({
@@ -67,12 +68,15 @@ export default function ResultsView({
   const {
     author,
     table,
+    setTable,
     config,
     setConfig,
     maxTextLength,
     wordBreak,
     showInferenceDetails,
     evalId,
+    inComparisonMode,
+    setInComparisonMode,
   } = useResultsViewStore();
   const { setStateFromConfig } = useMainStore();
 
@@ -110,6 +114,19 @@ export default function ResultsView({
   const [shareUrl, setShareUrl] = React.useState('');
   const [shareLoading, setShareLoading] = React.useState(false);
 
+  // State for anchor element
+  const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
+
+  // Handle menu close
+  const handleMenuClose = () => {
+    setAnchorEl(null);
+  };
+
+  // Function to open the eval actions menu
+  const handleOpenMenu = (event: React.MouseEvent<HTMLElement>) => {
+    setAnchorEl(event.currentTarget);
+  };
+
   const handleShareButtonClick = async () => {
     setShareLoading(true);
     try {
@@ -138,6 +155,52 @@ export default function ResultsView({
       alert('Sorry, something went wrong.');
     } finally {
       setShareLoading(false);
+    }
+  };
+
+  const handleComparisonEvalSelected = async (compareEvalId: string) => {
+    setAnchorEl(null);
+    try {
+      const response = await fetch(`${await getApiBaseUrl()}/api/results/${compareEvalId}`, {
+        cache: 'no-store',
+      });
+      const body = await response.json();
+      const comparisonTable = body.data.results.table as EvaluateTable;
+
+      // Combine the comparison table with the current table
+      const combinedTable: EvaluateTable = {
+        head: {
+          prompts: [
+            ...table.head.prompts.map((prompt) => ({
+              ...prompt,
+              label: `[${evalId || defaultEvalId || 'Eval A'}] ${prompt.label || ''}`,
+            })),
+            ...comparisonTable.head.prompts.map((prompt) => ({
+              ...prompt,
+              label: `[${compareEvalId}] ${prompt.label || ''}`,
+            })),
+          ],
+          vars: table.head.vars, // Assuming vars are the same
+        },
+        body: table.body.map((row, index) => ({
+          ...row,
+          outputs: [...row.outputs, ...(comparisonTable.body[index]?.outputs || [])],
+        })),
+      };
+
+      // Update the state with the combined table
+      setTable(combinedTable);
+
+      // Update other relevant state if needed
+      setConfig({
+        ...config,
+        ...body.data.config,
+        description: `Combined: "${config?.description || 'Eval A'}" and "${body.data.config?.description || 'Eval B'}"`,
+      });
+      setInComparisonMode(true);
+    } catch (error) {
+      console.error('Error fetching comparison eval:', error);
+      alert('Failed to load comparison eval. Please try again.');
     }
   };
 
@@ -235,19 +298,6 @@ export default function ResultsView({
     }
   };
 
-  // State for anchor element
-  const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
-
-  // Handle menu close
-  const handleMenuClose = () => {
-    setAnchorEl(null);
-  };
-
-  // Function to open the eval actions menu
-  const handleOpenMenu = (event: React.MouseEvent<HTMLElement>) => {
-    setAnchorEl(event.currentTarget);
-  };
-
   const [evalIdCopied, setEvalIdCopied] = React.useState(false);
 
   const handleEvalIdCopyClick = async () => {
@@ -271,19 +321,21 @@ export default function ResultsView({
         className="eval-header"
       >
         {recentEvals && recentEvals.length > 0 && (
-          <EvalSelector
+          <EvalSelectorButton
             recentEvals={recentEvals}
             onRecentEvalSelected={onRecentEvalSelected}
             currentEval={recentEvals.find((evl) => evl.evalId === evalId) || null}
           />
         )}
-        <Typography variant="h5" sx={{ display: 'flex', alignItems: 'center' }}>
-          <Tooltip title="Click to edit description">
-            <span className="description" onClick={handleDescriptionClick}>
-              {config?.description || evalId}
-            </span>
-          </Tooltip>
-        </Typography>
+        {!inComparisonMode && (
+          <Typography variant="h5" sx={{ display: 'flex', alignItems: 'center' }}>
+            <Tooltip title="Click to edit description">
+              <span className="description" onClick={handleDescriptionClick}>
+                {config?.description || evalId}
+              </span>
+            </Tooltip>
+          </Typography>
+        )}
         {config?.description && evalId && (
           <>
             <Tooltip title="Click to copy">
@@ -384,6 +436,10 @@ export default function ResultsView({
                 open={Boolean(anchorEl)}
                 onClose={handleMenuClose}
               >
+                <CompareEvalMenuItem
+                  initialEvals={recentEvals}
+                  onComparisonEvalSelected={handleComparisonEvalSelected}
+                />
                 <Tooltip title="View the configuration that defines this eval" placement="left">
                   <MenuItem onClick={() => setConfigModalOpen(true)}>
                     <ListItemIcon>
@@ -444,7 +500,7 @@ export default function ResultsView({
                 <Button
                   color="primary"
                   startIcon={<EyeIcon />}
-                  onClick={() => router.push(`/report/?evalId=${evalId}`)}
+                  onClick={() => router.push(`/report/?evalId=${evalId || defaultEvalId}`)}
                 >
                   Vulnerability Report
                 </Button>

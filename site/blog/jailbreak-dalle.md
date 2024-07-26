@@ -1,4 +1,5 @@
 ---
+image: https://storage.googleapis.com/promptfoo-public-1/promptfoo.dev/blog/jailbreak-dalle/gallery-blurred.png
 ian_comment: 'images here: https://console.cloud.google.com/storage/browser/promptfoo-public-1/promptfoo.dev/blog/jailbreak-dalle;tab=objects?project=promptfoo&prefix=&forceOnObjectsSortingFiltering=false'
 ---
 
@@ -320,7 +321,7 @@ Tips:
 
 ## What's next
 
-The red team [implementation](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/iterativeImage.ts) is not state-of-the-art and has been purposely simplified from the original TAP implementation in order to improve speed and cost. But, it gets the job done. Contributions are welcome!
+The red team [implementation](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/providers/iterativeImage.ts) is not state-of-the-art and has been purposely simplified from the original TAP implementation in order to improve speed and cost. But, it gets the job done. Contributions are welcome!
 
 With images, it's very hard to toe the line between easily generating disturbing content versus being overly censorious. The above examples drive this point home.
 

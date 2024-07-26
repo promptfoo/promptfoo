@@ -116,7 +116,7 @@ const TestSuites: React.FC<{
                   Severity
                 </TableSortLabel>
               </TableCell>
-              <TableCell>Actions</TableCell>
+              <TableCell style={{ minWidth: '275px' }}>Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>

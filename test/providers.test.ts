@@ -27,7 +27,11 @@ import {
   HuggingfaceTextClassificationProvider,
 } from '../src/providers/huggingface';
 import { LlamaProvider } from '../src/providers/llama';
-import { OllamaChatProvider, OllamaCompletionProvider } from '../src/providers/ollama';
+import {
+  OllamaChatProvider,
+  OllamaCompletionProvider,
+  OllamaEmbeddingProvider,
+} from '../src/providers/ollama';
 import {
   OpenAiAssistantProvider,
   OpenAiCompletionProvider,
@@ -42,6 +46,8 @@ import { ScriptCompletionProvider } from '../src/providers/scriptCompletion';
 import { VertexChatProvider, VertexEmbeddingProvider } from '../src/providers/vertex';
 import { VoyageEmbeddingProvider } from '../src/providers/voyage';
 import { WebhookProvider } from '../src/providers/webhook';
+import RedteamIterativeProvider from '../src/redteam/providers/iterative';
+import RedteamImageIterativeProvider from '../src/redteam/providers/iterativeImage';
 import type { ProviderOptionsMap, ProviderFunction } from '../src/types';
 
 jest.mock('fs', () => ({
@@ -756,7 +762,10 @@ config:
     const provider = await loadApiProvider('file://path/to/mock-provider-file.yaml');
     expect(provider.id()).toBe('openai:gpt-4');
     expect(fs.readFileSync).toHaveBeenCalledTimes(1);
-    expect(fs.readFileSync).toHaveBeenCalledWith('path/to/mock-provider-file.yaml', 'utf8');
+    expect(fs.readFileSync).toHaveBeenCalledWith(
+      expect.stringMatching(/path[\\\/]to[\\\/]mock-provider-file\.yaml/),
+      'utf8',
+    );
   });
 
   it('loadApiProvider with openai:chat', async () => {
@@ -820,6 +829,16 @@ config:
     const provider = await loadApiProvider('ollama:completion:llama2:13b');
     expect(provider).toBeInstanceOf(OllamaCompletionProvider);
     expect(provider.id()).toBe('ollama:completion:llama2:13b');
+  });
+
+  it('loadApiProvider with ollama:embedding:modelName', async () => {
+    const provider = await loadApiProvider('ollama:embedding:llama2:13b');
+    expect(provider).toBeInstanceOf(OllamaEmbeddingProvider);
+  });
+
+  it('loadApiProvider with ollama:embeddings:modelName', async () => {
+    const provider = await loadApiProvider('ollama:embeddings:llama2:13b');
+    expect(provider).toBeInstanceOf(OllamaEmbeddingProvider);
   });
 
   it('loadApiProvider with ollama:chat:modelName', async () => {
@@ -965,6 +984,18 @@ config:
       expect(cfProvider.id()).toMatch(`cloudflare-ai:${modelTypeForId}:${modelName}`);
       expect(cfProvider).toBeInstanceOf(providerKlass);
     }
+  });
+
+  it('loadApiProvider with promptfoo:redteam:iterative', async () => {
+    const provider = await loadApiProvider('promptfoo:redteam:iterative');
+    expect(provider).toBeInstanceOf(RedteamIterativeProvider);
+    expect(provider.id()).toBe('promptfoo:redteam:iterative');
+  });
+
+  it('loadApiProvider with promptfoo:redteam:iterative:image', async () => {
+    const provider = await loadApiProvider('promptfoo:redteam:iterative:image');
+    expect(provider).toBeInstanceOf(RedteamImageIterativeProvider);
+    expect(provider.id()).toBe('promptfoo:redteam:iterative:image');
   });
 
   it('loadApiProvider with RawProviderConfig', async () => {

@@ -49,6 +49,9 @@ COPY --from=builder /app/drizzle ./src/web/nextui/.next/server/drizzle
 
 RUN mkdir -p /root/.promptfoo/output
 
+# Install curl for the healthcheck
+RUN apk add --no-cache curl
+
 # Create a script to write environment variables to .env file
 RUN echo -e '#!/bin/sh\n\
 echo "Writing environment variables to .env file..."\n\

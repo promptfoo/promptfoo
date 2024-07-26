@@ -1,6 +1,6 @@
 # LiteLLM
 
-The [LiteLLM](https://docs.litellm.com/docs) provides access to hundreds of LLMs.
+The [LiteLLM](https://docs.litellm.ai/docs/) provides access to hundreds of LLMs.
 
 Because it's compatible with the OpenAI API, you can configure promptfoo to use LiteLLM by overriding the `apiBaseUrl` variable to point to the LiteLLM service.
 

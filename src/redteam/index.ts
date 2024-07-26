@@ -3,21 +3,25 @@ import cliProgress from 'cli-progress';
 import invariant from 'tiny-invariant';
 import logger from '../logger';
 import { loadApiProvider } from '../providers';
-import type { ApiProvider, TestCase, TestSuite } from '../types';
+import type { ApiProvider, TestCase } from '../types';
 import { extractVariablesFromTemplates } from '../util/templates';
-import { REDTEAM_MODEL, ALL_PLUGINS, DEFAULT_PLUGINS } from './constants';
+import { REDTEAM_MODEL, ALL_PLUGINS } from './constants';
 import { addInjections } from './methods/injections';
 import { addIterativeJailbreaks } from './methods/iterative';
 import CompetitorPlugin from './plugins/competitors';
 import ContractPlugin from './plugins/contracts';
+import DebugAccessPlugin from './plugins/debugInterface';
 import ExcessiveAgencyPlugin from './plugins/excessiveAgency';
 import HallucinationPlugin from './plugins/hallucination';
-import { getHarmfulTests } from './plugins/harmful';
+import { HARM_CATEGORIES, getHarmfulTests } from './plugins/harmful';
 import HijackingPlugin from './plugins/hijacking';
 import ImitationPlugin from './plugins/imitation';
 import OverreliancePlugin from './plugins/overreliance';
-import { getPiiTests } from './plugins/pii';
+import { PII_REQUEST_CATEGORIES, getPiiLeakTestsForCategory } from './plugins/pii';
 import PoliticsPlugin from './plugins/politics';
+import RbacPlugin from './plugins/rbac';
+import ShellInjectionPlugin from './plugins/shellInjection';
+import SqlInjectionPlugin from './plugins/sqlInjection';
 import { getPurpose } from './purpose';
 
 export interface SynthesizeOptions {
@@ -28,9 +32,6 @@ export interface SynthesizeOptions {
   purpose?: string;
   numTests: number;
 }
-
-// n is assigned a default value by commander. Require that it exists in the type
-type PartialSynthesizeOptions = Partial<Omit<SynthesizeOptions, 'numTests'>> & { numTests: number };
 
 interface Plugin {
   key: string;
@@ -45,7 +46,8 @@ interface Plugin {
 
 interface Method {
   key: string;
-  action: (testCases: TestCase[], harmfulPrompts: TestCase[], injectVar: string) => TestCase[];
+  action: (testCases: (TestCase & { plugin: string })[], injectVar: string) => TestCase[];
+  requiredPlugins?: string[];
 }
 
 const Plugins: Plugin[] = [
@@ -69,6 +71,11 @@ const Plugins: Plugin[] = [
     action: (provider, purpose, injectVar, n, prompts) =>
       new HallucinationPlugin(provider, purpose, injectVar, prompts).generateTests(n),
   },
+  ...(Object.keys(HARM_CATEGORIES).map((category) => ({
+    key: category,
+    action: (provider, purpose, injectVar, n) =>
+      getHarmfulTests(provider, purpose, injectVar, [category], n),
+  })) as Plugin[]),
   {
     key: 'hijacking',
     action: (provider, purpose, injectVar, n, prompts) =>
@@ -87,13 +94,43 @@ const Plugins: Plugin[] = [
     action: (provider, purpose, injectVar, n, prompts) =>
       new OverreliancePlugin(provider, purpose, injectVar, prompts).generateTests(n),
   },
-  { key: 'pii', action: getPiiTests },
+  {
+    key: 'sql-injection',
+    action: (provider, purpose, injectVar, n, prompts) =>
+      new SqlInjectionPlugin(provider, purpose, injectVar, prompts).generateTests(n),
+  },
+  {
+    key: 'shell-injection',
+    action: (provider, purpose, injectVar, n, prompts) =>
+      new ShellInjectionPlugin(provider, purpose, injectVar, prompts).generateTests(n),
+  },
+  {
+    key: 'debug-access',
+    action: (provider, purpose, injectVar, n, prompts) =>
+      new DebugAccessPlugin(provider, purpose, injectVar, prompts).generateTests(n),
+  },
+  {
+    key: 'rbac',
+    action: (provider, purpose, injectVar, n, prompts) =>
+      new RbacPlugin(provider, purpose, injectVar, prompts).generateTests(n),
+  },
   {
     key: 'politics',
     action: (provider, purpose, injectVar, n, prompts) =>
       new PoliticsPlugin(provider, purpose, injectVar, prompts).generateTests(n),
   },
+  ...(PII_REQUEST_CATEGORIES.map((category) => ({
+    key: category,
+    action: (provider, purpose, injectVar, n) =>
+      getPiiLeakTestsForCategory(provider, purpose, injectVar, category, n),
+  })) as Plugin[]),
 ];
+
+// These plugins refer to a collection of tests.
+const categories = {
+  harmful: Object.keys(HARM_CATEGORIES),
+  pii: PII_REQUEST_CATEGORIES,
+} as const;
 
 const Methods: Method[] = [
   {
@@ -107,26 +144,30 @@ const Methods: Method[] = [
   },
   {
     key: 'jailbreak',
-    action: (_, harmfulPrompts) => {
+    action: (testCases) => {
+      const harmfulPrompts = testCases.filter((t) => t.plugin.startsWith('harmful:'));
       logger.debug('Adding jailbreaks to harmful prompts');
       const jailbreaks = addIterativeJailbreaks(harmfulPrompts);
       logger.debug(`Added ${jailbreaks.length} jailbreak test cases`);
       return jailbreaks;
     },
+    requiredPlugins: Object.keys(HARM_CATEGORIES),
   },
   {
     key: 'prompt-injection',
-    action: (_, harmfulPrompts, injectVar) => {
+    action: (testCases, injectVar) => {
+      const harmfulPrompts = testCases.filter((t) => t.plugin.startsWith('harmful:'));
       logger.debug('Adding prompt injections');
       const injections = addInjections(harmfulPrompts, injectVar);
       logger.debug(`Added ${injections.length} prompt injection test cases`);
       return injections;
     },
+    requiredPlugins: Object.keys(HARM_CATEGORIES),
   },
 ];
 
 function validatePlugins(plugins: string[]): void {
-  const invalidPlugins = plugins.filter((plugin) => !ALL_PLUGINS.has(plugin));
+  const invalidPlugins = plugins.filter((plugin) => !ALL_PLUGINS.includes(plugin));
   if (invalidPlugins.length > 0) {
     const validPluginsString = Array.from(ALL_PLUGINS).join(', ');
     const invalidPluginsString = invalidPlugins.join(', ');
@@ -145,7 +186,12 @@ export async function synthesize({
   numTests,
 }: SynthesizeOptions) {
   validatePlugins(plugins);
-  const reasoningProvider = await loadApiProvider(provider || REDTEAM_MODEL);
+  const redteamProvider: ApiProvider = await loadApiProvider(provider || REDTEAM_MODEL, {
+    options: {
+      config: { temperature: 0.5 },
+    },
+  });
+
   logger.info(
     `Synthesizing test cases for ${prompts.length} ${
       prompts.length === 1 ? 'prompt' : 'prompts'
@@ -167,6 +213,23 @@ export async function synthesize({
     invariant(typeof injectVar === 'string', `Inject var must be a string, got ${injectVar}`);
   }
 
+  // if a category is included in the user selected plugins, add all of its plugins
+  for (const [category, categoryPlugins] of Object.entries(categories)) {
+    if (plugins.includes(category)) {
+      plugins.push(...categoryPlugins);
+    }
+  }
+
+  // if a method is included in the user selected plugins, add all of its required plugins
+  for (const { key, requiredPlugins } of Methods) {
+    if (plugins.includes(key) && requiredPlugins) {
+      plugins.push(...requiredPlugins);
+    }
+  }
+
+  // Deduplicate, filter out the category names, and sort
+  plugins = [...new Set(plugins)].filter((p) => !Object.keys(categories).includes(p)).sort();
+
   // Initialize progress bar
   const progressBar = new cliProgress.SingleBar({}, cliProgress.Presets.shades_classic);
   const totalSteps = plugins.length + 2; // +2 for initial setup steps
@@ -184,56 +247,29 @@ export async function synthesize({
 
   // Get purpose
   updateProgress();
-  const purpose = purposeOverride || (await getPurpose(reasoningProvider, prompts));
+  const purpose = purposeOverride || (await getPurpose(redteamProvider, prompts));
   updateProgress();
 
   logger.debug(`System purpose: ${purpose}`);
 
-  // Get adversarial test cases
-  const testCases: TestCase[] = [];
-  const harmfulPrompts: TestCase[] = [];
-
-  const redteamProvider: ApiProvider = await loadApiProvider(provider || REDTEAM_MODEL, {
-    options: {
-      config: { temperature: 0.5 },
-    },
-  });
-
-  const addHarmfulCases = plugins.some((p) => p.startsWith('harmful'));
-  if (plugins.includes('prompt-injection') || plugins.includes('jailbreak') || addHarmfulCases) {
-    logger.debug('Generating harmful test cases');
-    const newHarmfulPrompts = await getHarmfulTests(
-      redteamProvider,
-      purpose,
-      injectVar,
-      plugins.filter((p) => p.startsWith('harmful:')),
-    );
-    harmfulPrompts.push(...newHarmfulPrompts);
-
-    if (addHarmfulCases) {
-      testCases.push(...harmfulPrompts);
-      logger.debug(`Added ${harmfulPrompts.length} harmful test cases`);
-    } else {
-      logger.debug(`Generated ${harmfulPrompts.length} harmful test cases`);
-    }
-  }
-
+  const testCases: (TestCase & { plugin: string })[] = [];
   for (const { key, action } of Plugins) {
     if (plugins.includes(key)) {
       updateProgress();
       logger.debug(`Generating ${key} tests`);
       const pluginTests = await action(redteamProvider, purpose, injectVar, numTests, prompts);
-      testCases.push(...pluginTests);
+      testCases.push(...pluginTests.map((t) => ({ ...t, plugin: key })));
       logger.debug(`Added ${pluginTests.length} ${key} test cases`);
     }
   }
 
   for (const { key, action } of Methods) {
     if (plugins.includes(key)) {
-      const newTestCases = action(testCases, harmfulPrompts, injectVar);
-      testCases.push(...newTestCases);
+      const newTestCases = action(testCases, injectVar);
+      testCases.push(...newTestCases.map((t) => ({ ...t, plugin: key })));
     }
   }
+
   // Finish progress bar
   if (process.env.LOG_LEVEL !== 'debug') {
     progressBar.update(100);
@@ -241,16 +277,4 @@ export async function synthesize({
   }
 
   return testCases;
-}
-
-export async function synthesizeFromTestSuite(
-  testSuite: TestSuite,
-  options: PartialSynthesizeOptions,
-) {
-  return synthesize({
-    ...options,
-    plugins:
-      options.plugins && options.plugins.length > 0 ? options.plugins : Array.from(DEFAULT_PLUGINS),
-    prompts: testSuite.prompts.map((prompt) => prompt.raw),
-  });
 }
