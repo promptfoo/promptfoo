@@ -106,6 +106,9 @@ jobs:
         run: |
           npm exec check-dependency-version-consistency
 
+      - name: Check for circular dependencies
+        run: npx madge $(git ls-files '*.ts') --circular
+
   python:
     name: Check Python
     timeout-minutes: 5
@@ -157,9 +160,6 @@ jobs:
       - name: Type Check
         working-directory: site
         run: npm run typecheck
-
-      - name: Check for circular dependencies
-        run: npx madge $(git ls-files '*.ts') --circular
 
       - name: Build Documentation
         working-directory: site
