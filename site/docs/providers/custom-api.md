@@ -94,19 +94,12 @@ class CustomApiProvider {
 module.exports = CustomApiProvider;
 ```
 
-## Example - Embedding
-
-Here's an example of a custom API provider that returns embeddings along with token usage:
+Custom API providers can also be used for embeddings or classification.
 
 ```javascript
-const fetch = require('node-fetch');
-
-class CustomApiProvider {
+module.exports = class CustomApiProvider {
   constructor(options) {
-    // The caller may override Provider ID (e.g. when using multiple instances of the same provider)
     this.providerId = options.id || 'custom provider';
-
-    // The config object contains any options passed to the provider in the config file.
     this.config = options.config;
   }
 
@@ -114,24 +107,25 @@ class CustomApiProvider {
     return this.providerId;
   }
 
+  // or embeddings:
   async callEmbeddingApi(prompt) {
-    // Add your custom API logic here
-
-    const ret = {
-      //required
-      embedding: embedding,
-      //optional
-      tokenUsage: {
-        total: 10,
-        prompt: 1,
-        completion: 0,
+    // Add your custom embedding logic here
+    return {
+      embedding: [], // Your embedding array
+      tokenUsage: { total: 10, prompt: 1, completion: 0 },
+    };
+  }
+  // or classification
+  async callClassificationApi(prompt) {
+    // Add your custom classification logic here
+    return {
+      classification: {
+        classA: 0.6,
+        classB: 0.4,
       },
     };
-    return ret;
   }
-}
-
-module.exports = CustomApiProvider;
+};
 ```
 
 ### Caching
