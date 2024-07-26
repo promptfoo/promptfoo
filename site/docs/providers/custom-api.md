@@ -178,8 +178,7 @@ promptfoo eval -p prompt1.txt prompt2.txt -o results.csv -v vars.csv -r ./custom
 
 This command will evaluate the prompts using the custom API provider and save the results to the specified CSV file.
 
-A full working example is available in the [examples directory](https://github.com/promptfoo/promptfoo/tree/main/examples/custom-provider).
-A full working example for an embedding provider can also be found in the [examples directory](https://github.com/promptfoo/promptfoo/tree/main/examples/custom-provider-embeddings).
+Full working examples of a [custom provider](https://github.com/promptfoo/promptfoo/tree/main/examples/custom-provider) and [custom provider embeddings](https://github.com/promptfoo/promptfoo/tree/main/examples/custom-provider-embeddings) are available in the [examples directory](https://github.com/promptfoo/promptfoo/tree/main/examples).
 
 ## Multiple instances of the same provider
 
