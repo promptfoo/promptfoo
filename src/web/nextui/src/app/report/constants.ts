@@ -1,4 +1,4 @@
-import type { Collection, Plugin, Strategy } from '../../../../../redteam/constants';
+import type { Plugin, Strategy } from '../../../../../redteam/constants';
 
 export const riskCategories = {
   'Brand Risk': [
