@@ -274,6 +274,7 @@ class Evaluator {
           this.stats.tokenUsage.total += checkResult.tokensUsed.total || 0;
           this.stats.tokenUsage.prompt += checkResult.tokensUsed.prompt || 0;
           this.stats.tokenUsage.completion += checkResult.tokensUsed.completion || 0;
+          this.stats.tokenUsage.cached += checkResult.tokensUsed.cached || 0;
         }
         ret.response = processedResponse;
         ret.gradingResult = checkResult;

@@ -10,14 +10,14 @@ describe('AssertionsResult', () => {
     pass: true,
     score: 1,
     reason: 'The succeeding reason',
-    tokensUsed: { total: 1, prompt: 2, completion: 3 },
+    tokensUsed: { total: 1, prompt: 2, completion: 3, cached: 0 },
     assertion: null,
   };
   const failingResult = {
     pass: false,
     score: 0,
     reason: 'The failing reason',
-    tokensUsed: { total: 1, prompt: 2, completion: 3 },
+    tokensUsed: { total: 1, prompt: 2, completion: 3, cached: 0 },
     assertion: null,
   };
   const testResult = {
@@ -27,7 +27,7 @@ describe('AssertionsResult', () => {
     componentResults: [succeedingResult],
     namedScores: {},
     assertion: null,
-    tokensUsed: { total: 1, prompt: 2, completion: 3 },
+    tokensUsed: { total: 1, prompt: 2, completion: 3, cached: 0 },
   };
   let assertionsResult: AssertionsResult;
 
@@ -100,7 +100,7 @@ describe('AssertionsResult', () => {
     expect(assertionsResult.testResult()).toEqual({
       ...testResult,
       componentResults: [resultWithoutTokensUsed],
-      tokensUsed: { total: 0, prompt: 0, completion: 0 },
+      tokensUsed: { total: 0, prompt: 0, completion: 0, cached: 0 },
     });
   });
 
@@ -207,7 +207,7 @@ describe('AssertionsResult', () => {
         pass: true,
         score: 1,
         reason: 'No assertions',
-        tokensUsed: { total: 0, prompt: 0, completion: 0 },
+        tokensUsed: { total: 0, prompt: 0, completion: 0, cached: 0 },
         assertion: null,
       });
     });
