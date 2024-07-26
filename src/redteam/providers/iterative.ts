@@ -152,8 +152,15 @@ async function runRedteamConversation({
 
     // Update the application prompt with the new injection.
     logger.debug(`New injectVar: ${newInjectVar}, improvement: ${improvement}`);
-    vars[injectVar] = newInjectVar;
-    targetPrompt = await renderPrompt(prompt, vars, filters, provider);
+    targetPrompt = await renderPrompt(
+      prompt,
+      {
+        ...vars,
+        [injectVar]: newInjectVar,
+      },
+      filters,
+      provider,
+    );
 
     // Is it on topic?
     const isOnTopicBody = JSON.stringify([
