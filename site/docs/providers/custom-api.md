@@ -9,14 +9,13 @@ To create a custom API provider, implement the `ApiProvider` interface in a sepa
 ```ts
 export interface CallApiContextParams {
   vars: Record<string, string | object>;
+  // Used when provider is overridden on the test case.
+  originalProvider?: ApiProvider;
 }
 
 export interface CallApiOptionsParams {
   // Whether to include logprobs in API response (used with OpenAI providers)
   includeLogProbs?: boolean;
-
-  // Used when provider is overridden on the test case.
-  originalProvider?: ApiProvider;
 }
 
 export interface ApiProvider {
