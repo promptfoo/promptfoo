@@ -1,8 +1,10 @@
 import { promises as fs } from 'fs';
 import { PythonShell } from 'python-shell';
-import * as pythonWrapper from '../src/python/wrapper';
+import { runPython } from '../src/python/pythonUtils';
+import { runPythonCode } from '../src/python/wrapper';
 
 jest.mock('../src/esm');
+jest.mock('../src/logger');
 
 jest.mock('python-shell');
 
@@ -19,14 +21,11 @@ describe('Python Wrapper', () => {
       const mockPythonShellRun = jest.mocked(PythonShell.run);
       mockPythonShellRun.mockResolvedValue(['{"type": "final_result", "data": "test result"}']);
 
-      const result = await pythonWrapper.runPython('testScript.py', 'testMethod', [
-        'arg1',
-        { key: 'value' },
-      ]);
+      const result = await runPython('testScript.py', 'testMethod', ['arg1', { key: 'value' }]);
 
       expect(result).toBe('test result');
       expect(mockPythonShellRun).toHaveBeenCalledWith('wrapper.py', expect.any(Object));
-      expect(mockPythonShellRun.mock.calls[0][1].args).toEqual([
+      expect(mockPythonShellRun.mock.calls[0][1]!.args).toEqual([
         expect.stringContaining('testScript.py'),
         'testMethod',
         expect.stringContaining('promptfoo-python-input-json'),
@@ -38,9 +37,9 @@ describe('Python Wrapper', () => {
       const mockPythonShellRun = jest.mocked(PythonShell.run);
       mockPythonShellRun.mockRejectedValue(new Error('Test Error'));
 
-      await expect(
-        pythonWrapper.runPython('testScript.py', 'testMethod', ['arg1']),
-      ).rejects.toThrow('Error running Python script: Test Error');
+      await expect(runPython('testScript.py', 'testMethod', ['arg1'])).rejects.toThrow(
+        'Error running Python script: Test Error',
+      );
     });
 
     it('should handle Python script returning incorrect result type', async () => {
@@ -52,9 +51,7 @@ describe('Python Wrapper', () => {
         '{"type": "unexpected_result", "data": "test result"}',
       ]);
 
-      await expect(
-        pythonWrapper.runPython('testScript.py', 'testMethod', ['arg1']),
-      ).rejects.toThrow(
+      await expect(runPython('testScript.py', 'testMethod', ['arg1'])).rejects.toThrow(
         'The Python script `call_api` function must return a dict with an `output`',
       );
     });
@@ -70,7 +67,7 @@ describe('Python Wrapper', () => {
       jest.spyOn(fs, 'writeFile').mockResolvedValue();
 
       const code = 'print("Hello, world!")';
-      const result = await pythonWrapper.runPythonCode(code, 'main', []);
+      const result = await runPythonCode(code, 'main', []);
 
       expect(result).toBe('execution result');
       expect(mockPythonShellRun).toHaveBeenCalledWith('wrapper.py', expect.any(Object));
@@ -81,7 +78,7 @@ describe('Python Wrapper', () => {
       jest.spyOn(fs, 'writeFile').mockResolvedValue();
       jest.spyOn(fs, 'unlink').mockResolvedValue();
 
-      await pythonWrapper.runPythonCode('print("cleanup test")', 'main', []);
+      await runPythonCode('print("cleanup test")', 'main', []);
 
       expect(fs.unlink).toHaveBeenCalledTimes(2);
     });

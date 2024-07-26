@@ -4,6 +4,10 @@ import * as path from 'path';
 import { dereferenceConfig, readConfigs } from '../src/config';
 import { UnifiedConfig } from '../src/types';
 
+jest.mock('../src/database', () => ({
+  getDb: jest.fn(),
+}));
+
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
 }));
@@ -20,8 +24,6 @@ jest.mock('fs', () => ({
   existsSync: jest.fn(),
   mkdirSync: jest.fn(),
 }));
-
-jest.mock('../src/database');
 
 describe('readConfigs', () => {
   beforeEach(() => {
@@ -64,14 +66,27 @@ describe('readConfigs', () => {
       sharing: true,
     };
 
-    jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob]);
+    jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob].flat());
     jest
       .mocked(fs.readFileSync)
+      .mockImplementation(
+        (
+          path: fs.PathOrFileDescriptor,
+          options?: fs.ObjectEncodingOptions | BufferEncoding | null,
+        ): string | Buffer => {
+          if (typeof path === 'string' && path === 'config1.json') {
+            return JSON.stringify(config1);
+          } else if (typeof path === 'string' && path === 'config2.json') {
+            return JSON.stringify(config2);
+          }
+          return Buffer.from(''); // Return an empty Buffer instead of null
+        },
+      )
       .mockReturnValueOnce(JSON.stringify(config1))
       .mockReturnValueOnce(JSON.stringify(config2))
       .mockReturnValueOnce(JSON.stringify(config1))
       .mockReturnValueOnce(JSON.stringify(config2))
-      .mockReturnValue('you should not see this');
+      .mockReturnValue(Buffer.from('')); // Return an empty Buffer instead of null
 
     // Mocks for prompt loading
     jest.mocked(fs.readdirSync).mockReturnValue([]);
@@ -158,55 +173,69 @@ describe('readConfigs', () => {
 
   it('makeAbsolute should resolve file:// syntax and plaintext prompts', async () => {
     jest.mocked(fs.existsSync).mockReturnValue(true);
-    jest.mocked(fs.readFileSync).mockImplementation((path: string) => {
-      if (path === 'config1.json') {
-        return JSON.stringify({
-          description: 'test1',
-          prompts: ['file://prompt1.txt', 'prompt2'],
-        });
-      } else if (path === 'config2.json') {
-        return JSON.stringify({
-          description: 'test2',
-          prompts: ['file://prompt3.txt', 'prompt4'],
-        });
-      }
-      return null;
-    });
+    jest
+      .mocked(fs.readFileSync)
+      .mockImplementation(
+        (
+          path: fs.PathOrFileDescriptor,
+          options?: fs.ObjectEncodingOptions | BufferEncoding | null,
+        ): string | Buffer => {
+          if (typeof path === 'string' && path === 'config1.json') {
+            return JSON.stringify({
+              description: 'test1',
+              prompts: ['file://prompt1.txt', 'prompt2'],
+            });
+          } else if (typeof path === 'string' && path === 'config2.json') {
+            return JSON.stringify({
+              description: 'test2',
+              prompts: ['file://prompt3.txt', 'prompt4'],
+            });
+          }
+          return Buffer.from(''); // Return an empty Buffer instead of null
+        },
+      );
 
     const configPaths = ['config1.json', 'config2.json'];
     const result = await readConfigs(configPaths);
 
     expect(result.prompts).toEqual([
-      'file://' + path.resolve(path.dirname(configPaths[0]), 'prompt1.txt'),
+      `file://${path.resolve(path.dirname(configPaths[0]), 'prompt1.txt')}`,
       'prompt2',
-      'file://' + path.resolve(path.dirname(configPaths[1]), 'prompt3.txt'),
+      `file://${path.resolve(path.dirname(configPaths[1]), 'prompt3.txt')}`,
       'prompt4',
     ]);
   });
 
-  it('dedupes prompts when reading configs', async () => {
+  it('de-duplicates prompts when reading configs', async () => {
     jest.mocked(fs.existsSync).mockReturnValue(true);
-    jest.mocked(fs.readFileSync).mockImplementation((path: string) => {
-      if (path === 'config1.json') {
-        return JSON.stringify({
-          description: 'test1',
-          prompts: ['prompt1', 'file://prompt2.txt', 'prompt3'],
-        });
-      } else if (path === 'config2.json') {
-        return JSON.stringify({
-          description: 'test2',
-          prompts: ['prompt3', 'file://prompt2.txt', 'prompt4'],
-        });
-      }
-      return null;
-    });
+    jest
+      .mocked(fs.readFileSync)
+      .mockImplementation(
+        (
+          path: fs.PathOrFileDescriptor,
+          options?: fs.ObjectEncodingOptions | BufferEncoding | null,
+        ): string | Buffer => {
+          if (typeof path === 'string' && path === 'config1.json') {
+            return JSON.stringify({
+              description: 'test1',
+              prompts: ['prompt1', 'file://prompt2.txt', 'prompt3'],
+            });
+          } else if (typeof path === 'string' && path === 'config2.json') {
+            return JSON.stringify({
+              description: 'test2',
+              prompts: ['prompt3', 'file://prompt2.txt', 'prompt4'],
+            });
+          }
+          return Buffer.from(''); // Return an empty Buffer instead of null
+        },
+      );
 
     const configPaths = ['config1.json', 'config2.json'];
     const result = await readConfigs(configPaths);
 
     expect(result.prompts).toEqual([
       'prompt1',
-      'file://' + path.resolve(path.dirname(configPaths[0]), 'prompt2.txt'),
+      `file://${path.resolve(path.dirname(configPaths[0]), 'prompt2.txt')}`,
       'prompt3',
       'prompt4',
     ]);

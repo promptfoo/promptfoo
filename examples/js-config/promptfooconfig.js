@@ -1,7 +1,7 @@
 module.exports = {
   description: 'A translator built with LLM',
   prompts: ['prompts.txt'],
-  providers: ['openai:gpt-3.5-turbo'],
+  providers: ['openai:gpt-4o-mini'],
   tests: [
     {
       vars: {

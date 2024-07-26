@@ -8,6 +8,7 @@ import Pagination from '@mui/material/Pagination';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
+import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import TableSortLabel from '@mui/material/TableSortLabel';
@@ -41,8 +42,12 @@ export default function Datasets() {
         .then((response) => response.json())
         .then((data) => {
           const sortedData = [...data.data].sort((a, b) => {
-            if (sortField === null) return 0;
-            if (sortOrder === 'asc') return a[sortField] > b[sortField] ? 1 : -1;
+            if (sortField === null) {
+              return 0;
+            }
+            if (sortOrder === 'asc') {
+              return a[sortField] > b[sortField] ? 1 : -1;
+            }
             return a[sortField] < b[sortField] ? 1 : -1;
           });
           setTestCases(sortedData);
@@ -71,113 +76,115 @@ export default function Datasets() {
 
   return (
     <Box paddingX={2}>
-      <Table>
-        <TableHead>
-          <TableRow>
-            <TableCell style={{ width: '10%' }}>ID</TableCell>
-            <TableCell style={{ width: '20%' }}>
-              <TableSortLabel
-                active={sortField === 'raw'}
-                direction={sortField === 'raw' ? sortOrder : 'asc'}
-                onClick={() => handleSort('raw')}
-              >
-                Info
-              </TableSortLabel>
-            </TableCell>
-            <TableCell style={{ width: '20%' }}>Variables</TableCell>
-            <TableCell style={{ width: '10%' }}>
-              <TableSortLabel
-                active={sortField === 'count'}
-                direction={sortField === 'count' ? sortOrder : 'asc'}
-                onClick={() => handleSort('count')}
-              >
-                Total # evals
-              </TableSortLabel>
-            </TableCell>
-            <TableCell style={{ width: '20%' }}>
-              <Tooltip title="The date of the most recent eval for this set of test cases">
+      <TableContainer>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableCell style={{ width: '10%' }}>ID</TableCell>
+              <TableCell style={{ width: '20%' }}>
                 <TableSortLabel
-                  active={sortField === 'date'}
-                  direction={sortField === 'date' ? sortOrder : 'asc'}
-                  onClick={() => handleSort('date')}
+                  active={sortField === 'raw'}
+                  direction={sortField === 'raw' ? sortOrder : 'asc'}
+                  onClick={() => handleSort('raw')}
                 >
-                  Most recent eval date
+                  Info
                 </TableSortLabel>
-              </Tooltip>
-            </TableCell>
-            <TableCell style={{ width: '20%' }}>
-              <Tooltip title="The ID of the most recent eval for this set of test cases">
+              </TableCell>
+              <TableCell style={{ width: '20%' }}>Variables</TableCell>
+              <TableCell style={{ width: '10%' }}>
                 <TableSortLabel
-                  active={sortField === 'evalId'}
-                  direction={sortField === 'evalId' ? sortOrder : 'asc'}
-                  onClick={() => handleSort('evalId')}
+                  active={sortField === 'count'}
+                  direction={sortField === 'count' ? sortOrder : 'asc'}
+                  onClick={() => handleSort('count')}
                 >
-                  Most recent eval ID
+                  Total # evals
                 </TableSortLabel>
-              </Tooltip>
-            </TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {testCases
-            .slice((page - 1) * rowsPerPage, page * rowsPerPage)
-            .map((testCasesData, index) => (
-              <TableRow
-                key={index}
-                hover
-                onClick={() => handleClickOpen(index)}
-                style={{ cursor: 'pointer' }}
-              >
-                <TableCell>{testCasesData.id.slice(0, 6)}</TableCell>
-                <TableCell style={{ width: '20%', whiteSpace: 'pre-wrap' }}>
-                  {testCasesData.testCases.length} test cases
-                </TableCell>
-                <TableCell style={{ width: '20%', whiteSpace: 'pre-wrap' }}>
-                  {(() => {
-                    if (
-                      !Array.isArray(testCasesData.testCases) ||
-                      typeof testCasesData.testCases[0] === 'string'
-                    ) {
-                      return '';
-                    }
-                    const allVarsKeys = ((testCasesData.testCases as TestCase[]) || []).flatMap(
-                      (testCase) => Object.keys(testCase.vars || {}),
-                    );
-                    const uniqueVarsKeys = Array.from(new Set(allVarsKeys));
-                    return uniqueVarsKeys.length > 0 ? uniqueVarsKeys.join(', ') : 'None';
-                  })()}
-                </TableCell>
-                <TableCell style={{ width: '10%' }}>{testCasesData.count}</TableCell>
-                <TableCell style={{ width: '20%' }}>
-                  {testCasesData.recentEvalDate || 'Unknown'}
-                </TableCell>
-                <TableCell style={{ width: '20%' }}>
-                  {testCasesData.recentEvalId ? (
-                    <Link href={`/eval?evalId=${testCasesData.recentEvalId}`}>
-                      {testCasesData.recentEvalId}
-                    </Link>
-                  ) : (
-                    'Unknown'
-                  )}
-                </TableCell>
-              </TableRow>
-            ))}
-        </TableBody>
-      </Table>
-      {Math.ceil(testCases.length / rowsPerPage) > 1 && (
-        <Pagination
-          count={Math.ceil(testCases.length / rowsPerPage)}
-          page={page}
-          onChange={(event, value) => setPage(value)}
-        />
-      )}
-      {testCases[dialogTestCaseIndex] && (
-        <DatasetDialog
-          openDialog={openDialog}
-          handleClose={handleClose}
-          testCase={testCases[dialogTestCaseIndex]}
-        />
-      )}
+              </TableCell>
+              <TableCell style={{ width: '20%' }}>
+                <Tooltip title="The date of the most recent eval for this set of test cases">
+                  <TableSortLabel
+                    active={sortField === 'date'}
+                    direction={sortField === 'date' ? sortOrder : 'asc'}
+                    onClick={() => handleSort('date')}
+                  >
+                    Most recent eval date
+                  </TableSortLabel>
+                </Tooltip>
+              </TableCell>
+              <TableCell style={{ width: '20%' }}>
+                <Tooltip title="The ID of the most recent eval for this set of test cases">
+                  <TableSortLabel
+                    active={sortField === 'evalId'}
+                    direction={sortField === 'evalId' ? sortOrder : 'asc'}
+                    onClick={() => handleSort('evalId')}
+                  >
+                    Most recent eval ID
+                  </TableSortLabel>
+                </Tooltip>
+              </TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {testCases
+              .slice((page - 1) * rowsPerPage, page * rowsPerPage)
+              .map((testCasesData, index) => (
+                <TableRow
+                  key={index}
+                  hover
+                  onClick={() => handleClickOpen(index)}
+                  style={{ cursor: 'pointer' }}
+                >
+                  <TableCell>{testCasesData.id.slice(0, 6)}</TableCell>
+                  <TableCell style={{ width: '20%', whiteSpace: 'pre-wrap' }}>
+                    {testCasesData.testCases.length} test cases
+                  </TableCell>
+                  <TableCell style={{ width: '20%', whiteSpace: 'pre-wrap' }}>
+                    {(() => {
+                      if (
+                        !Array.isArray(testCasesData.testCases) ||
+                        typeof testCasesData.testCases[0] === 'string'
+                      ) {
+                        return '';
+                      }
+                      const allVarsKeys = ((testCasesData.testCases as TestCase[]) || []).flatMap(
+                        (testCase) => Object.keys(testCase.vars || {}),
+                      );
+                      const uniqueVarsKeys = Array.from(new Set(allVarsKeys));
+                      return uniqueVarsKeys.length > 0 ? uniqueVarsKeys.join(', ') : 'None';
+                    })()}
+                  </TableCell>
+                  <TableCell style={{ width: '10%' }}>{testCasesData.count}</TableCell>
+                  <TableCell style={{ width: '20%' }}>
+                    {testCasesData.recentEvalDate || 'Unknown'}
+                  </TableCell>
+                  <TableCell style={{ width: '20%' }}>
+                    {testCasesData.recentEvalId ? (
+                      <Link href={`/eval?evalId=${testCasesData.recentEvalId}`}>
+                        {testCasesData.recentEvalId}
+                      </Link>
+                    ) : (
+                      'Unknown'
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+          </TableBody>
+        </Table>
+        {Math.ceil(testCases.length / rowsPerPage) > 1 && (
+          <Pagination
+            count={Math.ceil(testCases.length / rowsPerPage)}
+            page={page}
+            onChange={(event, value) => setPage(value)}
+          />
+        )}
+        {testCases[dialogTestCaseIndex] && (
+          <DatasetDialog
+            openDialog={openDialog}
+            handleClose={handleClose}
+            testCase={testCases[dialogTestCaseIndex]}
+          />
+        )}
+      </TableContainer>
     </Box>
   );
 }

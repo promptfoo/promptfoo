@@ -31,7 +31,10 @@ jest.mock('fs', () => ({
 }));
 
 jest.mock('../src/esm');
-jest.mock('../src/database');
+jest.mock('../src/database', () => ({
+  getDb: jest.fn(),
+}));
+jest.mock('../src/logger');
 
 const mockApiProvider: ApiProvider = {
   id: jest.fn().mockReturnValue('test-provider'),
@@ -691,6 +694,65 @@ describe('evaluator', () => {
     expect(summary.results[3].response?.output).toBe('French Bonjour');
   });
 
+  it('evaluate with scenarios and defaultTest', async () => {
+    const mockApiProvider: ApiProvider = {
+      id: jest.fn().mockReturnValue('test-provider'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Hello, World',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      defaultTest: {
+        assert: [
+          {
+            type: 'starts-with',
+            value: 'Hello',
+          },
+        ],
+      },
+      scenarios: [
+        {
+          config: [{}],
+          tests: [{}],
+        },
+        {
+          config: [
+            {
+              assert: [
+                {
+                  type: 'contains',
+                  value: ',',
+                },
+              ],
+            },
+          ],
+          tests: [
+            {
+              assert: [
+                {
+                  type: 'icontains',
+                  value: 'world',
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const summary = await evaluate(testSuite, {});
+
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
+    expect(summary.stats.successes).toBe(2);
+    expect(summary.stats.failures).toBe(0);
+    expect(summary.results[0].gradingResult?.componentResults?.length).toBe(1);
+    expect(summary.results[1].gradingResult?.componentResults?.length).toBe(3);
+  });
+
   it('evaluate with _conversation variable', async () => {
     const mockApiProvider: ApiProvider = {
       id: jest.fn().mockReturnValue('test-provider'),
@@ -882,8 +944,12 @@ describe('renderPrompt', () => {
   });
 
   it('should load external js files in renderPrompt and execute the exported function', async () => {
-    const prompt = toPrompt('Test prompt with {{ var1 }}');
-    const vars = { var1: 'file:///path/to/testFunction.js' };
+    const prompt = toPrompt('Test prompt with {{ var1 }} {{ var2 }} {{ var3 }}');
+    const vars = {
+      var1: 'file:///path/to/testFunction.js',
+      var2: 'file:///path/to/testFunction.cjs',
+      var3: 'file:///path/to/testFunction.mjs',
+    };
     const evaluateOptions = {};
 
     jest.doMock(
@@ -891,9 +957,19 @@ describe('renderPrompt', () => {
       () => (varName: any, prompt: any, vars: any) => ({ output: `Dynamic value for ${varName}` }),
       { virtual: true },
     );
+    jest.doMock(
+      path.resolve('/path/to/testFunction.cjs'),
+      () => (varName: any, prompt: any, vars: any) => ({ output: `and ${varName}` }),
+      { virtual: true },
+    );
+    jest.doMock(
+      path.resolve('/path/to/testFunction.mjs'),
+      () => (varName: any, prompt: any, vars: any) => ({ output: `and ${varName}` }),
+      { virtual: true },
+    );
 
     const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions);
-    expect(renderedPrompt).toBe('Test prompt with Dynamic value for var1');
+    expect(renderedPrompt).toBe('Test prompt with Dynamic value for var1 and var2 and var3');
   });
 
   it('should load external json files in renderPrompt and parse the JSON content', async () => {

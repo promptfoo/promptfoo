@@ -1,5 +1,5 @@
-import sys
 import json
+import sys
 
 
 def prompt1(context):

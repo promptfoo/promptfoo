@@ -17,6 +17,7 @@ import type {
   CsvRow,
   ProviderOptions,
   TestCase,
+  TestCaseWithVarsFile,
   TestSuite,
   TestSuiteConfig,
   VarMapping,
@@ -83,9 +84,6 @@ export async function readStandaloneTestsFile(
   });
 }
 
-type TestCaseWithVarsFile = TestCase<
-  Record<string, string | string[] | object> | string | string[]
->;
 export async function readTest(
   test: string | TestCaseWithVarsFile,
   basePath: string = '',
@@ -224,6 +222,26 @@ export async function readTests(
         ret.push(await readTest(globOrTest, basePath));
       }
     }
+  }
+
+  if (
+    ret.some((testCase) => testCase.vars?.assert) &&
+    !process.env.PROMPTFOO_NO_TESTCASE_ASSERT_WARNING
+  ) {
+    logger.warn(dedent`
+      Warning: Found 'assert' key in vars. This is likely a mistake in your configuration.
+
+      'assert' should be *unindented* so it is under the test itself, not vars. For example:
+
+      tests:
+        - vars:
+            foo: bar
+          assert:
+            - type: contains
+              value: "bar"
+
+      To disable this message, set the environment variable PROMPTFOO_NO_TESTCASE_ASSERT_WARNING=1.
+    `);
   }
 
   return ret;

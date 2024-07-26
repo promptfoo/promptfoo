@@ -2,6 +2,8 @@ import packageJson from '../package.json';
 import { fetchWithTimeout } from '../src/fetch';
 import { getLatestVersion, checkForUpdates } from '../src/updates';
 
+jest.mock('../src/logger');
+
 jest.mock('../src/fetch', () => ({
   fetchWithTimeout: jest.fn(),
 }));
@@ -15,7 +17,7 @@ describe('getLatestVersion', () => {
     jest.mocked(fetchWithTimeout).mockResolvedValueOnce({
       ok: true,
       json: async () => ({ latestVersion: '1.1.0' }),
-    });
+    } as never);
 
     const latestVersion = await getLatestVersion();
     expect(latestVersion).toBe('1.1.0');
@@ -24,7 +26,7 @@ describe('getLatestVersion', () => {
   it('should throw an error if the response is not ok', async () => {
     jest.mocked(fetchWithTimeout).mockResolvedValueOnce({
       ok: false,
-    });
+    } as never);
 
     await expect(getLatestVersion()).rejects.toThrow(
       'Failed to fetch package information for promptfoo',
@@ -45,7 +47,7 @@ describe('checkForUpdates', () => {
     jest.mocked(fetchWithTimeout).mockResolvedValueOnce({
       ok: true,
       json: async () => ({ latestVersion: '1.1.0' }),
-    });
+    } as never);
 
     const result = await checkForUpdates();
     expect(result).toBeTruthy();
@@ -55,7 +57,7 @@ describe('checkForUpdates', () => {
     jest.mocked(fetchWithTimeout).mockResolvedValueOnce({
       ok: true,
       json: async () => ({ latestVersion: '1.1.0' }),
-    });
+    } as never);
 
     const result = await checkForUpdates();
     expect(result).toBeTruthy();
@@ -65,7 +67,7 @@ describe('checkForUpdates', () => {
     jest.mocked(fetchWithTimeout).mockResolvedValueOnce({
       ok: true,
       json: async () => ({ latestVersion: packageJson.version }),
-    });
+    } as never);
 
     const result = await checkForUpdates();
     expect(result).toBeFalsy();

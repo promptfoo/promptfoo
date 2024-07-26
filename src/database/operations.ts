@@ -1,10 +1,6 @@
-import Database from 'better-sqlite3';
 import { relations, sql } from 'drizzle-orm';
-import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { text, integer, sqliteTable, primaryKey } from 'drizzle-orm/sqlite-core';
-import path from 'node:path';
-import type { EvaluateSummary, UnifiedConfig } from './types';
-import { getConfigDirectoryPath } from './util';
+import type { EvaluateSummary, UnifiedConfig } from '../types';
 
 // ------------ Prompts ------------
 
@@ -150,21 +146,3 @@ export const llmOutputsRelations = relations(llmOutputs, ({ one }) => ({
   }),
 }));
 */
-
-let dbInstance: ReturnType<typeof drizzle> | null = null;
-
-export function getDbPath() {
-  return path.resolve(getConfigDirectoryPath(true /* createIfNotExists */), 'promptfoo.db');
-}
-
-export function getDbSignalPath() {
-  return path.resolve(getConfigDirectoryPath(true /* createIfNotExists */), 'evalLastWritten');
-}
-
-export function getDb() {
-  if (!dbInstance) {
-    const sqlite = new Database(getDbPath());
-    dbInstance = drizzle(sqlite);
-  }
-  return dbInstance;
-}

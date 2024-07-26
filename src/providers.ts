@@ -58,6 +58,7 @@ import { VoyageEmbeddingProvider } from './providers/voyage';
 import { WebhookProvider } from './providers/webhook';
 import RedteamIterativeProvider from './redteam/providers/iterative';
 import RedteamImageIterativeProvider from './redteam/providers/iterativeImage';
+import RedteamIterativeTreeProvider from './redteam/providers/iterativeTree';
 import type {
   ApiProvider,
   EnvOverrides,
@@ -87,17 +88,24 @@ export async function loadApiProvider(
   let ret: ApiProvider;
   if (
     providerPath.startsWith('file://') &&
-    (providerPath.endsWith('.yaml') || providerPath.endsWith('.yml'))
+    (providerPath.endsWith('.yaml') ||
+      providerPath.endsWith('.yml') ||
+      providerPath.endsWith('.json'))
   ) {
     const filePath = providerPath.slice('file://'.length);
     const modulePath = path.isAbsolute(filePath)
       ? filePath
       : path.join(basePath || process.cwd(), filePath);
-    const yamlContent = yaml.load(fs.readFileSync(modulePath, 'utf8')) as ProviderOptions;
-    invariant(yamlContent, `Provider config ${filePath} is undefined`);
-    invariant(yamlContent.id, `Provider config ${filePath} must have an id`);
-    logger.info(`Loaded provider ${yamlContent.id} from ${filePath}`);
-    ret = await loadApiProvider(yamlContent.id, { ...context, options: yamlContent });
+    let fileContent: ProviderOptions;
+    if (providerPath.endsWith('.json')) {
+      fileContent = JSON.parse(fs.readFileSync(modulePath, 'utf8')) as ProviderOptions;
+    } else {
+      fileContent = yaml.load(fs.readFileSync(modulePath, 'utf8')) as ProviderOptions;
+    }
+    invariant(fileContent, `Provider config ${filePath} is undefined`);
+    invariant(fileContent.id, `Provider config ${filePath} must have an id`);
+    logger.info(`Loaded provider ${fileContent.id} from ${filePath}`);
+    ret = await loadApiProvider(fileContent.id, { ...context, options: fileContent });
   } else if (providerPath === 'echo') {
     ret = {
       id: () => 'echo',
@@ -117,7 +125,7 @@ export async function loadApiProvider(
     const modelName = splits.slice(2).join(':');
 
     if (modelType === 'chat') {
-      ret = new OpenAiChatCompletionProvider(modelName || 'gpt-3.5-turbo', providerOptions);
+      ret = new OpenAiChatCompletionProvider(modelName || 'gpt-4o-mini', providerOptions);
     } else if (modelType === 'embedding' || modelType === 'embeddings') {
       ret = new OpenAiEmbeddingProvider(modelName || 'text-embedding-3-large', providerOptions);
     } else if (modelType === 'completion') {
@@ -343,7 +351,9 @@ export async function loadApiProvider(
   } else if (providerPath.startsWith('http:') || providerPath.startsWith('https:')) {
     ret = new HttpProvider(providerPath, providerOptions);
   } else if (providerPath === 'promptfoo:redteam:iterative') {
-    ret = new RedteamIterativeProvider();
+    ret = new RedteamIterativeProvider(providerOptions.config);
+  } else if (providerPath === 'promptfoo:redteam:iterative:tree') {
+    ret = new RedteamIterativeTreeProvider(providerOptions.config);
   } else if (providerPath === 'promptfoo:redteam:iterative:image') {
     ret = new RedteamImageIterativeProvider();
   } else if (providerPath === 'promptfoo:manual-input') {

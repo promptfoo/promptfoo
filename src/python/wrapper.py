@@ -1,8 +1,8 @@
+import asyncio
+import importlib.util
 import json
 import os
 import sys
-import importlib.util
-import asyncio
 
 
 def call_method(script_path, method_name, *args):

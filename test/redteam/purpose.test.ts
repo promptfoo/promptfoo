@@ -1,6 +1,8 @@
 import { getPurpose } from '../../src/redteam/purpose';
 import { ApiProvider } from '../../src/types';
 
+jest.mock('../../src/logger');
+
 describe('getPurpose', () => {
   let mockProvider: jest.Mocked<ApiProvider>;
   beforeEach(() => {
@@ -44,9 +46,8 @@ describe('getPurpose', () => {
 
   it('should throw an error if purpose is not a string', async () => {
     mockProvider.callApi.mockResolvedValue({ output: 123 });
-
     await expect(getPurpose(mockProvider, ['Some prompt'])).rejects.toThrow(
-      'Expected purpose to be a string',
+      'Invalid system purpose: expected string, got: 123',
     );
   });
 });

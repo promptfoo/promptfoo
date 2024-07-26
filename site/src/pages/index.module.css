@@ -198,10 +198,9 @@
   margin: 4rem 0;
 }
 
-.ctaSection h3 {
+.ctaSection h2 {
   font-size: 2rem;
   margin-bottom: 2rem;
-  color: #333;
 }
 
 @media screen and (max-width: 768px) {

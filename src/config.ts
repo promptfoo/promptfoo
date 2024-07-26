@@ -1,5 +1,4 @@
 import $RefParser from '@apidevtools/json-schema-ref-parser';
-import chalk from 'chalk';
 import * as fs from 'fs';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
@@ -79,8 +78,12 @@ export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<Unifi
 
   if (Array.isArray(rawConfig.providers)) {
     rawConfig.providers.forEach((provider, providerIndex) => {
-      if (typeof provider === 'string') return;
-      if (typeof provider === 'function') return;
+      if (typeof provider === 'string') {
+        return;
+      }
+      if (typeof provider === 'function') {
+        return;
+      }
       if (!provider.config) {
         // Handle when provider is a map
         provider = Object.values(provider)[0] as ProviderOptions;
@@ -104,8 +107,12 @@ export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<Unifi
   // Restore functions and tools parameters
   if (Array.isArray(config.providers)) {
     config.providers.forEach((provider, index) => {
-      if (typeof provider === 'string') return;
-      if (typeof provider === 'function') return;
+      if (typeof provider === 'string') {
+        return;
+      }
+      if (typeof provider === 'function') {
+        return;
+      }
       if (!provider.config) {
         // Handle when provider is a map
         provider = Object.values(provider)[0] as ProviderOptions;
@@ -136,6 +143,9 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
     case '.js':
     case '.cjs':
     case '.mjs':
+    case '.ts':
+    case '.cts':
+    case '.mts':
       return (await importModule(configPath)) as UnifiedConfig;
     default:
       throw new Error(`Unsupported configuration file format: ${ext}`);
@@ -301,7 +311,7 @@ export async function resolveConfigs(
   // Standalone assertion mode
   if (cmdObj.assertions) {
     if (!cmdObj.modelOutputs) {
-      logger.error(chalk.red('You must provide --model-outputs when using --assertions'));
+      logger.error('You must provide --model-outputs when using --assertions');
       process.exit(1);
     }
     const modelOutputs = JSON.parse(
@@ -348,20 +358,20 @@ export async function resolveConfigs(
     derivedMetrics: fileConfig.derivedMetrics || defaultConfig.derivedMetrics,
     outputPath: cmdObj.output || fileConfig.outputPath || defaultConfig.outputPath,
     metadata: fileConfig.metadata || defaultConfig.metadata,
+    redteam: fileConfig.redteam || defaultConfig.redteam,
   };
 
   // Validation
   if (!config.prompts || config.prompts.length === 0) {
-    logger.error(chalk.red('You must provide at least 1 prompt'));
+    logger.error('You must provide at least 1 prompt');
     process.exit(1);
   }
 
   if (!config.providers || config.providers.length === 0) {
-    logger.error(chalk.red('You must specify at least 1 provider (for example, openai:gpt-4o)'));
+    logger.error('You must specify at least 1 provider (for example, openai:gpt-4o)');
     process.exit(1);
   }
   invariant(Array.isArray(config.providers), 'providers must be an array');
-
   // Parse prompts, providers, and tests
   const parsedPrompts = await readPrompts(config.prompts, cmdObj.prompts ? undefined : basePath);
   const parsedProviders = await loadApiProviders(config.providers, {
@@ -401,7 +411,7 @@ export async function resolveConfigs(
   const parsedProviderPromptMap = readProviderPromptMap(config, parsedPrompts);
 
   if (parsedPrompts.length === 0) {
-    logger.error(chalk.red('No prompts found'));
+    logger.error('No prompts found');
     process.exit(1);
   }
 

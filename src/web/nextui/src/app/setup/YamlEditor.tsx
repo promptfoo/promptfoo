@@ -3,6 +3,8 @@ import Editor from 'react-simple-code-editor';
 import { useStore } from '@/state/evalConfig';
 import EditIcon from '@mui/icons-material/Edit';
 import SaveIcon from '@mui/icons-material/Save';
+import UploadIcon from '@mui/icons-material/Upload';
+import { useTheme } from '@mui/material';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
@@ -15,6 +17,7 @@ import './YamlEditor.css';
 import 'prismjs/themes/prism.css';
 
 const YamlEditorComponent: React.FC = () => {
+  const darkMode = useTheme().palette.mode === 'dark';
   const {
     defaultTest,
     setDefaultTest,
@@ -60,6 +63,24 @@ const YamlEditorComponent: React.FC = () => {
     setIsReadOnly(!isReadOnly);
   };
 
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const content = e.target?.result as string;
+        setCode(content);
+        try {
+          const parsed = yaml.load(content, { json: true });
+          handleChange(parsed);
+        } catch (error) {
+          console.error('Error parsing uploaded YAML:', error);
+        }
+      };
+      reader.readAsText(file);
+    }
+  };
+
   React.useEffect(() => {
     const testSuite = {
       defaultTest,
@@ -87,14 +108,20 @@ const YamlEditorComponent: React.FC = () => {
         </Link>{' '}
         to learn more.
       </Typography>
-      <Button
-        variant="text"
-        color="primary"
-        startIcon={isReadOnly ? <EditIcon /> : <SaveIcon />}
-        onClick={toggleReadOnly}
-      >
-        {isReadOnly ? 'Edit YAML' : 'Save'}
-      </Button>
+      <Box display="flex" gap={2} mb={2}>
+        <Button
+          variant="text"
+          color="primary"
+          startIcon={isReadOnly ? <EditIcon /> : <SaveIcon />}
+          onClick={toggleReadOnly}
+        >
+          {isReadOnly ? 'Edit YAML' : 'Save'}
+        </Button>
+        <Button variant="text" color="primary" startIcon={<UploadIcon />} component="label">
+          Upload YAML
+          <input type="file" hidden accept=".yaml,.yml" onChange={handleFileUpload} />
+        </Button>
+      </Box>
       <Editor
         autoCapitalize="off"
         value={code}
@@ -106,6 +133,7 @@ const YamlEditorComponent: React.FC = () => {
         highlight={(code) => highlight(code, languages.yaml)}
         padding={10}
         style={{
+          backgroundColor: darkMode ? '#1e1e1e' : '#fff',
           fontFamily: '"Fira code", "Fira Mono", monospace',
           fontSize: 14,
         }}

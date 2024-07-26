@@ -185,7 +185,7 @@ Example:
 
 ```yaml
 providers:
-  - openai:gpt-3.5-turbo
+  - openai:gpt-4o-mini
   - openai:gpt-4
 assert:
   # Pass if the LLM call costs less than $0.001
@@ -535,7 +535,9 @@ Comparing scores across models may not be meaningful, unless the models have bee
 This makes it easier to include in an aggregate promptfoo score, as higher scores are usually better. In this example, we compare perplexity across multiple GPTs:
 
 ```yaml
-providers: [gpt-4-1106-preview, gpt-3.5-turbo-1106]
+providers:
+  - openai:gpt-4o-mini
+  - openai:gpt-4o
 tests:
   - assert:
       - type: perplexity-score

@@ -13,30 +13,14 @@
               "type": "string"
             },
             {
-              "anyOf": [
+              "allOf": [
                 {
-                  "allOf": [
-                    {
-                      "type": "object",
-                      "properties": {
-                        "label": {
-                          "type": "string"
-                        }
-                      }
+                  "type": "object",
+                  "properties": {
+                    "label": {
+                      "type": "string"
                     }
-                  ]
-                },
-                {
-                  "allOf": [
-                    {
-                      "type": "object",
-                      "properties": {
-                        "label": {
-                          "type": "string"
-                        }
-                      }
-                    }
-                  ]
+                  }
                 }
               ]
             },
@@ -496,6 +480,10 @@
                       },
                       "threshold": {
                         "type": "number"
+                      },
+                      "metadata": {
+                        "type": "object",
+                        "additionalProperties": {}
                       }
                     },
                     "additionalProperties": false
@@ -538,6 +526,9 @@
                     },
                     "threshold": {
                       "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/threshold"
+                    },
+                    "metadata": {
+                      "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/metadata"
                     }
                   },
                   "additionalProperties": false
@@ -574,6 +565,9 @@
             },
             "threshold": {
               "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/threshold"
+            },
+            "metadata": {
+              "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/metadata"
             }
           },
           "additionalProperties": false
@@ -640,8 +634,177 @@
           }
         },
         "metadata": {
+          "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/metadata"
+        },
+        "redteam": {
           "type": "object",
-          "additionalProperties": {}
+          "properties": {
+            "injectVar": {
+              "type": "string",
+              "description": "Variable to inject. Can be a string or array of strings. If string, it's transformed to an array. Inferred from the prompts by default."
+            },
+            "purpose": {
+              "type": "string",
+              "description": "Purpose override string - describes the prompt templates"
+            },
+            "provider": {
+              "type": "string",
+              "description": "Provider used for generating adversarial inputs"
+            },
+            "numTests": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "default": 5,
+              "description": "Number of tests to generate"
+            },
+            "plugins": {
+              "type": "array",
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": [
+                      "competitors",
+                      "contracts",
+                      "debug-access",
+                      "excessive-agency",
+                      "hallucination",
+                      "harmful",
+                      "harmful:chemical-biological-weapons",
+                      "harmful:child-exploitation",
+                      "harmful:copyright-violations",
+                      "harmful:cybercrime",
+                      "harmful:graphic-content",
+                      "harmful:harassment-bullying",
+                      "harmful:hate",
+                      "harmful:illegal-activities",
+                      "harmful:illegal-drugs",
+                      "harmful:indiscriminate-weapons",
+                      "harmful:insults",
+                      "harmful:intellectual-property",
+                      "harmful:misinformation-disinformation",
+                      "harmful:non-violent-crime",
+                      "harmful:privacy",
+                      "harmful:profanity",
+                      "harmful:radicalization",
+                      "harmful:self-harm",
+                      "harmful:sex-crime",
+                      "harmful:sexual-content",
+                      "harmful:specialized-advice",
+                      "harmful:unsafe-practices",
+                      "harmful:violent-crime",
+                      "hijacking",
+                      "overreliance",
+                      "pii",
+                      "pii:api-db",
+                      "pii:direct",
+                      "pii:session",
+                      "pii:social",
+                      "politics",
+                      "rbac",
+                      "shell-injection",
+                      "sql-injection"
+                    ],
+                    "description": "Name of the plugin"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "enum": [
+                          "competitors",
+                          "contracts",
+                          "debug-access",
+                          "excessive-agency",
+                          "hallucination",
+                          "harmful",
+                          "harmful:chemical-biological-weapons",
+                          "harmful:child-exploitation",
+                          "harmful:copyright-violations",
+                          "harmful:cybercrime",
+                          "harmful:graphic-content",
+                          "harmful:harassment-bullying",
+                          "harmful:hate",
+                          "harmful:illegal-activities",
+                          "harmful:illegal-drugs",
+                          "harmful:indiscriminate-weapons",
+                          "harmful:insults",
+                          "harmful:intellectual-property",
+                          "harmful:misinformation-disinformation",
+                          "harmful:non-violent-crime",
+                          "harmful:privacy",
+                          "harmful:profanity",
+                          "harmful:radicalization",
+                          "harmful:self-harm",
+                          "harmful:sex-crime",
+                          "harmful:sexual-content",
+                          "harmful:specialized-advice",
+                          "harmful:unsafe-practices",
+                          "harmful:violent-crime",
+                          "hijacking",
+                          "overreliance",
+                          "pii",
+                          "pii:api-db",
+                          "pii:direct",
+                          "pii:session",
+                          "pii:social",
+                          "politics",
+                          "rbac",
+                          "shell-injection",
+                          "sql-injection"
+                        ],
+                        "description": "Name of the plugin"
+                      },
+                      "numTests": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "description": "Number of tests to generate for this plugin"
+                      }
+                    },
+                    "required": ["id"],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "description": "Plugins to use for redteam generation",
+              "default": []
+            },
+            "strategies": {
+              "type": "array",
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": ["jailbreak", "prompt-injection", "jailbreak:tree"],
+                    "description": "Name of the strategy"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "enum": ["jailbreak", "prompt-injection", "jailbreak:tree"],
+                        "description": "Name of the strategy"
+                      }
+                    },
+                    "required": ["id"],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "description": "Strategies to use for redteam generation.\n\nDefaults to jailbreak, prompt-injection\nSupports jailbreak, prompt-injection, jailbreak:tree",
+              "default": [
+                {
+                  "id": "jailbreak"
+                },
+                {
+                  "id": "prompt-injection"
+                }
+              ]
+            }
+          },
+          "additionalProperties": false
         },
         "evaluateOptions": {
           "type": "object",

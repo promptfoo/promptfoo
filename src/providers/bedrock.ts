@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { BedrockRuntime } from '@aws-sdk/client-bedrock-runtime';
 import dedent from 'dedent';
+import { Agent } from 'http';
 import { getCache, isCacheEnabled } from '../cache';
 import logger from '../logger';
 import type {
@@ -9,8 +10,8 @@ import type {
   EnvOverrides,
   ProviderResponse,
   ProviderEmbeddingResponse,
-} from '../types.js';
-import { parseMessages } from './anthropic';
+} from '../types';
+import { outputFromMessage, parseMessages } from './anthropic';
 import { parseChatPrompt } from './shared';
 
 interface BedrockOptions {
@@ -35,10 +36,19 @@ interface BedrockClaudeLegacyCompletionOptions extends BedrockOptions {
   top_k?: number;
 }
 
-interface BedrockClaudeMessagesCompletionOptions extends BedrockOptions {
+export interface BedrockClaudeMessagesCompletionOptions extends BedrockOptions {
   max_tokens?: number;
   temperature?: number;
   anthropic_version?: string;
+  tools?: {
+    name: string;
+    description: string;
+    input_schema: any;
+  }[];
+  tool_choice?: {
+    type: 'any' | 'auto' | 'tool';
+    name?: string;
+  };
 }
 
 interface BedrockLlamaGenerationOptions extends BedrockOptions {
@@ -197,7 +207,9 @@ export interface LlamaMessage {
 
 // see https://github.com/meta-llama/llama/blob/main/llama/generation.py#L284-L395
 export const formatPromptLlama2Chat = (messages: LlamaMessage[]): string => {
-  if (messages.length === 0) return '';
+  if (messages.length === 0) {
+    return '';
+  }
 
   let formattedPrompt = '<s>';
   let systemMessageIncluded = false;
@@ -296,7 +308,7 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
   };
 };
 
-const BEDROCK_MODEL = {
+export const BEDROCK_MODEL = {
   CLAUDE_COMPLETION: {
     params: (config: BedrockClaudeLegacyCompletionOptions, prompt: string, stop: string[]) => {
       const params: any = {
@@ -340,10 +352,14 @@ const BEDROCK_MODEL = {
         undefined,
         'bedrock-2023-05-31',
       );
+      addConfigParam(params, 'tools', config?.tools, undefined, undefined);
+      addConfigParam(params, 'tool_choice', config?.tool_choice, undefined, undefined);
       addConfigParam(params, 'system', system, undefined, undefined);
       return params;
     },
-    output: (responseJson: any) => responseJson?.content[0].text,
+    output: (responseJson: any) => {
+      return outputFromMessage(responseJson);
+    },
   },
   TITAN_TEXT: {
     params: (config: BedrockTextGenerationOptions, prompt: string, stop: string[]) => {
@@ -544,7 +560,9 @@ export abstract class AwsBedrockGenericProvider {
         try {
           const { NodeHttpHandler } = await import('@smithy/node-http-handler');
           const { ProxyAgent } = await import('proxy-agent');
-          handler = new NodeHttpHandler({ httpsAgent: new ProxyAgent() });
+          handler = new NodeHttpHandler({
+            httpsAgent: new ProxyAgent() as unknown as Agent,
+          });
         } catch (err) {
           throw new Error(
             `The @smithy/node-http-handler package is required as a peer dependency. Please install it in your project or globally.`,

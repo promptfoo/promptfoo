@@ -4,7 +4,7 @@ import yaml from 'js-yaml';
 import { testCaseFromCsvRow } from '../src/csv';
 import { loadApiProvider } from '../src/providers';
 import { readStandaloneTestsFile, readTest, readTests } from '../src/testCases';
-import type { AssertionType, TestCase } from '../src/types';
+import type { AssertionType, TestCase, TestCaseWithVarsFile } from '../src/types';
 
 jest.mock('node-fetch', () => jest.fn());
 jest.mock('proxy-agent', () => ({
@@ -29,7 +29,9 @@ jest.mock('fs', () => ({
   },
 }));
 
-jest.mock('../src/database');
+jest.mock('../src/database', () => ({
+  getDb: jest.fn(),
+}));
 
 describe('readStandaloneTestsFile', () => {
   beforeEach(() => {
@@ -120,7 +122,7 @@ describe('readTest', () => {
   });
 
   it('readTest with TestCase that contains a vars glob input', async () => {
-    const input = {
+    const input: TestCaseWithVarsFile = {
       description: 'Test 1',
       vars: 'vars/*.yaml',
       assert: [{ type: 'equals' as AssertionType, value: 'value1' }],
@@ -311,7 +313,7 @@ describe('readTests', () => {
       .mocked(fs.readFileSync)
       .mockReturnValueOnce(yaml.dump(test1Content))
       .mockReturnValueOnce(yaml.dump(test2Content));
-    jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob]);
+    jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob].flat());
 
     const result = await readTests(testsPaths);
 
@@ -336,7 +338,7 @@ describe('readTests', () => {
       .mocked(fs.readFileSync)
       .mockReturnValueOnce(yaml.dump(test1Content))
       .mockReturnValueOnce(yaml.dump(vars1Content));
-    jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob]);
+    jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob].flat());
 
     const result = await readTests(testsPaths);
 
@@ -351,7 +353,7 @@ describe('readTests', () => {
       assert: [{ type: 'equals', value: 'value1' }],
     };
     jest.mocked(fs.readFileSync).mockReturnValueOnce(yaml.dump(test1Content));
-    jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob]);
+    jest.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob].flat());
 
     const result = await readTests(testsPaths);
 

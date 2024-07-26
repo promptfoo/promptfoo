@@ -12,6 +12,7 @@ import Pagination from '@mui/material/Pagination';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
+import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import TableSortLabel from '@mui/material/TableSortLabel';
@@ -115,7 +116,9 @@ export default function Cols() {
 
   const sortedCols = React.useMemo(() => {
     return filteredCols.sort((a, b) => {
-      if (!sortField) return 0;
+      if (!sortField) {
+        return 0;
+      }
       if (sortField === 'passRate') {
         const aValue = parseFloat(calculatePassRate(a.metrics));
         const bValue = parseFloat(calculatePassRate(b.metrics));
@@ -184,7 +187,7 @@ export default function Cols() {
         </div>
       </Box>
       <Box>This page shows performance metrics for recent evals.</Box>
-      <Box display="flex" flexDirection="row" gap={2} mt={2}>
+      <Box display="flex" flexDirection="row" gap={2} my={2}>
         <Autocomplete
           options={evalIdOptions}
           value={filter.evalId}
@@ -230,113 +233,115 @@ export default function Cols() {
           sx={{ width: 220 }}
         />
       </Box>
-      <Table>
-        <TableHead>
-          <TableRow>
-            <TableCell>
-              <TableSortLabel
-                active={sortField === 'evalId'}
-                direction={sortField === 'evalId' ? sortOrder : 'asc'}
-                onClick={() => handleSort('evalId')}
-              >
-                Eval
-              </TableSortLabel>
-            </TableCell>
-            <TableCell>Dataset</TableCell>
-            <TableCell>Provider</TableCell>
-            <TableCell>Prompt</TableCell>
-            <TableCell>
-              <TableSortLabel
-                active={sortField === 'passRate'}
-                direction={sortField === 'passRate' ? sortOrder : 'asc'}
-                onClick={() => handleSort('passRate')}
-              >
-                Pass Rate %
-              </TableSortLabel>
-            </TableCell>
-            <TableCell>
-              <TableSortLabel
-                active={sortField === 'testPassCount'}
-                direction={sortField === 'testPassCount' ? sortOrder : 'asc'}
-                onClick={() => handleSort('testPassCount')}
-              >
-                Pass Count
-              </TableSortLabel>
-            </TableCell>
-            <TableCell>
-              <TableSortLabel
-                active={sortField === 'testFailCount'}
-                direction={sortField === 'testFailCount' ? sortOrder : 'asc'}
-                onClick={() => handleSort('testFailCount')}
-              >
-                Fail Count
-              </TableSortLabel>
-            </TableCell>
-            <TableCell>
-              <TableSortLabel
-                active={sortField === 'score'}
-                direction={sortField === 'score' ? sortOrder : 'asc'}
-                onClick={() => handleSort('score')}
-              >
-                Raw score
-              </TableSortLabel>
-            </TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {sortedCols.slice((page - 1) * rowsPerPage, page * rowsPerPage).map((col, index) => (
-            <TableRow
-              key={index}
-              hover
-              onClick={() =>
-                setFilter({
-                  ...filter,
-                  evalId: col.evalId,
-                  datasetId: col.datasetId || '',
-                  promptId: col.promptId || '',
-                  provider: col.provider,
-                })
-              }
-            >
+      <TableContainer>
+        <Table>
+          <TableHead>
+            <TableRow>
               <TableCell>
-                <Link href={`/eval?evalId=${col.evalId}`} onClick={(e) => e.stopPropagation()}>
-                  {col.evalId}
-                </Link>
+                <TableSortLabel
+                  active={sortField === 'evalId'}
+                  direction={sortField === 'evalId' ? sortOrder : 'asc'}
+                  onClick={() => handleSort('evalId')}
+                >
+                  Eval
+                </TableSortLabel>
+              </TableCell>
+              <TableCell>Dataset</TableCell>
+              <TableCell>Provider</TableCell>
+              <TableCell>Prompt</TableCell>
+              <TableCell>
+                <TableSortLabel
+                  active={sortField === 'passRate'}
+                  direction={sortField === 'passRate' ? sortOrder : 'asc'}
+                  onClick={() => handleSort('passRate')}
+                >
+                  Pass Rate %
+                </TableSortLabel>
               </TableCell>
               <TableCell>
-                <Link href={`/datasets?id=${col.datasetId}`} onClick={(e) => e.stopPropagation()}>
-                  {col.datasetId?.slice(0, 6)}
-                </Link>
-              </TableCell>
-              <TableCell>{col.provider}</TableCell>
-              <TableCell>
-                <Link href={`/prompts?id=${col.promptId}`} onClick={(e) => e.stopPropagation()}>
-                  [{col.promptId?.slice(0, 6)}]
-                </Link>{' '}
-                {col.raw}
-              </TableCell>
-              <TableCell>{calculatePassRate(col.metrics)}</TableCell>
-              <TableCell>
-                {col.metrics?.testPassCount == null ? '-' : `${col.metrics.testPassCount}`}
+                <TableSortLabel
+                  active={sortField === 'testPassCount'}
+                  direction={sortField === 'testPassCount' ? sortOrder : 'asc'}
+                  onClick={() => handleSort('testPassCount')}
+                >
+                  Pass Count
+                </TableSortLabel>
               </TableCell>
               <TableCell>
-                {col.metrics?.testFailCount == null ? '-' : `${col.metrics.testFailCount}`}
+                <TableSortLabel
+                  active={sortField === 'testFailCount'}
+                  direction={sortField === 'testFailCount' ? sortOrder : 'asc'}
+                  onClick={() => handleSort('testFailCount')}
+                >
+                  Fail Count
+                </TableSortLabel>
               </TableCell>
               <TableCell>
-                {col.metrics?.score == null ? '-' : col.metrics.score?.toFixed(2)}
+                <TableSortLabel
+                  active={sortField === 'score'}
+                  direction={sortField === 'score' ? sortOrder : 'asc'}
+                  onClick={() => handleSort('score')}
+                >
+                  Raw score
+                </TableSortLabel>
               </TableCell>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-      {Math.ceil(filteredCols.length / rowsPerPage) > 1 && (
-        <Pagination
-          count={Math.ceil(sortedCols.length / rowsPerPage)}
-          page={page}
-          onChange={(event, value) => setPage(value)}
-          sx={{ pt: 2, pb: 4, display: 'flex', justifyContent: 'center' }}
-        />
-      )}
+          </TableHead>
+          <TableBody>
+            {sortedCols.slice((page - 1) * rowsPerPage, page * rowsPerPage).map((col, index) => (
+              <TableRow
+                key={index}
+                hover
+                onClick={() =>
+                  setFilter({
+                    ...filter,
+                    evalId: col.evalId,
+                    datasetId: col.datasetId || '',
+                    promptId: col.promptId || '',
+                    provider: col.provider,
+                  })
+                }
+              >
+                <TableCell>
+                  <Link href={`/eval?evalId=${col.evalId}`} onClick={(e) => e.stopPropagation()}>
+                    {col.evalId}
+                  </Link>
+                </TableCell>
+                <TableCell>
+                  <Link href={`/datasets?id=${col.datasetId}`} onClick={(e) => e.stopPropagation()}>
+                    {col.datasetId?.slice(0, 6)}
+                  </Link>
+                </TableCell>
+                <TableCell>{col.provider}</TableCell>
+                <TableCell>
+                  <Link href={`/prompts?id=${col.promptId}`} onClick={(e) => e.stopPropagation()}>
+                    [{col.promptId?.slice(0, 6)}]
+                  </Link>{' '}
+                  {col.raw}
+                </TableCell>
+                <TableCell>{calculatePassRate(col.metrics)}</TableCell>
+                <TableCell>
+                  {col.metrics?.testPassCount == null ? '-' : `${col.metrics.testPassCount}`}
+                </TableCell>
+                <TableCell>
+                  {col.metrics?.testFailCount == null ? '-' : `${col.metrics.testFailCount}`}
+                </TableCell>
+                <TableCell>
+                  {col.metrics?.score == null ? '-' : col.metrics.score?.toFixed(2)}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+        {Math.ceil(filteredCols.length / rowsPerPage) > 1 && (
+          <Pagination
+            count={Math.ceil(sortedCols.length / rowsPerPage)}
+            page={page}
+            onChange={(event, value) => setPage(value)}
+            sx={{ pt: 2, pb: 4, display: 'flex', justifyContent: 'center' }}
+          />
+        )}
+      </TableContainer>
     </Box>
   );
 }

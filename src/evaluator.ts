@@ -13,7 +13,7 @@ import cliState from './cliState';
 import { importModule } from './esm';
 import logger from './logger';
 import { maybeEmitAzureOpenAiWarning } from './providers/azureopenaiUtil';
-import { runPython } from './python/wrapper';
+import { runPython } from './python/pythonUtils';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
 import type {
@@ -154,6 +154,11 @@ export async function renderPrompt(
       logger.debug(`Loading var ${varName} from file: ${filePath}`);
       switch (fileExtension) {
         case 'js':
+        case 'cjs':
+        case 'mjs':
+        case 'ts':
+        case 'cts':
+        case 'mts':
           const javascriptOutput = (await (
             await importModule(filePath)
           )(varName, basePrompt, vars, provider)) as {
@@ -593,6 +598,11 @@ class Evaluator {
                 ...testSuite.defaultTest?.options,
                 ...test.options,
               },
+              assert: [
+                // defaultTest.assert is omitted because it will be added to each test case later
+                ...(data.assert || []),
+                ...(test.assert || []),
+              ],
             };
           });
           // Add scenario tests to tests

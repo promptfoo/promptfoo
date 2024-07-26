@@ -1,6 +1,8 @@
 import * as React from 'react';
 import './CustomMetrics.css';
 
+const NUM_METRICS_TO_DISPLAY_ABOVE_FOLD = 10;
+
 interface CustomMetricsProps {
   lookup: Record<string, number>;
   metricTotals?: Record<string, number>;
@@ -12,12 +14,17 @@ const CustomMetrics: React.FC<CustomMetricsProps> = ({
   metricTotals,
   onSearchTextChange,
 }) => {
+  const [showAll, setShowAll] = React.useState(false);
   if (!lookup || !Object.keys(lookup).length) {
     return null;
   }
+
+  const metrics = Object.entries(lookup);
+  const displayMetrics = showAll ? metrics : metrics.slice(0, NUM_METRICS_TO_DISPLAY_ABOVE_FOLD);
+
   return (
     <div className="custom-metric-container">
-      {Object.entries(lookup).map(([metric, score]) =>
+      {displayMetrics.map(([metric, score]) =>
         metric && typeof score !== 'undefined' ? (
           <span
             key={metric}
@@ -35,6 +42,11 @@ const CustomMetrics: React.FC<CustomMetricsProps> = ({
             )}
           </span>
         ) : null,
+      )}
+      {metrics.length > 10 && (
+        <span className="clickable" onClick={() => setShowAll(!showAll)}>
+          {showAll ? 'Show less' : 'Show more...'}
+        </span>
       )}
     </div>
   );

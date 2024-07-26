@@ -40,7 +40,7 @@ This will create a `promptfooconfig.yaml` file in your current directory.
 
    ```yaml
    providers:
-     - openai:gpt-3.5-turbo
+     - openai:gpt-4o-mini
      - openai:gpt-4
    ```
 
@@ -100,7 +100,7 @@ See the [Configuration docs](/docs/configuration/guide) for a detailed guide.
 
 ```yaml
 prompts: [prompts.txt]
-providers: [openai:gpt-3.5-turbo]
+providers: [openai:gpt-4o-mini]
 tests:
   - description: First test case - automatic review
     vars:
@@ -209,13 +209,13 @@ In [this next example](https://github.com/promptfoo/promptfoo/tree/main/examples
 prompts: [prompt1.txt, prompt2.txt]
 
 # Set the LLMs we want to test
-providers: [openai:gpt-3.5-turbo, openai:gpt-4]
+providers: [openai:gpt-4o-mini, openai:gpt-4]
 ```
 
 A simple `npx promptfoo@latest eval` will run the example. Also note that you can override parameters directly from the command line. For example, this command:
 
 ```
-npx promptfoo@latest eval -p prompts.txt -r openai:gpt-3.5-turbo openai:gpt-4 -o output.html
+npx promptfoo@latest eval -p prompts.txt -r openai:gpt-4o-mini openai:gpt-4o -o output.html
 ```
 
 Produces this HTML table:
@@ -226,7 +226,7 @@ Full setup and output [here](https://github.com/promptfoo/promptfoo/tree/main/ex
 
 A similar approach can be used to run other model comparisons. For example, you can:
 
-- Compare same models with different temperatures (see [GPT 3.5 temperature comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/gpt-3.5-temperature-comparison))
+- Compare same models with different temperatures (see [GPT temperature comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/gpt-3.5-temperature-comparison))
 - Compare Llama vs. GPT (see [Llama vs GPT benchmark](/docs/guides/compare-llama2-vs-gpt))
 - Compare Retrieval-Augmented Generation (RAG) with LangChain vs. regular GPT-4 (see [LangChain example](https://promptfoo.dev/docs/configuration/testing-llm-chains))
 
