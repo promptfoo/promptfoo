@@ -2,7 +2,7 @@
   "name": "promptfoo",
   "description": "LLM eval & testing toolkit",
   "author": "Ian Webster",
-  "version": "0.73.5",
+  "version": "0.73.6",
   "license": "MIT",
   "type": "commonjs",
   "repository": {
@@ -56,6 +56,12 @@
     "prepublishOnly": "npm run build:clean && npm run build",
     "sentry:sourcemaps": "sentry-cli sourcemaps inject --org promptfoo --project cli ./dist && sentry-cli sourcemaps upload --org promptfoo --project cli ./dist  || true"
   },
+  "overrides": {
+    "uri-js": "npm:uri-js-replace",
+    "node-fetch": {
+      "whatwg-url": "14.x"
+    }
+  },
   "peerDependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.602.0",
     "@azure/identity": "^4.0.0",
@@ -73,7 +79,7 @@
     "@libsql/client": "^0.7.0",
     "@sentry/cli": "^2.33.0",
     "@swc/cli": "^0.4.0",
-    "@swc/core": "^1.7.0",
+    "@swc/core": "^1.7.1",
     "@swc/jest": "^0.2.36",
     "@trivago/prettier-plugin-sort-imports": "^4.3.0",
     "@types/async": "^3.2.24",
@@ -121,7 +127,7 @@
     "@sentry/node": "^8.20.0",
     "@sentry/profiling-node": "^8.20.0",
     "ajv": "^8.17.1",
-    "ajv-formats": "^2.1.1",
+    "ajv-formats": "^3.0.1",
     "async": "^3.2.5",
     "better-sqlite3": "^11.1.2",
     "cache-manager": "^4.1.0",

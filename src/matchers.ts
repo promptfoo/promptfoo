@@ -307,8 +307,8 @@ export async function matchesClassification(
 }
 
 export async function matchesLlmRubric(
-  expected: string,
-  output: string,
+  rubric: string,
+  llmOutput: string,
   grading?: GradingConfig,
   vars?: Record<string, string | object>,
 ): Promise<Omit<GradingResult, 'assertion'>> {
@@ -321,8 +321,8 @@ export async function matchesLlmRubric(
   const rubricPrompt = grading?.rubricPrompt || DEFAULT_GRADING_PROMPT;
   invariant(typeof rubricPrompt === 'string', 'rubricPrompt must be a string');
   const prompt = nunjucks.renderString(rubricPrompt, {
-    output: JSON.stringify(output).slice(1, -1),
-    rubric: JSON.stringify(expected).slice(1, -1),
+    output: JSON.stringify(llmOutput).slice(1, -1),
+    rubric: JSON.stringify(rubric).slice(1, -1),
     ...fromVars(vars),
   });
 

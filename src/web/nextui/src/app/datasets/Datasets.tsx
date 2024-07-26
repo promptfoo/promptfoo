@@ -42,8 +42,12 @@ export default function Datasets() {
         .then((response) => response.json())
         .then((data) => {
           const sortedData = [...data.data].sort((a, b) => {
-            if (sortField === null) return 0;
-            if (sortOrder === 'asc') return a[sortField] > b[sortField] ? 1 : -1;
+            if (sortField === null) {
+              return 0;
+            }
+            if (sortOrder === 'asc') {
+              return a[sortField] > b[sortField] ? 1 : -1;
+            }
             return a[sortField] < b[sortField] ? 1 : -1;
           });
           setTestCases(sortedData);

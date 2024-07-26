@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { redteamConfigSchema } from '../redteam/types';
+import { RedteamAssertionTypes, redteamConfigSchema } from './redteam/types';
 
 export const CommandLineOptionsSchema = z.object({
   // Shared with TestSuite
@@ -545,7 +545,10 @@ export type BaseAssertionTypes = z.infer<typeof BaseAssertionTypesSchema>;
 
 type NotPrefixed<T extends string> = `not-${T}`;
 
-export type AssertionType = BaseAssertionTypes | NotPrefixed<BaseAssertionTypes>;
+export type AssertionType =
+  | BaseAssertionTypes
+  | NotPrefixed<BaseAssertionTypes>
+  | RedteamAssertionTypes;
 
 const AssertionSetSchema = z.object({
   type: z.literal('assert-set'),

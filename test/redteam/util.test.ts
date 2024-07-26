@@ -1,5 +1,7 @@
 import { retryWithDeduplication, sampleArray } from '../../src/redteam/util';
 
+jest.mock('../../src/logger');
+
 describe('retryWithDeduplication', () => {
   it('should collect unique items until target count is reached', async () => {
     const operation = jest

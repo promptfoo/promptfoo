@@ -156,6 +156,9 @@ export async function renderPrompt(
         case 'js':
         case 'cjs':
         case 'mjs':
+        case 'ts':
+        case 'cts':
+        case 'mts':
           const javascriptOutput = (await (
             await importModule(filePath)
           )(varName, basePrompt, vars, provider)) as {

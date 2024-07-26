@@ -47,7 +47,7 @@ prompts:
   - 'Act as a travel agent and help the user plan their trip. User query: {{query}}'
 
 providers:
-  - openai:gpt-3.5-turbo
+  - openai:gpt-4o-mini
 ```
 
 :::tip

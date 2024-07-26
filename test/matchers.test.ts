@@ -23,6 +23,7 @@ import type {
 import { TestGrader } from './utils';
 
 jest.mock('../src/esm');
+jest.mock('../src/logger');
 
 const Grader = new TestGrader();
 
@@ -660,7 +661,7 @@ describe('matchesAnswerRelevance', () => {
           tokenUsage: { total: 5, prompt: 2, completion: 3 },
         });
       }
-      return Promise.reject(new Error('Unexpected input ' + text));
+      return Promise.reject(new Error(`Unexpected input ${text}`));
     });
 
     await expect(matchesAnswerRelevance(input, output, threshold)).resolves.toEqual({

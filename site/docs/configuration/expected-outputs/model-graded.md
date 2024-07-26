@@ -53,7 +53,7 @@ Here's an example output that indicates PASS/FAIL based on LLM assessment ([see 
 You can use test `vars` in the LLM rubric. This example uses the `question` variable to help detect hallucinations:
 
 ```yaml
-providers: [openai:gpt-3.5-turbo]
+providers: [openai:gpt-4o-mini]
 prompts: [prompt1.txt, prompt2.txt]
 defaultTest:
   assert:
@@ -148,7 +148,7 @@ By default, model-graded asserts use GPT-4 for grading. If you do not have acces
 1. Using the `--grader` CLI option:
 
    ```
-   promptfoo eval --grader openai:gpt-3.5-turbo
+   promptfoo eval --grader openai:gpt-4o-mini
    ```
 
 2. Using `test.options` or `defaultTest.options` on a per-test or testsuite basis:
@@ -156,7 +156,7 @@ By default, model-graded asserts use GPT-4 for grading. If you do not have acces
    ```yaml
    defaultTest:
      options:
-       provider: openai:gpt-3.5-turbo
+       provider: openai:gpt-4o-mini
    tests:
      - description: Use LLM to evaluate output
        assert:
@@ -172,14 +172,14 @@ By default, model-graded asserts use GPT-4 for grading. If you do not have acces
        assert:
          - type: llm-rubric
            value: Is spoken like a pirate
-           provider: openai:gpt-3.5-turbo
+           provider: openai:gpt-4o-mini
    ```
 
 Use the `provider.config` field to set custom parameters:
 
 ```yaml
 provider:
-  - id: openai:gpt-3.5-turbo
+  - id: openai:gpt-4o-mini
     config:
       temperature: 0
 ```
