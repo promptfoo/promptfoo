@@ -751,7 +751,7 @@ describe('call provider apis', () => {
           inputArgs.concat([
             'Test prompt',
             '{"config":{"some_config_val":42}}',
-            '{"vars":{"var1":"value 1","var2":"value 2 \\"with some double \\"quotes\\"\\""}}',
+            '{"prompt":{"label":"Test prompt","raw":"Test prompt"},"vars":{"var1":"value 1","var2":"value 2 \\"with some double \\"quotes\\"\\""}}',
           ]),
         ),
         expect.any(Object),
@@ -1031,7 +1031,13 @@ config:
   });
 
   it('loadApiProvider with promptfoo:redteam:iterative:image', async () => {
-    const provider = await loadApiProvider('promptfoo:redteam:iterative:image');
+    const provider = await loadApiProvider('promptfoo:redteam:iterative:image', {
+      options: {
+        config: {
+          injectVar: 'imageUrl',
+        },
+      },
+    });
     expect(provider).toBeInstanceOf(RedteamImageIterativeProvider);
     expect(provider.id()).toBe('promptfoo:redteam:iterative:image');
   });
