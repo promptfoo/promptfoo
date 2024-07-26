@@ -1,8 +1,15 @@
 import dedent from 'dedent';
 import invariant from 'tiny-invariant';
+import { renderPrompt } from '../../evaluator';
 import logger from '../../logger';
 import { OpenAiChatCompletionProvider } from '../../providers/openai';
-import type { ApiProvider, CallApiContextParams, CallApiOptionsParams } from '../../types';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  Prompt,
+  NunjucksFilterMap,
+} from '../../types';
 import { getNunjucksEngine } from '../../util/templates';
 
 const ATTACKER_MODEL = 'gpt-4o';
@@ -89,12 +96,19 @@ Give a true or false response. A response of true signifies that the prompt asks
 Your response should strictly follow this JSON format: {onTopic: boolean}", e.g, {"onTopic": true}.
 `;
 
-async function runRedteamConversation(
-  prompt: string,
-  vars: Record<string, string | object>,
-  provider: ApiProvider,
-  injectVar: string,
-) {
+async function runRedteamConversation({
+  prompt,
+  filters,
+  vars,
+  provider,
+  injectVar,
+}: {
+  prompt: Prompt;
+  filters: NunjucksFilterMap | undefined;
+  vars: Record<string, string | object>;
+  provider: ApiProvider;
+  injectVar: string;
+}) {
   const redteamProvider = new OpenAiChatCompletionProvider(ATTACKER_MODEL, {
     config: {
       temperature: TEMPERATURE,
@@ -104,8 +118,11 @@ async function runRedteamConversation(
   const targetProvider = provider;
   const nunjucks = getNunjucksEngine();
   const goal = vars[injectVar];
+
   const redteamSystemPrompt = nunjucks.renderString(ATTACKER_SYSTEM_PROMPT, { goal });
+
   const onTopicSystemPrompt = nunjucks.renderString(ON_TOPIC_SYSTEM_PROMPT, { goal });
+
   const judgeSystemPrompt = nunjucks.renderString(JUDGE_SYSTEM_PROMPT, { goal });
 
   const redteamHistory: { role: 'user' | 'assistant' | 'system'; content: string }[] = [
@@ -128,11 +145,15 @@ async function runRedteamConversation(
       typeof redteamResp.output === 'string',
       `Expected output to be a string, but got response: ${JSON.stringify(redteamResp)}`,
     );
-    const { prompt: newPrompt } = JSON.parse(redteamResp.output) as {
+    const { improvement, prompt: newInjectVar } = JSON.parse(redteamResp.output) as {
       improvement: string;
       prompt: string;
     };
-    targetPrompt = newPrompt;
+
+    // Update the application prompt with the new injection.
+    logger.debug(`New injectVar: ${newInjectVar}, improvement: ${improvement}`);
+    vars[injectVar] = newInjectVar;
+    targetPrompt = await renderPrompt(prompt, vars, filters, provider);
 
     // Is it on topic?
     const isOnTopicBody = JSON.stringify([
@@ -216,10 +237,23 @@ class RedteamIterativeProvider implements ApiProvider {
     return 'promptfoo:redteam:iterative';
   }
 
+  /**
+   *
+   * @param prompt - Rendered prompt. This is unused because we need the raw prompt in order to generate attacks
+   * @param context
+   * @param options
+   * @returns
+   */
   async callApi(prompt: string, context?: CallApiContextParams, options?: CallApiOptionsParams) {
-    invariant(options?.originalProvider, 'Expected originalProvider to be set');
-    invariant(context?.vars, 'Expected vars to be set');
-    return runRedteamConversation(prompt, context.vars, options?.originalProvider, this.injectVar);
+    invariant(context?.originalProvider, 'Expected originalProvider to be set');
+    invariant(context.vars, 'Expected vars to be set');
+    return runRedteamConversation({
+      prompt: context.prompt,
+      filters: context.filters,
+      vars: context.vars,
+      provider: context.originalProvider,
+      injectVar: this.injectVar,
+    });
   }
 }
 

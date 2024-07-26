@@ -294,7 +294,7 @@ class Evaluator {
 
   async runEval({
     provider,
-    prompt,
+    prompt, // raw prompt
     test,
     delay,
     nunjucksFilters: filters,
@@ -355,15 +355,20 @@ class Evaluator {
         response = await ((test.provider as ApiProvider) || provider).callApi(
           renderedPrompt,
           {
+            // Always included
             vars,
 
-            // These are removed in python and script providers, but every Javascript provider gets them
+            // Part of these may be removed in python and script providers, but every Javascript provider gets them
+            prompt,
+            filters,
+            originalProvider: provider,
+
+            // All of these are removed in python and script providers, but every Javascript provider gets them
             logger,
             fetchWithCache,
             getCache,
           },
           {
-            originalProvider: provider,
             includeLogProbs: test.assert?.some((a) => a.type === 'perplexity'),
           },
         );

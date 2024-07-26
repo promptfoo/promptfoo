@@ -733,6 +733,10 @@ describe('call provider apis', () => {
         },
       });
       const result = await provider.callApi('Test prompt', {
+        prompt: {
+          label: 'Test prompt',
+          raw: 'Test prompt',
+        },
         vars: {
           var1: 'value 1',
           var2: 'value 2 "with some double "quotes""',
