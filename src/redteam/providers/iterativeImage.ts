@@ -1,6 +1,6 @@
 import dedent from 'dedent';
 import invariant from 'tiny-invariant';
-import { renderPrompt } from '../../evaluator';
+import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import type {
   ApiProvider,
