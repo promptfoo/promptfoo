@@ -851,7 +851,7 @@ export const TestSuiteConfigSchema = z.object({
 
   // Extensions that are called at various plugin points
   extensions: z.array(z.string()).optional(),
-  
+
   // Any other information about this configuration.
   metadata: MetadataSchema.optional(),
 

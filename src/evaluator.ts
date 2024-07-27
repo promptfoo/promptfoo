@@ -328,14 +328,11 @@ class Evaluator {
       for (const extension of testSuite.extensions) {
         logger.info(`Running extension ${extension}`);
         if (extension.startsWith('python:')) {
-          const filePath = path.resolve(cliState.basePath || '', extension.slice('python:'.length)); 
-          await runPython(filePath, 'extension_hook', [
-            hookName,
-            context,
-          ])
+          const filePath = path.resolve(cliState.basePath || '', extension.slice('python:'.length));
+          await runPython(filePath, 'extension_hook', [hookName, context]);
         }
       }
-    }
+    };
 
     if (options.generateSuggestions) {
       // TODO(ian): Move this into its own command/file
@@ -544,7 +541,7 @@ class Evaluator {
       }
     }
 
-    await runExtensionHook('evals_prepared', { 'evals': runEvalOptions, 'suite': testSuite });
+    await runExtensionHook('evals_prepared', { evals: runEvalOptions, suite: testSuite });
 
     // Set up table...
     const isTest = tests.some((t) => !!t.assert);
@@ -876,7 +873,12 @@ class Evaluator {
       progressBar.stop();
     }
 
-    await runExtensionHook('evals_ran', { 'evals': runEvalOptions, 'results': results, 'table': table, 'suite': testSuite });
+    await runExtensionHook('evals_ran', {
+      evals: runEvalOptions,
+      results: results,
+      table: table,
+      suite: testSuite,
+    });
 
     telemetry.record('eval_ran', {
       numPrompts: prompts.length,
