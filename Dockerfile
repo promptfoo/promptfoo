@@ -66,7 +66,7 @@ RUN mkdir -p /app/src/web/nextui
 RUN chown nextjs:nodejs /app/src/web/nextui
 
 # Install curl for the healthcheck
-RUN apk add --no-cache curl
+RUN apk add --no-cache curl sqlite-dev
 
 # Create a script to write environment variables to .env file
 RUN echo -e '#!/bin/sh\n\

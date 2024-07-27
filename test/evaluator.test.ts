@@ -1,13 +1,8 @@
 import * as fs from 'fs';
 import glob from 'glob';
 import * as path from 'path';
-import {
-  evaluate,
-  renderPrompt,
-  resolveVariables,
-  generateVarCombinations,
-  isAllowedPrompt,
-} from '../src/evaluator';
+import { evaluate, generateVarCombinations, isAllowedPrompt } from '../src/evaluator';
+import { renderPrompt, resolveVariables } from '../src/evaluatorHelpers';
 import type { ApiProvider, TestSuite, Prompt } from '../src/types';
 
 jest.mock('node-fetch', () => jest.fn());
