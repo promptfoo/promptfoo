@@ -1,3 +1,5 @@
+import dedent from 'dedent';
+
 /**
  * This module exports various prompts used for model graded evaluation.
  * They are imported and re-exported by the `prompts` module.
@@ -8,17 +10,17 @@ export * from './external/ragas';
 export const DEFAULT_GRADING_PROMPT = JSON.stringify([
   {
     role: 'system',
-    content: `You are grading output according to a user-specified rubric. If the statement in the rubric is true, then the output passes the test. You respond with a JSON object with this structure: {pass: boolean; reason: string;}.
+    content: dedent`You are grading output according to a user-specified rubric. If the statement in the rubric is true, then the output passes the test. You respond with a JSON object with this structure: {pass: boolean; reason: string;}.
 
-Examples:
+    Examples:
 
-Output: Hello world
-Rubric: Content contains a greeting
-{"reason": "the content contains the word 'world'", "pass": true, "score": 1.0}
+    Output: Hello world
+    Rubric: Content contains a greeting
+    {"reason": "the content contains the word 'world'", "pass": true, "score": 1.0}
 
-Output: Avast ye swabs, repel the invaders!
-Rubric: Does not speak like a pirate
-{"reason": "'avast ye' is a common pirate term", "pass": false, "score": 0.0}`,
+    Output: Avast ye swabs, repel the invaders!
+    Rubric: Does not speak like a pirate
+    {"reason": "'avast ye' is a common pirate term", "pass": false, "score": 0.0}`,
   },
   {
     role: 'user',
