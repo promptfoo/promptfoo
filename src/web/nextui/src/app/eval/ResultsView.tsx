@@ -62,8 +62,6 @@ interface ResultsViewProps {
   defaultEvalId?: string;
 }
 
-const LOCAL_STORAGE_KEY_PREFIX = 'resultsViewSelectedColumns';
-
 // Utility function to safely parse JSON
 const safeJSONParse = (str: string | null): string[] | null => {
   if (!str) {
@@ -269,7 +267,7 @@ export default function ResultsView({
   );
 
   const localStorageKey = useMemo(
-    () => `${LOCAL_STORAGE_KEY_PREFIX}_${evalId || defaultEvalId || 'default'}`,
+    () => `resultsViewSelectedColumns_${evalId || defaultEvalId || 'default'}`,
     [evalId, defaultEvalId],
   );
 
