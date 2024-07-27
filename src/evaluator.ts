@@ -11,6 +11,7 @@ import cliState from './cliState';
 import { renderPrompt } from './evaluatorHelpers';
 import logger from './logger';
 import { maybeEmitAzureOpenAiWarning } from './providers/azureopenaiUtil';
+import { runPython } from './python/pythonUtils';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
 import type {
