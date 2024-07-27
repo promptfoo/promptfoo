@@ -1,10 +1,12 @@
 prompts:
-  - prompts.txt
+  - 'Rephrase this in French: {{body}}'
+  - 'Rephrase this like a pirate: {{body}}'
+
+providers:
+  - openai:gpt-4o-mini
 
 extensions:
   - python:customPlugin.py
-
-providers: [openai:gpt-4o]
 
 tests:
   - vars:
