@@ -4,7 +4,6 @@ import { ToastProvider } from '@/app/contexts/ToastContext';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import ResultsView from './ResultsView';
 
-// Mock the stores
 const mockRecentEvals = [
   {
     id: '1',
@@ -43,14 +42,12 @@ vi.mock('./store', () => ({
   })),
 }));
 
-// Update the mock for @/state/evalConfig
 vi.mock('@/state/evalConfig', () => ({
   useStore: vi.fn(() => ({
     setStateFromConfig: vi.fn(),
   })),
 }));
 
-// Mock Next.js router
 vi.mock('next/navigation', () => ({
   useRouter: () => ({
     push: vi.fn(),
@@ -60,7 +57,6 @@ vi.mock('next/navigation', () => ({
   }),
 }));
 
-// Wrap the component with ToastProvider
 const renderWithToastProvider = (ui: React.ReactNode) => {
   return render(<ToastProvider>{ui}</ToastProvider>);
 };
