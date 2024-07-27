@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { useEffect, useCallback, useMemo } from 'react';
 import { REMOTE_API_BASE_URL, REMOTE_APP_BASE_URL } from '@/../../../constants';
 import { getApiBaseUrl } from '@/api';
 import { useStore as useMainStore } from '@/state/evalConfig';
@@ -60,6 +61,19 @@ interface ResultsViewProps {
   onRecentEvalSelected: (file: string) => void;
   defaultEvalId?: string;
 }
+
+const LOCAL_STORAGE_KEY_PREFIX = 'resultsViewSelectedColumns';
+
+// Utility function to safely parse JSON
+const safeJSONParse = (str: string | null): string[] | null => {
+  if (!str) return null;
+  try {
+    const parsed = JSON.parse(str);
+    return Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+};
 
 export default function ResultsView({
   recentEvals,
@@ -237,29 +251,64 @@ export default function ResultsView({
   const [configModalOpen, setConfigModalOpen] = React.useState(false);
   const [viewSettingsModalOpen, setViewSettingsModalOpen] = React.useState(false);
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
-  const [selectedColumns, setSelectedColumns] = React.useState<string[]>(
-    columnData.map((col) => col.value),
-  );
+  const [selectedColumns, setSelectedColumns] = React.useState<string[]>([]);
+  const [debouncedSelectedColumns] = useDebounce(selectedColumns, 300);
 
-  const handleChange = (event: SelectChangeEvent<typeof selectedColumns>) => {
-    const {
-      target: { value },
-    } = event;
-    setSelectedColumns(typeof value === 'string' ? value.split(',') : value);
-
-    const allColumns = [
+  const allColumns = useMemo(
+    () => [
       ...(hasAnyDescriptions ? ['description'] : []),
       ...head.vars.map((_, idx) => `Variable ${idx + 1}`),
       ...head.prompts.map((_, idx) => `Prompt ${idx + 1}`),
-    ];
-    const newColumnVisibility: VisibilityState = {};
-    allColumns.forEach((col) => {
-      newColumnVisibility[col] = (typeof value === 'string' ? value.split(',') : value).includes(
-        col,
-      );
-    });
-    setColumnVisibility(newColumnVisibility);
-  };
+    ],
+    [hasAnyDescriptions, head.vars, head.prompts],
+  );
+
+  const localStorageKey = useMemo(
+    () => `${LOCAL_STORAGE_KEY_PREFIX}_${evalId || defaultEvalId || 'default'}`,
+    [evalId, defaultEvalId],
+  );
+
+  const updateColumnVisibility = useCallback(
+    (columns: string[]) => {
+      const newColumnVisibility: VisibilityState = {};
+      allColumns.forEach((col) => {
+        newColumnVisibility[col] = columns.includes(col);
+      });
+      setColumnVisibility(newColumnVisibility);
+    },
+    [allColumns],
+  );
+
+  useEffect(() => {
+    const loadSelectedColumns = () => {
+      const storedColumns = safeJSONParse(localStorage.getItem(localStorageKey));
+      if (storedColumns && storedColumns.every((col) => allColumns.includes(col))) {
+        setSelectedColumns(storedColumns);
+        updateColumnVisibility(storedColumns);
+      } else {
+        setSelectedColumns(allColumns);
+        updateColumnVisibility(allColumns);
+      }
+    };
+
+    loadSelectedColumns();
+  }, [allColumns, updateColumnVisibility, localStorageKey]);
+
+  useEffect(() => {
+    localStorage.setItem(localStorageKey, JSON.stringify(debouncedSelectedColumns));
+  }, [debouncedSelectedColumns, localStorageKey]);
+
+  const handleChange = useCallback(
+    (event: SelectChangeEvent<typeof selectedColumns>) => {
+      const newSelectedColumns = Array.isArray(event.target.value)
+        ? event.target.value
+        : event.target.value.split(',');
+
+      setSelectedColumns(newSelectedColumns);
+      updateColumnVisibility(newSelectedColumns);
+    },
+    [updateColumnVisibility],
+  );
 
   const handleDescriptionClick = async () => {
     invariant(config, 'Config must be loaded before clicking its description');
