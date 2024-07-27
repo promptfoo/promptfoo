@@ -98,6 +98,19 @@ export function generateVarCombinations(
   return combinations;
 }
 
+async function runExtensionHook(hookName: string, context: any, extensions?: string[]) {
+  if (!extensions || extensions.length === 0) {
+    return;
+  }
+  for (const extension of extensions) {
+    logger.info(`Running extension ${extension}`);
+    if (extension.startsWith('python:')) {
+      const filePath = path.resolve(cliState.basePath || '', extension.slice('python:'.length));
+      await runPython(filePath, 'extension_hook', [hookName, context]);
+    }
+  }
+}
+
 class Evaluator {
   testSuite: TestSuite;
   options: EvaluateOptions;
@@ -322,18 +335,7 @@ class Evaluator {
     const { testSuite, options } = this;
     const prompts: CompletedPrompt[] = [];
 
-    const runExtensionHook = async (hookName: string, context: any) => {
-      if (!testSuite.extensions) {
-        return;
-      }
-      for (const extension of testSuite.extensions) {
-        logger.info(`Running extension ${extension}`);
-        if (extension.startsWith('python:')) {
-          const filePath = path.resolve(cliState.basePath || '', extension.slice('python:'.length));
-          await runPython(filePath, 'extension_hook', [hookName, context]);
-        }
-      }
-    };
+    await runExtensionHook('evals_prepared', { suite: testSuite }, testSuite.extensions);
 
     if (options.generateSuggestions) {
       // TODO(ian): Move this into its own command/file
@@ -541,8 +543,6 @@ class Evaluator {
         }
       }
     }
-
-    await runExtensionHook('evals_prepared', { evals: runEvalOptions, suite: testSuite });
 
     // Set up table...
     const isTest = tests.some((t) => !!t.assert);
@@ -874,12 +874,16 @@ class Evaluator {
       progressBar.stop();
     }
 
-    await runExtensionHook('evals_ran', {
-      evals: runEvalOptions,
-      results: results,
-      table: table,
-      suite: testSuite,
-    });
+    await runExtensionHook(
+      'evals_ran',
+      {
+        evals: runEvalOptions,
+        results: results,
+        table: table,
+        suite: testSuite,
+      },
+      testSuite.extensions,
+    );
 
     telemetry.record('eval_ran', {
       numPrompts: prompts.length,
