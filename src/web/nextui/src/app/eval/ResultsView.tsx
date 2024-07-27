@@ -228,7 +228,7 @@ export default function ResultsView({
 
   const promptOptions = useMemo(() => {
     return head.prompts.map((prompt, idx) => {
-      const label = typeof prompt === 'string' ? prompt : prompt.text;
+      const label = typeof prompt === 'string' ? prompt : (prompt.label ?? prompt.raw);
       return {
         value: `Prompt ${idx + 1}`,
         label: `Prompt ${idx + 1}: ${label && label.length > 100 ? label.slice(0, 100) + '...' : label || ''}`,
