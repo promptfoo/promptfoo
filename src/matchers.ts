@@ -168,6 +168,7 @@ function fail(reason: string, tokensUsed?: Partial<TokenUsage>): Omit<GradingRes
       total: tokensUsed?.total || 0,
       prompt: tokensUsed?.prompt || 0,
       completion: tokensUsed?.completion || 0,
+      cached: tokensUsed?.cached || 0,
     },
   };
 }
@@ -191,6 +192,7 @@ export async function matchesSimilarity(
     total: 0,
     prompt: 0,
     completion: 0,
+    cached: 0,
   };
 
   if ('callSimilarityApi' in finalProvider) {
@@ -217,6 +219,8 @@ export async function matchesSimilarity(
       completion:
         (expectedEmbedding.tokenUsage?.completion || 0) +
         (outputEmbedding.tokenUsage?.completion || 0),
+      cached:
+        (expectedEmbedding.tokenUsage?.cached || 0) + (outputEmbedding.tokenUsage?.cached || 0),
     };
 
     if (expectedEmbedding.error || outputEmbedding.error) {
@@ -356,6 +360,7 @@ export async function matchesLlmRubric(
         total: resp.tokenUsage?.total || 0,
         prompt: resp.tokenUsage?.prompt || 0,
         completion: resp.tokenUsage?.completion || 0,
+        cached: resp.tokenUsage?.cached || 0,
       },
     };
   } catch (err) {
@@ -454,6 +459,7 @@ export async function matchesFactuality(
         total: resp.tokenUsage?.total || 0,
         prompt: resp.tokenUsage?.prompt || 0,
         completion: resp.tokenUsage?.completion || 0,
+        cached: resp.tokenUsage?.cached || 0,
       },
     };
   } catch (err) {
@@ -513,6 +519,7 @@ export async function matchesClosedQa(
         total: resp.tokenUsage?.total || 0,
         prompt: resp.tokenUsage?.prompt || 0,
         completion: resp.tokenUsage?.completion || 0,
+        cached: resp.tokenUsage?.cached || 0,
       },
     };
   } catch (err) {
@@ -543,6 +550,7 @@ export async function matchesAnswerRelevance(
     total: 0,
     prompt: 0,
     completion: 0,
+    cached: 0,
   };
 
   const candidateQuestions: string[] = [];
@@ -558,6 +566,7 @@ export async function matchesAnswerRelevance(
       tokensUsed.total += resp.tokenUsage?.total || 0;
       tokensUsed.prompt += resp.tokenUsage?.prompt || 0;
       tokensUsed.completion += resp.tokenUsage?.completion || 0;
+      tokensUsed.cached += resp.tokenUsage?.cached || 0;
       return fail(resp.error || 'No output', tokensUsed);
     }
 
@@ -578,6 +587,7 @@ export async function matchesAnswerRelevance(
     tokensUsed.total += inputEmbeddingResp.tokenUsage?.total || 0;
     tokensUsed.prompt += inputEmbeddingResp.tokenUsage?.prompt || 0;
     tokensUsed.completion += inputEmbeddingResp.tokenUsage?.completion || 0;
+    tokensUsed.cached += inputEmbeddingResp.tokenUsage?.cached || 0;
     return fail(inputEmbeddingResp.error || 'No embedding', tokensUsed);
   }
   const inputEmbedding = inputEmbeddingResp.embedding;
@@ -588,6 +598,7 @@ export async function matchesAnswerRelevance(
     tokensUsed.total += resp.tokenUsage?.total || 0;
     tokensUsed.prompt += resp.tokenUsage?.prompt || 0;
     tokensUsed.completion += resp.tokenUsage?.completion || 0;
+    tokensUsed.cached += resp.tokenUsage?.cached || 0;
     if (resp.error || !resp.embedding) {
       return fail(resp.error || 'No embedding', tokensUsed);
     }
@@ -661,6 +672,7 @@ export async function matchesContextRecall(
       total: resp.tokenUsage?.total || 0,
       prompt: resp.tokenUsage?.prompt || 0,
       completion: resp.tokenUsage?.completion || 0,
+      cached: resp.tokenUsage?.cached || 0,
     },
   };
 }
@@ -708,6 +720,7 @@ export async function matchesContextRelevance(
       total: resp.tokenUsage?.total || 0,
       prompt: resp.tokenUsage?.prompt || 0,
       completion: resp.tokenUsage?.completion || 0,
+      cached: resp.tokenUsage?.cached || 0,
     },
   };
 }
@@ -790,6 +803,7 @@ export async function matchesContextFaithfulness(
       total: resp.tokenUsage?.total || 0,
       prompt: resp.tokenUsage?.prompt || 0,
       completion: resp.tokenUsage?.completion || 0,
+      cached: resp.tokenUsage?.cached || 0,
     },
   };
 }
@@ -837,6 +851,7 @@ export async function matchesSelectBest(
     total: resp.tokenUsage?.total || 0,
     prompt: resp.tokenUsage?.prompt || 0,
     completion: resp.tokenUsage?.completion || 0,
+    cached: resp.tokenUsage?.cached || 0,
   };
   return outputs.map((output, index) => {
     if (index === verdict) {
