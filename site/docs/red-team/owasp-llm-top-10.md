@@ -1,3 +1,7 @@
+---
+sidebar_position: 20
+---
+
 # OWASP LLM Top 10
 
 Promptfoo is an open-source tool that can help address many of the vulnerabilities outlined in the OWASP LLM Top 10. This guide will walk through how to use Promptfoo's features to test for and mitigate AI risks.
