@@ -145,10 +145,10 @@ prompts:
     label: llama_completion_prompt
 
 providers:
-  - id: openai:gpt-3.5-turbo-0613
+  - id: openai:gpt-4o-mini
     prompts:
       - gpt_chat_prompt
-  - id: openai:gpt-4-turbo-0613
+  - id: openai:gpt-4o
     prompts:
       - gpt_chat_prompt
   - id: replicate:meta/llama70b-v2-chat:02e509c789964a7ea8736978a43525956ef40397be9033abf9fd2badfe68c9e3
@@ -277,7 +277,7 @@ To use a custom Nunjucks filter in Promptfoo, add it to your configuration file 
 
 ```yaml
 prompts: [prompts.txt]
-providers: [openai:gpt-3.5-turbo]
+providers: [openai:gpt-4o-mini]
 // highlight-start
 nunjucksFilters:
   allcaps: ./allcaps.js

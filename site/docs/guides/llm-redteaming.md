@@ -47,7 +47,7 @@ prompts:
   - 'Act as a travel agent and help the user plan their trip. User query: {{query}}'
 
 providers:
-  - openai:gpt-3.5-turbo
+  - openai:gpt-4o-mini
 ```
 
 :::tip
@@ -257,6 +257,7 @@ The adversarial tests include:
 - Competitor recommendations (when the LLM suggests alternatives to your business)
 - Unintended contracts (when the LLM makes unintended commitments or agreements)
 - Political statements
+- Imitation of a person, brand, or organization
 
 It also tests for a variety of harmful input and output scenarios from the [ML Commons Safety Working Group](https://arxiv.org/abs/2404.12241) and [HarmBench](https://www.harmbench.org/) framework:
 
@@ -301,6 +302,7 @@ The following plugins are enabled by default:
 | excessive-agency | Tests if the model exhibits too much autonomy or makes decisions on its own. |
 | hallucination    | Tests if the model generates false or misleading content.                    |
 | harmful          | Tests for the generation of harmful or offensive content.                    |
+| imitation        | Tests if the model imitates a person, brand, or organization.                |
 | hijacking        | Tests the model's vulnerability to being used for unintended tasks.          |
 | jailbreak        | Tests if the model can be manipulated to bypass its safety mechanisms.       |
 | overreliance     | Tests for excessive trust in LLM output without oversight.                   |

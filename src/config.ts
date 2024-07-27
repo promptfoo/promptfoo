@@ -143,6 +143,9 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
     case '.js':
     case '.cjs':
     case '.mjs':
+    case '.ts':
+    case '.cts':
+    case '.mts':
       return (await importModule(configPath)) as UnifiedConfig;
     default:
       throw new Error(`Unsupported configuration file format: ${ext}`);

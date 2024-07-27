@@ -268,9 +268,9 @@ export async function createDummyFiles(directory: string | null, interactive: bo
     }
 
     const choices: { name: string; value: (string | object)[] }[] = [
-      { name: 'Choose later', value: ['openai:gpt-3.5-turbo', 'openai:gpt-4o'] },
+      { name: 'Choose later', value: ['openai:gpt-4o-mini', 'openai:gpt-4o'] },
       {
-        name: '[OpenAI] GPT 4o, GPT-3.5, ...',
+        name: '[OpenAI] GPT 4o, GPT 4o-mini, GPT-3.5, ...',
         value:
           action === 'agent'
             ? [
@@ -299,7 +299,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
                   },
                 },
               ]
-            : ['openai:gpt-3.5-turbo', 'openai:gpt-4o'],
+            : ['openai:gpt-4o-mini', 'openai:gpt-4o'],
       },
       {
         name: '[Anthropic] Claude Opus, Sonnet, Haiku, ...',
@@ -382,7 +382,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
         logger.info('⌛ Wrote provider.py');
       }
     } else {
-      providers.push('openai:gpt-3.5-turbo');
+      providers.push('openai:gpt-4o-mini');
       providers.push('openai:gpt-4o');
     }
 
@@ -413,7 +413,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
     language = 'not_sure';
     prompts.push(`Write a tweet about {{topic}}`);
     prompts.push(`Write a concise, funny tweet about {{topic}}`);
-    providers.push('openai:gpt-3.5-turbo');
+    providers.push('openai:gpt-4o-mini');
     providers.push('openai:gpt-4o');
   }
 

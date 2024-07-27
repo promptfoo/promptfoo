@@ -1,13 +1,8 @@
 import * as fs from 'fs';
 import glob from 'glob';
 import * as path from 'path';
-import {
-  evaluate,
-  renderPrompt,
-  resolveVariables,
-  generateVarCombinations,
-  isAllowedPrompt,
-} from '../src/evaluator';
+import { evaluate, generateVarCombinations, isAllowedPrompt } from '../src/evaluator';
+import { renderPrompt, resolveVariables } from '../src/evaluatorHelpers';
 import type { ApiProvider, TestSuite, Prompt } from '../src/types';
 
 jest.mock('node-fetch', () => jest.fn());
@@ -34,6 +29,7 @@ jest.mock('../src/esm');
 jest.mock('../src/database', () => ({
   getDb: jest.fn(),
 }));
+jest.mock('../src/logger');
 
 const mockApiProvider: ApiProvider = {
   id: jest.fn().mockReturnValue('test-provider'),

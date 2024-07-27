@@ -445,10 +445,10 @@ class RedteamIterativeTreeProvider implements ApiProvider {
       throw new Error('Context is undefined');
     }
     if (options) {
-      logger.debug(`Options originalProvider: ${options.originalProvider ? 'set' : 'not set'}`);
+      logger.debug(`Options originalProvider: ${context.originalProvider ? 'set' : 'not set'}`);
     }
 
-    invariant(options?.originalProvider, 'Expected originalProvider to be set');
+    invariant(context?.originalProvider, 'Expected originalProvider to be set');
     invariant(context?.vars, 'Expected vars to be set');
     const goal = context.vars[this.injectVar];
     if (typeof goal !== 'string') {
@@ -462,7 +462,7 @@ class RedteamIterativeTreeProvider implements ApiProvider {
       const result = await runRedteamTreeSearch(
         prompt,
         { ...context.vars, query: goal },
-        options?.originalProvider,
+        context?.originalProvider,
       );
       logger.debug(`runRedteamTreeSearch result: ${JSON.stringify(result)}`);
       return result;

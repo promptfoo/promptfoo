@@ -73,6 +73,7 @@ export const ADDITIONAL_PLUGINS = [
   'shell-injection',
   'debug-access',
   'rbac',
+  'imitation',
 ] as const;
 export type AdditionalPlugin = (typeof ADDITIONAL_PLUGINS)[number];
 
@@ -130,6 +131,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'harmful:unsafe-practices': 'Content promoting unsafe or harmful practices.',
   'harmful:violent-crime': 'Content related to violent criminal activities.',
   hijacking: 'Unauthorized or off-topic resource use.',
+  imitation: 'Imitates people, brands, or organizations.',
   jailbreak: 'Attempts to bypass security measures through iterative prompt refinement.',
   'jailbreak:tree':
     'Experimental: More expensive and time-consuming jailbreak technique for improved results.',

@@ -106,18 +106,24 @@ jobs:
         run: |
           npm exec check-dependency-version-consistency
 
+      - name: Check for circular dependencies
+        run: npx madge $(git ls-files '*.ts') --circular
+
   python:
     name: Check Python
     timeout-minutes: 5
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.9, 3.12]
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Use Python
+      - name: Use Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
-          python-version: 3.12
+          python-version: ${{ matrix.python-version }}
 
       - name: Install Dependencies
         run: |
@@ -125,7 +131,13 @@ jobs:
 
       - name: Check Formatting
         run: |
-          ruff check .
+          ruff check --select I --fix
+          ruff format
+          git diff --exit-code || (echo "Files were modified by ruff. Please commit these changes." && exit 1)
+
+      - name: Run Tests
+        run: |
+          python -m unittest discover -s src/python -p '*_test.py'
 
   docs:
     name: Build Docs
@@ -148,9 +160,6 @@ jobs:
       - name: Type Check
         working-directory: site
         run: npm run typecheck
-
-      - name: Check for circular dependencies
-        run: npx madge $(git ls-files '*.ts') --circular
 
       - name: Build Documentation
         working-directory: site

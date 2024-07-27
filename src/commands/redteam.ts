@@ -163,7 +163,8 @@ export function redteamCommand(program: Command) {
       const plugins = await checkbox({
         message: 'Select the plugins you want to enable:',
         choices: pluginChoices,
-        pageSize: 20,
+        pageSize: Math.min(pluginChoices.length, process.stdout.rows - 4),
+        loop: false,
       });
 
       // select strategies
@@ -188,7 +189,8 @@ export function redteamCommand(program: Command) {
         message:
           'Select the strategies you want to enable (Note: Each strategy will add as many test cases as all plugins combined):',
         choices: strategyChoices,
-        pageSize: 20,
+        pageSize: Math.min(strategyChoices.length, process.stdout.rows - 4),
+        loop: false,
       });
 
       const numTests = await number({

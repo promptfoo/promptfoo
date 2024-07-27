@@ -20,7 +20,7 @@ describe('PluginBase', () => {
       }),
       id: jest.fn().mockReturnValue('test-provider'),
     };
-    plugin = new TestPlugin(provider, 'test purpose', 'testVar');
+    plugin = new TestPlugin(provider, 'test purpose', 'testVar', ['Test prompt', 'another prompt']);
   });
 
   afterEach(() => {

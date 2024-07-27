@@ -17,7 +17,7 @@ The model-graded factuality check takes the following three inputs:
 In this example, we ensure that two prompts correctly output the capital of California. The `value` provided in the assertion is the ideal answer:
 
 ```yaml
-providers: [openai:gpt-3.5-turbo]
+providers: [openai:gpt-4o-mini]
 prompts: [prompts/name_capitals_concise.txt, prompts/name_capitals_verbose.txt]
 tests:
   - vars:
@@ -31,7 +31,7 @@ tests:
 In this example, we compare the factuality abilities of three models (GPT-3.5, GPT-4, and Llama2-70b), while keeping the prompt constant:
 
 ```yaml
-providers: [openai:gpt-3.5-turbo, openai:gpt-4, ollama:llama2:70b]
+providers: [openai:gpt-4o-mini, openai:gpt-4o, ollama:llama3.1:70b]
 prompts: [prompts/name_capitals_concise.txt]
 tests:
   - vars:

@@ -153,3 +153,20 @@ export const redteamConfigSchema = z
   });
 
 export type RedteamConfig = z.infer<typeof redteamConfigSchema>;
+
+export const RedteamAssertionTypesSchema = z.enum([
+  'promptfoo:redteam:dummy' as const,
+  ...REDTEAM_ALL_PLUGINS.map((plugin) => `promptfoo:redteam:${plugin}` as const),
+]);
+
+export type RedteamAssertionTypes = z.infer<typeof RedteamAssertionTypesSchema>;
+
+export interface SynthesizeOptions {
+  injectVar?: string;
+  numTests: number;
+  plugins: { id: string; numTests: number }[];
+  prompts: string[];
+  provider?: string;
+  purpose?: string;
+  strategies: { id: string }[];
+}

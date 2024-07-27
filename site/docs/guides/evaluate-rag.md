@@ -133,7 +133,7 @@ Now that we've constructed a prompt, let's set up some test cases. In this examp
 
 ```yaml title=promptfooconfig.yaml
 prompts: [prompt1.txt]
-providers: [openai:gpt-3.5-turbo]
+providers: [openai:gpt-4o-mini]
 tests:
   - vars:
       query: What is the max purchase that doesn't require approval?
@@ -248,10 +248,10 @@ In the above example, both prompts perform well. So we might go with prompt 1, w
 
 ### Comparing models
 
-Imagine we're exploring budget and want to compare the performance of GPT-4 vs GPT-3.5 vs Llama-2. Update the `providers` config to list each of the models:
+Imagine we're exploring budget and want to compare the performance of GPT-4 vs Llama. Update the `providers` config to list each of the models:
 
 ```yaml
-providers: [openai:gpt-3.5-turbo, openai:gpt-4, ollama:llama2]
+providers: [openai:gpt-4o-mini, openai:gpt-4o, ollama:llama3.1]
 ```
 
 Let's also add a heuristic that prefers shorter outputs. Using the `defaultTest` directive, we apply this to all RAG tests:
@@ -267,7 +267,7 @@ Here's the final config:
 
 ```yaml title=promptfooconfig.yaml
 prompts: [prompt1.txt]
-providers: [openai:gpt-3.5-turbo, openai:gpt-4, ollama:llama2]
+providers: [openai:gpt-4o-mini, openai:gpt-4o, ollama:llama3.1]
 defaultTest:
   assert:
     - type: python

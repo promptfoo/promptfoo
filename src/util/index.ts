@@ -900,7 +900,10 @@ export async function transformOutput(
     if (
       codeOrFilepath.endsWith('.js') ||
       codeOrFilepath.endsWith('.cjs') ||
-      codeOrFilepath.endsWith('.mjs')
+      codeOrFilepath.endsWith('.mjs') ||
+      codeOrFilepath.endsWith('.ts') ||
+      codeOrFilepath.endsWith('.cts') ||
+      codeOrFilepath.endsWith('.mts')
     ) {
       const requiredModule = await importModule(filePath);
       if (typeof requiredModule === 'function') {
@@ -1099,7 +1102,10 @@ export function parsePathOrGlob(
 
   if (filename.includes(':')) {
     const splits = filename.split(':');
-    if (splits[0] && ['.js', '.cjs', '.mjs', '.py'].some((ext) => splits[0].endsWith(ext))) {
+    if (
+      splits[0] &&
+      ['.js', '.cjs', '.mjs', '.ts', '.cts', '.mts', '.py'].some((ext) => splits[0].endsWith(ext))
+    ) {
       [filename, functionName] = splits;
     }
   }

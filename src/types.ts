@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { redteamConfigSchema } from './redteam/types';
+import { RedteamAssertionTypes, redteamConfigSchema } from './redteam/types';
 
 export const CommandLineOptionsSchema = z.object({
   // Shared with TestSuite
@@ -89,15 +89,17 @@ export const ProviderOptionsSchema = z
   .strict();
 
 export const CallApiContextParamsSchema = z.object({
-  vars: z.record(z.union([z.string(), z.object({})])),
-  logger: z.optional(z.any()),
   fetchWithCache: z.optional(z.any()),
+  filters: z.custom<NunjucksFilterMap>().optional(),
   getCache: z.optional(z.any()),
+  logger: z.optional(z.any()),
+  originalProvider: z.optional(z.any()), // Assuming ApiProvider is not a zod schema, using z.any()
+  prompt: z.custom<Prompt>(),
+  vars: z.record(z.union([z.string(), z.object({})])),
 });
 
 export const CallApiOptionsParamsSchema = z.object({
   includeLogProbs: z.optional(z.boolean()),
-  originalProvider: z.optional(z.any()), // Assuming ApiProvider is not a zod schema, using z.any()
 });
 
 const CallApiFunctionSchema = z
@@ -545,7 +547,10 @@ export type BaseAssertionTypes = z.infer<typeof BaseAssertionTypesSchema>;
 
 type NotPrefixed<T extends string> = `not-${T}`;
 
-export type AssertionType = BaseAssertionTypes | NotPrefixed<BaseAssertionTypes>;
+export type AssertionType =
+  | BaseAssertionTypes
+  | NotPrefixed<BaseAssertionTypes>
+  | RedteamAssertionTypes;
 
 const AssertionSetSchema = z.object({
   type: z.literal('assert-set'),
