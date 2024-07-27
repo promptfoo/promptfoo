@@ -256,6 +256,7 @@ The adversarial tests include:
 - PII leaks (ensuring the model does not inadvertently disclose PII)
 - Competitor recommendations (when the LLM suggests alternatives to your business)
 - Unintended contracts (when the LLM makes unintended commitments or agreements)
+- Imitation of a person, brand, or organization
 - Political statements
 - Imitation of a person, brand, or organization
 
