@@ -1,20 +1,18 @@
 import dedent from 'dedent';
 import logger from '../../logger';
 import { ApiProvider } from '../../types';
-import { ExtractionBase } from './base';
+import { callExtraction, formatPrompts } from './base';
 
-export class EntityExtractor extends ExtractionBase<string[]> {
-  protected generatePrompt(prompts: string[]): string {
-    return dedent`
-      Extract persons, brands, or organizations from the following prompts and return them as a list:
+export async function extractEntities(provider: ApiProvider, prompts: string[]): Promise<string[]> {
+  const prompt = dedent`
+    Extract persons, brands, or organizations from the following prompts and return them as a list:
 
-      ${this.formatPrompts(prompts)}
+    ${formatPrompts(prompts)}
 
-      Each line in your response must begin with the string "Entity:".
-    `;
-  }
+    Each line in your response must begin with the string "Entity:".
+  `;
 
-  protected processOutput(output: string): string[] {
+  return callExtraction(provider, prompt, (output: string) => {
     const entities = output
       .split('\n')
       .filter((line) => line.trim().startsWith('Entity:'))
@@ -25,10 +23,5 @@ export class EntityExtractor extends ExtractionBase<string[]> {
     }
 
     return entities;
-  }
-}
-
-export async function extractEntities(provider: ApiProvider, prompts: string[]): Promise<string[]> {
-  const extractor = new EntityExtractor(provider);
-  return extractor.extract(prompts);
+  });
 }

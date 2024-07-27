@@ -1,5 +1,7 @@
 import logger from '../../../src/logger';
-import { ExtractionBase } from '../../../src/redteam/extraction/base';
+import { callExtraction, formatPrompts } from '../../../src/redteam/extraction/base';
+import { extractEntities } from '../../../src/redteam/extraction/entities';
+import { extractSystemPurpose } from '../../../src/redteam/extraction/purpose';
 import { ApiProvider } from '../../../src/types';
 
 jest.mock('../../../src/logger', () => ({
@@ -7,60 +9,95 @@ jest.mock('../../../src/logger', () => ({
   debug: jest.fn(),
 }));
 
-class TestExtractor extends ExtractionBase<string[]> {
-  protected generatePrompt(prompts: string[]): string {
-    return `Test prompt for: ${prompts.join(', ')}`;
-  }
-
-  protected processOutput(output: string): string[] {
-    return output.split(',').map((item) => item.trim());
-  }
-}
-
-describe('ExtractionBase', () => {
+describe('Extraction Utils', () => {
   let provider: ApiProvider;
-  let extractor: TestExtractor;
 
   beforeEach(() => {
     provider = {
-      callApi: jest.fn().mockResolvedValue({ output: 'item1, item2, item3' }),
+      callApi: jest.fn().mockResolvedValue({ output: 'test output' }),
       id: jest.fn().mockReturnValue('test-provider'),
     };
-    extractor = new TestExtractor(provider);
     jest.clearAllMocks();
   });
 
-  afterEach(() => {
+  describe('callExtraction', () => {
+    it('should call API and process output correctly', async () => {
+      const result = await callExtraction(provider, 'test prompt', (output) =>
+        output.toUpperCase(),
+      );
+      expect(result).toBe('TEST OUTPUT');
+      expect(provider.callApi).toHaveBeenCalledWith('test prompt');
+    });
+
+    it('should throw an error if API call fails', async () => {
+      const error = new Error('API error');
+      jest.mocked(provider.callApi).mockResolvedValue({ error: error.message });
+
+      await expect(callExtraction(provider, 'test prompt', jest.fn())).rejects.toThrow(
+        'Failed to perform extraction: API error',
+      );
+      expect(logger.error).toHaveBeenCalledWith('Error in extraction: API error');
+    });
+
+    it('should throw an error if output is not a string', async () => {
+      jest.mocked(provider.callApi).mockResolvedValue({ output: 123 });
+
+      await expect(callExtraction(provider, 'test prompt', jest.fn())).rejects.toThrow(
+        'Invalid extraction output: expected string, got: 123',
+      );
+      expect(logger.error).toHaveBeenCalledWith('Invalid output from extraction. Got: 123');
+    });
+  });
+
+  describe('formatPrompts', () => {
+    it('should format prompts correctly', () => {
+      const formattedPrompts = formatPrompts(['prompt1', 'prompt2']);
+      expect(formattedPrompts).toBe('<prompt>\nprompt1\n</prompt>\n<prompt>\nprompt2\n</prompt>');
+    });
+  });
+});
+
+describe('System Purpose Extractor', () => {
+  let provider: ApiProvider;
+
+  beforeEach(() => {
+    provider = {
+      callApi: jest.fn().mockResolvedValue({ output: 'Extracted system purpose' }),
+      id: jest.fn().mockReturnValue('test-provider'),
+    };
     jest.clearAllMocks();
   });
 
-  it('should extract data correctly', async () => {
-    const result = await extractor.extract(['prompt1', 'prompt2']);
-    expect(result).toEqual(['item1', 'item2', 'item3']);
-    expect(provider.callApi).toHaveBeenCalledWith('Test prompt for: prompt1, prompt2');
+  it('should extract system purpose correctly', async () => {
+    const result = await extractSystemPurpose(provider, ['prompt1', 'prompt2']);
+    expect(result).toBe('Extracted system purpose');
+    expect(provider.callApi).toHaveBeenCalledWith(expect.stringContaining('prompt1'));
+    expect(provider.callApi).toHaveBeenCalledWith(expect.stringContaining('prompt2'));
+  });
+});
+
+describe('Entities Extractor', () => {
+  let provider: ApiProvider;
+
+  beforeEach(() => {
+    provider = {
+      callApi: jest.fn().mockResolvedValue({ output: 'Entity: Apple\nEntity: Google' }),
+      id: jest.fn().mockReturnValue('test-provider'),
+    };
+    jest.clearAllMocks();
   });
 
-  it('should throw an error if API call fails', async () => {
-    const error = new Error('API error');
-    jest.mocked(provider.callApi).mockResolvedValue({ error: error.message });
-
-    await expect(extractor.extract(['prompt'])).rejects.toThrow(
-      'Failed to perform extraction: API error',
-    );
-    expect(logger.error).toHaveBeenCalledWith('Error in extraction: API error');
+  it('should extract entities correctly', async () => {
+    const result = await extractEntities(provider, ['prompt1', 'prompt2']);
+    expect(result).toEqual(['Apple', 'Google']);
+    expect(provider.callApi).toHaveBeenCalledWith(expect.stringContaining('prompt1'));
+    expect(provider.callApi).toHaveBeenCalledWith(expect.stringContaining('prompt2'));
   });
 
-  it('should throw an error if output is not a string', async () => {
-    jest.mocked(provider.callApi).mockResolvedValue({ output: 123 });
-
-    await expect(extractor.extract(['prompt'])).rejects.toThrow(
-      'Invalid extraction output: expected string, got: 123',
-    );
-    expect(logger.error).toHaveBeenCalledWith('Invalid output from extraction. Got: 123');
-  });
-
-  it('should format prompts correctly', () => {
-    const formattedPrompts = extractor['formatPrompts'](['prompt1', 'prompt2']);
-    expect(formattedPrompts).toBe('<prompt>\nprompt1\n</prompt>\n<prompt>\nprompt2\n</prompt>');
+  it('should log debug message when no entities are found', async () => {
+    jest.mocked(provider.callApi).mockResolvedValue({ output: 'No entities found' });
+    const result = await extractEntities(provider, ['prompt']);
+    expect(result).toEqual([]);
+    expect(logger.debug).toHaveBeenCalledWith('No entities were extracted from the prompts.');
   });
 });
