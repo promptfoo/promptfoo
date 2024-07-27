@@ -1,7 +1,5 @@
 import logger from '../../../src/logger';
-import { callExtraction, formatPrompts } from '../../../src/redteam/extraction/base';
-import { extractEntities } from '../../../src/redteam/extraction/entities';
-import { extractSystemPurpose } from '../../../src/redteam/extraction/purpose';
+import { callExtraction, formatPrompts } from '../../../src/redteam/extraction/util';
 import { ApiProvider } from '../../../src/types';
 
 jest.mock('../../../src/logger', () => ({

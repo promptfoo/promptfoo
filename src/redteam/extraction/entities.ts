@@ -1,7 +1,7 @@
 import dedent from 'dedent';
 import logger from '../../logger';
 import { ApiProvider } from '../../types';
-import { callExtraction, formatPrompts } from './base';
+import { callExtraction, formatPrompts } from './util';
 
 export async function extractEntities(provider: ApiProvider, prompts: string[]): Promise<string[]> {
   const prompt = dedent`
