@@ -16,6 +16,11 @@ const storage: StateStorage = {
   },
 };
 
+interface ColumnState {
+  selectedColumns: string[];
+  columnVisibility: VisibilityState;
+}
+
 interface TableState {
   evalId: string | null;
   setEvalId: (evalId: string) => void;
@@ -47,10 +52,8 @@ interface TableState {
   inComparisonMode: boolean;
   setInComparisonMode: (inComparisonMode: boolean) => void;
 
-  selectedColumns: string[];
-  setSelectedColumns: (columns: string[]) => void;
-  columnVisibility: VisibilityState;
-  setColumnVisibility: (visibility: VisibilityState) => void;
+  columnStates: Record<string, ColumnState>;
+  setColumnState: (evalId: string, state: ColumnState) => void;
 }
 
 export const useStore = create<TableState>()(
@@ -86,18 +89,20 @@ export const useStore = create<TableState>()(
       inComparisonMode: false,
       setInComparisonMode: (inComparisonMode: boolean) => set(() => ({ inComparisonMode })),
 
-      selectedColumns: [],
-      setSelectedColumns: (columns: string[]) => set(() => ({ selectedColumns: columns })),
-      columnVisibility: {},
-      setColumnVisibility: (visibility: VisibilityState) =>
-        set(() => ({ columnVisibility: visibility })),
+      columnStates: {},
+      setColumnState: (evalId: string, state: ColumnState) =>
+        set((prevState) => ({
+          columnStates: {
+            ...prevState.columnStates,
+            [evalId]: state,
+          },
+        })),
     }),
     {
       name: 'ResultsViewStorage',
       storage: createJSONStorage(() => storage),
       partialize: (state) => ({
-        selectedColumns: state.selectedColumns,
-        columnVisibility: state.columnVisibility,
+        columnStates: state.columnStates,
       }),
     },
   ),

@@ -62,19 +62,6 @@ interface ResultsViewProps {
   defaultEvalId?: string;
 }
 
-// Utility function to safely parse JSON
-const safeJSONParse = (str: string | null): string[] | null => {
-  if (!str) {
-    return null;
-  }
-  try {
-    const parsed = JSON.parse(str);
-    return Array.isArray(parsed) ? parsed : null;
-  } catch {
-    return null;
-  }
-};
-
 export default function ResultsView({
   recentEvals,
   onRecentEvalSelected,
@@ -94,12 +81,16 @@ export default function ResultsView({
     evalId,
     inComparisonMode,
     setInComparisonMode,
-    selectedColumns,
-    setSelectedColumns,
-    columnVisibility,
-    setColumnVisibility,
+    columnStates,
+    setColumnState,
   } = useResultsViewStore();
   const { setStateFromConfig } = useMainStore();
+
+  const currentEvalId = evalId || defaultEvalId || 'default';
+  const currentColumnState = columnStates[currentEvalId] || {
+    selectedColumns: [],
+    columnVisibility: {},
+  };
 
   const [searchText, setSearchText] = React.useState(searchParams?.get('search') || '');
   const [debouncedSearchText] = useDebounce(searchText, 1000);
@@ -267,51 +258,38 @@ export default function ResultsView({
     [hasAnyDescriptions, head.vars, head.prompts],
   );
 
-  const localStorageKey = useMemo(
-    () => `resultsViewSelectedColumns_${evalId || defaultEvalId || 'default'}`,
-    [evalId, defaultEvalId],
-  );
-
   const updateColumnVisibility = useCallback(
     (columns: string[]) => {
       const newColumnVisibility: VisibilityState = {};
       allColumns.forEach((col) => {
         newColumnVisibility[col] = columns.includes(col);
       });
-      setColumnVisibility(newColumnVisibility);
+      setColumnState(currentEvalId, {
+        selectedColumns: columns,
+        columnVisibility: newColumnVisibility,
+      });
     },
-    [allColumns, setColumnVisibility],
+    [allColumns, setColumnState, currentEvalId],
   );
 
   useEffect(() => {
-    const loadSelectedColumns = () => {
-      const storedColumns = safeJSONParse(localStorage.getItem(localStorageKey));
-      if (storedColumns && storedColumns.every((col) => allColumns.includes(col))) {
-        setSelectedColumns(storedColumns);
-        updateColumnVisibility(storedColumns);
-      } else {
-        setSelectedColumns(allColumns);
-        updateColumnVisibility(allColumns);
-      }
-    };
-
-    loadSelectedColumns();
-  }, [allColumns, updateColumnVisibility, localStorageKey, setSelectedColumns]);
-
-  useEffect(() => {
-    localStorage.setItem(localStorageKey, JSON.stringify(selectedColumns));
-  }, [selectedColumns, localStorageKey]);
+    if (
+      currentColumnState.selectedColumns.length === 0 ||
+      !currentColumnState.selectedColumns.every((col) => allColumns.includes(col))
+    ) {
+      updateColumnVisibility(allColumns);
+    }
+  }, [allColumns, currentColumnState.selectedColumns, updateColumnVisibility]);
 
   const handleChange = useCallback(
-    (event: SelectChangeEvent<typeof selectedColumns>) => {
+    (event: SelectChangeEvent<typeof currentColumnState.selectedColumns>) => {
       const newSelectedColumns = Array.isArray(event.target.value)
         ? event.target.value
         : event.target.value.split(',');
 
-      setSelectedColumns(newSelectedColumns);
       updateColumnVisibility(newSelectedColumns);
     },
-    [setSelectedColumns, updateColumnVisibility],
+    [updateColumnVisibility],
   );
 
   const handleDescriptionClick = async () => {
@@ -453,14 +431,14 @@ export default function ResultsView({
               labelId="visible-columns-label"
               id="visible-columns"
               multiple
-              value={selectedColumns}
+              value={currentColumnState.selectedColumns}
               onChange={handleChange}
               input={<OutlinedInput label="Visible columns" />}
               renderValue={(selected: string[]) => selected.join(', ')}
             >
               {columnData.map((column) => (
                 <MenuItem dense key={column.value} value={column.value}>
-                  <Checkbox checked={selectedColumns.indexOf(column.value) > -1} />
+                  <Checkbox checked={currentColumnState.selectedColumns.includes(column.value)} />
                   <ListItemText primary={column.label} />
                 </MenuItem>
               ))}
@@ -590,10 +568,10 @@ export default function ResultsView({
           </ResponsiveStack>
         </Box>
       </ResponsiveStack>
-      <ResultsCharts columnVisibility={columnVisibility} />
+      <ResultsCharts columnVisibility={currentColumnState.columnVisibility} />
       <ResultsTable
         maxTextLength={maxTextLength}
-        columnVisibility={columnVisibility}
+        columnVisibility={currentColumnState.columnVisibility}
         wordBreak={wordBreak}
         showStats={showInferenceDetails}
         filterMode={filterMode}

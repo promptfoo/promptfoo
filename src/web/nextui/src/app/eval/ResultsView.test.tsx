@@ -25,6 +25,11 @@ const mockRecentEvals = [
   },
 ];
 
+const mockColumnState = {
+  selectedColumns: ['Variable 1', 'Prompt 1'],
+  columnVisibility: { 'Variable 1': true, 'Prompt 1': true },
+};
+
 vi.mock('./store', () => ({
   useStore: vi.fn().mockImplementation(() => ({
     table: {
@@ -39,10 +44,10 @@ vi.mock('./store', () => ({
     setInComparisonMode: vi.fn(),
     author: '',
     recentEvals: mockRecentEvals,
-    columnVisibility: {},
-    setColumnVisibility: vi.fn(),
-    selectedColumns: [],
-    setSelectedColumns: vi.fn(),
+    columnStates: {
+      '1': mockColumnState,
+    },
+    setColumnState: vi.fn(),
   })),
 }));
 
@@ -78,5 +83,13 @@ describe('ResultsView', () => {
     );
     expect(screen.getByText('Columns')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Search or select an eval...')).toBeInTheDocument();
+  });
+
+  it('displays the correct column visibility state', () => {
+    renderWithToastProvider(
+      <ResultsView recentEvals={mockRecentEvals} onRecentEvalSelected={mockOnRecentEvalSelected} />,
+    );
+    const columnSelect = screen.getByLabelText('Columns');
+    expect(columnSelect).toHaveTextContent('Variable 1, Prompt 1');
   });
 });
