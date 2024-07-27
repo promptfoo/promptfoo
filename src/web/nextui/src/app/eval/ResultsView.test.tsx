@@ -1,7 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import React from 'react';
 import { ToastProvider } from '@/app/contexts/ToastContext';
-import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import ResultsView from './ResultsView';
 
@@ -62,18 +61,7 @@ vi.mock('next/navigation', () => ({
 }));
 
 // Wrap the component with ToastProvider
-const renderWithToastProvider = (
-  ui:
-    | string
-    | number
-    | bigint
-    | boolean
-    | React.JSX.Element
-    | Iterable<React.ReactNode>
-    | Promise<React.AwaitedReactNode>
-    | null
-    | undefined,
-) => {
+const renderWithToastProvider = (ui: React.ReactNode) => {
   return render(<ToastProvider>{ui}</ToastProvider>);
 };
 

@@ -66,7 +66,9 @@ const LOCAL_STORAGE_KEY_PREFIX = 'resultsViewSelectedColumns';
 
 // Utility function to safely parse JSON
 const safeJSONParse = (str: string | null): string[] | null => {
-  if (!str) return null;
+  if (!str) {
+    return null;
+  }
   try {
     const parsed = JSON.parse(str);
     return Array.isArray(parsed) ? parsed : null;
@@ -226,6 +228,17 @@ export default function ResultsView({
     [table.body],
   );
 
+  const promptOptions = useMemo(() => {
+    return head.prompts.map((prompt, idx) => {
+      const label = typeof prompt === 'string' ? prompt : prompt.text;
+      return {
+        value: `Prompt ${idx + 1}`,
+        label: `Prompt ${idx + 1}: ${label && label.length > 100 ? label.slice(0, 100) + '...' : label || ''}`,
+        group: 'Prompts',
+      };
+    });
+  }, [head.prompts]);
+
   const columnData = React.useMemo(() => {
     return [
       ...(hasAnyDescriptions ? [{ value: 'description', label: 'Description' }] : []),
@@ -236,17 +249,9 @@ export default function ResultsView({
         }`,
         group: 'Variables',
       })),
-      ...head.prompts.map((_, idx) => {
-        const prompt = head.prompts[idx];
-        const label = prompt.label || prompt.display || prompt.raw;
-        return {
-          value: `Prompt ${idx + 1}`,
-          label: `Prompt ${idx + 1}: ${label.length > 100 ? label.slice(0, 97) + '...' : label}`,
-          group: 'Prompts',
-        };
-      }),
+      ...promptOptions,
     ];
-  }, [head.vars, head.prompts, hasAnyDescriptions]);
+  }, [head.vars, promptOptions, hasAnyDescriptions]);
 
   const [configModalOpen, setConfigModalOpen] = React.useState(false);
   const [viewSettingsModalOpen, setViewSettingsModalOpen] = React.useState(false);
