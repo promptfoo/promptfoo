@@ -94,6 +94,10 @@ export default function ResultsView({
     evalId,
     inComparisonMode,
     setInComparisonMode,
+    selectedColumns,
+    setSelectedColumns,
+    columnVisibility,
+    setColumnVisibility,
   } = useResultsViewStore();
   const { setStateFromConfig } = useMainStore();
 
@@ -253,9 +257,6 @@ export default function ResultsView({
 
   const [configModalOpen, setConfigModalOpen] = React.useState(false);
   const [viewSettingsModalOpen, setViewSettingsModalOpen] = React.useState(false);
-  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
-  const [selectedColumns, setSelectedColumns] = React.useState<string[]>([]);
-  const [debouncedSelectedColumns] = useDebounce(selectedColumns, 300);
 
   const allColumns = useMemo(
     () => [
@@ -279,7 +280,7 @@ export default function ResultsView({
       });
       setColumnVisibility(newColumnVisibility);
     },
-    [allColumns],
+    [allColumns, setColumnVisibility],
   );
 
   useEffect(() => {
@@ -295,11 +296,11 @@ export default function ResultsView({
     };
 
     loadSelectedColumns();
-  }, [allColumns, updateColumnVisibility, localStorageKey]);
+  }, [allColumns, updateColumnVisibility, localStorageKey, setSelectedColumns]);
 
   useEffect(() => {
-    localStorage.setItem(localStorageKey, JSON.stringify(debouncedSelectedColumns));
-  }, [debouncedSelectedColumns, localStorageKey]);
+    localStorage.setItem(localStorageKey, JSON.stringify(selectedColumns));
+  }, [selectedColumns, localStorageKey]);
 
   const handleChange = useCallback(
     (event: SelectChangeEvent<typeof selectedColumns>) => {
@@ -310,7 +311,7 @@ export default function ResultsView({
       setSelectedColumns(newSelectedColumns);
       updateColumnVisibility(newSelectedColumns);
     },
-    [updateColumnVisibility],
+    [setSelectedColumns, updateColumnVisibility],
   );
 
   const handleDescriptionClick = async () => {

@@ -1,3 +1,4 @@
+import type { VisibilityState } from '@tanstack/table-core';
 import { get, set, del } from 'idb-keyval';
 import { create } from 'zustand';
 import { persist, createJSONStorage, StateStorage } from 'zustand/middleware';
@@ -45,6 +46,11 @@ interface TableState {
 
   inComparisonMode: boolean;
   setInComparisonMode: (inComparisonMode: boolean) => void;
+
+  selectedColumns: string[];
+  setSelectedColumns: (columns: string[]) => void;
+  columnVisibility: VisibilityState;
+  setColumnVisibility: (visibility: VisibilityState) => void;
 }
 
 export const useStore = create<TableState>()(
@@ -79,10 +85,20 @@ export const useStore = create<TableState>()(
 
       inComparisonMode: false,
       setInComparisonMode: (inComparisonMode: boolean) => set(() => ({ inComparisonMode })),
+
+      selectedColumns: [],
+      setSelectedColumns: (columns: string[]) => set(() => ({ selectedColumns: columns })),
+      columnVisibility: {},
+      setColumnVisibility: (visibility: VisibilityState) =>
+        set(() => ({ columnVisibility: visibility })),
     }),
     {
       name: 'ResultsViewStorage',
       storage: createJSONStorage(() => storage),
+      partialize: (state) => ({
+        selectedColumns: state.selectedColumns,
+        columnVisibility: state.columnVisibility,
+      }),
     },
   ),
 );

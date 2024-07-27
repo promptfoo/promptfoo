@@ -39,6 +39,10 @@ vi.mock('./store', () => ({
     setInComparisonMode: vi.fn(),
     author: '',
     recentEvals: mockRecentEvals,
+    columnVisibility: {},
+    setColumnVisibility: vi.fn(),
+    selectedColumns: [],
+    setSelectedColumns: vi.fn(),
   })),
 }));
 
