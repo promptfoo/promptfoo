@@ -282,7 +282,7 @@ export default function ResultsView({
   }, [allColumns, currentColumnState.selectedColumns, updateColumnVisibility]);
 
   const handleChange = useCallback(
-    (event: SelectChangeEvent<typeof currentColumnState.selectedColumns>) => {
+    (event: SelectChangeEvent<string[]>) => {
       const newSelectedColumns = Array.isArray(event.target.value)
         ? event.target.value
         : event.target.value.split(',');
