@@ -3,6 +3,7 @@ import React from 'react';
 import { ToastProvider } from '@/app/contexts/ToastContext';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import ResultsView from './ResultsView';
+import userEvent from '@testing-library/user-event';
 
 // Mock the stores
 const mockRecentEvals = [

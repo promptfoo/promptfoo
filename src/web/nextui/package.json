@@ -57,6 +57,7 @@
   "devDependencies": {
     "@testing-library/jest-dom": "^6.4.7",
     "@testing-library/react": "^16.0.0",
+    "@testing-library/user-event": "^14.5.2",
     "@types/better-sqlite3": "^7.6.11",
     "@types/diff": "^5.2.1",
     "@types/fuzzysearch": "^1.0.2",
