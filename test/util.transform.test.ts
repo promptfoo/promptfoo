@@ -1,26 +1,17 @@
 import * as path from 'path';
 import { transformOutput } from '../src/util/transform';
 
-jest.mock('proxy-agent', () => ({
-  ProxyAgent: jest.fn().mockImplementation(() => ({})),
-}));
+jest.mock('../src/esm');
 
-jest.mock('glob', () => ({
-  globSync: jest.fn(),
+jest.mock('../src/python/pythonUtils', () => ({
+  runPython: jest.fn().mockImplementation(async (filePath, functionName, args) => {
+    const [output] = args;
+    return output.toUpperCase() + ' FROM PYTHON';
+  }),
 }));
 
 jest.mock('fs', () => ({
-  readFileSync: jest.fn(),
-  writeFileSync: jest.fn(),
-  statSync: jest.fn(),
-  readdirSync: jest.fn(),
-  existsSync: jest.fn(),
-  mkdirSync: jest.fn(),
-}));
-
-jest.mock('../src/esm');
-jest.mock('../src/database', () => ({
-  getDb: jest.fn(),
+  unlink: jest.fn(),
 }));
 
 describe('util', () => {
@@ -70,6 +61,53 @@ describe('util', () => {
       await expect(transformOutput(transformFunctionPath, output, context)).rejects.toThrow(
         'Transform transform.js must export a function or have a default export as a function',
       );
+    });
+
+    it('transforms output using a Python file', async () => {
+      const output = 'hello';
+      const context = { vars: { key: 'value' }, prompt: { id: '123' } };
+      const pythonFilePath = 'file://transform.py';
+
+      const transformedOutput = await transformOutput(pythonFilePath, output, context);
+      expect(transformedOutput).toBe('HELLO FROM PYTHON');
+    });
+
+    it('throws error for unsupported file format', async () => {
+      const output = 'test';
+      const context = { vars: {}, prompt: {} };
+      const unsupportedFilePath = 'file://transform.txt';
+
+      await expect(transformOutput(unsupportedFilePath, output, context)).rejects.toThrow(
+        'Unsupported transform file format: file://transform.txt',
+      );
+    });
+
+    it('transforms output using a multi-line function', async () => {
+      const output = 'hello';
+      const context = { vars: { key: 'value' }, prompt: { id: '123' } };
+      const multiLineFunction = `
+        const uppercased = output.toUpperCase();
+        return uppercased + ' WORLD';
+      `;
+
+      const transformedOutput = await transformOutput(multiLineFunction, output, context);
+      expect(transformedOutput).toBe('HELLO WORLD');
+    });
+
+    it('transforms output using a default export function from a file', async () => {
+      const output = 'hello';
+      const context = { vars: { key: 'value' }, prompt: { id: '123' } };
+      jest.doMock(
+        path.resolve('transform.js'),
+        () => ({
+          default: (output: string) => output.toUpperCase() + ' DEFAULT',
+        }),
+        { virtual: true },
+      );
+
+      const transformFunctionPath = 'file://transform.js';
+      const transformedOutput = await transformOutput(transformFunctionPath, output, context);
+      expect(transformedOutput).toBe('HELLO DEFAULT');
     });
   });
 });
