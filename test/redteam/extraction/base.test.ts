@@ -50,7 +50,7 @@ describe('Extraction Utils', () => {
   describe('formatPrompts', () => {
     it('should format prompts correctly', () => {
       const formattedPrompts = formatPrompts(['prompt1', 'prompt2']);
-      expect(formattedPrompts).toBe('<prompt>\nprompt1\n</prompt>\n<prompt>\nprompt2\n</prompt>');
+      expect(formattedPrompts).toBe('<Prompt>\nprompt1\n</Prompt>\n<Prompt>\nprompt2\n</Prompt>');
     });
   });
 });

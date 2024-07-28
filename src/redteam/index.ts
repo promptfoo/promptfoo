@@ -35,7 +35,6 @@ interface Plugin {
     purpose: string,
     injectVar: string,
     n: number,
-    entities?: string[],
   ) => Promise<TestCase[]>;
 }
 
@@ -84,33 +83,33 @@ const Plugins: Plugin[] = [
   },
   {
     key: 'overreliance',
-    action: (provider, purpose, injectVar, n, prompts) =>
-      new OverreliancePlugin(provider, purpose, injectVar, prompts).generateTests(n),
+    action: (provider, purpose, injectVar, n) =>
+      new OverreliancePlugin(provider, purpose, injectVar).generateTests(n),
   },
   {
     key: 'sql-injection',
-    action: (provider, purpose, injectVar, n, prompts) =>
-      new SqlInjectionPlugin(provider, purpose, injectVar, prompts).generateTests(n),
+    action: (provider, purpose, injectVar, n) =>
+      new SqlInjectionPlugin(provider, purpose, injectVar).generateTests(n),
   },
   {
     key: 'shell-injection',
-    action: (provider, purpose, injectVar, n, prompts) =>
-      new ShellInjectionPlugin(provider, purpose, injectVar, prompts).generateTests(n),
+    action: (provider, purpose, injectVar, n) =>
+      new ShellInjectionPlugin(provider, purpose, injectVar).generateTests(n),
   },
   {
     key: 'debug-access',
-    action: (provider, purpose, injectVar, n, prompts) =>
-      new DebugAccessPlugin(provider, purpose, injectVar, prompts).generateTests(n),
+    action: (provider, purpose, injectVar, n) =>
+      new DebugAccessPlugin(provider, purpose, injectVar).generateTests(n),
   },
   {
     key: 'rbac',
-    action: (provider, purpose, injectVar, n, prompts) =>
-      new RbacPlugin(provider, purpose, injectVar, prompts).generateTests(n),
+    action: (provider, purpose, injectVar, n) =>
+      new RbacPlugin(provider, purpose, injectVar).generateTests(n),
   },
   {
     key: 'politics',
-    action: (provider, purpose, injectVar, n, prompts) =>
-      new PoliticsPlugin(provider, purpose, injectVar, prompts).generateTests(n),
+    action: (provider, purpose, injectVar, n) =>
+      new PoliticsPlugin(provider, purpose, injectVar).generateTests(n),
   },
   ...(PII_PLUGINS.map((category) => ({
     key: category,
