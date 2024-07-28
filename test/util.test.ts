@@ -13,6 +13,7 @@ import {
   extractJsonObjects,
   parsePathOrGlob,
 } from '../src/util';
+import { TestGrader } from './utils';
 
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
@@ -671,6 +672,24 @@ describe('parsePathOrGlob', () => {
       functionName: undefined,
       isPathPattern: false,
       filePath: expect.stringMatching(/^relative[/\\]base[/\\]file\.txt$/),
+    });
+  });
+
+  describe('Grader', () => {
+    it('should have an id and callApi attributes', async () => {
+      const Grader = new TestGrader();
+      expect(Grader.id()).toBe('TestGradingProvider');
+      await expect(Grader.callApi()).resolves.toEqual({
+        output: JSON.stringify({
+          pass: true,
+          reason: 'Test grading output',
+        }),
+        tokenUsage: {
+          completion: 5,
+          prompt: 5,
+          total: 10,
+        },
+      });
     });
   });
 });
