@@ -27,7 +27,8 @@ import type {
   ProviderResponse,
   Assertion,
 } from './types';
-import { transformOutput, sha256 } from './util';
+import { sha256 } from './util';
+import { transformOutput } from './util/transform';
 
 export const DEFAULT_MAX_CONCURRENCY = 4;
 

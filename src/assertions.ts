@@ -47,8 +47,9 @@ import {
   AssertionValue,
   ProviderResponse,
 } from './types';
-import { transformOutput, extractJsonObjects } from './util';
+import { extractJsonObjects } from './util';
 import { getNunjucksEngine } from './util/templates';
+import { transformOutput } from './util/transform';
 
 const ASSERTIONS_MAX_CONCURRENCY = process.env.PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY
   ? parseInt(process.env.PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY, 10)
