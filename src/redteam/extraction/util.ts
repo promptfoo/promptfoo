@@ -26,9 +26,9 @@ export function formatPrompts(prompts: string[]): string {
   return prompts
     .map(
       (prompt) => dedent`
-    <prompt>
+    <Prompt>
     ${prompt}
-    </prompt>`,
+    </Prompt>`,
     )
     .join('\n');
 }
