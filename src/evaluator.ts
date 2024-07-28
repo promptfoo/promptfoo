@@ -534,7 +534,10 @@ class Evaluator {
     const table: EvaluateTable = {
       head: {
         prompts,
-        vars: Array.from(varNames).sort(),
+        vars: [
+          ...Object.keys(testSuite.defaultTest?.vars || {}).sort(),
+          ...Array.from(varNames).sort(),
+        ],
       },
       body: [],
     };
