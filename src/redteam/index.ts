@@ -77,8 +77,8 @@ const Plugins: Plugin[] = [
   },
   {
     key: 'imitation',
-    action: async (provider, purpose, injectVar, n, entities) => {
-      const plugin = new ImitationPlugin(provider, purpose, injectVar, entities);
+    action: async (provider, purpose, injectVar, n) => {
+      const plugin = new ImitationPlugin(provider, purpose, injectVar);
       return plugin.generateTests(n);
     },
   },
@@ -291,6 +291,7 @@ export async function synthesize({
             ...(t.metadata || {}),
             pluginId: key,
             purpose,
+            ...(key === 'imitation' && entities.length > 0 ? { entities } : {}),
           },
         })),
       );
