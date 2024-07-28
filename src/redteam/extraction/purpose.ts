@@ -11,16 +11,16 @@ export async function extractSystemPurpose(
     
     ${formatPrompts(prompts)}
     
-    Given the above prompts, output the "system purpose" of the application in a single sentence, enclosed in <purpose> tags.
+    Given the above prompts, output the "system purpose" of the application in a single sentence, enclosed in <Purpose> tags.
     
     Example outputs:
-    <purpose>Provide users a way to manage finances</purpose>
-    <purpose>Executive assistant that helps with scheduling and reminders</purpose>
-    <purpose>Ecommerce chatbot that sells shoes</purpose>
+    <Purpose>Provide users a way to manage finances</Purpose>
+    <Purpose>Executive assistant that helps with scheduling and reminders</Purpose>
+    <Purpose>Ecommerce chatbot that sells shoes</Purpose>
   `;
 
   return callExtraction(provider, prompt, (output: string) => {
-    const match = output.match(/<purpose>(.*?)<\/purpose>/);
+    const match = output.match(/<Purpose>(.*?)<\/Purpose>/);
     return match ? match[1].trim() : output.trim();
   });
 }

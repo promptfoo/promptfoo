@@ -69,11 +69,11 @@ export type BasePlugin = (typeof BASE_PLUGINS)[number];
 
 export const ADDITIONAL_PLUGINS = [
   'competitors',
-  'debug-access',
-  'imitation',
-  'rbac',
-  'shell-injection',
   'sql-injection',
+  'shell-injection',
+  'debug-access',
+  'rbac',
+  'imitation',
 ] as const;
 export type AdditionalPlugin = (typeof ADDITIONAL_PLUGINS)[number];
 
