@@ -27,7 +27,8 @@ import type {
   ProviderResponse,
   Assertion,
 } from './types';
-import { transformOutput, sha256 } from './util';
+import { sha256 } from './util';
+import { transform } from './util/transform';
 
 export const DEFAULT_MAX_CONCURRENCY = 4;
 
@@ -247,10 +248,10 @@ class Evaluator {
       } else if (response.output) {
         // Create a copy of response so we can potentially mutate it.
         const processedResponse = { ...response };
-        const transform =
+        const shouldTransform =
           test.options?.transform || test.options?.postprocess || provider.transform;
-        if (transform) {
-          processedResponse.output = await transformOutput(transform, processedResponse.output, {
+        if (shouldTransform) {
+          processedResponse.output = await transform(shouldTransform, processedResponse.output, {
             vars,
             prompt,
           });
