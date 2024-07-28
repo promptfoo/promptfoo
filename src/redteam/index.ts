@@ -277,13 +277,7 @@ export async function synthesize({
     if (plugin) {
       updateProgress();
       logger.debug(`Generating ${key} tests`);
-      const pluginTests = await action(
-        redteamProvider,
-        purpose,
-        injectVar,
-        plugin.numTests,
-        entities,
-      );
+      const pluginTests = await action(redteamProvider, purpose, injectVar, plugin.numTests);
       testCases.push(
         ...pluginTests.map((t) => ({
           ...t,
