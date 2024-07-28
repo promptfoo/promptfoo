@@ -1,5 +1,4 @@
 import * as React from 'react';
-import { useEffect, useCallback, useMemo } from 'react';
 import { REMOTE_API_BASE_URL, REMOTE_APP_BASE_URL } from '@/../../../constants';
 import { getApiBaseUrl } from '@/api';
 import { useStore as useMainStore } from '@/state/evalConfig';
@@ -221,7 +220,7 @@ export default function ResultsView({
     [table.body],
   );
 
-  const promptOptions = useMemo(() => {
+  const promptOptions = React.useMemo(() => {
     return head.prompts.map((prompt, idx) => {
       const label = prompt.label || prompt.display || prompt.raw;
       return {
@@ -249,7 +248,7 @@ export default function ResultsView({
   const [configModalOpen, setConfigModalOpen] = React.useState(false);
   const [viewSettingsModalOpen, setViewSettingsModalOpen] = React.useState(false);
 
-  const allColumns = useMemo(
+  const allColumns = React.useMemo(
     () => [
       ...(hasAnyDescriptions ? ['description'] : []),
       ...head.vars.map((_, idx) => `Variable ${idx + 1}`),
@@ -258,7 +257,7 @@ export default function ResultsView({
     [hasAnyDescriptions, head.vars, head.prompts],
   );
 
-  const updateColumnVisibility = useCallback(
+  const updateColumnVisibility = React.useCallback(
     (columns: string[]) => {
       const newColumnVisibility: VisibilityState = {};
       allColumns.forEach((col) => {
@@ -272,16 +271,16 @@ export default function ResultsView({
     [allColumns, setColumnState, currentEvalId],
   );
 
-  useEffect(() => {
+  React.useEffect(() => {
     if (
       currentColumnState.selectedColumns.length === 0 ||
-      !currentColumnState.selectedColumns.every((col) => allColumns.includes(col))
+      !currentColumnState.selectedColumns.every((col: string) => allColumns.includes(col))
     ) {
       updateColumnVisibility(allColumns);
     }
   }, [allColumns, currentColumnState.selectedColumns, updateColumnVisibility]);
 
-  const handleChange = useCallback(
+  const handleChange = React.useCallback(
     (event: SelectChangeEvent<string[]>) => {
       const newSelectedColumns = Array.isArray(event.target.value)
         ? event.target.value
