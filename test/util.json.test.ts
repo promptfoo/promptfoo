@@ -1,3 +1,4 @@
+import dedent from 'dedent';
 import { isValidJson, safeJsonStringify } from '../src/util/json';
 
 describe('json utilities', () => {
@@ -33,12 +34,13 @@ describe('json utilities', () => {
 
     it('pretty prints when specified', () => {
       const obj = { key: 'value', nested: { inner: 'content' } };
-      const expected = `{
-  "key": "value",
-  "nested": {
-    "inner": "content"
-  }
-}`;
+      const expected = dedent`
+      {
+        "key": "value",
+        "nested": {
+          "inner": "content"
+        }
+      }`;
       expect(safeJsonStringify(obj, true)).toBe(expected);
     });
 
