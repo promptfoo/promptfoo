@@ -60,7 +60,7 @@ Customize the behavior of each model by setting parameters such as `temperature`
 
 ```yaml title=promptfooconfig.yaml
 providers:
-  - id: openai:gpt-3.5-turbo-0613
+  - id: openai:gpt-4o-mini
     // highlight-start
     config:
       temperature: 0

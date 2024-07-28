@@ -822,9 +822,9 @@ config:
   });
 
   it('loadApiProvider with OpenAI finetuned model', async () => {
-    const provider = await loadApiProvider('openai:chat:ft:gpt-3.5-turbo-0613:company-name::ID:');
+    const provider = await loadApiProvider('openai:chat:ft:gpt-4o-mini:company-name::ID:');
     expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
-    expect(provider.id()).toBe('openai:ft:gpt-3.5-turbo-0613:company-name::ID:');
+    expect(provider.id()).toBe('openai:ft:gpt-4o-mini:company-name::ID:');
   });
 
   it('loadApiProvider with azureopenai:completion:modelName', async () => {

@@ -48,7 +48,7 @@ providers:
       apiBaseUrl: https://openrouter.ai/api/v1
       apiKeyEnvar: OPENROUTER_API_KEY
       temperature: 0
-  - id: openai:gpt-3.5-turbo-0613
+  - id: openai:gpt-4o-mini
 ```
 
 Set your API keys as environment variables:
@@ -78,7 +78,7 @@ providers:
       // highlight-start
       temperature: 0
       // highlight-end
-  - id: openai:gpt-3.5-turbo-0613
+  - id: openai:gpt-4o-mini
     // highlight-start
     config:
       temperature: 0

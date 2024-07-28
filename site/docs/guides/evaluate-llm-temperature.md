@@ -39,11 +39,11 @@ prompts:
   - 'Respond to the following instruction: {{message}}'
 
 providers:
-  - id: openai:gpt-3.5-turbo-0613
+  - id: openai:gpt-4o-mini
     label: openai-gpt-3.5-turbo-lowtemp
     config:
       temperature: 0.2
-  - id: openai:gpt-3.5-turbo-0613
+  - id: openai:gpt-4o-mini
     label: openai-gpt-3.5-turbo-hightemp
     config:
       temperature: 0.9
@@ -130,13 +130,13 @@ Set a constant seed in the provider config:
 
 ```yaml
 providers:
-  - id: openai:gpt-3.5-turbo-0613
+  - id: openai:gpt-4o-mini
     label: openai-gpt-3.5-turbo-lowtemp
     config:
       temperature: 0.2
       // highlight-next-line
       seed: 0
-  - id: openai:gpt-3.5-turbo-0613
+  - id: openai:gpt-4o-mini
     label: openai-gpt-3.5-turbo-hightemp
     config:
       temperature: 0.9

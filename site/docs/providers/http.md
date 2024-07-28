@@ -91,7 +91,7 @@ Extracts the message content from this response:
   "id": "chatcmpl-abc123",
   "object": "chat.completion",
   "created": 1677858242,
-  "model": "gpt-3.5-turbo-0613",
+  "model": "gpt-4o-mini",
   "usage": {
     "prompt_tokens": 13,
     "completion_tokens": 7,
