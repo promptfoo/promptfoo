@@ -85,12 +85,6 @@ export default function ResultsView({
   } = useResultsViewStore();
   const { setStateFromConfig } = useMainStore();
 
-  const currentEvalId = evalId || defaultEvalId || 'default';
-  const currentColumnState = columnStates[currentEvalId] || {
-    selectedColumns: [],
-    columnVisibility: {},
-  };
-
   const [searchText, setSearchText] = React.useState(searchParams?.get('search') || '');
   const [debouncedSearchText] = useDebounce(searchText, 1000);
   const handleSearchTextChange = (text: string) => {
@@ -256,6 +250,12 @@ export default function ResultsView({
     ],
     [hasAnyDescriptions, head.vars, head.prompts],
   );
+
+  const currentEvalId = evalId || defaultEvalId || 'default';
+  const currentColumnState = columnStates[currentEvalId] || {
+    selectedColumns: [],
+    columnVisibility: {},
+  };
 
   const updateColumnVisibility = React.useCallback(
     (columns: string[]) => {

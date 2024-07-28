@@ -101,9 +101,6 @@ export const useStore = create<TableState>()(
     {
       name: 'ResultsViewStorage',
       storage: createJSONStorage(() => storage),
-      partialize: (state) => ({
-        columnStates: state.columnStates,
-      }),
     },
   ),
 );
