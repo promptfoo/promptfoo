@@ -45,6 +45,31 @@ describe('Extraction Utils', () => {
       );
       expect(logger.error).toHaveBeenCalledWith('Invalid output from extraction. Got: 123');
     });
+
+    it('should handle empty string output', async () => {
+      jest.mocked(provider.callApi).mockResolvedValue({ output: '' });
+
+      const result = await callExtraction(provider, 'test prompt', (output) => output.length);
+      expect(result).toBe(0);
+    });
+
+    it('should handle null output', async () => {
+      jest.mocked(provider.callApi).mockResolvedValue({ output: null });
+
+      await expect(callExtraction(provider, 'test prompt', jest.fn())).rejects.toThrow(
+        'Invalid extraction output: expected string, got: null',
+      );
+      expect(logger.error).toHaveBeenCalledWith('Invalid output from extraction. Got: null');
+    });
+
+    it('should handle undefined output', async () => {
+      jest.mocked(provider.callApi).mockResolvedValue({ output: undefined });
+
+      await expect(callExtraction(provider, 'test prompt', jest.fn())).rejects.toThrow(
+        'Invalid extraction output: expected string, got: undefined',
+      );
+      expect(logger.error).toHaveBeenCalledWith('Invalid output from extraction. Got: undefined');
+    });
   });
 
   describe('formatPrompts', () => {
