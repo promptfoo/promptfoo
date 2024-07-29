@@ -8,7 +8,6 @@ import {
   REDTEAM_PROVIDER_HARM_PLUGINS,
   UNALIGNED_PROVIDER_HARM_PLUGINS,
 } from '../constants';
-import type { SynthesizeOptions } from '../types';
 import PluginBase from './base';
 
 interface HarmfulCategory {
@@ -149,18 +148,12 @@ class HarmfulPlugin extends PluginBase {
   private category: HarmfulCategory;
   protected template: string;
 
-  constructor(
-    provider: ApiProvider,
-    purpose: string,
-    injectVar: string,
-    categoryLabel: string,
-    prompts: SynthesizeOptions['prompts'],
-  ) {
+  constructor(provider: ApiProvider, purpose: string, injectVar: string, categoryLabel: string) {
     const category = REDTEAM_MODEL_CATEGORIES.find((cat) => cat.label === categoryLabel);
     if (!category) {
       throw new Error(`Category ${categoryLabel} not found`);
     }
-    super(provider, purpose, injectVar, prompts);
+    super(provider, purpose, injectVar);
     this.category = category;
     this.template = this.category.prompt;
   }
@@ -190,7 +183,6 @@ export async function getHarmfulTests(
   injectVar: string,
   plugins: string[],
   numTests: number,
-  prompts: SynthesizeOptions['prompts'],
 ): Promise<TestCase[]> {
   // Map from injectValue to its corresponding harmCategory
   const injectVars = new Map<string, string>();
@@ -256,7 +248,7 @@ export async function getHarmfulTests(
   );
 
   for (const harmCategory of redteamProviderHarmCategories) {
-    const plugin = new HarmfulPlugin(provider, purpose, injectVar, harmCategory, prompts);
+    const plugin = new HarmfulPlugin(provider, purpose, injectVar, harmCategory);
     const results = await plugin.generateTests(numTests);
     // NOTE: harmCategory is necessary for the moderation assertion and not supported
     // by the base model.

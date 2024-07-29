@@ -2,7 +2,6 @@ import invariant from 'tiny-invariant';
 import logger from '../../logger';
 import type { ApiProvider, Assertion, TestCase } from '../../types';
 import { getNunjucksEngine } from '../../util/templates';
-import type { SynthesizeOptions } from '../types';
 import { retryWithDeduplication, sampleArray } from '../util';
 
 /**
@@ -19,13 +18,11 @@ export default abstract class PluginBase {
    * @param provider - The API provider used for generating prompts.
    * @param purpose - The purpose of the plugin.
    * @param injectVar - The variable name to inject the generated prompt into.
-   * @param prompts - The user-provided prompts for validation.
    */
   constructor(
     protected provider: ApiProvider,
     protected purpose: string,
     protected injectVar: string,
-    protected prompts: SynthesizeOptions['prompts'],
   ) {
     logger.debug(`PluginBase initialized with purpose: ${purpose}, injectVar: ${injectVar}`);
   }

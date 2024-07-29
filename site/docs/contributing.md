@@ -28,9 +28,21 @@ We particularly welcome contributions in the following areas:
 
 3. Set up your development environment:
 
+   3.1. Setup locally
+
    ```sh
    # We recommend using the Node.js version specified in the .nvmrc file (ensure node >= 18)
    nvm use
+   npm install
+   ```
+
+   3.2 Setup using `devcontainer` (requires Docker and VSCode)
+
+   Open the repository in VSCode and click on the "Reopen in Container" button. This will build a Docker container with all the necessary dependencies.
+
+   Now install node based dependencies:
+
+   ```sh
    npm install
    ```
 
