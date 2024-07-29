@@ -27,6 +27,7 @@ import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import type { CellContext, ColumnDef, VisibilityState } from '@tanstack/table-core';
+import yaml from 'js-yaml';
 import Link from 'next/link';
 import remarkGfm from 'remark-gfm';
 import invariant from 'tiny-invariant';
@@ -128,7 +129,7 @@ function ResultsTable({
   onFailureFilterToggle,
   onSearchTextChange,
 }: ResultsTableProps) {
-  const { evalId, table, setTable, inComparisonMode } = useMainStore();
+  const { evalId, table, setTable, config, inComparisonMode } = useMainStore();
   const { showToast } = useToast();
 
   invariant(table, 'Table should be defined');
@@ -459,15 +460,21 @@ function ResultsTable({
                 </div>
               ) : null;
 
+              const providerConfig = Array.isArray(config?.providers)
+                ? config.providers[idx]
+                : undefined;
               const providerParts = prompt.provider ? prompt.provider.split(':') : [];
-              const providerDisplay =
-                providerParts.length > 1 ? (
-                  <>
-                    {providerParts[0]}:<strong>{providerParts.slice(1).join(':')}</strong>
-                  </>
-                ) : (
-                  <strong>{prompt.provider}</strong>
-                );
+              const providerDisplay = (
+                <Tooltip title={providerConfig ? <pre>{yaml.dump(providerConfig)}</pre> : ''}>
+                  {providerParts.length > 1 ? (
+                    <>
+                      {providerParts[0]}:<strong>{providerParts.slice(1).join(':')}</strong>
+                    </>
+                  ) : (
+                    <strong>{prompt.provider}</strong>
+                  )}
+                </Tooltip>
+              );
               return (
                 <div className="output-header">
                   <div className="pills">
@@ -542,6 +549,7 @@ function ResultsTable({
     ];
   }, [
     body.length,
+    config?.providers,
     columnHelper,
     failureFilter,
     filterMode,
