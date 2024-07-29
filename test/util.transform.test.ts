@@ -1,5 +1,5 @@
 import * as path from 'path';
-import { transformOutput } from '../src/util/transform';
+import { transform } from '../src/util/transform';
 
 jest.mock('../src/esm');
 
@@ -19,7 +19,7 @@ describe('util', () => {
     jest.clearAllMocks();
   });
 
-  describe('transformOutput', () => {
+  describe('transform', () => {
     afterEach(() => {
       jest.clearAllMocks();
       jest.resetModules();
@@ -29,7 +29,7 @@ describe('util', () => {
       const output = 'original output';
       const context = { vars: { key: 'value' }, prompt: { id: '123' } };
       const transformFunction = 'output.toUpperCase()';
-      const transformedOutput = await transformOutput(transformFunction, output, context);
+      const transformedOutput = await transform(transformFunction, output, context);
       expect(transformedOutput).toBe('ORIGINAL OUTPUT');
     });
 
@@ -40,7 +40,7 @@ describe('util', () => {
         virtual: true,
       });
       const transformFunctionPath = 'file://transform.js';
-      const transformedOutput = await transformOutput(transformFunctionPath, output, context);
+      const transformedOutput = await transform(transformFunctionPath, output, context);
       expect(transformedOutput).toBe('HELLO');
     });
 
@@ -48,7 +48,7 @@ describe('util', () => {
       const output = 'test';
       const context = { vars: {}, prompt: {} };
       const transformFunction = ''; // Empty function, returns undefined
-      await expect(transformOutput(transformFunction, output, context)).rejects.toThrow(
+      await expect(transform(transformFunction, output, context)).rejects.toThrow(
         'Transform function did not return a value',
       );
     });
@@ -58,7 +58,7 @@ describe('util', () => {
       const context = { vars: {}, prompt: {} };
       jest.doMock(path.resolve('transform.js'), () => 'banana', { virtual: true });
       const transformFunctionPath = 'file://transform.js';
-      await expect(transformOutput(transformFunctionPath, output, context)).rejects.toThrow(
+      await expect(transform(transformFunctionPath, output, context)).rejects.toThrow(
         'Transform transform.js must export a function or have a default export as a function',
       );
     });
@@ -68,7 +68,7 @@ describe('util', () => {
       const context = { vars: { key: 'value' }, prompt: { id: '123' } };
       const pythonFilePath = 'file://transform.py';
 
-      const transformedOutput = await transformOutput(pythonFilePath, output, context);
+      const transformedOutput = await transform(pythonFilePath, output, context);
       expect(transformedOutput).toBe('HELLO FROM PYTHON');
     });
 
@@ -77,7 +77,7 @@ describe('util', () => {
       const context = { vars: {}, prompt: {} };
       const unsupportedFilePath = 'file://transform.txt';
 
-      await expect(transformOutput(unsupportedFilePath, output, context)).rejects.toThrow(
+      await expect(transform(unsupportedFilePath, output, context)).rejects.toThrow(
         'Unsupported transform file format: file://transform.txt',
       );
     });
@@ -90,7 +90,7 @@ describe('util', () => {
         return uppercased + ' WORLD';
       `;
 
-      const transformedOutput = await transformOutput(multiLineFunction, output, context);
+      const transformedOutput = await transform(multiLineFunction, output, context);
       expect(transformedOutput).toBe('HELLO WORLD');
     });
 
@@ -106,7 +106,7 @@ describe('util', () => {
       );
 
       const transformFunctionPath = 'file://transform.js';
-      const transformedOutput = await transformOutput(transformFunctionPath, output, context);
+      const transformedOutput = await transform(transformFunctionPath, output, context);
       expect(transformedOutput).toBe('HELLO DEFAULT');
     });
   });

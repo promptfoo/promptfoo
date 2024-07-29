@@ -15,6 +15,6 @@ tests:
   - vars:
       topic: bananas
     transform: output.length
-    assert: 
+    assert:
       - type: number
         value: output.length
