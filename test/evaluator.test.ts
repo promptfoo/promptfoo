@@ -538,7 +538,7 @@ describe('evaluator', () => {
             },
           ],
           // This transform overrides the defaultTest transform
-          options: {transform: '"testTransformed " + output'},
+          options: { transform: '"testTransformed " + output' },
         },
       ],
     };
@@ -548,7 +548,9 @@ describe('evaluator', () => {
     expect(mockApiProviderWithTransform.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
     expect(summary.stats.failures).toBe(0);
-    expect(summary.results[0].response?.output).toBe('testTransformed ProviderTransformed: Original output');
+    expect(summary.results[0].response?.output).toBe(
+      'testTransformed ProviderTransformed: Original output',
+    );
   });
 
   it('evaluate with providerPromptMap', async () => {
