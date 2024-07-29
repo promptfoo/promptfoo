@@ -5,7 +5,9 @@ import logger from '../logger';
 import { loadApiProvider } from '../providers';
 import type { ApiProvider, TestCase } from '../types';
 import { extractVariablesFromTemplates } from '../util/templates';
-import { REDTEAM_MODEL, HARM_PLUGINS, PII_PLUGINS } from './constants';
+import { REDTEAM_MODEL, HARM_PLUGINS, PII_PLUGINS, INCLUDE_ENTITY_METADATA } from './constants';
+import { extractEntities } from './extraction/entities';
+import { extractSystemPurpose } from './extraction/purpose';
 import CompetitorPlugin from './plugins/competitors';
 import ContractPlugin from './plugins/contracts';
 import DebugAccessPlugin from './plugins/debugAccess';
@@ -20,7 +22,6 @@ import PoliticsPlugin from './plugins/politics';
 import RbacPlugin from './plugins/rbac';
 import ShellInjectionPlugin from './plugins/shellInjection';
 import SqlInjectionPlugin from './plugins/sqlInjection';
-import { getPurpose } from './purpose';
 import { addInjections } from './strategies/injections';
 import { addIterativeJailbreaks } from './strategies/iterative';
 import type { SynthesizeOptions } from './types';
@@ -34,7 +35,6 @@ interface Plugin {
     purpose: string,
     injectVar: string,
     n: number,
-    prompts: SynthesizeOptions['prompts'],
   ) => Promise<TestCase[]>;
 }
 
@@ -46,71 +46,70 @@ interface Strategy {
 const Plugins: Plugin[] = [
   {
     key: 'competitors',
-    action: (provider, purpose, injectVar, n, prompts) =>
-      new CompetitorPlugin(provider, purpose, injectVar, prompts).generateTests(n),
+    action: (provider, purpose, injectVar, n) =>
+      new CompetitorPlugin(provider, purpose, injectVar).generateTests(n),
   },
   {
     key: 'contracts',
-    action: (provider, purpose, injectVar, n, prompts) =>
-      new ContractPlugin(provider, purpose, injectVar, prompts).generateTests(n),
+    action: (provider, purpose, injectVar, n) =>
+      new ContractPlugin(provider, purpose, injectVar).generateTests(n),
   },
   {
     key: 'excessive-agency',
-    action: (provider, purpose, injectVar, n, prompts) =>
-      new ExcessiveAgencyPlugin(provider, purpose, injectVar, prompts).generateTests(n),
+    action: (provider, purpose, injectVar, n) =>
+      new ExcessiveAgencyPlugin(provider, purpose, injectVar).generateTests(n),
   },
   {
     key: 'hallucination',
-    action: (provider, purpose, injectVar, n, prompts) =>
-      new HallucinationPlugin(provider, purpose, injectVar, prompts).generateTests(n),
+    action: (provider, purpose, injectVar, n) =>
+      new HallucinationPlugin(provider, purpose, injectVar).generateTests(n),
   },
   ...(Object.keys(HARM_PLUGINS).map((category) => ({
     key: category,
-    action: (provider, purpose, injectVar, n, prompts) =>
-      getHarmfulTests(provider, purpose, injectVar, [category], n, prompts),
+    action: (provider, purpose, injectVar, n) =>
+      getHarmfulTests(provider, purpose, injectVar, [category], n),
   })) as Plugin[]),
   {
     key: 'hijacking',
-    action: (provider, purpose, injectVar, n, prompts) =>
-      new HijackingPlugin(provider, purpose, injectVar, prompts).generateTests(n),
+    action: (provider, purpose, injectVar, n) =>
+      new HijackingPlugin(provider, purpose, injectVar).generateTests(n),
   },
   {
     key: 'imitation',
-    action: async (provider, purpose, injectVar, n, prompts) => {
-      const plugin = new ImitationPlugin(provider, purpose, injectVar, prompts);
-      await plugin.buildEntityWhitelist();
+    action: async (provider, purpose, injectVar, n) => {
+      const plugin = new ImitationPlugin(provider, purpose, injectVar);
       return plugin.generateTests(n);
     },
   },
   {
     key: 'overreliance',
-    action: (provider, purpose, injectVar, n, prompts) =>
-      new OverreliancePlugin(provider, purpose, injectVar, prompts).generateTests(n),
+    action: (provider, purpose, injectVar, n) =>
+      new OverreliancePlugin(provider, purpose, injectVar).generateTests(n),
   },
   {
     key: 'sql-injection',
-    action: (provider, purpose, injectVar, n, prompts) =>
-      new SqlInjectionPlugin(provider, purpose, injectVar, prompts).generateTests(n),
+    action: (provider, purpose, injectVar, n) =>
+      new SqlInjectionPlugin(provider, purpose, injectVar).generateTests(n),
   },
   {
     key: 'shell-injection',
-    action: (provider, purpose, injectVar, n, prompts) =>
-      new ShellInjectionPlugin(provider, purpose, injectVar, prompts).generateTests(n),
+    action: (provider, purpose, injectVar, n) =>
+      new ShellInjectionPlugin(provider, purpose, injectVar).generateTests(n),
   },
   {
     key: 'debug-access',
-    action: (provider, purpose, injectVar, n, prompts) =>
-      new DebugAccessPlugin(provider, purpose, injectVar, prompts).generateTests(n),
+    action: (provider, purpose, injectVar, n) =>
+      new DebugAccessPlugin(provider, purpose, injectVar).generateTests(n),
   },
   {
     key: 'rbac',
-    action: (provider, purpose, injectVar, n, prompts) =>
-      new RbacPlugin(provider, purpose, injectVar, prompts).generateTests(n),
+    action: (provider, purpose, injectVar, n) =>
+      new RbacPlugin(provider, purpose, injectVar).generateTests(n),
   },
   {
     key: 'politics',
-    action: (provider, purpose, injectVar, n, prompts) =>
-      new PoliticsPlugin(provider, purpose, injectVar, prompts).generateTests(n),
+    action: (provider, purpose, injectVar, n) =>
+      new PoliticsPlugin(provider, purpose, injectVar).generateTests(n),
   },
   ...(PII_PLUGINS.map((category) => ({
     key: category,
@@ -261,8 +260,12 @@ export async function synthesize({
   };
 
   // Get purpose
+  const purpose = purposeOverride || (await extractSystemPurpose(redteamProvider, prompts));
   updateProgress();
-  const purpose = purposeOverride || (await getPurpose(redteamProvider, prompts));
+  let entities: string[] = [];
+  if (plugins.some((p) => p.id === 'imitation')) {
+    entities = await extractEntities(redteamProvider, prompts);
+  }
   updateProgress();
 
   logger.debug(`System purpose: ${purpose}`);
@@ -273,13 +276,7 @@ export async function synthesize({
     if (plugin) {
       updateProgress();
       logger.debug(`Generating ${key} tests`);
-      const pluginTests = await action(
-        redteamProvider,
-        purpose,
-        injectVar,
-        plugin.numTests,
-        prompts,
-      );
+      const pluginTests = await action(redteamProvider, purpose, injectVar, plugin.numTests);
       testCases.push(
         ...pluginTests.map((t) => ({
           ...t,
@@ -287,6 +284,7 @@ export async function synthesize({
             ...(t.metadata || {}),
             pluginId: key,
             purpose,
+            ...(INCLUDE_ENTITY_METADATA.includes(key) && entities.length > 0 ? { entities } : {}),
           },
         })),
       );

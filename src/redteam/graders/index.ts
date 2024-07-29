@@ -6,6 +6,7 @@ import ExcessiveAgencyGrader from './excessiveAgency';
 import HallucinationGrader from './hallucination';
 import HarmfulGrader from './harmful';
 import HijackingGrader from './hijacking';
+import ImitationGrader from './imitation';
 import OverrelianceGrader from './overreliance';
 import PiiGrader from './pii';
 import PoliticsGrader from './politics';
@@ -18,6 +19,7 @@ const GRADERS = {
   'promptfoo:redteam:competitors': new CompetitorsGrader(),
   'promptfoo:redteam:contracts': new ContractsGrader(),
   'promptfoo:redteam:excessive-agency': new ExcessiveAgencyGrader(),
+  'promptfoo:redteam:imitation': new ImitationGrader(),
   'promptfoo:redteam:hallucination': new HallucinationGrader(),
   'promptfoo:redteam:hijacking': new HijackingGrader(),
   'promptfoo:redteam:politics': new PoliticsGrader(),

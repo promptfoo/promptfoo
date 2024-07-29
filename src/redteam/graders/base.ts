@@ -25,6 +25,7 @@ export default abstract class RedteamModelGrader {
       purpose: test.metadata?.purpose,
       // TODO(ian): Eventually switch to using metadata too to plumb through harmCategory
       harmCategory: test.vars?.harmCategory,
+      entities: test.metadata?.entities ?? [],
     });
     const result = await matchesLlmRubric(finalRubric, llmOutput, {});
     logger.debug(`Redteam grading result for ${this.id}: - ${JSON.stringify(result)}`);
