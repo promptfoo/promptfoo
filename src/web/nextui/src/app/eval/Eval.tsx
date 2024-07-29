@@ -61,7 +61,8 @@ export default function Eval({
   defaultEvalId: defaultEvalIdProp,
 }: EvalOptions) {
   const router = useRouter();
-  const { table, setTable, setConfig, setEvalId, setAuthor, setInComparisonMode } = useStore();
+  const { table, setTable, config, setConfig, evalId, setEvalId, setAuthor, setInComparisonMode } =
+    useStore();
   const [loaded, setLoaded] = React.useState(false);
   const [failed, setFailed] = React.useState(false);
   const [recentEvals, setRecentEvals] = React.useState<ResultLightweightWithLabel[]>(
@@ -101,15 +102,15 @@ export default function Eval({
   );
 
   const searchParams = useSearchParams();
-  const evalId = searchParams ? searchParams.get('evalId') : null;
+  const searchEvalId = searchParams ? searchParams.get('evalId') : null;
 
   React.useEffect(() => {
-    if (evalId) {
-      console.log('Eval init: Fetching eval by id', evalId);
+    if (searchEvalId) {
+      console.log('Eval init: Fetching eval by id', searchEvalId);
       const run = async () => {
-        await fetchEvalById(evalId);
+        await fetchEvalById(searchEvalId);
         setLoaded(true);
-        setDefaultEvalId(evalId);
+        setDefaultEvalId(searchEvalId);
         // Load other recent eval runs
         fetchRecentFileEvals();
       };
@@ -236,9 +237,13 @@ export default function Eval({
     fetchEvalById,
     preloadedData,
     setDefaultEvalId,
-    evalId,
+    searchEvalId,
     setInComparisonMode,
   ]);
+
+  React.useEffect(() => {
+    document.title = `${config?.description || evalId || 'Eval'} | promptfoo`;
+  }, [config, evalId]);
 
   if (failed) {
     return <div className="notice">404 Eval not found</div>;

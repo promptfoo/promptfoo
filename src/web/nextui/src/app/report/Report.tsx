@@ -40,6 +40,10 @@ const App: React.FC = () => {
     }
   }, []);
 
+  React.useEffect(() => {
+    document.title = `Report: ${evalData?.config.description || evalId || 'Red Team'} | promptfoo`;
+  }, [evalData, evalId]);
+
   if (!evalData || !evalId) {
     return <Box sx={{ width: '100%', textAlign: 'center' }}>Loading...</Box>;
   }
