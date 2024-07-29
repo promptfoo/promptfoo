@@ -5,7 +5,7 @@ import logger from '../logger';
 import { loadApiProvider } from '../providers';
 import type { ApiProvider, TestCase } from '../types';
 import { extractVariablesFromTemplates } from '../util/templates';
-import { REDTEAM_MODEL, HARM_PLUGINS, PII_PLUGINS } from './constants';
+import { REDTEAM_MODEL, HARM_PLUGINS, PII_PLUGINS, INCLUDE_ENTITY_METADATA } from './constants';
 import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
 import CompetitorPlugin from './plugins/competitors';
@@ -284,7 +284,7 @@ export async function synthesize({
             ...(t.metadata || {}),
             pluginId: key,
             purpose,
-            ...(key === 'imitation' && entities.length > 0 ? { entities } : {}),
+            ...(INCLUDE_ENTITY_METADATA.includes(key) && entities.length > 0 ? { entities } : {}),
           },
         })),
       );
