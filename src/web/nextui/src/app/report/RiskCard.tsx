@@ -122,7 +122,7 @@ const RiskCard: React.FC<{
                       >
                         {`${Math.round(test.percentage * 100)}%`}
                       </Typography>
-                    ) : test.percentage > pluginPassRateThreshold ? (
+                    ) : test.percentage >= pluginPassRateThreshold ? (
                       <CheckCircleIcon className="risk-card-icon-passed" />
                     ) : (
                       <CancelIcon className="risk-card-icon-failed" />
