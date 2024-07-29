@@ -1,0 +1,10 @@
+services:
+  promptfoo_dev:
+    build:
+      context: ..
+      dockerfile: ./.devcontainer/Dockerfile.dev
+    network_mode: 'host'
+    volumes:
+      - ..:/workspace:Z
+    user: promptfoo
+    command: 'sleep infinity'
