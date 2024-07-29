@@ -109,6 +109,42 @@ jobs:
       - name: Check for circular dependencies
         run: npx madge $(git ls-files '*.ts') --circular
 
+  assets:
+    name: Generate Assets
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Use Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Generate Citation
+        run: npm run citation:generate
+
+      - name: Generate JSON Schema
+        run: npm run jsonSchema:generate
+
+      - name: Format
+        run: npm run f
+
+      - name: Check for changes
+        run: |
+          if [[ -n $(git status --porcelain) ]]; then
+            echo "Changes detected after generating assets and formatting:"
+            git status --porcelain
+            exit 1
+          else
+            echo "No changes detected."
+          fi
+
   python:
     name: Check Python
     timeout-minutes: 5

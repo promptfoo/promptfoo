@@ -1,0 +1,19 @@
+cff-version: 1.2.0
+message: If you use this software, please cite it as below.
+authors:
+  - family-names: Webster
+    given-names: Ian
+title: promptfoo
+version: 0.73.8
+date-released: '2024-07-29'
+url: https://promptfoo.dev
+repository-code: https://github.com/promptfoo/promptfoo
+license: MIT
+type: software
+description: LLM eval & testing toolkit
+keywords:
+  - llm
+  - evaluation
+  - evals
+  - testing
+  - prompt-engineering
