@@ -128,7 +128,7 @@ function ResultsTable({
   onFailureFilterToggle,
   onSearchTextChange,
 }: ResultsTableProps) {
-  const { evalId, table, setTable, inComparisonMode } = useMainStore();
+  const { evalId, table, setTable, config, inComparisonMode } = useMainStore();
   const { showToast } = useToast();
 
   invariant(table, 'Table should be defined');
@@ -459,15 +459,23 @@ function ResultsTable({
                 </div>
               ) : null;
 
+              const providerConfig = Array.isArray(config?.providers)
+                ? config.providers[idx]
+                : undefined;
               const providerParts = prompt.provider ? prompt.provider.split(':') : [];
-              const providerDisplay =
-                providerParts.length > 1 ? (
-                  <>
-                    {providerParts[0]}:<strong>{providerParts.slice(1).join(':')}</strong>
-                  </>
-                ) : (
-                  <strong>{prompt.provider}</strong>
-                );
+              const providerDisplay = (
+                <Tooltip
+                  title={providerConfig ? <pre>{JSON.stringify(providerConfig, null, 2)}</pre> : ''}
+                >
+                  {providerParts.length > 1 ? (
+                    <>
+                      {providerParts[0]}:<strong>{providerParts.slice(1).join(':')}</strong>
+                    </>
+                  ) : (
+                    <strong>{prompt.provider}</strong>
+                  )}
+                </Tooltip>
+              );
               return (
                 <div className="output-header">
                   <div className="pills">
