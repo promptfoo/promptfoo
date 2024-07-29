@@ -14,7 +14,3 @@ defaultTest:
 tests:
   - vars:
       topic: bananas
-    transform: output.length
-    assert:
-      - type: number
-        value: output.length
