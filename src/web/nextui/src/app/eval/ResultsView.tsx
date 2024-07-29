@@ -214,16 +214,14 @@ export default function ResultsView({
     [table.body],
   );
 
-  const promptOptions = React.useMemo(() => {
-    return head.prompts.map((prompt, idx) => {
-      const label = prompt.label || prompt.display || prompt.raw;
-      return {
-        value: `Prompt ${idx + 1}`,
-        label: `Prompt ${idx + 1}: ${label && label.length > 100 ? label.slice(0, 100) + '...' : label || ''}`,
-        group: 'Prompts',
-      };
-    });
-  }, [head.prompts]);
+  const promptOptions = head.prompts.map((prompt, idx) => {
+    const label = prompt.label || prompt.display || prompt.raw;
+    return {
+      value: `Prompt ${idx + 1}`,
+      label: `Prompt ${idx + 1}: ${label && label.length > 100 ? label.slice(0, 100) + '...' : label || ''}`,
+      group: 'Prompts',
+    };
+  });
 
   const columnData = React.useMemo(() => {
     return [
