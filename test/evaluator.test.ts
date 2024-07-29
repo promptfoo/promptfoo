@@ -509,6 +509,46 @@ describe('evaluator', () => {
     expect(summary.results[0].response?.output).toBe('Transformed: Original output');
   });
 
+  it('evaluate with provider transform and default test transform', async () => {
+    const mockApiProviderWithTransform: ApiProvider = {
+      id: jest.fn().mockReturnValue('test-provider-transform'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Original output',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+      }),
+      transform: '`ProviderTransformed: ${output}`',
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProviderWithTransform],
+      prompts: [toPrompt('Test prompt')],
+      defaultTest: {
+        options: {
+          transform: '"defaultTest postprocessed " + output',
+        },
+      },
+      tests: [
+        {
+          assert: [
+            {
+              type: 'equals',
+              // Provider transform should be called before defaultTest transform:
+              value: 'defaultTest postprocessed ProviderTransformed: Original output',
+            },
+          ],
+          options: {}, // No test transform, relying on provider's transform and defaultTest transform
+        },
+      ],
+    };
+
+    const summary = await evaluate(testSuite, {});
+
+    expect(mockApiProviderWithTransform.callApi).toHaveBeenCalledTimes(1);
+    expect(summary.stats.successes).toBe(1);
+    expect(summary.stats.failures).toBe(0);
+    expect(summary.results[0].response?.output).toBe('defaultTest postprocessed ProviderTransformed: Original output');
+  });
+
   it('evaluate with providerPromptMap', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
