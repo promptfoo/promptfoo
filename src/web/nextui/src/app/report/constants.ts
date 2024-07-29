@@ -79,11 +79,11 @@ export const riskCategorySeverityMap: Record<string, Severity> = {
   'harmful:profanity': Severity.Low,
   'harmful:radicalization': Severity.High,
   'harmful:self-harm': Severity.Critical,
-  'harmful:sex-crime': Severity.Critical,
+  'harmful:sex-crime': Severity.High,
   'harmful:sexual-content': Severity.High,
   'harmful:specialized-advice': Severity.High,
   'harmful:unsafe-practices': Severity.Low,
-  'harmful:violent-crime': Severity.Critical,
+  'harmful:violent-crime': Severity.High,
   'prompt-injection': Severity.Medium,
   'shell-injection': Severity.High,
   'sql-injection': Severity.High,
@@ -115,7 +115,7 @@ export const categoryLabels = Object.keys(categoryMapReverse);
 
 // Map from metric name or harm category to plugin name
 export const categoryAliases = {
-  'debug-access': 'DebugInterface',
+  'debug-access': 'DebugAccess',
   'excessive-agency': 'ExcessiveAgency',
   'harmful:child-exploitation': 'Child Exploitation',
   'harmful:cybercrime': 'Cybercrime & Unauthorized Intrusion - Hacking and Malware',

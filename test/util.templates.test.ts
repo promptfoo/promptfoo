@@ -1,4 +1,9 @@
-import { extractVariablesFromTemplate, extractVariablesFromTemplates } from '../src/util/templates';
+import nunjucks from 'nunjucks';
+import {
+  extractVariablesFromTemplate,
+  extractVariablesFromTemplates,
+  getNunjucksEngine,
+} from '../src/util/templates';
 
 describe('extractVariablesFromTemplate', () => {
   it('should extract simple variables', () => {
@@ -89,5 +94,40 @@ describe('extractVariablesFromTemplates', () => {
     const result = extractVariablesFromTemplates(templates);
 
     expect(result).toEqual(['name', 'age']);
+  });
+});
+
+describe('getNunjucksEngine', () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    jest.resetModules();
+    process.env = { ...originalEnv };
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  it('should return a simple render function when PROMPTFOO_DISABLE_TEMPLATING is set', () => {
+    process.env.PROMPTFOO_DISABLE_TEMPLATING = 'true';
+    const engine = getNunjucksEngine();
+    expect(engine.renderString('Hello {{ name }}', {})).toBe('Hello {{ name }}');
+  });
+
+  it('should return a nunjucks environment when PROMPTFOO_DISABLE_TEMPLATING is not set', () => {
+    const engine = getNunjucksEngine();
+    expect(engine).toBeInstanceOf(nunjucks.Environment);
+    expect(engine.renderString('Hello {{ name }}', { name: 'World' })).toBe('Hello World');
+  });
+
+  it('should add custom filters when provided', () => {
+    const customFilters: Record<string, (args_0: any, ...args_1: any[]) => string> = {
+      uppercase: (str: string) => str.toUpperCase(),
+      add: (a: number, b: number) => (a + b).toString(),
+    };
+    const engine = getNunjucksEngine(customFilters);
+    expect(engine.renderString('{{ "hello" | uppercase }}', {})).toBe('HELLO');
+    expect(engine.renderString('{{ 5 | add(3) }}', {})).toBe('8');
   });
 });

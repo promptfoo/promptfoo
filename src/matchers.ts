@@ -502,11 +502,11 @@ export async function matchesClosedQa(
 
   invariant(typeof resp.output === 'string', 'model-graded-closedqa produced malformed response');
   try {
-    const pass = resp.output.endsWith('Y');
+    const pass = resp.output.trimEnd().endsWith('Y');
     let reason;
     if (pass) {
       reason = 'The submission meets the criterion';
-    } else if (resp.output.endsWith('N')) {
+    } else if (resp.output.trimEnd().endsWith('N')) {
       reason = `The submission does not meet the criterion:\n${resp.output}`;
     } else {
       reason = `Model grader produced a malformed response:\n${resp.output}`;

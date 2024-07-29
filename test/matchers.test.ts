@@ -386,7 +386,7 @@ describe('matchesClosedQa', () => {
     const grading = {};
 
     jest.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce({
-      output: 'foo \n \n bar\n Y Y',
+      output: 'foo \n \n bar\n Y Y \n',
       tokenUsage: { total: 10, prompt: 5, completion: 5 },
     });
 
@@ -410,13 +410,13 @@ describe('matchesClosedQa', () => {
     const grading = {};
 
     jest.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce({
-      output: 'foo bar N',
+      output: 'foo bar N \n',
       tokenUsage: { total: 10, prompt: 5, completion: 5 },
     });
 
     await expect(matchesClosedQa(input, expected, output, grading)).resolves.toEqual({
       pass: false,
-      reason: 'The submission does not meet the criterion:\nfoo bar N',
+      reason: 'The submission does not meet the criterion:\nfoo bar N \n',
       score: 0,
       tokensUsed: {
         total: expect.any(Number),
