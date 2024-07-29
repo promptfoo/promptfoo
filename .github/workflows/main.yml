@@ -126,9 +126,6 @@ jobs:
       - name: Install Dependencies
         run: npm install
 
-      - name: Generate Citation
-        run: npm run citation:generate
-
       - name: Generate JSON Schema
         run: npm run jsonSchema:generate
 
