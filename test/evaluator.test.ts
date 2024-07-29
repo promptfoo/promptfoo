@@ -509,7 +509,7 @@ describe('evaluator', () => {
     expect(summary.results[0].response?.output).toBe('Transformed: Original output');
   });
 
-  it('evaluate with provider transform and default test transform', async () => {
+  it('evaluate with provider transform and test transform', async () => {
     const mockApiProviderWithTransform: ApiProvider = {
       id: jest.fn().mockReturnValue('test-provider-transform'),
       callApi: jest.fn().mockResolvedValue({
@@ -524,7 +524,8 @@ describe('evaluator', () => {
       prompts: [toPrompt('Test prompt')],
       defaultTest: {
         options: {
-          transform: '"defaultTest postprocessed " + output',
+          // overriden by the test transform
+          transform: '"defaultTestTransformed " + output',
         },
       },
       tests: [
@@ -532,11 +533,12 @@ describe('evaluator', () => {
           assert: [
             {
               type: 'equals',
-              // Provider transform should be called before defaultTest transform:
-              value: 'defaultTest postprocessed ProviderTransformed: Original output',
+              // Order of transforms: 1. Provider transform 2. Test transform (or defaultTest transform, if test transform unset)
+              value: 'testTransformed ProviderTransformed: Original output',
             },
           ],
-          options: {}, // No test transform, relying on provider's transform and defaultTest transform
+          // This transform overrides the defaultTest transform
+          options: {transform: '"testTransformed " + output'},
         },
       ],
     };
@@ -546,7 +548,7 @@ describe('evaluator', () => {
     expect(mockApiProviderWithTransform.callApi).toHaveBeenCalledTimes(1);
     expect(summary.stats.successes).toBe(1);
     expect(summary.stats.failures).toBe(0);
-    expect(summary.results[0].response?.output).toBe('defaultTest postprocessed ProviderTransformed: Original output');
+    expect(summary.results[0].response?.output).toBe('testTransformed ProviderTransformed: Original output');
   });
 
   it('evaluate with providerPromptMap', async () => {
