@@ -849,6 +849,15 @@ export async function getEvalFromId(hash: string) {
   return undefined;
 }
 
+export async function getEvalsByDatasetId(
+  datasetId: string,
+  limit: number = DEFAULT_QUERY_LIMIT,
+): Promise<TestCasesWithMetadata[]> {
+  const allTestCases = await getTestCasesWithPredicate(() => true, limit);
+  const matchingEvals = allTestCases.filter((testCase) => testCase.id == datasetId);
+  return matchingEvals;
+}
+
 export async function deleteEval(evalId: string) {
   const db = getDb();
   await db.transaction(async () => {

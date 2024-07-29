@@ -537,7 +537,7 @@ export default function ResultsView({
           </ResponsiveStack>
         </Box>
       </ResponsiveStack>
-      <ResultsCharts columnVisibility={columnVisibility} />
+      <ResultsCharts columnVisibility={columnVisibility} recentEvals={recentEvals} />
       <ResultsTable
         maxTextLength={maxTextLength}
         columnVisibility={columnVisibility}
