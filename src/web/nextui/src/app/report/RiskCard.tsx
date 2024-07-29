@@ -93,12 +93,17 @@ const RiskCard: React.FC<{
                 >
                   <ListItem
                     className="risk-card-list-item"
-                    onClick={() => {
+                    onClick={(event) => {
                       const searchParams = new URLSearchParams(window.location.search);
                       const evalId = searchParams.get('evalId');
                       const descriptiveName =
                         categoryAliases[test.name as keyof typeof categoryAliases];
-                      window.location.href = `/eval/?evalId=${evalId}&search=${encodeURIComponent(`(var=${descriptiveName}|metric=${descriptiveName})`)}`;
+                      const url = `/eval/?evalId=${evalId}&search=${encodeURIComponent(`(var=${descriptiveName}|metric=${descriptiveName})`)}`;
+                      if (event.ctrlKey || event.metaKey) {
+                        window.open(url, '_blank');
+                      } else {
+                        window.location.href = url;
+                      }
                     }}
                     style={{ cursor: 'pointer' }}
                   >
