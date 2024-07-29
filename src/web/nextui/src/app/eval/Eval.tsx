@@ -242,7 +242,7 @@ export default function Eval({
   ]);
 
   React.useEffect(() => {
-    document.title = `${config?.description || evalId} | promptfoo`;
+    document.title = `${config?.description || evalId || 'Eval'} | promptfoo`;
   }, [config, evalId]);
 
   if (failed) {

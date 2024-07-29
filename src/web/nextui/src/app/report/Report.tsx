@@ -41,7 +41,7 @@ const App: React.FC = () => {
   }, []);
 
   React.useEffect(() => {
-    document.title = `Report: ${evalData?.config.description || evalId} | promptfoo`;
+    document.title = `Report: ${evalData?.config.description || evalId || 'Red Team'} | promptfoo`;
   }, [evalData, evalId]);
 
   if (!evalData || !evalId) {
