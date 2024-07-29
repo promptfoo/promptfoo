@@ -1,6 +1,7 @@
-# prettier-ignore
-prompts: [prompt.yaml]
-providers: ['openai:chat:gpt-4o-mini']
+prompts:
+  - prompt.yaml
+providers:
+  - openai:chat:gpt-4o-mini
 
 tests:
   - vars:

@@ -17,7 +17,7 @@ The end result will be a custom benchmark that looks similar to this:
 ## Requirements
 
 - OpenRouter API key for DBRX and Mixtral.
-- OpenAI API key for GPT-3.5.
+- OpenAI API key for gpt-4o-mini
 - Node 18+
 
 ## Step 1: Initial Setup

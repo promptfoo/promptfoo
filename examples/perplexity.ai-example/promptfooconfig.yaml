@@ -2,7 +2,6 @@ prompts:
   - 'Who discovered {{topic}}?'
 
 providers:
-  # Compare GPT 3.5 vs Perplexity 70B
   - id: openai:chat:gpt-4o-mini
   - id: openai:chat:pplx-70b-online
     config:
