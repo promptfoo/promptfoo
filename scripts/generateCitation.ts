@@ -7,6 +7,7 @@ import path from 'path';
  * Represents the structure of package.json file
  */
 interface PackageJson {
+  license: string;
   version: string;
   description: string;
 }
@@ -51,10 +52,10 @@ const createDefaultCitation = (packageJson: PackageJson): Citation => ({
   'date-released': new Date().toISOString().slice(0, 10),
   url: 'https://promptfoo.dev',
   'repository-code': 'https://github.com/promptfoo/promptfoo',
-  license: 'MIT',
+  license: packageJson.license,
   type: 'software',
   description: packageJson.description,
-  keywords: ['llm', 'evaluation', 'evals', 'testing', 'prompt-engineering'],
+  keywords: ['llm', 'evaluation', 'evals', 'testing', 'prompt-engineering', 'red-team'],
 });
 
 /**
