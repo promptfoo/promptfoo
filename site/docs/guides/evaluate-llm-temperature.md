@@ -32,19 +32,19 @@ This command sets up a basic configuration file in your current directory, which
 
 ## Evaluating
 
-Here's an example configuration that compares the outputs of GPT-3.5 at a low temperature (0.2) and a high temperature (0.9):
+Here's an example configuration that compares the outputs of gpt-4o-mini at a low temperature (0.2) and a high temperature (0.9):
 
 ```yaml title=promptfooconfig.yaml
 prompts:
   - 'Respond to the following instruction: {{message}}'
 
 providers:
-  - id: openai:gpt-3.5-turbo-0613
-    label: openai-gpt-3.5-turbo-lowtemp
+  - id: openai:gpt-4o-mini
+    label: openai-gpt-4o-mini-lowtemp
     config:
       temperature: 0.2
-  - id: openai:gpt-3.5-turbo-0613
-    label: openai-gpt-3.5-turbo-hightemp
+  - id: openai:gpt-4o-mini
+    label: openai-gpt-4o-mini-hightemp
     config:
       temperature: 0.9
 
@@ -61,7 +61,7 @@ tests:
 
 In the above configuration, we just use a boilerplate prompt because we're more interested in comparing the different models.
 
-We define two providers that call the same model (GPT 3.5) with different temperature settings. The `id` field helps us distinguish between the two when reviewing the results.
+We define two providers that call the same model (gpt-4o-mini) with different temperature settings. The `id` field helps us distinguish between the two when reviewing the results.
 
 The `tests` section includes our test cases that will be run against both temperature settings.
 
@@ -95,7 +95,7 @@ tests:
 
 This assertion will use a language model to determine whether the LLM output adheres to the criteria.
 
-In the above example comparing different GPT 3.5 temperatures, we notice that GPT actually _hallucinates_ an incorrect answer to the question about Henry VII's grandchildren. It gets it correct with low temperature, but incorrect with high temperature:
+In the above example comparing different temperatures, we notice that gpt-4o-mini actually _hallucinates_ an incorrect answer to the question about Henry VII's grandchildren. It gets it correct with low temperature, but incorrect with high temperature:
 
 ![gpt hallucinating with high temperature](/img/docs/gpt-temperature-hallucination.png)
 
@@ -130,13 +130,13 @@ Set a constant seed in the provider config:
 
 ```yaml
 providers:
-  - id: openai:gpt-3.5-turbo-0613
+  - id: openai:gpt-4o-mini
     label: openai-gpt-3.5-turbo-lowtemp
     config:
       temperature: 0.2
       // highlight-next-line
       seed: 0
-  - id: openai:gpt-3.5-turbo-0613
+  - id: openai:gpt-4o-mini
     label: openai-gpt-3.5-turbo-hightemp
     config:
       temperature: 0.9
