@@ -4,8 +4,8 @@ authors:
   - family-names: Webster
     given-names: Ian
 title: promptfoo
-version: 0.73.8
-date-released: '2024-07-29'
+version: 0.73.9
+date-released: '2024-07-30'
 url: https://promptfoo.dev
 repository-code: https://github.com/promptfoo/promptfoo
 license: MIT
