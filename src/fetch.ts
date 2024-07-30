@@ -1,6 +1,7 @@
 import fetch from 'node-fetch';
 import type { RequestInfo, RequestInit, Response } from 'node-fetch';
 import { ProxyAgent } from 'proxy-agent';
+import invariant from 'tiny-invariant';
 import logger from './logger';
 
 export async function fetchWithProxy(
@@ -40,6 +41,9 @@ export function fetchWithTimeout(
 }
 
 function isRateLimited(response: Response): boolean {
+  // This check helps make sure we set up tests correctly.
+  invariant(response.headers, 'Response headers are missing');
+
   return response.headers.get('X-RateLimit-Remaining') === '0';
 }
 
@@ -68,16 +72,9 @@ export async function fetchWithRetries(
     : 5000;
 
   for (let i = 0; i < retries; i++) {
+    let response;
     try {
-      const response = await fetchWithTimeout(url, options, timeout);
-
-      if (isRateLimited(response)) {
-        logger.debug(
-          `Rate limited on URL ${url}: ${response.status} ${response.statusText}, waiting before retry ${i + 1}/${retries}`,
-        );
-        await handleRateLimit(response);
-        continue;
-      }
+      response = await fetchWithTimeout(url, options, timeout);
 
       if (process.env.PROMPTFOO_RETRY_5XX && response.status >= 500 && response.status < 600) {
         throw new Error(`Internal Server Error: ${response.status} ${response.statusText}`);
@@ -88,6 +85,14 @@ export async function fetchWithRetries(
       lastError = error;
       const waitTime = Math.pow(2, i) * (backoff + 1000 * Math.random());
       await new Promise((resolve) => setTimeout(resolve, waitTime));
+    }
+
+    if (response && isRateLimited(response)) {
+      logger.debug(
+        `Rate limited on URL ${url}: ${response.status} ${response.statusText}, waiting before retry ${i + 1}/${retries}`,
+      );
+      await handleRateLimit(response);
+      continue;
     }
   }
   throw new Error(`Request failed after ${retries} retries: ${(lastError as Error).message}`);
