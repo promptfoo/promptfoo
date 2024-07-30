@@ -138,6 +138,12 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
     strategies: strategyObjs,
   };
   const parsedConfig = redteamConfigSchema.safeParse(config);
+  if (!parsedConfig.success) {
+    logger.error('Invalid redteam configuration:');
+    logger.error(parsedConfig.error.toString());
+    throw new Error('Invalid redteam configuration');
+  }
+
   const redteamTests = await synthesize({
     ...parsedConfig.data,
     prompts: testSuite.prompts.map((prompt) => prompt.raw),
