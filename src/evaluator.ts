@@ -248,16 +248,17 @@ class Evaluator {
       } else if (response.output) {
         // Create a copy of response so we can potentially mutate it.
         const processedResponse = { ...response };
-        const callTransform = async (codeOrFilepath: string) => {
-          processedResponse.output = await transform(codeOrFilepath, processedResponse.output, {
+        const transforms = [
+          [provider.transform].find((s) => s),
+          [test.options?.transform, test.options?.postprocess].find((s) => s),
+        ]
+          .flat()
+          .filter((s) => typeof s === 'string');
+        for (const t of transforms) {
+          processedResponse.output = await transform(t, processedResponse.output, {
             vars,
             prompt,
           });
-        };
-
-        const transforms = [provider.transform, test.options?.transform, test.options?.postprocess];
-        for (const transform_ of transforms.filter((t) => t !== undefined)) {
-          await callTransform(transform_);
         }
 
         invariant(processedResponse.output != null, 'Response output should not be null');
