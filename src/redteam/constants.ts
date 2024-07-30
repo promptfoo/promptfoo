@@ -99,6 +99,8 @@ export type AdditionalStrategy = (typeof ADDITIONAL_STRATEGIES)[number];
 export const ALL_STRATEGIES = [...DEFAULT_STRATEGIES, ...ADDITIONAL_STRATEGIES] as const;
 export type Strategy = (typeof ALL_STRATEGIES)[number];
 
+export const INCLUDE_ENTITY_METADATA: string[] = ['imitation'];
+
 // Duplicated in src/web/nextui/src/app/report/constants.ts for frontend
 export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   competitors: 'Competitor mentions and endorsements',

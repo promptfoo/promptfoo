@@ -28,7 +28,8 @@ import type {
   ProviderResponse,
   Assertion,
 } from './types';
-import { transformOutput, sha256 } from './util';
+import { sha256 } from './util';
+import { transform } from './util/transform';
 
 export const DEFAULT_MAX_CONCURRENCY = 4;
 
@@ -261,10 +262,15 @@ class Evaluator {
       } else if (response.output) {
         // Create a copy of response so we can potentially mutate it.
         const processedResponse = { ...response };
-        const transform =
-          test.options?.transform || test.options?.postprocess || provider.transform;
-        if (transform) {
-          processedResponse.output = await transformOutput(transform, processedResponse.output, {
+        const transforms: string[] = [
+          provider.transform, // Apply provider transform first
+          // NOTE: postprocess is deprecated. Use the first defined transform.
+          [test.options?.transform, test.options?.postprocess].find((s) => s),
+        ]
+          .flat()
+          .filter((s): s is string => typeof s === 'string');
+        for (const t of transforms) {
+          processedResponse.output = await transform(t, processedResponse.output, {
             vars,
             prompt,
           });
@@ -550,7 +556,10 @@ class Evaluator {
     const table: EvaluateTable = {
       head: {
         prompts,
-        vars: Array.from(varNames).sort(),
+        vars: [
+          ...Object.keys(testSuite.defaultTest?.vars || {}).sort(),
+          ...Array.from(varNames).sort(),
+        ],
       },
       body: [],
     };

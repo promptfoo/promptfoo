@@ -80,6 +80,8 @@ export default function ResultsView({
     evalId,
     inComparisonMode,
     setInComparisonMode,
+    columnStates,
+    setColumnState,
   } = useResultsViewStore();
   const { setStateFromConfig } = useMainStore();
 
@@ -212,6 +214,15 @@ export default function ResultsView({
     [table.body],
   );
 
+  const promptOptions = head.prompts.map((prompt, idx) => {
+    const label = prompt.label || prompt.display || prompt.raw;
+    return {
+      value: `Prompt ${idx + 1}`,
+      label: `Prompt ${idx + 1}: ${label && label.length > 100 ? label.slice(0, 100) + '...' : label || ''}`,
+      group: 'Prompts',
+    };
+  });
+
   const columnData = React.useMemo(() => {
     return [
       ...(hasAnyDescriptions ? [{ value: 'description', label: 'Description' }] : []),
@@ -222,44 +233,61 @@ export default function ResultsView({
         }`,
         group: 'Variables',
       })),
-      ...head.prompts.map((_, idx) => {
-        const prompt = head.prompts[idx];
-        const label = prompt.label || prompt.display || prompt.raw;
-        return {
-          value: `Prompt ${idx + 1}`,
-          label: `Prompt ${idx + 1}: ${label.length > 100 ? label.slice(0, 97) + '...' : label}`,
-          group: 'Prompts',
-        };
-      }),
+      ...promptOptions,
     ];
-  }, [head.vars, head.prompts, hasAnyDescriptions]);
+  }, [head.vars, promptOptions, hasAnyDescriptions]);
 
   const [configModalOpen, setConfigModalOpen] = React.useState(false);
   const [viewSettingsModalOpen, setViewSettingsModalOpen] = React.useState(false);
-  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
-  const [selectedColumns, setSelectedColumns] = React.useState<string[]>(
-    columnData.map((col) => col.value),
-  );
 
-  const handleChange = (event: SelectChangeEvent<typeof selectedColumns>) => {
-    const {
-      target: { value },
-    } = event;
-    setSelectedColumns(typeof value === 'string' ? value.split(',') : value);
-
-    const allColumns = [
+  const allColumns = React.useMemo(
+    () => [
       ...(hasAnyDescriptions ? ['description'] : []),
       ...head.vars.map((_, idx) => `Variable ${idx + 1}`),
       ...head.prompts.map((_, idx) => `Prompt ${idx + 1}`),
-    ];
-    const newColumnVisibility: VisibilityState = {};
-    allColumns.forEach((col) => {
-      newColumnVisibility[col] = (typeof value === 'string' ? value.split(',') : value).includes(
-        col,
-      );
-    });
-    setColumnVisibility(newColumnVisibility);
+    ],
+    [hasAnyDescriptions, head.vars, head.prompts],
+  );
+
+  const currentEvalId = evalId || defaultEvalId || 'default';
+  const currentColumnState = columnStates[currentEvalId] || {
+    selectedColumns: [],
+    columnVisibility: {},
   };
+
+  const updateColumnVisibility = React.useCallback(
+    (columns: string[]) => {
+      const newColumnVisibility: VisibilityState = {};
+      allColumns.forEach((col) => {
+        newColumnVisibility[col] = columns.includes(col);
+      });
+      setColumnState(currentEvalId, {
+        selectedColumns: columns,
+        columnVisibility: newColumnVisibility,
+      });
+    },
+    [allColumns, setColumnState, currentEvalId],
+  );
+
+  React.useEffect(() => {
+    if (
+      currentColumnState.selectedColumns.length === 0 ||
+      !currentColumnState.selectedColumns.every((col: string) => allColumns.includes(col))
+    ) {
+      updateColumnVisibility(allColumns);
+    }
+  }, [allColumns, currentColumnState.selectedColumns, updateColumnVisibility]);
+
+  const handleChange = React.useCallback(
+    (event: SelectChangeEvent<string[]>) => {
+      const newSelectedColumns = Array.isArray(event.target.value)
+        ? event.target.value
+        : event.target.value.split(',');
+
+      updateColumnVisibility(newSelectedColumns);
+    },
+    [updateColumnVisibility],
+  );
 
   const handleDescriptionClick = async () => {
     invariant(config, 'Config must be loaded before clicking its description');
@@ -400,14 +428,14 @@ export default function ResultsView({
               labelId="visible-columns-label"
               id="visible-columns"
               multiple
-              value={selectedColumns}
+              value={currentColumnState.selectedColumns}
               onChange={handleChange}
               input={<OutlinedInput label="Visible columns" />}
               renderValue={(selected: string[]) => selected.join(', ')}
             >
               {columnData.map((column) => (
                 <MenuItem dense key={column.value} value={column.value}>
-                  <Checkbox checked={selectedColumns.indexOf(column.value) > -1} />
+                  <Checkbox checked={currentColumnState.selectedColumns.includes(column.value)} />
                   <ListItemText primary={column.label} />
                 </MenuItem>
               ))}
@@ -537,10 +565,10 @@ export default function ResultsView({
           </ResponsiveStack>
         </Box>
       </ResponsiveStack>
-      <ResultsCharts columnVisibility={columnVisibility} />
+      <ResultsCharts columnVisibility={currentColumnState.columnVisibility} />
       <ResultsTable
         maxTextLength={maxTextLength}
-        columnVisibility={columnVisibility}
+        columnVisibility={currentColumnState.columnVisibility}
         wordBreak={wordBreak}
         showStats={showInferenceDetails}
         filterMode={filterMode}

@@ -96,33 +96,35 @@ export function redteamCommand(program: Command) {
       }
 
       // Question: Provider
-      let provider: string;
-      const providerChoice = await rawlist({
-        message: 'Choose a provider to target:',
-        choices: [
-          { name: 'openai:gpt-4o-mini', value: 'openai:gpt-4o-mini' },
-          { name: 'openai:gpt-4o', value: 'openai:gpt-4o' },
-          { name: 'openai:gpt-3.5-turbo', value: 'openai:gpt-3.5-turbo' },
-          {
-            name: 'anthropic:claude-3-5-sonnet-20240620',
-            value: 'anthropic:messages:claude-3-5-sonnet-20240620',
-          },
-          {
-            name: 'anthropic:claude-3-opus-20240307',
-            value: 'anthropic:messages:claude-3-opus-20240307',
-          },
-          { name: 'vertex:gemini-pro', value: 'vertex:gemini-pro' },
-          { name: 'Other', value: 'Other' },
-        ],
+      const providerChoices = [
+        { name: 'openai:gpt-4o-mini', value: 'openai:gpt-4o-mini', checked: true },
+        { name: 'openai:gpt-4o', value: 'openai:gpt-4o' },
+        { name: 'openai:gpt-3.5-turbo', value: 'openai:gpt-3.5-turbo' },
+        {
+          name: 'anthropic:claude-3-5-sonnet-20240620',
+          value: 'anthropic:messages:claude-3-5-sonnet-20240620',
+        },
+        {
+          name: 'anthropic:claude-3-opus-20240307',
+          value: 'anthropic:messages:claude-3-opus-20240307',
+        },
+        { name: 'vertex:gemini-pro', value: 'vertex:gemini-pro' },
+        { name: 'Other', value: 'Other' },
+      ];
+
+      const selectedProviders = await checkbox({
+        message: 'Choose one or more providers to target:',
+        choices: providerChoices,
       });
 
-      if (providerChoice === 'Other') {
-        provider = await input({
+      const providers: string[] = selectedProviders.filter((p) => p !== 'Other');
+
+      if (selectedProviders.includes('Other')) {
+        const customProvider = await input({
           message:
-            'Enter the provider ID (see https://www.promptfoo.dev/docs/providers/ for options):',
+            'Enter the custom provider ID (see https://www.promptfoo.dev/docs/providers/ for options):',
         });
-      } else {
-        provider = providerChoice;
+        providers.push(customProvider);
       }
 
       // Question: OpenAI API key
@@ -204,7 +206,7 @@ export function redteamCommand(program: Command) {
       // Create config file
       const config = {
         prompts,
-        providers: [provider],
+        providers: providers,
         tests: [],
         redteam: redteamConfigSchema.safeParse({
           plugins: plugins,
