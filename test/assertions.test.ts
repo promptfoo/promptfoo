@@ -2087,11 +2087,14 @@ describe('runAssertion', () => {
   it('should pass when the webhook assertion passes', async () => {
     const output = 'Expected output';
 
-    jest
-      .mocked(fetchWithRetries)
-      .mockImplementation(() =>
-        Promise.resolve(new Response(JSON.stringify({ pass: true }), { status: 200 })),
-      );
+    jest.mocked(fetchWithRetries).mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ pass: true }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
+    );
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
@@ -2108,11 +2111,14 @@ describe('runAssertion', () => {
 
   it('should fail when the webhook assertion fails', async () => {
     const output = 'Different output';
-    jest
-      .mocked(fetchWithRetries)
-      .mockImplementation(() =>
-        Promise.resolve(new Response(JSON.stringify({ pass: false }), { status: 200 })),
-      );
+    jest.mocked(fetchWithRetries).mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ pass: false }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
+    );
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
@@ -2130,9 +2136,14 @@ describe('runAssertion', () => {
   it('should fail when the webhook returns an error', async () => {
     const output = 'Expected output';
 
-    jest
-      .mocked(fetchWithRetries)
-      .mockImplementation(() => Promise.resolve(new Response('', { status: 500 })));
+    jest.mocked(fetchWithRetries).mockImplementation(() =>
+      Promise.resolve(
+        new Response('', {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
+    );
 
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
