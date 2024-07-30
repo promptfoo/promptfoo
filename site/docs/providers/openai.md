@@ -18,7 +18,7 @@ The OpenAI provider supports the following model formats:
 - `openai:completion` - defaults to `text-davinci-003`
 - `openai:<model name>` - uses a specific model name (mapped automatically to chat or completion endpoint)
 - `openai:chat:<model name>` - uses any model name against the `/v1/chat/completions` endpoint
-- `openai:chat:ft:gpt-3.5-turbo-0613:company-name:ID` - example of a fine-tuned chat completion model
+- `openai:chat:ft:gpt-4o-mini:company-name:ID` - example of a fine-tuned chat completion model
 - `openai:completion:<model name>` - uses any model name against the `/v1/completions` endpoint
 - `openai:embeddings:<model name>` - uses any model name against the `/v1/embeddings` endpoint
 - `openai:assistant:<assistant id>` - use an assistant

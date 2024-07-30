@@ -469,6 +469,14 @@ promptfoo supports tool use and function calling with OpenAI and Anthropic model
 
 ## Transforming outputs
 
+Transforms can be applied at both the provider level and in test cases. The order of application is:
+
+1. Provider transforms (always applied first)
+2. Default test transforms (if specified in `defaultTest`)
+3. Individual test case transforms (overrides `defaultTest` transform if present)
+
+Note that only one transform is applied at the test case level - either from `defaultTest` or the individual test case, not both.
+
 The `TestCase.options.transform` field is a Javascript snippet that modifies the LLM output before it is run through the test assertions.
 
 It is a function that takes a string output and a context object:

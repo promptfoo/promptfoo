@@ -133,7 +133,7 @@ jobs:
         run: npm run jsonSchema:generate
 
       - name: Format
-        run: npm run f
+        run: npm run format
 
       - name: Check for changes
         run: |

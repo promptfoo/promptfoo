@@ -509,6 +509,59 @@ describe('evaluator', () => {
     expect(summary.results[0].response?.output).toBe('Transformed: Original output');
   });
 
+  it('evaluate with provider transform and test transform', async () => {
+    const mockApiProviderWithTransform: ApiProvider = {
+      id: jest.fn().mockReturnValue('test-provider-transform'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Original output',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+      }),
+      transform: '`ProviderTransformed: ${output}`',
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProviderWithTransform],
+      prompts: [toPrompt('Test prompt')],
+      defaultTest: {
+        options: {
+          // overridden by the test transform
+          transform: '"defaultTestTransformed " + output',
+        },
+      },
+      tests: [
+        {
+          assert: [
+            {
+              type: 'equals',
+              // Order of transforms: 1. Provider transform 2. Test transform (or defaultTest transform, if test transform unset)
+              value: 'testTransformed ProviderTransformed: Original output',
+            },
+          ],
+          // This transform overrides the defaultTest transform
+          options: { transform: '"testTransformed " + output' },
+        },
+      ],
+    };
+
+    await expect(evaluate(testSuite, {})).resolves.toEqual(
+      expect.objectContaining({
+        stats: expect.objectContaining({
+          successes: 1,
+          failures: 0,
+        }),
+        results: expect.arrayContaining([
+          expect.objectContaining({
+            response: expect.objectContaining({
+              output: 'testTransformed ProviderTransformed: Original output',
+            }),
+          }),
+        ]),
+      }),
+    );
+
+    expect(mockApiProviderWithTransform.callApi).toHaveBeenCalledTimes(1);
+  });
+
   it('evaluate with providerPromptMap', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
@@ -882,6 +935,134 @@ describe('evaluator', () => {
     expect(summary.stats.successes).toBe(1);
     expect(summary.stats.failures).toBe(0);
     expect(summary.results[0].response?.output).toBe('Test output postprocessed');
+  });
+
+  it('evaluate with multiple transforms', async () => {
+    const mockApiProviderWithTransform: ApiProvider = {
+      id: jest.fn().mockReturnValue('test-provider-transform'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Original output',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+      }),
+      transform: '`Provider: ${output}`',
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProviderWithTransform],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          assert: [
+            {
+              type: 'equals',
+              value: 'Test: Provider: Original output',
+            },
+          ],
+          options: {
+            transform: '`Test: ${output}`',
+          },
+        },
+      ],
+    };
+
+    const summary = await evaluate(testSuite, {});
+
+    expect(mockApiProviderWithTransform.callApi).toHaveBeenCalledTimes(1);
+    expect(summary.stats.successes).toBe(1);
+    expect(summary.stats.failures).toBe(0);
+    expect(summary.results[0].response?.output).toBe('Test: Provider: Original output');
+  });
+
+  it('evaluate with provider transform and test postprocess (deprecated)', async () => {
+    const mockApiProviderWithTransform: ApiProvider = {
+      id: jest.fn().mockReturnValue('test-provider-transform'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Original output',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+      }),
+      transform: '`Provider: ${output}`',
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProviderWithTransform],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          assert: [
+            {
+              type: 'equals',
+              value: 'Postprocess: Provider: Original output',
+            },
+          ],
+          options: {
+            postprocess: '`Postprocess: ${output}`',
+          },
+        },
+      ],
+    };
+
+    await expect(evaluate(testSuite, {})).resolves.toEqual(
+      expect.objectContaining({
+        stats: expect.objectContaining({
+          successes: 1,
+          failures: 0,
+        }),
+        results: expect.arrayContaining([
+          expect.objectContaining({
+            response: expect.objectContaining({
+              output: 'Postprocess: Provider: Original output',
+            }),
+          }),
+        ]),
+      }),
+    );
+    expect(mockApiProviderWithTransform.callApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('evaluate with provider transform, test transform, and test postprocess (deprecated)', async () => {
+    const mockApiProviderWithTransform: ApiProvider = {
+      id: jest.fn().mockReturnValue('test-provider-transform'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Original output',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+      }),
+      transform: '`Provider: ${output}`',
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProviderWithTransform],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          assert: [
+            {
+              type: 'equals',
+              value: 'Transform: Provider: Original output',
+            },
+          ],
+          options: {
+            transform: '`Transform: ${output}`',
+            postprocess: '`Postprocess: ${output}`', // This should be ignored
+          },
+        },
+      ],
+    };
+    await expect(evaluate(testSuite, {})).resolves.toEqual(
+      expect.objectContaining({
+        stats: expect.objectContaining({
+          successes: 1,
+          failures: 0,
+        }),
+        results: expect.arrayContaining([
+          expect.objectContaining({
+            response: expect.objectContaining({
+              output: 'Transform: Provider: Original output',
+            }),
+          }),
+        ]),
+      }),
+    );
+    expect(mockApiProviderWithTransform.callApi).toHaveBeenCalledTimes(1);
   });
 });
 

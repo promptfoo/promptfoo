@@ -10,10 +10,4 @@ url: https://promptfoo.dev
 repository-code: https://github.com/promptfoo/promptfoo
 license: MIT
 type: software
-description: LLM eval & testing toolkit
-keywords:
-  - llm
-  - evaluation
-  - evals
-  - testing
-  - prompt-engineering
+description: LLM evaluation and testing toolkit for prompts, agents, and RAGs.  Supports redteaming, pentesting, and vulnerability scanning for LLMs.  Compare performance across various models (GPT, Claude, Gemini, Llama, etc.).  Features declarative configs, CLI, and CI/CD integration.
