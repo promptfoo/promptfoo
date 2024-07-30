@@ -1,5 +1,6 @@
 import dedent from 'dedent';
 import { z } from 'zod';
+import { ApiProviderSchema, ProviderOptionsSchema } from '../types';
 import {
   ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
   ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
@@ -34,10 +35,7 @@ export const redteamPluginSchema = z.union([
  * Schema for individual redteam strategies
  */
 export const redteamStrategySchema = z.union([
-  z
-    .enum(ALL_STRATEGIES as unknown as [string, ...string[]])
-    .describe('Name of the strategy')
-    .transform((s) => ({ id: s })),
+  z.enum(ALL_STRATEGIES as unknown as [string, ...string[]]).describe('Name of the strategy'),
   z.object({
     id: z.enum(ALL_STRATEGIES as unknown as [string, ...string[]]).describe('Name of the strategy'),
   }),
@@ -89,7 +87,10 @@ export const redteamConfigSchema = z
       .string()
       .optional()
       .describe('Purpose override string - describes the prompt templates'),
-    provider: z.string().optional().describe('Provider used for generating adversarial inputs'),
+    provider: z
+      .union([z.string(), ProviderOptionsSchema, ApiProviderSchema])
+      .optional()
+      .describe('Provider used for generating adversarial inputs'),
     numTests: z.number().int().positive().default(5).describe('Number of tests to generate'),
     plugins: z
       .array(redteamPluginSchema)
@@ -147,6 +148,7 @@ export const redteamConfigSchema = z
       ...(data.purpose ? { purpose: data.purpose } : {}),
       ...(data.injectVar ? { injectVar: data.injectVar } : {}),
       ...(data.provider ? { provider: data.provider } : {}),
+      numTests: data.numTests,
       plugins: uniquePlugins,
       strategies: data.strategies,
     };

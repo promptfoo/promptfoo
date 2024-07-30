@@ -21,7 +21,7 @@ import {
 } from '../redteam/constants';
 import { redteamConfigSchema } from '../redteam/types';
 import telemetry from '../telemetry';
-import { Prompt, TestSuite } from '../types';
+import { Prompt, TestSuite, UnifiedConfig } from '../types';
 import { doGenerateRedteam } from './generate/redteam';
 
 export async function redteamInit(directory: string | undefined) {
