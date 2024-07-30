@@ -25,7 +25,7 @@
     "cache-manager-ioredis": "^2.1.0",
     "chart.js": "^4.4.3",
     "csv-parse": "^5.5.6",
-    "csv-stringify": "^6.5.0",
+    "csv-stringify": "^6.5.1",
     "debounce": "^1.2.1",
     "diff": "^5.2.0",
     "drizzle-orm": "^0.32.1",
