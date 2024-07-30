@@ -524,7 +524,7 @@ describe('evaluator', () => {
       prompts: [toPrompt('Test prompt')],
       defaultTest: {
         options: {
-          // overriden by the test transform
+          // overridden by the test transform
           transform: '"defaultTestTransformed " + output',
         },
       },
@@ -543,14 +543,23 @@ describe('evaluator', () => {
       ],
     };
 
-    const summary = await evaluate(testSuite, {});
+    await expect(evaluate(testSuite, {})).resolves.toEqual(
+      expect.objectContaining({
+        stats: expect.objectContaining({
+          successes: 1,
+          failures: 0,
+        }),
+        results: expect.arrayContaining([
+          expect.objectContaining({
+            response: expect.objectContaining({
+              output: 'testTransformed ProviderTransformed: Original output',
+            }),
+          }),
+        ]),
+      }),
+    );
 
     expect(mockApiProviderWithTransform.callApi).toHaveBeenCalledTimes(1);
-    expect(summary.stats.successes).toBe(1);
-    expect(summary.stats.failures).toBe(0);
-    expect(summary.results[0].response?.output).toBe(
-      'testTransformed ProviderTransformed: Original output',
-    );
   });
 
   it('evaluate with providerPromptMap', async () => {
