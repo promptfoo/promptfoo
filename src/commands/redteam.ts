@@ -17,7 +17,6 @@ import {
   ALL_PLUGINS,
   DEFAULT_PLUGINS,
   DEFAULT_STRATEGIES,
-  Strategy,
   subCategoryDescriptions,
 } from '../redteam/constants';
 import { redteamConfigSchema } from '../redteam/types';
@@ -27,18 +26,19 @@ import { doGenerateRedteam } from './generate/redteam';
 
 export async function redteamInit(directory: string | undefined) {
   telemetry.maybeShowNotice();
-  telemetry.record('command_used', {
-    name: 'redteam init - started',
-  });
+  telemetry.record('command_used', { name: 'redteam init - started' });
   await telemetry.send();
 
-  let projectDir = directory;
-  if (!projectDir) {
-    projectDir = await input({
-      message: 'Where do you want to create the project?',
+  console.clear(); // Clear the screen for a fresh start
+
+  logger.info(chalk.bold('Red Team Initialization\n'));
+
+  const projectDir =
+    directory ||
+    (await input({
+      message: 'Project directory:',
       default: '.',
-    });
-  }
+    }));
   if (projectDir !== '.' && !fs.existsSync(projectDir)) {
     fs.mkdirSync(projectDir, { recursive: true });
   }
@@ -46,50 +46,54 @@ export async function redteamInit(directory: string | undefined) {
   const configPath = path.join(projectDir, 'promptfooconfig.yaml');
   const previousConfigExists = fs.existsSync(configPath);
   let existingConfig: TestSuite | undefined;
+
   if (previousConfigExists) {
     const overwrite = await confirm({
-      message: `A promptfoo configuration file already exists at: ${configPath} Do you want to overwrite it?`,
+      message: `Config file exists at ${configPath}. Overwrite?`,
       default: false,
     });
-    if (!overwrite) {
-      return;
-    }
+    if (!overwrite) {return;}
     existingConfig = yaml.load(fs.readFileSync(configPath, 'utf8')) as TestSuite;
   }
+
+  console.clear();
+  logger.info(chalk.bold('Prompt Configuration\n'));
 
   const promptChoices = [
     { name: 'Enter a prompt', value: 'enter' },
     { name: 'Reference a prompt file', value: 'file' },
+    ...(previousConfigExists ? [{ name: 'Use existing config prompts', value: 'existing' }] : []),
   ];
-  if (previousConfigExists) {
-    promptChoices.push({ name: 'Use prompts from existing config', value: 'existing' });
-  }
-  // Question: Prompt
+
   const promptChoice = await rawlist({
     message: 'How would you like to specify the prompt?',
     choices: promptChoices,
   });
 
   let prompts: (Prompt | string)[] = [];
-  if (promptChoice === 'enter') {
-    prompts.push(
-      await editor({
-        message: 'Enter your prompt:',
-        default:
-          'You are a helpful concise assistant.\n\nUser query: {{query}}\n\n(NOTE: your prompt must include "{{query}}" as a placeholder for user input)',
-      }),
-    );
-  } else if (promptChoice === 'file') {
-    const promptFile = await input({
-      message: 'Enter the path to your prompt file (text or JSON):',
-    });
-    prompts.push(`file://${promptFile}`);
-  } else if (promptChoice === 'existing') {
-    invariant(existingConfig?.prompts, 'No prompts found in existing configuration');
-    prompts = existingConfig?.prompts;
+  switch (promptChoice) {
+    case 'enter':
+      prompts.push(
+        await editor({
+          message: 'Enter your prompt:',
+          default:
+            'You are a helpful assistant.\n\nUser query: {{query}}\n\n(Include {{query}} as a placeholder)',
+        }),
+      );
+      break;
+    case 'file':
+      const promptFile = await input({ message: 'Path to prompt file (text/JSON):' });
+      prompts.push(`file://${promptFile}`);
+      break;
+    case 'existing':
+      invariant(existingConfig?.prompts, 'No prompts in existing config');
+      prompts = existingConfig.prompts;
+      break;
   }
 
-  // Question: Provider
+  console.clear();
+  logger.info(chalk.bold('Provider Configuration\n'));
+
   const providerChoices = [
     { name: 'openai:gpt-4o-mini', value: 'openai:gpt-4o-mini', checked: true },
     { name: 'openai:gpt-4o', value: 'openai:gpt-4o' },
@@ -107,49 +111,47 @@ export async function redteamInit(directory: string | undefined) {
   ];
 
   const selectedProviders = await checkbox({
-    message: 'Choose one or more providers to target:',
+    message: 'Select providers to target:',
     choices: providerChoices,
+    pageSize: Math.min(providerChoices.length, process.stdout.rows - 4),
   });
 
   const providers: string[] = selectedProviders.filter((p) => p !== 'Other');
-
   if (selectedProviders.includes('Other')) {
     const customProvider = await input({
-      message:
-        'Enter the custom provider ID (see https://www.promptfoo.dev/docs/providers/ for options):',
+      message: 'Enter custom provider ID:',
     });
     providers.push(customProvider);
   }
 
-  // Question: OpenAI API key
   if (!process.env.OPENAI_API_KEY) {
+    console.clear();
+    logger.info(chalk.bold('OpenAI API Configuration\n'));
+
     const apiKeyChoice = await rawlist({
-      message:
-        'An OpenAI API key is required to generate the adversarial dataset. How would you like to proceed?',
+      message: 'OpenAI API key is required. How to proceed?',
       choices: [
-        { name: 'Enter API key now (sets the environment variable)', value: 'enter' },
-        { name: "I'll set it later", value: 'later' },
+        { name: 'Enter API key now', value: 'enter' },
+        { name: 'Set it later', value: 'later' },
       ],
     });
 
     if (apiKeyChoice === 'enter') {
-      const apiKey = await input({
-        message: 'Enter your OpenAI API key:',
-      });
+      const apiKey = await input({ message: 'Enter your OpenAI API key:' });
       process.env.OPENAI_API_KEY = apiKey;
-      logger.info('OPENAI_API_KEY environment variable has been set for this session.');
+      logger.info('OPENAI_API_KEY set for this session.');
     } else {
-      logger.warn(
-        'Remember to set the OPENAI_API_KEY environment variable before generating the dataset.',
-      );
+      logger.warn('Remember to set OPENAI_API_KEY before generating the dataset.');
     }
   }
 
-  // Question: Plugins
+  console.clear();
+  logger.info(chalk.bold('Plugin Configuration\n'));
+
   const pluginChoices = Array.from(ALL_PLUGINS)
     .sort()
     .map((plugin) => ({
-      name: `${plugin} - ${subCategoryDescriptions[plugin] || 'No description available'}`,
+      name: `${plugin} - ${subCategoryDescriptions[plugin] || 'No description'}`,
       value: plugin,
       checked:
         existingConfig?.redteam?.plugins.some((p) => p.id === plugin || p === plugin) ||
@@ -157,21 +159,23 @@ export async function redteamInit(directory: string | undefined) {
     }));
 
   const plugins = await checkbox({
-    message: 'Select the plugins you want to enable:',
+    message: 'Select plugins to enable:',
     choices: pluginChoices,
     pageSize: Math.min(pluginChoices.length, process.stdout.rows - 4),
     loop: false,
   });
 
-  // select strategies
+  console.clear();
+  logger.info(chalk.bold('Strategy Configuration\n'));
+
   const strategyChoices = [
     ...Array.from(DEFAULT_STRATEGIES).sort(),
     new Separator(),
     ...Array.from(ADDITIONAL_STRATEGIES).sort(),
-  ].map((strategy: Strategy | Separator) =>
+  ].map((strategy) =>
     typeof strategy === 'string'
       ? {
-          name: `${strategy} - ${subCategoryDescriptions[strategy] || 'No description available'}`,
+          name: `${strategy} - ${subCategoryDescriptions[strategy] || 'No description'}`,
           value: strategy,
           checked:
             existingConfig?.redteam?.strategies?.some(
@@ -182,15 +186,14 @@ export async function redteamInit(directory: string | undefined) {
   );
 
   const strategies = await checkbox({
-    message:
-      'Select the strategies you want to enable (Note: Each strategy will add as many test cases as all plugins combined):',
+    message: 'Select strategies to enable:',
     choices: strategyChoices,
     pageSize: Math.min(strategyChoices.length, process.stdout.rows - 4),
     loop: false,
   });
 
   const numTests = await number({
-    message: 'How many test cases do you want to generate per plugin?',
+    message: 'Number of test cases per plugin:',
     default: 5,
     min: 0,
     max: 1000,
@@ -232,10 +235,11 @@ export async function redteamInit(directory: string | undefined) {
     'utf8',
   );
 
-  logger.info('\n' + chalk.green(`Created red teaming configuration file at ${configPath}`) + '\n');
+  console.clear();
+  logger.info(chalk.green(`\nCreated red teaming configuration file at ${configPath}\n`));
 
   const readyToGenerate = await confirm({
-    message: 'Are you ready to generate adversarial test cases?',
+    message: 'Generate adversarial test cases now?',
     default: true,
   });
 
@@ -250,17 +254,13 @@ export async function redteamInit(directory: string | undefined) {
     });
   } else {
     logger.info(
-      '\n' +
-        chalk.blue(
-          'To generate test cases later, use the command: ' +
-            chalk.bold('promptfoo generate redteam'),
-        ),
+      chalk.blue(
+        `\nTo generate test cases later, run: ${chalk.bold('promptfoo generate redteam')}\n`,
+      ),
     );
   }
 
-  telemetry.record('command_used', {
-    name: 'redteam init',
-  });
+  telemetry.record('command_used', { name: 'redteam init' });
   await telemetry.send();
 }
 
