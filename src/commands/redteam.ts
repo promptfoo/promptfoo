@@ -404,9 +404,8 @@ export function redteamCommand(program: Command) {
           name: `${plugin} - ${subCategoryDescriptions[plugin] || 'No description available'}`,
           value: plugin,
           checked:
-            existingConfig?.redteam?.plugins.some((p) =>
-              typeof p === 'string' ? p === plugin : p.id === plugin,
-            ) || DEFAULT_PLUGINS.has(plugin),
+            existingConfig?.redteam?.plugins.some((p) => p.id === plugin) ||
+            DEFAULT_PLUGINS.has(plugin),
         }));
 
       const plugins = await checkbox({
@@ -428,9 +427,8 @@ export function redteamCommand(program: Command) {
               name: `${strategy} - ${subCategoryDescriptions[strategy] || 'No description available'}`,
               value: strategy,
               checked:
-                existingConfig?.redteam?.strategies?.some((s) =>
-                  typeof s === 'string' ? s === strategy : s.id === strategy,
-                ) || DEFAULT_STRATEGIES.includes(strategy as any),
+                existingConfig?.redteam?.strategies?.some((s) => s.id === strategy) ||
+                DEFAULT_STRATEGIES.includes(strategy as any),
             },
       );
 
@@ -492,7 +490,7 @@ export function redteamCommand(program: Command) {
 
       if (readyToGenerate) {
         await doGenerateRedteam({
-          plugins: parsedPlugins.map((p) => (typeof p === 'string' ? { id: p } : p)),
+          plugins: parsedPlugins,
           cache: false,
           write: true,
           defaultConfig: config,

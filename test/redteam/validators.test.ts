@@ -5,9 +5,9 @@ import {
   HARM_PLUGINS,
 } from '../../src/redteam/constants';
 import {
-  redteamGenerateOptionsSchema,
+  RedteamGenerateOptionsSchema,
   redteamConfigSchema,
-  redteamPluginSchema,
+  RedteamPluginSchema,
 } from '../../src/redteam/validators';
 
 describe('redteamGenerateOptionsSchema', () => {
@@ -24,7 +24,7 @@ describe('redteamGenerateOptionsSchema', () => {
       purpose: 'You are an expert content moderator',
       write: true,
     };
-    expect(redteamGenerateOptionsSchema.safeParse(input)).toEqual({
+    expect(RedteamGenerateOptionsSchema.safeParse(input)).toEqual({
       success: true,
       data: {
         cache: true,
@@ -46,7 +46,7 @@ describe('redteamGenerateOptionsSchema', () => {
       plugins: ['harmful:medical'],
       numTests: 10,
     };
-    expect(redteamGenerateOptionsSchema.safeParse(input).success).toBe(false);
+    expect(RedteamGenerateOptionsSchema.safeParse(input).success).toBe(false);
   });
 
   it('should require numTests to be a positive integer', () => {
@@ -54,13 +54,13 @@ describe('redteamGenerateOptionsSchema', () => {
       numTests: -5,
       plugins: ['harmful:hate'],
     };
-    expect(redteamGenerateOptionsSchema.safeParse(input).success).toBe(false);
+    expect(RedteamGenerateOptionsSchema.safeParse(input).success).toBe(false);
   });
 });
 
 describe('redteamPluginSchema', () => {
   it('should accept a valid plugin name as a string', () => {
-    expect(redteamPluginSchema.safeParse('hijacking').success).toBe(true);
+    expect(RedteamPluginSchema.safeParse('hijacking').success).toBe(true);
   });
 
   it('should accept a valid plugin object', () => {
@@ -68,11 +68,11 @@ describe('redteamPluginSchema', () => {
       id: 'harmful:hate',
       numTests: 30,
     };
-    expect(redteamPluginSchema.safeParse(input).success).toBe(true);
+    expect(RedteamPluginSchema.safeParse(input).success).toBe(true);
   });
 
   it('should reject an invalid plugin name', () => {
-    expect(redteamPluginSchema.safeParse('medical').success).toBe(false);
+    expect(RedteamPluginSchema.safeParse('medical').success).toBe(false);
   });
 
   it('should reject a plugin object with negative numTests', () => {
@@ -80,14 +80,14 @@ describe('redteamPluginSchema', () => {
       id: 'jailbreak',
       numTests: -10,
     };
-    expect(redteamPluginSchema.safeParse(input).success).toBe(false);
+    expect(RedteamPluginSchema.safeParse(input).success).toBe(false);
   });
 
   it('should allow omitting numTests in a plugin object', () => {
     const input = {
       id: 'hijacking',
     };
-    expect(redteamPluginSchema.safeParse(input).success).toBe(true);
+    expect(RedteamPluginSchema.safeParse(input).success).toBe(true);
   });
 });
 
