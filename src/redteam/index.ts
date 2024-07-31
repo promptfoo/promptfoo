@@ -19,6 +19,7 @@ import HijackingPlugin from './plugins/hijacking';
 import ImitationPlugin from './plugins/imitation';
 import OverreliancePlugin from './plugins/overreliance';
 import { getPiiLeakTestsForCategory } from './plugins/pii';
+import PolicyPlugin from './plugins/policy';
 import PoliticsPlugin from './plugins/politics';
 import RbacPlugin from './plugins/rbac';
 import ShellInjectionPlugin from './plugins/shellInjection';
@@ -36,6 +37,7 @@ interface Plugin {
     purpose: string,
     injectVar: string,
     n: number,
+    config?: Record<string, any>,
   ) => Promise<TestCase[]>;
 }
 
@@ -117,6 +119,14 @@ const Plugins: Plugin[] = [
     action: (provider, purpose, injectVar, n) =>
       getPiiLeakTestsForCategory(provider, purpose, injectVar, category, n),
   })) as Plugin[]),
+  {
+    key: 'policy',
+    action: (provider, purpose, injectVar, n, config) => {
+      invariant(config?.policy, 'Policy plugin requires a config');
+      const plugin = new PolicyPlugin(provider, purpose, injectVar, config as { policy: string });
+      return plugin.generateTests(n);
+    },
+  },
 ];
 
 // These plugins refer to a collection of tests.
@@ -197,7 +207,6 @@ export async function synthesize({
   prompts,
   provider,
   injectVar,
-  numTests,
   purpose: purposeOverride,
   strategies,
   plugins,
@@ -286,7 +295,13 @@ export async function synthesize({
     if (plugin) {
       updateProgress();
       logger.debug(`Generating ${key} tests`);
-      const pluginTests = await action(redteamProvider, purpose, injectVar, plugin.numTests);
+      const pluginTests = await action(
+        redteamProvider,
+        purpose,
+        injectVar,
+        plugin.numTests,
+        plugin.config,
+      );
       testCases.push(
         ...pluginTests.map((t) => ({
           ...t,
