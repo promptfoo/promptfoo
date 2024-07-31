@@ -7,10 +7,10 @@ import {
 import {
   RedteamGenerateOptionsSchema,
   redteamConfigSchema,
-  redteamPluginSchema,
-} from '../../src/redteam/types';
+  RedteamPluginSchema,
+} from '../../src/redteam/validators';
 
-describe('RedteamGenerateOptionsSchema', () => {
+describe('redteamGenerateOptionsSchema', () => {
   it('should accept valid options for a redteam test', () => {
     const input = {
       cache: true,
@@ -60,7 +60,7 @@ describe('RedteamGenerateOptionsSchema', () => {
 
 describe('redteamPluginSchema', () => {
   it('should accept a valid plugin name as a string', () => {
-    expect(redteamPluginSchema.safeParse('hijacking').success).toBe(true);
+    expect(RedteamPluginSchema.safeParse('hijacking').success).toBe(true);
   });
 
   it('should accept a valid plugin object', () => {
@@ -68,11 +68,11 @@ describe('redteamPluginSchema', () => {
       id: 'harmful:hate',
       numTests: 30,
     };
-    expect(redteamPluginSchema.safeParse(input).success).toBe(true);
+    expect(RedteamPluginSchema.safeParse(input).success).toBe(true);
   });
 
   it('should reject an invalid plugin name', () => {
-    expect(redteamPluginSchema.safeParse('medical').success).toBe(false);
+    expect(RedteamPluginSchema.safeParse('medical').success).toBe(false);
   });
 
   it('should reject a plugin object with negative numTests', () => {
@@ -80,14 +80,14 @@ describe('redteamPluginSchema', () => {
       id: 'jailbreak',
       numTests: -10,
     };
-    expect(redteamPluginSchema.safeParse(input).success).toBe(false);
+    expect(RedteamPluginSchema.safeParse(input).success).toBe(false);
   });
 
   it('should allow omitting numTests in a plugin object', () => {
     const input = {
       id: 'hijacking',
     };
-    expect(redteamPluginSchema.safeParse(input).success).toBe(true);
+    expect(RedteamPluginSchema.safeParse(input).success).toBe(true);
   });
 });
 
@@ -354,5 +354,68 @@ describe('redteamConfigSchema', () => {
         strategies: [{ id: 'jailbreak' }, { id: 'prompt-injection' }],
       },
     });
+  });
+
+  it('should accept a provider object with id and config', () => {
+    const input = {
+      provider: {
+        id: 'openai:gpt-4',
+        config: {
+          temperature: 0.7,
+          max_tokens: 100,
+        },
+      },
+      plugins: ['overreliance'],
+      strategies: ['jailbreak'],
+    };
+    expect(redteamConfigSchema.safeParse(input)).toEqual({
+      success: true,
+      data: {
+        provider: {
+          id: 'openai:gpt-4',
+          config: {
+            temperature: 0.7,
+            max_tokens: 100,
+          },
+        },
+        plugins: [{ id: 'overreliance', numTests: 5 }],
+        strategies: [{ id: 'jailbreak' }],
+      },
+    });
+  });
+
+  it('should accept a provider object with callApi function', () => {
+    const mockCallApi = jest.fn();
+    const input = {
+      provider: {
+        id: () => 'custom-provider',
+        callApi: mockCallApi,
+        label: 'Custom Provider',
+      },
+      plugins: ['overreliance'],
+      strategies: ['jailbreak'],
+    };
+    expect(redteamConfigSchema.safeParse(input)).toEqual({
+      success: true,
+      data: {
+        provider: {
+          id: expect.any(Function),
+          callApi: mockCallApi,
+          label: 'Custom Provider',
+        },
+        plugins: [{ id: 'overreliance', numTests: 5 }],
+        strategies: [{ id: 'jailbreak' }],
+      },
+    });
+  });
+
+  it('should reject an invalid provider', () => {
+    const input = {
+      provider: 123, // Invalid provider
+      plugins: ['overreliance'],
+      strategies: ['jailbreak'],
+    };
+    const result = redteamConfigSchema.safeParse(input);
+    expect(result.success).toBe(false);
   });
 });

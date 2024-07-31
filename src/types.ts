@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { RedteamAssertionTypes, redteamConfigSchema } from './redteam/types';
+import { RedteamAssertionTypes, RedteamConfig } from './redteam/types';
 
 export const CommandLineOptionsSchema = z.object({
   // Shared with TestSuite
@@ -81,7 +81,7 @@ export const ProviderOptionsSchema = z
     label: z.custom<ProviderLabel>().optional(),
     config: z.any().optional(),
     // List of prompt display strings
-    prompts: z.union([z.string().transform((value) => [value]), z.array(z.string())]).optional(),
+    prompts: z.array(z.string()).optional(),
     transform: z.string().optional(),
     delay: z.number().optional(),
     env: EnvOverridesSchema.optional(),
@@ -775,7 +775,7 @@ export const TestSuiteSchema = z.object({
   derivedMetrics: z.array(DerivedMetricSchema).optional(),
 
   // Redteam configuration - used only when generating redteam tests
-  redteam: redteamConfigSchema.optional(),
+  redteam: z.custom<RedteamConfig>().optional(),
 });
 
 export type TestSuite = z.infer<typeof TestSuiteSchema>;
@@ -850,7 +850,7 @@ export const TestSuiteConfigSchema = z.object({
   metadata: MetadataSchema.optional(),
 
   // Redteam configuration - used only when generating redteam tests
-  redteam: redteamConfigSchema.optional(),
+  redteam: z.custom<RedteamConfig>().optional(),
 });
 
 export type TestSuiteConfig = z.infer<typeof TestSuiteConfigSchema>;

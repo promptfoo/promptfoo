@@ -19,7 +19,7 @@ import {
   DEFAULT_STRATEGIES,
   subCategoryDescriptions,
 } from '../redteam/constants';
-import { redteamConfigSchema } from '../redteam/types';
+import { redteamConfigSchema } from '../redteam/validators';
 import telemetry from '../telemetry';
 import { Prompt, TestSuite } from '../types';
 import { doGenerateRedteam } from './generate/redteam';
@@ -156,7 +156,7 @@ export async function redteamInit(directory: string | undefined) {
       name: `${plugin} - ${subCategoryDescriptions[plugin] || 'No description'}`,
       value: plugin,
       checked:
-        existingConfig?.redteam?.plugins.some((p) => p.id === plugin || p === plugin) ||
+        existingConfig?.redteam?.plugins.some((p) => p.id === plugin) ||
         DEFAULT_PLUGINS.has(plugin),
     }));
 

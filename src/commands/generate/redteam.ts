@@ -16,13 +16,9 @@ import {
   DEFAULT_STRATEGIES,
   ADDITIONAL_STRATEGIES,
 } from '../../redteam/constants';
-import type { SynthesizeOptions } from '../../redteam/types';
-import {
-  RedteamConfig,
-  RedteamGenerateOptions,
-  RedteamGenerateOptionsSchema,
-  redteamConfigSchema,
-} from '../../redteam/types';
+import type { RedteamStrategyObject, SynthesizeOptions } from '../../redteam/types';
+import { RedteamConfig, RedteamGenerateOptions } from '../../redteam/types';
+import { RedteamGenerateOptionsSchema, redteamConfigSchema } from '../../redteam/validators';
 import telemetry from '../../telemetry';
 import { TestSuite, UnifiedConfig } from '../../types';
 import { printBorder, setupEnv } from '../../util';
@@ -81,7 +77,7 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
     );
   }
 
-  let plugins: { id: string; numTests: number }[] =
+  let plugins =
     redteamConfig?.plugins ??
     Array.from(REDTEAM_DEFAULT_PLUGINS).map((plugin) => ({
       id: plugin,
@@ -116,17 +112,17 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
     strategies = [
       ...new Set([
         ...strategies,
-        ...options.addStrategies.map((strategy) =>
-          typeof strategy === 'string' ? { id: strategy } : strategy,
-        ),
+        ...options.addStrategies.map((strategy) => ({
+          id: strategy,
+        })),
       ]),
     ];
   }
-  const strategyObjs: { id: string }[] = strategies.map((s) =>
+  const strategyObjs: RedteamStrategyObject[] = strategies.map((s) =>
     typeof s === 'string' ? { id: s } : s,
-  ) as { id: string }[];
+  );
 
-  logger.debug(`plugins: ${plugins.map((p) => p.id ?? p).join(', ')}`);
+  logger.debug(`plugins: ${plugins.map((p) => p.id).join(', ')}`);
   logger.debug(`strategies: ${strategyObjs.map((s) => s.id ?? s).join(', ')}`);
 
   const config = {
@@ -138,6 +134,12 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
     strategies: strategyObjs,
   };
   const parsedConfig = redteamConfigSchema.safeParse(config);
+  if (!parsedConfig.success) {
+    logger.error('Invalid redteam configuration:');
+    logger.error(parsedConfig.error.toString());
+    throw new Error('Invalid redteam configuration');
+  }
+
   const redteamTests = await synthesize({
     ...parsedConfig.data,
     prompts: testSuite.prompts.map((prompt) => prompt.raw),
