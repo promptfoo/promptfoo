@@ -213,7 +213,7 @@ export type ProviderSimilarityResponse = z.infer<typeof ProviderSimilarityRespon
 export type TokenUsage = z.infer<typeof TokenUsageSchema>;
 
 // The z.infer type is not as good as a manually created type
-type CallApiFunction = {
+export type CallApiFunction = {
   (
     prompt: string,
     context?: CallApiContextParams,
