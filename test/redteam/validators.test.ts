@@ -395,13 +395,18 @@ describe('redteamConfigSchema', () => {
       plugins: ['overreliance'],
       strategies: ['jailbreak'],
     };
-    const result = redteamConfigSchema.safeParse(input);
-    expect(result.success).toBe(true);
-    expect(result.data?.provider).toHaveProperty('id');
-    expect(result.data?.provider).toHaveProperty('callApi');
-    expect(result.data?.provider).toHaveProperty('label', 'Custom Provider');
-    expect(result.data?.plugins).toEqual([{ id: 'overreliance', numTests: 5 }]);
-    expect(result.data?.strategies).toEqual([{ id: 'jailbreak' }]);
+    expect(redteamConfigSchema.safeParse(input)).toEqual({
+      success: true,
+      data: {
+        provider: {
+          id: expect.any(Function),
+          callApi: mockCallApi,
+          label: 'Custom Provider',
+        },
+        plugins: [{ id: 'overreliance', numTests: 5 }],
+        strategies: [{ id: 'jailbreak' }],
+      },
+    });
   });
 
   it('should reject an invalid provider', () => {
