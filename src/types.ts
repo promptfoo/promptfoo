@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { RedteamAssertionTypes, RedteamConfig } from './redteam/types';
-import { NunjucksFilterMap, NunjucksFilterMapSchema, Prompt, PromptSchema } from './types/prompts';
+import { Prompt, PromptConfigSchema, PromptFunction, PromptSchema } from './types/prompts';
 import {
   ApiProvider,
   ApiProviderSchema,
@@ -10,6 +10,12 @@ import {
   ProviderResponse,
   ProvidersSchema,
 } from './types/providers';
+import { NunjucksFilterMap, NunjucksFilterMapSchema } from './types/shared';
+import { TokenUsage, TokenUsageSchema } from './types/shared';
+
+export * from './types/providers';
+export * from './types/prompts';
+export * from './types/shared';
 
 export const CommandLineOptionsSchema = z.object({
   // Shared with TestSuite
@@ -51,14 +57,6 @@ export const CommandLineOptionsSchema = z.object({
   envFile: z.string().optional(),
 });
 
-const TokenUsageSchema = z.object({
-  cached: z.number().optional(),
-  completion: z.number().optional(),
-  prompt: z.number().optional(),
-  total: z.number().optional(),
-});
-
-export type TokenUsage = z.infer<typeof TokenUsageSchema>;
 export type CommandLineOptions = z.infer<typeof CommandLineOptionsSchema>;
 
 export interface CsvRow {

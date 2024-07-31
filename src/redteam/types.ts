@@ -1,4 +1,4 @@
-import { ApiProvider, ProviderOptions } from '../types';
+import type { ApiProvider, ProviderOptions } from '../types/providers';
 
 export type RedteamPluginObject = {
   id: string;

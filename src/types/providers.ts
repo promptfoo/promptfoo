@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { NunjucksFilterMap, NunjucksFilterMapSchema, Prompt } from './prompts';
+import type { Prompt } from './prompts';
+import { NunjucksFilterMapSchema, TokenUsageSchema } from './shared';
 
 export type ProviderId = string;
 

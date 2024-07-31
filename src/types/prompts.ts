@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ApiProvider } from './providers';
+import type { ApiProvider } from './providers';
 
 export const PromptConfigSchema = z.object({
   prefix: z.string().optional(),
@@ -40,10 +40,3 @@ export const PromptSchema = z.object({
 });
 
 export type Prompt = z.infer<typeof PromptSchema>;
-
-export const NunjucksFilterMapSchema = z.record(
-  z.string(),
-  z.function(z.tuple([z.any()]).rest(z.any()), z.string()),
-);
-// Define the type using the schema
-export type NunjucksFilterMap = z.infer<typeof NunjucksFilterMapSchema>;
