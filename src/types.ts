@@ -81,7 +81,7 @@ export const ProviderOptionsSchema = z
     label: z.custom<ProviderLabel>().optional(),
     config: z.any().optional(),
     // List of prompt display strings
-    prompts: z.union([z.string().transform((value) => [value]), z.array(z.string())]).optional(),
+    prompts: z.array(z.string()).optional(),
     transform: z.string().optional(),
     delay: z.number().optional(),
     env: EnvOverridesSchema.optional(),

@@ -17,6 +17,7 @@ import {
   ADDITIONAL_STRATEGIES,
 } from '../../redteam/constants';
 import type {
+  RedteamPlugin,
   RedteamPluginObject,
   RedteamStrategyObject,
   SynthesizeOptions,
@@ -81,7 +82,7 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
     );
   }
 
-  let plugins: RedteamPluginObject[] =
+  let plugins: RedteamPlugin[] =
     redteamConfig?.plugins ??
     Array.from(REDTEAM_DEFAULT_PLUGINS).map((plugin) => ({
       id: plugin,
@@ -126,7 +127,7 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
     typeof s === 'string' ? { id: s } : s,
   );
 
-  logger.debug(`plugins: ${plugins.map((p) => p.id ?? p).join(', ')}`);
+  logger.debug(`plugins: ${plugins.map((p) => (typeof p === 'string' ? p : p.id)).join(', ')}`);
   logger.debug(`strategies: ${strategyObjs.map((s) => s.id ?? s).join(', ')}`);
 
   const config = {

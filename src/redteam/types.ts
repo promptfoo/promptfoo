@@ -35,9 +35,8 @@ export type RedteamConfig = {
   injectVar?: string;
   purpose?: string;
   provider?: string | ProviderOptions | ApiProvider;
-  numTests: number;
   plugins: RedteamPluginObject[];
-  strategies: RedteamStrategy[];
+  strategies: RedteamStrategyObject[];
 };
 
 export type RedteamAssertionTypes = `promptfoo:redteam:${string}`;
