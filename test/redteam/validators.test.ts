@@ -355,4 +355,62 @@ describe('redteamConfigSchema', () => {
       },
     });
   });
+
+  it('should accept a provider object with id and config', () => {
+    const input = {
+      provider: {
+        id: 'openai:gpt-4',
+        config: {
+          temperature: 0.7,
+          max_tokens: 100,
+        },
+      },
+      plugins: ['overreliance'],
+      strategies: ['jailbreak'],
+    };
+    expect(redteamConfigSchema.safeParse(input)).toEqual({
+      success: true,
+      data: {
+        provider: {
+          id: 'openai:gpt-4',
+          config: {
+            temperature: 0.7,
+            max_tokens: 100,
+          },
+        },
+        plugins: [{ id: 'overreliance', numTests: 5 }],
+        strategies: [{ id: 'jailbreak' }],
+      },
+    });
+  });
+
+  it('should accept a provider object with callApi function', () => {
+    const mockCallApi = jest.fn();
+    const input = {
+      provider: {
+        id: () => 'custom-provider',
+        callApi: mockCallApi,
+        label: 'Custom Provider',
+      },
+      plugins: ['overreliance'],
+      strategies: ['jailbreak'],
+    };
+    const result = redteamConfigSchema.safeParse(input);
+    expect(result.success).toBe(true);
+    expect(result.data?.provider).toHaveProperty('id');
+    expect(result.data?.provider).toHaveProperty('callApi');
+    expect(result.data?.provider).toHaveProperty('label', 'Custom Provider');
+    expect(result.data?.plugins).toEqual([{ id: 'overreliance', numTests: 5 }]);
+    expect(result.data?.strategies).toEqual([{ id: 'jailbreak' }]);
+  });
+
+  it('should reject an invalid provider', () => {
+    const input = {
+      provider: 123, // Invalid provider
+      plugins: ['overreliance'],
+      strategies: ['jailbreak'],
+    };
+    const result = redteamConfigSchema.safeParse(input);
+    expect(result.success).toBe(false);
+  });
 });
