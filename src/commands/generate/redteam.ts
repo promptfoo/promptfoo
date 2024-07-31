@@ -16,12 +16,7 @@ import {
   DEFAULT_STRATEGIES,
   ADDITIONAL_STRATEGIES,
 } from '../../redteam/constants';
-import type {
-  RedteamPlugin,
-  RedteamPluginObject,
-  RedteamStrategyObject,
-  SynthesizeOptions,
-} from '../../redteam/types';
+import type { RedteamStrategyObject, SynthesizeOptions } from '../../redteam/types';
 import { RedteamConfig, RedteamGenerateOptions } from '../../redteam/types';
 import { RedteamGenerateOptionsSchema, redteamConfigSchema } from '../../redteam/validators';
 import telemetry from '../../telemetry';
