@@ -5,12 +5,12 @@ import {
   HARM_PLUGINS,
 } from '../../src/redteam/constants';
 import {
-  RedteamGenerateOptionsSchema,
+  redteamGenerateOptionsSchema,
   redteamConfigSchema,
   redteamPluginSchema,
-} from '../../src/redteam/types';
+} from '../../src/redteam/validators';
 
-describe('RedteamGenerateOptionsSchema', () => {
+describe('redteamGenerateOptionsSchema', () => {
   it('should accept valid options for a redteam test', () => {
     const input = {
       cache: true,
@@ -24,7 +24,7 @@ describe('RedteamGenerateOptionsSchema', () => {
       purpose: 'You are an expert content moderator',
       write: true,
     };
-    expect(RedteamGenerateOptionsSchema.safeParse(input)).toEqual({
+    expect(redteamGenerateOptionsSchema.safeParse(input)).toEqual({
       success: true,
       data: {
         cache: true,
@@ -46,7 +46,7 @@ describe('RedteamGenerateOptionsSchema', () => {
       plugins: ['harmful:medical'],
       numTests: 10,
     };
-    expect(RedteamGenerateOptionsSchema.safeParse(input).success).toBe(false);
+    expect(redteamGenerateOptionsSchema.safeParse(input).success).toBe(false);
   });
 
   it('should require numTests to be a positive integer', () => {
@@ -54,7 +54,7 @@ describe('RedteamGenerateOptionsSchema', () => {
       numTests: -5,
       plugins: ['harmful:hate'],
     };
-    expect(RedteamGenerateOptionsSchema.safeParse(input).success).toBe(false);
+    expect(redteamGenerateOptionsSchema.safeParse(input).success).toBe(false);
   });
 });
 

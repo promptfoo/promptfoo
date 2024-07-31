@@ -16,13 +16,13 @@ import {
   DEFAULT_STRATEGIES,
   ADDITIONAL_STRATEGIES,
 } from '../../redteam/constants';
-import type { SynthesizeOptions } from '../../redteam/types';
-import {
-  RedteamConfig,
-  RedteamGenerateOptions,
-  RedteamGenerateOptionsSchema,
-  redteamConfigSchema,
+import type {
+  RedteamPluginObject,
+  RedteamStrategyObject,
+  SynthesizeOptions,
 } from '../../redteam/types';
+import { RedteamConfig, RedteamGenerateOptions } from '../../redteam/types';
+import { redteamGenerateOptionsSchema, redteamConfigSchema } from '../../redteam/validators';
 import telemetry from '../../telemetry';
 import { TestSuite, UnifiedConfig } from '../../types';
 import { printBorder, setupEnv } from '../../util';
@@ -81,7 +81,7 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
     );
   }
 
-  let plugins: { id: string; numTests: number }[] =
+  let plugins: RedteamPluginObject[] =
     redteamConfig?.plugins ??
     Array.from(REDTEAM_DEFAULT_PLUGINS).map((plugin) => ({
       id: plugin,
@@ -122,9 +122,9 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
       ]),
     ];
   }
-  const strategyObjs: { id: string }[] = strategies.map((s) =>
+  const strategyObjs: RedteamStrategyObject[] = strategies.map((s) =>
     typeof s === 'string' ? { id: s } : s,
-  ) as { id: string }[];
+  );
 
   logger.debug(`plugins: ${plugins.map((p) => p.id ?? p).join(', ')}`);
   logger.debug(`strategies: ${strategyObjs.map((s) => s.id ?? s).join(', ')}`);
@@ -268,7 +268,7 @@ export function generateRedteamCommand(
           }
           overrides = parsed.data;
         }
-        const validatedOpts = RedteamGenerateOptionsSchema.parse({
+        const validatedOpts = redteamGenerateOptionsSchema.parse({
           ...opts,
           defaultConfig,
           defaultConfigPath,

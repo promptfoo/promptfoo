@@ -19,7 +19,7 @@ import {
   DEFAULT_STRATEGIES,
   subCategoryDescriptions,
 } from '../redteam/constants';
-import { redteamConfigSchema } from '../redteam/types';
+import { redteamConfigSchema } from '../redteam/validators';
 import telemetry from '../telemetry';
 import { Prompt, TestSuite, UnifiedConfig } from '../types';
 import { doGenerateRedteam } from './generate/redteam';
