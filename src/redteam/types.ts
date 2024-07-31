@@ -1,6 +1,6 @@
 import dedent from 'dedent';
 import { z } from 'zod';
-import { ApiProviderSchema, ProviderOptionsSchema } from '../types';
+import { ApiProvider, ApiProviderSchema, ProviderOptions, ProviderOptionsSchema } from '../types';
 import {
   ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
   ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
@@ -88,7 +88,7 @@ export const redteamConfigSchema = z
       .optional()
       .describe('Purpose override string - describes the prompt templates'),
     provider: z
-      .union([z.string(), ProviderOptionsSchema, ApiProviderSchema])
+      .union([z.string(), z.lazy(() => ProviderOptionsSchema), z.lazy(() => ApiProviderSchema)])
       .optional()
       .describe('Provider used for generating adversarial inputs'),
     numTests: z.number().int().positive().default(5).describe('Number of tests to generate'),
@@ -168,7 +168,7 @@ export interface SynthesizeOptions {
   numTests: number;
   plugins: { id: string; numTests: number }[];
   prompts: string[];
-  provider?: string;
+  provider?: ApiProvider | ProviderOptions | string;
   purpose?: string;
   strategies: { id: string }[];
 }
