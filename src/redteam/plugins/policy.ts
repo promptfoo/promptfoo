@@ -1,4 +1,4 @@
-import { Assertion, Plugin, ApiProvider } from '../../types';
+import { Assertion, Plugin, ApiProvider, TestCase } from '../../types';
 import PluginBase from './base';
 
 export default class PolicyPlugin extends PluginBase implements Plugin {
@@ -49,5 +49,16 @@ export default class PolicyPlugin extends PluginBase implements Plugin {
         metric: 'PolicyViolation',
       },
     ];
+  }
+
+  async generateTests(n: number): Promise<TestCase[]> {
+    const tests = await super.generateTests(n);
+    return tests.map((test) => ({
+      ...test,
+      metadata: {
+        ...test.metadata,
+        policy: this.policy,
+      },
+    }));
   }
 }
