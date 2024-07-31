@@ -29,16 +29,16 @@ export async function redteamInit(directory: string | undefined) {
   telemetry.record('command_used', { name: 'redteam init - started' });
   await telemetry.send();
 
-  console.clear(); // Clear the screen for a fresh start
-
+  console.clear();
   logger.info(chalk.bold('Red Team Initialization\n'));
 
-  const projectDir =
-    directory ||
-    (await input({
-      message: 'Project directory:',
+  let projectDir = directory;
+  if (!projectDir) {
+    projectDir = await input({
+      message: 'Where do you want to create the project?',
       default: '.',
-    }));
+    });
+  }
   if (projectDir !== '.' && !fs.existsSync(projectDir)) {
     fs.mkdirSync(projectDir, { recursive: true });
   }
@@ -46,13 +46,14 @@ export async function redteamInit(directory: string | undefined) {
   const configPath = path.join(projectDir, 'promptfooconfig.yaml');
   const previousConfigExists = fs.existsSync(configPath);
   let existingConfig: TestSuite | undefined;
-
   if (previousConfigExists) {
     const overwrite = await confirm({
-      message: `Config file exists at ${configPath}. Overwrite?`,
+      message: `A promptfoo configuration file already exists at: ${configPath} Do you want to overwrite it?`,
       default: false,
     });
-    if (!overwrite) {return;}
+    if (!overwrite) {
+      return;
+    }
     existingConfig = yaml.load(fs.readFileSync(configPath, 'utf8')) as TestSuite;
   }
 
@@ -62,7 +63,9 @@ export async function redteamInit(directory: string | undefined) {
   const promptChoices = [
     { name: 'Enter a prompt', value: 'enter' },
     { name: 'Reference a prompt file', value: 'file' },
-    ...(previousConfigExists ? [{ name: 'Use existing config prompts', value: 'existing' }] : []),
+    ...(previousConfigExists
+      ? [{ name: 'Use prompts from existing config', value: 'existing' }]
+      : []),
   ];
 
   const promptChoice = await rawlist({
@@ -71,24 +74,22 @@ export async function redteamInit(directory: string | undefined) {
   });
 
   let prompts: (Prompt | string)[] = [];
-  switch (promptChoice) {
-    case 'enter':
-      prompts.push(
-        await editor({
-          message: 'Enter your prompt:',
-          default:
-            'You are a helpful assistant.\n\nUser query: {{query}}\n\n(Include {{query}} as a placeholder)',
-        }),
-      );
-      break;
-    case 'file':
-      const promptFile = await input({ message: 'Path to prompt file (text/JSON):' });
-      prompts.push(`file://${promptFile}`);
-      break;
-    case 'existing':
-      invariant(existingConfig?.prompts, 'No prompts in existing config');
-      prompts = existingConfig.prompts;
-      break;
+  if (promptChoice === 'enter') {
+    prompts.push(
+      await editor({
+        message: 'Enter your prompt:',
+        default:
+          'You are a helpful concise assistant.\n\nUser query: {{query}}\n\n(NOTE: your prompt must include "{{query}}" as a placeholder for user input)',
+      }),
+    );
+  } else if (promptChoice === 'file') {
+    const promptFile = await input({
+      message: 'Enter the path to your prompt file (text or JSON):',
+    });
+    prompts.push(`file://${promptFile}`);
+  } else if (promptChoice === 'existing') {
+    invariant(existingConfig?.prompts, 'No prompts found in existing configuration');
+    prompts = existingConfig?.prompts;
   }
 
   console.clear();
@@ -111,7 +112,7 @@ export async function redteamInit(directory: string | undefined) {
   ];
 
   const selectedProviders = await checkbox({
-    message: 'Select providers to target:',
+    message: 'Choose one or more providers to target:',
     choices: providerChoices,
     pageSize: Math.min(providerChoices.length, process.stdout.rows - 4),
   });
@@ -119,7 +120,8 @@ export async function redteamInit(directory: string | undefined) {
   const providers: string[] = selectedProviders.filter((p) => p !== 'Other');
   if (selectedProviders.includes('Other')) {
     const customProvider = await input({
-      message: 'Enter custom provider ID:',
+      message:
+        'Enter the custom provider ID (see https://www.promptfoo.dev/docs/providers/ for options):',
     });
     providers.push(customProvider);
   }
@@ -239,7 +241,7 @@ export async function redteamInit(directory: string | undefined) {
   logger.info(chalk.green(`\nCreated red teaming configuration file at ${configPath}\n`));
 
   const readyToGenerate = await confirm({
-    message: 'Generate adversarial test cases now?',
+    message: 'Are you ready to generate adversarial test cases?',
     default: true,
   });
 
@@ -254,9 +256,11 @@ export async function redteamInit(directory: string | undefined) {
     });
   } else {
     logger.info(
-      chalk.blue(
-        `\nTo generate test cases later, run: ${chalk.bold('promptfoo generate redteam')}\n`,
-      ),
+      '\n' +
+        chalk.blue(
+          'To generate test cases later, use the command: ' +
+            chalk.bold('promptfoo generate redteam'),
+        ),
     );
   }
 
