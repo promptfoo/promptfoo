@@ -1,5 +1,6 @@
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
+import dedent from 'dedent';
 import invariant from 'tiny-invariant';
 import logger from '../logger';
 import { loadApiProvider } from '../providers';
@@ -160,9 +161,12 @@ function validatePlugins(plugins: { id: string; numTests: number }[]): void {
   if (invalidPlugins.length > 0) {
     const validPluginsString = Plugins.map((p) => p.key).join(', ');
     const invalidPluginsString = invalidPlugins.map((p) => p.id).join(', ');
-    throw new Error(
-      `Invalid plugin(s): ${invalidPluginsString}. Valid plugins are: ${validPluginsString}`,
+    logger.error(
+      dedent`Invalid plugin(s): ${invalidPluginsString}. 
+      
+      ${chalk.white(`Valid plugins are: ${validPluginsString}`)}`,
     );
+    process.exit(1);
   }
   const pluginsWithoutNumTests = plugins.filter(
     (plugin) => !Number.isSafeInteger(plugin.numTests) || plugin.numTests <= 0,
