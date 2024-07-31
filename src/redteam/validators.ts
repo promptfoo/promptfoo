@@ -25,6 +25,12 @@ const RedteamPluginObjectSchema = z.object({
     .positive()
     .optional()
     .describe('Number of tests to generate for this plugin'),
+  config: z
+    .object({
+      policy: z.string().describe('A custom policy to redteam against'),
+    })
+    .optional()
+    .describe('Optional configuration for the plugin'),
 });
 
 /**
@@ -107,6 +113,14 @@ export const redteamConfigSchema = z
       )
       .optional()
       .default(() => Array.from(DEFAULT_STRATEGIES).map((name) => ({ id: name }))),
+    policies: z
+      .array(
+        z.object({
+          name: z.string(),
+          description: z.string(),
+        }),
+      )
+      .optional(),
   })
   .transform((data): RedteamConfig => {
     const pluginObjs: RedteamPluginObject[] = data.plugins

@@ -21,7 +21,7 @@ import {
 } from '../redteam/constants';
 import { redteamConfigSchema } from '../redteam/validators';
 import telemetry from '../telemetry';
-import { Prompt, TestSuite } from '../types';
+import { Prompt, TestSuite, Policy } from '../types';
 import { doGenerateRedteam } from './generate/redteam';
 
 export async function redteamInit(directory: string | undefined) {
@@ -167,6 +167,36 @@ export async function redteamInit(directory: string | undefined) {
     loop: false,
   });
 
+  // New code for policy definition
+  const definePolicies = await confirm({
+    message: 'Would you like to define custom policies?',
+    default: false,
+  });
+
+  const policies: Policy[] = [];
+
+  if (definePolicies) {
+    let addMore = true;
+    while (addMore) {
+      const policyName = await input({
+        message: 'Enter the policy name:',
+        validate: (input) => input.trim() !== '' || 'Policy name cannot be empty',
+      });
+
+      const policyDescription = await input({
+        message: 'Enter the policy description:',
+        validate: (input) => input.trim() !== '' || 'Policy description cannot be empty',
+      });
+
+      policies.push({ name: policyName, description: policyDescription });
+
+      addMore = await confirm({
+        message: 'Would you like to add another policy?',
+        default: false,
+      });
+    }
+  }
+
   console.clear();
   logger.info(chalk.bold('Strategy Configuration\n'));
 
@@ -211,6 +241,7 @@ export async function redteamInit(directory: string | undefined) {
       plugins: plugins,
       strategies: strategies,
       numTests,
+      policies: policies.length > 0 ? policies : undefined,
     }).data,
   };
 
@@ -221,6 +252,7 @@ export async function redteamInit(directory: string | undefined) {
     plugins: plugins,
     strategies: strategies,
     numTests,
+    policies: policies.length > 0 ? policies : undefined,
   })?.data?.plugins;
   const configPlugins = plugins.length >= 2 ? [parsedPlugins?.[0], ...plugins.slice(1)] : plugins;
 
@@ -232,6 +264,7 @@ export async function redteamInit(directory: string | undefined) {
         numTests,
         plugins: configPlugins,
         strategies,
+        policies: policies.length > 0 ? policies : undefined,
       },
     }),
     'utf8',

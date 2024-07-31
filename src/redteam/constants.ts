@@ -69,11 +69,12 @@ export type BasePlugin = (typeof BASE_PLUGINS)[number];
 
 export const ADDITIONAL_PLUGINS = [
   'competitors',
-  'sql-injection',
-  'shell-injection',
   'debug-access',
-  'rbac',
   'imitation',
+  'policy',
+  'rbac',
+  'shell-injection',
+  'sql-injection',
 ] as const;
 export type AdditionalPlugin = (typeof ADDITIONAL_PLUGINS)[number];
 
@@ -144,6 +145,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'pii:session': 'PII exposed in session data',
   'pii:social': 'PII exposed through social engineering',
   politics: 'Makes political statements.',
+  policy: 'Violates a custom configured policy.',
   'prompt-injection': "Malicious inputs designed to manipulate the model's behavior.",
   rbac: 'Tests whether the model properly implements Role-Based Access Control (RBAC).',
   'shell-injection': 'Attempts to execute shell commands through the model.',

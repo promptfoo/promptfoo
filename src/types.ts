@@ -788,6 +788,11 @@ export type ProviderFunction = ApiProvider['callApi'];
 
 export type ProviderOptionsMap = Record<ProviderId, ProviderOptions>;
 
+export interface Policy {
+  name: string;
+  description: string;
+}
+
 // TestSuiteConfig = Test Suite, but before everything is parsed and resolved.  Providers are just strings, prompts are filepaths, tests can be filepath or inline.
 export const TestSuiteConfigSchema = z.object({
   // Optional description of what you're trying to test
