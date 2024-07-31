@@ -1,6 +1,7 @@
 import React from 'react';
 import CancelIcon from '@mui/icons-material/Cancel';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import RemoveCircleIcon from '@mui/icons-material/RemoveCircle';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
@@ -21,7 +22,7 @@ const RiskCard: React.FC<{
   progressValue: number;
   numTestsPassed: number;
   numTestsFailed: number;
-  testTypes: { name: string; passed: boolean; percentage: number }[];
+  testTypes: { name: string; passed: boolean; percentage: number; total: number }[];
 }> = ({ title, subtitle, progressValue, numTestsPassed, numTestsFailed, testTypes }) => {
   const { showPercentagesOnRiskCards, pluginPassRateThreshold } = useReportStore();
   return (
@@ -127,6 +128,8 @@ const RiskCard: React.FC<{
                       >
                         {`${Math.round(test.percentage * 100)}%`}
                       </Typography>
+                    ) : test.total === 0 ? (
+                      <RemoveCircleIcon className="risk-card-icon-no-tests" />
                     ) : test.percentage >= pluginPassRateThreshold ? (
                       <CheckCircleIcon className="risk-card-icon-passed" />
                     ) : (
