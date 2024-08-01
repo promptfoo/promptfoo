@@ -1,5 +1,4 @@
 import * as fs from 'fs';
-import * as path from 'path';
 import cliState from '../src/cliState';
 import { maybeLoadFromExternalFile } from '../src/providers/shared';
 
@@ -85,7 +84,7 @@ describe('maybeLoadFromExternalFile', () => {
       'utf8',
     );
 
-    cliState.basePath = undefined; // Reset for other tests
+    cliState.basePath = undefined;
   });
 
   it('should ignore basePath when file path is absolute', () => {
@@ -103,6 +102,6 @@ describe('maybeLoadFromExternalFile', () => {
       'utf8',
     );
 
-    cliState.basePath = undefined; // Reset for other tests
+    cliState.basePath = undefined;
   });
 });
