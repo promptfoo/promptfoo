@@ -13,14 +13,14 @@ import logger from './logger';
 import { loadApiProvider } from './providers';
 import { getDefaultProviders } from './providers/defaults';
 import type {
-  ApiProvider,
   CsvRow,
-  ProviderOptions,
   TestCase,
   TestCaseWithVarsFile,
   TestSuite,
   TestSuiteConfig,
   VarMapping,
+  ApiProvider,
+  ProviderOptions,
 } from './types';
 import { extractJsonObjects } from './util';
 import { extractVariablesFromTemplates } from './util/templates';

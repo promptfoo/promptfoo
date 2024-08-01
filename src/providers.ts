@@ -59,13 +59,13 @@ import { WebhookProvider } from './providers/webhook';
 import RedteamIterativeProvider from './redteam/providers/iterative';
 import RedteamImageIterativeProvider from './redteam/providers/iterativeImage';
 import RedteamIterativeTreeProvider from './redteam/providers/iterativeTree';
+import type { TestSuiteConfig } from './types';
 import type {
   ApiProvider,
   EnvOverrides,
   ProviderOptions,
   ProviderOptionsMap,
-  TestSuiteConfig,
-} from './types';
+} from './types/providers';
 
 // FIXME(ian): Make loadApiProvider handle all the different provider types (string, ProviderOptions, ApiProvider, etc), rather than the callers.
 export async function loadApiProvider(

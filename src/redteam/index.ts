@@ -3,7 +3,8 @@ import cliProgress from 'cli-progress';
 import invariant from 'tiny-invariant';
 import logger from '../logger';
 import { loadApiProvider } from '../providers';
-import type { ApiProvider, TestCase } from '../types';
+import { isApiProvider, isProviderOptions, type ApiProvider, type TestCase } from '../types';
+import type { SynthesizeOptions } from '../types/redteam';
 import { extractVariablesFromTemplates } from '../util/templates';
 import { REDTEAM_MODEL, HARM_PLUGINS, PII_PLUGINS, INCLUDE_ENTITY_METADATA } from './constants';
 import { extractEntities } from './extraction/entities';
@@ -24,7 +25,6 @@ import ShellInjectionPlugin from './plugins/shellInjection';
 import SqlInjectionPlugin from './plugins/sqlInjection';
 import { addInjections } from './strategies/injections';
 import { addIterativeJailbreaks } from './strategies/iterative';
-import type { SynthesizeOptions } from './types';
 
 type TestCaseWithPlugin = TestCase & { metadata: { pluginId: string } };
 
@@ -200,11 +200,17 @@ export async function synthesize({
 }: SynthesizeOptions) {
   validatePlugins(plugins);
   validateStrategies(strategies);
-  const redteamProvider: ApiProvider = await loadApiProvider(provider || REDTEAM_MODEL, {
-    options: {
-      config: { temperature: 0.5 },
-    },
-  });
+
+  let redteamProvider: ApiProvider;
+  if (isApiProvider(provider)) {
+    redteamProvider = provider;
+  } else if (isProviderOptions(provider)) {
+    redteamProvider = await loadApiProvider(provider.id || REDTEAM_MODEL, provider);
+  } else {
+    redteamProvider = await loadApiProvider(REDTEAM_MODEL, {
+      options: { config: { temperature: 0.5 } },
+    });
+  }
 
   logger.info(
     `Synthesizing test cases for ${prompts.length} ${

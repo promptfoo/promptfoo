@@ -10,9 +10,14 @@ import {
   HARM_PLUGINS,
   PII_PLUGINS,
   Collection,
-} from './constants';
+} from '../redteam/constants';
+import { RedteamConfig, RedteamPluginObject } from '../types/redteam';
+import { ProviderSchema } from '../validators/providers';
 
-const redteamPluginObjectSchema = z.object({
+/**
+ * Schema for individual redteam plugins
+ */
+const RedteamPluginObjectSchema = z.object({
   id: z.enum(REDTEAM_ALL_PLUGINS as [string, ...string[]]).describe('Name of the plugin'),
   numTests: z
     .number()
@@ -23,21 +28,18 @@ const redteamPluginObjectSchema = z.object({
 });
 
 /**
- * Schema for individual redteam plugins
+ * Schema for individual redteam plugins or their shorthand.
  */
-export const redteamPluginSchema = z.union([
+export const RedteamPluginSchema = z.union([
   z.enum(REDTEAM_ALL_PLUGINS as [string, ...string[]]).describe('Name of the plugin'),
-  redteamPluginObjectSchema,
+  RedteamPluginObjectSchema,
 ]);
 
 /**
  * Schema for individual redteam strategies
  */
-export const redteamStrategySchema = z.union([
-  z
-    .enum(ALL_STRATEGIES as unknown as [string, ...string[]])
-    .describe('Name of the strategy')
-    .transform((s) => ({ id: s })),
+export const RedteamStrategySchema = z.union([
+  z.enum(ALL_STRATEGIES as unknown as [string, ...string[]]).describe('Name of the strategy'),
   z.object({
     id: z.enum(ALL_STRATEGIES as unknown as [string, ...string[]]).describe('Name of the strategy'),
   }),
@@ -55,7 +57,7 @@ export const RedteamGenerateOptionsSchema = z.object({
   injectVar: z.string().optional().describe('Variable to inject'),
   numTests: z.number().int().positive().describe('Number of tests to generate'),
   output: z.string().optional().describe('Output file path'),
-  plugins: z.array(redteamPluginObjectSchema).optional().describe('Plugins to use'),
+  plugins: z.array(RedteamPluginObjectSchema).optional().describe('Plugins to use'),
   addPlugins: z
     .array(z.enum(REDTEAM_ADDITIONAL_PLUGINS as readonly string[] as [string, ...string[]]))
     .optional()
@@ -66,18 +68,14 @@ export const RedteamGenerateOptionsSchema = z.object({
     .describe('Additional strategies to include'),
   provider: z.string().optional().describe('Provider to use'),
   purpose: z.string().optional().describe('Purpose of the redteam generation'),
-  strategies: z.array(redteamStrategySchema).optional().describe('Strategies to use'),
+  strategies: z.array(RedteamStrategySchema).optional().describe('Strategies to use'),
   write: z.boolean().describe('Whether to write the output'),
 });
-/** Type definition for RedteamGenerateOptions */
-export type RedteamGenerateOptions = z.infer<typeof RedteamGenerateOptionsSchema>;
-
-export type RedteamPluginObject = z.infer<typeof redteamPluginObjectSchema>;
 
 /**
  * Schema for `redteam` section of promptfooconfig.yaml
  */
-export const redteamConfigSchema = z
+export const RedteamConfigSchema = z
   .object({
     injectVar: z
       .string()
@@ -89,15 +87,17 @@ export const redteamConfigSchema = z
       .string()
       .optional()
       .describe('Purpose override string - describes the prompt templates'),
-    provider: z.string().optional().describe('Provider used for generating adversarial inputs'),
+    provider: z
+      .lazy(() => ProviderSchema)
+      .optional()
+      .describe('Provider used for generating adversarial inputs'),
     numTests: z.number().int().positive().default(5).describe('Number of tests to generate'),
     plugins: z
-      .array(redteamPluginSchema)
+      .array(RedteamPluginSchema)
       .describe('Plugins to use for redteam generation')
-      .optional()
-      .default(() => []),
+      .default([]),
     strategies: z
-      .array(redteamStrategySchema)
+      .array(RedteamStrategySchema)
       .describe(
         dedent`Strategies to use for redteam generation.
 
@@ -108,8 +108,8 @@ export const redteamConfigSchema = z
       .optional()
       .default(() => Array.from(DEFAULT_STRATEGIES).map((name) => ({ id: name }))),
   })
-  .transform((data) => {
-    const pluginObjs = data.plugins
+  .transform((data): RedteamConfig => {
+    const pluginObjs: RedteamPluginObject[] = data.plugins
       .map((plugin) =>
         typeof plugin === 'string'
           ? { id: plugin, numTests: data.numTests }
@@ -118,7 +118,7 @@ export const redteamConfigSchema = z
       .sort((a, b) => a.id.localeCompare(b.id));
 
     const plugins = pluginObjs
-      .flatMap((pluginObj: { id: string; numTests?: number }) => {
+      .flatMap((pluginObj) => {
         if (pluginObj.id === 'harmful') {
           return Object.keys(HARM_PLUGINS).map((category) => ({
             id: category,
@@ -139,8 +139,10 @@ export const redteamConfigSchema = z
       })
       .filter((plugin) => !COLLECTIONS.includes(plugin.id as Collection)); // category plugins are handled above
 
-    const uniquePlugins = Array.from(
-      plugins.reduce((map, plugin) => map.set(plugin.id, plugin), new Map()).values(),
+    const uniquePlugins: RedteamPluginObject[] = Array.from(
+      plugins
+        .reduce((map, plugin) => map.set(plugin.id, plugin), new Map<string, RedteamPluginObject>())
+        .values(),
     ).sort((a, b) => a.id.localeCompare(b.id));
 
     return {
@@ -148,25 +150,15 @@ export const redteamConfigSchema = z
       ...(data.injectVar ? { injectVar: data.injectVar } : {}),
       ...(data.provider ? { provider: data.provider } : {}),
       plugins: uniquePlugins,
-      strategies: data.strategies,
+      strategies: data.strategies.map((strategy) =>
+        typeof strategy === 'string' ? { id: strategy } : strategy,
+      ),
     };
   });
 
-export type RedteamConfig = z.infer<typeof redteamConfigSchema>;
+// Ensure that schemas match their corresponding types
+function assert<T extends never>() {}
+type TypeEqualityGuard<A, B> = Exclude<A, B> | Exclude<B, A>;
 
-export const RedteamAssertionTypesSchema = z.enum([
-  'promptfoo:redteam:dummy' as const,
-  ...REDTEAM_ALL_PLUGINS.map((plugin) => `promptfoo:redteam:${plugin}` as const),
-]);
-
-export type RedteamAssertionTypes = z.infer<typeof RedteamAssertionTypesSchema>;
-
-export interface SynthesizeOptions {
-  injectVar?: string;
-  numTests: number;
-  plugins: { id: string; numTests: number }[];
-  prompts: string[];
-  provider?: string;
-  purpose?: string;
-  strategies: { id: string }[];
-}
+assert<TypeEqualityGuard<RedteamConfig, z.infer<typeof RedteamConfigSchema>>>();
+assert<TypeEqualityGuard<RedteamPluginObject, z.infer<typeof RedteamPluginObjectSchema>>>();

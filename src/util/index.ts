@@ -947,9 +947,10 @@ export function providerToIdentifier(provider: TestCase['provider']): string | u
     return provider.id();
   } else if (isProviderOptions(provider)) {
     return provider.id;
+  } else if (typeof provider === 'string') {
+    return provider;
   }
-
-  return provider;
+  return undefined;
 }
 
 export function varsMatch(
