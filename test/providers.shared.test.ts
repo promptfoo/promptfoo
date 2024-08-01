@@ -1,4 +1,6 @@
 import * as fs from 'fs';
+import * as path from 'path';
+import cliState from '../src/cliState';
 import { maybeLoadFromExternalFile } from '../src/providers/shared';
 
 jest.mock('fs');
@@ -48,5 +50,57 @@ describe('maybeLoadFromExternalFile', () => {
   it('should parse and return YAML content for a .yml file', () => {
     jest.mocked(fs.readFileSync).mockReturnValue(mockYamlContent);
     expect(maybeLoadFromExternalFile('file://test.yml')).toEqual({ key: 'value' });
+  });
+
+  it('should use basePath when resolving file paths', () => {
+    const basePath = '/base/path';
+    cliState.basePath = basePath;
+    jest.mocked(fs.readFileSync).mockReturnValue(mockFileContent);
+
+    maybeLoadFromExternalFile('file://test.txt');
+
+    expect(fs.existsSync).toHaveBeenCalledWith(path.resolve(basePath, 'test.txt'));
+    expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve(basePath, 'test.txt'), 'utf8');
+
+    cliState.basePath = undefined;
+  });
+
+  it('should handle Windows paths correctly', () => {
+    const basePath = 'C:\\base\\path';
+    cliState.basePath = basePath;
+    jest.mocked(fs.readFileSync).mockReturnValue(mockFileContent);
+
+    maybeLoadFromExternalFile('file://test.txt');
+
+    expect(fs.existsSync).toHaveBeenCalledWith(path.resolve(basePath, 'test.txt'));
+    expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve(basePath, 'test.txt'), 'utf8');
+
+    cliState.basePath = undefined;
+  });
+
+  it('should handle relative paths correctly', () => {
+    const basePath = './relative/path';
+    cliState.basePath = basePath;
+    jest.mocked(fs.readFileSync).mockReturnValue(mockFileContent);
+
+    maybeLoadFromExternalFile('file://test.txt');
+
+    expect(fs.existsSync).toHaveBeenCalledWith(path.resolve(basePath, 'test.txt'));
+    expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve(basePath, 'test.txt'), 'utf8');
+
+    cliState.basePath = undefined; // Reset for other tests
+  });
+
+  it('should ignore basePath when file path is absolute', () => {
+    const basePath = '/base/path';
+    cliState.basePath = basePath;
+    jest.mocked(fs.readFileSync).mockReturnValue(mockFileContent);
+
+    maybeLoadFromExternalFile('file:///absolute/path/test.txt');
+
+    expect(fs.existsSync).toHaveBeenCalledWith('/absolute/path/test.txt');
+    expect(fs.readFileSync).toHaveBeenCalledWith('/absolute/path/test.txt', 'utf8');
+
+    cliState.basePath = undefined; // Reset for other tests
   });
 });

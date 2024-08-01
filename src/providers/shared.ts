@@ -1,5 +1,7 @@
 import * as fs from 'fs';
 import yaml from 'js-yaml';
+import * as path from 'path';
+import cliState from '../cliState';
 
 export const REQUEST_TIMEOUT_MS = process.env.REQUEST_TIMEOUT_MS
   ? parseInt(process.env.REQUEST_TIMEOUT_MS, 10)
@@ -44,7 +46,7 @@ export function maybeLoadFromExternalFile(filePath: string | object | Function |
     return filePath;
   }
 
-  const finalPath = filePath.slice('file://'.length);
+  const finalPath = path.resolve(cliState.basePath || '', filePath.slice('file://'.length));
   if (!fs.existsSync(finalPath)) {
     throw new Error(`File does not exist: ${finalPath}`);
   }
