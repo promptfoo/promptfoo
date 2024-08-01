@@ -167,7 +167,7 @@ function validatePlugins(
     logger.error(
       dedent`Invalid plugin(s): ${invalidPluginsString}. 
       
-      ${chalk.white(`Valid plugins are: ${validPluginsString}`)}`,
+      ${chalk.green(`Valid plugins are: ${validPluginsString}`)}`,
     );
     process.exit(1);
   }
