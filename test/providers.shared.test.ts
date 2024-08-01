@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as path from 'path';
 import cliState from '../src/cliState';
 import { maybeLoadFromExternalFile } from '../src/providers/shared';
 
@@ -58,13 +59,9 @@ describe('maybeLoadFromExternalFile', () => {
 
     maybeLoadFromExternalFile('file://test.txt');
 
-    expect(fs.existsSync).toHaveBeenCalledWith(
-      expect.stringMatching(/^[/\\]base[/\\]path[/\\]test\.txt$/),
-    );
-    expect(fs.readFileSync).toHaveBeenCalledWith(
-      expect.stringMatching(/^[/\\]base[/\\]path[/\\]test\.txt$/),
-      'utf8',
-    );
+    const expectedPath = path.resolve(basePath, 'test.txt');
+    expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);
+    expect(fs.readFileSync).toHaveBeenCalledWith(expectedPath, 'utf8');
 
     cliState.basePath = undefined;
   });
@@ -76,13 +73,9 @@ describe('maybeLoadFromExternalFile', () => {
 
     maybeLoadFromExternalFile('file://test.txt');
 
-    expect(fs.existsSync).toHaveBeenCalledWith(
-      expect.stringMatching(/^\.?[/\\]relative[/\\]path[/\\]test\.txt$/),
-    );
-    expect(fs.readFileSync).toHaveBeenCalledWith(
-      expect.stringMatching(/^\.?[/\\]relative[/\\]path[/\\]test\.txt$/),
-      'utf8',
-    );
+    const expectedPath = path.resolve(basePath, 'test.txt');
+    expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);
+    expect(fs.readFileSync).toHaveBeenCalledWith(expectedPath, 'utf8');
 
     cliState.basePath = undefined;
   });
@@ -94,13 +87,9 @@ describe('maybeLoadFromExternalFile', () => {
 
     maybeLoadFromExternalFile('file:///absolute/path/test.txt');
 
-    expect(fs.existsSync).toHaveBeenCalledWith(
-      expect.stringMatching(/^[/\\]absolute[/\\]path[/\\]test\.txt$/),
-    );
-    expect(fs.readFileSync).toHaveBeenCalledWith(
-      expect.stringMatching(/^[/\\]absolute[/\\]path[/\\]test\.txt$/),
-      'utf8',
-    );
+    const expectedPath = '/absolute/path/test.txt';
+    expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);
+    expect(fs.readFileSync).toHaveBeenCalledWith(expectedPath, 'utf8');
 
     cliState.basePath = undefined;
   });
