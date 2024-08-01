@@ -326,11 +326,25 @@ See the full example [here](https://github.com/promptfoo/promptfoo/tree/main/exa
 
 Requires Node.js 18 or newer.
 
-You can install promptfoo using npm (recommended), Homebrew, or by cloning the repository.
+You can install promptfoo using npm, npx, Homebrew, or by cloning the repository.
 
 ### npm (recommended)
 
-Run the following command to use promptfoo without installing it:
+Install `promptfoo` globally:
+
+```sh
+npm install -g promptfoo
+```
+
+Or install it locally in your project:
+
+```sh
+npm install promptfoo
+```
+
+### npx
+
+Run promptfoo without installing it:
 
 ```sh
 npx promptfoo@latest init
