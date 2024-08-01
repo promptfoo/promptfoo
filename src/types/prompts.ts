@@ -1,12 +1,14 @@
-import { z } from 'zod';
-import type { ApiProvider } from './providers';
+// Declared to avoid circular dependency with providers.ts
+declare class ApiProvider {
+  id: () => string;
+  callApi: (prompt: string, context?: any, options?: any) => Promise<any>;
+  label?: string;
+}
 
-export const PromptConfigSchema = z.object({
-  prefix: z.string().optional(),
-  suffix: z.string().optional(),
-});
-
-export type PromptConfig = z.infer<typeof PromptConfigSchema>;
+export type PromptConfig = {
+  prefix?: string;
+  suffix?: string;
+};
 
 export type PromptFunctionContext = {
   vars: Record<string, string | object>;
@@ -16,27 +18,15 @@ export type PromptFunctionContext = {
   };
 };
 
-export const PromptFunctionSchema = z
-  .function()
-  .args(
-    z.object({
-      vars: z.record(z.union([z.string(), z.any()])),
-      provider: z.custom<ApiProvider>().optional(),
-    }),
-  )
-  .returns(z.promise(z.union([z.string(), z.any()])));
+export type PromptFunction = (context: {
+  vars: Record<string, string | any>;
+  provider?: ApiProvider;
+}) => Promise<string | any>;
 
-export type PromptFunction = z.infer<typeof PromptFunctionSchema>;
-
-export const PromptSchema = z.object({
-  id: z.string().optional(),
-  raw: z.string(),
-  /**
-   * @deprecated in > 0.59.0. Use `label` instead.
-   */
-  display: z.string().optional(),
-  label: z.string(),
-  function: PromptFunctionSchema.optional(),
-});
-
-export type Prompt = z.infer<typeof PromptSchema>;
+export type Prompt = {
+  id?: string;
+  raw: string;
+  display?: string;
+  label: string;
+  function?: PromptFunction;
+};

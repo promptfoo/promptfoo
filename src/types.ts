@@ -1,20 +1,22 @@
+// Note: This file is in the process of being deconstructed into `types/` and `validators/`
+// Right now Zod and pure types are mixed together!
 import { z } from 'zod';
-import { RedteamAssertionTypes, RedteamConfig } from './redteam/types';
-import { Prompt, PromptConfigSchema, PromptFunction, PromptSchema } from './types/prompts';
+import { Prompt, PromptFunction } from './types/prompts';
+import { ApiProvider, ProviderOptions, ProviderResponse } from './types/providers';
+import { RedteamAssertionTypes, RedteamConfig } from './types/redteam';
+import { NunjucksFilterMap, TokenUsage } from './types/shared';
+import { PromptConfigSchema, PromptSchema } from './validators/prompts';
 import {
-  ApiProvider,
   ApiProviderSchema,
   ProviderEnvOverridesSchema,
-  ProviderOptions,
   ProviderOptionsSchema,
-  ProviderResponse,
   ProvidersSchema,
-} from './types/providers';
-import { NunjucksFilterMap, NunjucksFilterMapSchema } from './types/shared';
-import { TokenUsage, TokenUsageSchema } from './types/shared';
+} from './validators/providers';
+import { NunjucksFilterMapSchema, TokenUsageSchema } from './validators/shared';
 
-export * from './types/providers';
 export * from './types/prompts';
+export * from './types/providers';
+export * from './types/redteam';
 export * from './types/shared';
 
 export const CommandLineOptionsSchema = z.object({

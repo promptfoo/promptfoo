@@ -1,6 +1,5 @@
 import dedent from 'dedent';
 import { z } from 'zod';
-import { ProviderSchema } from '../types';
 import {
   ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
   ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
@@ -11,8 +10,9 @@ import {
   HARM_PLUGINS,
   PII_PLUGINS,
   Collection,
-} from './constants';
-import { RedteamConfig, RedteamPluginObject } from './types';
+} from '../redteam/constants';
+import { ProviderSchema } from '../types';
+import { RedteamConfig, RedteamPluginObject } from '../types/redteam';
 
 /**
  * Schema for individual redteam plugins

@@ -8,7 +8,7 @@ import {
   RedteamGenerateOptionsSchema,
   redteamConfigSchema,
   RedteamPluginSchema,
-} from '../../src/redteam/validators';
+} from '../../src/validators/redteam';
 
 describe('redteamGenerateOptionsSchema', () => {
   it('should accept valid options for a redteam test', () => {

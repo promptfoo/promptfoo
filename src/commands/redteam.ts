@@ -19,9 +19,9 @@ import {
   DEFAULT_STRATEGIES,
   subCategoryDescriptions,
 } from '../redteam/constants';
-import { redteamConfigSchema } from '../redteam/validators';
 import telemetry from '../telemetry';
 import { Prompt, TestSuite } from '../types';
+import { redteamConfigSchema } from '../validators/redteam';
 import { doGenerateRedteam } from './generate/redteam';
 
 export async function redteamInit(directory: string | undefined) {

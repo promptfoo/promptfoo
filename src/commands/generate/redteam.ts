@@ -16,12 +16,12 @@ import {
   DEFAULT_STRATEGIES,
   ADDITIONAL_STRATEGIES,
 } from '../../redteam/constants';
-import type { RedteamStrategyObject, SynthesizeOptions } from '../../redteam/types';
-import { RedteamConfig, RedteamGenerateOptions } from '../../redteam/types';
-import { RedteamGenerateOptionsSchema, redteamConfigSchema } from '../../redteam/validators';
 import telemetry from '../../telemetry';
 import { TestSuite, UnifiedConfig } from '../../types';
+import type { RedteamStrategyObject, SynthesizeOptions } from '../../types/redteam';
+import { RedteamConfig, RedteamGenerateOptions } from '../../types/redteam';
 import { printBorder, setupEnv } from '../../util';
+import { RedteamGenerateOptionsSchema, redteamConfigSchema } from '../../validators/redteam';
 
 export async function doGenerateRedteam(options: RedteamGenerateOptions) {
   setupEnv(options.envFile);
