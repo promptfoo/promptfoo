@@ -72,12 +72,12 @@
     "node-sql-parser": "^5.2.0"
   },
   "devDependencies": {
-    "@aws-sdk/client-bedrock-runtime": "^3.621.0",
-    "@azure/identity": "^4.4.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.622.0",
+    "@azure/identity": "^4.4.1",
     "@eslint/js": "^9.8.0",
     "@libsql/client": "^0.8.0",
     "@swc/cli": "^0.4.0",
-    "@swc/core": "^1.7.3",
+    "@swc/core": "^1.7.4",
     "@swc/jest": "^0.2.36",
     "@trivago/prettier-plugin-sort-imports": "^4.3.0",
     "@types/async": "^3.2.24",
@@ -120,7 +120,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.25.0",
-    "@apidevtools/json-schema-ref-parser": "^11.6.4",
+    "@apidevtools/json-schema-ref-parser": "^11.7.0",
     "@googleapis/sheets": "^9.0.0",
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
