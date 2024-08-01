@@ -17,7 +17,12 @@ import type {
 import { renderVarsInObject } from '../util';
 import { safeJsonStringify } from '../util/json';
 import type { OpenAiFunction, OpenAiTool } from './openaiUtil';
-import { REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase } from './shared';
+import {
+  REQUEST_TIMEOUT_MS,
+  maybeLoadFromExternalFile,
+  parseChatPrompt,
+  toTitleCase,
+} from './shared';
 
 // see https://platform.openai.com/docs/models
 const OPENAI_CHAT_MODELS = [
@@ -471,10 +476,16 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       frequency_penalty:
         this.config.frequency_penalty ?? parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0'),
       ...(this.config.functions
-        ? { functions: renderVarsInObject(this.config.functions, context?.vars) }
+        ? {
+            functions: maybeLoadFromExternalFile(
+              renderVarsInObject(this.config.functions, context?.vars),
+            ),
+          }
         : {}),
       ...(this.config.function_call ? { function_call: this.config.function_call } : {}),
-      ...(this.config.tools ? { tools: renderVarsInObject(this.config.tools, context?.vars) } : {}),
+      ...(this.config.tools
+        ? { tools: maybeLoadFromExternalFile(renderVarsInObject(this.config.tools, context?.vars)) }
+        : {}),
       ...(this.config.tool_choice ? { tool_choice: this.config.tool_choice } : {}),
       ...(this.config.response_format ? { response_format: this.config.response_format } : {}),
       ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
@@ -639,7 +650,9 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
       assistant_id: this.assistantId,
       model: this.assistantConfig.modelName || undefined,
       instructions: this.assistantConfig.instructions || undefined,
-      tools: renderVarsInObject(this.assistantConfig.tools, context?.vars) || undefined,
+      tools:
+        maybeLoadFromExternalFile(renderVarsInObject(this.assistantConfig.tools, context?.vars)) ||
+        undefined,
       metadata: this.assistantConfig.metadata || undefined,
       temperature: this.assistantConfig.temperature || undefined,
       tool_choice: this.assistantConfig.toolChoice || undefined,
