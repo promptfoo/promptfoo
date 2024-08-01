@@ -20,7 +20,7 @@ import {
   subCategoryDescriptions,
 } from '../redteam/constants';
 import telemetry from '../telemetry';
-import type { Prompt, TestSuite } from '../types';
+import type { Prompt, RedteamPluginObject, TestSuite } from '../types';
 import { RedteamConfigSchema } from '../validators/redteam';
 import { doGenerateRedteam } from './generate/redteam';
 
@@ -160,29 +160,41 @@ export async function redteamInit(directory: string | undefined) {
         DEFAULT_PLUGINS.has(plugin),
     }));
 
-  const plugins: (string | Plugin)[] = await checkbox({
+  const plugins: (string | RedteamPluginObject)[] = await checkbox({
     message: 'Select plugins to enable:',
     choices: pluginChoices,
     pageSize: Math.min(pluginChoices.length, process.stdout.rows - 4),
     loop: false,
+    searchable: true,
+    validate: (answer) => answer.length > 0 || 'You must select at least one plugin.',
   });
 
-  // New code for policy definition
-  const definePolicy = await confirm({
-    message: 'Would you like to define a custom policy?',
-    default: false,
-  });
+  // Handle policy plugin
+  if (plugins.includes('policy')) {
+    let definePolicies = true;
+    let policyCount = 1;
 
-  if (definePolicy) {
-    const policyDescription = await input({
-      message: 'Enter the policy description:',
-      validate: (input) => input.trim() !== '' || 'Policy description cannot be empty',
-    });
+    while (definePolicies) {
+      const policyDescription = await input({
+        message: `Enter policy description ${policyCount}:`,
+        validate: (input) => input.trim() !== '' || 'Policy description cannot be empty',
+      });
 
-    plugins.push({
-      id: 'policy',
-      config: { policy: policyDescription },
-    } as Plugin);
+      plugins.push({
+        id: 'policy',
+        config: { policy: policyDescription },
+      } as RedteamPluginObject);
+
+      policyCount++;
+
+      definePolicies = await confirm({
+        message: 'Would you like to define an additional policy?',
+        default: false,
+      });
+    }
+
+    // Remove the original 'policy' string from the plugins array
+    plugins.splice(plugins.indexOf('policy'), 1);
   }
 
   console.clear();
