@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { ApiProvider } from '../types/providers';
+import type { Prompt, PromptConfig, PromptFunction } from '../types/prompts';
+import type { ApiProvider } from '../types/providers';
 
 // Zod schemas for validation
 export const PromptConfigSchema = z.object({
@@ -27,3 +28,11 @@ export const PromptSchema = z.object({
   label: z.string(),
   function: PromptFunctionSchema.optional(),
 });
+
+// Ensure that schemas match their corresponding types
+function assert<T extends never>() {}
+type TypeEqualityGuard<A, B> = Exclude<A, B> | Exclude<B, A>;
+
+assert<TypeEqualityGuard<PromptConfig, z.infer<typeof PromptConfigSchema>>>();
+assert<TypeEqualityGuard<PromptFunction, z.infer<typeof PromptFunctionSchema>>>();
+assert<TypeEqualityGuard<Prompt, z.infer<typeof PromptSchema>>>();

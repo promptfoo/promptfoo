@@ -75,7 +75,7 @@ export const RedteamGenerateOptionsSchema = z.object({
 /**
  * Schema for `redteam` section of promptfooconfig.yaml
  */
-export const redteamConfigSchema = z
+export const RedteamConfigSchema = z
   .object({
     injectVar: z
       .string()
@@ -155,3 +155,10 @@ export const redteamConfigSchema = z
       ),
     };
   });
+
+// Ensure that schemas match their corresponding types
+function assert<T extends never>() {}
+type TypeEqualityGuard<A, B> = Exclude<A, B> | Exclude<B, A>;
+
+assert<TypeEqualityGuard<RedteamConfig, z.infer<typeof RedteamConfigSchema>>>();
+assert<TypeEqualityGuard<RedteamPluginObject, z.infer<typeof RedteamPluginObjectSchema>>>();

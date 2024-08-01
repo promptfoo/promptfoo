@@ -21,7 +21,7 @@ import {
 } from '../redteam/constants';
 import telemetry from '../telemetry';
 import { Prompt, TestSuite } from '../types';
-import { redteamConfigSchema } from '../validators/redteam';
+import { RedteamConfigSchema } from '../validators/redteam';
 import { doGenerateRedteam } from './generate/redteam';
 
 export async function redteamInit(directory: string | undefined) {
@@ -207,7 +207,7 @@ export async function redteamInit(directory: string | undefined) {
     prompts,
     providers: providers,
     tests: [],
-    redteam: redteamConfigSchema.safeParse({
+    redteam: RedteamConfigSchema.safeParse({
       plugins: plugins,
       strategies: strategies,
       numTests,
@@ -217,7 +217,7 @@ export async function redteamInit(directory: string | undefined) {
   // Write the simplified form to the config file to make it easier
   // for people to play with. Writes 1 in the { id: ..., numTests }
   // and then the rest as strings.
-  const parsedPlugins = redteamConfigSchema.safeParse({
+  const parsedPlugins = RedteamConfigSchema.safeParse({
     plugins: plugins,
     strategies: strategies,
     numTests,
