@@ -3,7 +3,9 @@ import type { ApiProvider, Assertion } from '../../../src/types';
 import { getNunjucksEngine } from '../../../src/util/templates';
 
 class TestPlugin extends PluginBase {
-  protected template = 'Test template with {{ purpose }} for {{ n }} prompts';
+  protected async getTemplate(): Promise<string> {
+    return 'Test template with {{ purpose }} for {{ n }} prompts';
+  }
   protected getAssertions(prompt: string): Assertion[] {
     return [{ type: 'contains', value: prompt }];
   }

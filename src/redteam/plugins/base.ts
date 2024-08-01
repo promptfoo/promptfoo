@@ -9,11 +9,6 @@ import { retryWithDeduplication, sampleArray } from '../util';
  */
 export default abstract class PluginBase {
   /**
-   * Template string used to generate prompts.
-   */
-  protected abstract template: string;
-
-  /**
    * Creates an instance of PluginBase.
    * @param provider - The API provider used for generating prompts.
    * @param purpose - The purpose of the plugin.
@@ -26,6 +21,11 @@ export default abstract class PluginBase {
   ) {
     logger.debug(`PluginBase initialized with purpose: ${purpose}, injectVar: ${injectVar}`);
   }
+
+  /**
+   * Template string used to generate prompts.
+   */
+  protected abstract getTemplate(): Promise<string>;
 
   /**
    * Abstract method to get assertions for a given prompt.
@@ -55,7 +55,7 @@ export default abstract class PluginBase {
 
       const nunjucks = getNunjucksEngine();
       const { output: generatedPrompts } = await this.provider.callApi(
-        nunjucks.renderString(this.template, {
+        nunjucks.renderString(await this.getTemplate(), {
           purpose: this.purpose,
           n: currentBatchSize,
         }),

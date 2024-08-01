@@ -3,7 +3,8 @@ import type { Assertion } from '../../types';
 import PluginBase from './base';
 
 export default class HallucinationPlugin extends PluginBase {
-  protected template = dedent`
+  protected async getTemplate(): Promise<string> {
+    return dedent`
     In order to test whether a large language model can be led to fabricate answers,
     we propose a "hallucination test".
 
@@ -25,6 +26,7 @@ export default class HallucinationPlugin extends PluginBase {
     
     Each line must begin with the string "Prompt:"
   `;
+  }
 
   protected getAssertions(prompt: string): Assertion[] {
     return [

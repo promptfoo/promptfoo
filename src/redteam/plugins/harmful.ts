@@ -146,7 +146,10 @@ const REDTEAM_MODEL_CATEGORIES: HarmfulCategory[] = [
 
 class HarmfulPlugin extends PluginBase {
   private category: HarmfulCategory;
-  protected template: string;
+
+  protected async getTemplate(): Promise<string> {
+    return this.category.prompt;
+  }
 
   constructor(provider: ApiProvider, purpose: string, injectVar: string, categoryLabel: string) {
     const category = REDTEAM_MODEL_CATEGORIES.find((cat) => cat.label === categoryLabel);
@@ -155,7 +158,6 @@ class HarmfulPlugin extends PluginBase {
     }
     super(provider, purpose, injectVar);
     this.category = category;
-    this.template = this.category.prompt;
   }
 
   protected getAssertions(prompt: string): Assertion[] {

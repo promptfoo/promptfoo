@@ -1,5 +1,6 @@
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
+import dedent from 'dedent';
 import invariant from 'tiny-invariant';
 import logger from '../logger';
 import { loadApiProvider } from '../providers';
@@ -35,6 +36,7 @@ interface Plugin {
     purpose: string,
     injectVar: string,
     n: number,
+    config?: Record<string, any>,
   ) => Promise<TestCase[]>;
 }
 
@@ -155,14 +157,19 @@ const Strategies: Strategy[] = [
   },
 ];
 
-function validatePlugins(plugins: { id: string; numTests: number }[]): void {
+function validatePlugins(
+  plugins: { id: string; numTests: number; config?: Record<string, any> }[],
+): void {
   const invalidPlugins = plugins.filter((plugin) => !Plugins.map((p) => p.key).includes(plugin.id));
   if (invalidPlugins.length > 0) {
     const validPluginsString = Plugins.map((p) => p.key).join(', ');
     const invalidPluginsString = invalidPlugins.map((p) => p.id).join(', ');
-    throw new Error(
-      `Invalid plugin(s): ${invalidPluginsString}. Valid plugins are: ${validPluginsString}`,
+    logger.error(
+      dedent`Invalid plugin(s): ${invalidPluginsString}. 
+      
+      ${chalk.green(`Valid plugins are: ${validPluginsString}`)}`,
     );
+    process.exit(1);
   }
   const pluginsWithoutNumTests = plugins.filter(
     (plugin) => !Number.isSafeInteger(plugin.numTests) || plugin.numTests <= 0,
@@ -193,7 +200,6 @@ export async function synthesize({
   prompts,
   provider,
   injectVar,
-  numTests,
   purpose: purposeOverride,
   strategies,
   plugins,
@@ -282,7 +288,13 @@ export async function synthesize({
     if (plugin) {
       updateProgress();
       logger.debug(`Generating ${key} tests`);
-      const pluginTests = await action(redteamProvider, purpose, injectVar, plugin.numTests);
+      const pluginTests = await action(
+        redteamProvider,
+        purpose,
+        injectVar,
+        plugin.numTests,
+        plugin.config,
+      );
       testCases.push(
         ...pluginTests.map((t) => ({
           ...t,
