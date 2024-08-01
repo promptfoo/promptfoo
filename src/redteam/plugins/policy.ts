@@ -1,7 +1,7 @@
 import type { Assertion, ApiProvider, TestCase } from '../../types';
 import PluginBase from './base';
 
-export default class PolicyPlugin extends PluginBase  {
+export default class PolicyPlugin extends PluginBase {
   readonly id = 'policy';
   private policy: string;
 

@@ -80,7 +80,8 @@ redteam:
   plugins:
     - id: 'policy'
       numTests: 10
-  policy: 'Your custom policy statement here'
+      config:
+        policy: 'Your custom policy statement here'
 ```
 
 ##### Examples of Custom Policies

@@ -118,7 +118,7 @@ export const RedteamConfigSchema = z
       .sort((a, b) => a.id.localeCompare(b.id));
 
     const plugins = pluginObjs
-      .flatMap((pluginObj: RedteamPluginObject | { id: string, numTests: number }) => {
+      .flatMap((pluginObj: RedteamPluginObject | { id: string; numTests: number }) => {
         if (pluginObj.id === 'harmful') {
           return Object.keys(HARM_PLUGINS).map((category) => ({
             id: category,
