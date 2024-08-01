@@ -16,9 +16,15 @@ To get started, run this command:
       npx promptfoo@latest init
     </CodeBlock>
   </TabItem>
-  <TabItem value="npm" label="npm" default>
+  <TabItem value="npm" label="npm">
     <CodeBlock language="bash">
       {`npm install -g promptfoo
+promptfoo init`}
+    </CodeBlock>
+  </TabItem>
+  <TabItem value="homebrew" label="Homebrew">
+    <CodeBlock language="bash">
+      {`brew install promptfoo
 promptfoo init`}
     </CodeBlock>
   </TabItem>
@@ -189,7 +195,7 @@ A simple `npx promptfoo@latest eval` will run this example from the command line
 
 ![promptfoo command line](https://user-images.githubusercontent.com/310310/244891726-480e1114-d049-40b9-bd5f-f81c15060284.gif)
 
-This command will evaluate the prompts, substituing variable values, and output the results in your terminal.
+This command will evaluate the prompts, substituting variable values, and output the results in your terminal.
 
 Have a look at the setup and full output [here](https://github.com/promptfoo/promptfoo/tree/main/examples/self-grading).
 

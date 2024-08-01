@@ -324,7 +324,65 @@ See the full example [here](https://github.com/promptfoo/promptfoo/tree/main/exa
 
 ## Installation
 
-See **[installation docs](https://www.promptfoo.dev/docs/installation)**
+Requires Node.js 18 or newer.
+
+You can install promptfoo using npm, npx, Homebrew, or by cloning the repository.
+
+### npm (recommended)
+
+Install `promptfoo` globally:
+
+```sh
+npm install -g promptfoo
+```
+
+Or install it locally in your project:
+
+```sh
+npm install promptfoo
+```
+
+### npx
+
+Run promptfoo without installing it:
+
+```sh
+npx promptfoo@latest init
+```
+
+This will create a `promptfooconfig.yaml` placeholder in your current directory.
+
+### Homebrew
+
+If you prefer using Homebrew, you can install promptfoo with:
+
+```sh
+brew install promptfoo
+```
+
+### From source
+
+For the latest development version:
+
+```sh
+git clone https://github.com/promptfoo/promptfoo.git
+cd promptfoo
+npm install
+npm run build
+npm link
+```
+
+### Verify installation
+
+To verify that promptfoo is installed correctly, run:
+
+```sh
+promptfoo --version
+```
+
+This should display the version number of promptfoo.
+
+For more detailed installation instructions, including system requirements and troubleshooting, please visit our [installation guide](https://www.promptfoo.dev/docs/installation).
 
 ## API Providers
 
