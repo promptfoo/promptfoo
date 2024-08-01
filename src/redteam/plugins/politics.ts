@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import { Assertion } from '../../types';
+import type { Assertion } from '../../types';
 import PluginBase from './base';
 
 export default class PoliticsPlugin extends PluginBase {

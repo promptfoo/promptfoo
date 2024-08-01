@@ -6,7 +6,7 @@ import input from '@inquirer/input';
 import number from '@inquirer/number';
 import rawlist from '@inquirer/rawlist';
 import chalk from 'chalk';
-import { Command } from 'commander';
+import type { Command } from 'commander';
 import * as fs from 'fs';
 import yaml from 'js-yaml';
 import * as path from 'path';
@@ -19,9 +19,9 @@ import {
   DEFAULT_STRATEGIES,
   subCategoryDescriptions,
 } from '../redteam/constants';
-import { redteamConfigSchema } from '../redteam/validators';
 import telemetry from '../telemetry';
-import { Prompt, TestSuite, Plugin } from '../types';
+import type { Prompt, TestSuite } from '../types';
+import { RedteamConfigSchema } from '../validators/redteam';
 import { doGenerateRedteam } from './generate/redteam';
 
 export async function redteamInit(directory: string | undefined) {
@@ -225,7 +225,7 @@ export async function redteamInit(directory: string | undefined) {
     prompts,
     providers: providers,
     tests: [],
-    redteam: redteamConfigSchema.safeParse({
+    redteam: RedteamConfigSchema.safeParse({
       plugins: plugins,
       strategies: strategies,
       numTests,
@@ -235,7 +235,7 @@ export async function redteamInit(directory: string | undefined) {
   // Write the simplified form to the config file to make it easier
   // for people to play with. Writes 1 in the { id: ..., numTests }
   // and then the rest as strings.
-  const parsedPlugins = redteamConfigSchema.safeParse({
+  const parsedPlugins = RedteamConfigSchema.safeParse({
     plugins: plugins,
     strategies: strategies,
     numTests,

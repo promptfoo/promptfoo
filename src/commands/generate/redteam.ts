@@ -1,5 +1,5 @@
 import chalk from 'chalk';
-import { Command } from 'commander';
+import type { Command } from 'commander';
 import dedent from 'dedent';
 import * as fs from 'fs';
 import yaml from 'js-yaml';
@@ -16,12 +16,12 @@ import {
   DEFAULT_STRATEGIES,
   ADDITIONAL_STRATEGIES,
 } from '../../redteam/constants';
-import type { RedteamStrategyObject, SynthesizeOptions } from '../../redteam/types';
-import { RedteamConfig, RedteamGenerateOptions } from '../../redteam/types';
-import { RedteamGenerateOptionsSchema, redteamConfigSchema } from '../../redteam/validators';
 import telemetry from '../../telemetry';
-import { TestSuite, UnifiedConfig } from '../../types';
+import type { TestSuite, UnifiedConfig } from '../../types';
+import type { RedteamStrategyObject, SynthesizeOptions } from '../../types/redteam';
+import type { RedteamConfig, RedteamGenerateOptions } from '../../types/redteam';
 import { printBorder, setupEnv } from '../../util';
+import { RedteamGenerateOptionsSchema, RedteamConfigSchema } from '../../validators/redteam';
 
 export async function doGenerateRedteam(options: RedteamGenerateOptions) {
   setupEnv(options.envFile);
@@ -133,7 +133,7 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
     purpose: redteamConfig?.purpose || options.purpose,
     strategies: strategyObjs,
   };
-  const parsedConfig = redteamConfigSchema.safeParse(config);
+  const parsedConfig = RedteamConfigSchema.safeParse(config);
   if (!parsedConfig.success) {
     logger.error('Invalid redteam configuration:');
     logger.error(parsedConfig.error.toString());
@@ -250,7 +250,7 @@ export function generateRedteamCommand(
         let overrides: Record<string, any> = {};
         if (opts.plugins && opts.plugins.length > 0) {
           logger.warn(`Overriding plugins: ${opts.plugins.join(', ')}`);
-          const parsed = redteamConfigSchema.safeParse({
+          const parsed = RedteamConfigSchema.safeParse({
             plugins: opts.plugins,
             strategies: opts.strategies,
             numTests: opts.numTests,

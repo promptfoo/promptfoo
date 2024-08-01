@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import { globSync } from 'glob';
 import * as path from 'path';
 import { dereferenceConfig, readConfigs } from '../src/config';
-import { UnifiedConfig } from '../src/types';
+import type { UnifiedConfig } from '../src/types';
 
 jest.mock('../src/database', () => ({
   getDb: jest.fn(),

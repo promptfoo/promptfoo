@@ -1,4 +1,4 @@
-import { ApiProvider, ProviderOptions } from '../types';
+import type { ApiProvider, ProviderOptions } from '../types/providers';
 
 export type RedteamPluginObject = {
   id: string;
@@ -44,7 +44,7 @@ export type RedteamAssertionTypes = `promptfoo:redteam:${string}`;
 export interface SynthesizeOptions {
   injectVar?: string;
   numTests: number;
-  plugins: { id: string; numTests: number; config?: Record<string, unknown> }[];
+  plugins: { id: string; numTests: number }[];
   prompts: string[];
   provider?: ApiProvider | ProviderOptions | string;
   purpose?: string;

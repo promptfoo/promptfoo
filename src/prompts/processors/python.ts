@@ -1,5 +1,6 @@
 import * as fs from 'fs';
-import { PythonShell, Options as PythonShellOptions } from 'python-shell';
+import type { Options as PythonShellOptions } from 'python-shell';
+import { PythonShell } from 'python-shell';
 import invariant from 'tiny-invariant';
 import logger from '../../logger';
 import { runPython } from '../../python/pythonUtils';

@@ -1,6 +1,6 @@
 import { fetchWithCache } from '../cache';
 import logger from '../logger';
-import { ApiProvider, EnvOverrides, ProviderResponse, TokenUsage } from '../types';
+import type { ApiProvider, EnvOverrides, ProviderResponse, TokenUsage } from '../types';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
 
 const MISTRAL_CHAT_MODELS = [

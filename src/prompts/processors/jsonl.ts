@@ -1,5 +1,5 @@
 import * as fs from 'fs';
-import { Prompt } from '../../types';
+import type { Prompt } from '../../types';
 
 /**
  * Processes a JSONL file to extract prompts.

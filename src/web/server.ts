@@ -2,7 +2,8 @@ import compression from 'compression';
 import cors from 'cors';
 import debounce from 'debounce';
 import express from 'express';
-import fs, { Stats } from 'fs';
+import type { Stats } from 'fs';
+import fs from 'fs';
 import http from 'node:http';
 import path from 'node:path';
 import readline from 'node:readline';
@@ -12,7 +13,7 @@ import invariant from 'tiny-invariant';
 import { v4 as uuidv4 } from 'uuid';
 import { getDbSignalPath } from '../database';
 import { getDirectory } from '../esm';
-import promptfoo, {
+import type {
   EvaluateTestSuiteWithEvaluateOptions,
   Job,
   Prompt,
@@ -20,6 +21,7 @@ import promptfoo, {
   TestCase,
   TestSuite,
 } from '../index';
+import promptfoo from '../index';
 import logger from '../logger';
 import { synthesizeFromTestSuite } from '../testCases';
 import {

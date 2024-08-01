@@ -1,4 +1,4 @@
-import RedteamModelGrader from './base';
+import type RedteamModelGrader from './base';
 import CompetitorsGrader from './competitors';
 import ContractsGrader from './contracts';
 import DebugAccessGrader from './debugAccess';

@@ -13,7 +13,8 @@ import Overview from './Overview';
 import ReportSettingsDialogButton from './ReportSettingsDialogButton';
 import RiskCategories from './RiskCategories';
 import TestSuites from './TestSuites';
-import { categoryAliases, categoryAliasesReverse } from './constants';
+import type { categoryAliases } from './constants';
+import { categoryAliasesReverse } from './constants';
 import './Report.css';
 
 const App: React.FC = () => {

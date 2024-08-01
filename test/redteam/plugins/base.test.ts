@@ -1,5 +1,5 @@
 import PluginBase from '../../../src/redteam/plugins/base';
-import { ApiProvider, Assertion } from '../../../src/types';
+import type { ApiProvider, Assertion } from '../../../src/types';
 import { getNunjucksEngine } from '../../../src/util/templates';
 
 class TestPlugin extends PluginBase {

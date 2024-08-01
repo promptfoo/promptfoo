@@ -1,4 +1,4 @@
-import { Assertion, Plugin, ApiProvider, TestCase } from '../../types';
+import type { Assertion, Plugin, ApiProvider, TestCase } from '../../types';
 import PluginBase from './base';
 
 export default class PolicyPlugin extends PluginBase implements Plugin {

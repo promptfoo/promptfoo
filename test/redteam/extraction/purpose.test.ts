@@ -1,5 +1,5 @@
 import { extractSystemPurpose } from '../../../src/redteam/extraction/purpose';
-import { ApiProvider } from '../../../src/types';
+import type { ApiProvider } from '../../../src/types';
 
 jest.mock('../../../src/logger', () => ({
   error: jest.fn(),

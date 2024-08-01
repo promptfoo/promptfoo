@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { BedrockRuntime } from '@aws-sdk/client-bedrock-runtime';
 import dedent from 'dedent';
-import { Agent } from 'http';
+import type { Agent } from 'http';
 import { getCache, isCacheEnabled } from '../cache';
 import logger from '../logger';
 import type {

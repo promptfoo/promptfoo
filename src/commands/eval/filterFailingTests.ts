@@ -1,4 +1,4 @@
-import { TestSuite } from '../../types';
+import type { TestSuite } from '../../types';
 import { readOutput, resultIsForTestCase } from '../../util';
 
 type Tests = NonNullable<TestSuite['tests']>;

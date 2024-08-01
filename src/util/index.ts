@@ -284,6 +284,7 @@ export function listPreviousResults(
       createdAt: evals.createdAt,
       description: evals.description,
       config: evals.config,
+      results: evals.results,
       datasetId: evalsToDatasets.datasetId,
     })
     .from(evals)
@@ -297,13 +298,16 @@ export function listPreviousResults(
 
   const results = query.orderBy(desc(evals.createdAt)).limit(limit).all();
 
-  return results.map((result) => ({
-    evalId: result.evalId,
-    createdAt: result.createdAt,
-    description: result.description,
-    numTests: result.config.tests?.length || 0,
-    datasetId: result.datasetId,
-  }));
+  return results.map((result) => {
+    const numTests = result.results.table.body.length;
+    return {
+      evalId: result.evalId,
+      createdAt: result.createdAt,
+      description: result.description,
+      numTests,
+      datasetId: result.datasetId,
+    };
+  });
 }
 
 /**
@@ -940,9 +944,10 @@ export function providerToIdentifier(provider: TestCase['provider']): string | u
     return provider.id();
   } else if (isProviderOptions(provider)) {
     return provider.id;
+  } else if (typeof provider === 'string') {
+    return provider;
   }
-
-  return provider;
+  return undefined;
 }
 
 export function varsMatch(

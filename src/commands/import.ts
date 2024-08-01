@@ -1,4 +1,4 @@
-import { Command } from 'commander';
+import type { Command } from 'commander';
 import fs from 'fs';
 import { getDb } from '../database';
 import { evals } from '../database/operations';

@@ -1,12 +1,14 @@
 import dedent from 'dedent';
+import type {
+  BedrockClaudeMessagesCompletionOptions,
+  LlamaMessage,
+} from '../src/providers/bedrock';
 import {
   addConfigParam,
   AwsBedrockGenericProvider,
   BEDROCK_MODEL,
-  BedrockClaudeMessagesCompletionOptions,
   formatPromptLlama2Chat,
   getLlamaModelHandler,
-  LlamaMessage,
   LlamaVersion,
   parseValue,
 } from '../src/providers/bedrock';

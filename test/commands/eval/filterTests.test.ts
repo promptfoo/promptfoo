@@ -1,5 +1,5 @@
 import { filterTests } from '../../../src/commands/eval/filterTests';
-import { TestSuite } from '../../../src/types';
+import type { TestSuite } from '../../../src/types';
 
 describe('filterTests', () => {
   const testNoDescription = {};

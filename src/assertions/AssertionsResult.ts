@@ -1,4 +1,4 @@
-import { AssertionSet, GradingResult } from '../types';
+import type { AssertionSet, GradingResult } from '../types';
 
 const DEFAULT_TOKENS_USED = {
   total: 0,

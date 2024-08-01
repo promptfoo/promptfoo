@@ -1,5 +1,5 @@
 import React from 'react';
-import {
+import type {
   EvaluateSummary,
   ResultLightweightWithLabel,
   SharedResults,
@@ -9,7 +9,7 @@ import { getApiBaseUrl } from '@/api';
 import { IS_RUNNING_LOCALLY } from '@/constants';
 import { getResult } from '@/database';
 import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
-import { Metadata } from 'next';
+import type { Metadata } from 'next';
 import { cookies } from 'next/headers';
 import { notFound } from 'next/navigation';
 import Eval from '../Eval';
