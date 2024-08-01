@@ -165,16 +165,30 @@ export async function redteamInit(directory: string | undefined) {
     choices: pluginChoices,
     pageSize: Math.min(pluginChoices.length, process.stdout.rows - 4),
     loop: false,
-    searchable: true,
     validate: (answer) => answer.length > 0 || 'You must select at least one plugin.',
   });
 
   // Handle policy plugin
-  if (plugins.includes('policy')) {
-    let definePolicies = true;
-    let policyCount = 1;
+  let shouldDefinePolicies = plugins.includes('policy');
 
-    while (definePolicies) {
+  if (!shouldDefinePolicies) {
+    shouldDefinePolicies = await confirm({
+      message: 'Would you like to add a custom policy?',
+      default: false,
+    });
+  }
+
+  if (shouldDefinePolicies) {
+    // Remove the original 'policy' string if it exists
+    const policyIndex = plugins.indexOf('policy');
+    if (policyIndex !== -1) {
+      plugins.splice(policyIndex, 1);
+    }
+
+    let policyCount = 1;
+    let continueDefiningPolicies = true;
+
+    while (continueDefiningPolicies) {
       const policyDescription = await input({
         message: `Enter policy description ${policyCount}:`,
         validate: (input) => input.trim() !== '' || 'Policy description cannot be empty',
@@ -187,14 +201,11 @@ export async function redteamInit(directory: string | undefined) {
 
       policyCount++;
 
-      definePolicies = await confirm({
+      continueDefiningPolicies = await confirm({
         message: 'Would you like to define an additional policy?',
         default: false,
       });
     }
-
-    // Remove the original 'policy' string from the plugins array
-    plugins.splice(plugins.indexOf('policy'), 1);
   }
 
   console.clear();

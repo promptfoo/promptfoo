@@ -1,13 +1,11 @@
 import dedent from 'dedent';
 import { z } from 'zod';
-import type { Collection } from '../redteam/constants';
 import {
   ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
   ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
   ADDITIONAL_STRATEGIES as REDTEAM_ADDITIONAL_STRATEGIES,
   DEFAULT_STRATEGIES,
   ALL_STRATEGIES,
-  COLLECTIONS,
   HARM_PLUGINS,
   PII_PLUGINS,
 } from '../redteam/constants';
@@ -25,6 +23,7 @@ const RedteamPluginObjectSchema = z.object({
     .positive()
     .optional()
     .describe('Number of tests to generate for this plugin'),
+  config: z.record(z.unknown()).optional().describe('Plugin-specific configuration'),
 });
 
 /**
@@ -117,33 +116,30 @@ export const RedteamConfigSchema = z
       )
       .sort((a, b) => a.id.localeCompare(b.id));
 
-    const plugins = pluginObjs
-      .flatMap((pluginObj: RedteamPluginObject | { id: string; numTests: number }) => {
+    const uniquePlugins: RedteamPluginObject[] = Array.from(
+      pluginObjs
+        .reduce((map, plugin) => {
+          const key = `${plugin.id}:${JSON.stringify(plugin.config)}`;
+          return map.set(key, plugin);
+        }, new Map<string, RedteamPluginObject>())
+        .values(),
+    )
+      .sort((a, b) => a.id.localeCompare(b.id))
+      .flatMap((pluginObj): RedteamPluginObject[] => {
         if (pluginObj.id === 'harmful') {
           return Object.keys(HARM_PLUGINS).map((category) => ({
             id: category,
-            numTests:
-              pluginObjs.find((p) => p.id === category)?.numTests ??
-              pluginObj.numTests ??
-              data.numTests,
+            numTests: pluginObj.numTests ?? data.numTests,
           }));
         }
         if (pluginObj.id === 'pii') {
           return PII_PLUGINS.map((id) => ({
             id,
-            numTests:
-              pluginObjs.find((p) => p.id === id)?.numTests ?? pluginObj.numTests ?? data.numTests,
+            numTests: pluginObj.numTests ?? data.numTests,
           }));
         }
-        return pluginObj;
-      })
-      .filter((plugin) => !COLLECTIONS.includes(plugin.id as Collection)); // category plugins are handled above
-
-    const uniquePlugins: RedteamPluginObject[] = Array.from(
-      plugins
-        .reduce((map, plugin) => map.set(plugin.id, plugin), new Map<string, RedteamPluginObject>())
-        .values(),
-    ).sort((a, b) => a.id.localeCompare(b.id));
+        return [pluginObj];
+      });
 
     return {
       ...(data.purpose ? { purpose: data.purpose } : {}),

@@ -3,7 +3,7 @@ import type { ApiProvider, ProviderOptions } from '../types/providers';
 export type RedteamPluginObject = {
   id: string;
   numTests?: number;
-  config?: Record<string, any>;
+  config?: Record<string, unknown>;
 };
 
 export type RedteamPlugin = string | RedteamPluginObject;
