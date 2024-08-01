@@ -17,7 +17,12 @@ import type {
   ProviderResponse,
 } from '../types';
 import { renderVarsInObject } from '../util';
-import { REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase } from './shared';
+import {
+  REQUEST_TIMEOUT_MS,
+  maybeLoadFromExternalFile,
+  parseChatPrompt,
+  toTitleCase,
+} from './shared';
 
 interface AzureOpenAiCompletionOptions {
   // Azure identity params
@@ -356,11 +361,17 @@ export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvide
       frequency_penalty:
         this.config.frequency_penalty ?? parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0'),
       ...(this.config.functions
-        ? { functions: renderVarsInObject(this.config.functions, context?.vars) }
+        ? {
+            functions: maybeLoadFromExternalFile(
+              renderVarsInObject(this.config.functions, context?.vars),
+            ),
+          }
         : {}),
       ...(this.config.function_call ? { function_call: this.config.function_call } : {}),
       ...(this.config.seed !== undefined ? { seed: this.config.seed } : {}),
-      ...(this.config.tools ? { tools: renderVarsInObject(this.config.tools, context?.vars) } : {}),
+      ...(this.config.tools
+        ? { tools: maybeLoadFromExternalFile(renderVarsInObject(this.config.tools, context?.vars)) }
+        : {}),
       ...(this.config.tool_choice ? { tool_choice: this.config.tool_choice } : {}),
       ...(this.config.deployment_id ? { deployment_id: this.config.deployment_id } : {}),
       ...(this.config.dataSources ? { dataSources: this.config.dataSources } : {}),
