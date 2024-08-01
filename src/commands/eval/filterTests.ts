@@ -1,4 +1,4 @@
-import { TestSuite } from '../../types';
+import type { TestSuite } from '../../types';
 import { filterFailingTests } from './filterFailingTests';
 
 interface Args {

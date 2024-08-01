@@ -1,7 +1,7 @@
 import invariant from 'tiny-invariant';
 import logger from '../../logger';
 import { matchesLlmRubric } from '../../matchers';
-import { AtomicTestCase, GradingResult } from '../../types';
+import type { AtomicTestCase, GradingResult } from '../../types';
 import { getNunjucksEngine } from '../../util/templates';
 
 const nunjucks = getNunjucksEngine();

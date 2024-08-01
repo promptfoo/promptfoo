@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import { ApiProvider } from '../../types';
+import type { ApiProvider } from '../../types';
 import { callExtraction, formatPrompts } from './util';
 
 export async function extractSystemPurpose(

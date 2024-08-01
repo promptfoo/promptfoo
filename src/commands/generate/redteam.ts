@@ -1,5 +1,5 @@
 import chalk from 'chalk';
-import { Command } from 'commander';
+import type { Command } from 'commander';
 import dedent from 'dedent';
 import * as fs from 'fs';
 import yaml from 'js-yaml';
@@ -17,9 +17,9 @@ import {
   ADDITIONAL_STRATEGIES,
 } from '../../redteam/constants';
 import telemetry from '../../telemetry';
-import { TestSuite, UnifiedConfig } from '../../types';
+import type { TestSuite, UnifiedConfig } from '../../types';
 import type { RedteamStrategyObject, SynthesizeOptions } from '../../types/redteam';
-import { RedteamConfig, RedteamGenerateOptions } from '../../types/redteam';
+import type { RedteamConfig, RedteamGenerateOptions } from '../../types/redteam';
 import { printBorder, setupEnv } from '../../util';
 import { RedteamGenerateOptionsSchema, RedteamConfigSchema } from '../../validators/redteam';
 

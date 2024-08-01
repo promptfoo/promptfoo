@@ -1,4 +1,4 @@
-import { TestCase } from '../types';
+import type { TestCase } from '../types';
 
 export class AssertValidationError extends Error {
   constructor(message: string, testCase: TestCase) {

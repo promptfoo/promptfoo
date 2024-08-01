@@ -1,4 +1,5 @@
-import Ajv, { ValidateFunction } from 'ajv';
+import type { ValidateFunction } from 'ajv';
+import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
 import async from 'async';
 import { XMLParser } from 'fast-xml-parser';
@@ -29,13 +30,14 @@ import {
   matchesSelectBest,
   matchesModeration,
 } from './matchers';
-import { OpenAiChatCompletionProvider } from './providers/openai';
+import type { OpenAiChatCompletionProvider } from './providers/openai';
 import { validateFunctionCall } from './providers/openaiUtil';
 import { parseChatPrompt } from './providers/shared';
 import { runPython } from './python/pythonUtils';
 import { runPythonCode } from './python/wrapper';
 import { getGraderById } from './redteam/graders';
 import telemetry from './telemetry';
+import type { AssertionValue, ProviderResponse } from './types';
 import {
   type ApiProvider,
   type Assertion,
@@ -44,8 +46,6 @@ import {
   type GradingResult,
   type TestCase,
   isGradingResult,
-  AssertionValue,
-  ProviderResponse,
 } from './types';
 import { extractJsonObjects } from './util';
 import { getNunjucksEngine } from './util/templates';

@@ -1,5 +1,5 @@
 import nunjucks from 'nunjucks';
-import { NunjucksFilterMap } from '../types';
+import type { NunjucksFilterMap } from '../types';
 
 export function getNunjucksEngine(filters?: NunjucksFilterMap) {
   if (process.env.PROMPTFOO_DISABLE_TEMPLATING) {

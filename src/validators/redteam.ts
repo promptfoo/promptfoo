@@ -1,5 +1,6 @@
 import dedent from 'dedent';
 import { z } from 'zod';
+import type { Collection } from '../redteam/constants';
 import {
   ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
   ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
@@ -9,9 +10,8 @@ import {
   COLLECTIONS,
   HARM_PLUGINS,
   PII_PLUGINS,
-  Collection,
 } from '../redteam/constants';
-import { RedteamConfig, RedteamPluginObject } from '../types/redteam';
+import type { RedteamConfig, RedteamPluginObject } from '../types/redteam';
 import { ProviderSchema } from '../validators/providers';
 
 /**

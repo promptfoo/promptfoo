@@ -1,6 +1,6 @@
 import { fetchWithCache } from '../cache';
 import logger from '../logger';
-import {
+import type {
   ApiProvider,
   ApiSimilarityProvider,
   ProviderClassificationResponse,

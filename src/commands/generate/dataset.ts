@@ -1,5 +1,5 @@
 import chalk from 'chalk';
-import { Command } from 'commander';
+import type { Command } from 'commander';
 import * as fs from 'fs';
 import yaml from 'js-yaml';
 import { disableCache } from '../../cache';
@@ -7,7 +7,7 @@ import { resolveConfigs } from '../../config';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { synthesizeFromTestSuite } from '../../testCases';
-import { TestSuite, UnifiedConfig } from '../../types';
+import type { TestSuite, UnifiedConfig } from '../../types';
 import { printBorder, setupEnv } from '../../util';
 
 interface DatasetGenerateOptions {
