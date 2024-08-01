@@ -1,6 +1,6 @@
 import { matchesLlmRubric } from '../../../src/matchers';
 import RedteamModelGrader from '../../../src/redteam/graders/base';
-import { AtomicTestCase, GradingResult } from '../../../src/types';
+import type { AtomicTestCase, GradingResult } from '../../../src/types';
 
 jest.mock('../../../src/matchers', () => ({
   matchesLlmRubric: jest.fn(),

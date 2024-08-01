@@ -1,6 +1,6 @@
 import dedent from 'dedent';
 import logger from '../../logger';
-import { ApiProvider } from '../../types';
+import type { ApiProvider } from '../../types';
 
 export async function callExtraction<T>(
   provider: ApiProvider,

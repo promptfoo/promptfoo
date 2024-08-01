@@ -1,6 +1,6 @@
 import chalk from 'chalk';
 import chokidar from 'chokidar';
-import { Command } from 'commander';
+import type { Command } from 'commander';
 import dedent from 'dedent';
 import * as path from 'path';
 import invariant from 'tiny-invariant';
@@ -13,14 +13,8 @@ import { loadApiProvider } from '../providers';
 import { createShareableUrl } from '../share';
 import { generateTable } from '../table';
 import telemetry from '../telemetry';
-import {
-  CommandLineOptions,
-  EvaluateOptions,
-  OutputFileExtension,
-  TestSuite,
-  UnifiedConfig,
-  TestSuiteSchema,
-} from '../types';
+import type { CommandLineOptions, EvaluateOptions, TestSuite, UnifiedConfig } from '../types';
+import { OutputFileExtension, TestSuiteSchema } from '../types';
 import {
   migrateResultsFromFileSystemToDatabase,
   printBorder,

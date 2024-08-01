@@ -1,5 +1,5 @@
 import * as fs from 'fs';
-import { Prompt } from '../../types';
+import type { Prompt } from '../../types';
 import { PROMPT_DELIMITER } from '../constants';
 
 /**

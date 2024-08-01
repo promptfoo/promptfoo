@@ -1,4 +1,4 @@
-import { Prompt } from '../types';
+import type { Prompt } from '../types';
 import { VALID_FILE_EXTENSIONS } from './constants';
 
 /**

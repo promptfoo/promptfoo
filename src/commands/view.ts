@@ -1,4 +1,4 @@
-import { Command } from 'commander';
+import type { Command } from 'commander';
 import telemetry from '../telemetry';
 import { setupEnv } from '../util';
 import { setConfigDirectoryPath } from '../util/config';

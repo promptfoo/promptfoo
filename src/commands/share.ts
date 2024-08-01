@@ -1,11 +1,11 @@
 import chalk from 'chalk';
-import { Command } from 'commander';
+import type { Command } from 'commander';
 import readline from 'readline';
 import { URL } from 'url';
 import logger from '../logger';
 import { createShareableUrl } from '../share';
 import telemetry from '../telemetry';
-import { ResultsFile } from '../types';
+import type { ResultsFile } from '../types';
 import { readLatestResults, readResult, setupEnv } from '../util';
 
 async function createPublicUrl(results: ResultsFile, showAuth: boolean) {

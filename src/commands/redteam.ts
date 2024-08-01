@@ -6,7 +6,7 @@ import input from '@inquirer/input';
 import number from '@inquirer/number';
 import rawlist from '@inquirer/rawlist';
 import chalk from 'chalk';
-import { Command } from 'commander';
+import type { Command } from 'commander';
 import * as fs from 'fs';
 import yaml from 'js-yaml';
 import * as path from 'path';
@@ -20,7 +20,7 @@ import {
   subCategoryDescriptions,
 } from '../redteam/constants';
 import telemetry from '../telemetry';
-import { Prompt, TestSuite } from '../types';
+import type { Prompt, TestSuite } from '../types';
 import { RedteamConfigSchema } from '../validators/redteam';
 import { doGenerateRedteam } from './generate/redteam';
 

@@ -1,4 +1,4 @@
-import { Command } from 'commander';
+import type { Command } from 'commander';
 import fs from 'fs';
 import path from 'path';
 import { getDirectory } from '../esm';

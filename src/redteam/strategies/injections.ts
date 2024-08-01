@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import { TestCase } from '../../types';
+import type { TestCase } from '../../types';
 
 export function addInjections(testCases: TestCase[], injectVar: string): TestCase[] {
   const injections = [

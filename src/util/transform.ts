@@ -1,6 +1,6 @@
 import { importModule } from '../esm';
 import { runPython } from '../python/pythonUtils';
-import { Prompt } from '../types';
+import type { Prompt } from '../types';
 
 export async function transform(
   codeOrFilepath: string,

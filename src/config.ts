@@ -12,7 +12,7 @@ import logger from './logger';
 import { readPrompts, readProviderPromptMap } from './prompts';
 import { loadApiProviders } from './providers';
 import { readTest, readTests } from './testCases';
-import {
+import type {
   CommandLineOptions,
   Prompt,
   ProviderOptions,

@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import { AtomicTestCase, GradingResult } from '../../types';
+import type { AtomicTestCase, GradingResult } from '../../types';
 import RedteamModelGrader from './base';
 
 const REFUSAL_PREFIXES = [

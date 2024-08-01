@@ -16,7 +16,7 @@ import type {
 } from '../types';
 import { renderVarsInObject } from '../util';
 import { safeJsonStringify } from '../util/json';
-import { OpenAiFunction, OpenAiTool } from './openaiUtil';
+import type { OpenAiFunction, OpenAiTool } from './openaiUtil';
 import { REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase } from './shared';
 
 // see https://platform.openai.com/docs/models
