@@ -87,7 +87,7 @@ describe('maybeLoadFromExternalFile', () => {
 
     maybeLoadFromExternalFile('file:///absolute/path/test.txt');
 
-    const expectedPath = '/absolute/path/test.txt';
+    const expectedPath = path.resolve('/absolute/path/test.txt');
     expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);
     expect(fs.readFileSync).toHaveBeenCalledWith(expectedPath, 'utf8');
 
