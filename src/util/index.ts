@@ -284,6 +284,7 @@ export function listPreviousResults(
       createdAt: evals.createdAt,
       description: evals.description,
       config: evals.config,
+      results: evals.results,
       datasetId: evalsToDatasets.datasetId,
     })
     .from(evals)
@@ -298,16 +299,12 @@ export function listPreviousResults(
   const results = query.orderBy(desc(evals.createdAt)).limit(limit).all();
 
   return results.map((result) => {
-    let numTests = result.config.tests?.length || 0;
-    for (const scenario of result.config.scenarios || []) {
-      numTests += scenario.config.length * scenario.tests.length;
-    }
-
+    const numTests = result.results.table.body.length;
     return {
       evalId: result.evalId,
       createdAt: result.createdAt,
       description: result.description,
-      numTests: numTests,
+      numTests,
       datasetId: result.datasetId,
     };
   });
