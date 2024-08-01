@@ -80,6 +80,12 @@ const CallApiFunctionSchema = z
   .returns(z.promise(z.custom<ProviderResponse>()))
   .and(z.object({ label: z.string().optional() }));
 
+// Ensure that it matches the type of the function
+// TODO(ian): Do this for everything else?
+function assert<T extends never>() {}
+type TypeEqualityGuard<A, B> = Exclude<A, B> | Exclude<B, A>;
+assert<TypeEqualityGuard<CallApiFunction, z.infer<typeof CallApiFunctionSchema>>>();
+
 export const ApiProviderSchema = z.object({
   id: z.function().returns(z.string()),
   callApi: z.custom<CallApiFunction>(),
@@ -143,7 +149,4 @@ export const ProvidersSchema = z.union([
   ),
 ]);
 
-// Type assertion
-function assert<T extends never>() {}
-type TypeEqualityGuard<A, B> = Exclude<A, B> | Exclude<B, A>;
-assert<TypeEqualityGuard<CallApiFunction, z.infer<typeof CallApiFunctionSchema>>>();
+export const ProviderSchema = z.union([z.string(), ProviderOptionsSchema, ApiProviderSchema]);

@@ -1,23 +1,23 @@
 // Note: This file is in the process of being deconstructed into `types/` and `validators/`
 // Right now Zod and pure types are mixed together!
 import { z } from 'zod';
-import { Prompt, PromptFunction } from './types/prompts';
-import { ApiProvider, ProviderOptions, ProviderResponse } from './types/providers';
-import { RedteamAssertionTypes, RedteamConfig } from './types/redteam';
-import { NunjucksFilterMap, TokenUsage } from './types/shared';
-import { PromptConfigSchema, PromptSchema } from './validators/prompts';
+import { PromptConfigSchema, PromptSchema } from '../validators/prompts';
 import {
   ApiProviderSchema,
   ProviderEnvOverridesSchema,
   ProviderOptionsSchema,
   ProvidersSchema,
-} from './validators/providers';
-import { NunjucksFilterMapSchema, TokenUsageSchema } from './validators/shared';
+} from '../validators/providers';
+import { NunjucksFilterMapSchema, TokenUsageSchema } from '../validators/shared';
+import { Prompt, PromptFunction } from './prompts';
+import { ApiProvider, ProviderOptions, ProviderResponse } from './providers';
+import { RedteamAssertionTypes, RedteamConfig } from './redteam';
+import { NunjucksFilterMap, TokenUsage } from './shared';
 
-export * from './types/prompts';
-export * from './types/providers';
-export * from './types/redteam';
-export * from './types/shared';
+export * from './prompts';
+export * from './providers';
+export * from './redteam';
+export * from './shared';
 
 export const CommandLineOptionsSchema = z.object({
   // Shared with TestSuite
@@ -66,10 +66,6 @@ export interface CsvRow {
 }
 
 export type VarMapping = Record<string, string>;
-
-export type ProviderType = 'embedding' | 'classification' | 'text' | 'moderation';
-
-export type ProviderTypeMap = Partial<Record<ProviderType, string | ProviderOptions | ApiProvider>>;
 
 const GradingConfigSchema = z.object({
   rubricPrompt: z
@@ -407,9 +403,6 @@ const ProviderPromptMapSchema = z.record(
   z.string(),
   z.union([z.string().transform((value) => [value]), z.array(z.string())]),
 );
-
-export const ProviderSchema = z.union([z.string(), ProviderOptionsSchema, ApiProviderSchema]);
-export type Provider = z.infer<typeof ProviderSchema>;
 
 // Metadata is a key-value store for arbitrary data
 const MetadataSchema = z.record(z.string(), z.any());

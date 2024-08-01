@@ -11,8 +11,8 @@ import {
   PII_PLUGINS,
   Collection,
 } from '../redteam/constants';
-import { ProviderSchema } from '../types';
 import { RedteamConfig, RedteamPluginObject } from '../types/redteam';
+import { ProviderSchema } from '../validators/providers';
 
 /**
  * Schema for individual redteam plugins

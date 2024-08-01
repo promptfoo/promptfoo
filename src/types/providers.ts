@@ -6,6 +6,10 @@ export type ProviderLabel = string;
 export type ProviderFunction = ApiProvider['callApi'];
 export type ProviderOptionsMap = Record<ProviderId, ProviderOptions>;
 
+export type ProviderType = 'embedding' | 'classification' | 'text' | 'moderation';
+
+export type ProviderTypeMap = Partial<Record<ProviderType, string | ProviderOptions | ApiProvider>>;
+
 export interface ProviderModerationResponse {
   error?: string;
   flags?: ModerationFlag[];
