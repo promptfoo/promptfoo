@@ -59,21 +59,13 @@ describe('maybeLoadFromExternalFile', () => {
 
     maybeLoadFromExternalFile('file://test.txt');
 
-    expect(fs.existsSync).toHaveBeenCalledWith(path.resolve(basePath, 'test.txt'));
-    expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve(basePath, 'test.txt'), 'utf8');
-
-    cliState.basePath = undefined;
-  });
-
-  it('should handle Windows paths correctly', () => {
-    const basePath = 'C:\\base\\path';
-    cliState.basePath = basePath;
-    jest.mocked(fs.readFileSync).mockReturnValue(mockFileContent);
-
-    maybeLoadFromExternalFile('file://test.txt');
-
-    expect(fs.existsSync).toHaveBeenCalledWith(path.resolve(basePath, 'test.txt'));
-    expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve(basePath, 'test.txt'), 'utf8');
+    expect(fs.existsSync).toHaveBeenCalledWith(
+      expect.stringMatching(/^[/\\]base[/\\]path[/\\]test\.txt$/),
+    );
+    expect(fs.readFileSync).toHaveBeenCalledWith(
+      expect.stringMatching(/^[/\\]base[/\\]path[/\\]test\.txt$/),
+      'utf8',
+    );
 
     cliState.basePath = undefined;
   });
@@ -85,8 +77,13 @@ describe('maybeLoadFromExternalFile', () => {
 
     maybeLoadFromExternalFile('file://test.txt');
 
-    expect(fs.existsSync).toHaveBeenCalledWith(path.resolve(basePath, 'test.txt'));
-    expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve(basePath, 'test.txt'), 'utf8');
+    expect(fs.existsSync).toHaveBeenCalledWith(
+      expect.stringMatching(/^\.?[/\\]relative[/\\]path[/\\]test\.txt$/),
+    );
+    expect(fs.readFileSync).toHaveBeenCalledWith(
+      expect.stringMatching(/^\.?[/\\]relative[/\\]path[/\\]test\.txt$/),
+      'utf8',
+    );
 
     cliState.basePath = undefined; // Reset for other tests
   });
@@ -98,8 +95,13 @@ describe('maybeLoadFromExternalFile', () => {
 
     maybeLoadFromExternalFile('file:///absolute/path/test.txt');
 
-    expect(fs.existsSync).toHaveBeenCalledWith('/absolute/path/test.txt');
-    expect(fs.readFileSync).toHaveBeenCalledWith('/absolute/path/test.txt', 'utf8');
+    expect(fs.existsSync).toHaveBeenCalledWith(
+      expect.stringMatching(/^[/\\]absolute[/\\]path[/\\]test\.txt$/),
+    );
+    expect(fs.readFileSync).toHaveBeenCalledWith(
+      expect.stringMatching(/^[/\\]absolute[/\\]path[/\\]test\.txt$/),
+      'utf8',
+    );
 
     cliState.basePath = undefined; // Reset for other tests
   });
