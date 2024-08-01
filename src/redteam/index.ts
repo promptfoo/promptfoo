@@ -87,7 +87,13 @@ export async function synthesize({
   for (const [category, categoryPlugins] of Object.entries(categories)) {
     const plugin = plugins.find((p) => p.id === category);
     if (plugin) {
-      plugins.push(...categoryPlugins.map((p) => ({ id: p, numTests: plugin.numTests })));
+      plugins.push(
+        ...categoryPlugins.map((p) => ({
+          id: p,
+          numTests: plugin.numTests,
+          language: plugin.language,
+        })),
+      );
     }
   }
 
@@ -130,6 +136,7 @@ export async function synthesize({
         purpose,
         injectVar,
         plugin.numTests,
+        plugin.language,
         plugin.config,
       );
       testCases.push(

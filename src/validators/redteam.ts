@@ -25,6 +25,7 @@ const RedteamPluginObjectSchema = z.object({
     .positive()
     .optional()
     .describe('Number of tests to generate for this plugin'),
+  language: z.string().optional().describe('Language of tests ot generate for this plugin'),
   config: z.record(z.unknown()).optional().describe('Plugin-specific configuration'),
 });
 

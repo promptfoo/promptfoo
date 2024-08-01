@@ -48,7 +48,7 @@ export interface SynthesizeOptions {
   entities?: string[];
   injectVar?: string;
   numTests: number;
-  plugins: { id: string; numTests: number; config?: Record<string, any> }[];
+  plugins: { id: string; numTests: number; language: string; config?: Record<string, any> }[];
   prompts: string[];
   provider?: ApiProvider | ProviderOptions | string;
   purpose?: string;

@@ -89,6 +89,7 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
     plugins = options.plugins.map((plugin) => ({
       id: plugin.id,
       numTests: plugin.numTests || options.numTests,
+      language: plugin.language || '',
       ...(plugin.config && { config: plugin.config }),
     }));
   }
@@ -99,6 +100,7 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
         ...options.addPlugins.map((plugin) => ({
           id: plugin,
           numTests: options.numTests,
+          language: '',
         })),
       ]),
     ];

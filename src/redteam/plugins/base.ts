@@ -39,10 +39,11 @@ export abstract class PluginBase {
   /**
    * Generates test cases based on the plugin's configuration.
    * @param n - The number of test cases to generate.
+   * @param language - The language of test cases to generate.
    * @returns A promise that resolves to an array of TestCase objects.
    */
-  async generateTests(n: number): Promise<TestCase[]> {
-    logger.debug(`Generating ${n} test cases`);
+  async generateTests(n: number, language: string = ''): Promise<TestCase[]> {
+    logger.debug(`Generating ${n} ${language} test cases`);
     const batchSize = 20;
 
     /**
@@ -53,13 +54,15 @@ export abstract class PluginBase {
     const generatePrompts = async (currentPrompts: string[]): Promise<string[]> => {
       const remainingCount = n - currentPrompts.length;
       const currentBatchSize = Math.min(remainingCount, batchSize);
-      logger.debug(`Generating batch of ${currentBatchSize} prompts`);
+      const languageSpecification = language.length > 0 ? ` in ${language}` : '';
 
+      logger.debug(`Generating batch of ${currentBatchSize} prompts`);
       const nunjucks = getNunjucksEngine();
       const { output: generatedPrompts } = await this.provider.callApi(
         nunjucks.renderString(await this.getTemplate(), {
           purpose: this.purpose,
           n: currentBatchSize,
+          language: languageSpecification,
         }),
       );
 
