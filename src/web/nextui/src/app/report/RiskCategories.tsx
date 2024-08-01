@@ -43,6 +43,7 @@ const RiskCategories: React.FC<{
               // If there are no tests, default to 100% pass rate
               percentage:
                 (categoryStats[subCategory]?.pass || 1) / (categoryStats[subCategory]?.total || 1),
+              total: categoryStats[subCategory]?.total || 0,
             }))}
           />
         );

@@ -3,6 +3,7 @@ import rawlist from '@inquirer/rawlist';
 import chalk from 'chalk';
 import fs from 'fs';
 import path from 'path';
+import { redteamInit } from './commands/redteam';
 import logger from './logger';
 import { getNunjucksEngine } from './util/templates';
 
@@ -253,8 +254,20 @@ export async function createDummyFiles(directory: string | null, interactive: bo
         { name: 'Improve prompt and model performance', value: 'compare' },
         { name: 'Improve RAG performance', value: 'rag' },
         { name: 'Improve agent/chain of thought performance', value: 'agent' },
+        { name: 'Run a red team evaluation', value: 'redteam' },
       ],
     });
+
+    if (action === 'redteam') {
+      await redteamInit(directory || '.');
+      return {
+        numPrompts: 0,
+        providerPrefixes: [],
+        action: 'redteam',
+        language: 'not_applicable',
+      };
+    }
+
     language = 'not_sure';
     if (action === 'rag' || action === 'agent') {
       language = await rawlist({
