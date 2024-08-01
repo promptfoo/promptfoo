@@ -1,8 +1,7 @@
 import dedent from 'dedent';
 import { z } from 'zod';
 import { ProviderSchema } from '../types';
-import type {
-  Collection} from './constants';
+import type { Collection } from './constants';
 import {
   ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
   ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
@@ -11,7 +10,7 @@ import {
   ALL_STRATEGIES,
   COLLECTIONS,
   HARM_PLUGINS,
-  PII_PLUGINS
+  PII_PLUGINS,
 } from './constants';
 import type { RedteamConfig, RedteamPluginObject } from './types';
 
