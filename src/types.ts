@@ -774,6 +774,9 @@ export const TestSuiteSchema = z.object({
   // Metrics to calculate after the eval has been completed
   derivedMetrics: z.array(DerivedMetricSchema).optional(),
 
+  // Extensions that are called at various plugin points
+  extensions: z.array(z.string()).optional(),
+
   // Redteam configuration - used only when generating redteam tests
   redteam: redteamConfigSchema.optional(),
 });
@@ -845,6 +848,9 @@ export const TestSuiteConfigSchema = z.object({
 
   // Metrics to calculate after the eval has been completed
   derivedMetrics: z.array(DerivedMetricSchema).optional(),
+
+  // Extensions that are called at various plugin points
+  extensions: z.array(z.string()).optional(),
 
   // Any other information about this configuration.
   metadata: MetadataSchema.optional(),

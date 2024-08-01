@@ -11,6 +11,7 @@ import cliState from './cliState';
 import { renderPrompt } from './evaluatorHelpers';
 import logger from './logger';
 import { maybeEmitAzureOpenAiWarning } from './providers/azureopenaiUtil';
+import { runPython } from './python/pythonUtils';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
 import type {
@@ -96,6 +97,19 @@ export function generateVarCombinations(
   }
 
   return combinations;
+}
+
+async function runExtensionHook(hookName: string, context: any, extensions?: string[]) {
+  if (!extensions || extensions.length === 0) {
+    return;
+  }
+  for (const extension of extensions) {
+    logger.info(`Running extension ${extension}`);
+    if (extension.startsWith('python:')) {
+      const filePath = path.resolve(cliState.basePath || '', extension.slice('python:'.length));
+      await runPython(filePath, 'extension_hook', [hookName, context]);
+    }
+  }
 }
 
 class Evaluator {
@@ -326,6 +340,8 @@ class Evaluator {
   async evaluate(): Promise<EvaluateSummary> {
     const { testSuite, options } = this;
     const prompts: CompletedPrompt[] = [];
+
+    await runExtensionHook('evals_prepared', { suite: testSuite }, testSuite.extensions);
 
     if (options.generateSuggestions) {
       // TODO(ian): Move this into its own command/file
@@ -866,6 +882,17 @@ class Evaluator {
     if (progressBar) {
       progressBar.stop();
     }
+
+    await runExtensionHook(
+      'evals_ran',
+      {
+        evals: runEvalOptions,
+        results: results,
+        table: table,
+        suite: testSuite,
+      },
+      testSuite.extensions,
+    );
 
     telemetry.record('eval_ran', {
       numPrompts: prompts.length,

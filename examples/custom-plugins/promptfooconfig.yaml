@@ -1,0 +1,19 @@
+prompts:
+  - 'Rephrase this in French: {{body}}'
+  - 'Rephrase this like a pirate: {{body}}'
+
+providers:
+  - openai:gpt-4o-mini
+
+extensions:
+  - python:customPlugin.py
+
+tests:
+  - vars:
+      body: Hello world
+      setup: touch setup1
+      teardown: touch teardown1
+  - vars:
+      body: I'm hungry
+      setup: touch setup2
+      teardown: touch teardown2
