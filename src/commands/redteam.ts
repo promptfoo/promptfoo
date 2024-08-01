@@ -160,30 +160,12 @@ export async function redteamInit(directory: string | undefined) {
         DEFAULT_PLUGINS.has(plugin),
     }));
 
-  const plugins: (string | Plugin)[] = await checkbox({
+  const plugins = await checkbox({
     message: 'Select plugins to enable:',
     choices: pluginChoices,
     pageSize: Math.min(pluginChoices.length, process.stdout.rows - 4),
     loop: false,
   });
-
-  // New code for policy definition
-  const definePolicy = await confirm({
-    message: 'Would you like to define a custom policy?',
-    default: false,
-  });
-
-  if (definePolicy) {
-    const policyDescription = await input({
-      message: 'Enter the policy description:',
-      validate: (input) => input.trim() !== '' || 'Policy description cannot be empty',
-    });
-
-    plugins.push({
-      id: 'policy',
-      config: { policy: policyDescription },
-    } as Plugin);
-  }
 
   console.clear();
   logger.info(chalk.bold('Strategy Configuration\n'));

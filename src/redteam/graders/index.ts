@@ -9,7 +9,6 @@ import HijackingGrader from './hijacking';
 import ImitationGrader from './imitation';
 import OverrelianceGrader from './overreliance';
 import PiiGrader from './pii';
-import PolicyViolationGrader from './policy';
 import PoliticsGrader from './politics';
 import RbacGrader from './rbac';
 import ShellInjectionGrader from './shellInjection';
@@ -23,7 +22,6 @@ const GRADERS = {
   'promptfoo:redteam:imitation': new ImitationGrader(),
   'promptfoo:redteam:hallucination': new HallucinationGrader(),
   'promptfoo:redteam:hijacking': new HijackingGrader(),
-  'promptfoo:redteam:policy': new PolicyViolationGrader(),
   'promptfoo:redteam:politics': new PoliticsGrader(),
   'promptfoo:redteam:sql-injection': new SqlInjectionGrader(),
   'promptfoo:redteam:shell-injection': new ShellInjectionGrader(),
