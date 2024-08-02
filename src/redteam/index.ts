@@ -7,7 +7,7 @@ import { loadApiProvider } from '../providers';
 import { isApiProvider, isProviderOptions, type ApiProvider, type TestCase } from '../types';
 import type { SynthesizeOptions } from '../types/redteam';
 import { extractVariablesFromTemplates } from '../util/templates';
-import { REDTEAM_MODEL, HARM_PLUGINS, PII_PLUGINS, INCLUDE_ENTITY_METADATA } from './constants';
+import { REDTEAM_MODEL, HARM_PLUGINS, PII_PLUGINS } from './constants';
 import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
 import CompetitorPlugin from './plugins/competitors';
@@ -208,6 +208,7 @@ export async function synthesize({
   provider,
   injectVar,
   purpose: purposeOverride,
+  entities: entitiesOverride,
   strategies,
   plugins,
 }: SynthesizeOptions): Promise<{
@@ -285,10 +286,9 @@ export async function synthesize({
   // Get purpose
   const purpose = purposeOverride || (await extractSystemPurpose(redteamProvider, prompts));
   updateProgress();
-  let entities: string[] = [];
-  if (plugins.some((p) => p.id === 'imitation')) {
-    entities = await extractEntities(redteamProvider, prompts);
-  }
+  const entities: string[] = Array.isArray(entitiesOverride)
+    ? entitiesOverride
+    : await extractEntities(redteamProvider, prompts);
   updateProgress();
 
   logger.debug(`System purpose: ${purpose}`);
@@ -312,11 +312,6 @@ export async function synthesize({
           metadata: {
             ...(t.metadata || {}),
             pluginId,
-            purpose,
-            ...(INCLUDE_ENTITY_METADATA.some((prefix) => pluginId.startsWith(prefix)) &&
-            entities.length > 0
-              ? { entities }
-              : {}),
           },
         })),
       );

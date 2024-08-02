@@ -14,6 +14,8 @@ export type RedteamStrategyObject = {
 export type RedteamStrategy = string | RedteamStrategyObject;
 
 export type RedteamGenerateOptions = {
+  addPlugins?: string[];
+  addStrategies?: string[];
   cache: boolean;
   config?: string;
   defaultConfig: Record<string, unknown>;
@@ -23,8 +25,6 @@ export type RedteamGenerateOptions = {
   numTests: number;
   output?: string;
   plugins?: RedteamPluginObject[];
-  addPlugins?: string[];
-  addStrategies?: string[];
   provider?: string;
   purpose?: string;
   strategies?: RedteamStrategy[];
@@ -32,17 +32,18 @@ export type RedteamGenerateOptions = {
 };
 
 export type RedteamConfig = {
-  injectVar?: string;
-  purpose?: string;
-  provider?: string | ProviderOptions | ApiProvider;
-  plugins: RedteamPluginObject[];
-  strategies: RedteamStrategyObject[];
   entities?: string[];
+  injectVar?: string;
+  plugins: RedteamPluginObject[];
+  provider?: string | ProviderOptions | ApiProvider;
+  purpose?: string;
+  strategies: RedteamStrategyObject[];
 };
 
 export type RedteamAssertionTypes = `promptfoo:redteam:${string}`;
 
 export interface SynthesizeOptions {
+  entities?: string[];
   injectVar?: string;
   numTests: number;
   plugins: { id: string; numTests: number; config?: Record<string, any> }[];
