@@ -127,7 +127,7 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
 
   const config = {
     injectVar: redteamConfig?.injectVar || options.injectVar,
-    numTests: options.numTests,
+    numTests: redteamConfig?.numTests ?? options.numTests,
     plugins,
     provider: redteamConfig?.provider || options.provider,
     purpose: redteamConfig?.purpose || options.purpose,
