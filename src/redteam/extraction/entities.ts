@@ -5,7 +5,7 @@ import { callExtraction, formatPrompts } from './util';
 
 export async function extractEntities(provider: ApiProvider, prompts: string[]): Promise<string[]> {
   const prompt = dedent`
-    Extract persons, brands, or organizations from the following prompts and return them as a list:
+    Extract names, brands, organizations, or IDs from the following prompts and return them as a list:
 
     ${formatPrompts(prompts)}
 
