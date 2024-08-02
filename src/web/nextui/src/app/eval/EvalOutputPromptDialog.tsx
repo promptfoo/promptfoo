@@ -29,11 +29,11 @@ interface EvalOutputPromptDialogProps {
 }
 
 function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[] }) {
+  const [expandedValues, setExpandedValues] = useState<{ [key: number]: boolean }>({});
+
   if (!gradingResults) {
     return null;
   }
-
-  const [expandedValues, setExpandedValues] = useState<{ [key: number]: boolean }>({});
 
   const toggleExpand = (index: number) => {
     setExpandedValues((prev) => ({ ...prev, [index]: !prev[index] }));
