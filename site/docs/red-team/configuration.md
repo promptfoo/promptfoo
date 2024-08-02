@@ -55,10 +55,6 @@ There are three main components that affect the generation of redteam tests:
 
 ### Plugins
 
-There are three main components that affect the generation of redteam tests:
-
-### Plugins
-
 Plugins are specified as an array of either strings (plugin IDs) or objects with `id` and optional `numTests` properties. They must exactly match the plugin IDs available in the redteam system.
 
 #### Plugin Specification Examples
