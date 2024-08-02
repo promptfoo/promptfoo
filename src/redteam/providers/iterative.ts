@@ -178,13 +178,8 @@ async function runRedteamConversation({
     const isOnTopic = JSON.parse(isOnTopicResp.output).isOnTopic;
 
     const targetResp = await targetProvider.callApi(targetPrompt);
-    invariant(targetResp.output, 'Expected output to be defined');
-    let targetResponse;
-    if (typeof targetResp.output === 'string') {
-      targetResponse = targetResp.output;
-    } else {
-      targetResponse = JSON.stringify(targetResp.output);
-    }
+    invariant(typeof targetResp.output === 'string', 'Expected output to be a string');
+    const targetResponse = targetResp.output;
 
     const penalizedPhrases = ['in the face of impending doom'];
     const containsPenalizedPhrase = penalizedPhrases.some((phrase) =>
