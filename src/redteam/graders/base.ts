@@ -27,9 +27,8 @@ export default abstract class RedteamModelGrader {
     const finalRubric = nunjucks.renderString(this.rubric, {
       prompt,
       purpose: test.metadata?.purpose,
-      // TODO(ian): Eventually switch to using metadata too to plumb through harmCategory
-      harmCategory: test.vars?.harmCategory,
       entities: test.metadata?.entities ?? [],
+      harmCategory: test.metadata?.harmCategory,
     });
     const grade = await matchesLlmRubric(finalRubric, llmOutput, {});
     logger.debug(`Redteam grading result for ${this.id}: - ${JSON.stringify(grade)}`);

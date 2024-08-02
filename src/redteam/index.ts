@@ -333,6 +333,7 @@ export async function synthesize({
           metadata: {
             ...(t.metadata || {}),
             pluginId: key,
+            strategyId: strategy.id,
           },
         })),
       );

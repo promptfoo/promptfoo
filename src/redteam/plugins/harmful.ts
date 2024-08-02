@@ -255,8 +255,8 @@ export async function getHarmfulTests(
     // NOTE: harmCategory is necessary for the moderation assertion and not supported
     // by the base model.
     for (const result of results) {
-      if (result.vars) {
-        result.vars.harmCategory = harmCategory;
+      if (result.metadata) {
+        result.metadata.harmCategory = harmCategory;
       }
     }
     testCases.push(...results);
