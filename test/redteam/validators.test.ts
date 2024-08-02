@@ -249,7 +249,10 @@ describe('redteamConfigSchema', () => {
           { id: 'harmful:violent-crime', numTests: 5 },
           ...Object.keys(HARM_PLUGINS)
             .filter((category) => !['harmful:hate', 'harmful:violent-crime'].includes(category))
-            .map((category) => ({ id: category, numTests: 3 })),
+            .map((category) => ({
+              id: category,
+              numTests: 3,
+            })),
         ].sort((a, b) => a.id.localeCompare(b.id)),
         strategies: [{ id: 'jailbreak' }, { id: 'prompt-injection' }],
       },
@@ -463,5 +466,22 @@ describe('redteamConfigSchema', () => {
       ]),
     );
     expect(piiPlugins).toHaveLength(PII_PLUGINS.length);
+  });
+
+  it('should sort plugins with different configurations correctly', () => {
+    const input = {
+      plugins: [
+        { id: 'policy', config: { policy: 'Policy B' }, numTests: 3 },
+        { id: 'policy', config: { policy: 'Policy A' }, numTests: 5 },
+        { id: 'hijacking', numTests: 2 },
+      ],
+    };
+    const result = RedteamConfigSchema.safeParse(input);
+    expect(result.success).toBe(true);
+    expect(result.data?.plugins).toEqual([
+      { id: 'hijacking', numTests: 2 },
+      { id: 'policy', config: { policy: 'Policy A' }, numTests: 5 },
+      { id: 'policy', config: { policy: 'Policy B' }, numTests: 3 },
+    ]);
   });
 });

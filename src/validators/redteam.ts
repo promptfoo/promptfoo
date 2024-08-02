@@ -140,7 +140,9 @@ export const RedteamConfigSchema = z
     const uniquePlugins = Array.from(pluginMap.values())
       .filter((plugin) => !COLLECTIONS.includes(plugin.id as (typeof COLLECTIONS)[number]))
       .sort((a, b) => {
-        if (a.id !== b.id) return a.id.localeCompare(b.id);
+        if (a.id !== b.id) {
+          return a.id.localeCompare(b.id);
+        }
         return JSON.stringify(a.config || {}).localeCompare(JSON.stringify(b.config || {}));
       });
 
@@ -150,7 +152,7 @@ export const RedteamConfigSchema = z
       ...(data.provider ? { provider: data.provider } : {}),
       plugins: uniquePlugins,
       strategies: data.strategies?.map((strategy) =>
-        typeof strategy === 'string' ? { id: strategy } : strategy,
+        typeof strategy === 'string' ? { id: strategy } : { ...strategy },
       ),
     };
   });
