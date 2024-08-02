@@ -283,11 +283,11 @@ export async function synthesize({
   logger.debug(`System purpose: ${purpose}`);
 
   const testCases: TestCaseWithPlugin[] = [];
-  for (const { key, action } of Plugins) {
-    const plugin = plugins.find((p) => p.id === key);
+  for (const { key: pluginId, action } of Plugins) {
+    const plugin = plugins.find((p) => p.id === pluginId);
     if (plugin) {
       updateProgress();
-      logger.debug(`Generating ${key} tests`);
+      logger.debug(`Generating tests for ${pluginId}...`);
       const pluginTests = await action(
         redteamProvider,
         purpose,
@@ -300,13 +300,16 @@ export async function synthesize({
           ...t,
           metadata: {
             ...(t.metadata || {}),
-            pluginId: key,
+            pluginId,
             purpose,
-            ...(INCLUDE_ENTITY_METADATA.includes(key) && entities.length > 0 ? { entities } : {}),
+            ...(INCLUDE_ENTITY_METADATA.some((prefix) => pluginId.startsWith(prefix)) &&
+            entities.length > 0
+              ? { entities }
+              : {}),
           },
         })),
       );
-      logger.debug(`Added ${pluginTests.length} ${key} test cases`);
+      logger.debug(`Added ${pluginTests.length} ${pluginId} test cases`);
     }
   }
 
