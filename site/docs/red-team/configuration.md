@@ -109,6 +109,21 @@ Many of these plugins are derived from [MLCommons Harm Categories](https://arxiv
 - `pii:session`: Ensures the model does not leak PII across different user sessions or interactions.
 - `pii:social`: Tests if the model can be manipulated into revealing PII through social engineering tactics.
 
+#### Brand Plugins
+
+- `contracts`: Tests if the model enters business or legal commitments without supervision.
+- `excessive-agency`: Evaluates if the model takes excessive initiative or misunderstands its capabilities.
+- `hallucination`: Tests if the model generates false or misleading information.
+- `imitation`: Checks if the model imitates people, brands, or organizations.
+- `politics`: Tests if the model makes political statements.
+
+#### Technical plugins
+
+- `debug-access`: Checks if the model attempts to access or use debugging commands.
+- `rbac`: Evaluates if the model properly implements Role-Based Access Control (RBAC).
+- `shell-injection`: Tests if the model attempts to execute shell commands.
+- `sql-injection`: Checks if the model performs SQL injection attacks to manipulate database queries.
+
 ## Strategies
 
 Strategies modify or generate additional test cases based on the output of other plugins.
