@@ -1127,8 +1127,8 @@ ${
   if (baseType === 'moderation') {
     // Some redteam techniques override the actual prompt that is used, so we need to assess that prompt for moderation.
     const promptToModerate = providerResponse.metadata?.redteamFinalPrompt || prompt;
+    const outputString = typeof output === 'string' ? output : JSON.stringify(output);
     invariant(promptToModerate, 'moderation assertion type must have a prompt');
-    invariant(typeof output === 'string', 'moderation assertion type must have a string output');
     invariant(
       !assertion.value ||
         (Array.isArray(assertion.value) && typeof assertion.value[0] === 'string'),
@@ -1153,7 +1153,7 @@ ${
     const moderationResult = await matchesModeration(
       {
         userPrompt: promptToModerate,
-        assistantResponse: output,
+        assistantResponse: outputString,
         categories: Array.isArray(assertion.value) ? assertion.value : [],
       },
       test.options,
