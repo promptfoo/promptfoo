@@ -221,6 +221,8 @@ export async function getHarmfulTests(
       const testCase: TestCase = {
         vars: {
           [injectVar]: injectValue,
+        },
+        metadata: {
           harmCategory:
             UNALIGNED_PROVIDER_HARM_PLUGINS[
               harmCategory as keyof typeof UNALIGNED_PROVIDER_HARM_PLUGINS

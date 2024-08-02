@@ -332,7 +332,7 @@ export async function synthesize({
           ...t,
           metadata: {
             ...(t.metadata || {}),
-            pluginId: key,
+            pluginId: t.metadata?.pluginId,
             strategyId: strategy.id,
           },
         })),

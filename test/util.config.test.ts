@@ -1,10 +1,17 @@
 import * as fs from 'fs';
+import yaml from 'js-yaml';
 import * as os from 'os';
 import * as path from 'path';
-import { getConfigDirectoryPath, setConfigDirectoryPath } from '../src/util/config';
+import type { UnifiedConfig } from '../src/types';
+import {
+  getConfigDirectoryPath,
+  setConfigDirectoryPath,
+  writePromptfooConfig,
+} from '../src/util/config';
 
 jest.mock('os');
 jest.mock('fs');
+jest.mock('js-yaml');
 
 describe('config', () => {
   const mockHomedir = '/mock/home';
@@ -53,5 +60,90 @@ describe('config', () => {
       setConfigDirectoryPath(newPath);
       expect(getConfigDirectoryPath()).toBe(newPath);
     });
+  });
+});
+
+describe('writePromptfooConfig', () => {
+  const mockOutputPath = '/mock/output/path.yaml';
+
+  beforeEach(() => {
+    jest.resetAllMocks();
+  });
+
+  it('writes a basic config to the specified path', () => {
+    const mockConfig: Partial<UnifiedConfig> = { description: 'Test config' };
+    const mockYaml = 'description: Test config\n';
+    jest.mocked(yaml.dump).mockReturnValue(mockYaml);
+
+    writePromptfooConfig(mockConfig, mockOutputPath);
+
+    expect(fs.writeFileSync).toHaveBeenCalledWith(mockOutputPath, mockYaml);
+  });
+
+  it('orders the keys of the config correctly', () => {
+    const mockConfig: Partial<UnifiedConfig> = {
+      tests: [{ assert: [{ type: 'equals', value: 'test assertion' }] }],
+      description: 'Test config',
+      prompts: ['prompt1'],
+      providers: ['provider1'],
+      defaultTest: { assert: [{ type: 'equals', value: 'default assertion' }] },
+    };
+
+    writePromptfooConfig(mockConfig, mockOutputPath);
+
+    const dumpCall = jest.mocked(yaml.dump).mock.calls[0][0];
+    const keys = Object.keys(dumpCall);
+    expect(keys).toEqual(['description', 'prompts', 'providers', 'defaultTest', 'tests']);
+  });
+
+  it('uses js-yaml to dump the config with skipInvalid option', () => {
+    const mockConfig: Partial<UnifiedConfig> = { description: 'Test config' };
+
+    writePromptfooConfig(mockConfig, mockOutputPath);
+
+    expect(yaml.dump).toHaveBeenCalledWith(expect.anything(), { skipInvalid: true });
+  });
+
+  it('handles empty config', () => {
+    const mockConfig: Partial<UnifiedConfig> = {};
+
+    writePromptfooConfig(mockConfig, mockOutputPath);
+
+    expect(fs.writeFileSync).toHaveBeenCalledWith(mockOutputPath, undefined);
+    expect(yaml.dump).toHaveBeenCalledWith({}, { skipInvalid: true });
+  });
+
+  it('preserves all fields of the UnifiedConfig', () => {
+    const mockConfig: Partial<UnifiedConfig> = {
+      description: 'Full config test',
+      prompts: ['prompt1', 'prompt2'],
+      providers: ['provider1', 'provider2'],
+      defaultTest: { assert: [{ type: 'equals', value: 'default assertion' }] },
+      tests: [
+        { assert: [{ type: 'equals', value: 'test assertion 1' }] },
+        { assert: [{ type: 'equals', value: 'test assertion 2' }] },
+      ],
+      outputPath: './output',
+    };
+
+    writePromptfooConfig(mockConfig, mockOutputPath);
+
+    const dumpCall = jest.mocked(yaml.dump).mock.calls[0][0];
+    expect(dumpCall).toEqual(expect.objectContaining(mockConfig));
+  });
+
+  it('handles config with undefined values', () => {
+    const mockConfig: Partial<UnifiedConfig> = {
+      description: 'Config with undefined',
+      prompts: undefined,
+      providers: ['provider1'],
+    };
+
+    writePromptfooConfig(mockConfig, mockOutputPath);
+
+    const dumpCall = jest.mocked(yaml.dump).mock.calls[0][0];
+    expect(dumpCall).toHaveProperty('description', 'Config with undefined');
+    expect(dumpCall).toHaveProperty('providers', ['provider1']);
+    expect(dumpCall).not.toHaveProperty('prompts');
   });
 });
