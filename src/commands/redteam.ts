@@ -169,16 +169,7 @@ export async function redteamInit(directory: string | undefined) {
   });
 
   // Handle policy plugin
-  let shouldDefinePolicies = plugins.includes('policy');
-
-  if (!shouldDefinePolicies) {
-    shouldDefinePolicies = await confirm({
-      message: 'Would you like to add a custom policy?',
-      default: false,
-    });
-  }
-
-  if (shouldDefinePolicies) {
+  if (plugins.includes('policy')) {
     // Remove the original 'policy' string if it exists
     const policyIndex = plugins.indexOf('policy');
     if (policyIndex !== -1) {
@@ -186,14 +177,16 @@ export async function redteamInit(directory: string | undefined) {
     }
 
     const policyDescription = await input({
-      message: 'Enter policy description:',
-      validate: (input) => input.trim() !== '' || 'Policy description cannot be empty',
+      message:
+        'You selected the `policy` plugin. Please enter your custom policy description (leave empty to skip):',
     });
 
-    plugins.push({
-      id: 'policy',
-      config: { policy: policyDescription.trim() },
-    } as RedteamPluginObject);
+    if (policyDescription.trim() !== '') {
+      plugins.push({
+        id: 'policy',
+        config: { policy: policyDescription.trim() },
+      } as RedteamPluginObject);
+    }
   }
 
   console.clear();
@@ -237,8 +230,8 @@ export async function redteamInit(directory: string | undefined) {
     providers: providers,
     tests: [],
     redteam: RedteamConfigSchema.safeParse({
-      plugins: plugins,
-      strategies: strategies,
+      plugins,
+      strategies,
       numTests,
     }).data,
   };
@@ -247,8 +240,8 @@ export async function redteamInit(directory: string | undefined) {
   // for people to play with. Writes 1 in the { id: ..., numTests }
   // and then the rest as strings.
   const parsedPlugins = RedteamConfigSchema.safeParse({
-    plugins: plugins,
-    strategies: strategies,
+    plugins,
+    strategies,
     numTests,
   })?.data?.plugins;
   const configPlugins = plugins.length >= 2 ? [parsedPlugins?.[0], ...plugins.slice(1)] : plugins;

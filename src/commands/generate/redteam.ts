@@ -88,6 +88,7 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
     plugins = options.plugins.map((plugin) => ({
       id: plugin.id,
       numTests: plugin.numTests || options.numTests,
+      ...(plugin.config && { config: plugin.config }),
     }));
   }
   if (Array.isArray(options.addPlugins) && options.addPlugins.length > 0) {

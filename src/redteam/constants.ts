@@ -71,14 +71,23 @@ export const ADDITIONAL_PLUGINS = [
   'competitors',
   'debug-access',
   'imitation',
-  'policy',
   'rbac',
   'shell-injection',
   'sql-injection',
 ] as const;
 export type AdditionalPlugin = (typeof ADDITIONAL_PLUGINS)[number];
 
-export type Plugin = Collection | HarmPlugin | PIIPlugin | BasePlugin | AdditionalPlugin;
+// Plugins that require configuration and can't be enabled by default or included as additional.
+export const CONFIG_REQUIRED_PLUGINS = ['policy'] as const;
+export type ConfigRequiredPlugin = (typeof CONFIG_REQUIRED_PLUGINS)[number];
+
+export type Plugin =
+  | Collection
+  | HarmPlugin
+  | PIIPlugin
+  | BasePlugin
+  | AdditionalPlugin
+  | ConfigRequiredPlugin;
 
 export const DEFAULT_PLUGINS: ReadonlySet<Plugin> = new Set([
   ...COLLECTIONS,
@@ -88,7 +97,7 @@ export const DEFAULT_PLUGINS: ReadonlySet<Plugin> = new Set([
 ] as const satisfies readonly Plugin[]);
 
 export const ALL_PLUGINS: readonly Plugin[] = [
-  ...new Set([...DEFAULT_PLUGINS, ...ADDITIONAL_PLUGINS]),
+  ...new Set([...DEFAULT_PLUGINS, ...ADDITIONAL_PLUGINS, ...CONFIG_REQUIRED_PLUGINS]),
 ].sort() as Plugin[];
 
 export const DEFAULT_STRATEGIES = ['jailbreak', 'prompt-injection'] as const;
