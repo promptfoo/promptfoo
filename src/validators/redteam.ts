@@ -108,39 +108,52 @@ export const RedteamConfigSchema = z
       .default(() => Array.from(DEFAULT_STRATEGIES).map((name) => ({ id: name }))),
   })
   .transform((data): RedteamConfig => {
-    const pluginObjs: RedteamPluginObject[] = data.plugins
-      .map((plugin) =>
+    const pluginMap = new Map<string, RedteamPluginObject>();
+
+    data.plugins.forEach((plugin) => {
+      const pluginObj =
         typeof plugin === 'string'
           ? { id: plugin, numTests: data.numTests }
-          : { ...plugin, numTests: plugin.numTests ?? data.numTests },
-      )
-      .sort((a, b) => a.id.localeCompare(b.id));
+          : { ...plugin, numTests: plugin.numTests ?? data.numTests };
 
-    const uniquePlugins: RedteamPluginObject[] = Array.from(
-      pluginObjs
-        .reduce((map, plugin) => {
-          const key = `${plugin.id}:${JSON.stringify(plugin.config)}`;
-          return map.set(key, plugin);
-        }, new Map<string, RedteamPluginObject>())
-        .values(),
-    )
+      const key = `${pluginObj.id}:${JSON.stringify(pluginObj.config)}`;
+      pluginMap.set(key, pluginObj);
+    });
+
+    const uniquePlugins: RedteamPluginObject[] = Array.from(pluginMap.values())
       .flatMap((pluginObj): RedteamPluginObject[] => {
         if (pluginObj.id === 'harmful') {
-          return Object.keys(HARM_PLUGINS).map((category) => ({
-            id: category,
-            numTests: pluginObj.numTests ?? data.numTests,
-          }));
+          return Object.keys(HARM_PLUGINS).map((category) => {
+            const existingPlugin = Array.from(pluginMap.values()).find((p) => p.id === category);
+            return (
+              existingPlugin || {
+                id: category,
+                numTests: pluginObj.numTests,
+              }
+            );
+          });
         }
         if (pluginObj.id === 'pii') {
-          return PII_PLUGINS.map((id) => ({
-            id,
-            numTests: pluginObj.numTests ?? data.numTests,
-          }));
+          return PII_PLUGINS.map((id) => {
+            const existingPlugin = Array.from(pluginMap.values()).find((p) => p.id === id);
+            return (
+              existingPlugin || {
+                id,
+                numTests: pluginObj.numTests,
+              }
+            );
+          });
         }
         return [pluginObj];
       })
+      .filter(
+        (plugin, index, self) =>
+          index ===
+          self.findIndex(
+            (t) => t.id === plugin.id && JSON.stringify(t.config) === JSON.stringify(plugin.config),
+          ),
+      )
       .sort((a, b) => a.id.localeCompare(b.id));
-
 
     return {
       ...(data.purpose ? { purpose: data.purpose } : {}),
