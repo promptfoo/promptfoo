@@ -124,7 +124,6 @@ export const RedteamConfigSchema = z
         }, new Map<string, RedteamPluginObject>())
         .values(),
     )
-      .sort((a, b) => a.id.localeCompare(b.id))
       .flatMap((pluginObj): RedteamPluginObject[] => {
         if (pluginObj.id === 'harmful') {
           return Object.keys(HARM_PLUGINS).map((category) => ({
@@ -139,7 +138,9 @@ export const RedteamConfigSchema = z
           }));
         }
         return [pluginObj];
-      });
+      })
+      .sort((a, b) => a.id.localeCompare(b.id));
+
 
     return {
       ...(data.purpose ? { purpose: data.purpose } : {}),
