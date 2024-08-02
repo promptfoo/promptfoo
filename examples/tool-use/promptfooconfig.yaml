@@ -37,6 +37,9 @@ providers:
                     - fahrenheit
               required:
                 - location
+  - id: openai:chat:gpt-4o-mini
+    config:
+      tools: file://external_tools.yaml
 
 prompts:
   - Tell me about the weather in {{city}}.

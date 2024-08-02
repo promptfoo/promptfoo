@@ -89,13 +89,14 @@ export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<Unifi
         provider = Object.values(provider)[0] as ProviderOptions;
       }
 
-      if (provider.config?.functions) {
+      // Handle dereferencing for inline tools, but skip external file paths (which are just strings)
+      if (Array.isArray(provider.config?.functions)) {
         functionsParametersList[providerIndex] = extractFunctionParameters(
           provider.config.functions,
         );
       }
 
-      if (provider.config?.tools) {
+      if (Array.isArray(provider.config?.tools)) {
         toolsParametersList[providerIndex] = extractToolParameters(provider.config.tools);
       }
     });

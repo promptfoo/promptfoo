@@ -414,4 +414,25 @@ describe('dereferenceConfig', () => {
     };
     expect(dereferencedConfig).toEqual(expectedOutput);
   });
+
+  it('should preserve handle string functions/tools when dereferencing', async () => {
+    const rawConfig = {
+      description: 'Test config with function parameters',
+      prompts: [],
+      tests: [],
+      evaluateOptions: {},
+      commandLineOptions: {},
+      providers: [
+        {
+          name: 'provider2',
+          config: {
+            functions: 'file://external_functions.yaml',
+            tools: 'file://external_tools.yaml',
+          },
+        },
+      ],
+    };
+    const dereferencedConfig = await dereferenceConfig(rawConfig as UnifiedConfig);
+    expect(dereferencedConfig).toEqual(rawConfig);
+  });
 });
