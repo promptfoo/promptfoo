@@ -24,6 +24,7 @@ export function writePromptfooConfig(config: Partial<UnifiedConfig>, outputPath:
     'description',
     'prompts',
     'providers',
+    'redteam',
     'defaultTest',
     'tests',
     'scenarios',
