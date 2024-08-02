@@ -3,6 +3,7 @@ import {
   ALL_STRATEGIES as REDTEAM_ALL_STRATEGIES,
   COLLECTIONS,
   HARM_PLUGINS,
+  PII_PLUGINS,
 } from '../../src/redteam/constants';
 import {
   RedteamGenerateOptionsSchema,
@@ -248,7 +249,10 @@ describe('redteamConfigSchema', () => {
           { id: 'harmful:violent-crime', numTests: 5 },
           ...Object.keys(HARM_PLUGINS)
             .filter((category) => !['harmful:hate', 'harmful:violent-crime'].includes(category))
-            .map((category) => ({ id: category, numTests: 3 })),
+            .map((category) => ({
+              id: category,
+              numTests: 3,
+            })),
         ].sort((a, b) => a.id.localeCompare(b.id)),
         strategies: [{ id: 'jailbreak' }, { id: 'prompt-injection' }],
       },
@@ -412,5 +416,72 @@ describe('redteamConfigSchema', () => {
     };
     const result = RedteamConfigSchema.safeParse(input);
     expect(result.success).toBe(false);
+  });
+
+  it('should handle plugins with config attributes', () => {
+    const input = {
+      plugins: [
+        { id: 'policy', config: { policy: 'Policy 1' }, numTests: 5 },
+        { id: 'policy', config: { policy: 'Policy 2' }, numTests: 3 },
+        { id: 'harmful:hate', numTests: 10 },
+        'harmful',
+      ],
+      numTests: 2,
+    };
+    expect(RedteamConfigSchema.safeParse(input)).toEqual({
+      success: true,
+      data: {
+        plugins: [
+          { id: 'harmful:hate', numTests: 10 },
+          { id: 'policy', config: { policy: 'Policy 1' }, numTests: 5 },
+          { id: 'policy', config: { policy: 'Policy 2' }, numTests: 3 },
+          ...Object.keys(HARM_PLUGINS)
+            .filter((category) => category !== 'harmful:hate')
+            .map((category) => ({ id: category, numTests: 2 })),
+        ].sort((a, b) => a.id.localeCompare(b.id)),
+        strategies: [{ id: 'jailbreak' }, { id: 'prompt-injection' }],
+      },
+    });
+    expect(RedteamConfigSchema.safeParse(input)?.data?.plugins).toHaveLength(
+      Object.keys(HARM_PLUGINS).length + 2, // +2 for the two policy plugins
+    );
+  });
+
+  it('should handle PII plugins with default numTests', () => {
+    const input = {
+      plugins: [
+        { id: 'pii', numTests: 7 },
+        { id: 'pii:session', numTests: 3 },
+      ],
+      numTests: 5,
+    };
+    const result = RedteamConfigSchema.safeParse(input);
+    expect(result.success).toBe(true);
+    expect(result.data).toBeDefined();
+    const piiPlugins = result.data?.plugins.filter((p) => p.id.startsWith('pii:'));
+    expect(piiPlugins).toEqual(
+      expect.arrayContaining([
+        { id: 'pii:session', numTests: 3 },
+        ...PII_PLUGINS.filter((id) => id !== 'pii:session').map((id) => ({ id, numTests: 7 })),
+      ]),
+    );
+    expect(piiPlugins).toHaveLength(PII_PLUGINS.length);
+  });
+
+  it('should sort plugins with different configurations correctly', () => {
+    const input = {
+      plugins: [
+        { id: 'policy', config: { policy: 'Policy B' }, numTests: 3 },
+        { id: 'policy', config: { policy: 'Policy A' }, numTests: 5 },
+        { id: 'hijacking', numTests: 2 },
+      ],
+    };
+    const result = RedteamConfigSchema.safeParse(input);
+    expect(result.success).toBe(true);
+    expect(result.data?.plugins).toEqual([
+      { id: 'hijacking', numTests: 2 },
+      { id: 'policy', config: { policy: 'Policy A' }, numTests: 5 },
+      { id: 'policy', config: { policy: 'Policy B' }, numTests: 3 },
+    ]);
   });
 });

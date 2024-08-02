@@ -77,7 +77,17 @@ export const ADDITIONAL_PLUGINS = [
 ] as const;
 export type AdditionalPlugin = (typeof ADDITIONAL_PLUGINS)[number];
 
-export type Plugin = Collection | HarmPlugin | PIIPlugin | BasePlugin | AdditionalPlugin;
+// Plugins that require configuration and can't be enabled by default or included as additional.
+export const CONFIG_REQUIRED_PLUGINS = ['policy'] as const;
+export type ConfigRequiredPlugin = (typeof CONFIG_REQUIRED_PLUGINS)[number];
+
+export type Plugin =
+  | Collection
+  | HarmPlugin
+  | PIIPlugin
+  | BasePlugin
+  | AdditionalPlugin
+  | ConfigRequiredPlugin;
 
 export const DEFAULT_PLUGINS: ReadonlySet<Plugin> = new Set([
   ...COLLECTIONS,
@@ -87,7 +97,7 @@ export const DEFAULT_PLUGINS: ReadonlySet<Plugin> = new Set([
 ] as const satisfies readonly Plugin[]);
 
 export const ALL_PLUGINS: readonly Plugin[] = [
-  ...new Set([...DEFAULT_PLUGINS, ...ADDITIONAL_PLUGINS]),
+  ...new Set([...DEFAULT_PLUGINS, ...ADDITIONAL_PLUGINS, ...CONFIG_REQUIRED_PLUGINS]),
 ].sort() as Plugin[];
 
 export const DEFAULT_STRATEGIES = ['jailbreak', 'prompt-injection'] as const;
@@ -144,6 +154,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'pii:session': 'PII exposed in session data',
   'pii:social': 'PII exposed through social engineering',
   politics: 'Makes political statements.',
+  policy: 'Violates a custom configured policy.',
   'prompt-injection': "Malicious inputs designed to manipulate the model's behavior.",
   rbac: 'Tests whether the model properly implements Role-Based Access Control (RBAC).',
   'shell-injection': 'Attempts to execute shell commands through the model.',

@@ -21,7 +21,7 @@ The following YAML structure outlines the configuration options available for re
 
 ```yaml
 redteam:
-  plugins: Array<string | { id: string, numTests?: number }>
+  plugins: Array<string | { id: string, numTests?: number, config?: Record<string, any> }>
   strategies: Array<string | { id: string }>
   numTests: number # default number of tests to generate per plugin
   injectVar: string # variable to inject
@@ -48,12 +48,12 @@ providers:
 
 ## Plugins
 
-Plugins are specified as an array of either strings (plugin IDs) or objects with `id` and optional `numTests` properties. They must exactly match the plugin IDs available in the redteam system.
+Plugins are specified as an array of either strings (plugin IDs) or objects with `id` and optional `numTests` properties. Some plugins support additional configuration options. They must exactly match the plugin IDs available in the redteam system.
 
 ### Plugin Specification
 
 - **As a string**: `"plugin-id"`
-- **As an object**: `{ id: "plugin-id", numTests: 10 }`
+- **As an object**: `{ id: "plugin-id", numTests: 10, config: { key: "value" } }`
 
 If `numTests` is not specified for a plugin, it will use the global `numTests` value.
 
@@ -66,6 +66,58 @@ There are three core concepts that affect the number of generated redteam tests:
 - `overreliance`
 - `hijacking`
   ...
+
+#### Custom Policies
+
+In addition to the predefined plugins, you can create one or more custom policies to test specific requirements or constraints of your application. Custom policies allow you to generate targeted redteam tests that are tailored to your business needs.
+
+##### Configuring Custom Policies
+
+To use a custom policy, add a `policy` field to your redteam configuration:
+
+```yaml
+redteam:
+  plugins:
+    - id: 'policy'
+      numTests: 10
+      config:
+        policy: 'Your custom policy statement here'
+```
+
+##### Examples of Custom Policies
+
+Here are some business examples of custom policies:
+
+1. **Financial Services**:
+
+   ```yaml
+   policy: 'Do not provide specific investment advice or recommend individual stocks.'
+   ```
+
+2. **Healthcare**:
+
+   ```yaml
+   policy: 'Do not diagnose medical conditions or prescribe treatments. Always refer users to qualified healthcare professionals.'
+   ```
+
+3. **E-commerce**:
+
+   ```yaml
+   policy: 'Do not disclose customer personal information or order details. Refer users to their account page for such information.'
+   ```
+
+4. **Education**:
+
+   ```yaml
+   policy: 'Do not write essays or complete assignments for students. Provide guidance and explanations instead.'
+   ```
+
+##### Best Practices for Custom Policies
+
+1. Be specific and clear in your policy statement.
+2. Align the policy with your application's purpose and ethical guidelines.
+3. Consider potential edge cases and loopholes when formulating your policy.
+4. Regularly review and update your custom policies as your application evolves.
 
 #### Plugin Collections
 

@@ -1,15 +1,14 @@
 import dedent from 'dedent';
 import { z } from 'zod';
-import type { Collection } from '../redteam/constants';
 import {
   ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
   ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
   ADDITIONAL_STRATEGIES as REDTEAM_ADDITIONAL_STRATEGIES,
   DEFAULT_STRATEGIES,
   ALL_STRATEGIES,
-  COLLECTIONS,
   HARM_PLUGINS,
   PII_PLUGINS,
+  COLLECTIONS,
 } from '../redteam/constants';
 import type { RedteamConfig, RedteamPluginObject } from '../types/redteam';
 import { ProviderSchema } from '../validators/providers';
@@ -25,6 +24,7 @@ const RedteamPluginObjectSchema = z.object({
     .positive()
     .optional()
     .describe('Number of tests to generate for this plugin'),
+  config: z.record(z.unknown()).optional().describe('Plugin-specific configuration'),
 });
 
 /**
@@ -109,49 +109,50 @@ export const RedteamConfigSchema = z
       .default(() => Array.from(DEFAULT_STRATEGIES).map((name) => ({ id: name }))),
   })
   .transform((data): RedteamConfig => {
-    const pluginObjs: RedteamPluginObject[] = data.plugins
-      .map((plugin) =>
+    const pluginMap = new Map<string, RedteamPluginObject>();
+
+    data.plugins.forEach((plugin) => {
+      const pluginObj =
         typeof plugin === 'string'
           ? { id: plugin, numTests: data.numTests }
-          : { ...plugin, numTests: plugin.numTests ?? data.numTests },
-      )
-      .sort((a, b) => a.id.localeCompare(b.id));
+          : { ...plugin, numTests: plugin.numTests ?? data.numTests };
 
-    const plugins = pluginObjs
-      .flatMap((pluginObj) => {
-        if (pluginObj.id === 'harmful') {
-          return Object.keys(HARM_PLUGINS).map((category) => ({
-            id: category,
-            numTests:
-              pluginObjs.find((p) => p.id === category)?.numTests ??
-              pluginObj.numTests ??
-              data.numTests,
-          }));
-        }
-        if (pluginObj.id === 'pii') {
-          return PII_PLUGINS.map((id) => ({
-            id,
-            numTests:
-              pluginObjs.find((p) => p.id === id)?.numTests ?? pluginObj.numTests ?? data.numTests,
-          }));
-        }
-        return pluginObj;
-      })
-      .filter((plugin) => !COLLECTIONS.includes(plugin.id as Collection)); // category plugins are handled above
+      if (pluginObj.id === 'harmful') {
+        Object.keys(HARM_PLUGINS).forEach((id) => {
+          const key = `${id}:${JSON.stringify(pluginObj.config)}`;
+          if (!pluginMap.has(key)) {
+            pluginMap.set(key, { id, numTests: pluginObj.numTests, config: pluginObj.config });
+          }
+        });
+      } else if (pluginObj.id === 'pii') {
+        PII_PLUGINS.forEach((id) => {
+          const key = `${id}:${JSON.stringify(pluginObj.config)}`;
+          if (!pluginMap.has(key)) {
+            pluginMap.set(key, { id, numTests: pluginObj.numTests, config: pluginObj.config });
+          }
+        });
+      } else {
+        const key = `${pluginObj.id}:${JSON.stringify(pluginObj.config)}`;
+        pluginMap.set(key, pluginObj);
+      }
+    });
 
-    const uniquePlugins: RedteamPluginObject[] = Array.from(
-      plugins
-        .reduce((map, plugin) => map.set(plugin.id, plugin), new Map<string, RedteamPluginObject>())
-        .values(),
-    ).sort((a, b) => a.id.localeCompare(b.id));
+    const uniquePlugins = Array.from(pluginMap.values())
+      .filter((plugin) => !COLLECTIONS.includes(plugin.id as (typeof COLLECTIONS)[number]))
+      .sort((a, b) => {
+        if (a.id !== b.id) {
+          return a.id.localeCompare(b.id);
+        }
+        return JSON.stringify(a.config || {}).localeCompare(JSON.stringify(b.config || {}));
+      });
 
     return {
       ...(data.purpose ? { purpose: data.purpose } : {}),
       ...(data.injectVar ? { injectVar: data.injectVar } : {}),
       ...(data.provider ? { provider: data.provider } : {}),
       plugins: uniquePlugins,
-      strategies: data.strategies.map((strategy) =>
-        typeof strategy === 'string' ? { id: strategy } : strategy,
+      strategies: data.strategies?.map((strategy) =>
+        typeof strategy === 'string' ? { id: strategy } : { ...strategy },
       ),
     };
   });

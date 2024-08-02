@@ -20,6 +20,7 @@ import HijackingPlugin from './plugins/hijacking';
 import ImitationPlugin from './plugins/imitation';
 import OverreliancePlugin from './plugins/overreliance';
 import { getPiiLeakTestsForCategory } from './plugins/pii';
+import PolicyPlugin from './plugins/policy';
 import PoliticsPlugin from './plugins/politics';
 import RbacPlugin from './plugins/rbac';
 import ShellInjectionPlugin from './plugins/shellInjection';
@@ -118,6 +119,14 @@ const Plugins: Plugin[] = [
     action: (provider, purpose, injectVar, n) =>
       getPiiLeakTestsForCategory(provider, purpose, injectVar, category, n),
   })) as Plugin[]),
+  {
+    key: 'policy',
+    action: (provider, purpose, injectVar, n, config) => {
+      invariant(config?.policy, 'Policy plugin requires a config');
+      const plugin = new PolicyPlugin(provider, purpose, injectVar, config as { policy: string });
+      return plugin.generateTests(n);
+    },
+  },
 ];
 
 // These plugins refer to a collection of tests.
@@ -223,7 +232,10 @@ export async function synthesize({
       prompts.length === 1 ? 'prompt' : 'prompts'
     }...\nUsing plugins:\n\n${chalk.yellow(
       plugins
-        .map((p) => `${p.id} (${formatTestCount(p.numTests)})`)
+        .map(
+          (p) =>
+            `${p.id} (${formatTestCount(p.numTests)})${p.config ? ` (${JSON.stringify(p.config)})` : ''}`,
+        )
         .sort()
         .join('\n'),
     )}\n`,

@@ -4,7 +4,7 @@ import { matchesLlmRubric } from '../../matchers';
 import type { AtomicTestCase, GradingResult } from '../../types';
 import { getNunjucksEngine } from '../../util/templates';
 
-const nunjucks = getNunjucksEngine();
+const nunjucks = getNunjucksEngine(undefined, true /* throwOnUndefined */);
 
 /**
  * Base class for all redteam graders.
@@ -27,6 +27,7 @@ export default abstract class RedteamModelGrader {
     const finalRubric = nunjucks.renderString(this.rubric, {
       prompt,
       purpose: test.metadata?.purpose,
+      policy: test.metadata?.policy,
       // TODO(ian): Eventually switch to using metadata too to plumb through harmCategory
       harmCategory: test.vars?.harmCategory,
       entities: test.metadata?.entities ?? [],

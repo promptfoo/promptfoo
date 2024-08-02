@@ -1,7 +1,7 @@
 import nunjucks from 'nunjucks';
 import type { NunjucksFilterMap } from '../types';
 
-export function getNunjucksEngine(filters?: NunjucksFilterMap) {
+export function getNunjucksEngine(filters?: NunjucksFilterMap, throwOnUndefined: boolean = false) {
   if (process.env.PROMPTFOO_DISABLE_TEMPLATING) {
     return {
       renderString: (template: string) => template,
@@ -10,6 +10,7 @@ export function getNunjucksEngine(filters?: NunjucksFilterMap) {
 
   const env = nunjucks.configure({
     autoescape: false,
+    throwOnUndefined,
   });
 
   if (filters) {

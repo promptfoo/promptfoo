@@ -3,6 +3,7 @@ import type { ApiProvider, ProviderOptions } from '../types/providers';
 export type RedteamPluginObject = {
   id: string;
   numTests?: number;
+  config?: Record<string, unknown>;
 };
 
 export type RedteamPlugin = string | RedteamPluginObject;
@@ -33,9 +34,10 @@ export type RedteamGenerateOptions = {
 
 export type RedteamConfig = {
   injectVar?: string;
-  purpose?: string;
-  provider?: string | ProviderOptions | ApiProvider;
+  numTests?: number;
   plugins: RedteamPluginObject[];
+  provider?: string | ProviderOptions | ApiProvider;
+  purpose?: string;
   strategies: RedteamStrategyObject[];
 };
 
