@@ -33,6 +33,19 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
     return null;
   }
 
+  const [expandedValues, setExpandedValues] = useState<{ [key: number]: boolean }>({});
+
+  const toggleExpand = (index: number) => {
+    setExpandedValues((prev) => ({ ...prev, [index]: !prev[index] }));
+  };
+
+  const ellipsize = (value: string, maxLength: number) => {
+    if (value.length <= maxLength) {
+      return value;
+    }
+    return value.slice(0, maxLength) + '...';
+  };
+
   return (
     <Box mt={2}>
       <Typography variant="subtitle1">Assertions</Typography>
@@ -52,17 +65,24 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
               if (!result) {
                 return null;
               }
+              const value = result.assertion?.value
+                ? typeof result.assertion.value === 'object'
+                  ? JSON.stringify(result.assertion.value, null, 2)
+                  : String(result.assertion.value)
+                : '-';
+              const truncatedValue = ellipsize(value, 300);
+              const isExpanded = expandedValues[i] || false;
+
               return (
                 <TableRow key={i}>
                   <TableCell>{result.pass ? '✅' : '❌'}</TableCell>
                   <TableCell>{result.score?.toFixed(2)}</TableCell>
                   <TableCell>{result.assertion?.type || ''}</TableCell>
-                  <TableCell style={{ whiteSpace: 'pre-wrap' }}>
-                    {result.assertion?.value
-                      ? typeof result.assertion.value === 'object'
-                        ? JSON.stringify(result.assertion.value, null, 2)
-                        : String(result.assertion.value)
-                      : '-'}
+                  <TableCell
+                    style={{ whiteSpace: 'pre-wrap', cursor: 'pointer' }}
+                    onClick={() => toggleExpand(i)}
+                  >
+                    {isExpanded ? value : truncatedValue}
                   </TableCell>
                   <TableCell style={{ whiteSpace: 'pre-wrap' }}>{result.reason}</TableCell>
                 </TableRow>

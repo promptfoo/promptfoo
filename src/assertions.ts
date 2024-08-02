@@ -1362,9 +1362,13 @@ ${
     invariant(grader, `Unknown promptfoo grader: ${baseType}`);
     invariant(prompt, `Promptfoo grader ${baseType} must have a prompt`);
 
+    const { grade, rubric } = await grader.getResult(prompt, outputString, test);
     return {
-      assertion,
-      ...(await grader.getResult(prompt, outputString, test)),
+      assertion: {
+        ...assertion,
+        value: rubric,
+      },
+      ...grade,
     };
   }
 
