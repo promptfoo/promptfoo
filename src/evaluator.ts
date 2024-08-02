@@ -245,7 +245,7 @@ class Evaluator {
       };
       if (response.error) {
         ret.error = response.error;
-      } else if (response.output) {
+      } else if (response.output != null) {
         // Create a copy of response so we can potentially mutate it.
         const processedResponse = { ...response };
         const transforms: string[] = [

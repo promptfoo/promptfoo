@@ -1064,6 +1064,55 @@ describe('evaluator', () => {
     );
     expect(mockApiProviderWithTransform.callApi).toHaveBeenCalledTimes(1);
   });
+
+  it('evaluate with no output', async () => {
+    const mockApiProviderNoOutput: ApiProvider = {
+      id: jest.fn().mockReturnValue('test-provider-no-output'),
+      callApi: jest.fn().mockResolvedValue({
+        output: null,
+        tokenUsage: { total: 5, prompt: 5, completion: 0, cached: 0 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProviderNoOutput],
+      prompts: [toPrompt('Test prompt')],
+      tests: [],
+    };
+
+    const summary = await evaluate(testSuite, {});
+
+    expect(summary.stats.successes).toBe(0);
+    expect(summary.stats.failures).toBe(1);
+    expect(summary.results[0].error).toBe('No output');
+    expect(summary.results[0].success).toBe(false);
+    expect(summary.results[0].score).toBe(0);
+    expect(mockApiProviderNoOutput.callApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('evaluate with false output', async () => {
+    const mockApiProviderNoOutput: ApiProvider = {
+      id: jest.fn().mockReturnValue('test-provider-no-output'),
+      callApi: jest.fn().mockResolvedValue({
+        output: false,
+        tokenUsage: { total: 5, prompt: 5, completion: 0, cached: 0 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProviderNoOutput],
+      prompts: [toPrompt('Test prompt')],
+      tests: [],
+    };
+
+    const summary = await evaluate(testSuite, {});
+
+    expect(summary.stats.successes).toBe(1);
+    expect(summary.stats.failures).toBe(0);
+    expect(summary.results[0].success).toBe(true);
+    expect(summary.results[0].score).toBe(1);
+    expect(mockApiProviderNoOutput.callApi).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('renderPrompt', () => {
