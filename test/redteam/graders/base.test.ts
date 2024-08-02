@@ -18,8 +18,7 @@ describe('RedteamModelGrader', () => {
   beforeEach(() => {
     grader = new TestGrader();
     mockTest = {
-      vars: { harmCategory: 'test-harm' },
-      metadata: { purpose: 'test-purpose' },
+      metadata: { purpose: 'test-purpose', harmCategory: 'test-harm' },
     } as AtomicTestCase;
     jest.clearAllMocks();
   });
