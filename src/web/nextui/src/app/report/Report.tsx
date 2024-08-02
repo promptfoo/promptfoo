@@ -10,6 +10,7 @@ import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import type { ResultsFile, SharedResults } from '../eval/types';
 import Overview from './Overview';
+import ReportDownloadButton from './ReportDownloadButton';
 import ReportSettingsDialogButton from './ReportSettingsDialogButton';
 import RiskCategories from './RiskCategories';
 import TestSuites from './TestSuites';
@@ -108,7 +109,10 @@ const App: React.FC = () => {
     <Container>
       <Stack spacing={4} pb={8} pt={2}>
         <Card className="report-header" sx={{ position: 'relative' }}>
-          <ReportSettingsDialogButton />
+          <Box sx={{ position: 'absolute', top: 8, right: 8, display: 'flex' }}>
+            <ReportDownloadButton evalDescription={evalData.config.description || evalId} />
+            <ReportSettingsDialogButton />
+          </Box>
           <Typography variant="h4">
             <strong>LLM Risk Assessment</strong>
             {evalData.config.description && `: ${evalData.config.description}`}
