@@ -196,7 +196,7 @@ export async function redteamInit(directory: string | undefined) {
 
       plugins.push({
         id: 'policy',
-        config: { policy: policyDescription },
+        config: { policy: policyDescription.trim() },
       } as RedteamPluginObject);
 
       policyCount++;
@@ -255,6 +255,8 @@ export async function redteamInit(directory: string | undefined) {
     }).data,
   };
 
+  logger.warn(`plugins: ${JSON.stringify(plugins, null, 2)}`);
+
   // Write the simplified form to the config file to make it easier
   // for people to play with. Writes 1 in the { id: ..., numTests }
   // and then the rest as strings.
@@ -264,6 +266,9 @@ export async function redteamInit(directory: string | undefined) {
     numTests,
   })?.data?.plugins;
   const configPlugins = plugins.length >= 2 ? [parsedPlugins?.[0], ...plugins.slice(1)] : plugins;
+
+  logger.warn(`parsedPlugins: ${JSON.stringify(parsedPlugins, null, 2)}`);
+  logger.warn(`configPlugins: ${JSON.stringify(configPlugins, null, 2)}`);
 
   fs.writeFileSync(
     configPath,

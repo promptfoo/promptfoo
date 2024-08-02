@@ -232,7 +232,10 @@ export async function synthesize({
       prompts.length === 1 ? 'prompt' : 'prompts'
     }...\nUsing plugins:\n\n${chalk.yellow(
       plugins
-        .map((p) => `${p.id} (${formatTestCount(p.numTests)})`)
+        .map(
+          (p) =>
+            `${p.id} (${formatTestCount(p.numTests)})${p.config ? ` (${JSON.stringify(p.config)})` : ''}`,
+        )
         .sort()
         .join('\n'),
     )}\n`,
