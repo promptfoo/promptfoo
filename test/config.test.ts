@@ -103,6 +103,7 @@ describe('readConfigs', () => {
       scenarios: ['scenario1'],
       defaultTest: {
         description: 'defaultTest1',
+        metadata: {},
         options: {},
         vars: { var1: 'value1' },
         assert: [{ type: 'equals', value: 'expected1' }],
@@ -124,6 +125,7 @@ describe('readConfigs', () => {
       scenarios: ['scenario2'],
       defaultTest: {
         description: 'defaultTest2',
+        metadata: {},
         options: {},
         vars: { var2: 'value2' },
         assert: [{ type: 'equals', value: 'expected2' }],
@@ -147,6 +149,7 @@ describe('readConfigs', () => {
       scenarios: ['scenario1', 'scenario2'],
       defaultTest: {
         description: 'defaultTest2',
+        metadata: {},
         options: {},
         vars: { var1: 'value1', var2: 'value2' },
         assert: [

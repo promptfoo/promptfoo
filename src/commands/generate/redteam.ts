@@ -166,8 +166,8 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
       ...existingYaml,
       defaultTest: {
         ...(existingYaml.defaultTest || {}),
-        vars: {
-          ...(existingYaml.defaultTest?.vars || {}),
+        metadata: {
+          ...(existingYaml.defaultTest?.metadata || {}),
           purpose,
           entities,
         },
@@ -184,8 +184,8 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
     const existingConfig = yaml.load(fs.readFileSync(configPath, 'utf8')) as Partial<UnifiedConfig>;
     existingConfig.defaultTest = {
       ...(existingConfig.defaultTest || {}),
-      vars: {
-        ...(existingConfig.defaultTest?.vars || {}),
+      metadata: {
+        ...(existingConfig.defaultTest?.metadata || {}),
         purpose,
         entities,
       },
