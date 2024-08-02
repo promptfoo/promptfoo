@@ -37,6 +37,7 @@ export type RedteamConfig = {
   provider?: string | ProviderOptions | ApiProvider;
   plugins: RedteamPluginObject[];
   strategies: RedteamStrategyObject[];
+  entities?: string[];
 };
 
 export type RedteamAssertionTypes = `promptfoo:redteam:${string}`;

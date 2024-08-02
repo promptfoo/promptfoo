@@ -185,7 +185,14 @@ function validateStrategies(strategies: { id: string }[]): void {
     (strategy) => !Strategies.map((s) => s.key).includes(strategy.id),
   );
   if (invalidStrategies.length > 0) {
-    throw new Error(`Invalid strategy(s): ${invalidStrategies.join(', ')}`);
+    const validStrategiesString = Strategies.map((s) => s.key).join(', ');
+    const invalidStrategiesString = invalidStrategies.map((s) => s.id).join(', ');
+    logger.error(
+      dedent`Invalid strategy(s): ${invalidStrategiesString}. 
+      
+      ${chalk.green(`Valid strategies are: ${validStrategiesString}`)}`,
+    );
+    process.exit(1);
   }
 }
 
@@ -203,7 +210,11 @@ export async function synthesize({
   purpose: purposeOverride,
   strategies,
   plugins,
-}: SynthesizeOptions) {
+}: SynthesizeOptions): Promise<{
+  purpose: string;
+  entities: string[];
+  testCases: TestCaseWithPlugin[];
+}> {
   validatePlugins(plugins);
   validateStrategies(strategies);
 
@@ -341,5 +352,5 @@ export async function synthesize({
     progressBar.stop();
   }
 
-  return testCases;
+  return { purpose, entities, testCases };
 }

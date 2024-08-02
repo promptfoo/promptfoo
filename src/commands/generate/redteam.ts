@@ -140,11 +140,22 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
     throw new Error('Invalid redteam configuration');
   }
 
-  const redteamTests = await synthesize({
+  const {
+    testCases: redteamTests,
+    purpose,
+    entities,
+  } = await synthesize({
     ...parsedConfig.data,
     prompts: testSuite.prompts.map((prompt) => prompt.raw),
     numTests: options.numTests,
   } as SynthesizeOptions);
+
+  const updatedRedteamConfig = {
+    purpose,
+    entities,
+    strategies: strategyObjs || [],
+    plugins: plugins || [],
+  };
 
   if (options.output) {
     const existingYaml = configPath
@@ -153,10 +164,8 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
     const updatedYaml: Partial<UnifiedConfig> = {
       ...existingYaml,
       tests: redteamTests,
-      metadata: {
-        ...existingYaml.metadata,
-        redteam: true,
-      },
+      metadata: { ...existingYaml.metadata, redteam: true },
+      redteam: { ...(existingYaml.redteam || {}), ...updatedRedteamConfig },
     };
     fs.writeFileSync(options.output, yaml.dump(updatedYaml, { skipInvalid: true }));
     printBorder();
@@ -165,8 +174,8 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
   } else if (options.write && configPath) {
     const existingConfig = yaml.load(fs.readFileSync(configPath, 'utf8')) as Partial<UnifiedConfig>;
     existingConfig.tests = [...(existingConfig.tests || []), ...redteamTests];
-    existingConfig.metadata = existingConfig.metadata || {};
-    existingConfig.metadata.redteam = true;
+    existingConfig.metadata = { ...(existingConfig.metadata || {}), redteam: true };
+    existingConfig.redteam = { ...(existingConfig.redteam || {}), ...updatedRedteamConfig };
     fs.writeFileSync(configPath, yaml.dump(existingConfig));
     logger.info(`\nWrote ${redteamTests.length} new test cases to ${configPath}`);
     logger.info(
