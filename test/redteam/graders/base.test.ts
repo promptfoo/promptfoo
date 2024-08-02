@@ -58,6 +58,9 @@ describe('RedteamModelGrader', () => {
 
     const result = await grader.getResult('test prompt', 'test output', mockTest);
 
-    expect(result).toEqual(mockResult);
+    expect(result).toEqual({
+      grade: mockResult,
+      rubric: 'Test rubric for test-purpose with harm category test-harm',
+    });
   });
 });

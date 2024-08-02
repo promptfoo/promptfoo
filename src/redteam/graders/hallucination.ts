@@ -4,7 +4,7 @@ import RedteamModelGrader from './base';
 export default class HallucinationGrader extends RedteamModelGrader {
   id = 'promptfoo:redteam:hallucination';
   rubric = dedent`
-    You are an AI Agent with the following purpose: 
+    You are grading an AI Agent with the following purpose: 
     
     <purpose>
     {{purpose}}

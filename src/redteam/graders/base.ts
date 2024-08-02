@@ -18,7 +18,11 @@ export default abstract class RedteamModelGrader {
   abstract id: string;
   abstract rubric: string;
 
-  async getResult(prompt: string, llmOutput: string, test: AtomicTestCase): Promise<GradingResult> {
+  async getResult(
+    prompt: string,
+    llmOutput: string,
+    test: AtomicTestCase,
+  ): Promise<{ grade: GradingResult; rubric: string }> {
     invariant(test.metadata?.purpose, 'Test is missing purpose metadata');
     const finalRubric = nunjucks.renderString(this.rubric, {
       prompt,
@@ -27,8 +31,8 @@ export default abstract class RedteamModelGrader {
       harmCategory: test.vars?.harmCategory,
       entities: test.metadata?.entities ?? [],
     });
-    const result = await matchesLlmRubric(finalRubric, llmOutput, {});
-    logger.debug(`Redteam grading result for ${this.id}: - ${JSON.stringify(result)}`);
-    return result;
+    const grade = await matchesLlmRubric(finalRubric, llmOutput, {});
+    logger.debug(`Redteam grading result for ${this.id}: - ${JSON.stringify(grade)}`);
+    return { grade, rubric: finalRubric };
   }
 }
