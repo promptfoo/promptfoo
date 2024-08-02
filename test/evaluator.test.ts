@@ -755,6 +755,7 @@ describe('evaluator', () => {
       providers: [mockApiProvider],
       prompts: [toPrompt('Test prompt')],
       defaultTest: {
+        metadata: { defaultKey: 'defaultValue' },
         assert: [
           {
             type: 'starts-with',
@@ -764,8 +765,8 @@ describe('evaluator', () => {
       },
       scenarios: [
         {
-          config: [{}],
-          tests: [{}],
+          config: [{ metadata: { configKey: 'configValue' } }],
+          tests: [{ metadata: { testKey: 'testValue' } }],
         },
         {
           config: [
@@ -792,13 +793,60 @@ describe('evaluator', () => {
       ],
     };
 
-    const summary = await evaluate(testSuite, {});
+    const result = await evaluate(testSuite, {});
+
+    expect(result).toMatchObject({
+      stats: {
+        successes: 2,
+        failures: 0,
+      },
+      results: expect.arrayContaining([
+        expect.objectContaining({
+          gradingResult: expect.objectContaining({
+            componentResults: expect.arrayContaining([expect.anything()]),
+          }),
+        }),
+        expect.objectContaining({
+          gradingResult: expect.objectContaining({
+            componentResults: expect.arrayContaining([
+              expect.anything(),
+              expect.anything(),
+              expect.anything(),
+            ]),
+          }),
+        }),
+      ]),
+    });
+
+    expect(result.table.body[0].test.metadata).toEqual({
+      defaultKey: 'defaultValue',
+      configKey: 'configValue',
+      testKey: 'testValue',
+    });
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
-    expect(summary.stats.successes).toBe(2);
-    expect(summary.stats.failures).toBe(0);
-    expect(summary.results[0].gradingResult?.componentResults?.length).toBe(1);
-    expect(summary.results[1].gradingResult?.componentResults?.length).toBe(3);
+  });
+
+  it('merges metadata correctly for regular tests', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      defaultTest: {
+        metadata: { defaultKey: 'defaultValue' },
+      },
+      tests: [
+        {
+          metadata: { testKey: 'testValue' },
+        },
+      ],
+    };
+
+    const summary = await evaluate(testSuite, {});
+
+    expect(summary.table.body[0].test.metadata).toEqual({
+      defaultKey: 'defaultValue',
+      testKey: 'testValue',
+    });
   });
 
   it('evaluate with _conversation variable', async () => {
