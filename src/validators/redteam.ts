@@ -8,6 +8,7 @@ import {
   ALL_STRATEGIES,
   HARM_PLUGINS,
   PII_PLUGINS,
+  COLLECTIONS,
 } from '../redteam/constants';
 import type { RedteamConfig, RedteamPluginObject } from '../types/redteam';
 import { ProviderSchema } from '../validators/providers';
@@ -116,51 +117,39 @@ export const RedteamConfigSchema = z
           ? { id: plugin, numTests: data.numTests }
           : { ...plugin, numTests: plugin.numTests ?? data.numTests };
 
-      const key = `${pluginObj.id}:${JSON.stringify(pluginObj.config)}`;
-      pluginMap.set(key, pluginObj);
+      if (pluginObj.id === 'harmful') {
+        Object.keys(HARM_PLUGINS).forEach((id) => {
+          const key = `${id}:${JSON.stringify(pluginObj.config)}`;
+          if (!pluginMap.has(key)) {
+            pluginMap.set(key, { id, numTests: pluginObj.numTests, config: pluginObj.config });
+          }
+        });
+      } else if (pluginObj.id === 'pii') {
+        PII_PLUGINS.forEach((id) => {
+          const key = `${id}:${JSON.stringify(pluginObj.config)}`;
+          if (!pluginMap.has(key)) {
+            pluginMap.set(key, { id, numTests: pluginObj.numTests, config: pluginObj.config });
+          }
+        });
+      } else {
+        const key = `${pluginObj.id}:${JSON.stringify(pluginObj.config)}`;
+        pluginMap.set(key, pluginObj);
+      }
     });
 
-    const uniquePlugins: RedteamPluginObject[] = Array.from(pluginMap.values())
-      .flatMap((pluginObj): RedteamPluginObject[] => {
-        if (pluginObj.id === 'harmful') {
-          return Object.keys(HARM_PLUGINS).map((category) => {
-            const existingPlugin = Array.from(pluginMap.values()).find((p) => p.id === category);
-            return (
-              existingPlugin || {
-                id: category,
-                numTests: pluginObj.numTests,
-              }
-            );
-          });
-        }
-        if (pluginObj.id === 'pii') {
-          return PII_PLUGINS.map((id) => {
-            const existingPlugin = Array.from(pluginMap.values()).find((p) => p.id === id);
-            return (
-              existingPlugin || {
-                id,
-                numTests: pluginObj.numTests,
-              }
-            );
-          });
-        }
-        return [pluginObj];
-      })
-      .filter(
-        (plugin, index, self) =>
-          index ===
-          self.findIndex(
-            (t) => t.id === plugin.id && JSON.stringify(t.config) === JSON.stringify(plugin.config),
-          ),
-      )
-      .sort((a, b) => a.id.localeCompare(b.id));
+    const uniquePlugins = Array.from(pluginMap.values())
+      .filter((plugin) => !COLLECTIONS.includes(plugin.id as (typeof COLLECTIONS)[number]))
+      .sort((a, b) => {
+        if (a.id !== b.id) return a.id.localeCompare(b.id);
+        return JSON.stringify(a.config || {}).localeCompare(JSON.stringify(b.config || {}));
+      });
 
     return {
       ...(data.purpose ? { purpose: data.purpose } : {}),
       ...(data.injectVar ? { injectVar: data.injectVar } : {}),
       ...(data.provider ? { provider: data.provider } : {}),
       plugins: uniquePlugins,
-      strategies: data.strategies.map((strategy) =>
+      strategies: data.strategies?.map((strategy) =>
         typeof strategy === 'string' ? { id: strategy } : strategy,
       ),
     };
