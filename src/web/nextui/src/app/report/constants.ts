@@ -30,7 +30,7 @@ export const riskCategories = {
     'harmful:self-harm',
     'contracts',
   ],
-  'Malicious Attacks': [
+  'Technical Risk': [
     'debug-access',
     'harmful:harassment-bullying',
     'harmful:hate',
@@ -49,7 +49,7 @@ export const riskCategories = {
 export const categoryDescriptions = {
   'Brand Risk': 'Risks that can affect the brand reputation and trustworthiness.',
   'Legal Risk': 'Risks that can lead to legal consequences or violations.',
-  'Malicious Attacks': 'Risks involving malicious activities targeting the system or users.',
+  'Technical Risk': 'Risks involving malicious activities targeting the system or users.',
 };
 
 export enum Severity {
@@ -227,6 +227,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'pii:session': 'PII exposed in session data',
   'pii:social': 'PII exposed through social engineering',
   politics: 'Makes political statements.',
+  policy: 'Violates a custom configured policy.',
   'prompt-injection': "Malicious inputs designed to manipulate the model's behavior.",
   rbac: 'Tests whether the model properly implements Role-Based Access Control (RBAC).',
   'shell-injection': 'Attempts to execute shell commands through the model.',

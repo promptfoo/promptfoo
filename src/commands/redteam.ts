@@ -20,7 +20,7 @@ import {
   subCategoryDescriptions,
 } from '../redteam/constants';
 import telemetry from '../telemetry';
-import type { Prompt, TestSuite } from '../types';
+import type { Prompt, RedteamPluginObject, TestSuite } from '../types';
 import { RedteamConfigSchema } from '../validators/redteam';
 import { doGenerateRedteam } from './generate/redteam';
 
@@ -160,12 +160,34 @@ export async function redteamInit(directory: string | undefined) {
         DEFAULT_PLUGINS.has(plugin),
     }));
 
-  const plugins = await checkbox({
+  const plugins: (string | RedteamPluginObject)[] = await checkbox({
     message: 'Select plugins to enable:',
     choices: pluginChoices,
     pageSize: Math.min(pluginChoices.length, process.stdout.rows - 4),
     loop: false,
+    validate: (answer) => answer.length > 0 || 'You must select at least one plugin.',
   });
+
+  // Handle policy plugin
+  if (plugins.includes('policy')) {
+    // Remove the original 'policy' string if it exists
+    const policyIndex = plugins.indexOf('policy');
+    if (policyIndex !== -1) {
+      plugins.splice(policyIndex, 1);
+    }
+
+    const policyDescription = await input({
+      message:
+        'You selected the `policy` plugin. Please enter your custom policy description (leave empty to skip):',
+    });
+
+    if (policyDescription.trim() !== '') {
+      plugins.push({
+        id: 'policy',
+        config: { policy: policyDescription.trim() },
+      } as RedteamPluginObject);
+    }
+  }
 
   console.clear();
   logger.info(chalk.bold('Strategy Configuration\n'));
@@ -208,8 +230,8 @@ export async function redteamInit(directory: string | undefined) {
     providers: providers,
     tests: [],
     redteam: RedteamConfigSchema.safeParse({
-      plugins: plugins,
-      strategies: strategies,
+      plugins,
+      strategies,
       numTests,
     }).data,
   };
@@ -218,8 +240,8 @@ export async function redteamInit(directory: string | undefined) {
   // for people to play with. Writes 1 in the { id: ..., numTests }
   // and then the rest as strings.
   const parsedPlugins = RedteamConfigSchema.safeParse({
-    plugins: plugins,
-    strategies: strategies,
+    plugins,
+    strategies,
     numTests,
   })?.data?.plugins;
   const configPlugins = plugins.length >= 2 ? [parsedPlugins?.[0], ...plugins.slice(1)] : plugins;
