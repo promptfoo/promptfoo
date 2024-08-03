@@ -411,7 +411,8 @@ const VarsSchema = z.record(
   z.union([
     z.string(),
     z.number().transform(String),
-    z.array(z.union([z.string(), z.number().transform(String)])),
+    z.boolean(),
+    z.array(z.union([z.string(), z.number().transform(String), z.boolean()])),
     z.object({}),
     z.array(z.any()),
   ]),
@@ -490,10 +491,10 @@ export type Scenario = z.infer<typeof ScenarioSchema>;
 
 // Same as a TestCase, except the `vars` object has been flattened into its final form.
 export const AtomicTestCaseSchema = TestCaseSchema.extend({
-  vars: z.record(z.union([z.string(), z.object({})])).optional(),
+  vars: z.record(z.union([z.string(), z.boolean(), z.object({})])).optional(),
 }).strict();
 
-export type AtomicTestCase<Vars = Record<string, string | object>> = z.infer<
+export type AtomicTestCase<Vars = Record<string, string | object | boolean>> = z.infer<
   typeof AtomicTestCaseSchema
 >;
 
