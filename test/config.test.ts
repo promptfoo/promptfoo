@@ -39,6 +39,7 @@ describe('readConfigs', () => {
       scenarios: ['scenario1'],
       defaultTest: {
         description: 'defaultTest1',
+        metadata: {},
         vars: { var1: 'value1' },
         assert: [{ type: 'equals', value: 'expected1' }],
       },
@@ -56,6 +57,7 @@ describe('readConfigs', () => {
       scenarios: ['scenario2'],
       defaultTest: {
         description: 'defaultTest2',
+        metadata: {},
         vars: { var2: 'value2' },
         assert: [{ type: 'equals', value: 'expected2' }],
       },
@@ -103,6 +105,7 @@ describe('readConfigs', () => {
       scenarios: ['scenario1'],
       defaultTest: {
         description: 'defaultTest1',
+        metadata: {},
         options: {},
         vars: { var1: 'value1' },
         assert: [{ type: 'equals', value: 'expected1' }],
@@ -124,6 +127,7 @@ describe('readConfigs', () => {
       scenarios: ['scenario2'],
       defaultTest: {
         description: 'defaultTest2',
+        metadata: {},
         options: {},
         vars: { var2: 'value2' },
         assert: [{ type: 'equals', value: 'expected2' }],
@@ -147,6 +151,7 @@ describe('readConfigs', () => {
       scenarios: ['scenario1', 'scenario2'],
       defaultTest: {
         description: 'defaultTest2',
+        metadata: {},
         options: {},
         vars: { var1: 'value1', var2: 'value2' },
         assert: [
@@ -239,6 +244,31 @@ describe('readConfigs', () => {
       'prompt3',
       'prompt4',
     ]);
+  });
+
+  it('merges metadata correctly', async () => {
+    const config1 = {
+      defaultTest: {
+        metadata: { key1: 'value1' },
+      },
+    };
+    const config2 = {
+      defaultTest: {
+        metadata: { key2: 'value2' },
+      },
+    };
+
+    jest
+      .mocked(fs.readFileSync)
+      .mockReturnValueOnce(JSON.stringify(config1))
+      .mockReturnValueOnce(JSON.stringify(config2));
+
+    const result = await readConfigs(['config1.json', 'config2.json']);
+
+    expect(result.defaultTest?.metadata).toEqual({
+      key1: 'value1',
+      key2: 'value2',
+    });
   });
 });
 

@@ -282,6 +282,7 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
         vars: { ...prev?.vars, ...curr.defaultTest?.vars },
         assert: [...(prev?.assert || []), ...(curr.defaultTest?.assert || [])],
         options: { ...prev?.options, ...curr.defaultTest?.options },
+        metadata: { ...prev?.metadata, ...curr.defaultTest?.metadata },
       };
     }, {}),
     nunjucksFilters: configs.reduce((prev, curr) => ({ ...prev, ...curr.nunjucksFilters }), {}),
@@ -417,6 +418,7 @@ export async function resolveConfigs(
   }
 
   const defaultTest: TestCase = {
+    metadata: config.metadata,
     options: {
       prefix: cmdObj.promptPrefix,
       suffix: cmdObj.promptSuffix,

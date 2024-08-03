@@ -447,6 +447,11 @@ class Evaluator {
                 ...(data.assert || []),
                 ...(test.assert || []),
               ],
+              metadata: {
+                ...testSuite.defaultTest?.metadata,
+                ...data.metadata,
+                ...test.metadata,
+              },
             };
           });
           // Add scenario tests to tests
@@ -489,6 +494,7 @@ class Evaluator {
       testCase.assert = [...(testSuite.defaultTest?.assert || []), ...(testCase.assert || [])];
       testCase.threshold = testCase.threshold ?? testSuite.defaultTest?.threshold;
       testCase.options = { ...testSuite.defaultTest?.options, ...testCase.options };
+      testCase.metadata = { ...testSuite.defaultTest?.metadata, ...testCase.metadata };
 
       const prependToPrompt =
         testCase.options?.prefix || testSuite.defaultTest?.options?.prefix || '';
