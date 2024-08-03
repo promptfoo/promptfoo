@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import { isValidJson, safeJsonStringify } from '../src/util/json';
+import { isValidJson, safeJsonStringify, orderKeys } from '../src/util/json';
 
 describe('json utilities', () => {
   describe('isValidJson', () => {
@@ -83,6 +83,67 @@ describe('json utilities', () => {
     it('preserves non-circular nested structures', () => {
       const nested = { a: { b: { c: 1 } }, d: [1, 2, { e: 3 }] };
       expect(JSON.parse(safeJsonStringify(nested))).toEqual(nested);
+    });
+  });
+
+  describe('orderKeys', () => {
+    it('orders keys according to specified order', () => {
+      const obj = { c: 3, a: 1, b: 2 };
+      const order: (keyof typeof obj)[] = ['a', 'b', 'c'];
+      const result = orderKeys(obj, order);
+      expect(Object.keys(result)).toEqual(['a', 'b', 'c']);
+    });
+
+    it('places unspecified keys at the end', () => {
+      const obj = { d: 4, b: 2, a: 1, c: 3 };
+      const order: (keyof typeof obj)[] = ['a', 'b'];
+      const result = orderKeys(obj, order);
+      expect(Object.keys(result)).toEqual(['a', 'b', 'd', 'c']);
+    });
+
+    it('ignores specified keys that do not exist in the object', () => {
+      const obj = { a: 1, c: 3 };
+      const order = ['a', 'b', 'c', 'd'] as (keyof typeof obj)[];
+      const result = orderKeys(obj, order);
+      expect(Object.keys(result)).toEqual(['a', 'c']);
+    });
+
+    it('returns an empty object when input is empty', () => {
+      const obj = {};
+      const order = ['a', 'b', 'c'] as (keyof typeof obj)[];
+      const result = orderKeys(obj, order);
+      expect(result).toEqual({});
+    });
+
+    it('returns the original object when order is empty', () => {
+      const obj = { c: 3, a: 1, b: 2 };
+      const order: (keyof typeof obj)[] = [];
+      const result = orderKeys(obj, order);
+      expect(result).toEqual(obj);
+    });
+
+    it('preserves nested object structures', () => {
+      const obj = { c: { x: 1 }, a: [1, 2], b: 2 };
+      const order: (keyof typeof obj)[] = ['a', 'b', 'c'];
+      const result = orderKeys(obj, order);
+      expect(result).toEqual({ a: [1, 2], b: 2, c: { x: 1 } });
+    });
+
+    it('handles objects with symbol keys', () => {
+      const sym1 = Symbol('sym1');
+      const sym2 = Symbol('sym2');
+      const obj = { [sym1]: 1, b: 2, [sym2]: 3, a: 4 };
+      const order: (keyof typeof obj)[] = ['a', 'b'];
+      const result = orderKeys(obj, order);
+      expect(Object.getOwnPropertySymbols(result)).toEqual([sym1, sym2]);
+      expect(Object.keys(result)).toEqual(['a', 'b']);
+    });
+
+    it('maintains the correct types for keys and values', () => {
+      const obj = { a: 'string', b: 42, c: true, d: null, e: undefined };
+      const order: (keyof typeof obj)[] = ['b', 'a', 'c', 'd', 'e'];
+      const result = orderKeys(obj, order);
+      expect(result).toEqual({ b: 42, a: 'string', c: true, d: null, e: undefined });
     });
   });
 });
