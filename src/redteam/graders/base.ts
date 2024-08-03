@@ -26,11 +26,10 @@ export default abstract class RedteamModelGrader {
     invariant(test.metadata?.purpose, 'Test is missing purpose metadata');
     const finalRubric = nunjucks.renderString(this.rubric, {
       prompt,
-      purpose: test.metadata?.purpose,
-      policy: test.metadata?.policy,
-      // TODO(ian): Eventually switch to using metadata too to plumb through harmCategory
-      harmCategory: test.vars?.harmCategory,
       entities: test.metadata?.entities ?? [],
+      harmCategory: test.metadata?.harmCategory,
+      policy: test.metadata?.policy,
+      purpose: test.metadata?.purpose,
     });
     const grade = await matchesLlmRubric(finalRubric, llmOutput, {});
     logger.debug(`Redteam grading result for ${this.id}: - ${JSON.stringify(grade)}`);

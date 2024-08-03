@@ -7,7 +7,7 @@ import { loadApiProvider } from '../providers';
 import { isApiProvider, isProviderOptions, type ApiProvider, type TestCase } from '../types';
 import type { SynthesizeOptions } from '../types/redteam';
 import { extractVariablesFromTemplates } from '../util/templates';
-import { REDTEAM_MODEL, HARM_PLUGINS, PII_PLUGINS, INCLUDE_ENTITY_METADATA } from './constants';
+import { REDTEAM_MODEL, HARM_PLUGINS, PII_PLUGINS } from './constants';
 import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
 import CompetitorPlugin from './plugins/competitors';
@@ -194,7 +194,14 @@ function validateStrategies(strategies: { id: string }[]): void {
     (strategy) => !Strategies.map((s) => s.key).includes(strategy.id),
   );
   if (invalidStrategies.length > 0) {
-    throw new Error(`Invalid strategy(s): ${invalidStrategies.join(', ')}`);
+    const validStrategiesString = Strategies.map((s) => s.key).join(', ');
+    const invalidStrategiesString = invalidStrategies.map((s) => s.id).join(', ');
+    logger.error(
+      dedent`Invalid strategy(s): ${invalidStrategiesString}. 
+      
+      ${chalk.green(`Valid strategies are: ${validStrategiesString}`)}`,
+    );
+    process.exit(1);
   }
 }
 
@@ -210,9 +217,14 @@ export async function synthesize({
   provider,
   injectVar,
   purpose: purposeOverride,
+  entities: entitiesOverride,
   strategies,
   plugins,
-}: SynthesizeOptions) {
+}: SynthesizeOptions): Promise<{
+  purpose: string;
+  entities: string[];
+  testCases: TestCaseWithPlugin[];
+}> {
   validatePlugins(plugins);
   validateStrategies(strategies);
 
@@ -286,10 +298,9 @@ export async function synthesize({
   // Get purpose
   const purpose = purposeOverride || (await extractSystemPurpose(redteamProvider, prompts));
   updateProgress();
-  let entities: string[] = [];
-  if (plugins.some((p) => p.id === 'imitation')) {
-    entities = await extractEntities(redteamProvider, prompts);
-  }
+  const entities: string[] = Array.isArray(entitiesOverride)
+    ? entitiesOverride
+    : await extractEntities(redteamProvider, prompts);
   updateProgress();
 
   logger.debug(`System purpose: ${purpose}`);
@@ -313,11 +324,6 @@ export async function synthesize({
           metadata: {
             ...(t.metadata || {}),
             pluginId,
-            purpose,
-            ...(INCLUDE_ENTITY_METADATA.some((prefix) => pluginId.startsWith(prefix)) &&
-            entities.length > 0
-              ? { entities }
-              : {}),
           },
         })),
       );
@@ -338,7 +344,8 @@ export async function synthesize({
           ...t,
           metadata: {
             ...(t.metadata || {}),
-            pluginId: key,
+            pluginId: t.metadata?.pluginId,
+            strategyId: strategy.id,
           },
         })),
       );
@@ -353,5 +360,5 @@ export async function synthesize({
     progressBar.stop();
   }
 
-  return testCases;
+  return { purpose, entities, testCases };
 }

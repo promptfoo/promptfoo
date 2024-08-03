@@ -221,6 +221,8 @@ export async function getHarmfulTests(
       const testCase: TestCase = {
         vars: {
           [injectVar]: injectValue,
+        },
+        metadata: {
           harmCategory:
             UNALIGNED_PROVIDER_HARM_PLUGINS[
               harmCategory as keyof typeof UNALIGNED_PROVIDER_HARM_PLUGINS
@@ -255,8 +257,8 @@ export async function getHarmfulTests(
     // NOTE: harmCategory is necessary for the moderation assertion and not supported
     // by the base model.
     for (const result of results) {
-      if (result.vars) {
-        result.vars.harmCategory = harmCategory;
+      if (result.metadata) {
+        result.metadata.harmCategory = harmCategory;
       }
     }
     testCases.push(...results);
