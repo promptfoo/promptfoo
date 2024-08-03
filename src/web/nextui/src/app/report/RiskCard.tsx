@@ -65,7 +65,7 @@ const RiskCard: React.FC<{
                   endAngle: 90,
                   color: 'primary.main',
                 }}
-                text={`${Math.round(progressValue)}%`}
+                text={Number.isNaN(progressValue) ? '-' : `${Math.round(progressValue)}%`}
                 sx={{
                   width: '100%',
                   height: '100%',
