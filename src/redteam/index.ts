@@ -25,8 +25,11 @@ import PoliticsPlugin from './plugins/politics';
 import RbacPlugin from './plugins/rbac';
 import ShellInjectionPlugin from './plugins/shellInjection';
 import SqlInjectionPlugin from './plugins/sqlInjection';
+import { addBase64Encoding } from './strategies/base64';
 import { addInjections } from './strategies/injections';
 import { addIterativeJailbreaks } from './strategies/iterative';
+import { addLeetspeak } from './strategies/leetspeak';
+import { addRot13 } from './strategies/rot13';
 
 type TestCaseWithPlugin = TestCase & { metadata: { pluginId: string } };
 
@@ -39,11 +42,6 @@ interface Plugin {
     n: number,
     config?: Record<string, any>,
   ) => Promise<TestCase[]>;
-}
-
-interface Strategy {
-  key: string;
-  action: (testCases: TestCaseWithPlugin[], injectVar: string) => TestCase[];
 }
 
 const Plugins: Plugin[] = [
@@ -135,6 +133,11 @@ const categories = {
   pii: PII_PLUGINS,
 } as const;
 
+interface Strategy {
+  key: string;
+  action: (testCases: TestCaseWithPlugin[], injectVar: string) => TestCase[];
+}
+
 const Strategies: Strategy[] = [
   {
     key: 'jailbreak',
@@ -149,7 +152,7 @@ const Strategies: Strategy[] = [
     key: 'prompt-injection',
     action: (testCases, injectVar) => {
       const harmfulPrompts = testCases.filter((t) => t.metadata.pluginId.startsWith('harmful:'));
-      logger.debug('Adding prompt injections');
+      logger.debug('Adding prompt injections to `harmful` plugin test cases');
       const newTestCases = addInjections(harmfulPrompts, injectVar);
       logger.debug(`Added ${newTestCases.length} prompt injection test cases`);
       return newTestCases;
@@ -161,6 +164,33 @@ const Strategies: Strategy[] = [
       logger.debug('Adding experimental tree jailbreaks to all test cases');
       const newTestCases = addIterativeJailbreaks(testCases, injectVar, 'iterative:tree');
       logger.debug(`Added ${newTestCases.length} experimental tree jailbreak test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    key: 'rot13',
+    action: (testCases, injectVar) => {
+      logger.debug('Adding ROT13 encoding to all test cases');
+      const newTestCases = addRot13(testCases, injectVar);
+      logger.debug(`Added ${newTestCases.length} ROT13 encoded test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    key: 'leetspeak',
+    action: (testCases, injectVar) => {
+      logger.debug('Adding leetspeak encoding to all test cases');
+      const newTestCases = addLeetspeak(testCases, injectVar);
+      logger.debug(`Added ${newTestCases.length} leetspeak encoded test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    key: 'base64',
+    action: (testCases, injectVar) => {
+      logger.debug('Adding Base64 encoding to all test cases');
+      const newTestCases = addBase64Encoding(testCases, injectVar);
+      logger.debug(`Added ${newTestCases.length} Base64 encoded test cases`);
       return newTestCases;
     },
   },
