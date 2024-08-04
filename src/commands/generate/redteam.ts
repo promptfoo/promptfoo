@@ -238,15 +238,13 @@ export function generateRedteamCommand(
     )
     .option(
       '--plugins <plugins>',
-      dedent`Comma-separated list of plugins to use. Defaults to:
-        \n- ${Array.from(REDTEAM_DEFAULT_PLUGINS).sort().join('\n- ')}\n\n
-    `,
-      (val) => val.split(',').map((x) => x.trim()),
-    )
-    .option(
-      '--add-plugins <plugins>',
-      dedent`Comma-separated list of plugins to run in addition to the default plugins:
-        \n- ${Array.from(REDTEAM_ADDITIONAL_PLUGINS).sort().join('\n- ')}\n\n
+      dedent`Comma-separated list of plugins to use. Use 'default' to include default plugins. 
+      
+        Defaults to:
+        - default (includes: ${Array.from(REDTEAM_DEFAULT_PLUGINS).sort().join(', ')})
+
+        Optional:
+        - ${Array.from(REDTEAM_ADDITIONAL_PLUGINS).sort().join(', ')}
       `,
       (val) => val.split(',').map((x) => x.trim()),
     )
@@ -276,7 +274,6 @@ export function generateRedteamCommand(
       try {
         let overrides: Record<string, any> = {};
         if (opts.plugins && opts.plugins.length > 0) {
-          logger.warn(`Overriding plugins: ${opts.plugins.join(', ')}`);
           const parsed = RedteamConfigSchema.safeParse({
             plugins: opts.plugins,
             strategies: opts.strategies,

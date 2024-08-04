@@ -1,6 +1,7 @@
 import {
   ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
   ALL_STRATEGIES as REDTEAM_ALL_STRATEGIES,
+  DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
   COLLECTIONS,
   HARM_PLUGINS,
   PII_PLUGINS,
@@ -118,7 +119,9 @@ describe('redteamConfigSchema', () => {
     expect(RedteamConfigSchema.safeParse(input)).toEqual({
       success: true,
       data: {
-        plugins: [],
+        plugins: expect.arrayContaining(
+          Array(REDTEAM_DEFAULT_PLUGINS.size).fill(expect.any(Object)),
+        ),
         strategies: [{ id: 'jailbreak' }, { id: 'prompt-injection' }],
       },
     });
@@ -130,7 +133,9 @@ describe('redteamConfigSchema', () => {
       success: true,
       data: {
         purpose: undefined,
-        plugins: [],
+        plugins: expect.arrayContaining(
+          Array(REDTEAM_DEFAULT_PLUGINS.size).fill(expect.any(Object)),
+        ),
         strategies: [{ id: 'jailbreak' }, { id: 'prompt-injection' }],
       },
     });
