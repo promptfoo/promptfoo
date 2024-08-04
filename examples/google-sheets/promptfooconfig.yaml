@@ -7,4 +7,5 @@ providers:
 # Public sheet, or requires a service account with read access
 tests: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit?usp=sharing
 # Writing output to a sheet requires a service account with write access
-# outputPath: https://docs.google.com/spreadsheets/d/15X1jSsgaiebh9gD2OPiYh5IkLAawXAgIrF2uMGAU7uE/edit#gid=0
+# Remove the line below if you just want to use Web UI, CSV, or other standard output formats.
+outputPath: https://docs.google.com/spreadsheets/d/15X1jSsgaiebh9gD2OPiYh5IkLAawXAgIrF2uMGAU7uE/edit#gid=0
