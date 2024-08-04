@@ -11,6 +11,8 @@ import * as fs from 'fs';
 import yaml from 'js-yaml';
 import * as path from 'path';
 import invariant from 'tiny-invariant';
+import { getUserEmail, setUserEmail } from '../accounts';
+import { readGlobalConfig, writeGlobalConfigPartial } from '../globalConfig';
 import logger from '../logger';
 import {
   ADDITIONAL_STRATEGIES,
@@ -244,6 +246,50 @@ export async function redteamInit(directory: string | undefined) {
     strategies,
     numTests,
   })?.data?.plugins;
+
+  const hasHarmfulPlugin = parsedPlugins?.some((plugin) => plugin.id.startsWith('harmful'));
+  if (hasHarmfulPlugin) {
+    const { hasHarmfulRedteamConsent } = readGlobalConfig();
+    if (!hasHarmfulRedteamConsent) {
+      logger.info(chalk.yellow('\nImportant Notice:'));
+      logger.info(
+        'You have selected one or more plugins that generate potentially harmful content.',
+      );
+      logger.info(
+        'This content is intended solely for adversarial testing and evaluation purposes.',
+      );
+
+      const existingEmail = getUserEmail();
+
+      let email: string;
+      if (existingEmail) {
+        const confirmExistingEmail = await confirm({
+          message: `Do you agree?`,
+          default: true,
+        });
+        if (!confirmExistingEmail) {
+          process.exit(1);
+        }
+        email = existingEmail;
+      } else {
+        email = await input({
+          message: 'Please enter your email address to confirm your agreement:',
+          validate: (value) => {
+            return value.includes('@') || 'Please enter a valid email address';
+          },
+        });
+        setUserEmail(email);
+      }
+
+      try {
+        await telemetry.saveConsent(email);
+        writeGlobalConfigPartial({ hasHarmfulRedteamConsent: true });
+      } catch (err) {
+        logger.error(`Error saving consent: ${(err as Error).message}`);
+      }
+    }
+  }
+
   const configPlugins = plugins.length >= 2 ? [parsedPlugins?.[0], ...plugins.slice(1)] : plugins;
 
   fs.writeFileSync(
