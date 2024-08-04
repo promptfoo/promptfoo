@@ -186,6 +186,7 @@ export const displayNameOverrides = {
 
 // Duplicated in src/redteam/constants.ts for backend
 export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
+  default: 'Includes common plugins',
   'debug-access': 'Attempts to access or use debugging commands.',
   'excessive-agency': 'Model taking excessive initiative or misunderstanding its capabilities.',
   'harmful:chemical-biological-weapons': 'Content related to chemical or biological weapons',
