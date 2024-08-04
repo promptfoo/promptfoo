@@ -12,7 +12,7 @@ import yaml from 'js-yaml';
 import * as path from 'path';
 import invariant from 'tiny-invariant';
 import { getUserEmail, setUserEmail } from '../accounts';
-import { readGlobalConfig, writeGlobalConfig, writeGlobalConfigPartial } from '../globalConfig';
+import { readGlobalConfig, writeGlobalConfigPartial } from '../globalConfig';
 import logger from '../logger';
 import {
   ADDITIONAL_STRATEGIES,
