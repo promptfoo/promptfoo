@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import { globSync } from 'glob';
 import * as path from 'path';
+import * as googleSheets from '../src/googleSheets';
 import type { ApiProvider, EvaluateResult, EvaluateTable, TestCase } from '../src/types';
 import {
   providerToIdentifier,
@@ -35,6 +36,10 @@ jest.mock('fs', () => ({
 jest.mock('../src/esm');
 jest.mock('../src/database', () => ({
   getDb: jest.fn(),
+}));
+
+jest.mock('../src/googleSheets', () => ({
+  writeCsvToGoogleSheet: jest.fn(),
 }));
 
 describe('util', () => {
@@ -329,6 +334,55 @@ describe('util', () => {
       writeMultipleOutputs(outputPath, null, summary, config, shareableUrl);
 
       expect(fs.writeFileSync).toHaveBeenCalledTimes(2);
+    });
+
+    it('writes output to Google Sheets', async () => {
+      const outputPath = 'https://docs.google.com/spreadsheets/d/1234567890/edit#gid=0';
+      const evalId = null;
+      const results = {
+        version: 2,
+        timestamp: '2024-01-01T00:00:00.000Z',
+        stats: {
+          successes: 1,
+          failures: 0,
+          tokenUsage: {
+            total: 10,
+            prompt: 5,
+            completion: 5,
+            cached: 0,
+          },
+        },
+        results: [],
+        table: {
+          head: {
+            vars: ['var1', 'var2'],
+            prompts: [{ raw: 'Test prompt', label: 'Test prompt', provider: 'test-provider' }],
+          },
+          body: [
+            {
+              vars: ['value1', 'value2'],
+              outputs: [
+                {
+                  pass: true,
+                  score: 1.0,
+                  namedScores: { accuracy: 0.9 },
+                  text: 'Test output',
+                  prompt: 'Test prompt',
+                  latencyMs: 1000,
+                  cost: 0,
+                },
+              ],
+              test: {},
+            },
+          ],
+        },
+      };
+      const config = { description: 'Test config' };
+      const shareableUrl = null;
+
+      await writeOutput(outputPath, evalId, results, config, shareableUrl);
+
+      expect(googleSheets.writeCsvToGoogleSheet).toHaveBeenCalledTimes(1);
     });
   });
 
