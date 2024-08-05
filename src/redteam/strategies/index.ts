@@ -1,14 +1,12 @@
 import chalk from 'chalk';
 import dedent from 'dedent';
 import logger from '../../logger';
-import type { TestCase } from '../../types';
+import type { TestCase, TestCaseWithPlugin } from '../../types';
 import { addBase64Encoding } from './base64';
 import { addInjections } from './injections';
 import { addIterativeJailbreaks } from './iterative';
 import { addLeetspeak } from './leetspeak';
 import { addRot13 } from './rot13';
-
-type TestCaseWithPlugin = TestCase & { metadata: { pluginId: string } };
 
 interface Strategy {
   key: string;

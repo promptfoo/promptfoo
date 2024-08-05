@@ -3,7 +3,8 @@ import cliProgress from 'cli-progress';
 import invariant from 'tiny-invariant';
 import logger from '../logger';
 import { loadApiProvider } from '../providers';
-import { isApiProvider, isProviderOptions, type ApiProvider, type TestCase } from '../types';
+import type { TestCaseWithPlugin } from '../types';
+import { isApiProvider, isProviderOptions, type ApiProvider } from '../types';
 import type { SynthesizeOptions } from '../types/redteam';
 import { extractVariablesFromTemplates } from '../util/templates';
 import { REDTEAM_MODEL, HARM_PLUGINS, PII_PLUGINS } from './constants';
@@ -11,8 +12,6 @@ import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
 import { Plugins, validatePlugins } from './plugins';
 import { Strategies, validateStrategies } from './strategies';
-
-type TestCaseWithPlugin = TestCase & { metadata: { pluginId: string } };
 
 // These plugins refer to a collection of tests.
 const categories = {
