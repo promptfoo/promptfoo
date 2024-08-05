@@ -2,6 +2,7 @@ import dedent from 'dedent';
 import { z } from 'zod';
 import {
   ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
+  DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
   ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
   ADDITIONAL_STRATEGIES as REDTEAM_ADDITIONAL_STRATEGIES,
   DEFAULT_STRATEGIES,
@@ -95,7 +96,7 @@ export const RedteamConfigSchema = z
     plugins: z
       .array(RedteamPluginSchema)
       .describe('Plugins to use for redteam generation')
-      .default([]),
+      .default(['default']),
     strategies: z
       .array(RedteamStrategySchema)
       .describe(
@@ -126,6 +127,13 @@ export const RedteamConfigSchema = z
         });
       } else if (pluginObj.id === 'pii') {
         PII_PLUGINS.forEach((id) => {
+          const key = `${id}:${JSON.stringify(pluginObj.config)}`;
+          if (!pluginMap.has(key)) {
+            pluginMap.set(key, { id, numTests: pluginObj.numTests, config: pluginObj.config });
+          }
+        });
+      } else if (pluginObj.id === 'default') {
+        REDTEAM_DEFAULT_PLUGINS.forEach((id) => {
           const key = `${id}:${JSON.stringify(pluginObj.config)}`;
           if (!pluginMap.has(key)) {
             pluginMap.set(key, { id, numTests: pluginObj.numTests, config: pluginObj.config });
