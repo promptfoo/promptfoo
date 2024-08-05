@@ -1,3 +1,4 @@
+import dedent from 'dedent';
 import invariant from 'tiny-invariant';
 import logger from '../../logger';
 import { matchesLlmRubric } from '../../matchers';
@@ -99,14 +100,28 @@ export abstract class RedteamModelGrader {
     test: AtomicTestCase,
   ): Promise<{ grade: GradingResult; rubric: string }> {
     invariant(test.metadata?.purpose, 'Test is missing purpose metadata');
-    const nunjucks = getNunjucksEngine(undefined, false /* throwOnUndefined */);
-    const finalRubric = nunjucks.renderString(this.rubric, {
+    const nunjucks = getNunjucksEngine(undefined, true /* throwOnUndefined */);
+    const vars = {
       prompt,
       entities: test.metadata?.entities ?? [],
       harmCategory: test.metadata?.harmCategory,
       policy: test.metadata?.policy,
       purpose: test.metadata?.purpose,
-    });
+    };
+    let finalRubric: string;
+    try {
+      finalRubric = nunjucks.renderString(this.rubric, vars);
+    } catch (error) {
+      const err = error as Error;
+      logger.debug(`Error rendering rubric template: ${err.message}`);
+      logger.debug(`Template: ${this.rubric}`);
+      logger.debug(`Variables: ${JSON.stringify(vars)}`);
+      throw new Error(dedent`
+        Error rendering rubric template: ${err.message}
+
+        Variables: ${JSON.stringify(vars, null, 2)}
+      `);
+    }
     const grade = await matchesLlmRubric(finalRubric, llmOutput, {});
     logger.debug(`Redteam grading result for ${this.id}: - ${JSON.stringify(grade)}`);
     return { grade, rubric: finalRubric };
