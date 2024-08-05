@@ -458,6 +458,8 @@ export type TestCase<Vars = Record<string, string | string[] | object>> = z.infe
   typeof TestCaseSchema
 >;
 
+export type TestCaseWithPlugin = TestCase & { metadata: { pluginId: string } };
+
 export const TestCaseWithVarsFileSchema = TestCaseSchema.extend({
   vars: z.union([VarsSchema, z.string(), z.array(z.string())]).optional(),
 });
