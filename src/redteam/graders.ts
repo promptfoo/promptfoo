@@ -1,19 +1,19 @@
-import type RedteamModelGrader from './base';
-import CompetitorsGrader from './competitors';
-import ContractsGrader from './contracts';
-import DebugAccessGrader from './debugAccess';
-import ExcessiveAgencyGrader from './excessiveAgency';
-import HallucinationGrader from './hallucination';
-import HarmfulGrader from './harmful';
-import HijackingGrader from './hijacking';
-import ImitationGrader from './imitation';
-import OverrelianceGrader from './overreliance';
-import PiiGrader from './pii';
-import PolicyViolationGrader from './policy';
-import PoliticsGrader from './politics';
-import RbacGrader from './rbac';
-import ShellInjectionGrader from './shellInjection';
-import SqlInjectionGrader from './sqlInjection';
+import type { RedteamModelGrader } from './plugins/base';
+import { CompetitorsGrader } from './plugins/competitors';
+import { ContractsGrader } from './plugins/contracts';
+import { DebugAccessGrader } from './plugins/debugAccess';
+import { ExcessiveAgencyGrader } from './plugins/excessiveAgency';
+import { HallucinationGrader } from './plugins/hallucination';
+import { HarmfulGrader } from './plugins/harmful';
+import { HijackingGrader } from './plugins/hijacking';
+import { ImitationGrader } from './plugins/imitation';
+import { OverrelianceGrader } from './plugins/overreliance';
+import { PiiGrader } from './plugins/pii';
+import { PolicyViolationGrader } from './plugins/policy';
+import { PoliticsGrader } from './plugins/politics';
+import { RbacGrader } from './plugins/rbac';
+import { ShellInjectionGrader } from './plugins/shellInjection';
+import { SqlInjectionGrader } from './plugins/sqlInjection';
 
 const GRADERS = {
   'promptfoo:redteam:overreliance': new OverrelianceGrader(),

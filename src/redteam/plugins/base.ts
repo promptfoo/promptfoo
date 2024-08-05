@@ -1,13 +1,15 @@
 import invariant from 'tiny-invariant';
 import logger from '../../logger';
+import { matchesLlmRubric } from '../../matchers';
 import type { ApiProvider, Assertion, TestCase } from '../../types';
+import type { AtomicTestCase, GradingResult } from '../../types';
 import { getNunjucksEngine } from '../../util/templates';
 import { retryWithDeduplication, sampleArray } from '../util';
 
 /**
  * Abstract base class for creating plugins that generate test cases.
  */
-export default abstract class PluginBase {
+export abstract class PluginBase {
   /**
    * Creates an instance of PluginBase.
    * @param provider - The API provider used for generating prompts.
@@ -76,5 +78,37 @@ export default abstract class PluginBase {
       },
       assert: this.getAssertions(prompt),
     }));
+  }
+}
+
+/**
+ * Base class for all redteam graders.
+ *
+ * Each grader should implement an id (e.g. `promptfoo:redteam:foo`) and a rubric (grading prompt).
+ * By default, the rubric is passed to `llm-rubric` grader.
+ *
+ * But if you'd like, you can override the `getResult` method to use a different grading method.
+ */
+export abstract class RedteamModelGrader {
+  abstract id: string;
+  abstract rubric: string;
+
+  async getResult(
+    prompt: string,
+    llmOutput: string,
+    test: AtomicTestCase,
+  ): Promise<{ grade: GradingResult; rubric: string }> {
+    invariant(test.metadata?.purpose, 'Test is missing purpose metadata');
+    const nunjucks = getNunjucksEngine(undefined, true /* throwOnUndefined */);
+    const finalRubric = nunjucks.renderString(this.rubric, {
+      prompt,
+      entities: test.metadata?.entities ?? [],
+      harmCategory: test.metadata?.harmCategory,
+      policy: test.metadata?.policy,
+      purpose: test.metadata?.purpose,
+    });
+    const grade = await matchesLlmRubric(finalRubric, llmOutput, {});
+    logger.debug(`Redteam grading result for ${this.id}: - ${JSON.stringify(grade)}`);
+    return { grade, rubric: finalRubric };
   }
 }
