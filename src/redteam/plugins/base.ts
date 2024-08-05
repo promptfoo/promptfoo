@@ -99,7 +99,7 @@ export abstract class RedteamModelGrader {
     test: AtomicTestCase,
   ): Promise<{ grade: GradingResult; rubric: string }> {
     invariant(test.metadata?.purpose, 'Test is missing purpose metadata');
-    const nunjucks = getNunjucksEngine(undefined, true /* throwOnUndefined */);
+    const nunjucks = getNunjucksEngine(undefined, false /* throwOnUndefined */);
     const finalRubric = nunjucks.renderString(this.rubric, {
       prompt,
       entities: test.metadata?.entities ?? [],
