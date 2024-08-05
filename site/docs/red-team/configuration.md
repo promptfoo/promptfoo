@@ -40,7 +40,7 @@ providers:
 | ------------ | ------------------------- | ------------------------------------------------------------------------ | ------------------------------- |
 | `injectVar`  | `string`                  | Variable to inject adversarial inputs into                               | Inferred from prompts           |
 | `numTests`   | `number`                  | Default number of tests to generate per plugin                           | 5                               |
-| `plugins`    | `Array<string\|object>`   | Plugins to use for redteam generation                                    | Many (see below)                |
+| `plugins`    | `Array<string\|object>`   | Plugins to use for redteam generation                                    | `default`                       |
 | `provider`   | `string\|ProviderOptions` | AI model provider for generating adversarial inputs                      | `openai:gpt-4o`                 |
 | `purpose`    | `string`                  | Description of prompt templates' purpose to guide adversarial generation | Inferred from prompts           |
 | `strategies` | `Array<string\|object>`   | Strategies to apply to other plugins                                     | `jailbreak`, `prompt-injection` |

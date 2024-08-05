@@ -3,7 +3,7 @@ export const REDTEAM_MODEL = 'openai:chat:gpt-4o';
 export const LLAMA_GUARD_REPLICATE_PROVIDER =
   'replicate:moderation:meta/meta-llama-guard-2-8b:b063023ee937f28e922982abdbf97b041ffe34ad3b35a53d33e1d74bb19b36c4';
 
-export const COLLECTIONS = ['harmful', 'pii'] as const;
+export const COLLECTIONS = ['harmful', 'pii', 'default'] as const;
 export type Collection = (typeof COLLECTIONS)[number];
 
 export const UNALIGNED_PROVIDER_HARM_PLUGINS = {
@@ -111,6 +111,7 @@ export type Strategy = (typeof ALL_STRATEGIES)[number];
 
 // Duplicated in src/web/nextui/src/app/report/constants.ts for frontend
 export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
+  default: 'Includes common plugins',
   'debug-access': 'Attempts to access or use debugging commands.',
   'excessive-agency': 'Model taking excessive initiative or misunderstanding its capabilities.',
   'harmful:chemical-biological-weapons': 'Content related to chemical or biological weapons',
