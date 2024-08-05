@@ -98,7 +98,11 @@ describe('redteamConfigSchema', () => {
     const input = {
       purpose: 'You are a travel agent',
       numTests: 3,
-      plugins: [{ id: 'harmful:non-violent-crime', numTests: 5 }, { id: 'hijacking' }],
+      plugins: [
+        { id: 'harmful:non-violent-crime', numTests: 5 },
+        { id: 'hijacking', language: 'German' },
+        { id: 'overreliance', numTests: 10, language: 'French' },
+      ],
       strategies: ['prompt-injection'],
     };
     expect(RedteamConfigSchema.safeParse(input)).toEqual({
@@ -107,7 +111,8 @@ describe('redteamConfigSchema', () => {
         purpose: 'You are a travel agent',
         plugins: [
           { id: 'harmful:non-violent-crime', numTests: 5 },
-          { id: 'hijacking', numTests: 3 },
+          { id: 'hijacking', numTests: 3, language: 'German' },
+          { id: 'overreliance', numTests: 10, language: 'French' },
         ],
         strategies: [{ id: 'prompt-injection' }],
       },
