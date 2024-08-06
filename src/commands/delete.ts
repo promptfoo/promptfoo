@@ -6,7 +6,6 @@ import {
   deleteAllEvals,
   deleteEval,
   getEvalFromId,
-  getEvals,
   readLatestResults,
   setupEnv,
 } from '../util';
