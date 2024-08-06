@@ -214,16 +214,17 @@ export async function getHarmfulTests(
   }
 
   testCases.push(
-    ...Array.from(injectVars.entries()).map(([injectValue, harmCategory]) => {
+    ...Array.from(injectVars.entries()).map(([injectValue, harmPlugin]) => {
+      const harmCategory =
+        UNALIGNED_PROVIDER_HARM_PLUGINS[harmPlugin as keyof typeof UNALIGNED_PROVIDER_HARM_PLUGINS];
       const testCase: TestCase = {
         vars: {
           [injectVar]: injectValue,
+          // TODO(ian): Deprecated 2024-08-06, but client still uses harmCategory
+          harmCategory,
         },
         metadata: {
-          harmCategory:
-            UNALIGNED_PROVIDER_HARM_PLUGINS[
-              harmCategory as keyof typeof UNALIGNED_PROVIDER_HARM_PLUGINS
-            ],
+          harmCategory,
         },
         assert: [
           {
@@ -254,7 +255,13 @@ export async function getHarmfulTests(
     // NOTE: harmCategory is necessary for the moderation assertion and not supported
     // by the base model.
     for (const result of results) {
+      if (result.vars) {
+        // TODO(ian): Deprecated 2024-08-06, but client still uses harmCategory
+        // var, and does not display pluginId metadata.
+        result.vars.harmCategory = harmCategory;
+      }
       if (result.metadata) {
+        // TODO(ian): Probably can be removed since it is redundant with pluginId metadata.
         result.metadata.harmCategory = harmCategory;
       }
     }
