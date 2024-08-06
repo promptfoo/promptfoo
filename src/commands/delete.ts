@@ -2,13 +2,7 @@ import confirm from '@inquirer/confirm';
 import type { Command } from 'commander';
 import logger from '../logger';
 import telemetry from '../telemetry';
-import {
-  deleteAllEvals,
-  deleteEval,
-  getEvalFromId,
-  readLatestResults,
-  setupEnv,
-} from '../util';
+import { deleteAllEvals, deleteEval, getEvalFromId, readLatestResults, setupEnv } from '../util';
 
 async function handleEvalDelete(evalId: string, envPath?: string) {
   try {
