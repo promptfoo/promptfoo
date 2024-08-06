@@ -267,9 +267,9 @@ function ResultsTable({
                 const vars = row.vars.map((v) => `var=${v}`).join(' ');
                 const stringifiedOutput = `${output.text} ${Object.keys(output.namedScores)
                   .map((k) => `metric=${k}:${output.namedScores[k]}`)
-                  .join(' ')} ${
-                  output.gradingResult?.reason || ''
-                } ${output.gradingResult?.comment || ''}`;
+                  .join(' ')} 
+                  ${output.metadata?.pluginId ? `plugin=${output.metadata.pluginId}` : ''}
+                  ${output.gradingResult?.reason || ''} ${output.gradingResult?.comment || ''}`;
 
                 const searchString = `${vars} ${stringifiedOutput}`;
                 return searchRegex.test(searchString);
