@@ -285,6 +285,12 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
         metadata: { ...prev?.metadata, ...curr.defaultTest?.metadata },
       };
     }, {}),
+    derivedMetrics: configs.reduce<UnifiedConfig['derivedMetrics']>((prev, curr) => {
+      if (curr.derivedMetrics) {
+        return [...(prev ?? []), ...curr.derivedMetrics];
+      }
+      return prev;
+    }, undefined),
     nunjucksFilters: configs.reduce((prev, curr) => ({ ...prev, ...curr.nunjucksFilters }), {}),
     env: configs.reduce((prev, curr) => ({ ...prev, ...curr.env }), {}),
     evaluateOptions: configs.reduce((prev, curr) => ({ ...prev, ...curr.evaluateOptions }), {}),
