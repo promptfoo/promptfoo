@@ -26,7 +26,7 @@ import {
 
 // see https://platform.openai.com/docs/models
 const OPENAI_CHAT_MODELS = [
-  ...['gpt-4o', 'gpt-4o-2024-05-13'].map((model) => ({
+  ...['gpt-4o', 'gpt-4o-2024-05-13', 'gpt-4o-2024-08-06'].map((model) => ({
     id: model,
     cost: {
       input: 5 / 1000000,
@@ -128,7 +128,7 @@ type OpenAiCompletionOptions = OpenAiSharedOptions & {
   function_call?: 'none' | 'auto' | { name: string };
   tools?: OpenAiTool[];
   tool_choice?: 'none' | 'auto' | 'required' | { type: 'function'; function?: { name: string } };
-  response_format?: { type: 'json_object' };
+  response_format?: { type: 'json_object' | 'json_schema'; json_schema?: object };
   stop?: string[];
   seed?: number;
   passthrough?: object;
@@ -462,35 +462,41 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       );
     }
 
+    // Merge configs from the provider and the prompt
+    const config = {
+      ...this.config,
+      ...context?.prompt?.config,
+    };
+
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
     const body = {
       model: this.modelName,
       messages: messages,
-      seed: this.config.seed || 0,
-      max_tokens: this.config.max_tokens ?? parseInt(process.env.OPENAI_MAX_TOKENS || '1024'),
-      temperature: this.config.temperature ?? parseFloat(process.env.OPENAI_TEMPERATURE || '0'),
-      top_p: this.config.top_p ?? parseFloat(process.env.OPENAI_TOP_P || '1'),
+      seed: config.seed || 0,
+      max_tokens: config.max_tokens ?? parseInt(process.env.OPENAI_MAX_TOKENS || '1024'),
+      temperature: config.temperature ?? parseFloat(process.env.OPENAI_TEMPERATURE || '0'),
+      top_p: config.top_p ?? parseFloat(process.env.OPENAI_TOP_P || '1'),
       presence_penalty:
-        this.config.presence_penalty ?? parseFloat(process.env.OPENAI_PRESENCE_PENALTY || '0'),
+        config.presence_penalty ?? parseFloat(process.env.OPENAI_PRESENCE_PENALTY || '0'),
       frequency_penalty:
-        this.config.frequency_penalty ?? parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0'),
-      ...(this.config.functions
+        config.frequency_penalty ?? parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0'),
+      ...(config.functions
         ? {
             functions: maybeLoadFromExternalFile(
-              renderVarsInObject(this.config.functions, context?.vars),
+              renderVarsInObject(config.functions, context?.vars),
             ),
           }
         : {}),
-      ...(this.config.function_call ? { function_call: this.config.function_call } : {}),
-      ...(this.config.tools
-        ? { tools: maybeLoadFromExternalFile(renderVarsInObject(this.config.tools, context?.vars)) }
+      ...(config.function_call ? { function_call: config.function_call } : {}),
+      ...(config.tools
+        ? { tools: maybeLoadFromExternalFile(renderVarsInObject(config.tools, context?.vars)) }
         : {}),
-      ...(this.config.tool_choice ? { tool_choice: this.config.tool_choice } : {}),
-      ...(this.config.response_format ? { response_format: this.config.response_format } : {}),
+      ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
+      ...(config.response_format ? { response_format: config.response_format } : {}),
       ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
-      ...(this.config.stop ? { stop: this.config.stop } : {}),
-      ...(this.config.passthrough || {}),
+      ...(config.stop ? { stop: config.stop } : {}),
+      ...(config.passthrough || {}),
     };
     logger.debug(`Calling OpenAI API: ${JSON.stringify(body)}`);
 
@@ -505,7 +511,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${this.getApiKey()}`,
             ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
-            ...this.config.headers,
+            ...config.headers,
           },
           body: JSON.stringify(body),
         },
@@ -531,7 +537,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       } else if (message.content === null) {
         output = message.function_call || message.tool_calls;
       } else {
-        output = message.content;
+        output = message.refusal || message.content;
       }
       const logProbs = data.choices[0].logprobs?.content?.map(
         (logProbObj: { token: string; logprob: number }) => logProbObj.logprob,
@@ -539,11 +545,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
       // Handle function tool callbacks
       const functionCalls = message.function_call ? [message.function_call] : message.tool_calls;
-      if (functionCalls && this.config.functionToolCallbacks) {
+      if (functionCalls && config.functionToolCallbacks) {
         for (const functionCall of functionCalls) {
           const functionName = functionCall.name;
-          if (this.config.functionToolCallbacks[functionName]) {
-            const functionResult = await this.config.functionToolCallbacks[functionName](
+          if (config.functionToolCallbacks[functionName]) {
+            const functionResult = await config.functionToolCallbacks[functionName](
               message.function_call.arguments,
             );
             return {
@@ -553,7 +559,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
               logProbs,
               cost: calculateCost(
                 this.modelName,
-                this.config,
+                config,
                 data.usage?.prompt_tokens,
                 data.usage?.completion_tokens,
               ),
@@ -569,7 +575,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         logProbs,
         cost: calculateCost(
           this.modelName,
-          this.config,
+          config,
           data.usage?.prompt_tokens,
           data.usage?.completion_tokens,
         ),
