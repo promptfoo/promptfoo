@@ -411,7 +411,8 @@ const VarsSchema = z.record(
   z.union([
     z.string(),
     z.number().transform(String),
-    z.array(z.union([z.string(), z.number().transform(String)])),
+    z.boolean().transform(String),
+    z.array(z.union([z.string(), z.number().transform(String), z.boolean().transform(String)])),
     z.object({}),
     z.array(z.any()),
   ]),
