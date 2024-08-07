@@ -346,19 +346,10 @@ const AssertionSetSchema = z.object({
 
 export type AssertionSet = z.infer<typeof AssertionSetSchema>;
 
-const AssertionTypeSchema = z.union([
-  BaseAssertionTypesSchema,
-  z
-    .string()
-    .refine(
-      (val) => val.startsWith('not-') && BaseAssertionTypesSchema.safeParse(val.slice(4)).success,
-    ),
-]);
-
 // TODO(ian): maybe Assertion should support {type: config} to make the yaml cleaner
 export const AssertionSchema = z.object({
   // Type of assertion
-  type: AssertionTypeSchema,
+  type: z.custom<AssertionType>(),
 
   // The expected value, if applicable
   value: z.custom<AssertionValue>().optional(),

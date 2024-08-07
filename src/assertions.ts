@@ -1403,7 +1403,7 @@ export async function runAssertions({
     index: number;
   }[] = test.assert
     .map((assertion, i) => {
-      if (assertion.type === 'assert-set' && 'assert' in assertion) {
+      if (assertion.type === 'assert-set') {
         const subAssertResult = new AssertionsResult({
           threshold: assertion.threshold,
           parentAssertionSet: {

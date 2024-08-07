@@ -70,11 +70,11 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
     }
     if (test.assert) {
       for (const assertion of test.assert) {
-        if (assertion.type === 'assert-set' || 'provider' in assertion) {
+        if (assertion.type === 'assert-set' || typeof assertion.provider === 'function') {
           continue;
         }
 
-        if ('provider' in assertion && assertion.provider) {
+        if (assertion.provider) {
           if (typeof assertion.provider === 'object') {
             const casted = assertion.provider as ProviderOptions;
             invariant(casted.id, 'Provider object must have an id');

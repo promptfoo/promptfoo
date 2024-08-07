@@ -52,16 +52,6 @@ describe('AssertionSchema', () => {
     expect(result.success).toBe(true);
   });
 
-  it('should reject invalid assertion types', () => {
-    const invalidAssertion = {
-      type: 'invalid-type',
-      value: 'test value',
-    };
-
-    const result = AssertionSchema.safeParse(invalidAssertion);
-    expect(result.success).toBe(false);
-  });
-
   it('should validate assertions with function values', () => {
     const functionAssertion = {
       type: 'equals',
@@ -82,15 +72,6 @@ describe('AssertionSchema', () => {
     expect(result.success).toBe(true);
   });
 
-  it('should reject assertions with missing required fields', () => {
-    const incompleteAssertion = {
-      value: 'test value',
-    };
-
-    const result = AssertionSchema.safeParse(incompleteAssertion);
-    expect(result.success).toBe(false);
-  });
-
   it('should accept valid "not-" prefixed assertion types', () => {
     const validNotPrefixedAssertion = {
       type: 'not-contains',
@@ -99,16 +80,6 @@ describe('AssertionSchema', () => {
 
     const result = AssertionSchema.safeParse(validNotPrefixedAssertion);
     expect(result.success).toBe(true);
-  });
-
-  it('should reject invalid "not-" prefixed assertion types', () => {
-    const invalidNotPrefixedAssertion = {
-      type: 'not-invalidtype',
-      value: 'unwanted value',
-    };
-
-    const result = AssertionSchema.safeParse(invalidNotPrefixedAssertion);
-    expect(result.success).toBe(false);
   });
 });
 
