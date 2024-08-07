@@ -869,6 +869,11 @@ export async function deleteEval(evalId: string) {
   });
 }
 
+export async function deleteAllEvals() {
+  const db = getDb();
+  await db.delete(evals).run();
+}
+
 export async function readFilters(
   filters: Record<string, string>,
   basePath: string = '',
