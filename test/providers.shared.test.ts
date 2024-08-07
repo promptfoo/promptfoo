@@ -99,11 +99,7 @@ describe('maybeLoadFromExternalFile', () => {
     cliState.basePath = basePath;
     jest.mocked(fs.readFileSync).mockReturnValue(mockJsonContent);
 
-    maybeLoadFromExternalFile([
-      'file://test1.txt',
-      'file://test2.txt',
-      'file://test3.txt',
-    ]);
+    maybeLoadFromExternalFile(['file://test1.txt', 'file://test2.txt', 'file://test3.txt']);
 
     expect(fs.existsSync).toHaveBeenCalledTimes(3);
     expect(fs.existsSync).toHaveBeenNthCalledWith(1, path.resolve(basePath, 'test1.txt'));
