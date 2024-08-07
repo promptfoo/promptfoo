@@ -346,10 +346,19 @@ const AssertionSetSchema = z.object({
 
 export type AssertionSet = z.infer<typeof AssertionSetSchema>;
 
+const AssertionTypeSchema = z.union([
+  BaseAssertionTypesSchema,
+  z
+    .string()
+    .refine(
+      (val) => val.startsWith('not-') && BaseAssertionTypesSchema.safeParse(val.slice(4)).success,
+    ),
+]);
+
 // TODO(ian): maybe Assertion should support {type: config} to make the yaml cleaner
 export const AssertionSchema = z.object({
   // Type of assertion
-  type: z.custom<AssertionType>(),
+  type: AssertionTypeSchema,
 
   // The expected value, if applicable
   value: z.custom<AssertionValue>().optional(),
@@ -407,7 +416,7 @@ const ProviderPromptMapSchema = z.record(
 // Metadata is a key-value store for arbitrary data
 const MetadataSchema = z.record(z.string(), z.any());
 
-const VarsSchema = z.record(
+export const VarsSchema = z.record(
   z.union([
     z.string(),
     z.number().transform(String),

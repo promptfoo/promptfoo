@@ -1,7 +1,7 @@
 import chalk from 'chalk';
 import { MODEL_GRADED_ASSERTION_TYPES } from '../assertions';
 import logger from '../logger';
-import type { TestCase, TestSuite } from '../types';
+import type { AssertionType, TestCase, TestSuite } from '../types';
 import { AzureOpenAiChatCompletionProvider, AzureOpenAiCompletionProvider } from './azureopenai';
 import {
   OpenAiAssistantProvider,
@@ -26,8 +26,8 @@ export function maybeEmitAzureOpenAiWarning(testSuite: TestSuite, tests: TestCas
       (t.assert || []).filter(
         (a) =>
           a.type !== 'assert-set' &&
-          MODEL_GRADED_ASSERTION_TYPES.has(a.type) &&
-          !a.provider &&
+          MODEL_GRADED_ASSERTION_TYPES.has(a.type as AssertionType) &&
+          !('provider' in a) &&
           !t.options?.provider,
       ),
     );
