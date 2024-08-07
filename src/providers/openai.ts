@@ -493,7 +493,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         ? { tools: maybeLoadFromExternalFile(renderVarsInObject(config.tools, context?.vars)) }
         : {}),
       ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
-      ...(config.response_format ? { response_format: config.response_format } : {}),
+      ...(config.response_format
+        ? { response_format: maybeLoadFromExternalFile(config.response_format) }
+        : {}),
       ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
       ...(config.stop ? { stop: config.stop } : {}),
       ...(config.passthrough || {}),
