@@ -407,11 +407,12 @@ const ProviderPromptMapSchema = z.record(
 // Metadata is a key-value store for arbitrary data
 const MetadataSchema = z.record(z.string(), z.any());
 
-const VarsSchema = z.record(
+export const VarsSchema = z.record(
   z.union([
     z.string(),
     z.number().transform(String),
-    z.array(z.union([z.string(), z.number().transform(String)])),
+    z.boolean().transform(String),
+    z.array(z.union([z.string(), z.number().transform(String), z.boolean().transform(String)])),
     z.object({}),
     z.array(z.any()),
   ]),
