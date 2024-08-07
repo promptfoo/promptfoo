@@ -97,9 +97,7 @@ const RiskCard: React.FC<{
                     onClick={(event) => {
                       const searchParams = new URLSearchParams(window.location.search);
                       const evalId = searchParams.get('evalId');
-                      const descriptiveName =
-                        categoryAliases[test.name as keyof typeof categoryAliases];
-                      const url = `/eval/?evalId=${evalId}&search=${encodeURIComponent(`(var=${descriptiveName}|metric=${descriptiveName})`)}`;
+                      const url = `/eval/?evalId=${evalId}&search=${encodeURIComponent(`plugin=${test.name}`)}`;
                       if (event.ctrlKey || event.metaKey) {
                         window.open(url, '_blank');
                       } else {

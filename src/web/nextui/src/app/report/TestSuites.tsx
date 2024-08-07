@@ -208,7 +208,7 @@ const TestSuites: React.FC<{
                         onClick={() => {
                           const searchParams = new URLSearchParams(window.location.search);
                           const evalId = searchParams.get('evalId');
-                          window.location.href = `/eval/?evalId=${evalId}&search=${encodeURIComponent(`(var=${subCategory.type}|metric=${subCategory.type})`)}`;
+                          window.location.href = `/eval/?evalId=${evalId}&search=${encodeURIComponent(`plugin=${subCategory.pluginName}`)}`;
                         }}
                       >
                         View logs

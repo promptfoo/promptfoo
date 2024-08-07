@@ -55,16 +55,16 @@ const App: React.FC = () => {
 
   const categoryStats = evalData.results.results.reduce(
     (acc, row) => {
-      const harm = row.vars['harmCategory'];
+      const harmPlugin = row.metadata?.pluginId;
       const metricNames =
         row.gradingResult?.componentResults?.map((result) => result.assertion?.metric) || [];
 
-      const categoriesToCount = [harm, ...metricNames].filter((c) => c);
-      for (const category of categoriesToCount) {
+      for (const category of metricNames) {
         if (typeof category !== 'string') {
           continue;
         }
         const pluginName =
+          harmPlugin ||
           categoryAliasesReverse[category.split('/')[0] as keyof typeof categoryAliases];
         if (!pluginName) {
           console.log('Unknown harm category:', category);

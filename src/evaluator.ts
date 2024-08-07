@@ -241,7 +241,9 @@ class Evaluator {
         namedScores: {},
         latencyMs,
         cost: response.cost,
-        metadata: response.metadata,
+        // Result metadata includes both response and test metadata
+        // TODO(ian): Better organization down the line could mean we don't need to copy test metadata.
+        metadata: { ...response.metadata, ...test.metadata },
       };
       if (response.error) {
         ret.error = response.error;
