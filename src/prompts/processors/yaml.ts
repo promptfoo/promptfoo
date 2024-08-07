@@ -18,6 +18,7 @@ export function processYamlFile(filePath: string, prompt: Partial<Prompt>): Prom
     {
       raw: fileContents,
       label: prompt.label || `${filePath}: ${fileContents}`,
+      config: prompt.config,
     },
   ];
 }

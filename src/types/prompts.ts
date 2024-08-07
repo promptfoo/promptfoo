@@ -29,4 +29,7 @@ export type Prompt = {
   display?: string;
   label: string;
   function?: PromptFunction;
+
+  // These config options are merged into the provider config.
+  config?: any;
 };
