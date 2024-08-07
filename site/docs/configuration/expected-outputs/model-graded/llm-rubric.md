@@ -23,11 +23,11 @@ Under the hood, `llm-rubric` uses a model to evaluate the output based on the cr
 
 It asks the model to output a JSON object that looks like this:
 
-````json
+```json
 {
-    "reason": "<Analysis of the rubric and the output>",
-    "score": 0.5, // 0.0-1.0
-    "pass": true // true or false
+  "reason": "<Analysis of the rubric and the output>",
+  "score": 0.5, // 0.0-1.0
+  "pass": true // true or false
 }
 ```
 
@@ -37,12 +37,12 @@ Use your knowledge of this structure to give special instructions in your rubric
 assert:
   - type: llm-rubric
     value: |
-        Evaluate the output based on how funny it is.  Grade it on a scale of 0.0 to 1.0, where:
-        Score of 0.1: Only a slight smile.
-        Score of 0.5: Laughing out loud.
-        Score of 1.0: Rolling on the floor laughing.
+      Evaluate the output based on how funny it is.  Grade it on a scale of 0.0 to 1.0, where:
+      Score of 0.1: Only a slight smile.
+      Score of 0.5: Laughing out loud.
+      Score of 1.0: Rolling on the floor laughing.
 
-        Anything funny enough to be on SNL should pass, otherwise fail.
+      Anything funny enough to be on SNL should pass, otherwise fail.
 ```
 
 ### Using variables in the rubric
@@ -61,7 +61,7 @@ tests:
       question: What is the capital of France?
   - vars:
       question: How many planets are in our solar system?
-````
+```
 
 ### Overriding the LLM grader
 
