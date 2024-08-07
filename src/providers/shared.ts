@@ -39,6 +39,13 @@ export function toTitleCase(str: string) {
 }
 
 export function maybeLoadFromExternalFile(filePath: string | object | Function | undefined | null) {
+  if (Array.isArray(filePath)) {
+    return filePath.map((path) => {
+      const content: any = maybeLoadFromExternalFile(path);
+      return content;
+    });
+  }
+
   if (typeof filePath !== 'string') {
     return filePath;
   }
