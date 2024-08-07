@@ -8,7 +8,7 @@ promptfoo supports several types of model-graded assertions:
 
 Output-based:
 
-- `llm-rubric` - checks if the LLM output matches given requirements, using a language model to grade the output based on the rubric.
+- [`llm-rubric`](llm-rubric) - checks if the LLM output matches given requirements, using a language model to grade the output based on the rubric.
 - `model-graded-closedqa` - similar to the above, a "criteria-checking" eval that ensures the answer meets a specific requirement. Uses an OpenAI-authored prompt from their public evals.
 - `factuality` - a factual consistency eval which, given a completion `A` and reference answer `B` evaluates whether A is a subset of B, A is a superset of B, A and B are equivalent, A and B disagree, or A and B differ, but difference don't matter from the perspective of factuality. Uses the prompt from OpenAI's public evals.
 - `answer-relevance` - ensure that LLM output is related to original query
