@@ -236,6 +236,9 @@
                               "type": "number"
                             },
                             {
+                              "type": "boolean"
+                            },
+                            {
                               "type": "array",
                               "items": {
                                 "anyOf": [
@@ -244,6 +247,9 @@
                                   },
                                   {
                                     "type": "number"
+                                  },
+                                  {
+                                    "type": "boolean"
                                   }
                                 ]
                               }
