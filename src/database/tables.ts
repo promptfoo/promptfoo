@@ -1,27 +1,40 @@
 import { relations, sql } from 'drizzle-orm';
-import { text, integer, sqliteTable, primaryKey } from 'drizzle-orm/sqlite-core';
+import { text, integer, sqliteTable, primaryKey, index } from 'drizzle-orm/sqlite-core';
 import type { EvaluateSummary, UnifiedConfig } from '../types';
 
 // ------------ Prompts ------------
 
-export const prompts = sqliteTable('prompts', {
-  id: text('id').primaryKey(),
-  createdAt: integer('created_at')
-    .notNull()
-    .default(sql`CURRENT_TIMESTAMP`),
-  prompt: text('prompt').notNull(),
-});
+export const prompts = sqliteTable(
+  'prompts',
+  {
+    id: text('id').primaryKey(),
+    createdAt: integer('created_at')
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
+    prompt: text('prompt').notNull(),
+  },
+  (table) => ({
+    createdAtIdx: index('prompts_created_at_idx').on(table.createdAt),
+  }),
+);
 
-export const evals = sqliteTable('evals', {
-  id: text('id').primaryKey(),
-  createdAt: integer('created_at')
-    .notNull()
-    .default(sql`CURRENT_TIMESTAMP`),
-  author: text('author'),
-  description: text('description'),
-  results: text('results', { mode: 'json' }).$type<EvaluateSummary>().notNull(),
-  config: text('config', { mode: 'json' }).$type<Partial<UnifiedConfig>>().notNull(),
-});
+export const evals = sqliteTable(
+  'evals',
+  {
+    id: text('id').primaryKey(),
+    createdAt: integer('created_at')
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
+    author: text('author'),
+    description: text('description'),
+    results: text('results', { mode: 'json' }).$type<EvaluateSummary>().notNull(),
+    config: text('config', { mode: 'json' }).$type<Partial<UnifiedConfig>>().notNull(),
+  },
+  (table) => ({
+    createdAtIdx: index('evals_created_at_idx').on(table.createdAt),
+    authorIdx: index('evals_author_idx').on(table.author),
+  }),
+);
 
 export const evalsToPrompts = sqliteTable(
   'evals_to_prompts',
@@ -37,6 +50,8 @@ export const evalsToPrompts = sqliteTable(
   },
   (t) => ({
     pk: primaryKey({ columns: [t.evalId, t.promptId] }),
+    evalIdIdx: index('evals_to_prompts_eval_id_idx').on(t.evalId),
+    promptIdIdx: index('evals_to_prompts_prompt_id_idx').on(t.promptId),
   }),
 );
 
@@ -46,13 +61,19 @@ export const promptsRelations = relations(prompts, ({ many }) => ({
 
 // ------------ Datasets ------------
 
-export const datasets = sqliteTable('datasets', {
-  id: text('id').primaryKey(),
-  tests: text('tests', { mode: 'json' }).$type<UnifiedConfig['tests']>(),
-  createdAt: integer('created_at')
-    .notNull()
-    .default(sql`CURRENT_TIMESTAMP`),
-});
+export const datasets = sqliteTable(
+  'datasets',
+  {
+    id: text('id').primaryKey(),
+    tests: text('tests', { mode: 'json' }).$type<UnifiedConfig['tests']>(),
+    createdAt: integer('created_at')
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => ({
+    createdAtIdx: index('datasets_created_at_idx').on(table.createdAt),
+  }),
+);
 
 export const evalsToDatasets = sqliteTable(
   'evals_to_datasets',
@@ -68,6 +89,8 @@ export const evalsToDatasets = sqliteTable(
   },
   (t) => ({
     pk: primaryKey({ columns: [t.evalId, t.datasetId] }),
+    evalIdIdx: index('evals_to_datasets_eval_id_idx').on(t.evalId),
+    datasetIdIdx: index('evals_to_datasets_dataset_id_idx').on(t.datasetId),
   }),
 );
 
