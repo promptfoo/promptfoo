@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { AssertionSchema, BaseAssertionTypesSchema, VarsSchema } from '../src/types';
+import {
+  AssertionSchema,
+  BaseAssertionTypesSchema,
+  isGradingResult,
+  VarsSchema,
+} from '../src/types';
 
 describe('AssertionSchema', () => {
   it('should validate a basic assertion', () => {
@@ -114,6 +119,41 @@ describe('VarsSchema', () => {
 
     invalidCases.forEach((invalidInput) => {
       expect(() => VarsSchema.parse(invalidInput)).toThrow(z.ZodError);
+    });
+  });
+});
+
+describe('isGradingResult', () => {
+  it('should correctly identify valid GradingResult objects', () => {
+    const validResults = [
+      { pass: true, score: 1, reason: 'Perfect' },
+      { pass: false, score: 0, reason: 'Failed', namedScores: { accuracy: 0 } },
+      { pass: true, score: 0.5, reason: 'Partial', tokensUsed: { total: 100 } },
+      { pass: true, score: 1, reason: 'Good', componentResults: [] },
+      { pass: false, score: 0, reason: 'Bad', assertion: null },
+      { pass: true, score: 1, reason: 'Excellent', comment: 'Great job!' },
+    ];
+
+    validResults.forEach((result) => {
+      expect(isGradingResult(result)).toBe(true);
+    });
+  });
+
+  it('should correctly identify invalid GradingResult objects', () => {
+    const invalidResults = [
+      {},
+      { pass: 'true', score: 1, reason: 'Invalid pass type' },
+      { pass: true, score: '1', reason: 'Invalid score type' },
+      { pass: true, score: 1, reason: 42 },
+      { pass: true, score: 1, reason: 'Valid', namedScores: 'invalid' },
+      { pass: true, score: 1, reason: 'Valid', tokensUsed: 'invalid' },
+      { pass: true, score: 1, reason: 'Valid', componentResults: 'invalid' },
+      { pass: true, score: 1, reason: 'Valid', assertion: 'invalid' },
+      { pass: true, score: 1, reason: 'Valid', comment: 42 },
+    ];
+
+    invalidResults.forEach((result) => {
+      expect(isGradingResult(result)).toBe(false);
     });
   });
 });
