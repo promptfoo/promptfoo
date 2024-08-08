@@ -89,7 +89,6 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
     plugins = options.plugins.map((plugin) => ({
       id: plugin.id,
       numTests: plugin.numTests || options.numTests,
-      language: plugin.language || '',
       ...(plugin.config && { config: plugin.config }),
     }));
   }
@@ -100,7 +99,6 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
         ...options.addPlugins.map((plugin) => ({
           id: plugin,
           numTests: options.numTests,
-          language: '',
         })),
       ]),
     ];
@@ -132,6 +130,7 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
   const config = {
     injectVar: redteamConfig?.injectVar || options.injectVar,
     numTests: redteamConfig?.numTests ?? options.numTests,
+    language: redteamConfig?.language,
     plugins,
     provider: redteamConfig?.provider || options.provider,
     purpose: redteamConfig?.purpose || options.purpose,
@@ -151,7 +150,8 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
   } = await synthesize({
     ...parsedConfig.data,
     prompts: testSuite.prompts.map((prompt) => prompt.raw),
-    numTests: options.numTests,
+    numTests: config.numTests,
+    language: config.language,
   } as SynthesizeOptions);
 
   const updatedRedteamConfig = {

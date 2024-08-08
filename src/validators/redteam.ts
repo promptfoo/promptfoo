@@ -25,7 +25,6 @@ const RedteamPluginObjectSchema = z.object({
     .positive()
     .optional()
     .describe('Number of tests to generate for this plugin'),
-  language: z.string().optional().describe('Language of tests ot generate for this plugin'),
   config: z.record(z.unknown()).optional().describe('Plugin-specific configuration'),
 });
 
@@ -94,6 +93,7 @@ export const RedteamConfigSchema = z
       .optional()
       .describe('Provider used for generating adversarial inputs'),
     numTests: z.number().int().positive().default(5).describe('Number of tests to generate'),
+    language: z.string().optional().describe('Language of tests ot generate for this plugin'),
     plugins: z
       .array(RedteamPluginSchema)
       .describe('Plugins to use for redteam generation')
@@ -159,6 +159,7 @@ export const RedteamConfigSchema = z
       ...(data.purpose ? { purpose: data.purpose } : {}),
       ...(data.injectVar ? { injectVar: data.injectVar } : {}),
       ...(data.provider ? { provider: data.provider } : {}),
+      ...(data.language ? { language: data.language } : {}),
       plugins: uniquePlugins,
       strategies: data.strategies?.map((strategy) =>
         typeof strategy === 'string' ? { id: strategy } : { ...strategy },
