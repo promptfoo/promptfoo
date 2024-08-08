@@ -130,6 +130,7 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
   const config = {
     injectVar: redteamConfig?.injectVar || options.injectVar,
     numTests: redteamConfig?.numTests ?? options.numTests,
+    language: redteamConfig?.language,
     plugins,
     provider: redteamConfig?.provider || options.provider,
     purpose: redteamConfig?.purpose || options.purpose,
@@ -149,7 +150,8 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
   } = await synthesize({
     ...parsedConfig.data,
     prompts: testSuite.prompts.map((prompt) => prompt.raw),
-    numTests: options.numTests,
+    numTests: config.numTests,
+    language: config.language,
   } as SynthesizeOptions);
 
   const updatedRedteamConfig = {

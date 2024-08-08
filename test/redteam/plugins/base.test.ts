@@ -11,7 +11,7 @@ jest.mock('../../../src/matchers', () => ({
 
 class TestPlugin extends PluginBase {
   protected async getTemplate(): Promise<string> {
-    return 'Test template with {{ purpose }} for {{ n }} prompts';
+    return 'Test template with {{ purpose }} for {{ n }} prompts{{ language }}';
   }
   protected getAssertions(prompt: string): Assertion[] {
     return [{ type: 'contains', value: prompt }];
@@ -38,7 +38,7 @@ describe('PluginBase', () => {
 
   it('should generate test cases correctly', async () => {
     expect.assertions(2);
-    await expect(plugin.generateTests(2)).resolves.toEqual([
+    await expect(plugin.generateTests(2, 'German')).resolves.toEqual([
       {
         vars: { testVar: 'another prompt' },
         assert: [{ type: 'contains', value: 'another prompt' }],
@@ -49,10 +49,14 @@ describe('PluginBase', () => {
       },
     ]);
     expect(provider.callApi).toHaveBeenCalledWith(
-      getNunjucksEngine().renderString('Test template with {{ purpose }} for {{ n }} prompts', {
-        purpose: 'test purpose',
-        n: 2,
-      }),
+      getNunjucksEngine().renderString(
+        'Test template with {{ purpose }} for {{ n }} prompts{{ language }}',
+        {
+          purpose: 'test purpose',
+          n: 2,
+          language: ' in German',
+        },
+      ),
     );
   });
 
