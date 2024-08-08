@@ -98,11 +98,7 @@ describe('redteamConfigSchema', () => {
     const input = {
       purpose: 'You are a travel agent',
       numTests: 3,
-      plugins: [
-        { id: 'harmful:non-violent-crime', numTests: 5 },
-        { id: 'hijacking', language: 'German' },
-        { id: 'overreliance', numTests: 10, language: 'French' },
-      ],
+      plugins: [{ id: 'harmful:non-violent-crime', numTests: 5 }, { id: 'hijacking' }],
       strategies: ['prompt-injection'],
     };
     expect(RedteamConfigSchema.safeParse(input)).toEqual({
@@ -111,8 +107,7 @@ describe('redteamConfigSchema', () => {
         purpose: 'You are a travel agent',
         plugins: [
           { id: 'harmful:non-violent-crime', numTests: 5 },
-          { id: 'hijacking', numTests: 3, language: 'German' },
-          { id: 'overreliance', numTests: 10, language: 'French' },
+          { id: 'hijacking', numTests: 3 },
         ],
         strategies: [{ id: 'prompt-injection' }],
       },
@@ -342,6 +337,22 @@ describe('redteamConfigSchema', () => {
       success: true,
       data: {
         provider: 'openai:gpt-3.5-turbo',
+        plugins: [{ id: 'overreliance', numTests: 5 }],
+        strategies: [{ id: 'jailbreak' }],
+      },
+    });
+  });
+
+  it('should accept a language string', () => {
+    const input = {
+      language: 'German',
+      plugins: ['overreliance'],
+      strategies: ['jailbreak'],
+    };
+    expect(RedteamConfigSchema.safeParse(input)).toEqual({
+      success: true,
+      data: {
+        language: 'German',
         plugins: [{ id: 'overreliance', numTests: 5 }],
         strategies: [{ id: 'jailbreak' }],
       },
