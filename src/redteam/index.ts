@@ -66,7 +66,9 @@ export async function synthesize({
         .join('\n'),
     )}\n`,
   );
-  logger.info(`Using strategies: ${strategies.map((s) => s.id).join(', ')}`);
+  if (strategies.length > 0) {
+    logger.info(`Using strategies: ${strategies.map((s) => s.id).join(', ')}`);
+  }
   logger.info('Generating...');
 
   // Get vars
