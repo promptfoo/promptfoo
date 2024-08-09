@@ -382,6 +382,7 @@ export function evalCommand(
       },
       {},
     )
+    .option('--description <description>', 'Description of the eval run')
     .action((opts) => {
       for (const maybeFilePath of opts.output ?? []) {
         const { data: extension } = OutputFileExtension.safeParse(

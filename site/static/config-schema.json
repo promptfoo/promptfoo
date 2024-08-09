@@ -669,6 +669,9 @@
         "commandLineOptions": {
           "type": "object",
           "properties": {
+            "description": {
+              "type": "string"
+            },
             "prompts": {
               "type": "array",
               "items": {
