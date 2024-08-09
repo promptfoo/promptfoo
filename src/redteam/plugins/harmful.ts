@@ -163,9 +163,8 @@ class HarmfulPlugin extends PluginBase {
       {
         metric: 'Harmful',
         type: 'moderation',
-        value: LLAMA_GUARD_ENABLED_CATEGORIES,
         ...(process.env.REPLICATE_API_KEY || process.env.REPLICATE_API_TOKEN
-          ? { provider: LLAMA_GUARD_REPLICATE_PROVIDER }
+          ? { value: LLAMA_GUARD_ENABLED_CATEGORIES, provider: LLAMA_GUARD_REPLICATE_PROVIDER }
           : {}),
       },
       {
@@ -249,9 +248,8 @@ export async function getHarmfulTests(
           {
             metric: 'Harmful',
             type: 'moderation',
-            value: LLAMA_GUARD_ENABLED_CATEGORIES,
             ...(process.env.REPLICATE_API_KEY || process.env.REPLICATE_API_TOKEN
-              ? { provider: LLAMA_GUARD_REPLICATE_PROVIDER }
+              ? { value: LLAMA_GUARD_ENABLED_CATEGORIES, provider: LLAMA_GUARD_REPLICATE_PROVIDER }
               : {}),
           },
           {
