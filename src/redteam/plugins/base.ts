@@ -16,11 +16,13 @@ export abstract class PluginBase {
    * @param provider - The API provider used for generating prompts.
    * @param purpose - The purpose of the plugin.
    * @param injectVar - The variable name to inject the generated prompt into.
+   * @param modifiers - An optional object of modifiers to append to the template.
    */
   constructor(
     protected provider: ApiProvider,
     protected purpose: string,
     protected injectVar: string,
+    protected modifiers: Record<string, string> = {},
   ) {
     logger.debug(`PluginBase initialized with purpose: ${purpose}, injectVar: ${injectVar}`);
   }
@@ -40,11 +42,10 @@ export abstract class PluginBase {
   /**
    * Generates test cases based on the plugin's configuration.
    * @param n - The number of test cases to generate.
-   * @param language - The language of test cases to generate.
    * @returns A promise that resolves to an array of TestCase objects.
    */
-  async generateTests(n: number, language: string = ''): Promise<TestCase[]> {
-    logger.debug(`Generating ${n} ${language} test cases`);
+  async generateTests(n: number): Promise<TestCase[]> {
+    logger.debug(`Generating ${n} test cases`);
     const batchSize = 20;
 
     /**
@@ -55,17 +56,17 @@ export abstract class PluginBase {
     const generatePrompts = async (currentPrompts: string[]): Promise<string[]> => {
       const remainingCount = n - currentPrompts.length;
       const currentBatchSize = Math.min(remainingCount, batchSize);
-      const languageSpecification = language.length > 0 ? ` in ${language}` : '';
 
       logger.debug(`Generating batch of ${currentBatchSize} prompts`);
       const nunjucks = getNunjucksEngine();
-      const { output: generatedPrompts } = await this.provider.callApi(
-        nunjucks.renderString(await this.getTemplate(), {
-          purpose: this.purpose,
-          n: currentBatchSize,
-          language: languageSpecification,
-        }),
-      );
+      const renderedTemplate = nunjucks.renderString(await this.getTemplate(), {
+        purpose: this.purpose,
+        n: currentBatchSize,
+      });
+
+      const finalTemplate = this.appendModifiers(renderedTemplate);
+
+      const { output: generatedPrompts } = await this.provider.callApi(finalTemplate);
 
       invariant(typeof generatedPrompts === 'string', 'Expected generatedPrompts to be a string');
       return generatedPrompts
@@ -82,6 +83,18 @@ export abstract class PluginBase {
       },
       assert: this.getAssertions(prompt),
     }));
+  }
+
+  private appendModifiers(template: string): string {
+    if (Object.keys(this.modifiers).length === 0) {
+      return template;
+    }
+
+    const modifierSection = Object.entries(this.modifiers)
+      .map(([key, value]) => `${key}: ${value}`)
+      .join('\n');
+
+    return `${template.trim()}\n\n<Modifiers>\n${modifierSection}\n</Modifiers>`;
   }
 }
 
