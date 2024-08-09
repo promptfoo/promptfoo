@@ -120,7 +120,7 @@ export type DefaultStrategy = (typeof DEFAULT_STRATEGIES)[number];
 export const ADDITIONAL_STRATEGIES = ['jailbreak:tree', 'rot13', 'base64', 'leetspeak'] as const;
 export type AdditionalStrategy = (typeof ADDITIONAL_STRATEGIES)[number];
 
-export const ALL_STRATEGIES = [...DEFAULT_STRATEGIES, ...ADDITIONAL_STRATEGIES] as const;
+export const ALL_STRATEGIES = ['default', ...DEFAULT_STRATEGIES, ...ADDITIONAL_STRATEGIES] as const;
 export type Strategy = (typeof ALL_STRATEGIES)[number];
 
 // Duplicated in src/web/nextui/src/app/report/constants.ts for frontend

@@ -92,33 +92,12 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
       ...(plugin.config && { config: plugin.config }),
     }));
   }
-  if (Array.isArray(options.addPlugins) && options.addPlugins.length > 0) {
-    plugins = [
-      ...new Set([
-        ...plugins,
-        ...options.addPlugins.map((plugin) => ({
-          id: plugin,
-          numTests: options.numTests,
-        })),
-      ]),
-    ];
-  }
   invariant(plugins && Array.isArray(plugins) && plugins.length > 0, 'No plugins found');
 
   let strategies: (string | { id: string })[] =
     redteamConfig?.strategies ?? DEFAULT_STRATEGIES.map((s) => ({ id: s }));
   if (options.strategies) {
     strategies = options.strategies;
-  }
-  if (Array.isArray(options.addStrategies) && options.addStrategies.length > 0) {
-    strategies = [
-      ...new Set([
-        ...strategies,
-        ...options.addStrategies.map((strategy) => ({
-          id: strategy,
-        })),
-      ]),
-    ];
   }
   const strategyObjs: RedteamStrategyObject[] = strategies.map((s) =>
     typeof s === 'string' ? { id: s } : s,
@@ -250,15 +229,13 @@ export function generateRedteamCommand(
     )
     .option(
       '--strategies <strategies>',
-      dedent`Comma-separated list of strategies to use. Use 'none' to disable all strategies. Defaults to:
-        \n- ${Array.from(DEFAULT_STRATEGIES).sort().join('\n- ')}\n\n
-      `,
-      (val) => (val.toLowerCase() === 'none' ? [] : val.split(',').map((x) => x.trim())),
-    )
-    .option(
-      '--add-strategies <strategies>',
-      dedent`Comma-separated list of strategies to run in addition to the default strategies:
-        \n- ${Array.from(ADDITIONAL_STRATEGIES).sort().join('\n- ')}\n\n
+      dedent`Comma-separated list of strategies to use. Use 'default' to include default strategies. 
+      
+        Defaults to:
+        - default (includes: ${Array.from(DEFAULT_STRATEGIES).sort().join(', ')})
+
+        Optional:
+        - ${Array.from(ADDITIONAL_STRATEGIES).sort().join(', ')}
       `,
       (val) => val.split(',').map((x) => x.trim()),
     )

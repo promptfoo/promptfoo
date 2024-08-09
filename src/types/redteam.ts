@@ -15,8 +15,6 @@ export type RedteamStrategyObject = {
 export type RedteamStrategy = string | RedteamStrategyObject;
 
 export type RedteamGenerateOptions = {
-  addPlugins?: string[];
-  addStrategies?: string[];
   cache: boolean;
   config?: string;
   defaultConfig: Record<string, unknown>;
