@@ -352,7 +352,7 @@ export async function resolveConfigs(
 
   const defaultTestRaw = fileConfig.defaultTest || defaultConfig.defaultTest;
   const config: Omit<UnifiedConfig, 'evaluateOptions' | 'commandLineOptions'> = {
-    description: fileConfig.description || defaultConfig.description,
+    description: cmdObj.description || fileConfig.description || defaultConfig.description,
     prompts: cmdObj.prompts || fileConfig.prompts || defaultConfig.prompts || [],
     providers: cmdObj.providers || fileConfig.providers || defaultConfig.providers || [],
     tests: cmdObj.tests || cmdObj.vars || fileConfig.tests || defaultConfig.tests || [],

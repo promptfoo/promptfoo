@@ -21,6 +21,7 @@ export * from './shared';
 
 export const CommandLineOptionsSchema = z.object({
   // Shared with TestSuite
+  description: z.string().optional(),
   prompts: z.array(z.string()).optional(),
   providers: z.array(z.string()),
   output: z.array(z.string()),
