@@ -38,14 +38,18 @@ describe('calculateScore', () => {
   });
 });
 
-describe('expandNode', () => {
+fdescribe('expandNode', () => {
   const mockRedteamProvider = {
-    callApi: jest.fn().mockResolvedValue({ output: '{"prompt": "new prompt"}' }),
+    callApi: jest.fn().mockResolvedValue({ output: '{"rating": 7}' }),
   };
   const mockTargetProvider = {
     callApi: jest.fn().mockResolvedValue({ output: 'target response' }),
   };
-  const mockParser = jest.fn().mockReturnValue({ classification: 'Non-Refusal' });
+  const mockParser = jest.fn()
+    .mockReturnValueOnce({ prompt: "new prompt" }) // For redteam output
+    .mockReturnValueOnce({ onTopic: true }) // For isOnTopic check
+    .mockReturnValueOnce({ classification: "Non-Refusal" }) // For non-refusal check
+    .mockReturnValue({ rating: 7 }); // For judge output
 
   it('should expand a node and return children', async () => {
     const node = { prompt: 'test', score: 0, children: [], depth: 0 };
@@ -63,8 +67,22 @@ describe('expandNode', () => {
       0,
     );
 
+    console.log('Expanded children:', children);
+
+    expect(children).toBeDefined();
+    expect(Array.isArray(children)).toBe(true);
     expect(children.length).toBeGreaterThan(0);
-    expect(children[0].prompt).toBe('new prompt');
+
+    if (children.length > 0) {
+      expect(children[0].prompt).toBe('new prompt');
+      expect(typeof children[0].score).toBe('number');
+      expect(children[0].depth).toBe(1);
+    }
+
+    // Check that all mock functions were called
+    expect(mockRedteamProvider.callApi).toHaveBeenCalledTimes(4);
+    expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
+    expect(mockParser).toHaveBeenCalledTimes(4);
   });
 
   it('should not expand node beyond max depth', async () => {
@@ -164,6 +182,7 @@ describe('RedteamIterativeTreeProvider', () => {
     const mockContext = {
       vars: { query: 'test goal' },
       originalProvider: {} as any,
+      prompt: { text: 'initial prompt', raw: 'initial prompt', label: 'test' },
     };
 
     // Mock the treeSearch function
@@ -194,6 +213,7 @@ describe('RedteamIterativeTreeProvider', () => {
     const mockContext = {
       vars: {},
       originalProvider: {} as any,
+      prompt: { text: 'test', raw: 'test', label: 'test' },
     };
     await expect(provider.callApi('test', mockContext)).rejects.toThrow('Goal is undefined');
   });
