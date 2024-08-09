@@ -285,6 +285,12 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
         metadata: { ...prev?.metadata, ...curr.defaultTest?.metadata },
       };
     }, {}),
+    derivedMetrics: configs.reduce<UnifiedConfig['derivedMetrics']>((prev, curr) => {
+      if (curr.derivedMetrics) {
+        return [...(prev ?? []), ...curr.derivedMetrics];
+      }
+      return prev;
+    }, undefined),
     nunjucksFilters: configs.reduce((prev, curr) => ({ ...prev, ...curr.nunjucksFilters }), {}),
     env: configs.reduce((prev, curr) => ({ ...prev, ...curr.env }), {}),
     evaluateOptions: configs.reduce((prev, curr) => ({ ...prev, ...curr.evaluateOptions }), {}),
@@ -346,7 +352,7 @@ export async function resolveConfigs(
 
   const defaultTestRaw = fileConfig.defaultTest || defaultConfig.defaultTest;
   const config: Omit<UnifiedConfig, 'evaluateOptions' | 'commandLineOptions'> = {
-    description: fileConfig.description || defaultConfig.description,
+    description: cmdObj.description || fileConfig.description || defaultConfig.description,
     prompts: cmdObj.prompts || fileConfig.prompts || defaultConfig.prompts || [],
     providers: cmdObj.providers || fileConfig.providers || defaultConfig.providers || [],
     tests: cmdObj.tests || cmdObj.vars || fileConfig.tests || defaultConfig.tests || [],

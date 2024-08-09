@@ -13,7 +13,7 @@ import invariant from 'tiny-invariant';
 import { getAuthor } from '../accounts';
 import { TERMINAL_MAX_WIDTH } from '../constants';
 import { getDbSignalPath, getDb } from '../database';
-import { datasets, evals, evalsToDatasets, evalsToPrompts, prompts } from '../database/operations';
+import { datasets, evals, evalsToDatasets, evalsToPrompts, prompts } from '../database/tables';
 import { getDirectory, importModule } from '../esm';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
@@ -867,6 +867,11 @@ export async function deleteEval(evalId: string) {
       throw new Error(`Eval with ID ${evalId} not found`);
     }
   });
+}
+
+export async function deleteAllEvals() {
+  const db = getDb();
+  await db.delete(evals).run();
 }
 
 export async function readFilters(

@@ -376,7 +376,7 @@ tests:
 
   - vars:
       city: New York
-    # transform returns only the 'name' property for this testcase
+    # transform returns only the 'name' property for this test case
     transform: output.name
     assert:
       - type: is-json
@@ -393,6 +393,13 @@ To load your functions from a file, specify the file path in your provider confi
 ```yaml
 providers:
   - file://./path/to/provider_with_function.yaml
+```
+
+You can also use a pattern to load multiple files:
+
+```yaml
+providers:
+  - file://./path/to/provider_*.yaml
 ```
 
 Here's an example of how your `provider_with_function.yaml` might look:
