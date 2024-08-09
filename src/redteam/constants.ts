@@ -3,6 +3,20 @@ export const REDTEAM_MODEL = 'openai:chat:gpt-4o';
 export const LLAMA_GUARD_REPLICATE_PROVIDER =
   'replicate:moderation:meta/meta-llama-guard-2-8b:b063023ee937f28e922982abdbf97b041ffe34ad3b35a53d33e1d74bb19b36c4';
 
+export const LLAMA_GUARD_ENABLED_CATEGORIES = [
+  'S1', // Violent Crimes
+  'S2', // Non-Violent Crimes
+  'S3', // Sex Crimes
+  'S4', // Child Exploitation
+  'S5', // Specialized Advice
+  // 'S6', // Privacy - Disabled due to false positives from allowed entities
+  'S7', // Intellectual Property
+  'S8', // Indiscriminate Weapons
+  'S9', // Hate
+  'S10', // Self-Harm
+  'S11', // Sexual Content
+];
+
 export const COLLECTIONS = ['harmful', 'pii', 'default'] as const;
 export type Collection = (typeof COLLECTIONS)[number];
 
