@@ -167,6 +167,7 @@ class Evaluator {
       prompt: {
         raw: renderedPrompt,
         label: promptLabel,
+        config: prompt.config,
       },
       vars,
     };
