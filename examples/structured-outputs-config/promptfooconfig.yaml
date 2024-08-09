@@ -1,9 +1,9 @@
-description: "Structured prompts"
+description: 'Structured prompts'
 
 prompts:
   # Schema output with `steps` array
   - label: 'With step-by-step'
-    raw: "You are a helpful math tutor. Solve {{problem}}"
+    raw: 'You are a helpful math tutor. Solve {{problem}}'
     config:
       response_format:
         type: json_schema
@@ -35,7 +35,7 @@ prompts:
 
   # Schema output without `steps` array
   - label: 'Without step-by-step'
-    raw: "You are a helpful math tutor. Solve {{problem}}"
+    raw: 'You are a helpful math tutor. Solve {{problem}}'
     config:
       response_format:
         type: json_schema
@@ -50,7 +50,6 @@ prompts:
             required:
               - final_answer
             additionalProperties: false
-
 
 providers:
   - openai:chat:gpt-4o-2024-08-06
