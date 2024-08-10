@@ -140,7 +140,7 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
     case '.yaml':
     case '.yml':
       const rawConfig = yaml.load(fs.readFileSync(configPath, 'utf-8')) as UnifiedConfig;
-      return dereferenceConfig(rawConfig);
+      return dereferenceConfig(rawConfig || {});
     case '.js':
     case '.cjs':
     case '.mjs':
