@@ -48,9 +48,10 @@ export class CohereChatCompletionProvider implements ApiProvider {
     'command-r-v1',
   ];
 
+  config: CohereChatOptions;
+
   private apiKey: string;
   private modelName: string;
-  private config: CohereChatOptions;
 
   constructor(
     modelName: string,

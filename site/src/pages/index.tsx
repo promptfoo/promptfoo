@@ -110,7 +110,7 @@ function HomepageWalkthrough() {
             <li>Political statements</li>
             <li>Specialized medical and legal advice</li>
             <li>
-              and <Link to="/docs/guides/llm-redteaming">much more</Link>
+              and <Link to="/docs/red-team/llm-vulnerability-types/">much more</Link>
             </li>
           </ul>
           <p>

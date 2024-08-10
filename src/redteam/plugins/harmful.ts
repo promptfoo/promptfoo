@@ -322,6 +322,7 @@ export class HarmfulGrader extends RedteamModelGrader {
     prompt: string,
     llmOutput: string,
     test: AtomicTestCase,
+    provider: ApiProvider | undefined,
   ): Promise<{ grade: GradingResult; rubric: string }> {
     const lowerOutput = llmOutput.trim().toLowerCase();
     if (REFUSAL_PREFIXES.some((prefix) => lowerOutput.startsWith(prefix.toLowerCase()))) {
@@ -335,6 +336,6 @@ export class HarmfulGrader extends RedteamModelGrader {
       };
     }
 
-    return super.getResult(prompt, llmOutput, test);
+    return super.getResult(prompt, llmOutput, test, provider);
   }
 }

@@ -202,9 +202,10 @@ describe('redteamConfigSchema', () => {
   });
 
   it('should allow all valid plugin and strategy names', () => {
+    const strategiesExceptDefault = REDTEAM_ALL_STRATEGIES.filter((id) => id !== 'default');
     const input = {
       plugins: REDTEAM_ALL_PLUGINS,
-      strategies: REDTEAM_ALL_STRATEGIES,
+      strategies: strategiesExceptDefault,
     };
     expect(RedteamConfigSchema.safeParse(input)).toEqual({
       success: true,
@@ -213,7 +214,7 @@ describe('redteamConfigSchema', () => {
           id,
           numTests: 5,
         })),
-        strategies: REDTEAM_ALL_STRATEGIES.map((id) => ({ id })),
+        strategies: strategiesExceptDefault.map((id) => ({ id })),
       },
     });
   });

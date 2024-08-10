@@ -108,7 +108,7 @@ export const RedteamConfigSchema = z
         `,
       )
       .optional()
-      .default(() => Array.from(DEFAULT_STRATEGIES).map((name) => ({ id: name }))),
+      .default(['default']),
   })
   .transform((data): RedteamConfig => {
     const pluginMap = new Map<string, RedteamPluginObject>();
@@ -155,15 +155,24 @@ export const RedteamConfigSchema = z
         return JSON.stringify(a.config || {}).localeCompare(JSON.stringify(b.config || {}));
       });
 
+    const strategies = data.strategies
+      ?.map((strategy) => {
+        if (typeof strategy === 'string') {
+          return strategy === 'default'
+            ? DEFAULT_STRATEGIES.map((id) => ({ id }))
+            : { id: strategy };
+        }
+        return strategy;
+      })
+      .flat();
+
     return {
       ...(data.purpose ? { purpose: data.purpose } : {}),
       ...(data.injectVar ? { injectVar: data.injectVar } : {}),
       ...(data.provider ? { provider: data.provider } : {}),
       ...(data.language ? { language: data.language } : {}),
       plugins: uniquePlugins,
-      strategies: data.strategies?.map((strategy) =>
-        typeof strategy === 'string' ? { id: strategy } : { ...strategy },
-      ),
+      strategies,
     };
   });
 

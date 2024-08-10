@@ -19,7 +19,8 @@ interface PythonProviderConfig {
 }
 
 export class PythonProvider implements ApiProvider {
-  private config: PythonProviderConfig;
+  config: PythonProviderConfig;
+
   private scriptPath: string;
   private functionName: string | null;
   public label: string | undefined;
