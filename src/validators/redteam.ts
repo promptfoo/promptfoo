@@ -1,5 +1,6 @@
 import dedent from 'dedent';
 import { z } from 'zod';
+import logger from '../logger';
 import {
   ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
@@ -13,7 +14,6 @@ import {
 } from '../redteam/constants';
 import type { RedteamConfig, RedteamPluginObject } from '../types/redteam';
 import { ProviderSchema } from '../validators/providers';
-import logger from '../logger';
 
 /**
  * Schema for individual redteam plugins
