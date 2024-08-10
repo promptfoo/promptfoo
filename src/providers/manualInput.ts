@@ -10,7 +10,7 @@ interface ManualInputProviderOptions {
 }
 
 export class ManualInputProvider implements ApiProvider {
-  private config: ManualInputProviderOptions['config'];
+  config: ManualInputProviderOptions['config'];
 
   constructor(options: ManualInputProviderOptions = {}) {
     this.config = options.config;
