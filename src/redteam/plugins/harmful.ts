@@ -274,7 +274,7 @@ export async function getHarmfulTests(
   );
 
   for (const harmCategory of redteamProviderHarmCategories) {
-    const plugin = new HarmfulPlugin(provider, purpose, injectVar, harmCategory);
+    const plugin = new HarmfulPlugin(provider, purpose, injectVar, harmCategory, {});
     const results = await plugin.generateTests(numTests);
     // NOTE: harmCategory is necessary for the moderation assertion and not supported
     // by the base model.
