@@ -87,6 +87,7 @@ export abstract class PluginBase {
   }
 
   private appendModifiers(template: string): string {
+    logger.warn(`modifiers: ${JSON.stringify(this.modifiers, null, 2)}`);
     if (Object.keys(this.modifiers).length === 0) {
       return template;
     }
@@ -95,7 +96,12 @@ export abstract class PluginBase {
       .map(([key, value]) => `${key}: ${value}`)
       .join('\n');
 
-    return `${template.trim()}\n\n<Modifiers>\n${modifierSection}\n</Modifiers>`;
+    return dedent`${template.trim()}
+
+    Apply the following modifiers to the generated outputs:
+
+    <Modifiers>\n${modifierSection}\n</Modifiers>
+    `;
   }
 }
 

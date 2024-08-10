@@ -56,6 +56,7 @@ export const RedteamGenerateOptionsSchema = z.object({
   defaultConfigPath: z.string().optional().describe('Path to the default configuration file'),
   envFile: z.string().optional().describe('Path to the environment file'),
   injectVar: z.string().optional().describe('Variable to inject'),
+  language: z.string().optional().describe('Language of tests to generate'),
   numTests: z.number().int().positive().describe('Number of tests to generate'),
   output: z.string().optional().describe('Output file path'),
   plugins: z.array(RedteamPluginObjectSchema).optional().describe('Plugins to use'),

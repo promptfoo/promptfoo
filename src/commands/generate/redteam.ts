@@ -247,6 +247,10 @@ export function generateRedteamCommand(
       (val) => (Number.isInteger(val) ? val : parseInt(val, 10)),
       5,
     )
+    .option(
+      '--language <language>',
+      'Specify the language for generated tests. Defaults to English',
+    )
     .option('--no-cache', 'Do not read or write results to disk cache', false)
     .option('--env-file <path>', 'Path to .env file')
     .action((opts: Partial<RedteamGenerateOptions>): void => {
@@ -267,13 +271,18 @@ export function generateRedteamCommand(
           }
           overrides = parsed.data;
         }
+        logger.warn(`opts language: ${opts.language}`);
         const validatedOpts = RedteamGenerateOptionsSchema.parse({
           ...opts,
           defaultConfig,
           defaultConfigPath,
+          ...(overrides.language ? { language: overrides.language } : {}),
           ...(overrides.plugins ? { plugins: overrides.plugins } : {}),
           ...(overrides.strategies ? { strategies: overrides.strategies } : {}),
         });
+
+        // logger.warn(`validatedOpts language: ${validatedOpts?.language}`);
+
         doGenerateRedteam(validatedOpts);
       } catch (error) {
         if (error instanceof z.ZodError) {
