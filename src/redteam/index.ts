@@ -7,10 +7,17 @@ import type { TestCaseWithPlugin } from '../types';
 import { isApiProvider, isProviderOptions, type ApiProvider } from '../types';
 import type { SynthesizeOptions } from '../types/redteam';
 import { extractVariablesFromTemplates } from '../util/templates';
-import { REDTEAM_MODEL, HARM_PLUGINS, PII_PLUGINS } from './constants';
+import {
+  REDTEAM_MODEL,
+  HARM_PLUGINS,
+  PII_PLUGINS,
+  NIST_AI_RMF_MAPPING,
+  OWASP_LLM_TOP_10_MAPPING,
+  OWASP_API_TOP_10_MAPPING,
+} from './constants';
 import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
-import { Plugins, validatePlugins } from './plugins';
+import { Plugins } from './plugins';
 import { Strategies, validateStrategies } from './strategies';
 
 // These plugins refer to a collection of tests.
@@ -39,7 +46,6 @@ export async function synthesize({
   entities: string[];
   testCases: TestCaseWithPlugin[];
 }> {
-  validatePlugins(plugins);
   validateStrategies(strategies);
 
   let redteamProvider: ApiProvider;
@@ -92,6 +98,33 @@ export async function synthesize({
       plugins.push(...categoryPlugins.map((p) => ({ id: p, numTests: plugin.numTests })));
     }
   }
+
+  // Apply aliases for NIST and OWASP mappings
+  const expandedPlugins: typeof plugins = [];
+  for (const plugin of plugins) {
+    if (plugin.id.startsWith('nist:ai:measure:')) {
+      const mapping = NIST_AI_RMF_MAPPING[plugin.id];
+      if (mapping) {
+        expandedPlugins.push(...mapping.plugins.map((p) => ({ id: p, numTests: plugin.numTests })));
+        strategies.push(...mapping.strategies.map((s) => ({ id: s })));
+      }
+    } else if (plugin.id.startsWith('owasp:llm:')) {
+      const mapping = OWASP_LLM_TOP_10_MAPPING[plugin.id];
+      if (mapping) {
+        expandedPlugins.push(...mapping.plugins.map((p) => ({ id: p, numTests: plugin.numTests })));
+        strategies.push(...mapping.strategies.map((s) => ({ id: s })));
+      }
+    } else if (plugin.id.startsWith('owasp:api:')) {
+      const mapping = OWASP_API_TOP_10_MAPPING[plugin.id];
+      if (mapping) {
+        expandedPlugins.push(...mapping.plugins.map((p) => ({ id: p, numTests: plugin.numTests })));
+        strategies.push(...mapping.strategies.map((s) => ({ id: s })));
+      }
+    } else {
+      expandedPlugins.push(plugin);
+    }
+  }
+  plugins = expandedPlugins;
 
   // Deduplicate, filter out the category names, and sort
   plugins = [...new Set(plugins)].filter((p) => !Object.keys(categories).includes(p.id)).sort();
