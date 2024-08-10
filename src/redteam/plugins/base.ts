@@ -2,6 +2,7 @@ import dedent from 'dedent';
 import invariant from 'tiny-invariant';
 import logger from '../../logger';
 import { matchesLlmRubric } from '../../matchers';
+import { maybeLoadFromExternalFile } from '../../providers/shared';
 import type { ApiProvider, Assertion, TestCase } from '../../types';
 import type { AtomicTestCase, GradingResult } from '../../types';
 import { getNunjucksEngine } from '../../util/templates';
@@ -98,6 +99,7 @@ export abstract class RedteamModelGrader {
     prompt: string,
     llmOutput: string,
     test: AtomicTestCase,
+    provider: ApiProvider | undefined,
   ): Promise<{ grade: GradingResult; rubric: string }> {
     invariant(test.metadata?.purpose, 'Test is missing purpose metadata');
     const nunjucks = getNunjucksEngine(undefined, true /* throwOnUndefined */);
@@ -107,6 +109,7 @@ export abstract class RedteamModelGrader {
       harmCategory: test.metadata?.harmCategory,
       policy: test.metadata?.policy,
       purpose: test.metadata?.purpose,
+      tools: maybeLoadFromExternalFile(provider?.config?.tools),
     };
     let finalRubric: string;
     try {

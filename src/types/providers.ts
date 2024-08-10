@@ -53,6 +53,7 @@ export interface ApiProvider {
   label?: ProviderLabel;
   transform?: string;
   delay?: number;
+  config?: any;
 }
 
 export interface ApiEmbeddingProvider extends ApiProvider {

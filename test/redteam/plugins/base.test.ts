@@ -1,4 +1,5 @@
 import { matchesLlmRubric } from '../../../src/matchers';
+import * as shared from '../../../src/providers/shared';
 import { PluginBase } from '../../../src/redteam/plugins/base';
 import { RedteamModelGrader } from '../../../src/redteam/plugins/base';
 import type { ApiProvider, Assertion } from '../../../src/types';
@@ -7,6 +8,10 @@ import { getNunjucksEngine } from '../../../src/util/templates';
 
 jest.mock('../../../src/matchers', () => ({
   matchesLlmRubric: jest.fn(),
+}));
+
+jest.mock('../../../src/providers/shared', () => ({
+  maybeLoadFromExternalFile: jest.fn(),
 }));
 
 class TestPlugin extends PluginBase {
@@ -200,9 +205,9 @@ describe('RedteamModelGrader', () => {
 
   it('should throw an error if test is missing purpose metadata', async () => {
     const testWithoutPurpose = { ...mockTest, metadata: {} };
-    await expect(grader.getResult('prompt', 'output', testWithoutPurpose)).rejects.toThrow(
-      'Test is missing purpose metadata',
-    );
+    await expect(
+      grader.getResult('prompt', 'output', testWithoutPurpose, undefined /* provider */),
+    ).rejects.toThrow('Test is missing purpose metadata');
   });
 
   it('should render the rubric with correct variables', async () => {
@@ -213,7 +218,7 @@ describe('RedteamModelGrader', () => {
     };
     jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
-    await grader.getResult('test prompt', 'test output', mockTest);
+    await grader.getResult('test prompt', 'test output', mockTest, undefined /* provider */);
 
     expect(matchesLlmRubric).toHaveBeenCalledWith(
       'Test rubric for test-purpose with harm category test-harm',
@@ -230,11 +235,88 @@ describe('RedteamModelGrader', () => {
     };
     jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
-    const result = await grader.getResult('test prompt', 'test output', mockTest);
+    const result = await grader.getResult(
+      'test prompt',
+      'test output',
+      mockTest,
+      undefined /* provider */,
+    );
 
     expect(result).toEqual({
       grade: mockResult,
       rubric: 'Test rubric for test-purpose with harm category test-harm',
+    });
+  });
+
+  describe('RedteamModelGrader with tools', () => {
+    let toolProvider: any;
+    let maybeLoadFromExternalFileSpy: jest.SpyInstance;
+    let ToolGrader: any;
+
+    beforeEach(() => {
+      toolProvider = {
+        config: {
+          tools: 'file://tools.json',
+        },
+      };
+
+      maybeLoadFromExternalFileSpy = jest
+        .spyOn(shared, 'maybeLoadFromExternalFile')
+        .mockImplementation((input) => {
+          if (input === 'file://tools.json') {
+            return [{ name: 'tool1' }, { name: 'tool2' }];
+          }
+          return input;
+        });
+
+      ToolGrader = class extends RedteamModelGrader {
+        id = 'test-tool-grader';
+        rubric = 'Test rubric for {{ tools | dump }}';
+      };
+    });
+
+    afterEach(() => {
+      maybeLoadFromExternalFileSpy.mockRestore();
+    });
+
+    it('should handle tools from provider config', async () => {
+      const mockResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+      };
+      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const toolGrader = new ToolGrader();
+      await toolGrader.getResult('test prompt', 'test output', mockTest, toolProvider);
+
+      expect(matchesLlmRubric).toHaveBeenCalledWith(
+        expect.stringContaining('tool1'),
+        expect.any(String),
+        {},
+      );
+      expect(matchesLlmRubric).toHaveBeenCalledWith(
+        expect.stringContaining('tool2'),
+        expect.any(String),
+        {},
+      );
+    });
+
+    it('should handle when no tools are provided', async () => {
+      const mockResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+      };
+      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const toolGrader = new ToolGrader();
+
+      await expect(
+        toolGrader.getResult('test prompt', 'test output', mockTest, undefined),
+      ).rejects.toThrow(/^Error rendering rubric template/);
+
+      expect(matchesLlmRubric).not.toHaveBeenCalled();
     });
   });
 });
