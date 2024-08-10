@@ -43,6 +43,8 @@ export async function synthesize({
   validatePlugins(plugins);
   validateStrategies(strategies);
 
+  logger.warn(`------------- language: ${language}`);
+
   let redteamProvider: ApiProvider;
   if (isApiProvider(provider)) {
     redteamProvider = provider;

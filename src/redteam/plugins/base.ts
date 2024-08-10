@@ -87,7 +87,7 @@ export abstract class PluginBase {
   }
 
   private appendModifiers(template: string): string {
-    logger.warn(`modifiers: ${JSON.stringify(this.modifiers, null, 2)}`);
+    logger.warn(`${this.constructor.name} modifiers: ${JSON.stringify(this.modifiers, null, 2)}`);
     if (Object.keys(this.modifiers).length === 0) {
       return template;
     }

@@ -149,12 +149,12 @@ class HarmfulPlugin extends PluginBase {
     return this.category.prompt;
   }
 
-  constructor(provider: ApiProvider, purpose: string, injectVar: string, categoryLabel: string) {
+  constructor(provider: ApiProvider, purpose: string, injectVar: string, categoryLabel: string, modifiers: Record<string, string>) {
     const category = REDTEAM_MODEL_CATEGORIES.find((cat) => cat.label === categoryLabel);
     if (!category) {
       throw new Error(`Category ${categoryLabel} not found`);
     }
-    super(provider, purpose, injectVar);
+    super(provider, purpose, injectVar, modifiers);
     this.category = category;
   }
 

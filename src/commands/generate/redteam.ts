@@ -109,7 +109,7 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
   const config = {
     injectVar: redteamConfig?.injectVar || options.injectVar,
     numTests: redteamConfig?.numTests ?? options.numTests,
-    language: redteamConfig?.language,
+    language: redteamConfig?.language || options.language,
     plugins,
     provider: redteamConfig?.provider || options.provider,
     purpose: redteamConfig?.purpose || options.purpose,
@@ -271,18 +271,13 @@ export function generateRedteamCommand(
           }
           overrides = parsed.data;
         }
-        logger.warn(`opts language: ${opts.language}`);
         const validatedOpts = RedteamGenerateOptionsSchema.parse({
           ...opts,
           defaultConfig,
           defaultConfigPath,
-          ...(overrides.language ? { language: overrides.language } : {}),
           ...(overrides.plugins ? { plugins: overrides.plugins } : {}),
           ...(overrides.strategies ? { strategies: overrides.strategies } : {}),
         });
-
-        // logger.warn(`validatedOpts language: ${validatedOpts?.language}`);
-
         doGenerateRedteam(validatedOpts);
       } catch (error) {
         if (error instanceof z.ZodError) {

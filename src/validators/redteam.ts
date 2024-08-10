@@ -13,6 +13,7 @@ import {
 } from '../redteam/constants';
 import type { RedteamConfig, RedteamPluginObject } from '../types/redteam';
 import { ProviderSchema } from '../validators/providers';
+import logger from '../logger';
 
 /**
  * Schema for individual redteam plugins
@@ -166,6 +167,8 @@ export const RedteamConfigSchema = z
         return strategy;
       })
       .flat();
+
+    logger.warn(`redteam config language: ${data.language}`);
 
     return {
       ...(data.purpose ? { purpose: data.purpose } : {}),
