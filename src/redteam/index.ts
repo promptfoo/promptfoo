@@ -128,14 +128,10 @@ export async function synthesize({
     if (plugin) {
       updateProgress();
       logger.debug(`Generating tests for ${pluginId}...`);
-      const pluginTests = await action(
-        redteamProvider,
-        purpose,
-        injectVar,
-        plugin.numTests,
+      const pluginTests = await action(redteamProvider, purpose, injectVar, plugin.numTests, {
+        ...(plugin.config || {}),
         language,
-        plugin.config,
-      );
+      });
       testCases.push(
         ...pluginTests.map((t) => ({
           ...t,

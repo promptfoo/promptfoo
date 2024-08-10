@@ -29,7 +29,7 @@ describe('PluginBase', () => {
       }),
       id: jest.fn().mockReturnValue('test-provider'),
     };
-    plugin = new TestPlugin(provider, 'test purpose', 'testVar');
+    plugin = new TestPlugin(provider, 'test purpose', 'testVar', { language: 'German' });
   });
 
   afterEach(() => {
@@ -38,7 +38,7 @@ describe('PluginBase', () => {
 
   it('should generate test cases correctly', async () => {
     expect.assertions(2);
-    await expect(plugin.generateTests(2, 'German')).resolves.toEqual([
+    await expect(plugin.generateTests(2)).resolves.toEqual([
       {
         vars: { testVar: 'another prompt' },
         assert: [{ type: 'contains', value: 'another prompt' }],
