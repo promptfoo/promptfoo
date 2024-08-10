@@ -213,18 +213,27 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
     }
   }
 
-  const redteam: UnifiedConfig['redteam'] = {
+  let redteam: UnifiedConfig['redteam'] = {
     plugins: [],
     strategies: [],
   };
   for (const config of configs) {
     if (config.redteam) {
-      redteam.plugins = [
-        ...new Set([...(redteam.plugins || []), ...(config.redteam.plugins || [])]),
-      ];
-      redteam.strategies = [
-        ...new Set([...(redteam.strategies || []), ...(config.redteam.strategies || [])]),
-      ];
+      // Merge all properties from config.redteam
+      redteam = { ...redteam, ...config.redteam };
+
+      // Merge plugins, strategies, and entities as set
+      if (config.redteam.plugins) {
+        redteam.plugins = [...new Set([...(redteam.plugins || []), ...config.redteam.plugins])];
+      }
+      if (config.redteam.strategies) {
+        redteam.strategies = [
+          ...new Set([...(redteam.strategies || []), ...config.redteam.strategies]),
+        ];
+      }
+      if (config.redteam.entities) {
+        redteam.entities = [...new Set([...(redteam.entities || []), ...config.redteam.entities])];
+      }
     }
   }
 
