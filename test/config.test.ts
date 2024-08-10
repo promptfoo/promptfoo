@@ -180,8 +180,8 @@ describe('readConfigs', () => {
       nunjucksFilters: { filter1: 'filter1', filter2: 'filter2' },
       derivedMetrics: undefined,
       redteam: {
-        plugins: ['plugin1', 'plugin2'],
-        strategies: ['strategy1'],
+        plugins: ['plugin2'],
+        strategies: [],
       },
       env: { envVar1: 'envValue1', envVar2: 'envValue2' },
       evaluateOptions: { maxConcurrency: 2 },
