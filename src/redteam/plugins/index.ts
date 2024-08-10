@@ -4,6 +4,8 @@ import invariant from 'tiny-invariant';
 import logger from '../../logger';
 import type { ApiProvider, TestCase } from '../../types';
 import { HARM_PLUGINS, PII_PLUGINS } from '../constants';
+import { BflaPlugin } from './bfla';
+import { BolaPlugin } from './bola';
 import { CompetitorPlugin } from './competitors';
 import { ContractPlugin } from './contracts';
 import { DebugAccessPlugin } from './debugAccess';
@@ -111,6 +113,16 @@ export const Plugins: Plugin[] = [
       const plugin = new PolicyPlugin(provider, purpose, injectVar, config as { policy: string });
       return plugin.generateTests(n);
     },
+  },
+  {
+    key: 'bola',
+    action: (provider, purpose, injectVar, n, config) =>
+      new BolaPlugin(provider, purpose, injectVar, config).generateTests(n),
+  },
+  {
+    key: 'bfla',
+    action: (provider, purpose, injectVar, n, config) =>
+      new BflaPlugin(provider, purpose, injectVar, config).generateTests(n),
   },
 ];
 

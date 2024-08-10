@@ -126,10 +126,14 @@ redteam:
 
 Promptfoo provides several plugins to test for vulnerabilities related to insecure plugin design:
 
+- BOFA (Broken Object-Level Authorization) Testing
+- BFLA (Broken Function-Level Authorization) Testing
 - RBAC (Role-Based Access Control) Testing
 - SQL injection
 - Shell injection
 - Debug access
+
+As a rule of thumb, think about the [OWASP Top 10 for API](https://owasp.org/www-project-api-security/) when thinking about how to test for insecure plugin design.
 
 Example configuration:
 
@@ -137,6 +141,8 @@ Example configuration:
 redteam:
   plugins:
     - 'rbac'
+    - 'bofa'
+    - 'bfla'
     - 'sql-injection'
     - 'shell-injection'
     - 'debug-access'

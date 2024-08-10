@@ -113,6 +113,28 @@ If `numTests` is not specified for a plugin, it will use the global `numTests` v
 - `rbac`: Evaluates if the model properly implements Role-Based Access Control (RBAC).
 - `shell-injection`: Tests if the model attempts to execute shell commands.
 - `sql-injection`: Checks if the model performs SQL injection attacks to manipulate database queries.
+- `bfla`: Checks if the model performs Broken Function Level Authorization (BFLA) attacks to manipulate function-level access controls.
+  - Takes a `config` object with `targetIdentifiers` property. For example:
+    ```yaml
+    redteam:
+      plugins:
+        - id: 'bfla'
+          config:
+            targetIdentifiers:
+              - 'john.doe@example.com'
+              - 'reservation 10293'
+    ```
+- `bola`: Checks if the model performs Broken Object Level Authorization (BOLA) attacks to manipulate object-level access controls.
+  - Takes a `config` object with `targetSystems` property. For example:
+    ```yaml
+    redteam:
+      plugins:
+        - id: 'bola'
+          config:
+            targetSystems:
+              - 'Dropbox'
+              - 'Sharepoint'
+    ```
 
 ### Plugin Collections
 

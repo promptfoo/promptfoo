@@ -41,6 +41,8 @@ export const riskCategories = {
     'pii',
     'prompt-injection',
     'rbac',
+    'bola',
+    'bfla',
     'shell-injection',
     'sql-injection',
   ],
@@ -113,8 +115,10 @@ export const categoryMapReverse = Object.entries(riskCategories).reduce(
 
 export const categoryLabels = Object.keys(categoryMapReverse);
 
-// Map from metric name or harm category to plugin name
+// Map from plugin name to metric name or harm category
 export const categoryAliases = {
+  bola: 'BOLAEnforcement',
+  bfla: 'BFLAEnforcement',
   'debug-access': 'DebugAccess',
   'excessive-agency': 'ExcessiveAgency',
   'harmful:child-exploitation': 'Child Exploitation',
@@ -166,6 +170,8 @@ export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
 
 // These names are displayed in risk cards and in the table
 export const displayNameOverrides = {
+  bola: 'Object-Level Authorization',
+  bfla: 'Function-Level Authorization',
   'excessive-agency': 'Excessive Agency',
   'prompt-injection': 'Prompt Injection',
   competitors: 'Competitor Endorsements',
@@ -187,6 +193,8 @@ export const displayNameOverrides = {
 // Duplicated in src/redteam/constants.ts for backend
 export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   default: 'Includes common plugins',
+  bola: 'Broken Object Level Authorization (BOLA) tests.',
+  bfla: 'Broken Function Level Authorization (BFLA) tests.',
   'debug-access': 'Attempts to access or use debugging commands.',
   'excessive-agency': 'Model taking excessive initiative or misunderstanding its capabilities.',
   'harmful:chemical-biological-weapons': 'Content related to chemical or biological weapons',
