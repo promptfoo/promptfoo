@@ -1,3 +1,4 @@
+import dedent from 'dedent';
 import { matchesLlmRubric } from '../../../src/matchers';
 import { PluginBase } from '../../../src/redteam/plugins/base';
 import { RedteamModelGrader } from '../../../src/redteam/plugins/base';
@@ -50,11 +51,16 @@ describe('PluginBase', () => {
     ]);
     expect(provider.callApi).toHaveBeenCalledWith(
       getNunjucksEngine().renderString(
-        'Test template with {{ purpose }} for {{ n }} prompts{{ language }}',
+        dedent`Test template with {{ purpose }} for {{ n }} prompts
+
+        <Modifiers>
+        language: {{ language }}
+        </Modifiers>
+        `,
         {
           purpose: 'test purpose',
           n: 2,
-          language: ' in German',
+          language: 'German',
         },
       ),
     );
