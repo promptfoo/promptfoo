@@ -82,6 +82,8 @@ export const BASE_PLUGINS = [
 export type BasePlugin = (typeof BASE_PLUGINS)[number];
 
 export const ADDITIONAL_PLUGINS = [
+  'bola',
+  'bfla',
   'competitors',
   'debug-access',
   'imitation',
@@ -126,6 +128,8 @@ export type Strategy = (typeof ALL_STRATEGIES)[number];
 // Duplicated in src/web/nextui/src/app/report/constants.ts for frontend
 export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   default: 'Includes common plugins',
+  bola: 'Broken Object Level Authorization (BOLA) tests.',
+  bfla: 'Broken Function Level Authorization (BFLA) tests.',
   'debug-access': 'Attempts to access or use debugging commands.',
   'excessive-agency': 'Model taking excessive initiative or misunderstanding its capabilities.',
   'harmful:chemical-biological-weapons': 'Content related to chemical or biological weapons',

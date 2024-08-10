@@ -213,6 +213,21 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
     }
   }
 
+  const redteam: UnifiedConfig['redteam'] = {
+    plugins: [],
+    strategies: [],
+  };
+  for (const config of configs) {
+    if (config.redteam) {
+      redteam.plugins = [
+        ...new Set([...(redteam.plugins || []), ...(config.redteam.plugins || [])]),
+      ];
+      redteam.strategies = [
+        ...new Set([...(redteam.strategies || []), ...(config.redteam.strategies || [])]),
+      ];
+    }
+  }
+
   const configsAreStringOrArray = configs.every(
     (config) => typeof config.prompts === 'string' || Array.isArray(config.prompts),
   );
@@ -298,6 +313,7 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
       (prev, curr) => ({ ...prev, ...curr.commandLineOptions }),
       {},
     ),
+    redteam,
     metadata: configs.reduce((prev, curr) => ({ ...prev, ...curr.metadata }), {}),
     sharing: !configs.some((config) => config.sharing === false),
   };

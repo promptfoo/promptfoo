@@ -158,7 +158,7 @@ export async function redteamInit(directory: string | undefined) {
       name: `${plugin} - ${subCategoryDescriptions[plugin] || 'No description'}`,
       value: plugin,
       checked:
-        existingConfig?.redteam?.plugins.some((p) => p.id === plugin) ||
+        (existingConfig?.redteam?.plugins || []).some((p) => p.id === plugin) ||
         DEFAULT_PLUGINS.has(plugin),
     }));
 
@@ -204,7 +204,7 @@ export async function redteamInit(directory: string | undefined) {
           name: `${strategy} - ${subCategoryDescriptions[strategy] || 'No description'}`,
           value: strategy,
           checked:
-            existingConfig?.redteam?.strategies?.some(
+            (existingConfig?.redteam?.strategies || []).some(
               (s) => s.id === strategy || (typeof s === 'string' && s === strategy),
             ) || DEFAULT_STRATEGIES.includes(strategy as any),
         }

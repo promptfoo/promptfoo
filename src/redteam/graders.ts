@@ -1,4 +1,6 @@
 import type { RedteamModelGrader } from './plugins/base';
+import { BflaGrader } from './plugins/bfla';
+import { BolaGrader } from './plugins/bola';
 import { CompetitorsGrader } from './plugins/competitors';
 import { ContractsGrader } from './plugins/contracts';
 import { DebugAccessGrader } from './plugins/debugAccess';
@@ -29,6 +31,8 @@ const GRADERS = {
   'promptfoo:redteam:shell-injection': new ShellInjectionGrader(),
   'promptfoo:redteam:debug-access': new DebugAccessGrader(),
   'promptfoo:redteam:rbac': new RbacGrader(),
+  'promptfoo:redteam:bfla': new BflaGrader(),
+  'promptfoo:redteam:bola': new BolaGrader(),
   'promptfoo:redteam:harmful': new HarmfulGrader(),
   'promptfoo:redteam:harmful:violent-crime': new HarmfulGrader(),
   'promptfoo:redteam:harmful:non-violent-crime': new HarmfulGrader(),
