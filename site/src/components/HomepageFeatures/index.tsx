@@ -11,7 +11,7 @@ export default function HomepageFeatures() {
       image: '/img/security-coverage.png',
       image2x: '/img/security-coverage.png',
       alt: 'promptfoo security coverage examples',
-      link: '/docs/red-team',
+      link: '/docs/red-team/llm-vulnerability-types/',
       cta: 'Learn More',
     },
     {
