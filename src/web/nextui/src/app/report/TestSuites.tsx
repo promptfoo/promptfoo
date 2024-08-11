@@ -11,7 +11,6 @@ import TableRow from '@mui/material/TableRow';
 import TableSortLabel from '@mui/material/TableSortLabel';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import { useRouter } from 'next/navigation';
 import {
   categoryAliases,
   displayNameOverrides,
@@ -25,7 +24,7 @@ const getSubCategoryStats = (
   categoryStats: Record<string, { pass: number; total: number; passWithFilter: number }>,
 ) => {
   const subCategoryStats = [];
-  for (const [category, subCategories] of Object.entries(riskCategories)) {
+  for (const subCategories of Object.values(riskCategories)) {
     for (const subCategory of subCategories) {
       subCategoryStats.push({
         pluginName: subCategory,
@@ -67,7 +66,6 @@ const TestSuites: React.FC<{
   evalId: string;
   categoryStats: Record<string, { pass: number; total: number; passWithFilter: number }>;
 }> = ({ evalId, categoryStats }) => {
-  const router = useRouter();
   const subCategoryStats = getSubCategoryStats(categoryStats).filter(
     (subCategory) => subCategory.passRate !== 'N/A',
   );

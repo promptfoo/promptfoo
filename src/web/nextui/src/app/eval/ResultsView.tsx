@@ -79,7 +79,6 @@ export default function ResultsView({
     wordBreak,
     showInferenceDetails,
     evalId,
-    inComparisonMode,
     setInComparisonMode,
     columnStates,
     setColumnState,

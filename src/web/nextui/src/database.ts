@@ -105,7 +105,7 @@ export async function createResult(
     throw error;
   }
 
-  const { error: jobUpdateError } = await supabase
+  await supabase
     .from('EvaluationJob')
     .update({
       status: SupabaseJobStatus.COMPLETE,

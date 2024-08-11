@@ -62,7 +62,7 @@ describe('InfoModal', () => {
   });
 
   it('has correct link hrefs', () => {
-    const { asFragment } = render(<InfoModal open={true} onClose={mockOnClose} />);
+    render(<InfoModal open={true} onClose={mockOnClose} />);
     const links = [
       { text: 'Documentation', href: 'https://www.promptfoo.dev/docs/intro' },
       { text: 'GitHub Repository', href: 'https://github.com/promptfoo/promptfoo' },

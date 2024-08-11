@@ -49,10 +49,9 @@ export class VoyageEmbeddingProvider implements ApiEmbeddingProvider {
       model: this.modelName,
     };
 
-    let data,
-      cached = false;
+    let data;
     try {
-      ({ data, cached } = (await fetchWithCache(
+      ({ data } = (await fetchWithCache(
         `${this.getApiUrl()}/embeddings`,
         {
           method: 'POST',
