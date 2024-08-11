@@ -13,14 +13,14 @@ import logger from './logger';
 import { loadApiProvider } from './providers';
 import { getDefaultProviders } from './providers/defaults';
 import type {
-  ApiProvider,
   CsvRow,
-  ProviderOptions,
   TestCase,
   TestCaseWithVarsFile,
   TestSuite,
   TestSuiteConfig,
   VarMapping,
+  ApiProvider,
+  ProviderOptions,
 } from './types';
 import { extractJsonObjects } from './util';
 import { extractVariablesFromTemplates } from './util/templates';
@@ -142,7 +142,7 @@ export async function readTest(
   }
 
   // Validation of the shape of test
-  if (!testCase.assert && !testCase.vars && !testCase.options) {
+  if (!testCase.assert && !testCase.vars && !testCase.options && !testCase.metadata) {
     throw new Error(
       `Test case must have either assert, vars, or options property. Instead got ${JSON.stringify(
         testCase,

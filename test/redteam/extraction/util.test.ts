@@ -1,6 +1,6 @@
 import logger from '../../../src/logger';
 import { callExtraction, formatPrompts } from '../../../src/redteam/extraction/util';
-import { ApiProvider } from '../../../src/types';
+import type { ApiProvider } from '../../../src/types';
 
 jest.mock('../../../src/logger', () => ({
   error: jest.fn(),

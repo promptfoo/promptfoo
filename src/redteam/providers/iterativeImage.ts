@@ -252,7 +252,7 @@ async function runRedteamConversation({
 class RedteamIterativeProvider implements ApiProvider {
   private readonly injectVar: string;
 
-  constructor(private readonly config: Record<string, string | object>) {
+  constructor(readonly config: Record<string, string | object>) {
     logger.debug(`RedteamIterativeProvider config: ${JSON.stringify(config)}`);
     invariant(typeof config.injectVar === 'string', 'Expected injectVar to be set');
     this.injectVar = config.injectVar;

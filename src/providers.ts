@@ -59,13 +59,13 @@ import { WebhookProvider } from './providers/webhook';
 import RedteamIterativeProvider from './redteam/providers/iterative';
 import RedteamImageIterativeProvider from './redteam/providers/iterativeImage';
 import RedteamIterativeTreeProvider from './redteam/providers/iterativeTree';
+import type { TestSuiteConfig } from './types';
 import type {
   ApiProvider,
   EnvOverrides,
   ProviderOptions,
   ProviderOptionsMap,
-  TestSuiteConfig,
-} from './types';
+} from './types/providers';
 
 // FIXME(ian): Make loadApiProvider handle all the different provider types (string, ProviderOptions, ApiProvider, etc), rather than the callers.
 export async function loadApiProvider(
@@ -141,9 +141,11 @@ export async function loadApiProvider(
     } else if (modelType === 'image') {
       ret = new OpenAiImageProvider(modelName, providerOptions);
     } else {
-      throw new Error(
-        `Unknown OpenAI model type: ${modelType}. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>, openai:embeddings:<model name>, openai:image:<model name>`,
+      // Assume user did not provide model type, and it's a chat model
+      logger.warn(
+        `Unknown OpenAI model type: ${modelType}. Treating it as a chat model. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>, openai:embeddings:<model name>, openai:image:<model name>`,
       );
+      ret = new OpenAiChatCompletionProvider(modelType, providerOptions);
     }
   } else if (providerPath.startsWith('azureopenai:')) {
     // Load Azure OpenAI module

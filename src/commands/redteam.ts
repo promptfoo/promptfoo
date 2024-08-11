@@ -6,11 +6,13 @@ import input from '@inquirer/input';
 import number from '@inquirer/number';
 import rawlist from '@inquirer/rawlist';
 import chalk from 'chalk';
-import { Command } from 'commander';
+import type { Command } from 'commander';
 import * as fs from 'fs';
 import yaml from 'js-yaml';
 import * as path from 'path';
 import invariant from 'tiny-invariant';
+import { getUserEmail, setUserEmail } from '../accounts';
+import { readGlobalConfig, writeGlobalConfigPartial } from '../globalConfig';
 import logger from '../logger';
 import {
   ADDITIONAL_STRATEGIES,
@@ -19,9 +21,9 @@ import {
   DEFAULT_STRATEGIES,
   subCategoryDescriptions,
 } from '../redteam/constants';
-import { redteamConfigSchema } from '../redteam/types';
 import telemetry from '../telemetry';
-import { Prompt, TestSuite } from '../types';
+import type { Prompt, RedteamPluginObject, TestSuite } from '../types';
+import { RedteamConfigSchema } from '../validators/redteam';
 import { doGenerateRedteam } from './generate/redteam';
 
 export async function redteamInit(directory: string | undefined) {
@@ -156,16 +158,38 @@ export async function redteamInit(directory: string | undefined) {
       name: `${plugin} - ${subCategoryDescriptions[plugin] || 'No description'}`,
       value: plugin,
       checked:
-        existingConfig?.redteam?.plugins.some((p) => p.id === plugin || p === plugin) ||
+        (existingConfig?.redteam?.plugins || []).some((p) => p.id === plugin) ||
         DEFAULT_PLUGINS.has(plugin),
     }));
 
-  const plugins = await checkbox({
+  const plugins: (string | RedteamPluginObject)[] = await checkbox({
     message: 'Select plugins to enable:',
     choices: pluginChoices,
     pageSize: Math.min(pluginChoices.length, process.stdout.rows - 4),
     loop: false,
+    validate: (answer) => answer.length > 0 || 'You must select at least one plugin.',
   });
+
+  // Handle policy plugin
+  if (plugins.includes('policy')) {
+    // Remove the original 'policy' string if it exists
+    const policyIndex = plugins.indexOf('policy');
+    if (policyIndex !== -1) {
+      plugins.splice(policyIndex, 1);
+    }
+
+    const policyDescription = await input({
+      message:
+        'You selected the `policy` plugin. Please enter your custom policy description (leave empty to skip):',
+    });
+
+    if (policyDescription.trim() !== '') {
+      plugins.push({
+        id: 'policy',
+        config: { policy: policyDescription.trim() },
+      } as RedteamPluginObject);
+    }
+  }
 
   console.clear();
   logger.info(chalk.bold('Strategy Configuration\n'));
@@ -180,7 +204,7 @@ export async function redteamInit(directory: string | undefined) {
           name: `${strategy} - ${subCategoryDescriptions[strategy] || 'No description'}`,
           value: strategy,
           checked:
-            existingConfig?.redteam?.strategies?.some(
+            (existingConfig?.redteam?.strategies || []).some(
               (s) => s.id === strategy || (typeof s === 'string' && s === strategy),
             ) || DEFAULT_STRATEGIES.includes(strategy as any),
         }
@@ -207,9 +231,9 @@ export async function redteamInit(directory: string | undefined) {
     prompts,
     providers: providers,
     tests: [],
-    redteam: redteamConfigSchema.safeParse({
-      plugins: plugins,
-      strategies: strategies,
+    redteam: RedteamConfigSchema.safeParse({
+      plugins,
+      strategies,
       numTests,
     }).data,
   };
@@ -217,11 +241,55 @@ export async function redteamInit(directory: string | undefined) {
   // Write the simplified form to the config file to make it easier
   // for people to play with. Writes 1 in the { id: ..., numTests }
   // and then the rest as strings.
-  const parsedPlugins = redteamConfigSchema.safeParse({
-    plugins: plugins,
-    strategies: strategies,
+  const parsedPlugins = RedteamConfigSchema.safeParse({
+    plugins,
+    strategies,
     numTests,
   })?.data?.plugins;
+
+  const hasHarmfulPlugin = parsedPlugins?.some((plugin) => plugin.id.startsWith('harmful'));
+  if (hasHarmfulPlugin) {
+    const { hasHarmfulRedteamConsent } = readGlobalConfig();
+    if (!hasHarmfulRedteamConsent) {
+      logger.info(chalk.yellow('\nImportant Notice:'));
+      logger.info(
+        'You have selected one or more plugins that generate potentially harmful content.',
+      );
+      logger.info(
+        'This content is intended solely for adversarial testing and evaluation purposes.',
+      );
+
+      const existingEmail = getUserEmail();
+
+      let email: string;
+      if (existingEmail) {
+        const confirmExistingEmail = await confirm({
+          message: `Do you agree?`,
+          default: true,
+        });
+        if (!confirmExistingEmail) {
+          process.exit(1);
+        }
+        email = existingEmail;
+      } else {
+        email = await input({
+          message: 'Please enter your email address to confirm your agreement:',
+          validate: (value) => {
+            return value.includes('@') || 'Please enter a valid email address';
+          },
+        });
+        setUserEmail(email);
+      }
+
+      try {
+        await telemetry.saveConsent(email);
+        writeGlobalConfigPartial({ hasHarmfulRedteamConsent: true });
+      } catch (err) {
+        logger.error(`Error saving consent: ${(err as Error).message}`);
+      }
+    }
+  }
+
   const configPlugins = plugins.length >= 2 ? [parsedPlugins?.[0], ...plugins.slice(1)] : plugins;
 
   fs.writeFileSync(

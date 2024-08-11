@@ -12,9 +12,8 @@ import type {
 } from '../types';
 import { getNunjucksEngine } from '../util/templates';
 import { parseChatPrompt } from './shared';
+import type { GeminiErrorResponse, Palm2ApiResponse } from './vertexUtil';
 import {
-  GeminiErrorResponse,
-  Palm2ApiResponse,
   getGoogleClient,
   maybeCoerceToGeminiFormat,
   type GeminiApiResponse,

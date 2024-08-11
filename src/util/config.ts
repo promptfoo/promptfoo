@@ -1,6 +1,9 @@
 import * as fs from 'fs';
+import yaml from 'js-yaml';
 import * as os from 'os';
 import * as path from 'path';
+import type { UnifiedConfig } from '../types';
+import { orderKeys } from './json';
 
 let configDirectoryPath: string | undefined = process.env.PROMPTFOO_CONFIG_DIR;
 
@@ -14,4 +17,17 @@ export function getConfigDirectoryPath(createIfNotExists: boolean = false): stri
 
 export function setConfigDirectoryPath(newPath: string): void {
   configDirectoryPath = newPath;
+}
+
+export function writePromptfooConfig(config: Partial<UnifiedConfig>, outputPath: string) {
+  const orderedConfig = orderKeys(config, [
+    'description',
+    'prompts',
+    'providers',
+    'redteam',
+    'defaultTest',
+    'tests',
+    'scenarios',
+  ]);
+  fs.writeFileSync(outputPath, yaml.dump(orderedConfig, { skipInvalid: true }));
 }

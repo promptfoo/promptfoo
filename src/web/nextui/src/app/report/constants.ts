@@ -3,44 +3,47 @@ import type { Plugin, Strategy } from '../../../../../redteam/constants';
 export const riskCategories = {
   'Brand Risk': [
     'competitors',
-    'politics',
     'excessive-agency',
     'hallucination',
-    'imitation',
-    'overreliance',
     'harmful:graphic-content',
+    'harmful:harassment-bullying',
     'harmful:indiscriminate-weapons',
+    'harmful:insults',
     'harmful:misinformation-disinformation',
     'harmful:non-violent-crime',
+    'harmful:profanity',
     'harmful:radicalization',
     'harmful:unsafe-practices',
+    'imitation',
+    'overreliance',
+    'politics',
   ],
   'Legal Risk': [
+    'contracts',
     'harmful:child-exploitation',
     'harmful:copyright-violations',
     'harmful:cybercrime',
+    'harmful:hate',
     'harmful:illegal-activities',
     'harmful:illegal-drugs',
     'harmful:intellectual-property',
     'harmful:privacy',
+    'harmful:self-harm',
     'harmful:sex-crime',
     'harmful:sexual-content',
     'harmful:specialized-advice',
     'harmful:violent-crime',
-    'harmful:self-harm',
-    'contracts',
   ],
-  'Malicious Attacks': [
+  'Technical Risk': [
     'debug-access',
-    'harmful:harassment-bullying',
-    'harmful:hate',
-    'harmful:insults',
-    'harmful:profanity',
     'hijacking',
     'jailbreak',
     'pii',
     'prompt-injection',
     'rbac',
+    'bola',
+    'bfla',
+    'ssrf',
     'shell-injection',
     'sql-injection',
   ],
@@ -49,7 +52,7 @@ export const riskCategories = {
 export const categoryDescriptions = {
   'Brand Risk': 'Risks that can affect the brand reputation and trustworthiness.',
   'Legal Risk': 'Risks that can lead to legal consequences or violations.',
-  'Malicious Attacks': 'Risks involving malicious activities targeting the system or users.',
+  'Technical Risk': 'Risks involving malicious activities targeting the system or users.',
 };
 
 export enum Severity {
@@ -113,8 +116,11 @@ export const categoryMapReverse = Object.entries(riskCategories).reduce(
 
 export const categoryLabels = Object.keys(categoryMapReverse);
 
-// Map from metric name or harm category to plugin name
+// Map from plugin name to metric name or harm category
 export const categoryAliases = {
+  bola: 'BOLAEnforcement',
+  bfla: 'BFLAEnforcement',
+  ssrf: 'SSRFEnforcement',
   'debug-access': 'DebugAccess',
   'excessive-agency': 'ExcessiveAgency',
   'harmful:child-exploitation': 'Child Exploitation',
@@ -166,6 +172,9 @@ export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
 
 // These names are displayed in risk cards and in the table
 export const displayNameOverrides = {
+  bola: 'Object-Level Authorization',
+  bfla: 'Function-Level Authorization',
+  ssrf: 'Server-Side Request Forgery',
   'excessive-agency': 'Excessive Agency',
   'prompt-injection': 'Prompt Injection',
   competitors: 'Competitor Endorsements',
@@ -186,12 +195,12 @@ export const displayNameOverrides = {
 
 // Duplicated in src/redteam/constants.ts for backend
 export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
-  competitors: 'Competitor mentions and endorsements',
-  contracts: 'Enters business or legal commitments without supervision.',
+  default: 'Includes common plugins',
+  bola: 'Broken Object Level Authorization (BOLA) tests.',
+  bfla: 'Broken Function Level Authorization (BFLA) tests.',
+  ssrf: 'Server-Side Request Forgery (SSRF) tests.',
   'debug-access': 'Attempts to access or use debugging commands.',
   'excessive-agency': 'Model taking excessive initiative or misunderstanding its capabilities.',
-  hallucination: 'Model generating false or misleading information.',
-  harmful: 'All harmful categories',
   'harmful:chemical-biological-weapons': 'Content related to chemical or biological weapons',
   'harmful:child-exploitation': 'Content exploiting or harming children.',
   'harmful:copyright-violations': 'Content violating copyright laws.',
@@ -215,20 +224,28 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'harmful:specialized-advice': 'Providing advice in specialized fields without expertise.',
   'harmful:unsafe-practices': 'Content promoting unsafe or harmful practices.',
   'harmful:violent-crime': 'Content related to violent criminal activities.',
-  hijacking: 'Unauthorized or off-topic resource use.',
-  imitation: 'Imitates people, brands, or organizations.',
-  jailbreak: 'Attempts to bypass security measures through iterative prompt refinement.',
   'jailbreak:tree':
     'Experimental: More expensive and time-consuming jailbreak technique for improved results.',
-  overreliance: 'Model susceptible to relying on an incorrect user assumption or input.',
-  pii: 'All PII categories',
   'pii:api-db': 'PII exposed through API or database',
   'pii:direct': 'Direct exposure of PII',
   'pii:session': 'PII exposed in session data',
   'pii:social': 'PII exposed through social engineering',
-  politics: 'Makes political statements.',
   'prompt-injection': "Malicious inputs designed to manipulate the model's behavior.",
-  rbac: 'Tests whether the model properly implements Role-Based Access Control (RBAC).',
   'shell-injection': 'Attempts to execute shell commands through the model.',
   'sql-injection': 'Attempts to perform SQL injection attacks to manipulate database queries.',
+  base64: 'Attempts to obfuscate malicious content using Base64 encoding.',
+  competitors: 'Competitor mentions and endorsements',
+  contracts: 'Enters business or legal commitments without supervision.',
+  hallucination: 'Model generating false or misleading information.',
+  harmful: 'All harmful categories',
+  hijacking: 'Unauthorized or off-topic resource use.',
+  imitation: 'Imitates people, brands, or organizations.',
+  jailbreak: 'Attempts to bypass security measures through iterative prompt refinement.',
+  leetspeak: 'Attempts to obfuscate malicious content using leetspeak.',
+  overreliance: 'Model susceptible to relying on an incorrect user assumption or input.',
+  pii: 'All PII categories',
+  policy: 'Violates a custom configured policy.',
+  politics: 'Makes political statements.',
+  rbac: 'Tests whether the model properly implements Role-Based Access Control (RBAC).',
+  rot13: 'Attempts to obfuscate malicious content using ROT13 encoding.',
 };

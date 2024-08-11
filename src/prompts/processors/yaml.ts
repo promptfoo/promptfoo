@@ -1,5 +1,5 @@
 import * as fs from 'fs';
-import { Prompt } from '../../types';
+import type { Prompt } from '../../types';
 
 /**
  * Processes a YAML file to extract prompts.
@@ -18,6 +18,7 @@ export function processYamlFile(filePath: string, prompt: Partial<Prompt>): Prom
     {
       raw: fileContents,
       label: prompt.label || `${filePath}: ${fileContents}`,
+      config: prompt.config,
     },
   ];
 }

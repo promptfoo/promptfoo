@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { BedrockRuntime } from '@aws-sdk/client-bedrock-runtime';
 import dedent from 'dedent';
-import { Agent } from 'http';
+import type { Agent } from 'http';
 import { getCache, isCacheEnabled } from '../cache';
 import logger from '../logger';
 import type {
@@ -12,7 +12,7 @@ import type {
   ProviderEmbeddingResponse,
 } from '../types';
 import { outputFromMessage, parseMessages } from './anthropic';
-import { parseChatPrompt } from './shared';
+import { maybeLoadFromExternalFile, parseChatPrompt } from './shared';
 
 interface BedrockOptions {
   region?: string;
@@ -352,7 +352,13 @@ export const BEDROCK_MODEL = {
         undefined,
         'bedrock-2023-05-31',
       );
-      addConfigParam(params, 'tools', config?.tools, undefined, undefined);
+      addConfigParam(
+        params,
+        'tools',
+        maybeLoadFromExternalFile(config?.tools),
+        undefined,
+        undefined,
+      );
       addConfigParam(params, 'tool_choice', config?.tool_choice, undefined, undefined);
       addConfigParam(params, 'system', system, undefined, undefined);
       return params;
@@ -441,7 +447,7 @@ export const BEDROCK_MODEL = {
       addConfigParam(params, 'presence_penalty', config?.presence_penalty);
       addConfigParam(params, 'seed', config?.seed);
       addConfigParam(params, 'return_prompt', config?.return_prompt);
-      addConfigParam(params, 'tools', config?.tools);
+      addConfigParam(params, 'tools', maybeLoadFromExternalFile(config?.tools));
       addConfigParam(params, 'tool_results', config?.tool_results);
       addConfigParam(params, 'stop_sequences', stop);
       addConfigParam(params, 'raw_prompting', config?.raw_prompting);

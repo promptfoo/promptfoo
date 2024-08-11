@@ -1,18 +1,17 @@
+import dedent from 'dedent';
 import invariant from 'tiny-invariant';
 import logger from '../../logger';
+import { matchesLlmRubric } from '../../matchers';
+import { maybeLoadFromExternalFile } from '../../providers/shared';
 import type { ApiProvider, Assertion, TestCase } from '../../types';
+import type { AtomicTestCase, GradingResult } from '../../types';
 import { getNunjucksEngine } from '../../util/templates';
 import { retryWithDeduplication, sampleArray } from '../util';
 
 /**
  * Abstract base class for creating plugins that generate test cases.
  */
-export default abstract class PluginBase {
-  /**
-   * Template string used to generate prompts.
-   */
-  protected abstract template: string;
-
+export abstract class PluginBase {
   /**
    * Creates an instance of PluginBase.
    * @param provider - The API provider used for generating prompts.
@@ -26,6 +25,11 @@ export default abstract class PluginBase {
   ) {
     logger.debug(`PluginBase initialized with purpose: ${purpose}, injectVar: ${injectVar}`);
   }
+
+  /**
+   * Template string used to generate prompts.
+   */
+  protected abstract getTemplate(): Promise<string>;
 
   /**
    * Abstract method to get assertions for a given prompt.
@@ -55,7 +59,7 @@ export default abstract class PluginBase {
 
       const nunjucks = getNunjucksEngine();
       const { output: generatedPrompts } = await this.provider.callApi(
-        nunjucks.renderString(this.template, {
+        nunjucks.renderString(await this.getTemplate(), {
           purpose: this.purpose,
           n: currentBatchSize,
         }),
@@ -76,5 +80,53 @@ export default abstract class PluginBase {
       },
       assert: this.getAssertions(prompt),
     }));
+  }
+}
+
+/**
+ * Base class for all redteam graders.
+ *
+ * Each grader should implement an id (e.g. `promptfoo:redteam:foo`) and a rubric (grading prompt).
+ * By default, the rubric is passed to `llm-rubric` grader.
+ *
+ * But if you'd like, you can override the `getResult` method to use a different grading method.
+ */
+export abstract class RedteamModelGrader {
+  abstract id: string;
+  abstract rubric: string;
+
+  async getResult(
+    prompt: string,
+    llmOutput: string,
+    test: AtomicTestCase,
+    provider: ApiProvider | undefined,
+  ): Promise<{ grade: GradingResult; rubric: string }> {
+    invariant(test.metadata?.purpose, 'Test is missing purpose metadata');
+    const nunjucks = getNunjucksEngine(undefined, true /* throwOnUndefined */);
+    const vars = {
+      prompt,
+      entities: test.metadata?.entities ?? [],
+      harmCategory: test.metadata?.harmCategory,
+      policy: test.metadata?.policy,
+      purpose: test.metadata?.purpose,
+      tools: maybeLoadFromExternalFile(provider?.config?.tools),
+    };
+    let finalRubric: string;
+    try {
+      finalRubric = nunjucks.renderString(this.rubric, vars);
+    } catch (error) {
+      const err = error as Error;
+      logger.debug(`Error rendering rubric template: ${err.message}`);
+      logger.debug(`Template: ${this.rubric}`);
+      logger.debug(`Variables: ${JSON.stringify(vars)}`);
+      throw new Error(dedent`
+        Error rendering rubric template: ${err.message}
+
+        Variables: ${JSON.stringify(vars, null, 2)}
+      `);
+    }
+    const grade = await matchesLlmRubric(finalRubric, llmOutput, {});
+    logger.debug(`Redteam grading result for ${this.id}: - ${JSON.stringify(grade)}`);
+    return { grade, rubric: finalRubric };
   }
 }

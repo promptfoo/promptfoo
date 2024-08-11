@@ -1,6 +1,6 @@
 import logger from '../../../src/logger';
 import { extractEntities } from '../../../src/redteam/extraction/entities';
-import { ApiProvider } from '../../../src/types';
+import type { ApiProvider } from '../../../src/types';
 
 jest.mock('../../../src/logger', () => ({
   error: jest.fn(),

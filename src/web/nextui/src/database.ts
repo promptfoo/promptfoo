@@ -1,4 +1,4 @@
-import { EvaluateSummary, EvaluateTestSuite } from '@/../../../types';
+import type { EvaluateSummary, EvaluateTestSuite } from '@/../../../types';
 import type { Database } from '@/types/supabase';
 import type { SupabaseClient } from '@supabase/supabase-js';
 

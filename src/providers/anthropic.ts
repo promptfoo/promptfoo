@@ -2,7 +2,7 @@ import Anthropic, { APIError } from '@anthropic-ai/sdk';
 import { getCache, isCacheEnabled } from '../cache';
 import logger from '../logger';
 import type { ApiProvider, EnvOverrides, ProviderResponse, TokenUsage } from '../types';
-import { parseChatPrompt } from './shared';
+import { maybeLoadFromExternalFile, parseChatPrompt } from './shared';
 
 const ANTHROPIC_MODELS = [
   ...['claude-instant-1.2'].map((model) => ({
@@ -209,7 +209,7 @@ export class AnthropicMessagesProvider implements ApiProvider {
       messages: extractedMessages,
       stream: false,
       temperature: this.config.temperature || parseFloat(process.env.ANTHROPIC_TEMPERATURE || '0'),
-      ...(this.config.tools ? { tools: this.config.tools } : {}),
+      ...(this.config.tools ? { tools: maybeLoadFromExternalFile(this.config.tools) } : {}),
       ...(this.config.tool_choice ? { tool_choice: this.config.tool_choice } : {}),
     };
 

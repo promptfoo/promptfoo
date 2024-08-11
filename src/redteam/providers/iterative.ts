@@ -178,8 +178,13 @@ async function runRedteamConversation({
     const isOnTopic = JSON.parse(isOnTopicResp.output).isOnTopic;
 
     const targetResp = await targetProvider.callApi(targetPrompt);
-    invariant(typeof targetResp.output === 'string', 'Expected output to be a string');
-    const targetResponse = targetResp.output;
+    invariant(targetResp.output, 'Expected output to be defined');
+    let targetResponse;
+    if (typeof targetResp.output === 'string') {
+      targetResponse = targetResp.output;
+    } else {
+      targetResponse = JSON.stringify(targetResp.output);
+    }
 
     const penalizedPhrases = ['in the face of impending doom'];
     const containsPenalizedPhrase = penalizedPhrases.some((phrase) =>
@@ -234,7 +239,7 @@ async function runRedteamConversation({
 class RedteamIterativeProvider implements ApiProvider {
   private readonly injectVar: string;
 
-  constructor(private readonly config: Record<string, string | object>) {
+  constructor(readonly config: Record<string, string | object>) {
     logger.debug(`RedteamIterativeProvider config: ${JSON.stringify(config)}`);
     invariant(typeof config.injectVar === 'string', 'Expected injectVar to be set');
     this.injectVar = config.injectVar;

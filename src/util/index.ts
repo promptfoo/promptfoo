@@ -1,5 +1,6 @@
 import { createHash } from 'crypto';
 import { stringify } from 'csv-stringify/sync';
+import dedent from 'dedent';
 import dotenv from 'dotenv';
 import { desc, eq, like, and } from 'drizzle-orm';
 import deepEqual from 'fast-deep-equal';
@@ -12,7 +13,7 @@ import invariant from 'tiny-invariant';
 import { getAuthor } from '../accounts';
 import { TERMINAL_MAX_WIDTH } from '../constants';
 import { getDbSignalPath, getDb } from '../database';
-import { datasets, evals, evalsToDatasets, evalsToPrompts, prompts } from '../database/operations';
+import { datasets, evals, evalsToDatasets, evalsToPrompts, prompts } from '../database/tables';
 import { getDirectory, importModule } from '../esm';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
@@ -43,6 +44,27 @@ import { getNunjucksEngine } from './templates';
 
 const DEFAULT_QUERY_LIMIT = 100;
 
+const outputToSimpleString = (output: EvaluateTableOutput) => {
+  const passFailText = output.pass ? '[PASS]' : '[FAIL]';
+  const namedScoresText = Object.entries(output.namedScores)
+    .map(([name, value]) => `${name}: ${value?.toFixed(2)}`)
+    .join(', ');
+  const scoreText =
+    namedScoresText.length > 0
+      ? `(${output.score?.toFixed(2)}, ${namedScoresText})`
+      : `(${output.score?.toFixed(2)})`;
+  const gradingResultText = output.gradingResult
+    ? `${output.pass ? 'Pass' : 'Fail'} Reason: ${output.gradingResult.reason}`
+    : '';
+  return dedent`
+      ${passFailText} ${scoreText}
+
+      ${output.text}
+
+      ${gradingResultText}
+    `.trim();
+};
+
 export async function writeOutput(
   outputPath: string,
   evalId: string | null,
@@ -50,33 +72,6 @@ export async function writeOutput(
   config: Partial<UnifiedConfig>,
   shareableUrl: string | null,
 ) {
-  const { data: outputExtension } = OutputFileExtension.safeParse(
-    path.extname(outputPath).slice(1).toLowerCase(),
-  );
-  invariant(
-    outputExtension,
-    `Unsupported output file format ${outputExtension}. Please use one of: ${OutputFileExtension.options.join(', ')}.`,
-  );
-
-  const outputToSimpleString = (output: EvaluateTableOutput) => {
-    const passFailText = output.pass ? '[PASS]' : '[FAIL]';
-    const namedScoresText = Object.entries(output.namedScores)
-      .map(([name, value]) => `${name}: ${value?.toFixed(2)}`)
-      .join(', ');
-    const scoreText =
-      namedScoresText.length > 0
-        ? `(${output.score?.toFixed(2)}, ${namedScoresText})`
-        : `(${output.score?.toFixed(2)})`;
-    const gradingResultText = output.gradingResult
-      ? `${output.pass ? 'Pass' : 'Fail'} Reason: ${output.gradingResult.reason}`
-      : '';
-    return `${passFailText} ${scoreText}
-
-${output.text}
-
-${gradingResultText}`.trim();
-  };
-
   if (outputPath.match(/^https:\/\/docs\.google\.com\/spreadsheets\//)) {
     const rows = results.table.body.map((row) => {
       const csvRow: CsvRow = {};
@@ -88,50 +83,56 @@ ${gradingResultText}`.trim();
       });
       return csvRow;
     });
+    logger.info(`Writing ${rows.length} rows to Google Sheets...`);
     await writeCsvToGoogleSheet(rows, outputPath);
-  } else {
-    // Ensure the directory exists
-    const outputDir = path.dirname(outputPath);
-    if (!fs.existsSync(outputDir)) {
-      fs.mkdirSync(outputDir, { recursive: true });
-    }
+    return;
+  }
 
-    if (outputExtension === 'csv') {
-      const csvOutput = stringify([
-        [
-          ...results.table.head.vars,
-          ...results.table.head.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`),
-        ],
-        ...results.table.body.map((row) => [...row.vars, ...row.outputs.map(outputToSimpleString)]),
-      ]);
-      fs.writeFileSync(outputPath, csvOutput);
-    } else if (outputExtension === 'json') {
-      fs.writeFileSync(
-        outputPath,
-        JSON.stringify({ evalId, results, config, shareableUrl } satisfies OutputFile, null, 2),
-      );
-    } else if (
-      outputExtension === 'yaml' ||
-      outputExtension === 'yml' ||
-      outputExtension === 'txt'
-    ) {
-      fs.writeFileSync(outputPath, yaml.dump({ results, config, shareableUrl } as OutputFile));
-    } else if (outputExtension === 'html') {
-      const template = fs.readFileSync(`${getDirectory()}/tableOutput.html`, 'utf-8');
-      const table = [
-        [
-          ...results.table.head.vars,
-          ...results.table.head.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`),
-        ],
-        ...results.table.body.map((row) => [...row.vars, ...row.outputs.map(outputToSimpleString)]),
-      ];
-      const htmlOutput = getNunjucksEngine().renderString(template, {
-        config,
-        table,
-        results: results.results,
-      });
-      fs.writeFileSync(outputPath, htmlOutput);
-    }
+  const { data: outputExtension } = OutputFileExtension.safeParse(
+    path.extname(outputPath).slice(1).toLowerCase(),
+  );
+  invariant(
+    outputExtension,
+    `Unsupported output file format ${outputExtension}. Please use one of: ${OutputFileExtension.options.join(', ')}.`,
+  );
+
+  // Ensure the directory exists
+  const outputDir = path.dirname(outputPath);
+  if (!fs.existsSync(outputDir)) {
+    fs.mkdirSync(outputDir, { recursive: true });
+  }
+
+  if (outputExtension === 'csv') {
+    const csvOutput = stringify([
+      [
+        ...results.table.head.vars,
+        ...results.table.head.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`),
+      ],
+      ...results.table.body.map((row) => [...row.vars, ...row.outputs.map(outputToSimpleString)]),
+    ]);
+    fs.writeFileSync(outputPath, csvOutput);
+  } else if (outputExtension === 'json') {
+    fs.writeFileSync(
+      outputPath,
+      JSON.stringify({ evalId, results, config, shareableUrl } satisfies OutputFile, null, 2),
+    );
+  } else if (outputExtension === 'yaml' || outputExtension === 'yml' || outputExtension === 'txt') {
+    fs.writeFileSync(outputPath, yaml.dump({ results, config, shareableUrl } as OutputFile));
+  } else if (outputExtension === 'html') {
+    const template = fs.readFileSync(`${getDirectory()}/tableOutput.html`, 'utf-8');
+    const table = [
+      [
+        ...results.table.head.vars,
+        ...results.table.head.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`),
+      ],
+      ...results.table.body.map((row) => [...row.vars, ...row.outputs.map(outputToSimpleString)]),
+    ];
+    const htmlOutput = getNunjucksEngine().renderString(template, {
+      config,
+      table,
+      results: results.results,
+    });
+    fs.writeFileSync(outputPath, htmlOutput);
   }
 }
 
@@ -284,6 +285,7 @@ export function listPreviousResults(
       createdAt: evals.createdAt,
       description: evals.description,
       config: evals.config,
+      results: evals.results,
       datasetId: evalsToDatasets.datasetId,
     })
     .from(evals)
@@ -298,16 +300,12 @@ export function listPreviousResults(
   const results = query.orderBy(desc(evals.createdAt)).limit(limit).all();
 
   return results.map((result) => {
-    let numTests = result.config.tests?.length || 0;
-    for (const scenario of result.config.scenarios || []) {
-      numTests += scenario.config.length * scenario.tests.length;
-    }
-
+    const numTests = result.results.table.body.length;
     return {
       evalId: result.evalId,
       createdAt: result.createdAt,
       description: result.description,
-      numTests: numTests,
+      numTests,
       datasetId: result.datasetId,
     };
   });
@@ -871,6 +869,11 @@ export async function deleteEval(evalId: string) {
   });
 }
 
+export async function deleteAllEvals() {
+  const db = getDb();
+  await db.delete(evals).run();
+}
+
 export async function readFilters(
   filters: Record<string, string>,
   basePath: string = '',
@@ -947,9 +950,10 @@ export function providerToIdentifier(provider: TestCase['provider']): string | u
     return provider.id();
   } else if (isProviderOptions(provider)) {
     return provider.id;
+  } else if (typeof provider === 'string') {
+    return provider;
   }
-
-  return provider;
+  return undefined;
 }
 
 export function varsMatch(

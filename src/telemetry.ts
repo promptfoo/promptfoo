@@ -14,6 +14,7 @@ type TelemetryEvent = {
 type TelemetryEventTypes = 'eval_ran' | 'assertion_used' | 'command_used';
 
 const TELEMETRY_ENDPOINT = 'https://api.promptfoo.dev/telemetry';
+const CONSENT_ENDPOINT = 'https://api.promptfoo.dev/consent';
 
 const TELEMETRY_TIMEOUT_MS = 1000;
 
@@ -63,6 +64,33 @@ export class Telemetry {
           this.events = [];
         }
       } catch (err) {}
+    }
+  }
+
+  /**
+   * This is a separate endpoint to save consent used only for redteam data synthesis for "harmful" plugins.
+   */
+  async saveConsent(email: string): Promise<void> {
+    if (!this.disabled) {
+      try {
+        const response = await fetchWithTimeout(
+          CONSENT_ENDPOINT,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ email }),
+          },
+          TELEMETRY_TIMEOUT_MS,
+        );
+
+        if (!response.ok) {
+          throw new Error(`Failed to save consent: ${response.statusText}`);
+        }
+      } catch (err) {
+        logger.error(`Error saving consent: ${(err as Error).message}`);
+      }
     }
   }
 }

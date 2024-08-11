@@ -1,5 +1,5 @@
 import { validateAssertions, AssertValidationError } from '../../src/assertions/validateAssertions';
-import { TestCase } from '../../src/types';
+import type { TestCase } from '../../src/types';
 
 describe('validateAssertions', () => {
   const test: TestCase = {

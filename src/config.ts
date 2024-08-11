@@ -12,7 +12,7 @@ import logger from './logger';
 import { readPrompts, readProviderPromptMap } from './prompts';
 import { loadApiProviders } from './providers';
 import { readTest, readTests } from './testCases';
-import {
+import type {
   CommandLineOptions,
   Prompt,
   ProviderOptions,
@@ -89,13 +89,14 @@ export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<Unifi
         provider = Object.values(provider)[0] as ProviderOptions;
       }
 
-      if (provider.config?.functions) {
+      // Handle dereferencing for inline tools, but skip external file paths (which are just strings)
+      if (Array.isArray(provider.config?.functions)) {
         functionsParametersList[providerIndex] = extractFunctionParameters(
           provider.config.functions,
         );
       }
 
-      if (provider.config?.tools) {
+      if (Array.isArray(provider.config?.tools)) {
         toolsParametersList[providerIndex] = extractToolParameters(provider.config.tools);
       }
     });
@@ -139,7 +140,7 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
     case '.yaml':
     case '.yml':
       const rawConfig = yaml.load(fs.readFileSync(configPath, 'utf-8')) as UnifiedConfig;
-      return dereferenceConfig(rawConfig);
+      return dereferenceConfig(rawConfig || {});
     case '.js':
     case '.cjs':
     case '.mjs':
@@ -228,6 +229,21 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
     }
   }
 
+  const redteam: UnifiedConfig['redteam'] = {
+    plugins: [],
+    strategies: [],
+  };
+  for (const config of configs) {
+    if (config.redteam) {
+      redteam.plugins = [
+        ...new Set([...(redteam.plugins || []), ...(config.redteam.plugins || [])]),
+      ];
+      redteam.strategies = [
+        ...new Set([...(redteam.strategies || []), ...(config.redteam.strategies || [])]),
+      ];
+    }
+  }
+
   const configsAreStringOrArray = configs.every(
     (config) => typeof config.prompts === 'string' || Array.isArray(config.prompts),
   );
@@ -297,8 +313,15 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
         vars: { ...prev?.vars, ...curr.defaultTest?.vars },
         assert: [...(prev?.assert || []), ...(curr.defaultTest?.assert || [])],
         options: { ...prev?.options, ...curr.defaultTest?.options },
+        metadata: { ...prev?.metadata, ...curr.defaultTest?.metadata },
       };
     }, {}),
+    derivedMetrics: configs.reduce<UnifiedConfig['derivedMetrics']>((prev, curr) => {
+      if (curr.derivedMetrics) {
+        return [...(prev ?? []), ...curr.derivedMetrics];
+      }
+      return prev;
+    }, undefined),
     nunjucksFilters: configs.reduce((prev, curr) => ({ ...prev, ...curr.nunjucksFilters }), {}),
     env: configs.reduce((prev, curr) => ({ ...prev, ...curr.env }), {}),
     evaluateOptions: configs.reduce((prev, curr) => ({ ...prev, ...curr.evaluateOptions }), {}),
@@ -307,6 +330,7 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
       {},
     ),
     extensions: extensions,
+    redteam,
     metadata: configs.reduce((prev, curr) => ({ ...prev, ...curr.metadata }), {}),
     sharing: !configs.some((config) => config.sharing === false),
   };
@@ -361,7 +385,7 @@ export async function resolveConfigs(
 
   const defaultTestRaw = fileConfig.defaultTest || defaultConfig.defaultTest;
   const config: Omit<UnifiedConfig, 'evaluateOptions' | 'commandLineOptions'> = {
-    description: fileConfig.description || defaultConfig.description,
+    description: cmdObj.description || fileConfig.description || defaultConfig.description,
     prompts: cmdObj.prompts || fileConfig.prompts || defaultConfig.prompts || [],
     providers: cmdObj.providers || fileConfig.providers || defaultConfig.providers || [],
     tests: cmdObj.tests || cmdObj.vars || fileConfig.tests || defaultConfig.tests || [],
@@ -434,6 +458,7 @@ export async function resolveConfigs(
   }
 
   const defaultTest: TestCase = {
+    metadata: config.metadata,
     options: {
       prefix: cmdObj.promptPrefix,
       suffix: cmdObj.promptSuffix,

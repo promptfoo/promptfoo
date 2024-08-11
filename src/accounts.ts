@@ -1,4 +1,4 @@
-import { GlobalConfig } from './configTypes';
+import type { GlobalConfig } from './configTypes';
 import { readGlobalConfig, writeGlobalConfig } from './globalConfig';
 
 export function getUserEmail(): string | null {

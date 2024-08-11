@@ -1,4 +1,5 @@
-import Ajv, { ValidateFunction } from 'ajv';
+import type { ValidateFunction } from 'ajv';
+import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
 import async from 'async';
 import { XMLParser } from 'fast-xml-parser';
@@ -29,13 +30,14 @@ import {
   matchesSelectBest,
   matchesModeration,
 } from './matchers';
-import { OpenAiChatCompletionProvider } from './providers/openai';
+import type { OpenAiChatCompletionProvider } from './providers/openai';
 import { validateFunctionCall } from './providers/openaiUtil';
 import { parseChatPrompt } from './providers/shared';
 import { runPython } from './python/pythonUtils';
 import { runPythonCode } from './python/wrapper';
 import { getGraderById } from './redteam/graders';
 import telemetry from './telemetry';
+import type { AssertionValue, ProviderResponse } from './types';
 import {
   type ApiProvider,
   type Assertion,
@@ -44,8 +46,6 @@ import {
   type GradingResult,
   type TestCase,
   isGradingResult,
-  AssertionValue,
-  ProviderResponse,
 } from './types';
 import { extractJsonObjects } from './util';
 import { getNunjucksEngine } from './util/templates';
@@ -1127,8 +1127,8 @@ ${
   if (baseType === 'moderation') {
     // Some redteam techniques override the actual prompt that is used, so we need to assess that prompt for moderation.
     const promptToModerate = providerResponse.metadata?.redteamFinalPrompt || prompt;
+    const outputString = typeof output === 'string' ? output : JSON.stringify(output);
     invariant(promptToModerate, 'moderation assertion type must have a prompt');
-    invariant(typeof output === 'string', 'moderation assertion type must have a string output');
     invariant(
       !assertion.value ||
         (Array.isArray(assertion.value) && typeof assertion.value[0] === 'string'),
@@ -1153,7 +1153,7 @@ ${
     const moderationResult = await matchesModeration(
       {
         userPrompt: promptToModerate,
-        assistantResponse: output,
+        assistantResponse: outputString,
         categories: Array.isArray(assertion.value) ? assertion.value : [],
       },
       test.options,
@@ -1362,9 +1362,13 @@ ${
     invariant(grader, `Unknown promptfoo grader: ${baseType}`);
     invariant(prompt, `Promptfoo grader ${baseType} must have a prompt`);
 
+    const { grade, rubric } = await grader.getResult(prompt, outputString, test, provider);
     return {
-      assertion,
-      ...(await grader.getResult(prompt, outputString, test)),
+      assertion: {
+        ...assertion,
+        value: rubric,
+      },
+      ...grade,
     };
   }
 

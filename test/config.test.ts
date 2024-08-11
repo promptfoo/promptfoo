@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import { globSync } from 'glob';
 import * as path from 'path';
 import { dereferenceConfig, readConfigs } from '../src/config';
-import { UnifiedConfig } from '../src/types';
+import type { UnifiedConfig } from '../src/types';
 
 jest.mock('../src/database', () => ({
   getDb: jest.fn(),
@@ -39,10 +39,15 @@ describe('readConfigs', () => {
       scenarios: ['scenario1'],
       defaultTest: {
         description: 'defaultTest1',
+        metadata: {},
         vars: { var1: 'value1' },
         assert: [{ type: 'equals', value: 'expected1' }],
       },
       nunjucksFilters: { filter1: 'filter1' },
+      redteam: {
+        plugins: ['plugin1'],
+        strategies: ['strategy1'],
+      },
       env: { envVar1: 'envValue1' },
       evaluateOptions: { maxConcurrency: 1 },
       commandLineOptions: { verbose: true },
@@ -56,10 +61,15 @@ describe('readConfigs', () => {
       scenarios: ['scenario2'],
       defaultTest: {
         description: 'defaultTest2',
+        metadata: {},
         vars: { var2: 'value2' },
         assert: [{ type: 'equals', value: 'expected2' }],
       },
       nunjucksFilters: { filter2: 'filter2' },
+      redteam: {
+        plugins: ['plugin2'],
+        strategies: [],
+      },
       env: { envVar2: 'envValue2' },
       evaluateOptions: { maxConcurrency: 2 },
       commandLineOptions: { verbose: false },
@@ -104,11 +114,17 @@ describe('readConfigs', () => {
       scenarios: ['scenario1'],
       defaultTest: {
         description: 'defaultTest1',
+        metadata: {},
         options: {},
         vars: { var1: 'value1' },
         assert: [{ type: 'equals', value: 'expected1' }],
       },
       nunjucksFilters: { filter1: 'filter1' },
+      derivedMetrics: undefined,
+      redteam: {
+        plugins: ['plugin1'],
+        strategies: ['strategy1'],
+      },
       env: { envVar1: 'envValue1' },
       evaluateOptions: { maxConcurrency: 1 },
       commandLineOptions: { verbose: true },
@@ -126,11 +142,17 @@ describe('readConfigs', () => {
       scenarios: ['scenario2'],
       defaultTest: {
         description: 'defaultTest2',
+        metadata: {},
         options: {},
         vars: { var2: 'value2' },
         assert: [{ type: 'equals', value: 'expected2' }],
       },
       nunjucksFilters: { filter2: 'filter2' },
+      derivedMetrics: undefined,
+      redteam: {
+        plugins: ['plugin2'],
+        strategies: [],
+      },
       env: { envVar2: 'envValue2' },
       evaluateOptions: { maxConcurrency: 2 },
       commandLineOptions: { verbose: false },
@@ -150,6 +172,7 @@ describe('readConfigs', () => {
       scenarios: ['scenario1', 'scenario2'],
       defaultTest: {
         description: 'defaultTest2',
+        metadata: {},
         options: {},
         vars: { var1: 'value1', var2: 'value2' },
         assert: [
@@ -158,6 +181,11 @@ describe('readConfigs', () => {
         ],
       },
       nunjucksFilters: { filter1: 'filter1', filter2: 'filter2' },
+      derivedMetrics: undefined,
+      redteam: {
+        plugins: ['plugin1', 'plugin2'],
+        strategies: ['strategy1'],
+      },
       env: { envVar1: 'envValue1', envVar2: 'envValue2' },
       evaluateOptions: { maxConcurrency: 2 },
       commandLineOptions: { verbose: false },
@@ -242,6 +270,31 @@ describe('readConfigs', () => {
       'prompt3',
       'prompt4',
     ]);
+  });
+
+  it('merges metadata correctly', async () => {
+    const config1 = {
+      defaultTest: {
+        metadata: { key1: 'value1' },
+      },
+    };
+    const config2 = {
+      defaultTest: {
+        metadata: { key2: 'value2' },
+      },
+    };
+
+    jest
+      .mocked(fs.readFileSync)
+      .mockReturnValueOnce(JSON.stringify(config1))
+      .mockReturnValueOnce(JSON.stringify(config2));
+
+    const result = await readConfigs(['config1.json', 'config2.json']);
+
+    expect(result.defaultTest?.metadata).toEqual({
+      key1: 'value1',
+      key2: 'value2',
+    });
   });
 });
 
@@ -416,5 +469,26 @@ describe('dereferenceConfig', () => {
       },
     };
     expect(dereferencedConfig).toEqual(expectedOutput);
+  });
+
+  it('should preserve handle string functions/tools when dereferencing', async () => {
+    const rawConfig = {
+      description: 'Test config with function parameters',
+      prompts: [],
+      tests: [],
+      evaluateOptions: {},
+      commandLineOptions: {},
+      providers: [
+        {
+          name: 'provider2',
+          config: {
+            functions: 'file://external_functions.yaml',
+            tools: 'file://external_tools.yaml',
+          },
+        },
+      ],
+    };
+    const dereferencedConfig = await dereferenceConfig(rawConfig as UnifiedConfig);
+    expect(dereferencedConfig).toEqual(rawConfig);
   });
 });

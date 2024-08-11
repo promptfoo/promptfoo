@@ -37,8 +37,7 @@ WORKDIR /app/src/web/nextui
 RUN npm prune --omit=dev
 
 # ---- Final Stage ----
-ARG TARGETPLATFORM=linux/amd64
-FROM --platform=${TARGETPLATFORM} node:20-alpine
+FROM node:20-alpine
 
 LABEL org.opencontainers.image.source="https://github.com/promptfoo/promptfoo"
 LABEL org.opencontainers.image.description="promptfoo is a tool for testing evaluating and red-teaming LLM apps."
@@ -52,6 +51,22 @@ COPY --from=builder /app/src/web/nextui/public ./public
 COPY --from=builder /app/src/web/nextui/.next/standalone ./
 COPY --from=builder /app/src/web/nextui/.next/static ./src/web/nextui/.next/static
 COPY --from=builder /app/drizzle ./src/web/nextui/.next/server/drizzle
+
+## build + install better-sqlite3
+## This is a kludge to get better-sqlite3 to work on mac M1
+## see: https://github.com/promptfoo/promptfoo/issues/1330
+ARG BSQL3_VERSION=v11.1.2
+RUN apk update && apk add --no-cache python3 build-base git && \
+    mkdir -p /tmp/build/ && \
+    cd /tmp/build/ && \
+    git clone https://github.com/WiseLibs/better-sqlite3.git && \
+    cd better-sqlite3 && git checkout $BSQL3_VERSION && \
+    cd /app && \
+    cp -r /tmp/build/better-sqlite3/* /app/node_modules/better-sqlite3/ && \
+    cd node_modules/better-sqlite3 && \
+    npm run build-release && \
+    rm -rf /tmp/build/ && \
+    apk del python3 build-base git
 
 RUN mkdir -p /root/.promptfoo/output
 

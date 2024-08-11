@@ -755,6 +755,7 @@ describe('evaluator', () => {
       providers: [mockApiProvider],
       prompts: [toPrompt('Test prompt')],
       defaultTest: {
+        metadata: { defaultKey: 'defaultValue' },
         assert: [
           {
             type: 'starts-with',
@@ -764,8 +765,8 @@ describe('evaluator', () => {
       },
       scenarios: [
         {
-          config: [{}],
-          tests: [{}],
+          config: [{ metadata: { configKey: 'configValue' } }],
+          tests: [{ metadata: { testKey: 'testValue' } }],
         },
         {
           config: [
@@ -792,13 +793,60 @@ describe('evaluator', () => {
       ],
     };
 
-    const summary = await evaluate(testSuite, {});
+    const result = await evaluate(testSuite, {});
+
+    expect(result).toMatchObject({
+      stats: {
+        successes: 2,
+        failures: 0,
+      },
+      results: expect.arrayContaining([
+        expect.objectContaining({
+          gradingResult: expect.objectContaining({
+            componentResults: expect.arrayContaining([expect.anything()]),
+          }),
+        }),
+        expect.objectContaining({
+          gradingResult: expect.objectContaining({
+            componentResults: expect.arrayContaining([
+              expect.anything(),
+              expect.anything(),
+              expect.anything(),
+            ]),
+          }),
+        }),
+      ]),
+    });
+
+    expect(result.table.body[0].test.metadata).toEqual({
+      defaultKey: 'defaultValue',
+      configKey: 'configValue',
+      testKey: 'testValue',
+    });
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
-    expect(summary.stats.successes).toBe(2);
-    expect(summary.stats.failures).toBe(0);
-    expect(summary.results[0].gradingResult?.componentResults?.length).toBe(1);
-    expect(summary.results[1].gradingResult?.componentResults?.length).toBe(3);
+  });
+
+  it('merges metadata correctly for regular tests', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      defaultTest: {
+        metadata: { defaultKey: 'defaultValue' },
+      },
+      tests: [
+        {
+          metadata: { testKey: 'testValue' },
+        },
+      ],
+    };
+
+    const summary = await evaluate(testSuite, {});
+
+    expect(summary.table.body[0].test.metadata).toEqual({
+      defaultKey: 'defaultValue',
+      testKey: 'testValue',
+    });
   });
 
   it('evaluate with _conversation variable', async () => {
@@ -1063,6 +1111,124 @@ describe('evaluator', () => {
       }),
     );
     expect(mockApiProviderWithTransform.callApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('evaluate with no output', async () => {
+    const mockApiProviderNoOutput: ApiProvider = {
+      id: jest.fn().mockReturnValue('test-provider-no-output'),
+      callApi: jest.fn().mockResolvedValue({
+        output: null,
+        tokenUsage: { total: 5, prompt: 5, completion: 0, cached: 0 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProviderNoOutput],
+      prompts: [toPrompt('Test prompt')],
+      tests: [],
+    };
+
+    const summary = await evaluate(testSuite, {});
+
+    expect(summary.stats.successes).toBe(0);
+    expect(summary.stats.failures).toBe(1);
+    expect(summary.results[0].error).toBe('No output');
+    expect(summary.results[0].success).toBe(false);
+    expect(summary.results[0].score).toBe(0);
+    expect(mockApiProviderNoOutput.callApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('evaluate with false output', async () => {
+    const mockApiProviderNoOutput: ApiProvider = {
+      id: jest.fn().mockReturnValue('test-provider-no-output'),
+      callApi: jest.fn().mockResolvedValue({
+        output: false,
+        tokenUsage: { total: 5, prompt: 5, completion: 0, cached: 0 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProviderNoOutput],
+      prompts: [toPrompt('Test prompt')],
+      tests: [],
+    };
+
+    const summary = await evaluate(testSuite, {});
+
+    expect(summary.stats.successes).toBe(1);
+    expect(summary.stats.failures).toBe(0);
+    expect(summary.results[0].success).toBe(true);
+    expect(summary.results[0].score).toBe(1);
+    expect(mockApiProviderNoOutput.callApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('should apply prompt config to provider call', async () => {
+    const mockApiProvider: ApiProvider = {
+      id: jest.fn().mockReturnValue('test-provider'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Test response',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [
+        {
+          raw: 'You are a helpful math tutor. Solve {{problem}}',
+          label: 'Math problem',
+          config: {
+            response_format: {
+              type: 'json_schema',
+              json_schema: {
+                name: 'math_response',
+                strict: true,
+                schema: {
+                  type: 'object',
+                  properties: {
+                    final_answer: { type: 'string' },
+                  },
+                  required: ['final_answer'],
+                  additionalProperties: false,
+                },
+              },
+            },
+          },
+        },
+      ],
+      tests: [{ vars: { problem: '8x + 31 = 2' } }],
+    };
+
+    const summary = await evaluate(testSuite, {});
+
+    expect(summary.stats.successes).toBe(1);
+    expect(summary.stats.failures).toBe(0);
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
+    expect(mockApiProvider.callApi).toHaveBeenCalledWith(
+      'You are a helpful math tutor. Solve 8x + 31 = 2',
+      expect.objectContaining({
+        prompt: expect.objectContaining({
+          config: {
+            response_format: {
+              type: 'json_schema',
+              json_schema: {
+                name: 'math_response',
+                strict: true,
+                schema: {
+                  type: 'object',
+                  properties: {
+                    final_answer: { type: 'string' },
+                  },
+                  required: ['final_answer'],
+                  additionalProperties: false,
+                },
+              },
+            },
+          },
+        }),
+      }),
+      expect.anything(),
+    );
   });
 });
 

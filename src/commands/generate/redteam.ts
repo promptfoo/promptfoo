@@ -1,5 +1,5 @@
 import chalk from 'chalk';
-import { Command } from 'commander';
+import type { Command } from 'commander';
 import dedent from 'dedent';
 import * as fs from 'fs';
 import yaml from 'js-yaml';
@@ -16,16 +16,13 @@ import {
   DEFAULT_STRATEGIES,
   ADDITIONAL_STRATEGIES,
 } from '../../redteam/constants';
-import type { SynthesizeOptions } from '../../redteam/types';
-import {
-  RedteamConfig,
-  RedteamGenerateOptions,
-  RedteamGenerateOptionsSchema,
-  redteamConfigSchema,
-} from '../../redteam/types';
 import telemetry from '../../telemetry';
-import { TestSuite, UnifiedConfig } from '../../types';
+import type { TestSuite, UnifiedConfig } from '../../types';
+import type { RedteamStrategyObject, SynthesizeOptions } from '../../types/redteam';
+import type { RedteamConfig, RedteamGenerateOptions } from '../../types/redteam';
 import { printBorder, setupEnv } from '../../util';
+import { writePromptfooConfig } from '../../util/config';
+import { RedteamGenerateOptionsSchema, RedteamConfigSchema } from '../../validators/redteam';
 
 export async function doGenerateRedteam(options: RedteamGenerateOptions) {
   setupEnv(options.envFile);
@@ -81,7 +78,7 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
     );
   }
 
-  let plugins: { id: string; numTests: number }[] =
+  let plugins =
     redteamConfig?.plugins ??
     Array.from(REDTEAM_DEFAULT_PLUGINS).map((plugin) => ({
       id: plugin,
@@ -92,18 +89,8 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
     plugins = options.plugins.map((plugin) => ({
       id: plugin.id,
       numTests: plugin.numTests || options.numTests,
+      ...(plugin.config && { config: plugin.config }),
     }));
-  }
-  if (Array.isArray(options.addPlugins) && options.addPlugins.length > 0) {
-    plugins = [
-      ...new Set([
-        ...plugins,
-        ...options.addPlugins.map((plugin) => ({
-          id: plugin,
-          numTests: options.numTests,
-        })),
-      ]),
-    ];
   }
   invariant(plugins && Array.isArray(plugins) && plugins.length > 0, 'No plugins found');
 
@@ -112,37 +99,44 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
   if (options.strategies) {
     strategies = options.strategies;
   }
-  if (Array.isArray(options.addStrategies) && options.addStrategies.length > 0) {
-    strategies = [
-      ...new Set([
-        ...strategies,
-        ...options.addStrategies.map((strategy) =>
-          typeof strategy === 'string' ? { id: strategy } : strategy,
-        ),
-      ]),
-    ];
-  }
-  const strategyObjs: { id: string }[] = strategies.map((s) =>
+  const strategyObjs: RedteamStrategyObject[] = strategies.map((s) =>
     typeof s === 'string' ? { id: s } : s,
-  ) as { id: string }[];
+  );
 
-  logger.debug(`plugins: ${plugins.map((p) => p.id ?? p).join(', ')}`);
+  logger.debug(`plugins: ${plugins.map((p) => p.id).join(', ')}`);
   logger.debug(`strategies: ${strategyObjs.map((s) => s.id ?? s).join(', ')}`);
 
   const config = {
     injectVar: redteamConfig?.injectVar || options.injectVar,
-    numTests: options.numTests,
+    numTests: redteamConfig?.numTests ?? options.numTests,
     plugins,
     provider: redteamConfig?.provider || options.provider,
     purpose: redteamConfig?.purpose || options.purpose,
     strategies: strategyObjs,
   };
-  const parsedConfig = redteamConfigSchema.safeParse(config);
-  const redteamTests = await synthesize({
+  const parsedConfig = RedteamConfigSchema.safeParse(config);
+  if (!parsedConfig.success) {
+    logger.error('Invalid redteam configuration:');
+    logger.error(parsedConfig.error.toString());
+    throw new Error('Invalid redteam configuration');
+  }
+
+  const {
+    testCases: redteamTests,
+    purpose,
+    entities,
+  } = await synthesize({
     ...parsedConfig.data,
     prompts: testSuite.prompts.map((prompt) => prompt.raw),
     numTests: options.numTests,
   } as SynthesizeOptions);
+
+  const updatedRedteamConfig = {
+    purpose,
+    entities,
+    strategies: strategyObjs || [],
+    plugins: plugins || [],
+  };
 
   if (options.output) {
     const existingYaml = configPath
@@ -150,22 +144,36 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
       : {};
     const updatedYaml: Partial<UnifiedConfig> = {
       ...existingYaml,
-      tests: redteamTests,
-      metadata: {
-        ...existingYaml.metadata,
-        redteam: true,
+      defaultTest: {
+        ...(existingYaml.defaultTest || {}),
+        metadata: {
+          ...(existingYaml.defaultTest?.metadata || {}),
+          purpose,
+          entities,
+        },
       },
+      tests: redteamTests,
+      metadata: { ...existingYaml.metadata, redteam: true },
+      redteam: { ...(existingYaml.redteam || {}), ...updatedRedteamConfig },
     };
-    fs.writeFileSync(options.output, yaml.dump(updatedYaml, { skipInvalid: true }));
+    writePromptfooConfig(updatedYaml, options.output);
     printBorder();
     logger.info(`Wrote ${redteamTests.length} new test cases to ${options.output}`);
     printBorder();
   } else if (options.write && configPath) {
     const existingConfig = yaml.load(fs.readFileSync(configPath, 'utf8')) as Partial<UnifiedConfig>;
+    existingConfig.defaultTest = {
+      ...(existingConfig.defaultTest || {}),
+      metadata: {
+        ...(existingConfig.defaultTest?.metadata || {}),
+        purpose,
+        entities,
+      },
+    };
     existingConfig.tests = [...(existingConfig.tests || []), ...redteamTests];
-    existingConfig.metadata = existingConfig.metadata || {};
-    existingConfig.metadata.redteam = true;
-    fs.writeFileSync(configPath, yaml.dump(existingConfig));
+    existingConfig.metadata = { ...(existingConfig.metadata || {}), redteam: true };
+    existingConfig.redteam = { ...(existingConfig.redteam || {}), ...updatedRedteamConfig };
+    writePromptfooConfig(existingConfig, configPath);
     logger.info(`\nWrote ${redteamTests.length} new test cases to ${configPath}`);
     logger.info(
       '\n' + chalk.green(`Run ${chalk.bold('promptfoo eval')} to run the generated tests`),
@@ -209,29 +217,25 @@ export function generateRedteamCommand(
     )
     .option(
       '--plugins <plugins>',
-      dedent`Comma-separated list of plugins to use. Defaults to:
-        \n- ${Array.from(REDTEAM_DEFAULT_PLUGINS).sort().join('\n- ')}\n\n
-    `,
-      (val) => val.split(',').map((x) => x.trim()),
-    )
-    .option(
-      '--add-plugins <plugins>',
-      dedent`Comma-separated list of plugins to run in addition to the default plugins:
-        \n- ${Array.from(REDTEAM_ADDITIONAL_PLUGINS).sort().join('\n- ')}\n\n
+      dedent`Comma-separated list of plugins to use. Use 'default' to include default plugins. 
+      
+        Defaults to:
+        - default (includes: ${Array.from(REDTEAM_DEFAULT_PLUGINS).sort().join(', ')})
+
+        Optional:
+        - ${Array.from(REDTEAM_ADDITIONAL_PLUGINS).sort().join(', ')}
       `,
       (val) => val.split(',').map((x) => x.trim()),
     )
     .option(
       '--strategies <strategies>',
-      dedent`Comma-separated list of strategies to use. Use 'none' to disable all strategies. Defaults to:
-        \n- ${Array.from(DEFAULT_STRATEGIES).sort().join('\n- ')}\n\n
-      `,
-      (val) => (val.toLowerCase() === 'none' ? [] : val.split(',').map((x) => x.trim())),
-    )
-    .option(
-      '--add-strategies <strategies>',
-      dedent`Comma-separated list of strategies to run in addition to the default strategies:
-        \n- ${Array.from(ADDITIONAL_STRATEGIES).sort().join('\n- ')}\n\n
+      dedent`Comma-separated list of strategies to use. Use 'default' to include default strategies. 
+      
+        Defaults to:
+        - default (includes: ${Array.from(DEFAULT_STRATEGIES).sort().join(', ')})
+
+        Optional:
+        - ${Array.from(ADDITIONAL_STRATEGIES).sort().join(', ')}
       `,
       (val) => val.split(',').map((x) => x.trim()),
     )
@@ -247,8 +251,7 @@ export function generateRedteamCommand(
       try {
         let overrides: Record<string, any> = {};
         if (opts.plugins && opts.plugins.length > 0) {
-          logger.warn(`Overriding plugins: ${opts.plugins.join(', ')}`);
-          const parsed = redteamConfigSchema.safeParse({
+          const parsed = RedteamConfigSchema.safeParse({
             plugins: opts.plugins,
             strategies: opts.strategies,
             numTests: opts.numTests,
