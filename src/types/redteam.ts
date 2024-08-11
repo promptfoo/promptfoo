@@ -21,7 +21,7 @@ export type RedteamGenerateOptions = {
   defaultConfigPath?: string;
   envFile?: string;
   injectVar?: string;
-  numTests: number;
+  numTests?: number;
   output?: string;
   plugins?: RedteamPluginObject[];
   provider?: string;

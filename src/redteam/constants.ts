@@ -1,3 +1,5 @@
+export const DEFAULT_NUM_TESTS_PER_PLUGIN = 5;
+
 export const REDTEAM_MODEL = 'openai:chat:gpt-4o';
 
 export const LLAMA_GUARD_REPLICATE_PROVIDER =
