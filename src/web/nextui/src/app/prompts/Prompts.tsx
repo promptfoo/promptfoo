@@ -18,6 +18,7 @@ import { useSearchParams } from 'next/navigation';
 import PromptDialog from './PromptDialog';
 
 const MAX_CELL_LENGTH = 500;
+const rowsPerPage = 10;
 
 export default function Prompts() {
   const searchParams = useSearchParams();
@@ -26,7 +27,6 @@ export default function Prompts() {
   const [sortField, setSortField] = useState<string | null>('date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [page, setPage] = useState(1);
-  const [rowsPerPage, setRowsPerPage] = useState(10);
   const [openDialog, setOpenDialog] = useState(false);
   const [selectedPromptIndex, setSelectedPromptIndex] = useState(0);
 

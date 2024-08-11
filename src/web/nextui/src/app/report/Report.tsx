@@ -71,7 +71,6 @@ const App: React.FC = () => {
           return acc;
         }
 
-        const pass = row.success;
         const rowPassedModeration = row.gradingResult?.componentResults?.some((result) => {
           const isModeration = result.assertion?.type === 'moderation';
           const isPass = result.pass;

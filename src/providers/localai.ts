@@ -57,10 +57,9 @@ export class LocalAiChatProvider extends LocalAiGenericProvider {
     };
     logger.debug(`Calling LocalAI API: ${JSON.stringify(body)}`);
 
-    let data,
-      cached = false;
+    let data;
     try {
-      ({ data, cached } = (await fetchWithCache(
+      ({ data } = (await fetchWithCache(
         `${this.apiBaseUrl}/chat/completions`,
         {
           method: 'POST',
@@ -95,10 +94,9 @@ export class LocalAiEmbeddingProvider extends LocalAiGenericProvider {
       input: text,
       model: this.modelName,
     };
-    let data,
-      cached = false;
+    let data;
     try {
-      ({ data, cached } = (await fetchWithCache(
+      ({ data } = (await fetchWithCache(
         `${this.apiBaseUrl}/embeddings`,
         {
           method: 'POST',
@@ -141,10 +139,9 @@ export class LocalAiCompletionProvider extends LocalAiGenericProvider {
     };
     logger.debug(`Calling LocalAI API: ${JSON.stringify(body)}`);
 
-    let data,
-      cached = false;
+    let data;
     try {
-      ({ data, cached } = (await fetchWithCache(
+      ({ data } = (await fetchWithCache(
         `${this.apiBaseUrl}/completions`,
         {
           method: 'POST',

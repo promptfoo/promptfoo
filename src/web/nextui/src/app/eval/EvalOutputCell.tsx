@@ -44,7 +44,7 @@ function EvalOutputCell({
   showDiffs: boolean;
   searchText: string;
 }) {
-  const { renderMarkdown, prettifyJson, showPrompts, showPassFail, inComparisonMode } =
+  const { renderMarkdown, prettifyJson, showPrompts, showPassFail } =
     useResultsViewStore();
   const [openPrompt, setOpen] = React.useState(false);
   const handlePromptOpen = () => {

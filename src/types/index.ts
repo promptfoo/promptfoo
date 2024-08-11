@@ -124,13 +124,6 @@ export interface RunEvalOptions {
   repeatIndex: number;
 }
 
-type progressCallback = (
-  progress: number,
-  total: number,
-  index: number,
-  evalStep: RunEvalOptions,
-) => void;
-
 const EvaluateOptionsSchema = z.object({
   maxConcurrency: z.number().optional(),
   showProgressBar: z.boolean().optional(),

@@ -48,13 +48,11 @@ const EvaluateTestSuiteCreator: React.FC = () => {
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
 
   const {
-    description,
     setDescription,
     providers,
     setProviders,
     prompts,
     setPrompts,
-    testCases,
     setTestCases,
   } = useStore();
 
