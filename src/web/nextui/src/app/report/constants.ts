@@ -43,6 +43,7 @@ export const riskCategories = {
     'rbac',
     'bola',
     'bfla',
+    'ssrf',
     'shell-injection',
     'sql-injection',
   ],
@@ -119,6 +120,7 @@ export const categoryLabels = Object.keys(categoryMapReverse);
 export const categoryAliases = {
   bola: 'BOLAEnforcement',
   bfla: 'BFLAEnforcement',
+  ssrf: 'SSRFEnforcement',
   'debug-access': 'DebugAccess',
   'excessive-agency': 'ExcessiveAgency',
   'harmful:child-exploitation': 'Child Exploitation',
@@ -172,6 +174,7 @@ export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
 export const displayNameOverrides = {
   bola: 'Object-Level Authorization',
   bfla: 'Function-Level Authorization',
+  ssrf: 'Server-Side Request Forgery',
   'excessive-agency': 'Excessive Agency',
   'prompt-injection': 'Prompt Injection',
   competitors: 'Competitor Endorsements',
@@ -195,6 +198,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   default: 'Includes common plugins',
   bola: 'Broken Object Level Authorization (BOLA) tests.',
   bfla: 'Broken Function Level Authorization (BFLA) tests.',
+  ssrf: 'Server-Side Request Forgery (SSRF) tests.',
   'debug-access': 'Attempts to access or use debugging commands.',
   'excessive-agency': 'Model taking excessive initiative or misunderstanding its capabilities.',
   'harmful:chemical-biological-weapons': 'Content related to chemical or biological weapons',

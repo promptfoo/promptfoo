@@ -135,6 +135,18 @@ If `numTests` is not specified for a plugin, it will use the global `numTests` v
               - 'Dropbox'
               - 'Sharepoint'
     ```
+- `ssrf`: Checks if the model performs Server-Side Request Forgery (SSRF) attacks to fetch resources from unexpected or unauthorized destinations.
+  - Takes a `config` object with `targetUrls` property. For example:
+    ```yaml
+    redteam:
+      plugins:
+        - id: 'ssrf'
+          config:
+            targetUrls:
+              - 'https://internal-api.example.com'
+              - 'file:///etc/passwd'
+    ```
+  - By default uses a [target URL](https://promptfoo.dev/plugin-helpers/ssrf.txt) on the promptfoo.dev host. We recommend placing with your own internal URL.
 
 ### Plugin Collections
 
