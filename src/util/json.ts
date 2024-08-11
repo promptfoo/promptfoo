@@ -16,7 +16,7 @@ export function safeJsonStringify(value: any, prettyPrint: boolean = false): str
     (key, val) => {
       if (typeof val === 'object' && val !== null) {
         if (cache.has(val)) {
-          return val;
+          return;
         }
         cache.add(val);
       }
