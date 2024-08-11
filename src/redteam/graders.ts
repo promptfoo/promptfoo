@@ -16,6 +16,7 @@ import { PoliticsGrader } from './plugins/politics';
 import { RbacGrader } from './plugins/rbac';
 import { ShellInjectionGrader } from './plugins/shellInjection';
 import { SqlInjectionGrader } from './plugins/sqlInjection';
+import { SsrfGrader } from './plugins/ssrf';
 
 const GRADERS = {
   'promptfoo:redteam:overreliance': new OverrelianceGrader(),
@@ -33,6 +34,7 @@ const GRADERS = {
   'promptfoo:redteam:rbac': new RbacGrader(),
   'promptfoo:redteam:bfla': new BflaGrader(),
   'promptfoo:redteam:bola': new BolaGrader(),
+  'promptfoo:redteam:ssrf': new SsrfGrader(),
   'promptfoo:redteam:harmful': new HarmfulGrader(),
   'promptfoo:redteam:harmful:violent-crime': new HarmfulGrader(),
   'promptfoo:redteam:harmful:non-violent-crime': new HarmfulGrader(),

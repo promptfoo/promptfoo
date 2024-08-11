@@ -88,6 +88,7 @@ export const ADDITIONAL_PLUGINS = [
   'debug-access',
   'imitation',
   'rbac',
+  'ssrf',
   'shell-injection',
   'sql-injection',
 ] as const;
@@ -130,6 +131,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   default: 'Includes common plugins',
   bola: 'Broken Object Level Authorization (BOLA) tests.',
   bfla: 'Broken Function Level Authorization (BFLA) tests.',
+  ssrf: 'Server-Side Request Forgery (SSRF) tests.',
   'debug-access': 'Attempts to access or use debugging commands.',
   'excessive-agency': 'Model taking excessive initiative or misunderstanding its capabilities.',
   'harmful:chemical-biological-weapons': 'Content related to chemical or biological weapons',
