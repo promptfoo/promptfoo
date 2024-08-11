@@ -79,16 +79,17 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
   }
 
   let plugins =
-    redteamConfig?.plugins ??
-    Array.from(REDTEAM_DEFAULT_PLUGINS).map((plugin) => ({
-      id: plugin,
-      numTests: options.numTests,
-    }));
+    redteamConfig?.plugins && redteamConfig.plugins.length > 0
+      ? redteamConfig.plugins
+      : Array.from(REDTEAM_DEFAULT_PLUGINS).map((plugin) => ({
+          id: plugin,
+          numTests: options.numTests ?? redteamConfig?.numTests,
+        }));
   // override plugins with command line options
   if (Array.isArray(options.plugins) && options.plugins.length > 0) {
     plugins = options.plugins.map((plugin) => ({
       id: plugin.id,
-      numTests: plugin.numTests || options.numTests,
+      numTests: plugin.numTests || options.numTests || redteamConfig?.numTests,
       ...(plugin.config && { config: plugin.config }),
     }));
   }
@@ -243,7 +244,7 @@ export function generateRedteamCommand(
       '-n, --num-tests <number>',
       'Number of test cases to generate per plugin',
       (val) => (Number.isInteger(val) ? val : parseInt(val, 10)),
-      5,
+      undefined,
     )
     .option('--no-cache', 'Do not read or write results to disk cache', false)
     .option('--env-file <path>', 'Path to .env file')

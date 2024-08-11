@@ -217,14 +217,25 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
     plugins: [],
     strategies: [],
   };
+
   for (const config of configs) {
     if (config.redteam) {
-      redteam.plugins = [
-        ...new Set([...(redteam.plugins || []), ...(config.redteam.plugins || [])]),
-      ];
-      redteam.strategies = [
-        ...new Set([...(redteam.strategies || []), ...(config.redteam.strategies || [])]),
-      ];
+      for (const redteamKey of Object.keys(config.redteam) as Array<keyof typeof redteam>) {
+        if (['entities', 'plugins', 'strategies'].includes(redteamKey)) {
+          if (Array.isArray(config.redteam[redteamKey])) {
+            const currentValue = redteam[redteamKey];
+            const newValue = config.redteam[redteamKey];
+            if (Array.isArray(currentValue) && Array.isArray(newValue)) {
+              (redteam[redteamKey] as unknown[]) = [
+                ...new Set([...currentValue, ...newValue]),
+              ].sort();
+            }
+          }
+        } else {
+          (redteam as Record<string, unknown>)[redteamKey] =
+            config.redteam[redteamKey as keyof typeof config.redteam];
+        }
+      }
     }
   }
 
