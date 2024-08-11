@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Tooltip, IconButton } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
+import { Tooltip, IconButton } from '@mui/material';
 import EvalSelectorDialog from './EvalSelectorDialog';
 import type { ResultLightweightWithLabel } from './types';
 
@@ -11,7 +11,8 @@ interface EvalSelectorProps {
 
 const EvalSelector: React.FC<EvalSelectorProps> = ({ recentEvals, onRecentEvalSelected }) => {
   const [open, setOpen] = useState(false);
-  const isMac = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.userAgent);
+  const isMac =
+    typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.userAgent);
   const tooltipTitle = isMac ? 'Search for Evals (⌘ + K)' : 'Search for Evals (Ctrl + K)';
 
   const handleOpen = () => {

@@ -54,7 +54,7 @@ export default function Datasets() {
           setTestCases(sortedData);
         });
     })();
-  }, [sortField, sortOrder, page, rowsPerPage]);
+  }, [sortField, sortOrder, page]);
 
   const handleClickOpen = (index: number) => {
     setDialogTestCaseIndex(index);
