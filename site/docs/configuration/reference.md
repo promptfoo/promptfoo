@@ -20,6 +20,7 @@ Here is the main structure of the promptfoo configuration file:
 | evaluateOptions.repeat          | number                                                                                                                 | No       | Number of times to run each test case . Defaults to 1                                                            |
 | evaluateOptions.delay           | number                                                                                                                 | No       | Force the test runner to wait after each API call (milliseconds)                                                 |
 | evaluateOptions.showProgressBar | boolean                                                                                                                | No       | Whether to display the progress bar                                                                              |
+| extensions                      | string[]                                                                                                               | No       | List of extension files to load                                                                                  |
 
 ### Test Case
 
@@ -59,6 +60,56 @@ promptfoo supports `.js` and `.json` extensions in addition to `.yaml`.
 It automatically loads `promptfooconfig.*`, but you can use a custom config file with `promptfoo eval -c path/to/config`.
 
 :::
+
+## Extension Hooks
+
+promptfoo supports extension hooks that allow you to run custom code at specific points in the evaluation lifecycle. These hooks are defined in extension files specified in the `extensions` property of the configuration.
+
+### Available Hooks
+
+| Hook Name          | Description                                   | Arguments                                                      |
+| ------------------ | --------------------------------------------- | -------------------------------------------------------------- |
+| beforeSuiteSetup   | Runs before the entire test suite begins      | `{ suite: TestSuite }`                                         |
+| afterSuiteComplete | Runs after the entire test suite has finished | `{ suite: TestSuite, results: EvaluateSummary }`               |
+| beforeEachTest     | Runs before each individual test              | `{ test: TestCase, suite: TestSuite }`                         |
+| afterEachTest      | Runs after each individual test               | `{ test: TestCase, result: EvaluateResult, suite: TestSuite }` |
+
+### Implementing Hooks
+
+To implement these hooks, create a JavaScript or Python file with functions named after the hooks you want to use. Then, specify the path to this file in the `extensions` array in your configuration.
+
+Example extension file (JavaScript):
+
+```javascript
+module.exports = {
+  beforeSuiteSetup: async ({ suite }) => {
+    console.log('Setting up test suite:', suite.description);
+    // Perform any necessary setup
+  },
+  afterSuiteComplete: async ({ suite, results }) => {
+    console.log('Test suite completed:', suite.description);
+    console.log('Total tests:', results.stats.successes + results.stats.failures);
+    // Perform any necessary teardown or reporting
+  },
+  beforeEachTest: async ({ test, suite }) => {
+    console.log('Running test:', test.description);
+    // Prepare for individual test
+  },
+  afterEachTest: async ({ test, result, suite }) => {
+    console.log('Test completed:', test.description, 'Pass:', result.success);
+    // Clean up after individual test or log results
+  },
+};
+```
+
+Example configuration:
+
+```yaml
+extensions:
+  - ./path/to/your/extension.js
+```
+
+These hooks provide powerful extensibility to your promptfoo evaluations, allowing you to implement custom logic for setup, teardown, logging, or integration with other systems.
 
 ## Provider-related types
 
