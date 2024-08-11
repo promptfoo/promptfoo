@@ -49,10 +49,12 @@ export default [
       '@typescript-eslint/ban-types': 0,
       '@typescript-eslint/consistent-type-imports': 'error',
       '@typescript-eslint/no-explicit-any': 0,
-      '@typescript-eslint/no-unused-vars': ['error', { 
-        vars: 'all',
-        varsIgnorePattern: '^_',
-        args: 'none',
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          vars: 'all',
+          varsIgnorePattern: '^_',
+          args: 'none',
           ignoreRestSiblings: false,
         },
       ],
