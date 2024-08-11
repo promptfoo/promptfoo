@@ -14,6 +14,7 @@ import {
   NIST_AI_RMF_MAPPING,
   OWASP_LLM_TOP_10_MAPPING,
   OWASP_API_TOP_10_MAPPING,
+  ALIASED_PLUGIN_MAPPINGS,
 } from './constants';
 import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
@@ -101,29 +102,35 @@ export async function synthesize({
 
   // Apply aliases for NIST and OWASP mappings
   const expandedPlugins: typeof plugins = [];
-  for (const plugin of plugins) {
-    if (plugin.id.startsWith('nist:ai:measure:')) {
-      const mapping = NIST_AI_RMF_MAPPING[plugin.id];
+  const expandPlugin = (
+    plugin: (typeof plugins)[0],
+    mapping: { plugins: string[]; strategies: string[] },
+  ) => {
+    mapping.plugins.forEach((p: string) =>
+      expandedPlugins.push({ id: p, numTests: plugin.numTests }),
+    );
+    strategies.push(...mapping.strategies.map((s: string) => ({ id: s })));
+  };
+
+  plugins.forEach((plugin) => {
+    const mappingKey = Object.keys(ALIASED_PLUGIN_MAPPINGS).find(
+      (key) => plugin.id === key || plugin.id.startsWith(`${key}:`),
+    );
+
+    if (mappingKey) {
+      const mapping =
+        ALIASED_PLUGIN_MAPPINGS[mappingKey][plugin.id] ||
+        Object.values(ALIASED_PLUGIN_MAPPINGS[mappingKey]).find((m) =>
+          plugin.id.startsWith(`${mappingKey}:`),
+        );
       if (mapping) {
-        expandedPlugins.push(...mapping.plugins.map((p) => ({ id: p, numTests: plugin.numTests })));
-        strategies.push(...mapping.strategies.map((s) => ({ id: s })));
-      }
-    } else if (plugin.id.startsWith('owasp:llm:')) {
-      const mapping = OWASP_LLM_TOP_10_MAPPING[plugin.id];
-      if (mapping) {
-        expandedPlugins.push(...mapping.plugins.map((p) => ({ id: p, numTests: plugin.numTests })));
-        strategies.push(...mapping.strategies.map((s) => ({ id: s })));
-      }
-    } else if (plugin.id.startsWith('owasp:api:')) {
-      const mapping = OWASP_API_TOP_10_MAPPING[plugin.id];
-      if (mapping) {
-        expandedPlugins.push(...mapping.plugins.map((p) => ({ id: p, numTests: plugin.numTests })));
-        strategies.push(...mapping.strategies.map((s) => ({ id: s })));
+        expandPlugin(plugin, mapping);
       }
     } else {
       expandedPlugins.push(plugin);
     }
-  }
+  });
+
   plugins = expandedPlugins;
 
   // Deduplicate, filter out the category names, and sort

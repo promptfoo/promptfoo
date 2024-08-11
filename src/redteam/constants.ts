@@ -287,11 +287,25 @@ export const NIST_AI_RMF_MAPPING: Record<string, { plugins: Plugin[]; strategies
   },
 };
 
+// Aliased plugins are like collections, except they are hidden from the standard plugin list.
 export const ALIASED_PLUGINS = [
+  'owasp:llm',
+  'owasp:api',
+  'nist:ai',
+  'nist:ai:measure',
   ...Object.keys(OWASP_LLM_TOP_10_MAPPING),
   ...Object.keys(OWASP_API_TOP_10_MAPPING),
   ...Object.keys(NIST_AI_RMF_MAPPING),
 ] as const;
+
+export const ALIASED_PLUGIN_MAPPINGS: Record<
+  string,
+  Record<string, { plugins: string[]; strategies: string[] }>
+> = {
+  'nist:ai:measure': NIST_AI_RMF_MAPPING,
+  'owasp:llm': OWASP_LLM_TOP_10_MAPPING,
+  'owasp:api': OWASP_API_TOP_10_MAPPING,
+};
 
 export const DEFAULT_STRATEGIES = ['jailbreak', 'prompt-injection'] as const;
 export type DefaultStrategy = (typeof DEFAULT_STRATEGIES)[number];
