@@ -162,7 +162,9 @@ These general-purpose environment variables are supported:
 | `PROMPTFOO_DISABLE_REF_PARSER`         | Prevents JSON schema dereferencing                                                                                                               |                |
 | `PROMPTFOO_DISABLE_TEMPLATING`         | Disable Nunjucks rendering                                                                                                                       |                |
 | `PROMPTFOO_DISABLE_VAR_EXPANSION`      | Prevents Array-type vars from being expanded into multiple test cases                                                                            |                |
+| `PROMPTFOO_FAILED_TEST_EXIT_CODE`      | Override the exit code (100) when there is at least 1 test case failure                                                                          | 100            |
 | `PROMPTFOO_REQUIRE_JSON_PROMPTS`       | By default the chat completion provider will wrap non-JSON messages in a single user message. Setting this envar to true disables that behavior. |                |
+| `FORCE_COLOR`                          | Set to 0 to disable terminal colors for printed outputs                                                                                          |                |
 
 :::tip
 promptfoo will load environment variables from the `.env` in your current working directory.
