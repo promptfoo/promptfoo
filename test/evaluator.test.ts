@@ -1,9 +1,14 @@
+import * as fs from 'fs';
+import glob from 'glob';
+import * as path from 'path';
 import { importModule } from '../src/esm';
 import {
   evaluate,
+  generateVarCombinations,
+  isAllowedPrompt,
   runExtensionHook,
 } from '../src/evaluator';
-import { renderPrompt } from '../src/evaluatorHelpers';
+import { renderPrompt, resolveVariables } from '../src/evaluatorHelpers';
 import { runPython } from '../src/python/pythonUtils';
 import type { ApiProvider, TestSuite, Prompt } from '../src/types';
 
@@ -793,46 +798,781 @@ describe('evaluator', () => {
     expect(summary.results[1].response?.output).toBe('Bonjour le monde');
   });
 
-  it('should load external js files in renderPrompt and execute the exported function', async () => {
-    const mockJsFunction = jest.fn().mockResolvedValue('JS function output');
-    jest.mocked(importModule).mockResolvedValue(mockJsFunction);
-
-    const vars = {
-      jsVar: 'file://test.js',
+  it('evaluate with scenarios and multiple vars', async () => {
+    const mockApiProvider: ApiProvider = {
+      id: jest.fn().mockReturnValue('test-provider'),
+      callApi: jest
+        .fn()
+        .mockResolvedValueOnce({
+          output: 'Spanish Hola',
+          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+        })
+        .mockResolvedValueOnce({
+          output: 'Spanish Bonjour',
+          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+        })
+        .mockResolvedValueOnce({
+          output: 'French Hola',
+          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+        })
+        .mockResolvedValueOnce({
+          output: 'French Bonjour',
+          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+        }),
+    };
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt {{ language }} {{ greeting }}')],
+      scenarios: [
+        {
+          config: [
+            {
+              vars: {
+                language: ['Spanish', 'French'],
+                greeting: ['Hola', 'Bonjour'],
+              },
+            },
+          ],
+          tests: [
+            {
+              assert: [
+                {
+                  type: 'equals',
+                  value: '{{language}} {{greeting}}',
+                },
+              ],
+            },
+          ],
+        },
+      ],
     };
 
-    const result = await renderPrompt(
-      { raw: 'Test prompt with {{ jsVar }}' },
-      vars,
-      undefined,
-      mockApiProvider,
-    );
+    const summary = await evaluate(testSuite, {});
 
-    expect(importModule).toHaveBeenCalledWith(expect.stringContaining('test.js'));
-    expect(mockJsFunction).toHaveBeenCalledWith('jsVar', expect.any(String), vars, mockApiProvider);
-    expect(result).toBe('Test prompt with JS function output');
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(4);
+    expect(summary.stats.successes).toBe(4);
+    expect(summary.stats.failures).toBe(0);
+    expect(summary.results[0].response?.output).toBe('Spanish Hola');
+    expect(summary.results[1].response?.output).toBe('Spanish Bonjour');
+    expect(summary.results[2].response?.output).toBe('French Hola');
+    expect(summary.results[3].response?.output).toBe('French Bonjour');
   });
 
-  it('should handle errors from extensions gracefully', async () => {
-    const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+  it('evaluate with scenarios and defaultTest', async () => {
+    const mockApiProvider: ApiProvider = {
+      id: jest.fn().mockReturnValue('test-provider'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Hello, World',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+      }),
+    };
 
-    jest.mocked(runPython).mockRejectedValueOnce(new Error('Python extension error'));
-    jest.mocked(importModule).mockRejectedValueOnce(new Error('JavaScript extension error'));
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      defaultTest: {
+        metadata: { defaultKey: 'defaultValue' },
+        assert: [
+          {
+            type: 'starts-with',
+            value: 'Hello',
+          },
+        ],
+      },
+      scenarios: [
+        {
+          config: [{ metadata: { configKey: 'configValue' } }],
+          tests: [{ metadata: { testKey: 'testValue' } }],
+        },
+        {
+          config: [
+            {
+              assert: [
+                {
+                  type: 'contains',
+                  value: ',',
+                },
+              ],
+            },
+          ],
+          tests: [
+            {
+              assert: [
+                {
+                  type: 'icontains',
+                  value: 'world',
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
 
-    const mockSuite: TestSuite = {
-      extensions: ['python:error.py', 'file://error.js'],
-    } as TestSuite;
+    const result = await evaluate(testSuite, {});
 
-    await runExtensionHook(
-      'afterEach',
-      { test: {}, result: {}, suite: mockSuite },
-      mockSuite.extensions,
+    expect(result).toMatchObject({
+      stats: {
+        successes: 2,
+        failures: 0,
+      },
+      results: expect.arrayContaining([
+        expect.objectContaining({
+          gradingResult: expect.objectContaining({
+            componentResults: expect.arrayContaining([expect.anything()]),
+          }),
+        }),
+        expect.objectContaining({
+          gradingResult: expect.objectContaining({
+            componentResults: expect.arrayContaining([
+              expect.anything(),
+              expect.anything(),
+              expect.anything(),
+            ]),
+          }),
+        }),
+      ]),
+    });
+
+    expect(result.table.body[0].test.metadata).toEqual({
+      defaultKey: 'defaultValue',
+      configKey: 'configValue',
+      testKey: 'testValue',
+    });
+
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
+  });
+
+  it('merges metadata correctly for regular tests', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      defaultTest: {
+        metadata: { defaultKey: 'defaultValue' },
+      },
+      tests: [
+        {
+          metadata: { testKey: 'testValue' },
+        },
+      ],
+    };
+
+    const summary = await evaluate(testSuite, {});
+
+    expect(summary.table.body[0].test.metadata).toEqual({
+      defaultKey: 'defaultValue',
+      testKey: 'testValue',
+    });
+  });
+
+  it('evaluate with _conversation variable', async () => {
+    const mockApiProvider: ApiProvider = {
+      id: jest.fn().mockReturnValue('test-provider'),
+      callApi: jest.fn().mockImplementation((prompt) => {
+        return Promise.resolve({
+          output: prompt,
+          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+        });
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('{{ var1 }} {{ _conversation[0].output }}')],
+      tests: [
+        {
+          vars: { var1: 'First run' },
+        },
+        {
+          vars: { var1: 'Second run' },
+        },
+      ],
+    };
+
+    const summary = await evaluate(testSuite, {});
+
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
+    expect(summary.stats.successes).toBe(2);
+    expect(summary.stats.failures).toBe(0);
+    expect(summary.results[0].response?.output).toBe('First run ');
+    expect(summary.results[1].response?.output).toBe('Second run First run ');
+  });
+
+  it('evaluate with labeled and unlabeled providers and providerPromptMap', async () => {
+    const mockLabeledProvider: ApiProvider = {
+      id: () => 'labeled-provider-id',
+      label: 'Labeled Provider',
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Labeled Provider Output',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+      }),
+    };
+
+    const mockUnlabeledProvider: ApiProvider = {
+      id: () => 'unlabeled-provider-id',
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Unlabeled Provider Output',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockLabeledProvider, mockUnlabeledProvider],
+      prompts: [
+        {
+          raw: 'Prompt 1',
+          label: 'prompt1',
+        },
+        {
+          raw: 'Prompt 2',
+          label: 'prompt2',
+        },
+      ],
+      providerPromptMap: {
+        'Labeled Provider': ['prompt1'],
+        'unlabeled-provider-id': ['prompt2'],
+      },
+    };
+
+    await expect(evaluate(testSuite, {})).resolves.toEqual(
+      expect.objectContaining({
+        stats: expect.objectContaining({
+          successes: 2,
+          failures: 0,
+        }),
+        results: [
+          expect.objectContaining({
+            provider: expect.objectContaining({
+              id: 'labeled-provider-id',
+              label: 'Labeled Provider',
+            }),
+            response: expect.objectContaining({
+              output: 'Labeled Provider Output',
+            }),
+          }),
+          expect.objectContaining({
+            provider: expect.objectContaining({
+              id: 'unlabeled-provider-id',
+              label: undefined,
+            }),
+            response: expect.objectContaining({
+              output: 'Unlabeled Provider Output',
+            }),
+          }),
+        ],
+        table: expect.objectContaining({
+          head: expect.objectContaining({
+            prompts: [
+              expect.objectContaining({
+                provider: 'Labeled Provider',
+              }),
+              expect.objectContaining({
+                provider: 'unlabeled-provider-id',
+              }),
+            ],
+          }),
+        }),
+      }),
     );
 
-    expect(consoleSpy).toHaveBeenCalledTimes(2);
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Python extension error'));
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('JavaScript extension error'));
+    expect(mockLabeledProvider.callApi).toHaveBeenCalledTimes(1);
+    expect(mockUnlabeledProvider.callApi).toHaveBeenCalledTimes(1);
+  });
 
-    consoleSpy.mockRestore();
+  it('should use the options from the test if they exist', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          vars: { var1: 'value1', var2: 'value2' },
+          options: {
+            transform: 'output + " postprocessed"',
+          },
+        },
+      ],
+    };
+
+    const summary = await evaluate(testSuite, {});
+
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
+    expect(summary.stats.successes).toBe(1);
+    expect(summary.stats.failures).toBe(0);
+    expect(summary.results[0].response?.output).toBe('Test output postprocessed');
+  });
+
+  it('evaluate with multiple transforms', async () => {
+    const mockApiProviderWithTransform: ApiProvider = {
+      id: jest.fn().mockReturnValue('test-provider-transform'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Original output',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+      }),
+      transform: '`Provider: ${output}`',
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProviderWithTransform],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          assert: [
+            {
+              type: 'equals',
+              value: 'Test: Provider: Original output',
+            },
+          ],
+          options: {
+            transform: '`Test: ${output}`',
+          },
+        },
+      ],
+    };
+
+    const summary = await evaluate(testSuite, {});
+
+    expect(mockApiProviderWithTransform.callApi).toHaveBeenCalledTimes(1);
+    expect(summary.stats.successes).toBe(1);
+    expect(summary.stats.failures).toBe(0);
+    expect(summary.results[0].response?.output).toBe('Test: Provider: Original output');
+  });
+
+  it('evaluate with provider transform and test postprocess (deprecated)', async () => {
+    const mockApiProviderWithTransform: ApiProvider = {
+      id: jest.fn().mockReturnValue('test-provider-transform'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Original output',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+      }),
+      transform: '`Provider: ${output}`',
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProviderWithTransform],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          assert: [
+            {
+              type: 'equals',
+              value: 'Postprocess: Provider: Original output',
+            },
+          ],
+          options: {
+            postprocess: '`Postprocess: ${output}`',
+          },
+        },
+      ],
+    };
+
+    await expect(evaluate(testSuite, {})).resolves.toEqual(
+      expect.objectContaining({
+        stats: expect.objectContaining({
+          successes: 1,
+          failures: 0,
+        }),
+        results: expect.arrayContaining([
+          expect.objectContaining({
+            response: expect.objectContaining({
+              output: 'Postprocess: Provider: Original output',
+            }),
+          }),
+        ]),
+      }),
+    );
+    expect(mockApiProviderWithTransform.callApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('evaluate with provider transform, test transform, and test postprocess (deprecated)', async () => {
+    const mockApiProviderWithTransform: ApiProvider = {
+      id: jest.fn().mockReturnValue('test-provider-transform'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Original output',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+      }),
+      transform: '`Provider: ${output}`',
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProviderWithTransform],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          assert: [
+            {
+              type: 'equals',
+              value: 'Transform: Provider: Original output',
+            },
+          ],
+          options: {
+            transform: '`Transform: ${output}`',
+            postprocess: '`Postprocess: ${output}`', // This should be ignored
+          },
+        },
+      ],
+    };
+    await expect(evaluate(testSuite, {})).resolves.toEqual(
+      expect.objectContaining({
+        stats: expect.objectContaining({
+          successes: 1,
+          failures: 0,
+        }),
+        results: expect.arrayContaining([
+          expect.objectContaining({
+            response: expect.objectContaining({
+              output: 'Transform: Provider: Original output',
+            }),
+          }),
+        ]),
+      }),
+    );
+    expect(mockApiProviderWithTransform.callApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('evaluate with no output', async () => {
+    const mockApiProviderNoOutput: ApiProvider = {
+      id: jest.fn().mockReturnValue('test-provider-no-output'),
+      callApi: jest.fn().mockResolvedValue({
+        output: null,
+        tokenUsage: { total: 5, prompt: 5, completion: 0, cached: 0 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProviderNoOutput],
+      prompts: [toPrompt('Test prompt')],
+      tests: [],
+    };
+
+    const summary = await evaluate(testSuite, {});
+
+    expect(summary.stats.successes).toBe(0);
+    expect(summary.stats.failures).toBe(1);
+    expect(summary.results[0].error).toBe('No output');
+    expect(summary.results[0].success).toBe(false);
+    expect(summary.results[0].score).toBe(0);
+    expect(mockApiProviderNoOutput.callApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('evaluate with false output', async () => {
+    const mockApiProviderNoOutput: ApiProvider = {
+      id: jest.fn().mockReturnValue('test-provider-no-output'),
+      callApi: jest.fn().mockResolvedValue({
+        output: false,
+        tokenUsage: { total: 5, prompt: 5, completion: 0, cached: 0 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProviderNoOutput],
+      prompts: [toPrompt('Test prompt')],
+      tests: [],
+    };
+
+    const summary = await evaluate(testSuite, {});
+
+    expect(summary.stats.successes).toBe(1);
+    expect(summary.stats.failures).toBe(0);
+    expect(summary.results[0].success).toBe(true);
+    expect(summary.results[0].score).toBe(1);
+    expect(mockApiProviderNoOutput.callApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('should apply prompt config to provider call', async () => {
+    const mockApiProvider: ApiProvider = {
+      id: jest.fn().mockReturnValue('test-provider'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Test response',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [
+        {
+          raw: 'You are a helpful math tutor. Solve {{problem}}',
+          label: 'Math problem',
+          config: {
+            response_format: {
+              type: 'json_schema',
+              json_schema: {
+                name: 'math_response',
+                strict: true,
+                schema: {
+                  type: 'object',
+                  properties: {
+                    final_answer: { type: 'string' },
+                  },
+                  required: ['final_answer'],
+                  additionalProperties: false,
+                },
+              },
+            },
+          },
+        },
+      ],
+      tests: [{ vars: { problem: '8x + 31 = 2' } }],
+    };
+
+    const summary = await evaluate(testSuite, {});
+
+    expect(summary.stats.successes).toBe(1);
+    expect(summary.stats.failures).toBe(0);
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
+    expect(mockApiProvider.callApi).toHaveBeenCalledWith(
+      'You are a helpful math tutor. Solve 8x + 31 = 2',
+      expect.objectContaining({
+        prompt: expect.objectContaining({
+          config: {
+            response_format: {
+              type: 'json_schema',
+              json_schema: {
+                name: 'math_response',
+                strict: true,
+                schema: {
+                  type: 'object',
+                  properties: {
+                    final_answer: { type: 'string' },
+                  },
+                  required: ['final_answer'],
+                  additionalProperties: false,
+                },
+              },
+            },
+          },
+        }),
+      }),
+      expect.anything(),
+    );
+  });
+});
+
+describe('renderPrompt', () => {
+  it('should render a prompt with a single variable', async () => {
+    const prompt = toPrompt('Test prompt {{ var1 }}');
+    const renderedPrompt = await renderPrompt(prompt, { var1: 'value1' }, {});
+    expect(renderedPrompt).toBe('Test prompt value1');
+  });
+
+  it('should render a JSON prompt', async () => {
+    const prompt = toPrompt('[{"text": "Test prompt "}, {"text": "{{ var1 }}"}]');
+    const renderedPrompt = await renderPrompt(prompt, { var1: 'value1' }, {});
+    expect(renderedPrompt).toBe(
+      JSON.stringify(JSON.parse('[{"text":"Test prompt "},{"text":"value1"}]'), null, 2),
+    );
+  });
+
+  it('should render a JSON prompt and escape the var string', async () => {
+    const prompt = toPrompt('[{"text": "Test prompt "}, {"text": "{{ var1 }}"}]');
+    const renderedPrompt = await renderPrompt(prompt, { var1: 'He said "hello world!"' }, {});
+    expect(renderedPrompt).toBe(
+      JSON.stringify(
+        JSON.parse('[{"text":"Test prompt "},{"text":"He said \\"hello world!\\""}]'),
+        null,
+        2,
+      ),
+    );
+  });
+
+  it('should render a JSON prompt with nested JSON', async () => {
+    const prompt = toPrompt('[{"text": "Test prompt "}, {"text": "{{ var1 }}"}]');
+    const renderedPrompt = await renderPrompt(prompt, { var1: '{"nested": "value1"}' }, {});
+    expect(renderedPrompt).toBe(
+      JSON.stringify(
+        JSON.parse('[{"text":"Test prompt "},{"text":"{\\"nested\\": \\"value1\\"}"}]'),
+        null,
+        2,
+      ),
+    );
+  });
+
+  it('should load external yaml files in renderPrompt', async () => {
+    const prompt = toPrompt('Test prompt with {{ var1 }}');
+    const vars = { var1: 'file://test.txt' };
+    const evaluateOptions = {};
+
+    // Mock fs.readFileSync to simulate loading a YAML file
+    jest.spyOn(fs, 'readFileSync').mockReturnValueOnce('loaded from file');
+
+    const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions);
+
+    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('test.txt'), 'utf8');
+    expect(renderedPrompt).toBe('Test prompt with loaded from file');
+  });
+
+  it('should load external js files in renderPrompt and execute the exported function', async () => {
+    const prompt = toPrompt('Test prompt with {{ var1 }} {{ var2 }} {{ var3 }}');
+    const vars = {
+      var1: 'file:///path/to/testFunction.js',
+      var2: 'file:///path/to/testFunction.cjs',
+      var3: 'file:///path/to/testFunction.mjs',
+    };
+    const evaluateOptions = {};
+
+    jest.doMock(
+      path.resolve('/path/to/testFunction.js'),
+      () => (varName: any, prompt: any, vars: any) => ({ output: `Dynamic value for ${varName}` }),
+      { virtual: true },
+    );
+    jest.doMock(
+      path.resolve('/path/to/testFunction.cjs'),
+      () => (varName: any, prompt: any, vars: any) => ({ output: `and ${varName}` }),
+      { virtual: true },
+    );
+    jest.doMock(
+      path.resolve('/path/to/testFunction.mjs'),
+      () => (varName: any, prompt: any, vars: any) => ({ output: `and ${varName}` }),
+      { virtual: true },
+    );
+
+    const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions);
+    expect(renderedPrompt).toBe('Test prompt with Dynamic value for var1 and var2 and var3');
+  });
+
+  it('should load external json files in renderPrompt and parse the JSON content', async () => {
+    const prompt = toPrompt('Test prompt with {{ var1 }}');
+    const vars = { var1: 'file:///path/to/testData.json' };
+    const evaluateOptions = {};
+
+    jest.spyOn(fs, 'readFileSync').mockReturnValueOnce(JSON.stringify({ key: 'valueFromJson' }));
+
+    const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions);
+
+    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('testData.json'), 'utf8');
+    expect(renderedPrompt).toBe('Test prompt with {"key":"valueFromJson"}');
+  });
+
+  it('should load external yaml files in renderPrompt and parse the YAML content', async () => {
+    const prompt = toPrompt('Test prompt with {{ var1 }}');
+    const vars = { var1: 'file:///path/to/testData.yaml' };
+    const evaluateOptions = {};
+
+    jest.spyOn(fs, 'readFileSync').mockReturnValueOnce('key: valueFromYaml');
+
+    const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions);
+
+    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('testData.yaml'), 'utf8');
+    expect(renderedPrompt).toBe('Test prompt with {"key":"valueFromYaml"}');
+  });
+});
+
+describe('resolveVariables', () => {
+  it('should replace placeholders with corresponding variable values', () => {
+    const variables = { final: '{{ my_greeting }}, {{name}}!', my_greeting: 'Hello', name: 'John' };
+    const expected = { final: 'Hello, John!', my_greeting: 'Hello', name: 'John' };
+    expect(resolveVariables(variables)).toEqual(expected);
+  });
+
+  it('should handle nested variable substitutions', () => {
+    const variables = { first: '{{second}}', second: '{{third}}', third: 'value' };
+    const expected = { first: 'value', second: 'value', third: 'value' };
+    expect(resolveVariables(variables)).toEqual(expected);
+  });
+
+  it('should not modify variables without placeholders', () => {
+    const variables = { greeting: 'Hello, world!', name: 'John' };
+    const expected = { greeting: 'Hello, world!', name: 'John' };
+    expect(resolveVariables(variables)).toEqual(expected);
+  });
+
+  it('should not fail if a variable is not found', () => {
+    const variables = { greeting: 'Hello, {{name}}!' };
+    expect(resolveVariables(variables)).toEqual({ greeting: 'Hello, {{name}}!' });
+  });
+
+  it('should not fail for unresolved placeholders', () => {
+    const variables = { greeting: 'Hello, {{name}}!', name: '{{unknown}}' };
+    expect(resolveVariables(variables)).toEqual({
+      greeting: 'Hello, {{unknown}}!',
+      name: '{{unknown}}',
+    });
+  });
+});
+
+describe('generateVarCombinations', () => {
+  it('should generate combinations for simple variables', () => {
+    const vars = { language: 'English', greeting: 'Hello' };
+    const expected = [{ language: 'English', greeting: 'Hello' }];
+    expect(generateVarCombinations(vars)).toEqual(expected);
+  });
+
+  it('should generate combinations for array variables', () => {
+    const vars = { language: ['English', 'French'], greeting: 'Hello' };
+    const expected = [
+      { language: 'English', greeting: 'Hello' },
+      { language: 'French', greeting: 'Hello' },
+    ];
+    expect(generateVarCombinations(vars)).toEqual(expected);
+  });
+
+  it('should handle file paths and expand them into combinations', () => {
+    const vars = { language: 'English', greeting: 'file:///path/to/greetings/*.txt' };
+    jest.spyOn(glob, 'globSync').mockReturnValue(['greeting1.txt', 'greeting2.txt']);
+    const expected = [
+      { language: 'English', greeting: 'file://greeting1.txt' },
+      { language: 'English', greeting: 'file://greeting2.txt' },
+    ];
+    expect(generateVarCombinations(vars)).toEqual(expected);
+  });
+
+  it('should correctly handle nested array variables', () => {
+    const vars = {
+      options: [
+        ['opt1', 'opt2'],
+        ['opt3', 'opt4'],
+      ],
+    };
+    const expected = [
+      {
+        options: [
+          ['opt1', 'opt2'],
+          ['opt3', 'opt4'],
+        ],
+      },
+    ];
+    expect(generateVarCombinations(vars)).toEqual(expected);
+  });
+
+  it('should return an empty array for empty input', () => {
+    const vars = {};
+    const expected = [{}];
+    expect(generateVarCombinations(vars)).toEqual(expected);
+  });
+});
+
+describe('isAllowedPrompt', () => {
+  const prompt1: Prompt = {
+    label: 'prompt1',
+    raw: '',
+  };
+  const prompt2: Prompt = {
+    label: 'group1:prompt2',
+    raw: '',
+  };
+  const prompt3: Prompt = {
+    label: 'group2:prompt3',
+    raw: '',
+  };
+
+  it('should return true if allowedPrompts is undefined', () => {
+    expect(isAllowedPrompt(prompt1, undefined)).toBe(true);
+  });
+
+  it('should return true if allowedPrompts includes the prompt label', () => {
+    expect(isAllowedPrompt(prompt1, ['prompt1', 'prompt2'])).toBe(true);
+  });
+
+  it('should return true if allowedPrompts includes a label that matches the start of the prompt label followed by a colon', () => {
+    expect(isAllowedPrompt(prompt2, ['group1'])).toBe(true);
+  });
+
+  it('should return false if allowedPrompts does not include the prompt label or any matching start label with a colon', () => {
+    expect(isAllowedPrompt(prompt3, ['group1', 'prompt2'])).toBe(false);
+  });
+
+  // TODO: What should the expected behavior of this test be?
+  it('should return false if allowedPrompts is an empty array', () => {
+    expect(isAllowedPrompt(prompt1, [])).toBe(false);
   });
 });
