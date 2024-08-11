@@ -216,7 +216,7 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
   const extensions: UnifiedConfig['extensions'] = [];
   for (const config of configs) {
     if (Array.isArray(config.extensions)) {
-      extensions.push(...config.extensions);
+      extensions.push(...config.extensions.filter((extension) => !extensions.includes(extension)));
     }
   }
 
