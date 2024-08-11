@@ -213,26 +213,28 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
     }
   }
 
-  let redteam: UnifiedConfig['redteam'] = {
+  const redteam: UnifiedConfig['redteam'] = {
     plugins: [],
     strategies: [],
   };
+
   for (const config of configs) {
     if (config.redteam) {
-      // Merge all properties from config.redteam
-      redteam = { ...redteam, ...config.redteam };
-
-      // Merge plugins, strategies, and entities as set
-      if (config.redteam.plugins) {
-        redteam.plugins = [...new Set([...(redteam.plugins || []), ...config.redteam.plugins])];
-      }
-      if (config.redteam.strategies) {
-        redteam.strategies = [
-          ...new Set([...(redteam.strategies || []), ...config.redteam.strategies]),
-        ];
-      }
-      if (config.redteam.entities) {
-        redteam.entities = [...new Set([...(redteam.entities || []), ...config.redteam.entities])];
+      for (const redteamKey of Object.keys(config.redteam) as Array<keyof typeof redteam>) {
+        if (['entities', 'plugins', 'strategies'].includes(redteamKey)) {
+          if (Array.isArray(config.redteam[redteamKey])) {
+            const currentValue = redteam[redteamKey];
+            const newValue = config.redteam[redteamKey];
+            if (Array.isArray(currentValue) && Array.isArray(newValue)) {
+              (redteam[redteamKey] as unknown[]) = [
+                ...new Set([...currentValue, ...newValue]),
+              ].sort();
+            }
+          }
+        } else {
+          (redteam as Record<string, unknown>)[redteamKey] =
+            config.redteam[redteamKey as keyof typeof config.redteam];
+        }
       }
     }
   }
