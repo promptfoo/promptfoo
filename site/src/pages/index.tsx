@@ -2,7 +2,6 @@ import React from 'react';
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
 import { useColorMode } from '@docusaurus/theme-common';
-import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import CompareIcon from '@mui/icons-material/Compare';
 import DescriptionIcon from '@mui/icons-material/Description';
 import SecurityIcon from '@mui/icons-material/Security';
@@ -15,7 +14,6 @@ import NewsletterForm from '../components/NewsletterForm';
 import styles from './index.module.css';
 
 function HomepageHeader() {
-  const { siteConfig } = useDocusaurusContext();
   return (
     <header className={clsx('hero hero--primary', styles.heroBanner)}>
       <div className="container">
@@ -190,7 +188,6 @@ function HomepageWalkthrough() {
 }
 
 export default function Home(): JSX.Element {
-  const { siteConfig } = useDocusaurusContext();
   return (
     <Layout
       title="Secure & reliable LLMs"

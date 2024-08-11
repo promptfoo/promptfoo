@@ -188,7 +188,6 @@ export async function isSql(
   assertion: Assertion,
 ): Promise<GradingResult> {
   let pass = false;
-  let parsedSql: any;
   let databaseType: string = 'MySQL';
   let whiteTableList: string[] | undefined;
   let whiteColumnList: string[] | undefined;
@@ -220,7 +219,7 @@ export async function isSql(
   const failureReasons: string[] = [];
 
   try {
-    parsedSql = sqlParser.astify(outputString, opt);
+    sqlParser.astify(outputString, opt);
     pass = !inverse;
   } catch (err) {
     pass = inverse;
@@ -1388,7 +1387,6 @@ export async function runAssertions({
   test: AtomicTestCase;
   latencyMs?: number;
 }): Promise<GradingResult> {
-  const { cost, logProbs, output } = providerResponse;
   if (!test.assert || test.assert.length < 1) {
     return AssertionsResult.noAssertsResult();
   }
