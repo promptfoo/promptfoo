@@ -9,7 +9,7 @@ providers:
     label: 4o
     prompts:
       - content_generation
-  - id: openai:gpt-3.5-turbo
+  - id: openai:gpt-4o-mini
     label: '3.5'
     prompts:
       - knowledge_base_query
