@@ -66,8 +66,16 @@ export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
   'model-graded-factuality',
 ]);
 
-const ajv = new Ajv();
-addFormats(ajv);
+export function createAjv(): Ajv {
+  const ajvOptions: ConstructorParameters<typeof Ajv>[0] = {
+    strictSchema: !['1', 'true'].includes(process.env.PROMPTFOO_DISABLE_AJV_STRICT_MODE || ''),
+  };
+  const ajv = new Ajv(ajvOptions);
+  addFormats(ajv);
+  return ajv;
+}
+
+const ajv = createAjv();
 
 const nunjucks = getNunjucksEngine();
 
