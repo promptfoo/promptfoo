@@ -66,21 +66,30 @@ export async function renderPrompt(
         case 'ts':
         case 'cts':
         case 'mts':
-          const javascriptOutput = (await (
-            await importModule(filePath)
-          )(varName, basePrompt, vars, provider)) as {
-            output?: string;
-            error?: string;
-          };
-          if (javascriptOutput.error) {
-            throw new Error(`Error running ${filePath}: ${javascriptOutput.error}`);
-          }
-          if (!javascriptOutput.output) {
+          const importedModule = await importModule(filePath);
+          const javascriptFunction =
+            typeof importedModule === 'function' ? importedModule : importedModule.default;
+          if (typeof javascriptFunction !== 'function') {
             throw new Error(
-              `Expected ${filePath} to return { output: string } but got ${javascriptOutput}`,
+              `Imported module must export a function or have a default export as a function`,
             );
           }
-          vars[varName] = javascriptOutput.output;
+          const javascriptOutput = await javascriptFunction(varName, basePrompt, vars, provider);
+          if (typeof javascriptOutput === 'string') {
+            vars[varName] = javascriptOutput;
+          } else if (javascriptOutput && typeof javascriptOutput === 'object') {
+            if (javascriptOutput.output) {
+              vars[varName] = javascriptOutput.output;
+            } else if (javascriptOutput.error) {
+              throw new Error(`Error running ${filePath}: ${javascriptOutput.error}`);
+            } else {
+              throw new Error(`Invalid output from JavaScript file: ${filePath}`);
+            }
+          } else {
+            throw new Error(
+              `Expected ${filePath} to return a string or { output: string } but got ${typeof javascriptOutput}`,
+            );
+          }
           break;
         case 'py':
           const pythonScriptOutput = (await runPython(filePath, 'get_var', [

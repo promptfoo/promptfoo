@@ -8,6 +8,7 @@ import invariant from 'tiny-invariant';
 import { runAssertions, runCompareAssertion } from './assertions';
 import { fetchWithCache, getCache } from './cache';
 import cliState from './cliState';
+import { importModule } from './esm';
 import { renderPrompt } from './evaluatorHelpers';
 import logger from './logger';
 import { maybeEmitAzureOpenAiWarning } from './providers/azureopenaiUtil';
@@ -99,15 +100,48 @@ export function generateVarCombinations(
   return combinations;
 }
 
-async function runExtensionHook(hookName: string, context: any, extensions?: string[]) {
+/**
+ * Runs extension hooks for the given hook name and context.
+ * @param hookName - The name of the hook to run.
+ * @param context - The context object to pass to the hook.
+ * @param extensions - An optional array of extension paths.
+ * @returns A Promise that resolves when all hooks have been run.
+ */
+export async function runExtensionHook(hookName: string, context: any, extensions?: string[]) {
   if (!extensions || extensions.length === 0) {
     return;
   }
   for (const extension of extensions) {
     logger.info(`Running extension ${extension}`);
-    if (extension.startsWith('python:')) {
-      const filePath = path.resolve(cliState.basePath || '', extension.slice('python:'.length));
-      await runPython(filePath, 'extension_hook', [hookName, context]);
+    try {
+      if (extension.startsWith('python:')) {
+        const filePath = path.resolve(cliState.basePath || '', extension.slice('python:'.length));
+        await runPython(filePath, 'extension_hook', [hookName, context]);
+      } else if (extension.startsWith('file://')) {
+        const filePath = extension.slice('file://'.length);
+        const extname = path.extname(filePath);
+        if (['.js', '.cjs', '.mjs', '.ts', '.cts', '.mts'].includes(extname)) {
+          const requiredModule = await importModule(filePath);
+          let extensionFn;
+          if (typeof requiredModule === 'function') {
+            extensionFn = requiredModule;
+          } else if (requiredModule.default && typeof requiredModule.default === 'function') {
+            extensionFn = requiredModule.default;
+          } else {
+            throw new Error(
+              `Extension ${filePath} must export a function or have a default export as a function`,
+            );
+          }
+          await extensionFn(hookName, context);
+        } else {
+          throw new Error(`Unsupported extension file format: ${extension}`);
+        }
+      } else {
+        throw new Error(`Unsupported extension format: ${extension}`);
+      }
+    } catch (error) {
+      logger.error(`Error running extension ${extension}: ${error}`);
+      throw error;
     }
   }
 }
@@ -342,7 +376,7 @@ class Evaluator {
     const { testSuite, options } = this;
     const prompts: CompletedPrompt[] = [];
 
-    await runExtensionHook('evals_prepared', { suite: testSuite }, testSuite.extensions);
+    await runExtensionHook('beforeAll', { suite: testSuite }, testSuite.extensions);
 
     if (options.generateSuggestions) {
       // TODO(ian): Move this into its own command/file

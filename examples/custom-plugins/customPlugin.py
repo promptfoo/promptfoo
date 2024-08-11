@@ -65,9 +65,9 @@ def extension_hook(hook_name: str, context: dict):
         hook_name: The name of the hook being called.
         context: A dictionary containing context information for the hook.
     """
-    if hook_name == "evals_prepared":
+    if hook_name == "beforeAll":
         evals_prepared_hook(context["evals"], context["suite"])
-    if hook_name == "evals_ran":
+    if hook_name == "afterAll":
         evals_ran_hook(
             context["evals"], context["results"], context["table"], context["suite"]
         )
