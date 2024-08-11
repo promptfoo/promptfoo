@@ -1,3 +1,7 @@
+# syntax=docker/dockerfile:1
+# check=skip=SecretsUsedInArgOrEnv
+# TODO(ian): Remove the SecretsUsedInArgOrEnv check once we remove the placeholder for NEXT_PUBLIC_SUPABASE_ANON_KEY
+
 # https://github.com/vercel/next.js/blob/canary/examples/with-docker/Dockerfile
 
 # ---- Build ----
