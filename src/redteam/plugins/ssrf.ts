@@ -12,7 +12,7 @@ export class SsrfPlugin extends PluginBase {
     config?: { targetUrls?: string[] },
   ) {
     super(provider, purpose, injectVar);
-    this.targetUrls = config?.targetUrls || [];
+    this.targetUrls = config?.targetUrls || ['https://promptfoo.dev/plugin-helpers/ssrf.txt'];
   }
 
   protected async getTemplate(): Promise<string> {
