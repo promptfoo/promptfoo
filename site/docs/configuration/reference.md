@@ -67,12 +67,12 @@ promptfoo supports extension hooks that allow you to run custom code at specific
 
 ### Available Hooks
 
-| Hook Name          | Description                                   | Arguments                                                      |
-| ------------------ | --------------------------------------------- | -------------------------------------------------------------- |
-| beforeSuiteSetup   | Runs before the entire test suite begins      | `{ suite: TestSuite }`                                         |
-| afterSuiteComplete | Runs after the entire test suite has finished | `{ suite: TestSuite, results: EvaluateSummary }`               |
-| beforeEachTest     | Runs before each individual test              | `{ test: TestCase, suite: TestSuite }`                         |
-| afterEachTest      | Runs after each individual test               | `{ test: TestCase, result: EvaluateResult, suite: TestSuite }` |
+| Hook Name  | Description                                   | Arguments                                                      |
+| ---------- | --------------------------------------------- | -------------------------------------------------------------- |
+| beforeAll  | Runs before the entire test suite begins      | `{ suite: TestSuite }`                                         |
+| afterAll   | Runs after the entire test suite has finished | `{ suite: TestSuite, results: EvaluateSummary }`               |
+| beforeEach | Runs before each individual test              | `{ test: TestCase, suite: TestSuite }`                         |
+| afterEach  | Runs after each individual test               | `{ test: TestCase, result: EvaluateResult, suite: TestSuite }` |
 
 ### Implementing Hooks
 
@@ -82,20 +82,20 @@ Example extension file (JavaScript):
 
 ```javascript
 module.exports = {
-  beforeSuiteSetup: async ({ suite }) => {
+  beforeAll: async ({ suite }) => {
     console.log('Setting up test suite:', suite.description);
     // Perform any necessary setup
   },
-  afterSuiteComplete: async ({ suite, results }) => {
+  afterAll: async ({ suite, results }) => {
     console.log('Test suite completed:', suite.description);
     console.log('Total tests:', results.stats.successes + results.stats.failures);
     // Perform any necessary teardown or reporting
   },
-  beforeEachTest: async ({ test, suite }) => {
+  beforeEach: async ({ test, suite }) => {
     console.log('Running test:', test.description);
     // Prepare for individual test
   },
-  afterEachTest: async ({ test, result, suite }) => {
+  afterEach: async ({ test, result, suite }) => {
     console.log('Test completed:', test.description, 'Pass:', result.success);
     // Clean up after individual test or log results
   },
