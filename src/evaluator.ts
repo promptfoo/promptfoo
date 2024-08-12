@@ -30,7 +30,7 @@ import type {
   ProviderResponse,
   Assertion,
 } from './types';
-import { sha256 } from './util';
+import { isJavascriptFile, sha256 } from './util';
 import { transform } from './util/transform';
 
 export const DEFAULT_MAX_CONCURRENCY = 4;
@@ -130,8 +130,7 @@ export async function runExtensionHook(
           await runPython(filePath, 'extension_hook', [hookName, context]);
         } else if (extension.startsWith('file://')) {
           const filePath = extension.slice('file://'.length);
-          const extname = path.extname(filePath);
-          if (['.js', '.cjs', '.mjs', '.ts', '.cts', '.mts'].includes(extname)) {
+          if (isJavascriptFile(filePath)) {
             const requiredModule = await importModule(filePath);
             let extensionFn;
             if (typeof requiredModule === 'function') {

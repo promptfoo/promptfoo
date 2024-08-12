@@ -6,7 +6,7 @@ import { importModule } from './esm';
 import logger from './logger';
 import { runPython } from './python/pythonUtils';
 import type { ApiProvider, NunjucksFilterMap, Prompt } from './types';
-import { renderVarsInObject } from './util';
+import { isJavascriptFile, renderVarsInObject } from './util';
 import { getNunjucksEngine } from './util/templates';
 
 export function resolveVariables(
@@ -56,65 +56,63 @@ export async function renderPrompt(
     if (typeof value === 'string' && value.startsWith('file://')) {
       const basePath = cliState.basePath || '';
       const filePath = path.resolve(process.cwd(), basePath, value.slice('file://'.length));
-      const fileExtension = filePath.split('.').pop();
 
       logger.debug(`Loading var ${varName} from file: ${filePath}`);
-      switch (fileExtension) {
-        case 'js':
-        case 'cjs':
-        case 'mjs':
-        case 'ts':
-        case 'cts':
-        case 'mts':
-          const importedModule = await importModule(filePath);
-          const javascriptFunction =
-            typeof importedModule === 'function' ? importedModule : importedModule.default;
-          if (typeof javascriptFunction !== 'function') {
-            throw new Error(
-              `Imported module must export a function or have a default export as a function`,
-            );
-          }
-          const javascriptOutput = await javascriptFunction(varName, basePrompt, vars, provider);
-          if (typeof javascriptOutput === 'string') {
-            vars[varName] = javascriptOutput;
-          } else if (javascriptOutput && typeof javascriptOutput === 'object') {
-            if (javascriptOutput.output) {
-              vars[varName] = javascriptOutput.output;
-            } else if (javascriptOutput.error) {
-              throw new Error(`Error running ${filePath}: ${javascriptOutput.error}`);
-            } else {
-              throw new Error(`Invalid output from JavaScript file: ${filePath}`);
-            }
-          } else {
-            throw new Error(
-              `Expected ${filePath} to return a string or { output: string } but got ${typeof javascriptOutput}`,
-            );
-          }
-          break;
-        case 'py':
-          const pythonScriptOutput = (await runPython(filePath, 'get_var', [
-            varName,
-            basePrompt,
-            vars,
-          ])) as { output?: string; error?: string };
-          if (pythonScriptOutput.error) {
-            throw new Error(`Error running Python script ${filePath}: ${pythonScriptOutput.error}`);
-          }
-          if (!pythonScriptOutput.output) {
-            throw new Error(`Python script ${filePath} did not return any output`);
-          }
-          vars[varName] = pythonScriptOutput.output.trim();
-          break;
-        case 'yaml':
-        case 'yml':
-          vars[varName] = JSON.stringify(
-            yaml.load(fs.readFileSync(filePath, 'utf8')) as string | object,
+      if (isJavascriptFile(filePath)) {
+        const importedModule = await importModule(filePath);
+        const javascriptFunction =
+          typeof importedModule === 'function' ? importedModule : importedModule.default;
+        if (typeof javascriptFunction !== 'function') {
+          throw new Error(
+            `Imported module must export a function or have a default export as a function`,
           );
-          break;
-        case 'json':
-        default:
-          vars[varName] = fs.readFileSync(filePath, 'utf8').trim();
-          break;
+        }
+        const javascriptOutput = await javascriptFunction(varName, basePrompt, vars, provider);
+        if (typeof javascriptOutput === 'string') {
+          vars[varName] = javascriptOutput;
+        } else if (javascriptOutput && typeof javascriptOutput === 'object') {
+          if (javascriptOutput.output) {
+            vars[varName] = javascriptOutput.output;
+          } else if (javascriptOutput.error) {
+            throw new Error(`Error running ${filePath}: ${javascriptOutput.error}`);
+          } else {
+            throw new Error(`Invalid output from JavaScript file: ${filePath}`);
+          }
+        } else {
+          throw new Error(
+            `Expected ${filePath} to return a string or { output: string } but got ${typeof javascriptOutput}`,
+          );
+        }
+      } else {
+        const fileExtension = filePath.split('.').pop();
+        switch (fileExtension) {
+          case 'py':
+            const pythonScriptOutput = (await runPython(filePath, 'get_var', [
+              varName,
+              basePrompt,
+              vars,
+            ])) as { output?: string; error?: string };
+            if (pythonScriptOutput.error) {
+              throw new Error(
+                `Error running Python script ${filePath}: ${pythonScriptOutput.error}`,
+              );
+            }
+            if (!pythonScriptOutput.output) {
+              throw new Error(`Python script ${filePath} did not return any output`);
+            }
+            vars[varName] = pythonScriptOutput.output.trim();
+            break;
+          case 'yaml':
+          case 'yml':
+            vars[varName] = JSON.stringify(
+              yaml.load(fs.readFileSync(filePath, 'utf8')) as string | object,
+            );
+            break;
+          case 'json':
+          default:
+            vars[varName] = fs.readFileSync(filePath, 'utf8').trim();
+            break;
+        }
       }
     }
   }

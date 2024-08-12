@@ -137,7 +137,7 @@ describe('readConfigs', () => {
       description: 'test2',
       providers: ['provider2'],
       prompts: ['prompt2'],
-      extensions: [],
+      extensions: undefined,
       tests: ['test2', 'test2'],
       scenarios: ['scenario2'],
       defaultTest: {
@@ -168,7 +168,7 @@ describe('readConfigs', () => {
       providers: ['provider1', 'provider2'],
       prompts: ['prompt1', 'prompt2'],
       tests: ['test1', 'test2', 'test1', 'test2'],
-      extensions: [],
+      extensions: undefined,
       scenarios: ['scenario1', 'scenario2'],
       defaultTest: {
         description: 'defaultTest2',

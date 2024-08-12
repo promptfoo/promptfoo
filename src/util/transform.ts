@@ -1,3 +1,4 @@
+import { isJavascriptFile } from '.';
 import { importModule } from '../esm';
 import { runPython } from '../python/pythonUtils';
 import type { Prompt } from '../types';
@@ -9,10 +10,6 @@ type TransformContext = {
   prompt: Partial<Prompt>;
 };
 
-function isJavascriptFile(filePath: string): boolean {
-  return /\.(js|cjs|mjs|ts|cts|mts)$/.test(filePath);
-}
-
 async function getJavascriptTransformFunction(filePath: string): Promise<Function> {
   const requiredModule = await importModule(filePath);
 
@@ -20,11 +17,10 @@ async function getJavascriptTransformFunction(filePath: string): Promise<Functio
     return requiredModule;
   } else if (requiredModule.default && typeof requiredModule.default === 'function') {
     return requiredModule.default;
-  } else {
-    throw new Error(
-      `Transform ${filePath} must export a function or have a default export as a function`,
-    );
   }
+  throw new Error(
+    `Transform ${filePath} must export a function or have a default export as a function`,
+  );
 }
 
 function getPythonTransformFunction(filePath: string): Function {
@@ -40,9 +36,8 @@ async function getFileTransformFunction(filePath: string): Promise<Function> {
     return getJavascriptTransformFunction(actualFilePath);
   } else if (filePath.endsWith('.py')) {
     return getPythonTransformFunction(actualFilePath);
-  } else {
-    throw new Error(`Unsupported transform file format: ${filePath}`);
   }
+  throw new Error(`Unsupported transform file format: ${filePath}`);
 }
 
 function getInlineTransformFunction(code: string): Function {
@@ -52,9 +47,8 @@ function getInlineTransformFunction(code: string): Function {
 async function getTransformFunction(codeOrFilepath: string): Promise<Function> {
   if (codeOrFilepath.startsWith('file://')) {
     return getFileTransformFunction(codeOrFilepath);
-  } else {
-    return getInlineTransformFunction(codeOrFilepath);
   }
+  return getInlineTransformFunction(codeOrFilepath);
 }
 
 /**
