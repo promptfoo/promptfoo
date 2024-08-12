@@ -56,3 +56,5 @@ Ready to build trustworthy, reliable AI applications?  [Reach out](https://prom
 Ian Webster
 
 CEO, Promptfoo
+
+<!-- truncate -->
