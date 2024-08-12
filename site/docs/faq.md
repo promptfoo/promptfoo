@@ -6,86 +6,76 @@ sidebar_label: FAQ
 
 ### What is Promptfoo?
 
-Promptfoo is a local-first, open-source tool for testing and evaluating prompts and language models (LLMs). It enables developers and AI practitioners to:
+Promptfoo is a local-first, open-source tool designed for comprehensive testing and evaluation of large language models (LLMs). It provides a robust framework for prompt engineering and LLM evaluation, helping developers and AI practitioners ensure the reliability, safety, and effectiveness of their AI systems. Key features include:
 
-1. Systematically test prompts across multiple LLM providers.
-2. Evaluate LLM outputs using a wide range of deterministic and model-graded assertion types.
-3. Perform comprehensive evaluations, including accuracy, safety, and performance metrics.
-4. Generate adversarial tests for LLM red teaming.
-5. Share results seamlessly with your team.
+1. Systematic testing of prompts across multiple LLM providers.
+2. Evaluation of LLM outputs using various assertion types.
+3. Comprehensive evaluations covering accuracy, safety, and performance metrics.
+4. Generation of adversarial tests for LLM red teaming.
+5. Seamless result sharing and integration into development pipelines.
+6. Support for various use cases and custom assertions.
+7. Flexibility to run as a command-line tool, a library, or integrate with testing frameworks.
 
-By providing a robust framework for prompt engineering and LLM evaluation, Promptfoo helps ensure the reliability, safety, and effectiveness of AI systems.
+Promptfoo operates locally, ensuring that your data and API calls remain secure and under your control.
 
 ### Why should I use Promptfoo?
 
 Promptfoo offers several key advantages for developers and organizations working with LLMs:
 
-1. **Improved Reliability**: Systematically test prompts and LLM outputs to identify and resolve issues before they affect your users.
-2. **Enhanced Safety**: Leverage our red teaming capabilities to proactively detect and mitigate potential vulnerabilities in your AI systems.
-3. **Cost Optimization**: Evaluate prompt effectiveness to reduce unnecessary API calls and optimize your LLM usage.
-4. **Streamlined Workflow**: Integrate Promptfoo seamlessly into your development pipeline, maintaining high-quality AI applications.
-5. **Multi-Provider Support**: Test prompts across various LLM providers to ensure consistency and find the best fit for your needs.
-6. **Open-Source Flexibility**: Customize and extend Promptfoo to meet your specific requirements.
-
-Whether you're developing a chatbot, RAG system, or any other LLM-powered application, Promptfoo helps you build more robust, efficient, and trustworthy AI systems.
+1. **Improved Reliability**: Systematically test prompts and LLM outputs to identify issues early. Example: Catch inconsistencies in chatbot responses across different prompts.
+2. **Enhanced Safety**: Leverage red teaming capabilities to detect potential vulnerabilities. Example: Test for prompt injection vulnerabilities in your AI system.
+3. **Cost Optimization**: Evaluate prompt effectiveness to reduce unnecessary API calls. Example: Identify and refine prompts that lead to excessive token usage.
+4. **Streamlined Workflow**: Integrate seamlessly into your development pipeline. Example: Automate LLM testing as part of your CI/CD process.
+5. **Multi-Provider Support**: Test prompts across various LLM providers for consistency. Example: Compare outputs from GPT-4, Claude, and PaLM for the same set of prompts.
+6. **Open-Source Flexibility**: Customize and extend Promptfoo to meet specific requirements. Example: Implement custom assertion types for domain-specific evaluations.
 
 ### Which LLM providers does Promptfoo support?
 
 Promptfoo supports a wide range of LLM providers, including:
 
-1. OpenAI (GPT-4o, GPT-4, GPT-3.5)
+1. OpenAI (GPT-4, GPT-3.5)
 2. Anthropic (Claude)
 3. Google (PaLM, Gemini)
-4. Amazon Bedrock (Anthropic, Llama, etc.)
+4. Amazon Bedrock
 5. Azure OpenAI
-6. Replicate (Llama3.1, Llama3, etc.)
+6. Replicate
 7. Hugging Face
 8. Local models and custom API integrations
 
-For the most up-to-date list of supported providers and detailed integration instructions, please refer to our [Providers documentation](/docs/providers/).
+Promptfoo's flexible architecture allows for easy integration with new or custom LLM providers. For the most up-to-date list and integration instructions, please refer to our [Providers documentation](/docs/providers/).
 
-### Does Promptfoo forward calls to an intermediate server?
+### Data Security and Privacy
 
-No, the source code runs on your machine. Calls to LLM APIs (e.g., OpenAI, Anthropic) are sent directly to the respective provider. The Promptfoo team does not have access to these requests or responses.
+**Does Promptfoo forward calls to an intermediate server?**
+No, the source code runs on your machine. Calls to LLM APIs are sent directly to the respective provider. The Promptfoo team does not have access to these requests or responses.
 
-### Does Promptfoo store API keys?
+**Does Promptfoo store API keys?**
+No, API keys are stored as local environment variables and are never transmitted anywhere besides directly to the LLM API.
 
-No, API keys are stored as local environment variables and are never transmitted anywhere besides directly to the LLM API (e.g., OpenAI, Anthropic).
+**Does Promptfoo store LLM inputs and outputs?**
+No, Promptfoo operates locally, and all data remains on your machine. The only exception is when you explicitly use the [share command](/docs/usage/sharing), which stores inputs and outputs in Cloudflare KV for two weeks.
 
-### Does Promptfoo store LLM inputs and outputs?
-
-No, Promptfoo operates locally, and all data remains on your machine.
-
-If you **explicitly** run the [share command](/docs/usage/sharing), your inputs and outputs are stored in Cloudflare KV for two weeks. This only occurs when you run `promptfoo share` or click the "Share" button in the web UI.
-
-### Do you collect any PII?
-
+**Do you collect any PII?**
 No, we do not collect any personally identifiable information (PII).
-
-### How do I use a proxy?
-
-Requests to most providers are made via [proxy-agent](https://www.npmjs.com/package/proxy-agent), which respects `HTTP_PROXY` and `HTTPS_PROXY` [environment variables](https://www.npmjs.com/package/proxy-from-env#environment-variables) in the form of `[protocol://]<host>[:port]`.
 
 ### What is LLM red teaming, and how does Promptfoo support it?
 
-LLM red teaming is the process of systematically testing Large Language Models (LLMs) to identify potential vulnerabilities, weaknesses, and unintended behaviors before deployment. Promptfoo supports this process by offering a comprehensive framework for generating and executing adversarial tests, tailored to your specific use case and aligned with industry standards and best practices.
+LLM red teaming is the process of systematically testing LLMs to identify potential vulnerabilities, weaknesses, and unintended behaviors before deployment. Promptfoo supports this by offering a framework for generating and executing adversarial tests, aligned with industry standards like OWASP LLM Top 10 and NIST AI Risk Management Framework.
 
-Promptfoo's red teaming framework addresses vulnerabilities outlined in the OWASP LLM Top 10 and aligns with NIST AI Risk Management Framework guidelines. It allows you to:
+Promptfoo's red teaming capabilities allow you to:
 
-1. Automatically generate adversarial tests specific to your LLM application.
-2. Execute these tests at scale in a pre-deployment environment.
-3. Analyze results to identify areas for improvement in your AI system's safety and reliability.
-4. Continuously monitor and evaluate your LLM's performance against evolving threats.
+1. Generate adversarial tests specific to your LLM application.
+2. Execute tests at scale in a pre-deployment environment.
+3. Analyze results to improve AI system safety and reliability.
+4. Continuously monitor LLM performance against evolving threats.
 
-By integrating Promptfoo’s red teaming capabilities into your development pipeline, you can proactively identify and mitigate potential risks, ensuring more secure and reliable applications.
+For more details, see our [LLM Red Teaming Guide](/docs/guides/llm-redteaming).
 
-For more detailed information on our red teaming capabilities, please refer to our [LLM Red Teaming Guide](/docs/guides/llm-redteaming).
+### Installation and Getting Started
 
-### How do I get started with Promptfoo?
+**How do I install Promptfoo?**
 
-Getting started with Promptfoo is simple:
-
-1. Install Node.js 18 or later if you haven't already.
+1. Ensure you have Node.js 18 or later installed.
 
 2. Install Promptfoo globally using npm:
 
@@ -93,21 +83,66 @@ Getting started with Promptfoo is simple:
    npm install -g promptfoo
    ```
 
-3. Initialize a new project with a sample configuration:
+   For macOS users who prefer Homebrew:
+
+   ```sh
+   brew install promptfoo
+   ```
+
+3. Verify the installation:
+   ```sh
+   promptfoo --version
+   ```
+
+**How do I get started with Promptfoo?**
+
+1. Initialize a new project:
 
    ```sh
    promptfoo init my-promptfoo-project
    cd my-promptfoo-project
    ```
 
-   This command sets up a basic project structure with a `promptfooconfig.yaml` file and example prompts.
+2. Explore the generated `promptfooconfig.yaml` file and example prompts.
 
-4. Explore the generated files and customize them as needed.
-
-5. Run your first evaluation:
-
+3. Run your first evaluation:
    ```sh
    promptfoo eval
    ```
 
-You can also explore our extensive collection of [examples](https://github.com/promptfoo/promptfoo/tree/main/examples/). They cover a wide range of use cases and configurations, from simple prompt testing to complex multi-provider evaluations and custom assertions. For a comprehensive guide, including detailed configuration options and best practices, please refer to our [Getting Started documentation](/docs/getting-started).
+For more detailed setup and usage instructions, refer to our [Getting Started documentation](/docs/getting-started).
+
+### Advanced Usage
+
+**How do I use a proxy with Promptfoo?**
+
+Promptfoo uses [proxy-agent](https://www.npmjs.com/package/proxy-agent), which respects `HTTP_PROXY` and `HTTPS_PROXY` environment variables in the form of `[protocol://]<host>[:port]`.
+
+**Can I use Promptfoo as a library in my project?**
+
+Yes, you can install Promptfoo as a library:
+
+```sh
+npm install promptfoo
+```
+
+This allows you to integrate Promptfoo's functionality directly into your application or testing framework.
+
+**How does Promptfoo integrate with existing development workflows?**
+
+Promptfoo can be integrated into CI/CD pipelines, used with testing frameworks like Jest and Vitest, and incorporated into various stages of the development process. For specific integration examples, check our [documentation](/docs/integrations).
+
+**What types of assertions and evaluations does Promptfoo support?**
+
+Promptfoo supports a wide range of assertions, including:
+
+- Content-based assertions (e.g., contains, regex matching)
+- Model-graded evaluations
+- Custom JavaScript assertions
+- Similarity comparisons
+
+For a complete list and usage details, see our [Assertions documentation](/docs/configuration/expected-outputs).
+
+### Troubleshooting
+
+For common issues and their solutions, please refer to our [Troubleshooting Guide](/docs/troubleshooting). If you encounter any problems not covered in the guide, feel free to open an issue on our [GitHub repository](https://github.com/promptfoo/promptfoo/issues).
