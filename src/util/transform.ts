@@ -5,7 +5,7 @@ import type { Prompt } from '../types';
 
 type TransformVars = Record<string, string | object | undefined>;
 
-type TransformContext = {
+export type TransformContext = {
   vars?: TransformVars;
   prompt: Partial<Prompt>;
 };

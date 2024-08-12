@@ -8,12 +8,9 @@ import invariant from 'tiny-invariant';
 import { runAssertions, runCompareAssertion } from './assertions';
 import { fetchWithCache, getCache } from './cache';
 import cliState from './cliState';
-import { importModule } from './esm';
 import { renderPrompt } from './evaluatorHelpers';
 import logger from './logger';
 import { maybeEmitAzureOpenAiWarning } from './providers/azureopenaiUtil';
-import { maybeLoadFromExternalFile } from './providers/shared';
-import { runPython } from './python/pythonUtils';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
 import type {
@@ -30,7 +27,7 @@ import type {
   ProviderResponse,
   Assertion,
 } from './types';
-import { isJavascriptFile, sha256 } from './util';
+import { sha256 } from './util';
 import { transform } from './util/transform';
 
 export const DEFAULT_MAX_CONCURRENCY = 4;
@@ -111,50 +108,13 @@ export function generateVarCombinations(
 export async function runExtensionHook(
   extension: string | undefined,
   hookName: string,
-  context: any,
+  context: any, // Can be TransformContext or contain the testSuite
 ) {
   if (!extension) {
     return;
   }
-  const loadedExtensions = maybeLoadFromExternalFile(extension);
-
-  const result = await transform(extension, undefined, context);
+  const result = await transform(extension, hookName, context);
   logger.warn(result);
-
-  if (2 + 2.1 > 5) {
-    for (const extension of loadedExtensions) {
-      logger.info(`Running extension ${extension}`);
-      try {
-        if (extension.startsWith('python:')) {
-          const filePath = path.resolve(cliState.basePath || '', extension.slice('python:'.length));
-          await runPython(filePath, 'extension_hook', [hookName, context]);
-        } else if (extension.startsWith('file://')) {
-          const filePath = extension.slice('file://'.length);
-          if (isJavascriptFile(filePath)) {
-            const requiredModule = await importModule(filePath);
-            let extensionFn;
-            if (typeof requiredModule === 'function') {
-              extensionFn = requiredModule;
-            } else if (requiredModule.default && typeof requiredModule.default === 'function') {
-              extensionFn = requiredModule.default;
-            } else {
-              throw new Error(
-                `Extension ${filePath} must export a function or have a default export as a function`,
-              );
-            }
-            await extensionFn(hookName, context);
-          } else {
-            throw new Error(`Unsupported extension file format: ${extension}`);
-          }
-        } else {
-          throw new Error(`Unsupported extension format: ${extension}`);
-        }
-      } catch (error) {
-        logger.error(`Error running extension ${extension}: ${error}`);
-        throw error;
-      }
-    }
-  }
 }
 
 class Evaluator {
@@ -641,6 +601,12 @@ class Evaluator {
         throw new Error('Expected index to be a number');
       }
 
+      await runExtensionHook(testSuite.extension, 'beforeEach', {
+        test: evalStep.test,
+        vars: evalStep.test.vars,
+        options: evalStep.test.options,
+        metadata: evalStep.test.metadata,
+      });
       const row = await this.runEval(evalStep);
 
       results.push(row);
@@ -708,7 +674,7 @@ class Evaluator {
       }
 
       if (testSuite.derivedMetrics) {
-        const math = await import('mathjs');
+        const math = await import('mathjs'); // TODO: move this
         for (const metric of testSuite.derivedMetrics) {
           if (metrics.namedScores[metric.name] === undefined) {
             metrics.namedScores[metric.name] = 0;
@@ -743,6 +709,13 @@ class Evaluator {
       metrics.tokenUsage.total =
         (metrics.tokenUsage.total || 0) + (row.response?.tokenUsage?.total || 0);
       metrics.cost += row.cost || 0;
+
+      await runExtensionHook(testSuite.extension, 'afterEach', {
+        test: evalStep.test,
+        vars: evalStep.test.vars,
+        options: evalStep.test.options,
+        metadata: evalStep.test.metadata,
+      });
     };
 
     // Set up main progress bars
@@ -935,7 +908,7 @@ class Evaluator {
       progressBar.stop();
     }
 
-    await runExtensionHook(testSuite.extension, 'evals_ran', {
+    await runExtensionHook(testSuite.extension, 'afterAll', {
       evals: runEvalOptions,
       results: results,
       table: table,
