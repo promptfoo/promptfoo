@@ -102,14 +102,36 @@ module.exports = {
 };
 ```
 
+Example extension file (Python):
+
+```python
+def extension_hook(hook_name, context):
+    if hook_name == 'beforeAll':
+        print(f"Setting up test suite: {context['suite'].get('description', '')}")
+        # Perform any necessary setup
+    elif hook_name == 'afterAll':
+        print(f"Test suite completed: {context['suite'].get('description', '')}")
+        print(f"Total tests: {context['results']['stats']['successes'] + context['results']['stats']['failures']}")
+        # Perform any necessary teardown or reporting
+    elif hook_name == 'beforeEach':
+        print(f"Running test: {context['test'].get('description', '')}")
+        # Prepare for individual test
+    elif hook_name == 'afterEach':
+        print(f"Test completed: {context['test'].get('description', '')}. Pass: {context['result'].get('success', False)}")
+        # Clean up after individual test or log results
+```
+
 Example configuration:
 
 ```yaml
 extensions:
   - ./path/to/your/extension.js
+  - python:./path/to/your/extension.py
 ```
 
 These hooks provide powerful extensibility to your promptfoo evaluations, allowing you to implement custom logic for setup, teardown, logging, or integration with other systems.
+
+Note: For Python extensions, prefix the file path with `python:` in the configuration.
 
 ## Provider-related types
 
