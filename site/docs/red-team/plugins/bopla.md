@@ -26,9 +26,9 @@ redteam:
     - id: 'bopla'
       config:
         targetProperties:
-          - 'isAdmin'
-          - 'accessLevel'
-          - 'hiddenTransactions'
+          - 'user.isAdmin'
+          - 'member.accessLevel'
+          - 'history.hiddenTransactions'
 ```
 
 The `targetProperties` is optional and can be used to make the test prompts more specific to the sensitive properties in your system.
