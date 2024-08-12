@@ -27,7 +27,6 @@ redteam:
       config:
         targetFlows:
           - 'User Account Creation'
-          - 'Financial Transactions'
           - 'Data Export'
 ```
 

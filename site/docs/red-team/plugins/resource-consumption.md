@@ -26,10 +26,8 @@ redteam:
     - id: 'resource-consumption'
       config:
         targetResources:
-          - 'CPU'
-          - 'Memory'
-          - 'Storage'
-          - 'Network Bandwidth'
+          - 'GPU provisioning'
+          - 'database queries'
 ```
 
 The `targetResources` is optional and can be used to make the test prompts more specific to the resources in your system.
