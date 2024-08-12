@@ -309,6 +309,7 @@ describe('readConfigs', () => {
       .mocked(fs.readFileSync)
       .mockReturnValueOnce(JSON.stringify(config1))
       .mockReturnValueOnce(JSON.stringify(config2));
+    jest.spyOn(console, 'warn').mockImplementation();
 
     const result = await readConfigs(['config1.json', 'config2.json']);
 
@@ -334,17 +335,18 @@ describe('readConfigs', () => {
   });
 
   it('warns when multiple configs and extensions are detected', async () => {
-    const config1 = {
-      extensions: ['extension1'],
-    };
-    const config2 = {
-      extensions: ['extension2'],
-    };
-
     jest
       .mocked(fs.readFileSync)
-      .mockReturnValueOnce(JSON.stringify(config1))
-      .mockReturnValueOnce(JSON.stringify(config2));
+      .mockReturnValueOnce(
+        JSON.stringify({
+          extensions: ['extension1'],
+        }),
+      )
+      .mockReturnValueOnce(
+        JSON.stringify({
+          extensions: ['extension2'],
+        }),
+      );
 
     const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
 
@@ -358,17 +360,18 @@ describe('readConfigs', () => {
   });
 
   it('warns when multiple extensions are detected and multiple configs are provided', async () => {
-    const config1 = {
-      extensions: ['extension1', 'extension2'],
-    };
-    const config2 = {
-      description: 'Config without extensions',
-    };
-
     jest
       .mocked(fs.readFileSync)
-      .mockReturnValueOnce(JSON.stringify(config1))
-      .mockReturnValueOnce(JSON.stringify(config2));
+      .mockReturnValueOnce(
+        JSON.stringify({
+          extensions: ['extension1', 'extension2'],
+        }),
+      )
+      .mockReturnValueOnce(
+        JSON.stringify({
+          description: 'Config without extensions',
+        }),
+      );
 
     const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
 
