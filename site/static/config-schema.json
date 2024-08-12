@@ -633,8 +633,11 @@
             "additionalProperties": false
           }
         },
-        "extension": {
-          "type": "string"
+        "extensions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         },
         "metadata": {
           "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/metadata"
