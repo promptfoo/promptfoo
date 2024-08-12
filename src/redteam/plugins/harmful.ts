@@ -220,13 +220,20 @@ export async function getHarmfulTests(
 
   for (const harmCategory of unalignedProviderHarmCategories) {
     const adversarialProvider = new PromptfooHarmfulCompletionProvider({ purpose, harmCategory });
-    const categoryPromises = Array.from({ length: numTests }, () =>
-      adversarialProvider.callApi(''),
-    );
-    const results = await Promise.all(categoryPromises);
+    const results = [];
+    for (let i = 0; i < numTests; i++) {
+      const result = await adversarialProvider.callApi('');
+      results.push(result);
+    }
     results.forEach((result) => {
-      const { output: generatedPrompt } = result;
-      invariant(typeof generatedPrompt === 'string', 'Expected generatedPrompt to be a string');
+      const { output: generatedPrompt, error } = result;
+      if (error) {
+        throw new Error(`Error generating prompt for ${harmCategory}: ${error}`);
+      }
+      invariant(
+        typeof generatedPrompt === 'string',
+        `Expected generatedPrompt to be a string, got ${JSON.stringify(result)}`,
+      );
       injectVars.set(generatedPrompt.split('\n')[0].trim(), harmCategory);
     });
   }
