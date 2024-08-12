@@ -6,7 +6,7 @@ sidebar_label: FAQ
 
 ### What is Promptfoo?
 
-Promptfoo is a local-first, open-source tool designed for comprehensive testing and evaluation of large language models (LLMs). It provides a robust framework for prompt engineering and LLM evaluation, helping developers and AI practitioners ensure the reliability, safety, and effectiveness of their AI systems. Key features include:
+Promptfoo is a local-first, open-source tool designed to help evaluate (eval) large language models (LLMs). Promptfoo is designed for application developers and for business applications. It provides a simple, flexible, and extensible API to get started quick and ship GenAI in reliably, safety, and effectively. Key features include:
 
 1. Systematic testing of prompts across multiple LLM providers.
 2. Evaluation of LLM outputs using various assertion types.
@@ -44,18 +44,22 @@ Promptfoo supports a wide range of LLM providers, including:
 
 Promptfoo's flexible architecture allows for easy integration with new or custom LLM providers. For the most up-to-date list and integration instructions, please refer to our [Providers documentation](/docs/providers/).
 
-### Data Security and Privacy
+## Data Security and Privacy
 
-**Does Promptfoo forward calls to an intermediate server?**
+### Does Promptfoo forward calls to an intermediate server?
+
 No, the source code runs on your machine. Calls to LLM APIs are sent directly to the respective provider. The Promptfoo team does not have access to these requests or responses.
 
-**Does Promptfoo store API keys?**
+### Does Promptfoo store API keys?
+
 No, API keys are stored as local environment variables and are never transmitted anywhere besides directly to the LLM API.
 
-**Does Promptfoo store LLM inputs and outputs?**
+### Does Promptfoo store LLM inputs and outputs?
+
 No, Promptfoo operates locally, and all data remains on your machine. The only exception is when you explicitly use the [share command](/docs/usage/sharing), which stores inputs and outputs in Cloudflare KV for two weeks.
 
-**Do you collect any PII?**
+### Do you collect any PII?
+
 No, we do not collect any personally identifiable information (PII).
 
 ### What is LLM red teaming, and how does Promptfoo support it?
@@ -71,9 +75,9 @@ Promptfoo's red teaming capabilities allow you to:
 
 For more details, see our [LLM Red Teaming Guide](/docs/guides/llm-redteaming).
 
-### Installation and Getting Started
+## Installation and Getting Started
 
-**How do I install Promptfoo?**
+### How do I install Promptfoo?
 
 1. Ensure you have Node.js 18 or later installed.
 
@@ -114,13 +118,13 @@ For more details, see our [LLM Red Teaming Guide](/docs/guides/llm-redteaming).
 
 For more detailed setup and usage instructions, refer to our [Getting Started documentation](/docs/getting-started).
 
-### Advanced Usage
+## Advanced Usage
 
-**How do I use a proxy with Promptfoo?**
+### How do I use a proxy with Promptfoo?
 
 Promptfoo uses [proxy-agent](https://www.npmjs.com/package/proxy-agent), which respects `HTTP_PROXY` and `HTTPS_PROXY` environment variables in the form of `[protocol://]<host>[:port]`.
 
-**Can I use Promptfoo as a library in my project?**
+### Can I use Promptfoo as a library in my project?
 
 Yes, you can install Promptfoo as a library:
 
@@ -130,11 +134,11 @@ npm install promptfoo
 
 This allows you to integrate Promptfoo's functionality directly into your application or testing framework.
 
-**How does Promptfoo integrate with existing development workflows?**
+### How does Promptfoo integrate with existing development workflows?
 
 Promptfoo can be integrated into CI/CD pipelines, used with testing frameworks like Jest and Vitest, and incorporated into various stages of the development process. For specific integration examples, check our [documentation](/docs/integrations).
 
-**What types of assertions and evaluations does Promptfoo support?**
+### What types of assertions and evaluations does Promptfoo support?
 
 Promptfoo supports a wide range of assertions, including:
 
@@ -147,4 +151,10 @@ For a complete list and usage details, see our [Assertions documentation](/docs/
 
 ### Troubleshooting
 
-For common issues and their solutions, please refer to our [Troubleshooting Guide](/docs/troubleshooting). If you encounter any problems not covered in the guide, feel free to open an issue on our [GitHub repository](https://github.com/promptfoo/promptfoo/issues).
+For common issues and their solutions, please refer to our:
+
+- [Documentation](https://www.promptfoo.dev/docs/intro/)
+- [GitHub Issues](https://github.com/promptfoo/promptfoo/issues)
+- [Discord Community](https://discord.gg/gHPS9jjfbs)
+
+If you encounter any problems not covered in these resources, feel free to open an issue on our [GitHub repository](https://github.com/promptfoo/promptfoo/issues).
