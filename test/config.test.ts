@@ -264,9 +264,9 @@ describe('readConfigs', () => {
     const configPaths = ['config1.json', 'config2.json'];
     const result = await readConfigs(configPaths);
 
-    expect((result.prompts as string[]).sort()).toEqual([
-      `file://${path.resolve(path.dirname(configPaths[0]), 'prompt2.txt')}`,
+    expect(result.prompts).toEqual([
       'prompt1',
+      `file://${path.resolve(path.dirname(configPaths[0]), 'prompt2.txt')}`,
       'prompt3',
       'prompt4',
     ]);
