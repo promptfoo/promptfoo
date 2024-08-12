@@ -14,9 +14,9 @@ Promptfoo is a local-first, open-source tool designed for comprehensive testing 
 4. Generation of adversarial tests for LLM red teaming.
 5. Seamless result sharing and integration into development pipelines.
 6. Support for various use cases and custom assertions.
-7. Flexibility to run as a command-line tool, a library, or integrate with testing frameworks.
+7. Flexibility to run as a command-line tool, a library, integrate with testing frameworks, or run in your ci/cd pipeline.
 
-Promptfoo operates locally, ensuring that your data and API calls remain secure and under your control.
+Promptfoo operates locally, meaning that your data and API calls remain secure and under your control.
 
 ### Why should I use Promptfoo?
 
@@ -90,6 +90,7 @@ For more details, see our [LLM Red Teaming Guide](/docs/guides/llm-redteaming).
    ```
 
 3. Verify the installation:
+
    ```sh
    promptfoo --version
    ```
@@ -106,6 +107,7 @@ For more details, see our [LLM Red Teaming Guide](/docs/guides/llm-redteaming).
 2. Explore the generated `promptfooconfig.yaml` file and example prompts.
 
 3. Run your first evaluation:
+
    ```sh
    promptfoo eval
    ```
