@@ -22,7 +22,7 @@ Typical usage example:
 """
 
 import subprocess
-from typing import List, Dict, Any, Set
+from typing import Any, Dict, List, Set
 
 
 def extract_unique_var_values(evals: List[Dict[str, Any]], var_name: str) -> Set[str]:
