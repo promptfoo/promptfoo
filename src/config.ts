@@ -211,15 +211,6 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
     }
   }
 
-  for (const config of configs) {
-    if (typeof config.tests === 'string') {
-      const newTests = await readTests(config.tests, path.dirname(configPaths[0]));
-      tests.push(...newTests);
-    } else if (Array.isArray(config.tests)) {
-      tests.push(...config.tests);
-    }
-  }
-
   const redteam: UnifiedConfig['redteam'] = {
     plugins: [],
     strategies: [],

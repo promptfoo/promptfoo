@@ -109,8 +109,8 @@ describe('readConfigs', () => {
       description: 'test1',
       providers: ['provider1'],
       prompts: ['prompt1'],
-      extensions: undefined,
-      tests: ['test1', 'test1'],
+      extension: undefined,
+      tests: ['test1'],
       scenarios: ['scenario1'],
       defaultTest: {
         description: 'defaultTest1',
@@ -137,8 +137,8 @@ describe('readConfigs', () => {
       description: 'test2',
       providers: ['provider2'],
       prompts: ['prompt2'],
-      extensions: undefined,
-      tests: ['test2', 'test2'],
+      extension: undefined,
+      tests: ['test2'],
       scenarios: ['scenario2'],
       defaultTest: {
         description: 'defaultTest2',
@@ -167,8 +167,8 @@ describe('readConfigs', () => {
       description: 'test1, test2',
       providers: ['provider1', 'provider2'],
       prompts: ['prompt1', 'prompt2'],
-      tests: ['test1', 'test2', 'test1', 'test2'],
-      extensions: undefined,
+      tests: ['test1', 'test2'],
+      extension: undefined,
       scenarios: ['scenario1', 'scenario2'],
       defaultTest: {
         description: 'defaultTest2',
@@ -264,9 +264,9 @@ describe('readConfigs', () => {
     const configPaths = ['config1.json', 'config2.json'];
     const result = await readConfigs(configPaths);
 
-    expect(result.prompts).toEqual([
-      'prompt1',
+    expect((result.prompts as string[]).sort()).toEqual([
       `file://${path.resolve(path.dirname(configPaths[0]), 'prompt2.txt')}`,
+      'prompt1',
       'prompt3',
       'prompt4',
     ]);
