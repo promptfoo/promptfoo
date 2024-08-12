@@ -115,6 +115,7 @@ export async function runExtensionHook(
   }
   const result = await transform(extension, hookName, context);
   logger.warn(result);
+  return result; // TODO: remove. Only used for unit tests
 }
 
 class Evaluator {
