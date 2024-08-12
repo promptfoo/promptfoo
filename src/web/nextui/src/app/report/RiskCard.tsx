@@ -26,10 +26,8 @@ const RiskCard: React.FC<{
 }> = ({ title, subtitle, progressValue, numTestsPassed, numTestsFailed, testTypes }) => {
   const { showPercentagesOnRiskCards, pluginPassRateThreshold } = useReportStore();
 
-  // Filter out test types with total 0
+  // Hide risk cards with no tests
   const filteredTestTypes = testTypes.filter((test) => test.total > 0);
-
-  // If all test types have total 0, return null
   if (filteredTestTypes.length === 0) {
     return null;
   }
