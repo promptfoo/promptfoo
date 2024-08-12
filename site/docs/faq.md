@@ -80,3 +80,34 @@ Promptfoo's red teaming framework is designed to address vulnerabilities outline
 By integrating promptfoo's red teaming capabilities into your development pipeline, you can proactively identify and mitigate potential risks before they impact end-users, resulting in more secure and reliable applications.
 
 For more detailed information on our red teaming capabilities and how they align with industry standards, please refer to our [LLM Red Teaming Guide](/docs/guides/llm-redteaming).
+
+### How do I get started with promptfoo?
+
+Getting started with promptfoo is quick and easy:
+
+1. Install Node.js 18 or later if you haven't already.
+
+2. Install promptfoo globally using npm:
+
+   ```sh
+   npm install -g promptfoo
+   ```
+
+3. Use the `init` command to create a new project with a sample configuration:
+
+   ```sh
+   promptfoo init my-promptfoo-project
+   cd my-promptfoo-project
+   ```
+
+   This command sets up a basic project structure with a `promptfooconfig.yaml` file and example prompts.
+
+4. Explore the generated files and customize them for your needs.
+
+5. Run your first evaluation:
+
+   ```sh
+   promptfoo eval
+   ```
+
+You can also explore our extensive collection of examples: [examples](https://github.com/promptfoo/promptfoo/tree/main/examples/). They cover a wide range of use cases and configurations, from simple prompt testing to complex multi-provider evaluations and custom assertions. For a comprehensive guide that includes detailed configuration options and best practices, please refer to our [Getting Started documentation](/docs/getting-started).
