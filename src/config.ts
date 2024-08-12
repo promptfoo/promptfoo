@@ -20,7 +20,7 @@ import type {
   TestSuite,
   UnifiedConfig,
 } from './types';
-import { readFilters } from './util';
+import { isJavascriptFile, readFilters } from './util';
 
 export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<UnifiedConfig> {
   if (process.env.PROMPTFOO_DISABLE_REF_PARSER) {
@@ -135,22 +135,13 @@ export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<Unifi
 
 export async function readConfig(configPath: string): Promise<UnifiedConfig> {
   const ext = path.parse(configPath).ext;
-  switch (ext) {
-    case '.json':
-    case '.yaml':
-    case '.yml':
-      const rawConfig = yaml.load(fs.readFileSync(configPath, 'utf-8')) as UnifiedConfig;
-      return dereferenceConfig(rawConfig || {});
-    case '.js':
-    case '.cjs':
-    case '.mjs':
-    case '.ts':
-    case '.cts':
-    case '.mts':
-      return (await importModule(configPath)) as UnifiedConfig;
-    default:
-      throw new Error(`Unsupported configuration file format: ${ext}`);
+  if (ext === '.json' || ext === '.yaml' || ext === '.yml') {
+    const rawConfig = yaml.load(fs.readFileSync(configPath, 'utf-8')) as UnifiedConfig;
+    return dereferenceConfig(rawConfig || {});
+  } else if (isJavascriptFile(configPath)) {
+    return (await importModule(configPath)) as UnifiedConfig;
   }
+  throw new Error(`Unsupported configuration file format: ${ext}`);
 }
 
 export async function maybeReadConfig(configPath: string): Promise<UnifiedConfig | undefined> {

@@ -8,7 +8,7 @@ import type {
   TestSuite,
   ProviderOptions,
 } from '../types';
-import { parsePathOrGlob } from '../util';
+import { isJavascriptFile, parsePathOrGlob } from '../util';
 import { processJsFile } from './processors/javascript';
 import { processJsonFile } from './processors/json';
 import { processJsonlFile } from './processors/jsonl';
@@ -140,7 +140,7 @@ export async function processPrompt(
   if (extension === '.jsonl') {
     return processJsonlFile(filePath, prompt);
   }
-  if (extension && ['.js', '.cjs', '.mjs', '.ts', '.cts', '.mts'].includes(extension)) {
+  if (extension && isJavascriptFile(extension)) {
     return processJsFile(filePath, prompt, functionName);
   }
   if (extension === '.py') {
