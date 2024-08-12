@@ -1,4 +1,4 @@
-declare module 'rouge' {
+declare module 'js-rouge' {
   function n(
     cand: string,
     ref: string,
