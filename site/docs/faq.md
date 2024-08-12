@@ -16,6 +16,34 @@ Promptfoo is a local-first, open-source tool for testing and evaluating AI promp
 
 Promptfoo helps ensure the reliability, safety, and effectiveness of AI systems by providing a robust framework for prompt engineering and LLM evaluation.
 
+### Why should I use promptfoo?
+
+Promptfoo offers several key benefits for developers and organizations working with LLMs:
+
+1. Improved reliability: By systematically testing prompts and LLM outputs, you can identify and fix issues before they affect your users.
+2. Enhanced safety: Our red teaming capabilities help you proactively detect and mitigate potential vulnerabilities in your AI systems.
+3. Cost optimization: By evaluating prompt effectiveness, you can reduce unnecessary API calls and optimize your LLM usage.
+4. Streamlined workflow: Promptfoo integrates seamlessly into your development pipeline, making it easy to maintain high-quality AI applications.
+5. Multi-provider support: Test your prompts across various LLM providers to ensure consistency and find the best fit for your needs.
+6. Open-source flexibility: As an open-source tool, promptfoo can be customized and extended to meet your specific requirements.
+
+Whether you're developing a chatbot, RAG system, or any other LLM-powered application, promptfoo can help you build more robust, efficient, and trustworthy AI systems.
+
+### Which LLM providers does promptfoo support?
+
+Promptfoo supports a wide range of LLM providers, including:
+
+1. OpenAI (GPT-4o, GPT-4, GPT-3.5)
+2. Anthropic (Claude)
+3. Google (PaLM, Gemini)
+4. Amazon Bedrock (Anthropic, Llama, etc.)
+5. Azure OpenAI
+6. Replicate (llama3.1, llama3, etc.)
+7. Hugging Face
+8. Local models and custom API integrations
+
+For the most up-to-date list of supported providers and detailed integration instructions, please refer to our [Providers documentation](/docs/providers/).
+
 ### Does promptfoo forward calls to an intermediate server?
 
 No, the source code is executed on your machine. Any calls to LLM APIs (such as OpenAI, Anthropic, etc.) are sent directly to the LLM provider. The authors of promptfoo do not have access to these requests or responses.
