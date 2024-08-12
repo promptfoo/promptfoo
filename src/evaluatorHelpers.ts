@@ -57,6 +57,7 @@ export async function renderPrompt(
       const basePath = cliState.basePath || '';
       const filePath = path.resolve(process.cwd(), basePath, value.slice('file://'.length));
       const fileExtension = filePath.split('.').pop();
+
       logger.debug(`Loading var ${varName} from file: ${filePath}`);
       if (isJavascriptFile(filePath)) {
         const javascriptOutput = (await (

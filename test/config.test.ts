@@ -109,7 +109,7 @@ describe('readConfigs', () => {
       description: 'test1',
       providers: ['provider1'],
       prompts: ['prompt1'],
-      extension: undefined,
+      extensions: [],
       tests: ['test1'],
       scenarios: ['scenario1'],
       defaultTest: {
@@ -137,7 +137,7 @@ describe('readConfigs', () => {
       description: 'test2',
       providers: ['provider2'],
       prompts: ['prompt2'],
-      extension: undefined,
+      extensions: [],
       tests: ['test2'],
       scenarios: ['scenario2'],
       defaultTest: {
@@ -168,7 +168,7 @@ describe('readConfigs', () => {
       providers: ['provider1', 'provider2'],
       prompts: ['prompt1', 'prompt2'],
       tests: ['test1', 'test2'],
-      extension: undefined,
+      extensions: [],
       scenarios: ['scenario1', 'scenario2'],
       defaultTest: {
         description: 'defaultTest2',
