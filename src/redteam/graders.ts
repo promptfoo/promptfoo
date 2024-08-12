@@ -6,6 +6,7 @@ import { BeavertailsGrader } from './plugins/beavertails';
 import { BflaGrader } from './plugins/bfla';
 import { BiasGrader } from './plugins/bias';
 import { BolaGrader } from './plugins/bola';
+import { BoplaGrader } from './plugins/bopla';
 import { CompetitorsGrader } from './plugins/competitors';
 import { CoppaGrader } from './plugins/compliance/coppa';
 import { FerpaGrader } from './plugins/compliance/ferpa';
@@ -86,9 +87,11 @@ import { ReligionGrader } from './plugins/religion';
 import { ShellInjectionGrader } from './plugins/shellInjection';
 import { SqlInjectionGrader } from './plugins/sqlInjection';
 import { SsrfGrader } from './plugins/ssrf';
+import { ResourceConsumptionGrader } from './plugins/resourceConsumption';
 import { ToolDiscoveryGrader } from './plugins/toolDiscovery';
 import { ToxicChatGrader } from './plugins/toxicChat';
 import { UnsafeBenchGrader } from './plugins/unsafebench';
+import { UnrestrictedAccessGrader } from './plugins/unrestrictedAccess';
 import { UnverifiableClaimsGrader } from './plugins/unverifiableClaims';
 import { VLGuardGrader } from './plugins/vlguard';
 import { WordplayGrader } from './plugins/wordplay';
@@ -110,6 +113,9 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:bola': new BolaGrader(),
   'promptfoo:redteam:cca': new CcaGrader(),
   'promptfoo:redteam:competitors': new CompetitorsGrader(),
+  'promptfoo:redteam:bopla': new BoplaGrader(),
+  'promptfoo:redteam:unrestricted-access': new UnrestrictedAccessGrader(),
+  'promptfoo:redteam:resource-consumption': new ResourceConsumptionGrader(),
   'promptfoo:redteam:contracts': new ContractsGrader(),
   'promptfoo:redteam:coppa': new CoppaGrader(),
   'promptfoo:redteam:cross-session-leak': new CrossSessionLeakGrader(),
