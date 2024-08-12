@@ -56,63 +56,43 @@ export async function renderPrompt(
     if (typeof value === 'string' && value.startsWith('file://')) {
       const basePath = cliState.basePath || '';
       const filePath = path.resolve(process.cwd(), basePath, value.slice('file://'.length));
-
+      const fileExtension = filePath.split('.').pop();
       logger.debug(`Loading var ${varName} from file: ${filePath}`);
       if (isJavascriptFile(filePath)) {
-        const importedModule = await importModule(filePath);
-        const javascriptFunction =
-          typeof importedModule === 'function' ? importedModule : importedModule.default;
-        if (typeof javascriptFunction !== 'function') {
+        const javascriptOutput = (await (
+          await importModule(filePath)
+        )(varName, basePrompt, vars, provider)) as {
+          output?: string;
+          error?: string;
+        };
+        if (javascriptOutput.error) {
+          throw new Error(`Error running ${filePath}: ${javascriptOutput.error}`);
+        }
+        if (!javascriptOutput.output) {
           throw new Error(
-            `Imported module must export a function or have a default export as a function`,
+            `Expected ${filePath} to return { output: string } but got ${javascriptOutput}`,
           );
         }
-        const javascriptOutput = await javascriptFunction(varName, basePrompt, vars, provider);
-        if (typeof javascriptOutput === 'string') {
-          vars[varName] = javascriptOutput;
-        } else if (javascriptOutput && typeof javascriptOutput === 'object') {
-          if (javascriptOutput.output) {
-            vars[varName] = javascriptOutput.output;
-          } else if (javascriptOutput.error) {
-            throw new Error(`Error running ${filePath}: ${javascriptOutput.error}`);
-          } else {
-            throw new Error(`Invalid output from JavaScript file: ${filePath}`);
-          }
-        } else {
-          throw new Error(
-            `Expected ${filePath} to return a string or { output: string } but got ${typeof javascriptOutput}`,
-          );
+        vars[varName] = javascriptOutput.output;
+      } else if (fileExtension === 'py') {
+        const pythonScriptOutput = (await runPython(filePath, 'get_var', [
+          varName,
+          basePrompt,
+          vars,
+        ])) as { output?: string; error?: string };
+        if (pythonScriptOutput.error) {
+          throw new Error(`Error running Python script ${filePath}: ${pythonScriptOutput.error}`);
         }
+        if (!pythonScriptOutput.output) {
+          throw new Error(`Python script ${filePath} did not return any output`);
+        }
+        vars[varName] = pythonScriptOutput.output.trim();
+      } else if (fileExtension === 'yaml' || fileExtension === 'yml') {
+        vars[varName] = JSON.stringify(
+          yaml.load(fs.readFileSync(filePath, 'utf8')) as string | object,
+        );
       } else {
-        const fileExtension = filePath.split('.').pop();
-        switch (fileExtension) {
-          case 'py':
-            const pythonScriptOutput = (await runPython(filePath, 'get_var', [
-              varName,
-              basePrompt,
-              vars,
-            ])) as { output?: string; error?: string };
-            if (pythonScriptOutput.error) {
-              throw new Error(
-                `Error running Python script ${filePath}: ${pythonScriptOutput.error}`,
-              );
-            }
-            if (!pythonScriptOutput.output) {
-              throw new Error(`Python script ${filePath} did not return any output`);
-            }
-            vars[varName] = pythonScriptOutput.output.trim();
-            break;
-          case 'yaml':
-          case 'yml':
-            vars[varName] = JSON.stringify(
-              yaml.load(fs.readFileSync(filePath, 'utf8')) as string | object,
-            );
-            break;
-          case 'json':
-          default:
-            vars[varName] = fs.readFileSync(filePath, 'utf8').trim();
-            break;
-        }
+        vars[varName] = fs.readFileSync(filePath, 'utf8').trim();
       }
     }
   }

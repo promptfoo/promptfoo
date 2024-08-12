@@ -1,0 +1,9 @@
+{
+  "position": 1000,
+  "label": "Plugins",
+  "collapsed": true,
+  "link": {
+    "type": "generated-index",
+    "description": "Supported plugins for red teaming your LLM applications."
+  }
+}
