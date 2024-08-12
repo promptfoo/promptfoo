@@ -208,7 +208,9 @@ describe('redteamConfigSchema', () => {
   });
 
   it('should allow all valid plugin and strategy names', () => {
-    const strategiesExceptDefault = REDTEAM_ALL_STRATEGIES.filter((id) => id !== 'default');
+    const strategiesExceptDefault = REDTEAM_ALL_STRATEGIES.filter(
+      (id) => id !== 'default' && id !== 'basic',
+    );
     const input = {
       plugins: REDTEAM_ALL_PLUGINS,
       strategies: strategiesExceptDefault,

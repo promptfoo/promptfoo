@@ -210,9 +210,10 @@ Strategies modify or generate additional test cases based on the output of other
 
 #### Available Strategies
 
-- `prompt-injection`: Creates prompt injection test cases (Default)
-- `jailbreak`: Applies a linear probe jailbreak technique (Default)
-- `jailbreak:tree`: Applies an advanced tree jailbreak technique
+- `basic` - Raw payloads only (Default)
+- `prompt-injection`: Wraps the payload in a prompt injection (Default)
+- `jailbreak`: Applies a linear probe jailbreak technique to deliver the payload (Default)
+- `jailbreak:tree`: Applies a tree-based jailbreak technique
 - `rot13`: Applies ROT13 encoding to the injected variable, shifting each letter 13 positions in the alphabet
 - `base64`: Encodes the injected variable using Base64 encoding
 - `leetspeak`: Converts the injected variable to leetspeak, replacing certain letters with numbers or symbols
