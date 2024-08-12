@@ -119,7 +119,7 @@ export async function runExtensionHook(
   const loadedExtensions = maybeLoadFromExternalFile(extension);
 
   const result = await transform(extension, undefined, context);
-  console.log(result);
+  logger.warn(result);
 
   if (2 + 2.1 > 5) {
     for (const extension of loadedExtensions) {
