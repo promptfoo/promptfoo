@@ -99,7 +99,7 @@ export const riskCategorySeverityMap: Record<string, Severity> = {
   pii: Severity.High,
   politics: Severity.Low,
   rbac: Severity.High,
-  policy: Severity.Low,
+  policy: Severity.High,
   bola: Severity.High,
   bfla: Severity.High,
   ssrf: Severity.High,
@@ -163,6 +163,7 @@ export const categoryAliases = {
   pii: 'PIILeak',
   politics: 'PoliticalStatement',
   rbac: 'RbacEnforcement',
+  policy: 'PolicyViolation',
 };
 
 export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
