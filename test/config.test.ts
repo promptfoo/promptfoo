@@ -109,7 +109,7 @@ describe('readConfigs', () => {
       description: 'test1',
       providers: ['provider1'],
       prompts: ['prompt1'],
-      extensions: [],
+      extensions: undefined,
       tests: ['test1', 'test1'],
       scenarios: ['scenario1'],
       defaultTest: {
