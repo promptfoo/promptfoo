@@ -18,17 +18,6 @@ Promptfoo is a local-first, open-source tool designed to help evaluate (eval) la
 
 Promptfoo operates locally, meaning that your data and API calls remain secure and under your control.
 
-### Why should I use Promptfoo?
-
-Promptfoo offers several key advantages for developers and organizations working with LLMs:
-
-1. **Improved Reliability**: Systematically test prompts and LLM outputs to identify issues early. Example: Catch inconsistencies in chatbot responses across different prompts.
-2. **Enhanced Safety**: Leverage red teaming capabilities to detect potential vulnerabilities. Example: Test for prompt injection vulnerabilities in your AI system.
-3. **Cost Optimization**: Evaluate prompt effectiveness to reduce unnecessary API calls. Example: Identify and refine prompts that lead to excessive token usage.
-4. **Streamlined Workflow**: Integrate seamlessly into your development pipeline. Example: Automate LLM testing as part of your CI/CD process.
-5. **Multi-Provider Support**: Test prompts across various LLM providers for consistency. Example: Compare outputs from GPT-4, Claude, and PaLM for the same set of prompts.
-6. **Open-Source Flexibility**: Customize and extend Promptfoo to meet specific requirements. Example: Implement custom assertion types for domain-specific evaluations.
-
 ### What is LLM red teaming, and how does Promptfoo support it?
 
 LLM red teaming is the process of systematically testing LLMs to identify potential vulnerabilities, weaknesses, and unintended behaviors before deployment. Promptfoo supports this by offering a framework for generating and executing adversarial tests, aligned with industry standards like OWASP LLM Top 10 and NIST AI Risk Management Framework.
@@ -136,25 +125,4 @@ This allows you to integrate Promptfoo's functionality directly into your applic
 
 ### How does Promptfoo integrate with existing development workflows?
 
-Promptfoo can be integrated into CI/CD pipelines, used with testing frameworks like Jest and Vitest, and incorporated into various stages of the development process. For specific integration examples, check our [documentation](/docs/integrations).
-
-### What types of assertions and evaluations does Promptfoo support?
-
-Promptfoo supports a wide range of assertions, including:
-
-- Content-based assertions (e.g., contains, regex matching)
-- Model-graded evaluations
-- Custom JavaScript assertions
-- Similarity comparisons
-
-For a complete list and usage details, see our [Assertions documentation](/docs/configuration/expected-outputs).
-
-### Troubleshooting
-
-For common issues and their solutions, please refer to our:
-
-- [Documentation](https://www.promptfoo.dev/docs/intro/)
-- [GitHub Issues](https://github.com/promptfoo/promptfoo/issues)
-- [Discord Community](https://discord.gg/gHPS9jjfbs)
-
-If you encounter any problems not covered in these resources, feel free to open an issue on our [GitHub repository](https://github.com/promptfoo/promptfoo/issues).
+Promptfoo can be integrated into CI/CD pipelines via [GitHub Action](https://github.com/promptfoo/promptfoo-action), used with testing frameworks like Jest and Vitest, and incorporated into various stages of the development process.
