@@ -31,6 +31,7 @@ import type {
 } from './types';
 import { sha256 } from './util';
 import { transform } from './util/transform';
+import { maybeLoadFromExternalFile } from './providers/shared';
 
 export const DEFAULT_MAX_CONCURRENCY = 4;
 
@@ -107,11 +108,10 @@ export function generateVarCombinations(
  * @param extensions - An optional array of extension paths.
  * @returns A Promise that resolves when all hooks have been run.
  */
-export async function runExtensionHook(hookName: string, context: any, extensions?: string[]) {
-  if (!extensions || extensions.length === 0) {
-    return;
-  }
-  for (const extension of extensions) {
+export async function runExtensionHook(hookName: string, context: any, extensions?: string | string[]) {
+  const loadedExtensions = maybeLoadFromExternalFile(extensions);
+
+  for (const extension of loadedExtensions) {
     logger.info(`Running extension ${extension}`);
     try {
       if (extension.startsWith('python:')) {

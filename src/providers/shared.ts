@@ -38,7 +38,7 @@ export function toTitleCase(str: string) {
   return str.replace(/\w\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase());
 }
 
-export function maybeLoadFromExternalFile(filePath: string | object | Function | undefined | null) {
+export function maybeLoadFromExternalFile(filePath: string | string[] | object | Function | undefined | null) {
   if (Array.isArray(filePath)) {
     return filePath.map((path) => {
       const content: any = maybeLoadFromExternalFile(path);
