@@ -29,6 +29,19 @@ Promptfoo offers several key advantages for developers and organizations working
 5. **Multi-Provider Support**: Test prompts across various LLM providers for consistency. Example: Compare outputs from GPT-4, Claude, and PaLM for the same set of prompts.
 6. **Open-Source Flexibility**: Customize and extend Promptfoo to meet specific requirements. Example: Implement custom assertion types for domain-specific evaluations.
 
+### What is LLM red teaming, and how does Promptfoo support it?
+
+LLM red teaming is the process of systematically testing LLMs to identify potential vulnerabilities, weaknesses, and unintended behaviors before deployment. Promptfoo supports this by offering a framework for generating and executing adversarial tests, aligned with industry standards like OWASP LLM Top 10 and NIST AI Risk Management Framework.
+
+Promptfoo's red teaming capabilities allow you to:
+
+1. Generate adversarial tests specific to your LLM application.
+2. Execute tests at scale in a pre-deployment environment.
+3. Analyze results to improve AI system safety and reliability.
+4. Continuously monitor LLM performance against evolving threats.
+
+For more details, see our [LLM Red Teaming Guide](/docs/guides/llm-redteaming).
+
 ### Which LLM providers does Promptfoo support?
 
 Promptfoo supports a wide range of LLM providers, including:
@@ -62,19 +75,6 @@ No, Promptfoo operates locally, and all data remains on your machine. The only e
 
 No, we do not collect any personally identifiable information (PII).
 
-### What is LLM red teaming, and how does Promptfoo support it?
-
-LLM red teaming is the process of systematically testing LLMs to identify potential vulnerabilities, weaknesses, and unintended behaviors before deployment. Promptfoo supports this by offering a framework for generating and executing adversarial tests, aligned with industry standards like OWASP LLM Top 10 and NIST AI Risk Management Framework.
-
-Promptfoo's red teaming capabilities allow you to:
-
-1. Generate adversarial tests specific to your LLM application.
-2. Execute tests at scale in a pre-deployment environment.
-3. Analyze results to improve AI system safety and reliability.
-4. Continuously monitor LLM performance against evolving threats.
-
-For more details, see our [LLM Red Teaming Guide](/docs/guides/llm-redteaming).
-
 ## Installation and Getting Started
 
 ### How do I install Promptfoo?
@@ -99,7 +99,7 @@ For more details, see our [LLM Red Teaming Guide](/docs/guides/llm-redteaming).
    promptfoo --version
    ```
 
-**How do I get started with Promptfoo?**
+### How do I get started with Promptfoo?
 
 1. Initialize a new project:
 
