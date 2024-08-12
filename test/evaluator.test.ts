@@ -79,14 +79,14 @@ describe('runExtensionHook', () => {
   });
 
   it('should not run any extensions if none are provided', async () => {
-    await runExtensionHook('beforeAll', { suite: {} as TestSuite });
+    await runExtensionHook(undefined, 'beforeAll', { suite: {} as TestSuite });
     expect(runPython).not.toHaveBeenCalled();
     expect(importModule).not.toHaveBeenCalled();
   });
 
   it('should run a single Python extension', async () => {
-    const mockSuite: TestSuite = { extensions: ['python:test_extension.py'] } as TestSuite;
-    await runExtensionHook('beforeAll', { suite: mockSuite }, mockSuite.extensions);
+    const mockSuite: TestSuite = { extension: 'python:test_extension.py' } as TestSuite;
+    await runExtensionHook(mockSuite.extension, 'beforeAll', { suite: mockSuite });
     expect(runPython).toHaveBeenCalledTimes(1);
     expect(runPython).toHaveBeenCalledWith(
       expect.stringContaining('test_extension.py'),
@@ -100,7 +100,7 @@ describe('runExtensionHook', () => {
     jest.mocked(importModule).mockResolvedValue(mockExtensionFn);
 
     const mockSuite: TestSuite = { extensions: ['file://test_extension.js'] } as TestSuite;
-    await runExtensionHook('beforeAll', { suite: mockSuite }, mockSuite.extensions);
+    await runExtensionHook(mockSuite.extensions, 'beforeAll', { suite: mockSuite });
 
     expect(importModule).toHaveBeenCalledTimes(1);
     expect(importModule).toHaveBeenCalledWith(expect.stringContaining('test_extension.js'));

@@ -12,6 +12,7 @@ import { importModule } from './esm';
 import { renderPrompt } from './evaluatorHelpers';
 import logger from './logger';
 import { maybeEmitAzureOpenAiWarning } from './providers/azureopenaiUtil';
+import { maybeLoadFromExternalFile } from './providers/shared';
 import { runPython } from './python/pythonUtils';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
@@ -31,7 +32,6 @@ import type {
 } from './types';
 import { sha256 } from './util';
 import { transform } from './util/transform';
-import { maybeLoadFromExternalFile } from './providers/shared';
 
 export const DEFAULT_MAX_CONCURRENCY = 4;
 
@@ -103,45 +103,54 @@ export function generateVarCombinations(
 
 /**
  * Runs extension hooks for the given hook name and context.
+ * @param extension - An optional extension path.
  * @param hookName - The name of the hook to run.
  * @param context - The context object to pass to the hook.
- * @param extensions - An optional array of extension paths.
  * @returns A Promise that resolves when all hooks have been run.
  */
-export async function runExtensionHook(hookName: string, context: any, extensions?: string | string[]) {
-  const loadedExtensions = maybeLoadFromExternalFile(extensions);
+export async function runExtensionHook(
+  extension: string | undefined,
+  hookName: string,
+  context: any,
+) {
+  const loadedExtensions = maybeLoadFromExternalFile(extension);
 
-  for (const extension of loadedExtensions) {
-    logger.info(`Running extension ${extension}`);
-    try {
-      if (extension.startsWith('python:')) {
-        const filePath = path.resolve(cliState.basePath || '', extension.slice('python:'.length));
-        await runPython(filePath, 'extension_hook', [hookName, context]);
-      } else if (extension.startsWith('file://')) {
-        const filePath = extension.slice('file://'.length);
-        const extname = path.extname(filePath);
-        if (['.js', '.cjs', '.mjs', '.ts', '.cts', '.mts'].includes(extname)) {
-          const requiredModule = await importModule(filePath);
-          let extensionFn;
-          if (typeof requiredModule === 'function') {
-            extensionFn = requiredModule;
-          } else if (requiredModule.default && typeof requiredModule.default === 'function') {
-            extensionFn = requiredModule.default;
+  const result = await transform(extension, undefined, context);
+  console.log(result);
+
+  if (2 + 2.1 > 5) {
+    for (const extension of loadedExtensions) {
+      logger.info(`Running extension ${extension}`);
+      try {
+        if (extension.startsWith('python:')) {
+          const filePath = path.resolve(cliState.basePath || '', extension.slice('python:'.length));
+          await runPython(filePath, 'extension_hook', [hookName, context]);
+        } else if (extension.startsWith('file://')) {
+          const filePath = extension.slice('file://'.length);
+          const extname = path.extname(filePath);
+          if (['.js', '.cjs', '.mjs', '.ts', '.cts', '.mts'].includes(extname)) {
+            const requiredModule = await importModule(filePath);
+            let extensionFn;
+            if (typeof requiredModule === 'function') {
+              extensionFn = requiredModule;
+            } else if (requiredModule.default && typeof requiredModule.default === 'function') {
+              extensionFn = requiredModule.default;
+            } else {
+              throw new Error(
+                `Extension ${filePath} must export a function or have a default export as a function`,
+              );
+            }
+            await extensionFn(hookName, context);
           } else {
-            throw new Error(
-              `Extension ${filePath} must export a function or have a default export as a function`,
-            );
+            throw new Error(`Unsupported extension file format: ${extension}`);
           }
-          await extensionFn(hookName, context);
         } else {
-          throw new Error(`Unsupported extension file format: ${extension}`);
+          throw new Error(`Unsupported extension format: ${extension}`);
         }
-      } else {
-        throw new Error(`Unsupported extension format: ${extension}`);
+      } catch (error) {
+        logger.error(`Error running extension ${extension}: ${error}`);
+        throw error;
       }
-    } catch (error) {
-      logger.error(`Error running extension ${extension}: ${error}`);
-      throw error;
     }
   }
 }
@@ -376,7 +385,7 @@ class Evaluator {
     const { testSuite, options } = this;
     const prompts: CompletedPrompt[] = [];
 
-    await runExtensionHook('beforeAll', { suite: testSuite }, testSuite.extensions);
+    await runExtensionHook( testSuite.extensions, 'beforeAll', { suite: testSuite });
 
     if (options.generateSuggestions) {
       // TODO(ian): Move this into its own command/file
@@ -925,6 +934,7 @@ class Evaluator {
     }
 
     await runExtensionHook(
+      testSuite.extensions,
       'evals_ran',
       {
         evals: runEvalOptions,
@@ -932,7 +942,6 @@ class Evaluator {
         table: table,
         suite: testSuite,
       },
-      testSuite.extensions,
     );
 
     telemetry.record('eval_ran', {
