@@ -113,6 +113,9 @@ export async function runExtensionHook(
   hookName: string,
   context: any,
 ) {
+  if (!extension) {
+    return;
+  }
   const loadedExtensions = maybeLoadFromExternalFile(extension);
 
   const result = await transform(extension, undefined, context);
@@ -385,7 +388,7 @@ class Evaluator {
     const { testSuite, options } = this;
     const prompts: CompletedPrompt[] = [];
 
-    await runExtensionHook( testSuite.extensions, 'beforeAll', { suite: testSuite });
+    await runExtensionHook(testSuite.extension, 'beforeAll', { suite: testSuite });
 
     if (options.generateSuggestions) {
       // TODO(ian): Move this into its own command/file
@@ -933,16 +936,12 @@ class Evaluator {
       progressBar.stop();
     }
 
-    await runExtensionHook(
-      testSuite.extensions,
-      'evals_ran',
-      {
-        evals: runEvalOptions,
-        results: results,
-        table: table,
-        suite: testSuite,
-      },
-    );
+    await runExtensionHook(testSuite.extension, 'evals_ran', {
+      evals: runEvalOptions,
+      results: results,
+      table: table,
+      suite: testSuite,
+    });
 
     telemetry.record('eval_ran', {
       numPrompts: prompts.length,

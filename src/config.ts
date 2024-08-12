@@ -213,10 +213,10 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
     }
   }
 
-  const extensions: UnifiedConfig['extensions'] = [];
+  let extension: UnifiedConfig['extension'] = undefined;
   for (const config of configs) {
-    if (Array.isArray(config.extensions)) {
-      extensions.push(...config.extensions.filter((extension) => !extensions.includes(extension)));
+    if (config.extension && !extension) {
+      extension = config.extension;
     }
   }
 
@@ -340,7 +340,7 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
       (prev, curr) => ({ ...prev, ...curr.commandLineOptions }),
       {},
     ),
-    extensions: extensions,
+    extension,
     redteam,
     metadata: configs.reduce((prev, curr) => ({ ...prev, ...curr.metadata }), {}),
     sharing: !configs.some((config) => config.sharing === false),
@@ -391,7 +391,7 @@ export async function resolveConfigs(
     });
   }
 
-  // Use basepath in cases where path was supplied in the config file
+  // Use base path in cases where path was supplied in the config file
   const basePath = configPaths ? path.dirname(configPaths[0]) : '';
 
   const defaultTestRaw = fileConfig.defaultTest || defaultConfig.defaultTest;
@@ -409,7 +409,7 @@ export async function resolveConfigs(
     defaultTest: defaultTestRaw ? await readTest(defaultTestRaw, basePath) : undefined,
     derivedMetrics: fileConfig.derivedMetrics || defaultConfig.derivedMetrics,
     outputPath: cmdObj.output || fileConfig.outputPath || defaultConfig.outputPath,
-    extensions: fileConfig.extensions,
+    extension: fileConfig.extension,
     metadata: fileConfig.metadata || defaultConfig.metadata,
     redteam: fileConfig.redteam || defaultConfig.redteam,
   };
@@ -493,7 +493,7 @@ export async function resolveConfigs(
       fileConfig.nunjucksFilters || defaultConfig.nunjucksFilters || {},
       basePath,
     ),
-    extensions: config.extensions,
+    extension: config.extension,
   };
 
   if (testSuite.tests) {

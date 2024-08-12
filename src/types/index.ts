@@ -599,8 +599,8 @@ export const TestSuiteConfigSchema = z.object({
   // Metrics to calculate after the eval has been completed
   derivedMetrics: z.array(DerivedMetricSchema).optional(),
 
-  // Extensions that are called at various plugin points
-  extensions: z.array(z.string()).optional(),
+  // Extension that is called at various plugin points
+  extension: z.string().optional(),
 
   // Any other information about this configuration.
   metadata: MetadataSchema.optional(),

@@ -99,8 +99,8 @@ describe('runExtensionHook', () => {
     const mockExtensionFn = jest.fn();
     jest.mocked(importModule).mockResolvedValue(mockExtensionFn);
 
-    const mockSuite: TestSuite = { extensions: ['file://test_extension.js'] } as TestSuite;
-    await runExtensionHook(mockSuite.extensions, 'beforeAll', { suite: mockSuite });
+    const mockSuite: TestSuite = { extension: 'file://test_extension.js' } as TestSuite;
+    await runExtensionHook(mockSuite.extension, 'beforeAll', { suite: mockSuite });
 
     expect(importModule).toHaveBeenCalledTimes(1);
     expect(importModule).toHaveBeenCalledWith(expect.stringContaining('test_extension.js'));
@@ -112,9 +112,9 @@ describe('runExtensionHook', () => {
     jest.mocked(importModule).mockResolvedValue(mockJsExtensionFn);
 
     const mockSuite: TestSuite = {
-      extensions: ['python:extension1.py', 'file://extension2.js'],
+      extension: 'file://extension2.js',
     } as TestSuite;
-    await runExtensionHook('afterAll', { suite: mockSuite, results: {} }, mockSuite.extensions);
+    await runExtensionHook(mockSuite.extension, 'afterAll', { suite: mockSuite, results: {} });
 
     expect(runPython).toHaveBeenCalledTimes(1);
     expect(runPython).toHaveBeenCalledWith(
@@ -132,22 +132,22 @@ describe('runExtensionHook', () => {
     const mockDefaultExportFn = jest.fn();
     jest.mocked(importModule).mockResolvedValue({ default: mockDefaultExportFn });
 
-    const mockSuite: TestSuite = { extensions: ['file://default_export.js'] } as TestSuite;
-    await runExtensionHook('beforeEach', { test: {}, suite: mockSuite }, mockSuite.extensions);
+    const mockSuite: TestSuite = { extension: 'file://default_export.js' } as TestSuite;
+    await runExtensionHook(mockSuite.extension, 'beforeEach', { test: {}, suite: mockSuite });
 
     expect(importModule).toHaveBeenCalledTimes(1);
     expect(mockDefaultExportFn).toHaveBeenCalledWith('beforeEach', { test: {}, suite: mockSuite });
   });
 
   it('should throw an error for unsupported file formats', async () => {
-    const mockSuite: TestSuite = { extensions: ['file://unsupported.txt'] } as TestSuite;
+    const mockSuite: TestSuite = { extension: 'file://unsupported.txt' } as TestSuite;
 
     await expect(
-      runExtensionHook(
-        'afterEach',
-        { test: {}, result: {}, suite: mockSuite },
-        mockSuite.extensions,
-      ),
+      runExtensionHook(mockSuite.extension, 'afterEach', {
+        test: {},
+        result: {},
+        suite: mockSuite,
+      }),
     ).rejects.toThrow('Unsupported extension file format: file://unsupported.txt');
   });
 
@@ -158,14 +158,14 @@ describe('runExtensionHook', () => {
     jest.mocked(importModule).mockRejectedValueOnce(new Error('JavaScript extension error'));
 
     const mockSuite: TestSuite = {
-      extensions: ['python:error.py', 'file://error.js'],
+      extension: 'file://error.js',
     } as TestSuite;
 
-    await runExtensionHook(
-      'afterEach',
-      { test: {}, result: {}, suite: mockSuite },
-      mockSuite.extensions,
-    );
+    await runExtensionHook(mockSuite.extension, 'afterEach', {
+      test: {},
+      result: {},
+      suite: mockSuite,
+    });
 
     expect(consoleSpy).toHaveBeenCalledTimes(2);
     expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Python extension error'));
