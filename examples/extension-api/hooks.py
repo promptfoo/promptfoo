@@ -109,29 +109,3 @@ def extension_hook(hook_name: str, context: Dict[str, Any]) -> None:
             f"afterEach: Completed evaluation for '{test.get('description', 'Unnamed test')}'"
         )
         print(f"Result: {result.get('pass', False)}")
-
-
-if __name__ == "__main__":
-    # Example usage
-    before_all_context = {
-        "evals": [{"test": {"vars": {"setup": "echo 'Setting up test environment'"}}}],
-        "suite": {"name": "Example Suite"},
-    }
-    extension_hook("beforeAll", before_all_context)
-
-    before_each_context = {"eval": {"test": {"description": "Test Case 1"}}}
-    extension_hook("beforeEach", before_each_context)
-
-    after_each_context = {
-        "eval": {"test": {"description": "Test Case 1"}},
-        "result": {"pass": True},
-    }
-    extension_hook("afterEach", after_each_context)
-
-    after_all_context = {
-        "evals": [
-            {"test": {"vars": {"teardown": "echo 'Cleaning up test environment'"}}}
-        ],
-        "results": [{}, {}],  # Simulating 2 evaluation results
-    }
-    extension_hook("afterAll", after_all_context)
