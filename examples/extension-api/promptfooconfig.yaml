@@ -6,7 +6,8 @@ providers:
   - openai:gpt-4o-mini
 
 extensions:
-  - python:customPlugin.py
+  - file://hooks.js
+  # - python:hooks.py
 
 tests:
   - vars:

@@ -19,9 +19,9 @@ Specify your extensions in the `promptfooconfig.yaml` file:
 
 ```yaml
 extensions:
-  - python:customPlugin.py
-  - file://customPlugin.py
-  - file://customPlugin.js
+  - python:hooks.py
+  # - file://hooks.js
+  # - file://hooks.js
 ```
 
 ## Why Use Extensions?
