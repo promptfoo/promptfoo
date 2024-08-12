@@ -158,6 +158,9 @@ export const RedteamConfigSchema = z
     const strategies = data.strategies
       ?.map((strategy) => {
         if (typeof strategy === 'string') {
+          if (strategy === 'basic') {
+            return [];
+          }
           return strategy === 'default'
             ? DEFAULT_STRATEGIES.map((id) => ({ id }))
             : { id: strategy };
