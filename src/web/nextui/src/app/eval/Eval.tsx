@@ -30,7 +30,7 @@ async function fetchEvalsFromSupabase(): Promise<{ id: string; createdAt: string
     data: { user },
   } = await supabase.auth.getUser();
   invariant(user, 'User not logged in');
-  const { data, error } = await supabase
+  const { data } = await supabase
     .from('EvaluationResult')
     .select('id, createdAt')
     .eq('user_id', user.id)
@@ -43,7 +43,7 @@ async function fetchEvalFromSupabase(
   id: string,
 ): Promise<Database['public']['Tables']['EvaluationResult']['Row'] | null> {
   const supabase = createClientComponentClient<Database>();
-  const { data, error } = await supabase.from('EvaluationResult').select('*').eq('id', id).single();
+  const { data } = await supabase.from('EvaluationResult').select('*').eq('id', id).single();
   return data;
 }
 

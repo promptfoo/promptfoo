@@ -33,9 +33,10 @@ export const PromptSchema = z.object({
 });
 
 // Ensure that schemas match their corresponding types
-function assert<T extends never>() {}
-type TypeEqualityGuard<A, B> = Exclude<A, B> | Exclude<B, A>;
+type AssertEqual<T, U> = T extends U ? (U extends T ? true : false) : false;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function assert<T extends true>() {}
 
-assert<TypeEqualityGuard<PromptConfig, z.infer<typeof PromptConfigSchema>>>();
-assert<TypeEqualityGuard<PromptFunction, z.infer<typeof PromptFunctionSchema>>>();
-assert<TypeEqualityGuard<Prompt, z.infer<typeof PromptSchema>>>();
+assert<AssertEqual<PromptConfig, z.infer<typeof PromptConfigSchema>>>();
+assert<AssertEqual<PromptFunction, z.infer<typeof PromptFunctionSchema>>>();
+assert<AssertEqual<Prompt, z.infer<typeof PromptSchema>>>();

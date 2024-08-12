@@ -124,13 +124,6 @@ export interface RunEvalOptions {
   repeatIndex: number;
 }
 
-type progressCallback = (
-  progress: number,
-  total: number,
-  index: number,
-  evalStep: RunEvalOptions,
-) => void;
-
 const EvaluateOptionsSchema = z.object({
   maxConcurrency: z.number().optional(),
   showProgressBar: z.boolean().optional(),
@@ -456,7 +449,8 @@ export const TestCaseSchema = z.object({
   metadata: MetadataSchema.optional(),
 });
 
-export type TestCase<Vars = Record<string, string | string[] | object>> = z.infer<
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export type TestCase<vars = Record<string, string | string[] | object>> = z.infer<
   typeof TestCaseSchema
 >;
 
@@ -497,7 +491,8 @@ export const AtomicTestCaseSchema = TestCaseSchema.extend({
   vars: z.record(z.union([z.string(), z.object({})])).optional(),
 }).strict();
 
-export type AtomicTestCase<Vars = Record<string, string | object>> = z.infer<
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export type AtomicTestCase<vars = Record<string, string | object>> = z.infer<
   typeof AtomicTestCaseSchema
 >;
 

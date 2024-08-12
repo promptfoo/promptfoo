@@ -72,7 +72,7 @@ export default async function Page({ params }: { params: { id: string } }) {
       data: { user },
     } = await supabase.auth.getUser();
     if (user) {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('EvaluationResult')
         .select('id, createdAt')
         .eq('user_id', user.id)

@@ -258,7 +258,7 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
   const configsAreStringOrArray = configs.every(
     (config) => typeof config.prompts === 'string' || Array.isArray(config.prompts),
   );
-  const configsAreObjects = configs.every((config) => typeof config.prompts === 'object');
+
   let prompts: UnifiedConfig['prompts'] = configsAreStringOrArray ? [] : {};
 
   const makeAbsolute = (configPath: string, relativePath: string | Prompt) => {

@@ -377,7 +377,7 @@ export class AzureOpenAiChatCompletionProvider extends AzureOpenAiGenericProvide
       ...(this.config.dataSources ? { dataSources: this.config.dataSources } : {}),
       ...(this.config.response_format ? { response_format: this.config.response_format } : {}),
       ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
-      ...(this.config.stop ? { stop: this.config.stop } : {}),
+      ...(stop ? { stop } : {}),
       ...(this.config.passthrough || {}),
     };
     logger.debug(`Calling Azure OpenAI API: ${JSON.stringify(body)}`);
