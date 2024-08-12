@@ -2,7 +2,7 @@
 sidebar_label: FAQ
 ---
 
-# Frequently Asked Questions
+# Frequently asked questions
 
 ### What is Promptfoo?
 
@@ -60,7 +60,7 @@ No, we do not collect any personally identifiable information (PII).
 
 ### How do I use a proxy with Promptfoo?
 
-Promptfoo uses [proxy-agent](https://www.npmjs.com/package/proxy-agent), which respects `HTTP_PROXY` and `HTTPS_PROXY` environment variables in the form of `[protocol://]<host>[:port]`.
+Requests to most providers are made via [proxy-agent](https://www.npmjs.com/package/proxy-agent), which respects `HTTP_PROXY` and `HTTPS_PROXY` [environment variables](https://www.npmjs.com/package/proxy-from-env#environment-variables) of the form `[protocol://]<host>[:port]`.
 
 ### How does Promptfoo integrate with existing development workflows?
 
