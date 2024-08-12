@@ -25,6 +25,15 @@ const RiskCard: React.FC<{
   testTypes: { name: string; passed: boolean; percentage: number; total: number }[];
 }> = ({ title, subtitle, progressValue, numTestsPassed, numTestsFailed, testTypes }) => {
   const { showPercentagesOnRiskCards, pluginPassRateThreshold } = useReportStore();
+
+  // Filter out test types with total 0
+  const filteredTestTypes = testTypes.filter((test) => test.total > 0);
+
+  // If all test types have total 0, return null
+  if (filteredTestTypes.length === 0) {
+    return null;
+  }
+
   return (
     <Card>
       <CardContent className="risk-card-container">
@@ -85,7 +94,7 @@ const RiskCard: React.FC<{
           </Grid>
           <Grid item xs={6} md={4}>
             <List dense>
-              {testTypes.map((test, index) => (
+              {filteredTestTypes.map((test, index) => (
                 <Tooltip
                   key={index}
                   title={subCategoryDescriptions[test.name as keyof typeof subCategoryDescriptions]}
@@ -128,8 +137,6 @@ const RiskCard: React.FC<{
                       >
                         {`${Math.round(test.percentage * 100)}%`}
                       </Typography>
-                    ) : test.total === 0 ? (
-                      <RemoveCircleIcon className="risk-card-icon-no-tests" />
                     ) : test.percentage >= pluginPassRateThreshold ? (
                       <CheckCircleIcon className="risk-card-icon-passed" />
                     ) : (
