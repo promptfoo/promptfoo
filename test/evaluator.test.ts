@@ -93,10 +93,10 @@ describe('runExtensionHook', () => {
   });
 
   it.skip('should run a Python extension', async () => {
-    const mockSuite: TestSuite = { extension: 'python:test_extension.py' } as TestSuite;
+    const mockSuite: TestSuite = { extensions: ['python:test_extension.py'] } as TestSuite;
     jest.mocked(runPython).mockResolvedValue('Python extension result');
 
-    await runExtensionHook(mockSuite.extension, 'beforeAll', { suite: mockSuite });
+    await runExtensionHook(mockSuite.extensions, 'beforeAll', { suite: mockSuite });
 
     expect(runPython).toHaveBeenCalledWith(
       expect.stringContaining('test_extension.py'),
@@ -109,8 +109,8 @@ describe('runExtensionHook', () => {
     const mockExtensionFn = jest.fn().mockReturnValue('JavaScript extension result');
     jest.mocked(importModule).mockResolvedValue(mockExtensionFn);
 
-    const mockSuite: TestSuite = { extension: 'file://test_extension.js' } as TestSuite;
-    await runExtensionHook(mockSuite.extension, 'beforeAll', { suite: mockSuite });
+    const mockSuite: TestSuite = { extensions: ['file://test_extension.js'] } as TestSuite;
+    await runExtensionHook(mockSuite.extensions, 'beforeAll', { suite: mockSuite });
 
     expect(importModule).toHaveBeenCalledWith(expect.stringContaining('test_extension.js'));
     expect(mockExtensionFn).toHaveBeenCalledWith('beforeAll', { suite: mockSuite });
@@ -120,18 +120,18 @@ describe('runExtensionHook', () => {
     const mockDefaultExportFn = jest.fn().mockReturnValue('Default export result');
     jest.mocked(importModule).mockResolvedValue({ default: mockDefaultExportFn });
 
-    const mockSuite: TestSuite = { extension: 'file://default_export.js' } as TestSuite;
-    await runExtensionHook(mockSuite.extension, 'beforeEach', { test: {}, suite: mockSuite });
+    const mockSuite: TestSuite = { extensions: ['file://default_export.js'] } as TestSuite;
+    await runExtensionHook(mockSuite.extensions, 'beforeEach', { test: {}, suite: mockSuite });
 
     expect(importModule).toHaveBeenCalledWith(expect.stringContaining('default_export.js'));
     expect(mockDefaultExportFn).toHaveBeenCalledWith('beforeEach', { test: {}, suite: mockSuite });
   });
 
   it('should throw an error for unsupported file formats', async () => {
-    const mockSuite: TestSuite = { extension: 'file://unsupported.txt' } as TestSuite;
+    const mockSuite: TestSuite = { extensions: ['file://unsupported.txt'] } as TestSuite;
 
     await expect(
-      runExtensionHook(mockSuite.extension, 'afterEach', {
+      runExtensionHook(mockSuite.extensions, 'afterEach', {
         test: {},
         result: {},
         suite: mockSuite,

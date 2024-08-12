@@ -204,11 +204,16 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
     }
   }
 
-  let extension: UnifiedConfig['extension'] = undefined;
+  const extensions: UnifiedConfig['extensions'] = [];
   for (const config of configs) {
-    if (config.extension && !extension) {
-      extension = config.extension;
+    if (Array.isArray(config.extensions)) {
+      extensions.push(...config.extensions);
     }
+  }
+  if (extensions.length > 1 && configs.length > 1) {
+    console.warn(
+      'Warning: Multiple configurations and extensions detected. Currently, all extensions are run across all configs and do not respect their original promptfooconfig. Please file an issue on our GitHub repository if you need support for this use case.',
+    );
   }
 
   const redteam: UnifiedConfig['redteam'] = {
@@ -322,7 +327,7 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
       (prev, curr) => ({ ...prev, ...curr.commandLineOptions }),
       {},
     ),
-    extension,
+    extensions,
     redteam,
     metadata: configs.reduce((prev, curr) => ({ ...prev, ...curr.metadata }), {}),
     sharing: !configs.some((config) => config.sharing === false),
@@ -391,7 +396,7 @@ export async function resolveConfigs(
     defaultTest: defaultTestRaw ? await readTest(defaultTestRaw, basePath) : undefined,
     derivedMetrics: fileConfig.derivedMetrics || defaultConfig.derivedMetrics,
     outputPath: cmdObj.output || fileConfig.outputPath || defaultConfig.outputPath,
-    extension: fileConfig.extension,
+    extensions: fileConfig.extensions || defaultConfig.extensions || [],
     metadata: fileConfig.metadata || defaultConfig.metadata,
     redteam: fileConfig.redteam || defaultConfig.redteam,
   };
@@ -475,7 +480,7 @@ export async function resolveConfigs(
       fileConfig.nunjucksFilters || defaultConfig.nunjucksFilters || {},
       basePath,
     ),
-    extension: config.extension,
+    extensions: config.extensions,
   };
 
   if (testSuite.tests) {

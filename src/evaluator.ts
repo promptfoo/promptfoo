@@ -100,25 +100,26 @@ export function generateVarCombinations(
 
 /**
  * Runs extension hooks for the given hook name and context.
- * @param extension - An optional extension path.
+ * @param extensions - An array of extension paths.
  * @param hookName - The name of the hook to run.
  * @param context - The context object to pass to the hook.
  * @returns A Promise that resolves when all hooks have been run.
  */
 export async function runExtensionHook(
-  extension: string | undefined,
+  extensions: string[] | undefined,
   hookName: string,
   context: any, // Can be TransformContext or contain the testSuite
 ) {
-  if (!extension) {
+  if (!extensions || extensions.length === 0) {
     return;
   }
-  logger.debug(`Running extension hook ${hookName} with context ${JSON.stringify(context)}`);
-  const resolvedPath = path.resolve(cliState.basePath || '', extension);
-  logger.debug(`Resolved extension path: ${resolvedPath}`);
-  const result = await transform(resolvedPath, hookName, context);
-  logger.warn(result);
-  return result; // TODO: remove. Only used for unit tests
+  for (const extension of extensions) {
+    logger.debug(`Running extension hook ${hookName} with context ${JSON.stringify(context)}`);
+    const resolvedPath = path.resolve(cliState.basePath || '', extension);
+    logger.debug(`Resolved extension path: ${resolvedPath}`);
+    const result = await transform(resolvedPath, hookName, context);
+    logger.warn(result);
+  }
 }
 
 class Evaluator {
@@ -351,7 +352,7 @@ class Evaluator {
     const { testSuite, options } = this;
     const prompts: CompletedPrompt[] = [];
 
-    await runExtensionHook(testSuite.extension, 'beforeAll', { suite: testSuite });
+    await runExtensionHook(testSuite.extensions, 'beforeAll', { suite: testSuite });
 
     if (options.generateSuggestions) {
       // TODO(ian): Move this into its own command/file
@@ -605,11 +606,8 @@ class Evaluator {
         throw new Error('Expected index to be a number');
       }
 
-      await runExtensionHook(testSuite.extension, 'beforeEach', {
+      await runExtensionHook(testSuite.extensions, 'beforeEach', {
         test: evalStep.test,
-        vars: evalStep.test.vars,
-        options: evalStep.test.options,
-        metadata: evalStep.test.metadata,
       });
       const row = await this.runEval(evalStep);
 
@@ -714,11 +712,8 @@ class Evaluator {
         (metrics.tokenUsage.total || 0) + (row.response?.tokenUsage?.total || 0);
       metrics.cost += row.cost || 0;
 
-      await runExtensionHook(testSuite.extension, 'afterEach', {
+      await runExtensionHook(testSuite.extensions, 'afterEach', {
         test: evalStep.test,
-        vars: evalStep.test.vars,
-        options: evalStep.test.options,
-        metadata: evalStep.test.metadata,
       });
     };
 
@@ -912,10 +907,8 @@ class Evaluator {
       progressBar.stop();
     }
 
-    await runExtensionHook(testSuite.extension, 'afterAll', {
-      evals: runEvalOptions,
+    await runExtensionHook(testSuite.extensions, 'afterAll', {
       results: results,
-      table: table,
       suite: testSuite,
     });
 
