@@ -109,3 +109,8 @@ def extension_hook(hook_name: str, context: Dict[str, Any]) -> None:
             f"afterEach: Completed evaluation for '{test.get('description', 'Unnamed test')}'"
         )
         print(f"Result: {result.get('pass', False)}")
+
+def get_transform(output, context):
+    print(f"get_transform: {output}")
+    print(f"context: {context}")
+    return output

@@ -113,7 +113,10 @@ export async function runExtensionHook(
   if (!extension) {
     return;
   }
-  const result = await transform(extension, hookName, context);
+  logger.debug(`Running extension hook ${hookName} with context ${JSON.stringify(context)}`);
+  const resolvedPath = path.resolve(cliState.basePath || '', extension);
+  logger.debug(`Resolved extension path: ${resolvedPath}`);
+  const result = await transform(resolvedPath, hookName, context);
   logger.warn(result);
   return result; // TODO: remove. Only used for unit tests
 }

@@ -5,9 +5,8 @@ prompts:
 providers:
   - openai:gpt-4o-mini
 
-extensions:
-  - file://hooks.py
-  # - python:hooks.py
+extension: file://./hooks.py
+# - python:hooks.py
 
 tests:
   - vars:
