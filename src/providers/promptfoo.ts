@@ -1,4 +1,3 @@
-import fetch from 'node-fetch';
 import { fetchWithRetries } from '../fetch';
 import logger from '../logger';
 import type {
