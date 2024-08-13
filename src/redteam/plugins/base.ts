@@ -77,7 +77,7 @@ export abstract class PluginBase {
     };
     const allPrompts = await retryWithDeduplication(generatePrompts, n);
     const prompts = sampleArray(allPrompts, n);
-    logger.debug(`Generating test cases from ${prompts.length} prompts`);
+    logger.debug(`${this.constructor.name} generating test cases from ${prompts.length} prompts`);
     // const processedPrompts = await this.postProcessPrompts(prompts);
     return prompts.sort().map((prompt) => ({
       vars: {
@@ -88,7 +88,6 @@ export abstract class PluginBase {
   }
 
   private appendModifiers(template: string): string {
-    logger.warn(`${this.constructor.name} modifiers: ${JSON.stringify(this.modifiers, null, 2)}`);
     if (Object.keys(this.modifiers).length === 0) {
       return template;
     }

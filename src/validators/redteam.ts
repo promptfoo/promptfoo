@@ -172,8 +172,6 @@ export const RedteamConfigSchema = z
       })
       .flat();
 
-    logger.warn(`redteam config language: ${data.language}`);
-
     return {
       numTests: data.numTests,
       plugins: uniquePlugins,
