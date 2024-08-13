@@ -142,6 +142,13 @@ export async function renderPrompt(
       version !== 'latest' ? Number(version) : undefined,
     );
     return langfuseResult;
+  } else if (prompt.raw.startsWith('helicone://')) {
+    const { getPrompt } = await import('./integrations/helicone');
+    const heliconePrompt = prompt.raw.slice('helicone://'.length);
+    const [id, version] = heliconePrompt.split(':');
+    const [majorVersion, minorVersion] = version ? version.split('.') : [undefined, undefined];
+    const heliconeResult = await getPrompt(id, vars, Number(majorVersion), Number(minorVersion));
+    return heliconeResult;
   }
 
   // Render prompt
