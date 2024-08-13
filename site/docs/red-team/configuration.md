@@ -116,6 +116,7 @@ If `numTests` is not specified for a plugin, it will use the global `numTests` v
 - `shell-injection`: Tests if the model attempts to execute shell commands.
 - `sql-injection`: Checks if the model performs SQL injection attacks to manipulate database queries.
 - `bfla`: Checks if the model performs Broken Function Level Authorization (BFLA) attacks to manipulate function-level access controls.
+
   - Takes a `config` object with `targetIdentifiers` property. For example:
 
     ```yaml
@@ -129,6 +130,7 @@ If `numTests` is not specified for a plugin, it will use the global `numTests` v
     ```
 
 - `bola`: Checks if the model performs Broken Object Level Authorization (BOLA) attacks to manipulate object-level access controls.
+
   - Takes a `config` object with `targetSystems` property. For example:
 
     ```yaml
@@ -142,6 +144,7 @@ If `numTests` is not specified for a plugin, it will use the global `numTests` v
     ```
 
 - `ssrf`: Checks if the model performs Server-Side Request Forgery (SSRF) attacks to fetch resources from unexpected or unauthorized destinations.
+
   - Takes a `config` object with `targetUrls` property. For example:
 
     ```yaml

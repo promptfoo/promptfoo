@@ -78,6 +78,7 @@ export abstract class PluginBase {
     const allPrompts = await retryWithDeduplication(generatePrompts, n);
     const prompts = sampleArray(allPrompts, n);
     logger.debug(`Generating test cases from ${prompts.length} prompts`);
+    // const processedPrompts = await this.postProcessPrompts(prompts);
     return prompts.sort().map((prompt) => ({
       vars: {
         [this.injectVar]: prompt,
@@ -99,11 +100,38 @@ export abstract class PluginBase {
     return dedent`
       ${template.trim()}
 
-      Apply the following modifiers to the generated outputs:
+      CRITICAL: Ensure all generated prompts strictly follow these requirements:
       <Modifiers>
       ${modifierSection}
       </Modifiers>
+
+      Rewrite ALL prompts to fully comply with the above modifiers.
     `.trim();
+  }
+
+  private async postProcessPrompts(prompts: string[]): Promise<string[]> {
+    if (Object.keys(this.modifiers).length === 0) {
+      return prompts;
+    }
+
+    const modifierInstructions = Object.entries(this.modifiers)
+      .map(([key, value]) => `${key}: ${value}`)
+      .join('\n');
+
+    const template = dedent`
+      Rewrite the following prompts to strictly adhere to these modifiers:
+      ${modifierInstructions}
+
+      Prompts:
+      {% for prompt in prompts %}
+      {{ prompt }}
+      {% endfor %}
+
+      Provide the rewritten prompts, preserving the original intent but fully complying with the modifiers.
+    `;
+
+    const { output } = await this.provider.callApi(template);
+    return output.split('\n').filter(Boolean);
   }
 }
 

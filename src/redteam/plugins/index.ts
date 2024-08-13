@@ -103,7 +103,7 @@ export const Plugins: Plugin[] = [
   ...(PII_PLUGINS.map((category) => ({
     key: category,
     action: (provider, purpose, injectVar, n, config) =>
-      getPiiLeakTestsForCategory(provider, purpose, injectVar, category, n, config),
+      getPiiLeakTestsForCategory(provider, purpose, injectVar, category, n),
   })) as Plugin[]),
   {
     key: 'policy',
