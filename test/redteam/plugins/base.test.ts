@@ -57,10 +57,11 @@ describe('PluginBase', () => {
       dedent`
         Test template with test purpose for 2 prompts
 
-        Apply the following modifiers to the generated outputs:
+        CRITICAL: Ensure all generated prompts strictly follow these requirements:
         <Modifiers>
         language: German
         </Modifiers>
+        Rewrite ALL prompts to fully comply with the above modifiers.
       `.trim(),
     );
   });

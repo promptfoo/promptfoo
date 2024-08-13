@@ -1,6 +1,5 @@
 import dedent from 'dedent';
 import { z } from 'zod';
-import logger from '../logger';
 import {
   ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
