@@ -175,13 +175,13 @@ export const RedteamConfigSchema = z
     logger.warn(`redteam config language: ${data.language}`);
 
     return {
-      ...(data.purpose ? { purpose: data.purpose } : {}),
-      ...(data.injectVar ? { injectVar: data.injectVar } : {}),
-      ...(data.provider ? { provider: data.provider } : {}),
-      ...(data.language ? { language: data.language } : {}),
       numTests: data.numTests,
       plugins: uniquePlugins,
       strategies,
+      ...(data.injectVar ? { injectVar: data.injectVar } : {}),
+      ...(data.language ? { language: data.language } : {}),
+      ...(data.provider ? { provider: data.provider } : {}),
+      ...(data.purpose ? { purpose: data.purpose } : {}),
     };
   });
 

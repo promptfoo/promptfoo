@@ -27,14 +27,14 @@ const formatTestCount = (numTests: number) => {
 };
 
 export async function synthesize({
+  entities: entitiesOverride,
+  injectVar,
+  language,
+  plugins,
   prompts,
   provider,
-  injectVar,
   purpose: purposeOverride,
-  entities: entitiesOverride,
   strategies,
-  plugins,
-  language,
 }: SynthesizeOptions): Promise<{
   purpose: string;
   entities: string[];

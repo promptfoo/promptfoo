@@ -129,9 +129,9 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
     entities,
   } = await synthesize({
     ...parsedConfig.data,
-    prompts: testSuite.prompts.map((prompt) => prompt.raw),
-    numTests: config.numTests,
     language: config.language,
+    numTests: config.numTests,
+    prompts: testSuite.prompts.map((prompt) => prompt.raw),
   } as SynthesizeOptions);
 
   const updatedRedteamConfig = {
