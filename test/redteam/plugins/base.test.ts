@@ -5,7 +5,6 @@ import { RedteamModelGrader } from '../../../src/redteam/plugins/base';
 import type { ApiProvider, Assertion } from '../../../src/types';
 import type { AtomicTestCase, GradingResult } from '../../../src/types';
 import { maybeLoadFromExternalFile } from '../../../src/util';
-import { getNunjucksEngine } from '../../../src/util/templates';
 
 jest.mock('../../../src/matchers', () => ({
   matchesLlmRubric: jest.fn(),
@@ -55,19 +54,14 @@ describe('PluginBase', () => {
       },
     ]);
     expect(provider.callApi).toHaveBeenCalledWith(
-      getNunjucksEngine().renderString(
-        dedent`Test template with {{ purpose }} for {{ n }} prompts
+      dedent`
+        Test template with test purpose for 2 prompts
 
+        Apply the following modifiers to the generated outputs:
         <Modifiers>
-        language: {{ language }}
+        language: German
         </Modifiers>
-        `,
-        {
-          purpose: 'test purpose',
-          n: 2,
-          language: 'German',
-        },
-      ),
+      `.trim(),
     );
   });
 

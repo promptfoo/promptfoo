@@ -96,12 +96,14 @@ export abstract class PluginBase {
       .map(([key, value]) => `${key}: ${value}`)
       .join('\n');
 
-    return dedent`${template.trim()}
+    return dedent`
+      ${template.trim()}
 
-    Apply the following modifiers to the generated outputs:
-
-    <Modifiers>\n${modifierSection}\n</Modifiers>
-    `;
+      Apply the following modifiers to the generated outputs:
+      <Modifiers>
+      ${modifierSection}
+      </Modifiers>
+    `.trim();
   }
 }
 

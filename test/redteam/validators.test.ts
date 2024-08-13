@@ -366,7 +366,7 @@ describe('redteamConfigSchema', () => {
       success: true,
       data: {
         language: 'German',
-        plugins: [{ id: 'overreliance', numTests: 5 }],
+        plugins: [{ id: 'overreliance', config: undefined, numTests: undefined }],
         strategies: [{ id: 'jailbreak' }],
       },
     });

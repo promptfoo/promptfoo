@@ -183,6 +183,15 @@ describe('util', () => {
   });
 
   describe('writeOutput', () => {
+    let consoleLogSpy: jest.SpyInstance;
+
+    beforeEach(() => {
+      consoleLogSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      consoleLogSpy.mockRestore();
+    });
     it('writeOutput with CSV output', () => {
       const outputPath = 'output.csv';
       const results: EvaluateResult[] = [
