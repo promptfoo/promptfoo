@@ -13,8 +13,15 @@ import { loadApiProvider } from '../providers';
 import { createShareableUrl } from '../share';
 import { generateTable } from '../table';
 import telemetry from '../telemetry';
-import type { CommandLineOptions, EvaluateOptions, TestSuite, UnifiedConfig } from '../types';
+import type {
+  CommandLineOptions,
+  EvaluateOptions,
+  Scenario,
+  TestSuite,
+  UnifiedConfig,
+} from '../types';
 import { OutputFileExtension, TestSuiteSchema } from '../types';
+import { maybeLoadFromExternalFile } from '../util';
 import {
   migrateResultsFromFileSystemToDatabase,
   printBorder,
@@ -98,12 +105,23 @@ export async function doEval(
     if (cmdObj.generateSuggestions) {
       options.generateSuggestions = true;
     }
+    logger.warn(`testSuite: ${JSON.stringify(testSuite.scenarios)}`);
+
+    // load scenarios or tests from an external file
+    if (testSuite.scenarios) {
+      testSuite.scenarios = (await maybeLoadFromExternalFile(testSuite.scenarios)) as Scenario[];
+    }
+    for (const scenario of testSuite.scenarios || []) {
+      if (scenario.tests) {
+        scenario.tests = await maybeLoadFromExternalFile(scenario.tests);
+      }
+    }
 
     const testSuiteSchema = TestSuiteSchema.safeParse(testSuite);
     if (!testSuiteSchema.success) {
       logger.warn(
         chalk.yellow(dedent`
-      TestSuite Schema Validation Error:
+      !TestSuite Schema Validation Error:
       
         ${JSON.stringify(testSuiteSchema.error.format())}
       

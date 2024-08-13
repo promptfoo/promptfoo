@@ -1,16 +1,16 @@
 import { matchesLlmRubric } from '../../../src/matchers';
-import * as shared from '../../../src/providers/shared';
 import { PluginBase } from '../../../src/redteam/plugins/base';
 import { RedteamModelGrader } from '../../../src/redteam/plugins/base';
 import type { ApiProvider, Assertion } from '../../../src/types';
 import type { AtomicTestCase, GradingResult } from '../../../src/types';
+import { maybeLoadFromExternalFile } from '../../../src/util';
 import { getNunjucksEngine } from '../../../src/util/templates';
 
 jest.mock('../../../src/matchers', () => ({
   matchesLlmRubric: jest.fn(),
 }));
 
-jest.mock('../../../src/providers/shared', () => ({
+jest.mock('../../../src/util', () => ({
   maybeLoadFromExternalFile: jest.fn(),
 }));
 
@@ -261,7 +261,7 @@ describe('RedteamModelGrader', () => {
       };
 
       maybeLoadFromExternalFileSpy = jest
-        .spyOn(shared, 'maybeLoadFromExternalFile')
+        .mocked(maybeLoadFromExternalFile)
         .mockImplementation((input) => {
           if (input === 'file://tools.json') {
             return [{ name: 'tool1' }, { name: 'tool2' }];

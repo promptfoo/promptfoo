@@ -421,6 +421,7 @@ class Evaluator {
     // Build scenarios and add to tests
     if (testSuite.scenarios && testSuite.scenarios.length > 0) {
       for (const scenario of testSuite.scenarios) {
+        logger.warn(`scenario tests: ${JSON.stringify(scenario)}`);
         for (const data of scenario.config) {
           // Merge defaultTest with scenario config
           const scenarioTests = (
