@@ -1,22 +1,16 @@
 import type { Plugin, Strategy } from '../../../../../redteam/constants';
 
 export const riskCategories = {
-  'Brand Risk': [
-    'competitors',
-    'excessive-agency',
-    'hallucination',
-    'harmful:graphic-content',
-    'harmful:harassment-bullying',
-    'harmful:indiscriminate-weapons',
-    'harmful:insults',
-    'harmful:misinformation-disinformation',
-    'harmful:non-violent-crime',
-    'harmful:profanity',
-    'harmful:radicalization',
-    'harmful:unsafe-practices',
-    'imitation',
-    'overreliance',
-    'politics',
+  'Security Risk': [
+    'debug-access',
+    'hijacking',
+    'pii',
+    'rbac',
+    'bola',
+    'bfla',
+    'ssrf',
+    'shell-injection',
+    'sql-injection',
   ],
   'Legal Risk': [
     'contracts',
@@ -34,17 +28,23 @@ export const riskCategories = {
     'harmful:specialized-advice',
     'harmful:violent-crime',
   ],
-  'Technical Risk': [
-    'debug-access',
-    'hijacking',
-    'jailbreak',
-    'pii',
-    'prompt-injection',
-    'rbac',
-    'bola',
-    'bfla',
-    'shell-injection',
-    'sql-injection',
+  'Brand Risk': [
+    'policy',
+    'competitors',
+    'excessive-agency',
+    'hallucination',
+    'harmful:graphic-content',
+    'harmful:harassment-bullying',
+    'harmful:indiscriminate-weapons',
+    'harmful:insults',
+    'harmful:misinformation-disinformation',
+    'harmful:non-violent-crime',
+    'harmful:profanity',
+    'harmful:radicalization',
+    'harmful:unsafe-practices',
+    'imitation',
+    'overreliance',
+    'politics',
   ],
 };
 
@@ -99,6 +99,10 @@ export const riskCategorySeverityMap: Record<string, Severity> = {
   pii: Severity.High,
   politics: Severity.Low,
   rbac: Severity.High,
+  policy: Severity.High,
+  bola: Severity.High,
+  bfla: Severity.High,
+  ssrf: Severity.High,
 };
 
 export type TopLevelCategory = keyof typeof riskCategories;
@@ -119,6 +123,7 @@ export const categoryLabels = Object.keys(categoryMapReverse);
 export const categoryAliases = {
   bola: 'BOLAEnforcement',
   bfla: 'BFLAEnforcement',
+  ssrf: 'SSRFEnforcement',
   'debug-access': 'DebugAccess',
   'excessive-agency': 'ExcessiveAgency',
   'harmful:child-exploitation': 'Child Exploitation',
@@ -158,6 +163,7 @@ export const categoryAliases = {
   pii: 'PIILeak',
   politics: 'PoliticalStatement',
   rbac: 'RbacEnforcement',
+  policy: 'PolicyViolation',
 };
 
 export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
@@ -172,6 +178,7 @@ export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
 export const displayNameOverrides = {
   bola: 'Object-Level Authorization',
   bfla: 'Function-Level Authorization',
+  ssrf: 'Server-Side Request Forgery',
   'excessive-agency': 'Excessive Agency',
   'prompt-injection': 'Prompt Injection',
   competitors: 'Competitor Endorsements',
@@ -188,13 +195,16 @@ export const displayNameOverrides = {
   'harmful:cybercrime': 'Cybercrime',
   'harmful:copyright-violations': 'Copyright Violations',
   'harmful:misinformation-disinformation': 'Misinformation & disinformation',
+  policy: 'Custom Policy',
 };
 
 // Duplicated in src/redteam/constants.ts for backend
 export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   default: 'Includes common plugins',
+  basic: 'Raw attacks without any special attack strategies.',
   bola: 'Broken Object Level Authorization (BOLA) tests.',
   bfla: 'Broken Function Level Authorization (BFLA) tests.',
+  ssrf: 'Server-Side Request Forgery (SSRF) tests.',
   'debug-access': 'Attempts to access or use debugging commands.',
   'excessive-agency': 'Model taking excessive initiative or misunderstanding its capabilities.',
   'harmful:chemical-biological-weapons': 'Content related to chemical or biological weapons',

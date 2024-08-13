@@ -6,7 +6,7 @@ import { importModule } from './esm';
 import logger from './logger';
 import { runPython } from './python/pythonUtils';
 import type { ApiProvider, NunjucksFilterMap, Prompt } from './types';
-import { renderVarsInObject } from './util';
+import { isJavascriptFile, renderVarsInObject } from './util';
 import { getNunjucksEngine } from './util/templates';
 
 export function resolveVariables(
@@ -59,53 +59,41 @@ export async function renderPrompt(
       const fileExtension = filePath.split('.').pop();
 
       logger.debug(`Loading var ${varName} from file: ${filePath}`);
-      switch (fileExtension) {
-        case 'js':
-        case 'cjs':
-        case 'mjs':
-        case 'ts':
-        case 'cts':
-        case 'mts':
-          const javascriptOutput = (await (
-            await importModule(filePath)
-          )(varName, basePrompt, vars, provider)) as {
-            output?: string;
-            error?: string;
-          };
-          if (javascriptOutput.error) {
-            throw new Error(`Error running ${filePath}: ${javascriptOutput.error}`);
-          }
-          if (!javascriptOutput.output) {
-            throw new Error(
-              `Expected ${filePath} to return { output: string } but got ${javascriptOutput}`,
-            );
-          }
-          vars[varName] = javascriptOutput.output;
-          break;
-        case 'py':
-          const pythonScriptOutput = (await runPython(filePath, 'get_var', [
-            varName,
-            basePrompt,
-            vars,
-          ])) as { output?: string; error?: string };
-          if (pythonScriptOutput.error) {
-            throw new Error(`Error running Python script ${filePath}: ${pythonScriptOutput.error}`);
-          }
-          if (!pythonScriptOutput.output) {
-            throw new Error(`Python script ${filePath} did not return any output`);
-          }
-          vars[varName] = pythonScriptOutput.output.trim();
-          break;
-        case 'yaml':
-        case 'yml':
-          vars[varName] = JSON.stringify(
-            yaml.load(fs.readFileSync(filePath, 'utf8')) as string | object,
+      if (isJavascriptFile(filePath)) {
+        const javascriptOutput = (await (
+          await importModule(filePath)
+        )(varName, basePrompt, vars, provider)) as {
+          output?: string;
+          error?: string;
+        };
+        if (javascriptOutput.error) {
+          throw new Error(`Error running ${filePath}: ${javascriptOutput.error}`);
+        }
+        if (!javascriptOutput.output) {
+          throw new Error(
+            `Expected ${filePath} to return { output: string } but got ${javascriptOutput}`,
           );
-          break;
-        case 'json':
-        default:
-          vars[varName] = fs.readFileSync(filePath, 'utf8').trim();
-          break;
+        }
+        vars[varName] = javascriptOutput.output;
+      } else if (fileExtension === 'py') {
+        const pythonScriptOutput = (await runPython(filePath, 'get_var', [
+          varName,
+          basePrompt,
+          vars,
+        ])) as { output?: string; error?: string };
+        if (pythonScriptOutput.error) {
+          throw new Error(`Error running Python script ${filePath}: ${pythonScriptOutput.error}`);
+        }
+        if (!pythonScriptOutput.output) {
+          throw new Error(`Python script ${filePath} did not return any output`);
+        }
+        vars[varName] = pythonScriptOutput.output.trim();
+      } else if (fileExtension === 'yaml' || fileExtension === 'yml') {
+        vars[varName] = JSON.stringify(
+          yaml.load(fs.readFileSync(filePath, 'utf8')) as string | object,
+        );
+      } else {
+        vars[varName] = fs.readFileSync(filePath, 'utf8').trim();
       }
     }
   }

@@ -18,6 +18,7 @@ import { PoliticsPlugin } from './politics';
 import { RbacPlugin } from './rbac';
 import { ShellInjectionPlugin } from './shellInjection';
 import { SqlInjectionPlugin } from './sqlInjection';
+import { SsrfPlugin } from './ssrf';
 
 export interface Plugin {
   key: string;
@@ -120,5 +121,10 @@ export const Plugins: Plugin[] = [
     key: 'bfla',
     action: (provider, purpose, injectVar, n, config) =>
       new BflaPlugin(provider, purpose, injectVar, config).generateTests(n),
+  },
+  {
+    key: 'ssrf',
+    action: (provider, purpose, injectVar, n, config) =>
+      new SsrfPlugin(provider, purpose, injectVar, config).generateTests(n),
   },
 ];

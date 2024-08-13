@@ -124,7 +124,7 @@ describe('Anthropic', () => {
           ],
         } as Anthropic.Messages.Message);
 
-      const result = await provider.callApi('What is the forecast in San Francisco?');
+      await provider.callApi('What is the forecast in San Francisco?');
       expect(provider.anthropic.messages.create).toHaveBeenCalledTimes(1);
       expect(provider.anthropic.messages.create).toHaveBeenNthCalledWith(1, {
         model: 'claude-3-opus-20240229',

@@ -329,3 +329,5 @@ With images, it's very hard to toe the line between easily generating disturbing
 Dall-E is already a bit dated and I'm sure OpenAI's future efforts will be more difficult to jailbreak. Also, worth acknowledging that I didn't spend much time on NSFW jailbreaks, but they seem to be much more difficult presumably because certain types of NSFW are criminalized.
 
 Check out promptfoo's [red team](/docs/red-team) to run tests on your own app with image or text.
+
+<!-- truncate -->

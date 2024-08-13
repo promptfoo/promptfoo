@@ -49,7 +49,15 @@ export default [
       '@typescript-eslint/ban-types': 0,
       '@typescript-eslint/consistent-type-imports': 'error',
       '@typescript-eslint/no-explicit-any': 0,
-      '@typescript-eslint/no-unused-vars': 0,
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          vars: 'all',
+          varsIgnorePattern: '^_',
+          args: 'none',
+          ignoreRestSiblings: false,
+        },
+      ],
       '@typescript-eslint/no-use-before-define': 'error',
       '@typescript-eslint/no-var-requires': 0,
       curly: 'error',
@@ -67,6 +75,7 @@ export default [
     rules: {
       '@typescript-eslint/no-namespace': 0,
       '@typescript-eslint/no-var-requires': 0,
+      '@typescript-eslint/no-unused-vars': 0,
     },
   },
 ];

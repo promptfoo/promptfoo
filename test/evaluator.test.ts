@@ -1161,6 +1161,75 @@ describe('evaluator', () => {
     expect(summary.results[0].score).toBe(1);
     expect(mockApiProviderNoOutput.callApi).toHaveBeenCalledTimes(1);
   });
+
+  it('should apply prompt config to provider call', async () => {
+    const mockApiProvider: ApiProvider = {
+      id: jest.fn().mockReturnValue('test-provider'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Test response',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [
+        {
+          raw: 'You are a helpful math tutor. Solve {{problem}}',
+          label: 'Math problem',
+          config: {
+            response_format: {
+              type: 'json_schema',
+              json_schema: {
+                name: 'math_response',
+                strict: true,
+                schema: {
+                  type: 'object',
+                  properties: {
+                    final_answer: { type: 'string' },
+                  },
+                  required: ['final_answer'],
+                  additionalProperties: false,
+                },
+              },
+            },
+          },
+        },
+      ],
+      tests: [{ vars: { problem: '8x + 31 = 2' } }],
+    };
+
+    const summary = await evaluate(testSuite, {});
+
+    expect(summary.stats.successes).toBe(1);
+    expect(summary.stats.failures).toBe(0);
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
+    expect(mockApiProvider.callApi).toHaveBeenCalledWith(
+      'You are a helpful math tutor. Solve 8x + 31 = 2',
+      expect.objectContaining({
+        prompt: expect.objectContaining({
+          config: {
+            response_format: {
+              type: 'json_schema',
+              json_schema: {
+                name: 'math_response',
+                strict: true,
+                schema: {
+                  type: 'object',
+                  properties: {
+                    final_answer: { type: 'string' },
+                  },
+                  required: ['final_answer'],
+                  additionalProperties: false,
+                },
+              },
+            },
+          },
+        }),
+      }),
+      expect.anything(),
+    );
+  });
 });
 
 describe('renderPrompt', () => {

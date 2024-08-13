@@ -137,9 +137,6 @@ export default function Cols() {
     });
   }, [filteredCols, sortField, sortOrder]);
 
-  const handleFilterChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setFilter({ ...filter, [event.target.name]: event.target.value });
-  };
   const evalIdOptions = React.useMemo(
     () => Array.from(new Set(cols.map((col) => col.evalId))),
     [cols],

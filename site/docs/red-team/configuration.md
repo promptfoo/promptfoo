@@ -135,6 +135,18 @@ If `numTests` is not specified for a plugin, it will use the global `numTests` v
               - 'Dropbox'
               - 'Sharepoint'
     ```
+- `ssrf`: Checks if the model performs Server-Side Request Forgery (SSRF) attacks to fetch resources from unexpected or unauthorized destinations.
+  - Takes a `config` object with `targetUrls` property. For example:
+    ```yaml
+    redteam:
+      plugins:
+        - id: 'ssrf'
+          config:
+            targetUrls:
+              - 'https://internal-api.example.com'
+              - 'file:///etc/passwd'
+    ```
+  - By default uses a [target URL](https://promptfoo.dev/plugin-helpers/ssrf.txt) on the promptfoo.dev host. We recommend placing with your own internal URL.
 
 ### Plugin Collections
 
@@ -198,9 +210,10 @@ Strategies modify or generate additional test cases based on the output of other
 
 #### Available Strategies
 
-- `prompt-injection`: Creates prompt injection test cases (Default)
-- `jailbreak`: Applies a linear probe jailbreak technique (Default)
-- `jailbreak:tree`: Applies an advanced tree jailbreak technique
+- `basic` - Raw payloads only (Default)
+- `prompt-injection`: Wraps the payload in a prompt injection (Default)
+- `jailbreak`: Applies a linear probe jailbreak technique to deliver the payload (Default)
+- `jailbreak:tree`: Applies a tree-based jailbreak technique
 - `rot13`: Applies ROT13 encoding to the injected variable, shifting each letter 13 positions in the alphabet
 - `base64`: Encodes the injected variable using Base64 encoding
 - `leetspeak`: Converts the injected variable to leetspeak, replacing certain letters with numbers or symbols

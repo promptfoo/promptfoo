@@ -2,6 +2,7 @@ import dedent from 'dedent';
 import invariant from 'tiny-invariant';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
+import { OpenAiChatCompletionProvider } from '../../providers/openai';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -93,7 +94,6 @@ async function runRedteamConversation({
   provider: ApiProvider;
   injectVar: string;
 }) {
-  const { OpenAiChatCompletionProvider } = await import('../../providers/openai');
   const redteamProvider = new OpenAiChatCompletionProvider(ATTACKER_MODEL, {
     config: {
       temperature: TEMPERATURE,
