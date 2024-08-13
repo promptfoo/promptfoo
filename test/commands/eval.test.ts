@@ -1,4 +1,3 @@
-import { jest } from '@jest/globals';
 import { doEval } from '../../src/commands/eval';
 import * as config from '../../src/config';
 import * as evaluator from '../../src/evaluator';
@@ -9,23 +8,21 @@ import * as telemetry from '../../src/telemetry';
 jest.mock('../../src/config');
 jest.mock('../../src/evaluator');
 jest.mock('../../src/logger');
-jest.mock('../../src/telemetry', () => ({
-  send: jest.fn().mockResolvedValue(undefined as void),
-}));
+jest.mock('../../src/telemetry');
 jest.mock('../../src/share');
 jest.mock('../../src/util');
 
 // Mock process.exit to prevent tests from actually exiting
-const mockExit = jest.spyOn(process, 'exit').mockImplementation((code?: number | string | null) => {
+jest.spyOn(process, 'exit').mockImplementation((code?: number | string | null) => {
   throw new Error(`Process.exit called with code ${code}`);
 });
 
 describe('doEval function', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    jest.resetAllMocks();
 
-    // Default mock for resolveConfigs to include at least one prompt
-    jest.mocked(config.resolveConfigs).mockResolvedValue({
+    // Update mocks
+    (jest.mocked(config.resolveConfigs)).mockResolvedValue({
       config: {
         prompts: ['Test prompt'],
         providers: ['Test provider'],
@@ -34,8 +31,7 @@ describe('doEval function', () => {
       basePath: '/test/path',
     });
 
-    // Mock evaluator.evaluate
-    jest.mocked(evaluator.evaluate).mockResolvedValue({
+    (jest.mocked(evaluator.evaluate)).mockResolvedValue({
       stats: {
         successes: 5,
         failures: 0,
@@ -46,6 +42,8 @@ describe('doEval function', () => {
       prompts: [{ raw: '', label: '', provider: '' }],
       vars: {},
     });
+
+    (jest.mocked(telemetry.send)).mockResolvedValue(undefined);
   });
 
   it('should run evaluation with default settings', async () => {
@@ -53,7 +51,12 @@ describe('doEval function', () => {
       verbose: false,
       cache: true,
       progressBar: true,
-    };
+      delay: '0',
+      providers: [],
+      maxConcurrency: '1',
+      repeat: '1',
+      output: [],
+    } as const;
     const mockDefaultConfig = {};
     const mockEvaluateOptions = {};
 
@@ -70,7 +73,12 @@ describe('doEval function', () => {
       verbose: true,
       cache: true,
       progressBar: true,
-    };
+      delay: '0',
+      providers: [],
+      maxConcurrency: '1',
+      repeat: '1',
+      output: [],
+    } as const;
 
     await doEval(mockCmdObj, {}, undefined, {});
 
@@ -82,7 +90,12 @@ describe('doEval function', () => {
       verbose: false,
       cache: false,
       progressBar: true,
-    };
+      delay: '0',
+      providers: [],
+      maxConcurrency: '1',
+      repeat: '1',
+      output: [],
+    } as const;
 
     await doEval(mockCmdObj, {}, undefined, {});
 
