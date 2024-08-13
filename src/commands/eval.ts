@@ -105,8 +105,6 @@ export async function doEval(
     if (cmdObj.generateSuggestions) {
       options.generateSuggestions = true;
     }
-    logger.warn(`testSuite: ${JSON.stringify(testSuite.scenarios)}`);
-
     // load scenarios or tests from an external file
     if (testSuite.scenarios) {
       testSuite.scenarios = (await maybeLoadFromExternalFile(testSuite.scenarios)) as Scenario[];
@@ -121,7 +119,7 @@ export async function doEval(
     if (!testSuiteSchema.success) {
       logger.warn(
         chalk.yellow(dedent`
-      !TestSuite Schema Validation Error:
+      TestSuite Schema Validation Error:
       
         ${JSON.stringify(testSuiteSchema.error.format())}
       
