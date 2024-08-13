@@ -16,7 +16,7 @@ jest.mock('../../../src/util', () => ({
 
 class TestPlugin extends PluginBase {
   protected async getTemplate(): Promise<string> {
-    return 'Test template with {{ purpose }} for {{ n }} prompts{{ language }}';
+    return 'Test template with {{ purpose }} for {{ n }} prompts';
   }
   protected getAssertions(prompt: string): Assertion[] {
     return [{ type: 'contains', value: prompt }];
