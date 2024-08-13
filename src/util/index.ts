@@ -11,6 +11,7 @@ import nunjucks from 'nunjucks';
 import * as path from 'path';
 import invariant from 'tiny-invariant';
 import { getAuthor } from '../accounts';
+import cliState from '../cliState';
 import { TERMINAL_MAX_WIDTH } from '../constants';
 import { getDbSignalPath, getDb } from '../database';
 import { datasets, evals, evalsToDatasets, evalsToPrompts, prompts } from '../database/tables';
@@ -1087,4 +1088,46 @@ export function parsePathOrGlob(
     functionName,
     isPathPattern,
   };
+}
+
+/**
+ * Loads content from an external file if the input is a file path, otherwise
+ * returns the input as-is.
+ *
+ * @param filePath - The input to process. Can be a file path string starting with "file://",
+ * an array of file paths, or any other type of data.
+ * @returns The loaded content if the input was a file path, otherwise the original input.
+ * For JSON and YAML files, the content is parsed into an object.
+ * For other file types, the raw file content is returned as a string.
+ *
+ * @throws {Error} If the specified file does not exist.
+ */
+export function maybeLoadFromExternalFile(filePath: string | object | Function | undefined | null) {
+  if (Array.isArray(filePath)) {
+    return filePath.map((path) => {
+      const content: any = maybeLoadFromExternalFile(path);
+      return content;
+    });
+  }
+
+  if (typeof filePath !== 'string') {
+    return filePath;
+  }
+  if (!filePath.startsWith('file://')) {
+    return filePath;
+  }
+
+  const finalPath = path.resolve(cliState.basePath || '', filePath.slice('file://'.length));
+  if (!fs.existsSync(finalPath)) {
+    throw new Error(`File does not exist: ${finalPath}`);
+  }
+
+  const contents = fs.readFileSync(finalPath, 'utf8');
+  if (finalPath.endsWith('.json')) {
+    return JSON.parse(contents);
+  }
+  if (finalPath.endsWith('.yaml') || finalPath.endsWith('.yml')) {
+    return yaml.load(contents);
+  }
+  return contents;
 }
