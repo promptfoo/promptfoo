@@ -199,7 +199,9 @@ module.exports = function (varName, prompt, otherVars) {
 
   if (varName === 'context') {
     // Return value based on the variable name and test context
-    return \`... Documents for \${otherVars.inquiry} for prompt: \${prompt} ...\`;
+    return {
+      output: \`... Documents for \${otherVars.inquiry} for prompt: \${prompt} ...\`;
+    };
   }
 
   // Default variable value
