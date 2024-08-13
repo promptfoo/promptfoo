@@ -147,7 +147,12 @@ export async function renderPrompt(
     const heliconePrompt = prompt.raw.slice('helicone://'.length);
     const [id, version] = heliconePrompt.split(':');
     const [majorVersion, minorVersion] = version ? version.split('.') : [undefined, undefined];
-    const heliconeResult = await getPrompt(id, vars, Number(majorVersion), Number(minorVersion));
+    const heliconeResult = await getPrompt(
+      id,
+      vars,
+      majorVersion !== undefined ? Number(majorVersion) : undefined,
+      minorVersion !== undefined ? Number(minorVersion) : undefined,
+    );
     return heliconeResult;
   }
 

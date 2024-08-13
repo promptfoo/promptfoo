@@ -11,7 +11,7 @@ export function maybeFilePath(str: string): boolean {
     throw new Error(`Invalid input: ${JSON.stringify(str)}`);
   }
 
-  const forbiddenSubstrings = ['\n', 'portkey://', 'langfuse://'];
+  const forbiddenSubstrings = ['\n', 'portkey://', 'langfuse://', 'helicone://'];
   if (forbiddenSubstrings.some((substring) => str.includes(substring))) {
     return false;
   }

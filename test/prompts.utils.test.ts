@@ -1,5 +1,6 @@
 import { maybeFilePath, normalizeInput } from '../src/prompts/utils';
 
+
 jest.mock('fs', () => ({
   statSync: jest.fn(jest.requireActual('fs').statSync),
 }));
@@ -27,6 +28,10 @@ describe('maybeFilePath', () => {
 
   it('should return false for strings with "langfuse://"', () => {
     expect(maybeFilePath('langfuse://path/to/file')).toBe(false);
+  });
+
+  it('should return false for strings with "helicone://"', () => {
+    expect(maybeFilePath('helicone://path/to/file')).toBe(false);
   });
 
   it('should return false for strings without file path indicators', () => {

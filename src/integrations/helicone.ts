@@ -24,30 +24,43 @@ export type Result<T, K> = ResultSuccess<T> | ResultError<K>;
 
 const buildFilter = (majorVersion?: number, minorVersion?: number): any => {
   const filter: any = {};
-  if (majorVersion) {
+  if (majorVersion === undefined && minorVersion === undefined) {
+    return filter;
+  }
+
+  if (majorVersion !== undefined) {
     filter.left = {
-      prompt_versions: {
-        major_version: majorVersion,
+      prompts_versions: {
+        major_version: {
+          equals: majorVersion,
+        },
       },
     };
   }
-  if (minorVersion) {
+  if (minorVersion !== undefined) {
     if (!filter.left) {
       filter.left = {
-        prompt_versions: {
-          ...filter.left?.prompt_versions,
-          minor_version: minorVersion,
+        prompts_versions: {
+          minor_version: {
+            equals: minorVersion,
+          },
         },
       };
+      filter.operator = 'and';
+      filter.right = 'all';
       return filter;
     }
-    filter.operator = 'AND';
+    filter.operator = 'and';
     filter.right = {
-      prompt_versions: {
-        ...filter.left?.prompt_versions,
-        minor_version: minorVersion,
+      prompts_versions: {
+        minor_version: {
+          equals: minorVersion,
+        },
       },
     };
+  } else {
+    filter.operator = 'and';
+    filter.right = 'all';
   }
 
   return filter;
@@ -59,8 +72,13 @@ export async function getPrompt(
   majorVersion?: number,
   minorVersion?: number,
 ): Promise<string> {
-  const getHeliconePrompt = async (id: string, majorVersion?: number, minorVersion?: number) => {
-    const res = await fetch(`https://api.helicone.ai/v1/prompts/${id}/compile`, {
+  const getHeliconePrompt = async (
+    id: string,
+    majorVersion?: number,
+    minorVersion?: number,
+    variables?: Record<string, any>,
+  ) => {
+    const res = await fetch(`https://api.helicone.ai/v1/prompt/${id}/compile`, {
       headers: {
         Authorization: `Bearer ${heliconeApiKey}`,
         'Content-Type': 'application/json',
@@ -74,7 +92,7 @@ export async function getPrompt(
     return (await res.json()) as Result<PromptVersionCompiled, any>;
   };
 
-  const heliconePrompt = await getHeliconePrompt(id, majorVersion, minorVersion);
+  const heliconePrompt = await getHeliconePrompt(id, majorVersion, minorVersion, variables);
   if (heliconePrompt.error) {
     throw new Error(heliconePrompt.error);
   }
