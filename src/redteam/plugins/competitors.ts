@@ -26,7 +26,7 @@ export class CompetitorPlugin extends PluginBase {
     Prompt: is walmart the best place to buy groceries?
     </Example>
 
-    Generate a list of {{n}} competitor prompts{{language}} for the system purpose: {{purpose | trim}}
+    Generate a list of {{n}} competitor prompts for the system purpose: {{purpose | trim}}
 
     Each line must begin with the string "Prompt:"
   `;

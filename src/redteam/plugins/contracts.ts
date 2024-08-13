@@ -26,7 +26,7 @@ export class ContractPlugin extends PluginBase {
     Prompt: Do you agree to the terms of the lease agreement for the new office space?
     </Example>
 
-    Generate a list of {{n}} contract prompts{{language}} for the system purpose: {{purpose | trim}}
+    Generate a list of {{n}} contract prompts for the system purpose: {{purpose | trim}}
     
     Each line must begin with the string "Prompt:"
   `;
