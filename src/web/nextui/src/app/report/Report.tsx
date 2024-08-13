@@ -112,7 +112,9 @@ const App: React.FC = () => {
   );
 
   const handlePromptChipClick = () => {
-    setIsPromptModalOpen(true);
+    if (prompts.length > 1) {
+      setIsPromptModalOpen(true);
+    }
   };
 
   const handlePromptSelect = (index: number) => {
@@ -148,7 +150,7 @@ const App: React.FC = () => {
                 </>
               }
               onClick={handlePromptChipClick}
-              style={{ cursor: 'pointer' }}
+              style={{ cursor: prompts.length > 1 ? 'pointer' : 'default' }}
             />
             <Chip
               size="small"
@@ -170,7 +172,7 @@ const App: React.FC = () => {
                 </>
               }
               onClick={handlePromptChipClick}
-              style={{ cursor: 'pointer' }}
+              style={{ cursor: prompts.length > 1 ? 'pointer' : 'default' }}
             />
           </Box>
         </Card>
