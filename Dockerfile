@@ -1,3 +1,7 @@
+# syntax=docker/dockerfile:1
+# check=skip=SecretsUsedInArgOrEnv
+# TODO(ian): Remove the SecretsUsedInArgOrEnv check once we remove the placeholder for NEXT_PUBLIC_SUPABASE_ANON_KEY
+
 # https://github.com/vercel/next.js/blob/canary/examples/with-docker/Dockerfile
 
 # ---- Build ----
@@ -37,8 +41,7 @@ WORKDIR /app/src/web/nextui
 RUN npm prune --omit=dev
 
 # ---- Final Stage ----
-ARG TARGETPLATFORM=linux/amd64
-FROM --platform=${TARGETPLATFORM} node:20-alpine
+FROM node:20-alpine
 
 LABEL org.opencontainers.image.source="https://github.com/promptfoo/promptfoo"
 LABEL org.opencontainers.image.description="promptfoo is a tool for testing evaluating and red-teaming LLM apps."

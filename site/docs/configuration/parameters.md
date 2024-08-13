@@ -257,6 +257,24 @@ In order to see the prompts for each test case, toggle `Table Settings` > `Show 
 
 ![final prompt shown for each test case](/img/docs/final-prompt-for-test-case.png)
 
+### Prompt configs
+
+Prompts can be configured with a `config` object. This object is merged with the provider configuration object and the combined object is used to call the provider API.
+
+A good use case for this is to set the `response_format` for a specific prompt.
+
+#### Example
+
+```yaml
+prompts:
+  - label: 'Prompt #1'
+    raw: 'You are a helpful math tutor. Solve {{problem}}'
+    config:
+      response_format:
+        type: json_schema
+        json_schema: ...
+```
+
 ### Nunjucks filters
 
 Nunjucks is a templating language with many [built-in filters](https://mozilla.github.io/nunjucks/templating.html#builtin-filters) that can be applied to variables. For example: `{{ varName | capitalize }}`.

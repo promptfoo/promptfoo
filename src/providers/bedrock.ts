@@ -11,8 +11,9 @@ import type {
   ProviderResponse,
   ProviderEmbeddingResponse,
 } from '../types';
+import { maybeLoadFromExternalFile } from '../util';
 import { outputFromMessage, parseMessages } from './anthropic';
-import { maybeLoadFromExternalFile, parseChatPrompt } from './shared';
+import { parseChatPrompt } from './shared';
 
 interface BedrockOptions {
   region?: string;

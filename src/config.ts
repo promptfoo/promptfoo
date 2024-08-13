@@ -20,7 +20,7 @@ import type {
   TestSuite,
   UnifiedConfig,
 } from './types';
-import { readFilters } from './util';
+import { isJavascriptFile, readFilters } from './util';
 
 export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<UnifiedConfig> {
   if (process.env.PROMPTFOO_DISABLE_REF_PARSER) {
@@ -135,22 +135,13 @@ export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<Unifi
 
 export async function readConfig(configPath: string): Promise<UnifiedConfig> {
   const ext = path.parse(configPath).ext;
-  switch (ext) {
-    case '.json':
-    case '.yaml':
-    case '.yml':
-      const rawConfig = yaml.load(fs.readFileSync(configPath, 'utf-8')) as UnifiedConfig;
-      return dereferenceConfig(rawConfig || {});
-    case '.js':
-    case '.cjs':
-    case '.mjs':
-    case '.ts':
-    case '.cts':
-    case '.mts':
-      return (await importModule(configPath)) as UnifiedConfig;
-    default:
-      throw new Error(`Unsupported configuration file format: ${ext}`);
+  if (ext === '.json' || ext === '.yaml' || ext === '.yml') {
+    const rawConfig = yaml.load(fs.readFileSync(configPath, 'utf-8')) as UnifiedConfig;
+    return dereferenceConfig(rawConfig || {});
+  } else if (isJavascriptFile(configPath)) {
+    return (await importModule(configPath)) as UnifiedConfig;
   }
+  throw new Error(`Unsupported configuration file format: ${ext}`);
 }
 
 export async function maybeReadConfig(configPath: string): Promise<UnifiedConfig | undefined> {
@@ -217,21 +208,32 @@ export async function readConfigs(configPaths: string[]): Promise<UnifiedConfig>
     plugins: [],
     strategies: [],
   };
+
   for (const config of configs) {
     if (config.redteam) {
-      redteam.plugins = [
-        ...new Set([...(redteam.plugins || []), ...(config.redteam.plugins || [])]),
-      ];
-      redteam.strategies = [
-        ...new Set([...(redteam.strategies || []), ...(config.redteam.strategies || [])]),
-      ];
+      for (const redteamKey of Object.keys(config.redteam) as Array<keyof typeof redteam>) {
+        if (['entities', 'plugins', 'strategies'].includes(redteamKey)) {
+          if (Array.isArray(config.redteam[redteamKey])) {
+            const currentValue = redteam[redteamKey];
+            const newValue = config.redteam[redteamKey];
+            if (Array.isArray(currentValue) && Array.isArray(newValue)) {
+              (redteam[redteamKey] as unknown[]) = [
+                ...new Set([...currentValue, ...newValue]),
+              ].sort();
+            }
+          }
+        } else {
+          (redteam as Record<string, unknown>)[redteamKey] =
+            config.redteam[redteamKey as keyof typeof config.redteam];
+        }
+      }
     }
   }
 
   const configsAreStringOrArray = configs.every(
     (config) => typeof config.prompts === 'string' || Array.isArray(config.prompts),
   );
-  const configsAreObjects = configs.every((config) => typeof config.prompts === 'object');
+
   let prompts: UnifiedConfig['prompts'] = configsAreStringOrArray ? [] : {};
 
   const makeAbsolute = (configPath: string, relativePath: string | Prompt) => {

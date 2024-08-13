@@ -15,14 +15,10 @@ import type {
   TokenUsage,
 } from '../types';
 import { renderVarsInObject } from '../util';
+import { maybeLoadFromExternalFile } from '../util';
 import { safeJsonStringify } from '../util/json';
 import type { OpenAiFunction, OpenAiTool } from './openaiUtil';
-import {
-  REQUEST_TIMEOUT_MS,
-  maybeLoadFromExternalFile,
-  parseChatPrompt,
-  toTitleCase,
-} from './shared';
+import { REQUEST_TIMEOUT_MS, parseChatPrompt, toTitleCase } from './shared';
 
 // see https://platform.openai.com/docs/models
 const OPENAI_CHAT_MODELS = [

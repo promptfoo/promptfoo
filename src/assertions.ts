@@ -47,7 +47,7 @@ import {
   type TestCase,
   isGradingResult,
 } from './types';
-import { extractJsonObjects } from './util';
+import { extractJsonObjects, isJavascriptFile } from './util';
 import { getNunjucksEngine } from './util/templates';
 import { transform } from './util/transform';
 
@@ -66,8 +66,16 @@ export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
   'model-graded-factuality',
 ]);
 
-const ajv = new Ajv();
-addFormats(ajv);
+export function createAjv(): Ajv {
+  const ajvOptions: ConstructorParameters<typeof Ajv>[0] = {
+    strictSchema: !['1', 'true'].includes(process.env.PROMPTFOO_DISABLE_AJV_STRICT_MODE || ''),
+  };
+  const ajv = new Ajv(ajvOptions);
+  addFormats(ajv);
+  return ajv;
+}
+
+const ajv = createAjv();
 
 const nunjucks = getNunjucksEngine();
 
@@ -188,7 +196,6 @@ export async function isSql(
   assertion: Assertion,
 ): Promise<GradingResult> {
   let pass = false;
-  let parsedSql: any;
   let databaseType: string = 'MySQL';
   let whiteTableList: string[] | undefined;
   let whiteColumnList: string[] | undefined;
@@ -220,7 +227,7 @@ export async function isSql(
   const failureReasons: string[] = [];
 
   try {
-    parsedSql = sqlParser.astify(outputString, opt);
+    sqlParser.astify(outputString, opt);
     pass = !inverse;
   } catch (err) {
     pass = inverse;
@@ -316,14 +323,7 @@ export async function runAssertion({
       const basePath = cliState.basePath || '';
       const filePath = path.resolve(basePath, renderedValue.slice('file://'.length));
 
-      if (
-        filePath.endsWith('.js') ||
-        filePath.endsWith('.cjs') ||
-        filePath.endsWith('.mjs') ||
-        filePath.endsWith('.ts') ||
-        filePath.endsWith('.cts') ||
-        filePath.endsWith('.mts')
-      ) {
+      if (isJavascriptFile(filePath)) {
         const requiredModule = await importModule(filePath);
         if (typeof requiredModule === 'function') {
           valueFromScript = await Promise.resolve(requiredModule(output, context));
@@ -1388,7 +1388,6 @@ export async function runAssertions({
   test: AtomicTestCase;
   latencyMs?: number;
 }): Promise<GradingResult> {
-  const { cost, logProbs, output } = providerResponse;
   if (!test.assert || test.assert.length < 1) {
     return AssertionsResult.noAssertsResult();
   }

@@ -2,9 +2,9 @@ import dedent from 'dedent';
 import invariant from 'tiny-invariant';
 import logger from '../../logger';
 import { matchesLlmRubric } from '../../matchers';
-import { maybeLoadFromExternalFile } from '../../providers/shared';
 import type { ApiProvider, Assertion, TestCase } from '../../types';
 import type { AtomicTestCase, GradingResult } from '../../types';
+import { maybeLoadFromExternalFile } from '../../util';
 import { getNunjucksEngine } from '../../util/templates';
 import { retryWithDeduplication, sampleArray } from '../util';
 

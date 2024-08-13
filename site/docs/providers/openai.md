@@ -91,28 +91,20 @@ interface OpenAiConfig {
   frequency_penalty?: number;
   presence_penalty?: number;
   best_of?: number;
-  functions?: {
-    name: string;
-    description?: string;
-    parameters: any;
-  }[];
+  functions?: OpenAiFunction[];
   function_call?: 'none' | 'auto' | { name: string };
-  tools?: {
-    type: string;
-    function: {
-      name: string;
-      description?: string;
-      parameters: any;
-    };
-  }[];
-  tool_choice?:
-    | 'none'
-    | 'auto'
-    | { type: 'function'; function?: { name: string } }
-    | { type: 'file_search' };
+  tools?: OpenAiTool[];
+  tool_choice?: 'none' | 'auto' | 'required' | { type: 'function'; function?: { name: string } };
+  response_format?: { type: 'json_object' | 'json_schema'; json_schema?: object };
   stop?: string[];
-  response_format?: { type: string };
   seed?: number;
+  passthrough?: object;
+
+  // Function tool callbacks
+  functionToolCallbacks?: Record<
+    OpenAI.FunctionDefinition['name'],
+    (arg: string) => Promise<string>
+  >;
 
   // General OpenAI parameters
   apiKey?: string;
@@ -424,6 +416,44 @@ config:
             description: The unit in which to return the temperature
         required:
           - location
+```
+
+## Using `response_format`
+
+Promptfoo supports the `response_format` parameter, which allows you to specify the expected output format.
+
+`response_format` can be included in the provider config, or in the prompt config.
+
+#### Prompt config example
+
+```yaml
+prompts:
+  - label: 'Prompt #1'
+    raw: 'You are a helpful math tutor. Solve {{problem}}'
+    config:
+      response_format:
+        type: json_schema
+        json_schema: ...
+```
+
+#### Provider config example
+
+```yaml
+providers:
+  - id: openai:chat:gpt-4o-mini
+    config:
+      response_format:
+        type: json_schema
+        json_schema: ...
+```
+
+#### External file references
+
+To make it easier to manage large JSON schemas, external file references are supported:
+
+```yaml
+config:
+  response_format: file://./path/to/response_format.json
 ```
 
 ## Supported environment variables

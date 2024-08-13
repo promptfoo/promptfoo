@@ -191,7 +191,8 @@
                       },
                       "label": {
                         "type": "string"
-                      }
+                      },
+                      "config": {}
                     },
                     "required": ["raw", "label"],
                     "additionalProperties": false

@@ -22,7 +22,7 @@ export type RedteamGenerateOptions = {
   envFile?: string;
   injectVar?: string;
   language?: string;
-  numTests: number;
+  numTests?: number;
   output?: string;
   plugins?: RedteamPluginObject[];
   provider?: string;

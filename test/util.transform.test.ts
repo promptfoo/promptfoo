@@ -14,6 +14,14 @@ jest.mock('fs', () => ({
   unlink: jest.fn(),
 }));
 
+jest.mock('glob', () => ({
+  globSync: jest.fn(),
+}));
+
+jest.mock('../src/database', () => ({
+  getDb: jest.fn(),
+}));
+
 describe('util', () => {
   beforeEach(() => {
     jest.clearAllMocks();

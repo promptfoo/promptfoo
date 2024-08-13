@@ -627,8 +627,12 @@ describe('call provider apis', () => {
         const hydratedBody = typeof body === 'string' ? JSON.parse(body) : body;
         expect(hydratedBody.prompt).toBe(PROMPT);
 
-        const { accountId, apiKey, ...passThroughConfig } = cloudflareChatConfig;
-        const { prompt, ...bodyWithoutPrompt } = hydratedBody;
+        const {
+          accountId: _accountId,
+          apiKey: _apiKey,
+          ...passThroughConfig
+        } = cloudflareChatConfig;
+        const { prompt: _prompt, ...bodyWithoutPrompt } = hydratedBody;
         expect(bodyWithoutPrompt).toEqual(passThroughConfig);
       });
     });

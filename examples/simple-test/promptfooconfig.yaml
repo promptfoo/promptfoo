@@ -1,5 +1,7 @@
-prompts: [prompts.txt]
-providers: [openai:gpt-3.5-turbo]
+prompts:
+  - prompts.txt
+providers:
+  - openai:gpt-4o-mini
 tests:
   - description: Check for exact match
     vars:
