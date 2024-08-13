@@ -43,8 +43,6 @@ export async function synthesize({
   validatePlugins(plugins);
   validateStrategies(strategies);
 
-  logger.warn(`------------- language: ${language}`);
-
   let redteamProvider: ApiProvider;
   if (isApiProvider(provider)) {
     redteamProvider = provider;
@@ -131,8 +129,8 @@ export async function synthesize({
       updateProgress();
       logger.debug(`Generating tests for ${pluginId}...`);
       const pluginTests = await action(redteamProvider, purpose, injectVar, plugin.numTests, {
-        ...(plugin.config || {}),
         language,
+        ...(plugin.config || {}),
       });
       testCases.push(
         ...pluginTests.map((t) => ({
