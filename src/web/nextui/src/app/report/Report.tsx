@@ -155,11 +155,6 @@ const App: React.FC = () => {
         <Overview categoryStats={categoryStats} />
         <RiskCategories categoryStats={categoryStats} />
         <TestSuites evalId={evalId} categoryStats={categoryStats} />
-        {/*
-        <div>
-          <Vulnerabilities />
-        </div>
-            */}
       </Stack>
     </Container>
   );
