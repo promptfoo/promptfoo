@@ -6,7 +6,6 @@ individual evaluations, as well as running setup and teardown commands.
 """
 
 import logging
-import os
 from datetime import datetime
 
 # Set up logging only if it hasn't been set up already

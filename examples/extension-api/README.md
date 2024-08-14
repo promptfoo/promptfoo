@@ -11,6 +11,8 @@ promptfoo supports four types of extension hooks, each triggered at a specific p
 3. `beforeEach`: Executed before each individual test
 4. `afterEach`: Executed after each individual test
 
+Each hook receives a `hookName` parameter and a `context` object containing relevant data for that specific hook type.
+
 For comprehensive information on implementing and using these hooks, refer to the [Extension Hooks](https://www.promptfoo.dev/docs/configuration/reference/#extension-hooks) section in the official documentation.
 
 ## Configuring Extensions
@@ -19,10 +21,11 @@ Specify your extensions in the `promptfooconfig.yaml` file:
 
 ```yaml
 extensions:
-  - python:hooks.py
-  # - file://hooks.js
-  # - file://hooks.js
+  - file:./path/to/your/extension.py:extension_hook
+  - file:./path/to/your/extension.js:extensionHook
 ```
+
+Note: You must include the function name after the file path, separated by a colon (`:`).
 
 ## Why Use Extensions?
 
@@ -31,6 +34,7 @@ Extensions in promptfoo empower you to:
 1. Enhance test functionality with custom pre- and post-test actions
 2. Dynamically prepare and clean up test environments
 3. Seamlessly integrate with external systems or services for comprehensive testing
+4. Implement custom logging or reporting mechanisms
 
 These extensions function similarly to "before" and "after" hooks in popular unit testing frameworks, allowing you to set up and tear down test environments with precision and control.
 
