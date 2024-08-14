@@ -284,7 +284,7 @@ This attack aims to push out the system's risk warnings from the context window,
 
 Promptfoo can help detect Context Window Overflow vulnerabilities through custom policies and specialized test cases.
 
-First, we set a custom policy along with `harmful` and `excessive-agency` plugins (learn more about the various plugin types [here](/docs/red-team/llm-vulnerability-types/):
+First, we set a custom policy along with `harmful` and `excessive-agency` plugins (learn more about the various plugin types [here](/docs/red-team/llm-vulnerability-types/)):
 
 ```yaml
 redteam:
