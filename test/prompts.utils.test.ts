@@ -1,6 +1,5 @@
 import { maybeFilePath, normalizeInput } from '../src/prompts/utils';
 
-
 jest.mock('fs', () => ({
   statSync: jest.fn(jest.requireActual('fs').statSync),
 }));
