@@ -3,9 +3,7 @@ sidebar_label: How to red team RAG applications
 sidebar_position: 10000
 ---
 
-# Red Teaming Guide for RAG Applications
-
-## Introduction
+# How to red team RAG applications
 
 Retrieval-Augmented Generation (RAG) is an increasingly popular LLM-based architecture for knowledge-based AI products. This guide focuses on application-layer attacks that developers deploying RAGs should consider.
 

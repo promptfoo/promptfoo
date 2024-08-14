@@ -3,7 +3,7 @@ sidebar_label: How to red team Agents
 sidebar_position: 10001
 ---
 
-# Red Teaming Guide for LLM Agents
+# How to red team LLM Agents
 
 LLM agents capable of interacting with their environment and executing complex tasks using natural language interfaces. As these agents gain access to external systems and sensitive data, security assessments are essential.
 
