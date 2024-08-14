@@ -67,16 +67,20 @@ promptfoo supports extension hooks that allow you to run custom code at specific
 
 ### Available Hooks
 
-| Hook Name  | Description                                   | Arguments                                                      |
-| ---------- | --------------------------------------------- | -------------------------------------------------------------- |
-| beforeAll  | Runs before the entire test suite begins      | `{ suite: TestSuite }`                                         |
-| afterAll   | Runs after the entire test suite has finished | `{ suite: TestSuite, results: EvaluateSummary }`               |
-| beforeEach | Runs before each individual test              | `{ test: TestCase, suite: TestSuite }`                         |
-| afterEach  | Runs after each individual test               | `{ test: TestCase, result: EvaluateResult, suite: TestSuite }` |
+| Hook Name  | Description                                   | Arguments                                         |
+| ---------- | --------------------------------------------- | ------------------------------------------------- |
+| beforeAll  | Runs before the entire test suite begins      | `{ suite: TestSuite }`                            |
+| afterAll   | Runs after the entire test suite has finished | `{ results: EvaluateResult[], suite: TestSuite }` |
+| beforeEach | Runs before each individual test              | `{ test: TestCase }`                              |
+| afterEach  | Runs after each individual test               | `{ test: TestCase, result: EvaluateResult }`      |
 
 ### Implementing Hooks
 
-To implement these hooks, create a JavaScript or Python file with functions named after the hooks you want to use. Then, specify the path to this file in the `extensions` array in your configuration.
+To implement these hooks, create a JavaScript or Python file with a function that handles the hooks you want to use. Then, specify the path to this file and the function name in the `extensions` array in your configuration.
+
+:::note
+All extensions receive all event types (beforeAll, afterAll, beforeEach, afterEach). It's up to the extension function to decide which events to handle based on the `hookName` parameter.
+:::
 
 Example extension file (Python):
 
@@ -87,7 +91,7 @@ def extension_hook(hook_name, context):
         # Perform any necessary setup
     elif hook_name == 'afterAll':
         print(f"Test suite completed: {context['suite'].get('description', '')}")
-        print(f"Total tests: {context['results']['stats']['successes'] + context['results']['stats']['failures']}")
+        print(f"Total tests: {len(context['results'])}")
         # Perform any necessary teardown or reporting
     elif hook_name == 'beforeEach':
         print(f"Running test: {context['test'].get('description', '')}")
@@ -106,7 +110,7 @@ async function extensionHook(hookName, context) {
     // Perform any necessary setup
   } else if (hookName === 'afterAll') {
     console.log(`Test suite completed: ${context.suite.description || ''}`);
-    console.log(`Total tests: ${context.results.stats.successes + context.results.stats.failures}`);
+    console.log(`Total tests: ${context.results.length}`);
     // Perform any necessary teardown or reporting
   } else if (hookName === 'beforeEach') {
     console.log(`Running test: ${context.test.description || ''}`);
@@ -118,6 +122,7 @@ async function extensionHook(hookName, context) {
     // Clean up after individual test or log results
   }
 }
+
 module.exports = extensionHook;
 ```
 
@@ -129,7 +134,11 @@ extensions:
   - file:./path/to/your/extension.py:extension_hook
 ```
 
-These hooks provide powerful extensibility to your promptfoo evaluations, allowing you to implement custom logic for setup, teardown, logging, or integration with other systems.
+:::important
+When specifying an extension in the configuration, you must include the function name after the file path, separated by a colon (`:`). This tells promptfoo which function to call in the extension file.
+:::
+
+These hooks provide powerful extensibility to your promptfoo evaluations, allowing you to implement custom logic for setup, teardown, logging, or integration with other systems. The extension function receives the `hookName` and a `context` object, which contains relevant data for each hook type. You can use this information to perform actions specific to each stage of the evaluation process.
 
 ## Provider-related types
 
