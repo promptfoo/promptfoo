@@ -115,9 +115,7 @@ export async function runExtensionHook(
   }
   for (const extension of extensions) {
     logger.debug(`Running extension hook ${hookName} with context ${JSON.stringify(context)}`);
-    const resolvedPath = path.resolve(cliState.basePath || '', extension);
-    logger.debug(`Resolved extension path: ${resolvedPath}`);
-    const result = await transform(resolvedPath, hookName, context);
+    const result = await transform(extension, hookName, context);
     logger.warn(result);
   }
 }

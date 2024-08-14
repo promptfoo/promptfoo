@@ -378,7 +378,7 @@ export async function resolveConfigs(
     });
   }
 
-  // Use base path in cases where path was supplied in the config file
+  // Use basepath in cases where path was supplied in the config file
   const basePath = configPaths ? path.dirname(configPaths[0]) : '';
 
   const defaultTestRaw = fileConfig.defaultTest || defaultConfig.defaultTest;
