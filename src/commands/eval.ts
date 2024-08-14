@@ -279,13 +279,13 @@ export async function doEval(
       const passRateThreshold = Number(process.env.PROMPTFOO_PASS_RATE_THRESHOLD || '100');
       const failedTestExitCode = Number(process.env.PROMPTFOO_FAILED_TEST_EXIT_CODE || '100');
 
-      if (passRate < passRateThreshold) {
+      if (passRate < (Number.isFinite(passRateThreshold) ? passRateThreshold : 100)) {
         logger.warn(
           chalk.yellow(
             `Pass rate ${passRate.toFixed(2)}% is below the threshold of ${passRateThreshold}%`,
           ),
         );
-        process.exit(failedTestExitCode);
+        process.exit(Number.isSafeInteger(failedTestExitCode) ? failedTestExitCode : 100);
       }
     }
   };
