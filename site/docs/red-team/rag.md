@@ -1,5 +1,6 @@
 ---
 sidebar_label: How to red team RAG applications
+sidebar_position: 10000
 ---
 
 # Red Teaming Guide for RAG Applications
