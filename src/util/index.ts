@@ -939,19 +939,20 @@ export function getStandaloneEvals(limit: number = DEFAULT_QUERY_LIMIT): Standal
     .limit(limit)
     .all();
 
-  const flatResults: StandaloneEval[] = [];
-  results.forEach((result) => {
-    const table = result.results.table;
-    table.head.prompts.forEach((col) => {
-      flatResults.push({
-        evalId: result.evalId,
-        promptId: result.promptId,
-        datasetId: result.datasetId,
-        ...col,
-      });
-    });
+  return results.flatMap((result) => {
+    const {
+      evalId,
+      promptId,
+      datasetId,
+      results: { table },
+    } = result;
+    return table.head.prompts.map((col) => ({
+      evalId,
+      promptId,
+      datasetId,
+      ...col,
+    }));
   });
-  return flatResults;
 }
 
 export function providerToIdentifier(provider: TestCase['provider']): string | undefined {
