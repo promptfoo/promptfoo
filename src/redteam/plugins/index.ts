@@ -37,82 +37,84 @@ export interface Plugin {
 export const Plugins: Plugin[] = [
   {
     key: 'competitors',
-    action: (provider, purpose, injectVar, n) =>
-      new CompetitorPlugin(provider, purpose, injectVar).generateTests(n),
+    action: (provider, purpose, injectVar, n, config) =>
+      new CompetitorPlugin(provider, purpose, injectVar, config).generateTests(n),
   },
   {
     key: 'contracts',
-    action: (provider, purpose, injectVar, n) =>
-      new ContractPlugin(provider, purpose, injectVar).generateTests(n),
+    action: (provider, purpose, injectVar, n, config) =>
+      new ContractPlugin(provider, purpose, injectVar, config).generateTests(n),
   },
   {
     key: 'excessive-agency',
-    action: (provider, purpose, injectVar, n) =>
-      new ExcessiveAgencyPlugin(provider, purpose, injectVar).generateTests(n),
+    action: (provider, purpose, injectVar, n, config) =>
+      new ExcessiveAgencyPlugin(provider, purpose, injectVar, config).generateTests(n),
   },
   {
     key: 'hallucination',
-    action: (provider, purpose, injectVar, n) =>
-      new HallucinationPlugin(provider, purpose, injectVar).generateTests(n),
+    action: (provider, purpose, injectVar, n, config) =>
+      new HallucinationPlugin(provider, purpose, injectVar, config).generateTests(n),
   },
   ...(Object.keys(HARM_PLUGINS).map((category) => ({
     key: category,
-    action: (provider, purpose, injectVar, n) =>
+    action: (provider, purpose, injectVar, n, config) =>
       getHarmfulTests(provider, purpose, injectVar, [category], n),
   })) as Plugin[]),
   {
     key: 'hijacking',
-    action: (provider, purpose, injectVar, n) =>
-      new HijackingPlugin(provider, purpose, injectVar).generateTests(n),
+    action: (provider, purpose, injectVar, n, config) =>
+      new HijackingPlugin(provider, purpose, injectVar, config).generateTests(n),
   },
   {
     key: 'imitation',
-    action: async (provider, purpose, injectVar, n) => {
-      const plugin = new ImitationPlugin(provider, purpose, injectVar);
-      return plugin.generateTests(n);
-    },
+    action: (provider, purpose, injectVar, n, config) =>
+      new ImitationPlugin(provider, purpose, injectVar, config).generateTests(n),
   },
   {
     key: 'overreliance',
-    action: (provider, purpose, injectVar, n) =>
-      new OverreliancePlugin(provider, purpose, injectVar).generateTests(n),
+    action: (provider, purpose, injectVar, n, config) =>
+      new OverreliancePlugin(provider, purpose, injectVar, config).generateTests(n),
   },
   {
     key: 'sql-injection',
-    action: (provider, purpose, injectVar, n) =>
-      new SqlInjectionPlugin(provider, purpose, injectVar).generateTests(n),
+    action: (provider, purpose, injectVar, n, config) =>
+      new SqlInjectionPlugin(provider, purpose, injectVar, config).generateTests(n),
   },
   {
     key: 'shell-injection',
-    action: (provider, purpose, injectVar, n) =>
-      new ShellInjectionPlugin(provider, purpose, injectVar).generateTests(n),
+    action: (provider, purpose, injectVar, n, config) =>
+      new ShellInjectionPlugin(provider, purpose, injectVar, config).generateTests(n),
   },
   {
     key: 'debug-access',
-    action: (provider, purpose, injectVar, n) =>
-      new DebugAccessPlugin(provider, purpose, injectVar).generateTests(n),
+    action: (provider, purpose, injectVar, n, config) =>
+      new DebugAccessPlugin(provider, purpose, injectVar, config).generateTests(n),
   },
   {
     key: 'rbac',
-    action: (provider, purpose, injectVar, n) =>
-      new RbacPlugin(provider, purpose, injectVar).generateTests(n),
+    action: (provider, purpose, injectVar, n, config) =>
+      new RbacPlugin(provider, purpose, injectVar, config).generateTests(n),
   },
   {
     key: 'politics',
-    action: (provider, purpose, injectVar, n) =>
-      new PoliticsPlugin(provider, purpose, injectVar).generateTests(n),
+    action: (provider, purpose, injectVar, n, config) =>
+      new PoliticsPlugin(provider, purpose, injectVar, config).generateTests(n),
   },
   ...(PII_PLUGINS.map((category) => ({
     key: category,
-    action: (provider, purpose, injectVar, n) =>
+    action: (provider, purpose, injectVar, n, config) =>
       getPiiLeakTestsForCategory(provider, purpose, injectVar, category, n),
   })) as Plugin[]),
   {
     key: 'policy',
     action: (provider, purpose, injectVar, n, config) => {
       invariant(config?.policy, 'Policy plugin requires a config');
-      const plugin = new PolicyPlugin(provider, purpose, injectVar, config as { policy: string });
-      return plugin.generateTests(n);
+      return new PolicyPlugin(
+        provider,
+        purpose,
+        injectVar,
+        config as { policy: string; language?: string },
+      ).generateTests(n);
     },
   },
   {

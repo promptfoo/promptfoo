@@ -21,6 +21,7 @@ export type RedteamGenerateOptions = {
   defaultConfigPath?: string;
   envFile?: string;
   injectVar?: string;
+  language?: string;
   numTests?: number;
   output?: string;
   plugins?: RedteamPluginObject[];
@@ -34,6 +35,7 @@ export type RedteamConfig = {
   entities?: string[];
   injectVar?: string;
   numTests?: number;
+  language?: string;
   plugins: RedteamPluginObject[];
   provider?: string | ProviderOptions | ApiProvider;
   purpose?: string;
@@ -46,6 +48,7 @@ export interface SynthesizeOptions {
   entities?: string[];
   injectVar?: string;
   numTests: number;
+  language: string;
   plugins: { id: string; numTests: number; config?: Record<string, any> }[];
   prompts: string[];
   provider?: ApiProvider | ProviderOptions | string;
