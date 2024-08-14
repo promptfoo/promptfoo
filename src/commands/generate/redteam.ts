@@ -110,6 +110,7 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
   const config = {
     injectVar: redteamConfig?.injectVar || options.injectVar,
     numTests: redteamConfig?.numTests ?? options.numTests,
+    language: redteamConfig?.language || options.language,
     plugins,
     provider: redteamConfig?.provider || options.provider,
     purpose: redteamConfig?.purpose || options.purpose,
@@ -128,8 +129,9 @@ export async function doGenerateRedteam(options: RedteamGenerateOptions) {
     entities,
   } = await synthesize({
     ...parsedConfig.data,
+    language: config.language,
+    numTests: config.numTests,
     prompts: testSuite.prompts.map((prompt) => prompt.raw),
-    numTests: options.numTests,
   } as SynthesizeOptions);
 
   const updatedRedteamConfig = {
@@ -245,6 +247,10 @@ export function generateRedteamCommand(
       'Number of test cases to generate per plugin',
       (val) => (Number.isInteger(val) ? val : parseInt(val, 10)),
       undefined,
+    )
+    .option(
+      '--language <language>',
+      'Specify the language for generated tests. Defaults to English',
     )
     .option('--no-cache', 'Do not read or write results to disk cache', false)
     .option('--env-file <path>', 'Path to .env file')

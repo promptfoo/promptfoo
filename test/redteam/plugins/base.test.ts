@@ -1,16 +1,16 @@
+import dedent from 'dedent';
 import { matchesLlmRubric } from '../../../src/matchers';
-import * as shared from '../../../src/providers/shared';
 import { PluginBase } from '../../../src/redteam/plugins/base';
 import { RedteamModelGrader } from '../../../src/redteam/plugins/base';
 import type { ApiProvider, Assertion } from '../../../src/types';
 import type { AtomicTestCase, GradingResult } from '../../../src/types';
-import { getNunjucksEngine } from '../../../src/util/templates';
+import { maybeLoadFromExternalFile } from '../../../src/util';
 
 jest.mock('../../../src/matchers', () => ({
   matchesLlmRubric: jest.fn(),
 }));
 
-jest.mock('../../../src/providers/shared', () => ({
+jest.mock('../../../src/util', () => ({
   maybeLoadFromExternalFile: jest.fn(),
 }));
 
@@ -34,7 +34,7 @@ describe('PluginBase', () => {
       }),
       id: jest.fn().mockReturnValue('test-provider'),
     };
-    plugin = new TestPlugin(provider, 'test purpose', 'testVar');
+    plugin = new TestPlugin(provider, 'test purpose', 'testVar', { language: 'German' });
   });
 
   afterEach(() => {
@@ -54,10 +54,15 @@ describe('PluginBase', () => {
       },
     ]);
     expect(provider.callApi).toHaveBeenCalledWith(
-      getNunjucksEngine().renderString('Test template with {{ purpose }} for {{ n }} prompts', {
-        purpose: 'test purpose',
-        n: 2,
-      }),
+      dedent`
+        Test template with test purpose for 2 prompts
+
+        CRITICAL: Ensure all generated prompts strictly follow these requirements:
+        <Modifiers>
+        language: German
+        </Modifiers>
+        Rewrite ALL prompts to fully comply with the above modifiers.
+      `.trim(),
     );
   });
 
@@ -261,7 +266,7 @@ describe('RedteamModelGrader', () => {
       };
 
       maybeLoadFromExternalFileSpy = jest
-        .spyOn(shared, 'maybeLoadFromExternalFile')
+        .mocked(maybeLoadFromExternalFile)
         .mockImplementation((input) => {
           if (input === 'file://tools.json') {
             return [{ name: 'tool1' }, { name: 'tool2' }];

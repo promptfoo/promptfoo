@@ -4,7 +4,7 @@
 [![npm](https://img.shields.io/npm/dm/promptfoo)](https://npmjs.com/package/promptfoo)
 [![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/typpo/promptfoo/main.yml)](https://github.com/promptfoo/promptfoo/actions/workflows/main.yml)
 ![MIT license](https://img.shields.io/github/license/promptfoo/promptfoo)
-[![Discord](https://dcbadge.vercel.app/api/server/gHPS9jjfbs?style=flat&compact=true)](https://discord.gg/gHPS9jjfbs)
+[![Discord](https://github.com/user-attachments/assets/2092591a-ccc5-42a7-aeb6-24a2808950fd)](https://discord.gg/gHPS9jjfbs)
 
 `promptfoo` is a tool for testing, evaluating, and red-teaming LLM apps.
 
@@ -32,6 +32,10 @@ promptfoo produces matrix views that let you quickly evaluate outputs across man
 It works on the command line too:
 
 ![Prompt evaluation](https://github.com/promptfoo/promptfoo/assets/310310/480e1114-d049-40b9-bd5f-f81c15060284)
+
+It also produces high-level vulnerability and risk reports:
+
+![gen ai red team](https://www.promptfoo.dev/assets/images/riskreport-1@2x-22b983ff8344206c7120824cd1adde6f.png)
 
 ## Why choose promptfoo?
 

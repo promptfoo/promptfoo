@@ -57,6 +57,7 @@ export const RedteamGenerateOptionsSchema = z.object({
   defaultConfigPath: z.string().optional().describe('Path to the default configuration file'),
   envFile: z.string().optional().describe('Path to the environment file'),
   injectVar: z.string().optional().describe('Variable to inject'),
+  language: z.string().optional().describe('Language of tests to generate'),
   numTests: z.number().int().positive().optional().describe('Number of tests to generate'),
   output: z.string().optional().describe('Output file path'),
   plugins: z.array(RedteamPluginObjectSchema).optional().describe('Plugins to use'),
@@ -94,6 +95,7 @@ export const RedteamConfigSchema = z
       .optional()
       .describe('Provider used for generating adversarial inputs'),
     numTests: z.number().int().positive().optional().describe('Number of tests to generate'),
+    language: z.string().optional().describe('Language of tests ot generate for this plugin'),
     plugins: z
       .array(RedteamPluginSchema)
       .describe('Plugins to use for redteam generation')
@@ -170,12 +172,13 @@ export const RedteamConfigSchema = z
       .flat();
 
     return {
-      ...(data.purpose ? { purpose: data.purpose } : {}),
-      ...(data.injectVar ? { injectVar: data.injectVar } : {}),
-      ...(data.provider ? { provider: data.provider } : {}),
       numTests: data.numTests,
       plugins: uniquePlugins,
       strategies,
+      ...(data.injectVar ? { injectVar: data.injectVar } : {}),
+      ...(data.language ? { language: data.language } : {}),
+      ...(data.provider ? { provider: data.provider } : {}),
+      ...(data.purpose ? { purpose: data.purpose } : {}),
     };
   });
 
