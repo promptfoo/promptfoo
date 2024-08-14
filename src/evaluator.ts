@@ -8,7 +8,7 @@ import invariant from 'tiny-invariant';
 import { runAssertions, runCompareAssertion } from './assertions';
 import { fetchWithCache, getCache } from './cache';
 import cliState from './cliState';
-import { renderPrompt } from './evaluatorHelpers';
+import { renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger from './logger';
 import { maybeEmitAzureOpenAiWarning } from './providers/azureopenaiUtil';
 import { generatePrompts } from './suggestions';
@@ -96,28 +96,6 @@ export function generateVarCombinations(
   }
 
   return combinations;
-}
-
-/**
- * Runs extension hooks for the given hook name and context.
- * @param extensions - An array of extension paths.
- * @param hookName - The name of the hook to run.
- * @param context - The context object to pass to the hook.
- * @returns A Promise that resolves when all hooks have been run.
- */
-export async function runExtensionHook(
-  extensions: string[] | undefined,
-  hookName: string,
-  context: any,
-) {
-  if (!extensions || !Array.isArray(extensions) || extensions.length === 0) {
-    return;
-  }
-  for (const extension of extensions) {
-    invariant(typeof extension === 'string', 'extension must be a string');
-    logger.debug(`Running extension hook ${hookName} with context ${JSON.stringify(context)}`);
-    await transform(extension, hookName, context, false);
-  }
 }
 
 class Evaluator {
