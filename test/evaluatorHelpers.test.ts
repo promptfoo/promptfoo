@@ -1,7 +1,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { renderPrompt, resolveVariables } from '../src/evaluatorHelpers';
+import { renderPrompt, resolveVariables, runExtensionHook } from '../src/evaluatorHelpers';
 import type { Prompt } from '../src/types';
+import { transform } from '../src/util/transform';
 
 jest.mock('node-fetch', () => jest.fn());
 jest.mock('proxy-agent', () => ({
@@ -175,5 +176,44 @@ describe('resolveVariables', () => {
       greeting: 'Hello, {{unknown}}!',
       name: '{{unknown}}',
     });
+  });
+});
+
+describe('runExtensionHook', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('should not call transform if extensions array is empty', async () => {
+    await runExtensionHook([], 'testHook', { data: 'test' });
+    expect(transform).not.toHaveBeenCalled();
+  });
+
+  it('should not call transform if extensions is undefined', async () => {
+    await runExtensionHook(undefined, 'testHook', { data: 'test' });
+    expect(transform).not.toHaveBeenCalled();
+  });
+
+  it('should call transform for each extension', async () => {
+    const extensions = ['ext1', 'ext2', 'ext3'];
+    const hookName = 'testHook';
+    const context = { data: 'test' };
+
+    await runExtensionHook(extensions, hookName, context);
+
+    expect(transform).toHaveBeenCalledTimes(3);
+    expect(transform).toHaveBeenNthCalledWith(1, 'ext1', hookName, context, false);
+    expect(transform).toHaveBeenNthCalledWith(2, 'ext2', hookName, context, false);
+    expect(transform).toHaveBeenNthCalledWith(3, 'ext3', hookName, context, false);
+  });
+
+  it('should throw an error if an extension is not a string', async () => {
+    const extensions = ['ext1', 123, 'ext3'] as string[];
+    const hookName = 'testHook';
+    const context = { data: 'test' };
+
+    await expect(runExtensionHook(extensions, hookName, context)).rejects.toThrow(
+      'extension must be a string',
+    );
   });
 });

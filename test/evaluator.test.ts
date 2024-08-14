@@ -1,5 +1,6 @@
 import glob from 'glob';
 import { evaluate, generateVarCombinations, isAllowedPrompt } from '../src/evaluator';
+import { runExtensionHook } from '../src/evaluatorHelpers';
 import type { ApiProvider, TestSuite, Prompt } from '../src/types';
 
 jest.mock('node-fetch', () => jest.fn());
@@ -27,6 +28,10 @@ jest.mock('../src/database', () => ({
   getDb: jest.fn(),
 }));
 jest.mock('../src/logger');
+jest.mock('../src/evaluatorHelpers', () => ({
+  ...jest.requireActual('../src/evaluatorHelpers'),
+  runExtensionHook: jest.fn(),
+}));
 
 const mockApiProvider: ApiProvider = {
   id: jest.fn().mockReturnValue('test-provider'),
@@ -1225,6 +1230,89 @@ describe('evaluator', () => {
         }),
       }),
       expect.anything(),
+    );
+  });
+
+  it('should call runExtensionHook with correct parameters at appropriate times', async () => {
+    const mockExtension = 'file:./path/to/extension.js:extensionFunction';
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt {{ var1 }}')],
+      tests: [
+        {
+          vars: { var1: 'value1' },
+          assert: [{ type: 'equals', value: 'Test output' }],
+        },
+      ],
+      extensions: [mockExtension],
+    };
+
+    const mockedRunExtensionHook = jest.mocked(runExtensionHook);
+    mockedRunExtensionHook.mockClear();
+
+    await evaluate(testSuite, {});
+
+    // Check if runExtensionHook was called 4 times (beforeAll, beforeEach, afterEach, afterAll)
+    expect(mockedRunExtensionHook).toHaveBeenCalledTimes(4);
+
+    // Check beforeAll call
+    expect(mockedRunExtensionHook).toHaveBeenNthCalledWith(
+      1,
+      [mockExtension],
+      'beforeAll',
+      expect.objectContaining({ suite: testSuite }),
+    );
+
+    // Check beforeEach call
+    expect(mockedRunExtensionHook).toHaveBeenNthCalledWith(
+      2,
+      [mockExtension],
+      'beforeEach',
+      expect.objectContaining({
+        test: expect.objectContaining({
+          vars: { var1: 'value1' },
+          assert: [{ type: 'equals', value: 'Test output' }],
+        }),
+      }),
+    );
+
+    // Check afterEach call
+    expect(mockedRunExtensionHook).toHaveBeenNthCalledWith(
+      3,
+      [mockExtension],
+      'afterEach',
+      expect.objectContaining({
+        test: expect.objectContaining({
+          vars: { var1: 'value1' },
+          assert: [{ type: 'equals', value: 'Test output' }],
+        }),
+        result: expect.objectContaining({
+          success: true,
+          score: 1,
+          response: expect.objectContaining({
+            output: 'Test output',
+          }),
+        }),
+      }),
+    );
+
+    // Check afterAll call
+    expect(mockedRunExtensionHook).toHaveBeenNthCalledWith(
+      4,
+      [mockExtension],
+      'afterAll',
+      expect.objectContaining({
+        results: expect.arrayContaining([
+          expect.objectContaining({
+            success: true,
+            score: 1,
+            response: expect.objectContaining({
+              output: 'Test output',
+            }),
+          }),
+        ]),
+        suite: testSuite,
+      }),
     );
   });
 });
