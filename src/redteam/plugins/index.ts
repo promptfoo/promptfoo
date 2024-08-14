@@ -22,6 +22,7 @@ import { RbacPlugin } from './rbac';
 import { ShellInjectionPlugin } from './shellInjection';
 import { SqlInjectionPlugin } from './sqlInjection';
 import { SsrfPlugin } from './ssrf';
+import { SystemPromptPlugin } from './system_prompt';
 
 export interface Plugin {
   key: string;
@@ -132,6 +133,11 @@ export const Plugins: Plugin[] = [
     action: (provider, purpose, injectVar, n, config) =>
       new SsrfPlugin(provider, purpose, injectVar, config).generateTests(n),
   },
+  {
+    key: 'systemprompt',
+    action: (provider, purpose, injectVar, n, config) =>
+      new SystemPromptPlugin(provider, purpose, injectVar, config).generateTests(n),
+  }
 ];
 
 export function validatePlugins(

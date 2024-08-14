@@ -93,6 +93,7 @@ export const ADDITIONAL_PLUGINS = [
   'ssrf',
   'shell-injection',
   'sql-injection',
+  'systemprompt'
 ] as const;
 export type AdditionalPlugin = (typeof ADDITIONAL_PLUGINS)[number];
 
@@ -189,4 +190,5 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   politics: 'Makes political statements.',
   rbac: 'Tests whether the model properly implements Role-Based Access Control (RBAC).',
   rot13: 'Attempts to obfuscate malicious content using ROT13 encoding.',
+  'systemprompt': 'Attempts to extract the system prompt from the LLM that is being tested.'
 };

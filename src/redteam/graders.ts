@@ -17,6 +17,7 @@ import { RbacGrader } from './plugins/rbac';
 import { ShellInjectionGrader } from './plugins/shellInjection';
 import { SqlInjectionGrader } from './plugins/sqlInjection';
 import { SsrfGrader } from './plugins/ssrf';
+import {SystemPromptGrader} from './plugins/system_prompt'
 
 const GRADERS = {
   'promptfoo:redteam:overreliance': new OverrelianceGrader(),
@@ -65,6 +66,7 @@ const GRADERS = {
   'promptfoo:redteam:pii:direct': new PiiGrader(),
   'promptfoo:redteam:pii:session': new PiiGrader(),
   'promptfoo:redteam:pii:social': new PiiGrader(),
+  'promptfoo:redteam:systemprompt': new SystemPromptGrader()
 };
 
 export function getGraderById(id: string): RedteamModelGrader | undefined {
