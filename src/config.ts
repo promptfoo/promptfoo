@@ -135,11 +135,11 @@ export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<Unifi
 
 export async function readConfig(configPath: string): Promise<UnifiedConfig> {
   const ext = path.parse(configPath).ext;
-  if (isJavascriptFile(configPath)) {
-    return (await importModule(configPath)) as UnifiedConfig;
-  } else if (['.json', '.yaml', '.yml'].includes(ext)) {
+  if (ext === '.json' || ext === '.yaml' || ext === '.yml') {
     const rawConfig = yaml.load(fs.readFileSync(configPath, 'utf-8')) as UnifiedConfig;
     return dereferenceConfig(rawConfig || {});
+  } else if (isJavascriptFile(configPath)) {
+    return (await importModule(configPath)) as UnifiedConfig;
   }
   throw new Error(`Unsupported configuration file format: ${ext}`);
 }
