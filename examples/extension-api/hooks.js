@@ -1,26 +1,22 @@
-module.exports = {
-  beforeAll: async ({ suite }) => {
-    console.log('Starting test suite:', suite.description);
+async function extensionHook(hookName, context) {
+  if (hookName === 'beforeAll') {
+    console.log('Starting test suite:', context.suite.description);
     console.log('Initializing global test resources...');
-  },
-
-  afterAll: async ({ suite, results }) => {
-    console.log('Test suite completed:', suite.description);
+  } else if (hookName === 'afterAll') {
+    console.log('Test suite completed:', context.suite.description);
     console.log('Test results:', {
-      successes: results.stats.successes,
-      failures: results.stats.failures,
+      successes: context.results.stats.successes,
+      failures: context.results.stats.failures,
     });
     console.log('Cleaning up global test resources...');
-  },
-
-  beforeEach: async ({ test, suite }) => {
-    console.log('Starting test:', test.description);
+  } else if (hookName === 'beforeEach') {
+    console.log('Starting test:', context.test.description);
     console.log('Setting up test-specific resources...');
-  },
-
-  afterEach: async ({ test, result, suite }) => {
-    console.log('Finished test:', test.description);
-    console.log('Test result:', result.success ? 'Passed' : 'Failed');
+  } else if (hookName === 'afterEach') {
+    console.log('Finished test:', context.test.description);
+    console.log('Test result:', context.result.success ? 'Passed' : 'Failed');
     console.log('Cleaning up test-specific resources...');
-  },
-};
+  }
+}
+
+module.exports = extensionHook;
