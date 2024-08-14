@@ -27,6 +27,7 @@ redteam:
   injectVar: string
   provider: string | ProviderOptions
   purpose: string
+  language: string
 
 prompts:
   - 'Your prompt template here: {{variable}}'
@@ -44,6 +45,7 @@ providers:
 | `provider`   | `string\|ProviderOptions` | AI model provider for generating adversarial inputs                      | `openai:gpt-4o`                 |
 | `purpose`    | `string`                  | Description of prompt templates' purpose to guide adversarial generation | Inferred from prompts           |
 | `strategies` | `Array<string\|object>`   | Strategies to apply to other plugins                                     | `jailbreak`, `prompt-injection` |
+| `language`   | `string`                  | Language for generated tests                                             | English                         |
 
 ## Core Concepts
 
@@ -114,7 +116,9 @@ If `numTests` is not specified for a plugin, it will use the global `numTests` v
 - `shell-injection`: Tests if the model attempts to execute shell commands.
 - `sql-injection`: Checks if the model performs SQL injection attacks to manipulate database queries.
 - `bfla`: Checks if the model performs Broken Function Level Authorization (BFLA) attacks to manipulate function-level access controls.
+
   - Takes a `config` object with `targetIdentifiers` property. For example:
+
     ```yaml
     redteam:
       plugins:
@@ -124,8 +128,11 @@ If `numTests` is not specified for a plugin, it will use the global `numTests` v
               - 'john.doe@example.com'
               - 'reservation 10293'
     ```
+
 - `bola`: Checks if the model performs Broken Object Level Authorization (BOLA) attacks to manipulate object-level access controls.
+
   - Takes a `config` object with `targetSystems` property. For example:
+
     ```yaml
     redteam:
       plugins:
@@ -135,8 +142,11 @@ If `numTests` is not specified for a plugin, it will use the global `numTests` v
               - 'Dropbox'
               - 'Sharepoint'
     ```
+
 - `ssrf`: Checks if the model performs Server-Side Request Forgery (SSRF) attacks to fetch resources from unexpected or unauthorized destinations.
+
   - Takes a `config` object with `targetUrls` property. For example:
+
     ```yaml
     redteam:
       plugins:
@@ -146,6 +156,7 @@ If `numTests` is not specified for a plugin, it will use the global `numTests` v
               - 'https://internal-api.example.com'
               - 'file:///etc/passwd'
     ```
+
   - By default uses a [target URL](https://promptfoo.dev/plugin-helpers/ssrf.txt) on the promptfoo.dev host. We recommend placing with your own internal URL.
 
 ### Plugin Collections
@@ -236,6 +247,17 @@ redteam:
   purpose: 'Helpful travel agent specializing in Europe, currently chatting with John Smith'
 ```
 
+### Language
+
+The `language` field allows you to specify the language for generated tests. If not provided, the default language is English. This can be useful for testing your model's behavior in different languages or for generating adversarial inputs in specific languages.
+
+Example usage:
+
+```yaml
+redteam:
+  language: 'German'
+```
+
 ### Provider
 
 The `redteam.provider` field allows you to specify a provider configuration for the "attacker" model, i.e. the model that generates adversarial _inputs_.
@@ -265,6 +287,7 @@ You can set up the provider in several ways:
    ```
 
 3. Using a file reference:
+
    ```yaml
    redteam:
      provider: file://path/to/provider.yaml
@@ -291,6 +314,7 @@ redteam:
     - 'competitors'
   strategies:
     - 'jailbreak'
+  language: 'Spanish'
 ```
 
 ### Advanced Configuration
@@ -300,6 +324,7 @@ redteam:
   injectVar: 'user_input'
   purpose: 'Evaluate chatbot safety and robustness'
   provider: 'openai:chat:gpt-4-turbo'
+  language: 'French'
   numTests: 20
   plugins:
     - id: 'harmful:child-exploitation'

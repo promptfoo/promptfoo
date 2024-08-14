@@ -356,6 +356,22 @@ describe('redteamConfigSchema', () => {
     });
   });
 
+  it('should accept a language string', () => {
+    const input = {
+      language: 'German',
+      plugins: ['overreliance'],
+      strategies: ['jailbreak'],
+    };
+    expect(RedteamConfigSchema.safeParse(input)).toEqual({
+      success: true,
+      data: {
+        language: 'German',
+        plugins: [{ id: 'overreliance', config: undefined, numTests: undefined }],
+        strategies: [{ id: 'jailbreak' }],
+      },
+    });
+  });
+
   it('should include injectVar, provider, and purpose when all are provided', () => {
     const input = {
       injectVar: 'system',

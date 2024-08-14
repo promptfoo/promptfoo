@@ -149,12 +149,18 @@ class HarmfulPlugin extends PluginBase {
     return this.category.prompt;
   }
 
-  constructor(provider: ApiProvider, purpose: string, injectVar: string, categoryLabel: string) {
+  constructor(
+    provider: ApiProvider,
+    purpose: string,
+    injectVar: string,
+    categoryLabel: string,
+    modifiers: Record<string, string>,
+  ) {
     const category = REDTEAM_MODEL_CATEGORIES.find((cat) => cat.label === categoryLabel);
     if (!category) {
       throw new Error(`Category ${categoryLabel} not found`);
     }
-    super(provider, purpose, injectVar);
+    super(provider, purpose, injectVar, modifiers);
     this.category = category;
   }
 
@@ -220,13 +226,20 @@ export async function getHarmfulTests(
 
   for (const harmCategory of unalignedProviderHarmCategories) {
     const adversarialProvider = new PromptfooHarmfulCompletionProvider({ purpose, harmCategory });
-    const categoryPromises = Array.from({ length: numTests }, () =>
-      adversarialProvider.callApi(''),
-    );
-    const results = await Promise.all(categoryPromises);
+    const results = [];
+    for (let i = 0; i < numTests; i++) {
+      const result = await adversarialProvider.callApi('');
+      results.push(result);
+    }
     results.forEach((result) => {
-      const { output: generatedPrompt } = result;
-      invariant(typeof generatedPrompt === 'string', 'Expected generatedPrompt to be a string');
+      const { output: generatedPrompt, error } = result;
+      if (error) {
+        throw new Error(`Error generating prompt for ${harmCategory}: ${error}`);
+      }
+      invariant(
+        typeof generatedPrompt === 'string',
+        `Expected generatedPrompt to be a string, got ${JSON.stringify(result)}`,
+      );
       injectVars.set(generatedPrompt.split('\n')[0].trim(), harmCategory);
     });
   }
@@ -268,7 +281,7 @@ export async function getHarmfulTests(
   );
 
   for (const harmCategory of redteamProviderHarmCategories) {
-    const plugin = new HarmfulPlugin(provider, purpose, injectVar, harmCategory);
+    const plugin = new HarmfulPlugin(provider, purpose, injectVar, harmCategory, {});
     const results = await plugin.generateTests(numTests);
     // NOTE: harmCategory is necessary for the moderation assertion and not supported
     // by the base model.
