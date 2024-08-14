@@ -110,19 +110,21 @@ async function getTransformFunction(codeOrFilepath: string): Promise<Function> {
  * For inline code, it's treated as JavaScript.
  * @param transformInput - The output to be transformed. Can be a string or an object.
  * @param context - The context object containing variables and prompt information.
+ * @param validateReturn - Optional. If true, throws an error if the transform function doesn't return a value.
  * @returns A promise that resolves to the transformed output.
  * @throws Error if the file format is unsupported or if the transform function
- * doesn't return a value.
+ * doesn't return a value (unless validateReturn is false).
  */
 export async function transform(
   codeOrFilepath: string,
   transformInput: string | object | undefined,
   context: TransformContext,
-): Promise<string | object> {
+  validateReturn: boolean = true,
+): Promise<string | object | undefined> {
   const postprocessFn = await getTransformFunction(codeOrFilepath);
   const ret = await Promise.resolve(postprocessFn(transformInput, context));
 
-  if (ret == null) {
+  if (validateReturn && ret == null) {
     throw new Error(`Transform function did not return a value\n\n${codeOrFilepath}`);
   }
 

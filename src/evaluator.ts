@@ -110,13 +110,13 @@ export async function runExtensionHook(
   hookName: string,
   context: any,
 ) {
-  if (!extensions || extensions.length === 0) {
+  if (!extensions || !Array.isArray(extensions) || extensions.length === 0) {
     return;
   }
   for (const extension of extensions) {
+    invariant(typeof extension === 'string', 'extension must be a string');
     logger.debug(`Running extension hook ${hookName} with context ${JSON.stringify(context)}`);
-    const result = await transform(extension, hookName, context);
-    logger.warn(result);
+    await transform(extension, hookName, context, false);
   }
 }
 

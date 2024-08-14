@@ -162,5 +162,22 @@ describe('util', () => {
         [output, expect.any(Object)],
       );
     });
+
+    it('does not throw error when validateReturn is false and function returns undefined', async () => {
+      const output = 'test';
+      const context = { vars: {}, prompt: {} };
+      const transformFunction = ''; // Empty function, returns undefined
+      const result = await transform(transformFunction, output, context, false);
+      expect(result).toBeUndefined();
+    });
+
+    it('throws error when validateReturn is true and function returns undefined', async () => {
+      const output = 'test';
+      const context = { vars: {}, prompt: {} };
+      const transformFunction = ''; // Empty function, returns undefined
+      await expect(transform(transformFunction, output, context, true)).rejects.toThrow(
+        'Transform function did not return a value',
+      );
+    });
   });
 });
