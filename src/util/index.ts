@@ -290,6 +290,8 @@ export function listPreviousResults(
   datasetId?: string,
 ): ResultLightweight[] {
   const db = getDb();
+  const startTime = performance.now();
+
   const query = db
     .select({
       evalId: evals.id,
@@ -308,13 +310,19 @@ export function listPreviousResults(
     );
 
   const results = query.orderBy(desc(evals.createdAt)).limit(limit).all();
-  return results.map((result) => ({
+  const mappedResults = results.map((result) => ({
     evalId: result.evalId,
     createdAt: result.createdAt,
     description: result.description,
     numTests: result.numTests,
     datasetId: result.datasetId,
   }));
+
+  const endTime = performance.now();
+  const executionTime = endTime - startTime;
+  logger.debug(`listPreviousResults execution time: ${executionTime.toFixed(2)}ms`);
+
+  return mappedResults;
 }
 
 /**
