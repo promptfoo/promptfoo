@@ -108,7 +108,7 @@ export function generateVarCombinations(
 export async function runExtensionHook(
   extensions: string[] | undefined,
   hookName: string,
-  context: any, // Can be TransformContext or contain the testSuite
+  context: any,
 ) {
   if (!extensions || extensions.length === 0) {
     return;

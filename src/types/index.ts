@@ -411,6 +411,9 @@ export const VarsSchema = z.record(
     z.array(z.any()),
   ]),
 );
+
+export type Vars = z.infer<typeof VarsSchema>;
+
 // Each test case is graded pass/fail with a score.  A test case represents a unique input to the LLM after substituting `vars` in the prompt.
 export const TestCaseSchema = z.object({
   // Optional description of what you're testing
