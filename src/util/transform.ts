@@ -1,4 +1,6 @@
+import path from 'path';
 import { isJavascriptFile } from '.';
+import cliState from '../cliState';
 import { importModule } from '../esm';
 import { runPython } from '../python/pythonUtils';
 import type { Prompt, Vars } from '../types';
@@ -68,11 +70,11 @@ async function getFileTransformFunction(filePath: string): Promise<Function> {
   const [actualFilePath, functionName] = parseFilePathAndFunctionName(
     filePath.slice('file://'.length),
   );
-
-  if (isJavascriptFile(actualFilePath)) {
-    return getJavascriptTransformFunction(actualFilePath, functionName);
-  } else if (actualFilePath.endsWith('.py')) {
-    return getPythonTransformFunction(actualFilePath, functionName);
+  const fullPath = path.join(cliState.basePath || '', actualFilePath);
+  if (isJavascriptFile(fullPath)) {
+    return getJavascriptTransformFunction(fullPath, functionName);
+  } else if (fullPath.endsWith('.py')) {
+    return getPythonTransformFunction(fullPath, functionName);
   }
   throw new Error(`Unsupported transform file format: file://${actualFilePath}`);
 }
