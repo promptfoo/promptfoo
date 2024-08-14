@@ -1366,7 +1366,7 @@ describe('renderPrompt', () => {
     expect(renderedPrompt).toBe('Test prompt with loaded from file');
   });
 
-  it.skip('should load external js files in renderPrompt and execute the exported function', async () => {
+  it('should load external js files in renderPrompt and execute the exported function', async () => {
     const prompt = toPrompt('Test prompt with {{ var1 }} {{ var2 }} {{ var3 }}');
     const vars = {
       var1: 'file:///path/to/testFunction.js',
