@@ -2,7 +2,7 @@ import { createHash } from 'crypto';
 import { stringify } from 'csv-stringify/sync';
 import dedent from 'dedent';
 import dotenv from 'dotenv';
-import { desc, eq, like, and } from 'drizzle-orm';
+import { desc, eq, like, and, sql } from 'drizzle-orm';
 import deepEqual from 'fast-deep-equal';
 import * as fs from 'fs';
 import { globSync } from 'glob';
@@ -295,8 +295,7 @@ export function listPreviousResults(
       evalId: evals.id,
       createdAt: evals.createdAt,
       description: evals.description,
-      config: evals.config,
-      results: evals.results,
+      numTests: sql<number>`json_array_length(${evals.results}->'table'->'body')`,
       datasetId: evalsToDatasets.datasetId,
     })
     .from(evals)
@@ -309,17 +308,13 @@ export function listPreviousResults(
     );
 
   const results = query.orderBy(desc(evals.createdAt)).limit(limit).all();
-
-  return results.map((result) => {
-    const numTests = result.results.table.body.length;
-    return {
-      evalId: result.evalId,
-      createdAt: result.createdAt,
-      description: result.description,
-      numTests,
-      datasetId: result.datasetId,
-    };
-  });
+  return results.map((result) => ({
+    evalId: result.evalId,
+    createdAt: result.createdAt,
+    description: result.description,
+    numTests: result.numTests,
+    datasetId: result.datasetId,
+  }));
 }
 
 /**
