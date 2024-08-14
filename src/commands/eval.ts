@@ -192,8 +192,11 @@ export async function doEval(
       }
     }
     printBorder();
+    const totalTests = summary.stats.successes + summary.stats.failures;
+    const passRate = (summary.stats.successes / totalTests) * 100;
     logger.info(chalk.green.bold(`Successes: ${summary.stats.successes}`));
     logger.info(chalk.red.bold(`Failures: ${summary.stats.failures}`));
+    logger.info(chalk.blue.bold(`Pass Rate: ${passRate.toFixed(2)}%`));
     logger.info(
       `Token usage: Total ${summary.stats.tokenUsage.total}, Prompt ${summary.stats.tokenUsage.prompt}, Completion ${summary.stats.tokenUsage.completion}, Cached ${summary.stats.tokenUsage.cached}`,
     );
@@ -273,9 +276,16 @@ export async function doEval(
     } else {
       logger.info('Done.');
 
-      if (summary.stats.failures > 0) {
-        const exitCode = Number(process.env.PROMPTFOO_FAILED_TEST_EXIT_CODE);
-        process.exit(isNaN(exitCode) ? 100 : exitCode);
+      const passRateThreshold = Number(process.env.PROMPTFOO_PASS_RATE_THRESHOLD || '100');
+      const failedTestExitCode = Number(process.env.PROMPTFOO_FAILED_TEST_EXIT_CODE || '100');
+
+      if (passRate < passRateThreshold) {
+        logger.warn(
+          chalk.yellow(
+            `Pass rate ${passRate.toFixed(2)}% is below the threshold of ${passRateThreshold}%`,
+          ),
+        );
+        process.exit(failedTestExitCode);
       }
     }
   };
