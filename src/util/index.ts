@@ -578,9 +578,7 @@ export async function updateResult(
   }
 }
 
-export async function readLatestResults(
-  filterDescription?: string,
-): Promise<ResultsFile | undefined> {
+export async function getLatestEval(filterDescription?: string): Promise<ResultsFile | undefined> {
   const db = getDb();
   let latestResults = await db
     .select({
