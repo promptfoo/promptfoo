@@ -3,115 +3,84 @@
 This module provides functionality for handling extension hooks in promptfoo.
 It allows for executing custom actions before and after test suites and
 individual evaluations, as well as running setup and teardown commands.
-
-Example usage:
-    extension_hook("beforeAll", context)
-    extension_hook("beforeEach", context)
-    extension_hook("afterEach", context)
-    extension_hook("afterAll", context)
-
-Typical usage example:
-
-    from hooks import extension_hook
-
-    context = {
-        "evals": [...],
-        "suite": {"name": "My Test Suite"},
-    }
-    extension_hook("beforeAll", context)
 """
 
-import subprocess
-from typing import Any, Dict, List, Set
+import logging
+import os
+from datetime import datetime
+
+# Set up logging only if it hasn't been set up already
+if not logging.getLogger().handlers:
+    log_filename = f"promptfoo_run_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+    logging.basicConfig(
+        filename=log_filename,
+        level=logging.INFO,
+        format="%(asctime)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
+counter = 0
 
 
-def extract_unique_var_values(evals: List[Dict[str, Any]], var_name: str) -> Set[str]:
-    """Extracts unique values for a given variable from a list of evaluations.
+def extension_hook(hook_name: str, context: dict) -> None:
+    """Handles different extension hooks for promptfoo.
+
+    This function is called at various points during the test execution process.
+    It logs information about the test suite and individual tests.
 
     Args:
-        evals: A list of evaluation dictionaries.
-        var_name: The name of the variable to extract values for.
+        hook_name (str): The name of the hook being called. Can be one of
+            "beforeAll", "beforeEach", "afterEach", or "afterAll".
+        context (dict): A dictionary containing contextual information for the hook.
+            The contents of this dictionary vary depending on the hook being called.
 
     Returns:
-        A set of unique values for the specified variable.
+        None
+
+    Global Variables:
+        counter (int): Keeps track of the number of tests completed.
+
+    Logs:
+        Information about the test suite and individual tests, including setup,
+        completion, results, and token usage.
     """
-    values = set()
-    for eval in evals:
-        test = eval.get("test", {})
-        vars = test.get("vars", {})
-        val = vars.get(var_name)
-        if val:
-            values.add(val)
+    global counter
 
-    return values
-
-
-def run_commands(commands: Set[str], action: str) -> None:
-    """Runs a set of shell commands and handles errors.
-
-    Args:
-        commands: A set of shell commands to run.
-        action: A string describing the action (e.g., "setup" or "teardown").
-
-    Raises:
-        subprocess.CalledProcessError: If a command fails to execute.
-    """
-    for command in commands:
-        print(f"Running {action} command: {command}")
-        try:
-            subprocess.run(command, shell=True, check=True)
-        except subprocess.CalledProcessError as e:
-            print(f"Error running {action} command: {e}")
-
-
-def extension_hook(hook_name: str, context: Dict[str, Any]) -> None:
-    """Handles different extension hooks.
-
-    This function processes various hook types and performs actions based on
-    the hook name and provided context.
-
-    Args:
-        hook_name: The name of the hook being called (e.g., "beforeAll").
-        context: A dictionary containing context information for the hook.
-
-    Supported hook names:
-        - beforeAll: Runs before all evaluations in a test suite.
-        - afterAll: Runs after all evaluations in a test suite.
-        - beforeEach: Runs before each individual evaluation.
-        - afterEach: Runs after each individual evaluation.
-    """
     if hook_name == "beforeAll":
-        evals = context.get("evals", [])
         suite = context.get("suite", {})
-        print(f"beforeAll: Starting test suite '{suite.get('name', 'Unnamed')}'")
-        setup_commands = extract_unique_var_values(evals, "setup")
-        run_commands(setup_commands, "setup")
-
-    elif hook_name == "afterAll":
-        evals = context.get("evals", [])
-        results = context.get("results", [])
-        print(f"afterAll: Completed {len(results)} evaluations")
-        teardown_commands = extract_unique_var_values(evals, "teardown")
-        run_commands(teardown_commands, "teardown")
+        logging.info(
+            f"Setting up test suite: {suite.get('description') or 'Unnamed suite'}"
+        )
+        logging.info(f"Total prompts: {len(suite.get('prompts', []))}")
+        logging.info(f"Total providers: {len(suite.get('providers', []))}")
+        logging.info(f"Total tests: {len(suite.get('tests', []))}")
 
     elif hook_name == "beforeEach":
-        eval_data = context.get("eval", {})
-        test = eval_data.get("test", {})
-        print(
-            f"beforeEach: Starting evaluation for '{test.get('description', 'Unnamed test')}'"
-        )
+        logging.info("Preparing test")
 
     elif hook_name == "afterEach":
-        eval_data = context.get("eval", {})
         result = context.get("result", {})
-        test = eval_data.get("test", {})
-        print(
-            f"afterEach: Completed evaluation for '{test.get('description', 'Unnamed test')}'"
+        result_str = ""
+        if result:
+            success = "Pass" if result.get("success") else "Fail"
+            score = result.get("score", 0)
+            result_str = f", Result: {success}, Score: {score}"
+        logging.info(f"Completed test {counter}{result_str}")
+        counter += 1
+
+    elif hook_name == "afterAll":
+        results = context.get("results", [])
+        logging.info("Test suite completed")
+        logging.info(f"Total tests run: {len(results)}")
+
+        successes = sum(1 for r in results if r.get("success"))
+        failures = sum(1 for r in results if not r.get("success"))
+        logging.info(f"Successes: {successes}")
+        logging.info(f"Failures: {failures}")
+
+        total_token_usage = sum(
+            r.get("response", {}).get("tokenUsage", {}).get("total", 0) for r in results
         )
-        print(f"Result: {result.get('pass', False)}")
+        logging.info(f"Total token usage: {total_token_usage}")
 
-
-def get_transform(output, context):
-    print(f"get_transform: {output}")
-    print(f"context: {context}")
-    return output
+    logging.info("")  # Add a blank line for readability between hooks

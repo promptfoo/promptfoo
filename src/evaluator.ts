@@ -712,6 +712,7 @@ class Evaluator {
 
       await runExtensionHook(testSuite.extensions, 'afterEach', {
         test: evalStep.test,
+        result: row,
       });
     };
 
