@@ -1,15 +1,8 @@
 import * as fs from 'fs';
 import glob from 'glob';
 import * as path from 'path';
-import { importModule } from '../src/esm';
-import {
-  evaluate,
-  generateVarCombinations,
-  isAllowedPrompt,
-  runExtensionHook,
-} from '../src/evaluator';
+import { evaluate, generateVarCombinations, isAllowedPrompt } from '../src/evaluator';
 import { renderPrompt, resolveVariables } from '../src/evaluatorHelpers';
-import { runPython } from '../src/python/pythonUtils';
 import type { ApiProvider, TestSuite, Prompt } from '../src/types';
 
 jest.mock('node-fetch', () => jest.fn());
@@ -32,26 +25,11 @@ jest.mock('fs', () => ({
   },
 }));
 
-jest.mock('../src/python/pythonUtils', () => ({
-  runPython: jest.fn(),
-}));
-
-jest.mock('../src/esm', () => ({
-  importModule: jest.fn(),
-}));
-
+jest.mock('../src/esm');
 jest.mock('../src/database', () => ({
   getDb: jest.fn(),
 }));
 jest.mock('../src/logger');
-
-jest.mock('../src/evaluator', () => {
-  const actual = jest.requireActual('../src/evaluator');
-  return {
-    ...actual,
-    runExtensionHook: jest.fn(actual.runExtensionHook),
-  };
-});
 
 const mockApiProvider: ApiProvider = {
   id: jest.fn().mockReturnValue('test-provider'),
@@ -80,65 +58,6 @@ const mockGradingApiProviderFails: ApiProvider = {
 function toPrompt(text: string): Prompt {
   return { raw: text, label: text };
 }
-
-describe('runExtensionHook', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
-
-  it('should not run any extensions if none are provided', async () => {
-    await runExtensionHook(undefined, 'beforeAll', { suite: {} as TestSuite });
-    expect(runPython).not.toHaveBeenCalled();
-    expect(importModule).not.toHaveBeenCalled();
-  });
-
-  it.skip('should run a Python extension', async () => {
-    const mockSuite: TestSuite = { extensions: ['python:test_extension.py'] } as TestSuite;
-    jest.mocked(runPython).mockResolvedValue('Python extension result');
-
-    await runExtensionHook(mockSuite.extensions, 'beforeAll', { suite: mockSuite });
-
-    expect(runPython).toHaveBeenCalledWith(
-      expect.stringContaining('test_extension.py'),
-      'extension_hook',
-      ['beforeAll', { suite: mockSuite }],
-    );
-  });
-
-  it('should run a JavaScript extension', async () => {
-    const mockExtensionFn = jest.fn().mockReturnValue('JavaScript extension result');
-    jest.mocked(importModule).mockResolvedValue(mockExtensionFn);
-
-    const mockSuite: TestSuite = { extensions: ['file://test_extension.js'] } as TestSuite;
-    await runExtensionHook(mockSuite.extensions, 'beforeAll', { suite: mockSuite });
-
-    expect(importModule).toHaveBeenCalledWith(expect.stringContaining('test_extension.js'));
-    expect(mockExtensionFn).toHaveBeenCalledWith('beforeAll', { suite: mockSuite });
-  });
-
-  it('should handle JavaScript modules with default export', async () => {
-    const mockDefaultExportFn = jest.fn().mockReturnValue('Default export result');
-    jest.mocked(importModule).mockResolvedValue({ default: mockDefaultExportFn });
-
-    const mockSuite: TestSuite = { extensions: ['file://default_export.js'] } as TestSuite;
-    await runExtensionHook(mockSuite.extensions, 'beforeEach', { test: {}, suite: mockSuite });
-
-    expect(importModule).toHaveBeenCalledWith(expect.stringContaining('default_export.js'));
-    expect(mockDefaultExportFn).toHaveBeenCalledWith('beforeEach', { test: {}, suite: mockSuite });
-  });
-
-  it('should throw an error for unsupported file formats', async () => {
-    const mockSuite: TestSuite = { extensions: ['file://unsupported.txt'] } as TestSuite;
-
-    await expect(
-      runExtensionHook(mockSuite.extensions, 'afterEach', {
-        test: {},
-        result: {},
-        suite: mockSuite,
-      }),
-    ).rejects.toThrow('Unsupported transform file format: file://unsupported.txt');
-  });
-});
 
 describe('evaluator', () => {
   beforeEach(() => {
