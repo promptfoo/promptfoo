@@ -548,31 +548,43 @@ Use `defaultTest` apply a transform option to every test case in your test suite
 
 ### Transforms from separate files
 
-Transform functions can be executed from external Python or Javascript files. For example:
+Transform functions can be executed from external JavaScript or Python files. You can optionally specify a function name to use.
+
+For JavaScript:
 
 ```yaml
 defaultTest:
   options:
-    transform: file://transform.js
+    transform: file://transform.js:customTransform
 ```
 
-Here's `transform.js`:
-
 ```js
-module.exports = (output, context) => {
-  // context.vars, context.prompt
-  // ...
-  return output.toUpperCase();
+module.exports = {
+  customTransform: (output, context) => {
+    // context.vars, context.prompt
+    return output.toUpperCase();
+  },
 };
 ```
 
-Or the equivalent `transform.py`:
+For Python:
 
-```py
+```yaml
+defaultTest:
+  options:
+    transform: file://transform.py
+```
+
+```python
 def get_transform(output, context):
     # context['vars'], context['prompt']
-    # ...
     return output.upper()
+```
+
+If no function name is specified for Python files, it defaults to `get_transform`. To use a custom Python function, specify it in the file path:
+
+```yaml
+transform: file://transform.py:custom_python_transform
 ```
 
 ## Config structure and organization

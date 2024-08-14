@@ -110,6 +110,7 @@ def extension_hook(hook_name: str, context: Dict[str, Any]) -> None:
         )
         print(f"Result: {result.get('pass', False)}")
 
+
 def get_transform(output, context):
     print(f"get_transform: {output}")
     print(f"context: {context}")

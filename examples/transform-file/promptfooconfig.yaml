@@ -8,8 +8,8 @@ providers:
 
 defaultTest:
   options:
-    # transform: file://transform.js
-    transform: file://transform.py:func_name
+    transform: file://transform.js
+    # transform: file://transform.py:custom_func_name
 
 tests:
   - vars:
