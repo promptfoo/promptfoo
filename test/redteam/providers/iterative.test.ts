@@ -44,9 +44,7 @@ describe('RedteamIterativeProvider', () => {
     it('should run the red team conversation and return the best response', async () => {
       const mockContext = {
         originalProvider: {
-          callApi: jest.mocked(jest
-            .fn()
-            .mockResolvedValue({ output: 'Target response' })),
+          callApi: jest.mocked(jest.fn().mockResolvedValue({ output: 'Target response' })),
         },
         vars: { goal: 'Test goal' },
         prompt: { text: 'Test prompt', raw: 'Test prompt', label: 'Test label' },

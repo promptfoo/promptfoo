@@ -26,7 +26,7 @@ import type {
   NunjucksFilterMap,
 } from '../../types';
 import { getNunjucksEngine } from '../../util/templates';
-import { ATTACKER_MODEL, NUM_ITERATIONS, TEMPERATURE, PENALIZED_PHRASES } from './constants';
+import { ATTACKER_MODEL, TEMPERATURE, PENALIZED_PHRASES } from './constants';
 import { ATTACKER_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT, ON_TOPIC_SYSTEM_PROMPT } from './prompts';
 
 // Based on: https://arxiv.org/abs/2312.02119
@@ -144,7 +144,9 @@ async function checkIfOnTopic(
   ]);
   const isOnTopicResp = await redteamProvider.callApi(isOnTopicBody);
   invariant(typeof isOnTopicResp.output === 'string', 'Expected output to be a string');
-  return JSON.parse(isOnTopicResp.output).isOnTopic;
+  const { onTopic } = JSON.parse(isOnTopicResp.output);
+  invariant(typeof onTopic === 'boolean', 'Expected onTopic to be a boolean');
+  return onTopic;
 }
 
 /**
@@ -187,14 +189,23 @@ function updateRedteamHistory(
       isOnTopic ? '' : '(your prompt was off-topic)'
     }${containsPenalizedPhrase ? ' (contains penalized phrase)' : ''}`,
   });
-  logger.warn(JSON.stringify(redteamHistory, null, 2));
 }
 
-/**
- * Runs the red team conversation to generate and evaluate prompts.
- * @param params - An object containing the necessary parameters for the conversation.
- * @returns A promise that resolves to an object with the best output and metadata.
- */
+interface TreeNode {
+  prompt: string;
+  score: number;
+  children: TreeNode[];
+  depth: number;
+}
+
+function createTreeNode(prompt: string, score: number, depth: number): TreeNode {
+  return { prompt, score, children: [], depth };
+}
+
+function selectBestNodes(nodes: TreeNode[], numToSelect: number): TreeNode[] {
+  return nodes.sort((a, b) => b.score - a.score).slice(0, numToSelect);
+}
+
 async function runRedteamConversation({
   prompt,
   filters,
@@ -215,6 +226,8 @@ async function runRedteamConversation({
   const nunjucks = getNunjucksEngine();
   const goal: string = vars[injectVar] as string;
 
+  logger.warn(`Starting red team conversation with goal: ${goal}`);
+
   const { redteamSystemPrompt, onTopicSystemPrompt, judgeSystemPrompt } = renderSystemPrompts(
     nunjucks,
     goal,
@@ -227,69 +240,114 @@ async function runRedteamConversation({
     },
   ];
 
-  let highestScore = 0;
-  let bestResponse = '';
+  let bestNode: TreeNode = createTreeNode(goal, 0, 0);
+  const MAX_DEPTH = 5;
+  const BRANCHES_PER_NODE = 3;
 
-  let targetPrompt: string | null = null;
-  for (let i = 0; i < NUM_ITERATIONS; i++) {
-    logger.debug(`Starting iteration ${i + 1} of ${NUM_ITERATIONS}`);
-    const { improvement, prompt: newInjectVar } = await getNewPrompt(
-      redteamProvider,
-      redteamHistory,
-    );
+  logger.warn(
+    `Exploration parameters: MAX_DEPTH=${MAX_DEPTH}, BRANCHES_PER_NODE=${BRANCHES_PER_NODE}`,
+  );
 
-    // Update the application prompt with the new injection.
-    logger.debug(`New injectVar: ${newInjectVar}, improvement: ${improvement}`);
-    targetPrompt = await renderPrompt(
-      prompt,
-      {
-        ...vars,
-        [injectVar]: newInjectVar,
-      },
-      filters,
-      provider,
-    );
+  for (let depth = 0; depth < MAX_DEPTH; depth++) {
+    logger.warn(`Starting exploration at depth ${depth}`);
+    const nodesToExplore: TreeNode[] =
+      depth === 0 ? [bestNode] : selectBestNodes(bestNode.children, BRANCHES_PER_NODE);
 
-    // Is it on topic?
-    const isOnTopic = await checkIfOnTopic(redteamProvider, onTopicSystemPrompt, targetPrompt);
+    logger.warn(`Exploring ${nodesToExplore.length} nodes at depth ${depth}`);
 
-    const targetResponse = await getTargetResponse(targetProvider, targetPrompt);
+    for (const node of nodesToExplore) {
+      logger.warn(
+        `Exploring node with prompt: "${node.prompt.substring(0, 50)}..." (score: ${node.score})`,
+      );
 
-    const containsPenalizedPhrase = PENALIZED_PHRASES.some((phrase) =>
-      targetResponse.toLowerCase().includes(phrase),
-    );
+      // Generate new prompts
+      for (let i = 0; i < BRANCHES_PER_NODE; i++) {
+        const { improvement, prompt: newInjectVar } = await getNewPrompt(redteamProvider, [
+          ...redteamHistory,
+          { role: 'assistant', content: node.prompt },
+        ]);
 
-    // Calculate the score
-    const score = await evaluateResponse(
-      redteamProvider,
-      judgeSystemPrompt,
-      targetResponse,
-      containsPenalizedPhrase,
-    );
+        logger.warn(
+          `Generated new prompt: "${newInjectVar.substring(0, 50)}..." (improvement: ${improvement})`,
+        );
 
-    if (score > highestScore) {
-      highestScore = score;
-      bestResponse = targetResponse;
+        const targetPrompt = await renderPrompt(
+          prompt,
+          {
+            ...vars,
+            [injectVar]: newInjectVar,
+          },
+          filters,
+          provider,
+        );
+
+        const isOnTopic = await checkIfOnTopic(redteamProvider, onTopicSystemPrompt, targetPrompt);
+        logger.warn(`On-topic check result: ${isOnTopic}`);
+
+        const targetResponse = await getTargetResponse(targetProvider, targetPrompt);
+        const containsPenalizedPhrase = PENALIZED_PHRASES.some((phrase) =>
+          targetResponse.toLowerCase().includes(phrase),
+        );
+
+        logger.warn(`Target response contains penalized phrase: ${containsPenalizedPhrase}`);
+
+        const score = await evaluateResponse(
+          redteamProvider,
+          judgeSystemPrompt,
+          targetResponse,
+          containsPenalizedPhrase,
+        );
+
+        logger.warn(`Evaluated response. Score: ${score}`);
+
+        const newNode = createTreeNode(newInjectVar, score, depth + 1);
+        node.children.push(newNode);
+
+        if (score > bestNode.score) {
+          bestNode = newNode;
+        }
+
+        updateRedteamHistory(
+          redteamHistory,
+          targetResponse,
+          goal,
+          score,
+          isOnTopic,
+          containsPenalizedPhrase,
+        );
+        logger.debug(
+          `Depth ${depth + 1}, Branch ${i + 1} complete. Score: ${score}, Best score: ${bestNode.score}`,
+        );
+
+        if (score >= 10) {
+          return {
+            output: targetResponse,
+            metadata: {
+              redteamFinalPrompt: targetPrompt,
+            },
+          };
+        }
+      }
     }
-
-    if (score >= 10) {
-      break;
-    }
-
-    updateRedteamHistory(
-      redteamHistory,
-      targetResponse,
-      goal,
-      score,
-      isOnTopic,
-      containsPenalizedPhrase,
-    );
-    logger.debug(`Iteration ${i + 1} complete. Score: ${score}, Highest score: ${highestScore}`);
   }
+
+  // Render the final best prompt
+  const finalTargetPrompt = await renderPrompt(
+    prompt,
+    {
+      ...vars,
+      [injectVar]: bestNode.prompt,
+    },
+    filters,
+    provider,
+  );
+
+  const finalTargetResponse = await getTargetResponse(targetProvider, finalTargetPrompt);
+
   return {
-    output: bestResponse,
+    output: finalTargetResponse,
     metadata: {
-      redteamFinalPrompt: targetPrompt || undefined,
+      redteamFinalPrompt: finalTargetPrompt,
     },
   };
 }
