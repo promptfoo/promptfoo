@@ -203,7 +203,7 @@ function createTreeNode(prompt: string, score: number, depth: number): TreeNode 
 }
 
 function selectBestNodes(nodes: TreeNode[], numToSelect: number): TreeNode[] {
-  return nodes.sort((a, b) => b.score - a.score).slice(0, numToSelect);
+  return nodes.sort((a, b) => b.score - a.score).slice(0, Math.min(numToSelect, nodes.length));
 }
 
 async function runRedteamConversation({
@@ -240,7 +240,7 @@ async function runRedteamConversation({
     },
   ];
 
-  let bestNode: TreeNode = createTreeNode(goal, 0, 0);
+  let currentBestNodes: TreeNode[] = [createTreeNode(goal, 0, 0)];
   const MAX_DEPTH = 5;
   const BRANCHES_PER_NODE = 3;
 
@@ -248,14 +248,15 @@ async function runRedteamConversation({
     `Exploration parameters: MAX_DEPTH=${MAX_DEPTH}, BRANCHES_PER_NODE=${BRANCHES_PER_NODE}`,
   );
 
+  let bestNode: TreeNode = createTreeNode(goal, 0, 0);
+
   for (let depth = 0; depth < MAX_DEPTH; depth++) {
     logger.warn(`Starting exploration at depth ${depth}`);
-    const nodesToExplore: TreeNode[] =
-      depth === 0 ? [bestNode] : selectBestNodes(bestNode.children, BRANCHES_PER_NODE);
+    logger.warn(`Exploring ${currentBestNodes.length} nodes at depth ${depth}`);
 
-    logger.warn(`Exploring ${nodesToExplore.length} nodes at depth ${depth}`);
+    const nextLevelNodes: TreeNode[] = [];
 
-    for (const node of nodesToExplore) {
+    for (const node of currentBestNodes) {
       logger.warn(
         `Exploring node with prompt: "${node.prompt.substring(0, 50)}..." (score: ${node.score})`,
       );
@@ -301,7 +302,7 @@ async function runRedteamConversation({
         logger.warn(`Evaluated response. Score: ${score}`);
 
         const newNode = createTreeNode(newInjectVar, score, depth + 1);
-        node.children.push(newNode);
+        nextLevelNodes.push(newNode);
 
         if (score > bestNode.score) {
           bestNode = newNode;
@@ -329,6 +330,10 @@ async function runRedteamConversation({
         }
       }
     }
+
+    // Select the best nodes for the next iteration
+    currentBestNodes = selectBestNodes(nextLevelNodes, BRANCHES_PER_NODE);
+    logger.warn(`Selected ${currentBestNodes.length} best nodes for next depth`);
   }
 
   // Render the final best prompt
