@@ -140,9 +140,9 @@ export class GroqProvider implements ApiProvider {
 
       return response;
     } catch (err) {
-      if (err instanceof Groq.APIError) {
+      if (err instanceof Error && 'status' in err) {
         return {
-          error: `API call error: ${err.status} ${err.name}: ${err.message}`,
+          error: `API call error: ${(err as any).status} ${err.name}: ${err.message}`,
         };
       }
       return {
