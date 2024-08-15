@@ -1,13 +1,34 @@
 prompts:
-  - 'Answer this question as concisely as possible: {{question}}'
+  - 'Answer this question as concisely as possible: {{calculation}}'
+  - 'Calculate the following and provide a brief explanation: {{calculation}}'
 
 providers:
-  - id: groq:mixtral-8x7b-32768
-  - id: groq:llama3-8b-8192
+  - id: groq:gemma2-9b-it
+  - id: groq:llama3-groq-8b-8192-tool-use-preview
+    config:
+      tools:
+        - type: function
+          function:
+            name: calculate
+            description: 'Evaluate a mathematical expression'
+            parameters:
+              type: object
+              properties:
+                expression:
+                  type: string
+                  description: 'The mathematical expression to evaluate'
+              required: ['expression']
+      tool_choice: auto
 
 tests:
   - vars:
-      question: What is the capital of France?
+      calculation: 25 * 4 + 10
     assert:
       - type: icontains
-        value: Paris
+        value: 110
+
+  - vars:
+      calculation: (8 + 2) * 5
+    assert:
+      - type: icontains
+        value: 50

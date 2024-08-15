@@ -44,7 +44,7 @@ describe('Groq', () => {
           usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
         };
         const mockCreate = jest.fn().mockResolvedValue(mockResponse);
-        (Groq as jest.MockedClass<typeof Groq>).mockImplementation(
+        (jest.mocked(Groq)).mockImplementation(
           () =>
             ({
               chat: {
@@ -85,7 +85,7 @@ describe('Groq', () => {
           usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
         };
         const mockCreate = jest.fn().mockResolvedValue(mockResponse);
-        (Groq as jest.MockedClass<typeof Groq>).mockImplementation(
+        (jest.mocked(Groq)).mockImplementation(
           () =>
             ({
               chat: {
@@ -117,7 +117,7 @@ describe('Groq', () => {
           usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
         };
         const mockCreate = jest.fn().mockResolvedValue(mockResponse);
-        (Groq as jest.MockedClass<typeof Groq>).mockImplementation(
+        (jest.mocked(Groq)).mockImplementation(
           () =>
             ({
               chat: {
@@ -145,7 +145,7 @@ describe('Groq', () => {
         mockError.name = 'APIError';
         (mockError as any).status = 400;
         const mockCreate = jest.fn().mockRejectedValue(mockError);
-        (Groq as jest.MockedClass<typeof Groq>).mockImplementation(
+        (jest.mocked(Groq)).mockImplementation(
           () =>
             ({
               chat: {
@@ -166,7 +166,7 @@ describe('Groq', () => {
       it('should handle non-API errors', async () => {
         const mockError = new Error('Unknown error');
         const mockCreate = jest.fn().mockRejectedValue(mockError);
-        (Groq as jest.MockedClass<typeof Groq>).mockImplementation(
+        (jest.mocked(Groq)).mockImplementation(
           () =>
             ({
               chat: {
@@ -198,7 +198,7 @@ describe('Groq', () => {
           usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
         };
         const mockCreate = jest.fn().mockResolvedValue(mockResponse);
-        (Groq as jest.MockedClass<typeof Groq>).mockImplementation(
+        (jest.mocked(Groq)).mockImplementation(
           () =>
             ({
               chat: {
