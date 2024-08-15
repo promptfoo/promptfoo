@@ -5,7 +5,7 @@ sidebar_label: Intro
 
 # LLM red teaming
 
-LLM red teaming is a proactive approach to find vulnerabilities in AI systems by simulating malicious inputs.
+LLM red teaming is a proactive approach to finding vulnerabilities in AI systems by simulating malicious inputs.
 
 As of today, there are multiple inherent security challenges with LLM architectures. Depending on your system's design, e.g. [RAG](/docs/red-team/rag/), [LLM agent](/docs/red-team/agents/), or [chatbot](/docs/red-team/llm-vulnerability-types/), you will face different types of vulnerabilities.
 
