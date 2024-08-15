@@ -1,6 +1,4 @@
 import { promises as fs } from 'fs';
-import path from 'path';
-import os from 'os';
 import { PythonShell } from 'python-shell';
 import { runPython } from '../src/python/pythonUtils';
 import { runPythonCode } from '../src/python/wrapper';
@@ -35,16 +33,25 @@ describe('Python Wrapper', () => {
       const result = await runPython('testScript.py', 'testMethod', ['arg1', { key: 'value' }]);
 
       expect(result).toBe('test result');
-      expect(mockPythonShellRun).toHaveBeenCalledWith('wrapper.py', expect.objectContaining({
-        args: expect.arrayContaining([
-          expect.stringContaining('testScript.py'),
-          'testMethod',
-          expect.stringContaining('promptfoo-python-input-json'),
-          expect.stringContaining('promptfoo-python-output-json'),
-        ]),
-      }));
-      expect(fs.writeFile).toHaveBeenCalledWith(expect.stringContaining('promptfoo-python-input-json'), expect.any(String));
-      expect(fs.readFile).toHaveBeenCalledWith(expect.stringContaining('promptfoo-python-output-json'), 'utf-8');
+      expect(mockPythonShellRun).toHaveBeenCalledWith(
+        'wrapper.py',
+        expect.objectContaining({
+          args: expect.arrayContaining([
+            expect.stringContaining('testScript.py'),
+            'testMethod',
+            expect.stringContaining('promptfoo-python-input-json'),
+            expect.stringContaining('promptfoo-python-output-json'),
+          ]),
+        }),
+      );
+      expect(fs.writeFile).toHaveBeenCalledWith(
+        expect.stringContaining('promptfoo-python-input-json'),
+        expect.any(String),
+      );
+      expect(fs.readFile).toHaveBeenCalledWith(
+        expect.stringContaining('promptfoo-python-output-json'),
+        'utf-8',
+      );
       expect(fs.unlink).toHaveBeenCalledTimes(2); // Once for input JSON, once for output JSON
     });
 
@@ -101,21 +108,29 @@ describe('Python Wrapper', () => {
       const result = await runPythonCode(code, 'main', []);
 
       expect(result).toBe('execution result');
-      expect(mockPythonShellRun).toHaveBeenCalledWith('wrapper.py', expect.objectContaining({
-        args: expect.arrayContaining([
-          expect.stringContaining('.py'),
-          'main',
-          expect.stringContaining('promptfoo-python-input-json'),
-          expect.stringContaining('promptfoo-python-output-json'),
-        ]),
-      }));
+      expect(mockPythonShellRun).toHaveBeenCalledWith(
+        'wrapper.py',
+        expect.objectContaining({
+          args: expect.arrayContaining([
+            expect.stringContaining('.py'),
+            'main',
+            expect.stringContaining('promptfoo-python-input-json'),
+            expect.stringContaining('promptfoo-python-output-json'),
+          ]),
+        }),
+      );
       expect(fs.writeFile).toHaveBeenCalledWith(expect.stringContaining('.py'), code);
-      expect(fs.readFile).toHaveBeenCalledWith(expect.stringContaining('promptfoo-python-output-json'), 'utf-8');
+      expect(fs.readFile).toHaveBeenCalledWith(
+        expect.stringContaining('promptfoo-python-output-json'),
+        'utf-8',
+      );
     });
 
     it('should clean up the temporary files after execution', async () => {
       jest.spyOn(fs, 'writeFile').mockResolvedValue();
-      jest.spyOn(fs, 'readFile').mockResolvedValue('{"type": "final_result", "data": "cleanup test"}');
+      jest
+        .spyOn(fs, 'readFile')
+        .mockResolvedValue('{"type": "final_result", "data": "cleanup test"}');
       jest.spyOn(fs, 'unlink').mockResolvedValue();
 
       await runPythonCode('print("cleanup test")', 'main', []);
