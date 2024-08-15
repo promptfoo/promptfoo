@@ -24,7 +24,7 @@ const TEMPERATURE = process.env.PROMPTFOO_JAILBREAK_TEMPERATURE
 
 // Based on: https://arxiv.org/abs/2312.02119
 
-async function initializeProviders() {
+async function initializeProviders(): Promise<OpenAiChatCompletionProvider> {
   return new OpenAiChatCompletionProvider(ATTACKER_MODEL, {
     config: {
       temperature: TEMPERATURE,
@@ -33,7 +33,14 @@ async function initializeProviders() {
   });
 }
 
-function renderSystemPrompts(nunjucks, goal) {
+function renderSystemPrompts(
+  nunjucks: any,
+  goal: string,
+): {
+  redteamSystemPrompt: string;
+  onTopicSystemPrompt: string;
+  judgeSystemPrompt: string;
+} {
   return {
     redteamSystemPrompt: nunjucks.renderString(ATTACKER_SYSTEM_PROMPT, { goal }),
     onTopicSystemPrompt: nunjucks.renderString(ON_TOPIC_SYSTEM_PROMPT, { goal }),
@@ -41,7 +48,12 @@ function renderSystemPrompts(nunjucks, goal) {
   };
 }
 
-async function evaluateResponse(redteamProvider, judgeSystemPrompt, targetResponse, containsPenalizedPhrase) {
+async function evaluateResponse(
+  redteamProvider: OpenAiChatCompletionProvider,
+  judgeSystemPrompt: string,
+  targetResponse: string,
+  containsPenalizedPhrase: boolean,
+): Promise<number> {
   const judgeBody = JSON.stringify([
     {
       role: 'system',
@@ -64,7 +76,10 @@ async function evaluateResponse(redteamProvider, judgeSystemPrompt, targetRespon
   return score;
 }
 
-async function getNewPrompt(redteamProvider, redteamHistory) {
+async function getNewPrompt(
+  redteamProvider: OpenAiChatCompletionProvider,
+  redteamHistory: { role: 'user' | 'assistant' | 'system'; content: string }[],
+): Promise<{ improvement: string; prompt: string }> {
   const redteamBody = JSON.stringify(redteamHistory);
   const redteamResp = await redteamProvider.callApi(redteamBody);
   invariant(
@@ -74,7 +89,11 @@ async function getNewPrompt(redteamProvider, redteamHistory) {
   return JSON.parse(redteamResp.output) as { improvement: string; prompt: string };
 }
 
-async function checkIfOnTopic(redteamProvider, onTopicSystemPrompt, targetPrompt) {
+async function checkIfOnTopic(
+  redteamProvider: OpenAiChatCompletionProvider,
+  onTopicSystemPrompt: string,
+  targetPrompt: string,
+): Promise<boolean> {
   const isOnTopicBody = JSON.stringify([
     {
       role: 'system',
@@ -90,13 +109,25 @@ async function checkIfOnTopic(redteamProvider, onTopicSystemPrompt, targetPrompt
   return JSON.parse(isOnTopicResp.output).isOnTopic;
 }
 
-async function getTargetResponse(targetProvider, targetPrompt) {
+async function getTargetResponse(
+  targetProvider: ApiProvider,
+  targetPrompt: string,
+): Promise<string> {
   const targetResp = await targetProvider.callApi(targetPrompt);
   invariant(targetResp.output, 'Expected output to be defined');
-  return typeof targetResp.output === 'string' ? targetResp.output : JSON.stringify(targetResp.output);
+  return typeof targetResp.output === 'string'
+    ? targetResp.output
+    : JSON.stringify(targetResp.output);
 }
 
-function updateRedteamHistory(redteamHistory, targetResponse, goal, score, isOnTopic, containsPenalizedPhrase) {
+function updateRedteamHistory(
+  redteamHistory: { role: 'user' | 'assistant' | 'system'; content: string }[],
+  targetResponse: string,
+  goal: string,
+  score: number,
+  isOnTopic: boolean,
+  containsPenalizedPhrase: boolean,
+): void {
   redteamHistory.push({
     role: 'user',
     content: `LANGUAGE MODEL OUTPUT: ${targetResponse}\n\nOBJECTIVE: ${goal}\n\nSCORE: ${score} ${
@@ -117,13 +148,16 @@ async function runRedteamConversation({
   vars: Record<string, string | object>;
   provider: ApiProvider;
   injectVar: string;
-}) {
+}): Promise<{ output: string; metadata: { redteamFinalPrompt?: string } }> {
   const redteamProvider = await initializeProviders();
   const targetProvider = provider;
   const nunjucks = getNunjucksEngine();
-  const goal = vars[injectVar];
+  const goal: string = vars[injectVar] as string;
 
-  const { redteamSystemPrompt, onTopicSystemPrompt, judgeSystemPrompt } = renderSystemPrompts(nunjucks, goal);
+  const { redteamSystemPrompt, onTopicSystemPrompt, judgeSystemPrompt } = renderSystemPrompts(
+    nunjucks,
+    goal,
+  );
 
   const redteamHistory: { role: 'user' | 'assistant' | 'system'; content: string }[] = [
     {
@@ -137,7 +171,10 @@ async function runRedteamConversation({
 
   let targetPrompt: string | null = null;
   for (let i = 0; i < NUM_ITERATIONS; i++) {
-    const { improvement, prompt: newInjectVar } = await getNewPrompt(redteamProvider, redteamHistory);
+    const { improvement, prompt: newInjectVar } = await getNewPrompt(
+      redteamProvider,
+      redteamHistory,
+    );
 
     // Update the application prompt with the new injection.
     logger.debug(`New injectVar: ${newInjectVar}, improvement: ${improvement}`);
@@ -162,7 +199,12 @@ async function runRedteamConversation({
     );
 
     // Calculate the score
-    const score = await evaluateResponse(redteamProvider, judgeSystemPrompt, targetResponse, containsPenalizedPhrase);
+    const score = await evaluateResponse(
+      redteamProvider,
+      judgeSystemPrompt,
+      targetResponse,
+      containsPenalizedPhrase,
+    );
 
     if (score > highestScore) {
       highestScore = score;
@@ -173,7 +215,14 @@ async function runRedteamConversation({
       break;
     }
 
-    updateRedteamHistory(redteamHistory, targetResponse, goal, score, isOnTopic, containsPenalizedPhrase);
+    updateRedteamHistory(
+      redteamHistory,
+      targetResponse,
+      goal,
+      score,
+      isOnTopic,
+      containsPenalizedPhrase,
+    );
   }
 
   return {
@@ -193,7 +242,7 @@ class RedteamIterativeProvider implements ApiProvider {
     this.injectVar = config.injectVar;
   }
 
-  id() {
+  id(): string {
     return 'promptfoo:redteam:iterative';
   }
 
@@ -204,9 +253,13 @@ class RedteamIterativeProvider implements ApiProvider {
    * @param options
    * @returns
    */
-  async callApi(prompt: string, context?: CallApiContextParams, options?: CallApiOptionsParams) {
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<{ output: string; metadata: { redteamFinalPrompt?: string } }> {
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
-    invariant(context.vars, 'Expected vars to be set');
+    invariant(context?.vars, 'Expected vars to be set');
     return runRedteamConversation({
       prompt: context.prompt,
       filters: context.filters,
