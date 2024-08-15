@@ -11,21 +11,12 @@ import type {
   NunjucksFilterMap,
 } from '../../types';
 import { getNunjucksEngine } from '../../util/templates';
+import { ATTACKER_MODEL, NUM_ITERATIONS, TEMPERATURE, PENALIZED_PHRASES } from './constants';
 import { ATTACKER_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT, ON_TOPIC_SYSTEM_PROMPT } from './prompts';
-
-const ATTACKER_MODEL = 'gpt-4o';
-
-const NUM_ITERATIONS = process.env.PROMPTFOO_NUM_JAILBREAK_ITERATIONS
-  ? parseInt(process.env.PROMPTFOO_NUM_JAILBREAK_ITERATIONS, 10)
-  : 4;
-
-const TEMPERATURE = process.env.PROMPTFOO_JAILBREAK_TEMPERATURE
-  ? parseFloat(process.env.PROMPTFOO_JAILBREAK_TEMPERATURE)
-  : 0.5;
 
 // Based on: https://arxiv.org/abs/2312.02119
 
-async function initializeProviders(): Promise<OpenAiChatCompletionProvider> {
+async function defaultInitializeProviders(): Promise<OpenAiChatCompletionProvider> {
   return new OpenAiChatCompletionProvider(ATTACKER_MODEL, {
     config: {
       temperature: TEMPERATURE,
@@ -135,6 +126,7 @@ function updateRedteamHistory(
       isOnTopic ? '' : '(your prompt was off-topic)'
     }${containsPenalizedPhrase ? ' (contains penalized phrase)' : ''}`,
   });
+  logger.warn(JSON.stringify(redteamHistory, null, 2));
 }
 
 async function runRedteamConversation({
@@ -143,12 +135,14 @@ async function runRedteamConversation({
   vars,
   provider,
   injectVar,
+  initializeProviders = defaultInitializeProviders,
 }: {
   prompt: Prompt;
   filters: NunjucksFilterMap | undefined;
   vars: Record<string, string | object>;
   provider: ApiProvider;
   injectVar: string;
+  initializeProviders?: () => Promise<OpenAiChatCompletionProvider>;
 }): Promise<{ output: string; metadata: { redteamFinalPrompt?: string } }> {
   const redteamProvider = await initializeProviders();
   const targetProvider = provider;
@@ -172,6 +166,7 @@ async function runRedteamConversation({
 
   let targetPrompt: string | null = null;
   for (let i = 0; i < NUM_ITERATIONS; i++) {
+    logger.debug(`Starting iteration ${i + 1} of ${NUM_ITERATIONS}`);
     const { improvement, prompt: newInjectVar } = await getNewPrompt(
       redteamProvider,
       redteamHistory,
@@ -194,8 +189,7 @@ async function runRedteamConversation({
 
     const targetResponse = await getTargetResponse(targetProvider, targetPrompt);
 
-    const penalizedPhrases = ['in the face of impending doom'];
-    const containsPenalizedPhrase = penalizedPhrases.some((phrase) =>
+    const containsPenalizedPhrase = PENALIZED_PHRASES.some((phrase) =>
       targetResponse.toLowerCase().includes(phrase),
     );
 
@@ -224,8 +218,8 @@ async function runRedteamConversation({
       isOnTopic,
       containsPenalizedPhrase,
     );
+    logger.debug(`Iteration ${i + 1} complete. Score: ${score}, Highest score: ${highestScore}`);
   }
-
   return {
     output: bestResponse,
     metadata: {
@@ -236,11 +230,16 @@ async function runRedteamConversation({
 
 class RedteamIterativeProvider implements ApiProvider {
   private readonly injectVar: string;
+  private readonly initializeProviders: () => Promise<OpenAiChatCompletionProvider>;
 
-  constructor(readonly config: Record<string, string | object>) {
+  constructor(
+    readonly config: Record<string, string | object>,
+    initializeProviders = defaultInitializeProviders,
+  ) {
     logger.debug(`RedteamIterativeProvider config: ${JSON.stringify(config)}`);
     invariant(typeof config.injectVar === 'string', 'Expected injectVar to be set');
     this.injectVar = config.injectVar;
+    this.initializeProviders = initializeProviders;
   }
 
   id(): string {
@@ -267,6 +266,7 @@ class RedteamIterativeProvider implements ApiProvider {
       vars: context.vars,
       provider: context.originalProvider,
       injectVar: this.injectVar,
+      initializeProviders: this.initializeProviders,
     });
   }
 }
