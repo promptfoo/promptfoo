@@ -154,6 +154,15 @@ export async function doEval(
 
     await migrateResultsFromFileSystemToDatabase();
 
+    if (process.env.PROMPTFOO_LIGHTWEIGHT_RESULTS) {
+      config = {};
+      summary.results = [];
+      summary.table.head.vars = [];
+      for (const row of summary.table.body) {
+        row.vars = [];
+      }
+    }
+
     let evalId: string | null = null;
     if (cmdObj.write) {
       evalId = await writeResultsToDatabase(summary, config);
