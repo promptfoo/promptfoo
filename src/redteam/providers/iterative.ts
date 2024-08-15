@@ -1,3 +1,4 @@
+import type { Environment } from 'nunjucks';
 import invariant from 'tiny-invariant';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
@@ -34,7 +35,7 @@ async function initializeProviders(): Promise<OpenAiChatCompletionProvider> {
 }
 
 function renderSystemPrompts(
-  nunjucks: any,
+  nunjucks: Environment,
   goal: string,
 ): {
   redteamSystemPrompt: string;
