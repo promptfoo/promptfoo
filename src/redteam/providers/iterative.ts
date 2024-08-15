@@ -1,3 +1,18 @@
+/**
+ * @file iterative.ts
+ * @description This file implements an iterative red team attack provider based on the paper:
+ * "Red Teaming Language Models via Iterative Refinement" (https://arxiv.org/abs/2312.02119).
+ * It provides functionality for generating, evaluating, and refining prompts to test the
+ * robustness of language models against potential misuse or harmful outputs.
+ *
+ * The main components of this file include:
+ * - Helper functions for initializing providers, rendering prompts, and evaluating responses
+ * - A `runRedteamConversation` function that orchestrates the iterative attack process
+ * - A `RedteamIterativeProvider` class that implements the `ApiProvider` interface for integration
+ *   with the larger system
+ *
+ * @module RedteamIterative
+ */
 import type { Environment } from 'nunjucks';
 import invariant from 'tiny-invariant';
 import { renderPrompt } from '../../evaluatorHelpers';
@@ -16,6 +31,10 @@ import { ATTACKER_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT, ON_TOPIC_SYSTEM_PROMPT } f
 
 // Based on: https://arxiv.org/abs/2312.02119
 
+/**
+ * Initializes and returns the default OpenAI chat completion provider.
+ * @returns A promise that resolves to an OpenAiChatCompletionProvider instance.
+ */
 async function defaultInitializeProviders(): Promise<OpenAiChatCompletionProvider> {
   return new OpenAiChatCompletionProvider(ATTACKER_MODEL, {
     config: {
@@ -25,7 +44,13 @@ async function defaultInitializeProviders(): Promise<OpenAiChatCompletionProvide
   });
 }
 
-function renderSystemPrompts(
+/**
+ * Renders system prompts for the red team, on-topic check, and judge.
+ * @param nunjucks - The Nunjucks environment for rendering templates.
+ * @param goal - The goal or objective for the red team.
+ * @returns An object containing the rendered system prompts.
+ */
+export function renderSystemPrompts(
   nunjucks: Environment,
   goal: string,
 ): {
@@ -40,6 +65,14 @@ function renderSystemPrompts(
   };
 }
 
+/**
+ * Evaluates the target response using the judge system.
+ * @param redteamProvider - The OpenAI provider for the red team.
+ * @param judgeSystemPrompt - The system prompt for the judge.
+ * @param targetResponse - The response to be evaluated.
+ * @param containsPenalizedPhrase - Whether the response contains a penalized phrase.
+ * @returns A promise that resolves to the evaluation score.
+ */
 async function evaluateResponse(
   redteamProvider: OpenAiChatCompletionProvider,
   judgeSystemPrompt: string,
@@ -68,6 +101,12 @@ async function evaluateResponse(
   return score;
 }
 
+/**
+ * Generates a new prompt based on the red team's conversation history.
+ * @param redteamProvider - The OpenAI provider for the red team.
+ * @param redteamHistory - The conversation history of the red team.
+ * @returns A promise that resolves to an object containing the improvement and new prompt.
+ */
 async function getNewPrompt(
   redteamProvider: OpenAiChatCompletionProvider,
   redteamHistory: { role: 'user' | 'assistant' | 'system'; content: string }[],
@@ -81,6 +120,13 @@ async function getNewPrompt(
   return JSON.parse(redteamResp.output) as { improvement: string; prompt: string };
 }
 
+/**
+ * Checks if the target prompt is on-topic.
+ * @param redteamProvider - The OpenAI provider for the red team.
+ * @param onTopicSystemPrompt - The system prompt for the on-topic check.
+ * @param targetPrompt - The prompt to be checked.
+ * @returns A promise that resolves to a boolean indicating if the prompt is on-topic.
+ */
 async function checkIfOnTopic(
   redteamProvider: OpenAiChatCompletionProvider,
   onTopicSystemPrompt: string,
@@ -101,6 +147,12 @@ async function checkIfOnTopic(
   return JSON.parse(isOnTopicResp.output).isOnTopic;
 }
 
+/**
+ * Gets the response from the target provider for a given prompt.
+ * @param targetProvider - The API provider to get the response from.
+ * @param targetPrompt - The prompt to send to the target provider.
+ * @returns A promise that resolves to the target provider's response as a string.
+ */
 async function getTargetResponse(
   targetProvider: ApiProvider,
   targetPrompt: string,
@@ -112,6 +164,15 @@ async function getTargetResponse(
     : JSON.stringify(targetResp.output);
 }
 
+/**
+ * Updates the red team's conversation history with the latest interaction results.
+ * @param redteamHistory - The conversation history to update.
+ * @param targetResponse - The response from the target provider.
+ * @param goal - The current goal or objective.
+ * @param score - The evaluation score for the response.
+ * @param isOnTopic - Whether the prompt was on-topic.
+ * @param containsPenalizedPhrase - Whether the response contains a penalized phrase.
+ */
 function updateRedteamHistory(
   redteamHistory: { role: 'user' | 'assistant' | 'system'; content: string }[],
   targetResponse: string,
@@ -129,6 +190,11 @@ function updateRedteamHistory(
   logger.warn(JSON.stringify(redteamHistory, null, 2));
 }
 
+/**
+ * Runs the red team conversation to generate and evaluate prompts.
+ * @param params - An object containing the necessary parameters for the conversation.
+ * @returns A promise that resolves to an object with the best output and metadata.
+ */
 async function runRedteamConversation({
   prompt,
   filters,
@@ -228,10 +294,18 @@ async function runRedteamConversation({
   };
 }
 
+/**
+ * Represents a provider for iterative red team attacks.
+ */
 class RedteamIterativeProvider implements ApiProvider {
   private readonly injectVar: string;
   private readonly initializeProviders: () => Promise<OpenAiChatCompletionProvider>;
 
+  /**
+   * Creates a new instance of RedteamIterativeProvider.
+   * @param config - The configuration object for the provider.
+   * @param initializeProviders - A function to initialize the OpenAI providers.
+   */
   constructor(
     readonly config: Record<string, string | object>,
     initializeProviders = defaultInitializeProviders,
@@ -242,16 +316,20 @@ class RedteamIterativeProvider implements ApiProvider {
     this.initializeProviders = initializeProviders;
   }
 
+  /**
+   * Returns the identifier for this provider.
+   * @returns The provider's identifier string.
+   */
   id(): string {
     return 'promptfoo:redteam:iterative';
   }
 
   /**
-   *
-   * @param prompt - Rendered prompt. This is unused because we need the raw prompt in order to generate attacks
-   * @param context
-   * @param options
-   * @returns
+   * Calls the API to perform a red team attack.
+   * @param prompt - The rendered prompt (unused in this implementation).
+   * @param context - The context for the API call.
+   * @param options - Additional options for the API call.
+   * @returns A promise that resolves to an object with the output and metadata.
    */
   async callApi(
     prompt: string,
