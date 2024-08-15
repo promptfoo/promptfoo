@@ -17,25 +17,30 @@ export async function runPython(
     os.tmpdir(),
     `promptfoo-python-input-json-${Date.now()}-${Math.random().toString(16).slice(2)}.json`,
   );
+  const outputPath = path.join(
+    os.tmpdir(),
+    `promptfoo-python-output-json-${Date.now()}-${Math.random().toString(16).slice(2)}.json`,
+  );
   const pythonOptions: PythonShellOptions = {
     mode: 'text',
     pythonPath: options.pythonExecutable || process.env.PROMPTFOO_PYTHON || 'python',
     scriptPath: __dirname,
-    args: [absPath, method, tempJsonPath],
+    args: [absPath, method, tempJsonPath, outputPath],
   };
 
   try {
     await fs.writeFile(tempJsonPath, safeJsonStringify(args));
     logger.debug(`Running Python wrapper with args: ${safeJsonStringify(args)}`);
-    const results = await PythonShell.run('wrapper.py', pythonOptions);
-    logger.debug(`Python script ${absPath} returned: ${results.join('\n')}`);
+    await PythonShell.run('wrapper.py', pythonOptions);
+    const output = await fs.readFile(outputPath, 'utf-8');
+    logger.debug(`Python script ${absPath} returned: ${output}`);
     let result: { type: 'final_result'; data: any } | undefined;
     try {
-      result = JSON.parse(results[results.length - 1]);
+      result = JSON.parse(output);
     } catch (error) {
       throw new Error(
         `Invalid JSON: ${(error as Error).message} when parsing result: ${
-          results[results.length - 1]
+          output
         }\nStack Trace: ${(error as Error).stack}`,
       );
     }
@@ -57,8 +62,10 @@ export async function runPython(
       }`,
     );
   } finally {
-    await fs
-      .unlink(tempJsonPath)
-      .catch((error) => logger.error(`Error removing temporary file: ${error}`));
+    await Promise.all(
+      [tempJsonPath, outputPath].map((file) =>
+        fs.unlink(file).catch((error) => logger.error(`Error removing ${file}: ${error}`)),
+      ),
+    );
   }
 }
