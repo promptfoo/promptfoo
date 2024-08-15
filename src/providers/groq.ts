@@ -37,6 +37,7 @@ interface GroqCompletionOptions {
   top_logprobs?: number;
   top_p?: number;
   user?: string;
+  functionToolCallbacks?: Record<string, (arg: string) => Promise<string>>;
 }
 
 export class GroqProvider implements ApiProvider {
@@ -121,13 +122,50 @@ export class GroqProvider implements ApiProvider {
 
       logger.debug(`\tGroq API response: ${JSON.stringify(chatCompletion)}`);
 
+      const outputBlocks = [];
+      const tokenUsage = {
+        total: chatCompletion.usage?.total_tokens,
+        prompt: chatCompletion.usage?.prompt_tokens,
+        completion: chatCompletion.usage?.completion_tokens,
+      };
+
+      // Handle assistant message
+      if (chatCompletion.choices[0].message.content) {
+        outputBlocks.push(`[Assistant] ${chatCompletion.choices[0].message.content}`);
+      }
+
+      // Handle tool calls
+      if (chatCompletion.choices[0].message.tool_calls) {
+        for (const toolCall of chatCompletion.choices[0].message.tool_calls) {
+          if (toolCall.function) {
+            const functionName = toolCall.function.name;
+            const functionArgs = JSON.parse(toolCall.function.arguments);
+            outputBlocks.push(
+              `[Call function ${functionName} with arguments ${JSON.stringify(functionArgs)}]`,
+            );
+
+            if (
+              this.config.functionToolCallbacks &&
+              this.config.functionToolCallbacks[functionName]
+            ) {
+              try {
+                const result = await this.config.functionToolCallbacks[functionName](
+                  toolCall.function.arguments,
+                );
+                outputBlocks.push(`[Function output: ${result}]`);
+              } catch (err) {
+                outputBlocks.push(
+                  `[Function error: ${err instanceof Error ? err.message : String(err)}]`,
+                );
+              }
+            }
+          }
+        }
+      }
+
       const response: ProviderResponse = {
-        output: chatCompletion.choices[0].message.content || '',
-        tokenUsage: {
-          total: chatCompletion.usage?.total_tokens,
-          prompt: chatCompletion.usage?.prompt_tokens,
-          completion: chatCompletion.usage?.completion_tokens,
-        },
+        output: outputBlocks.join('\n\n').trim(),
+        tokenUsage,
       };
 
       if (isCacheEnabled()) {
