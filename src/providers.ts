@@ -59,6 +59,7 @@ import { WebhookProvider } from './providers/webhook';
 import RedteamIterativeProvider from './redteam/providers/iterative';
 import RedteamImageIterativeProvider from './redteam/providers/iterativeImage';
 import RedteamIterativeTreeProvider from './redteam/providers/iterativeTree';
+import { GroqProvider } from './providers/groq';
 import type { TestSuiteConfig } from './types';
 import type {
   ApiProvider,
@@ -360,6 +361,9 @@ export async function loadApiProvider(
     ret = new RedteamImageIterativeProvider(providerOptions.config);
   } else if (providerPath === 'promptfoo:manual-input') {
     ret = new ManualInputProvider(providerOptions);
+  } else if (providerPath.startsWith('groq:')) {
+    const modelName = providerPath.split(':')[1];
+    ret = new GroqProvider(modelName, providerOptions);
   } else {
     if (providerPath.startsWith('file://')) {
       providerPath = providerPath.slice('file://'.length);
@@ -436,5 +440,6 @@ export default {
   LocalAiChatProvider,
   BAMChatProvider,
   BAMEmbeddingProvider,
+  GroqProvider,
   loadApiProvider,
 };
