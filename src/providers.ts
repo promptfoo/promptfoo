@@ -15,6 +15,7 @@ import { BAMChatProvider, BAMEmbeddingProvider } from './providers/bam';
 import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './providers/bedrock';
 import * as CloudflareAiProviders from './providers/cloudflare-ai';
 import { CohereChatCompletionProvider } from './providers/cohere';
+import { GroqProvider } from './providers/groq';
 import { HttpProvider } from './providers/http';
 import {
   HuggingfaceFeatureExtractionProvider,
@@ -59,7 +60,6 @@ import { WebhookProvider } from './providers/webhook';
 import RedteamIterativeProvider from './redteam/providers/iterative';
 import RedteamImageIterativeProvider from './redteam/providers/iterativeImage';
 import RedteamIterativeTreeProvider from './redteam/providers/iterativeTree';
-import { GroqProvider } from './providers/groq';
 import type { TestSuiteConfig } from './types';
 import type {
   ApiProvider,
