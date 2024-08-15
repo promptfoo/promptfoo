@@ -33,5 +33,5 @@ if __name__ == "__main__":
         data = json.load(fp)
 
     result = call_method(script_path, method_name, *data)
-    with open(output_path, 'w') as fp:
+    with open(output_path, "w") as fp:
         fp.write(json.dumps({"type": "final_result", "data": result}))
