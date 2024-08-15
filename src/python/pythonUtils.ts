@@ -62,11 +62,10 @@ export async function runPython(
       }`,
     );
   } finally {
-    await fs
-      .unlink(tempJsonPath)
-      .catch((error) => logger.error(`Error removing temporary file: ${error}`));
-    await fs
-      .unlink(outputPath)
-      .catch((error) => logger.error(`Error removing temporary file: ${error}`));
+    await Promise.all(
+      [tempJsonPath, outputPath].map((file) =>
+        fs.unlink(file).catch((error) => logger.error(`Error removing ${file}: ${error}`)),
+      ),
+    );
   }
 }
