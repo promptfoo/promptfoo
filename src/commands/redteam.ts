@@ -116,7 +116,7 @@ export async function redteamInit(directory: string | undefined) {
   const selectedProviders = await checkbox({
     message: 'Choose one or more providers to target:',
     choices: providerChoices,
-    pageSize: Math.min(providerChoices.length, process.stdout.rows - 4),
+    pageSize: process.stdout.rows - 4,
   });
 
   const providers: string[] = selectedProviders.filter((p) => p !== 'Other');
@@ -165,7 +165,7 @@ export async function redteamInit(directory: string | undefined) {
   const plugins: (string | RedteamPluginObject)[] = await checkbox({
     message: 'Select plugins to enable:',
     choices: pluginChoices,
-    pageSize: Math.min(pluginChoices.length, process.stdout.rows - 4),
+    pageSize: process.stdout.rows - 4,
     loop: false,
     validate: (answer) => answer.length > 0 || 'You must select at least one plugin.',
   });
@@ -214,7 +214,7 @@ export async function redteamInit(directory: string | undefined) {
   const strategies = await checkbox({
     message: 'Select strategies to enable:',
     choices: strategyChoices,
-    pageSize: Math.min(strategyChoices.length, process.stdout.rows - 4),
+    pageSize: process.stdout.rows - 4,
     loop: false,
   });
 

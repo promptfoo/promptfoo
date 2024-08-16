@@ -75,7 +75,7 @@ describe('Basic tests', () => {
 describe('Database Specific Syntax Tests', () => {
   it('should fail if the output SQL statement conforms to MySQL but not PostgreSQL', async () => {
     const renderedValue = {
-      database: 'PostgreSQL',
+      databaseType: 'PostgreSQL',
     };
     const outputString = `SELECT * FROM employees WHERE id = 1 LOCK IN SHARE MODE`;
     const result: GradingResult = await isSql(outputString, renderedValue, false, assertion);
@@ -87,7 +87,7 @@ describe('Database Specific Syntax Tests', () => {
 
   it('should fail if the output SQL statement conforms to PostgreSQL but not MySQL', async () => {
     const renderedValue = {
-      database: 'MySQL',
+      databaseType: 'MySQL',
     };
     const outputString = `SELECT first_name, last_name FROM employees WHERE first_name ILIKE 'john%'`;
     const result: GradingResult = await isSql(outputString, renderedValue, false, assertion);
@@ -99,7 +99,7 @@ describe('Database Specific Syntax Tests', () => {
 
   it('should pass if the output SQL statement conforms to PostgreSQL but not MySQL', async () => {
     const renderedValue = {
-      database: 'PostgreSQL',
+      databaseType: 'PostgreSQL',
     };
     const outputString = `SELECT first_name, last_name FROM employees WHERE first_name ILIKE 'john%'`;
     const result: GradingResult = await isSql(outputString, renderedValue, false, assertion);
@@ -113,7 +113,7 @@ describe('Database Specific Syntax Tests', () => {
    */
   // it('should fail if the output SQL statement conforms to PostgreSQL but not MySQL', () => {
   //   const renderedValue = {
-  //     database: 'MySQL',
+  //     databaseType: 'MySQL',
   //   };
   //   const outputString = `SELECT generate_series(1, 10);`;
   //   const result = testFunction(renderedValue, outputString, false);
@@ -126,7 +126,7 @@ describe('Database Specific Syntax Tests', () => {
 describe('White Table/Column List Tests', () => {
   it('should fail if the output SQL statement violate allowedTables', async () => {
     const renderedValue = {
-      database: 'MySQL',
+      databaseType: 'MySQL',
       allowedTables: ['(select|update|insert|delete)::null::departments'],
     };
     const outputString = `SELECT * FROM employees`;
@@ -139,7 +139,7 @@ describe('White Table/Column List Tests', () => {
 
   it('should pass if the output SQL statement does not violate allowedTables', async () => {
     const renderedValue = {
-      database: 'MySQL',
+      databaseType: 'MySQL',
       allowedTables: ['(select|update|insert|delete)::null::departments'],
     };
     const outputString = `SELECT * FROM departments`;
@@ -150,7 +150,7 @@ describe('White Table/Column List Tests', () => {
 
   it('should fail if the output SQL statement violate allowedColumns', async () => {
     const renderedValue = {
-      database: 'MySQL',
+      databaseType: 'MySQL',
       allowedColumns: ['select::null::name', 'update::null::id'],
     };
     const outputString = `SELECT id FROM t`;
@@ -163,7 +163,7 @@ describe('White Table/Column List Tests', () => {
 
   it('should pass if the output SQL statement does not violate allowedColumns', async () => {
     const renderedValue = {
-      database: 'MySQL',
+      databaseType: 'MySQL',
       allowedColumns: ['insert::department::dept_name', 'insert::department::location'],
     };
     const outputString = `INSERT INTO department (dept_name, location) VALUES ('Sales', 'New York')`;
@@ -181,7 +181,7 @@ describe('White Table/Column List Tests', () => {
    */
   // it('should pass if the output SQL statement does not violate allowedColumns', () => {
   //   const renderedValue = {
-  //     database: 'MySQL',
+  //     databaseType: 'MySQL',
   //     allowedColumns: ['update::a::id'],
   //   };
   //   const outputString = `UPDATE a SET id = 1`;
@@ -196,7 +196,7 @@ describe('White Table/Column List Tests', () => {
    */
   // it('should pass if the output SQL statement does not violate allowedColumns', () => {
   //   const renderedValue = {
-  //     database: 'MySQL',
+  //     databaseType: 'MySQL',
   //     allowedColumns: ['update::employee::salary','select::employee::id'],
   //   };
   //   const outputString = `UPDATE employee SET salary = 50000 WHERE id = 1`;

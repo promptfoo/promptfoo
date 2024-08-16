@@ -5,7 +5,7 @@ sidebar_label: Intro
 
 # LLM red teaming
 
-LLM red teaming is a proactive approach to find vulnerabilities in AI systems by simulating malicious inputs.
+LLM red teaming is a proactive approach to finding vulnerabilities in AI systems by simulating malicious inputs.
 
 As of today, there are multiple inherent security challenges with LLM architectures. Depending on your system's design, e.g. [RAG](/docs/red-team/rag/), [LLM agent](/docs/red-team/agents/), or [chatbot](/docs/red-team/llm-vulnerability-types/), you will face different types of vulnerabilities.
 
@@ -119,15 +119,28 @@ providers:
   - anthropic:messages:claude-3.5-sonnet-20240620
 ```
 
-<details>
-<summary>In addition to base models, Promptfoo can hook directly into your existing LLM app (Python, Javascript, etc), RAG or agent workflows, or hit your API.</summary>
+#### Talking to your app
 
-- **Custom**: See how to call your existing [Javascript](/docs/providers/custom-api), [Python](/docs/providers/python), [any other executable](/docs/providers/custom-script) or [API endpoint](/docs/providers/http).
-- **APIs**: See setup instructions for [OpenAI](/docs/providers/openai), [Azure](/docs/providers/azure), [Anthropic](/docs/providers/anthropic), [Mistral](/docs/providers/mistral), [HuggingFace](/docs/providers/huggingface), [AWS Bedrock](/docs/providers/aws-bedrock), and [more](/docs/providers).
+Promptfoo can hook directly into your existing LLM app (Python, Javascript, etc), RAG or agent workflows, or send requests to your API. See [custom providers](/docs/red-team/configuration/#custom-providers) for details on setting up:
 
-</details>
+- [HTTP requests](/docs/red-team/configuration/#http-requests) to your API
+- [Custom Python scripts](/docs/red-team/configuration/#custom-scripts) for precise control
+- [Javascript](/docs/providers/custom-api/), [any executable](/docs/providers/custom-script/), local providers like [ollama](/docs/providers/ollama/), or other [provider types](/docs/providers/)
+
+#### Prompting
+
+Your prompt may be [dynamic](/docs/configuration/parameters/#prompt-functions), or maybe it's constructed entirely on the application side and you just want to [pass through](/docs/red-team/configuration/#passthrough-prompts) the adversarial input. Also note that files are accepted:
+
+```yaml
+prompts:
+  - file://path/to/prompt.json
+```
+
+Learn more about [prompt formats](/docs/configuration/parameters/#prompts).
 
 ### Generate adversarial test cases
+
+The `init` step will do this for you automatically, but in case you'd like to manually re-generate your adversarial inputs:
 
 ```sh
 npx promptfoo@latest generate redteam -w
@@ -143,19 +156,9 @@ npx promptfoo@latest generate redteam -w --plugins harmful
 
 Run `npx promptfoo@latest generate redteam --help` to see all available plugins.
 
-#### Overriding the provider
+#### Changing the provider
 
-By default we use OpenAI. You can override the provider to use for generating adversarial test cases. Promptfoo supports most known LLM [providers](/docs/providers).
-
-For example, to use the `openai:chat:gpt-4o` model:
-
-```sh
-npx promptfoo@latest generate redteam -w --provider openai:chat:gpt-4o
-```
-
-:::warning
-Note that some providers such as Anthropic may disable your account for generating harmful test cases. We recommend using the default OpenAI provider.
-:::
+By default we use OpenAI's `gpt-4o` model, but we support hundreds of other models. Learn more about [setting the provider](/docs/red-team/configuration/#providers).
 
 ### Run the eval
 
@@ -175,7 +178,7 @@ Promptfoo provides a detailed eval view that lets you dig into specific red team
 
 ![llm red team evals](/img/docs/redteam-results.png)
 
-As mentioned above, you also get a view that summarizes your LLM app's vulnerabilities:
+You also get a view that summarizes your LLM app's vulnerabilities:
 
 ![llm red team report](/img/riskreport-1@2x.png)
 
@@ -202,10 +205,9 @@ Red teaming is not a one-time activity but an ongoing process. As you develop an
 
 Check out the [CI/CD integration](/docs/integrations/ci-cd/) docs for more info.
 
-## Detailed guide
+## Resources
 
-See [the full guide](/docs/guides/llm-redteaming) for detailed info on configuring more complex prompts, dynamically generated prompts and RAG/chain/agents, and more.
-
-## Configuration File
-
-The `redteam` section in your `promptfooconfig.yaml` file allows you to configure red teaming options for your prompts. To learn more about the available options, see [the configuration guide](/docs/red-team/configuration).
+- [Configuration guide](/docs/red-team/configuration/) for detailed info on configuring your red team
+- [Full guide](/docs/guides/llm-redteaming) for info examples of dynamically generated prompts, RAG/chain, etc.
+- [Types of LLM vulnerabilities](/docs/red-team/llm-vulnerability-types/) for an overview of supported [plugins](/docs/category/plugins/)
+- Guides on red teaming [agents](/docs/red-team/agents/) and [RAGs](/docs/red-team/rag/)
