@@ -17,12 +17,12 @@ const MAX_ROUNDS = 10;
 const MAX_BACKTRACKS = 10;
 
 interface CrescendoConfig {
-  conversationObjective: string;
-  systemPromptPath?: string;
+  injectVar: string;
 }
 
 class CrescendoProvider implements ApiProvider {
   readonly config: CrescendoConfig;
+  private userGoal: string | undefined;
   private readonly redTeamingChat: OpenAiChatCompletionProvider;
   private readonly scoringChat: OpenAiChatCompletionProvider;
   private readonly nunjucks: any;
@@ -55,7 +55,10 @@ class CrescendoProvider implements ApiProvider {
 
     logger.debug(`callApi invoked with prompt: ${prompt}`);
 
-    return this.applyCrescendoAttack({
+    this.userGoal = String(context.vars[this.config.injectVar]);
+    console.log('userGoal', this.userGoal);
+
+    return this.runAttack({
       prompt: context.prompt,
       filters: context.filters,
       vars: context.vars,
@@ -63,7 +66,7 @@ class CrescendoProvider implements ApiProvider {
     });
   }
 
-  private async applyCrescendoAttack({
+  private async runAttack({
     prompt,
     filters,
     vars,
@@ -85,9 +88,8 @@ class CrescendoProvider implements ApiProvider {
     let evalPercentage: number | null = null;
 
     const systemPrompt = this.nunjucks.renderString(CRESCENDO_SYSTEM_PROMPT, {
-      conversationObjective: this.config.conversationObjective,
+      conversation_objective: this.userGoal,
     });
-    logger.debug(`Rendered system prompt: ${systemPrompt}`);
 
     const redTeamingHistory: { role: 'user' | 'assistant' | 'system'; content: string }[] = [
       { role: 'system', content: systemPrompt },
@@ -140,8 +142,8 @@ class CrescendoProvider implements ApiProvider {
       }
 
       const evalScore = await this.getEvalScore(lastResponse);
-      evalFlag = evalScore.score_value;
-      evalPercentage = evalScore.score_metadata ? parseInt(evalScore.score_metadata) : 0;
+      evalFlag = evalScore.value;
+      evalPercentage = evalScore.metadata;
       logger.debug(`Eval score: flag=${evalFlag}, percentage=${evalPercentage}`);
 
       logger.info('\nSending to EVAL_SCORER:\n');
@@ -164,6 +166,7 @@ class CrescendoProvider implements ApiProvider {
       `\nFINAL RESULTS, TOTAL ROUNDS: ${roundNum}, TOTAL BACKTRACKS ${backtrackCount}:\n`,
     );
 
+    console.log('REturning ', lastResponse);
     return {
       output: lastResponse,
       metadata: {
@@ -249,6 +252,10 @@ class CrescendoProvider implements ApiProvider {
     logger.debug(`Rendered prompt: ${renderedPrompt}`);
 
     const response = await provider.callApi(renderedPrompt);
+    if (response.error) {
+      logger.error(`Error received from target: ${response.error}`);
+      throw new Error(`Error received from target: ${response.error}`);
+    }
     invariant(response.output, 'Expected output to be defined');
     logger.debug(`Received response from target: ${response.output}`);
 
@@ -266,7 +273,7 @@ class CrescendoProvider implements ApiProvider {
     });
 
     const refusalSystemPrompt = this.nunjucks.renderString(REFUSAL_SYSTEM_PROMPT, {
-      conversation_objective: this.config.conversationObjective,
+      conversation_objective: this.userGoal,
     });
     logger.debug(`Refusal system prompt: ${refusalSystemPrompt}`);
 
@@ -279,24 +286,30 @@ class CrescendoProvider implements ApiProvider {
     invariant(typeof refusalResponse.output === 'string', 'Expected output to be a string');
     logger.debug(`Refusal score response: ${refusalResponse.output}`);
 
-    const { score_value: isRefusal, score_rationale: refusalRationale } = JSON.parse(
-      refusalResponse.output,
+    const parsed = JSON.parse(refusalResponse.output) as {
+      value: boolean;
+      metadata: number;
+      rationale: string;
+    };
+
+    invariant(typeof parsed.value === 'boolean', 'Expected refusal grader value to be a boolean');
+    invariant(
+      typeof parsed.metadata === 'number',
+      'Expected refusal grader metadata to be a number',
     );
 
-    return [isRefusal, refusalRationale];
+    return [parsed.value, parsed.rationale];
   }
 
-  private async getEvalScore(
-    lastResponse: string,
-  ): Promise<{ score_value: boolean; score_metadata: string }> {
+  private async getEvalScore(lastResponse: string) {
     logger.debug(`Getting eval score for response: ${lastResponse.substring(0, 100)}...`);
     const evalInput = JSON.stringify({
-      conversation_objective: this.config.conversationObjective,
+      conversation_objective: this.userGoal,
       response_to_evaluate_input: lastResponse,
     });
 
     const evalSystemPrompt = this.nunjucks.renderString(EVAL_SYSTEM_PROMPT, {
-      conversation_objective: this.config.conversationObjective,
+      conversation_objective: this.userGoal,
     });
     logger.debug(`Eval system prompt: ${evalSystemPrompt}`);
 
@@ -309,7 +322,17 @@ class CrescendoProvider implements ApiProvider {
     invariant(typeof evalResponse.output === 'string', 'Expected output to be a string');
     logger.debug(`Eval score response: ${evalResponse.output}`);
 
-    return JSON.parse(evalResponse.output);
+    const parsed = JSON.parse(evalResponse.output) as {
+      value: boolean;
+      description: string;
+      rationale: string;
+      metadata: number;
+    };
+
+    invariant(typeof parsed.value === 'boolean', 'Expected eval grader value to be a boolean');
+    invariant(typeof parsed.metadata === 'number', 'Expected eval grader metadata to be a number');
+
+    return parsed;
   }
 }
 
