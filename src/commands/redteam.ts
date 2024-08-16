@@ -249,17 +249,6 @@ export async function redteamInit(directory: string | undefined) {
     loop: false,
   });
 
-  /*
-  const numTests = await number({
-    message: 'Number of test cases per plugin:',
-    default: 5,
-    min: 0,
-    max: 1000,
-  });
-  invariant(numTests, 'No number of tests provided');
-  */
-  const numTests = 5;
-
   const hasHarmfulPlugin = plugins.some(
     (plugin) => typeof plugin === 'string' && plugin.startsWith('harmful'),
   );
@@ -305,6 +294,8 @@ export async function redteamInit(directory: string | undefined) {
     }
   }
 
+  const numTests = 5;
+
   const nunjucks = getNunjucksEngine();
   const redteamConfig = nunjucks.renderString(REDTEAM_CONFIG_TEMPLATE, {
     numTests,
@@ -316,7 +307,7 @@ export async function redteamInit(directory: string | undefined) {
 
   fs.writeFileSync(configPath, redteamConfig, 'utf8');
 
-  //console.clear();
+  console.clear();
   logger.info(chalk.green(`\nCreated red teaming configuration file at ${configPath}\n`));
 
   const readyToGenerate = await confirm({
