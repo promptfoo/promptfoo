@@ -506,7 +506,7 @@ class Evaluator {
 
       // Finalize test case eval
       const varCombinations =
-        process.env.PROMPTFOO_DISABLE_VAR_EXPANSION || testCase.options.disableVarExpansion
+        getEnvBool('PROMPTFOO_DISABLE_VAR_EXPANSION') || testCase.options.disableVarExpansion
           ? [testCase.vars]
           : generateVarCombinations(testCase.vars || {});
 
