@@ -139,7 +139,7 @@ class CrescendoProvider implements ApiProvider {
       const attackPrompt = await this.getAttackPrompt(roundNum, evalFlag, lastResponse);
       logger.debug(`Generated attack prompt: ${attackPrompt}`);
 
-      lastResponse = await this.sendPrompt(attackPrompt, prompt, vars, filters, provider);
+      lastResponse = await this.sendPrompt(attackPrompt, prompt, vars, filters, provider, roundNum);
       logger.debug(`Received response from target: ${lastResponse.substring(0, 100)}...`);
 
       const [isRefusal, refusalRationale] = await this.getRefusalScore(attackPrompt, lastResponse);
@@ -284,6 +284,7 @@ class CrescendoProvider implements ApiProvider {
     vars: Record<string, string | object>,
     filters: NunjucksFilterMap | undefined,
     provider: ApiProvider,
+    roundNum: number,
   ): Promise<string> {
     const renderedPrompt = await renderPrompt(
       originalPrompt,
@@ -294,10 +295,26 @@ class CrescendoProvider implements ApiProvider {
     logger.debug(`Sending to target chat:`);
     this.logChatHistory(this.targetConversationId);
 
-    this.memory.addMessage(this.targetConversationId, {
-      role: 'user',
-      content: renderedPrompt,
-    });
+    try {
+      const parsed = JSON.parse(renderedPrompt);
+      // If successful, then load it directly into the chat history
+      for (const message of parsed) {
+        if (
+          message.role === 'system' &&
+          this.memory.getConversation(this.targetConversationId).some((m) => m.role === 'system')
+        ) {
+          // No duplicate system messages
+          continue;
+        }
+        this.memory.addMessage(this.targetConversationId, message);
+      }
+    } catch (e) {
+      // Otherwise, just send the rendered prompt as a string
+      this.memory.addMessage(this.targetConversationId, {
+        role: 'user',
+        content: renderedPrompt,
+      });
+    }
 
     const response = await provider.callApi(renderedPrompt);
     if (response.error) {
