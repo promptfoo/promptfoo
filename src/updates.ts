@@ -3,6 +3,7 @@ import semverGt from 'semver/functions/gt';
 import { TERMINAL_MAX_WIDTH, VERSION } from './constants';
 import { fetchWithTimeout } from './fetch';
 import logger from './logger';
+import { getEnvBool } from './envars';
 
 export async function getLatestVersion() {
   const response = await fetchWithTimeout(`https://api.promptfoo.dev/api/latestVersion`, {}, 1000);
@@ -14,7 +15,7 @@ export async function getLatestVersion() {
 }
 
 export async function checkForUpdates(): Promise<boolean> {
-  if (process.env.PROMPTFOO_DISABLE_UPDATE) {
+  if (getEnvBool('PROMPTFOO_DISABLE_UPDATE')) {
     return false;
   }
 

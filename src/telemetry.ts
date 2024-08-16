@@ -18,11 +18,13 @@ const CONSENT_ENDPOINT = 'https://api.promptfoo.dev/consent';
 
 const TELEMETRY_TIMEOUT_MS = 1000;
 
+import { getEnvBool } from './envars';
+
 export class Telemetry {
   private events: TelemetryEvent[] = [];
 
   get disabled() {
-    return process.env.PROMPTFOO_DISABLE_TELEMETRY === '1';
+    return getEnvBool('PROMPTFOO_DISABLE_TELEMETRY');
   }
 
   record(eventName: TelemetryEventTypes, properties: Record<string, EventValue>): void {

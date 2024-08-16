@@ -21,12 +21,14 @@ const customFormatter = winston.format.printf(({ level, message, ...args }) => {
   throw new Error(`Invalid log level: ${level}`);
 });
 
+import { getEnvar } from './envars';
+
 const logger = winston.createLogger({
   levels: LOG_LEVELS,
   format: winston.format.combine(winston.format.simple(), customFormatter),
   transports: [
     new winston.transports.Console({
-      level: process.env.LOG_LEVEL || 'info',
+      level: getEnvar('LOG_LEVEL', 'info'),
     }),
   ],
 });
