@@ -100,9 +100,10 @@ type EnvVarKey = keyof EnvVars;
  * @param defaultValue Optional default value if the environment variable is not set.
  * @returns The value of the environment variable, or the default value if provided.
  */
-export function getEnvar<K extends EnvVarKey>(key: K, defaultValue?: EnvVars[K]) {
+export function getEnvar(key: EnvVarKey): string | undefined;
+export function getEnvar(key: EnvVarKey, defaultValue: string): string;
+export function getEnvar(key: EnvVarKey, defaultValue?: string): string | undefined {
   const value = process.env[key];
-
   if (value === undefined) {
     return defaultValue;
   }
@@ -116,7 +117,7 @@ export function getEnvar<K extends EnvVarKey>(key: K, defaultValue?: EnvVars[K])
  * @returns The boolean value of the environment variable, or the default value if provided.
  */
 export function getEnvBool(key: EnvVarKey, defaultValue?: boolean): boolean {
-  const value = getEnvar(key, defaultValue);
+  const value = getEnvar(key) || defaultValue;
   if (typeof value === 'boolean') {
     return value;
   }
@@ -132,8 +133,10 @@ export function getEnvBool(key: EnvVarKey, defaultValue?: boolean): boolean {
  * @param defaultValue Optional default value if the environment variable is not set.
  * @returns The integer value of the environment variable, or the default value if provided.
  */
-export function getEnvInt(key: EnvVarKey, defaultValue?: number): number {
-  const value = getEnvar(key, defaultValue);
+export function getEnvInt(key: EnvVarKey): number | undefined;
+export function getEnvInt(key: EnvVarKey, defaultValue: number): number;
+export function getEnvInt(key: EnvVarKey, defaultValue?: number): number | undefined {
+  const value = getEnvar(key) || defaultValue;
   if (typeof value === 'number') {
     return Math.floor(value);
   }
@@ -143,7 +146,7 @@ export function getEnvInt(key: EnvVarKey, defaultValue?: number): number {
       return parsedValue;
     }
   }
-  return defaultValue || 0;
+  return defaultValue;
 }
 
 /**
@@ -152,8 +155,10 @@ export function getEnvInt(key: EnvVarKey, defaultValue?: number): number {
  * @param defaultValue Optional default value if the environment variable is not set.
  * @returns The float value of the environment variable, or the default value if provided.
  */
-export function getEnvFloat(key: EnvVarKey, defaultValue?: number): number {
-  const value = getEnvar(key, defaultValue);
+export function getEnvFloat(key: EnvVarKey): number | undefined;
+export function getEnvFloat(key: EnvVarKey, defaultValue: number): number;
+export function getEnvFloat(key: EnvVarKey, defaultValue?: number): number | undefined {
+  const value = getEnvar(key) || defaultValue;
   if (typeof value === 'number') {
     return value;
   }
@@ -163,5 +168,5 @@ export function getEnvFloat(key: EnvVarKey, defaultValue?: number): number {
       return parsedValue;
     }
   }
-  return defaultValue || 0;
+  return defaultValue;
 }
