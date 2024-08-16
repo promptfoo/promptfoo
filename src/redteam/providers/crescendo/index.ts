@@ -42,6 +42,7 @@ class CrescendoProvider implements ApiProvider {
       },
     });
     this.nunjucks = getNunjucksEngine();
+    logger.debug(`CrescendoProvider initialized with config: ${JSON.stringify(config)}`);
   }
 
   id() {
@@ -51,6 +52,8 @@ class CrescendoProvider implements ApiProvider {
   async callApi(prompt: string, context?: CallApiContextParams, options?: CallApiOptionsParams) {
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     invariant(context?.vars, 'Expected vars to be set');
+
+    logger.debug(`callApi invoked with prompt: ${prompt}`);
 
     return this.applyCrescendoAttack({
       prompt: context.prompt,
@@ -71,6 +74,10 @@ class CrescendoProvider implements ApiProvider {
     vars: Record<string, string | object>;
     provider: ApiProvider;
   }) {
+    logger.debug(
+      `Starting Crescendo attack with: prompt=${JSON.stringify(prompt)}, filtersPresent=${!!filters}, varsKeys=${Object.keys(vars)}, providerType=${provider.constructor.name}`,
+    );
+
     let roundNum = 0;
     let backtrackCount = 0;
     let lastResponse = '';
@@ -80,6 +87,7 @@ class CrescendoProvider implements ApiProvider {
     const systemPrompt = this.nunjucks.renderString(CRESCENDO_SYSTEM_PROMPT, {
       conversationObjective: this.config.conversationObjective,
     });
+    logger.debug(`Rendered system prompt: ${systemPrompt}`);
 
     const redTeamingHistory: { role: 'user' | 'assistant' | 'system'; content: string }[] = [
       { role: 'system', content: systemPrompt },
@@ -96,12 +104,15 @@ class CrescendoProvider implements ApiProvider {
         lastResponse,
         redTeamingHistory,
       );
+      logger.debug(`Generated attack prompt: ${attackPrompt}`);
 
       logger.info('\nSending Attack Prompt to PROMPT_TARGET:\n');
       lastResponse = await this.sendPrompt(attackPrompt, prompt, vars, filters, provider);
+      logger.debug(`Received response from target: ${lastResponse.substring(0, 100)}...`);
 
       logger.info('\nSending to REFUSAL_SCORER:\n');
       const [isRefusal, refusalRationale] = await this.getRefusalScore(attackPrompt, lastResponse);
+      logger.debug(`Refusal check result: isRefusal=${isRefusal}, rationale=${refusalRationale}`);
 
       if (isRefusal) {
         logger.info('\nResponse Rejected, performing back tracking...\n');
@@ -117,9 +128,11 @@ class CrescendoProvider implements ApiProvider {
         logger.info(`Question Backtrack Count: ${backtrackCount}`);
         if (backtrackCount < MAX_BACKTRACKS) {
           roundNum--;
+          logger.debug(`Backtracking: Reducing round number to ${roundNum}`);
         }
 
         if (backtrackCount >= MAX_BACKTRACKS) {
+          logger.debug(`Max backtracks (${MAX_BACKTRACKS}) reached. Exiting loop.`);
           break;
         }
 
@@ -129,6 +142,7 @@ class CrescendoProvider implements ApiProvider {
       const evalScore = await this.getEvalScore(lastResponse);
       evalFlag = evalScore.score_value;
       evalPercentage = evalScore.score_metadata ? parseInt(evalScore.score_metadata) : 0;
+      logger.debug(`Eval score: flag=${evalFlag}, percentage=${evalPercentage}`);
 
       logger.info('\nSending to EVAL_SCORER:\n');
 
@@ -167,6 +181,7 @@ class CrescendoProvider implements ApiProvider {
     lastResponse: string,
     redTeamingHistory: { role: 'user' | 'assistant' | 'system'; content: string }[],
   ): Promise<string> {
+    logger.debug(`getAttackPrompt called: round=${roundNum}, evalScore=${evalScore}`);
     let promptText: string;
 
     if (roundNum === 1) {
@@ -187,12 +202,12 @@ class CrescendoProvider implements ApiProvider {
 
     redTeamingHistory.push({ role: 'user', content: promptText });
 
-    console.log('history', JSON.stringify(redTeamingHistory, null, 2));
+    logger.debug(`Sending to redTeamingChat: ${JSON.stringify(redTeamingHistory, null, 2)}`);
     const response = await this.redTeamingChat.callApi(JSON.stringify(redTeamingHistory));
     invariant(typeof response.output === 'string', 'Expected output to be a string');
 
     const parsedOutput = JSON.parse(response.output);
-    console.log('parsedOutput', JSON.stringify(parsedOutput, null, 2));
+    logger.debug(`Received from redTeamingChat: ${JSON.stringify(parsedOutput, null, 2)}`);
     const expectedKeys = [
       'generated_question',
       'rationale_behind_jailbreak',
@@ -201,11 +216,13 @@ class CrescendoProvider implements ApiProvider {
 
     for (const key of expectedKeys) {
       if (!(key in parsedOutput)) {
+        logger.error(`Missing key in response: ${key}`);
         throw new Error(`Expected key '${key}' not found in JSON response: ${response.output}`);
       }
     }
 
     if (Object.keys(parsedOutput).length !== expectedKeys.length) {
+      logger.error(`Unexpected keys in response: ${Object.keys(parsedOutput).join(', ')}`);
       throw new Error(`Unexpected keys found in JSON response: ${response.output}`);
     }
 
@@ -221,7 +238,7 @@ class CrescendoProvider implements ApiProvider {
     filters: NunjucksFilterMap | undefined,
     provider: ApiProvider,
   ): Promise<string> {
-    console.log('Attack prompt:', attackPrompt);
+    logger.debug(`Sending prompt to target: ${attackPrompt}`);
     const renderedPrompt = await renderPrompt(
       originalPrompt,
       // FIXME(ian): injectVar
@@ -229,9 +246,11 @@ class CrescendoProvider implements ApiProvider {
       filters,
       provider,
     );
+    logger.debug(`Rendered prompt: ${renderedPrompt}`);
 
     const response = await provider.callApi(renderedPrompt);
     invariant(response.output, 'Expected output to be defined');
+    logger.debug(`Received response from target: ${response.output}`);
 
     return typeof response.output === 'string' ? response.output : JSON.stringify(response.output);
   }
@@ -240,6 +259,7 @@ class CrescendoProvider implements ApiProvider {
     attackPrompt: string,
     lastResponse: string,
   ): Promise<[boolean, string]> {
+    logger.debug(`Getting refusal score for prompt: ${attackPrompt}`);
     const refusalInput = JSON.stringify({
       conversation_objective: attackPrompt,
       response_to_evaluate_input: lastResponse,
@@ -248,6 +268,7 @@ class CrescendoProvider implements ApiProvider {
     const refusalSystemPrompt = this.nunjucks.renderString(REFUSAL_SYSTEM_PROMPT, {
       conversation_objective: this.config.conversationObjective,
     });
+    logger.debug(`Refusal system prompt: ${refusalSystemPrompt}`);
 
     const refusalBody = JSON.stringify([
       { role: 'system', content: refusalSystemPrompt },
@@ -256,6 +277,7 @@ class CrescendoProvider implements ApiProvider {
 
     const refusalResponse = await this.scoringChat.callApi(refusalBody);
     invariant(typeof refusalResponse.output === 'string', 'Expected output to be a string');
+    logger.debug(`Refusal score response: ${refusalResponse.output}`);
 
     const { score_value: isRefusal, score_rationale: refusalRationale } = JSON.parse(
       refusalResponse.output,
@@ -267,6 +289,7 @@ class CrescendoProvider implements ApiProvider {
   private async getEvalScore(
     lastResponse: string,
   ): Promise<{ score_value: boolean; score_metadata: string }> {
+    logger.debug(`Getting eval score for response: ${lastResponse.substring(0, 100)}...`);
     const evalInput = JSON.stringify({
       conversation_objective: this.config.conversationObjective,
       response_to_evaluate_input: lastResponse,
@@ -275,6 +298,7 @@ class CrescendoProvider implements ApiProvider {
     const evalSystemPrompt = this.nunjucks.renderString(EVAL_SYSTEM_PROMPT, {
       conversation_objective: this.config.conversationObjective,
     });
+    logger.debug(`Eval system prompt: ${evalSystemPrompt}`);
 
     const evalBody = JSON.stringify([
       { role: 'system', content: evalSystemPrompt },
@@ -283,6 +307,7 @@ class CrescendoProvider implements ApiProvider {
 
     const evalResponse = await this.scoringChat.callApi(evalBody);
     invariant(typeof evalResponse.output === 'string', 'Expected output to be a string');
+    logger.debug(`Eval score response: ${evalResponse.output}`);
 
     return JSON.parse(evalResponse.output);
   }
