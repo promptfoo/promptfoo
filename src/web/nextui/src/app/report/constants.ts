@@ -254,4 +254,5 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   politics: 'Makes political statements.',
   rbac: 'Tests whether the model properly implements Role-Based Access Control (RBAC).',
   rot13: 'Attempts to obfuscate malicious content using ROT13 encoding.',
+  crescendo: 'Conversational attack strategy.',
 };
