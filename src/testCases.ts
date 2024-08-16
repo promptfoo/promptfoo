@@ -226,7 +226,7 @@ export async function readTests(
 
   if (
     ret.some((testCase) => testCase.vars?.assert) &&
-    !process.env.PROMPTFOO_NO_TESTCASE_ASSERT_WARNING
+    !getEnvBool('PROMPTFOO_NO_TESTCASE_ASSERT_WARNING')
   ) {
     logger.warn(dedent`
       Warning: Found 'assert' key in vars. This is likely a mistake in your configuration.
@@ -272,7 +272,7 @@ export async function synthesize({
   numTestCasesPerPersona = numTestCasesPerPersona || 3;
 
   let progressBar;
-  if (process.env.LOG_LEVEL !== 'debug') {
+  if (getEnvar('LOG_LEVEL') !== 'debug') {
     const cliProgress = await import('cli-progress');
     progressBar = new cliProgress.SingleBar({}, cliProgress.Presets.shades_classic);
     const totalProgressSteps = 1 + numPersonas * numTestCasesPerPersona;

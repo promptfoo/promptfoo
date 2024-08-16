@@ -225,8 +225,8 @@ class Evaluator {
 
       if (!response.cached) {
         let sleep = provider.delay ?? delay;
-        if (!sleep && process.env.PROMPTFOO_DELAY_MS) {
-          sleep = parseInt(process.env.PROMPTFOO_DELAY_MS, 10) || 0;
+        if (!sleep) {
+          sleep = getEnvInt('PROMPTFOO_DELAY_MS', 0);
         }
         if (sleep) {
           logger.debug(`Sleeping for ${sleep}ms`);
@@ -907,14 +907,12 @@ class Evaluator {
         new Set(tests.flatMap((t) => t.assert || []).map((a) => a.type)),
       ).sort(),
       eventSource: options.eventSource || 'default',
-      ci: Boolean(
-        process.env.CI ||
-          process.env.GITHUB_ACTIONS ||
-          process.env.TRAVIS ||
-          process.env.CIRCLECI ||
-          process.env.JENKINS ||
-          process.env.GITLAB_CI,
-      ),
+      ci: getEnvBool('CI') ||
+          getEnvBool('GITHUB_ACTIONS') ||
+          getEnvBool('TRAVIS') ||
+          getEnvBool('CIRCLECI') ||
+          getEnvBool('JENKINS') ||
+          getEnvBool('GITLAB_CI'),
       hasAnyPass: results.some((r) => r.success),
     });
 
