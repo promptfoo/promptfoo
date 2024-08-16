@@ -31,9 +31,15 @@ prompts:
   {% for prompt in prompts -%}
   - {{ prompt | dump }}
   {% endfor %}
+  {% if prompts.length > 0 and not prompts[0].startsWith('file://') -%}
+  # You can also reference external prompts, e.g.
+  # - file:///path/to/prompt.json
+  # Learn more: https://promptfoo.dev/docs/configuration/parameters/#prompts
+  {% endif -%}
 
-# To set up a custom provider, see: https://promptfoo.dev/docs/red-team/configuration/#providers
 providers:
+  # To talk directly to your application, use a custom provider.
+  # See https://promptfoo.dev/docs/red-team/configuration/#providers
   {% for provider in providers -%}
   - {{ provider }}
   {% endfor %}
@@ -42,7 +48,7 @@ redteam:
   # Default number of inputs to generate for each plugin
   numTests: {{numTests}}
 
-  # Plugins to use for generating adversarial inputs
+  # Each plugin generates {{numTests}} adversarial inputs.
   # To control the number of tests for each plugin, use:
   # - id: plugin-name
   #   numTests: 10
