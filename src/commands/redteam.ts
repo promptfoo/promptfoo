@@ -50,6 +50,7 @@ redteam:
   # Default number of inputs to generate for each plugin
   numTests: {{numTests}}
 
+  {% if plugins.length > 0 -%}
   # Each plugin generates {{numTests}} adversarial inputs.
   # To control the number of tests for each plugin, use:
   # - id: plugin-name
@@ -69,12 +70,15 @@ redteam:
       {% endif -%}
     {% endif -%}
     {% endfor %}
+  {% endif -%}
 
+  {% if strategies.length > 0 -%}
   # Strategies for applying adversarial inputs
   strategies:
     {% for strategy in strategies -%}
     - {{strategy}}
     {% endfor %}
+  {% endif -%}
 `;
 
 export async function redteamInit(directory: string | undefined) {
