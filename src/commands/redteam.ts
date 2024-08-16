@@ -25,17 +25,17 @@ import { getNunjucksEngine } from '../util/templates';
 import { doGenerateRedteam } from './generate/redteam';
 
 const REDTEAM_CONFIG_TEMPLATE = `# Red teaming configuration
-# Learn more: https://promptfoo.dev/docs/red-team/configuration
+# Docs: https://promptfoo.dev/docs/red-team/configuration
 
 prompts:
   {% for prompt in prompts -%}
   - {{ prompt | dump }}
-  {% endfor %}
+  {% endfor -%}
   {% if prompts.length > 0 and not prompts[0].startsWith('file://') -%}
   # You can also reference external prompts, e.g.
   # - file:///path/to/prompt.json
   # Learn more: https://promptfoo.dev/docs/configuration/parameters/#prompts
-  {% endif -%}
+  {% endif %}
 
 providers:
   # To talk directly to your application, use a custom provider.
