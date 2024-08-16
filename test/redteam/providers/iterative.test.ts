@@ -29,7 +29,6 @@ describe('RedteamIterativeProvider', () => {
     it('should render system prompts correctly', () => {
       const goal = '{{goal}}';
       const result = renderSystemPrompts(getNunjucksEngine(), goal);
-
       expect(result.redteamSystemPrompt).toBe(ATTACKER_SYSTEM_PROMPT);
       expect(result.onTopicSystemPrompt).toBe(ON_TOPIC_SYSTEM_PROMPT);
       expect(result.judgeSystemPrompt).toBe(JUDGE_SYSTEM_PROMPT);
@@ -93,7 +92,7 @@ describe('RedteamIterativeProvider', () => {
 
       await expect(
         evaluateResponse(mockRedteamProvider, 'Judge prompt', 'Target response', false),
-      ).rejects.toThrow();
+      ).rejects.toThrow(/is not valid JSON/);
     });
   });
 
@@ -137,7 +136,9 @@ describe('RedteamIterativeProvider', () => {
         { role: 'system', content: 'System prompt' },
       ];
 
-      await expect(getNewPrompt(mockRedteamProvider, redteamHistory)).rejects.toThrow();
+      await expect(getNewPrompt(mockRedteamProvider, redteamHistory)).rejects.toThrow(
+        /is not valid JSON/,
+      );
     });
 
     it('should handle empty history correctly', async () => {
@@ -199,7 +200,7 @@ describe('RedteamIterativeProvider', () => {
 
       await expect(
         checkIfOnTopic(mockRedteamProvider, 'On-topic system prompt', 'Target prompt'),
-      ).rejects.toThrow();
+      ).rejects.toThrow(/is not valid JSON/);
     });
 
     it('should throw an error for unexpected API response format', async () => {
@@ -209,7 +210,7 @@ describe('RedteamIterativeProvider', () => {
 
       await expect(
         checkIfOnTopic(mockRedteamProvider, 'On-topic system prompt', 'Target prompt'),
-      ).rejects.toThrow();
+      ).rejects.toThrow('Invariant failed: Expected onTopic to be a boolean');
     });
   });
 
