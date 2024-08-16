@@ -95,7 +95,7 @@ You can begin red teaming your application in less than 5 minutes.
 ### Prerequisites
 
 - Install [Node 18 or later](https://nodejs.org/en/download/package-manager/)
-- Set the `OPENAI_API_KEY` environment variable or [override the provider](#overriding-the-provider) with your preferred service.
+- Set the `OPENAI_API_KEY` environment variable or [override the provider](/docs/red-team/configuration/#providers) with your preferred service.
 
 ### Initialize the project
 
