@@ -46,7 +46,7 @@ import { ScriptCompletionProvider } from '../src/providers/scriptCompletion';
 import { VertexChatProvider, VertexEmbeddingProvider } from '../src/providers/vertex';
 import { VoyageEmbeddingProvider } from '../src/providers/voyage';
 import { WebhookProvider } from '../src/providers/webhook';
-import RedteamIterativeProvider from '../src/redteam/providers/iterative';
+import RedteamIterativeProvider from '../src/redteam/providers/iterativeTree';
 import RedteamImageIterativeProvider from '../src/redteam/providers/iterativeImage';
 import RedteamIterativeTreeProvider from '../src/redteam/providers/iterativeTree';
 import type { ProviderOptionsMap, ProviderFunction } from '../src/types';

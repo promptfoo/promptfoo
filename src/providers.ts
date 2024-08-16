@@ -56,7 +56,7 @@ import { ScriptCompletionProvider } from './providers/scriptCompletion';
 import { VertexChatProvider, VertexEmbeddingProvider } from './providers/vertex';
 import { VoyageEmbeddingProvider } from './providers/voyage';
 import { WebhookProvider } from './providers/webhook';
-import RedteamIterativeProvider from './redteam/providers/iterative';
+import RedteamIterativeProvider from './redteam/providers/iterativeTree';
 import RedteamImageIterativeProvider from './redteam/providers/iterativeImage';
 import RedteamIterativeTreeProvider from './redteam/providers/iterativeTree';
 import type { TestSuiteConfig } from './types';

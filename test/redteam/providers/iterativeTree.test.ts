@@ -1,6 +1,6 @@
 import { jest } from '@jest/globals';
 import type { OpenAiChatCompletionProvider } from '../../../src/providers/openai';
-import type { TreeNode } from '../../../src/redteam/providers/iterative';
+import type { TreeNode } from '../../../src/redteam/providers/iterativeTree';
 import {
   renderSystemPrompts,
   calculateBranches,
@@ -11,7 +11,7 @@ import {
   checkIfOnTopic,
   updateRedteamHistory,
   getTargetResponse,
-} from '../../../src/redteam/providers/iterative';
+} from '../../../src/redteam/providers/iterativeTree';
 import {
   ATTACKER_SYSTEM_PROMPT,
   JUDGE_SYSTEM_PROMPT,
