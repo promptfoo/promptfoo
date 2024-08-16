@@ -7,13 +7,10 @@ import { z } from 'zod';
  * @returns The value of the environment variable, or the default value if provided.
  * @throws Error if the environment variable is not set and no default value is provided.
  */
-export function getEnvar(key: string, defaultValue?: string): string {
+export function getEnvar(key: string, defaultValue?: string): string | undefined {
   const value = process.env[key];
   if (value === undefined) {
-    if (defaultValue !== undefined) {
-      return defaultValue;
-    }
-    throw new Error(`Environment variable ${key} is not set`);
+    return defaultValue || undefined;
   }
   return value;
 }
@@ -28,12 +25,9 @@ export function getEnvar(key: string, defaultValue?: string): string {
 export function getEnvBool(key: string, defaultValue?: boolean): boolean {
   const value = process.env[key];
   if (value === undefined) {
-    if (defaultValue !== undefined) {
-      return defaultValue;
-    }
-    throw new Error(`Environment variable ${key} is not set`);
+    return defaultValue || false;
   }
-  return ['1', 'true', 'yes'].includes(value.toLowerCase());
+  return ['1', 'true', 'yes', 'yup', 'yeppers'].includes(value.toLowerCase());
 }
 
 /**
@@ -46,10 +40,7 @@ export function getEnvBool(key: string, defaultValue?: boolean): boolean {
 export function getEnvInt(key: string, defaultValue?: number): number {
   const value = process.env[key];
   if (value === undefined) {
-    if (defaultValue !== undefined) {
-      return defaultValue;
-    }
-    throw new Error(`Environment variable ${key} is not set`);
+    return defaultValue || 0;
   }
   const parsedValue = parseInt(value, 10);
   if (isNaN(parsedValue)) {
@@ -68,10 +59,7 @@ export function getEnvInt(key: string, defaultValue?: number): number {
 export function getEnvFloat(key: string, defaultValue?: number): number {
   const value = process.env[key];
   if (value === undefined) {
-    if (defaultValue !== undefined) {
-      return defaultValue;
-    }
-    throw new Error(`Environment variable ${key} is not set`);
+    return defaultValue || 0;
   }
   const parsedValue = parseFloat(value);
   if (isNaN(parsedValue)) {
@@ -91,10 +79,7 @@ export function getEnvFloat(key: string, defaultValue?: number): number {
 export function getEnvValidated<T>(key: string, schema: z.ZodType<T>, defaultValue?: T): T {
   const value = process.env[key];
   if (value === undefined) {
-    if (defaultValue !== undefined) {
-      return schema.parse(defaultValue);
-    }
-    throw new Error(`Environment variable ${key} is not set`);
+    return schema.parse(defaultValue || undefined);
   }
   try {
     return schema.parse(value);
